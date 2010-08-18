@@ -201,6 +201,95 @@ int main(int argc, char **argv) {
         }
     }
 
+    { // call and ret
+        for (int i = 0; i < 16; i++) {
+            fprintf(f, "call %s\n", regname[i]);
+            a.call(reg[i]);
+
+            fprintf(f, "call qword ptr [%s]\n", regname[i]);
+            a.call(AsmX64::Mem(reg[i]));
+
+            int off = (int)rand() - RAND_MAX/2;
+            if (off > 0) {
+                fprintf(f, "call qword ptr [%s+%d]\n", regname[i], off);
+            } else {
+                fprintf(f, "call qword ptr [%s-%d]\n", regname[i], -off);
+            }
+            a.call(AsmX64::Mem(reg[i], off));
+
+            off = (rand() & 0xff) - 128;            
+            if (off > 0) {
+                fprintf(f, "call qword ptr [%s+%d]\n", regname[i], off);
+            } else {
+                fprintf(f, "call qword ptr [%s-%d]\n", regname[i], -off);
+            }
+            a.call(AsmX64::Mem(reg[i], off));
+        }
+        fprintf(f, "ret\n");
+        a.ret();
+    }
+
+    { // mov
+        
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "mov %s, %s\n", regname[i], regname[j]);
+                a.mov(reg[i], reg[j]);
+            }
+        }
+        /*
+        // reg + mem
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "mov %s, [%s]\n", regname[i], regname[j]);
+                a.mov(reg[i], AsmX64::Mem(reg[j]));
+            }
+        }
+        
+        // reg + mem+off
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int off = (int)rand() - RAND_MAX/2;            
+                if (off > 0) {
+                    fprintf(f, "mov %s, [%s+%d]\n", regname[i], regname[j], off);
+                } else {
+                    fprintf(f, "mov %s, [%s-%d]\n", regname[i], regname[j], abs(off));
+                }
+                a.mov(reg[i], AsmX64::Mem(reg[j], off));
+            }
+        }
+        
+        // mem + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "mov [%s], %s\n", regname[i], regname[j]);
+                a.mov(AsmX64::Mem(reg[i]), reg[j]);
+            }
+        }
+        
+        // mem+off + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int off = (int)rand() - RAND_MAX/2;
+                if (off > 0) {
+                    fprintf(f, "mov [%s+%d], %s\n", regname[i], off, regname[j]);
+                } else {
+                    fprintf(f, "mov [%s-%d], %s\n", regname[i], abs(off), regname[j]);
+                }
+                a.mov(AsmX64::Mem(reg[i], off), reg[j]);
+            }
+        }  
+        
+        // reg + const
+        for (int i = 0; i < 16; i++) {
+            int off = (int)rand() - RAND_MAX/2;
+            if (rand() & 1) off = (rand() & 0xff) - 128;
+            fprintf(f, "mov %s, %d\n", regname[i], off);
+            a.mov(reg[i], off);
+        }
+        */
+    }
+
     fprintf(f, "END\n");
     fclose(f);
 
@@ -235,5 +324,17 @@ int main(int argc, char **argv) {
 
     // now compile test.s, and compare it with generated.obj using a disassembler
 
+    // now actually generate some functions and call them on the fly
+    a.buffer().clear();
+    // move the first argument to the output
+    a.mov(a.rax, a.rcx);
+    // add one 
+    //a.add(a.rax, 1);
+    a.ret();
+
+    // cast the buffer to a function pointer
+    long long (*func)(long long) = (long long (*)(long long))(&a.buffer()[0]);
+    printf("%lld == 17\n", func(16));
+    fflush(stdout);
     return 0;
 }

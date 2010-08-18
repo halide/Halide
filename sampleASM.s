@@ -43,4 +43,53 @@
         add rax, [rax]   
         add [rax+17], rax
         add [rax], rax      
+        ret
+        call rdx
+        call qword ptr[rdx]
+        call qword ptr[rdx+17]
+        call qword ptr[rdx+1700000]    
+        call r10
+        call qword ptr[r10]
+        call qword ptr[r10+17]
+        call qword ptr[r10+1700000]    
+        call r12
+        call qword ptr[r12]
+        call qword ptr[r12+17]
+        call qword ptr[r12+1700000]    
+        call rsp
+        call qword ptr[rsp]
+        call qword ptr[rsp+17]
+        call qword ptr[rsp+1700000]    
+        call rbp
+        call qword ptr[rbp]
+        call qword ptr[rbp+17]
+        call qword ptr[rbp+1700000]    
+        mov rcx, rdx
+        mov rdx, rcx
+        mov rcx, [rdx]
+        mov rcx, [rdx+17]
+        mov rcx, [rdx+1700000]
+        mov r10, r11
+        mov r10, [r11]
+        mov r10, [r11+17]
+        mov r10, [r11+1700000]
+        mov rsp, r11
+        mov rsp, [r11]
+        mov rsp, [r11+17]
+        mov rsp, [r11+1700000]
+        mov r10, rsp
+        mov r10, [rsp]
+        mov r10, [rsp+17]
+        mov r10, [rsp+1700000]
+        mov rbp, r11
+        mov rbp, [r11]
+        mov rbp, [r11+17]
+        mov rbp, [r11+1700000]
+        mov r10, rbp
+        mov r10, [rbp]
+        mov r10, [rbp+17]
+        mov r10, [rbp+1700000]    
+bar:    jmp foo       
+foo:    jmp bar   
+gah:    jmp gah       
 END
