@@ -173,6 +173,32 @@ public:
         bop(dst, src, 0x29);
     }
 
+    // dst -= src
+    void and(Reg dst, Reg src) { 
+        bop(dst, src, 0x21);
+    }
+
+    void and(Reg dst, int32_t n) {
+        bop(dst, n, 0x25, 0x04);
+    }
+
+    void and(Reg dst, std::string name) {
+        if (bindings.find(name) != bindings.end()) {
+            and(dst, bindings[name]);
+        } else {
+            and(dst, 0xefbeadde);
+        }
+        bindingSites[name].push_back(_buffer.size()-4);
+    }
+
+    void and(Reg dst, Mem src) {
+        bop(dst, src, 0x23);
+    }
+    
+    void and(Mem dst, Reg src) {
+        bop(dst, src, 0x21);
+    }
+
     // comparison
     void cmp(Reg dst, Reg src) { 
         bop(dst, src, 0x3B);
