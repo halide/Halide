@@ -18,55 +18,187 @@ int main(int argc, char **argv) {
 
     srand(157);
 
-    
-    // reg + reg
-    for (int i = 0; i < 16; i++) {
-        for (int j = 0; j < 16; j++) {
-            fprintf(f, "add %s, %s\n", regname[i], regname[j]);
-            a.add(reg[i], reg[j]);
+    { // add
+        // reg + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "add %s, %s\n", regname[i], regname[j]);
+                a.add(reg[i], reg[j]);
+            }
+        }
+        
+        // reg + mem
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "add %s, [%s]\n", regname[i], regname[j]);
+                a.add(reg[i], AsmX64::Mem(reg[j]));
+            }
+        }
+        
+        // reg + mem+off
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int off = (int)rand() - RAND_MAX/2;            
+                if (off > 0) {
+                    fprintf(f, "add %s, [%s+%d]\n", regname[i], regname[j], off);
+                } else {
+                    fprintf(f, "add %s, [%s-%d]\n", regname[i], regname[j], abs(off));
+                }
+                a.add(reg[i], AsmX64::Mem(reg[j], off));
+            }
+        }
+        
+        // mem + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "add [%s], %s\n", regname[i], regname[j]);
+                a.add(AsmX64::Mem(reg[i]), reg[j]);
+            }
+        }
+        
+        // mem+off + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int off = (int)rand() - RAND_MAX/2;
+                if (off > 0) {
+                    fprintf(f, "add [%s+%d], %s\n", regname[i], off, regname[j]);
+                } else {
+                    fprintf(f, "add [%s-%d], %s\n", regname[i], abs(off), regname[j]);
+                }
+                a.add(AsmX64::Mem(reg[i], off), reg[j]);
+            }
+        }  
+        
+        // reg + const
+        for (int i = 0; i < 16; i++) {
+            int off = (int)rand() - RAND_MAX/2;
+            if (rand() & 1) off = (rand() & 0xff) - 128;
+            fprintf(f, "add %s, %d\n", regname[i], off);
+            a.add(reg[i], off);
         }
     }
 
-    // reg + mem
-    for (int i = 0; i < 16; i++) {
-        for (int j = 0; j < 16; j++) {
-            fprintf(f, "add %s, [%s]\n", regname[i], regname[j]);
-            a.add(reg[i], AsmX64::Mem(reg[j]));
+
+    { // sub
+        // reg + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "sub %s, %s\n", regname[i], regname[j]);
+                a.sub(reg[i], reg[j]);
+            }
+        }
+        
+        // reg + mem
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "sub %s, [%s]\n", regname[i], regname[j]);
+                a.sub(reg[i], AsmX64::Mem(reg[j]));
+            }
+        }
+        
+        // reg + mem+off
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int off = (int)rand() - RAND_MAX/2;            
+                if (off > 0) {
+                    fprintf(f, "sub %s, [%s+%d]\n", regname[i], regname[j], off);
+                } else {
+                    fprintf(f, "sub %s, [%s-%d]\n", regname[i], regname[j], abs(off));
+                }
+                a.sub(reg[i], AsmX64::Mem(reg[j], off));
+            }
+        }
+        
+        // mem + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "sub [%s], %s\n", regname[i], regname[j]);
+                a.sub(AsmX64::Mem(reg[i]), reg[j]);
+            }
+        }
+        
+        // mem+off + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int off = (int)rand() - RAND_MAX/2;
+                if (off > 0) {
+                    fprintf(f, "sub [%s+%d], %s\n", regname[i], off, regname[j]);
+                } else {
+                    fprintf(f, "sub [%s-%d], %s\n", regname[i], abs(off), regname[j]);
+                }
+                a.sub(AsmX64::Mem(reg[i], off), reg[j]);
+            }
+        }  
+        
+        // reg + const
+        for (int i = 0; i < 16; i++) {
+            int off = (int)rand() - RAND_MAX/2;
+            if (rand() & 1) off = (rand() & 0xff) - 128;
+            fprintf(f, "sub %s, %d\n", regname[i], off);
+            a.sub(reg[i], off);
         }
     }
 
-    // reg + mem+off
-    for (int i = 0; i < 16; i++) {
-        for (int j = 0; j < 16; j++) {
-            int off = (int)rand();
-            fprintf(f, "add %s, [%s+%08xh]\n", regname[i], regname[j], off);
-            a.add(reg[i], AsmX64::Mem(reg[j], off));
-        }
-    }
 
-    // mem + reg
-    for (int i = 0; i < 16; i++) {
-        for (int j = 0; j < 16; j++) {
-            fprintf(f, "add [%s], %s\n", regname[i], regname[j]);
-            a.add(AsmX64::Mem(reg[i]), reg[j]);
-        }
-    }
 
-    // mem+off + reg
-    for (int i = 0; i < 16; i++) {
-        for (int j = 0; j < 16; j++) {
-            int off = (int)rand();
-            fprintf(f, "add [%s+%08xh], %s\n", regname[i], off, regname[j]);
-            a.add(AsmX64::Mem(reg[i], off), reg[j]);
+    { // cmp
+        // reg + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "cmp %s, %s\n", regname[i], regname[j]);
+                a.cmp(reg[i], reg[j]);
+            }
         }
-    }  
-    
-
-    // reg + const
-    for (int i = 0; i < 16; i++) {
-        int off = (int)rand();
-        fprintf(f, "add %s, %08xh\n", regname[i], off);
-        a.add(reg[i], off);
+        
+        // reg + mem
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "cmp %s, [%s]\n", regname[i], regname[j]);
+                a.cmp(reg[i], AsmX64::Mem(reg[j]));
+            }
+        }
+        
+        // reg + mem+off
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int off = (int)rand() - RAND_MAX/2;            
+                if (off > 0) {
+                    fprintf(f, "cmp %s, [%s+%d]\n", regname[i], regname[j], off);
+                } else {
+                    fprintf(f, "cmp %s, [%s-%d]\n", regname[i], regname[j], abs(off));
+                }
+                a.cmp(reg[i], AsmX64::Mem(reg[j], off));
+            }
+        }
+        
+        // mem + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                fprintf(f, "cmp [%s], %s\n", regname[i], regname[j]);
+                a.cmp(AsmX64::Mem(reg[i]), reg[j]);
+            }
+        }
+        
+        // mem+off + reg
+        for (int i = 0; i < 16; i++) {
+            for (int j = 0; j < 16; j++) {
+                int off = (int)rand() - RAND_MAX/2;
+                if (off > 0) {
+                    fprintf(f, "cmp [%s+%d], %s\n", regname[i], off, regname[j]);
+                } else {
+                    fprintf(f, "cmp [%s-%d], %s\n", regname[i], abs(off), regname[j]);
+                }
+                a.cmp(AsmX64::Mem(reg[i], off), reg[j]);
+            }
+        }  
+        
+        // reg + const
+        for (int i = 0; i < 16; i++) {
+            int off = (int)rand() - RAND_MAX/2;
+            if (rand() & 1) off = (rand() & 0xff) - 128;
+            fprintf(f, "cmp %s, %d\n", regname[i], off);
+            a.cmp(reg[i], off);
+        }
     }
 
     fprintf(f, "END\n");

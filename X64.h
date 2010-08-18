@@ -52,29 +52,41 @@ public:
 
     const std::vector<unsigned char> buffer() {return _buffer;}
 
-    // dst += src
-    void add(Reg dst, Reg src) { 
+    // simple binary operations like add, sub, cmp
+    void bop(Reg dst, Reg src, unsigned char op) {
         emit(0x48 | ((dst.num & 8) >> 1) | (src.num >> 3));
-        emit(0x03);
+        emit(op);
         emit(0xC0 | ((dst.num & 7) << 3) | (src.num & 7));
     }
 
-    void add(Reg dst, int n) {
+    void bop(Reg dst, int n, unsigned char raxop, unsigned char op) {
         emit(0x48 | (dst.num >> 3));
-        emit(0x81);
-        emit(0xC0 | (dst.num & 7));
-        emitConst(n);
+        if (dst == rax) {
+            emit(raxop);
+            emitInt32(n);
+        } else {
+            if (n >= -128 && n <= 127) {
+                emit(0x83);
+                emit(0xC0 | (op << 3) | (dst.num & 7));
+                emit((char)n);
+            } else {
+                emit(0x81);
+                emit(0xC0 | (op << 3) | (dst.num & 7));
+                emitInt32(n);
+            }
+        }
+
     }
 
-    void add(Reg dst, Mem src) {
+    void bop(Reg dst, Mem src, unsigned char op) {
         emit(0x48 | ((dst.num & 8) >> 1) | (src.reg.num >> 3));
-        emit(0x03);
+        emit(op);
         if (src.offset) {
             emit(0x80 | ((dst.num & 7) << 3) | (src.reg.num & 7));
             if ((src.reg.num & 7) == 4) {
                 emit(0x24);
             }
-            emitConst(src.offset);
+            emitInt32(src.offset);
         } else if ((src.reg.num & 7) == 5) {
             emit(0x40 | ((dst.num & 7) << 3) | (src.reg.num & 7));
             emit(0x00);
@@ -83,38 +95,84 @@ public:
             if ((src.reg.num & 7) == 4) {
                 emit(0x24);
             }
-        } 
-        
+        }         
     }
-    
-    void add(Mem dst, Reg src) {
-        emit(0x48 | ((dst.reg.num & 8) >> 1) | (src.num >> 3));        
-        emit(0x01);
+
+    void bop(Mem dst, Reg src, unsigned char op) {
+        emit(0x48 | ((src.num & 8) >> 1) | (dst.reg.num >> 3));        
+        emit(op);
         if (dst.offset) {
-            emit(0x40 | ((dst.reg.num & 7) << 3) | (src.num & 7));
-            emitConst(dst.offset);            
+            emit(0x80 | ((src.num & 7) << 3) | (dst.reg.num & 7));
+            if ((dst.reg.num & 7) == 4) {
+                emit(0x24);
+            }
+            emitInt32(dst.offset);            
         } else if ((dst.reg.num & 7) == 5) {
-            emit(0x40 | ((dst.reg.num & 7) << 3) | (src.num & 7));
+            emit(0x40 | ((src.num & 7) << 3) | (dst.reg.num & 7));
             emit(0x00);
         } else {
-            emit(0x00 | ((dst.reg.num & 7) << 3) | (src.num & 7));
+            emit(0x00 | ((src.num & 7) << 3) | (dst.reg.num & 7));
             if ((dst.reg.num & 7) == 4) {
-                emit(0x00);
-                emit(0x00);
-                emit(0x00);
-                emit(0x00);
-                emit(0x00);
-                emit(0x00);
-                emit(0x00);
                 emit(0x24);
             }
         }
     }
 
+    // dst += src
+    void add(Reg dst, Reg src) { 
+        bop(dst, src, 0x03);
+    }
+
+    void add(Reg dst, int n) {
+        bop(dst, n, 0x05, 0x00);
+    }
+
+    void add(Reg dst, Mem src) {
+        bop(dst, src, 0x03);
+    }
+    
+    void add(Mem dst, Reg src) {
+        bop(dst, src, 0x01);
+    }
+
+    // dst -= src
+    void sub(Reg dst, Reg src) { 
+        bop(dst, src, 0x2B);
+    }
+
+    void sub(Reg dst, int n) {
+        bop(dst, n, 0x2D, 0x05);
+    }
+
+    void sub(Reg dst, Mem src) {
+        bop(dst, src, 0x2B);
+    }
+    
+    void sub(Mem dst, Reg src) {
+        bop(dst, src, 0x29);
+    }
+
+    // comparison
+    void cmp(Reg dst, Reg src) { 
+        bop(dst, src, 0x3B);
+    }
+
+    void cmp(Reg dst, int n) {
+        bop(dst, n, 0x3D, 0x07);
+    }
+
+    void cmp(Reg dst, Mem src) {
+        bop(dst, src, 0x3B);
+    }
+    
+    void cmp(Mem dst, Reg src) {
+        bop(dst, src, 0x39);
+    }
+
 protected:
     std::vector<unsigned char> _buffer;
 
-    void emitConst(int x) {
+    void emitInt32(int x) {
         unsigned int y = (unsigned int)x;
         emit(y & 0xff);
         emit((y>>8) & 0xff);
