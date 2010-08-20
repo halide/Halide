@@ -55,6 +55,7 @@ public:
 
     std::vector<unsigned char> &buffer() {return _buffer;}
 
+protected:
     // simple binary operations like add, sub, cmp
     void bop(Reg dst, Reg src, unsigned char op) {
         emit(0x48 | ((dst.num & 8) >> 1) | (src.num >> 3));
@@ -121,6 +122,7 @@ public:
         }
     }
 
+public:
     // dst += src
     void add(Reg dst, Reg src) { 
         bop(dst, src, 0x03);
@@ -173,30 +175,83 @@ public:
         bop(dst, src, 0x29);
     }
 
-    // dst -= src
-    void and(Reg dst, Reg src) { 
+    // bitwise and (dst &= src)
+    void band(Reg dst, Reg src) { 
         bop(dst, src, 0x21);
     }
 
-    void and(Reg dst, int32_t n) {
+    void band(Reg dst, int32_t n) {
         bop(dst, n, 0x25, 0x04);
     }
 
-    void and(Reg dst, std::string name) {
+    void band(Reg dst, std::string name) {
         if (bindings.find(name) != bindings.end()) {
-            and(dst, bindings[name]);
+            band(dst, bindings[name]);
         } else {
-            and(dst, 0xefbeadde);
+            band(dst, 0xefbeadde);
         }
         bindingSites[name].push_back(_buffer.size()-4);
     }
 
-    void and(Reg dst, Mem src) {
+    void band(Reg dst, Mem src) {
         bop(dst, src, 0x23);
     }
     
-    void and(Mem dst, Reg src) {
+    void band(Mem dst, Reg src) {
         bop(dst, src, 0x21);
+    }
+
+    // bitwise or (dst |= src)
+    void bor(Reg dst, Reg src) { 
+        bop(dst, src, 0x0B);
+    }
+
+    void bor(Reg dst, int32_t n) {
+        bop(dst, n, 0x0D, 0x01);
+    }
+
+    void bor(Reg dst, std::string name) {
+        if (bindings.find(name) != bindings.end()) {
+            bor(dst, bindings[name]);
+        } else {
+            bor(dst, 0xefbeadde);
+        }
+        bindingSites[name].push_back(_buffer.size()-4);
+    }
+
+    void bor(Reg dst, Mem src) {
+        bop(dst, src, 0x0B);
+    }
+    
+    void bor(Mem dst, Reg src) {
+        bop(dst, src, 0x09);
+    }
+
+
+    // bitwise xor (dst ^= src)
+    void xor(Reg dst, Reg src) { 
+        bop(dst, src, 0x31);
+    }
+
+    void xor(Reg dst, int32_t n) {
+        bop(dst, n, 0x35, 0x06);
+    }
+
+    void xor(Reg dst, std::string name) {
+        if (bindings.find(name) != bindings.end()) {
+            xor(dst, bindings[name]);
+        } else {
+            xor(dst, 0xefbeadde);
+        }
+        bindingSites[name].push_back(_buffer.size()-4);
+    }
+
+    void xor(Reg dst, Mem src) {
+        bop(dst, src, 0x33);
+    }
+    
+    void xor(Mem dst, Reg src) {
+        bop(dst, src, 0x31);
     }
 
     // comparison
@@ -287,15 +342,9 @@ public:
 
     void mov(int64_t *ptr, Reg src) {
     }
-    */
 
-    void emitRelBinding(const std::string &name) {
-        int32_t dstOffset = 0xefbeadde;
-        if (bindings.find(name) != bindings.end())
-            dstOffset = bindings[name]-_buffer.size()-4;
-        emitInt32(dstOffset);        
-        relBindingSites[name].push_back(_buffer.size()-4);        
-    }
+    ... conditional moves
+    */
 
     // near jump
     void jmp(const std::string &name) {
@@ -315,6 +364,84 @@ public:
         emit(0x0F);
         emit(0x85);
         emitRelBinding(name);
+    }
+
+    // jump if <=
+    void jle(const std::string &name) {
+        emit(0x0F);
+        emit(0x8E);
+        emitRelBinding(name);
+    }
+
+    // jump if >=
+    void jge(const std::string &name) {
+        emit(0x0F);
+        emit(0x8D);
+        emitRelBinding(name);
+    }
+
+    // jump if <
+    void jl(const std::string &name) {
+        emit(0x0F);
+        emit(0x8C);
+        emitRelBinding(name);
+    }
+
+    // jump if >
+    void jg(const std::string &name) {
+        emit(0x0F);
+        emit(0x8F);
+        emitRelBinding(name);
+    }
+
+    
+    // shift left
+    void sal(Reg reg, uint8_t val) {
+         
+    }
+
+    // shift right (with sign extension)
+    void sar(Reg reg, uint8_t val) {
+        
+    }
+
+    // rotate bits left
+    void rol(Reg reg, uint8_t val) {
+        
+    }
+
+    // rotate bits right
+    void ror(Reg reg, uint8_t val) {
+        
+    }
+
+    // bit search left and right
+    void bsl(Reg dst, Mem src) {
+    }
+
+    void bsl(Reg dst, Reg src) {
+    }
+
+    void bsr(Reg dst, Mem src) {
+    }
+
+    void bsr(Reg dst, Reg src) {
+    }
+
+    // endianness swap
+    void bswap(Red reg) {
+    }
+
+    // swap 
+    void xchg(Reg dst, Mem src) {
+    }
+
+    void xchg(Reg dst, Reg src) {
+        
+    }
+
+    void xchg(Mem dst, Reg src) {
+        xchg(src, dst);
     }
 
     void label(const std::string &name) {
@@ -346,6 +473,25 @@ public:
     }
 
 protected:
+
+    void emitRelBinding(const std::string &name) {
+        int32_t dstOffset = 0xefbeadde;
+        if (bindings.find(name) != bindings.end())
+            dstOffset = bindings[name]-_buffer.size()-4;
+        emitInt32(dstOffset);        
+        relBindingSites[name].push_back(_buffer.size()-4);        
+    }
+
+    void emitBinding(const std::string &name) {
+        int32_t dstOffset = 0xefbeadde;
+        if (bindings.find(name) != bindings.end())
+            dstOffset = bindings[name];
+        emitInt32(dstOffset);        
+        bindingSites[name].push_back(_buffer.size()-4);        
+    }
+
+
+
     std::vector<unsigned char> _buffer;
 
     void emitInt32(int x) {
