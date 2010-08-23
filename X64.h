@@ -394,6 +394,7 @@ public:
         emitRelBinding(name);
     }
 
+    /*
     
     // shift left
     void sal(Reg reg, uint8_t val) {
@@ -442,6 +443,32 @@ public:
 
     void xchg(Mem dst, Reg src) {
         xchg(src, dst);
+    }
+
+    */
+
+    // SSE instructions
+
+    void movss(SSEReg dst, SSEReg src) {
+    }
+
+    void movss(SSEReg dst, float *src) {
+    }
+
+    void movss(float *dst, SSEReg src) {
+    }
+
+    void movss(Mem dst, SSEReg src) {
+    }
+
+    void movss(SSEReg dst, Mem src) {
+    }
+
+    void addss(SSEReg dst, SSEReg src) {
+    }
+
+    void subss(SSEReg dst, SSEReg src) {
+        
     }
 
     void label(const std::string &name) {
