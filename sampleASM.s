@@ -92,4 +92,8 @@
 bar:    jmp foo       
 foo:    jmp bar   
 gah:    jmp gah       
-END
+        addps xmm0, xmm1
+        shufps xmm0, xmm1, 0
+        addps xmm10, xmm11
+        shufps xmm10, xmm11, 0    
+    END
