@@ -1,3 +1,6 @@
+tests: tests.cpp FImage.h Compiler.h X64.h Compiler.o
+		
+
 test: generated.txt test.txt
 	diff generated.txt test.txt
 

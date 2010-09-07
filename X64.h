@@ -2,6 +2,9 @@
 #include <string>
 #include <map>
 #include <stdint.h>
+#include <windows.h>
+
+using namespace std;
 
 class AsmX64 {
 public:
@@ -25,7 +28,7 @@ public:
     public:
         SSEReg(int x) : num(x) {}
         int num;
-        bool operator==(const Reg &other) {
+        bool operator==(const SSEReg &other) {
             return num == other.num;
         }
     };
@@ -123,6 +126,14 @@ protected:
     }
 
 public:
+    ~AsmX64() {
+        // Clean up the binary blobs
+        map<std::string, void *>::iterator iter;
+        for (iter = blobs.begin(); iter != blobs.end(); iter++) {
+            free(iter->second);
+        }
+    }
+
     // dst += src
     void add(Reg dst, Reg src) { 
         bop(dst, src, 0x03);
@@ -173,6 +184,47 @@ public:
     
     void sub(Mem dst, Reg src) {
         bop(dst, src, 0x29);
+    }
+
+    void imul(Reg dst, Reg src) {
+        emit(0x48 | ((dst.num & 8) >> 1) | (src.num >> 3));
+        emit(0x0F);
+        emit(0xAF);
+        emit(0xC0 | ((dst.num & 7) << 3) | (src.num & 7));        
+    }
+
+    void imul(Reg dst, Mem src) {
+        emit(0x48 | ((dst.num & 8) >> 1) | (src.reg.num >> 3));
+        emit(0x0F);
+        emit(0xAF);
+        if (src.offset) {
+            emit(0x80 | ((dst.num & 7) << 3) | (src.reg.num & 7));
+            if ((src.reg.num & 7) == 4) {
+                emit(0x24);
+            }
+            emitInt32(src.offset);
+        } else if ((src.reg.num & 7) == 5) {
+            emit(0x40 | ((dst.num & 7) << 3) | (src.reg.num & 7));
+            emit(0x00);
+        } else {
+            emit(0x00 | ((dst.num & 7) << 3) | (src.reg.num & 7));
+            if ((src.reg.num & 7) == 4) {
+                emit(0x24);
+            }
+        }                 
+    }
+
+    void imul(Reg dst, int32_t n) {
+        emit(0x48 | ((dst.num & 8) >> 1) | (dst.num >> 3));
+        if (n >= -128 && n <= 127) {
+            emit(0x6B);
+            emit(0xC0 | ((dst.num & 7) << 3) | (dst.num & 7));        
+            emit((int8_t)n);
+        } else {
+            emit(0x69);
+            emit(0xC0 | ((dst.num & 7) << 3) | (dst.num & 7));        
+            emitInt32(n);
+        }
     }
 
     // bitwise and (dst &= src)
@@ -229,28 +281,28 @@ public:
 
 
     // bitwise xor (dst ^= src)
-    void xor(Reg dst, Reg src) { 
+    void bxor(Reg dst, Reg src) { 
         bop(dst, src, 0x31);
     }
 
-    void xor(Reg dst, int32_t n) {
+    void bxor(Reg dst, int32_t n) {
         bop(dst, n, 0x35, 0x06);
     }
 
-    void xor(Reg dst, std::string name) {
+    void bxor(Reg dst, std::string name) {
         if (bindings.find(name) != bindings.end()) {
-            xor(dst, bindings[name]);
+            bxor(dst, bindings[name]);
         } else {
-            xor(dst, 0xefbeadde);
+            bxor(dst, 0xefbeadde);
         }
         bindingSites[name].push_back(_buffer.size()-4);
     }
 
-    void xor(Reg dst, Mem src) {
+    void bxor(Reg dst, Mem src) {
         bop(dst, src, 0x33);
     }
     
-    void xor(Mem dst, Reg src) {
+    void bxor(Mem dst, Reg src) {
         bop(dst, src, 0x31);
     }
 
@@ -326,23 +378,38 @@ public:
     void mov(Reg dst, Reg src) {
         bop(dst, src, 0x8B);
     }
-
-    /*
+    
     void mov(Reg dst, Mem src) {
+        bop(dst, src, 0x8B);
     }
     
     void mov(Mem dst, Reg src) {
-    }
+        bop(dst, src, 0x89);
+    } 
 
     void mov(Reg dst, int64_t n) {
+        emit(0x48 | (dst.num >> 3));
+        emit(0xB8 | (dst.num & 7));
+        emitInt32(n & 0xffffffff);        
+        emitInt32((n>>32));
     }
 
-    void mov(Reg dst, int64_t *ptr) {
+    void mov(Reg dst, int32_t n) {
+        emit(0x48 | (dst.num >> 3));
+        emit(0xC7);
+        emit(0xC0 | (dst.num & 7));
+        emitInt32(n);
+    } 
+
+    void mov(Reg dst, void *addr) {
+        mov(dst, (int64_t)addr);
     }
 
-    void mov(int64_t *ptr, Reg src) {
-    }
+    void mov(Reg dst, float n) {
+        mov(dst, *((int32_t *)&n));
+    } 
 
+    /*
     ... conditional moves
     */
 
@@ -449,26 +516,309 @@ public:
 
     // SSE instructions
 
+    void bop(SSEReg dst, SSEReg src, unsigned char op) {
+        if (dst.num > 7 || src.num > 7) {
+            emit(0x40 | ((dst.num & 8) >> 1) | (src.num >> 3));
+        }
+        emit(0x0F);
+        emit(op);
+        emit(0xC0 | ((dst.num & 7) << 3) | (src.num & 7));
+    }
+
+    void bop(SSEReg dst, Mem src, unsigned char op) {
+        if (dst.num > 7 || src.reg.num > 7) {
+            emit(0x40 | ((dst.num & 8) >> 1) | (src.reg.num >> 3));
+        }
+        emit(0x0F);
+        emit(op);
+        if (src.offset) {
+            emit(0x80 | ((dst.num & 7) << 3) | (src.reg.num & 7));
+            if ((src.reg.num & 7) == 4) {
+                emit(0x24);
+            }
+            emitInt32(src.offset);
+        } else if ((src.reg.num & 7) == 5) {
+            emit(0x40 | ((dst.num & 7) << 3) | (src.reg.num & 7));
+            emit(0x00);
+        } else {
+            emit(0x00 | ((dst.num & 7) << 3) | (src.reg.num & 7));
+            if ((src.reg.num & 7) == 4) {
+                emit(0x24);
+            }
+        }         
+    }
+
+
+    void bop(SSEReg dst, Reg src, unsigned char op) {
+        emit(0x48 | ((dst.num & 8) >> 1) | (src.num >> 3));
+        emit(0x0F);
+        emit(op);
+        emit(0xC0 | ((dst.num & 7) << 3) | (src.num & 7));
+    }
+
+    void bop(Mem dst, SSEReg src, unsigned char op) {
+        if (dst.reg.num > 7 || src.num > 7) {
+            emit(0x40 | ((src.num & 8) >> 1) | (dst.reg.num >> 3));
+        }
+        emit(0x0F);
+        emit(op);
+        if (dst.offset) {
+            emit(0x80 | ((src.num & 7) << 3) | (dst.reg.num & 7));
+            if ((dst.reg.num & 7) == 4) {
+                emit(0x24);
+            }
+            emitInt32(dst.offset);            
+        } else if ((dst.reg.num & 7) == 5) {
+            emit(0x40 | ((src.num & 7) << 3) | (dst.reg.num & 7));
+            emit(0x00);
+        } else {
+            emit(0x00 | ((src.num & 7) << 3) | (dst.reg.num & 7));
+            if ((dst.reg.num & 7) == 4) {
+                emit(0x24);
+            }
+        }
+    }
+
     void movss(SSEReg dst, SSEReg src) {
-    }
-
-    void movss(SSEReg dst, float *src) {
-    }
-
-    void movss(float *dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0x10);
     }
 
     void movss(Mem dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0x11);
     }
 
     void movss(SSEReg dst, Mem src) {
+        emit(0xF3);
+        bop(dst, src, 0x10);
+    }
+
+    void movntss(Mem dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0x2B);
+    }
+
+    void movntps(Mem dst, SSEReg src) {
+        bop(dst, src, 0x2B);
+    }
+
+    void movaps(Mem dst, SSEReg src) {
+        bop(dst, src, 0x29);
+    }
+
+    void movaps(SSEReg dst, Mem src) {
+        bop(dst, src, 0x28);
+    }
+
+    void movaps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0x28);
+    }
+
+    void movups(Mem dst, SSEReg src) {
+        bop(dst, src, 0x11);
+    }
+
+    void movups(SSEReg dst, Mem src) {
+        bop(dst, src, 0x10);
+    }
+
+    void movups(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0x10);
     }
 
     void addss(SSEReg dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0x58);
     }
 
     void subss(SSEReg dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0x5C);        
+    }
+
+    void mulss(SSEReg dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0x59);
+    }
+
+    void divss(SSEReg dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0x5E);
+    }
+
+    void cmpeqss(SSEReg dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0xC2);
+        emit(0x00);
+    }
+
+    void cmpltss(SSEReg dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0xC2);
+        emit(0x01);
+    }
+    
+    void cmpless(SSEReg dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0xC2);
+        emit(0x02);
+    }
+
+    void cmpneqss(SSEReg dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0xC2);
+        emit(0x04);
+    }
+
+    void cmpnltss(SSEReg dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0xC2);
+        emit(0x05);
+    }
+
+    void cmpnless(SSEReg dst, SSEReg src) {
+        emit(0xF3);
+        bop(dst, src, 0xC2);
+        emit(0x06);
+    }
+
+    void addps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0x58);
+    }
+
+    void subps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0x5C);        
+    }
+
+    void mulps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0x59);
+    }
+
+    void divps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0x5E);
+    }
+
+    void cmpeqps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0xC2);
+        emit(0x00);
+    }
+
+    void cmpltps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0xC2);
+        emit(0x01);
+    }
+    
+    void cmpleps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0xC2);
+        emit(0x02);
+    }
+
+    void cmpneqps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0xC2);
+        emit(0x04);
+    }
+
+    void cmpnltps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0xC2);
+        emit(0x05);
+    }
+
+    void cmpnleps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0xC2);
+        emit(0x06);
+    }
+
+    void bandps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0x54);
+    }
+
+    void bandnps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0x55);
+    }
+
+    void borps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0x56);
+    }
+
+    void bxorps(SSEReg dst, SSEReg src) {
+        bop(dst, src, 0x57);
+    }
+
+    void cvtsi2ss(SSEReg dst, Reg src) {
+        emit(0xF3);
+        bop(dst, src, 0x2A);
+    }
+
+    void punpckldq(SSEReg dst, SSEReg src) {
+        emit(0x66);
+        bop(dst, src, 0x62);
+    }
+
+    void punpcklqdq(SSEReg dst, SSEReg src) {
+        emit(0x66);
+        bop(dst, src, 0x6C);        
+    }
+
+    void punpckldq(SSEReg dst, Mem src) {
+        emit(0x66);
+        bop(dst, src, 0x62);
+    }
+
+    void punpcklqdq(SSEReg dst, Mem src) {
+        emit(0x66);
+        bop(dst, src, 0x6C);        
+    }
+
+    void shufps(SSEReg dst, SSEReg src, 
+                uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
+        bop(dst, src, 0xC6);
+        emit((a&3) | ((b&3)<<2) | ((c&3)<<4) | ((d&3)<<6));
+    }
+
+    void popNonVolatiles() {
+        mov(rbx, Mem(rsp, 0xD8));
+        mov(rbp, Mem(rsp, 0xD0));
+        mov(rdi, Mem(rsp, 0xC8));
+        mov(rsi, Mem(rsp, 0xC0));
+        mov(r12, Mem(rsp, 0xB8));
+        mov(r13, Mem(rsp, 0xB0));
+        mov(r14, Mem(rsp, 0xA8));
+        mov(r15, Mem(rsp, 0xA0));
         
+        movups(xmm6, Mem(rsp, 0x90));
+        movups(xmm7, Mem(rsp, 0x80));
+        movups(xmm8, Mem(rsp, 0x70));
+        movups(xmm9, Mem(rsp, 0x60));
+        movups(xmm10, Mem(rsp, 0x50));
+        movups(xmm11, Mem(rsp, 0x40));
+        movups(xmm12, Mem(rsp, 0x30));
+        movups(xmm13, Mem(rsp, 0x20));
+        movups(xmm14, Mem(rsp, 0x10));
+        movups(xmm15, Mem(rsp, 0x00));
+        add(rsp, 0xE0);
+    }
+
+    void pushNonVolatiles() {
+        sub(rsp, 0xE0);
+        mov(Mem(rsp, 0xD8), rbx);
+        mov(Mem(rsp, 0xD0), rbp);
+        mov(Mem(rsp, 0xC8), rdi);
+        mov(Mem(rsp, 0xC0), rsi);
+        mov(Mem(rsp, 0xB8), r12);
+        mov(Mem(rsp, 0xB0), r13);
+        mov(Mem(rsp, 0xA8), r14);
+        mov(Mem(rsp, 0xA0), r15);
+        movups(Mem(rsp, 0x90), xmm6);
+        movups(Mem(rsp, 0x80), xmm7);
+        movups(Mem(rsp, 0x70), xmm8);
+        movups(Mem(rsp, 0x60), xmm9);
+        movups(Mem(rsp, 0x50), xmm10);
+        movups(Mem(rsp, 0x40), xmm11);
+        movups(Mem(rsp, 0x30), xmm12);
+        movups(Mem(rsp, 0x20), xmm13);
+        movups(Mem(rsp, 0x10), xmm14);
+        movups(Mem(rsp, 0x00), xmm15);
     }
 
     void label(const std::string &name) {
@@ -497,6 +847,58 @@ public:
         }
 
         bindings[name] = val;
+    }
+
+    // run the function with no arguments and no return value
+    void run() {
+        // Convince windows that the buffer is safe to execute (normally
+        // it refuses to do so for security reasons)
+        DWORD out;
+        VirtualProtect(&(_buffer[0]), _buffer.size(), PAGE_EXECUTE_READWRITE, &out);
+        
+        // Cast the buffer to a function pointer of the appropriate type and call it
+        printf("About to run the function...\n");        
+        void (*func)(void) = (void (*)(void))(&(_buffer[0]));
+        func();
+        printf("Back from the function\n");
+    }
+
+    
+    void saveCOFF(const char *filename) {
+        FILE *f = fopen(filename, "w");
+        unsigned short coffHeader[10] = {0x8664,  // machine
+                                         1,     // sections
+                                         0, 0,  // date stamp
+                                         20, 0, // pointer to symbol table
+                                         0, 0,  // entries in symbol table
+                                         0,     // optional header size
+                                         0};    // characteristics
+        
+        unsigned char sectionName[8] = {'.', 't', 'e', 'x', 't', 0, 0, 0};
+        
+        unsigned int sectionHeader[8] = {0, // physical address
+                                         0, // virtual address
+                                         _buffer.size(), // size of data
+                                         10*2 + 8 + 8*4, // pointer to raw data
+                                         0, // relocation table
+                                         0, // line numbers
+                                         0, // relocation entries and line number entries
+                                         0x60500020}; // flags
+        
+        fwrite(coffHeader, 2, 10, f);
+        fwrite(sectionName, 1, 8, f);
+        fwrite(sectionHeader, 4, 8, f);
+        fwrite(&(_buffer[0]), 1, _buffer.size(), f);
+        fclose(f);
+    }
+
+    void *data(std::string name) {
+        if (blobs.find(name) != blobs.end()) return blobs[name];
+        return NULL;
+    }
+
+    void *makeData(std::string name, size_t size) {
+        return blobs[name] = malloc(size);
     }
 
 protected:
@@ -541,6 +943,8 @@ protected:
     // constant minus the location immediately following the
     // site. This is useful for jmp instructions.
     std::map<std::string, std::vector<uint32_t> > relBindingSites;
-
     std::map<std::string, int32_t> bindings;
+
+    // 16-byte aligned data blobs
+    std::map<std::string, void *> blobs;
 };
