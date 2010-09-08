@@ -12,20 +12,37 @@ Expr::Expr(float val) {
     node = IRNode::make(val);
 }
 
-Expr Expr::operator+(Expr other) {
-    return Expr(IRNode::make(Plus, node, other.node));
+void Expr::operator+=(Expr other) {
+    node = IRNode::make(Plus, node, other.node);
 }
 
-Expr Expr::operator-(Expr other) {
-    return Expr(IRNode::make(Minus, node, other.node));
+void Expr::operator*=(Expr other) {
+    node = IRNode::make(Times, node, other.node);
 }
 
-Expr Expr::operator*(Expr other) {
-    return Expr(IRNode::make(Times, node, other.node));
+void Expr::operator/=(Expr other) {
+    node = IRNode::make(Divide, node, other.node);
 }
 
-Expr Expr::operator/(Expr other) {
-    return Expr(IRNode::make(Divide, node, other.node));
+void Expr::operator-=(Expr other) {
+    node = IRNode::make(Minus, node, other.node);
+}
+
+
+Expr operator+(Expr a, Expr b) {
+    return Expr(IRNode::make(Plus, a.node, b.node));
+}
+
+Expr operator-(Expr a, Expr b) {
+    return Expr(IRNode::make(Minus, a.node, b.node));
+}
+
+Expr operator*(Expr a, Expr b) {
+    return Expr(IRNode::make(Times, a.node, b.node));
+}
+
+Expr operator/(Expr a, Expr b) {
+    return Expr(IRNode::make(Divide, a.node, b.node));
 }
 
 void Expr::debug() {
@@ -101,10 +118,6 @@ Expr FImage::operator()(Expr x, Expr y, Expr c) {
     Expr addr((int)data);
     addr = ((addr + y) + x) + c;
     return Expr(IRNode::make(Load, addr.node));
-}
-
-float FImage::operator()(int x, int y, int c) {
-    return data[(y*width+x)*channels + c];
 }
 
 

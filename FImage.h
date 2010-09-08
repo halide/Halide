@@ -12,13 +12,22 @@ public:
     Expr(IRNode *n);
     Expr(int);
     Expr(float);
-    Expr operator+(Expr);
-    Expr operator-(Expr);
-    Expr operator*(Expr);
-    Expr operator/(Expr);
+
+    void operator+=(Expr);
+    void operator-=(Expr);
+    void operator*=(Expr);
+    void operator/=(Expr);
+
     IRNode *node;
     void debug();
 };
+
+Expr operator+(Expr, Expr);
+Expr operator-(Expr, Expr);
+Expr operator*(Expr, Expr);
+Expr operator/(Expr, Expr);
+
+
 
 class Var : public Expr {
 public:
@@ -44,8 +53,10 @@ public:
     LVal operator()(Var, Var, Var);
     Expr operator()(Expr, Expr, Expr);
 
-    float operator()(int, int, int);
-
+    float &FImage::operator()(int x, int y, int c) {
+        return data[(y*width+x)*channels + c];
+    }
+    
     void evaluate();
 
     int width, height, channels;
