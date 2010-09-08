@@ -368,6 +368,11 @@ public:
 
             // deal with const integer a
             if (inputs[0]->op == PlusImm) {
+                printf("Hit times of plusimm: ");
+                inputs[0]->printExp();
+                printf(" * ");
+                inputs[1]->printExp();
+                printf("\n");
                 return make(Plus, 
                             make(Times, inputs[0]->inputs[0], inputs[1]),
                             make(Times, inputs[1], make(inputs[0]->ival)));
@@ -1056,7 +1061,8 @@ protected:
         reg = -1;
 
         // compute the level based on deps
-        if ((deps & DepC) || (deps & DepMem)) level = 4;
+        if (deps & DepUnbound) level = 99;
+        else if ((deps & DepC) || (deps & DepMem)) level = 4;
         else if (deps & DepX) level = 3;
         else if (deps & DepY) level = 2;
         else if (deps & DepT) level = 1;

@@ -35,53 +35,46 @@ public:
                              (1 << outPtr.num) |
                              (1 << tmp.num) | 
                              (1 << a->rsp.num));
-        
-        IRNode::make(VarX)->reg = x.num;
-        IRNode::make(VarY)->reg = y.num;
-        IRNode::make(VarT)->reg = t.num;
-        //IRNode::make(VarC)->reg = c.num;
-        
-        // make a specialized version of the expression for each color channel
 
+        // make a specialized version of the expression for each color channel
         vector<IRNode *> roots(im->channels);
         for (int i = def.c.min; i < def.c.max; i++) {
             roots[i] = root->substitute(VarC, i);
+            // nuke any existing register allocations        
+            regClear(roots[i]);
             printf("Unrolled %d: ", i);
             roots[i]->printExp();
             printf("\n");
         }
 
+        // Force the vars into the intended registers
+        IRNode::make(VarX)->reg = x.num;
+        IRNode::make(VarY)->reg = y.num;
+        IRNode::make(VarT)->reg = t.num;
+        //IRNode::make(VarC)->reg = c.num;       
+
         // Register assignment and evaluation ordering
         uint32_t clobbered[5], outputs[5];
         vector<vector<IRNode *> > ordering = doRegisterAssignment(roots, clobbered, outputs, reserved);        
         
+        assert(ordering[4].size() == 0, 
+               "C should have been unrolled!\n");
+
         // print out the assembly for inspection
-        const char *dims = "tyxc";
-        for (size_t l = 0; l < ordering.size(); l++) {
+        const char *dims = "tyx";
+        const int range[3][2] = {{0, 1},
+                                 {def.y.min, def.y.max},
+                                 {def.x.min, def.x.max}};
+        for (size_t l = 0; l < 4; l++) {
             if (l) {
                 for (size_t k = 1; k < l; k++) putchar(' ');
-                printf("for %c:\n", dims[l-1]);
+                printf("for %c from %d to %d:\n",
+                       dims[l-1], range[l-1][0], range[l-1][1]);
             }
             for (size_t i = 0; i < ordering[l].size(); i++) {
                 IRNode *next = ordering[l][i];
                 for (size_t k = 0; k < l; k++) putchar(' ');
                 next->print();
-            }
-            if (clobbered[l] & 0x3fffffff) {
-                for (size_t k = 0; k < l; k++) putchar(' ');
-                printf("clobbered: ");
-                for (int i = 0; i < 32; i++) {
-                    if (clobbered[l] & (1 << i)) printf("%d ", i);
-                }
-                printf("\n");
-            }
-            if (outputs[l]) {
-                for (size_t k = 0; k < l; k++) putchar(' ');
-                printf("output: ");
-                for (int i = 0; i < 32; i++) {
-                    if (outputs[l] & (1 << i)) printf("%d ", i);
-                }
-                printf("\n");
             }
         }
         
@@ -96,7 +89,7 @@ public:
         
         // generate constants
         compileBody(a, x, y, t, ordering[0]);
-        a->mov(t, 0);
+        a->mov(t, 0); // def.t.min);
         a->label("tloop"); 
         
         // generate the values that don't depend on Y, X, or memory
@@ -112,6 +105,7 @@ public:
         a->mov(tmp, y);
         a->imul(tmp, im->width*im->channels*sizeof(float));
         a->add(outPtr, tmp);
+        a->add(outPtr, def.x.min*im->channels*sizeof(float));
         
         // generate the values that don't depend on X or memory
         compileBody(a, x, y, t, ordering[2]);        
@@ -120,9 +114,6 @@ public:
         
         // generate the values that don't depend on memory
         compileBody(a, x, y, t, ordering[3]);       
-        
-        //a->mov(c, def.c.min);
-        //a->label("cloop");                         
         
         // insert code for the expression body
         compileBody(a, x, y, t, ordering[4]);
@@ -171,7 +162,7 @@ public:
         a->cmp(y, def.y.max);
         a->jl("yloop");            
         a->add(t, 1);
-        a->cmp(t, 0); //im->frames);
+        a->cmp(t, 0); //def.t.max);
         a->jl("tloop");            
         a->add(a->rsp, im->channels*4*4);
         a->popNonVolatiles();
@@ -519,11 +510,6 @@ protected:
                "Registers xmm14 and xmm15 are reserved for the code generator\n");
         reserved |= (1<<30) | (1<<31);
         
-        // nuke any existing allocations        
-        for (size_t i = 0; i < roots.size(); i++) {
-            regClear(roots[i]);
-        }
-
         // the resulting evaluation order
         vector<vector<IRNode *> > order(5);
         for (size_t i = 0; i < roots.size(); i++) {

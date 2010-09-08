@@ -1,20 +1,8 @@
-tests: tests.cpp FImage.h Compiler.h X64.h Compiler.o
-		
+HEADERS = FImage.h Compiler.h X64.h IRNode.h
+OBJECTS = tests.obj Compiler.obj FImage.obj
 
-test: generated.txt test.txt
-	diff generated.txt test.txt
+tests.exe: $(OBJECTS) 
+	cl.exe $(OBJECTS) /Ox /link ImageStack-x64-static-mt.lib /LTCG winmm.lib ws2_32.lib user32.lib
 
-generated.txt: generated.obj
-	dumpbin /disasm:bytes generated.obj | grep "^  " | cut -d: -f2 > generated.txt
-
-test.txt: test.obj
-	dumpbin /disasm:bytes test.obj | grep "^  " | cut -d: -f2 > test.txt
-
-generated.obj: testX64
-	./testX64
-
-test.obj: generated.obj testX64
-	ml64.exe /c test.s
-
-testX64: testX64.cpp X64.h
-	g++ -Wall testX64.cpp -o testX64
+%.obj: %.cpp $(HEADERS)
+	cl.exe /EHsc /Ox /c $< /DWIN32 /I ../../ImageStack/src

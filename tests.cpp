@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
 
     // Compute horizontal derivative
     FImage dx(im.width, im.height, im.channels);
-    x = Var(1, im.width);
+    x = Var(4, im.width);
     //dx(0, y, c) = im(0, y, c);    
     dx(x, y, c) = im(x, y, c) - im(x-1, y, c);
 
@@ -53,28 +53,78 @@ int main(int argc, char **argv) {
     dx.evaluate();
     save(dx, "dx.tmp");
 
-    return 0;
+    // Separable 11x11 Gaussian
+    float g[11];
+    float sum = 0;
+    for (int i = 0; i < 11; i++) {
+        g[i] = expf(-(i-5)*(i-5)/5.0);
+        sum += g[i];
+    }
+    for (int i = 0; i < 11; i++) {
+        g[i] /= sum;
+    }
 
-    /*
-    // Separable 5x5 Gaussian
-    float g[] = {0.135, 0.368, 1.0};
     FImage blurry(im.width, im.height, im.channels);
     FImage tmp(im.width, im.height, im.channels);
 
-    x = Var(2, im.width-2);
-    tmp(x, y, c) = (g[0]*im(x-2, y, c) +
-                    g[1]*im(x-1, y, c) +
-                    g[2]*im(x, y, c) + 
-                    g[1]*im(x+1, y, c) + 
-                    g[0]*im(x+2, y, c));
-    
-    y = Var(2, im.height-2);
-    blurry(x, y, c) = (g[0]*im(x, y-2, c) + 
-                       g[1]*im(x, y-1, c) + 
-                       g[2]*im(x, y, c) + 
-                       g[1]*im(x, y+1, c) + 
-                       g[0]*im(x, y+2, c));
-    
+    float t0 = ImageStack::currentTime();
+
+    x = Var(8, im.width-8);
+    y = Var(8, im.height-8);
+
+    Expr blurX = 0;
+    for (int i = -5; i <= 5; i++) 
+        blurX += im(x+i, y, c)*g[i+5];
+    tmp(x, y, c) = blurX;
+
+    Expr blurY = 0;
+    for (int i = -5; i <= 5; i++) 
+        blurY += tmp(x, y+i, c)*g[i+5];
+    blurry(x, y, c) = blurY;
+
+    tmp.evaluate();
+    blurry.evaluate();
+
+    float t1 = ImageStack::currentTime();
+
+    save(blurry, "blurry.tmp");
+
+    float t2 = ImageStack::currentTime();
+
+    for (int yi = 8; yi < im.height-8; yi++) {
+        for (int xi = 8; xi < im.width-8; xi++) {
+            for (int ci = 0; ci < im.channels; ci++) {
+                float blurX = 0.0f;
+                for (int i = -5; i <= 5; i++) {
+                    blurX += im(xi+i, yi, ci)*g[i+5];
+                }                
+                tmp(xi, yi, ci) = blurX;
+            }            
+        }
+    }
+
+    for (int yi = 8; yi < im.height-8; yi++) {
+        for (int xi = 8; xi < im.width-8; xi++) {
+            for (int ci = 0; ci < im.channels; ci++) {
+                float blurY = 0.0f;
+                for (int i = -5; i <= 5; i++) {
+                    blurY += tmp(xi, yi+i, ci)*g[i+5];
+                }                
+                blurry(xi, yi, ci) = blurY;
+            }            
+        }
+    }
+
+    float t3 = ImageStack::currentTime();
+
+    printf("FImage: %f\nConventional: %f\n", t1-t0, t3-t2);
+
+    save(blurry, "blurry2.tmp");
+
+
+    return 0;
+
+    /*
     // 256-bin Histogram
     FImage hist(256, 1, 3);
     x = Var(0, im.width);
