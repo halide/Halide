@@ -492,6 +492,7 @@ public:
                 a->movss(tmp2, AsmX64::Mem(gsrc1, node->ival + 3*12));
                 a->punpckldq(tmp, tmp2);
                 a->punpcklqdq(dst, tmp);
+               
 
             case NoOp:
                 break;
@@ -652,6 +653,7 @@ protected:
             }
         }
 
+
         // else find a previously used register that is safe to evict
         // - meaning it's at the same or higher level and all its
         // outputs will have already been evaluated and are at the same or higher level
@@ -688,8 +690,12 @@ protected:
             }
         }
 
+
         // else find a completely unused register and use that. 
         for (size_t i = 0; i < regs.size(); i++) {
+            // don't consider used registers
+            if (regs[i]) continue;
+            
             // don't consider the wrong type of register
             if (gpr && (i >= 16)) break;
             if (!gpr && (i < 16)) continue;
