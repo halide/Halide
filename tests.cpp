@@ -1,15 +1,23 @@
 #include "FImage.h"
-#include "ImageStack.h"
+
+// We use Cimg for file loading and saving
+#define cimg_use_jpeg
+#define cimg_use_png
+#define cimg_use_tiff
+#include "CImg.h"
+using namespace cimg_library;
 
 FImage load(const char *fname) {
-    ImageStack::Image input = ImageStack::Load::apply(fname);
-    FImage im(input.width, input.height, input.channels);
+    CImg<float> input;
+    input.load_jpeg(fname);
+
+    FImage im(input.width(), input.height(), input.spectrum());
 
     float *imPtr = im.data;
-    for (int y = 0; y < input.height; y++) {
-        for (int x = 0; x < input.width; x++) {
-            for (int c = 0; c < input.channels; c++) {
-                *imPtr++ = input(x, y)[c];
+    for (int y = 0; y < input.height(); y++) {
+        for (int x = 0; x < input.width(); x++) {
+            for (int c = 0; c < input.spectrum(); c++) {
+                *imPtr++ = input(x, y, c)/256.0f;
             }
         }
     }
@@ -18,108 +26,130 @@ FImage load(const char *fname) {
 }
 
 void save(const FImage &im, const char *fname) {
-    ImageStack::Image output(im.width, im.height, 1, im.channels);
+    CImg<float> output(im.width, im.height, 1, im.channels);
     float *imPtr = im.data;
-    for (int y = 0; y < output.height; y++) {
-        for (int x = 0; x < output.width; x++) {
-            for (int c = 0; c < output.channels; c++) {
-                output(x, y)[c] = *imPtr++;
+    for (int y = 0; y < output.height(); y++) {
+        for (int x = 0; x < output.width(); x++) {
+            for (int c = 0; c < output.spectrum(); c++) {
+                output(x, y, c) = 256*(*imPtr++);
             }
         }
     }
-    ImageStack::Save::apply(output, fname);
+    output.save_jpeg(fname);
 }
 
 int main(int argc, char **argv) {
 
-    FImage im = load(argv[1]);
+    FImage im(0, 0, 0);
+    if (argc == 1)
+        im = load("dog_big.jpg");
+    else 
+        im = load(argv[1]);
 
     Var x(0, im.width), y(0, im.height), c(0, im.channels);
 
     // Add one to an image
     FImage bright(im.width, im.height, im.channels);
-    bright(x, y, c) = im(x, y, c) + 1;
+    bright(x, y, c) = (im(x, y, c) + 1)/2.0f;
     bright.evaluate();
 
-    save(bright, "bright.tmp");
+    save(bright, "bright.jpg");
 
     // Compute horizontal derivative
     FImage dx(im.width, im.height, im.channels);
     x = Var(4, im.width);
     //dx(0, y, c) = im(0, y, c);    
-    dx(x, y, c) = im(x, y, c) - im(x-1, y, c);
+    dx(x, y, c) = (im(x, y, c) - im(x-1, y, c))+0.5f;
 
     dx.debug();
     dx.evaluate();
-    save(dx, "dx.tmp");
+    save(dx, "dx.jpg");
 
-    // Separable 11x11 Gaussian
-    float g[11];
+    // Separable KxK Gaussian
+    #define K 19
+    float g[K];
     float sum = 0;
-    for (int i = 0; i < 11; i++) {
-        g[i] = expf(-(i-5)*(i-5)/5.0);
+    for (int i = 0; i < K; i++) {
+        g[i] = expf(-(i-K/2)*(i-K/2)/(0.125f*K*K));
         sum += g[i];
     }
-    for (int i = 0; i < 11; i++) {
+    for (int i = 0; i < K; i++) {
         g[i] /= sum;
     }
 
     FImage blurry(im.width, im.height, im.channels);
     FImage tmp(im.width, im.height, im.channels);
 
-    float t0 = ImageStack::currentTime();
-
-    x = Var(8, im.width-8);
-    y = Var(8, im.height-8);
+    x = Var(16, im.width-16);
+    y = Var(16, im.height-16);
 
     Expr blurX = 0;
-    for (int i = -5; i <= 5; i++) 
-        blurX += im(x+i, y, c)*g[i+5];
+    for (int i = -K/2; i <= K/2; i++) 
+        blurX += im(x+i, y, c)*g[i+K/2];
     tmp(x, y, c) = blurX;
 
     Expr blurY = 0;
-    for (int i = -5; i <= 5; i++) 
-        blurY += tmp(x, y+i, c)*g[i+5];
+    for (int i = -K/2; i <= K/2; i++) 
+        blurY += tmp(x, y+i, c)*g[i+K/2];
     blurry(x, y, c) = blurY;
 
+    int t0 = timeGetTime();   
+
     tmp.evaluate();
+
+    int t1 = timeGetTime();
+
     blurry.evaluate();
 
-    float t1 = ImageStack::currentTime();
+    int t2 = timeGetTime();
 
-    save(blurry, "blurry.tmp");
+    save(blurry, "blurry.jpg");
 
-    float t2 = ImageStack::currentTime();
+    int t3 = timeGetTime();
 
-    for (int yi = 8; yi < im.height-8; yi++) {
-        for (int xi = 8; xi < im.width-8; xi++) {
+    for (int yi = 16; yi < im.height-16; yi++) {
+        for (int xi = 16; xi < im.width-16; xi++) {
             for (int ci = 0; ci < im.channels; ci++) {
                 float blurX = 0.0f;
-                for (int i = -5; i <= 5; i++) {
-                    blurX += im(xi+i, yi, ci)*g[i+5];
+                for (int i = -K/2; i <= K/2; i++) {
+                    blurX += im(xi+i, yi, ci)*g[i+K/2];
                 }                
                 tmp(xi, yi, ci) = blurX;
             }            
         }
     }
 
-    for (int yi = 8; yi < im.height-8; yi++) {
-        for (int xi = 8; xi < im.width-8; xi++) {
+    int t4 = timeGetTime();
+
+    for (int yi = 16; yi < im.height-16; yi++) {
+        for (int xi = 16; xi < im.width-16; xi++) {
             for (int ci = 0; ci < im.channels; ci++) {
                 float blurY = 0.0f;
-                for (int i = -5; i <= 5; i++) {
-                    blurY += tmp(xi, yi+i, ci)*g[i+5];
+                for (int i = -K/2; i <= K/2; i++) {
+                    blurY += tmp(xi, yi+i, ci)*g[i+K/2];
                 }                
                 blurry(xi, yi, ci) = blurY;
             }            
         }
     }
 
-    float t3 = ImageStack::currentTime();
+    int t5 = timeGetTime();
 
-    printf("FImage: %f\nConventional: %f\n", t1-t0, t3-t2);
+    printf("FImage: %d %d\n", t1-t0, t2-t1);
+    printf("Conventional: %d %d\n", t4-t3, t5-t4);
 
-    save(blurry, "blurry2.tmp");
+    // clock speed in cycles per millisecond
+    const float clock = 2660000.0f;
+    int multiplies = (im.width-32)*(im.height-32)*im.channels*K;
+    float f_mpc1 = multiplies / ((t1-t0)*clock);
+    float f_mpc2 = multiplies / ((t2-t1)*clock);
+    float c_mpc1 = multiplies / ((t4-t3)*clock);
+    float c_mpc2 = multiplies / ((t5-t4)*clock);
+
+    printf("FImage: %f %f multiplies per clock\n", f_mpc1, f_mpc2);
+    printf("Conventional: %f %f multiplies per clock\n", c_mpc1, c_mpc2);
+
+    save(blurry, "blurry2.jpg");
 
 
     return 0;
