@@ -145,11 +145,12 @@ FImage histEqualize(FImage im) {
 
 int main(int argc, char **argv) {
 
-    FImage im(0, 0, 0);
-    if (argc == 1)
-        im = load("dog_big.jpg");
-    else 
-        im = load(argv[1]);
+    if (argc != 2) {
+        printf("Usage: tests.exe image.jpg\n");
+        return -1;
+    }
+
+    FImage im = load(argv[1]);
 
     Var x(0, im.width), y(0, im.height), c(0, im.channels);
 
@@ -159,7 +160,7 @@ int main(int argc, char **argv) {
     // Test 2: Compute horizontal derivative
     save(gradientx(im).evaluate(), "dx.jpg");
 
-    // Test 3: Separable Gaussian blur
+    // Test 3: Separable Gaussian blur with timing
     FImage tmp(im.width, im.height, im.channels);
     FImage blurry(im.width, im.height, im.channels);
     const int K = 19;
