@@ -821,6 +821,33 @@ public:
         movups(Mem(rsp, 0x00), xmm15);
     }
 
+    // Add a mark for intel's static binary analyzer (iaca). Code that
+    // includes these won't run. Use savecoff to generate an obj file
+    // to pass to the analyzer.
+    void iacaStart() {
+        emit(0x65);
+        emit(0xC6);
+        emit(0x04);
+        emit(0x25);
+        emit(0x6F);
+        emit(0x00);
+        emit(0x00);
+        emit(0x00);
+        emit(0x6F);
+    }
+
+    void iacaEnd() {
+        emit(0x65);
+        emit(0xC6);
+        emit(0x04);
+        emit(0x25);
+        emit(0xDE);
+        emit(0x00);
+        emit(0x00);
+        emit(0x00);
+        emit(0xDE);
+    }
+
     void label(const std::string &name) {
         bind(name, _buffer.size());
     }
