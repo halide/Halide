@@ -1,32 +1,5 @@
 #include "Compiler.h"
 
-void panic(const char *fmt, ...) {
-    char message[1024];
-    va_list arglist;
-    va_start(arglist, fmt);
-    vsnprintf(message, 1024, fmt, arglist);
-    va_end(arglist);
-    printf(message);
-    exit(-1);
-}
-
-void assert(bool cond, const char *fmt, ...) {
-    if (cond) return;
-    char message[1024];
-    va_list arglist;
-    va_start(arglist, fmt);
-    vsnprintf(message, 1024, fmt, arglist);
-    va_end(arglist);
-    printf(message);
-    exit(-1);
-}
-
-
-map<float, IRNode *> IRNode::floatInstances;
-map<int, IRNode *> IRNode::intInstances;
-map<OpCode, IRNode *> IRNode::varInstances;
-vector<IRNode *> IRNode::allNodes;
-
 
 // Compile a gather
 void Compiler::compileGather(AsmX64 *a, FImage *im) {
@@ -716,7 +689,6 @@ void Compiler::regAssign(IRNode *node,
         if (okToClobber) {
             node->reg = input1->reg;
             regs[input1->reg] = node;
-            node->order = order[node->level].size();
             order[node->level].push_back(node);
             return;
         }
@@ -760,7 +732,6 @@ void Compiler::regAssign(IRNode *node,
         if (okToClobber) {
             node->reg = input2->reg;
             regs[input2->reg] = node;
-            node->order = order[node->level].size();
             order[node->level].push_back(node);
             return;
         }
@@ -802,7 +773,6 @@ void Compiler::regAssign(IRNode *node,
         if (safeToEvict) {
             node->reg = i;
             regs[i] = node;
-            node->order = order[node->level].size();
             order[node->level].push_back(node);
             return;
         }
@@ -823,7 +793,6 @@ void Compiler::regAssign(IRNode *node,
 
         node->reg = i;
         regs[i] = node;
-        node->order = order[node->level].size();
         order[node->level].push_back(node);
         return;
     }
@@ -857,7 +826,6 @@ void Compiler::regAssign(IRNode *node,
         if (okToClobber) {
             node->reg = input->reg;
             regs[input->reg] = node;
-            node->order = order[node->level].size();
             order[node->level].push_back(node);
             return;
         }
