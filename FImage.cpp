@@ -2,6 +2,7 @@
 #include "Compiler.h"
 
 
+// An Expr is a wrapper around the IRNode structure used by the compiler
 Expr::Expr(IRNode *n) : node(n) {}
 
 Expr::Expr(int val) {
@@ -45,6 +46,7 @@ Expr operator/(Expr a, Expr b) {
     return Expr(IRNode::make(Divide, a.node, b.node));
 }
 
+// Print out an expression
 void Expr::debug() {
     node->printExp(); 
     printf("\n");
@@ -55,17 +57,20 @@ Var::Var(int a, int b) : Expr(IRNode::make(UnboundVar)) {
     max = b;
 }
 
+// Make an LVal reference to a particular pixel. It can be used as an
+// assignment target or cast to a load operation. In the future it may
+// also serve as a marker for a site in an expression that can be
+// fused.
 LVal::LVal(FImage *im_, Var x_, Var y_, Var c_) : 
     Expr((*im_)(Expr(x_), Expr(y_), Expr(c_))), 
     im(im_), x(x_), y(y_), c(c_) {
-    // TODO: right node casting an lval to an expression produces a
-    // load, which does not attempt to fuse kernels in any way
 }
 
 
 void LVal::operator=(Expr e) {
-    // Make a new version of the rhs with the variables bound appropriately
-    // Don't worry about t for now. Now's a good time to optimize too.
+    // Make a new version of the rhs with the variables bound
+    // appropriately Don't worry about t for now. Now's a good time to
+    // do any final optimizations too.
     IRNode *ix, *iy, *ic;
     printf("Creating assignment\n");        
     ix = x.node->bind(x.node, y.node, NULL, c.node)->optimize();
@@ -75,13 +80,12 @@ void LVal::operator=(Expr e) {
     ic = c.node->bind(x.node, y.node, NULL, c.node)->optimize();
     printf("Done binding c\n");
     printf("Done creating LHS\n");
-    node = e.node->bind(x.node, y.node, NULL, c.node);
+    node = e.node->bind(x.node, y.node, NULL, c.node)->optimize();
     printf("Done creating RHS\n");
-    node = node->optimize();    
-    printf("Done optimizing RHS...\n");
     x.node = ix;
     y.node = iy;
     c.node = ic;
+    // Add this to the list of definitions of im
     im->definitions.push_back(*this);
 }
 
@@ -91,13 +95,17 @@ FImage::FImage(int w, int h, int c) {
     height = h;
     channels = c;
     data = new float[width*height*channels];
-    // TODO: enforce alignment, lazy allocation
+    // TODO: enforce alignment, lazy allocation, etc, etc
 }
 
+// Generate an LVal reference to a location in this image that can be
+// used as an assignment target, and can also be cast to the RVal
+// version (a load of a computed address)
 LVal FImage::operator()(Var x, Var y, Var c) {
     return LVal(this, x, y, c);
 }
 
+// Print out a particular definition. We assume the LVal has already been assigned to.
 void LVal::debug() {
     printf("[");
     x.node->printExp();
@@ -110,7 +118,7 @@ void LVal::debug() {
     printf("\n");
 }
 
-
+// Generate a rval reference that will turn into a load of a computed address.
 Expr FImage::operator()(Expr x, Expr y, Expr c) {    
     y = y * (4*width*channels);
     x = x * (4*channels);
@@ -121,20 +129,23 @@ Expr FImage::operator()(Expr x, Expr y, Expr c) {
 }
 
 
+// Print out all the definitions of this FImage
 void FImage::debug() {
     for (size_t i = 0; i < definitions.size(); i++) {
         definitions[i].debug();
     }
 }
 
-void FImage::evaluate() {
-    // just evaluate the first definition for now
+FImage &FImage::evaluate() {
+    // For now we assume the sole definition of this FImage is a very
+    // simple gather
     Compiler c;
     AsmX64 a;    
-    printf("Calling compile...\n");
-    c.compileEval(&a, this);
+    printf("Compiling...\n");
+    c.compileGather(&a, this);
     printf("Running...\n");
     a.run();
+    return *this;
 }
 
 

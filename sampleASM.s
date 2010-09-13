@@ -146,9 +146,5 @@ testData REAL4 1.75
         movntss dword ptr [rdx], xmm2
         movntss dword ptr [rdx], xmm3    
 
-        addps xmm1, xmm3
-        blendvps xmm1, xmm3, xmm0
-        addps xmm13, xmm14
-        blendvps xmm13, xmm14, xmm0
     
         END

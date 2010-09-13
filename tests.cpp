@@ -38,6 +38,111 @@ void save(const FImage &im, const char *fname) {
     output.save_jpeg(fname);
 }
 
+FImage brighten(FImage im) {
+    Var x(0, im.width), y(0, im.height), c(0, im.channels);
+    FImage bright(im.width, im.height, im.channels);
+    bright(x, y, c) = (im(x, y, c) + 1)/2.0f;
+    return bright;
+}
+
+FImage gradientx(FImage im) {
+    // TODO: make x.min = 1, and allow the base case definition
+    
+    Var x(4, im.width), y(0, im.height), c(0, im.channels);
+    FImage dx(im.width, im.height, im.channels);
+    //dx(0, y, c) = im(0, y, c);    
+    dx(x, y, c) = (im(x, y, c) - im(x-1, y, c))+0.5f;
+    return dx;
+}
+
+void blur(FImage im, const int K, FImage &tmp, FImage &output) {
+    // create a gaussian kernel
+    vector<float> g(K);
+    float sum = 0;
+    for (int i = 0; i < K; i++) {
+        g[i] = expf(-(i-K/2)*(i-K/2)/(0.125f*K*K));
+        sum += g[i];
+    }
+    for (int i = 0; i < K; i++) {
+        g[i] /= sum;
+    }
+
+    Var x(16, im.width-16);
+    Var y(16, im.height-16);
+    Var c(0, im.channels);
+
+    Expr blurX = 0;
+    for (int i = -K/2; i <= K/2; i++) 
+        blurX += im(x+i, y, c)*g[i+K/2];
+    tmp(x, y, c) = blurX;
+
+    Expr blurY = 0;
+    for (int i = -K/2; i <= K/2; i++) 
+        blurY += tmp(x, y+i, c)*g[i+K/2];
+    output(x, y, c) = blurY;
+}
+
+void blurNative(FImage im, const int K, FImage &tmp, FImage &output) {
+    // create a gaussian kernel
+    vector<float> g(K);
+    float sum = 0;
+    for (int i = 0; i < K; i++) {
+        g[i] = expf(-(i-K/2)*(i-K/2)/(0.125f*K*K));
+        sum += g[i];
+    }
+    for (int i = 0; i < K; i++) {
+        g[i] /= sum;
+    }
+
+    for (int y = 16; y < im.height-16; y++) {            
+        for (int x = 16; x < im.width-16; x++) {
+            for (int c = 0; c < im.channels; c++) {
+                float blurX = 0;
+                for (int i = -K/2; i <= K/2; i++) 
+                    blurX += im(x+i, y, c)*g[i+K/2];
+                tmp(x, y, c) = blurX;
+            }
+        }
+    }
+
+    for (int y = 16; y < im.height-16; y++) {            
+        for (int x = 16; x < im.width-16; x++) {
+            for (int c = 0; c < im.channels; c++) {
+                float blurY = 0;
+                for (int i = -K/2; i <= K/2; i++) 
+                    blurY += tmp(x, y+i, c)*g[i+K/2];
+                output(x, y, c) = blurY;
+            }
+        }
+    }
+}
+
+// TODO: this one doesn't work at all. It uses a reduction and a scan
+/*
+FImage histEqualize(FImage im) {    
+    // 256-bin Histogram
+    FImage hist(hist.width, 1, im.channels);
+    Var x(0, im.width);
+    Var y(0, im.height);
+    hist(floor(im(x, y, c)*256), 0, c) += 1.0f/(im.width*im.height);
+
+    // Compute the cumulative distribution by scanning along the
+    // histogram
+    FImage cdf(hist.width, 1, im.channels);    
+    cdf(0, 0, c) = 0;
+    x = Var(1, hist.width);
+    cdf(x, 0, c) = cdf(x-1, 0, c) + hist(x, 0, c);
+
+    // Equalize im using the cdf
+    FImage equalized(im.width, im.height, im.channels);
+    x = Var(0, im.width);
+    y = Var(0, im.height);
+    equalized(x, y, c) = cdf(floor(im(x, y, c)*256), 1, c);
+
+    return equalized();
+}
+*/
+
 int main(int argc, char **argv) {
 
     FImage im(0, 0, 0);
@@ -48,171 +153,47 @@ int main(int argc, char **argv) {
 
     Var x(0, im.width), y(0, im.height), c(0, im.channels);
 
-    // Add one to an image
-    FImage bright(im.width, im.height, im.channels);
-    bright(x, y, c) = (im(x, y, c) + 1)/2.0f;
-    bright.evaluate();
+    // Test 1: Add one to an image
+    save(brighten(im).evaluate(), "bright.jpg");
 
-    save(bright, "bright.jpg");
+    // Test 2: Compute horizontal derivative
+    save(gradientx(im).evaluate(), "dx.jpg");
 
-    // Compute horizontal derivative
-    FImage dx(im.width, im.height, im.channels);
-    x = Var(4, im.width);
-    //dx(0, y, c) = im(0, y, c);    
-    dx(x, y, c) = (im(x, y, c) - im(x-1, y, c))+0.5f;
-
-    dx.debug();
-    dx.evaluate();
-    save(dx, "dx.jpg");
-
-    // Separable KxK Gaussian
-    #define K 19
-    float g[K];
-    float sum = 0;
-    for (int i = 0; i < K; i++) {
-        g[i] = expf(-(i-K/2)*(i-K/2)/(0.125f*K*K));
-        sum += g[i];
-    }
-    for (int i = 0; i < K; i++) {
-        g[i] /= sum;
-    }
-
-    FImage blurry(im.width, im.height, im.channels);
+    // Test 3: Separable Gaussian blur
     FImage tmp(im.width, im.height, im.channels);
-
-    x = Var(16, im.width-16);
-    y = Var(16, im.height-16);
-
-    Expr blurX = 0;
-    for (int i = -K/2; i <= K/2; i++) 
-        blurX += im(x+i, y, c)*g[i+K/2];
-    tmp(x, y, c) = blurX;
-
-    Expr blurY = 0;
-    for (int i = -K/2; i <= K/2; i++) 
-        blurY += tmp(x, y+i, c)*g[i+K/2];
-    blurry(x, y, c) = blurY;
-
-    int t0 = timeGetTime();   
-
+    FImage blurry(im.width, im.height, im.channels);
+    const int K = 19;
+    int t0 = timeGetTime();
+    blur(im, K, tmp, blurry);
     tmp.evaluate();
-
-    int t1 = timeGetTime();
-
     blurry.evaluate();
-
-    int t2 = timeGetTime();
-
+    int t1 = timeGetTime();
     save(blurry, "blurry.jpg");
 
+    // Do it in native C++ for comparison
+    int t2 = timeGetTime();
+    blurNative(im, K, tmp, blurry);
     int t3 = timeGetTime();
+    save(blurry, "blurry_native.jpg");
 
-    for (int yi = 16; yi < im.height-16; yi++) {
-        for (int xi = 16; xi < im.width-16; xi++) {
-            for (int ci = 0; ci < im.channels; ci++) {
-                float blurX = 0.0f;
-                for (int i = -K/2; i <= K/2; i++) {
-                    blurX += im(xi+i, yi, ci)*g[i+K/2];
-                }                
-                tmp(xi, yi, ci) = blurX;
-            }            
-        }
-    }
-
-    int t4 = timeGetTime();
-
-    for (int yi = 16; yi < im.height-16; yi++) {
-        for (int xi = 16; xi < im.width-16; xi++) {
-            for (int ci = 0; ci < im.channels; ci++) {
-                float blurY = 0.0f;
-                for (int i = -K/2; i <= K/2; i++) {
-                    blurY += tmp(xi, yi+i, ci)*g[i+K/2];
-                }                
-                blurry(xi, yi, ci) = blurY;
-            }            
-        }
-    }
-
-    int t5 = timeGetTime();
-
-    printf("FImage: %d %d\n", t1-t0, t2-t1);
-    printf("Conventional: %d %d\n", t4-t3, t5-t4);
+    printf("FImage: %d ms\n", t1-t0);
+    printf("Native: %d ms\n", t3-t2);
 
     // clock speed in cycles per millisecond
-    const float clock = 2660000.0f;
-    int multiplies = (im.width-32)*(im.height-32)*im.channels*K;
-    float f_mpc1 = multiplies / ((t1-t0)*clock);
-    float f_mpc2 = multiplies / ((t2-t1)*clock);
-    float c_mpc1 = multiplies / ((t4-t3)*clock);
-    float c_mpc2 = multiplies / ((t5-t4)*clock);
+    const double clock = 2130000.0;
+    long long pixels = (im.width-32)*(im.height-32)*2;
+    long long multiplies = pixels*im.channels*K;
+    double f_mpc = multiplies / ((t1-t0)*clock);
+    double n_mpc = multiplies / ((t3-t2)*clock);
 
-    printf("FImage: %f %f multiplies per clock\n", f_mpc1, f_mpc2);
-    printf("Conventional: %f %f multiplies per clock\n", c_mpc1, c_mpc2);
+    double f_ppc = ((t1-t0)*clock)/pixels;
+    double n_ppc = ((t3-t2)*clock)/pixels;
 
-    save(blurry, "blurry2.jpg");
+    printf("FImage: %f multiplies per cycle\n", f_mpc);
+    printf("Native: %f multiplies per cycle\n", n_mpc);
 
+    printf("FImage: %f cycles per pixel\n", f_ppc);
+    printf("Native: %f cycles per pixel\n", n_ppc);
 
     return 0;
-
-    /*
-    // 256-bin Histogram
-    FImage hist(256, 1, 3);
-    x = Var(0, im.width);
-    y = Var(0, im.height);
-    hist(floor(im(x, y, c)*256), 0, c) += 1.0f/(im.width*im.height);
-
-    // Compute the cumulative distribution by scanning along the
-    // histogram
-    FImage cdf(256, 1, 3);    
-    cdf(0, 0, c) = 0;
-    x = Var(1, 256);
-    cdf(x, 0, c) = cdf(x-1, 0, c) + hist(x, 0, c);
-
-    // Equalize im using the cdf
-    FImage equalized(im.width, im.height, im.channels);
-    x = Var(0, im.width);
-    y = Var(0, im.height);
-    equalized(x, y, c) = cdf(floor(im(x, y, c)*256), 1, c);
-
-    // Convolve an image by a filter
-    FImage filter = Load::apply("...");
-    FImage filtered(im.width-filter.width+1, im.height-filter.height+1, im.channels);
-
-    Var j(0, filter.width), k(0, filter.height);
-    x = Var(0, filtered.width); 
-    y = Var(0, filtered.height);    
-    filtered(x, y, c) = sum(j, k, filter(j, k, 0) * im(x+j, y+k, c));
-    */
 }
-
-/*
-f(Var) = Expr 
-
-Gathers look like this:
-Image(Var, Var, Var) = Expr
-where the RHS does not reference the same Image
-Gathers are detected and optimized by:
-  unrolling across the inner arg
-  vectorizing across the middle arg
-  parallelizing across the outer arg
-
-Reductions look like this:
-Image(Expr, Expr, Expr) = f(Image(Expr, Expr, Expr))
-Where both instances of the image have the same arguments
-reductions can be optimized similarly to gathers, but parallelization is slightly trickier
-
-Scans look like this
-Image(Var, Var, Var) = f(Image(Var, Var, Var))
-Where the two ranges don't match. The system will try to figure out the right ordering. If it can't it will complain. Boundary case definitions must also exist
-Good: 
-
-im(0, y, c) = 0;
-im(x, 0, c) = 0;
-im(x, y, c) = im(x-1, y, c) + im(1, y-1, c) + 1;
-
-Bad (no possible ordering):
-
-im(x, y, c) = im(x-1, y, c) + im(x+1, y, c);
-
-The system will error on any other structure
-*/
