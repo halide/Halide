@@ -9,8 +9,10 @@ class FImage;
 // A node in an expression tree.
 class Expr {
 public:
+    Expr();
     Expr(IRNode::Ptr);
     Expr(int);
+    Expr(uint32_t);
     Expr(float);
 
     void operator+=(Expr);
@@ -30,6 +32,7 @@ Expr operator/(Expr, Expr);
 // A loop variable with the given range [min, max)
 class Range : public Expr {
 public:
+    Range();
     Range(int a, int b);
     int min, max;
 };
@@ -37,39 +40,82 @@ public:
 // An assignable reference to a pixel (e.g. im(x, y, c), not im(sin(x), y, c))
 class LVal : public Expr {
 public:
+    LVal(FImage *, Range);
+    LVal(FImage *, Range, Range);
     LVal(FImage *, Range, Range, Range);
+    LVal(FImage *, Range, Range, Range, Range);
     void operator=(Expr);
     void debug();
 
     FImage *im;
-    Range x, y, c;
+    vector<Range> vars;
 };
 
-// The lazily evaluated image type
+// The lazily evaluated image type. Has from 1 to 4 dimensions.
 class FImage {
 public:
-    FImage(int width, int height, int channels);
+    FImage(uint32_t);
+    FImage(uint32_t, uint32_t);
+    FImage(uint32_t, uint32_t, uint32_t);
+    FImage(uint32_t, uint32_t, uint32_t, uint32_t);
 
     // Make an assignable reference to a location in the image (e.g. im(x, y, c))
+    LVal operator()(Range);
+    LVal operator()(Range, Range);
     LVal operator()(Range, Range, Range);
+    LVal operator()(Range, Range, Range, Range);
 
     // Make a more general unassignable reference (e.g. im(x*13-y, floor(y/x), c+x+y))
+    Expr operator()(Expr);
+    Expr operator()(Expr, Expr);
     Expr operator()(Expr, Expr, Expr);
+    Expr operator()(Expr, Expr, Expr, Expr);
 
     // Actually look something up in the image. Won't return anything
     // interesting if the image hasn't been evaluated yet.
-    float &FImage::operator()(int x, int y, int c) {
-        return data[(y*width+x)*channels + c];
+    float &FImage::operator()(int a) {
+        return data[a*stride[0]];
+    }
+
+    float &FImage::operator()(int a, int b) {
+        return data[a*stride[0] + b*stride[1]];
+    }
+
+    float &FImage::operator()(int a, int b, int c) {
+        return data[a*stride[0] + b*stride[1] + c*stride[2]];
+    }
+
+    float &FImage::operator()(int a, int b, int c, int d) {
+        return data[a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]];
+    }
+
+    float FImage::operator()(int a) const {
+        return data[a*stride[0]];
+    }
+
+    float FImage::operator()(int a, int b) const {
+        return data[a*stride[0] + b*stride[1]];
+    }
+
+    float FImage::operator()(int a, int b, int c) const {
+        return data[a*stride[0] + b*stride[1] + c*stride[2]];
+    }
+
+    float FImage::operator()(int a, int b, int c, int d) const {
+        return data[a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]];
     }
     
     // Evaluate the image and return a reference to it. In the future
     // this may return a vanilla image type instead.
     FImage &evaluate();
-
+        
     // Dimensions
-    int width, height, channels;
+    vector<uint32_t> size;
+    vector<uint32_t> stride;
 
-    // The point of the start of the first scanline. Public for now.
+    // The point of the start of the first scanline. Public for now
+    // for inspection, but don't assume anything about the way data is
+    // stored.
     float *data;
 
     // The vector of definitions of this image. Right now all but the first is ignored.

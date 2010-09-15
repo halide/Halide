@@ -11,6 +11,7 @@ public:
     // 64-bit registers
     class Reg {
     public:
+        Reg() : num(0) {}
         Reg(int x) : num(x) {}
         int num;
         bool operator==(const Reg &other) {
@@ -26,6 +27,7 @@ public:
     // SSE 128-bit registers
     class SSEReg {
     public:
+        SSEReg() : num(0) {}
         SSEReg(int x) : num(x) {}
         int num;
         bool operator==(const SSEReg &other) {
