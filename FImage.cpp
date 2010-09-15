@@ -3,7 +3,7 @@
 
 
 // An Expr is a wrapper around the IRNode structure used by the compiler
-Expr::Expr(IRNode *n) : node(n) {}
+Expr::Expr(IRNode::Ptr n) : node(n) {}
 
 Expr::Expr(int val) {
     node = IRNode::make(val);
@@ -52,7 +52,7 @@ void Expr::debug() {
     printf("\n");
 }
 
-Var::Var(int a, int b) : Expr(IRNode::make(UnboundVar)) {
+Range::Range(int a, int b) : Expr(IRNode::make(Var)) {
     min = a;
     max = b;
 }
@@ -61,30 +61,15 @@ Var::Var(int a, int b) : Expr(IRNode::make(UnboundVar)) {
 // assignment target or cast to a load operation. In the future it may
 // also serve as a marker for a site in an expression that can be
 // fused.
-LVal::LVal(FImage *im_, Var x_, Var y_, Var c_) : 
+LVal::LVal(FImage *im_, Range x_, Range y_, Range c_) : 
     Expr((*im_)(Expr(x_), Expr(y_), Expr(c_))), 
     im(im_), x(x_), y(y_), c(c_) {
 }
 
 
 void LVal::operator=(Expr e) {
-    // Make a new version of the rhs with the variables bound
-    // appropriately Don't worry about t for now. Now's a good time to
-    // do any final optimizations too.
-    IRNode *ix, *iy, *ic;
-    printf("Creating assignment\n");        
-    ix = x.node->bind(x.node, y.node, NULL, c.node)->optimize();
-    printf("Done binding x\n");
-    iy = y.node->bind(x.node, y.node, NULL, c.node)->optimize();
-    printf("Done binding y\n");
-    ic = c.node->bind(x.node, y.node, NULL, c.node)->optimize();
-    printf("Done binding c\n");
-    printf("Done creating LHS\n");
-    node = e.node->bind(x.node, y.node, NULL, c.node)->optimize();
-    printf("Done creating RHS\n");
-    x.node = ix;
-    y.node = iy;
-    c.node = ic;
+    node = e.node;
+
     // Add this to the list of definitions of im
     im->definitions.push_back(*this);
 }
@@ -101,7 +86,7 @@ FImage::FImage(int w, int h, int c) {
 // Generate an LVal reference to a location in this image that can be
 // used as an assignment target, and can also be cast to the RVal
 // version (a load of a computed address)
-LVal FImage::operator()(Var x, Var y, Var c) {
+LVal FImage::operator()(Range x, Range y, Range c) {
     return LVal(this, x, y, c);
 }
 

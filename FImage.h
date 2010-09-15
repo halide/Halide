@@ -1,16 +1,15 @@
 #ifndef FIMAGE_H
 #define FIMAGE_H
 
-#include <vector>
-using namespace std;
+#include "IRNode.h"
 
-class IRNode;
+
 class FImage;
 
 // A node in an expression tree.
 class Expr {
 public:
-    Expr(IRNode *n);
+    Expr(IRNode::Ptr);
     Expr(int);
     Expr(float);
 
@@ -19,7 +18,7 @@ public:
     void operator*=(Expr);
     void operator/=(Expr);
 
-    IRNode *node;
+    IRNode::Ptr node;
     void debug();
 };
 
@@ -29,21 +28,21 @@ Expr operator*(Expr, Expr);
 Expr operator/(Expr, Expr);
 
 // A loop variable with the given range [min, max)
-class Var : public Expr {
+class Range : public Expr {
 public:
-    Var(int a, int b);
+    Range(int a, int b);
     int min, max;
 };
 
 // An assignable reference to a pixel (e.g. im(x, y, c), not im(sin(x), y, c))
 class LVal : public Expr {
 public:
-    LVal(FImage *, Var, Var, Var);
+    LVal(FImage *, Range, Range, Range);
     void operator=(Expr);
     void debug();
 
     FImage *im;
-    Var x, y, c;
+    Range x, y, c;
 };
 
 // The lazily evaluated image type
@@ -52,7 +51,7 @@ public:
     FImage(int width, int height, int channels);
 
     // Make an assignable reference to a location in the image (e.g. im(x, y, c))
-    LVal operator()(Var, Var, Var);
+    LVal operator()(Range, Range, Range);
 
     // Make a more general unassignable reference (e.g. im(x*13-y, floor(y/x), c+x+y))
     Expr operator()(Expr, Expr, Expr);

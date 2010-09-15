@@ -23,35 +23,38 @@ void assert(bool cond, const char *fmt, ...) {
 }
 
 
-map<float, IRNode *> IRNode::floatInstances;
-map<int, IRNode *> IRNode::intInstances;
-map<OpCode, IRNode *> IRNode::varInstances;
-vector<IRNode *> IRNode::allNodes;
+map<float, IRNode::WeakPtr> IRNode::floatInstances;
+map<int, IRNode::WeakPtr> IRNode::intInstances;
+vector<IRNode::WeakPtr> IRNode::allNodes;
 
-
-
-IRNode *IRNode::make(float v) {
-    if (floatInstances[v] == NULL) 
-        return (floatInstances[v] = new IRNode(v));
-    return floatInstances[v];
+IRNode::Ptr IRNode::make(float v) {
+    if (floatInstances[v].expired()) {
+        Ptr p = makeNew(v);
+        floatInstances[v] = p;
+        return p;
+    }
+    return floatInstances[v].lock();
 };
 
-IRNode *IRNode::make(int v) {
-    if (intInstances[v] == NULL) 
-        return (intInstances[v] = new IRNode(v));
-    return intInstances[v];
+IRNode::Ptr IRNode::make(int v) {
+    if (intInstances[v].expired()) {
+        Ptr p = makeNew(v);
+        intInstances[v] = p;
+        return p;
+    }
+    return intInstances[v].lock();
 };
 
-IRNode *IRNode::make(OpCode opcode, 
-                     IRNode *input1,
-                     IRNode *input2,
-                     IRNode *input3,
-                     IRNode *input4,
-                     int ival,
-                     float fval) {
+IRNode::Ptr IRNode::make(OpCode opcode, 
+                         IRNode::Ptr input1,
+                         IRNode::Ptr input2,
+                         IRNode::Ptr input3,
+                         IRNode::Ptr input4,
+                         int ival,
+                         float fval) {
     
     // collect the inputs into a vector
-    vector<IRNode *> inputs;
+    vector<IRNode::Ptr> inputs;
     if (input1) {
         inputs.push_back(input1);
     }
@@ -67,9 +70,9 @@ IRNode *IRNode::make(OpCode opcode,
     return make(opcode, inputs, ival, fval);
 }
 
-IRNode *IRNode::make(OpCode opcode,
-                     vector<IRNode *> inputs,
-                     int ival, float fval) {
+IRNode::Ptr IRNode::make(OpCode opcode,
+                         vector<IRNode::Ptr> inputs,
+                         int ival, float fval) {
     
     // We will progressively modify the inputs to finally return a
     // node that is equivalent to the requested node on the
@@ -85,11 +88,7 @@ IRNode *IRNode::make(OpCode opcode,
                opname[opcode], inputs.size());
         t = inputs[0]->type;
         break;
-    case VarX: 
-    case VarY: 
-    case VarT:
-    case VarC:
-    case UnboundVar:
+    case Var:
         assert(inputs.size() == 0, "Wrong number of inputs for opcode: %s %d\n",
                opname[opcode], inputs.size());
         t = Int;
@@ -214,7 +213,7 @@ IRNode *IRNode::make(OpCode opcode,
     // Constant folding
     bool allInputsConst = true;
     for (size_t i = 0; i < inputs.size() && allInputsConst; i++) {
-        if (inputs[i]->deps) allInputsConst = false;
+        if (!inputs[i]->constant) allInputsConst = false;
     }
     if (allInputsConst && inputs.size()) {
         switch(opcode) {
@@ -283,54 +282,18 @@ IRNode *IRNode::make(OpCode opcode,
                     make(Divide, make(1.0f), inputs[1]));
     }
 
-    // (x+a)*b = x*b + a*b (where a and b are both lower level than x)
-    if (opcode == Times) {
-        IRNode *x = NULL, *a = NULL, *b = NULL;
-        if (inputs[0]->op == Plus) {
-            b = inputs[1];
-            x = inputs[0]->inputs[1];
-            a = inputs[0]->inputs[0];
-        } else if (inputs[1]->op == Plus) {
-            b = inputs[0];
-            x = inputs[1]->inputs[1];
-            a = inputs[1]->inputs[0];
-        }
-
-        if (x) {
-            // x is the higher level of x and a
-            if (x->level < a->level) {
-                IRNode *tmp = x;
-                x = a;
-                a = tmp;
-            }
-                    
-            // it's only worth rebalancing if a and b are both
-            // lower level than x (e.g. (x+y)*3)
-            if (x->level > a->level && x->level > b->level) {
-                return make(Plus, 
-                            make(Times, x, b),
-                            make(Times, a, b));
-            }
-        }
-
-        // deal with const integer a
-        if (inputs[0]->op == PlusImm) {
-            printf("Hit times of plusimm: ");
-            inputs[0]->printExp();
-            printf(" * ");
-            inputs[1]->printExp();
-            printf("\n");
-            return make(Plus, 
-                        make(Times, inputs[0]->inputs[0], inputs[1]),
-                        make(Times, inputs[1], make(inputs[0]->ival)));
-        }
+    // (x+a)*b = x*b + a*b (where a and b are both constant integers)
+    if (opcode == TimesImm && inputs[0]->op == PlusImm) {
+        return make(PlusImm, 
+                    make(TimesImm, inputs[0]->inputs[0], NULL, NULL, NULL, ival),
+                    NULL, NULL, NULL, ival * inputs[0]->ival);
     }
 
     // (x*a)*b = x*(a*b) where a and b are more const than x. This
     // should be replaced with generic product rebalancing,
     // similar to the sum rebalancing.
     if (opcode == Times) {
-        IRNode *x = NULL, *a = NULL, *b = NULL;
+        IRNode::Ptr x, a, b;
         if (inputs[0]->op == Times) {
             x = inputs[0]->inputs[0];
             a = inputs[0]->inputs[1];
@@ -344,7 +307,7 @@ IRNode *IRNode::make(OpCode opcode,
         if (x) {
             // x is the higher level of x and a
             if (x->level < a->level) {
-                IRNode *tmp = x;
+                IRNode::Ptr tmp = x;
                 x = a;
                 a = tmp;
             }
@@ -401,10 +364,10 @@ IRNode *IRNode::make(OpCode opcode,
       } else if (inputs[1]->val == 2.0f) { // x^2 = x*x
       return make(Times, inputTypes[0], inputs[0], inputTypes[0], inputs[0]);
       } else if (inputs[1]->val == 3.0f) { // x^3 = x*x*x
-      IRNode *squared = make(Times, inputTypes[0], inputs[0], inputTypes[0], inputs[0]);
+      IRNode::Ptr squared = make(Times, inputTypes[0], inputs[0], inputTypes[0], inputs[0]);
       return make(t, Times, t, squared, inputTypes[0], inputs[0]);
       } else if (inputs[1]->val == 4.0f) { // x^4 = x*x*x*x
-      IRNode *squared = make(Times, inputTypes[0], inputs[0], inputTypes[0], inputs[0]);
+      IRNode::Ptr squared = make(Times, inputTypes[0], inputs[0], inputTypes[0], inputs[0]);
       return make(Times, t, squared, t, squared);                    
       } else if (inputs[1]->val == floorf(inputs[1]->val) &&
       inputs[1]->val > 0) {
@@ -419,10 +382,10 @@ IRNode *IRNode::make(OpCode opcode,
                     
       // make a stack x, x^2, x^4, x^8 ...
       // and multiply the appropriate terms from it
-      vector<IRNode *> powStack;
+      vector<IRNode::Ptr > powStack;
       powStack.push_back(inputs[0]);
-      IRNode *result = (power & 1) ? inputs[0] : NULL;
-      IRNode *last = inputs[0];
+      IRNode::Ptr result = (power & 1) ? inputs[0] : NULL;
+      IRNode::Ptr last = inputs[0];
       for (int i = 2; i < power; i *= 2) {
       last = make(Times, last->type, last, last->type, last);
       powStack.push_back(last);
@@ -449,20 +412,10 @@ IRNode *IRNode::make(OpCode opcode,
         }
     }              
 
-    // Return a single unique instance of each variable
-    if (opcode == VarX || opcode == VarY || opcode == VarT || opcode == VarC) {
-        vector<IRNode *> b;
-        if (varInstances[opcode] == NULL)
-            return (varInstances[opcode] = new IRNode(t, opcode, b, 0, 0.0f));
-        return varInstances[opcode];
-    }
-
-    // Unbound variables are unique and must not be merged or
-    // modified - they will be replaced later individually with a
-    // bind() call.
-    if (opcode == UnboundVar) {
-        vector<IRNode *> b;
-        return new IRNode(t, opcode, b, 0, 0.0f);
+    // Don't merge or modify vars
+    if (opcode == Var) {
+        vector<IRNode::Ptr> empty;
+        return makeNew(t, opcode, empty, 0, 0.0f);
     }
 
     // Fuse instructions
@@ -470,27 +423,27 @@ IRNode *IRNode::make(OpCode opcode,
     // Load of something plus an int constant can be converted to a load with offset
     if (opcode == Load || opcode == LoadImm) {
         if (inputs[0]->op == Plus) {
-            IRNode *left = inputs[0]->inputs[0];
-            IRNode *right = inputs[0]->inputs[1];
+            IRNode::Ptr left = inputs[0]->inputs[0];
+            IRNode::Ptr right = inputs[0]->inputs[1];
             if (left->op == Const) {
-                IRNode *n = make(LoadImm, right, 
+                IRNode::Ptr n = make(LoadImm, right, 
                                  NULL, NULL, NULL,
                                  left->ival + ival);
                 return n;
             } else if (right->op == Const) {
-                IRNode *n = make(LoadImm, left,
+                IRNode::Ptr n = make(LoadImm, left,
                                  NULL, NULL, NULL,
                                  right->ival + ival);
                 return n;
             }
         } else if (inputs[0]->op == Minus &&
                    inputs[0]->inputs[1]->op == Const) {
-            IRNode *n = make(LoadImm, inputs[0]->inputs[0], 
+            IRNode::Ptr n = make(LoadImm, inputs[0]->inputs[0], 
                              NULL, NULL, NULL, 
                              -inputs[0]->inputs[1]->ival + ival);
             return n;
         } else if (inputs[0]->op == PlusImm) {
-            IRNode *n = make(LoadImm, inputs[0]->inputs[0],
+            IRNode::Ptr n = make(LoadImm, inputs[0]->inputs[0],
                              NULL, NULL, NULL,
                              inputs[0]->ival + ival);
             return n;
@@ -499,15 +452,15 @@ IRNode *IRNode::make(OpCode opcode,
 
     // Times an int constant can be fused into a times immediate
     if (opcode == Times && t == Int) {
-        IRNode *left = inputs[0];
-        IRNode *right = inputs[1];
+        IRNode::Ptr left = inputs[0];
+        IRNode::Ptr right = inputs[1];
         if (left->op == Const) {
-            IRNode *n = make(TimesImm, right, 
+            IRNode::Ptr n = make(TimesImm, right, 
                              NULL, NULL, NULL,
                              left->ival);
             return n;
         } else if (right->op == Const) {
-            IRNode *n = make(TimesImm, left, 
+            IRNode::Ptr n = make(TimesImm, left, 
                              NULL, NULL, NULL,
                              right->ival);
             return n;
@@ -518,7 +471,8 @@ IRNode *IRNode::make(OpCode opcode,
     // inputs already has a parent that does the same op to the same children.
     if (inputs.size() && inputs[0]->outputs.size() ) {
         for (size_t i = 0; i < inputs[0]->outputs.size(); i++) {
-            IRNode *candidate = inputs[0]->outputs[i];
+            IRNode::Ptr candidate = inputs[0]->outputs[i].lock();
+            if (!candidate) continue;
             if (candidate->ival != ival) continue;
             if (candidate->fval != fval) continue;
             if (candidate->op != opcode) continue;
@@ -528,63 +482,85 @@ IRNode *IRNode::make(OpCode opcode,
             for (size_t j = 0; j < inputs.size(); j++) {
                 if (candidate->inputs[j] != inputs[j]) inputsMatch = false;
             }
-            // it's the same op on the same inputs, reuse the old node
+            // it's the same op on the same inputs, reuse the old node 
             if (inputsMatch) return candidate;
         }
     }
 
 
     // We didn't see any reason to fuse or modify this op, so make a new node.
-    return new IRNode(t, opcode, inputs, ival, fval);
+    return makeNew(t, opcode, inputs, ival, fval);
 }
 
-// Any optimizations that must be done after generation is complete. Right now it just
-// does the final sum rebalancing.
-IRNode *IRNode::optimize() {
-    IRNode *newNode = rebalanceSum();
+// Any optimizations that must be done after generation is
+// complete. Rebuilds the graph and then does the final sum
+// rebalancing.
+IRNode::Ptr IRNode::optimize() {
+    // Don't rebuild constants or vars
+    if (op == Const) return self.lock();
+    if (op == Var) return self.lock();
+
+    vector<IRNode::Ptr > newInputs(inputs.size());
+    for (size_t i = 0; i < inputs.size(); i++) {
+        newInputs[i] = inputs[i]->optimize();
+    }
+    IRNode::Ptr newNode = make(op, newInputs, ival, fval); 
+
+    // if I don't have any sum parents who will do it for me, call rebalanceSum
+    bool sumParent = false;
+    for (size_t i = 0; i < outputs.size(); i++) {
+        Ptr out = outputs[i].lock();
+        if (!out) continue;
+        if (out->op == Plus || 
+            out->op == Minus ||
+            out->op == PlusImm) sumParent = true;
+    }
+    if (!sumParent) newNode = newNode->rebalanceSum();
+    
     return newNode;
 }        
 
-// kill everything
-void IRNode::clearAll() {
-    IRNode::floatInstances.clear();
-    IRNode::intInstances.clear();
-    IRNode::varInstances.clear();
-    for (size_t i = 0; i < IRNode::allNodes.size(); i++) {
-        delete IRNode::allNodes[i];
-    }
-    IRNode::allNodes.clear();            
-}
-
 // type coercion
-IRNode *IRNode::as(Type t) {
-    if (t == type) return this;
+IRNode::Ptr IRNode::as(Type t) {
+    if (t == type) return self.lock();
 
     // insert new casting operators
     if (type == Int) {
         if (t == Float) 
-            return make(IntToFloat, this);
+            return make(IntToFloat, self.lock());
         if (t == Bool)
-            return make(NEQ, this, make(0));
+            return make(NEQ, self.lock(), make(0));
     }
 
     if (type == Bool) {            
         if (t == Float) 
-            return make(And, this, make(1.0f));
+            return make(And, self.lock(), make(1.0f));
         if (t == Int) 
-            return make(And, this, make(1));
+            return make(And, self.lock(), make(1));
     }
 
     if (type == Float) {
         if (t == Bool) 
-            return make(NEQ, this, make(0.0f));
+            return make(NEQ, self.lock(), make(0.0f));
         if (t == Int) 
-            return make(FloatToInt, this);
+            return make(FloatToInt, self.lock());
     }            
 
     panic("Casting to/from unknown type\n");
-    return this;
+    return self.lock();
             
+}
+
+void IRNode::assignLevel(int l) {
+    if (level == l) return;
+    level = l;
+    // Tell my (living) parents I got a promotion (they'll tell the grandparents).
+    for (size_t i = 0; i < outputs.size(); i++) {
+        Ptr out = outputs[i].lock();
+        if (!out) continue;
+        if (out->level < level)
+            out->assignLevel(level);
+    }
 }
 
 void IRNode::printExp() {
@@ -593,20 +569,8 @@ void IRNode::printExp() {
         if (type == Float) printf("%f", fval);
         else printf("%d", ival);
         break;
-    case VarX:
-        printf("x");
-        break;
-    case VarY:
-        printf("y");
-        break;
-    case VarT:
-        printf("t");
-        break;
-    case VarC:
-        printf("c");
-        break;
-    case UnboundVar:
-        printf("<%x>", (int)this);
+    case Var:
+        printf("var");
         break;
     case Plus:
         printf("(");
@@ -727,125 +691,80 @@ void IRNode::print() {
     printf("\n");
 }
 
-// make a new version of this IRNode with one of the variables replaced with a constant
-IRNode *IRNode::substitute(OpCode var, int val) {
-    if (op == var) return make(val);
-    int dep = 0;
-    switch (var) {
-    case VarC:
-        dep = DepC;
-        break;
-    case VarX:
-        dep = DepX;
-        break;
-    case VarY:
-        dep = DepY;
-        break;
-    case VarT:
-        dep = DepT;
-        break;
-    default:
-        panic("%s is not a variable!\n", opname[var]);
-    }
-
-    if (deps & dep) {
-        // rebuild all the inputs
-        vector<IRNode *> newInputs(inputs.size());
-        for (size_t i = 0; i < newInputs.size(); i++) {
-            newInputs[i] = inputs[i]->substitute(var, val);
+void IRNode::saveDot(const char *filename) {
+    FILE *f = fopen(filename, "w");
+    fprintf(f, "digraph G {\n");
+    char id[256];
+    for (size_t i = 0; i < allNodes.size(); i++) {
+        IRNode::Ptr n = allNodes[i].lock();
+        if (!n) continue;
+        if (n->ival) 
+            fprintf(f, "  n%x [label = \"%s %d\"]\n", (long long)n.get(), opname[n->op], n->ival);
+        else if (n->fval)  
+            fprintf(f, "  n%x [label = \"%s %f\"]\n", (long long)n.get(), opname[n->op], n->fval);           
+        else 
+            fprintf(f, "  n%x [label = \"%s\"]\n", (long long)n.get(), opname[n->op]);            
+        for (size_t j = 0; j < n->inputs.size(); j++) {
+            IRNode::Ptr in = n->inputs[j];
+            fprintf(f, "  n%x -> n%x\n", (long long)n.get(), (long long)in.get());
         }
-        return make(op, newInputs, ival, fval);
-    } else {
-        // no need to rebuild a subtree that doesn't depend on this variable
-        return this;
-    }
+        /*
+        for (size_t j = 0; j < n->outputs.size(); j++) {
+            IRNode::Ptr out = n->outputs[j].lock();
+            if (!out) continue;
+            fprintf(f, "  n%x -> n%x [color = \"gray\"]\n", (long long)out.get(), (long long)n.get());
+        }        
+        */
+    } 
+    fprintf(f, "}\n");
+    fclose(f);
 }
 
-// bind unbound variables to x, y, t, and c
-IRNode *IRNode::bind(IRNode *x, IRNode *y, IRNode *t, IRNode *c) {
-    if (!(deps & DepUnbound)) return this;
-    if (this == x) return IRNode::make(VarX);
-    if (this == y) return IRNode::make(VarY);
-    if (this == c) return IRNode::make(VarC);
-    if (this == t) return IRNode::make(VarT);
+// make a new version of this IRNode with one node replaced with
+// another. Also optimizes.
+IRNode::Ptr IRNode::substitute(IRNode::Ptr a, IRNode::Ptr b) {
+    if (self.lock() == a) return b;
 
-    vector<IRNode *> newInputs(inputs.size());
+    // Don't rebuild consts or vars
+    if (op == Const) return self.lock();
+    if (op == Var) return self.lock();
+
+    // rebuild all the inputs
+    vector<IRNode::Ptr > newInputs(inputs.size());
     for (size_t i = 0; i < newInputs.size(); i++) {
-        newInputs[i] = inputs[i]->bind(x, y, t, c);
+        newInputs[i] = inputs[i]->substitute(a, b);
     }
 
-    IRNode *node = IRNode::make(op, newInputs, ival, fval);
-    return node;
-}
-        
-// Remove nodes that do not assist in the computation of these nodes
-void IRNode::collectGarbage(vector<IRNode *> saved) {
+    IRNode::Ptr newNode = make(op, newInputs, ival, fval);
 
-    // mark all nodes for death
-    for (size_t i = 0; i < allNodes.size(); i++) {
-        allNodes[i]->marked = true;
+    //printf("This: "); printExp(); printf(" @ %d\n", level);
+    //printf("Became: "); newNode->printExp(); printf(" @ %d\n", newNode->level);
+
+    // if I don't have any sum parents who will do it for me, call rebalanceSum
+    bool sumParent = false;
+    for (size_t i = 0; i < outputs.size(); i++) {
+        Ptr out = outputs[i].lock();
+        if (!out) continue;
+        if (out->op == Plus || 
+            out->op == Minus ||
+            out->op == PlusImm) sumParent = true;
     }
+    if (!sumParent) newNode = newNode->rebalanceSum();
 
-    // unmark those that are necessary for the computation of these nodes
-    for (size_t i = 0; i < saved.size(); i++) {
-        saved[i]->markDescendents(false);
-    }
-
-    vector<IRNode *> newAllNodes;
-    map<float, IRNode *> newFloatInstances;
-    map<int, IRNode *> newIntInstances;
-    map<OpCode, IRNode *> newVarInstances;
-
-    // save the unmarked nodes by migrating them to new data structures
-    for (size_t i = 0; i < allNodes.size(); i++) {
-        IRNode *n = allNodes[i];
-        if (!n->marked) {
-            newAllNodes.push_back(n);
-            if (n->op == Const) {
-                if (n->type == Float) 
-                    newFloatInstances[n->fval] = n;
-                else
-                    newIntInstances[n->ival] = n;
-            } else if (n->op == VarX ||
-                       n->op == VarY ||
-                       n->op == VarT ||
-                       n->op == VarC) {
-                newVarInstances[n->op] = n;
-            }
-        }
-    }
-
-    // delete the marked nodes
-    for (size_t i = 0; i < allNodes.size(); i++) {
-        IRNode *n = allNodes[i];
-        if (n->marked) delete n;
-    }
-
-    allNodes.swap(newAllNodes);
-    floatInstances.swap(newFloatInstances);
-    intInstances.swap(newIntInstances);
-    varInstances.swap(newVarInstances);
+    return newNode;
 }
 
-void IRNode::markDescendents(bool newMark) {
-    if (marked == newMark) return;
-    for (size_t i = 0; i < inputs.size(); i++) {
-        inputs[i]->markDescendents(newMark);
-    }
-    marked = newMark;
-}
-
-IRNode *IRNode::rebalanceSum() {
-    if (op != Plus && op != Minus && op != PlusImm) return this;
+IRNode::Ptr IRNode::rebalanceSum() {
+    if (op != Plus && op != Minus && op != PlusImm) return self.lock();
             
     // collect all the inputs
-    vector<pair<IRNode *, bool> > terms;
+    vector<pair<IRNode::Ptr , bool> > terms;
 
     collectSum(terms);
 
     // extract out the const terms
-    vector<pair<IRNode *, bool> > constTerms;
-    vector<pair<IRNode *, bool> > nonConstTerms;
+    vector<pair<IRNode::Ptr , bool> > constTerms;
+    vector<pair<IRNode::Ptr , bool> > nonConstTerms;
     for (size_t i = 0; i < terms.size(); i++) {
         if (terms[i].first->op == Const) {
             constTerms.push_back(terms[i]);
@@ -860,7 +779,7 @@ IRNode *IRNode::rebalanceSum() {
             int li = nonConstTerms[i].first->level;
             int lj = nonConstTerms[j].first->level;
             if (li > lj) {
-                pair<IRNode *, bool> tmp = nonConstTerms[i];
+                pair<IRNode::Ptr , bool> tmp = nonConstTerms[i];
                 nonConstTerms[i] = nonConstTerms[j];
                 nonConstTerms[j] = tmp;
             }
@@ -868,7 +787,7 @@ IRNode *IRNode::rebalanceSum() {
     }
 
     // remake the summation
-    IRNode *t;
+    IRNode::Ptr t;
     bool tPos;
     t = nonConstTerms[0].first;
     tPos = nonConstTerms[0].second;
@@ -926,7 +845,7 @@ IRNode *IRNode::rebalanceSum() {
 }
 
 
-void IRNode::collectSum(vector<pair<IRNode *, bool> > &terms, bool positive) {
+void IRNode::collectSum(vector<pair<IRNode::Ptr , bool> > &terms, bool positive) {
     if (op == Plus) {
         inputs[0]->collectSum(terms, positive);
         inputs[1]->collectSum(terms, positive);
@@ -937,41 +856,43 @@ void IRNode::collectSum(vector<pair<IRNode *, bool> > &terms, bool positive) {
         inputs[0]->collectSum(terms, positive);
         terms.push_back(make_pair(make(ival), true));
     } else {
-        terms.push_back(make_pair(this, positive));
+        terms.push_back(make_pair(self.lock(), positive));
     }
 }
 
 // TODO: rebalance product
 
-IRNode::IRNode(float v) {
-    allNodes.push_back(this);
-    op = Const;
-    fval = v;
-    ival = 0;
-    deps = 0;
-    reg = -1;
-    level = 0;
-    type = Float;
-    width = 1;
+IRNode::Ptr IRNode::makeNew(Type t, OpCode opcode, 
+                            const vector<IRNode::Ptr> &inputs,
+                            int iv, float fv) {
+    // This is the only place where "new IRNode" should appear
+    Ptr sharedPtr(new IRNode(t, opcode, inputs, iv, fv));
+    WeakPtr weakPtr(sharedPtr);
+    sharedPtr->self = weakPtr;
+
+    for (size_t i = 0; i < inputs.size(); i++) {
+        inputs[i]->outputs.push_back(weakPtr);
+    }
+
+    allNodes.push_back(weakPtr);
+
+    return sharedPtr;
 }
 
-IRNode::IRNode(int v) {
-    allNodes.push_back(this);
-    op = Const;
-    ival = v;
-    fval = 0.0f;
-    deps = 0;
-    reg = -1;
-    level = 0;
-    type = Int;
-    width = 1;
+IRNode::Ptr IRNode::makeNew(float v) {
+    vector<IRNode::Ptr> empty;
+    return makeNew(Float, Const, empty, 0, v);
 }
 
+IRNode::Ptr IRNode::makeNew(int v) {
+    vector<IRNode::Ptr> empty;
+    return makeNew(Int, Const, empty, v, 0);
+}
+
+// Only makeNew may call this
 IRNode::IRNode(Type t, OpCode opcode, 
-       vector<IRNode *> input,
-       int iv, float fv) {
-    allNodes.push_back(this);
-
+               const vector<IRNode::Ptr> &input,
+               int iv, float fv) {
     ival = iv;
     fval = fv;
 
@@ -981,27 +902,58 @@ IRNode::IRNode(Type t, OpCode opcode,
     type = t;
     width = 1;
 
-    deps = 0;
     op = opcode;
-    if (opcode == VarX) deps |= DepX;
-    else if (opcode == VarY) deps |= DepY;
-    else if (opcode == VarT) deps |= DepT;
-    else if (opcode == VarC) deps |= DepC;
-    else if (opcode == Load) deps |= DepMem;
-    else if (opcode == UnboundVar) deps |= DepUnbound;
+    level = 0;
 
-    for (size_t i = 0; i < inputs.size(); i++) {
-        deps |= inputs[i]->deps;
-        inputs[i]->outputs.push_back(this);
+    if (op == Var) {
+        constant = false;
+    } else {
+        constant = true;
     }
 
-    reg = -1;
+    for (size_t i = 0; i < inputs.size(); i++) {
+        constant = constant && inputs[i]->constant;
+        if (inputs[i]->level > level) level = inputs[i]->level;
+    }
 
-    // compute the level based on deps
-    if (deps & DepUnbound) level = 99;
-    else if ((deps & DepC) || (deps & DepMem)) level = 4;
-    else if (deps & DepX) level = 3;
-    else if (deps & DepY) level = 2;
-    else if (deps & DepT) level = 1;
-    else level = 0;
+    // No register assigned yet
+    reg = -1;
 }
+
+IRNode::~IRNode() {
+    // Oh, I guess nobody wants me any more. I'd better not have any live outputs then
+    for (size_t i = 0; i < outputs.size(); i++) {
+        assert(outputs[i].expired(), "IRNode with live outputs being destroyed!\n");
+    }
+
+    // Tell the children not to bother calling anymore
+    for (size_t i = 0; i < inputs.size(); i++) {
+        Ptr in = inputs[i];
+        for (size_t j = 0; j < in->outputs.size(); j++) {
+            Ptr out = in->outputs[j].lock();
+            if (out.get() == this) {
+                in->outputs[j] = in->outputs[in->outputs.size()-1];
+                in->outputs.pop_back();
+                j--;
+            }
+        }
+    }
+
+    // Remove myself from any arrays I might belong to
+    if (op == Const) {
+        if (type == Int) {
+            intInstances.erase(intInstances.find(ival));
+        } else if (type == Float) {
+            floatInstances.erase(floatInstances.find(fval));
+        }
+    }
+
+    for (size_t i = 0; i < allNodes.size(); i++) {
+        if (allNodes[i].lock().get() == this) {
+            allNodes[i] = allNodes[allNodes.size()-1];
+            allNodes.pop_back();
+            break;
+        }
+    }
+}
+

@@ -6,6 +6,7 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <memory>
 
 using namespace std;
 
@@ -13,8 +14,7 @@ void panic(const char *fmt, ...);
 void assert(bool condition, const char *fmt, ...);
 
 static const char *opname[] = {"Const", "NoOp",
-                               "VarX", "VarY", "VarT", "VarC", "UnboundVar",
-                               "Plus", "Minus", "Times", "Divide", "Power",
+                               "Var", "Plus", "Minus", "Times", "Divide", "Power",
                                "Sin", "Cos", "Tan", "ASin", "ACos", "ATan", "ATan2", 
                                "Abs", "Floor", "Ceil", "Round",
                                "Exp", "Log", "Mod", 
@@ -25,8 +25,7 @@ static const char *opname[] = {"Const", "NoOp",
 
 
 enum OpCode {Const = 0, NoOp, 
-             VarX, VarY, VarT, VarC, UnboundVar,
-             Plus, Minus, Times, Divide, Power,
+             Var, Plus, Minus, Times, Divide, Power,
              Sin, Cos, Tan, ASin, ACos, ATan, ATan2, 
              Abs, Floor, Ceil, Round,
              Exp, Log, Mod, 
@@ -40,9 +39,10 @@ enum OpCode {Const = 0, NoOp,
 class IRNode {
 public:
 
-    enum Type {Unknown = 0, Float, Bool, Int};   
+    typedef shared_ptr<IRNode> Ptr;
+    typedef weak_ptr<IRNode> WeakPtr;
 
-    enum {DepT = 1, DepY = 2, DepX = 4, DepC = 8, DepMem = 16, DepUnbound = 32};
+    enum Type {Unknown = 0, Float, Bool, Int};   
 
     // Opcode
     OpCode op;
@@ -58,13 +58,14 @@ public:
     int width;
 
     // Inputs - whose values do I depend on?
-    vector<IRNode *> inputs;    
+    vector<Ptr> inputs;    
         
     // Who uses my value?
-    vector<IRNode *> outputs;
-        
-    // Which loop variables does this node depend on?
-    uint32_t deps;
+    vector<WeakPtr> outputs;
+
+            
+    // Does this op depend on any vars or memory?
+    bool constant;
 
     // What register will this node be computed in? -1 indicates no
     // register has been allocated. 0-15 indicates a GPR, 16-31
@@ -80,92 +81,91 @@ public:
     // What is the type of this expression?
     Type type;
 
+    // Destructor. Don't call delete - use Ptrs and WeakPtrs instead.
+    ~IRNode();
+
     // Make a float constant
-    static IRNode *IRNode::make(float v);
+    static Ptr make(float v);
 
     // Make an int constant 
-    static IRNode *IRNode::make(int v);
+    static Ptr make(int v);
 
     // Make an IRNode with the given opcode and the given inputs and constant values
-    static IRNode *IRNode::make(OpCode opcode, 
-                                IRNode *input1 = NULL, 
-                                IRNode *input2 = NULL, 
-                                IRNode *input3 = NULL,
-                                IRNode *input4 = NULL,
-                                int ival = 0,
-                                float fval = 0.0f);
+    static Ptr make(OpCode opcode, 
+                    Ptr input1 = NULL, 
+                    Ptr input2 = NULL, 
+                    Ptr input3 = NULL,
+                    Ptr input4 = NULL,
+                    int ival = 0,
+                    float fval = 0.0f);
 
 
     // Return an optimized version of this node. Most optimizations
     // are done by make, but there may be some that can only
     // effectively run after the entire DAG is generated. They go
     // here.
-    IRNode *optimize();
+    Ptr optimize();
 
-    // Return a new version of this node with a variable replaced by a constant int value
-    IRNode *substitute(OpCode var, int val);
+    // Return a new version of this node with one IRNode replaced with
+    // another. Rebuilds and reoptimizes the graph.
+    Ptr substitute(Ptr oldNode, Ptr newNode);
 
-    // Return a new version of this node with the given unbound
-    // variables replaced with VarX, VarY, VarT, and VarC.
-    IRNode *bind(IRNode *x, IRNode *y, IRNode *t, IRNode *c);
+    // Assign a loop level to a var. The outputs will be recursively updated too.
+    void assignLevel(int);
 
     // Cast an IRNode to a different type
-    IRNode *IRNode::as(Type t);
+    Ptr as(Type t);
 
     // Recursively print out the complete expression this IRNode
     // computes (e.g. x+y*17). This can get long.
-    void IRNode::printExp();
+    void printExp();
 
     // Print out which operation occurs on what registers (e.g. xmm0 =
     // xmm1 + xmm2). Must be called after registers are assigned.
-    void IRNode::print();
+    void print();
+
+    // Save out a .dot file showing all nodes in existence and how they connect
+    static void saveDot(const char *filename);
+
+    // Make another copy of the sole shared pointer to this object
+    Ptr ptr() {return self.lock();}
 
 protected:
     // All the const float nodes
-    static map<float, IRNode *> floatInstances;
+    static map<float, WeakPtr> floatInstances;
 
     // All the int nodes
-    static map<int, IRNode *> intInstances;
-
-    // All the Var nodes
-    static map<OpCode, IRNode *> varInstances;
+    static map<int, WeakPtr> intInstances;
 
     // All nodes, including those above
-    static vector<IRNode *> allNodes;
+    static vector<WeakPtr> allNodes;
 
-    // Delete all IRNodes except for those in this list and all nodes
-    // necessary for the computation of those in this list.  Currently
-    // IRNodes are garbage collected (if they are ever deleted at
-    // all), using a mark and sweep algorithm.
-    void collectGarbage(vector<IRNode *> saved);
-    
-    // Delete all IRNodes.
-    void IRNode::clearAll();
+    // The correct way for IRNode methods to create new nodes.
+    static Ptr makeNew(float);
+    static Ptr makeNew(int);
+    static Ptr makeNew(Type, OpCode, const vector<Ptr> &input, int, float);
 
-    // Is this node marked for death by the garbage collector?
-    bool marked;
-    
-    // Mark a node and its inputs, (and it's inputs' inputs...)
-    void markDescendents(bool newMark);
-
-    // You can only make IRNodes using the static make functions. The actual constructors are private.
-    IRNode::IRNode(float v);
-    IRNode::IRNode(int v);
-    IRNode::IRNode(Type t, OpCode opcode, 
-                   vector<IRNode *> input,
-                   int iv, float fv);
+    // The actual constructor. Only used by the makeNew methods, which
+    // are only used by the make methods.
+    IRNode(Type t, OpCode opcode, 
+           const vector<Ptr> &input,
+           int iv, float fv);
     
     // A slightly more generate make function that takes a vector of children for inputs
-    static IRNode *IRNode::make(OpCode opcode,
-                                vector<IRNode *> inputs,
-                                int ival = 0, float fval = 0.0f);
+    static Ptr IRNode::make(OpCode opcode,
+                            vector<Ptr> inputs,
+                            int ival = 0, float fval = 0.0f);
+    
 
+
+    // A weak reference to myself. 
+    WeakPtr self;
 
     // Reorder summations from low to high level. (x+(y+1)) is cheaper
     // to compute than ((x+y)+1) because more can be moved into an
     // outer loop. This is done by the optimize call and also by make.
-    IRNode *rebalanceSum();
-    void collectSum(vector<pair<IRNode *, bool> > &terms, bool positive = true);
+    Ptr rebalanceSum();
+    void collectSum(vector<pair<Ptr, bool> > &terms, bool positive = true);
 
 };
 

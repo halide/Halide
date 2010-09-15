@@ -39,7 +39,7 @@ void save(const FImage &im, const char *fname) {
 }
 
 FImage brighten(FImage im) {
-    Var x(0, im.width), y(0, im.height), c(0, im.channels);
+    Range x(0, im.width), y(0, im.height), c(0, im.channels);
     FImage bright(im.width, im.height, im.channels);
     bright(x, y, c) = (im(x, y, c) + 1)/2.0f;
     return bright;
@@ -48,7 +48,7 @@ FImage brighten(FImage im) {
 FImage gradientx(FImage im) {
     // TODO: make x.min = 1, and allow the base case definition
     
-    Var x(4, im.width), y(0, im.height), c(0, im.channels);
+    Range x(4, im.width), y(0, im.height), c(0, im.channels);
     FImage dx(im.width, im.height, im.channels);
     //dx(0, y, c) = im(0, y, c);    
     dx(x, y, c) = (im(x, y, c) - im(x-1, y, c))+0.5f;
@@ -67,9 +67,9 @@ void blur(FImage im, const int K, FImage &tmp, FImage &output) {
         g[i] /= sum;
     }
 
-    Var x(16, im.width-16);
-    Var y(16, im.height-16);
-    Var c(0, im.channels);
+    Range x(16, im.width-16);
+    Range y(16, im.height-16);
+    Range c(0, im.channels);
 
     Expr blurX = 0;
     for (int i = -K/2; i <= K/2; i++) 
@@ -122,24 +122,59 @@ void blurNative(FImage im, const int K, FImage &tmp, FImage &output) {
 FImage histEqualize(FImage im) {    
     // 256-bin Histogram
     FImage hist(hist.width, 1, im.channels);
-    Var x(0, im.width);
-    Var y(0, im.height);
+    Range x(0, im.width);
+    Range y(0, im.height);
     hist(floor(im(x, y, c)*256), 0, c) += 1.0f/(im.width*im.height);
 
     // Compute the cumulative distribution by scanning along the
     // histogram
     FImage cdf(hist.width, 1, im.channels);    
     cdf(0, 0, c) = 0;
-    x = Var(1, hist.width);
+    x = Range(1, hist.width);
     cdf(x, 0, c) = cdf(x-1, 0, c) + hist(x, 0, c);
 
     // Equalize im using the cdf
     FImage equalized(im.width, im.height, im.channels);
-    x = Var(0, im.width);
-    y = Var(0, im.height);
+    x = Range(0, im.width);
+    y = Range(0, im.height);
     equalized(x, y, c) = cdf(floor(im(x, y, c)*256), 1, c);
 
     return equalized();
+}
+*/
+
+
+/*
+// Conway's game of life (A scan that should block across the scan direction)
+FImage life(FImage initial, int generations) {
+    FImage grid(initial.width, initial.height, generations);
+
+    // Use the input as the first slice
+    Range x(0, initial.width), y(0, initial.height);
+    grid(x, y, 0) = initial(x, y, 0);
+
+    // Update slice t using slice t-1
+    x = Range(1, initial.width-1);
+    y = Range(1, initial.height-1);
+    Range t(1, generations);
+    Expr live = grid(x, y, t-1);
+    Expr sum = (grid(x-1, y, t-1) +
+                grid(x, y-1, t-1) + 
+                grid(x+1, y, t-1) + 
+                grid(x, y+1, t-1) + 
+                grid(x-1, y-1, t-1) + 
+                grid(x+1, y-1, t-1) + 
+                grid(x-1, y+1, t-1) + 
+                grid(x+1, y+1, t-1));
+
+    grid(x, y, t) = (sum == 3) || (live && (sum == 2));
+
+    // Grab the last slice as the output
+    FImage out(initial.width, initial.height, 1);
+    x = Range(0, initial.width);
+    y = Range(0, initial.height);
+    out(x, y, 0) = grid(x, y, generations-1);
+    return out;
 }
 */
 
@@ -152,7 +187,7 @@ int main(int argc, char **argv) {
 
     FImage im = load(argv[1]);
 
-    Var x(0, im.width), y(0, im.height), c(0, im.channels);
+    Range x(0, im.width), y(0, im.height), c(0, im.channels);
 
     // Test 1: Add one to an image
     save(brighten(im).evaluate(), "bright.jpg");
