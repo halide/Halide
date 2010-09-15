@@ -33,27 +33,25 @@ public:
 protected:
     // Generate machine code for a vector of IRNodes. Registers must
     // have already been assigned.
-    void compileBody(AsmX64 *a, vector<IRNode *> code);
+    void compileBody(AsmX64 *a, vector<IRNode::Ptr> code);
     
     // Assign registers and generates an evaluation order for a vector
     // of expressions.
     void doRegisterAssignment(
-        const vector<IRNode *> &roots, 
-        const map<OpCode, int> &vars,
+        const vector<IRNode::Ptr> &roots, 
         uint32_t reserved,
-        vector<IRNode *> order[5],
-        uint32_t clobberedRegs[5], 
-        uint32_t outputRegs[5]);
+        vector<vector<IRNode::Ptr> > &order,
+        vector<uint32_t> &clobberedRegs, 
+        vector<uint32_t> &outputRegs);
 
     // Remove all assigned registers
-    void regClear(IRNode *node);
+    void regClear(IRNode::Ptr node);
 
     // Assign a register to a node
-    void regAssign(IRNode *node,
-                   const map<OpCode, int> &vars, 
+    void regAssign(IRNode::Ptr node,
                    uint32_t reserved,
-                   vector<IRNode *> &regs, 
-                   vector<IRNode *> *order);
+                   vector<IRNode::Ptr> &regs, 
+                   vector<vector<IRNode::Ptr> > &order);
 
         
 };
