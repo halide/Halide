@@ -3,10 +3,17 @@
 
 
 // An Expr is a wrapper around the IRNode structure used by the compiler
+Expr::Expr() {}
+
 Expr::Expr(IRNode::Ptr n) : node(n) {}
 
 Expr::Expr(int val) {
     node = IRNode::make(val);
+}
+
+Expr::Expr(uint32_t val) {
+    // TODO: this will overflow for large values :(
+    node = IRNode::make((int)val);
 }
 
 Expr::Expr(float val) {
@@ -52,6 +59,9 @@ void Expr::debug() {
     printf("\n");
 }
 
+Range::Range() {
+}
+
 Range::Range(int a, int b) : Expr(IRNode::make(Var)) {
     min = a;
     max = b;
@@ -61,11 +71,39 @@ Range::Range(int a, int b) : Expr(IRNode::make(Var)) {
 // assignment target or cast to a load operation. In the future it may
 // also serve as a marker for a site in an expression that can be
 // fused.
-LVal::LVal(FImage *im_, Range x_, Range y_, Range c_) : 
-    Expr((*im_)(Expr(x_), Expr(y_), Expr(c_))), 
-    im(im_), x(x_), y(y_), c(c_) {
+LVal::LVal(FImage *im_, Range a) : 
+    Expr((*im_)(Expr(a))), 
+    im(im_) {
+    vars.resize(1);
+    vars[0] = a;
 }
 
+LVal::LVal(FImage *im_, Range a, Range b) : 
+    Expr((*im_)(Expr(a), Expr(b))), 
+    im(im_) {
+    vars.resize(2);
+    vars[0] = a;
+    vars[1] = b;
+}
+
+LVal::LVal(FImage *im_, Range a, Range b, Range c) : 
+    Expr((*im_)(Expr(a), Expr(b), Expr(c))), 
+    im(im_) {
+    vars.resize(3);
+    vars[0] = a;
+    vars[1] = b;
+    vars[2] = c;
+}
+
+LVal::LVal(FImage *im_, Range a, Range b, Range c, Range d) : 
+    Expr((*im_)(Expr(a), Expr(b), Expr(c), Expr(d))), 
+    im(im_) {
+    vars.resize(4);
+    vars[0] = a;
+    vars[1] = b;
+    vars[2] = c;
+    vars[3] = d;
+}
 
 void LVal::operator=(Expr e) {
     node = e.node;
@@ -74,45 +112,116 @@ void LVal::operator=(Expr e) {
     im->definitions.push_back(*this);
 }
 
-
-FImage::FImage(int w, int h, int c) {
-    width = w;
-    height = h;
-    channels = c;
-    data = new float[width*height*channels];
+FImage::FImage(uint32_t a) {
+    size.resize(1);
+    stride.resize(1);
+    size[0] = a;
+    stride[0] = 1;
     // TODO: enforce alignment, lazy allocation, etc, etc
+    data = new float[a];
 }
+
+FImage::FImage(uint32_t a, uint32_t b) {
+    size.resize(2);
+    stride.resize(2);
+    size[0] = a;
+    size[1] = b;
+    stride[0] = 1;
+    stride[1] = a;
+    data = new float[a*b];
+}
+
+FImage::FImage(uint32_t a, uint32_t b, uint32_t c) {
+    size.resize(3);
+    stride.resize(3);
+    size[0] = a;
+    size[1] = b;
+    size[2] = c;
+    stride[0] = 1;
+    stride[1] = a;
+    stride[2] = a*b;
+    data = new float[a*b*c];
+}
+
+FImage::FImage(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+    size.resize(4);
+    stride.resize(4);
+    size[0] = a;
+    size[1] = b;
+    size[2] = c;
+    size[3] = d;
+    stride[0] = 1;
+    stride[1] = a;
+    stride[2] = a*b;
+    stride[3] = a*b*c;
+    data = new float[a*b*c*d];
+}
+
+
 
 // Generate an LVal reference to a location in this image that can be
 // used as an assignment target, and can also be cast to the RVal
 // version (a load of a computed address)
-LVal FImage::operator()(Range x, Range y, Range c) {
-    return LVal(this, x, y, c);
+LVal FImage::operator()(Range a) {
+    return LVal(this, a);
+}
+
+LVal FImage::operator()(Range a, Range b) {
+    return LVal(this, a, b);
+}
+
+LVal FImage::operator()(Range a, Range b, Range c) {
+    return LVal(this, a, b, c);
+}
+
+LVal FImage::operator()(Range a, Range b, Range c, Range d) {
+    return LVal(this, a, b, c, d);
 }
 
 // Print out a particular definition. We assume the LVal has already been assigned to.
 void LVal::debug() {
     printf("[");
-    x.node->printExp();
-    printf(":[%d-%d], ", x.min, x.max);
-    y.node->printExp();
-    printf(":[%d-%d], ", y.min, y.max);
-    c.node->printExp();
-    printf(":[%d-%d]] = ", c.min, c.max);
-    node->printExp();
-    printf("\n");
+    for (size_t i = 0; i < vars.size(); i++) {
+        vars[i].node->printExp();
+        printf(":[%d-%d], ", vars[i].min, vars[i].max);
+    }
+    printf("\b\b\n");
 }
 
 // Generate a rval reference that will turn into a load of a computed address.
-Expr FImage::operator()(Expr x, Expr y, Expr c) {    
-    y = y * (4*width*channels);
-    x = x * (4*channels);
-    c = c * 4;
+Expr FImage::operator()(Expr a) {    
+    a = a * (4 * stride[0]);
     Expr addr((int)data);
-    addr = ((addr + y) + x) + c;
+    addr = addr + a;
     return Expr(IRNode::make(Load, addr.node));
 }
 
+Expr FImage::operator()(Expr a, Expr b) {    
+    a = a * (4 * stride[0]);
+    b = b * (4 * stride[1]);
+    Expr addr((int)data);
+    addr = (addr + b) + a;
+    return Expr(IRNode::make(Load, addr.node));
+}
+
+Expr FImage::operator()(Expr a, Expr b, Expr c) {    
+    a = a * (4 * stride[0]);
+    b = b * (4 * stride[1]);
+    c = c * (4 * stride[2]);
+    Expr addr((int)data);
+    addr = ((addr + c) + b) + a;
+    return Expr(IRNode::make(Load, addr.node));
+}
+
+Expr FImage::operator()(Expr a, Expr b, Expr c, Expr d) {    
+    a = a * (4 * stride[0]);
+    b = b * (4 * stride[1]);
+    c = c * (4 * stride[2]);
+    d = d * (4 * stride[3]);
+    Expr addr((int)data);
+    addr = (((addr + d) + c) + b) + a;
+    return Expr(IRNode::make(Load, addr.node));
+}
 
 // Print out all the definitions of this FImage
 void FImage::debug() {

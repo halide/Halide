@@ -13,11 +13,10 @@ FImage load(const char *fname) {
 
     FImage im(input.width(), input.height(), input.spectrum());
 
-    float *imPtr = im.data;
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             for (int c = 0; c < input.spectrum(); c++) {
-                *imPtr++ = input(x, y, c)/256.0f;
+                im(x, y, c) = input(x, y, c)/256.0f;
             }
         }
     }
@@ -26,12 +25,11 @@ FImage load(const char *fname) {
 }
 
 void save(const FImage &im, const char *fname) {
-    CImg<float> output(im.width, im.height, 1, im.channels);
-    float *imPtr = im.data;
+    CImg<float> output(im.size[0], im.size[1], 1, im.size[2]);
     for (int y = 0; y < output.height(); y++) {
         for (int x = 0; x < output.width(); x++) {
             for (int c = 0; c < output.spectrum(); c++) {
-                output(x, y, c) = 256*(*imPtr++);
+                output(x, y, c) = 256*im(x, y, c);
             }
         }
     }
@@ -39,8 +37,8 @@ void save(const FImage &im, const char *fname) {
 }
 
 FImage brighten(FImage im) {
-    Range x(0, im.width), y(0, im.height), c(0, im.channels);
-    FImage bright(im.width, im.height, im.channels);
+    Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+    FImage bright(im.size[0], im.size[1], im.size[2]);
     bright(x, y, c) = (im(x, y, c) + 1)/2.0f;
     return bright;
 }
@@ -48,8 +46,8 @@ FImage brighten(FImage im) {
 FImage gradientx(FImage im) {
     // TODO: make x.min = 1, and allow the base case definition
     
-    Range x(4, im.width), y(0, im.height), c(0, im.channels);
-    FImage dx(im.width, im.height, im.channels);
+    Range x(4, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+    FImage dx(im.size[0], im.size[1], im.size[2]);
     //dx(0, y, c) = im(0, y, c);    
     dx(x, y, c) = (im(x, y, c) - im(x-1, y, c))+0.5f;
     return dx;
@@ -67,9 +65,9 @@ void blur(FImage im, const int K, FImage &tmp, FImage &output) {
         g[i] /= sum;
     }
 
-    Range x(16, im.width-16);
-    Range y(16, im.height-16);
-    Range c(0, im.channels);
+    Range x(16, im.size[0]-16);
+    Range y(16, im.size[1]-16);
+    Range c(0, im.size[2]);
 
     Expr blurX = 0;
     for (int i = -K/2; i <= K/2; i++) 
@@ -94,9 +92,9 @@ void blurNative(FImage im, const int K, FImage &tmp, FImage &output) {
         g[i] /= sum;
     }
 
-    for (int y = 16; y < im.height-16; y++) {            
-        for (int x = 16; x < im.width-16; x++) {
-            for (int c = 0; c < im.channels; c++) {
+    for (int c = 0; c < im.size[2]; c++) {
+        for (int y = 16; y < im.size[1]-16; y++) {            
+            for (int x = 16; x < im.size[0]-16; x++) {
                 float blurX = 0;
                 for (int i = -K/2; i <= K/2; i++) 
                     blurX += im(x+i, y, c)*g[i+K/2];
@@ -105,9 +103,9 @@ void blurNative(FImage im, const int K, FImage &tmp, FImage &output) {
         }
     }
 
-    for (int y = 16; y < im.height-16; y++) {            
-        for (int x = 16; x < im.width-16; x++) {
-            for (int c = 0; c < im.channels; c++) {
+    for (int c = 0; c < im.size[2]; c++) {
+        for (int y = 16; y < im.size[1]-16; y++) {            
+            for (int x = 16; x < im.size[0]-16; x++) {
                 float blurY = 0;
                 for (int i = -K/2; i <= K/2; i++) 
                     blurY += tmp(x, y+i, c)*g[i+K/2];
@@ -121,22 +119,22 @@ void blurNative(FImage im, const int K, FImage &tmp, FImage &output) {
 /*
 FImage histEqualize(FImage im) {    
     // 256-bin Histogram
-    FImage hist(hist.width, 1, im.channels);
-    Range x(0, im.width);
-    Range y(0, im.height);
-    hist(floor(im(x, y, c)*256), 0, c) += 1.0f/(im.width*im.height);
+    FImage hist(hist.size[0], 1, im.size[2]);
+    Range x(0, im.size[0]);
+    Range y(0, im.size[1]);
+    hist(floor(im(x, y, c)*256), 0, c) += 1.0f/(im.size[0]*im.size[1]);
 
     // Compute the cumulative distribution by scanning along the
     // histogram
-    FImage cdf(hist.width, 1, im.channels);    
+    FImage cdf(hist.size[0], 1, im.size[2]);    
     cdf(0, 0, c) = 0;
-    x = Range(1, hist.width);
+    x = Range(1, hist.size[0]);
     cdf(x, 0, c) = cdf(x-1, 0, c) + hist(x, 0, c);
 
     // Equalize im using the cdf
-    FImage equalized(im.width, im.height, im.channels);
-    x = Range(0, im.width);
-    y = Range(0, im.height);
+    FImage equalized(im.size[0], im.size[1], im.size[2]);
+    x = Range(0, im.size[0]);
+    y = Range(0, im.size[1]);
     equalized(x, y, c) = cdf(floor(im(x, y, c)*256), 1, c);
 
     return equalized();
@@ -147,15 +145,15 @@ FImage histEqualize(FImage im) {
 /*
 // Conway's game of life (A scan that should block across the scan direction)
 FImage life(FImage initial, int generations) {
-    FImage grid(initial.width, initial.height, generations);
+    FImage grid(initial.size[0], initial.size[1], generations);
 
     // Use the input as the first slice
-    Range x(0, initial.width), y(0, initial.height);
+    Range x(0, initial.size[0]), y(0, initial.size[1]);
     grid(x, y, 0) = initial(x, y, 0);
 
     // Update slice t using slice t-1
-    x = Range(1, initial.width-1);
-    y = Range(1, initial.height-1);
+    x = Range(1, initial.size[0]-1);
+    y = Range(1, initial.size[1]-1);
     Range t(1, generations);
     Expr live = grid(x, y, t-1);
     Expr sum = (grid(x-1, y, t-1) +
@@ -170,9 +168,9 @@ FImage life(FImage initial, int generations) {
     grid(x, y, t) = (sum == 3) || (live && (sum == 2));
 
     // Grab the last slice as the output
-    FImage out(initial.width, initial.height, 1);
-    x = Range(0, initial.width);
-    y = Range(0, initial.height);
+    FImage out(initial.size[0], initial.size[1], 1);
+    x = Range(0, initial.size[0]);
+    y = Range(0, initial.size[1]);
     out(x, y, 0) = grid(x, y, generations-1);
     return out;
 }
@@ -187,7 +185,7 @@ int main(int argc, char **argv) {
 
     FImage im = load(argv[1]);
 
-    Range x(0, im.width), y(0, im.height), c(0, im.channels);
+    Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
 
     // Test 1: Add one to an image
     save(brighten(im).evaluate(), "bright.jpg");
@@ -196,9 +194,9 @@ int main(int argc, char **argv) {
     save(gradientx(im).evaluate(), "dx.jpg");
 
     // Test 3: Separable Gaussian blur with timing
-    FImage tmp(im.width, im.height, im.channels);
-    FImage blurry(im.width, im.height, im.channels);
-    const int K = 19;
+    FImage tmp(im.size[0], im.size[1], im.size[2]);
+    FImage blurry(im.size[0], im.size[1], im.size[2]);
+    const int K = 21;
     int t0 = timeGetTime();
     blur(im, K, tmp, blurry);
     tmp.evaluate();
@@ -217,8 +215,8 @@ int main(int argc, char **argv) {
 
     // clock speed in cycles per millisecond
     const double clock = 2130000.0;
-    long long pixels = (im.width-32)*(im.height-32)*2;
-    long long multiplies = pixels*im.channels*K;
+    long long pixels = (im.size[0]-32)*(im.size[1]-32)*2;
+    long long multiplies = pixels*im.size[2]*K;
     double f_mpc = multiplies / ((t1-t0)*clock);
     double n_mpc = multiplies / ((t3-t2)*clock);
 

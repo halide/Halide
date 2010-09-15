@@ -81,6 +81,9 @@ public:
     // What is the type of this expression?
     Type type;
 
+    // A tag used by recursive algorithms that need to add marks to different nodes
+    int tag;
+
     // Destructor. Don't call delete - use Ptrs and WeakPtrs instead.
     ~IRNode();
 
@@ -130,15 +133,15 @@ public:
     // Make another copy of the sole shared pointer to this object
     Ptr ptr() {return self.lock();}
 
+    // All nodes in existence
+    static vector<WeakPtr> allNodes;
+
 protected:
     // All the const float nodes
     static map<float, WeakPtr> floatInstances;
 
     // All the int nodes
     static map<int, WeakPtr> intInstances;
-
-    // All nodes, including those above
-    static vector<WeakPtr> allNodes;
 
     // The correct way for IRNode methods to create new nodes.
     static Ptr makeNew(float);
