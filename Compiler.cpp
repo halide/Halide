@@ -1,5 +1,6 @@
 #include "Compiler.h"
 
+#include <algorithm>
 
 // Compile a gather
 void Compiler::compileGather(AsmX64 *a, FImage *im) {
@@ -7,6 +8,8 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     LVal def = im->definitions[0];
     IRNode::Ptr root = def.node;
     
+    int t1 = timeGetTime();
+
     // Assign loop levels. First var is innermost (usually x)
     for (size_t i = 0; i < def.vars.size(); i++) {
         def.vars[i].node->assignLevel(def.vars.size()-i);
@@ -18,13 +21,28 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
 
     // Force the output type of the expression to be a float and do a
     // final optimization pass now that levels are assigned.
-    IRNode::saveDot("before.dot");
+    //IRNode::saveDot("before.dot");
     def.node = root = root->as(IRNode::Float)->optimize();
-    IRNode::saveDot("after.dot");
 
     // vectorize across the innermost variable
     // TODO: right now it's hacked in
     // root = root->vectorize(def.vars[0].node, 4);
+
+    // Unroll across a relevant variable. This should depend on what
+    // gives the most sharing of inputs. E.g. a vertical convolution
+    // should unroll across Y.
+    // Right now it's hacked in.
+    // vector<IRNode *> roots = root->unroll(def.vars[0].node, 4);
+
+    // hardcoded unrolling across X by a factor of 4
+    vector<IRNode::Ptr> roots(4);
+    roots[0] = root;
+    roots[1] = root->substitute(def.vars[0].node, IRNode::make(PlusImm, def.vars[0].node, NULL, NULL, NULL, 4));
+    roots[2] = root->substitute(def.vars[0].node, IRNode::make(PlusImm, def.vars[0].node, NULL, NULL, NULL, 8));
+    roots[3] = root->substitute(def.vars[0].node, IRNode::make(PlusImm, def.vars[0].node, NULL, NULL, NULL, 12));
+
+    //IRNode::saveDot("after.dot");
+
 
     // Assign the variables some registers
     vector<AsmX64::Reg> varRegs(def.vars.size());
@@ -64,11 +82,15 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     printf("Register assignment...\n");
     vector<uint32_t> clobbered, outputs;
     vector<vector<IRNode::Ptr > > order;        
-    vector<IRNode::Ptr> roots(1, root);
+    //vector<IRNode::Ptr> roots(1, root);
     doRegisterAssignment(roots, reserved, order, clobbered, outputs);   
     printf("Done\n");
+    int t2 = timeGetTime();
+
+    printf("Compilation took %d ms\n", t2-t1);
 
     // print out the proposed ordering and register assignment for inspection
+    
     for (size_t l = 0; l < order.size(); l++) {
         if (l) {
             for (size_t k = 1; k < l; k++) putchar(' ');
@@ -80,6 +102,7 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
             next->print();
         }
     }
+    
 
     // From here on we assume three loop variables (and hence four levels)
     // TODO: fix this
@@ -120,11 +143,14 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
        
     compileBody(a, order[3]);
 
-    a->movntps(AsmX64::Mem(outPtr), root->reg);
+    a->movntps(AsmX64::Mem(outPtr, 0*4*4), roots[0]->reg);
+    a->movntps(AsmX64::Mem(outPtr, 1*4*4), roots[1]->reg);
+    a->movntps(AsmX64::Mem(outPtr, 2*4*4), roots[2]->reg);
+    a->movntps(AsmX64::Mem(outPtr, 3*4*4), roots[3]->reg);
 
     // Move on to the next X (actually jump by four due to the hacked vectorization we're doing)
-    a->add(outPtr, 4*4);
-    a->add(varRegs[0], 4);
+    a->add(outPtr, 4*4*4);
+    a->add(varRegs[0], 4*4);
     a->cmp(varRegs[0], def.vars[0].max);
     a->jl("loop2");
 
@@ -145,7 +171,7 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     a->ret();        
 
     // Save an object file that you can use dumpbin on to inspect
-    a->saveCOFF("generated.obj");        
+    //a->saveCOFF("generated.obj");        
 }
     
 // Generate machine code for a vector of IRNodes. Registers must have already been assigned.
@@ -513,7 +539,6 @@ void Compiler::doRegisterAssignment(
     vector<uint32_t> &clobberedRegs, 
     vector<uint32_t> &outputRegs) {
 
-
     // Who's currently occupying which register? First the 16 gprs, then the 16 sse registers.
     vector<IRNode::Ptr > regs(32);
 
@@ -530,18 +555,27 @@ void Compiler::doRegisterAssignment(
     }
 
     // Clear any previous register assignment and order, and make the
-    // descendents of the roots for evaluation (set tag to 1)
+    // descendents of the roots for evaluation (sets tag to 1)
     for (size_t i = 0; i < roots.size(); i++) {
         regClear(roots[i]);
     }
     order.clear();
 
-    for (size_t i = 0; i < roots.size(); i++) {
-        // Assign registers to this expression
-        regAssign(roots[i], reserved, regs, order);
-        // Don't let the next expression clobber the output of the
-        // previous expressions
-        reserved |= (1 << roots[i]->reg);
+    // Then compute the order of evaluation (sets tag to 2)
+    printf("Doing instruction scheduling\n");
+    doInstructionScheduling(roots, order);
+    printf("Done instruction scheduling\n");
+
+    // Now assign a register to each node, in the order of evaluation
+    for (size_t l = 0; l < order.size(); l++) {
+        for (size_t i = 0; i < order[l].size(); i++) {
+            // Assign registers to this expression (sets tag to 3)
+            regAssign(order[l][i], reserved, regs, order);
+
+            // If we just evaluated a root, don't let it get clobbered            
+            if (find(roots.begin(), roots.end(), order[l][i]) != roots.end())
+                reserved |= (1 << order[l][i]->reg);
+        }
     }
 
     // Detect what registers get clobbered
@@ -584,6 +618,83 @@ void Compiler::doRegisterAssignment(
 
 }
 
+void Compiler::doInstructionScheduling(
+    const vector<IRNode::Ptr > &roots, 
+    vector<vector<IRNode::Ptr > > &order) {
+
+    // Gather the nodes in a depth-first manner, and resize order to
+    // be big enough. Also tag each node with the minimum distance to a root node plus 100
+    for (size_t i = 0; i < roots.size(); i++) {
+        if (order.size() <= roots[i]->level) order.resize(roots[i]->level+1);
+        gatherDescendents(roots[i], order, 100);
+    }       
+
+    printf("Got the descendants..\n");
+
+    // Stable sort the nodes from deepest to shallowest and retag everything to 2
+    for (size_t l = 0; l < order.size(); l++) {
+        for (size_t i = 0; i < order[l].size(); i++) {
+            IRNode::Ptr ni = order[l][i];
+            for (size_t j = i+1; j < order[l].size(); j++) {
+                IRNode::Ptr nj = order[l][j];
+                if (ni->tag < nj->tag &&
+                    find(nj->inputs.begin(), nj->inputs.end(), ni) == nj->inputs.end()) {
+                    order[l][j] = ni;
+                    order[l][j-1] = nj;
+                } else {
+                    break;
+                }
+            }
+            ni->tag = 2;
+        }
+
+        // Bubble up all nodes that don't increase register pressure.
+        // A node is reductive in this way if at least one of its
+        // inputs has only one output participating in this
+        // evaluation.
+        for (size_t i = 0; i < order[l].size(); i++) {
+            IRNode::Ptr ni = order[l][i];
+            bool reductive = false;
+            for (size_t j = 0; j < ni->inputs.size(); j++) {
+                IRNode::Ptr in = ni->inputs[j];
+                int count = 0;
+                for (size_t k = 0; k < in->outputs.size(); k++) {
+                    IRNode::Ptr inout = in->outputs[k].lock();
+                    if (!inout) continue;
+                    if (inout->tag) count++;
+                }
+                if (count == 1) reductive = true;
+            }
+            if (reductive) {
+                for (size_t j = i; j > 0; j--) {
+                    IRNode::Ptr nj = order[l][j-1];
+                    // Can I move ni before nj?
+                    if (find(ni->inputs.begin(), ni->inputs.end(), nj) == ni->inputs.end()) {
+                        order[l][j-1] = ni;
+                        order[l][j] = nj;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+}
+
+void Compiler::gatherDescendents(IRNode::Ptr node, vector<vector<IRNode::Ptr> > &output, int d) {
+    // If I'm already in the output, bail
+    if (node->tag > 1) {
+        if (d < node->tag) node->tag = d;
+        return;
+    }
+    node->tag = d;
+    for (size_t j = 0; j < node->inputs.size(); j++) {
+        gatherDescendents(node->inputs[j], output, d+1);
+    }
+    output[node->level].push_back(node);
+}
+
 // Remove all assigned registers
 void Compiler::regClear(IRNode::Ptr node) {
     // We don't clobber the registers assigned to external loop vars
@@ -605,8 +716,8 @@ void Compiler::regAssign(IRNode::Ptr node,
     // Check we're at a known loop level
     assert(node->level || node->constant, "Cannot assign registers to a node that depends on a variable with a loop order not yet assigned.\n");
 
-    // Expand the order vector as necessary if we discover deeper loop levels exist
-    if (order.size() <= node->level) order.resize(node->level+1);
+    // Check order is larger enough
+    assert(node->level < order.size(), "The order vector should have more levels that it does!\n");
 
     // If I already have a register bail out. This may occur
     // because I was manually assigned a register outside
@@ -617,9 +728,10 @@ void Compiler::regAssign(IRNode::Ptr node,
         return;
     }
 
-    // Recursively assign registers to the inputs
+    // Check all the inputs already have registers
     for (size_t i = 0; i < node->inputs.size(); i++) {
-        regAssign(node->inputs[i], reserved, regs, order);
+        assert(node->inputs[i]->reg >= 0, "Cannot assign register to a node whose inputs don't have registers\n");
+        //regAssign(node->inputs[i], reserved, regs, order);
     }
 
     // Figure out if we're going into a GPR or an SSE
@@ -651,13 +763,13 @@ void Compiler::regAssign(IRNode::Ptr node,
 
         // Every parent must be this node, or at the same level and
         // already evaluated, or not a descendent of our root node we
-        // started register assignment from (tag != 1). Note that a parent can't
+        // started register assignment from (tag == 0). Note that a parent can't
         // possible be at a higher loop level.
         for (size_t i = 0; i < input1->outputs.size() && okToClobber; i++) {
             IRNode::Ptr out = input1->outputs[i].lock();
             if (!out) continue;
             if (out == node) continue;
-            if (out->tag != 1) continue;
+            if (out->tag == 0) continue;
             if (out->level == node->level && out->reg >= 0) continue;
             okToClobber = false;
         }
@@ -665,7 +777,6 @@ void Compiler::regAssign(IRNode::Ptr node,
         if (okToClobber) {
             node->reg = input1->reg;
             regs[input1->reg] = node;
-            order[node->level].push_back(node);
             return;
         }
     }
@@ -702,14 +813,13 @@ void Compiler::regAssign(IRNode::Ptr node,
             IRNode::Ptr out = input2->outputs[i].lock();
             if (!out) continue;
             if (out == node) continue;
-            if (out->tag != 1) continue;
+            if (out->tag == 0) continue;
             if (out->level == node->level && out->reg >= 0) continue;
             okToClobber = false;
         }
         if (okToClobber) {
             node->reg = input2->reg;
             regs[input2->reg] = node;
-            order[node->level].push_back(node);
             return;
         }
     }
@@ -743,7 +853,7 @@ void Compiler::regAssign(IRNode::Ptr node,
             IRNode::Ptr out = regs[i]->outputs[j].lock();
             if (!out) continue;
             if (out == node) continue; 
-            if (out->tag != 1) continue;
+            if (out->tag == 0) continue;
             if (out->level == node->level && out->reg >= 0) continue;
             okToClobber = false;
         }
@@ -751,7 +861,6 @@ void Compiler::regAssign(IRNode::Ptr node,
         if (okToClobber) {
             node->reg = i;
             regs[i] = node;
-            order[node->level].push_back(node);
             return;
         }
     }
@@ -771,7 +880,6 @@ void Compiler::regAssign(IRNode::Ptr node,
 
         node->reg = i;
         regs[i] = node;
-        order[node->level].push_back(node);
         return;
     }
 
@@ -798,14 +906,13 @@ void Compiler::regAssign(IRNode::Ptr node,
             IRNode::Ptr out = input->outputs[i].lock();
             if (!out) continue;
             if (out == node) continue;
-            if (out->tag != 1) continue;
+            if (out->tag == 0) continue;
             if (out->level == node->level && out->reg >= 0) continue;
             okToClobber = false;
         }
         if (okToClobber) {
             node->reg = input->reg;
             regs[input->reg] = node;
-            order[node->level].push_back(node);
             return;
         }
     }

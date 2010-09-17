@@ -47,6 +47,17 @@ protected:
     // Remove all assigned registers
     void regClear(IRNode::Ptr node);
 
+    // Gather all descendents of a node in a depth-first post-order
+    // manner. Used to start off the instruction scheduler.
+    void gatherDescendents(IRNode::Ptr node, 
+                           vector<vector<IRNode::Ptr> > &output, int depth);
+
+    // Find and order all the IRNodes that go into computing the given
+    // vector of root nodes
+    void doInstructionScheduling(
+        const vector<IRNode::Ptr > &roots, 
+        vector<vector<IRNode::Ptr > > &order);
+
     // Assign a register to a node
     void regAssign(IRNode::Ptr node,
                    uint32_t reserved,
