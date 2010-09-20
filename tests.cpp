@@ -196,7 +196,7 @@ int main(int argc, char **argv) {
     // Test 3: Separable Gaussian blur with timing
     FImage tmp(im.size[0], im.size[1], im.size[2]);
     FImage blurry(im.size[0], im.size[1], im.size[2]);
-    const int K = 9;
+    const int K = 21;
     int t0 = timeGetTime();
     blur(im, K, tmp, blurry);
     tmp.evaluate();

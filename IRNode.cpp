@@ -78,8 +78,18 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     // node that is equivalent to the requested node on the
     // requested inputs. 
     
-    // First, type inference and coercion
+    /*
+    printf("Making %s\n", opname[opcode]);
+    for (size_t i = 0; i < inputs.size(); i++) {
+        printf(" from: "); 
+        inputs[i]->printExp();
+        printf(" %d \n", inputs[i]->width);
+    }
+    */
+
+    // Type inference and coercion
     Type t;
+    int w;
     switch(opcode) {
     case Const:
         panic("Shouldn't make Consts using this make function\n");
@@ -87,11 +97,13 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n",
                opname[opcode], inputs.size());
         t = inputs[0]->type;
+        w = inputs[0]->width;
         break;
     case Var:
         assert(inputs.size() == 0, "Wrong number of inputs for opcode: %s %d\n",
                opname[opcode], inputs.size());
         t = Int;
+        w = 1;
         break;
     case Plus:
     case Minus:
@@ -108,12 +120,17 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         // upgrade everything to the output type
         inputs[0] = inputs[0]->as(t);
         inputs[1] = inputs[1]->as(t);
+
+        w = inputs[0]->width;
+        assert(inputs[1]->width == w, "Inputs must have same vector width\n");
         break;
     case Divide:
     case ATan2:
         t = Float;
         inputs[0] = inputs[0]->as(Float);
         inputs[1] = inputs[1]->as(Float);
+        w = inputs[0]->width;
+        assert(inputs[1]->width == w, "Inputs must have same vector width\n");
         break;
     case Sin:
     case Cos:
@@ -127,12 +144,14 @@ IRNode::Ptr IRNode::make(OpCode opcode,
                opname[opcode], inputs.size());
         t = Float;
         inputs[0] = inputs[0]->as(Float);
+        w = inputs[0]->width;
         break;
     case Abs:
         assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n", 
                opname[opcode], inputs.size());
         if (inputs[0]->type == Bool) return inputs[0];
         t = inputs[0]->type;
+        w = inputs[0]->width;
         break;
     case Floor:
     case Ceil:
@@ -141,6 +160,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
                opname[opcode], inputs.size());    
         if (inputs[0]->type != Float) return inputs[0];
         t = Float; // TODO: perhaps Int?
+        w = inputs[0]->width;
         break;
     case LT:
     case GT:
@@ -158,6 +178,8 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         inputs[0] = inputs[0]->as(t);
         inputs[1] = inputs[1]->as(t);
         t = Bool;
+        w = inputs[0]->width;
+        assert(inputs[1]->width == w, "Inputs must have same vector width\n");
         break;
     case And:
     case Nand:
@@ -166,6 +188,8 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         // first arg is always bool
         inputs[0] = inputs[0]->as(Bool);
         t = inputs[1]->type;
+        w = inputs[0]->width;
+        assert(inputs[1]->width == w, "Inputs must have same vector width\n");
         break;
     case Or:               
         assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
@@ -179,18 +203,22 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         }
         inputs[0] = inputs[0]->as(t);
         inputs[1] = inputs[1]->as(t);
+        w = inputs[0]->width;
+        assert(inputs[1]->width == w, "Inputs must have same vector width\n");
         break;
     case IntToFloat:
         assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n",
                opname[opcode], inputs.size());
         assert(inputs[0]->type == Int, "IntToFloat can only take integers\n");
         t = Float;
+        w = inputs[0]->width;
         break;
     case FloatToInt:
         assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n",
                opname[opcode], inputs.size());
         assert(inputs[0]->type == Float, "FloatToInt can only take floats\n");
         t = Int;
+        w = inputs[0]->width;
         break;
     case PlusImm:
     case TimesImm:
@@ -198,22 +226,45 @@ IRNode::Ptr IRNode::make(OpCode opcode,
                "Wrong number of inputs for opcode: %s %d\n",
                opname[opcode], inputs.size());
         t = Int;
+        w = inputs[0]->width;
         break;
-    case LoadImm:
+    case LoadVector:
     case Load:
         assert(inputs.size() == 1,
                "Wrong number of inputs for opcode: %s %d\n",
                opname[opcode], inputs.size());
         inputs[0] = inputs[0]->as(Int);
+        assert(inputs[0]->width == 1, "Can only load scalar addresses\n");
+        w = (opcode == Load ? 1 : 4);
         t = Float;
         break;
+    case Vector:
+        assert(inputs.size() == 4, 
+               "Wrong number of inputs for opcode: %s %d\n",
+               opname[opcode], inputs.size());
+
+        for (size_t i = 0; i < inputs.size(); i++) {
+            assert(inputs[i]->width == 1, "Components of Vector must be scalar\n");
+        }
         
+        // Force all inputs to the same type
+        t = Int;
+        for (size_t i = 0; i < inputs.size(); i++) {
+            if (inputs[i]->type == Float) t = Float;
+        }
+        for (size_t i = 0; i < inputs.size(); i++) {
+            inputs[i] = inputs[i]->as(t);
+        }
+        w = inputs.size();
+        break;
     }
     
     // Constant folding
     bool allInputsConst = true;
     for (size_t i = 0; i < inputs.size() && allInputsConst; i++) {
         if (!inputs[i]->constant) allInputsConst = false;
+        // TODO: make constant folding work with vector types
+        if (inputs[i]->width != 1) allInputsConst = false;
     }
     if (allInputsConst && inputs.size()) {
         switch(opcode) {
@@ -274,6 +325,41 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     if (opcode == NoOp) {
         return inputs[0];
     }
+
+    // Push vectors downwards
+    if (opcode == Vector) {
+        bool allChildrenSameOp = true;
+        for (size_t i = 1; i < inputs.size(); i++) {
+            if (inputs[0]->op != inputs[i]->op || 
+                inputs[0]->fval != inputs[i]->fval ||
+                inputs[0]->ival != inputs[i]->ival) allChildrenSameOp = false;            
+        }
+        if (allChildrenSameOp && 
+            inputs[0]->op != Const &&
+            inputs[0]->op != Var &&            
+            inputs[0]->op != Load) {
+            vector<IRNode::Ptr> childInputs(inputs[0]->inputs.size());
+            for (size_t j = 0; j < childInputs.size(); j++) {
+                childInputs[j] = make(Vector, 
+                                      inputs[0]->inputs[j], inputs[1]->inputs[j],
+                                      inputs[2]->inputs[j], inputs[3]->inputs[j]);
+            }
+            return make(inputs[0]->op, childInputs, inputs[0]->ival, inputs[0]->fval);
+        }
+
+        // Special case a vector of four loadimms with offsets incrementing by 4 bytes
+        bool vectorLoad = true;
+        for (size_t i = 0; i < inputs.size() && vectorLoad; i++) {
+            if (inputs[i]->op != Load) vectorLoad = false;
+            if (vectorLoad && inputs[i]->inputs[0] != inputs[0]->inputs[0]) vectorLoad = false;
+            if (vectorLoad && inputs[i]->ival != inputs[0]->ival + i*4) vectorLoad = false;
+        }
+        if (vectorLoad) {
+            IRNode::Ptr v = make(LoadVector, inputs[0]->inputs[0], NULL, NULL, NULL, inputs[0]->ival);
+            return v;
+        }
+    }
+
 
     // Replace division of a lower level node with multiplication by its inverse
     if (opcode == Divide && inputs[1]->level < inputs[0]->level) {
@@ -415,37 +501,37 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     // Don't merge or modify vars
     if (opcode == Var) {
         vector<IRNode::Ptr> empty;
-        return makeNew(t, opcode, empty, 0, 0.0f);
+        return makeNew(t, 1, opcode, empty, 0, 0.0f);
     }
 
     // Fuse instructions
         
     // Load of something plus an int constant can be converted to a load with offset
-    if (opcode == Load || opcode == LoadImm) {
+    if (opcode == Load || opcode == LoadVector) {
         if (inputs[0]->op == Plus) {
             IRNode::Ptr left = inputs[0]->inputs[0];
             IRNode::Ptr right = inputs[0]->inputs[1];
             if (left->op == Const) {
-                IRNode::Ptr n = make(LoadImm, right, 
-                                 NULL, NULL, NULL,
-                                 left->ival + ival);
+                IRNode::Ptr n = make(opcode, right, 
+                                     NULL, NULL, NULL,
+                                     left->ival + ival);
                 return n;
             } else if (right->op == Const) {
-                IRNode::Ptr n = make(LoadImm, left,
-                                 NULL, NULL, NULL,
-                                 right->ival + ival);
+                IRNode::Ptr n = make(opcode, left,
+                                     NULL, NULL, NULL,
+                                     right->ival + ival);
                 return n;
             }
         } else if (inputs[0]->op == Minus &&
                    inputs[0]->inputs[1]->op == Const) {
-            IRNode::Ptr n = make(LoadImm, inputs[0]->inputs[0], 
-                             NULL, NULL, NULL, 
-                             -inputs[0]->inputs[1]->ival + ival);
+            IRNode::Ptr n = make(opcode, inputs[0]->inputs[0], 
+                                 NULL, NULL, NULL, 
+                                 -inputs[0]->inputs[1]->ival + ival);
             return n;
         } else if (inputs[0]->op == PlusImm) {
-            IRNode::Ptr n = make(LoadImm, inputs[0]->inputs[0],
-                             NULL, NULL, NULL,
-                             inputs[0]->ival + ival);
+            IRNode::Ptr n = make(opcode, inputs[0]->inputs[0],
+                                 NULL, NULL, NULL,
+                                 inputs[0]->ival + ival);
             return n;
         }
     }
@@ -472,7 +558,9 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     if (inputs.size() && inputs[0]->outputs.size() ) {
         for (size_t i = 0; i < inputs[0]->outputs.size(); i++) {
             IRNode::Ptr candidate = inputs[0]->outputs[i].lock();
+            // Redo any analysis in case something has changed
             if (!candidate) continue;
+            candidate->analyze();
             if (candidate->ival != ival) continue;
             if (candidate->fval != fval) continue;
             if (candidate->op != opcode) continue;
@@ -489,7 +577,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
 
 
     // We didn't see any reason to fuse or modify this op, so make a new node.
-    return makeNew(t, opcode, inputs, ival, fval);
+    return makeNew(t, w, opcode, inputs, ival, fval);
 }
 
 // Any optimizations that must be done after generation is
@@ -610,16 +698,6 @@ void IRNode::printExp() {
         inputs[1]->printExp();
         printf(")");
         break;
-    case LoadImm:
-        printf("[");
-        inputs[0]->printExp();
-        printf("+%d]", ival);
-        break;
-    case Load:
-        printf("[");
-        inputs[0]->printExp();
-        printf("]");
-        break;
     default:
         if (inputs.size() == 0) {
             printf("%s", opname[op]);
@@ -678,7 +756,10 @@ void IRNode::print() {
     case TimesImm:
         printf("%s * %d", args[0].c_str(), ival);
         break;
-    case LoadImm:
+    case LoadVector:
+        printf("LoadVector %s + %d", args[0].c_str(), ival);
+        break;
+    case Load:
         printf("Load %s + %d", args[0].c_str(), ival);
         break;
     default:
@@ -862,11 +943,11 @@ void IRNode::collectSum(vector<pair<IRNode::Ptr , bool> > &terms, bool positive)
 
 // TODO: rebalance product
 
-IRNode::Ptr IRNode::makeNew(Type t, OpCode opcode, 
+IRNode::Ptr IRNode::makeNew(Type t, int w, OpCode opcode, 
                             const vector<IRNode::Ptr> &inputs,
                             int iv, float fv) {
     // This is the only place where "new IRNode" should appear
-    Ptr sharedPtr(new IRNode(t, opcode, inputs, iv, fv));
+    Ptr sharedPtr(new IRNode(t, w, opcode, inputs, iv, fv));
     WeakPtr weakPtr(sharedPtr);
     sharedPtr->self = weakPtr;
 
@@ -881,16 +962,26 @@ IRNode::Ptr IRNode::makeNew(Type t, OpCode opcode,
 
 IRNode::Ptr IRNode::makeNew(float v) {
     vector<IRNode::Ptr> empty;
-    return makeNew(Float, Const, empty, 0, v);
+    return makeNew(Float, 1, Const, empty, 0, v);
 }
 
 IRNode::Ptr IRNode::makeNew(int v) {
     vector<IRNode::Ptr> empty;
-    return makeNew(Int, Const, empty, v, 0);
+    return makeNew(Int, 1, Const, empty, v, 0);
+}
+
+unsigned int gcd(unsigned int a, unsigned int b) {
+    unsigned int tmp;
+    while (b) {
+        tmp = b;
+        b = a % b;
+        a = tmp;
+    }
+    return a;
 }
 
 // Only makeNew may call this
-IRNode::IRNode(Type t, OpCode opcode, 
+IRNode::IRNode(Type t, int w, OpCode opcode, 
                const vector<IRNode::Ptr> &input,
                int iv, float fv) {
     ival = iv;
@@ -900,10 +991,13 @@ IRNode::IRNode(Type t, OpCode opcode,
         inputs.push_back(input[i]);
 
     type = t;
-    width = 1;
+    width = w;
 
     op = opcode;
     level = 0;
+
+
+    modulus = remainder = 0;
 
     if (op == Var) {
         constant = false;
@@ -918,7 +1012,93 @@ IRNode::IRNode(Type t, OpCode opcode,
 
     // No register assigned yet
     reg = -1;
+
+    // Do static analysis
+    analyze();
 }
+
+
+void IRNode::analyze() {
+    if (type == Int) {
+        if (op == PlusImm) {
+
+            modulus = inputs[0]->modulus;
+            remainder = (inputs[0]->remainder + ival) % modulus;
+            while (remainder < 0) remainder += modulus;
+
+        } else if (op == TimesImm) {
+
+            int64_t mod = (int64_t)inputs[0]->modulus * (int64_t)ival;
+            if (mod < 0) mod = -mod;
+            if (mod & 0xffffffff00000000) {
+                //printf("Bailing out due to potential overflow\n");
+                modulus = 1;
+                remainder = 0;
+            } else {
+                modulus = (unsigned int)mod;
+                remainder = (inputs[0]->remainder * ival) % modulus;
+            }
+            while (remainder < 0) remainder += modulus;
+
+        } else if (op == Plus) {           
+            if (inputs[0]->op == Const) {
+                modulus = inputs[1]->modulus;
+                remainder = (inputs[1]->remainder + inputs[0]->ival) % modulus;
+                while (remainder < 0) remainder += modulus;
+            } else if (inputs[1]->op == Const) {
+                modulus = inputs[0]->modulus;
+                remainder = (inputs[0]->remainder + inputs[1]->ival) % modulus;
+                while (remainder < 0) remainder += modulus;
+            } else {
+                modulus = gcd(inputs[0]->modulus, inputs[1]->modulus);
+                if (inputs[0]->modulus == inputs[1]->modulus) modulus = inputs[0]->modulus;
+                remainder = (inputs[0]->remainder + inputs[1]->remainder) % modulus;
+            }
+
+        } else if (op == Minus) {
+            if (inputs[0]->op == Const) {
+                modulus = inputs[1]->modulus;
+                remainder = (inputs[1]->remainder - inputs[0]->ival) % modulus;
+                while (remainder < 0) remainder += modulus;
+            } else if (inputs[1]->op == Const) {
+                modulus = inputs[0]->modulus;
+                remainder = (inputs[0]->remainder - inputs[1]->ival) % modulus;
+                while (remainder < 0) remainder += modulus;
+            } else {
+                modulus = gcd(inputs[0]->modulus, inputs[1]->modulus);
+                if (inputs[0]->modulus == inputs[1]->modulus) modulus = inputs[0]->modulus;
+                remainder = (modulus + inputs[0]->remainder - inputs[1]->remainder) % modulus;
+            }
+
+        } else if (op == Times && inputs[0]->op == Const) {
+            int64_t mod = (int64_t)inputs[1]->modulus * (int64_t)inputs[0]->ival;
+            if (mod < 0) mod = -mod;
+            if (mod & 0xffffffff00000000) {
+                modulus = 1;
+                remainder = 0;
+            } else {
+                modulus = (unsigned int)mod;
+                remainder = (inputs[1]->remainder * ival) % modulus;
+            }
+            while (remainder < 0) remainder += modulus;            
+
+        } else if (op == Times && inputs[1]->op == Const) {
+            int64_t mod = (int64_t)inputs[0]->modulus * (int64_t)inputs[1]->ival;
+            if (mod < 0) mod = -mod;
+            if (mod & 0xffffffff00000000) {
+                modulus = 1;
+                remainder = 0;
+            } else {
+                modulus = (unsigned int)mod;
+                remainder = (inputs[0]->remainder * ival) % modulus;
+            }
+            while (remainder < 0) remainder += modulus;            
+        } else {
+            modulus = 1;
+            remainder = 0;
+        }
+    }
+};
 
 IRNode::~IRNode() {
     // Oh, I guess nobody wants me any more. I'd better not have any live outputs then

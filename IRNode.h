@@ -21,7 +21,8 @@ static const char *opname[] = {"Const", "NoOp",
                                "LT", "GT", "LTE", "GTE", "EQ", "NEQ",
                                "And", "Or", "Nand", "Load",
                                "IntToFloat", "FloatToInt", 
-                               "LoadImm", "PlusImm", "TimesImm"};
+                               "PlusImm", "TimesImm", 
+                               "Vector", "LoadVector"};
 
 
 enum OpCode {Const = 0, NoOp, 
@@ -33,7 +34,8 @@ enum OpCode {Const = 0, NoOp,
              And, Or, Nand,
              Load,
              IntToFloat, FloatToInt, 
-             LoadImm, PlusImm, TimesImm};
+             PlusImm, TimesImm, 
+             Vector, LoadVector};
 
 // One node in the intermediate representation
 class IRNode {
@@ -52,10 +54,13 @@ public:
     int ival;
 
     // Vector width. Should be one or four on X64.
-    //
-    // TODO: this is currently always set to 1 even though we're
-    // forcibly vectorizing across X
     int width;
+
+    // If I'm a non-const integer, some things may still be known statically
+    // about my value. E.g. I'm congruent to remainder modulo
+    // modulus. This is useful for reasoning about alignment.
+    unsigned int modulus;
+    int remainder;    
 
     // Inputs - whose values do I depend on?
     vector<Ptr> inputs;    
@@ -146,11 +151,11 @@ protected:
     // The correct way for IRNode methods to create new nodes.
     static Ptr makeNew(float);
     static Ptr makeNew(int);
-    static Ptr makeNew(Type, OpCode, const vector<Ptr> &input, int, float);
+    static Ptr makeNew(Type, int, OpCode, const vector<Ptr> &input, int, float);
 
     // The actual constructor. Only used by the makeNew methods, which
     // are only used by the make methods.
-    IRNode(Type t, OpCode opcode, 
+    IRNode(Type t, int w, OpCode opcode, 
            const vector<Ptr> &input,
            int iv, float fv);
     
@@ -160,6 +165,8 @@ protected:
                             int ival = 0, float fval = 0.0f);
     
 
+    // Do (or redo any static analysis)
+    void analyze();
 
     // A weak reference to myself. 
     WeakPtr self;
