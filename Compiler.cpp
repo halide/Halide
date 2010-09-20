@@ -15,33 +15,41 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
         def.vars[i].node->assignLevel(def.vars.size()-i);
     }
 
+    // Let the compiler know that x will be a multiple of four
+    def.vars[0].node->modulus = 4;
+    def.vars[0].node->remainder = 0;
+
     printf("Compiling: ");
     root->printExp();
     printf("\n");
 
     // Force the output type of the expression to be a float and do a
     // final optimization pass now that levels are assigned.
-    //IRNode::saveDot("before.dot");
+    IRNode::saveDot("before.dot");
     def.node = root = root->as(IRNode::Float)->optimize();
 
     // vectorize across the innermost variable
-    // TODO: right now it's hacked in
-    // root = root->vectorize(def.vars[0].node, 4);
+    // TODO: we're assuming it's a multiple of 4
+    root = IRNode::make(Vector, root, 
+                        root->substitute(def.vars[0].node, 
+                                         IRNode::make(PlusImm, def.vars[0].node,
+                                                      NULL, NULL, NULL, 1)),
+                        root->substitute(def.vars[0].node, 
+                                         IRNode::make(PlusImm, def.vars[0].node,
+                                                      NULL, NULL, NULL, 2)),
+                        root->substitute(def.vars[0].node, 
+                                         IRNode::make(PlusImm, def.vars[0].node,
+                                                      NULL, NULL, NULL, 3)));
 
     // Unroll across a relevant variable. This should depend on what
     // gives the most sharing of inputs. E.g. a vertical convolution
     // should unroll across Y.
-    // Right now it's hacked in.
-    // vector<IRNode *> roots = root->unroll(def.vars[0].node, 4);
+    // Right now it's hacked in as no unrolling.
 
-    // hardcoded unrolling across X by a factor of 4
-    vector<IRNode::Ptr> roots(4);
+    vector<IRNode::Ptr> roots(1);
     roots[0] = root;
-    roots[1] = root->substitute(def.vars[0].node, IRNode::make(PlusImm, def.vars[0].node, NULL, NULL, NULL, 4));
-    roots[2] = root->substitute(def.vars[0].node, IRNode::make(PlusImm, def.vars[0].node, NULL, NULL, NULL, 8));
-    roots[3] = root->substitute(def.vars[0].node, IRNode::make(PlusImm, def.vars[0].node, NULL, NULL, NULL, 12));
 
-    //IRNode::saveDot("after.dot");
+    IRNode::saveDot("after.dot");
 
 
     // Assign the variables some registers
@@ -82,7 +90,6 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     printf("Register assignment...\n");
     vector<uint32_t> clobbered, outputs;
     vector<vector<IRNode::Ptr > > order;        
-    //vector<IRNode::Ptr> roots(1, root);
     doRegisterAssignment(roots, reserved, order, clobbered, outputs);   
     printf("Done\n");
     int t2 = timeGetTime();
@@ -143,14 +150,11 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
        
     compileBody(a, order[3]);
 
-    a->movntps(AsmX64::Mem(outPtr, 0*4*4), roots[0]->reg);
-    a->movntps(AsmX64::Mem(outPtr, 1*4*4), roots[1]->reg);
-    a->movntps(AsmX64::Mem(outPtr, 2*4*4), roots[2]->reg);
-    a->movntps(AsmX64::Mem(outPtr, 3*4*4), roots[3]->reg);
+    a->movntps(AsmX64::Mem(outPtr), roots[0]->reg);
 
-    // Move on to the next X (actually jump by four due to the hacked vectorization we're doing)
-    a->add(outPtr, 4*4*4);
-    a->add(varRegs[0], 4*4);
+    // Move on to the next X 
+    a->add(outPtr, 4*4);
+    a->add(varRegs[0], 4);
     a->cmp(varRegs[0], def.vars[0].max);
     a->jl("loop2");
 
@@ -171,7 +175,7 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     a->ret();        
 
     // Save an object file that you can use dumpbin on to inspect
-    //a->saveCOFF("generated.obj");        
+    a->saveCOFF("generated.obj");        
 }
     
 // Generate machine code for a vector of IRNodes. Registers must have already been assigned.
@@ -220,7 +224,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
                 } else {
                     a->mov(gtmp, &(node->fval));
                     a->movss(dst, AsmX64::Mem(gtmp));
-                    a->shufps(dst, dst, 0, 0, 0, 0);
+                    //a->shufps(dst, dst, 0, 0, 0, 0);
                 }
             } else if (node->type == IRNode::Bool) {
                 if (gpr) {
@@ -242,7 +246,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
                     a->mov(a->r15, node->ival);
                     // ints are 32-bit for now, so this works
                     a->cvtsi2ss(dst, a->r15);
-                    a->shufps(dst, dst, 0, 0, 0, 0);                        
+                    //a->shufps(dst, dst, 0, 0, 0, 0);                        
                 }
             }
             break;
@@ -474,29 +478,58 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
         case IntToFloat:
             if (gpr1 && !gpr) {
                 a->cvtsi2ss(dst, gsrc1);
-                a->shufps(dst, dst, 0, 0, 0, 0);
+                //a->shufps(dst, dst, 0, 0, 0, 0);
             } else {
                 panic("IntToFloat can only go from gpr to sse\n");
             }
             break;
+        case LoadVector:
         case Load:
-            node->ival = 0;
-        case LoadImm:
             assert(gpr1, "Can only load using addresses in gprs\n");
             assert(!gpr, "Can only load into sse regs\n");
-            a->movups(dst, AsmX64::Mem(gsrc1, node->ival));
+            if (node->width == 1) {
+                a->movss(dst, AsmX64::Mem(gsrc1, node->ival));
+            } else {
+                int modulus = node->inputs[0]->modulus;
+                int remainder = (node->inputs[0]->remainder + node->ival) % modulus;
+                if ((modulus & 0xf) == 0 && (remainder & 0xf) == 0) {
+                    a->movaps(dst, AsmX64::Mem(gsrc1, node->ival));
+                } else {
+                    printf("Unaligned load!\n");
+                    a->movups(dst, AsmX64::Mem(gsrc1, node->ival));
+                }
+            }
+            break;
+        case Vector:
+            assert(!gpr, "Can't put vectors in gprs");
 
-            /* If stride != 1
-            a->movss(dst, AsmX64::Mem(gsrc1, node->ival));
-            a->movss(tmp, AsmX64::Mem(gsrc1, node->ival + stride*4));
-            a->punpckldq(dst, tmp);
-            a->movss(tmp, AsmX64::Mem(gsrc1, node->ival + stride*8));
-            a->movss(tmp2, AsmX64::Mem(gsrc1, node->ival + stride*12));
-            a->punpckldq(tmp, tmp2);
-            a->punpcklqdq(dst, tmp);
-            */
-
-
+            // Can we use shufps?
+            if (src1 == src2 && src3 == src4) {
+                if (src1 == dst) {
+                    a->shufps(dst, src3, 0, 0, 0, 0);
+                } else if (src3 == dst) {
+                    a->movaps(tmp, src1);
+                    a->shufps(tmp, src3, 0, 0, 0, 0);
+                    a->movaps(src3, tmp);
+                } else {
+                    a->movaps(dst, src1);
+                    a->shufps(dst, src3, 0, 0, 0, 0);
+                }
+            } else if (dst == src1) {
+                a->punpckldq(dst, src2);
+                a->movaps(tmp, src3);
+                a->punpckldq(tmp, src4);
+                a->punpcklqdq(dst, tmp);
+            } else {
+                // Most general case:
+                a->movaps(tmp, src1);
+                a->punpckldq(tmp, src2);
+                a->movaps(tmp2, src3);
+                a->punpckldq(tmp2, src4);
+                a->punpcklqdq(tmp, tmp2);
+                a->movaps(dst, tmp);
+            }
+            break;           
         case NoOp:
             break;
         }
