@@ -10,9 +10,11 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     
     int t1 = timeGetTime();
 
+    assert(def.vars.size() < 256, "FImage can't cope with more than 255 free variables\n");
+
     // Assign loop levels. First var is innermost (usually x)
     for (size_t i = 0; i < def.vars.size(); i++) {
-        def.vars[i].node->assignLevel(def.vars.size()-i);
+        def.vars[i].node->assignLevel((unsigned char)(def.vars.size()-i));
     }
 
     // Let the compiler know that x will be a multiple of four
@@ -188,10 +190,10 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
     for (size_t i = 0; i < code.size(); i++) {
         // Extract the node, its register, and any inputs and their registers
         IRNode::Ptr node = code[i];
-        IRNode::Ptr c1 = (node->inputs.size() >= 1) ? node->inputs[0] : NULL;
-        IRNode::Ptr c2 = (node->inputs.size() >= 2) ? node->inputs[1] : NULL;
-        IRNode::Ptr c3 = (node->inputs.size() >= 3) ? node->inputs[2] : NULL;
-        IRNode::Ptr c4 = (node->inputs.size() >= 4) ? node->inputs[3] : NULL;
+        IRNode::Ptr c1 = (node->inputs.size() >= 1) ? node->inputs[0] : NULL_IRNODE_PTR;
+        IRNode::Ptr c2 = (node->inputs.size() >= 2) ? node->inputs[1] : NULL_IRNODE_PTR;
+        IRNode::Ptr c3 = (node->inputs.size() >= 3) ? node->inputs[2] : NULL_IRNODE_PTR;
+        IRNode::Ptr c4 = (node->inputs.size() >= 4) ? node->inputs[3] : NULL_IRNODE_PTR;
 
         // SSE source and destination registers
         AsmX64::SSEReg dst(node->reg-16);
@@ -328,18 +330,24 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
             }
             break;
         case TimesImm:
+            assert((node->ival >> 32) == 0 || (node->ival >> 31) == -1, 
+                   "TimesImm may only use a 32-bit signed constant\n");
             if (gdst == gsrc1) {
-                a->imul(gdst, node->ival);
+                a->imul(gdst, (int32_t)node->ival);
             } else {
-                a->mov(gdst, node->ival);
+                // This could be a 64-bit constant here, but I want to discourage this case anyway
+                a->mov(gdst, (int32_t)node->ival);
                 a->imul(gdst, gsrc1);
             }
             break;
         case PlusImm:
+            assert((node->ival >> 32) == 0 || (node->ival >> 31) == -1, 
+                   "PlusImm may only use a 32-bit signed constant\n");
             if (gdst == gsrc1) {
-                a->add(gdst, node->ival);
+                a->add(gdst, (int32_t)node->ival);
             } else {
-                a->mov(gdst, node->ival);
+                // This could be a 64-bit constant here, but I want to discourage this case anyway
+                a->mov(gdst, (int32_t)node->ival);
                 a->add(gdst, gsrc1);
             }
             break;
@@ -477,8 +485,8 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
             break;
         case IntToFloat:
             if (gpr1 && !gpr) {
+                // TODO: this truncates to 32-bits currently
                 a->cvtsi2ss(dst, gsrc1);
-                //a->shufps(dst, dst, 0, 0, 0, 0);
             } else {
                 panic("IntToFloat can only go from gpr to sse\n");
             }
@@ -487,16 +495,18 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
         case Load:
             assert(gpr1, "Can only load using addresses in gprs\n");
             assert(!gpr, "Can only load into sse regs\n");
+            assert((node->ival >> 32) == 0 || (node->ival >> 32) == -1, 
+                   "Load may only use a 32-bit signed constant\n");
             if (node->width == 1) {
-                a->movss(dst, AsmX64::Mem(gsrc1, node->ival));
+                a->movss(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
             } else {
                 int modulus = node->inputs[0]->modulus;
                 int remainder = (node->inputs[0]->remainder + node->ival) % modulus;
                 if ((modulus & 0xf) == 0 && (remainder & 0xf) == 0) {
-                    a->movaps(dst, AsmX64::Mem(gsrc1, node->ival));
+                    a->movaps(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
                 } else {
                     printf("Unaligned load!\n");
-                    a->movups(dst, AsmX64::Mem(gsrc1, node->ival));
+                    a->movups(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
                 }
             }
             break;
@@ -892,7 +902,7 @@ void Compiler::regAssign(IRNode::Ptr node,
         }
 
         if (okToClobber) {
-            node->reg = i;
+            node->reg = (unsigned char)i;
             regs[i] = node;
             return;
         }
@@ -911,7 +921,7 @@ void Compiler::regAssign(IRNode::Ptr node,
         // Don't consider reserved registers
         if (reserved & (1 << i)) continue;
 
-        node->reg = i;
+        node->reg = (unsigned char)i;
         regs[i] = node;
         return;
     }

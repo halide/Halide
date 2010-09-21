@@ -24,7 +24,7 @@ void assert(bool cond, const char *fmt, ...) {
 
 
 map<float, IRNode::WeakPtr> IRNode::floatInstances;
-map<int, IRNode::WeakPtr> IRNode::intInstances;
+map<int64_t, IRNode::WeakPtr> IRNode::intInstances;
 vector<IRNode::WeakPtr> IRNode::allNodes;
 
 IRNode::Ptr IRNode::make(float v) {
@@ -36,7 +36,7 @@ IRNode::Ptr IRNode::make(float v) {
     return floatInstances[v].lock();
 };
 
-IRNode::Ptr IRNode::make(int v) {
+IRNode::Ptr IRNode::make(int64_t v) {
     if (intInstances[v].expired()) {
         Ptr p = makeNew(v);
         intInstances[v] = p;
@@ -50,7 +50,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
                          IRNode::Ptr input2,
                          IRNode::Ptr input3,
                          IRNode::Ptr input4,
-                         int ival,
+                         int64_t ival,
                          float fval) {
     
     // collect the inputs into a vector
@@ -72,7 +72,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
 
 IRNode::Ptr IRNode::make(OpCode opcode,
                          vector<IRNode::Ptr> inputs,
-                         int ival, float fval) {
+                         int64_t ival, float fval) {
     
     // We will progressively modify the inputs to finally return a
     // node that is equivalent to the requested node on the
@@ -255,7 +255,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         for (size_t i = 0; i < inputs.size(); i++) {
             inputs[i] = inputs[i]->as(t);
         }
-        w = inputs.size();
+        w = (int)inputs.size();
         break;
     }
     
@@ -297,7 +297,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
             if (t == Float) {
                 return make(inputs[0]->ival ? inputs[1]->fval : 0.0f);
             } else {
-                return make(inputs[0]->ival ? inputs[1]->ival : 0);
+                return make(inputs[0]->ival ? inputs[1]->ival : 0ll);
             }
         case Or:
             if (t == Float) {
@@ -309,16 +309,17 @@ IRNode::Ptr IRNode::make(OpCode opcode,
             if (t == Float) {
                 return make(!inputs[0]->ival ? inputs[1]->fval : 0.0f);
             } else {
-                return make(!inputs[0]->ival ? inputs[1]->ival : 0);
+                return make(!inputs[0]->ival ? inputs[1]->ival : 0ll);
             }
         case IntToFloat:
+            assert(inputs[0]->ival>>32 == 0, "IntToFloat on 64bit value 0x%llx will lose data\n", inputs[0]->ival);
             return make((float)inputs[0]->ival);
         case FloatToInt:
-            return make((int)inputs[0]->fval);
+            return make((int64_t)inputs[0]->fval);
         default:
             // TODO: transcendentals, pow, floor, comparisons, etc
             break;
-        } 
+        }
     }
 
     // Strength reduction rules.
@@ -371,8 +372,8 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     // (x+a)*b = x*b + a*b (where a and b are both constant integers)
     if (opcode == TimesImm && inputs[0]->op == PlusImm) {
         return make(PlusImm, 
-                    make(TimesImm, inputs[0]->inputs[0], NULL, NULL, NULL, ival),
-                    NULL, NULL, NULL, ival * inputs[0]->ival);
+                    make(TimesImm, inputs[0]->inputs[0], NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, ival),
+                    NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, ival * inputs[0]->ival);
     }
 
     // (x*a)*b = x*(a*b) where a and b are more const than x. This
@@ -542,12 +543,12 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         IRNode::Ptr right = inputs[1];
         if (left->op == Const) {
             IRNode::Ptr n = make(TimesImm, right, 
-                             NULL, NULL, NULL,
+                             NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
                              left->ival);
             return n;
         } else if (right->op == Const) {
             IRNode::Ptr n = make(TimesImm, left, 
-                             NULL, NULL, NULL,
+                             NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
                              right->ival);
             return n;
         }
@@ -617,14 +618,14 @@ IRNode::Ptr IRNode::as(Type t) {
         if (t == Float) 
             return make(IntToFloat, self.lock());
         if (t == Bool)
-            return make(NEQ, self.lock(), make(0));
+            return make(NEQ, self.lock(), make(0ll));
     }
 
     if (type == Bool) {            
         if (t == Float) 
             return make(And, self.lock(), make(1.0f));
         if (t == Int) 
-            return make(And, self.lock(), make(1));
+            return make(And, self.lock(), make(1ll));
     }
 
     if (type == Float) {
@@ -639,7 +640,7 @@ IRNode::Ptr IRNode::as(Type t) {
             
 }
 
-void IRNode::assignLevel(int l) {
+void IRNode::assignLevel(unsigned char l) {
     if (level == l) return;
     level = l;
     // Tell my (living) parents I got a promotion (they'll tell the grandparents).
@@ -655,7 +656,7 @@ void IRNode::printExp() {
     switch(op) {
     case Const:
         if (type == Float) printf("%f", fval);
-        else printf("%d", ival);
+        else printf("%lld", ival);
         break;
     case Var:
         printf("var");
@@ -670,12 +671,12 @@ void IRNode::printExp() {
     case PlusImm:
         printf("(");
         inputs[0]->printExp();
-        printf("+%d)", ival);
+        printf("+%lld)", ival);
         break;
     case TimesImm:
         printf("(");
         inputs[0]->printExp();
-        printf("*%d)", ival);
+        printf("*%lld)", ival);
         break;
     case Minus:
         printf("(");
@@ -725,7 +726,7 @@ void IRNode::print() {
     char buf[32];
     for (size_t i = 0; i < inputs.size(); i++) {
         if (inputs[i]->reg < 0) 
-            sprintf(buf, "%d", inputs[i]->ival);
+            sprintf(buf, "%lld", inputs[i]->ival);
         else if (inputs[i]->reg < 16)
             sprintf(buf, "r%d", inputs[i]->reg);
         else
@@ -736,7 +737,7 @@ void IRNode::print() {
     switch (op) {
     case Const:
         if (type == Float) printf("%f", fval);
-        else printf("%d", ival);
+        else printf("%lld", ival);
         break;                
     case Plus:
         printf("%s + %s", args[0].c_str(), args[1].c_str());
@@ -780,14 +781,14 @@ void IRNode::saveDot(const char *filename) {
         IRNode::Ptr n = allNodes[i].lock();
         if (!n) continue;
         if (n->ival) 
-            fprintf(f, "  n%x [label = \"%s %d\"]\n", (long long)n.get(), opname[n->op], n->ival);
+            fprintf(f, "  n%llx [label = \"%s %lld\"]\n", (long long)n.get(), opname[n->op], n->ival);
         else if (n->fval)  
-            fprintf(f, "  n%x [label = \"%s %f\"]\n", (long long)n.get(), opname[n->op], n->fval);           
+            fprintf(f, "  n%llx [label = \"%s %f\"]\n", (long long)n.get(), opname[n->op], n->fval);           
         else 
-            fprintf(f, "  n%x [label = \"%s\"]\n", (long long)n.get(), opname[n->op]);            
+            fprintf(f, "  n%llx [label = \"%s\"]\n", (long long)n.get(), opname[n->op]);            
         for (size_t j = 0; j < n->inputs.size(); j++) {
             IRNode::Ptr in = n->inputs[j];
-            fprintf(f, "  n%x -> n%x\n", (long long)n.get(), (long long)in.get());
+            fprintf(f, "  n%llx -> n%llx\n", (long long)n.get(), (long long)in.get());
         }
         /*
         for (size_t j = 0; j < n->outputs.size(); j++) {
@@ -906,7 +907,7 @@ IRNode::Ptr IRNode::rebalanceSum() {
     // if we're building an int sum, the const term is
     // outermost so that loadimms can pick it up
     if (type == Int) {
-        int c = 0;
+        int64_t c = 0;
         for (size_t i = 0; i < constTerms.size(); i++) {
             if (constTerms[i].second) {
                 c += constTerms[i].first->ival;
@@ -916,7 +917,7 @@ IRNode::Ptr IRNode::rebalanceSum() {
         }
         if (c != 0) {
             if (tPos) 
-                t = make(PlusImm, t, NULL, NULL, NULL, c);
+                t = make(PlusImm, t, NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, c);
             else
                 t = make(Minus, make(c), t);
         }
@@ -945,7 +946,7 @@ void IRNode::collectSum(vector<pair<IRNode::Ptr , bool> > &terms, bool positive)
 
 IRNode::Ptr IRNode::makeNew(Type t, int w, OpCode opcode, 
                             const vector<IRNode::Ptr> &inputs,
-                            int iv, float fv) {
+                            int64_t iv, float fv) {
     // This is the only place where "new IRNode" should appear
     Ptr sharedPtr(new IRNode(t, w, opcode, inputs, iv, fv));
     WeakPtr weakPtr(sharedPtr);
@@ -965,7 +966,10 @@ IRNode::Ptr IRNode::makeNew(float v) {
     return makeNew(Float, 1, Const, empty, 0, v);
 }
 
-IRNode::Ptr IRNode::makeNew(int v) {
+IRNode::Ptr IRNode::makeNew(int64_t v) {
+    if ((v>>32) != 0 && (v>>31) != -1) {
+        printf("We only trust 32 bit values for now: 0x%llx\n", v);
+    }
     vector<IRNode::Ptr> empty;
     return makeNew(Int, 1, Const, empty, v, 0);
 }
@@ -983,7 +987,7 @@ unsigned int gcd(unsigned int a, unsigned int b) {
 // Only makeNew may call this
 IRNode::IRNode(Type t, int w, OpCode opcode, 
                const vector<IRNode::Ptr> &input,
-               int iv, float fv) {
+               int64_t iv, float fv) {
     ival = iv;
     fval = fv;
 
@@ -1028,10 +1032,10 @@ void IRNode::analyze() {
 
         } else if (op == TimesImm) {
 
-            int64_t mod = (int64_t)inputs[0]->modulus * (int64_t)ival;
+            int64_t mod = (int64_t)inputs[0]->modulus * ival;
             if (mod < 0) mod = -mod;
-            if (mod & 0xffffffff00000000) {
-                //printf("Bailing out due to potential overflow\n");
+            if ((mod>>32) || (abs(ival)>>32)) {
+                //printf("Bailing out of modulus analysis due to potential overflow\n");
                 modulus = 1;
                 remainder = 0;
             } else {
@@ -1073,7 +1077,7 @@ void IRNode::analyze() {
         } else if (op == Times && inputs[0]->op == Const) {
             int64_t mod = (int64_t)inputs[1]->modulus * (int64_t)inputs[0]->ival;
             if (mod < 0) mod = -mod;
-            if (mod & 0xffffffff00000000) {
+            if ((mod>>32) || (abs(inputs[0]->ival)>>32)) {
                 modulus = 1;
                 remainder = 0;
             } else {
@@ -1085,7 +1089,7 @@ void IRNode::analyze() {
         } else if (op == Times && inputs[1]->op == Const) {
             int64_t mod = (int64_t)inputs[0]->modulus * (int64_t)inputs[1]->ival;
             if (mod < 0) mod = -mod;
-            if (mod & 0xffffffff00000000) {
+            if ((mod>>32) || (abs(inputs[1]->ival)>>32)) {
                 modulus = 1;
                 remainder = 0;
             } else {

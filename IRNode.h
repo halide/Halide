@@ -10,6 +10,11 @@
 
 using namespace std;
 
+#ifndef _MSC_VER
+#include <tr1/memory>
+using namespace std::tr1;
+#endif
+
 void panic(const char *fmt, ...);
 void assert(bool condition, const char *fmt, ...);
 
@@ -43,6 +48,7 @@ public:
 
     typedef shared_ptr<IRNode> Ptr;
     typedef weak_ptr<IRNode> WeakPtr;
+    #define NULL_IRNODE_PTR (IRNode::Ptr((IRNode*)NULL))
 
     enum Type {Unknown = 0, Float, Bool, Int};   
 
@@ -51,7 +57,7 @@ public:
         
     // Any immediate data. Mostly useful for the Const op.
     float fval;
-    int ival;
+    int64_t ival;
 
     // Vector width. Should be one or four on X64.
     int width;
@@ -96,15 +102,16 @@ public:
     static Ptr make(float v);
 
     // Make an int constant 
-    static Ptr make(int v);
-
+    static Ptr make(int64_t v);
+    //static Ptr make(int v) { return make((int64_t)v); } // this has proven quite unsafe
+    
     // Make an IRNode with the given opcode and the given inputs and constant values
     static Ptr make(OpCode opcode, 
-                    Ptr input1 = NULL, 
-                    Ptr input2 = NULL, 
-                    Ptr input3 = NULL,
-                    Ptr input4 = NULL,
-                    int ival = 0,
+                    Ptr input1 = NULL_IRNODE_PTR, 
+                    Ptr input2 = NULL_IRNODE_PTR, 
+                    Ptr input3 = NULL_IRNODE_PTR,
+                    Ptr input4 = NULL_IRNODE_PTR,
+                    int64_t ival = 0,
                     float fval = 0.0f);
 
 
@@ -119,7 +126,7 @@ public:
     Ptr substitute(Ptr oldNode, Ptr newNode);
 
     // Assign a loop level to a var. The outputs will be recursively updated too.
-    void assignLevel(int);
+    void assignLevel(unsigned char);
 
     // Cast an IRNode to a different type
     Ptr as(Type t);
@@ -146,23 +153,23 @@ protected:
     static map<float, WeakPtr> floatInstances;
 
     // All the int nodes
-    static map<int, WeakPtr> intInstances;
+    static map<int64_t, WeakPtr> intInstances;
 
     // The correct way for IRNode methods to create new nodes.
     static Ptr makeNew(float);
-    static Ptr makeNew(int);
-    static Ptr makeNew(Type, int, OpCode, const vector<Ptr> &input, int, float);
+    static Ptr makeNew(int64_t);
+    static Ptr makeNew(Type, int, OpCode, const vector<Ptr> &input, int64_t, float);
 
     // The actual constructor. Only used by the makeNew methods, which
     // are only used by the make methods.
     IRNode(Type t, int w, OpCode opcode, 
            const vector<Ptr> &input,
-           int iv, float fv);
+           int64_t iv, float fv);
     
     // A slightly more generate make function that takes a vector of children for inputs
     static Ptr IRNode::make(OpCode opcode,
                             vector<Ptr> inputs,
-                            int ival = 0, float fval = 0.0f);
+                            int64_t ival = 0, float fval = 0.0f);
     
 
     // Do (or redo any static analysis)

@@ -3,6 +3,9 @@
 
 #include "IRNode.h"
 
+#ifndef _MSC_VER
+unsigned long timeGetTime();
+#endif //!_MSC_VER
 
 class FImage;
 
@@ -11,7 +14,8 @@ class Expr {
 public:
     Expr();
     Expr(IRNode::Ptr);
-    Expr(int);
+    Expr(int64_t);
+    Expr(int32_t);
     Expr(uint32_t);
     Expr(float);
 
@@ -73,35 +77,35 @@ public:
 
     // Actually look something up in the image. Won't return anything
     // interesting if the image hasn't been evaluated yet.
-    float &FImage::operator()(int a) {
+    float &operator()(int a) {
         return data[a*stride[0]];
     }
 
-    float &FImage::operator()(int a, int b) {
+    float &operator()(int a, int b) {
         return data[a*stride[0] + b*stride[1]];
     }
 
-    float &FImage::operator()(int a, int b, int c) {
+    float &operator()(int a, int b, int c) {
         return data[a*stride[0] + b*stride[1] + c*stride[2]];
     }
 
-    float &FImage::operator()(int a, int b, int c, int d) {
+    float &operator()(int a, int b, int c, int d) {
         return data[a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]];
     }
 
-    float FImage::operator()(int a) const {
+    float operator()(int a) const {
         return data[a*stride[0]];
     }
 
-    float FImage::operator()(int a, int b) const {
+    float operator()(int a, int b) const {
         return data[a*stride[0] + b*stride[1]];
     }
 
-    float FImage::operator()(int a, int b, int c) const {
+    float operator()(int a, int b, int c) const {
         return data[a*stride[0] + b*stride[1] + c*stride[2]];
     }
 
-    float FImage::operator()(int a, int b, int c, int d) const {
+    float operator()(int a, int b, int c, int d) const {
         return data[a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]];
     }
     
