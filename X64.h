@@ -2,7 +2,12 @@
 #include <string>
 #include <map>
 #include <stdint.h>
+#ifdef _MSC_VER
 #include <windows.h>
+#else //!_MSC_VER
+#include <sys/mman.h>
+typedef unsigned long DWORD;
+#endif
 
 using namespace std;
 
@@ -12,8 +17,8 @@ public:
     class Reg {
     public:
         Reg() : num(0) {}
-        Reg(int x) : num(x) {}
-        int num;
+        Reg(unsigned char x) : num(x) {}
+        unsigned char num;
         bool operator==(const Reg &other) {
             return num == other.num;
         }
@@ -28,8 +33,8 @@ public:
     class SSEReg {
     public:
         SSEReg() : num(0) {}
-        SSEReg(int x) : num(x) {}
-        int num;
+        SSEReg(unsigned char x) : num(x) {}
+        unsigned char num;
         bool operator==(const SSEReg &other) {
             return num == other.num;
         }
@@ -141,6 +146,7 @@ public:
         bop(dst, src, 0x03);
     }
 
+    // TODO: this should type check or assert that its operands are <= 32 bits
     void add(Reg dst, int32_t n) {
         bop(dst, n, 0x05, 0x00);
     }
@@ -151,7 +157,7 @@ public:
         } else {
             add(dst, 0xefbeadde);
         }
-        bindingSites[name].push_back(_buffer.size()-4);
+        bindingSites[name].push_back(bufSize()-4);
     }
 
     void add(Reg dst, Mem src) {
@@ -177,7 +183,7 @@ public:
         } else {
             sub(dst, 0xefbeadde);
         }
-        bindingSites[name].push_back(_buffer.size()-4);
+        bindingSites[name].push_back(bufSize()-4);
     }
 
     void sub(Reg dst, Mem src) {
@@ -244,7 +250,7 @@ public:
         } else {
             band(dst, 0xefbeadde);
         }
-        bindingSites[name].push_back(_buffer.size()-4);
+        bindingSites[name].push_back(bufSize()-4);
     }
 
     void band(Reg dst, Mem src) {
@@ -270,7 +276,7 @@ public:
         } else {
             bor(dst, 0xefbeadde);
         }
-        bindingSites[name].push_back(_buffer.size()-4);
+        bindingSites[name].push_back(bufSize()-4);
     }
 
     void bor(Reg dst, Mem src) {
@@ -297,7 +303,7 @@ public:
         } else {
             bxor(dst, 0xefbeadde);
         }
-        bindingSites[name].push_back(_buffer.size()-4);
+        bindingSites[name].push_back(bufSize()-4);
     }
 
     void bxor(Reg dst, Mem src) {
@@ -323,7 +329,7 @@ public:
         } else {
             cmp(dst, 0xefbeadde);
         }
-        bindingSites[name].push_back(_buffer.size()-4);
+        bindingSites[name].push_back(bufSize()-4);
     }
 
     void cmp(Reg dst, Mem src) {
@@ -360,7 +366,7 @@ public:
                 if ((mem.reg.num & 7) == 4) {
                     emit(0x24);
                 }
-                emit(mem.offset);
+                emit((unsigned char)mem.offset);
             } else {
                 emit(0x90 | (mem.reg.num & 7));
                 if ((mem.reg.num & 7) == 4) {
@@ -851,7 +857,7 @@ public:
     }
 
     void label(const std::string &name) {
-        bind(name, _buffer.size());
+        bind(name, bufSize());
     }
 
     // bind a string to a value   
@@ -877,17 +883,71 @@ public:
 
         bindings[name] = val;
     }
-
-    // run the function with no arguments and no return value
-    void run() {
+    
+    static void makePagesExecutable(void *base, size_t size)
+    {
+#ifdef _MSC_VER
         // Convince windows that the buffer is safe to execute (normally
         // it refuses to do so for security reasons)
         DWORD out;
-        VirtualProtect(&(_buffer[0]), _buffer.size(), PAGE_EXECUTE_READWRITE, &out);
+        VirtualProtect(base, size, PAGE_EXECUTE_READWRITE, &out);
+#else //!_MSC_VER
+        // Page protection on Mac OS X/Darwin, via http://blog.gmane.org/gmane.comp.gnu.lightning.general/month=20100201
+        // and https://llvm.org/svn/llvm-project/compiler-rt/trunk/lib/enable_execute_stack.c
+#if __APPLE__
+        /* On Darwin, pagesize is always 4096 bytes */
+        const uintptr_t pageSize = 4096;
+#elif !defined(HAVE_SYSCONF)
+        #error "HAVE_SYSCONF not defined! See enable_execute_stack.c"
+#else
+        const uintptr_t pageSize = sysconf(_SC_PAGESIZE);
+#endif /* __APPLE__ */
+        uintptr_t p = base;
+    	const uintptr_t pageAlignMask = ~(pageSize-1);
+        unsigned char* startPage = (unsigned char*)(p & pageAlignMask);
+        unsigned char* endPage = (unsigned char*)((p+size+pageSize) & pageAlignMask);
+        size_t length = endPage - startPage;
+    	(void) mprotect((void *)startPage, length, PROT_READ | PROT_WRITE | PROT_EXEC);
+#endif //!_MSC_VER
+    }
+
+    // run the function with no arguments and no return value
+    void run() {
+        makePagesExecutable( (void *)&(_buffer[0]), _buffer.size() );
         
         // Cast the buffer to a function pointer of the appropriate type and call it
-        printf("About to run the function...\n");        
+        printf("About to run the function...\n");
         void (*func)(void) = (void (*)(void))(&(_buffer[0]));
+        /*
+        Platform calling conventions
+        Scratch registers:
+            Win64:
+                - RAX, RCX, RDX
+                - R8-R11
+                - ST(0)-ST(7) // doesn't matter?
+                - XMM0-XMM5
+                - YMM0-YMM5
+                - YMM6H-YMM15H
+            Mac/Linux AMD64:
+                - RAX, RCX, RDX
+                - RSI, RDI
+                - R8-R11
+                - ST(0)-ST(7) // doesn't matter?
+                - XMM0-XMM15
+                - YMM0-YMM15
+        Callee-save:
+            Win64:
+                - RBX, RBP
+                - RSI, RDI
+                - R12-R15
+                - XMM6-XMM15
+            Mac/Linux AMD64:
+                - RBX, RBP
+                - R12-R15
+        
+        Conclusion: Win64 callees will be strictly more conservative than AMD64
+        callers require. This should be safe, assuming no args.
+        */
         func();
         printf("Back from the function\n");
     }
@@ -907,7 +967,7 @@ public:
         
         unsigned int sectionHeader[8] = {0, // physical address
                                          0, // virtual address
-                                         _buffer.size(), // size of data
+                                         bufSize(), // size of data
                                          10*2 + 8 + 8*4, // pointer to raw data
                                          0, // relocation table
                                          0, // line numbers
@@ -932,12 +992,16 @@ public:
 
 protected:
 
+    uint32_t bufSize() {
+        return (uint32_t)_buffer.size();
+    }
+
     void emitRelBinding(const std::string &name) {
         int32_t dstOffset = 0xefbeadde;
         if (bindings.find(name) != bindings.end())
-            dstOffset = bindings[name]-_buffer.size()-4;
+            dstOffset = bindings[name]-bufSize()-4;
         emitInt32(dstOffset);        
-        relBindingSites[name].push_back(_buffer.size()-4);        
+        relBindingSites[name].push_back(bufSize()-4);        
     }
 
     void emitBinding(const std::string &name) {
@@ -945,7 +1009,7 @@ protected:
         if (bindings.find(name) != bindings.end())
             dstOffset = bindings[name];
         emitInt32(dstOffset);        
-        bindingSites[name].push_back(_buffer.size()-4);        
+        bindingSites[name].push_back(bufSize()-4);        
     }
 
 

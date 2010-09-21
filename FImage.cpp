@@ -2,18 +2,39 @@
 #include "Compiler.h"
 
 
+#ifndef _MSC_VER
+#include <sys/time.h>
+// This returns unsigned long, not as-yet-undefined DWORD, here for expedience
+unsigned long timeGetTime()
+{
+    struct timeval tv;
+    struct timezone tz;
+    gettimeofday(&tv, &tz);
+    // TODO: this almost surely wraps around in many situations
+    return tv.tv_sec*1000 + tv.tv_usec/1000;
+}
+#endif //!_MSC_VER
+
+
 // An Expr is a wrapper around the IRNode structure used by the compiler
 Expr::Expr() {}
 
 Expr::Expr(IRNode::Ptr n) : node(n) {}
 
-Expr::Expr(int val) {
+Expr::Expr(int64_t val) {
+    //assert(val>>32 == 0, "We only trust 32 bit values for now: 0x%lx", val); // make sure we have a safe 32 bit value
+    if ((val>>32) != 0 && (val>>31) != -1) {
+        printf("We only trust 32 bit values for now: 0x%lx\n", val);
+    }
     node = IRNode::make(val);
 }
 
+Expr::Expr(int32_t val) {
+    node = IRNode::make((int64_t)val);
+}
+
 Expr::Expr(uint32_t val) {
-    // TODO: this will overflow for large values :(
-    node = IRNode::make((int)val);
+    node = IRNode::make((int64_t)val);
 }
 
 Expr::Expr(float val) {
@@ -188,10 +209,11 @@ void LVal::debug() {
     printf("\b\b\n");
 }
 
+#define PTR_TO_INT(p)   ((int64_t)(p))
 // Generate a rval reference that will turn into a load of a computed address.
 Expr FImage::operator()(Expr a) {    
     a = a * (4 * stride[0]);
-    Expr addr((int)data);
+    Expr addr(PTR_TO_INT(data));
     addr = addr + a;
     return Expr(IRNode::make(Load, addr.node));
 }
@@ -199,7 +221,7 @@ Expr FImage::operator()(Expr a) {
 Expr FImage::operator()(Expr a, Expr b) {    
     a = a * (4 * stride[0]);
     b = b * (4 * stride[1]);
-    Expr addr((int)data);
+    Expr addr(PTR_TO_INT(data));
     addr = (addr + b) + a;
     return Expr(IRNode::make(Load, addr.node));
 }
@@ -208,7 +230,7 @@ Expr FImage::operator()(Expr a, Expr b, Expr c) {
     a = a * (4 * stride[0]);
     b = b * (4 * stride[1]);
     c = c * (4 * stride[2]);
-    Expr addr((int)data);
+    Expr addr(PTR_TO_INT(data));
     addr = ((addr + c) + b) + a;
     return Expr(IRNode::make(Load, addr.node));
 }
@@ -218,7 +240,7 @@ Expr FImage::operator()(Expr a, Expr b, Expr c, Expr d) {
     b = b * (4 * stride[1]);
     c = c * (4 * stride[2]);
     d = d * (4 * stride[3]);
-    Expr addr((int)data);
+    Expr addr(PTR_TO_INT(data));
     addr = (((addr + d) + c) + b) + a;
     return Expr(IRNode::make(Load, addr.node));
 }
@@ -239,6 +261,7 @@ FImage &FImage::evaluate() {
     c.compileGather(&a, this);
     printf("Running...\n");
     a.run();
+
     return *this;
 }
 

@@ -1,12 +1,17 @@
 #include <stdio.h>
-#include <windows.h> // for VirtualProtect
 #include "X64.h"
 
 int main(int argc, char **argv) {
     
-    // Generate some X64 machine code representing a function that returns the argument plus one
+    // Generate some X64 machine code representing a function that
+    // loops from 10->0 multiplying the argument by 2 (by adding it
+    // into itself) -- computing arg*2^10.
     AsmX64 a;
-    a.mov(a.rax, a.rcx); 
+#ifdef _MSC_VER
+    a.mov(a.rax, a.rcx); // Microsoft x86-64 calling convention
+#else //!_MSC_VER
+    a.mov(a.rax, a.rdi); // AMD64 calling convention for non-Windows platforms
+#endif
     a.sub(a.rdx, a.rdx);
     a.add(a.rdx, 10);
     a.label("loop");
@@ -22,10 +27,9 @@ int main(int argc, char **argv) {
     }
     printf("\n");
 
-    // Convince windows that the buffer is safe to execute (normally
+    // Convince the OS that the buffer is safe to execute (normally
     // it refuses to do so for security reasons)
-    DWORD out;
-    VirtualProtect(&(a.buffer()[0]), a.buffer().size(), PAGE_EXECUTE_READWRITE, &out);
+    AsmX64::makePagesExecutable((uintptr_t)&(a.buffer()[0]), a.buffer().size());
 
     // Cast the buffer to a function pointer of the appropriate type
     int64_t (*func)(int64_t) = (int64_t (*)(int64_t))(&(a.buffer()[0]));

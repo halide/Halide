@@ -112,6 +112,8 @@
 #pragma warning(disable:4800)
 #pragma warning(disable:4804)
 #pragma warning(disable:4996)
+#pragma warning(disable:4267)
+#pragma warning(disable:4244)
 #define _CRT_SECURE_NO_DEPRECATE 1
 #define _CRT_NONSTDC_NO_DEPRECATE 1
 #endif
@@ -176,7 +178,7 @@
 #define cimg_display 0
 #elif cimg_OS==1
 #if defined(__MACOSX__) || defined(__APPLE__)
-#define cimg_display 1
+#define cimg_display 0
 #else
 #define cimg_display 1
 #endif
