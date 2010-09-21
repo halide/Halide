@@ -1,0 +1,17 @@
+HEADERS = FImage.h Compiler.h X64.h IRNode.h CImg.h
+OBJECTS = Compiler.o FImage.o IRNode.o
+
+%.o: %.cpp $(HEADERS)
+	g++ -c -g -O0 $< #-Iinclude
+
+tests: tests.o $(OBJECTS) 
+	g++ -g -o tests tests.o $(OBJECTS) -ljpeg -lpng -ltiff
+
+testConsole: testConsole.o $(OBJECTS) 
+	g++ -g -o testConsole testConsole.o $(OBJECTS) -ljpeg -lpng -ltiff
+
+testX64: testX64.o $(OBJECTS) 
+	g++ -g -o testX64 testX64.o $(OBJECTS) -ljpeg -lpng -ltiff
+
+clean:
+	rm $(OBJECTS) tests
