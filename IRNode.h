@@ -103,7 +103,6 @@ public:
 
     // Make an int constant 
     static Ptr make(int64_t v);
-    //static Ptr make(int v) { return make((int64_t)v); } // this has proven quite unsafe
     
     // Make an IRNode with the given opcode and the given inputs and constant values
     static Ptr make(OpCode opcode, 
