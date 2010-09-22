@@ -495,7 +495,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
         case Load:
             assert(gpr1, "Can only load using addresses in gprs\n");
             assert(!gpr, "Can only load into sse regs\n");
-            assert((node->ival >> 32) == 0 || (node->ival >> 32) == -1, 
+            assert((node->ival >> 32) == 0 || (node->ival >> 31) == -1, 
                    "Load may only use a 32-bit signed constant\n");
             if (node->width == 1) {
                 a->movss(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
