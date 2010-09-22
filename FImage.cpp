@@ -126,7 +126,7 @@ LVal::LVal(FImage *im_, Range a, Range b, Range c, Range d) :
     vars[3] = d;
 }
 
-void LVal::operator=(Expr e) {
+void LVal::operator=(const Expr &e) {
     node = e.node;
 
     // Add this to the list of definitions of im

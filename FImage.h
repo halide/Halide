@@ -48,11 +48,18 @@ public:
     LVal(FImage *, Range, Range);
     LVal(FImage *, Range, Range, Range);
     LVal(FImage *, Range, Range, Range, Range);
-    void operator=(Expr);
+    void operator=(const Expr &);
+
+    // Always use the above assignment operator, don't assign an LVal to an LVal
+    void operator=(const LVal &other) {*this = (const Expr &)other;};
+
     void debug();
 
     FImage *im;
     vector<Range> vars;
+private:
+    // Can't assign an LVal to an LVal - it must be cast to an expression.
+
 };
 
 // The lazily evaluated image type. Has from 1 to 4 dimensions.

@@ -38,6 +38,13 @@ void save(const FImage &im, const char *fname) {
     output.save_png(fname);
 }
 
+FImage doNothing(FImage im) {
+    Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+    FImage output(im.size[0], im.size[1], im.size[2]);
+    output(x, y, c) = im(x, y, c);
+    return output;
+}
+
 FImage brighten(FImage im) {
     Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
     FImage bright(im.size[0], im.size[1], im.size[2]);
@@ -189,10 +196,11 @@ int main(int argc, char **argv) {
 
     Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
 
+    // Test 0: Do nothing apart from copy the input to the output
+    save(doNothing(im).evaluate(), "identity.png");
+
     // Test 1: Add one to an image
     save(brighten(im).evaluate(), "bright.png");
-
-    return 0;
 
     // Test 2: Compute horizontal derivative
     save(gradientx(im).evaluate(), "dx.png");
