@@ -1,17 +1,19 @@
 HEADERS = FImage.h Compiler.h X64.h IRNode.h CImg.h
 OBJECTS = Compiler.o FImage.o IRNode.o
+#CXXFLAGS = -g
+CXXFLAGS = -O3 -ffast-math -march=nocona -msse3 -mfpmath=sse
 
 %.o: %.cpp $(HEADERS)
-	g++ -c -g -O0 $< #-Iinclude
+	g++ $(CXXFLAGS) -c -I /opt/local/include $< 
 
 tests: tests.o $(OBJECTS) 
-	g++ -g -o tests tests.o $(OBJECTS) -ljpeg -lpng -ltiff
+	g++ $(CXXFLAGS) -o tests tests.o $(OBJECTS) -L/opt/local/lib -ljpeg -lpng -ltiff
 
 testConsole: testConsole.o $(OBJECTS) 
-	g++ -g -o testConsole testConsole.o $(OBJECTS) -ljpeg -lpng -ltiff
+	g++ $(CXXFLAGS) -o testConsole testConsole.o $(OBJECTS) -ljpeg -lpng -ltiff
 
 testX64: testX64.o $(OBJECTS) 
-	g++ -g -o testX64 testX64.o $(OBJECTS) -ljpeg -lpng -ltiff
+	g++ $(CXXFLAGS) -o testX64 testX64.o $(OBJECTS) -ljpeg -lpng -ltiff
 
 clean:
 	rm $(OBJECTS) tests

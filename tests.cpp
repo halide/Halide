@@ -9,7 +9,7 @@ using namespace cimg_library;
 
 FImage load(const char *fname) {
     CImg<float> input;
-    input.load_jpeg(fname);
+    input.load_png(fname);
 
     FImage im(input.width(), input.height(), input.spectrum());
 
@@ -30,10 +30,12 @@ void save(const FImage &im, const char *fname) {
         for (int x = 0; x < output.width(); x++) {
             for (int c = 0; c < output.spectrum(); c++) {
                 output(x, y, c) = 256*im(x, y, c);
+                if (output(x, y, c) > 255) output(x, y, c) = 255;
+                if (output(x, y, c) < 0) output(x, y, c) = 0;
             }
         }
     }
-    output.save_jpeg(fname);
+    output.save_png(fname);
 }
 
 FImage brighten(FImage im) {
@@ -179,7 +181,7 @@ FImage life(FImage initial, int generations) {
 int main(int argc, char **argv) {
 
     if (argc != 2) {
-        printf("Usage: tests.exe image.jpg\n");
+        printf("Usage: tests.exe image.png\n");
         return -1;
     }
 
@@ -188,10 +190,12 @@ int main(int argc, char **argv) {
     Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
 
     // Test 1: Add one to an image
-    save(brighten(im).evaluate(), "bright.jpg");
+    save(brighten(im).evaluate(), "bright.png");
+
+    return 0;
 
     // Test 2: Compute horizontal derivative
-    save(gradientx(im).evaluate(), "dx.jpg");
+    save(gradientx(im).evaluate(), "dx.png");
 
     // Test 3: Separable Gaussian blur with timing
     FImage tmp(im.size[0], im.size[1], im.size[2]);
@@ -202,13 +206,13 @@ int main(int argc, char **argv) {
     tmp.evaluate();
     blurry.evaluate();
     int t1 = timeGetTime();
-    save(blurry, "blurry.jpg");
+    save(blurry, "blurry.png");
 
     // Do it in native C++ for comparison
     int t2 = timeGetTime();
     blurNative(im, K, tmp, blurry);
     int t3 = timeGetTime();
-    save(blurry, "blurry_native.jpg");
+    save(blurry, "blurry_native.png");
 
     printf("FImage: %d ms\n", t1-t0);
     printf("Native: %d ms\n", t3-t2);

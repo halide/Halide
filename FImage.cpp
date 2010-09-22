@@ -24,7 +24,7 @@ Expr::Expr(IRNode::Ptr n) : node(n) {}
 Expr::Expr(int64_t val) {
     //assert(val>>32 == 0, "We only trust 32 bit values for now: 0x%lx", val); // make sure we have a safe 32 bit value
     if ((val>>32) != 0 && (val>>31) != -1) {
-        printf("We only trust 32 bit values for now: 0x%lx\n", val);
+        printf("We only trust 32 bit values for now: 0x%llx\n", val);
     }
     node = IRNode::make(val);
 }
