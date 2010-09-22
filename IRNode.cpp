@@ -292,6 +292,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         case TimesImm:
             return make(inputs[0]->ival * ival);
         case Divide:
+            printf("Folding constant: %f / %f\n", inputs[0]->fval, inputs[1]->fval);
             return make(inputs[0]->fval / inputs[1]->fval);
         case And:
             if (t == Float) {
