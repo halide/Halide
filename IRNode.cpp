@@ -7,7 +7,7 @@ void panic(const char *fmt, ...) {
     va_start(arglist, fmt);
     vsnprintf(message, 1024, fmt, arglist);
     va_end(arglist);
-    printf(message);
+    printf("%s", message);
     exit(-1);
 }
 
@@ -18,7 +18,7 @@ void assert(bool cond, const char *fmt, ...) {
     va_start(arglist, fmt);
     vsnprintf(message, 1024, fmt, arglist);
     va_end(arglist);
-    printf(message);
+    printf("%s", message);
     exit(-1);
 }
 
@@ -356,7 +356,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
             if (vectorLoad && inputs[i]->ival != inputs[0]->ival + i*4) vectorLoad = false;
         }
         if (vectorLoad) {
-            IRNode::Ptr v = make(LoadVector, inputs[0]->inputs[0], NULL, NULL, NULL, inputs[0]->ival);
+            IRNode::Ptr v = make(LoadVector, inputs[0]->inputs[0], NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, inputs[0]->ival);
             return v;
         }
     }
@@ -514,24 +514,24 @@ IRNode::Ptr IRNode::make(OpCode opcode,
             IRNode::Ptr right = inputs[0]->inputs[1];
             if (left->op == Const) {
                 IRNode::Ptr n = make(opcode, right, 
-                                     NULL, NULL, NULL,
+                                     NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
                                      left->ival + ival);
                 return n;
             } else if (right->op == Const) {
                 IRNode::Ptr n = make(opcode, left,
-                                     NULL, NULL, NULL,
+                                     NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
                                      right->ival + ival);
                 return n;
             }
         } else if (inputs[0]->op == Minus &&
                    inputs[0]->inputs[1]->op == Const) {
             IRNode::Ptr n = make(opcode, inputs[0]->inputs[0], 
-                                 NULL, NULL, NULL, 
+                                 NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 
                                  -inputs[0]->inputs[1]->ival + ival);
             return n;
         } else if (inputs[0]->op == PlusImm) {
             IRNode::Ptr n = make(opcode, inputs[0]->inputs[0],
-                                 NULL, NULL, NULL,
+                                 NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
                                  inputs[0]->ival + ival);
             return n;
         }
@@ -752,19 +752,19 @@ void IRNode::print() {
         printf("%s / %s", args[0].c_str(), args[1].c_str());
         break;
     case PlusImm:
-        printf("%s + %d", args[0].c_str(), ival);
+        printf("%s + %lld", args[0].c_str(), ival);
         break;
     case TimesImm:
-        printf("%s * %d", args[0].c_str(), ival);
+        printf("%s * %lld", args[0].c_str(), ival);
         break;
     case LoadVector:
-        printf("LoadVector %s + %d", args[0].c_str(), ival);
+        printf("LoadVector %s + %lld", args[0].c_str(), ival);
         break;
     case Load:
-        printf("Load %s + %d", args[0].c_str(), ival);
+        printf("Load %s + %lld", args[0].c_str(), ival);
         break;
     default:
-        printf(opname[op]);
+        printf("%s", opname[op]);
         for (size_t i = 0; i < args.size(); i++)
             printf(" %s", args[i].c_str());
         break;
@@ -892,6 +892,43 @@ IRNode::Ptr IRNode::rebalanceSum() {
         }
     }
 
+    // if we're building an int sum, a 32-bit const term is outermost
+    // so that loads/plusimm/timesimm can pick it up. The 64-bit
+    // component is innermost.
+    int64_t innerConst = 0;
+    int64_t outerConst = 0;
+    if (type == Int) {
+        int64_t c = 0;
+        for (size_t i = 0; i < constTerms.size(); i++) {
+            if (constTerms[i].second) {
+                c += constTerms[i].first->ival;
+            } else {
+                c -= constTerms[i].first->ival;
+            }
+        }
+        if (c > 0) {
+            // TODO: do this split biased towards integer constants
+            // that already exist. The current method can produce
+            // redundant work when it straddles a 2^32 bounday.
+            innerConst = c & 0xffffffff00000000;
+            outerConst = c - innerConst;
+        } else {
+            innerConst = -((-c) & 0xffffffff00000000);
+            outerConst = c - innerConst;
+        }
+
+
+        if (innerConst) {
+            if (tPos) {
+                t = make(Plus, t, make(innerConst));
+            } else {
+                t = make(Minus, make(innerConst), t);
+            }
+            tPos = true;
+        }
+        
+    }
+
     for (size_t i = 1; i < nonConstTerms.size(); i++) {
         bool nextPos = nonConstTerms[i].second;
         if (tPos == nextPos)
@@ -904,24 +941,16 @@ IRNode::Ptr IRNode::rebalanceSum() {
         }                    
     }
 
-    // if we're building an int sum, the const term is
-    // outermost so that loadimms can pick it up
-    if (type == Int) {
-        int64_t c = 0;
-        for (size_t i = 0; i < constTerms.size(); i++) {
-            if (constTerms[i].second) {
-                c += constTerms[i].first->ival;
-            } else {
-                c -= constTerms[i].first->ival;
-            }
-        }
-        if (c != 0) {
-            if (tPos) 
-                t = make(PlusImm, t, NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, c);
-            else
-                t = make(Minus, make(c), t);
+    if (outerConst != 0) {
+        if (tPos) {
+            t = make(PlusImm, t, NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, outerConst);
+        } else {
+            // TODO: in this case it was pointless to divide the
+            // constant term up into an inner and outer const
+            t = make(Minus, make(outerConst), t);
         }
     }
+
 
     return t;
 }

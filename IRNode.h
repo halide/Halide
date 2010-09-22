@@ -166,9 +166,9 @@ protected:
            int64_t iv, float fv);
     
     // A slightly more generate make function that takes a vector of children for inputs
-    static Ptr IRNode::make(OpCode opcode,
-                            vector<Ptr> inputs,
-                            int64_t ival = 0, float fval = 0.0f);
+    static Ptr make(OpCode opcode,
+                    vector<Ptr> inputs,
+                    int64_t ival = 0, float fval = 0.0f);
     
 
     // Do (or redo any static analysis)

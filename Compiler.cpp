@@ -35,13 +35,13 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     root = IRNode::make(Vector, root, 
                         root->substitute(def.vars[0].node, 
                                          IRNode::make(PlusImm, def.vars[0].node,
-                                                      NULL, NULL, NULL, 1)),
+                                                      NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 1)),
                         root->substitute(def.vars[0].node, 
                                          IRNode::make(PlusImm, def.vars[0].node,
-                                                      NULL, NULL, NULL, 2)),
+                                                      NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 2)),
                         root->substitute(def.vars[0].node, 
                                          IRNode::make(PlusImm, def.vars[0].node,
-                                                      NULL, NULL, NULL, 3)));
+                                                      NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 3)));
 
     // Unroll across a relevant variable. This should depend on what
     // gives the most sharing of inputs. E.g. a vertical convolution
@@ -963,7 +963,7 @@ void Compiler::regAssign(IRNode::Ptr node,
     // Freak out - we're out of registers and we don't know
     // how to spill to the stack yet. 
     printf("Register assignments:\n");
-    for (size_t i = 0; i < regs.size(); i++) {
+    for (int i = 0; i < (int)regs.size(); i++) {
         if (regs[i]) {
             printf("%d: ", i, opname[regs[i]->op]);
             regs[i]->printExp();

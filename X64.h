@@ -902,7 +902,7 @@ public:
 #else
         const uintptr_t pageSize = sysconf(_SC_PAGESIZE);
 #endif /* __APPLE__ */
-        uintptr_t p = base;
+        uintptr_t p = (uintptr_t)base;
     	const uintptr_t pageAlignMask = ~(pageSize-1);
         unsigned char* startPage = (unsigned char*)(p & pageAlignMask);
         unsigned char* endPage = (unsigned char*)((p+size+pageSize) & pageAlignMask);
