@@ -224,7 +224,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
                 if (node->fval == 0.0f) {
                     a->bxorps(dst, dst);
                 } else {
-                    a->mov(gtmp, &(node->fval));
+                    a->mov(gtmp, a->addData(node->fval));
                     a->movss(dst, AsmX64::Mem(gtmp));
                     //a->shufps(dst, dst, 0, 0, 0, 0);
                 }

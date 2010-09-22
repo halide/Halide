@@ -60,7 +60,8 @@ public:
         xmm0(0), xmm1(1), xmm2(2), xmm3(3),
         xmm4(4), xmm5(5), xmm6(6), xmm7(7), 
         xmm8(8), xmm9(9), xmm10(10), xmm11(11), 
-        xmm12(12), xmm13(13), xmm14(14), xmm15(15)
+        xmm12(12), xmm13(13), xmm14(14), xmm15(15), 
+        data(NULL)
         {}
 
     std::vector<unsigned char> &buffer() {return _buffer;}
@@ -134,11 +135,7 @@ protected:
 
 public:
     ~AsmX64() {
-        // Clean up the binary blobs
-        map<std::string, void *>::iterator iter;
-        for (iter = blobs.begin(); iter != blobs.end(); iter++) {
-            free(iter->second);
-        }
+        if (data) delete[] data;
     }
 
     // dst += src
@@ -981,13 +978,20 @@ public:
         fclose(f);
     }
 
-    void *data(std::string name) {
-        if (blobs.find(name) != blobs.end()) return blobs[name];
-        return NULL;
-    }
-
-    void *makeData(std::string name, size_t size) {
-        return blobs[name] = malloc(size);
+    // Add some anonymous data to a data section that lives with this
+    // object. Returns a pointer to it.
+    template<typename T>
+    void *addData(T x) {
+        if (data == NULL) {
+            data = new unsigned char[4096];
+            dataSize = 0;
+        }
+        assert(dataSize + sizeof(T) <= 4096, 
+               "Can't use more than 4096 bytes for constants for now.\n");
+        T *ptr = (T*)(data + dataSize);
+        dataSize += sizeof(T);
+        *ptr = x;        
+        return ptr;
     }
 
 protected:
@@ -1038,6 +1042,8 @@ protected:
     std::map<std::string, std::vector<uint32_t> > relBindingSites;
     std::map<std::string, int32_t> bindings;
 
-    // 16-byte aligned data blobs
-    std::map<std::string, void *> blobs;
+    // A data page (4096 bytes) to use for constants. Initialized on first use.
+    unsigned char *data;
+    // How much of it us used?
+    int dataSize;
 };
