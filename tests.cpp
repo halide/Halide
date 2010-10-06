@@ -128,25 +128,25 @@ void blurNative(FImage im, const int K, FImage &tmp, FImage &output) {
 /*
 FImage histEqualize(FImage im) {    
     // 256-bin Histogram
-    FImage hist(hist.size[0], 1, im.size[2]);
+    FImage hist(256, im.size[2]);
     Range x(0, im.size[0]);
     Range y(0, im.size[1]);
-    hist(floor(im(x, y, c)*256), 0, c) += 1.0f/(im.size[0]*im.size[1]);
+    hist(floor(im(x, y, c)*256), c) += 1.0f/(im.size[0]*im.size[1]);
 
     // Compute the cumulative distribution by scanning along the
     // histogram
-    FImage cdf(hist.size[0], 1, im.size[2]);    
-    cdf(0, 0, c) = 0;
+    FImage cdf(hist.size[0], im.size[2]);    
+    cdf(0, c) = 0;
     x = Range(1, hist.size[0]);
-    cdf(x, 0, c) = cdf(x-1, 0, c) + hist(x, 0, c);
+    cdf(x, c) = cdf(x-1, c) + hist(x, c);
 
     // Equalize im using the cdf
     FImage equalized(im.size[0], im.size[1], im.size[2]);
     x = Range(0, im.size[0]);
     y = Range(0, im.size[1]);
-    equalized(x, y, c) = cdf(floor(im(x, y, c)*256), 1, c);
+    equalized(x, y, c) = cdf(floor(im(x, y, c)*256), c);
 
-    return equalized();
+    return equalized;
 }
 */
 
@@ -208,12 +208,11 @@ int main(int argc, char **argv) {
     // Test 3: Separable Gaussian blur with timing
     FImage tmp(im.size[0], im.size[1], im.size[2]);
     FImage blurry(im.size[0], im.size[1], im.size[2]);
-    const int K = 21;
-    int t0 = timeGetTime();
-    blur(im, K, tmp, blurry);
-    tmp.evaluate();
-    blurry.evaluate();
-    int t1 = timeGetTime();
+    const int K = 7;
+    int t0, t1;
+    blur(im, K, tmp, blurry);    
+    tmp.evaluate(&t0);
+    blurry.evaluate(&t1);
     save(blurry, "blurry.png");
 
     // Do it in native C++ for comparison
@@ -222,24 +221,28 @@ int main(int argc, char **argv) {
     int t3 = timeGetTime();
     save(blurry, "blurry_native.png");
 
-    printf("FImage: %d ms\n", t1-t0);
+    printf("FImage: %d %d ms\n", t0, t1);
     printf("Native: %d ms\n", t3-t2);
 
     // clock speed in cycles per millisecond
     const double clock = 2130000.0;
-    long long pixels = (im.size[0]-32)*(im.size[1]-32)*2;
+    long long pixels = (im.size[0]-32)*(im.size[1]-32);
     long long multiplies = pixels*im.size[2]*K;
-    double f_mpc = multiplies / ((t1-t0)*clock);
-    double n_mpc = multiplies / ((t3-t2)*clock);
+    double f0_mpc = multiplies / (t0*clock);
+    double f1_mpc = multiplies / (t1*clock);
+    double n_mpc = 2*multiplies / ((t3-t2)*clock);
 
-    double f_ppc = ((t1-t0)*clock)/pixels;
-    double n_ppc = ((t3-t2)*clock)/pixels;
+    double f0_cpp = (t0*clock)/pixels;
+    double f1_cpp = (t1*clock)/pixels;
+    double n_cpp = 0.5*((t3-t2)*clock)/pixels;
 
-    printf("FImage: %f multiplies per cycle\n", f_mpc);
+    printf("FImage: %f multiplies per cycle\n", f0_mpc);
+    printf("FImage: %f multiplies per cycle\n", f1_mpc);
     printf("Native: %f multiplies per cycle\n", n_mpc);
 
-    printf("FImage: %f cycles per pixel\n", f_ppc);
-    printf("Native: %f cycles per pixel\n", n_ppc);
+    printf("FImage: %f cycles per pixel\n", f0_cpp);
+    printf("FImage: %f cycles per pixel\n", f1_cpp);
+    printf("Native: %f cycles per pixel\n", n_cpp);
 
     return 0;
 }

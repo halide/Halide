@@ -238,6 +238,18 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         w = (opcode == Load ? 1 : 4);
         t = Float;
         break;
+
+    case SelectVector:
+        assert(inputs.size() == 2, 
+               "Wrong number of inputs for opcode: %s %d\n",
+               opname[opcode], inputs.size());
+        assert(inputs[0]->width == inputs[1]->width && inputs[0]->width > 1, 
+               "SelectVector requires vector arguments\n");
+        assert(ival > 0 && ival < inputs[0]->width, 
+               "SelectVector requires an int immediate greater than zero and less than the vector width\n");
+        w = inputs[0]->width;
+        t = inputs[0]->type;
+        break;
     case Vector:
         assert(inputs.size() == 4, 
                "Wrong number of inputs for opcode: %s %d\n",
@@ -538,16 +550,41 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         }
     }
 
-    // Times an int constant can be fused into a times immediate
+    // Unaligned vector loads that may have nearby aligned loads
+    // should just use VSelect on the aligned loads instead
+    if (opcode == LoadVector && 
+        !(inputs[0]->modulus & 15)) {
+        int64_t offset = (inputs[0]->remainder + ival) & 15;
+        // If it's word-aligned but not 16-byte aligned we can do something.
+        if (offset != 0 && ((offset & 3) == 0)) {
+            // Check to see if the aligned equivalents exist
+            IRNode::Ptr n1 = make(LoadVector, inputs[0], 
+                                  NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
+                                  ival - offset);
+            IRNode::Ptr n2 = make(LoadVector, inputs[0], 
+                                  NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
+                                  ival + 16 - offset);
+            // TODO: just because the aligned equivalents currently
+            // exist doesn't mean they're in use in the same
+            // kernel. We really need contexts or something.
+            if (n1->outputs.size() || n2->outputs.size() || 1) {
+                printf("Converting unaligned load to two aligned loads\n");
+                return make(SelectVector, n1, n2, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
+                            offset/4);
+            }
+        }
+    }
+
+    // Times an int constant can be fused into a times immediate provided the immediate is 32-bit
     if (opcode == Times && t == Int) {
         IRNode::Ptr left = inputs[0];
         IRNode::Ptr right = inputs[1];
-        if (left->op == Const) {
+        if (left->op == Const && (left->ival >> 32 == 0 || left->ival >> 31 == -1)) {
             IRNode::Ptr n = make(TimesImm, right, 
                              NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
                              left->ival);
             return n;
-        } else if (right->op == Const) {
+        } else if (right->op == Const && (right->ival >> 32 == 0 || right->ival >> 31 == -1)) {
             IRNode::Ptr n = make(TimesImm, left, 
                              NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
                              right->ival);
@@ -700,6 +737,23 @@ void IRNode::printExp() {
         inputs[1]->printExp();
         printf(")");
         break;
+    case Load: 
+        printf("Load(");
+        inputs[0]->printExp();
+        printf("+%lld)", ival);
+        break;
+    case LoadVector:
+        printf("LoadVector(");
+        inputs[0]->printExp();
+        printf("+%lld)", ival);
+        break;        
+    case SelectVector:
+        printf("SelectVector(");
+        inputs[0]->printExp();
+        printf(", ");
+        inputs[1]->printExp();
+        printf(", %lld)", ival);
+        break;
     default:
         if (inputs.size() == 0) {
             printf("%s", opname[op]);
@@ -763,6 +817,9 @@ void IRNode::print() {
         break;
     case Load:
         printf("Load %s + %lld", args[0].c_str(), ival);
+        break;
+    case SelectVector:
+        printf("SelectVector %s %s %lld", args[0].c_str(), args[1].c_str(), ival);
         break;
     default:
         printf("%s", opname[op]);
@@ -907,17 +964,33 @@ IRNode::Ptr IRNode::rebalanceSum() {
                 c -= constTerms[i].first->ival;
             }
         }
-        if (c > 0) {
-            // TODO: do this split biased towards integer constants
-            // that already exist. The current method can produce
-            // redundant work when it straddles a 2^32 bounday.
-            innerConst = c & 0xffffffff00000000;
-            outerConst = c - innerConst;
-        } else {
-            innerConst = -((-c) & 0xffffffff00000000);
-            outerConst = c - innerConst;
-        }
 
+        if ((int32_t)c != c) {
+            // Look for an existing 64-bit const within 32-bits of this value
+            bool baseFound = false;
+            map<int64_t, IRNode::WeakPtr>::iterator iter;
+            for (iter = intInstances.begin();
+                 iter != intInstances.end();
+                 iter++) {
+                int64_t val = iter->first;
+                int64_t offset = c - val;
+                if ((int32_t)offset == offset) {
+                    printf("Using %lld as a base for %lld\n", val, c);
+                    baseFound = true;
+                    innerConst = val;
+                    outerConst = offset;
+                    break;
+                }
+            }
+
+            if (!baseFound) {
+                outerConst = 0;
+                innerConst = c;
+            }
+        } else {
+            innerConst = 0;
+            outerConst = c;
+        }
 
         if (innerConst) {
             if (tPos) {

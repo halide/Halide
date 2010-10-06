@@ -27,32 +27,70 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
 
     // Force the output type of the expression to be a float and do a
     // final optimization pass now that levels are assigned.
-    IRNode::saveDot("before.dot");
+    //IRNode::saveDot("before.dot");
     def.node = root = root->as(IRNode::Float)->optimize();
 
-    // vectorize across the innermost variable
+    int vectorWidth[3] = {1, 1, 1};
+    int vectorDim = 0;
+    vectorWidth[vectorDim] = 4;
+
+    // vectorize across some variable
     // TODO: we're assuming it's a multiple of 4
     root = IRNode::make(Vector, root, 
-                        root->substitute(def.vars[0].node, 
-                                         IRNode::make(PlusImm, def.vars[0].node,
+                        root->substitute(def.vars[vectorDim].node, 
+                                         IRNode::make(PlusImm, def.vars[vectorDim].node,
                                                       NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 1)),
-                        root->substitute(def.vars[0].node, 
-                                         IRNode::make(PlusImm, def.vars[0].node,
+                        root->substitute(def.vars[vectorDim].node, 
+                                         IRNode::make(PlusImm, def.vars[vectorDim].node,
                                                       NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 2)),
-                        root->substitute(def.vars[0].node, 
-                                         IRNode::make(PlusImm, def.vars[0].node,
+                        root->substitute(def.vars[vectorDim].node, 
+                                         IRNode::make(PlusImm, def.vars[vectorDim].node,
                                                       NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 3)));
 
     // Unroll across a relevant variable. This should depend on what
     // gives the most sharing of inputs. E.g. a vertical convolution
     // should unroll across Y.
-    // Right now it's hacked in as no unrolling.
 
-    vector<IRNode::Ptr> roots(1);
+    int unroll[3] = {4, 1, 1};
+
+    vector<IRNode::Ptr> roots(unroll[0]*unroll[1]*unroll[2]);
     roots[0] = root;
+    for (int i = 0; i < unroll[0]; i++) {
+        if (i > 0) {
+            roots[i*unroll[1]*unroll[2]] = 
+                root->substitute(def.vars[0].node, 
+                                 IRNode::make(PlusImm, def.vars[0].node, 
+                                              NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
+                                              i*vectorWidth[0]));
+        }
+        for (int j = 0; j < unroll[1]; j++) {
+            if (j > 0) {
+                roots[(i*unroll[1] + j)*unroll[2]] = 
+                    roots[i*unroll[1]*unroll[2]]->substitute(def.vars[1].node, 
+                                                             IRNode::make(PlusImm, def.vars[1].node, 
+                                                                          NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
+                                                                          j*vectorWidth[1]));      
+            }
+            for (int k = 0; k < unroll[2]; k++) {
+                if (k > 0) {
+                    roots[(i*unroll[1] + j)*unroll[2] + k] = 
+                        roots[(i*unroll[1] + j)*unroll[2]]->substitute(def.vars[2].node, 
+                                                                       IRNode::make(PlusImm, def.vars[2].node, 
+                                                                                    NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
+                                                                                    k*vectorWidth[2]));   
+                }
+            }
+        }
+    }
 
-    IRNode::saveDot("after.dot");
+    // Add the store address as another thing to compute
+    Expr storeAddr = (int64_t)(&((*im)(0, 0, 0)));
+    for (size_t i = 0; i < def.vars.size(); i++) {
+        storeAddr += def.vars[i] * (4 * im->stride[i]);
+    }
+    roots.push_back(storeAddr.node->optimize());
 
+    //IRNode::saveDot("after.dot");
 
     // Assign the variables some registers
     vector<AsmX64::Reg> varRegs(def.vars.size());
@@ -62,11 +100,10 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     if (varRegs.size() > 3) varRegs[3] = a->rbx;
     if (varRegs.size() > 4) panic("Can't handle more than 4 loop vars for now\n");
     
-    AsmX64::Reg tmp = a->r15, outPtr = a->rbp;
+    AsmX64::Reg tmp = a->r15;
 
     // Mark these registers as unclobberable for the register allocation
-    uint32_t reserved = ((1 << outPtr.num) |
-                         (1 << tmp.num) | 
+    uint32_t reserved = ((1 << tmp.num) | 
                          (1 << a->rsp.num));
 
     // Force the vars into the intended registers and mark them as reserved
@@ -95,6 +132,9 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     doRegisterAssignment(roots, reserved, order, clobbered, outputs);   
     printf("Done\n");
     int t2 = timeGetTime();
+
+    // which register is the output pointer in?
+    AsmX64::Reg outPtr(roots[roots.size()-1]->reg);
 
     printf("Compilation took %d ms\n", t2-t1);
 
@@ -127,47 +167,52 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     a->pushNonVolatiles();
         
     compileBody(a, order[0]);
+
     a->mov(varRegs[2], def.vars[2].min);
     a->label("loop0"); 
-        
+    
     compileBody(a, order[1]);        
+
     a->mov(varRegs[1], def.vars[1].min);               
     a->label("loop1"); 
 
     compileBody(a, order[2]);
 
-    // Compute the address of the start of this scanline in the output
-    a->mov(outPtr, &((*im)(def.vars[0].min, 0, 0)));
-    for (size_t i = 1; i < def.vars.size(); i++) {
-        a->mov(tmp, varRegs[i]);
-        a->imul(tmp, im->stride[i]*sizeof(float)); 
-        a->add(outPtr, tmp);
-    }
-        
-    // Add a mark for the intel static analyzer tool
-    // a->iacaStart();
-
     a->mov(varRegs[0], def.vars[0].min);
     a->label("loop2");
-       
+
+    // Add a mark for the intel static analyzer tool
+    //a->iacaStart();
+
     compileBody(a, order[3]);
+        
+    // Right now the saving code can only handle vectorizing across X
+    assert(vectorWidth[0] == 4, "Can only handle vectorizing across X for now\n");
 
-    a->movntps(AsmX64::Mem(outPtr), roots[0]->reg);
+    for (int i = 0; i < unroll[0]; i++) {
+        for (int j = 0; j < unroll[1]; j++) {
+            for (int k = 0; k < unroll[2]; k++) {    
+                int offset = (int)(im->stride[0]*vectorWidth[0]*i + 
+                                   im->stride[1]*vectorWidth[1]*j +
+                                   im->stride[2]*vectorWidth[2]*k);
+                a->movntps(AsmX64::Mem(outPtr, 4*offset), roots[(i*unroll[1] + j)*unroll[2] + k]->reg); 
+            }
+        }
+    }        
 
-    // Move on to the next X 
-    a->add(outPtr, 4*4);
-    a->add(varRegs[0], 4);
+    // Next inner x
+    a->add(varRegs[0], vectorWidth[0]*unroll[0]);
     a->cmp(varRegs[0], def.vars[0].max);
     a->jl("loop2");
+
+    a->add(varRegs[1], vectorWidth[1]*unroll[1]);
+    a->cmp(varRegs[1], def.vars[1].max);
+    a->jl("loop1");            
 
     // add a mark for the intel static analyzer
     //a->iacaEnd();
 
-    a->add(varRegs[1], 1);
-    a->cmp(varRegs[1], def.vars[1].max);
-    a->jl("loop1");            
-
-    a->add(varRegs[2], 1);
+    a->add(varRegs[2], vectorWidth[2]*unroll[2]);
     a->cmp(varRegs[2], def.vars[2].max);
     a->jl("loop0");            
 
@@ -491,6 +536,53 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
                 panic("IntToFloat can only go from gpr to sse\n");
             }
             break;
+        case SelectVector:
+            assert(!gpr && !gpr1 && !gpr2, "Can only select vector in sse regs\n");
+            if (node->ival == 1) {
+                if (dst == src1) {                                        
+                    a->movaps(tmp, src1);
+                    a->shufps(tmp, src2, 3, 3, 0, 0);
+                    a->shufps(dst, tmp, 1, 2, 0, 2);
+                } else if (dst == src2) {
+                    a->movaps(tmp, src2);
+                    a->shufps(tmp, src1, 0, 0, 3, 3);
+                    a->movaps(dst, src1);
+                    a->shufps(dst, tmp, 1, 2, 2, 0);                    
+                } else {
+                    a->movaps(tmp, src1);
+                    a->shufps(tmp, src2, 3, 3, 0, 0);                    
+                    a->movaps(dst, src1);
+                    a->shufps(dst, tmp, 1, 2, 0, 2);
+                }
+            } else if (node->ival == 2) {
+                if (dst == src1) {
+                    a->shufps(dst, src2, 2, 3, 0, 1);
+                } else if (dst == src2) {
+                    a->movaps(tmp, src2);
+                    a->movaps(dst, src1);
+                    a->shufps(dst, tmp, 2, 3, 0, 1);                    
+                } else {
+                    a->movaps(dst, src1);
+                    a->shufps(dst, src2, 2, 3, 0, 1);
+                }
+            } else if (node->ival == 3) {
+                if (dst == src1) {
+                    a->shufps(dst, src2, 3, 3, 0, 0);
+                    a->shufps(dst, src2, 0, 2, 1, 2);
+                } else if (dst == src2) {
+                    a->movaps(tmp, src1);
+                    a->shufps(tmp, src2, 3, 3, 0, 0);
+                    a->shufps(tmp, src2, 0, 2, 1, 2);
+                    a->movaps(dst, tmp);
+                } else {
+                    a->movaps(dst, src1);
+                    a->shufps(dst, src2, 3, 3, 0, 0);
+                    a->shufps(dst, src2, 0, 2, 1, 2);
+                }
+            } else {
+                panic("Can't deal with SelectVector with argument other than 1, 2, or 3\n");
+            }
+            break;
         case LoadVector:
         case Load:
             assert(gpr1, "Can only load using addresses in gprs\n");
@@ -503,6 +595,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
                 int modulus = node->inputs[0]->modulus;
                 int remainder = (node->inputs[0]->remainder + node->ival) % modulus;
                 if ((modulus & 0xf) == 0 && (remainder & 0xf) == 0) {
+                    //a->movaps(dst, a->xmm0);
                     a->movaps(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
                 } else {
                     printf("Unaligned load!\n");
@@ -531,13 +624,24 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
                 a->punpckldq(tmp, src4);
                 a->punpcklqdq(dst, tmp);
             } else {
-                // Most general case:
+                // Most general case: We're allowed to clobber the
+                // high floats in the sources, because they're scalar
+
+                a->movaps(tmp, src1);
+                a->punpckldq(tmp, src2);
+                a->punpckldq(src3, src4); // clobber the high words in src3
+                a->punpcklqdq(tmp, src3);
+                a->movaps(dst, tmp);
+
+                // No clobber version:
+                /*
                 a->movaps(tmp, src1);
                 a->punpckldq(tmp, src2);
                 a->movaps(tmp2, src3);
                 a->punpckldq(tmp2, src4);
                 a->punpcklqdq(tmp, tmp2);
                 a->movaps(dst, tmp);
+                */
             }
             break;           
         case NoOp:
@@ -556,19 +660,18 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
 // registers xmm14 and xmm15) may not be marked high, because the
 // code generator uses those as scratch.
 // 
-// As output it returns primarily order: five arrays of IRNodes,
-// one to be computed at each loop level. We're assuming the loop
+// As output it returns primarily order: a vector of vectors of
+// IRNodes, one to be computed at each loop level. For a 2D image, the
+// loop structure would look like this: We're assuming the loop
 // structure looks like this:
 //
 // compute constants (order[0])
-// for t:
-//   compute things that depend on t (order[1])
+// for c:
+//   compute things that depend on c (order[1])
 //   for y:
 //     compute things that depend on y (order[2])
 //     for x:
-//       compute things that depend on x (order[3])
-//       for c:
-//         compute things that depens on c (order[4])
+//       compute things that depens on x (order[3])
 // 
 // Also, clobberedRegs will contain masks of which registers get
 // clobbered at each level, and outputRegs will indicate which
@@ -666,15 +769,14 @@ void Compiler::doInstructionScheduling(
     vector<vector<IRNode::Ptr > > &order) {
 
     // Gather the nodes in a depth-first manner, and resize order to
-    // be big enough. Also tag each node with the minimum distance to a root node plus 100
+    // be big enough. Also tag each node with the minimum depth to a root plus 100.
     for (size_t i = 0; i < roots.size(); i++) {
         if (order.size() <= roots[i]->level) order.resize(roots[i]->level+1);
         gatherDescendents(roots[i], order, 100);
     }       
 
-    printf("Got the descendants..\n");
-
-    // Stable sort the nodes from deepest to shallowest and retag everything to 2
+    // Stable sort the nodes from deepest to shallowest without
+    // breaking any data dependencies. Also retag everything 2.
     for (size_t l = 0; l < order.size(); l++) {
         for (size_t i = 0; i < order[l].size(); i++) {
             IRNode::Ptr ni = order[l][i];
@@ -691,34 +793,74 @@ void Compiler::doInstructionScheduling(
             ni->tag = 2;
         }
 
-        // Bubble up all nodes that don't increase register pressure.
-        // A node is reductive in this way if at least one of its
-        // inputs has only one output participating in this
-        // evaluation.
         for (size_t i = 0; i < order[l].size(); i++) {
             IRNode::Ptr ni = order[l][i];
-            bool reductive = false;
-            for (size_t j = 0; j < ni->inputs.size(); j++) {
-                IRNode::Ptr in = ni->inputs[j];
-                int count = 0;
-                for (size_t k = 0; k < in->outputs.size(); k++) {
-                    IRNode::Ptr inout = in->outputs[k].lock();
-                    if (!inout) continue;
-                    if (inout->tag) count++;
+
+            // Which node should get evaluated next? We'd like to be
+            // able to clobber an input. Rate each node's input
+            // according to how many unevaluated outputs it
+            // has. Choose the node with the input with the lowest
+            // rating. 1 is ideal, because it means we can clobber
+            // that input. 2 or 3 is still good because we're getting
+            // closer to being able to clobber that input.
+
+            int bestRating = 0;
+            IRNode::Ptr np;
+            size_t location;
+            for (size_t j = i; j < order[l].size(); j++) {
+                IRNode::Ptr nj = order[l][j];
+                bool ready = true;
+                for (size_t k = 0; k < nj->inputs.size(); k++) {
+                    IRNode::Ptr nk = nj->inputs[k];
+                    // If all inputs aren't evaluated yet, it's game
+                    // over for this node
+                    if (nk->tag != 3) ready = false;
                 }
-                if (count == 1) reductive = true;
-            }
-            if (reductive) {
-                for (size_t j = i; j > 0; j--) {
-                    IRNode::Ptr nj = order[l][j-1];
-                    // Can I move ni before nj?
-                    if (find(ni->inputs.begin(), ni->inputs.end(), nj) == ni->inputs.end()) {
-                        order[l][j-1] = ni;
-                        order[l][j] = nj;
-                    } else {
-                        break;
+                if (!ready) continue;
+
+                for (size_t k = 0; k < nj->inputs.size(); k++) {
+                    IRNode::Ptr nk = nj->inputs[k];
+
+                    // Can't clobber inputs from a higher level
+                    if (nk->level != l) continue;
+
+                    // Can't clobber external vars
+                    if (nk->op == Var) continue;
+
+                    // Can't clobber inputs of a different width
+                    if (nk->width != nj->width) continue;
+
+                    // Count how many outputs of this input are yet to be evaluated.
+                    int remainingOutputs = 0;
+                    for (size_t m = 0; m < nk->outputs.size(); m++) {
+                        IRNode::Ptr nm = nk->outputs[m].lock();
+
+                        // Ignore those not participating in this computation
+                        if (!nm || !nm->tag) continue;
+                        
+                        // Unevaluated outputs that aren't nj means you can't clobber
+                        if (nm->tag != 3) remainingOutputs++;
+                    }                    
+
+                    if (remainingOutputs < bestRating || !np) {
+                        bestRating = remainingOutputs;
+                        np = nj;
+                        location = j;
                     }
                 }
+            }
+
+            // Did we find a node to promote?
+            if (np) {
+                // Then bubble it up to just before ni
+                while(location > i) {
+                    order[l][location] = order[l][location-1];
+                    location--;
+                }
+                order[l][i] = np;
+                np->tag = 3;
+            } else {
+                ni->tag = 3;
             }
         }
     }
@@ -728,9 +870,8 @@ void Compiler::doInstructionScheduling(
 void Compiler::gatherDescendents(IRNode::Ptr node, vector<vector<IRNode::Ptr> > &output, int d) {
     // If I'm already in the output, bail
     if (node->tag > 1) {
-        if (d < node->tag) node->tag = d;
         return;
-    }
+    }    
     node->tag = d;
     for (size_t j = 0; j < node->inputs.size(); j++) {
         gatherDescendents(node->inputs[j], output, d+1);
@@ -973,5 +1114,13 @@ void Compiler::regAssign(IRNode::Ptr node,
         else
             printf("%d: (empty)\n", i);
     }
-    panic("Out of registers compiling %s!\n", opname[node->op]);
+    printf("Out of registers compiling:\n");
+    node->printExp();
+    printf("\n");
+    printf("Cannot clobber inputs because...\n");
+    for (size_t i = 0; i < node->inputs.size(); i++) {
+        printf("Child %d has %d outputs\n", i, node->inputs[i]->outputs.size());
+    }
+    panic("Out of registers!\n");
+    
 }
