@@ -904,7 +904,7 @@ public:
         unsigned char* startPage = (unsigned char*)(p & pageAlignMask);
         unsigned char* endPage = (unsigned char*)((p+size+pageSize) & pageAlignMask);
         size_t length = endPage - startPage;
-    	(void) mprotect((void *)startPage, length, PROT_READ | PROT_WRITE | PROT_EXEC);
+    	(void) mprotect((void *)startPage, length, PROT_EXEC | PROT_READ | PROT_WRITE);
 #endif //!_MSC_VER
     }
 
@@ -913,7 +913,6 @@ public:
         makePagesExecutable( (void *)&(_buffer[0]), _buffer.size() );
         
         // Cast the buffer to a function pointer of the appropriate type and call it
-        printf("About to run the function...\n");
         void (*func)(void) = (void (*)(void))(&(_buffer[0]));
         /*
         Platform calling conventions
@@ -946,7 +945,6 @@ public:
         callers require. This should be safe, assuming no args.
         */
         func();
-        printf("Back from the function\n");
     }
 
     
@@ -955,25 +953,49 @@ public:
         unsigned short coffHeader[10] = {0x8664,  // machine
                                          1,     // sections
                                          0, 0,  // date stamp
-                                         20, 0, // pointer to symbol table
-                                         0, 0,  // entries in symbol table
+                                         10*2 + 8 + 8*4, 0, // pointer to symbol table
+                                         1, 0,  // entries in symbol table
                                          0,     // optional header size
                                          0};    // characteristics
-        
+
+        // The symbol table
+        struct {
+            char name[8];
+            unsigned long value;
+            short sectionNumber;
+            unsigned short type;
+            unsigned char storageClass;
+            unsigned char auxiliary;
+        } symbols;
+
+        // The section table
         unsigned char sectionName[8] = {'.', 't', 'e', 'x', 't', 0, 0, 0};
-        
         unsigned int sectionHeader[8] = {0, // physical address
                                          0, // virtual address
                                          bufSize(), // size of data
-                                         10*2 + 8 + 8*4, // pointer to raw data
+                                         10*2 + 8 + 8*4 + 18 + 4, // pointer to raw data
                                          0, // relocation table
                                          0, // line numbers
                                          0, // relocation entries and line number entries
                                          0x60500020}; // flags
         
+        memset(&symbols, 0, sizeof(symbols));
+        symbols.name[0] = 'f';
+        symbols.name[1] = 'u';
+        symbols.name[2] = 'n';
+        symbols.name[3] = 'c';
+        symbols.value = 0;
+        symbols.sectionNumber = 1;
+        symbols.type = 32;
+        symbols.storageClass = 2;
+        symbols.auxiliary = 0;
+        
         fwrite(coffHeader, 2, 10, f);
         fwrite(sectionName, 1, 8, f);
         fwrite(sectionHeader, 4, 8, f);
+        fwrite(&symbols, 18, 1, f);
+        int stringTableSize = 0;
+        fwrite(&stringTableSize, 4, 1, f);
         fwrite(&(_buffer[0]), 1, _buffer.size(), f);
         fclose(f);
     }

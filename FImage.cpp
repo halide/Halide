@@ -252,15 +252,19 @@ void FImage::debug() {
     }
 }
 
-FImage &FImage::evaluate() {
+FImage &FImage::evaluate(int *time) {
     // For now we assume the sole definition of this FImage is a very
     // simple gather
     Compiler c;
     AsmX64 a;    
-    printf("Compiling...\n");
+    printf("Compiling...\n"); fflush(stdout);
     c.compileGather(&a, this);
-    printf("Running...\n");
+    printf("Running...\n"); fflush(stdout);
+    int t0 = timeGetTime();
     a.run();
+    int t1 = timeGetTime();
+    if (time) time[0] = t1-t0;
+    printf("Done\n"); fflush(stdout);
 
     return *this;
 }

@@ -27,7 +27,7 @@ static const char *opname[] = {"Const", "NoOp",
                                "And", "Or", "Nand", "Load",
                                "IntToFloat", "FloatToInt", 
                                "PlusImm", "TimesImm", 
-                               "Vector", "LoadVector"};
+                               "Vector", "LoadVector", "SelectVector"};
 
 
 enum OpCode {Const = 0, NoOp, 
@@ -40,7 +40,7 @@ enum OpCode {Const = 0, NoOp,
              Load,
              IntToFloat, FloatToInt, 
              PlusImm, TimesImm, 
-             Vector, LoadVector};
+             Vector, LoadVector, SelectVector};
 
 // One node in the intermediate representation
 class IRNode {
