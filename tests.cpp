@@ -52,6 +52,15 @@ FImage brighten(FImage im) {
     return bright;
 }
 
+FImage conditionalBrighten(FImage im) {
+    Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+    Expr brighter = im(x, y, c)*2.0f - 0.5f;
+    Expr test = (im(x, y, 0) + im(x, y, 1) + im(x, y, 2)) > 1.5f;
+    FImage bright(im.size[0], im.size[1], im.size[2]);
+    bright(x, y, c) = select(test, brighter, im(x, y, c));
+    return bright;
+}
+
 FImage gradientx(FImage im) {
     // TODO: make x.min = 1, and allow the base case definition
     
@@ -201,6 +210,9 @@ int main(int argc, char **argv) {
 
     // Test 1: Add one to an image
     save(brighten(im).evaluate(), "bright.png");
+
+    // Test 1.5: Conditionally add one to an image
+    save(conditionalBrighten(im).evaluate(), "condBrighten.png");
 
     // Test 2: Compute horizontal derivative
     save(gradientx(im).evaluate(), "dx.png");

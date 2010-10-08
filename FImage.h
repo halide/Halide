@@ -33,6 +33,14 @@ Expr operator-(Expr, Expr);
 Expr operator*(Expr, Expr);
 Expr operator/(Expr, Expr);
 
+Expr select(Expr, Expr, Expr);
+Expr operator>(Expr, Expr);
+Expr operator>=(Expr, Expr);
+Expr operator>(Expr, Expr);
+Expr operator<=(Expr, Expr);
+Expr operator!=(Expr, Expr);
+Expr operator==(Expr, Expr);
+
 // A loop variable with the given range [min, max)
 class Range : public Expr {
 public:

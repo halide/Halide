@@ -27,12 +27,14 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
 
     // Force the output type of the expression to be a float and do a
     // final optimization pass now that levels are assigned.
-    //IRNode::saveDot("before.dot");
+    IRNode::saveDot("before.dot");
     def.node = root = root->as(IRNode::Float)->optimize();
 
     int vectorWidth[3] = {1, 1, 1};
     int vectorDim = 0;
     vectorWidth[vectorDim] = 4;
+
+    printf("a\n");
 
     // vectorize across some variable
     // TODO: we're assuming it's a multiple of 4
@@ -47,11 +49,10 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
                                          IRNode::make(PlusImm, def.vars[vectorDim].node,
                                                       NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 3)));
 
-    // Unroll across a relevant variable. This should depend on what
-    // gives the most sharing of inputs. E.g. a vertical convolution
-    // should unroll across Y.
-
+    // Unroll across a relevant variable. 
     int unroll[3] = {4, 1, 1};
+
+    printf("b\n");
 
     vector<IRNode::Ptr> roots(unroll[0]*unroll[1]*unroll[2]);
     roots[0] = root;
@@ -83,6 +84,8 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
         }
     }
 
+    printf("c\n");
+
     // Add the store address as another thing to compute
     Expr storeAddr = (int64_t)(&((*im)(0, 0, 0)));
     for (size_t i = 0; i < def.vars.size(); i++) {
@@ -90,7 +93,9 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     }
     roots.push_back(storeAddr.node->optimize());
 
-    //IRNode::saveDot("after.dot");
+    IRNode::saveDot("after.dot");
+
+    printf("Done optimizing\n");
 
     // Assign the variables some registers
     vector<AsmX64::Reg> varRegs(def.vars.size());
