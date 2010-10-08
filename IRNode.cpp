@@ -260,9 +260,12 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         }
         
         // Force all inputs to the same type
-        t = Int;
+        t = Bool;
         for (size_t i = 0; i < inputs.size(); i++) {
             if (inputs[i]->type == Float) t = Float;
+        }
+        for (size_t i = 0; i < inputs.size(); i++) {
+            if (inputs[i]->type == Int) t = Int;
         }
         for (size_t i = 0; i < inputs.size(); i++) {
             inputs[i] = inputs[i]->as(t);

@@ -74,6 +74,37 @@ Expr operator/(Expr a, Expr b) {
     return Expr(IRNode::make(Divide, a.node, b.node));
 }
 
+Expr operator>(Expr a, Expr b) {
+    return Expr(IRNode::make(GT, a.node, b.node));
+}
+
+Expr operator<(Expr a, Expr b) {
+    return Expr(IRNode::make(LT, a.node, b.node));
+}
+
+Expr operator>=(Expr a, Expr b) {
+    return Expr(IRNode::make(GTE, a.node, b.node));
+}
+
+Expr operator<=(Expr a, Expr b) {
+    return Expr(IRNode::make(LTE, a.node, b.node));
+}
+
+Expr operator!=(Expr a, Expr b) {
+    return Expr(IRNode::make(NEQ, a.node, b.node));
+}
+
+Expr operator==(Expr a, Expr b) {
+    return Expr(IRNode::make(EQ, a.node, b.node));
+}
+
+Expr select(Expr cond, Expr thenCase, Expr elseCase) {
+    IRNode::Ptr t = IRNode::make(And, cond.node, thenCase.node);
+    IRNode::Ptr e = IRNode::make(Nand, cond.node, elseCase.node);
+    IRNode::Ptr result = IRNode::make(Or, t, e);
+    return Expr(result);
+}
+
 // Print out an expression
 void Expr::debug() {
     node->printExp(); 
