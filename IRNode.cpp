@@ -78,6 +78,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     // node that is equivalent to the requested node on the
     // requested inputs. 
     
+    
     /*
     printf("Making %s\n", opname[opcode]);
     for (size_t i = 0; i < inputs.size(); i++) {
@@ -94,8 +95,6 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case Const:
         panic("Shouldn't make Consts using this make function\n");
     case NoOp:
-        assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
         t = inputs[0]->type;
         w = inputs[0]->width;
         break;
@@ -228,6 +227,21 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         t = Int;
         w = inputs[0]->width;
         break;
+    case StoreVector:
+    case Store:
+        assert(inputs.size() == 2,
+               "Wrong number of inputs for opcode: %s %d\n",
+               opname[opcode], inputs.size());
+        inputs[0] = inputs[0]->as(Int);
+        // Right now we can only store floats
+        inputs[1] = inputs[1]->as(Float);
+        assert(inputs[0]->width == 1, "Can only store to scalar addresses\n");
+        // Store has no output. For the type system, it retains the
+        // type of the thing stored. This should possibly be replaced
+        // with a void type.
+        w = inputs[1]->width;
+        t = inputs[1]->type;
+        break;
     case LoadVector:
     case Load:
         assert(inputs.size() == 1,
@@ -248,6 +262,15 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         assert(ival > 0 && ival < inputs[0]->width, 
                "SelectVector requires an int immediate greater than zero and less than the vector width\n");
         w = inputs[0]->width;
+        t = inputs[0]->type;
+        break;
+    case ExtractScalar:
+        assert(inputs.size() == 1, 
+               "Wrong number of inputs for opcode: %s %d\n",
+               opname[opcode], inputs.size());
+        assert(inputs[0]->width > 1, 
+               "Input to ExtractScalar must be a vector\n");
+        w = 1;
         t = inputs[0]->type;
         break;
     case Vector:
@@ -339,7 +362,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     }
 
     // Strength reduction rules.
-    if (opcode == NoOp) {
+    if (opcode == NoOp && inputs.size() == 1) {
         return inputs[0];
     }
 
@@ -354,7 +377,8 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         if (allChildrenSameOp && 
             inputs[0]->op != Const &&
             inputs[0]->op != Var &&            
-            inputs[0]->op != Load) {
+            inputs[0]->op != Load &&
+            inputs[0]->op != Store) {
             vector<IRNode::Ptr> childInputs(inputs[0]->inputs.size());
             for (size_t j = 0; j < childInputs.size(); j++) {
                 childInputs[j] = make(Vector, 
@@ -364,16 +388,60 @@ IRNode::Ptr IRNode::make(OpCode opcode,
             return make(inputs[0]->op, childInputs, inputs[0]->ival, inputs[0]->fval);
         }
 
-        // Special case a vector of four loadimms with offsets incrementing by 4 bytes
+        // Special case a memory access to a vector of four addresses incrementing by 4 bytes
         bool vectorLoad = true;
         for (size_t i = 0; i < inputs.size() && vectorLoad; i++) {
             if (inputs[i]->op != Load) vectorLoad = false;
+            // The base load addresses all match
             if (vectorLoad && inputs[i]->inputs[0] != inputs[0]->inputs[0]) vectorLoad = false;
+            // The load offsets differ by the appropriate multiples of 4
             if (vectorLoad && inputs[i]->ival != inputs[0]->ival + i*4) vectorLoad = false;
         }
         if (vectorLoad) {
-            IRNode::Ptr v = make(LoadVector, inputs[0]->inputs[0], NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, inputs[0]->ival);
-            return v;
+            IRNode::Ptr vecload = make(LoadVector, inputs[0]->inputs[0], inputs[0]->ival);
+            return vecload;
+        }
+
+        bool vectorStore = true;
+        for (size_t i = 0; i < inputs.size() && vectorStore; i++) {
+            if (inputs[i]->op != Store) vectorStore = false;
+            // The base store addresses all match
+            if (vectorStore && inputs[i]->inputs[0] != inputs[0]->inputs[0]) vectorStore = false;
+            // The store offsets differ by the appropriate multiples of 4
+            if (vectorStore && inputs[i]->ival != inputs[0]->ival + i*4) vectorStore = false;
+        }
+        if (vectorStore) {
+            // Get the four values to store
+            IRNode::Ptr values = make(Vector, inputs[0]->inputs[1], inputs[1]->inputs[1], inputs[2]->inputs[1], inputs[3]->inputs[1]);
+            // Make the StoreVector node, using the address of the first Store node
+            IRNode::Ptr vecstore = make(StoreVector, inputs[0]->inputs[0], values, inputs[0]->ival);
+            return vecstore;
+        }
+
+        // If we're still stuck with a vector of stores, just
+        // vectorize the input, then do four extractions and four
+        // stores.
+        if (inputs[0]->op == Store && inputs[1]->op == Store &&
+            inputs[2]->op == Store && inputs[3]->op == Store) {
+            IRNode::Ptr values = make(Vector,
+                                      inputs[0]->inputs[1], inputs[1]->inputs[1],
+                                      inputs[2]->inputs[1], inputs[3]->inputs[1]);            
+            IRNode::Ptr s0 = make(Store, inputs[0]->inputs[0], make(ExtractScalar, values, 0), inputs[0]->ival);
+            IRNode::Ptr s1 = make(Store, inputs[1]->inputs[0], make(ExtractScalar, values, 1), inputs[1]->ival);
+            IRNode::Ptr s2 = make(Store, inputs[2]->inputs[0], make(ExtractScalar, values, 2), inputs[2]->ival);
+            IRNode::Ptr s3 = make(Store, inputs[3]->inputs[0], make(ExtractScalar, values, 3), inputs[3]->ival);
+            // Bundle the four stores together into a noop
+            return make(NoOp, s0, s1, s2, s3);
+        }
+
+        if (inputs[0]->op == Store || inputs[1]->op == Store || 
+            inputs[2]->op == Store || inputs[3]->op == Store) {            
+            printf("Failed to transform a vector of stores. Inputs:\n");
+            inputs[0]->printExp(); printf("\n");
+            inputs[1]->printExp(); printf("\n");
+            inputs[2]->printExp(); printf("\n");
+            inputs[3]->printExp(); printf("\n");
+            panic("Bailing out.\n");
         }
     }
 
@@ -523,31 +591,28 @@ IRNode::Ptr IRNode::make(OpCode opcode,
 
     // Fuse instructions
         
-    // Load of something plus an int constant can be converted to a load with offset
-    if (opcode == Load || opcode == LoadVector) {
+    // Load or store of something plus an int constant can be converted to a load with offset
+    if (opcode == Load || opcode == LoadVector || opcode == Store || opcode == StoreVector) {
+        IRNode::Ptr value = inputs.size() > 1 ? inputs[1] : NULL_IRNODE_PTR;
         if (inputs[0]->op == Plus) {
             IRNode::Ptr left = inputs[0]->inputs[0];
             IRNode::Ptr right = inputs[0]->inputs[1];
             if (left->op == Const) {
-                IRNode::Ptr n = make(opcode, right, 
-                                     NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
+                IRNode::Ptr n = make(opcode, right, value, 
                                      left->ival + ival);
                 return n;
             } else if (right->op == Const) {
-                IRNode::Ptr n = make(opcode, left,
-                                     NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
+                IRNode::Ptr n = make(opcode, left, value,
                                      right->ival + ival);
                 return n;
             }
         } else if (inputs[0]->op == Minus &&
                    inputs[0]->inputs[1]->op == Const) {
-            IRNode::Ptr n = make(opcode, inputs[0]->inputs[0], 
-                                 NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 
+            IRNode::Ptr n = make(opcode, inputs[0]->inputs[0], value, 
                                  -inputs[0]->inputs[1]->ival + ival);
             return n;
         } else if (inputs[0]->op == PlusImm) {
-            IRNode::Ptr n = make(opcode, inputs[0]->inputs[0],
-                                 NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
+            IRNode::Ptr n = make(opcode, inputs[0]->inputs[0], value,
                                  inputs[0]->ival + ival);
             return n;
         }
@@ -562,18 +627,15 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         if (offset != 0 && ((offset & 3) == 0)) {
             // Check to see if the aligned equivalents exist
             IRNode::Ptr n1 = make(LoadVector, inputs[0], 
-                                  NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
                                   ival - offset);
             IRNode::Ptr n2 = make(LoadVector, inputs[0], 
-                                  NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
                                   ival + 16 - offset);
             // TODO: just because the aligned equivalents currently
             // exist doesn't mean they're in use in the same
             // kernel. We really need contexts or something.
             if (n1->outputs.size() || n2->outputs.size() || 1) {
                 printf("Converting unaligned load to two aligned loads\n");
-                return make(SelectVector, n1, n2, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
-                            offset/4);
+                return make(SelectVector, n1, n2, offset/4);
             }
         }
     }
@@ -584,13 +646,11 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         IRNode::Ptr right = inputs[1];
         if (left->op == Const && (left->ival >> 32 == 0 || left->ival >> 31 == -1)) {
             IRNode::Ptr n = make(TimesImm, right, 
-                             NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
-                             left->ival);
+                                 left->ival);
             return n;
         } else if (right->op == Const && (right->ival >> 32 == 0 || right->ival >> 31 == -1)) {
             IRNode::Ptr n = make(TimesImm, left, 
-                             NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
-                             right->ival);
+                                 right->ival);
             return n;
         }
     }
@@ -699,9 +759,6 @@ void IRNode::printExp() {
         if (type == Float) printf("%f", fval);
         else printf("%lld", ival);
         break;
-    case Var:
-        printf("var");
-        break;
     case Plus:
         printf("(");
         inputs[0]->printExp();
@@ -750,12 +807,34 @@ void IRNode::printExp() {
         inputs[0]->printExp();
         printf("+%lld)", ival);
         break;        
+    case Store: 
+        printf("Store(");
+        inputs[0]->printExp();
+        printf("+%lld, ", ival);
+        inputs[1]->printExp();
+        printf(")");
+        break;
+    case StoreVector:
+        printf("StoreVector(");
+        inputs[0]->printExp();
+        printf("+%lld, ", ival);
+        inputs[1]->printExp();
+        printf(")");
+        break;        
     case SelectVector:
         printf("SelectVector(");
         inputs[0]->printExp();
         printf(", ");
         inputs[1]->printExp();
         printf(", %lld)", ival);
+        break;
+    case ExtractScalar:
+        printf("ExtractScalar(");
+        inputs[0]->printExp();
+        printf(", %lld)", ival);
+        break;
+    case Var:
+        printf("var");
         break;
     default:
         if (inputs.size() == 0) {
@@ -774,10 +853,12 @@ void IRNode::printExp() {
 }
 
 void IRNode::print() {
-            
+
+    if (op == NoOp) return;
+
     if (reg < 16)
         printf("r%d = ", reg);
-    else 
+    else if (reg < 32)
         printf("xmm%d = ", reg-16);
 
     vector<string> args(inputs.size());
@@ -821,8 +902,17 @@ void IRNode::print() {
     case Load:
         printf("Load %s + %lld", args[0].c_str(), ival);
         break;
+    case StoreVector:
+        printf("StoreVector %s + %lld, %s", args[0].c_str(), ival, args[1].c_str());
+        break;
+    case Store:
+        printf("Store %s + %lld, %s", args[0].c_str(), ival, args[1].c_str());
+        break;
     case SelectVector:
         printf("SelectVector %s %s %lld", args[0].c_str(), args[1].c_str(), ival);
+        break;
+    case ExtractScalar:
+        printf("ExtractScalar %s %lld", args[0].c_str(), ival);
         break;
     default:
         printf("%s", opname[op]);
@@ -842,11 +932,11 @@ void IRNode::saveDot(const char *filename) {
         IRNode::Ptr n = allNodes[i].lock();
         if (!n) continue;
         if (n->ival) 
-            fprintf(f, "  n%llx [label = \"%s %lld\"]\n", (long long)n.get(), opname[n->op], n->ival);
+            fprintf(f, "  n%llx [label = \"%s %d %lld\"]\n", (long long)n.get(), opname[n->op], n->level, n->ival);
         else if (n->fval)  
-            fprintf(f, "  n%llx [label = \"%s %f\"]\n", (long long)n.get(), opname[n->op], n->fval);           
+            fprintf(f, "  n%llx [label = \"%s %d %f\"]\n", (long long)n.get(), opname[n->op], n->level, n->fval);           
         else 
-            fprintf(f, "  n%llx [label = \"%s\"]\n", (long long)n.get(), opname[n->op]);            
+            fprintf(f, "  n%llx [label = \"%s %d\"]\n", (long long)n.get(), opname[n->op], n->level);            
         for (size_t j = 0; j < n->inputs.size(); j++) {
             IRNode::Ptr in = n->inputs[j];
             fprintf(f, "  n%llx -> n%llx\n", (long long)n.get(), (long long)in.get());
@@ -905,14 +995,29 @@ IRNode::Ptr IRNode::rebalanceSum() {
 
     collectSum(terms);
 
+    // Look for cancellations
+    vector<pair<IRNode::Ptr, bool> > uniqueTerms;
+    vector<bool> cancelled(terms.size(), false);
+    for (size_t i = 0; i < terms.size(); i++) {
+        if (cancelled[i]) continue;
+        for (size_t j = i+1; j < terms.size() && !cancelled[i]; j++) {
+            if (cancelled[j]) continue;
+            if (terms[j].first == terms[i].first &&
+                terms[j].second != terms[i].second) {
+                cancelled[i] = cancelled[j] = true;
+            }
+        }
+        if (!cancelled[i]) uniqueTerms.push_back(terms[i]);
+    }
+
     // extract out the const terms
     vector<pair<IRNode::Ptr , bool> > constTerms;
     vector<pair<IRNode::Ptr , bool> > nonConstTerms;
-    for (size_t i = 0; i < terms.size(); i++) {
-        if (terms[i].first->op == Const) {
-            constTerms.push_back(terms[i]);
+    for (size_t i = 0; i < uniqueTerms.size(); i++) {
+        if (uniqueTerms[i].first->op == Const) {
+            constTerms.push_back(uniqueTerms[i]);
         } else {
-            nonConstTerms.push_back(terms[i]);
+            nonConstTerms.push_back(uniqueTerms[i]);
         }
     }
             
@@ -932,8 +1037,11 @@ IRNode::Ptr IRNode::rebalanceSum() {
     // remake the summation
     IRNode::Ptr t;
     bool tPos;
-    t = nonConstTerms[0].first;
-    tPos = nonConstTerms[0].second;
+
+    if (nonConstTerms.size()) {
+        t = nonConstTerms[0].first;
+        tPos = nonConstTerms[0].second;
+    }
 
     // If we're building a float sum, the const term is innermost
     if (type == Float) {
@@ -945,6 +1053,10 @@ IRNode::Ptr IRNode::rebalanceSum() {
                 c -= constTerms[i].first->fval;
             }
         }
+
+        // Just the const term
+        if (!t) return make(c);
+
         if (c != 0.0f) {
             if (tPos) 
                 t = make(Plus, make(c), t);
@@ -967,6 +1079,9 @@ IRNode::Ptr IRNode::rebalanceSum() {
                 c -= constTerms[i].first->ival;
             }
         }
+
+        // Just the const term
+        if (!t) return make(c);
 
         if ((int32_t)c != c) {
             // Look for an existing 64-bit const within 32-bits of this value
@@ -1020,7 +1135,7 @@ IRNode::Ptr IRNode::rebalanceSum() {
 
     if (outerConst != 0) {
         if (tPos) {
-            t = make(PlusImm, t, NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, outerConst);
+            t = make(PlusImm, t, outerConst);
         } else {
             // TODO: in this case it was pointless to divide the
             // constant term up into an inner and outer const
@@ -1077,7 +1192,7 @@ IRNode::Ptr IRNode::makeNew(int64_t v) {
         printf("We only trust 32 bit values for now: 0x%llx\n", v);
     }
     vector<IRNode::Ptr> empty;
-    return makeNew(Int, 1, Const, empty, v, 0);
+    return makeNew(Int, 1, Const, empty, v, 0);    
 }
 
 unsigned int gcd(unsigned int a, unsigned int b) {
@@ -1109,6 +1224,10 @@ IRNode::IRNode(Type t, int w, OpCode opcode,
 
     modulus = remainder = 0;
 
+    // max < min -> bounds are unknown
+    max = 0x80000000;
+    min = 0x7fffffff;
+
     if (op == Var) {
         constant = false;
     } else {
@@ -1118,6 +1237,12 @@ IRNode::IRNode(Type t, int w, OpCode opcode,
     for (size_t i = 0; i < inputs.size(); i++) {
         constant = constant && inputs[i]->constant;
         if (inputs[i]->level > level) level = inputs[i]->level;
+    }
+
+    if (opcode == Const && t == Int) {
+        if (!(abs(iv) >> 32)) {
+            min = max = (int32_t)iv;
+        }
     }
 
     // No register assigned yet
@@ -1136,6 +1261,18 @@ void IRNode::analyze() {
             remainder = (inputs[0]->remainder + ival) % modulus;
             while (remainder < 0) remainder += modulus;
 
+            int64_t max64 = (int64_t)inputs[0]->max + ival;
+            int64_t min64 = (int64_t)inputs[0]->min + ival;
+            if (abs(max64) >> 32 || abs(min64) >> 32 ||
+                (inputs[0]->max < inputs[0]->min)) {
+                // max < min -> Bounds are unknown
+                max = 0x80000000;
+                min = 0x7fffffff;
+            } else {
+                max = (int32_t)max64;
+                min = (int32_t)min64;
+            }
+
         } else if (op == TimesImm) {
 
             int64_t mod = (int64_t)inputs[0]->modulus * ival;
@@ -1149,6 +1286,18 @@ void IRNode::analyze() {
                 remainder = (inputs[0]->remainder * ival) % modulus;
             }
             while (remainder < 0) remainder += modulus;
+
+            int64_t max64 = (int64_t)inputs[0]->max * ival;
+            int64_t min64 = (int64_t)inputs[0]->min * ival;
+            if (abs(max64) >> 32 || abs(min64) >> 32 ||
+                (inputs[0]->max < inputs[0]->min)) {
+                // max < min -> Bounds are unknown
+                max = 0x80000000;
+                min = 0x7fffffff;
+            } else {
+                max = (int32_t)max64;
+                min = (int32_t)min64;
+            }
 
         } else if (op == Plus) {           
             if (inputs[0]->op == Const) {
@@ -1165,6 +1314,19 @@ void IRNode::analyze() {
                 remainder = (inputs[0]->remainder + inputs[1]->remainder) % modulus;
             }
 
+            int64_t max64 = (int64_t)inputs[0]->max + (int64_t)inputs[1]->max;
+            int64_t min64 = (int64_t)inputs[0]->min + (int64_t)inputs[1]->min;
+            if (abs(max64) >> 32 || abs(min64) >> 32 ||
+                (inputs[0]->max < inputs[0]->min) || 
+                (inputs[1]->max < inputs[1]->min)) {
+                // max < min -> Bounds are unknown
+                max = 0x80000000;
+                min = 0x7fffffff;
+            } else {
+                max = (int32_t)max64;
+                min = (int32_t)min64;
+            }
+
         } else if (op == Minus) {
             if (inputs[0]->op == Const) {
                 modulus = inputs[1]->modulus;
@@ -1178,6 +1340,19 @@ void IRNode::analyze() {
                 modulus = gcd(inputs[0]->modulus, inputs[1]->modulus);
                 if (inputs[0]->modulus == inputs[1]->modulus) modulus = inputs[0]->modulus;
                 remainder = (modulus + inputs[0]->remainder - inputs[1]->remainder) % modulus;
+            }
+
+            int64_t max64 = (int64_t)inputs[0]->max - (int64_t)inputs[1]->min;
+            int64_t min64 = (int64_t)inputs[0]->min - (int64_t)inputs[1]->max;
+            if (abs(max64) >> 32 || abs(min64) >> 32 ||
+                (inputs[0]->max < inputs[0]->min) || 
+                (inputs[1]->max < inputs[1]->min)) {
+                // max < min -> Bounds are unknown
+                max = 0x80000000;
+                min = 0x7fffffff;
+            } else {
+                max = (int32_t)max64;
+                min = (int32_t)min64;
             }
 
         } else if (op == Times && inputs[0]->op == Const) {
@@ -1206,6 +1381,39 @@ void IRNode::analyze() {
         } else {
             modulus = 1;
             remainder = 0;
+            max = 0x80000000;
+            min = 0x7fffffff;
+        }
+
+        if (op == Times) {
+            int64_t min0 = (int64_t)inputs[0]->min;
+            int64_t max0 = (int64_t)inputs[0]->max;
+            int64_t min1 = (int64_t)inputs[1]->min;
+            int64_t max1 = (int64_t)inputs[1]->max;
+
+            int64_t a = min0 * min1;
+            int64_t b = min0 * max1;
+            int64_t c = max0 * min1;
+            int64_t d = max0 * max1;
+
+            int64_t ab = a < b ? a : b;
+            int64_t cd = c < d ? c : d;
+            int64_t min64 = ab < cd ? ab : cd;
+
+            ab = a > b ? a : b;
+            cd = c > d ? c : d;
+            int64_t max64 = ab > cd ? ab : cd;            
+
+            if (abs(max64) >> 32 || abs(min64) >> 32 ||
+                (inputs[0]->max < inputs[0]->min) || 
+                (inputs[1]->max < inputs[1]->min)) {
+                // max < min -> Bounds are unknown
+                max = 0x80000000;
+                min = 0x7fffffff;
+            } else {
+                max = (int32_t)max64;
+                min = (int32_t)min64;
+            }
         }
     }
 };

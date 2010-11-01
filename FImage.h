@@ -17,6 +17,7 @@ public:
     Expr(int64_t);
     Expr(int32_t);
     Expr(uint32_t);
+    Expr(void *);
     Expr(float);
 
     void operator+=(Expr);
@@ -41,32 +42,47 @@ Expr operator<=(Expr, Expr);
 Expr operator!=(Expr, Expr);
 Expr operator==(Expr, Expr);
 
+// external function application. Assumes Exprs are floats.
+//Expr apply((float (*)(float)), Expr);
+
+
 // A loop variable with the given range [min, max)
 class Range : public Expr {
 public:
     Range();
     Range(int a, int b);
-    int min, max;
 };
 
-// An assignable reference to a pixel (e.g. im(x, y, c), not im(sin(x), y, c))
-class LVal : public Expr {
+// An assignable reference to a memory location (e.g. im(x, y, c), or im(sin(x), y, c))
+class MemRef : public Expr {
 public:
-    LVal(FImage *, Range);
-    LVal(FImage *, Range, Range);
-    LVal(FImage *, Range, Range, Range);
-    LVal(FImage *, Range, Range, Range, Range);
+    MemRef(FImage *, Expr);
+    MemRef(FImage *, Expr, Expr);
+    MemRef(FImage *, Expr, Expr, Expr);
+    MemRef(FImage *, Expr, Expr, Expr, Expr);
+
+    // This assignment corresponds to definition. This MemRef is
+    // defined to have the given expression as its value.
     void operator=(const Expr &);
 
-    // Always use the above assignment operator, don't assign an LVal to an LVal
-    void operator=(const LVal &other) {*this = (const Expr &)other;};
+    // In these recursive definitions, the rhs version of (*this) will
+    // be interpreted as a load, and the lhs version will be a store.
+    void operator+=(const Expr &e) {*this = (*this + e);}
+    void operator-=(const Expr &e) {*this = (*this - e);}
+    void operator*=(const Expr &e) {*this = (*this * e);}
+    void operator/=(const Expr &e) {*this = (*this / e);}
+
+    // Always use the above assignment operator, don't assign an MemRef to an MemRef
+    void operator=(const MemRef &other) {*this = (const Expr &)other;}
+
+
 
     void debug();
 
     FImage *im;
-    vector<Range> vars;
+    vector<Expr> indices;
 private:
-    // Can't assign an LVal to an LVal - it must be cast to an expression.
+    // Can't assign an MemRef to an MemRef - it must be cast to an expression.
 
 };
 
@@ -79,16 +95,10 @@ public:
     FImage(uint32_t, uint32_t, uint32_t, uint32_t);
 
     // Make an assignable reference to a location in the image (e.g. im(x, y, c))
-    LVal operator()(Range);
-    LVal operator()(Range, Range);
-    LVal operator()(Range, Range, Range);
-    LVal operator()(Range, Range, Range, Range);
-
-    // Make a more general unassignable reference (e.g. im(x*13-y, floor(y/x), c+x+y))
-    Expr operator()(Expr);
-    Expr operator()(Expr, Expr);
-    Expr operator()(Expr, Expr, Expr);
-    Expr operator()(Expr, Expr, Expr, Expr);
+    MemRef operator()(Expr);
+    MemRef operator()(Expr, Expr);
+    MemRef operator()(Expr, Expr, Expr);
+    MemRef operator()(Expr, Expr, Expr, Expr);
 
     // Actually look something up in the image. Won't return anything
     // interesting if the image hasn't been evaluated yet.
@@ -138,7 +148,7 @@ public:
     float *data;
 
     // The vector of definitions of this image. Right now all but the first is ignored.
-    vector<LVal> definitions;
+    vector<MemRef> definitions;
     
     // Print out the definitions of the image.
     void debug();
