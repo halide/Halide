@@ -2,108 +2,205 @@
 
 #include <algorithm>
 
-// Compile a gather
-void Compiler::compileGather(AsmX64 *a, FImage *im) {
+
+void Compiler::collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &nodes) {
+    if (node->op == op) nodes.insert(node);
+    for (int i = 0; i < node->inputs.size(); i++) {
+        collectInputs(node->inputs[i], op, nodes);
+    }
+}
+
+// Compile the evaluation of a single FImage
+void Compiler::compile(AsmX64 *a, FImage *im) {
+    printf("Image has %d definitions.\n", im->definitions.size()); fflush(stdout);
     // Only consider the first definition for now
-    LVal def = im->definitions[0];
-    IRNode::Ptr root = def.node;
-    
+    IRNode::Ptr def = im->definitions[0].node;
+
+    // It should be a store or storeVector node.
+    assert(def->op == Store || def->op == StoreVector, "Definitions of images should be Store nodes\n");
+
+    IRNode::Ptr lhs = def->inputs[0];
+    IRNode::Ptr rhs = def->inputs[1];
+
     int t1 = timeGetTime();
 
-    assert(def.vars.size() < 256, "FImage can't cope with more than 255 free variables\n");
+    // Find the variables we need to iterate over by digging into the lhs and rhs
+    printf("Collecting free variables\n");
+    IRNode::PtrSet varSet;
+    collectInputs(def, Var, varSet);
 
-    // Assign loop levels. First var is innermost (usually x)
-    for (size_t i = 0; i < def.vars.size(); i++) {
-        def.vars[i].node->assignLevel((unsigned char)(def.vars.size()-i));
+    assert(varSet.size() < 256, "FImage can't cope with more than 255 variables\n");
+
+    // put them in a vector
+    vector<IRNode::Ptr> vars(varSet.size());
+    int i = 0;
+    for (IRNode::PtrSet::iterator iter = varSet.begin();
+         iter != varSet.end(); iter++) {
+        vars[i++] = *iter;
     }
 
-    // Let the compiler know that x will be a multiple of four
-    def.vars[0].node->modulus = 4;
-    def.vars[0].node->remainder = 0;
+    // Differentiate the store address w.r.t each var. If one of them
+    // has a derivative of 4, we should vectorize across it and put it
+    // in the inner loop
+    vector<int64_t> storeDelta(vars.size());
+    for (size_t i = 0; i < vars.size(); i++) {
+        IRNode::Ptr next = IRNode::make(PlusImm, vars[i], 1);
+        IRNode::Ptr nextLhs = lhs->substitute(vars[i], next);
+        if (nextLhs == lhs) {
+            storeDelta[i] = 0;
+        } else {
+            IRNode::Ptr delta = IRNode::make(Minus, nextLhs, lhs)->optimize();
+            printf("delta = "); delta->printExp(); printf("\n");
+            if (delta->op == Const && delta->type == IRNode::Int) {
+                storeDelta[i] = delta->ival;
+            } else {
+                // Unknown store delta
+                storeDelta[i] = 0x7fffffffffffffff;
+            }
+        }
+    }
+
+    // Stable sort loop levels by the store delta and assign loop levels
+    for (size_t i = 0; i < vars.size(); i++) {
+        for (size_t j = i+1; j < vars.size(); j++) {
+            if (abs(storeDelta[i]) < abs(storeDelta[j])) {
+                IRNode::Ptr v = vars[i];
+                vars[i] = vars[j];
+                vars[j] = v;
+                int64_t d = storeDelta[i];
+                storeDelta[i] = storeDelta[j];
+                storeDelta[j] = d;
+            }
+        }
+        vars[i]->assignLevel((unsigned char)(i+1));
+    }
+
+
+    // Check all the vars have sane bounds.
+    for (size_t i = 0; i < vars.size(); i++) {
+        printf("Var %d : [%d %d]\n", i, vars[i]->min, vars[i]->max);
+        assert(vars[i]->max >= vars[i]->min, "Variable %d has undefined bounds\n");
+    }
+
+    // Should we vectorize across the loop vars? Right now the answer
+    // is always yes, unless we're accumulating onto a scalar. In the
+    // future we'll have to figure out how to horizontally reduce at
+    // the end in this case.
+    bool vectorize = storeDelta[0] != 0;
+
+    // Vectorize across the smallest non-zero store delta
+    int vectorDim = 0;
+    for (int i = 0; i < (int)vars.size(); i++) {
+        if (storeDelta[i] == 0) break;
+        vectorDim = i;
+    }
+
+    vector<int> vectorWidth(vars.size(), 1);
+    if (vectorize) vectorWidth[vectorDim] = 4;
+
+    // Let the compiler know that the innermost var will be a multiple
+    // of four because we're vectorizing across it
+    vars[vectorDim]->modulus = 4;
+    vars[vectorDim]->remainder = 0;
+
 
     printf("Compiling: ");
-    root->printExp();
+    def->printExp();
     printf("\n");
 
-    // Force the output type of the expression to be a float and do a
-    // final optimization pass now that levels are assigned.
+    // Do a final optimization pass now that levels are assigned.
     IRNode::saveDot("before.dot");
-    def.node = root = root->as(IRNode::Float)->optimize();
+    def = def->optimize();
 
-    int vectorWidth[3] = {1, 1, 1};
-    int vectorDim = 0;
-    vectorWidth[vectorDim] = 4;
+    if (vectorize) {
+        // vectorize across some variable
+        // TODO: we're assuming its bounds are suitable for this - a multiple of four
+        def = IRNode::make(Vector, def, 
+                           def->substitute(vars[vectorDim], 
+                                           IRNode::make(PlusImm, vars[vectorDim], 1)),
+                           def->substitute(vars[vectorDim], 
+                                           IRNode::make(PlusImm, vars[vectorDim], 2)),
+                           def->substitute(vars[vectorDim], 
+                                           IRNode::make(PlusImm, vars[vectorDim], 3)));
+    }
 
-    printf("a\n");
+    // Unroll across some vars
+    vector<int> unroll(vars.size(), 1);
 
-    // vectorize across some variable
-    // TODO: we're assuming it's a multiple of 4
-    root = IRNode::make(Vector, root, 
-                        root->substitute(def.vars[vectorDim].node, 
-                                         IRNode::make(PlusImm, def.vars[vectorDim].node,
-                                                      NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 1)),
-                        root->substitute(def.vars[vectorDim].node, 
-                                         IRNode::make(PlusImm, def.vars[vectorDim].node,
-                                                      NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 2)),
-                        root->substitute(def.vars[vectorDim].node, 
-                                         IRNode::make(PlusImm, def.vars[vectorDim].node,
-                                                      NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, 3)));
-
-    // Unroll across a relevant variable. 
-    int unroll[3] = {4, 1, 1};
-
-    printf("b\n");
+    // This should be smarter, right now we just unroll by 2 in the
+    // two innermost vars. Assumes they have even bounds.
+    //unroll[unroll.size()-1] = 2;
+    //unroll[unroll.size()-2] = 2;
 
     vector<IRNode::Ptr> roots(unroll[0]*unroll[1]*unroll[2]);
-    roots[0] = root;
+    roots[0] = def;
     for (int i = 0; i < unroll[0]; i++) {
         if (i > 0) {
             roots[i*unroll[1]*unroll[2]] = 
-                root->substitute(def.vars[0].node, 
-                                 IRNode::make(PlusImm, def.vars[0].node, 
-                                              NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
-                                              i*vectorWidth[0]));
+                def->substitute(vars[0], IRNode::make(PlusImm, vars[0], i*vectorWidth[0]));
         }
         for (int j = 0; j < unroll[1]; j++) {
             if (j > 0) {
                 roots[(i*unroll[1] + j)*unroll[2]] = 
-                    roots[i*unroll[1]*unroll[2]]->substitute(def.vars[1].node, 
-                                                             IRNode::make(PlusImm, def.vars[1].node, 
-                                                                          NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
-                                                                          j*vectorWidth[1]));      
+                    roots[i*unroll[1]*unroll[2]]->substitute(vars[1], IRNode::make(PlusImm, vars[1], j*vectorWidth[1]));      
             }
             for (int k = 0; k < unroll[2]; k++) {
                 if (k > 0) {
                     roots[(i*unroll[1] + j)*unroll[2] + k] = 
-                        roots[(i*unroll[1] + j)*unroll[2]]->substitute(def.vars[2].node, 
-                                                                       IRNode::make(PlusImm, def.vars[2].node, 
-                                                                                    NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR,
-                                                                                    k*vectorWidth[2]));   
+                        roots[(i*unroll[1] + j)*unroll[2]]->substitute(vars[2], IRNode::make(PlusImm, vars[2], k*vectorWidth[2]));   
                 }
             }
         }
     }
 
-    printf("c\n");
-
-    // Add the store address as another thing to compute
-    Expr storeAddr = (int64_t)(&((*im)(0, 0, 0)));
-    for (size_t i = 0; i < def.vars.size(); i++) {
-        storeAddr += def.vars[i] * (4 * im->stride[i]);
-    }
-    roots.push_back(storeAddr.node->optimize());
-
     IRNode::saveDot("after.dot");
 
     printf("Done optimizing\n");
 
+    // Look for loads that are possibly aliased with the store and
+    // increase their loop level to the same as the store
+    IRNode::PtrSet loadSet, storeSet;
+    for (size_t i = 0; i < roots.size(); i++) {
+        collectInputs(roots[i], Load, loadSet);
+        collectInputs(roots[i], LoadVector, loadSet);
+        collectInputs(roots[i], Store, storeSet);
+        collectInputs(roots[i], StoreVector, storeSet);
+    }
+
+    
+    for (IRNode::PtrSet::iterator storeIter = storeSet.begin();
+         storeIter != storeSet.end(); storeIter++) {
+        IRNode::Ptr store = *storeIter;
+        int64_t storeMin = lhs->min + store->ival;
+        int64_t storeMax = lhs->max + store->ival;
+        printf("Store address bounds: %d %d\n", storeMin, storeMax);
+        for (IRNode::PtrSet::iterator loadIter = loadSet.begin();
+             loadIter != loadSet.end(); loadIter++) {
+            IRNode::Ptr load = *loadIter;
+            IRNode::Ptr loadAddr = load->inputs[0];
+            int64_t loadMin = loadAddr->min + load->ival;
+            int64_t loadMax = loadAddr->max + load->ival;
+            printf("Load address bounds: %d : %d\n", loadMin, loadMax);
+            
+            if (loadMin >= storeMin && loadMin <= storeMax ||
+                loadMax >= storeMin && loadMax <= storeMin) {
+                printf("Possible aliasing detected\n");
+                printf("Promoting load at loop level %d to loop level %d\n", load->level, store->level);
+                load->assignLevel(def->level);
+            }
+        }
+    }   
+
     // Assign the variables some registers
-    vector<AsmX64::Reg> varRegs(def.vars.size());
+    vector<AsmX64::Reg> varRegs(vars.size());
     if (varRegs.size() > 0) varRegs[0] = a->rax;
     if (varRegs.size() > 1) varRegs[1] = a->rcx;
     if (varRegs.size() > 2) varRegs[2] = a->rdx;
     if (varRegs.size() > 3) varRegs[3] = a->rbx;
-    if (varRegs.size() > 4) panic("Can't handle more than 4 loop vars for now\n");
+    if (varRegs.size() > 4) varRegs[4] = a->rbp;
+    if (varRegs.size() > 5) varRegs[5] = a->rsi;
+    if (varRegs.size() > 6) varRegs[6] = a->rdi;
+    if (varRegs.size() > 7) panic("Can't handle more than 7 loop indices for now\n");
     
     AsmX64::Reg tmp = a->r15;
 
@@ -111,10 +208,10 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     uint32_t reserved = ((1 << tmp.num) | 
                          (1 << a->rsp.num));
 
-    // Force the vars into the intended registers and mark them as reserved
+    // Force the indices into the intended registers and mark them as reserved
     for (size_t i = 0; i < varRegs.size(); i++) {
         reserved |= (1 << varRegs[i].num);
-        def.vars[i].node->reg = varRegs[i].num;
+        vars[i]->reg = varRegs[i].num;
     }
 
     // Register assignment and evaluation ordering. This returns a
@@ -130,7 +227,6 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     //       compute things that depend on var level 3 (order[3])
     //       for ...
     //          ...
-
     printf("Register assignment...\n");
     vector<uint32_t> clobbered, outputs;
     vector<vector<IRNode::Ptr > > order;        
@@ -158,10 +254,6 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
     }
     
 
-    // From here on we assume three loop variables (and hence four levels)
-    // TODO: fix this
-    assert(order.size() == 4, "Can only handle 3D images\n");
-
     // Align the stack to a 16-byte boundary - it always comes in
     // offset by 8 bytes because it contains the 64-bit return
     // address.
@@ -173,67 +265,36 @@ void Compiler::compileGather(AsmX64 *a, FImage *im) {
         
     compileBody(a, order[0]);
 
-    a->mov(varRegs[2], def.vars[2].min);
-    a->label("loop0"); 
+    char *labels[] = {"l0", "l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8"};
+
+    for (size_t i = 0; i < vars.size(); i++) {
+        printf("Starting loop %d\n", i);
+        a->mov(varRegs[i], vars[i]->min);
+        a->label(labels[i]); 
     
-    compileBody(a, order[1]);        
+        compileBody(a, order[i+1]);
+    }
 
-    a->mov(varRegs[1], def.vars[1].min);               
-    a->label("loop1"); 
-
-    compileBody(a, order[2]);
-
-    a->mov(varRegs[0], def.vars[0].min);
-    a->label("loop2");
-
-    // Add a mark for the intel static analyzer tool
-    //a->iacaStart();
-
-    compileBody(a, order[3]);
-        
-    // Right now the saving code can only handle vectorizing across X
-    assert(vectorWidth[0] == 4, "Can only handle vectorizing across X for now\n");
-
-    for (int i = 0; i < unroll[0]; i++) {
-        for (int j = 0; j < unroll[1]; j++) {
-            for (int k = 0; k < unroll[2]; k++) {    
-                int offset = (int)(im->stride[0]*vectorWidth[0]*i + 
-                                   im->stride[1]*vectorWidth[1]*j +
-                                   im->stride[2]*vectorWidth[2]*k);
-                a->movntps(AsmX64::Mem(outPtr, 4*offset), roots[(i*unroll[1] + j)*unroll[2] + k]->reg); 
-            }
-        }
-    }        
-
-    // Next inner x
-    a->add(varRegs[0], vectorWidth[0]*unroll[0]);
-    a->cmp(varRegs[0], def.vars[0].max);
-    a->jl("loop2");
-
-    a->add(varRegs[1], vectorWidth[1]*unroll[1]);
-    a->cmp(varRegs[1], def.vars[1].max);
-    a->jl("loop1");            
-
-    // add a mark for the intel static analyzer
-    //a->iacaEnd();
-
-    a->add(varRegs[2], vectorWidth[2]*unroll[2]);
-    a->cmp(varRegs[2], def.vars[2].max);
-    a->jl("loop0");            
+    for (int i = (int)vars.size()-1; i >= 0; i--) {
+        a->add(varRegs[i], vectorWidth[i]*unroll[i]);
+        a->cmp(varRegs[i], vars[i]->max+1);
+        a->jl(labels[i]);
+    }
 
     // Pop the stack and return
     a->popNonVolatiles();
     a->add(a->rsp, 8);
     a->ret();        
 
+    printf("Saving object file\n");
+
     // Save an object file that you can use dumpbin on to inspect
     a->saveCOFF("generated.obj");        
 }
     
 // Generate machine code for a vector of IRNodes. Registers must have already been assigned.
-void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
+void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
         
-    AsmX64::SSEReg tmp2 = a->xmm14;
     AsmX64::SSEReg tmp = a->xmm15;
     AsmX64::Reg gtmp = a->r15;
 
@@ -380,23 +441,21 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
             }
             break;
         case TimesImm:
-            assert((node->ival >> 32) == 0 || (node->ival >> 31) == -1, 
+            assert(abs(node->ival) >> 32 == 0, 
                    "TimesImm may only use a 32-bit signed constant\n");
             if (gdst == gsrc1) {
                 a->imul(gdst, (int32_t)node->ival);
             } else {
-                // This could be a 64-bit constant here, but I want to discourage this case anyway
                 a->mov(gdst, (int32_t)node->ival);
                 a->imul(gdst, gsrc1);
             }
             break;
         case PlusImm:
-            assert((node->ival >> 32) == 0 || (node->ival >> 31) == -1, 
+            assert(abs(node->ival) >> 32 == 0,
                    "PlusImm may only use a 32-bit signed constant\n");
             if (gdst == gsrc1) {
                 a->add(gdst, (int32_t)node->ival);
             } else {
-                // This could be a 64-bit constant here, but I want to discourage this case anyway
                 a->mov(gdst, (int32_t)node->ival);
                 a->add(gdst, gsrc1);
             }
@@ -588,11 +647,39 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
                 panic("Can't deal with SelectVector with argument other than 1, 2, or 3\n");
             }
             break;
+        case ExtractScalar:
+            assert(!gpr && !gpr1, "Can only extract scalar from sse regs into sse regs\n");
+            if (!(dst == src1)) a->movaps(dst, src1);
+            assert(node->ival >= 0 && node->ival < 4, 
+                   "Integer argument to ExtractScalar must be 0, 1, 2, or 3\n");
+            a->shufps(dst, src1, 
+                      (uint8_t)node->ival, (uint8_t)node->ival,
+                      (uint8_t)node->ival, (uint8_t)node->ival);
+            break;
+        case StoreVector:
+        case Store:
+            assert(gpr1, "Can only store using addresses in gprs\n");
+            assert(!gpr2, "Can only store values in sse registers\n");
+            assert(abs(node->ival) >> 32 == 0,
+                   "Store may only use a 32-bit signed constant\n");
+            if (node->width == 1) {
+                a->movss(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
+            } else {
+                int modulus = node->inputs[0]->modulus;
+                int remainder = (node->inputs[0]->remainder + node->ival) % modulus;
+                if ((modulus & 0xf) == 0 && (remainder & 0xf) == 0) {
+                    a->movaps(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
+                } else {
+                    printf("Unaligned store!\n");
+                    a->movups(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
+                }
+            }
+            break;
         case LoadVector:
         case Load:
             assert(gpr1, "Can only load using addresses in gprs\n");
             assert(!gpr, "Can only load into sse regs\n");
-            assert((node->ival >> 32) == 0 || (node->ival >> 31) == -1, 
+            assert(abs(node->ival) >> 32 == 0,
                    "Load may only use a 32-bit signed constant\n");
             if (node->width == 1) {
                 a->movss(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
@@ -660,10 +747,10 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr > code) {
 //
 // roots: the vector of expressions to be assigned registers
 //
-// reserved: Registers corresponding to bits marked high in this
-// mask may not be used. Bits 30 and 31 (which correspond to
-// registers xmm14 and xmm15) may not be marked high, because the
-// code generator uses those as scratch.
+// reserved: Registers corresponding to bits marked high in this mask
+// may not be used. Bit 31 (which corresponds to register xmm15) must
+// not be marked high, because the code generator uses that as
+// scratch.
 // 
 // As output it returns primarily order: a vector of vectors of
 // IRNodes, one to be computed at each loop level. For a 2D image, the
@@ -693,10 +780,10 @@ void Compiler::doRegisterAssignment(
     // Who's currently occupying which register? First the 16 gprs, then the 16 sse registers.
     vector<IRNode::Ptr > regs(32);
 
-    // Reserve xmm14-15 for the code generator to use as scratch
-    assert(!(reserved & ((1<<30) | (1<<31))), 
-           "Registers xmm14 and xmm15 are reserved for the code generator\n");
-    reserved |= (1<<30) | (1<<31);
+    // Reserve xmm15 for the code generator to use as scratch
+    assert(!(reserved & (1<<31)),
+           "Register xmm15 is reserved for the code generator\n");
+    reserved |= (1<<31);
         
     // Clear the tag on all nodes
     for (size_t i = 0; i < IRNode::allNodes.size(); i++) {
@@ -733,7 +820,7 @@ void Compiler::doRegisterAssignment(
     clobberedRegs.clear();
     clobberedRegs.resize(order.size(), 0);
     for (int i = 0; i < order.size(); i++) {
-        clobberedRegs[i] = (1<<30) | (1<<31);
+        clobberedRegs[i] = (1<<31);
         for (size_t j = 0; j < order[i].size(); j++) {
             IRNode::Ptr node = order[i][j];
             clobberedRegs[i] |= (1 << node->reg);
@@ -872,6 +959,7 @@ void Compiler::doInstructionScheduling(
 
 }
 
+
 void Compiler::gatherDescendents(IRNode::Ptr node, vector<vector<IRNode::Ptr> > &output, int d) {
     // If I'm already in the output, bail
     if (node->tag > 1) {
@@ -890,10 +978,15 @@ void Compiler::regClear(IRNode::Ptr node) {
     if (node->op == Var) return;
 
     node->reg = -1;
+
     node->tag = 1;
     for (size_t i = 0; i < node->inputs.size(); i++) {
         regClear(node->inputs[i]);
     }        
+
+    // Some ops don't need one
+    if (node->op == Store || node->op == StoreVector || node->op == NoOp)
+        node->reg = 33;
 }
      
 // Recursively assign registers to sub-expressions
@@ -915,7 +1008,7 @@ void Compiler::regAssign(IRNode::Ptr node,
     // pointing to the same IRNode.
     if (node->reg >= 0) {
         return;
-    }
+    }    
 
     // Check all the inputs already have registers
     for (size_t i = 0; i < node->inputs.size(); i++) {
@@ -925,8 +1018,8 @@ void Compiler::regAssign(IRNode::Ptr node,
 
     // Figure out if we're going into a GPR or an SSE
     // register. All vectors go in SSE. Scalar floats also go in
-    // SSE.
-    bool gpr = (node->width == 1) && (node->type != IRNode::Float);
+    // SSE. Masks resulting from comparisons also go in SSE
+    bool gpr = (node->width == 1) && (node->type == IRNode::Int);
 
     // If there are inputs, see if we can use the register of the
     // one of the inputs as output - the first is optimal, as this

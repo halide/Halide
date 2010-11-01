@@ -133,6 +133,67 @@ void blurNative(FImage im, const int K, FImage &tmp, FImage &output) {
     }
 }
 
+void convolve(FImage im, FImage filter, FImage &out) {
+    int mx = filter.size[0]/2;
+    int my = filter.size[1]/2;
+    Range x(mx, im.size[0]-mx);
+    Range y(my, im.size[1]-my);
+    Range c(0, im.size[2]);
+    Range fx(0, filter.size[0]);
+    Range fy(0, filter.size[1]);
+
+    out(x, y, c) += im(x + fx - mx, y + fy - my, c) * filter(fx, fy);
+
+}
+
+void convolveNative(FImage im, FImage filter, FImage &out) {
+    int mx = filter.size[0]/2;
+    int my = filter.size[1]/2;
+    for (int c = 0; c < im.size[2]; c++) {
+        for (int y = my; y < im.size[1]-my; y++) {
+            for (int x = mx; x < im.size[0]-mx; x++) {
+                out(x, y, c) = 0.0f;
+                for (int fy = 0; fy < filter.size[1]; fy++) {
+                    for (int fx = 0; fx < filter.size[0]; fx++) {
+                        out(x, y, c) += im(x + fx - mx, y + fy - my, c) * filter(fx, fy);
+                    }
+                }
+            }
+        }
+    }
+}
+
+FImage boxFilter(FImage im, int size) {
+    Range x(size/2, im.size[0]-size/2);
+    Range y(size/2, im.size[1]-size/2);
+    Range c(0, im.size[2]);
+    FImage out(im.size[0], im.size[1], im.size[2]);
+    FImage tmp(im.size[0], im.size[1], im.size[2]);
+
+    // blur in X with zero boundary condition
+
+    // Ramp up
+    x = Range(1, size/2);
+    tmp(0, y, c) += im(x, y, c)/size;
+    tmp(x, y, c) = tmp(x-1, y, c) + im(x+size/2, y, c)/size;
+
+    // Steady-state
+    x = Range(size/2, im.size[0]-size/2);
+    tmp(x, y, c) = tmp(x-1, y, c) + (im(x+size/2, y, c) - im(x-size/2, y, c))/size;
+
+    // Ramp down
+    x = Range(im.size[0]-size/2, im.size[0]);
+    tmp(x, y, c) = tmp(x-1, y, c) - im(x-size/2, y, c)/size;
+
+    // blur in Y
+    out(x, y, c) = out(x, y-1, c) + (tmp(x, y+size/2, c) - tmp(x, y-size/2, c))/size;
+
+    tmp.evaluate();
+    out.evaluate();
+
+    return out;
+}
+
 // TODO: this one doesn't work at all. It uses a reduction and a scan
 /*
 FImage histEqualize(FImage im) {    
@@ -217,27 +278,60 @@ int main(int argc, char **argv) {
     // Test 2: Compute horizontal derivative
     save(gradientx(im).evaluate(), "dx.png");
 
-    // Test 3: Separable Gaussian blur with timing
+    // Test 3: Convolution
+    // Make a nice sharpening filter
+    FImage filter(17, 17);
+    float sum = 0;
+    for (int fy = 0; fy < 17; fy++) {
+        for (int fx = 0; fx < 17; fx++) {
+            float dx = (fx - 8)*(fx - 8);
+            float dy = (fy - 8)*(fy - 8);
+            filter(fx, fy) = -exp(-(dx+dy)/16);
+            sum -= filter(fx, fy);
+        }
+    }
+    for (int fy = 0; fy < 17; fy++) {
+        for (int fx = 0; fx < 17; fx++) {
+            filter(fx, fy) /= sum;
+        }
+    }        
+    // Put a spike in the center
+    filter(8, 8) += 2;
+
+    FImage out(im.size[0], im.size[1], im.size[2]);
+    convolve(im, filter, out);
+    int t0, t1, t2, t3;
+    out.evaluate(&t0);
+    save(out, "sharp.png");
+    t1 = timeGetTime();
+    convolveNative(im, filter, out);
+    t1 = timeGetTime() - t1;
+    save(out, "sharpNative.png");
+    printf("Sharpening: %d vs %d (speedup = %f)\n", t0, t1, (float)t1/t0);
+
+    // Test 4: Recursive box filter
+    save(boxFilter(im, 16), "boxFilter.png");
+
+    // Test 5: Separable Gaussian blur with timing
     FImage tmp(im.size[0], im.size[1], im.size[2]);
     FImage blurry(im.size[0], im.size[1], im.size[2]);
     const int K = 7;
-    int t0, t1;
     blur(im, K, tmp, blurry);    
     tmp.evaluate(&t0);
     blurry.evaluate(&t1);
     save(blurry, "blurry.png");
 
     // Do it in native C++ for comparison
-    int t2 = timeGetTime();
+    t2 = timeGetTime();
     blurNative(im, K, tmp, blurry);
-    int t3 = timeGetTime();
+    t3 = timeGetTime();
     save(blurry, "blurry_native.png");
 
     printf("FImage: %d %d ms\n", t0, t1);
     printf("Native: %d ms\n", t3-t2);
 
     // clock speed in cycles per millisecond
-    const double clock = 2130000.0;
+    const double clock = 3068000.0;
     long long pixels = (im.size[0]-32)*(im.size[1]-32);
     long long multiplies = pixels*im.size[2]*K;
     double f0_mpc = multiplies / (t0*clock);

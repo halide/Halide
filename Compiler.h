@@ -5,6 +5,8 @@
 #include "X64.h"
 #include "FImage.h"
 
+#include <hash_set>
+
 class Compiler {
 public:
     
@@ -15,12 +17,7 @@ public:
     //
     // 1) The bounds of X are a multiple of 4
     //
-    // 2) The derivative of all load addresses w.r.t x is 1 pixel
-    // (i.e. the number of channels * sizeof(float)). This means the following does not work:
-    // out(x, y, c) = im(2*x, y, c);
-    //
-    // TODO: Remove both of these limitations and allow for more flexible vectorization
-    void compileGather(AsmX64 *a, FImage *im);
+    void compile(AsmX64 *a, FImage *im);
 
     // TODO: Compile a reduction
 
@@ -43,6 +40,9 @@ protected:
         vector<vector<IRNode::Ptr> > &order,
         vector<uint32_t> &clobberedRegs, 
         vector<uint32_t> &outputRegs);
+
+    // Gather all descendents of a node with a particular op
+    void collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &nodes);
 
     // Remove all assigned registers
     void regClear(IRNode::Ptr node);

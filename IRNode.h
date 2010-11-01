@@ -7,10 +7,11 @@
 #include <map>
 #include <vector>
 #include <memory>
-
+#include <unordered_set>
 using namespace std;
 
 #ifndef _MSC_VER
+#include <tr1/unordered_set>
 #include <tr1/memory>
 using namespace std::tr1;
 #endif
@@ -24,10 +25,10 @@ static const char *opname[] = {"Const", "NoOp",
                                "Abs", "Floor", "Ceil", "Round",
                                "Exp", "Log", "Mod", 
                                "LT", "GT", "LTE", "GTE", "EQ", "NEQ",
-                               "And", "Or", "Nand", "Load",
+                               "And", "Or", "Nand", "Load", "Store",
                                "IntToFloat", "FloatToInt", 
                                "PlusImm", "TimesImm", 
-                               "Vector", "LoadVector", "SelectVector"};
+                               "Vector", "LoadVector", "StoreVector", "SelectVector", "ExtractScalar"};
 
 
 enum OpCode {Const = 0, NoOp, 
@@ -37,10 +38,20 @@ enum OpCode {Const = 0, NoOp,
              Exp, Log, Mod, 
              LT, GT, LTE, GTE, EQ, NEQ,
              And, Or, Nand,
-             Load,
+             Load, Store,
              IntToFloat, FloatToInt, 
              PlusImm, TimesImm, 
-             Vector, LoadVector, SelectVector};
+             Vector, LoadVector, StoreVector, SelectVector, ExtractScalar};
+
+// Here's how you hash a shared_ptr
+template<class T>
+class std::tr1::hash<std::tr1::shared_ptr<T>> {
+public:
+    size_t operator()(const std::tr1::shared_ptr<T>& key) const {
+        return (size_t)key.get();
+    }
+};
+
 
 // One node in the intermediate representation
 class IRNode {
@@ -48,6 +59,7 @@ public:
 
     typedef shared_ptr<IRNode> Ptr;
     typedef weak_ptr<IRNode> WeakPtr;
+    typedef unordered_set<Ptr> PtrSet;
     #define NULL_IRNODE_PTR (IRNode::Ptr((IRNode*)NULL))
 
     enum Type {Unknown = 0, Float, Bool, Int};   
@@ -67,6 +79,10 @@ public:
     // modulus. This is useful for reasoning about alignment.
     unsigned int modulus;
     int remainder;    
+
+    // Bounds for integer nodes. Inclusive. Necessary for vars. Useful
+    // for reasoning about overflow and signedness.
+    int min, max;
 
     // Inputs - whose values do I depend on?
     vector<Ptr> inputs;    
@@ -112,6 +128,24 @@ public:
                     Ptr input4 = NULL_IRNODE_PTR,
                     int64_t ival = 0,
                     float fval = 0.0f);
+
+
+    // Alternative versions for common cases
+    static Ptr make(OpCode opcode, 
+                    Ptr input1, 
+                    int64_t ival) {
+        return make(opcode, input1, NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, ival, 0.0f);
+    }
+
+    static Ptr make(OpCode opcode, 
+                    Ptr input1, 
+                    Ptr input2,
+                    int64_t ival) {
+        return make(opcode, input1, input2, NULL_IRNODE_PTR, NULL_IRNODE_PTR, ival, 0.0f);
+    }
+
+
+
 
 
     // Return an optimized version of this node. Most optimizations
@@ -184,6 +218,9 @@ protected:
     void collectSum(vector<pair<Ptr, bool> > &terms, bool positive = true);
 
 };
+
+
+
 
 
 #endif
