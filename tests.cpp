@@ -163,6 +163,7 @@ void convolveNative(FImage im, FImage filter, FImage &out) {
     }
 }
 
+// This doesn't work yet - it only compiles the first definition
 FImage boxFilter(FImage im, int size) {
     Range x(size/2, im.size[0]-size/2);
     Range y(size/2, im.size[1]-size/2);
