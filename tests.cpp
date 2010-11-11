@@ -87,9 +87,11 @@ void blur(FImage im, const int K, FImage &tmp, FImage &output) {
     Range y(16, im.size[1]-16);
     Range c(0, im.size[2]);
 
+
     Expr blurX = 0;
     for (int i = -K/2; i <= K/2; i++) 
         blurX += im(x+i, y, c)*g[i+K/2];
+
     tmp(x, y, c) = blurX;
 
     Expr blurY = 0;
@@ -207,7 +209,7 @@ FImage histEqualize(FImage im) {
     // Compute the cumulative distribution by scanning along the
     // histogram
     FImage cdf(hist.size[0], im.size[2]);    
-    cdf(0, c) = 0;
+    cdf(0, c) = 0; 
     x = Range(1, hist.size[0]);
     cdf(x, c) = cdf(x-1, c) + hist(x, c);
 
@@ -218,6 +220,91 @@ FImage histEqualize(FImage im) {
     equalized(x, y, c) = cdf(floor(im(x, y, c)*256), c);
 
     return equalized;
+}
+
+FImage bilateral(FImage im, float spatialSigma, float rangeSigma) {
+    // Allocate a bilateral grid
+    FImage grid(ceil(im.size[0]/spatialSigma), ceil(im.size[1]/spatialSigma), ceil(1/rangeSigma), im.size[2]+1);
+
+    Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+
+    // Trilinear splat
+    Range c(0, im.size[2]);
+
+    int cellWidth = im.size[0]/grid.size[0];
+    int cellHeight = im.size[1]/grid.size[1];
+    Range gx(0, grid.size[0]);
+    Range gy(0, grid.size[1]);
+    Range dx(0, cellWidth*2);
+    Range dy(0, cellHeight*2);        
+
+    Expr weightXY = (1 - abs(dx - cellWidth)/cellWidth)*(1 - abs(dy - cellHeight)/cellHeight);
+    Expr imX = gx*cellWidth + dx, imY = gy*cellHeight + dy;    
+    Expr gridZ = sum(c, im(imX, imY, c))/im.size[2];
+    Expr weightZ = gridZ - floor(gridZ);
+
+    grid(gx, gy, floor(gridZ), c) += im(imX, imY, c) * weightXY * (1-weightZ);
+    grid(gx, gy, floor(gridZ)+1, c) += im(imX, imY, c) * weightXY * weightZ;
+
+    / Alternatively do a splat from each input pixel. Has more contention.
+    for (int dx = 0; dx < 2; dx++) {
+        for (int dy = 0; dy < 2; dy++) {
+            for (int dz = 0; dz < 2; dz++) {
+                Expr weight = abs(1-dx-alphaX)*abs(1-dy-alphaY)*abs(1-dz-alphaZ);
+                grid(gridX+dx, gridY+dy, gridZ+dz, c) += im(x, y, c) * weight;
+                grid(gridX+dx, gridY+dy, gridZ+dz, im.size[2]) += weight;
+            }
+        }
+    }
+    /
+
+    // Blur
+    FImage blurryGridX(grid.size[0], grid.size[1], grid.size[2], grid.size[3]);
+    FImage blurryGridXY(grid.size[0], grid.size[1], grid.size[2], grid.size[3]);
+    FImage blurryGridXYZ(grid.size[0], grid.size[1], grid.size[2], grid.size[3]);
+    
+    x = Range(1, grid.size[0]-1);
+    y = Range(0, grid.size[1]);
+    z = Range(0, grid.size[2]);
+    c = Range(0, grid.size[3]);
+
+    blurryGridX(x, y, z, c) = (grid(x-1, y, z, c) + 2*grid(x, y, z, c) + grid(x+1, y, z, c))/4;
+
+    y = Range(1, grid.size[1]-1);
+    blurryGridXY(x, y, z, c) = (blurryGridX(x, y-1, z, c) + 2*blurryGridX(x, y, z, c) + blurryGridX(x, y+1, z, c))/4;
+
+    z = Range(1, grid.size[2]-1);
+    blurryGridXYZ(x, y, z, c) = (blurryGridXY(x, y, z-1, c) + 2*blurryGridXY(x, y, z, c) + blurryGridXY(x, y, z+1, c))/4;
+
+    // Trilinear slice
+    FImage out(im.size[0], im.size[1], im.size[2]);
+
+    Expr gridX = x / spatialSigma;
+    Expr gridY = y / spatialSigma;
+    Expr gridZ = sum(c, im(x, y, c))/im.size[2];    
+
+    Expr alphaX = gridX - floor(gridX);
+    Expr alphaY = gridY - floor(gridY);
+    Expr alphaZ = gridZ - floor(gridZ);
+
+    gridX -= floor(gridX);
+    gridY -= floor(gridY);
+    gridZ -= floor(gridZ);   
+
+    x = Range(0, out.size[0]);
+    y = Range(0, out.size[1]);
+    c = Range(0, out.size[2]);
+
+    for (int dx = 0; dx < 2; dx++) {
+        for (int dy = 0; dy < 2; dy++) {
+            for (int dz = 0; dz < 2; dz++) {
+                Expr weight = abs(1-dx-alphaX)*abs(1-dy-alphaY)*abs(1-dz-alphaZ);
+                out(x, y, c) += weight * blurryGridXYZ(gridX+dx, gridY+dy, gridZ+dz, c);
+            }
+        }
+    }    
+
+    return out;
 }
 */
 
