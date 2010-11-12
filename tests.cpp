@@ -198,7 +198,7 @@ FImage boxFilter(FImage im, int size) {
 }
 
 // TODO: this one doesn't work at all. It uses a reduction and a scan
-/*
+#if 0
 FImage histEqualize(FImage im) {    
     // 256-bin Histogram
     FImage hist(256, im.size[2]);
@@ -246,7 +246,21 @@ FImage bilateral(FImage im, float spatialSigma, float rangeSigma) {
     grid(gx, gy, floor(gridZ), c) += im(imX, imY, c) * weightXY * (1-weightZ);
     grid(gx, gy, floor(gridZ)+1, c) += im(imX, imY, c) * weightXY * weightZ;
 
-    / Alternatively do a splat from each input pixel. Has more contention.
+    columnInputs = (im[...];
+    gridColumn = grid[x][y][..];
+    reduce(columnInputs, lambda (i:float, in:GridColumn) -> GridColumn {
+               update = (0 0 ... 1 ... 0) // with the 1 at index i.z
+               return k + update;
+               
+               // or: pass in logical in and out variables, preallocated?
+               
+           });
+    
+    
+    im(x, y) sends (\col -> col[i] += 1) to grid(x/10, y/10)
+
+
+    /* Alternatively do a splat from each input pixel. Has more contention.
     for (int dx = 0; dx < 2; dx++) {
         for (int dy = 0; dy < 2; dy++) {
             for (int dz = 0; dz < 2; dz++) {
@@ -256,7 +270,7 @@ FImage bilateral(FImage im, float spatialSigma, float rangeSigma) {
             }
         }
     }
-    /
+    */
 
     // Blur
     FImage blurryGridX(grid.size[0], grid.size[1], grid.size[2], grid.size[3]);
@@ -306,7 +320,7 @@ FImage bilateral(FImage im, float spatialSigma, float rangeSigma) {
 
     return out;
 }
-*/
+#endif //0
 
 
 /*
