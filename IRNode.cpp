@@ -619,7 +619,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     }
 
     // Unaligned vector loads that may have nearby aligned loads
-    // should just use VSelect on the aligned loads instead
+    // should just use ExtractVector on the aligned loads instead
     if (opcode == LoadVector && 
         !(inputs[0]->modulus & 15)) {
         int64_t offset = (inputs[0]->remainder + ival) & 15;
