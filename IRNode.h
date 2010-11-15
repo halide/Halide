@@ -28,7 +28,7 @@ static const char *opname[] = {"Const", "NoOp",
                                "And", "Or", "Nand", "Load", "Store",
                                "IntToFloat", "FloatToInt", 
                                "PlusImm", "TimesImm", 
-                               "Vector", "LoadVector", "StoreVector", "SelectVector", "ExtractScalar"};
+                               "Vector", "LoadVector", "StoreVector", "ExtractVector", "ExtractScalar"};
 
 
 enum OpCode {Const = 0, NoOp, 
@@ -41,7 +41,7 @@ enum OpCode {Const = 0, NoOp,
              Load, Store,
              IntToFloat, FloatToInt, 
              PlusImm, TimesImm, 
-             Vector, LoadVector, StoreVector, SelectVector, ExtractScalar};
+             Vector, LoadVector, StoreVector, ExtractVector, ExtractScalar};
 
 // Here's how you hash a shared_ptr
 template<class T>
