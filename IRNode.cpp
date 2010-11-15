@@ -253,14 +253,14 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         t = Float;
         break;
 
-    case SelectVector:
+    case ExtractVector:
         assert(inputs.size() == 2, 
                "Wrong number of inputs for opcode: %s %d\n",
                opname[opcode], inputs.size());
         assert(inputs[0]->width == inputs[1]->width && inputs[0]->width > 1, 
-               "SelectVector requires vector arguments\n");
+               "ExtractVector requires vector arguments\n");
         assert(ival > 0 && ival < inputs[0]->width, 
-               "SelectVector requires an int immediate greater than zero and less than the vector width\n");
+               "ExtractVector requires an int immediate greater than zero and less than the vector width\n");
         w = inputs[0]->width;
         t = inputs[0]->type;
         break;
@@ -456,8 +456,8 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     // (x+a)*b = x*b + a*b (where a and b are both constant integers)
     if (opcode == TimesImm && inputs[0]->op == PlusImm) {
         return make(PlusImm, 
-                    make(TimesImm, inputs[0]->inputs[0], NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, ival),
-                    NULL_IRNODE_PTR, NULL_IRNODE_PTR, NULL_IRNODE_PTR, ival * inputs[0]->ival);
+                    make(TimesImm, inputs[0]->inputs[0], ival),
+                    ival * inputs[0]->ival);
     }
 
     // (x*a)*b = x*(a*b) where a and b are more const than x. This
@@ -635,7 +635,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
             // kernel. We really need contexts or something.
             if (n1->outputs.size() || n2->outputs.size() || 1) {
                 printf("Converting unaligned load to two aligned loads\n");
-                return make(SelectVector, n1, n2, offset/4);
+                return make(ExtractVector, n1, n2, offset/4);
             }
         }
     }
@@ -821,8 +821,8 @@ void IRNode::printExp() {
         inputs[1]->printExp();
         printf(")");
         break;        
-    case SelectVector:
-        printf("SelectVector(");
+    case ExtractVector:
+        printf("ExtractVector(");
         inputs[0]->printExp();
         printf(", ");
         inputs[1]->printExp();
@@ -908,8 +908,8 @@ void IRNode::print() {
     case Store:
         printf("Store %s + %lld, %s", args[0].c_str(), ival, args[1].c_str());
         break;
-    case SelectVector:
-        printf("SelectVector %s %s %lld", args[0].c_str(), args[1].c_str(), ival);
+    case ExtractVector:
+        printf("ExtractVector %s %s %lld", args[0].c_str(), args[1].c_str(), ival);
         break;
     case ExtractScalar:
         printf("ExtractScalar %s %lld", args[0].c_str(), ival);

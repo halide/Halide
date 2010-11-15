@@ -95,14 +95,18 @@ void Compiler::compile(AsmX64 *a, FImage *im) {
         vectorDim = i;
     }
 
+    // Right now we only vectorize across vars with store delta of 4
+    if (storeDelta[vectorDim] != 4) vectorize = false;
+
     vector<int> vectorWidth(vars.size(), 1);
-    if (vectorize) vectorWidth[vectorDim] = 4;
+    if (vectorize) {
+        vectorWidth[vectorDim] = 4;
 
-    // Let the compiler know that the innermost var will be a multiple
-    // of four because we're vectorizing across it
-    vars[vectorDim]->modulus = 4;
-    vars[vectorDim]->remainder = 0;
-
+        // Let the compiler know that the innermost var will be a multiple
+        // of four because we're vectorizing across it
+        vars[vectorDim]->modulus = 4;
+        vars[vectorDim]->remainder = 0;
+    }
 
     printf("Compiling: ");
     def->printExp();
@@ -128,9 +132,10 @@ void Compiler::compile(AsmX64 *a, FImage *im) {
     vector<int> unroll(vars.size(), 1);
 
     // This should be smarter, right now we just unroll by 2 in the
-    // two innermost vars. Assumes they have even bounds.
+    // innermost var. Assumes they have even bounds.
+
+    // TODO: currently unrolling doesn't respect load-store ordering, so it messes up reductions
     //unroll[unroll.size()-1] = 2;
-    //unroll[unroll.size()-2] = 2;
 
     vector<IRNode::Ptr> roots(unroll[0]*unroll[1]*unroll[2]);
     roots[0] = def;
@@ -600,7 +605,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
                 panic("IntToFloat can only go from gpr to sse\n");
             }
             break;
-        case SelectVector:
+        case ExtractVector:
             assert(!gpr && !gpr1 && !gpr2, "Can only select vector in sse regs\n");
             if (node->ival == 1) {
                 if (dst == src1) {                                        
@@ -644,7 +649,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
                     a->shufps(dst, src2, 0, 2, 1, 2);
                 }
             } else {
-                panic("Can't deal with SelectVector with argument other than 1, 2, or 3\n");
+                panic("Can't deal with ExtractVector with argument other than 1, 2, or 3\n");
             }
             break;
         case ExtractScalar:
