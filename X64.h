@@ -5,6 +5,7 @@
 #ifdef _MSC_VER
 #include <windows.h>
 #else //!_MSC_VER
+#include <assert>
 #include <sys/mman.h>
 typedef unsigned long DWORD;
 #endif

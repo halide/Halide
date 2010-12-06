@@ -6,14 +6,15 @@
 #include <string>
 #include <map>
 #include <vector>
-#include <memory>
-#include <unordered_set>
 using namespace std;
 
 #ifndef _MSC_VER
 #include <tr1/unordered_set>
 #include <tr1/memory>
 using namespace std::tr1;
+#else
+#include <memory>
+#include <unordered_set>
 #endif
 
 void panic(const char *fmt, ...);
@@ -44,14 +45,17 @@ enum OpCode {Const = 0, NoOp,
              Vector, LoadVector, StoreVector, ExtractVector, ExtractScalar};
 
 // Here's how you hash a shared_ptr
-template<class T>
-class std::tr1::hash<std::tr1::shared_ptr<T>> {
-public:
-    size_t operator()(const std::tr1::shared_ptr<T>& key) const {
-        return (size_t)key.get();
+namespace std {
+    namespace tr1 {
+        template<class T>
+        class hash<shared_ptr<T> > {
+        public:
+            size_t operator()(const shared_ptr<T>& key) const {
+                return (size_t)key.get();
+            }
+        };
     }
-};
-
+}
 
 // One node in the intermediate representation
 class IRNode {

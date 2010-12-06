@@ -5,8 +5,6 @@
 #include "X64.h"
 #include "FImage.h"
 
-#include <hash_set>
-
 class Compiler {
 public:
     
