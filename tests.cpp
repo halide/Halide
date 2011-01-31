@@ -62,11 +62,14 @@ FImage conditionalBrighten(FImage im) {
 }
 
 FImage gradientx(FImage im) {
-    // TODO: make x.min = 1, and allow the base case definition
+    // TODO: make x.min = 1
     
     Range x(4, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
     FImage dx(im.size[0], im.size[1], im.size[2]);
-    //dx(0, y, c) = im(0, y, c);    
+    dx(0, y, c) = 0.5f;    
+    dx(1, y, c) = im(1, y, c) - im(0, y, c) + 0.5f;    
+    dx(2, y, c) = im(2, y, c) - im(1, y, c) + 0.5f;
+    dx(3, y, c) = im(3, y, c) - im(2, y, c) + 0.5f; 
     dx(x, y, c) = (im(x, y, c) - im(x-1, y, c))+0.5f;
     return dx;
 }
@@ -112,9 +115,9 @@ void blurNative(FImage im, const int K, FImage &tmp, FImage &output) {
         g[i] /= sum;
     }
 
-    for (int c = 0; c < im.size[2]; c++) {
-        for (int y = 16; y < im.size[1]-16; y++) {            
-            for (int x = 16; x < im.size[0]-16; x++) {
+    for (int c = 0; c < (int)im.size[2]; c++) {
+        for (int y = 16; y < (int)im.size[1]-16; y++) {            
+            for (int x = 16; x < (int)im.size[0]-16; x++) {
                 float blurX = 0;
                 for (int i = -K/2; i <= K/2; i++) 
                     blurX += im(x+i, y, c)*g[i+K/2];
@@ -123,9 +126,9 @@ void blurNative(FImage im, const int K, FImage &tmp, FImage &output) {
         }
     }
 
-    for (int c = 0; c < im.size[2]; c++) {
-        for (int y = 16; y < im.size[1]-16; y++) {            
-            for (int x = 16; x < im.size[0]-16; x++) {
+    for (int c = 0; c < (int)im.size[2]; c++) {
+        for (int y = 16; y < (int)im.size[1]-16; y++) {            
+            for (int x = 16; x < (int)im.size[0]-16; x++) {
                 float blurY = 0;
                 for (int i = -K/2; i <= K/2; i++) 
                     blurY += tmp(x, y+i, c)*g[i+K/2];
@@ -151,12 +154,12 @@ void convolve(FImage im, FImage filter, FImage &out) {
 void convolveNative(FImage im, FImage filter, FImage &out) {
     int mx = filter.size[0]/2;
     int my = filter.size[1]/2;
-    for (int c = 0; c < im.size[2]; c++) {
-        for (int y = my; y < im.size[1]-my; y++) {
-            for (int x = mx; x < im.size[0]-mx; x++) {
+    for (int c = 0; c < (int)im.size[2]; c++) {
+        for (int y = my; y < (int)im.size[1]-my; y++) {
+            for (int x = mx; x < (int)im.size[0]-mx; x++) {
                 out(x, y, c) = 0.0f;
-                for (int fy = 0; fy < filter.size[1]; fy++) {
-                    for (int fx = 0; fx < filter.size[0]; fx++) {
+                for (int fy = 0; fy < (int)filter.size[1]; fy++) {
+                    for (int fx = 0; fx < (int)filter.size[0]; fx++) {
                         out(x, y, c) += im(x + fx - mx, y + fy - my, c) * filter(fx, fy);
                     }
                 }
@@ -178,7 +181,7 @@ FImage boxFilter(FImage im, int size) {
     // Ramp up
     x = Range(1, size/2);
     tmp(0, y, c) += im(x, y, c)/size;
-    tmp(x, y, c) = tmp(x-1, y, c) + im(x+size/2, y, c)/size;
+    //tmp(x, y, c) = tmp(x-1, y, c) + im(x+size/2, y, c)/size;
 
     // Steady-state
     x = Range(size/2, im.size[0]-size/2);
@@ -186,18 +189,19 @@ FImage boxFilter(FImage im, int size) {
 
     // Ramp down
     x = Range(im.size[0]-size/2, im.size[0]);
-    tmp(x, y, c) = tmp(x-1, y, c) - im(x-size/2, y, c)/size;
+    //tmp(x, y, c) = tmp(x-1, y, c) - im(x-size/2, y, c)/size;
 
     // blur in Y
-    out(x, y, c) = out(x, y-1, c) + (tmp(x, y+size/2, c) - tmp(x, y-size/2, c))/size;
+    //out(x, y, c) = out(x, y-1, c) + (tmp(x, y+size/2, c) - tmp(x, y-size/2, c))/size;
 
     tmp.evaluate();
-    out.evaluate();
+    //out.evaluate();
 
-    return out;
+    return tmp;
 }
 
 // TODO: this one doesn't work at all. It uses a reduction and a scan
+
 #if 0
 FImage histEqualize(FImage im) {    
     // 256-bin Histogram
@@ -369,16 +373,16 @@ int main(int argc, char **argv) {
     Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
 
     // Test 0: Do nothing apart from copy the input to the output
-    save(doNothing(im).evaluate(), "identity.png");
+    save(doNothing(im).evaluate(), "test_identity.png");
 
     // Test 1: Add one to an image
-    save(brighten(im).evaluate(), "bright.png");
+    save(brighten(im).evaluate(), "test_bright.png");
 
     // Test 1.5: Conditionally add one to an image
-    save(conditionalBrighten(im).evaluate(), "condBrighten.png");
+    save(conditionalBrighten(im).evaluate(), "test_cond_brighten.png");
 
     // Test 2: Compute horizontal derivative
-    save(gradientx(im).evaluate(), "dx.png");
+    save(gradientx(im).evaluate(), "test_dx.png");
 
     // Test 3: Convolution
     // Make a nice sharpening filter
@@ -404,15 +408,15 @@ int main(int argc, char **argv) {
     convolve(im, filter, out);
     int t0, t1, t2, t3;
     out.evaluate(&t0);
-    save(out, "sharp.png");
+    save(out, "test_sharp.png");
     t1 = timeGetTime();
     convolveNative(im, filter, out);
     t1 = timeGetTime() - t1;
-    save(out, "sharpNative.png");
+    save(out, "test_sharpNative.png");
     printf("Sharpening: %d vs %d (speedup = %f)\n", t0, t1, (float)t1/t0);
 
     // Test 4: Recursive box filter
-    save(boxFilter(im, 16), "boxFilter.png");
+    save(boxFilter(im, 16), "test_box_filter.png");
 
     // Test 5: Separable Gaussian blur with timing
     FImage tmp(im.size[0], im.size[1], im.size[2]);
@@ -421,13 +425,13 @@ int main(int argc, char **argv) {
     blur(im, K, tmp, blurry);    
     tmp.evaluate(&t0);
     blurry.evaluate(&t1);
-    save(blurry, "blurry.png");
+    save(blurry, "test_blurry.png");
 
     // Do it in native C++ for comparison
     t2 = timeGetTime();
     blurNative(im, K, tmp, blurry);
     t3 = timeGetTime();
-    save(blurry, "blurry_native.png");
+    save(blurry, "test_blurry_native.png");
 
     printf("FImage: %d %d ms\n", t0, t1);
     printf("Native: %d ms\n", t3-t2);

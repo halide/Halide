@@ -116,8 +116,7 @@ Range::Range() {
 }
 
 Range::Range(int a, int b) : Expr(IRNode::make(Var)) {
-    node->min = a;
-    node->max = b-1;
+    node->interval.setBounds(a, b-1);
 }
 
 // Make an MemRef reference to a particular pixel. It can be used as an
@@ -199,7 +198,8 @@ FImage::FImage(uint32_t a) {
     size[0] = a;
     stride[0] = 1;
     // TODO: enforce alignment, lazy allocation, etc, etc
-    data = new float[a];
+    buffer.reset(new vector<float>(a + 8));
+    data = &(*buffer)[0] + 4;
 }
 
 FImage::FImage(uint32_t a, uint32_t b) {
@@ -209,7 +209,8 @@ FImage::FImage(uint32_t a, uint32_t b) {
     size[1] = b;
     stride[0] = 1;
     stride[1] = a;
-    data = new float[a*b];
+    buffer.reset(new vector<float>(a*b + 8));
+    data = &(*buffer)[0] + 4;
 }
 
 FImage::FImage(uint32_t a, uint32_t b, uint32_t c) {
@@ -221,7 +222,9 @@ FImage::FImage(uint32_t a, uint32_t b, uint32_t c) {
     stride[0] = 1;
     stride[1] = a;
     stride[2] = a*b;
-    data = new float[a*b*c];
+    buffer.reset(new vector<float>(a*b*c + 8));
+    data = &(*buffer)[0] + 4;
+
 }
 
 FImage::FImage(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
@@ -235,10 +238,13 @@ FImage::FImage(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
     stride[1] = a;
     stride[2] = a*b;
     stride[3] = a*b*c;
-    data = new float[a*b*c*d];
+    buffer.reset(new vector<float>(a*b*c*d + 8));
+    data = &(*buffer)[0] + 4;
 }
 
-
+FImage::~FImage() {
+    //delete[] (data-4);
+}
 
 // Generate an MemRef reference to a (computed) location in this image
 // that can be used as an assignment target, and can also be cast to
@@ -278,8 +284,7 @@ void FImage::debug() {
 }
 
 FImage &FImage::evaluate(int *time) {
-    // For now we assume the sole definition of this FImage is a very
-    // simple gather
+
     Compiler c;
     AsmX64 a;    
     printf("Compiling...\n"); fflush(stdout);

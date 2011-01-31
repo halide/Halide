@@ -5,16 +5,50 @@
 
 void Compiler::collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &nodes) {
     if (node->op == op) nodes.insert(node);
-    for (int i = 0; i < node->inputs.size(); i++) {
+    for (size_t i = 0; i < node->inputs.size(); i++) {
         collectInputs(node->inputs[i], op, nodes);
     }
 }
 
-// Compile the evaluation of a single FImage
 void Compiler::compile(AsmX64 *a, FImage *im) {
-    printf("Image has %d definitions.\n", im->definitions.size()); fflush(stdout);
-    // Only consider the first definition for now
-    IRNode::Ptr def = im->definitions[0].node;
+
+    // Align the stack to a 16-byte boundary - it always comes in
+    // offset by 8 bytes because it contains the 64-bit return
+    // address.
+    a->sub(a->rsp, 8);
+        
+    // Save all the registers that the 64-bit C abi tells us we're
+    // supposed to. This maintains stack alignment.
+    a->pushNonVolatiles();
+        
+
+    // Compile a chunk of code that just runs the definitions in order
+    for (int i = 0; i < (int)im->definitions.size(); i++) {
+        // TODO: loop fusion between definitions
+        compileDefinition(a, im, i);
+    }
+
+    // Pop the stack and return
+    a->popNonVolatiles();
+    a->add(a->rsp, 8);
+    a->ret();        
+
+    printf("Saving object file\n");
+
+    // Save an object file that you can use dumpbin on to inspect
+    a->saveCOFF("generated.obj");        
+    a->saveELF("generated.o");
+}
+
+// Compile the evaluation of a single FImage
+void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
+    printf("Compiling definition %d/%d.\n",
+           definition+1, (int)im->definitions.size());    
+
+    IRNode::Ptr def = im->definitions[definition].node;
+
+    def->printExp();
+    printf("\n");
 
     // It should be a store or storeVector node.
     assert(def->op == Store || def->op == StoreVector, "Definitions of images should be Store nodes\n");
@@ -78,8 +112,9 @@ void Compiler::compile(AsmX64 *a, FImage *im) {
 
     // Check all the vars have sane bounds.
     for (size_t i = 0; i < vars.size(); i++) {
-        printf("Var %d : [%d %d]\n", i, vars[i]->min, vars[i]->max);
-        assert(vars[i]->max >= vars[i]->min, "Variable %d has undefined bounds\n");
+        printf("Var %d : [%ld %ld]\n", (int)i,
+               vars[i]->interval.min(), vars[i]->interval.max());
+        assert(vars[i]->interval.bounded(), "Variable %d has undefined bounds\n");
     }
 
     // Should we vectorize across the loop vars? Right now the answer
@@ -98,21 +133,28 @@ void Compiler::compile(AsmX64 *a, FImage *im) {
     // Right now we only vectorize across vars with store delta of 4
     if (storeDelta[vectorDim] != 4) vectorize = false;
 
+    // Can't vectorize across a variable with recursive dependencies
+    // of < 4. So find all load that depend on this var, subtract the
+    // store address, and see if it could be < 4.
+
     vector<int> vectorWidth(vars.size(), 1);
     if (vectorize) {
         vectorWidth[vectorDim] = 4;
 
         // Let the compiler know that the innermost var will be a multiple
         // of four because we're vectorizing across it
-        vars[vectorDim]->modulus = 4;
-        vars[vectorDim]->remainder = 0;
+        vars[vectorDim]->interval.setCongruence(0, 4);
     }
+
+    // Now that bounds and congruences are set, do static analysis
+    def->analyze();
 
     printf("Compiling: ");
     def->printExp();
     printf("\n");
 
-    // Do a final optimization pass now that levels are assigned.
+    // Do a final optimization pass now that levels are assigned and
+    // static analysis is done.
     IRNode::saveDot("before.dot");
     def = def->optimize();
 
@@ -135,8 +177,10 @@ void Compiler::compile(AsmX64 *a, FImage *im) {
     // innermost var. Assumes they have even bounds.
 
     // TODO: currently unrolling doesn't respect load-store ordering, so it messes up reductions
+    // TODO: Also, this unrolling code is hardcoded to be 3-variables
     //unroll[unroll.size()-1] = 2;
 
+    /*
     vector<IRNode::Ptr> roots(unroll[0]*unroll[1]*unroll[2]);
     roots[0] = def;
     for (int i = 0; i < unroll[0]; i++) {
@@ -157,6 +201,9 @@ void Compiler::compile(AsmX64 *a, FImage *im) {
             }
         }
     }
+    */
+    vector<IRNode::Ptr> roots(1);
+    roots[0] = def;
 
     IRNode::saveDot("after.dot");
 
@@ -175,23 +222,23 @@ void Compiler::compile(AsmX64 *a, FImage *im) {
     
     for (IRNode::PtrSet::iterator storeIter = storeSet.begin();
          storeIter != storeSet.end(); storeIter++) {
-        IRNode::Ptr store = *storeIter;
-        int64_t storeMin = lhs->min + store->ival;
-        int64_t storeMax = lhs->max + store->ival;
-        printf("Store address bounds: %d %d\n", storeMin, storeMax);
+        IRNode::Ptr store = *storeIter;        
+        SteppedInterval storeRange = lhs->interval + store->ival;
+        printf("Store address bounds: %ld %ld\n", storeRange.min(), storeRange.max());
         for (IRNode::PtrSet::iterator loadIter = loadSet.begin();
              loadIter != loadSet.end(); loadIter++) {
             IRNode::Ptr load = *loadIter;
             IRNode::Ptr loadAddr = load->inputs[0];
-            int64_t loadMin = loadAddr->min + load->ival;
-            int64_t loadMax = loadAddr->max + load->ival;
-            printf("Load address bounds: %d : %d\n", loadMin, loadMax);
+            SteppedInterval loadRange = loadAddr->interval + load->ival;
+            printf("Load address bounds: %ld : %ld\n", loadRange.min(), loadRange.max());
             
-            if (loadMin >= storeMin && loadMin <= storeMax ||
-                loadMax >= storeMin && loadMax <= storeMin) {
+            int64_t distance = abs(loadRange - storeRange).min();
+            if (distance == 0) {
                 printf("Possible aliasing detected\n");
                 printf("Promoting load at loop level %d to loop level %d\n", load->level, store->level);
                 load->assignLevel(def->level);
+            } else {
+                printf("Load and store come within %ld of each other\n", distance);
             }
         }
     }   
@@ -258,23 +305,16 @@ void Compiler::compile(AsmX64 *a, FImage *im) {
         }
     }
     
-
-    // Align the stack to a 16-byte boundary - it always comes in
-    // offset by 8 bytes because it contains the 64-bit return
-    // address.
-    a->sub(a->rsp, 8);
-        
-    // Save all the registers that the 64-bit C abi tells us we're
-    // supposed to. This maintains stack alignment.
-    a->pushNonVolatiles();
-        
     compileBody(a, order[0]);
 
-    char *labels[] = {"l0", "l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8"};
+    char labels[10][20];
+    for (int i = 0; i < 10; i++) {
+        snprintf(labels[i], 20, "l%d.%d", definition, i);
+    }
 
     for (size_t i = 0; i < vars.size(); i++) {
-        printf("Starting loop %d\n", i);
-        a->mov(varRegs[i], vars[i]->min);
+        printf("Starting loop %d\n", (int)i);
+        a->mov(varRegs[i], vars[i]->interval.min());
         a->label(labels[i]); 
     
         compileBody(a, order[i+1]);
@@ -282,19 +322,11 @@ void Compiler::compile(AsmX64 *a, FImage *im) {
 
     for (int i = (int)vars.size()-1; i >= 0; i--) {
         a->add(varRegs[i], vectorWidth[i]*unroll[i]);
-        a->cmp(varRegs[i], vars[i]->max+1);
+        a->cmp(varRegs[i], vars[i]->interval.max()+1);
         a->jl(labels[i]);
     }
 
-    // Pop the stack and return
-    a->popNonVolatiles();
-    a->add(a->rsp, 8);
-    a->ret();        
 
-    printf("Saving object file\n");
-
-    // Save an object file that you can use dumpbin on to inspect
-    a->saveCOFF("generated.obj");        
 }
     
 // Generate machine code for a vector of IRNodes. Registers must have already been assigned.
@@ -322,10 +354,10 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
         bool gpr = node->reg < 16;
 
         // Which sources are GPRs?
-        bool gpr1 = c1 && c1->reg < 16;
-        bool gpr2 = c2 && c2->reg < 16;
-        bool gpr3 = c3 && c3->reg < 16;
-        bool gpr4 = c4 && c4->reg < 16;
+        bool gpr1 = c1 && (c1->reg < 16);
+        bool gpr2 = c2 && (c2->reg < 16);
+        //bool gpr3 = c3 && (c3->reg < 16);
+        //bool gpr4 = c4 && (c4->reg < 16);
 
         // GPR source and destination registers
         AsmX64::Reg gdst(node->reg);
@@ -446,7 +478,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
             }
             break;
         case TimesImm:
-            assert(abs(node->ival) >> 32 == 0, 
+            assert(fits32(node->ival), 
                    "TimesImm may only use a 32-bit signed constant\n");
             if (gdst == gsrc1) {
                 a->imul(gdst, (int32_t)node->ival);
@@ -456,7 +488,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
             }
             break;
         case PlusImm:
-            assert(abs(node->ival) >> 32 == 0,
+            assert(fits32(node->ival),
                    "PlusImm may only use a 32-bit signed constant\n");
             if (gdst == gsrc1) {
                 a->add(gdst, (int32_t)node->ival);
@@ -595,7 +627,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
         case Round:
         case Abs:               
         case FloatToInt:
-            panic("Not implemented: %s\n", opname[node->op]);                
+            panic("Not implemented: %s\n", opname(node->op));                
             break;
         case IntToFloat:
             if (gpr1 && !gpr) {
@@ -665,14 +697,15 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
         case Store:
             assert(gpr1, "Can only store using addresses in gprs\n");
             assert(!gpr2, "Can only store values in sse registers\n");
-            assert(abs(node->ival) >> 32 == 0,
+            assert(fits32(node->ival),
                    "Store may only use a 32-bit signed constant\n");
             if (node->width == 1) {
                 a->movss(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
             } else {
-                int modulus = node->inputs[0]->modulus;
-                int remainder = (node->inputs[0]->remainder + node->ival) % modulus;
-                if ((modulus & 0xf) == 0 && (remainder & 0xf) == 0) {
+                SteppedInterval i = node->inputs[0]->interval + node->ival;
+                printf("%ld %ld %ld %ld\n", i.min(), i.max(), i.remainder(), i.modulus());
+                if ((i.modulus() & 0xf) == 0 &&
+                    (i.remainder() & 0xf) == 0) {
                     a->movaps(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
                 } else {
                     printf("Unaligned store!\n");
@@ -684,15 +717,14 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
         case Load:
             assert(gpr1, "Can only load using addresses in gprs\n");
             assert(!gpr, "Can only load into sse regs\n");
-            assert(abs(node->ival) >> 32 == 0,
+            assert(fits32(node->ival),
                    "Load may only use a 32-bit signed constant\n");
             if (node->width == 1) {
                 a->movss(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
             } else {
-                int modulus = node->inputs[0]->modulus;
-                int remainder = (node->inputs[0]->remainder + node->ival) % modulus;
-                if ((modulus & 0xf) == 0 && (remainder & 0xf) == 0) {
-                    //a->movaps(dst, a->xmm0);
+                SteppedInterval i = node->inputs[0]->interval + node->ival;
+                if ((i.modulus() & 0xf) == 0 &&
+                    (i.remainder() & 0xf) == 0) {
                     a->movaps(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
                 } else {
                     printf("Unaligned load!\n");
@@ -824,7 +856,7 @@ void Compiler::doRegisterAssignment(
     // Detect what registers get clobbered
     clobberedRegs.clear();
     clobberedRegs.resize(order.size(), 0);
-    for (int i = 0; i < order.size(); i++) {
+    for (size_t i = 0; i < order.size(); i++) {
         clobberedRegs[i] = (1<<31);
         for (size_t j = 0; j < order[i].size(); j++) {
             IRNode::Ptr node = order[i][j];
@@ -838,7 +870,7 @@ void Compiler::doRegisterAssignment(
     outputRegs.resize(order.size(), 0);
     
     if (outputRegs.size()) outputRegs[0] = 0;
-    for (int i = 1; i < order.size(); i++) {
+    for (size_t i = 1; i < order.size(); i++) {
         outputRegs[i] = 0;
         for (size_t j = 0; j < order[i].size(); j++) {
             IRNode::Ptr node = order[i][j];
@@ -868,7 +900,8 @@ void Compiler::doInstructionScheduling(
     // Gather the nodes in a depth-first manner, and resize order to
     // be big enough. Also tag each node with the minimum depth to a root plus 100.
     for (size_t i = 0; i < roots.size(); i++) {
-        if (order.size() <= roots[i]->level) order.resize(roots[i]->level+1);
+        if ((int)order.size() <= roots[i]->level)
+            order.resize(roots[i]->level+1);
         gatherDescendents(roots[i], order, 100);
     }       
 
@@ -903,7 +936,7 @@ void Compiler::doInstructionScheduling(
 
             int bestRating = 0;
             IRNode::Ptr np;
-            size_t location;
+            size_t location = 0;
             for (size_t j = i; j < order[l].size(); j++) {
                 IRNode::Ptr nj = order[l][j];
                 bool ready = true;
@@ -919,7 +952,7 @@ void Compiler::doInstructionScheduling(
                     IRNode::Ptr nk = nj->inputs[k];
 
                     // Can't clobber inputs from a higher level
-                    if (nk->level != l) continue;
+                    if (nk->level != (int)l) continue;
 
                     // Can't clobber external vars
                     if (nk->op == Var) continue;
@@ -1004,7 +1037,7 @@ void Compiler::regAssign(IRNode::Ptr node,
     assert(node->level || node->constant, "Cannot assign registers to a node that depends on a variable with a loop order not yet assigned.\n");
 
     // Check order is larger enough
-    assert(node->level < order.size(), "The order vector should have more levels that it does!\n");
+    assert(node->level < (int)order.size(), "The order vector should have more levels that it does!\n");
 
     // If I already have a register bail out. This may occur
     // because I was manually assigned a register outside
@@ -1209,7 +1242,7 @@ void Compiler::regAssign(IRNode::Ptr node,
     printf("Register assignments:\n");
     for (int i = 0; i < (int)regs.size(); i++) {
         if (regs[i]) {
-            printf("%d: ", i, opname[regs[i]->op]);
+            printf("%d: %s ", i, opname(regs[i]->op));
             regs[i]->printExp();
             printf("\n");
         } else if (reserved & (1<<i)) 
@@ -1222,7 +1255,7 @@ void Compiler::regAssign(IRNode::Ptr node,
     printf("\n");
     printf("Cannot clobber inputs because...\n");
     for (size_t i = 0; i < node->inputs.size(); i++) {
-        printf("Child %d has %d outputs\n", i, node->inputs[i]->outputs.size());
+        printf("Child %d has %d outputs\n", (int)i, (int)node->inputs[i]->outputs.size());
     }
     panic("Out of registers!\n");
     

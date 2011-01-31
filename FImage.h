@@ -94,12 +94,14 @@ public:
     FImage(uint32_t, uint32_t, uint32_t);
     FImage(uint32_t, uint32_t, uint32_t, uint32_t);
 
+    ~FImage();
+
     // Make an assignable reference to a location in the image (e.g. im(x, y, c))
     MemRef operator()(Expr);
     MemRef operator()(Expr, Expr);
     MemRef operator()(Expr, Expr, Expr);
     MemRef operator()(Expr, Expr, Expr, Expr);
-
+    
     // Actually look something up in the image. Won't return anything
     // interesting if the image hasn't been evaluated yet.
     float &operator()(int a) {
@@ -146,6 +148,9 @@ public:
     // for inspection, but don't assume anything about the way data is
     // stored.
     float *data;
+
+    // How the data is actually stored
+    shared_ptr<vector<float> > buffer;
 
     // The vector of definitions of this image. Right now all but the first is ignored.
     vector<MemRef> definitions;

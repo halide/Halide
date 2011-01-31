@@ -26,6 +26,9 @@ public:
     // its definitions
 
 protected:
+    // Compile a single definition
+    void compileDefinition(AsmX64 *a, FImage *im, int definition);
+
     // Generate machine code for a vector of IRNodes. Registers must
     // have already been assigned.
     void compileBody(AsmX64 *a, vector<IRNode::Ptr> code);

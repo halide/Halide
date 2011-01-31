@@ -17,19 +17,7 @@ using namespace std::tr1;
 #include <unordered_set>
 #endif
 
-void panic(const char *fmt, ...);
-void assert(bool condition, const char *fmt, ...);
-
-static const char *opname[] = {"Const", "NoOp",
-                               "Var", "Plus", "Minus", "Times", "Divide", "Power",
-                               "Sin", "Cos", "Tan", "ASin", "ACos", "ATan", "ATan2", 
-                               "Abs", "Floor", "Ceil", "Round",
-                               "Exp", "Log", "Mod", 
-                               "LT", "GT", "LTE", "GTE", "EQ", "NEQ",
-                               "And", "Or", "Nand", "Load", "Store",
-                               "IntToFloat", "FloatToInt", 
-                               "PlusImm", "TimesImm", 
-                               "Vector", "LoadVector", "StoreVector", "ExtractVector", "ExtractScalar"};
+#include "Interval.h"
 
 
 enum OpCode {Const = 0, NoOp, 
@@ -43,6 +31,8 @@ enum OpCode {Const = 0, NoOp,
              IntToFloat, FloatToInt, 
              PlusImm, TimesImm, 
              Vector, LoadVector, StoreVector, ExtractVector, ExtractScalar};
+
+const char *opname(OpCode op);
 
 // Here's how you hash a shared_ptr
 namespace std {
@@ -78,15 +68,10 @@ public:
     // Vector width. Should be one or four on X64.
     int width;
 
-    // If I'm a non-const integer, some things may still be known statically
-    // about my value. E.g. I'm congruent to remainder modulo
-    // modulus. This is useful for reasoning about alignment.
-    unsigned int modulus;
-    int remainder;    
-
-    // Bounds for integer nodes. Inclusive. Necessary for vars. Useful
-    // for reasoning about overflow and signedness.
-    int min, max;
+    // Static info for integer nodes. Necessary for vars. Useful for
+    // reasoning about overflow, alignment, and signedness,
+    // etc. Includes min, max, modulus, and remainder.
+    SteppedInterval interval;
 
     // Inputs - whose values do I depend on?
     vector<Ptr> inputs;    
@@ -185,6 +170,9 @@ public:
     // All nodes in existence
     static vector<WeakPtr> allNodes;
 
+    // Do (or redo any static analysis)
+    void analyze();
+
 protected:
     // All the const float nodes
     static map<float, WeakPtr> floatInstances;
@@ -208,9 +196,6 @@ protected:
                     vector<Ptr> inputs,
                     int64_t ival = 0, float fval = 0.0f);
     
-
-    // Do (or redo any static analysis)
-    void analyze();
 
     // A weak reference to myself. 
     WeakPtr self;
