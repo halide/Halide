@@ -1,27 +1,21 @@
 #include "IRNode.h"
 #include <stdarg.h>
+#include <stdlib.h>
+#include "base.h"
 
-void panic(const char *fmt, ...) {
-    char message[1024];
-    va_list arglist;
-    va_start(arglist, fmt);
-    vsnprintf(message, 1024, fmt, arglist);
-    va_end(arglist);
-    printf("%s", message);
-    exit(-1);
+const char *opname(OpCode op) {
+    static const char *table[] = {"Const", "NoOp",
+                                  "Var", "Plus", "Minus", "Times", "Divide", "Power",
+                                  "Sin", "Cos", "Tan", "ASin", "ACos", "ATan", "ATan2", 
+                                  "Abs", "Floor", "Ceil", "Round",
+                                  "Exp", "Log", "Mod", 
+                                  "LT", "GT", "LTE", "GTE", "EQ", "NEQ",
+                                  "And", "Or", "Nand", "Load", "Store",
+                                  "IntToFloat", "FloatToInt", 
+                                  "PlusImm", "TimesImm", 
+                                  "Vector", "LoadVector", "StoreVector", "ExtractVector", "ExtractScalar"};
+    return table[op];
 }
-
-void assert(bool cond, const char *fmt, ...) {
-    if (cond) return;
-    char message[1024];
-    va_list arglist;
-    va_start(arglist, fmt);
-    vsnprintf(message, 1024, fmt, arglist);
-    va_end(arglist);
-    printf("%s", message);
-    exit(-1);
-}
-
 
 map<float, IRNode::WeakPtr> IRNode::floatInstances;
 map<int64_t, IRNode::WeakPtr> IRNode::intInstances;
@@ -80,7 +74,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     
     
     /*
-    printf("Making %s\n", opname[opcode]);
+    printf("Making %s\n", opname(opcode));
     for (size_t i = 0; i < inputs.size(); i++) {
         printf(" from: "); 
         inputs[i]->printExp();
@@ -89,8 +83,8 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     */
 
     // Type inference and coercion
-    Type t;
-    int w;
+    Type t = Int;
+    int w = 1;
     switch(opcode) {
     case Const:
         panic("Shouldn't make Consts using this make function\n");
@@ -100,7 +94,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         break;
     case Var:
         assert(inputs.size() == 0, "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         t = Int;
         w = 1;
         break;
@@ -110,7 +104,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case Power:
     case Mod:
         assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         // the output is either int or float
         if (inputs[0]->type == Float ||
             inputs[1]->type == Float) t = Float;
@@ -140,14 +134,14 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case Exp:
     case Log:
         assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n", 
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         t = Float;
         inputs[0] = inputs[0]->as(Float);
         w = inputs[0]->width;
         break;
     case Abs:
         assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n", 
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         if (inputs[0]->type == Bool) return inputs[0];
         t = inputs[0]->type;
         w = inputs[0]->width;
@@ -156,7 +150,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case Ceil:
     case Round:
         assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n", 
-               opname[opcode], inputs.size());    
+               opname(opcode), inputs.size());    
         if (inputs[0]->type != Float) return inputs[0];
         t = Float; // TODO: perhaps Int?
         w = inputs[0]->width;
@@ -168,7 +162,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case EQ:
     case NEQ:
         assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());    
+               opname(opcode), inputs.size());    
         if (inputs[0]->type == Float || inputs[1]->type == Float) {
             t = Float;                    
         } else { // TODO: compare ints?
@@ -183,7 +177,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case And:
     case Nand:
         assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());    
+               opname(opcode), inputs.size());    
         // first arg is always bool
         inputs[0] = inputs[0]->as(Bool);
         t = inputs[1]->type;
@@ -192,7 +186,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         break;
     case Or:               
         assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());    
+               opname(opcode), inputs.size());    
         if (inputs[0]->type == Float || inputs[1]->type == Float) {
             t = Float;
         } else if (inputs[0]->type == Int || inputs[0]->type == Int) {
@@ -207,14 +201,14 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         break;
     case IntToFloat:
         assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         assert(inputs[0]->type == Int, "IntToFloat can only take integers\n");
         t = Float;
         w = inputs[0]->width;
         break;
     case FloatToInt:
         assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         assert(inputs[0]->type == Float, "FloatToInt can only take floats\n");
         t = Int;
         w = inputs[0]->width;
@@ -223,7 +217,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case TimesImm:
         assert(inputs.size() == 1,
                "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         t = Int;
         w = inputs[0]->width;
         break;
@@ -231,7 +225,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case Store:
         assert(inputs.size() == 2,
                "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         inputs[0] = inputs[0]->as(Int);
         // Right now we can only store floats
         inputs[1] = inputs[1]->as(Float);
@@ -246,7 +240,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case Load:
         assert(inputs.size() == 1,
                "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         inputs[0] = inputs[0]->as(Int);
         assert(inputs[0]->width == 1, "Can only load scalar addresses\n");
         w = (opcode == Load ? 1 : 4);
@@ -256,7 +250,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case ExtractVector:
         assert(inputs.size() == 2, 
                "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         assert(inputs[0]->width == inputs[1]->width && inputs[0]->width > 1, 
                "ExtractVector requires vector arguments\n");
         assert(ival > 0 && ival < inputs[0]->width, 
@@ -267,7 +261,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case ExtractScalar:
         assert(inputs.size() == 1, 
                "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
         assert(inputs[0]->width > 1, 
                "Input to ExtractScalar must be a vector\n");
         w = 1;
@@ -276,7 +270,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case Vector:
         assert(inputs.size() == 4, 
                "Wrong number of inputs for opcode: %s %d\n",
-               opname[opcode], inputs.size());
+               opname(opcode), inputs.size());
 
         for (size_t i = 0; i < inputs.size(); i++) {
             assert(inputs[i]->width == 1, "Components of Vector must be scalar\n");
@@ -336,7 +330,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
             if (t == Float) {
                 return make(inputs[0]->ival ? inputs[1]->fval : 0.0f);
             } else {
-                return make(inputs[0]->ival ? inputs[1]->ival : 0ll);
+                return make(inputs[0]->ival ? inputs[1]->ival : (int64_t)0);
             }
         case Or:
             if (t == Float) {
@@ -348,7 +342,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
             if (t == Float) {
                 return make(!inputs[0]->ival ? inputs[1]->fval : 0.0f);
             } else {
-                return make(!inputs[0]->ival ? inputs[1]->ival : 0ll);
+                return make(!inputs[0]->ival ? inputs[1]->ival : (int64_t)0);
             }
         case IntToFloat:
             assert(inputs[0]->ival>>32 == 0, "IntToFloat on 64bit value 0x%llx will lose data\n", inputs[0]->ival);
@@ -395,7 +389,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
             // The base load addresses all match
             if (vectorLoad && inputs[i]->inputs[0] != inputs[0]->inputs[0]) vectorLoad = false;
             // The load offsets differ by the appropriate multiples of 4
-            if (vectorLoad && inputs[i]->ival != inputs[0]->ival + i*4) vectorLoad = false;
+            if (vectorLoad && (inputs[i]->ival != inputs[0]->ival + (int64_t)(i*4))) vectorLoad = false;
         }
         if (vectorLoad) {
             IRNode::Ptr vecload = make(LoadVector, inputs[0]->inputs[0], inputs[0]->ival);
@@ -408,7 +402,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
             // The base store addresses all match
             if (vectorStore && inputs[i]->inputs[0] != inputs[0]->inputs[0]) vectorStore = false;
             // The store offsets differ by the appropriate multiples of 4
-            if (vectorStore && inputs[i]->ival != inputs[0]->ival + i*4) vectorStore = false;
+            if (vectorStore && (inputs[i]->ival != inputs[0]->ival + (int64_t)(i*4))) vectorStore = false;
         }
         if (vectorStore) {
             // Get the four values to store
@@ -620,9 +614,8 @@ IRNode::Ptr IRNode::make(OpCode opcode,
 
     // Unaligned vector loads that may have nearby aligned loads
     // should just use ExtractVector on the aligned loads instead
-    if (opcode == LoadVector && 
-        !(inputs[0]->modulus & 15)) {
-        int64_t offset = (inputs[0]->remainder + ival) & 15;
+    if (opcode == LoadVector && !(inputs[0]->interval.modulus() & 15)) {
+        int64_t offset = (inputs[0]->interval.remainder()+ival) & 15;
         // If it's word-aligned but not 16-byte aligned we can do something.
         if (offset != 0 && ((offset & 3) == 0)) {
             // Check to see if the aligned equivalents exist
@@ -660,9 +653,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     if (inputs.size() && inputs[0]->outputs.size() ) {
         for (size_t i = 0; i < inputs[0]->outputs.size(); i++) {
             IRNode::Ptr candidate = inputs[0]->outputs[i].lock();
-            // Redo any analysis in case something has changed
             if (!candidate) continue;
-            candidate->analyze();
             if (candidate->ival != ival) continue;
             if (candidate->fval != fval) continue;
             if (candidate->op != opcode) continue;
@@ -719,14 +710,14 @@ IRNode::Ptr IRNode::as(Type t) {
         if (t == Float) 
             return make(IntToFloat, self.lock());
         if (t == Bool)
-            return make(NEQ, self.lock(), make(0ll));
+            return make(NEQ, self.lock(), make((int64_t)0));
     }
 
     if (type == Bool) {            
         if (t == Float) 
             return make(And, self.lock(), make(1.0f));
         if (t == Int) 
-            return make(And, self.lock(), make(1ll));
+            return make(And, self.lock(), make((int64_t)1));
     }
 
     if (type == Float) {
@@ -757,7 +748,7 @@ void IRNode::printExp() {
     switch(op) {
     case Const:
         if (type == Float) printf("%f", fval);
-        else printf("%lld", ival);
+        else printf("%ld", ival);
         break;
     case Plus:
         printf("(");
@@ -769,12 +760,12 @@ void IRNode::printExp() {
     case PlusImm:
         printf("(");
         inputs[0]->printExp();
-        printf("+%lld)", ival);
+        printf("+%ld)", ival);
         break;
     case TimesImm:
         printf("(");
         inputs[0]->printExp();
-        printf("*%lld)", ival);
+        printf("*%ld)", ival);
         break;
     case Minus:
         printf("(");
@@ -800,24 +791,24 @@ void IRNode::printExp() {
     case Load: 
         printf("Load(");
         inputs[0]->printExp();
-        printf("+%lld)", ival);
+        printf("+%ld)", ival);
         break;
     case LoadVector:
         printf("LoadVector(");
         inputs[0]->printExp();
-        printf("+%lld)", ival);
+        printf("+%ld)", ival);
         break;        
     case Store: 
         printf("Store(");
         inputs[0]->printExp();
-        printf("+%lld, ", ival);
+        printf("+%ld, ", ival);
         inputs[1]->printExp();
         printf(")");
         break;
     case StoreVector:
         printf("StoreVector(");
         inputs[0]->printExp();
-        printf("+%lld, ", ival);
+        printf("+%ld, ", ival);
         inputs[1]->printExp();
         printf(")");
         break;        
@@ -826,21 +817,21 @@ void IRNode::printExp() {
         inputs[0]->printExp();
         printf(", ");
         inputs[1]->printExp();
-        printf(", %lld)", ival);
+        printf(", %ld)", ival);
         break;
     case ExtractScalar:
         printf("ExtractScalar(");
         inputs[0]->printExp();
-        printf(", %lld)", ival);
+        printf(", %ld)", ival);
         break;
     case Var:
         printf("var");
         break;
     default:
         if (inputs.size() == 0) {
-            printf("%s", opname[op]);
+            printf("%s", opname(op));
         } else {
-            printf("%s(", opname[op]); 
+            printf("%s(", opname(op)); 
             inputs[0]->printExp();
             for (size_t i = 1; i < inputs.size(); i++) {
                 printf(", ");
@@ -865,7 +856,7 @@ void IRNode::print() {
     char buf[32];
     for (size_t i = 0; i < inputs.size(); i++) {
         if (inputs[i]->reg < 0) 
-            sprintf(buf, "%lld", inputs[i]->ival);
+            sprintf(buf, "%ld", inputs[i]->ival);
         else if (inputs[i]->reg < 16)
             sprintf(buf, "r%d", inputs[i]->reg);
         else
@@ -876,7 +867,7 @@ void IRNode::print() {
     switch (op) {
     case Const:
         if (type == Float) printf("%f", fval);
-        else printf("%lld", ival);
+        else printf("%ld", ival);
         break;                
     case Plus:
         printf("%s + %s", args[0].c_str(), args[1].c_str());
@@ -891,31 +882,31 @@ void IRNode::print() {
         printf("%s / %s", args[0].c_str(), args[1].c_str());
         break;
     case PlusImm:
-        printf("%s + %lld", args[0].c_str(), ival);
+        printf("%s + %ld", args[0].c_str(), ival);
         break;
     case TimesImm:
-        printf("%s * %lld", args[0].c_str(), ival);
+        printf("%s * %ld", args[0].c_str(), ival);
         break;
     case LoadVector:
-        printf("LoadVector %s + %lld", args[0].c_str(), ival);
+        printf("LoadVector %s + %ld", args[0].c_str(), ival);
         break;
     case Load:
-        printf("Load %s + %lld", args[0].c_str(), ival);
+        printf("Load %s + %ld", args[0].c_str(), ival);
         break;
     case StoreVector:
-        printf("StoreVector %s + %lld, %s", args[0].c_str(), ival, args[1].c_str());
+        printf("StoreVector %s + %ld, %s", args[0].c_str(), ival, args[1].c_str());
         break;
     case Store:
-        printf("Store %s + %lld, %s", args[0].c_str(), ival, args[1].c_str());
+        printf("Store %s + %ld, %s", args[0].c_str(), ival, args[1].c_str());
         break;
     case ExtractVector:
-        printf("ExtractVector %s %s %lld", args[0].c_str(), args[1].c_str(), ival);
+        printf("ExtractVector %s %s %ld", args[0].c_str(), args[1].c_str(), ival);
         break;
     case ExtractScalar:
-        printf("ExtractScalar %s %lld", args[0].c_str(), ival);
+        printf("ExtractScalar %s %ld", args[0].c_str(), ival);
         break;
     default:
-        printf("%s", opname[op]);
+        printf("%s", opname(op));
         for (size_t i = 0; i < args.size(); i++)
             printf(" %s", args[i].c_str());
         break;
@@ -927,16 +918,15 @@ void IRNode::print() {
 void IRNode::saveDot(const char *filename) {
     FILE *f = fopen(filename, "w");
     fprintf(f, "digraph G {\n");
-    char id[256];
     for (size_t i = 0; i < allNodes.size(); i++) {
         IRNode::Ptr n = allNodes[i].lock();
         if (!n) continue;
         if (n->ival) 
-            fprintf(f, "  n%llx [label = \"%s %d %lld\"]\n", (long long)n.get(), opname[n->op], n->level, n->ival);
+            fprintf(f, "  n%llx [label = \"%s %d %ld\"]\n", (long long)n.get(), opname(n->op), n->level, n->ival);
         else if (n->fval)  
-            fprintf(f, "  n%llx [label = \"%s %d %f\"]\n", (long long)n.get(), opname[n->op], n->level, n->fval);           
+            fprintf(f, "  n%llx [label = \"%s %d %f\"]\n", (long long)n.get(), opname(n->op), n->level, n->fval);           
         else 
-            fprintf(f, "  n%llx [label = \"%s %d\"]\n", (long long)n.get(), opname[n->op], n->level);            
+            fprintf(f, "  n%llx [label = \"%s %d\"]\n", (long long)n.get(), opname(n->op), n->level);            
         for (size_t j = 0; j < n->inputs.size(); j++) {
             IRNode::Ptr in = n->inputs[j];
             fprintf(f, "  n%llx -> n%llx\n", (long long)n.get(), (long long)in.get());
@@ -1036,7 +1026,7 @@ IRNode::Ptr IRNode::rebalanceSum() {
 
     // remake the summation
     IRNode::Ptr t;
-    bool tPos;
+    bool tPos = true;
 
     if (nonConstTerms.size()) {
         t = nonConstTerms[0].first;
@@ -1093,7 +1083,7 @@ IRNode::Ptr IRNode::rebalanceSum() {
                 int64_t val = iter->first;
                 int64_t offset = c - val;
                 if ((int32_t)offset == offset) {
-                    printf("Using %lld as a base for %lld\n", val, c);
+                    //printf("Using %ld as a base for %ld\n", val, c);
                     baseFound = true;
                     innerConst = val;
                     outerConst = offset;
@@ -1189,20 +1179,10 @@ IRNode::Ptr IRNode::makeNew(float v) {
 
 IRNode::Ptr IRNode::makeNew(int64_t v) {
     if ((v>>32) != 0 && (v>>31) != -1) {
-        printf("We only trust 32 bit values for now: 0x%llx\n", v);
+        printf("We only trust 32 bit values for now: 0x%lx\n", v);
     }
     vector<IRNode::Ptr> empty;
     return makeNew(Int, 1, Const, empty, v, 0);    
-}
-
-unsigned int gcd(unsigned int a, unsigned int b) {
-    unsigned int tmp;
-    while (b) {
-        tmp = b;
-        b = a % b;
-        a = tmp;
-    }
-    return a;
 }
 
 // Only makeNew may call this
@@ -1221,13 +1201,6 @@ IRNode::IRNode(Type t, int w, OpCode opcode,
     op = opcode;
     level = 0;
 
-
-    modulus = remainder = 0;
-
-    // max < min -> bounds are unknown
-    max = 0x80000000;
-    min = 0x7fffffff;
-
     if (op == Var) {
         constant = false;
     } else {
@@ -1239,183 +1212,47 @@ IRNode::IRNode(Type t, int w, OpCode opcode,
         if (inputs[i]->level > level) level = inputs[i]->level;
     }
 
+    /*
     if (opcode == Const && t == Int) {
-        if (!(abs(iv) >> 32)) {
-            min = max = (int32_t)iv;
-        }
+        interval.setBounds(iv, iv);
     }
+    */
 
     // No register assigned yet
     reg = -1;
 
-    // Do static analysis
     analyze();
 }
 
 
 void IRNode::analyze() {
+    for (size_t i = 0; i < inputs.size(); i++) inputs[i]->analyze();
+
     if (type == Int) {
-        if (op == PlusImm) {
-
-            modulus = inputs[0]->modulus;
-            remainder = (inputs[0]->remainder + ival) % modulus;
-            while (remainder < 0) remainder += modulus;
-
-            int64_t max64 = (int64_t)inputs[0]->max + ival;
-            int64_t min64 = (int64_t)inputs[0]->min + ival;
-            if (abs(max64) >> 32 || abs(min64) >> 32 ||
-                (inputs[0]->max < inputs[0]->min)) {
-                // max < min -> Bounds are unknown
-                max = 0x80000000;
-                min = 0x7fffffff;
-            } else {
-                max = (int32_t)max64;
-                min = (int32_t)min64;
-            }
-
+        if (op == Const) {
+            interval.setBounds(ival, ival);
+        } else if (op == PlusImm || 
+            op == Store || op == StoreVector || 
+            op == Load || op == LoadVector) {
+            interval = inputs[0]->interval + ival;
         } else if (op == TimesImm) {
-
-            int64_t mod = (int64_t)inputs[0]->modulus * ival;
-            if (mod < 0) mod = -mod;
-            if ((mod>>32) || (abs(ival)>>32)) {
-                //printf("Bailing out of modulus analysis due to potential overflow\n");
-                modulus = 1;
-                remainder = 0;
-            } else {
-                modulus = (unsigned int)mod;
-                remainder = (inputs[0]->remainder * ival) % modulus;
-            }
-            while (remainder < 0) remainder += modulus;
-
-            int64_t max64 = (int64_t)inputs[0]->max * ival;
-            int64_t min64 = (int64_t)inputs[0]->min * ival;
-            if (abs(max64) >> 32 || abs(min64) >> 32 ||
-                (inputs[0]->max < inputs[0]->min)) {
-                // max < min -> Bounds are unknown
-                max = 0x80000000;
-                min = 0x7fffffff;
-            } else {
-                max = (int32_t)max64;
-                min = (int32_t)min64;
-            }
-
+            interval = inputs[0]->interval * ival;
         } else if (op == Plus) {           
-            if (inputs[0]->op == Const) {
-                modulus = inputs[1]->modulus;
-                remainder = (inputs[1]->remainder + inputs[0]->ival) % modulus;
-                while (remainder < 0) remainder += modulus;
-            } else if (inputs[1]->op == Const) {
-                modulus = inputs[0]->modulus;
-                remainder = (inputs[0]->remainder + inputs[1]->ival) % modulus;
-                while (remainder < 0) remainder += modulus;
-            } else {
-                modulus = gcd(inputs[0]->modulus, inputs[1]->modulus);
-                if (inputs[0]->modulus == inputs[1]->modulus) modulus = inputs[0]->modulus;
-                remainder = (inputs[0]->remainder + inputs[1]->remainder) % modulus;
-            }
-
-            int64_t max64 = (int64_t)inputs[0]->max + (int64_t)inputs[1]->max;
-            int64_t min64 = (int64_t)inputs[0]->min + (int64_t)inputs[1]->min;
-            if (abs(max64) >> 32 || abs(min64) >> 32 ||
-                (inputs[0]->max < inputs[0]->min) || 
-                (inputs[1]->max < inputs[1]->min)) {
-                // max < min -> Bounds are unknown
-                max = 0x80000000;
-                min = 0x7fffffff;
-            } else {
-                max = (int32_t)max64;
-                min = (int32_t)min64;
-            }
-
+            interval = inputs[0]->interval + inputs[1]->interval;
         } else if (op == Minus) {
-            if (inputs[0]->op == Const) {
-                modulus = inputs[1]->modulus;
-                remainder = (inputs[1]->remainder - inputs[0]->ival) % modulus;
-                while (remainder < 0) remainder += modulus;
-            } else if (inputs[1]->op == Const) {
-                modulus = inputs[0]->modulus;
-                remainder = (inputs[0]->remainder - inputs[1]->ival) % modulus;
-                while (remainder < 0) remainder += modulus;
-            } else {
-                modulus = gcd(inputs[0]->modulus, inputs[1]->modulus);
-                if (inputs[0]->modulus == inputs[1]->modulus) modulus = inputs[0]->modulus;
-                remainder = (modulus + inputs[0]->remainder - inputs[1]->remainder) % modulus;
-            }
-
-            int64_t max64 = (int64_t)inputs[0]->max - (int64_t)inputs[1]->min;
-            int64_t min64 = (int64_t)inputs[0]->min - (int64_t)inputs[1]->max;
-            if (abs(max64) >> 32 || abs(min64) >> 32 ||
-                (inputs[0]->max < inputs[0]->min) || 
-                (inputs[1]->max < inputs[1]->min)) {
-                // max < min -> Bounds are unknown
-                max = 0x80000000;
-                min = 0x7fffffff;
-            } else {
-                max = (int32_t)max64;
-                min = (int32_t)min64;
-            }
-
-        } else if (op == Times && inputs[0]->op == Const) {
-            int64_t mod = (int64_t)inputs[1]->modulus * (int64_t)inputs[0]->ival;
-            if (mod < 0) mod = -mod;
-            if ((mod>>32) || (abs(inputs[0]->ival)>>32)) {
-                modulus = 1;
-                remainder = 0;
-            } else {
-                modulus = (unsigned int)mod;
-                remainder = (inputs[1]->remainder * ival) % modulus;
-            }
-            while (remainder < 0) remainder += modulus;            
-
-        } else if (op == Times && inputs[1]->op == Const) {
-            int64_t mod = (int64_t)inputs[0]->modulus * (int64_t)inputs[1]->ival;
-            if (mod < 0) mod = -mod;
-            if ((mod>>32) || (abs(inputs[1]->ival)>>32)) {
-                modulus = 1;
-                remainder = 0;
-            } else {
-                modulus = (unsigned int)mod;
-                remainder = (inputs[0]->remainder * ival) % modulus;
-            }
-            while (remainder < 0) remainder += modulus;            
-        } else {
-            modulus = 1;
-            remainder = 0;
-            max = 0x80000000;
-            min = 0x7fffffff;
+            interval = inputs[0]->interval - inputs[1]->interval;
+        } else if (op == Times) {
+            interval = inputs[0]->interval * inputs[1]->interval;
         }
 
-        if (op == Times) {
-            int64_t min0 = (int64_t)inputs[0]->min;
-            int64_t max0 = (int64_t)inputs[0]->max;
-            int64_t min1 = (int64_t)inputs[1]->min;
-            int64_t max1 = (int64_t)inputs[1]->max;
-
-            int64_t a = min0 * min1;
-            int64_t b = min0 * max1;
-            int64_t c = max0 * min1;
-            int64_t d = max0 * max1;
-
-            int64_t ab = a < b ? a : b;
-            int64_t cd = c < d ? c : d;
-            int64_t min64 = ab < cd ? ab : cd;
-
-            ab = a > b ? a : b;
-            cd = c > d ? c : d;
-            int64_t max64 = ab > cd ? ab : cd;            
-
-            if (abs(max64) >> 32 || abs(min64) >> 32 ||
-                (inputs[0]->max < inputs[0]->min) || 
-                (inputs[1]->max < inputs[1]->min)) {
-                // max < min -> Bounds are unknown
-                max = 0x80000000;
-                min = 0x7fffffff;
-            } else {
-                max = (int32_t)max64;
-                min = (int32_t)min64;
-            }
+        if (interval.bounded() && 0) {
+            printExp();
+            printf(" = %ld modulo %ld", interval.remainder(), interval.modulus());
+            printf(" <- [%ld %ld]\n", interval.min(), interval.max());
         }
     }
+
+
 };
 
 IRNode::~IRNode() {

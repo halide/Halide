@@ -1,0 +1,19 @@
+HEADERS = FImage.h Compiler.h X64.h IRNode.h CImg.h Interval.h
+OBJECTS = Compiler.o FImage.o IRNode.o base.o Interval.o
+CXXFLAGS = -g -Wall
+#CXXFLAGS = -O3 -Wall -ffast-math -march=core2 -msse3 -mfpmath=sse
+
+%.o: %.cpp $(HEADERS)
+	g++ $(CXXFLAGS) -c -I /opt/local/include $< 
+
+tests: tests.o $(OBJECTS) 
+	g++ $(CXXFLAGS) -o tests tests.o $(OBJECTS) -L/opt/local/lib -ljpeg -lpng -ltiff -lX11 -lpthread
+
+testConsole: testConsole.o $(OBJECTS) 
+	g++ $(CXXFLAGS) -o testConsole testConsole.o $(OBJECTS) -ljpeg -lpng -ltiff
+
+testX64: testX64.o $(OBJECTS) 
+	g++ $(CXXFLAGS) -o testX64 testX64.o $(OBJECTS) -ljpeg -lpng -ltiff
+
+clean:
+	rm $(OBJECTS) tests
