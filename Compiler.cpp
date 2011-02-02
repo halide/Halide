@@ -21,12 +21,16 @@ void Compiler::compile(AsmX64 *a, FImage *im) {
     // supposed to. This maintains stack alignment.
     a->pushNonVolatiles();
         
+    // Find any variables that are fused over the definitions
+    // TODO
 
     // Compile a chunk of code that just runs the definitions in order
     for (int i = 0; i < (int)im->definitions.size(); i++) {
-        // TODO: loop fusion between definitions
         compileDefinition(a, im, i);
     }
+
+    // Exit any loops that were fused over definitions
+    // TODO
 
     // Pop the stack and return
     a->popNonVolatiles();
@@ -61,7 +65,7 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
     // Find the variables we need to iterate over by digging into the lhs and rhs
     printf("Collecting free variables\n");
     IRNode::PtrSet varSet;
-    collectInputs(def, Var, varSet);
+    collectInputs(def, Variable, varSet);
 
     assert(varSet.size() < 256, "FImage can't cope with more than 255 variables\n");
 
@@ -70,12 +74,12 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
     int i = 0;
     for (IRNode::PtrSet::iterator iter = varSet.begin();
          iter != varSet.end(); iter++) {
-        vars[i++] = *iter;
+        vars[i] = *iter;
+        i++;
     }
 
-    // Differentiate the store address w.r.t each var. If one of them
-    // has a derivative of 4, we should vectorize across it and put it
-    // in the inner loop
+    // Differentiate the store address w.r.t each var to resolve
+    // ambiguous loop nestings.
     vector<int64_t> storeDelta(vars.size());
     for (size_t i = 0; i < vars.size(); i++) {
         IRNode::Ptr next = IRNode::make(PlusImm, vars[i], 1);
@@ -94,21 +98,32 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
         }
     }
 
-    // Stable sort loop levels by the store delta and assign loop levels
+    // Stable sort loop levels by the requested loop nesting and store
+    // delta and assign loop levels
     for (size_t i = 0; i < vars.size(); i++) {
         for (size_t j = i+1; j < vars.size(); j++) {
-            if (abs(storeDelta[i]) < abs(storeDelta[j])) {
+            int nj = vars[j]->data<Variable>()->loopNesting;
+            int sj = abs(storeDelta[j]);
+            int ni = vars[i]->data<Variable>()->loopNesting;        
+            int si = abs(storeDelta[i]);
+
+            if (ni > nj || (ni == nj && si < sj)) {
                 IRNode::Ptr v = vars[i];
                 vars[i] = vars[j];
                 vars[j] = v;
                 int64_t d = storeDelta[i];
                 storeDelta[i] = storeDelta[j];
-                storeDelta[j] = d;
-            }
+                storeDelta[j] = d;                
+            }            
         }
         vars[i]->assignLevel((unsigned char)(i+1));
     }
 
+
+    vector<NodeData<Variable> *> varData(vars.size());
+    for (size_t i = 0; i < vars.size(); i++) {
+        varData[i] = vars[i]->data<Variable>();
+    }
 
     // Check all the vars have sane bounds.
     for (size_t i = 0; i < vars.size(); i++) {
@@ -117,33 +132,26 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
         assert(vars[i]->interval.bounded(), "Variable %d has undefined bounds\n");
     }
 
-    // Should we vectorize across the loop vars? Right now the answer
-    // is always yes, unless we're accumulating onto a scalar. In the
-    // future we'll have to figure out how to horizontally reduce at
-    // the end in this case.
-    bool vectorize = storeDelta[0] != 0;
-
-    // Vectorize across the smallest non-zero store delta
+    // Find a var to vectorize across. For right now we just pick the
+    // innermost var flagged as vectorizable.
+    bool vectorize = false;
     int vectorDim = 0;
-    for (int i = 0; i < (int)vars.size(); i++) {
-        if (storeDelta[i] == 0) break;
-        vectorDim = i;
-    }
-
-    // Right now we only vectorize across vars with store delta of 4
-    if (storeDelta[vectorDim] != 4) vectorize = false;
-
-    // Can't vectorize across a variable with recursive dependencies
-    // of < 4. So find all load that depend on this var, subtract the
-    // store address, and see if it could be < 4.
-
     vector<int> vectorWidth(vars.size(), 1);
-    if (vectorize) {
-        vectorWidth[vectorDim] = 4;
-
-        // Let the compiler know that the innermost var will be a multiple
-        // of four because we're vectorizing across it
-        vars[vectorDim]->interval.setCongruence(0, 4);
+    for (size_t i = 0; i < vars.size() && !vectorize; i++) {       
+        int v = varData[i]->vectorize; 
+        if (v > 1) {
+            if (v != 4) {
+                printf("Warning: Current implementation can only vectorize with a width of 4. Switching to four. Resulting code may crash.\n");                
+            }
+            vectorize = true;
+            vectorDim = i;
+            vectorWidth[vectorDim] = 4;
+            const SteppedInterval &in = vars[vectorDim]->interval;
+            if (((in.max()+1) & 3) || (in.min() & 3)) {
+                printf("Warning: Can only vectorize across variables with a min and max that are multiples of four. Resulting code may crash.\n");
+            }
+            vars[vectorDim]->interval.setCongruence(0, 4);
+        }
     }
 
     // Now that bounds and congruences are set, do static analysis
@@ -156,6 +164,7 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
     // Do a final optimization pass now that levels are assigned and
     // static analysis is done.
     IRNode::saveDot("before.dot");
+
     def = def->optimize();
 
     if (vectorize) {
@@ -171,43 +180,42 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
     }
 
     // Unroll across some vars
+    vector<IRNode::Ptr> roots(1);
     vector<int> unroll(vars.size(), 1);
-
-    // This should be smarter, right now we just unroll by 2 in the
-    // innermost var. Assumes they have even bounds.
-
-    // TODO: currently unrolling doesn't respect load-store ordering, so it messes up reductions
-    // TODO: Also, this unrolling code is hardcoded to be 3-variables
-    //unroll[unroll.size()-1] = 2;
-
-    /*
-    vector<IRNode::Ptr> roots(unroll[0]*unroll[1]*unroll[2]);
     roots[0] = def;
-    for (int i = 0; i < unroll[0]; i++) {
-        if (i > 0) {
-            roots[i*unroll[1]*unroll[2]] = 
-                def->substitute(vars[0], IRNode::make(PlusImm, vars[0], i*vectorWidth[0]));
-        }
-        for (int j = 0; j < unroll[1]; j++) {
-            if (j > 0) {
-                roots[(i*unroll[1] + j)*unroll[2]] = 
-                    roots[i*unroll[1]*unroll[2]]->substitute(vars[1], IRNode::make(PlusImm, vars[1], j*vectorWidth[1]));      
+
+    for (size_t i = 0; i < vars.size(); i++) {
+        int u = unroll[i] = varData[i]->unroll;
+        const SteppedInterval &in = vars[i]->interval;        
+        if (u > 1) {
+            // sanity check
+            if ((in.max() - in.min() + 1) % (u*vectorWidth[i])) {
+                printf("Warning: Unrolling across a variable by an amount that is not a divisor of the range of the variable. Resulting code may crash.\n"); 
             }
-            for (int k = 0; k < unroll[2]; k++) {
-                if (k > 0) {
-                    roots[(i*unroll[1] + j)*unroll[2] + k] = 
-                        roots[(i*unroll[1] + j)*unroll[2]]->substitute(vars[2], IRNode::make(PlusImm, vars[2], k*vectorWidth[2]));   
+            if (varData[i]->order != Parallel) {
+                printf("Warning: Unrolling may reorder loads and stores between unrolled iterations, so it probably won't work for non-parallel variables.\n");
+            }
+            vector<IRNode::Ptr> newRoots;
+            for (size_t k = 0; k < roots.size(); k++) {
+                newRoots.push_back(roots[k]);
+                for (int j = 1; j < u; j++) {                
+                    IRNode::Ptr vNew = IRNode::make(PlusImm, vars[i], j*vectorWidth[i]);
+                    newRoots.push_back(roots[k]->substitute(vars[i], vNew));
                 }
             }
+            newRoots.swap(roots);
         }
     }
-    */
-    vector<IRNode::Ptr> roots(1);
-    roots[0] = def;
-
+    
     IRNode::saveDot("after.dot");
 
-    printf("Done optimizing\n");
+    // TODO: respect parallelize by generating different roots per thread ID?
+
+    printf("Done transforming code\n");
+
+    // -----------------------------------------------------------
+    // Everything below here can be ripped out and pushed to llvm
+    // -----------------------------------------------------------
 
     // Look for loads that are possibly aliased with the store and
     // increase their loop level to the same as the store
@@ -218,7 +226,6 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
         collectInputs(roots[i], Store, storeSet);
         collectInputs(roots[i], StoreVector, storeSet);
     }
-
     
     for (IRNode::PtrSet::iterator storeIter = storeSet.begin();
          storeIter != storeSet.end(); storeIter++) {
@@ -321,9 +328,16 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
     }
 
     for (int i = (int)vars.size()-1; i >= 0; i--) {
-        a->add(varRegs[i], vectorWidth[i]*unroll[i]);
-        a->cmp(varRegs[i], vars[i]->interval.max()+1);
-        a->jl(labels[i]);
+        if (varData[i]->order == Decreasing) {
+            a->sub(varRegs[i], vectorWidth[i]*unroll[i]);
+            a->cmp(varRegs[i], vars[i]->interval.min());
+            a->jge(labels[i]);
+        } else {
+            // At this point, parallel is treated as increasing
+            a->add(varRegs[i], vectorWidth[i]*unroll[i]);
+            a->cmp(varRegs[i], vars[i]->interval.max()+1);
+            a->jl(labels[i]);
+        }
     }
 
 
@@ -400,9 +414,9 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
                 }
             }
             break;
-        case Var:
+        case Variable:
             // These are placed in GPRs externally
-            assert(gpr, "Vars must be manually placed in gprs\n");
+            assert(gpr, "Variables must be manually placed in gprs\n");
             break;
         case Plus:
             if (gpr && gpr1 && gpr2) {
@@ -955,7 +969,7 @@ void Compiler::doInstructionScheduling(
                     if (nk->level != (int)l) continue;
 
                     // Can't clobber external vars
-                    if (nk->op == Var) continue;
+                    if (nk->op == Variable) continue;
 
                     // Can't clobber inputs of a different width
                     if (nk->width != nj->width) continue;
@@ -1013,7 +1027,7 @@ void Compiler::gatherDescendents(IRNode::Ptr node, vector<vector<IRNode::Ptr> > 
 // Remove all assigned registers
 void Compiler::regClear(IRNode::Ptr node) {
     // We don't clobber the registers assigned to external loop vars
-    if (node->op == Var) return;
+    if (node->op == Variable) return;
 
     node->reg = -1;
 

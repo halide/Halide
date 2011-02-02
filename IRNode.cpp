@@ -5,7 +5,7 @@
 
 const char *opname(OpCode op) {
     static const char *table[] = {"Const", "NoOp",
-                                  "Var", "Plus", "Minus", "Times", "Divide", "Power",
+                                  "Variable", "Plus", "Minus", "Times", "Divide", "Power",
                                   "Sin", "Cos", "Tan", "ASin", "ACos", "ATan", "ATan2", 
                                   "Abs", "Floor", "Ceil", "Round",
                                   "Exp", "Log", "Mod", 
@@ -92,7 +92,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         t = inputs[0]->type;
         w = inputs[0]->width;
         break;
-    case Var:
+    case Variable:
         assert(inputs.size() == 0, "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
         t = Int;
@@ -370,7 +370,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         }
         if (allChildrenSameOp && 
             inputs[0]->op != Const &&
-            inputs[0]->op != Var &&            
+            inputs[0]->op != Variable &&            
             inputs[0]->op != Load &&
             inputs[0]->op != Store) {
             vector<IRNode::Ptr> childInputs(inputs[0]->inputs.size());
@@ -578,7 +578,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     }              
 
     // Don't merge or modify vars
-    if (opcode == Var) {
+    if (opcode == Variable) {
         vector<IRNode::Ptr> empty;
         return makeNew(t, 1, opcode, empty, 0, 0.0f);
     }
@@ -679,7 +679,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
 IRNode::Ptr IRNode::optimize() {
     // Don't rebuild constants or vars
     if (op == Const) return self.lock();
-    if (op == Var) return self.lock();
+    if (op == Variable) return self.lock();
 
     vector<IRNode::Ptr > newInputs(inputs.size());
     for (size_t i = 0; i < inputs.size(); i++) {
@@ -824,7 +824,7 @@ void IRNode::printExp() {
         inputs[0]->printExp();
         printf(", %ld)", ival);
         break;
-    case Var:
+    case Variable:
         printf("var");
         break;
     default:
@@ -950,7 +950,7 @@ IRNode::Ptr IRNode::substitute(IRNode::Ptr a, IRNode::Ptr b) {
 
     // Don't rebuild consts or vars
     if (op == Const) return self.lock();
-    if (op == Var) return self.lock();
+    if (op == Variable) return self.lock();
 
     // rebuild all the inputs
     vector<IRNode::Ptr > newInputs(inputs.size());
@@ -1201,7 +1201,7 @@ IRNode::IRNode(Type t, int w, OpCode opcode,
     op = opcode;
     level = 0;
 
-    if (op == Var) {
+    if (op == Variable) {
         constant = false;
     } else {
         constant = true;
@@ -1211,15 +1211,13 @@ IRNode::IRNode(Type t, int w, OpCode opcode,
         constant = constant && inputs[i]->constant;
         if (inputs[i]->level > level) level = inputs[i]->level;
     }
-
-    /*
-    if (opcode == Const && t == Int) {
-        interval.setBounds(iv, iv);
-    }
-    */
-
+   
     // No register assigned yet
     reg = -1;
+
+    _data = NULL;
+
+    tag = 0;
 
     analyze();
 }
@@ -1251,7 +1249,6 @@ void IRNode::analyze() {
             printf(" <- [%ld %ld]\n", interval.min(), interval.max());
         }
     }
-
 
 };
 
@@ -1290,5 +1287,8 @@ IRNode::~IRNode() {
             break;
         }
     }
+
+    // Cleanup any data
+    if (_data) delete _data;
 }
 

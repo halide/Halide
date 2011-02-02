@@ -47,10 +47,54 @@ Expr operator==(Expr, Expr);
 
 
 // A loop variable with the given range [min, max)
-class Range : public Expr {
+class Var : public Expr {
 public:
-    Range();
-    Range(int a, int b);
+    Var(int a = 0, int b = 0);
+    
+    // Evaluation of expressions in this variable should be vectorized
+    // in this variable. Must be a multiple of one of the system's
+    // native vectorization widths. Larger multiples than 1 are
+    // converted to unrolling instead.
+    void vectorize(int n) {var->vectorize = n;}
+    int vectorize() {return var->vectorize;}
+
+    // Evaluation of expressions in this variable should be unrolled
+    // by this factor. If order is parallel the memory accesses of the
+    // evaluations may be intermixed, otherwise load after store,
+    // store after store, and store after load orderings are respected
+    // between unrolled instances.
+    void unroll(int n) {var->unroll = n;}
+    int unroll() {return var->unroll;}
+
+    // Evaluations of expressions in this variable should be handled
+    // by multiple worker threads. The domain should be sliced up into
+    // n chunks and handed off to worker threads.
+    void parallelize(int n) {var->parallelize = n;}
+    int parallelize() {return var->parallelize;}
+
+    // In what order is this coordinate traversed. If also vectorized,
+    // then in what order are the vectors traversed.
+    void order(Order o) {var->order = o;}
+    Order order() {return var->order;}
+
+    // All definitions in this variable should share the same loop
+    // across this variable. If an early definition writes to a value
+    // that a later definition will read at an earlier value of this
+    // loop variable, this will probably produce incorrect
+    // results. fuseLoops requires that all outer variables are also
+    // fused.
+    void fuseLoops(bool f) {var->fuseLoops = f;}
+    bool fuseLoops() {return var->fuseLoops;}
+    
+    // The highest values set here become the innermost loops. The
+    // default value is zero. For loop variables with the same nesting
+    // value, the ones with the smallest memory stride in the first
+    // store location are innermost.
+    void loopNesting(int n) {var->loopNesting = n;}    
+    int loopNesting() {return var->loopNesting;}
+
+private:
+    NodeData<Variable> *var;
 };
 
 // An assignable reference to a memory location (e.g. im(x, y, c), or im(sin(x), y, c))
