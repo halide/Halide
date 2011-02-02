@@ -112,11 +112,15 @@ void Expr::debug() {
     printf("\n");
 }
 
-Range::Range() {
-}
-
-Range::Range(int a, int b) : Expr(IRNode::make(Var)) {
+Var::Var(int a, int b) : Expr(IRNode::make(Variable)) {
     node->interval.setBounds(a, b-1);
+    var = node->data<Variable>();
+    var->unroll = 1;
+    var->vectorize = 1;
+    var->parallelize = 1;
+    var->fuseLoops = false;
+    var->order = Parallel;
+    var->loopNesting = 0;
 }
 
 // Make an MemRef reference to a particular pixel. It can be used as an

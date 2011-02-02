@@ -39,21 +39,23 @@ void save(const FImage &im, const char *fname) {
 }
 
 FImage doNothing(FImage im) {
-    Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+    Var x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
     FImage output(im.size[0], im.size[1], im.size[2]);
+    x.vectorize(4); x.unroll(4);
     output(x, y, c) = im(x, y, c);
     return output;
 }
 
 FImage brighten(FImage im) {
-    Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+    Var x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
     FImage bright(im.size[0], im.size[1], im.size[2]);
+    x.vectorize(4); y.unroll(4);
     bright(x, y, c) = (im(x, y, c) + 1)/2.0f;
     return bright;
 }
 
 FImage conditionalBrighten(FImage im) {
-    Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+    Var x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
     Expr brighter = im(x, y, c)*2.0f - 0.5f;
     Expr test = (im(x, y, 0) + im(x, y, 1) + im(x, y, 2)) > 1.5f;
     FImage bright(im.size[0], im.size[1], im.size[2]);
@@ -64,8 +66,12 @@ FImage conditionalBrighten(FImage im) {
 FImage gradientx(FImage im) {
     // TODO: make x.min = 1
     
-    Range x(4, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+    Var x(4, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
     FImage dx(im.size[0], im.size[1], im.size[2]);
+    
+    x.vectorize(4);
+    x.unroll(4);
+
     dx(0, y, c) = 0.5f;    
     dx(1, y, c) = im(1, y, c) - im(0, y, c) + 0.5f;    
     dx(2, y, c) = im(2, y, c) - im(1, y, c) + 0.5f;
@@ -86,10 +92,12 @@ void blur(FImage im, const int K, FImage &tmp, FImage &output) {
         g[i] /= sum;
     }
 
-    Range x(16, im.size[0]-16);
-    Range y(16, im.size[1]-16);
-    Range c(0, im.size[2]);
+    Var x(16, im.size[0]-16);
+    Var y(16, im.size[1]-16);
+    Var c(0, im.size[2]);
 
+    x.vectorize(4);
+    y.unroll(2);
 
     Expr blurX = 0;
     for (int i = -K/2; i <= K/2; i++) 
@@ -141,11 +149,13 @@ void blurNative(FImage im, const int K, FImage &tmp, FImage &output) {
 void convolve(FImage im, FImage filter, FImage &out) {
     int mx = filter.size[0]/2;
     int my = filter.size[1]/2;
-    Range x(mx, im.size[0]-mx);
-    Range y(my, im.size[1]-my);
-    Range c(0, im.size[2]);
-    Range fx(0, filter.size[0]);
-    Range fy(0, filter.size[1]);
+    Var x(mx, im.size[0]-mx);
+    Var y(my, im.size[1]-my);
+    Var c(0, im.size[2]);
+    Var fx(0, filter.size[0]);
+    Var fy(0, filter.size[1]);
+
+    x.vectorize(4);
 
     out(x, y, c) += im(x + fx - mx, y + fy - my, c) * filter(fx, fy);
 
@@ -168,59 +178,77 @@ void convolveNative(FImage im, FImage filter, FImage &out) {
     }
 }
 
-// This doesn't work yet - it only compiles the first definition
+// A recursive box filter in x then y
 FImage boxFilter(FImage im, int size) {
-    Range x(size/2, im.size[0]-size/2);
-    Range y(size/2, im.size[1]-size/2);
-    Range c(0, im.size[2]);
+    Var x, y;
+    Var c(0, im.size[2]);
     FImage out(im.size[0], im.size[1], im.size[2]);
     FImage tmp(im.size[0], im.size[1], im.size[2]);
+
+    // Transformation options
+    y = Var(0, im.size[1]);
+    y.vectorize(4);
 
     // blur in X with zero boundary condition
 
     // Ramp up
-    x = Range(1, size/2);
+    x = Var(1, size/2);
     tmp(0, y, c) += im(x, y, c)/size;
-    //tmp(x, y, c) = tmp(x-1, y, c) + im(x+size/2, y, c)/size;
+    tmp(x, y, c) = tmp(x-1, y, c) + im(x+size/2, y, c)/size;
 
     // Steady-state
-    x = Range(size/2, im.size[0]-size/2);
+    x = Var(size/2, im.size[0]-size/2);
     tmp(x, y, c) = tmp(x-1, y, c) + (im(x+size/2, y, c) - im(x-size/2, y, c))/size;
 
     // Ramp down
-    x = Range(im.size[0]-size/2, im.size[0]);
-    //tmp(x, y, c) = tmp(x-1, y, c) - im(x-size/2, y, c)/size;
+    x = Var(im.size[0]-size/2, im.size[0]);
+    tmp(x, y, c) = tmp(x-1, y, c) - im(x-size/2, y, c)/size;
 
     // blur in Y
-    //out(x, y, c) = out(x, y-1, c) + (tmp(x, y+size/2, c) - tmp(x, y-size/2, c))/size;
+    x = Var(0, im.size[0]);
+    x.vectorize(4);
+
+    // Ramp up
+    y = Var(1, size/2);
+    out(x, 0, c) += tmp(x, y, c)/size;
+    out(x, y, c) = out(x, y-1, c) + tmp(x, y+size/2, c)/size;
+
+    // Steady-state
+    y = Var(size/2, im.size[1]-size/2);
+    out(x, y, c) = out(x, y-1, c) + (tmp(x, y+size/2, c) - tmp(x, y-size/2, c))/size;
+
+    // Ramp down
+    y = Var(im.size[1]-size/2, im.size[1]);
+    out(x, y, c) = out(x, y-1, c) - tmp(x, y-size/2, c)/size;    
 
     tmp.evaluate();
-    //out.evaluate();
+    out.evaluate();
 
-    return tmp;
+    return out;
 }
 
-// TODO: this one doesn't work at all. It uses a reduction and a scan
-
+// TODO: this one doesn't work yet because we don't have floor.
+// It uses a reduction and a scan
 #if 0
 FImage histEqualize(FImage im) {    
     // 256-bin Histogram
     FImage hist(256, im.size[2]);
-    Range x(0, im.size[0]);
-    Range y(0, im.size[1]);
+    Var x(0, im.size[0]);
+    Var y(0, im.size[1]);
+    Var c(0, im.size[2]);
     hist(floor(im(x, y, c)*256), c) += 1.0f/(im.size[0]*im.size[1]);
 
     // Compute the cumulative distribution by scanning along the
     // histogram
     FImage cdf(hist.size[0], im.size[2]);    
     cdf(0, c) = 0; 
-    x = Range(1, hist.size[0]);
+    x = Var(1, hist.size[0]);
     cdf(x, c) = cdf(x-1, c) + hist(x, c);
 
     // Equalize im using the cdf
     FImage equalized(im.size[0], im.size[1], im.size[2]);
-    x = Range(0, im.size[0]);
-    y = Range(0, im.size[1]);
+    x = Var(0, im.size[0]);
+    y = Var(0, im.size[1]);
     equalized(x, y, c) = cdf(floor(im(x, y, c)*256), c);
 
     return equalized;
@@ -230,17 +258,17 @@ FImage bilateral(FImage im, float spatialSigma, float rangeSigma) {
     // Allocate a bilateral grid
     FImage grid(ceil(im.size[0]/spatialSigma), ceil(im.size[1]/spatialSigma), ceil(1/rangeSigma), im.size[2]+1);
 
-    Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+    Var x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
 
     // Trilinear splat
-    Range c(0, im.size[2]);
+    Var c(0, im.size[2]);
 
     int cellWidth = im.size[0]/grid.size[0];
     int cellHeight = im.size[1]/grid.size[1];
-    Range gx(0, grid.size[0]);
-    Range gy(0, grid.size[1]);
-    Range dx(0, cellWidth*2);
-    Range dy(0, cellHeight*2);        
+    Var gx(0, grid.size[0]);
+    Var gy(0, grid.size[1]);
+    Var dx(0, cellWidth*2);
+    Var dy(0, cellHeight*2);        
 
     Expr weightXY = (1 - abs(dx - cellWidth)/cellWidth)*(1 - abs(dy - cellHeight)/cellHeight);
     Expr imX = gx*cellWidth + dx, imY = gy*cellHeight + dy;    
@@ -281,17 +309,17 @@ FImage bilateral(FImage im, float spatialSigma, float rangeSigma) {
     FImage blurryGridXY(grid.size[0], grid.size[1], grid.size[2], grid.size[3]);
     FImage blurryGridXYZ(grid.size[0], grid.size[1], grid.size[2], grid.size[3]);
     
-    x = Range(1, grid.size[0]-1);
-    y = Range(0, grid.size[1]);
-    z = Range(0, grid.size[2]);
-    c = Range(0, grid.size[3]);
+    x = Var(1, grid.size[0]-1);
+    y = Var(0, grid.size[1]);
+    z = Var(0, grid.size[2]);
+    c = Var(0, grid.size[3]);
 
     blurryGridX(x, y, z, c) = (grid(x-1, y, z, c) + 2*grid(x, y, z, c) + grid(x+1, y, z, c))/4;
 
-    y = Range(1, grid.size[1]-1);
+    y = Var(1, grid.size[1]-1);
     blurryGridXY(x, y, z, c) = (blurryGridX(x, y-1, z, c) + 2*blurryGridX(x, y, z, c) + blurryGridX(x, y+1, z, c))/4;
 
-    z = Range(1, grid.size[2]-1);
+    z = Var(1, grid.size[2]-1);
     blurryGridXYZ(x, y, z, c) = (blurryGridXY(x, y, z-1, c) + 2*blurryGridXY(x, y, z, c) + blurryGridXY(x, y, z+1, c))/4;
 
     // Trilinear slice
@@ -309,9 +337,9 @@ FImage bilateral(FImage im, float spatialSigma, float rangeSigma) {
     gridY -= floor(gridY);
     gridZ -= floor(gridZ);   
 
-    x = Range(0, out.size[0]);
-    y = Range(0, out.size[1]);
-    c = Range(0, out.size[2]);
+    x = Var(0, out.size[0]);
+    y = Var(0, out.size[1]);
+    c = Var(0, out.size[2]);
 
     for (int dx = 0; dx < 2; dx++) {
         for (int dy = 0; dy < 2; dy++) {
@@ -333,13 +361,13 @@ FImage life(FImage initial, int generations) {
     FImage grid(initial.size[0], initial.size[1], generations);
 
     // Use the input as the first slice
-    Range x(0, initial.size[0]), y(0, initial.size[1]);
+    Var x(0, initial.size[0]), y(0, initial.size[1]);
     grid(x, y, 0) = initial(x, y, 0);
 
     // Update slice t using slice t-1
-    x = Range(1, initial.size[0]-1);
-    y = Range(1, initial.size[1]-1);
-    Range t(1, generations);
+    x = Var(1, initial.size[0]-1);
+    y = Var(1, initial.size[1]-1);
+    Var t(1, generations);
     Expr live = grid(x, y, t-1);
     Expr sum = (grid(x-1, y, t-1) +
                 grid(x, y-1, t-1) + 
@@ -354,8 +382,8 @@ FImage life(FImage initial, int generations) {
 
     // Grab the last slice as the output
     FImage out(initial.size[0], initial.size[1], 1);
-    x = Range(0, initial.size[0]);
-    y = Range(0, initial.size[1]);
+    x = Var(0, initial.size[0]);
+    y = Var(0, initial.size[1]);
     out(x, y, 0) = grid(x, y, generations-1);
     return out;
 }
@@ -370,7 +398,7 @@ int main(int argc, char **argv) {
 
     FImage im = load(argv[1]);
 
-    Range x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
+    Var x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
 
     // Test 0: Do nothing apart from copy the input to the output
     save(doNothing(im).evaluate(), "test_identity.png");

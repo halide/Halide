@@ -21,7 +21,7 @@ using namespace std::tr1;
 
 
 enum OpCode {Const = 0, NoOp, 
-             Var, Plus, Minus, Times, Divide, Power,
+             Variable, Plus, Minus, Times, Divide, Power,
              Sin, Cos, Tan, ASin, ACos, ATan, ATan2, 
              Abs, Floor, Ceil, Round,
              Exp, Log, Mod, 
@@ -32,7 +32,30 @@ enum OpCode {Const = 0, NoOp,
              PlusImm, TimesImm, 
              Vector, LoadVector, StoreVector, ExtractVector, ExtractScalar};
 
+enum Order {Increasing, Decreasing, Parallel};
+
 const char *opname(OpCode op);
+
+class AbstractNodeData {
+public:
+    virtual ~AbstractNodeData() {};
+};
+
+template<OpCode op>
+class NodeData : public AbstractNodeData {
+public:
+    ~NodeData() {};
+};
+
+template<>
+class NodeData<Variable> : public AbstractNodeData {
+public:
+    ~NodeData() {};
+    int vectorize, unroll, parallelize;
+    Order order;   
+    bool fuseLoops;
+    int loopNesting;
+};
 
 // Here's how you hash a shared_ptr
 namespace std {
@@ -91,7 +114,7 @@ public:
                
     // What level of the for loop will this node be computed at?
     // Right now 0 is outermost, representing consts, and 4 is
-    // deepest, representing iteration over channels.
+    // deepest, representing iteration over channels usually.
     signed char level;
 
     // What is the type of this expression?
@@ -134,8 +157,9 @@ public:
     }
 
 
-
-
+    // debugging output
+    void printExp();
+    void print();
 
     // Return an optimized version of this node. Most optimizations
     // are done by make, but there may be some that can only
@@ -153,14 +177,6 @@ public:
     // Cast an IRNode to a different type
     Ptr as(Type t);
 
-    // Recursively print out the complete expression this IRNode
-    // computes (e.g. x+y*17). This can get long.
-    void printExp();
-
-    // Print out which operation occurs on what registers (e.g. xmm0 =
-    // xmm1 + xmm2). Must be called after registers are assigned.
-    void print();
-
     // Save out a .dot file showing all nodes in existence and how they connect
     static void saveDot(const char *filename);
 
@@ -172,6 +188,14 @@ public:
 
     // Do (or redo any static analysis)
     void analyze();
+
+    // If you know statically that a node n is of type foo, then you
+    // can ask for n.data<foo>() to get at its supplemental data.
+    template<OpCode o>
+    NodeData<o> *data() {
+        if (_data == NULL) _data = new NodeData<o>(); 
+        return (NodeData<o> *)_data;
+    }
 
 protected:
     // All the const float nodes
@@ -206,9 +230,11 @@ protected:
     Ptr rebalanceSum();
     void collectSum(vector<pair<Ptr, bool> > &terms, bool positive = true);
 
+
+    // Extra data for this IRNode. Cast it to NodeData<op>
+    AbstractNodeData *_data;
+    
 };
-
-
 
 
 
