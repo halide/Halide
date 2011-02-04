@@ -1,3 +1,6 @@
 *.o
 *.dot
 .DS_Store
+*.log
+test_*
+/tests
