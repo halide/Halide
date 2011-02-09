@@ -22,7 +22,7 @@ pthread_mutex_t chunk_mutex = PTHREAD_MUTEX_INITIALIZER;
 // produce a chunk of data
 void produce_data(int *chunk) {
     for (int i = 0; i < chunk_size; i++) {
-	chunk[i] = i;
+        chunk[i] = i;
     }
 }
 
@@ -30,7 +30,7 @@ void produce_data(int *chunk) {
 int consume_data(int *chunk) {
     int acc = 0;
     for (int i = 0; i < chunk_size; i++) {
-	acc += chunk[i];
+        acc += chunk[i];
     }
     return acc;
 }
@@ -50,9 +50,9 @@ void segfault_sigaction(int signal, siginfo_t *si, void *arg) {
     size_t idx = (int *)si->si_addr - data;
 
     if (idx > size) {
-	printf("Legit segfault\n");
-	// this is a legit segfault
-	exit(1);
+        printf("Legit segfault\n");
+        // this is a legit segfault
+        exit(1);
     }
 
     // drop it to the nearest chunk boundary
@@ -100,7 +100,7 @@ void *do_eager(void *x) {
     info->ret = 0;
     for (int i = info->thread_id*chunk_size; i < size; i += chunk_size*info->threads) {
         info->ret += consume_data(data + i);
-    }	
+    }   
 
     return NULL;
 }
@@ -111,7 +111,7 @@ void *do_lazy(void *x) {
     info->ret = 0;
     for (int i = info->thread_id*chunk_size; i < size; i += chunk_size*info->threads) {
         info->ret += consume_data(data + i);
-    }	
+    }   
 
     return NULL;
 }
@@ -151,9 +151,9 @@ int main(int argc, char **argv) {
     struct timeval t1, t2;
 
     {
-	data = (int *)malloc_aligned(sizeof(int)*size);
+        data = (int *)malloc_aligned(sizeof(int)*size);
 
-	gettimeofday(&t1, NULL);
+        gettimeofday(&t1, NULL);
 
         for (int i = 0; i < threads; i++)
             pthread_create(thread+i, NULL, do_eager, info+i);
@@ -165,39 +165,39 @@ int main(int argc, char **argv) {
         }
 
 
-	gettimeofday(&t2, NULL);
+        gettimeofday(&t2, NULL);
 
-	printf("Eagerly scheduled sum    = %d (%ld us, %ld bytes)\n", sum, 
-	       (t2.tv_sec - t1.tv_sec)*1000000 + (t2.tv_usec - t1.tv_usec),
+        printf("Eagerly scheduled sum    = %d (%ld us, %ld bytes)\n", sum, 
+               (t2.tv_sec - t1.tv_sec)*1000000 + (t2.tv_usec - t1.tv_usec),
                sizeof(int)*size);
 
 
-	free_aligned(data);
+        free_aligned(data);
     }
 
 
 
     {
-	
-	// Allocate K chunks of actual memory
-	int fd = open("/tmp/foo", O_RDWR | O_CREAT);
-	ftruncate(fd, size*sizeof(int));
-	for (int i = 0; i < K; i++) {
-	    chunks[i] = (int *)mmap(NULL, sizeof(int)*chunk_size,
-				    PROT_WRITE, MAP_SHARED, 
-				    fd, i * chunk_size * sizeof(int));
+        
+        // Allocate K chunks of actual memory
+        int fd = open("/tmp/foo", O_RDWR | O_CREAT);
+        ftruncate(fd, size*sizeof(int));
+        for (int i = 0; i < K; i++) {
+            chunks[i] = (int *)mmap(NULL, sizeof(int)*chunk_size,
+                                    PROT_WRITE, MAP_SHARED, 
+                                    fd, i * chunk_size * sizeof(int));
             chunk_mapping[i] = NULL;
-	}
+        }
 
-	// Initialize data to map the entire file. We're not going
-	// to use it though, instead we'll remap pieces of it back to
-	// the chunks above as needed.
+        // Initialize data to map the entire file. We're not going
+        // to use it though, instead we'll remap pieces of it back to
+        // the chunks above as needed.
         data = (int *)mmap(NULL, sizeof(int)*size, PROT_NONE, MAP_SHARED, fd, 0);
 
         unlink("/tmp/foo");
 
-	gettimeofday(&t1, NULL);
-	
+        gettimeofday(&t1, NULL);
+        
         for (int i = 0; i < threads; i++)
             pthread_create(thread+i, NULL, do_lazy, info+i);
 
@@ -207,19 +207,19 @@ int main(int argc, char **argv) {
             sum += info[i].ret;
         }
         
-	gettimeofday(&t2, NULL);
+        gettimeofday(&t2, NULL);
 
-	close(fd);	
-	
-	printf("Lazily scheduled sum     = %d (%ld us, %ld bytes)\n", sum, 
-	       (t2.tv_sec - t1.tv_sec)*1000000 + (t2.tv_usec - t1.tv_usec),
+        close(fd);      
+        
+        printf("Lazily scheduled sum     = %d (%ld us, %ld bytes)\n", sum, 
+               (t2.tv_sec - t1.tv_sec)*1000000 + (t2.tv_usec - t1.tv_usec),
                sizeof(int)*chunk_size*K);
-	
+        
 
-	munmap(data, size*sizeof(int));
-	for (int i = 0; i < K; i++) {
-	    munmap(chunks[i], chunk_size);
-	}
+        munmap(data, size*sizeof(int));
+        for (int i = 0; i < K; i++) {
+            munmap(chunks[i], chunk_size);
+        }
 
 
     }
@@ -228,9 +228,9 @@ int main(int argc, char **argv) {
     // try a static schedule into some scratch
 
     {
-	data = (int *)malloc_aligned(sizeof(int)*chunk_size);
+        data = (int *)malloc_aligned(sizeof(int)*chunk_size);
 
-	gettimeofday(&t1, NULL);
+        gettimeofday(&t1, NULL);
 
         for (int i = 0; i < threads; i++)
             pthread_create(thread+i, NULL, do_static, info+i);
@@ -241,14 +241,14 @@ int main(int argc, char **argv) {
             sum += info[i].ret;
         }
 
-	gettimeofday(&t2, NULL);
+        gettimeofday(&t2, NULL);
 
-	printf("Statically scheduled sum = %d (%ld us, %ld bytes)\n", sum, 
-	       (t2.tv_sec - t1.tv_sec)*1000000 + (t2.tv_usec - t1.tv_usec),
+        printf("Statically scheduled sum = %d (%ld us, %ld bytes)\n", sum, 
+               (t2.tv_sec - t1.tv_sec)*1000000 + (t2.tv_usec - t1.tv_usec),
                sizeof(int)*chunk_size);       
 
 
-	free_aligned(data);
+        free_aligned(data);
     }
 
 
