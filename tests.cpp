@@ -49,7 +49,7 @@ FImage doNothing(FImage im) {
 FImage brighten(FImage im) {
     Var x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
     FImage bright(im.size[0], im.size[1], im.size[2]);
-    x.vectorize(4); y.unroll(4);
+    x.vectorize(4); x.unroll(4); //y.unroll(4); - BUG this is unsafe on Darwin/x64 2011-02-18
     bright(x, y, c) = (im(x, y, c) + 1)/2.0f;
     return bright;
 }
@@ -187,7 +187,7 @@ FImage boxFilter(FImage im, int size) {
 
     // Transformation options
     y = Var(0, im.size[1]);
-    y.vectorize(4);
+    //y.vectorize(4); // BUG: this is unsafe on Darwin/x64 2011-02-18
 
     // blur in X with zero boundary condition
 
