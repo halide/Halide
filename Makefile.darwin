@@ -13,7 +13,10 @@ testConsole: testConsole.o $(OBJECTS)
 	g++ $(CXXFLAGS) -o testConsole testConsole.o $(OBJECTS) -ljpeg -lpng -ltiff
 
 testX64: testX64.o $(OBJECTS) 
-	g++ $(CXXFLAGS) -o testX64 testX64.o $(OBJECTS) -ljpeg -lpng -ltiff
+	g++ $(CXXFLAGS) -o testX64 testX64.o $(OBJECTS)
+
+hello-fimage: hello-fimage.o $(OBJECTS)
+	g++ $(CXXFLAGS) -o hello-fimage hello-fimage.o $(OBJECTS)
 
 clean:
-	rm $(OBJECTS) tests
+	rm $(OBJECTS) tests testX64 hello-fimage
