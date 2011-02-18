@@ -918,10 +918,15 @@ public:
     	(void) mprotect((void *)startPage, length, PROT_EXEC | PROT_READ | PROT_WRITE);
 #endif //!_MSC_VER
     }
+    
+    void makeRunnable()
+    {
+        makePagesExecutable( (void *)&(_buffer[0]), _buffer.size() );
+    }
 
     // run the function with no arguments and no return value
     void run() {
-        makePagesExecutable( (void *)&(_buffer[0]), _buffer.size() );
+        makeRunnable();
         
         // Cast the buffer to a function pointer of the appropriate type and call it
         void (*func)(void) = (void (*)(void))(&(_buffer[0]));

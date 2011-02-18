@@ -327,10 +327,17 @@ int main(int argc, char **argv) {
     // now actually generate some functions and call them on the fly
     a.buffer().clear();
     // move the first argument to the output
+#ifdef WIN64 // Assume Microsoft x64 calling convention
     a.mov(a.rax, a.rcx);
+#else // Assume System V AMD64 ABI convention
+    a.mov(a.rax, a.rdi);
+#endif
     // add one 
-    //a.add(a.rax, 1);
+    a.add(a.rax, 1);
     a.ret();
+    
+    // make the buffer executable before calling it
+    a.makeRunnable();
 
     // cast the buffer to a function pointer
     long long (*func)(long long) = (long long (*)(long long))(&a.buffer()[0]);
