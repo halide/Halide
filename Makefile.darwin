@@ -1,22 +1,23 @@
 HEADERS = FImage.h Compiler.h X64.h IRNode.h CImg.h Interval.h
 OBJECTS = Compiler.o FImage.o IRNode.o base.o Interval.o
-CXXFLAGS = -g -Wall
-#CXXFLAGS = -O3 -Wall -ffast-math -march=core2 -msse3 -mfpmath=sse
+CXXFLAGS = -g -Wall -I/usr/local/include
+#CXXFLAGS = -O3 -Wall -ffast-math -march=core2 -msse3 -mfpmath=sse -I/usr/local/include
+LDFLAGS = -L/usr/local/lib -ljpeg -lpng -ltiff -lpthread -lLLVMCore -lLLVMCodeGen
 
 %.o: %.cpp $(HEADERS)
 	g++ $(CXXFLAGS) -c -I /usr/local/include $< 
 
 tests: tests.o $(OBJECTS) 
-	g++ $(CXXFLAGS) -o tests tests.o $(OBJECTS) -L/usr/local/lib -ljpeg -lpng -ltiff -lpthread #-L${LLVM_PATH}/lib -lLLVMCore -lLLVMCodeGen
+	g++ $(CXXFLAGS) -o tests tests.o $(OBJECTS) $(LDFLAGS)
 
 testConsole: testConsole.o $(OBJECTS) 
-	g++ $(CXXFLAGS) -o testConsole testConsole.o $(OBJECTS) -ljpeg -lpng -ltiff
+	g++ $(CXXFLAGS) -o testConsole testConsole.o $(OBJECTS) $(LDFLAGS)
 
 testX64: testX64.o $(OBJECTS) 
-	g++ $(CXXFLAGS) -o testX64 testX64.o $(OBJECTS)
+	g++ $(CXXFLAGS) -o testX64 testX64.o $(OBJECTS) $(LDFLAGS)
 
 hello-fimage: hello-fimage.o $(OBJECTS)
-	g++ $(CXXFLAGS) -o hello-fimage hello-fimage.o $(OBJECTS)
+	g++ $(CXXFLAGS) -o hello-fimage hello-fimage.o $(OBJECTS) $(LDFLAGS)
 
 clean:
 	rm $(OBJECTS) tests testX64 hello-fimage
