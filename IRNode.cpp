@@ -748,7 +748,7 @@ void IRNode::printExp() {
     switch(op) {
     case Const:
         if (type == Float) printf("%f", fval);
-        else printf("%ld", ival);
+        else printf("%lld", ival);
         break;
     case Plus:
         printf("(");
@@ -760,12 +760,12 @@ void IRNode::printExp() {
     case PlusImm:
         printf("(");
         inputs[0]->printExp();
-        printf("+%ld)", ival);
+        printf("+%lld)", ival);
         break;
     case TimesImm:
         printf("(");
         inputs[0]->printExp();
-        printf("*%ld)", ival);
+        printf("*%lld)", ival);
         break;
     case Minus:
         printf("(");
@@ -791,24 +791,24 @@ void IRNode::printExp() {
     case Load: 
         printf("Load(");
         inputs[0]->printExp();
-        printf("+%ld)", ival);
+        printf("+%lld)", ival);
         break;
     case LoadVector:
         printf("LoadVector(");
         inputs[0]->printExp();
-        printf("+%ld)", ival);
+        printf("+%lld)", ival);
         break;        
     case Store: 
         printf("Store(");
         inputs[0]->printExp();
-        printf("+%ld, ", ival);
+        printf("+%lld, ", ival);
         inputs[1]->printExp();
         printf(")");
         break;
     case StoreVector:
         printf("StoreVector(");
         inputs[0]->printExp();
-        printf("+%ld, ", ival);
+        printf("+%lld, ", ival);
         inputs[1]->printExp();
         printf(")");
         break;        
@@ -817,12 +817,12 @@ void IRNode::printExp() {
         inputs[0]->printExp();
         printf(", ");
         inputs[1]->printExp();
-        printf(", %ld)", ival);
+        printf(", %lld)", ival);
         break;
     case ExtractScalar:
         printf("ExtractScalar(");
         inputs[0]->printExp();
-        printf(", %ld)", ival);
+        printf(", %lld)", ival);
         break;
     case Variable:
         printf("var");
@@ -856,7 +856,7 @@ void IRNode::print() {
     char buf[32];
     for (size_t i = 0; i < inputs.size(); i++) {
         if (inputs[i]->reg < 0) 
-            sprintf(buf, "%ld", inputs[i]->ival);
+            sprintf(buf, "%lld", inputs[i]->ival);
         else if (inputs[i]->reg < 16)
             sprintf(buf, "r%d", inputs[i]->reg);
         else
@@ -867,7 +867,7 @@ void IRNode::print() {
     switch (op) {
     case Const:
         if (type == Float) printf("%f", fval);
-        else printf("%ld", ival);
+        else printf("%lld", ival);
         break;                
     case Plus:
         printf("%s + %s", args[0].c_str(), args[1].c_str());
@@ -882,28 +882,28 @@ void IRNode::print() {
         printf("%s / %s", args[0].c_str(), args[1].c_str());
         break;
     case PlusImm:
-        printf("%s + %ld", args[0].c_str(), ival);
+        printf("%s + %lld", args[0].c_str(), ival);
         break;
     case TimesImm:
-        printf("%s * %ld", args[0].c_str(), ival);
+        printf("%s * %lld", args[0].c_str(), ival);
         break;
     case LoadVector:
-        printf("LoadVector %s + %ld", args[0].c_str(), ival);
+        printf("LoadVector %s + %lld", args[0].c_str(), ival);
         break;
     case Load:
-        printf("Load %s + %ld", args[0].c_str(), ival);
+        printf("Load %s + %lld", args[0].c_str(), ival);
         break;
     case StoreVector:
-        printf("StoreVector %s + %ld, %s", args[0].c_str(), ival, args[1].c_str());
+        printf("StoreVector %s + %lld, %s", args[0].c_str(), ival, args[1].c_str());
         break;
     case Store:
-        printf("Store %s + %ld, %s", args[0].c_str(), ival, args[1].c_str());
+        printf("Store %s + %lld, %s", args[0].c_str(), ival, args[1].c_str());
         break;
     case ExtractVector:
-        printf("ExtractVector %s %s %ld", args[0].c_str(), args[1].c_str(), ival);
+        printf("ExtractVector %s %s %lld", args[0].c_str(), args[1].c_str(), ival);
         break;
     case ExtractScalar:
-        printf("ExtractScalar %s %ld", args[0].c_str(), ival);
+        printf("ExtractScalar %s %lld", args[0].c_str(), ival);
         break;
     default:
         printf("%s", opname(op));
@@ -922,7 +922,7 @@ void IRNode::saveDot(const char *filename) {
         IRNode::Ptr n = allNodes[i].lock();
         if (!n) continue;
         if (n->ival) 
-            fprintf(f, "  n%llx [label = \"%s %d %ld\"]\n", (long long)n.get(), opname(n->op), n->level, n->ival);
+            fprintf(f, "  n%llx [label = \"%s %d %lld\"]\n", (long long)n.get(), opname(n->op), n->level, n->ival);
         else if (n->fval)  
             fprintf(f, "  n%llx [label = \"%s %d %f\"]\n", (long long)n.get(), opname(n->op), n->level, n->fval);           
         else 
@@ -1179,7 +1179,7 @@ IRNode::Ptr IRNode::makeNew(float v) {
 
 IRNode::Ptr IRNode::makeNew(int64_t v) {
     if ((v>>32) != 0 && (v>>31) != -1) {
-        printf("We only trust 32 bit values for now: 0x%lx\n", v);
+        printf("We only trust 32 bit values for now: 0x%llx\n", v);
     }
     vector<IRNode::Ptr> empty;
     return makeNew(Int, 1, Const, empty, v, 0);    
@@ -1245,8 +1245,8 @@ void IRNode::analyze() {
 
         if (interval.bounded() && 0) {
             printExp();
-            printf(" = %ld modulo %ld", interval.remainder(), interval.modulus());
-            printf(" <- [%ld %ld]\n", interval.min(), interval.max());
+            printf(" = %lld modulo %lld", interval.remainder(), interval.modulus());
+            printf(" <- [%lld %lld]\n", interval.min(), interval.max());
         }
     }
 

@@ -287,16 +287,16 @@ void FImage::debug() {
     }
 }
 
-FImage &FImage::evaluate(int *time) {
+FImage &FImage::evaluate(time_t *time) {
 
     Compiler c;
     AsmX64 a;    
     printf("Compiling...\n"); fflush(stdout);
     c.compile(&a, this);
     printf("Running...\n"); fflush(stdout);
-    int t0 = timeGetTime();
+    time_t t0 = timeGetTime();
     a.run();
-    int t1 = timeGetTime();
+    time_t t1 = timeGetTime();
     if (time) time[0] = t1-t0;
     printf("Done\n"); fflush(stdout);
 

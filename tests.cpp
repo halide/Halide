@@ -434,14 +434,14 @@ int main(int argc, char **argv) {
 
     FImage out(im.size[0], im.size[1], im.size[2]);
     convolve(im, filter, out);
-    int t0, t1, t2, t3;
+    time_t t0, t1, t2, t3;
     out.evaluate(&t0);
     save(out, "test_sharp.png");
     t1 = timeGetTime();
     convolveNative(im, filter, out);
     t1 = timeGetTime() - t1;
     save(out, "test_sharpNative.png");
-    printf("Sharpening: %d vs %d (speedup = %f)\n", t0, t1, (float)t1/t0);
+    printf("Sharpening: %d vs %d (speedup = %f)\n", int(t0), int(t1), (float)t1/t0);
 
     // Test 4: Recursive box filter
     save(boxFilter(im, 16), "test_box_filter.png");
@@ -461,8 +461,8 @@ int main(int argc, char **argv) {
     t3 = timeGetTime();
     save(blurry, "test_blurry_native.png");
 
-    printf("FImage: %d %d ms\n", t0, t1);
-    printf("Native: %d ms\n", t3-t2);
+    printf("FImage: %d %d ms\n", int(t0), int(t1));
+    printf("Native: %d ms\n", int(t3-t2));
 
     // clock speed in cycles per millisecond
     const double clock = 3068000.0;

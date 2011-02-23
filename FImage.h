@@ -182,7 +182,7 @@ public:
     
     // Evaluate the image and return a reference to it. In the future
     // this may return a vanilla image type instead.
-    FImage &evaluate(int *time = NULL);
+    FImage &evaluate(time_t *time = NULL);
         
     // Dimensions
     vector<uint32_t> size;
