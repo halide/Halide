@@ -4,3 +4,7 @@
 *.log
 test_*
 /tests
+generated.obj
+hello-fimage
+test.s
+testX64
