@@ -2,6 +2,11 @@
 
 #include <algorithm>
 
+static inline int32_t truncate(int64_t v) {
+    int32_t t = int32_t(v & 0xFFFFFFFF);
+    assert(t == v, "Truncated 64-bit 0x%llx to 32-bit 0x%x", v, t);
+    return t;
+}
 
 void Compiler::collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &nodes) {
     if (node->op == op) nodes.insert(node);
@@ -60,7 +65,7 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
     IRNode::Ptr lhs = def->inputs[0];
     IRNode::Ptr rhs = def->inputs[1];
 
-    int t1 = timeGetTime();
+    time_t t1 = timeGetTime();
 
     // Find the variables we need to iterate over by digging into the lhs and rhs
     printf("Collecting free variables\n");
@@ -103,9 +108,9 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
     for (size_t i = 0; i < vars.size(); i++) {
         for (size_t j = i+1; j < vars.size(); j++) {
             int nj = vars[j]->data<Variable>()->loopNesting;
-            int sj = abs(storeDelta[j]);
+            int64_t sj = abs(storeDelta[j]);
             int ni = vars[i]->data<Variable>()->loopNesting;        
-            int si = abs(storeDelta[i]);
+            int64_t si = abs(storeDelta[i]);
 
             if (ni > nj || (ni == nj && si < sj)) {
                 IRNode::Ptr v = vars[i];
@@ -127,7 +132,7 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
 
     // Check all the vars have sane bounds.
     for (size_t i = 0; i < vars.size(); i++) {
-        printf("Var %d : [%ld %ld]\n", (int)i,
+        printf("Var %d : [%lld %lld]\n", (int)i,
                vars[i]->interval.min(), vars[i]->interval.max());
         assert(vars[i]->interval.bounded(), "Variable %d has undefined bounds\n");
     }
@@ -135,7 +140,7 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
     // Find a var to vectorize across. For right now we just pick the
     // innermost var flagged as vectorizable.
     bool vectorize = false;
-    int vectorDim = 0;
+    size_t vectorDim = 0;
     vector<int> vectorWidth(vars.size(), 1);
     for (size_t i = 0; i < vars.size() && !vectorize; i++) {       
         int v = varData[i]->vectorize; 
@@ -231,13 +236,13 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
          storeIter != storeSet.end(); storeIter++) {
         IRNode::Ptr store = *storeIter;        
         SteppedInterval storeRange = lhs->interval + store->ival;
-        printf("Store address bounds: %ld %ld\n", storeRange.min(), storeRange.max());
+        printf("Store address bounds: %lld %lld\n", storeRange.min(), storeRange.max());
         for (IRNode::PtrSet::iterator loadIter = loadSet.begin();
              loadIter != loadSet.end(); loadIter++) {
             IRNode::Ptr load = *loadIter;
             IRNode::Ptr loadAddr = load->inputs[0];
             SteppedInterval loadRange = loadAddr->interval + load->ival;
-            printf("Load address bounds: %ld : %ld\n", loadRange.min(), loadRange.max());
+            printf("Load address bounds: %lld : %lld\n", loadRange.min(), loadRange.max());
             
             int64_t distance = abs(loadRange - storeRange).min();
             if (distance == 0) {
@@ -245,7 +250,7 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
                 printf("Promoting load at loop level %d to loop level %d\n", load->level, store->level);
                 load->assignLevel(def->level);
             } else {
-                printf("Load and store come within %ld of each other\n", distance);
+                printf("Load and store come within %lld of each other\n", distance);
             }
         }
     }   
@@ -291,12 +296,12 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
     vector<vector<IRNode::Ptr > > order;        
     doRegisterAssignment(roots, reserved, order, clobbered, outputs);   
     printf("Done\n");
-    int t2 = timeGetTime();
+    time_t t2 = timeGetTime();
 
     // which register is the output pointer in?
     AsmX64::Reg outPtr(roots[roots.size()-1]->reg);
 
-    printf("Compilation took %d ms\n", t2-t1);
+    printf("Compilation took %ld ms\n", t2-t1);
 
     // print out the proposed ordering and register assignment for inspection
     
@@ -329,13 +334,14 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
 
     for (int i = (int)vars.size()-1; i >= 0; i--) {
         if (varData[i]->order == Decreasing) {
+            // should these 
             a->sub(varRegs[i], vectorWidth[i]*unroll[i]);
-            a->cmp(varRegs[i], vars[i]->interval.min());
+            a->cmp(varRegs[i], truncate(vars[i]->interval.min()));
             a->jge(labels[i]);
         } else {
             // At this point, parallel is treated as increasing
             a->add(varRegs[i], vectorWidth[i]*unroll[i]);
-            a->cmp(varRegs[i], vars[i]->interval.max()+1);
+            a->cmp(varRegs[i], truncate(vars[i]->interval.max()+1));
             a->jl(labels[i]);
         }
     }
@@ -712,12 +718,12 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
             assert(gpr1, "Can only store using addresses in gprs\n");
             assert(!gpr2, "Can only store values in sse registers\n");
             assert(fits32(node->ival),
-                   "Store may only use a 32-bit signed constant\n");
+                   "Store may only use a 32-bit signed constant - 0x%llx overflows\n", node->ival);
             if (node->width == 1) {
                 a->movss(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
             } else {
                 SteppedInterval i = node->inputs[0]->interval + node->ival;
-                printf("%ld %ld %ld %ld\n", i.min(), i.max(), i.remainder(), i.modulus());
+                printf("%lld %lld %lld %lld\n", i.min(), i.max(), i.remainder(), i.modulus());
                 if ((i.modulus() & 0xf) == 0 &&
                     (i.remainder() & 0xf) == 0) {
                     a->movaps(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
