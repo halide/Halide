@@ -7,12 +7,13 @@
 class AsmX64Compiler : public Compiler {
 public:
     
-    void compile(FImage *im);
     void run() { a.run(); }
 
 protected:
+    void compilePrologue();
     // Compile a single definition
     void compileDefinition(FImage *im, int definition);
+    void compileEpilogue();
 
     // Generate machine code for a vector of IRNodes. Registers must
     // have already been assigned.
