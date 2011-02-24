@@ -1,4 +1,4 @@
-#include "Compiler.h"
+#include "AsmX64Compiler.h"
 
 #include <algorithm>
 
@@ -8,49 +8,49 @@ static inline int32_t truncate(int64_t v) {
     return t;
 }
 
-void Compiler::collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &nodes) {
+void AsmX64Compiler::collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &nodes) {
     if (node->op == op) nodes.insert(node);
     for (size_t i = 0; i < node->inputs.size(); i++) {
         collectInputs(node->inputs[i], op, nodes);
     }
 }
 
-void Compiler::compile(AsmX64 *a, FImage *im) {
+void AsmX64Compiler::compile(FImage *im) {
 
     // Align the stack to a 16-byte boundary - it always comes in
     // offset by 8 bytes because it contains the 64-bit return
     // address.
-    a->sub(a->rsp, 8);
+    a.sub(a.rsp, 8);
         
     // Save all the registers that the 64-bit C abi tells us we're
     // supposed to. This maintains stack alignment.
-    a->pushNonVolatiles();
+    a.pushNonVolatiles();
         
     // Find any variables that are fused over the definitions
     // TODO
 
     // Compile a chunk of code that just runs the definitions in order
     for (int i = 0; i < (int)im->definitions.size(); i++) {
-        compileDefinition(a, im, i);
+        compileDefinition(im, i);
     }
 
     // Exit any loops that were fused over definitions
     // TODO
 
     // Pop the stack and return
-    a->popNonVolatiles();
-    a->add(a->rsp, 8);
-    a->ret();        
+    a.popNonVolatiles();
+    a.add(a.rsp, 8);
+    a.ret();        
 
     printf("Saving object file\n");
 
     // Save an object file that you can use dumpbin on to inspect
-    a->saveCOFF("generated.obj");        
-    a->saveELF("generated.o");
+    a.saveCOFF("generated.obj");        
+    a.saveELF("generated.o");
 }
 
 // Compile the evaluation of a single FImage
-void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
+void AsmX64Compiler::compileDefinition(FImage *im, int definition) {
     printf("Compiling definition %d/%d.\n",
            definition+1, (int)im->definitions.size());    
 
@@ -257,20 +257,20 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
 
     // Assign the variables some registers
     vector<AsmX64::Reg> varRegs(vars.size());
-    if (varRegs.size() > 0) varRegs[0] = a->rax;
-    if (varRegs.size() > 1) varRegs[1] = a->rcx;
-    if (varRegs.size() > 2) varRegs[2] = a->rdx;
-    if (varRegs.size() > 3) varRegs[3] = a->rbx;
-    if (varRegs.size() > 4) varRegs[4] = a->rbp;
-    if (varRegs.size() > 5) varRegs[5] = a->rsi;
-    if (varRegs.size() > 6) varRegs[6] = a->rdi;
+    if (varRegs.size() > 0) varRegs[0] = a.rax;
+    if (varRegs.size() > 1) varRegs[1] = a.rcx;
+    if (varRegs.size() > 2) varRegs[2] = a.rdx;
+    if (varRegs.size() > 3) varRegs[3] = a.rbx;
+    if (varRegs.size() > 4) varRegs[4] = a.rbp;
+    if (varRegs.size() > 5) varRegs[5] = a.rsi;
+    if (varRegs.size() > 6) varRegs[6] = a.rdi;
     if (varRegs.size() > 7) panic("Can't handle more than 7 loop indices for now\n");
     
-    AsmX64::Reg tmp = a->r15;
+    AsmX64::Reg tmp = a.r15;
 
     // Mark these registers as unclobberable for the register allocation
     uint32_t reserved = ((1 << tmp.num) | 
-                         (1 << a->rsp.num));
+                         (1 << a.rsp.num));
 
     // Force the indices into the intended registers and mark them as reserved
     for (size_t i = 0; i < varRegs.size(); i++) {
@@ -317,7 +317,7 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
         }
     }
     
-    compileBody(a, order[0]);
+    compileBody(order[0]);
 
     char labels[10][20];
     for (int i = 0; i < 10; i++) {
@@ -326,23 +326,23 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
 
     for (size_t i = 0; i < vars.size(); i++) {
         printf("Starting loop %d\n", (int)i);
-        a->mov(varRegs[i], vars[i]->interval.min());
-        a->label(labels[i]); 
+        a.mov(varRegs[i], vars[i]->interval.min());
+        a.label(labels[i]); 
     
-        compileBody(a, order[i+1]);
+        compileBody(order[i+1]);
     }
 
     for (int i = (int)vars.size()-1; i >= 0; i--) {
         if (varData[i]->order == Decreasing) {
             // should these 
-            a->sub(varRegs[i], vectorWidth[i]*unroll[i]);
-            a->cmp(varRegs[i], truncate(vars[i]->interval.min()));
-            a->jge(labels[i]);
+            a.sub(varRegs[i], vectorWidth[i]*unroll[i]);
+            a.cmp(varRegs[i], truncate(vars[i]->interval.min()));
+            a.jge(labels[i]);
         } else {
             // At this point, parallel is treated as increasing
-            a->add(varRegs[i], vectorWidth[i]*unroll[i]);
-            a->cmp(varRegs[i], truncate(vars[i]->interval.max()+1));
-            a->jl(labels[i]);
+            a.add(varRegs[i], vectorWidth[i]*unroll[i]);
+            a.cmp(varRegs[i], truncate(vars[i]->interval.max()+1));
+            a.jl(labels[i]);
         }
     }
 
@@ -350,10 +350,10 @@ void Compiler::compileDefinition(AsmX64 *a, FImage *im, int definition) {
 }
     
 // Generate machine code for a vector of IRNodes. Registers must have already been assigned.
-void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
+void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
         
-    AsmX64::SSEReg tmp = a->xmm15;
-    AsmX64::Reg gtmp = a->r15;
+    AsmX64::SSEReg tmp = a.xmm15;
+    AsmX64::Reg gtmp = a.r15;
 
     for (size_t i = 0; i < code.size(); i++) {
         // Extract the node, its register, and any inputs and their registers
@@ -390,33 +390,33 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
         case Const: 
             if (node->type == IRNode::Float) {
                 if (node->fval == 0.0f) {
-                    a->bxorps(dst, dst);
+                    a.bxorps(dst, dst);
                 } else {
-                    a->mov(gtmp, a->addData(node->fval));
-                    a->movss(dst, AsmX64::Mem(gtmp));
-                    //a->shufps(dst, dst, 0, 0, 0, 0);
+                    a.mov(gtmp, a.addData(node->fval));
+                    a.movss(dst, AsmX64::Mem(gtmp));
+                    //a.shufps(dst, dst, 0, 0, 0, 0);
                 }
             } else if (node->type == IRNode::Bool) {
                 if (gpr) {
                     if (node->ival) 
-                        a->mov(gdst, -1);
+                        a.mov(gdst, -1);
                     else
-                        a->mov(gdst, 0);
+                        a.mov(gdst, 0);
                 } else {
                     if (node->ival) {
-                        a->cmpeqps(dst, dst);
+                        a.cmpeqps(dst, dst);
                     } else {
-                        a->bxorps(dst, dst);                    
+                        a.bxorps(dst, dst);                    
                     }
                 }
             } else {
                 if (gpr) {
-                    a->mov(gdst, node->ival);
+                    a.mov(gdst, node->ival);
                 } else {
-                    a->mov(a->r15, node->ival);
+                    a.mov(a.r15, node->ival);
                     // ints are 32-bit for now, so this works
-                    a->cvtsi2ss(dst, a->r15);
-                    //a->shufps(dst, dst, 0, 0, 0, 0);                        
+                    a.cvtsi2ss(dst, a.r15);
+                    //a.shufps(dst, dst, 0, 0, 0, 0);                        
                 }
             }
             break;
@@ -427,21 +427,21 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
         case Plus:
             if (gpr && gpr1 && gpr2) {
                 if (gdst == gsrc1)
-                    a->add(gdst, gsrc2);
+                    a.add(gdst, gsrc2);
                 else if (gdst == gsrc2) 
-                    a->add(gdst, gsrc1);
+                    a.add(gdst, gsrc1);
                 else {
-                    a->mov(gdst, gsrc1);
-                    a->add(gdst, gsrc2);
+                    a.mov(gdst, gsrc1);
+                    a.add(gdst, gsrc2);
                 }
             } else if (!gpr && !gpr1 && !gpr2) {
                 if (dst == src1)
-                    a->addps(dst, src2);
+                    a.addps(dst, src2);
                 else if (dst == src2) 
-                    a->addps(dst, src1);
+                    a.addps(dst, src1);
                 else {
-                    a->movaps(dst, src1);
-                    a->addps(dst, src2);
+                    a.movaps(dst, src1);
+                    a.addps(dst, src2);
                 }
             } else {
                 panic("Can't add between gpr/sse\n");
@@ -450,25 +450,25 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
         case Minus:
             if (gpr && gpr1 && gpr2) {
                 if (gdst == gsrc1) {
-                    a->sub(gdst, gsrc2);
+                    a.sub(gdst, gsrc2);
                 } else if (gdst == gsrc2) {
-                    a->mov(gtmp, gsrc2);
-                    a->mov(gsrc2, gsrc1);
-                    a->sub(gsrc2, gtmp);
+                    a.mov(gtmp, gsrc2);
+                    a.mov(gsrc2, gsrc1);
+                    a.sub(gsrc2, gtmp);
                 } else {                         
-                    a->mov(gdst, gsrc1);
-                    a->sub(gdst, gsrc2);
+                    a.mov(gdst, gsrc1);
+                    a.sub(gdst, gsrc2);
                 }
             } else if (!gpr && !gpr1 && !gpr2) {
                 if (dst == src1) {
-                    a->subps(dst, src2);
+                    a.subps(dst, src2);
                 } else if (dst == src2) {
-                    a->movaps(tmp, src2);
-                    a->movaps(src2, src1);
-                    a->subps(src2, tmp);
+                    a.movaps(tmp, src2);
+                    a.movaps(src2, src1);
+                    a.subps(src2, tmp);
                 } else { 
-                    a->movaps(dst, src1);
-                    a->subps(dst, src2);
+                    a.movaps(dst, src1);
+                    a.subps(dst, src2);
                 }
             } else {
                 panic("Can't sub between gpr/sse\n");
@@ -477,21 +477,21 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
         case Times: 
             if (gpr && gpr1 && gpr2) {
                 if (gdst == gsrc1)
-                    a->imul(gdst, gsrc2);
+                    a.imul(gdst, gsrc2);
                 else if (gdst == gsrc2) 
-                    a->imul(gdst, gsrc1);
+                    a.imul(gdst, gsrc1);
                 else {
-                    a->mov(gdst, gsrc1);
-                    a->imul(gdst, gsrc2);
+                    a.mov(gdst, gsrc1);
+                    a.imul(gdst, gsrc2);
                 }
             } else if (!gpr && !gpr1 && !gpr2) {
                 if (dst == src1)
-                    a->mulps(dst, src2);
+                    a.mulps(dst, src2);
                 else if (dst == src2) 
-                    a->mulps(dst, src1);
+                    a.mulps(dst, src1);
                 else {
-                    a->movaps(dst, src1);
-                    a->mulps(dst, src2);
+                    a.movaps(dst, src1);
+                    a.mulps(dst, src2);
                 }
             } else {
                 panic("Can't sub between gpr/sse\n");
@@ -501,134 +501,134 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
             assert(fits32(node->ival), 
                    "TimesImm may only use a 32-bit signed constant\n");
             if (gdst == gsrc1) {
-                a->imul(gdst, (int32_t)node->ival);
+                a.imul(gdst, (int32_t)node->ival);
             } else {
-                a->mov(gdst, (int32_t)node->ival);
-                a->imul(gdst, gsrc1);
+                a.mov(gdst, (int32_t)node->ival);
+                a.imul(gdst, gsrc1);
             }
             break;
         case PlusImm:
             assert(fits32(node->ival),
                    "PlusImm may only use a 32-bit signed constant\n");
             if (gdst == gsrc1) {
-                a->add(gdst, (int32_t)node->ival);
+                a.add(gdst, (int32_t)node->ival);
             } else {
-                a->mov(gdst, (int32_t)node->ival);
-                a->add(gdst, gsrc1);
+                a.mov(gdst, (int32_t)node->ival);
+                a.add(gdst, gsrc1);
             }
             break;
         case Divide: 
             assert(!gpr && !gpr1 && !gpr2, "Can only divide in sse regs for now\n");
             if (dst == src1) {
-                a->divps(dst, src2);
+                a.divps(dst, src2);
             } else if (dst == src2) {
-                a->movaps(tmp, src2);
-                a->movaps(src2, src1);
-                a->divps(src2, tmp); 
+                a.movaps(tmp, src2);
+                a.movaps(src2, src1);
+                a.divps(src2, tmp); 
             } else {
-                a->movaps(dst, src1);
-                a->divps(dst, src2);
+                a.movaps(dst, src1);
+                a.divps(dst, src2);
             }
             break;
         case And:
             assert(!gpr && !gpr1 && !gpr2, "Can only and in sse regs for now\n");
             if (dst == src1) 
-                a->bandps(dst, src2);
+                a.bandps(dst, src2);
             else if (dst == src2)
-                a->bandps(dst, src1);
+                a.bandps(dst, src1);
             else {
-                a->movaps(dst, src1);
-                a->bandps(dst, src2);
+                a.movaps(dst, src1);
+                a.bandps(dst, src2);
             }
             break;
         case Nand:
             assert(!gpr && !gpr1 && !gpr2, "Can only nand in sse regs for now\n");
             if (dst == src1) {
-                a->bandnps(dst, src2);
+                a.bandnps(dst, src2);
             } else if (dst == src2) {
-                a->movaps(tmp, src2);
-                a->movaps(src2, src1);
-                a->bandnps(src2, tmp); 
+                a.movaps(tmp, src2);
+                a.movaps(src2, src1);
+                a.bandnps(src2, tmp); 
             } else {
-                a->movaps(dst, src1);
-                a->bandnps(dst, src2);
+                a.movaps(dst, src1);
+                a.bandnps(dst, src2);
             }
             break;
         case Or:               
             assert(!gpr && !gpr1 && !gpr2, "Can only or in sse regs for now\n");
             if (dst == src1) 
-                a->borps(dst, src2);
+                a.borps(dst, src2);
             else if (dst == src2)
-                a->borps(dst, src1);
+                a.borps(dst, src1);
             else {
-                a->movaps(dst, src1);
-                a->borps(dst, src2);
+                a.movaps(dst, src1);
+                a.borps(dst, src2);
             }
             break;
         case NEQ:                               
             assert(!gpr && !gpr1 && !gpr2, "Can only neq in sse regs for now\n");
             if (dst == src1) 
-                a->cmpneqps(dst, src2);
+                a.cmpneqps(dst, src2);
             else if (dst == src2)
-                a->cmpneqps(dst, src1);
+                a.cmpneqps(dst, src1);
             else {
-                a->movaps(dst, src1);
-                a->cmpneqps(dst, src2);
+                a.movaps(dst, src1);
+                a.cmpneqps(dst, src2);
             }
             break;
         case EQ:
             assert(!gpr && !gpr1 && !gpr2, "Can only eq in sse regs for now\n");
             if (dst == src1) 
-                a->cmpeqps(dst, src2);
+                a.cmpeqps(dst, src2);
             else if (dst == src2)
-                a->cmpeqps(dst, src1);
+                a.cmpeqps(dst, src1);
             else {
-                a->movaps(dst, src1);
-                a->cmpeqps(dst, src2);
+                a.movaps(dst, src1);
+                a.cmpeqps(dst, src2);
             }
             break;
         case LT:
             assert(!gpr && !gpr1 && !gpr2, "Can only lt in sse regs for now\n");
             if (dst == src1) 
-                a->cmpltps(dst, src2);
+                a.cmpltps(dst, src2);
             else if (dst == src2)
-                a->cmpnleps(dst, src1);
+                a.cmpnleps(dst, src1);
             else {
-                a->movaps(dst, src1);
-                a->cmpltps(dst, src2);
+                a.movaps(dst, src1);
+                a.cmpltps(dst, src2);
             }
             break;
         case GT:
             assert(!gpr && !gpr1 && !gpr2, "Can only gt in sse regs for now\n");
             if (dst == src1) 
-                a->cmpnleps(dst, src2);
+                a.cmpnleps(dst, src2);
             else if (dst == src2)
-                a->cmpltps(dst, src1);
+                a.cmpltps(dst, src1);
             else {
-                a->movaps(dst, src1);
-                a->cmpnleps(dst, src2);
+                a.movaps(dst, src1);
+                a.cmpnleps(dst, src2);
             }
             break;
         case LTE:
             assert(!gpr && !gpr1 && !gpr2, "Can only lte in sse regs for now\n");
             if (dst == src1) 
-                a->cmpleps(dst, src2);
+                a.cmpleps(dst, src2);
             else if (dst == src2)
-                a->cmpnltps(dst, src1);
+                a.cmpnltps(dst, src1);
             else {
-                a->movaps(dst, src1);
-                a->cmpleps(dst, src2);
+                a.movaps(dst, src1);
+                a.cmpleps(dst, src2);
             }
             break;
         case GTE:
             assert(!gpr && !gpr1 && !gpr2, "Can only gte in sse regs for now\n");
             if (dst == src1) 
-                a->cmpnltps(dst, src2);
+                a.cmpnltps(dst, src2);
             else if (dst == src2)
-                a->cmpleps(dst, src1);
+                a.cmpleps(dst, src1);
             else {
-                a->movaps(dst, src1);
-                a->cmpnltps(dst, src2);
+                a.movaps(dst, src1);
+                a.cmpnltps(dst, src2);
             }
             break;
         case ATan2:
@@ -652,7 +652,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
         case IntToFloat:
             if (gpr1 && !gpr) {
                 // TODO: this truncates to 32-bits currently
-                a->cvtsi2ss(dst, gsrc1);
+                a.cvtsi2ss(dst, gsrc1);
             } else {
                 panic("IntToFloat can only go from gpr to sse\n");
             }
@@ -661,44 +661,44 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
             assert(!gpr && !gpr1 && !gpr2, "Can only select vector in sse regs\n");
             if (node->ival == 1) {
                 if (dst == src1) {                                        
-                    a->movaps(tmp, src1);
-                    a->shufps(tmp, src2, 3, 3, 0, 0);
-                    a->shufps(dst, tmp, 1, 2, 0, 2);
+                    a.movaps(tmp, src1);
+                    a.shufps(tmp, src2, 3, 3, 0, 0);
+                    a.shufps(dst, tmp, 1, 2, 0, 2);
                 } else if (dst == src2) {
-                    a->movaps(tmp, src2);
-                    a->shufps(tmp, src1, 0, 0, 3, 3);
-                    a->movaps(dst, src1);
-                    a->shufps(dst, tmp, 1, 2, 2, 0);                    
+                    a.movaps(tmp, src2);
+                    a.shufps(tmp, src1, 0, 0, 3, 3);
+                    a.movaps(dst, src1);
+                    a.shufps(dst, tmp, 1, 2, 2, 0);                    
                 } else {
-                    a->movaps(tmp, src1);
-                    a->shufps(tmp, src2, 3, 3, 0, 0);                    
-                    a->movaps(dst, src1);
-                    a->shufps(dst, tmp, 1, 2, 0, 2);
+                    a.movaps(tmp, src1);
+                    a.shufps(tmp, src2, 3, 3, 0, 0);                    
+                    a.movaps(dst, src1);
+                    a.shufps(dst, tmp, 1, 2, 0, 2);
                 }
             } else if (node->ival == 2) {
                 if (dst == src1) {
-                    a->shufps(dst, src2, 2, 3, 0, 1);
+                    a.shufps(dst, src2, 2, 3, 0, 1);
                 } else if (dst == src2) {
-                    a->movaps(tmp, src2);
-                    a->movaps(dst, src1);
-                    a->shufps(dst, tmp, 2, 3, 0, 1);                    
+                    a.movaps(tmp, src2);
+                    a.movaps(dst, src1);
+                    a.shufps(dst, tmp, 2, 3, 0, 1);                    
                 } else {
-                    a->movaps(dst, src1);
-                    a->shufps(dst, src2, 2, 3, 0, 1);
+                    a.movaps(dst, src1);
+                    a.shufps(dst, src2, 2, 3, 0, 1);
                 }
             } else if (node->ival == 3) {
                 if (dst == src1) {
-                    a->shufps(dst, src2, 3, 3, 0, 0);
-                    a->shufps(dst, src2, 0, 2, 1, 2);
+                    a.shufps(dst, src2, 3, 3, 0, 0);
+                    a.shufps(dst, src2, 0, 2, 1, 2);
                 } else if (dst == src2) {
-                    a->movaps(tmp, src1);
-                    a->shufps(tmp, src2, 3, 3, 0, 0);
-                    a->shufps(tmp, src2, 0, 2, 1, 2);
-                    a->movaps(dst, tmp);
+                    a.movaps(tmp, src1);
+                    a.shufps(tmp, src2, 3, 3, 0, 0);
+                    a.shufps(tmp, src2, 0, 2, 1, 2);
+                    a.movaps(dst, tmp);
                 } else {
-                    a->movaps(dst, src1);
-                    a->shufps(dst, src2, 3, 3, 0, 0);
-                    a->shufps(dst, src2, 0, 2, 1, 2);
+                    a.movaps(dst, src1);
+                    a.shufps(dst, src2, 3, 3, 0, 0);
+                    a.shufps(dst, src2, 0, 2, 1, 2);
                 }
             } else {
                 panic("Can't deal with ExtractVector with argument other than 1, 2, or 3\n");
@@ -706,10 +706,10 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
             break;
         case ExtractScalar:
             assert(!gpr && !gpr1, "Can only extract scalar from sse regs into sse regs\n");
-            if (!(dst == src1)) a->movaps(dst, src1);
+            if (!(dst == src1)) a.movaps(dst, src1);
             assert(node->ival >= 0 && node->ival < 4, 
                    "Integer argument to ExtractScalar must be 0, 1, 2, or 3\n");
-            a->shufps(dst, src1, 
+            a.shufps(dst, src1, 
                       (uint8_t)node->ival, (uint8_t)node->ival,
                       (uint8_t)node->ival, (uint8_t)node->ival);
             break;
@@ -720,16 +720,16 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
             assert(fits32(node->ival),
                    "Store may only use a 32-bit signed constant - 0x%llx overflows\n", node->ival);
             if (node->width == 1) {
-                a->movss(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
+                a.movss(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
             } else {
                 SteppedInterval i = node->inputs[0]->interval + node->ival;
                 printf("%lld %lld %lld %lld\n", i.min(), i.max(), i.remainder(), i.modulus());
                 if ((i.modulus() & 0xf) == 0 &&
                     (i.remainder() & 0xf) == 0) {
-                    a->movaps(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
+                    a.movaps(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
                 } else {
                     printf("Unaligned store!\n");
-                    a->movups(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
+                    a.movups(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
                 }
             }
             break;
@@ -740,15 +740,15 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
             assert(fits32(node->ival),
                    "Load may only use a 32-bit signed constant\n");
             if (node->width == 1) {
-                a->movss(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
+                a.movss(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
             } else {
                 SteppedInterval i = node->inputs[0]->interval + node->ival;
                 if ((i.modulus() & 0xf) == 0 &&
                     (i.remainder() & 0xf) == 0) {
-                    a->movaps(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
+                    a.movaps(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
                 } else {
                     printf("Unaligned load!\n");
-                    a->movups(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
+                    a.movups(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
                 }
             }
             break;
@@ -758,38 +758,38 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
             // Can we use shufps?
             if (src1 == src2 && src3 == src4) {
                 if (src1 == dst) {
-                    a->shufps(dst, src3, 0, 0, 0, 0);
+                    a.shufps(dst, src3, 0, 0, 0, 0);
                 } else if (src3 == dst) {
-                    a->movaps(tmp, src1);
-                    a->shufps(tmp, src3, 0, 0, 0, 0);
-                    a->movaps(src3, tmp);
+                    a.movaps(tmp, src1);
+                    a.shufps(tmp, src3, 0, 0, 0, 0);
+                    a.movaps(src3, tmp);
                 } else {
-                    a->movaps(dst, src1);
-                    a->shufps(dst, src3, 0, 0, 0, 0);
+                    a.movaps(dst, src1);
+                    a.shufps(dst, src3, 0, 0, 0, 0);
                 }
             } else if (dst == src1) {
-                a->punpckldq(dst, src2);
-                a->movaps(tmp, src3);
-                a->punpckldq(tmp, src4);
-                a->punpcklqdq(dst, tmp);
+                a.punpckldq(dst, src2);
+                a.movaps(tmp, src3);
+                a.punpckldq(tmp, src4);
+                a.punpcklqdq(dst, tmp);
             } else {
                 // Most general case: We're allowed to clobber the
                 // high floats in the sources, because they're scalar
 
-                a->movaps(tmp, src1);
-                a->punpckldq(tmp, src2);
-                a->punpckldq(src3, src4); // clobber the high words in src3
-                a->punpcklqdq(tmp, src3);
-                a->movaps(dst, tmp);
+                a.movaps(tmp, src1);
+                a.punpckldq(tmp, src2);
+                a.punpckldq(src3, src4); // clobber the high words in src3
+                a.punpcklqdq(tmp, src3);
+                a.movaps(dst, tmp);
 
                 // No clobber version:
                 /*
-                a->movaps(tmp, src1);
-                a->punpckldq(tmp, src2);
-                a->movaps(tmp2, src3);
-                a->punpckldq(tmp2, src4);
-                a->punpcklqdq(tmp, tmp2);
-                a->movaps(dst, tmp);
+                a.movaps(tmp, src1);
+                a.punpckldq(tmp, src2);
+                a.movaps(tmp2, src3);
+                a.punpckldq(tmp2, src4);
+                a.punpcklqdq(tmp, tmp2);
+                a.movaps(dst, tmp);
                 */
             }
             break;           
@@ -827,7 +827,7 @@ void Compiler::compileBody(AsmX64 *a, vector<IRNode::Ptr> code) {
 // registers contain output from a level (i.e. registers either
 // used by roots, or used by a higher level).
 // 
-void Compiler::doRegisterAssignment(
+void AsmX64Compiler::doRegisterAssignment(
     const vector<IRNode::Ptr > &roots, 
     uint32_t reserved,
     vector<vector<IRNode::Ptr > > &order,
@@ -913,7 +913,7 @@ void Compiler::doRegisterAssignment(
 
 }
 
-void Compiler::doInstructionScheduling(
+void AsmX64Compiler::doInstructionScheduling(
     const vector<IRNode::Ptr > &roots, 
     vector<vector<IRNode::Ptr > > &order) {
 
@@ -1018,7 +1018,7 @@ void Compiler::doInstructionScheduling(
 }
 
 
-void Compiler::gatherDescendents(IRNode::Ptr node, vector<vector<IRNode::Ptr> > &output, int d) {
+void AsmX64Compiler::gatherDescendents(IRNode::Ptr node, vector<vector<IRNode::Ptr> > &output, int d) {
     // If I'm already in the output, bail
     if (node->tag > 1) {
         return;
@@ -1031,7 +1031,7 @@ void Compiler::gatherDescendents(IRNode::Ptr node, vector<vector<IRNode::Ptr> > 
 }
 
 // Remove all assigned registers
-void Compiler::regClear(IRNode::Ptr node) {
+void AsmX64Compiler::regClear(IRNode::Ptr node) {
     // We don't clobber the registers assigned to external loop vars
     if (node->op == Variable) return;
 
@@ -1048,7 +1048,7 @@ void Compiler::regClear(IRNode::Ptr node) {
 }
      
 // Recursively assign registers to sub-expressions
-void Compiler::regAssign(IRNode::Ptr node,
+void AsmX64Compiler::regAssign(IRNode::Ptr node,
                          uint32_t reserved,
                          vector<IRNode::Ptr > &regs, 
                          vector<vector<IRNode::Ptr > > &order) {
