@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		033637BF13161ABC00114D38 /* libpng.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 033637BE13161ABC00114D38 /* libpng.dylib */; };
+		033637D013161FF800114D38 /* Compiler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 033637CF13161FF800114D38 /* Compiler.cpp */; };
 		0371F8121316140400C0244E /* AsmX64Compiler.h in Headers */ = {isa = PBXBuildFile; fileRef = 0371F8101316140400C0244E /* AsmX64Compiler.h */; };
 		0371F8131316140400C0244E /* AsmX64Compiler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0371F8111316140400C0244E /* AsmX64Compiler.cpp */; };
 		03A95C3A13141047009CC6B0 /* X64.h in Headers */ = {isa = PBXBuildFile; fileRef = 03A95C2E13141047009CC6B0 /* X64.h */; };
@@ -66,6 +67,7 @@
 
 /* Begin PBXFileReference section */
 		033637BE13161ABC00114D38 /* libpng.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libpng.dylib; path = usr/local/lib/libpng.dylib; sourceTree = SDKROOT; };
+		033637CF13161FF800114D38 /* Compiler.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Compiler.cpp; sourceTree = SOURCE_ROOT; };
 		0371F8101316140400C0244E /* AsmX64Compiler.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AsmX64Compiler.h; sourceTree = SOURCE_ROOT; };
 		0371F8111316140400C0244E /* AsmX64Compiler.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AsmX64Compiler.cpp; sourceTree = SOURCE_ROOT; };
 		039228EC13140F0A008F8BC6 /* fimage.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = fimage.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -139,6 +141,7 @@
 		039228EE13140F0A008F8BC6 /* fimage */ = {
 			isa = PBXGroup;
 			children = (
+				033637CF13161FF800114D38 /* Compiler.cpp */,
 				0371F8101316140400C0244E /* AsmX64Compiler.h */,
 				0371F8111316140400C0244E /* AsmX64Compiler.cpp */,
 				03A95C2E13141047009CC6B0 /* X64.h */,
@@ -290,6 +293,7 @@
 				03A95C4113141047009CC6B0 /* Interval.cpp in Sources */,
 				03A95C4413141047009CC6B0 /* base.cpp in Sources */,
 				0371F8131316140400C0244E /* AsmX64Compiler.cpp in Sources */,
+				033637D013161FF800114D38 /* Compiler.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

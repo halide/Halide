@@ -14,7 +14,7 @@ public:
     //
     // 1) The bounds of X are a multiple of 4
     //
-    virtual void compile(FImage *im) = 0;
+    virtual void compile(FImage *im);
     virtual void run() = 0;
 
     // TODO: Compile a reduction
@@ -24,6 +24,12 @@ public:
     // TODO: unify the above into a single compile which detects the
     // appropriate way to compile the evaluation of an FImage given
     // its definitions
+    
+protected:
+    virtual void compilePrologue() = 0;
+    // Compile a single definition
+    virtual void compileDefinition(FImage *im, int definition) = 0;
+    virtual void compileEpilogue() = 0;
 };
 
 #endif

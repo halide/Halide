@@ -15,40 +15,37 @@ void AsmX64Compiler::collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &
     }
 }
 
-void AsmX64Compiler::compile(FImage *im) {
-
+void AsmX64Compiler::compilePrologue() {
     // Align the stack to a 16-byte boundary - it always comes in
     // offset by 8 bytes because it contains the 64-bit return
     // address.
     a.sub(a.rsp, 8);
-        
+    
     // Save all the registers that the 64-bit C abi tells us we're
     // supposed to. This maintains stack alignment.
     a.pushNonVolatiles();
-        
+    
     // Find any variables that are fused over the definitions
     // TODO
+}
 
-    // Compile a chunk of code that just runs the definitions in order
-    for (int i = 0; i < (int)im->definitions.size(); i++) {
-        compileDefinition(im, i);
-    }
-
+void AsmX64Compiler::compileEpilogue() {
     // Exit any loops that were fused over definitions
     // TODO
-
+    
     // Pop the stack and return
     a.popNonVolatiles();
     a.add(a.rsp, 8);
     a.ret();        
-
+    
     printf("Saving object file\n");
-
+    
     // Save an object file that you can use dumpbin on to inspect
     a.saveCOFF("generated.obj");        
     a.saveELF("generated.o");
 }
 
+// TODO: refactor this into base Compiler::compileDefinition and more detailed compileBody per-backend?
 // Compile the evaluation of a single FImage
 void AsmX64Compiler::compileDefinition(FImage *im, int definition) {
     printf("Compiling definition %d/%d.\n",
