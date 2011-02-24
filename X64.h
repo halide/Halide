@@ -1,3 +1,6 @@
+#ifndef ASMX64
+#define ASMX64
+
 #include <vector>
 #include <string>
 #include <map>
@@ -1177,3 +1180,5 @@ protected:
     // How much of it us used?
     int dataSize;
 };
+
+#endif //ASMX64
