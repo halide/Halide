@@ -1,5 +1,5 @@
 #include "FImage.h"
-#include "Compiler.h"
+#include "AsmX64Compiler.h"
 
 
 #ifndef _MSC_VER
@@ -289,13 +289,12 @@ void FImage::debug() {
 
 FImage &FImage::evaluate(time_t *time) {
 
-    Compiler c;
-    AsmX64 a;    
+    AsmX64Compiler c;
     printf("Compiling...\n"); fflush(stdout);
-    c.compile(&a, this);
+    c.compile(this);
     printf("Running...\n"); fflush(stdout);
     time_t t0 = timeGetTime();
-    a.run();
+    c.run();
     time_t t1 = timeGetTime();
     if (time) time[0] = t1-t0;
     printf("Done\n"); fflush(stdout);

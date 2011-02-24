@@ -7,12 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		033637BF13161ABC00114D38 /* libpng.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 033637BE13161ABC00114D38 /* libpng.dylib */; };
+		0371F8121316140400C0244E /* AsmX64Compiler.h in Headers */ = {isa = PBXBuildFile; fileRef = 0371F8101316140400C0244E /* AsmX64Compiler.h */; };
+		0371F8131316140400C0244E /* AsmX64Compiler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0371F8111316140400C0244E /* AsmX64Compiler.cpp */; };
 		03A95C3A13141047009CC6B0 /* X64.h in Headers */ = {isa = PBXBuildFile; fileRef = 03A95C2E13141047009CC6B0 /* X64.h */; };
 		03A95C3B13141047009CC6B0 /* IRNode.h in Headers */ = {isa = PBXBuildFile; fileRef = 03A95C2F13141047009CC6B0 /* IRNode.h */; };
 		03A95C3C13141047009CC6B0 /* IRNode.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 03A95C3013141047009CC6B0 /* IRNode.cpp */; };
 		03A95C3D13141047009CC6B0 /* FImage.h in Headers */ = {isa = PBXBuildFile; fileRef = 03A95C3113141047009CC6B0 /* FImage.h */; };
 		03A95C3E13141047009CC6B0 /* FImage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 03A95C3213141047009CC6B0 /* FImage.cpp */; };
-		03A95C3F13141047009CC6B0 /* Compiler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 03A95C3313141047009CC6B0 /* Compiler.cpp */; };
 		03A95C4013141047009CC6B0 /* Interval.h in Headers */ = {isa = PBXBuildFile; fileRef = 03A95C3413141047009CC6B0 /* Interval.h */; };
 		03A95C4113141047009CC6B0 /* Interval.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 03A95C3513141047009CC6B0 /* Interval.cpp */; };
 		03A95C4213141047009CC6B0 /* Compiler.h in Headers */ = {isa = PBXBuildFile; fileRef = 03A95C3613141047009CC6B0 /* Compiler.h */; };
@@ -22,7 +24,6 @@
 		03A95C5613141C40009CC6B0 /* fimage.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 039228EC13140F0A008F8BC6 /* fimage.dylib */; };
 		03A95C6513144A6A009CC6B0 /* tests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 03A95C6113144A3A009CC6B0 /* tests.cpp */; };
 		03A95C6813144C83009CC6B0 /* fimage.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 039228EC13140F0A008F8BC6 /* fimage.dylib */; };
-		03A95C6A13144CA0009CC6B0 /* libpng.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 03A95C6913144CA0009CC6B0 /* libpng.dylib */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,6 +65,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		033637BE13161ABC00114D38 /* libpng.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libpng.dylib; path = usr/local/lib/libpng.dylib; sourceTree = SDKROOT; };
+		0371F8101316140400C0244E /* AsmX64Compiler.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AsmX64Compiler.h; sourceTree = SOURCE_ROOT; };
+		0371F8111316140400C0244E /* AsmX64Compiler.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AsmX64Compiler.cpp; sourceTree = SOURCE_ROOT; };
 		039228EC13140F0A008F8BC6 /* fimage.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = fimage.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		039228F113140F0A008F8BC6 /* fimageProj.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = fimageProj.xcconfig; sourceTree = "<group>"; };
 		039228F213140F0A008F8BC6 /* fimageTarget.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = fimageTarget.xcconfig; sourceTree = "<group>"; };
@@ -72,7 +76,6 @@
 		03A95C3013141047009CC6B0 /* IRNode.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = IRNode.cpp; sourceTree = SOURCE_ROOT; };
 		03A95C3113141047009CC6B0 /* FImage.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = FImage.h; sourceTree = SOURCE_ROOT; };
 		03A95C3213141047009CC6B0 /* FImage.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = FImage.cpp; sourceTree = SOURCE_ROOT; };
-		03A95C3313141047009CC6B0 /* Compiler.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Compiler.cpp; sourceTree = SOURCE_ROOT; };
 		03A95C3413141047009CC6B0 /* Interval.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Interval.h; sourceTree = SOURCE_ROOT; };
 		03A95C3513141047009CC6B0 /* Interval.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Interval.cpp; sourceTree = SOURCE_ROOT; };
 		03A95C3613141047009CC6B0 /* Compiler.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Compiler.h; sourceTree = SOURCE_ROOT; };
@@ -83,7 +86,6 @@
 		03A95C5B13144A30009CC6B0 /* tests */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = tests; sourceTree = BUILT_PRODUCTS_DIR; };
 		03A95C6113144A3A009CC6B0 /* tests.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = tests.cpp; sourceTree = SOURCE_ROOT; };
 		03A95C6713144BBD009CC6B0 /* CImg.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CImg.h; sourceTree = SOURCE_ROOT; };
-		03A95C6913144CA0009CC6B0 /* libpng.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libpng.dylib; path = usr/local/lib/libpng.dylib; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,7 +108,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				03A95C6A13144CA0009CC6B0 /* libpng.dylib in Frameworks */,
+				033637BF13161ABC00114D38 /* libpng.dylib in Frameworks */,
 				03A95C6813144C83009CC6B0 /* fimage.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -117,7 +119,6 @@
 		039228E113140F0A008F8BC6 = {
 			isa = PBXGroup;
 			children = (
-				03A95C6913144CA0009CC6B0 /* libpng.dylib */,
 				039228EE13140F0A008F8BC6 /* fimage */,
 				03A95C4D13141701009CC6B0 /* hello-fimage */,
 				03A95C5D13144A30009CC6B0 /* tests */,
@@ -138,12 +139,13 @@
 		039228EE13140F0A008F8BC6 /* fimage */ = {
 			isa = PBXGroup;
 			children = (
+				0371F8101316140400C0244E /* AsmX64Compiler.h */,
+				0371F8111316140400C0244E /* AsmX64Compiler.cpp */,
 				03A95C2E13141047009CC6B0 /* X64.h */,
 				03A95C2F13141047009CC6B0 /* IRNode.h */,
 				03A95C3013141047009CC6B0 /* IRNode.cpp */,
 				03A95C3113141047009CC6B0 /* FImage.h */,
 				03A95C3213141047009CC6B0 /* FImage.cpp */,
-				03A95C3313141047009CC6B0 /* Compiler.cpp */,
 				03A95C3413141047009CC6B0 /* Interval.h */,
 				03A95C3513141047009CC6B0 /* Interval.cpp */,
 				03A95C3613141047009CC6B0 /* Compiler.h */,
@@ -174,6 +176,7 @@
 		03A95C5D13144A30009CC6B0 /* tests */ = {
 			isa = PBXGroup;
 			children = (
+				033637BE13161ABC00114D38 /* libpng.dylib */,
 				03A95C6713144BBD009CC6B0 /* CImg.h */,
 				03A95C6113144A3A009CC6B0 /* tests.cpp */,
 			);
@@ -193,6 +196,7 @@
 				03A95C4013141047009CC6B0 /* Interval.h in Headers */,
 				03A95C4213141047009CC6B0 /* Compiler.h in Headers */,
 				03A95C4313141047009CC6B0 /* base.h in Headers */,
+				0371F8121316140400C0244E /* AsmX64Compiler.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -283,9 +287,9 @@
 			files = (
 				03A95C3C13141047009CC6B0 /* IRNode.cpp in Sources */,
 				03A95C3E13141047009CC6B0 /* FImage.cpp in Sources */,
-				03A95C3F13141047009CC6B0 /* Compiler.cpp in Sources */,
 				03A95C4113141047009CC6B0 /* Interval.cpp in Sources */,
 				03A95C4413141047009CC6B0 /* base.cpp in Sources */,
+				0371F8131316140400C0244E /* AsmX64Compiler.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -328,7 +332,7 @@
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = DEBUG;
-				GCC_VERSION = 4.2;
+				GCC_VERSION = com.apple.compilers.llvmgcc42;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
@@ -343,7 +347,7 @@
 			buildSettings = {
 				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
 				GCC_C_LANGUAGE_STANDARD = gnu99;
-				GCC_VERSION = 4.2;
+				GCC_VERSION = com.apple.compilers.llvmgcc42;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
@@ -446,6 +450,7 @@
 				03A95C5013141701009CC6B0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		03A95C5E13144A30009CC6B0 /* Build configuration list for PBXNativeTarget "tests" */ = {
 			isa = XCConfigurationList;
@@ -454,6 +459,7 @@
 				03A95C6013144A30009CC6B0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
