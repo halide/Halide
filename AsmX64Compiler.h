@@ -7,17 +7,17 @@
 class AsmX64Compiler : public Compiler {
 public:
     
-    void run() { a.run(); }
+    virtual void run() { a.run(); }
 
 protected:
-    void compilePrologue();
+    virtual void compilePrologue();
     // Compile a single definition
-    void compileDefinition(FImage *im, int definition);
-    void compileEpilogue();
+    virtual void compileDefinition(FImage *im, int definition);
+    virtual void compileEpilogue();
 
     // Generate machine code for a vector of IRNodes. Registers must
     // have already been assigned.
-    void compileBody(vector<IRNode::Ptr> code);
+    virtual void compileBody(vector<IRNode::Ptr> code);
     
     // Assign registers and generates an evaluation order for a vector
     // of expressions.
@@ -27,9 +27,6 @@ protected:
         vector<vector<IRNode::Ptr> > &order,
         vector<uint32_t> &clobberedRegs, 
         vector<uint32_t> &outputRegs);
-
-    // Gather all descendents of a node with a particular op
-    void collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &nodes);
 
     // Remove all assigned registers
     void regClear(IRNode::Ptr node);

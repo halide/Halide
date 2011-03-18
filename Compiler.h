@@ -26,10 +26,23 @@ public:
     // its definitions
     
 protected:
+    NodeData<Variable>* varData(size_t i) { return vars[i]->data<Variable>(); }
+    
     virtual void compilePrologue() = 0;
+
     // Compile a single definition
-    virtual void compileDefinition(FImage *im, int definition) = 0;
+    // Gather all descendents of a node with a particular op
+    virtual void collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &nodes);
+    
+    virtual void compileDefinition(FImage *im, int definition);
+    virtual void compileBody(vector<IRNode::Ptr> code) = 0;
     virtual void compileEpilogue() = 0;
+    
+    vector<IRNode::Ptr> roots;
+    vector<IRNode::Ptr> vars;
+    
+    vector<int> vectorWidth;
+    vector<int> unroll;
 };
 
 #endif
