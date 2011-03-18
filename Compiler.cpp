@@ -222,4 +222,132 @@ void Compiler::compileDefinition(FImage *im, int definition)
             }
         }
     }
+    
+    // Clear the tag on all nodes
+    for (size_t i = 0; i < IRNode::allNodes.size(); i++) {
+        IRNode::Ptr n = IRNode::allNodes[i].lock();
+        if (!n) continue;
+        n->tag = 0;
+    }
+    
+    // Then compute the order of evaluation (sets tag to 2)
+    printf("Doing instruction scheduling\n");
+    order.clear();
+    doInstructionScheduling();
+    printf("Done instruction scheduling\n");
+}
+
+
+void Compiler::doInstructionScheduling() {
+    
+    // Gather the nodes in a depth-first manner, and resize order to
+    // be big enough. Also tag each node with the minimum depth to a root plus 100.
+    for (size_t i = 0; i < roots.size(); i++) {
+        if ((int)order.size() <= roots[i]->level)
+            order.resize(roots[i]->level+1);
+        gatherDescendents(roots[i], order, 100);
+    }       
+    
+    // Stable sort the nodes from deepest to shallowest without
+    // breaking any data dependencies. Also retag everything 2.
+    for (size_t l = 0; l < order.size(); l++) {
+        for (size_t i = 0; i < order[l].size(); i++) {
+            IRNode::Ptr ni = order[l][i];
+            for (size_t j = i+1; j < order[l].size(); j++) {
+                IRNode::Ptr nj = order[l][j];
+                if (ni->tag < nj->tag &&
+                    find(nj->inputs.begin(), nj->inputs.end(), ni) == nj->inputs.end()) {
+                    order[l][j] = ni;
+                    order[l][j-1] = nj;
+                } else {
+                    break;
+                }
+            }
+            ni->tag = 2;
+        }
+        
+        for (size_t i = 0; i < order[l].size(); i++) {
+            IRNode::Ptr ni = order[l][i];
+            
+            // Which node should get evaluated next? We'd like to be
+            // able to clobber an input. Rate each node's input
+            // according to how many unevaluated outputs it
+            // has. Choose the node with the input with the lowest
+            // rating. 1 is ideal, because it means we can clobber
+            // that input. 2 or 3 is still good because we're getting
+            // closer to being able to clobber that input.
+            
+            int bestRating = 0;
+            IRNode::Ptr np;
+            size_t location = 0;
+            for (size_t j = i; j < order[l].size(); j++) {
+                IRNode::Ptr nj = order[l][j];
+                bool ready = true;
+                for (size_t k = 0; k < nj->inputs.size(); k++) {
+                    IRNode::Ptr nk = nj->inputs[k];
+                    // If all inputs aren't evaluated yet, it's game
+                    // over for this node
+                    if (nk->tag != 3) ready = false;
+                }
+                if (!ready) continue;
+                
+                for (size_t k = 0; k < nj->inputs.size(); k++) {
+                    IRNode::Ptr nk = nj->inputs[k];
+                    
+                    // Can't clobber inputs from a higher level
+                    if (nk->level != (int)l) continue;
+                    
+                    // Can't clobber external vars
+                    if (nk->op == Variable) continue;
+                    
+                    // Can't clobber inputs of a different width
+                    if (nk->width != nj->width) continue;
+                    
+                    // Count how many outputs of this input are yet to be evaluated.
+                    int remainingOutputs = 0;
+                    for (size_t m = 0; m < nk->outputs.size(); m++) {
+                        IRNode::Ptr nm = nk->outputs[m].lock();
+                        
+                        // Ignore those not participating in this computation
+                        if (!nm || !nm->tag) continue;
+                        
+                        // Unevaluated outputs that aren't nj means you can't clobber
+                        if (nm->tag != 3) remainingOutputs++;
+                    }                    
+                    
+                    if (remainingOutputs < bestRating || !np) {
+                        bestRating = remainingOutputs;
+                        np = nj;
+                        location = j;
+                    }
+                }
+            }
+            
+            // Did we find a node to promote?
+            if (np) {
+                // Then bubble it up to just before ni
+                while(location > i) {
+                    order[l][location] = order[l][location-1];
+                    location--;
+                }
+                order[l][i] = np;
+                np->tag = 3;
+            } else {
+                ni->tag = 3;
+            }
+        }
+    }
+    
+}
+
+void Compiler::gatherDescendents(IRNode::Ptr node, vector<vector<IRNode::Ptr> > &output, int d) {
+    // If I'm already in the output, bail
+    if (node->tag > 1) {
+        return;
+    }    
+    node->tag = d;
+    for (size_t j = 0; j < node->inputs.size(); j++) {
+        gatherDescendents(node->inputs[j], output, d+1);
+    }
+    output[node->level].push_back(node);
 }
