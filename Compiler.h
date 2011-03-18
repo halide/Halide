@@ -37,10 +37,22 @@ protected:
     virtual void compileDefinition(FImage *im, int definition);
     virtual void compileBody(vector<IRNode::Ptr> code) = 0;
     virtual void compileEpilogue() = 0;
+
+    // Gather all descendents of a node in a depth-first post-order
+    // manner. Used to start off the instruction scheduler.
+    virtual void gatherDescendents(IRNode::Ptr node, 
+                                   vector<vector<IRNode::Ptr> > &output,
+                                   int depth);
     
+    // Find and order all the IRNodes that go into computing the given
+    // vector of root nodes
+    virtual void doInstructionScheduling();
+
     vector<IRNode::Ptr> roots;
     vector<IRNode::Ptr> vars;
     
+    vector<vector<IRNode::Ptr > > order;
+
     vector<int> vectorWidth;
     vector<int> unroll;
 };

@@ -39,7 +39,7 @@ void AsmX64Compiler::compileEpilogue() {
 }
 
 // TODO: refactor this into base Compiler::compileDefinition and more detailed compileBody per-backend?
-// TODO: only pushes 
+// TODO: only pushes compileBody in concrete subclasses? And loop management code?
 // Compile the evaluation of a single FImage
 void AsmX64Compiler::compileDefinition(FImage *im, int definition) {
 
@@ -47,33 +47,10 @@ void AsmX64Compiler::compileDefinition(FImage *im, int definition) {
 
     // Transform code, build vars and roots lists, vectorWidth and unroll, etc.
     Compiler::compileDefinition(im, definition);
-    
+
     // -----------------------------------------------------------
     // Everything below here can be ripped out and pushed to llvm
     // -----------------------------------------------------------
-
-    // Assign the variables some registers
-    vector<AsmX64::Reg> varRegs(vars.size());
-    if (varRegs.size() > 0) varRegs[0] = a.rax;
-    if (varRegs.size() > 1) varRegs[1] = a.rcx;
-    if (varRegs.size() > 2) varRegs[2] = a.rdx;
-    if (varRegs.size() > 3) varRegs[3] = a.rbx;
-    if (varRegs.size() > 4) varRegs[4] = a.rbp;
-    if (varRegs.size() > 5) varRegs[5] = a.rsi;
-    if (varRegs.size() > 6) varRegs[6] = a.rdi;
-    if (varRegs.size() > 7) panic("Can't handle more than 7 loop indices for now\n");
-    
-    AsmX64::Reg tmp = a.r15;
-
-    // Mark these registers as unclobberable for the register allocation
-    uint32_t reserved = ((1 << tmp.num) | 
-                         (1 << a.rsp.num));
-
-    // Force the indices into the intended registers and mark them as reserved
-    for (size_t i = 0; i < varRegs.size(); i++) {
-        reserved |= (1 << varRegs[i].num);
-        vars[i]->reg = varRegs[i].num;
-    }
 
     // Register assignment and evaluation ordering. This returns a
     // vector of vector of IRNode - one to be computed at each loop
@@ -88,17 +65,17 @@ void AsmX64Compiler::compileDefinition(FImage *im, int definition) {
     //       compute things that depend on var level 3 (order[3])
     //       for ...
     //          ...
+    
+    // TODO: lift this out, push into just compileBody prologue by tracking and clearing single "registers allocated?" bit at start of compileDefinition, and allocating if not already?
     printf("Register assignment...\n");
-    vector<uint32_t> clobbered, outputs;
-    vector<vector<IRNode::Ptr > > order;        
-    doRegisterAssignment(roots, reserved, order, clobbered, outputs);   
+    doRegisterAssignment();
     printf("Done\n");
+
     time_t t2 = timeGetTime();
+    printf("Compilation took %ld ms\n", t2-t1);
 
     // which register is the output pointer in?
-    AsmX64::Reg outPtr(roots[roots.size()-1]->reg);
-
-    printf("Compilation took %ld ms\n", t2-t1);
+    //AsmX64::Reg outPtr(roots[roots.size()-1]->reg);
 
     // print out the proposed ordering and register assignment for inspection
     
@@ -624,12 +601,36 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
 // registers contain output from a level (i.e. registers either
 // used by roots, or used by a higher level).
 // 
-void AsmX64Compiler::doRegisterAssignment(
-    const vector<IRNode::Ptr > &roots, 
-    uint32_t reserved,
-    vector<vector<IRNode::Ptr > > &order,
-    vector<uint32_t> &clobberedRegs, 
-    vector<uint32_t> &outputRegs) {
+void AsmX64Compiler::doRegisterAssignment() {
+
+    // Assign the variables some registers
+    varRegs = vector<AsmX64::Reg>(vars.size());
+    if (varRegs.size() > 0) varRegs[0] = a.rax;
+    if (varRegs.size() > 1) varRegs[1] = a.rcx;
+    if (varRegs.size() > 2) varRegs[2] = a.rdx;
+    if (varRegs.size() > 3) varRegs[3] = a.rbx;
+    if (varRegs.size() > 4) varRegs[4] = a.rbp;
+    if (varRegs.size() > 5) varRegs[5] = a.rsi;
+    if (varRegs.size() > 6) varRegs[6] = a.rdi;
+    if (varRegs.size() > 7) panic("Can't handle more than 7 loop indices for now\n");
+    
+    AsmX64::Reg tmp = a.r15;
+    
+    // Mark these registers as unclobberable for the register allocation
+    uint32_t reserved = ((1 << tmp.num) | 
+                         (1 << a.rsp.num));
+    
+    // Force the indices into the intended registers and mark them as reserved
+    for (size_t i = 0; i < varRegs.size(); i++) {
+        reserved |= (1 << varRegs[i].num);
+        vars[i]->reg = varRegs[i].num;
+    }
+    
+    // Clear any previous register assignment, and make the
+    // descendents of the roots for evaluation (sets tag to 1)
+    for (size_t i = 0; i < roots.size(); i++) {
+        regClear(roots[i]);
+    }
 
     // Who's currently occupying which register? First the 16 gprs, then the 16 sse registers.
     vector<IRNode::Ptr > regs(32);
@@ -638,26 +639,7 @@ void AsmX64Compiler::doRegisterAssignment(
     assert(!(reserved & (1<<31)),
            "Register xmm15 is reserved for the code generator\n");
     reserved |= (1<<31);
-        
-    // Clear the tag on all nodes
-    for (size_t i = 0; i < IRNode::allNodes.size(); i++) {
-        IRNode::Ptr n = IRNode::allNodes[i].lock();
-        if (!n) continue;
-        n->tag = 0;
-    }
-
-    // Clear any previous register assignment and order, and make the
-    // descendents of the roots for evaluation (sets tag to 1)
-    for (size_t i = 0; i < roots.size(); i++) {
-        regClear(roots[i]);
-    }
-    order.clear();
-
-    // Then compute the order of evaluation (sets tag to 2)
-    printf("Doing instruction scheduling\n");
-    doInstructionScheduling(roots, order);
-    printf("Done instruction scheduling\n");
-
+    
     // Now assign a register to each node, in the order of evaluation
     for (size_t l = 0; l < order.size(); l++) {
         for (size_t i = 0; i < order[l].size(); i++) {
@@ -671,8 +653,7 @@ void AsmX64Compiler::doRegisterAssignment(
     }
 
     // Detect what registers get clobbered
-    clobberedRegs.clear();
-    clobberedRegs.resize(order.size(), 0);
+    vector<uint32_t> clobberedRegs(order.size(), 0);
     for (size_t i = 0; i < order.size(); i++) {
         clobberedRegs[i] = (1<<31);
         for (size_t j = 0; j < order[i].size(); j++) {
@@ -683,8 +664,7 @@ void AsmX64Compiler::doRegisterAssignment(
 
 
     // Detect what registers are used for inter-level communication
-    outputRegs.clear();
-    outputRegs.resize(order.size(), 0);
+    vector<uint32_t> outputRegs(order.size(), 0);
     
     if (outputRegs.size()) outputRegs[0] = 0;
     for (size_t i = 1; i < order.size(); i++) {
@@ -708,123 +688,6 @@ void AsmX64Compiler::doRegisterAssignment(
 
 
 
-}
-
-void AsmX64Compiler::doInstructionScheduling(
-    const vector<IRNode::Ptr > &roots, 
-    vector<vector<IRNode::Ptr > > &order) {
-
-    // Gather the nodes in a depth-first manner, and resize order to
-    // be big enough. Also tag each node with the minimum depth to a root plus 100.
-    for (size_t i = 0; i < roots.size(); i++) {
-        if ((int)order.size() <= roots[i]->level)
-            order.resize(roots[i]->level+1);
-        gatherDescendents(roots[i], order, 100);
-    }       
-
-    // Stable sort the nodes from deepest to shallowest without
-    // breaking any data dependencies. Also retag everything 2.
-    for (size_t l = 0; l < order.size(); l++) {
-        for (size_t i = 0; i < order[l].size(); i++) {
-            IRNode::Ptr ni = order[l][i];
-            for (size_t j = i+1; j < order[l].size(); j++) {
-                IRNode::Ptr nj = order[l][j];
-                if (ni->tag < nj->tag &&
-                    find(nj->inputs.begin(), nj->inputs.end(), ni) == nj->inputs.end()) {
-                    order[l][j] = ni;
-                    order[l][j-1] = nj;
-                } else {
-                    break;
-                }
-            }
-            ni->tag = 2;
-        }
-
-        for (size_t i = 0; i < order[l].size(); i++) {
-            IRNode::Ptr ni = order[l][i];
-
-            // Which node should get evaluated next? We'd like to be
-            // able to clobber an input. Rate each node's input
-            // according to how many unevaluated outputs it
-            // has. Choose the node with the input with the lowest
-            // rating. 1 is ideal, because it means we can clobber
-            // that input. 2 or 3 is still good because we're getting
-            // closer to being able to clobber that input.
-
-            int bestRating = 0;
-            IRNode::Ptr np;
-            size_t location = 0;
-            for (size_t j = i; j < order[l].size(); j++) {
-                IRNode::Ptr nj = order[l][j];
-                bool ready = true;
-                for (size_t k = 0; k < nj->inputs.size(); k++) {
-                    IRNode::Ptr nk = nj->inputs[k];
-                    // If all inputs aren't evaluated yet, it's game
-                    // over for this node
-                    if (nk->tag != 3) ready = false;
-                }
-                if (!ready) continue;
-
-                for (size_t k = 0; k < nj->inputs.size(); k++) {
-                    IRNode::Ptr nk = nj->inputs[k];
-
-                    // Can't clobber inputs from a higher level
-                    if (nk->level != (int)l) continue;
-
-                    // Can't clobber external vars
-                    if (nk->op == Variable) continue;
-
-                    // Can't clobber inputs of a different width
-                    if (nk->width != nj->width) continue;
-
-                    // Count how many outputs of this input are yet to be evaluated.
-                    int remainingOutputs = 0;
-                    for (size_t m = 0; m < nk->outputs.size(); m++) {
-                        IRNode::Ptr nm = nk->outputs[m].lock();
-
-                        // Ignore those not participating in this computation
-                        if (!nm || !nm->tag) continue;
-                        
-                        // Unevaluated outputs that aren't nj means you can't clobber
-                        if (nm->tag != 3) remainingOutputs++;
-                    }                    
-
-                    if (remainingOutputs < bestRating || !np) {
-                        bestRating = remainingOutputs;
-                        np = nj;
-                        location = j;
-                    }
-                }
-            }
-
-            // Did we find a node to promote?
-            if (np) {
-                // Then bubble it up to just before ni
-                while(location > i) {
-                    order[l][location] = order[l][location-1];
-                    location--;
-                }
-                order[l][i] = np;
-                np->tag = 3;
-            } else {
-                ni->tag = 3;
-            }
-        }
-    }
-
-}
-
-
-void AsmX64Compiler::gatherDescendents(IRNode::Ptr node, vector<vector<IRNode::Ptr> > &output, int d) {
-    // If I'm already in the output, bail
-    if (node->tag > 1) {
-        return;
-    }    
-    node->tag = d;
-    for (size_t j = 0; j < node->inputs.size(); j++) {
-        gatherDescendents(node->inputs[j], output, d+1);
-    }
-    output[node->level].push_back(node);
 }
 
 // Remove all assigned registers
