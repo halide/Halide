@@ -1119,7 +1119,7 @@ public:
             data = new uint8_t[4096];
             dataSize = 0;
         }
-        assert(dataSize + sizeof(T) <= 4096, 
+        Assert(dataSize + sizeof(T) <= 4096, 
                "Can't use more than 4096 bytes for constants for now.\n");
         T *ptr = (T*)(data + dataSize);
         dataSize += sizeof(T);

@@ -4,7 +4,7 @@
 
 static inline int32_t truncate(int64_t v) {
     int32_t t = int32_t(v & 0xFFFFFFFF);
-    assert(t == v, "Truncated 64-bit 0x%llx to 32-bit 0x%x", v, t);
+    Assert(t == v, "Truncated 64-bit 0x%llx to 32-bit 0x%x", v, t);
     return t;
 }
 
@@ -179,7 +179,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             break;
         case Variable:
             // These are placed in GPRs externally
-            assert(gpr, "Variables must be manually placed in gprs\n");
+            Assert(gpr, "Variables must be manually placed in gprs\n");
             break;
         case Plus:
             if (gpr && gpr1 && gpr2) {
@@ -255,7 +255,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case TimesImm:
-            assert(fits32(node->ival), 
+            Assert(fits32(node->ival), 
                    "TimesImm may only use a 32-bit signed constant\n");
             if (gdst == gsrc1) {
                 a.imul(gdst, (int32_t)node->ival);
@@ -265,7 +265,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case PlusImm:
-            assert(fits32(node->ival),
+            Assert(fits32(node->ival),
                    "PlusImm may only use a 32-bit signed constant\n");
             if (gdst == gsrc1) {
                 a.add(gdst, (int32_t)node->ival);
@@ -275,7 +275,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case Divide: 
-            assert(!gpr && !gpr1 && !gpr2, "Can only divide in sse regs for now\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only divide in sse regs for now\n");
             if (dst == src1) {
                 a.divps(dst, src2);
             } else if (dst == src2) {
@@ -288,7 +288,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case And:
-            assert(!gpr && !gpr1 && !gpr2, "Can only and in sse regs for now\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only and in sse regs for now\n");
             if (dst == src1) 
                 a.bandps(dst, src2);
             else if (dst == src2)
@@ -299,7 +299,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case Nand:
-            assert(!gpr && !gpr1 && !gpr2, "Can only nand in sse regs for now\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only nand in sse regs for now\n");
             if (dst == src1) {
                 a.bandnps(dst, src2);
             } else if (dst == src2) {
@@ -312,7 +312,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case Or:               
-            assert(!gpr && !gpr1 && !gpr2, "Can only or in sse regs for now\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only or in sse regs for now\n");
             if (dst == src1) 
                 a.borps(dst, src2);
             else if (dst == src2)
@@ -323,7 +323,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case NEQ:                               
-            assert(!gpr && !gpr1 && !gpr2, "Can only neq in sse regs for now\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only neq in sse regs for now\n");
             if (dst == src1) 
                 a.cmpneqps(dst, src2);
             else if (dst == src2)
@@ -334,7 +334,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case EQ:
-            assert(!gpr && !gpr1 && !gpr2, "Can only eq in sse regs for now\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only eq in sse regs for now\n");
             if (dst == src1) 
                 a.cmpeqps(dst, src2);
             else if (dst == src2)
@@ -345,7 +345,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case LT:
-            assert(!gpr && !gpr1 && !gpr2, "Can only lt in sse regs for now\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only lt in sse regs for now\n");
             if (dst == src1) 
                 a.cmpltps(dst, src2);
             else if (dst == src2)
@@ -356,7 +356,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case GT:
-            assert(!gpr && !gpr1 && !gpr2, "Can only gt in sse regs for now\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only gt in sse regs for now\n");
             if (dst == src1) 
                 a.cmpnleps(dst, src2);
             else if (dst == src2)
@@ -367,7 +367,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case LTE:
-            assert(!gpr && !gpr1 && !gpr2, "Can only lte in sse regs for now\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only lte in sse regs for now\n");
             if (dst == src1) 
                 a.cmpleps(dst, src2);
             else if (dst == src2)
@@ -378,7 +378,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case GTE:
-            assert(!gpr && !gpr1 && !gpr2, "Can only gte in sse regs for now\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only gte in sse regs for now\n");
             if (dst == src1) 
                 a.cmpnltps(dst, src2);
             else if (dst == src2)
@@ -415,7 +415,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case ExtractVector:
-            assert(!gpr && !gpr1 && !gpr2, "Can only select vector in sse regs\n");
+            Assert(!gpr && !gpr1 && !gpr2, "Can only select vector in sse regs\n");
             if (node->ival == 1) {
                 if (dst == src1) {                                        
                     a.movaps(tmp, src1);
@@ -462,9 +462,9 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case ExtractScalar:
-            assert(!gpr && !gpr1, "Can only extract scalar from sse regs into sse regs\n");
+            Assert(!gpr && !gpr1, "Can only extract scalar from sse regs into sse regs\n");
             if (!(dst == src1)) a.movaps(dst, src1);
-            assert(node->ival >= 0 && node->ival < 4, 
+            Assert(node->ival >= 0 && node->ival < 4, 
                    "Integer argument to ExtractScalar must be 0, 1, 2, or 3\n");
             a.shufps(dst, src1, 
                       (uint8_t)node->ival, (uint8_t)node->ival,
@@ -472,9 +472,9 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             break;
         case StoreVector:
         case Store:
-            assert(gpr1, "Can only store using addresses in gprs\n");
-            assert(!gpr2, "Can only store values in sse registers\n");
-            assert(fits32(node->ival),
+            Assert(gpr1, "Can only store using addresses in gprs\n");
+            Assert(!gpr2, "Can only store values in sse registers\n");
+            Assert(fits32(node->ival),
                    "Store may only use a 32-bit signed constant - 0x%llx overflows\n", node->ival);
             if (node->width == 1) {
                 a.movss(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
@@ -492,9 +492,9 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             break;
         case LoadVector:
         case Load:
-            assert(gpr1, "Can only load using addresses in gprs\n");
-            assert(!gpr, "Can only load into sse regs\n");
-            assert(fits32(node->ival),
+            Assert(gpr1, "Can only load using addresses in gprs\n");
+            Assert(!gpr, "Can only load into sse regs\n");
+            Assert(fits32(node->ival),
                    "Load may only use a 32-bit signed constant\n");
             if (node->width == 1) {
                 a.movss(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
@@ -510,7 +510,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
             }
             break;
         case Vector:
-            assert(!gpr, "Can't put vectors in gprs");
+            Assert(!gpr, "Can't put vectors in gprs");
 
             // Can we use shufps?
             if (src1 == src2 && src3 == src4) {
@@ -619,7 +619,7 @@ void AsmX64Compiler::assignRegisters() {
     vector<IRNode::Ptr > regs(32);
 
     // Reserve xmm15 for the code generator to use as scratch
-    assert(!(reserved & (1<<31)),
+    Assert(!(reserved & (1<<31)),
            "Register xmm15 is reserved for the code generator\n");
     reserved |= (1<<31);
     
@@ -697,10 +697,10 @@ void AsmX64Compiler::regAssign(IRNode::Ptr node,
                          vector<vector<IRNode::Ptr > > &order) {
 
     // Check we're at a known loop level
-    assert(node->level || node->constant, "Cannot assign registers to a node that depends on a variable with a loop order not yet assigned.\n");
+    Assert(node->level || node->constant, "Cannot assign registers to a node that depends on a variable with a loop order not yet assigned.\n");
 
     // Check order is larger enough
-    assert(node->level < (int)order.size(), "The order vector should have more levels that it does!\n");
+    Assert(node->level < (int)order.size(), "The order vector should have more levels that it does!\n");
 
     // If I already have a register bail out. This may occur
     // because I was manually assigned a register outside
@@ -713,7 +713,7 @@ void AsmX64Compiler::regAssign(IRNode::Ptr node,
 
     // Check all the inputs already have registers
     for (size_t i = 0; i < node->inputs.size(); i++) {
-        assert(node->inputs[i]->reg >= 0, "Cannot assign register to a node whose inputs don't have registers\n");
+        Assert(node->inputs[i]->reg >= 0, "Cannot assign register to a node whose inputs don't have registers\n");
         //regAssign(node->inputs[i], reserved, regs, order);
     }
 
