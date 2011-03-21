@@ -12,8 +12,11 @@ public:
 protected:
     virtual void compilePrologue();
     // Compile a single definition
-    virtual void compileDefinition(FImage *im, int definition);
+    virtual void preCompileDefinition(FImage *im, int definition);
     virtual void compileEpilogue();
+
+    virtual void compileLoopHeader(size_t level);
+    virtual void compileLoopTail(size_t level);
 
     // Generate machine code for a vector of IRNodes. Registers must
     // have already been assigned.
@@ -21,7 +24,7 @@ protected:
     
     // Assign registers and generates an evaluation order for a vector
     // of expressions.
-    void doRegisterAssignment();
+    void assignRegisters();
 
     // Remove all assigned registers
     void regClear(IRNode::Ptr node);
@@ -35,6 +38,7 @@ protected:
 private:
     AsmX64 a;
     vector<AsmX64::Reg> varRegs;
+    char labels[10][20];
 };
 
 #endif
