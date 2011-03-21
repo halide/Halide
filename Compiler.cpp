@@ -32,7 +32,7 @@ void Compiler::preCompileDefinition(FImage *im, int definition)
     printf("\n");
     
     // It should be a store or storeVector node.
-    assert(def->op == Store || def->op == StoreVector, "Definitions of images should be Store nodes\n");
+    Assert(def->op == Store || def->op == StoreVector, "Definitions of images should be Store nodes\n");
     
     IRNode::Ptr lhs = def->inputs[0];
     IRNode::Ptr rhs = def->inputs[1];
@@ -42,7 +42,7 @@ void Compiler::preCompileDefinition(FImage *im, int definition)
     IRNode::PtrSet varSet;
     collectInputs(def, Variable, varSet);
     
-    assert(varSet.size() < 256, "FImage can't cope with more than 255 variables\n");
+    Assert(varSet.size() < 256, "FImage can't cope with more than 255 variables\n");
     
     // put them in a vector
     vars = vector<IRNode::Ptr>(varSet.size());
@@ -107,7 +107,7 @@ void Compiler::preCompileDefinition(FImage *im, int definition)
     for (size_t i = 0; i < vars.size(); i++) {
         printf("Var %d : [%lld %lld]\n", (int)i,
                vars[i]->interval.min(), vars[i]->interval.max());
-        assert(vars[i]->interval.bounded(), "Variable %d has undefined bounds\n");
+        Assert(vars[i]->interval.bounded(), "Variable %d has undefined bounds\n");
     }
     
     // Find a var to vectorize across. For right now we just pick the
