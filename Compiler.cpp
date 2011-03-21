@@ -7,6 +7,7 @@ void Compiler::compile(FImage *im) {
 
     // Compile a chunk of code that just runs the definitions in order
     for (int i = 0; i < (int)im->definitions.size(); i++) {
+        preCompileDefinition(im, i);
         compileDefinition(im, i);
     }
     
@@ -20,7 +21,7 @@ void Compiler::collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &nodes)
     }
 }
 
-void Compiler::compileDefinition(FImage *im, int definition)
+void Compiler::preCompileDefinition(FImage *im, int definition)
 {
     printf("Compiling definition %d/%d.\n",
            definition+1, (int)im->definitions.size());    
@@ -233,12 +234,39 @@ void Compiler::compileDefinition(FImage *im, int definition)
     // Then compute the order of evaluation (sets tag to 2)
     printf("Doing instruction scheduling\n");
     order.clear();
-    doInstructionScheduling();
+    scheduleInstructions();
     printf("Done instruction scheduling\n");
 }
 
+void Compiler::compileDefinition(FImage *im, int definition) {
+    // print out the proposed ordering and register assignment for inspection
+    for (size_t l = 0; l < order.size(); l++) {
+        if (l) {
+            for (size_t k = 1; k < l; k++) putchar(' ');
+            printf("for:\n");
+        }
+        for (size_t i = 0; i < order[l].size(); i++) {
+            IRNode::Ptr next = order[l][i];
+            for (size_t k = 0; k < l; k++) putchar(' ');
+            next->print();
+        }
+    }
+    
+    compileBody(order[0]);
+    
+    for (size_t i = 0; i < vars.size(); i++) {
+        printf("Starting loop %d\n", (int)i);
+        
+        compileLoopHeader(i);
+        compileBody(order[i+1]);
+    }
+    
+    for (int i = (int)vars.size()-1; i >= 0; i--) {
+        compileLoopTail(i);
+    }
+}
 
-void Compiler::doInstructionScheduling() {
+void Compiler::scheduleInstructions() {
     
     // Gather the nodes in a depth-first manner, and resize order to
     // be big enough. Also tag each node with the minimum depth to a root plus 100.

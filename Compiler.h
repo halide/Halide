@@ -35,6 +35,9 @@ protected:
     virtual void collectInputs(IRNode::Ptr node, OpCode op, IRNode::PtrSet &nodes);
     
     virtual void compileDefinition(FImage *im, int definition);
+    virtual void preCompileDefinition(FImage *im, int definition);
+    virtual void compileLoopHeader(size_t level) = 0;
+    virtual void compileLoopTail(size_t level) = 0;
     virtual void compileBody(vector<IRNode::Ptr> code) = 0;
     virtual void compileEpilogue() = 0;
 
@@ -46,7 +49,7 @@ protected:
     
     // Find and order all the IRNodes that go into computing the given
     // vector of root nodes
-    virtual void doInstructionScheduling();
+    virtual void scheduleInstructions();
 
     vector<IRNode::Ptr> roots;
     vector<IRNode::Ptr> vars;

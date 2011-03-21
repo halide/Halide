@@ -41,13 +41,15 @@ void AsmX64Compiler::compileEpilogue() {
 // TODO: refactor this into base Compiler::compileDefinition and more detailed compileBody per-backend?
 // TODO: only pushes compileBody in concrete subclasses? And loop management code?
 // Compile the evaluation of a single FImage
-void AsmX64Compiler::compileDefinition(FImage *im, int definition) {
+void AsmX64Compiler::preCompileDefinition(FImage *im, int definition) {
 
     time_t t1 = timeGetTime();
 
     // Transform code, build vars and roots lists, vectorWidth and unroll, etc.
-    Compiler::compileDefinition(im, definition);
+    Compiler::preCompileDefinition(im, definition);
 
+    // TODO: reorganize comments for new structure
+    
     // -----------------------------------------------------------
     // Everything below here can be ripped out and pushed to llvm
     // -----------------------------------------------------------
@@ -68,61 +70,42 @@ void AsmX64Compiler::compileDefinition(FImage *im, int definition) {
     
     // TODO: lift this out, push into just compileBody prologue by tracking and clearing single "registers allocated?" bit at start of compileDefinition, and allocating if not already?
     printf("Register assignment...\n");
-    doRegisterAssignment();
+    assignRegisters();
     printf("Done\n");
-
-    time_t t2 = timeGetTime();
-    printf("Compilation took %ld ms\n", t2-t1);
 
     // which register is the output pointer in?
     //AsmX64::Reg outPtr(roots[roots.size()-1]->reg);
 
-    // print out the proposed ordering and register assignment for inspection
-    
-    for (size_t l = 0; l < order.size(); l++) {
-        if (l) {
-            for (size_t k = 1; k < l; k++) putchar(' ');
-            printf("for:\n");
-        }
-        for (size_t i = 0; i < order[l].size(); i++) {
-            IRNode::Ptr next = order[l][i];
-            for (size_t k = 0; k < l; k++) putchar(' ');
-            next->print();
-        }
-    }
-    
-    compileBody(order[0]);
-
-    char labels[10][20];
+    // Set up label strings
     for (int i = 0; i < 10; i++) {
         snprintf(labels[i], 20, "l%d.%d", definition, i);
     }
 
-    for (size_t i = 0; i < vars.size(); i++) {
-        printf("Starting loop %d\n", (int)i);
-        a.mov(varRegs[i], vars[i]->interval.min());
-        a.label(labels[i]); 
-    
-        compileBody(order[i+1]);
-    }
-
-    for (int i = (int)vars.size()-1; i >= 0; i--) {
-        if (varData(i)->order == Decreasing) {
-            // should these 
-            a.sub(varRegs[i], vectorWidth[i]*unroll[i]);
-            a.cmp(varRegs[i], truncate(vars[i]->interval.min()));
-            a.jge(labels[i]);
-        } else {
-            // At this point, parallel is treated as increasing
-            a.add(varRegs[i], vectorWidth[i]*unroll[i]);
-            a.cmp(varRegs[i], truncate(vars[i]->interval.max()+1));
-            a.jl(labels[i]);
-        }
-    }
-
-
+    time_t t2 = timeGetTime();
+    printf("Pre-compilation took %ld ms\n", t2-t1);
 }
-    
+
+void AsmX64Compiler::compileLoopHeader(size_t i) {
+    a.mov(varRegs[i], vars[i]->interval.min());
+    a.label(labels[i]);
+}
+
+void AsmX64Compiler::compileLoopTail(size_t i) {
+    // Iterate loops at tail
+    // TODO: factor out - express in IRNodes? Compile Loop Tail?
+    if (varData(i)->order == Decreasing) {
+        // should these 
+        a.sub(varRegs[i], vectorWidth[i]*unroll[i]);
+        a.cmp(varRegs[i], truncate(vars[i]->interval.min()));
+        a.jge(labels[i]);
+    } else {
+        // At this point, parallel is treated as increasing
+        a.add(varRegs[i], vectorWidth[i]*unroll[i]);
+        a.cmp(varRegs[i], truncate(vars[i]->interval.max()+1));
+        a.jl(labels[i]);
+    }
+}
+
 // Generate machine code for a vector of IRNodes. Registers must have already been assigned.
 void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
         
@@ -601,7 +584,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
 // registers contain output from a level (i.e. registers either
 // used by roots, or used by a higher level).
 // 
-void AsmX64Compiler::doRegisterAssignment() {
+void AsmX64Compiler::assignRegisters() {
 
     // Assign the variables some registers
     varRegs = vector<AsmX64::Reg>(vars.size());
