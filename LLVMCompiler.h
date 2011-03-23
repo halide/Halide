@@ -43,6 +43,13 @@ protected:
                    vector<vector<IRNode::Ptr> > &order);
 
 private:
+    llvm::ExecutionEngine *ee;
+    llvm::IRBuilder<> *builder;
+    llvm::Module *module;
+    llvm::Function *mainFunc;
+    llvm::LLVMContext& ctx;
+
+    llvm::FunctionPassManager *passMgr;
     //AsmX64 a;
     //vector<AsmX64::Reg> varRegs;
     //char labels[10][20];

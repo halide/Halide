@@ -12,7 +12,15 @@
 #include <llvm/Target/TargetData.h>
 #include <llvm/Target/TargetSelect.h>
 #include <llvm/Transforms/Scalar.h>
-#include "llvm/Support/IRBuilder.h"
+#include <llvm/Support/IRBuilder.h>
+
+#include <llvm/Support/ToolOutputFile.h>
+#include <llvm/Support/FormattedStream.h>
+#include <llvm/Target/TargetRegistry.h>
+#include <llvm/Target/TargetData.h>
+#include <llvm/Support/Host.h>
+
+#include <iostream>
 
 using namespace llvm;
 
@@ -22,34 +30,64 @@ static inline int32_t truncate(int64_t v) {
     return t;
 }
 
-LLVMCompiler::LLVMCompiler() {
+LLVMCompiler::LLVMCompiler() : ctx(getGlobalContext()) {
     InitializeNativeTarget();
 
-    LLVMContext &context = getGlobalContext();
-    IRBuilder<> *builder = new IRBuilder<>(context);
-    
+    builder = new IRBuilder<>(ctx);
 
     // Make the module, which holds all the code.
-    llvm::Module *module = new llvm::Module("FImage JIT", context);
+    module = new llvm::Module("FImage JIT", ctx);
     
-
     // Create the JIT.  This takes ownership of the module.
     std::string errStr;
-    ExecutionEngine *executionEngine = EngineBuilder(module).setErrorStr(&errStr).create();
-    if (!executionEngine) {
+    ee = EngineBuilder(module).setErrorStr(&errStr).create();
+    if (!ee) {
         fprintf(stderr, "Could not create ExecutionEngine: %s\n", errStr.c_str());
         exit(1);
     }
 
-    FunctionPassManager *passmgr = new FunctionPassManager(module);
+    // Set up the pass manager
+    passMgr = new FunctionPassManager(module);
+    passMgr->add(new TargetData(*ee->getTargetData()));
+    // AliasAnalysis support for GVN
+    passMgr->add(createBasicAliasAnalysisPass());
+    // Peephole, bit-twiddling optimizations
+    passMgr->add(createInstructionCombiningPass());
+    // Reassociate expressions
+    passMgr->add(createReassociatePass());
+    // Eliminate common sub-expressions
+    passMgr->add(createGVNPass());
+    // Simplify CFG (delete unreachable blocks, etc.)
+    passMgr->add(createCFGSimplificationPass());
+    
+    passMgr->doInitialization();
 }
 
 void LLVMCompiler::run() {
-#if 0
-#endif
+    void (*func)(void) = (void (*)(void))ee->getPointerToFunction(mainFunc);
+    func();
+    //ee->runFunction(mainFunc, args);
 }
 
 void LLVMCompiler::compilePrologue() {
+    // Set up the main function
+    std::vector<const Type*> voidArgs(0);
+    mainFunc = Function::Create(FunctionType::get(Type::getVoidTy(ctx), voidArgs, false), Function::ExternalLinkage, "__fimage", module);
+    
+    BasicBlock* bb = BasicBlock::Create(ctx, "entry", mainFunc);
+    builder->SetInsertPoint(bb);
+    
+    // Generate dummy code in the `entry` block to emit `printf("hi!\n")`;
+    Value* s = builder->CreateGlobalString("hi!\n");
+    std::vector<const Type*> cstrArgs(1, PointerType::get(Type::getInt8Ty(ctx), 0));
+    Function* printfFunc = Function::Create(FunctionType::get(Type::getInt32Ty(ctx), cstrArgs, true), Function::ExternalLinkage, "printf", module);
+    s->print(errs()); errs() << "\n";
+    s->getType()->print(errs()); errs() << "\n";
+    printfFunc->getFunctionType()->getParamType(0)->print(errs()); errs() << "\n";
+    builder->CreateCall(printfFunc, builder->CreateConstGEP2_32(s, 0, 0));
+    builder->CreateRetVoid();
+    
+    // This should be handled by the LLVM Function JIT, according to target conventions
 #if 0
     // Align the stack to a 16-byte boundary - it always comes in
     // offset by 8 bytes because it contains the 64-bit return
@@ -66,6 +104,7 @@ void LLVMCompiler::compilePrologue() {
 }
 
 void LLVMCompiler::compileEpilogue() {
+    // This should be handled by the LLVM Function JIT, according to target conventions
 #if 0
     // Exit any loops that were fused over definitions
     // TODO
@@ -81,6 +120,49 @@ void LLVMCompiler::compileEpilogue() {
     a.saveCOFF("generated.obj");        
     a.saveELF("generated.o");
 #endif
+    
+    // Verify the module
+    std::cerr << "verifying...";
+    if (verifyModule(*module)) {
+        std::cerr << ": Error constructing function!\n";
+        exit(1);
+    }
+    std::cerr << "OK\n";
+
+    // print the LLVM IR to stderr
+    // Different from cerr << *module?
+    module->dump();
+    
+    // Emit a binary object for later inspection.
+    // Based on llvm/tools/llc/llc.cpp
+    std::string errStr;
+    
+    const Target* target = TargetRegistry::lookupTarget(sys::getHostTriple(), errStr);
+    std::string featureStr;
+    TargetMachine* machine = target->createTargetMachine(sys::getHostTriple(), featureStr);
+    
+    tool_output_file *outfile = new tool_output_file("generated.o", errStr, raw_fd_ostream::F_Binary);
+    if (!errStr.empty()) {
+        std::cerr << errStr << "\n";
+        exit(1);
+    }
+    formatted_raw_ostream fos(outfile->os());
+
+#if 0
+    // Clone the JIT pass manager -- TODO: is this safe?
+    PassManager pm(*dynamic_cast<PassManager*>(passMgr));
+    pm.add(new TargetData(*(machine->getTargetData())));
+    machine->setAsmVerbosityDefault(true);
+    // TODO: Use non-binary file + TargetMachine::CGFT_AssemblyFile?
+    if (machine->addPassesToEmitFile(pm, fos, TargetMachine::CGFT_ObjectFile, CodeGenOpt::None))
+    {
+        std::cerr << "Target " << target->getName() << " does not support generation of requested object file type.\n";
+        exit(1);
+    }
+    
+    // The PassManager performs and optimization and dumps out generated.o
+    pm.run(*module);
+#endif //0
 }
 
 // TODO: refactor this into base Compiler::compileDefinition and more detailed compileBody per-backend?
