@@ -1,5 +1,6 @@
 Build env notes:
 
-- build llvm submodule with `./configure --prefix=$(CWD)`
+- ensure clang sub-submodule (llvm/tools/clang) is updated and checked out at branch matching llvm
+- build llvm submodule with `./configure --prefix=$(PWD)`
 - `source ./bash_profile` to configure llvm paths for current session
-- put ignores in llvm/.git/info/exclude to keep built dir clean
+- put ignores in [llvm,llvm/tools/clang]/.git/info/exclude to keep built dir clean
