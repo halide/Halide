@@ -41,6 +41,9 @@ protected:
                    uint32_t reserved,
                    vector<IRNode::Ptr> &regs, 
                    vector<vector<IRNode::Ptr> > &order);
+    
+    // Return a load of the value if it's a pointer, otherwise return the value
+    llvm::Value* loadIfPointer(llvm::Value* v);
 
 private:
     llvm::ExecutionEngine *ee;
@@ -50,9 +53,12 @@ private:
     llvm::LLVMContext& ctx;
 
     llvm::FunctionPassManager *passMgr;
+    std::vector<llvm::BasicBlock*> levelBlocks;
+    std::vector<llvm::Value*> varValues;
+    
+    std::map<IRNode::Ptr, llvm::Value*> nodeValues;
     //AsmX64 a;
     //vector<AsmX64::Reg> varRegs;
-    //char labels[10][20];
 };
 
 #endif

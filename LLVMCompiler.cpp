@@ -19,6 +19,7 @@
 #include <llvm/Target/TargetRegistry.h>
 #include <llvm/Target/TargetData.h>
 #include <llvm/Support/Host.h>
+//#include <llvm/Support/Debug.h>
 
 #include <iostream>
 
@@ -85,42 +86,12 @@ void LLVMCompiler::compilePrologue() {
     s->getType()->print(errs()); errs() << "\n";
     printfFunc->getFunctionType()->getParamType(0)->print(errs()); errs() << "\n";
     builder->CreateCall(printfFunc, builder->CreateConstGEP2_32(s, 0, 0));
-    builder->CreateRetVoid();
-    
-    // This should be handled by the LLVM Function JIT, according to target conventions
-#if 0
-    // Align the stack to a 16-byte boundary - it always comes in
-    // offset by 8 bytes because it contains the 64-bit return
-    // address.
-    a.sub(a.rsp, 8);
-    
-    // Save all the registers that the 64-bit C abi tells us we're
-    // supposed to. This maintains stack alignment.
-    a.pushNonVolatiles();
-    
-    // Find any variables that are fused over the definitions
-    // TODO
-#endif
 }
 
 void LLVMCompiler::compileEpilogue() {
-    // This should be handled by the LLVM Function JIT, according to target conventions
-#if 0
-    // Exit any loops that were fused over definitions
-    // TODO
-    
-    // Pop the stack and return
-    a.popNonVolatiles();
-    a.add(a.rsp, 8);
-    a.ret();        
-    
-    printf("Saving object file\n");
-    
-    // Save an object file that you can use dumpbin on to inspect
-    a.saveCOFF("generated.obj");        
-    a.saveELF("generated.o");
-#endif
-    
+    // Insert return from the generated function
+    builder->CreateRetVoid();
+
     // Verify the module
     std::cerr << "verifying...";
     if (verifyModule(*module)) {
@@ -149,14 +120,17 @@ void LLVMCompiler::compileEpilogue() {
     formatted_raw_ostream fos(outfile->os());
 
 #if 0
+    // Save an object file that you can use dumpbin on to inspect
+    printf("Saving object file\n");
+    
     // Clone the JIT pass manager -- TODO: is this safe?
-    PassManager pm(*dynamic_cast<PassManager*>(passMgr));
+    PassManager pm;
     pm.add(new TargetData(*(machine->getTargetData())));
     machine->setAsmVerbosityDefault(true);
     // TODO: Use non-binary file + TargetMachine::CGFT_AssemblyFile?
     if (machine->addPassesToEmitFile(pm, fos, TargetMachine::CGFT_ObjectFile, CodeGenOpt::None))
     {
-        std::cerr << "Target " << target->getName() << " does not support generation of requested object file type.\n";
+        errs() << "Target " << target->getName() << " does not support generation of requested object file type.\n";
         exit(1);
     }
     
@@ -175,13 +149,14 @@ void LLVMCompiler::preCompileDefinition(FImage *im, int definition) {
     // Transform code, build vars and roots lists, vectorWidth and unroll, etc.
     Compiler::preCompileDefinition(im, definition);
 
-    // Set up label strings
-#if 0
-    for (int i = 0; i < 10; i++) {
-        snprintf(labels[i], 20, "l%d.%d", definition, i);
+    // Initialize the varValues storage area
+    // TODO: replace this with emission-ordered varValues[i] = new expression assigning to the var; simplify away loadIfPointer...
+    varValues.clear();
+    for (size_t i = 0; i < vars.size(); i++) {
+        varValues.push_back(builder->CreateAlloca(Type::getInt64Ty(ctx)));
+        nodeValues[vars[i]] = varValues[i];
     }
-#endif
-
+    
     time_t t2 = timeGetTime();
     printf("Pre-compilation took %ld ms\n", t2-t1);
 }
@@ -191,6 +166,16 @@ void LLVMCompiler::compileLoopHeader(size_t i) {
     a.mov(varRegs[i], vars[i]->interval.min());
     a.label(labels[i]);
 #endif
+    char label[20];
+    snprintf(label, 20, "level%d", (int)i);
+    
+    // Store the initial loop induction value
+    Value* loopMin = ConstantInt::get(Type::getInt64Ty(ctx), vars[i]->interval.min());
+    builder->CreateStore(loopMin, varValues[i]);
+    
+    BasicBlock* bb = BasicBlock::Create(ctx, label, mainFunc);
+    builder->CreateBr(bb);
+    builder->SetInsertPoint(bb);
 }
 
 void LLVMCompiler::compileLoopTail(size_t i) {
@@ -213,12 +198,22 @@ void LLVMCompiler::compileLoopTail(size_t i) {
     }
 }
 
+Value* LLVMCompiler::loadIfPointer(Value* v) {
+    if (v->getType()->isPointerTy()) {
+        errs() << "loading "; v->getType()->print(errs());
+        return builder->CreateLoad(v);
+    } else {
+        errs() << "not loading "; v->getType()->print(errs());
+        return v;
+    }
+}
+
 // Generate machine code for a vector of IRNodes. Registers must have already been assigned.
 void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
 #if 0
     AsmX64::SSEReg tmp = a.xmm15;
     AsmX64::Reg gtmp = a.r15;
-
+#endif
     for (size_t i = 0; i < code.size(); i++) {
         // Extract the node, its register, and any inputs and their registers
         IRNode::Ptr node = code[i];
@@ -227,6 +222,12 @@ void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
         IRNode::Ptr c3 = (node->inputs.size() >= 3) ? node->inputs[2] : NULL_IRNODE_PTR;
         IRNode::Ptr c4 = (node->inputs.size() >= 4) ? node->inputs[3] : NULL_IRNODE_PTR;
 
+        Value* v1 = (node->inputs.size() >= 1) ? nodeValues[c1] : NULL;
+        Value* v2 = (node->inputs.size() >= 2) ? nodeValues[c2] : NULL;
+        Value* v3 = (node->inputs.size() >= 3) ? nodeValues[c3] : NULL;
+        Value* v4 = (node->inputs.size() >= 4) ? nodeValues[c4] : NULL;
+
+#if 0
         // SSE source and destination registers
         AsmX64::SSEReg dst(node->reg-16);
         AsmX64::SSEReg src1(c1 ? c1->reg-16 : 0);
@@ -249,46 +250,121 @@ void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
         AsmX64::Reg gsrc2(c2 ? c2->reg : 0);
         AsmX64::Reg gsrc3(c3 ? c3->reg : 0);
         AsmX64::Reg gsrc4(c4 ? c4->reg : 0);
+#endif
 
         switch(node->op) {
-        case Const: 
+        case Const:
+            errs() << "Const\n";
             if (node->type == IRNode::Float) {
-                if (node->fval == 0.0f) {
-                    a.bxorps(dst, dst);
-                } else {
-                    a.mov(gtmp, a.addData(node->fval));
-                    a.movss(dst, AsmX64::Mem(gtmp));
-                    //a.shufps(dst, dst, 0, 0, 0, 0);
-                }
+                nodeValues[node] = ConstantFP::get(Type::getFloatTy(ctx), node->fval);
             } else if (node->type == IRNode::Bool) {
-                if (gpr) {
-                    if (node->ival) 
-                        a.mov(gdst, -1);
-                    else
-                        a.mov(gdst, 0);
-                } else {
-                    if (node->ival) {
-                        a.cmpeqps(dst, dst);
-                    } else {
-                        a.bxorps(dst, dst);                    
-                    }
-                }
+                nodeValues[node] = ConstantInt::get(Type::getInt1Ty(ctx), node->ival);
             } else {
-                if (gpr) {
-                    a.mov(gdst, node->ival);
-                } else {
-                    a.mov(a.r15, node->ival);
-                    // ints are 32-bit for now, so this works
-                    a.cvtsi2ss(dst, a.r15);
-                    //a.shufps(dst, dst, 0, 0, 0, 0);                        
-                }
+                nodeValues[node] = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
             }
             break;
         case Variable:
+            errs() << "Variable\n";
+            // TODO: remove extraneous validation later
+            Assert(nodeValues.count(node), "Variables should be recorded at init-time\n");
+            Assert(std::find(vars.begin(), vars.end(), node) != vars.end(), "Variable node should have been in vars vector\n");
             // These are placed in GPRs externally
-            Assert(gpr, "Variables must be manually placed in gprs\n");
+            //Assert(gpr, "Variables must be manually placed in gprs\n");
             break;
+        
+        case StoreVector:
+            errs() << "Vector ";
+        case Store:
+            errs() << "Store\n";
+            // TODO: redundant address computation with Load
+            v3 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
+            v1 = builder->CreateAdd(v1, v3); // add imm
+            if (node->type == IRNode::Float) {
+                v1 = builder->CreateCast(Instruction::IntToPtr, v1, Type::getFloatPtrTy(ctx));
+            } else {
+                assert(node->type == IRNode::Int);
+                v1 = builder->CreateCast(Instruction::IntToPtr, v1, Type::getInt64PtrTy(ctx));
+            }
+            // Load it
+            nodeValues[node] = builder->CreateStore(loadIfPointer(v2), v1);
+#if 0
+            Assert(gpr1, "Can only store using addresses in gprs\n");
+            Assert(!gpr2, "Can only store values in sse registers\n");
+            Assert(fits32(node->ival),
+                   "Store may only use a 32-bit signed constant - 0x%llx overflows\n", node->ival);
+            if (node->width == 1) {
+                a.movss(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
+            } else {
+                SteppedInterval i = node->inputs[0]->interval + node->ival;
+                printf("%lld %lld %lld %lld\n", i.min(), i.max(), i.remainder(), i.modulus());
+                if ((i.modulus() & 0xf) == 0 &&
+                    (i.remainder() & 0xf) == 0) {
+                    a.movaps(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
+                } else {
+                    printf("Unaligned store!\n");
+                    a.movups(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
+                }
+            }
+#endif
+            break;
+        case LoadVector:
+            errs() << "Vector ";
+        case Load:
+            errs() << "Load\n";
+            // TODO: how to determine type of src/dst? -- node->type
+#if 0
+            // Load ptr as byte* to allow GetElementPointer offset computation to match normal load+imm semantics
+            v1 = builder->CreateCast(Instruction::IntToPtr, v1, Type::getInt8PtrTy(ctx));
+            // Set imm offset
+            v2 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
+            // Compute offset ptr in bytes
+            v1 = builder->CreateGEP(v1, v2);
+            v1 = builder->CreateCast(Instruction::BitCast, v1, Type::getFloatPtrTy(ctx));
+#endif
+            v3 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
+            v1 = builder->CreateAdd(v1, v3); // add imm
+            if (node->type == IRNode::Float) {
+                v1 = builder->CreateCast(Instruction::IntToPtr, v1, Type::getFloatPtrTy(ctx));
+            } else {
+                assert(node->type == IRNode::Int);
+                v1 = builder->CreateCast(Instruction::IntToPtr, v1, Type::getInt64PtrTy(ctx));
+            }
+            // Load it
+            nodeValues[node] = builder->CreateLoad(v1);
+#if 0
+            Assert(gpr1, "Can only load using addresses in gprs\n");
+            Assert(!gpr, "Can only load into sse regs\n");
+            Assert(fits32(node->ival),
+                   "Load may only use a 32-bit signed constant\n");
+            if (node->width == 1) {
+                a.movss(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
+            } else {
+                SteppedInterval i = node->inputs[0]->interval + node->ival;
+                if ((i.modulus() & 0xf) == 0 &&
+                    (i.remainder() & 0xf) == 0) {
+                    a.movaps(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
+                } else {
+                    printf("Unaligned load!\n");
+                    a.movups(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
+                }
+            }
+#endif
+            break;
+            
+        case NoOp:
+            break;
+
+        default:
+            panic("Not implemented: %s\n", opname(node->op));
+            break;
+
+        case PlusImm:
+            errs() << "Imm ";
+            v2 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
         case Plus:
+            errs() << "Plus\n";
+            nodeValues[node] = builder->CreateAdd(loadIfPointer(v1), loadIfPointer(v2));
+#if 0
             if (gpr && gpr1 && gpr2) {
                 if (gdst == gsrc1)
                     a.add(gdst, gsrc2);
@@ -310,7 +386,9 @@ void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
             } else {
                 panic("Can't add between gpr/sse\n");
             }
+#endif
             break;
+#if 0
         case Minus:
             if (gpr && gpr1 && gpr2) {
                 if (gdst == gsrc1) {
@@ -338,49 +416,20 @@ void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
                 panic("Can't sub between gpr/sse\n");
             }
             break;
-        case Times: 
-            if (gpr && gpr1 && gpr2) {
-                if (gdst == gsrc1)
-                    a.imul(gdst, gsrc2);
-                else if (gdst == gsrc2) 
-                    a.imul(gdst, gsrc1);
-                else {
-                    a.mov(gdst, gsrc1);
-                    a.imul(gdst, gsrc2);
-                }
-            } else if (!gpr && !gpr1 && !gpr2) {
-                if (dst == src1)
-                    a.mulps(dst, src2);
-                else if (dst == src2) 
-                    a.mulps(dst, src1);
-                else {
-                    a.movaps(dst, src1);
-                    a.mulps(dst, src2);
-                }
-            } else {
-                panic("Can't sub between gpr/sse\n");
-            }
-            break;
+#endif //0
         case TimesImm:
-            Assert(fits32(node->ival), 
-                   "TimesImm may only use a 32-bit signed constant\n");
-            if (gdst == gsrc1) {
-                a.imul(gdst, (int32_t)node->ival);
+            errs() << "Imm ";
+            v2 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
+        case Times:
+            errs() << "Times\n";
+            if (c1->type == IRNode::Float) {
+                nodeValues[node] = builder->CreateFMul(loadIfPointer(v1), loadIfPointer(v2));
             } else {
-                a.mov(gdst, (int32_t)node->ival);
-                a.imul(gdst, gsrc1);
+                assert(c1->type == IRNode::Int);
+                nodeValues[node] = builder->CreateMul(loadIfPointer(v1), loadIfPointer(v2));
             }
             break;
-        case PlusImm:
-            Assert(fits32(node->ival),
-                   "PlusImm may only use a 32-bit signed constant\n");
-            if (gdst == gsrc1) {
-                a.add(gdst, (int32_t)node->ival);
-            } else {
-                a.mov(gdst, (int32_t)node->ival);
-                a.add(gdst, gsrc1);
-            }
-            break;
+#if 0
         case Divide: 
             Assert(!gpr && !gpr1 && !gpr2, "Can only divide in sse regs for now\n");
             if (dst == src1) {
@@ -577,45 +626,6 @@ void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
                       (uint8_t)node->ival, (uint8_t)node->ival,
                       (uint8_t)node->ival, (uint8_t)node->ival);
             break;
-        case StoreVector:
-        case Store:
-            Assert(gpr1, "Can only store using addresses in gprs\n");
-            Assert(!gpr2, "Can only store values in sse registers\n");
-            Assert(fits32(node->ival),
-                   "Store may only use a 32-bit signed constant - 0x%llx overflows\n", node->ival);
-            if (node->width == 1) {
-                a.movss(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
-            } else {
-                SteppedInterval i = node->inputs[0]->interval + node->ival;
-                printf("%lld %lld %lld %lld\n", i.min(), i.max(), i.remainder(), i.modulus());
-                if ((i.modulus() & 0xf) == 0 &&
-                    (i.remainder() & 0xf) == 0) {
-                    a.movaps(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
-                } else {
-                    printf("Unaligned store!\n");
-                    a.movups(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
-                }
-            }
-            break;
-        case LoadVector:
-        case Load:
-            Assert(gpr1, "Can only load using addresses in gprs\n");
-            Assert(!gpr, "Can only load into sse regs\n");
-            Assert(fits32(node->ival),
-                   "Load may only use a 32-bit signed constant\n");
-            if (node->width == 1) {
-                a.movss(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
-            } else {
-                SteppedInterval i = node->inputs[0]->interval + node->ival;
-                if ((i.modulus() & 0xf) == 0 &&
-                    (i.remainder() & 0xf) == 0) {
-                    a.movaps(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
-                } else {
-                    printf("Unaligned load!\n");
-                    a.movups(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
-                }
-            }
-            break;
         case Vector:
             Assert(!gpr, "Can't put vectors in gprs");
 
@@ -656,10 +666,8 @@ void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
                 a.movaps(dst, tmp);
                 */
             }
-            break;           
-        case NoOp:
             break;
+#endif //0
         }
     }
-#endif
 }
