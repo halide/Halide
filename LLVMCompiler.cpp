@@ -149,11 +149,15 @@ void LLVMCompiler::preCompileDefinition(FImage *im, int definition) {
     // Transform code, build vars and roots lists, vectorWidth and unroll, etc.
     Compiler::preCompileDefinition(im, definition);
 
-    // Initialize the varValues storage area
-    // TODO: replace this with emission-ordered varValues[i] = new expression assigning to the var; simplify away loadIfPointer...
+    levelBlocks.clear();
+    levelBlocks.resize(vars.size());
+
+    // Initialize the varValues storage area    
     varValues.clear();
+    varValues.resize(vars.size());
+    // TODO: replace this with emission-ordered varValues[i] = new expression assigning to the var; simplify away loadIfPointer...?
     for (size_t i = 0; i < vars.size(); i++) {
-        varValues.push_back(builder->CreateAlloca(Type::getInt64Ty(ctx)));
+        varValues[i] = builder->CreateAlloca(Type::getInt64Ty(ctx));
         nodeValues[vars[i]] = varValues[i];
     }
     
@@ -169,18 +173,26 @@ void LLVMCompiler::compileLoopHeader(size_t i) {
     char label[20];
     snprintf(label, 20, "level%d", (int)i);
     
+    Assert(varData(i)->order != Decreasing, "Don't currently seem to initialize for decreasing loops.");
     // Store the initial loop induction value
     Value* loopMin = ConstantInt::get(Type::getInt64Ty(ctx), vars[i]->interval.min());
     builder->CreateStore(loopMin, varValues[i]);
+    //varValues[i] = loopMin;
+    //nodeValues[vars[i]] = varValues[i];
+    errs() << "varValues." << i << " = "; varValues[i]->print(errs()); errs() << "\n";
     
     BasicBlock* bb = BasicBlock::Create(ctx, label, mainFunc);
     builder->CreateBr(bb);
     builder->SetInsertPoint(bb);
+    levelBlocks[i] = bb;
 }
 
 void LLVMCompiler::compileLoopTail(size_t i) {
     // Iterate loops at tail
     // TODO: factor out - express in IRNodes? Compile Loop Tail?
+    Value* step = ConstantInt::get(Type::getInt64Ty(ctx), vectorWidth[i]*unroll[i]);
+    BasicBlock* nextBlock = BasicBlock::Create(ctx, "", mainFunc);
+    Value *cond;
     if (varData(i)->order == Decreasing) {
         #if 0
         // should these 
@@ -188,6 +200,18 @@ void LLVMCompiler::compileLoopTail(size_t i) {
         a.cmp(varRegs[i], truncate(vars[i]->interval.min()));
         a.jge(labels[i]);
         #endif
+        /*
+        // TODO: unify varValues[i] as accessor method: ref to nodeValues[vars[i]] for simplicity/safety?
+        varValues[i] = builder->CreateSub(varValues[i], step);
+        nodeValues[vars[i]] = varValues[i];
+         */
+        Value* newVar = builder->CreateSub(loadIfPointer(varValues[i]), step);
+        builder->CreateStore(newVar, varValues[i]);
+        
+        // TODO: truncate interval.min, like AsmX64? Seemingly unnecessary/unsafe...
+        Value* bound = ConstantInt::get(Type::getInt64Ty(ctx), vars[i]->interval.min());
+        cond = builder->CreateICmpSGE(newVar, bound);
+        builder->CreateCondBr(cond, levelBlocks[i], nextBlock);
     } else {
         #if 0
         // At this point, parallel is treated as increasing
@@ -195,7 +219,21 @@ void LLVMCompiler::compileLoopTail(size_t i) {
         a.cmp(varRegs[i], truncate(vars[i]->interval.max()+1));
         a.jl(labels[i]);
         #endif
+        /*
+        errs() << "varValues." << i << " = "; varValues[i]->print(errs()); errs() << "\n";
+        varValues[i] = builder->CreateAdd(varValues[i], step);
+        nodeValues[vars[i]] = varValues[i];
+        errs() << "varValues." << i << " = "; varValues[i]->print(errs()); errs() << "\n";
+         */
+        Value* newVar = builder->CreateAdd(loadIfPointer(varValues[i]), step);
+        builder->CreateStore(newVar, varValues[i]);
+
+        // TODO: truncate interval.min, like AsmX64? Seemingly unnecessary/unsafe...
+        Value* bound = ConstantInt::get(Type::getInt64Ty(ctx), vars[i]->interval.max()+1);
+        cond = builder->CreateICmpSLT(newVar, bound);
     }
+    builder->CreateCondBr(cond, levelBlocks[i], nextBlock);
+    builder->SetInsertPoint(nextBlock);
 }
 
 Value* LLVMCompiler::loadIfPointer(Value* v) {
