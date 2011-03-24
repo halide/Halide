@@ -210,10 +210,6 @@ Value* LLVMCompiler::loadIfPointer(Value* v) {
 
 // Generate machine code for a vector of IRNodes. Registers must have already been assigned.
 void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
-#if 0
-    AsmX64::SSEReg tmp = a.xmm15;
-    AsmX64::Reg gtmp = a.r15;
-#endif
     for (size_t i = 0; i < code.size(); i++) {
         // Extract the node, its register, and any inputs and their registers
         IRNode::Ptr node = code[i];
@@ -226,31 +222,6 @@ void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
         Value* v2 = (node->inputs.size() >= 2) ? nodeValues[c2] : NULL;
         Value* v3 = (node->inputs.size() >= 3) ? nodeValues[c3] : NULL;
         Value* v4 = (node->inputs.size() >= 4) ? nodeValues[c4] : NULL;
-
-#if 0
-        // SSE source and destination registers
-        AsmX64::SSEReg dst(node->reg-16);
-        AsmX64::SSEReg src1(c1 ? c1->reg-16 : 0);
-        AsmX64::SSEReg src2(c2 ? c2->reg-16 : 0);
-        AsmX64::SSEReg src3(c3 ? c3->reg-16 : 0);
-        AsmX64::SSEReg src4(c4 ? c4->reg-16 : 0);
-
-        // Is the destination a GPR?
-        bool gpr = node->reg < 16;
-
-        // Which sources are GPRs?
-        bool gpr1 = c1 && (c1->reg < 16);
-        bool gpr2 = c2 && (c2->reg < 16);
-        //bool gpr3 = c3 && (c3->reg < 16);
-        //bool gpr4 = c4 && (c4->reg < 16);
-
-        // GPR source and destination registers
-        AsmX64::Reg gdst(node->reg);
-        AsmX64::Reg gsrc1(c1 ? c1->reg : 0);
-        AsmX64::Reg gsrc2(c2 ? c2->reg : 0);
-        AsmX64::Reg gsrc3(c3 ? c3->reg : 0);
-        AsmX64::Reg gsrc4(c4 ? c4->reg : 0);
-#endif
 
         switch(node->op) {
         case Const:
@@ -265,64 +236,41 @@ void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
             break;
         case Variable:
             errs() << "Variable\n";
-            // TODO: remove extraneous validation later
+            // TODO: remove extraneous validation
             Assert(nodeValues.count(node), "Variables should be recorded at init-time\n");
-            Assert(std::find(vars.begin(), vars.end(), node) != vars.end(), "Variable node should have been in vars vector\n");
+            Assert(std::find(vars.begin(), vars.end(), node) != vars.end(),
+                   "Variable node should have been in vars vector\n");
             // These are placed in GPRs externally
             //Assert(gpr, "Variables must be manually placed in gprs\n");
             break;
         
-        case StoreVector:
-            errs() << "Vector ";
+        // TODO: vector ops unsupported so far
+        //case StoreVector:
+        //    errs() << "Vector ";
         case Store:
             errs() << "Store\n";
-            // TODO: redundant address computation with Load
-            v3 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
-            v1 = builder->CreateAdd(v1, v3); // add imm
+            // TODO REFACTOR: address computation logic is reundant with Load
+            // add base+imm
+            v1 = builder->CreateAdd(v1, ConstantInt::get(Type::getInt64Ty(ctx), node->ival));
+            // Cast to pointer
             if (node->type == IRNode::Float) {
                 v1 = builder->CreateCast(Instruction::IntToPtr, v1, Type::getFloatPtrTy(ctx));
             } else {
                 assert(node->type == IRNode::Int);
                 v1 = builder->CreateCast(Instruction::IntToPtr, v1, Type::getInt64PtrTy(ctx));
             }
-            // Load it
+            // Store it
             nodeValues[node] = builder->CreateStore(loadIfPointer(v2), v1);
-#if 0
-            Assert(gpr1, "Can only store using addresses in gprs\n");
-            Assert(!gpr2, "Can only store values in sse registers\n");
-            Assert(fits32(node->ival),
-                   "Store may only use a 32-bit signed constant - 0x%llx overflows\n", node->ival);
-            if (node->width == 1) {
-                a.movss(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
-            } else {
-                SteppedInterval i = node->inputs[0]->interval + node->ival;
-                printf("%lld %lld %lld %lld\n", i.min(), i.max(), i.remainder(), i.modulus());
-                if ((i.modulus() & 0xf) == 0 &&
-                    (i.remainder() & 0xf) == 0) {
-                    a.movaps(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
-                } else {
-                    printf("Unaligned store!\n");
-                    a.movups(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
-                }
-            }
-#endif
             break;
-        case LoadVector:
-            errs() << "Vector ";
+        
+        // TODO: vector ops unsupported so far
+        //case LoadVector:
+        //    errs() << "Vector ";
         case Load:
             errs() << "Load\n";
-            // TODO: how to determine type of src/dst? -- node->type
-#if 0
-            // Load ptr as byte* to allow GetElementPointer offset computation to match normal load+imm semantics
-            v1 = builder->CreateCast(Instruction::IntToPtr, v1, Type::getInt8PtrTy(ctx));
-            // Set imm offset
-            v2 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
-            // Compute offset ptr in bytes
-            v1 = builder->CreateGEP(v1, v2);
-            v1 = builder->CreateCast(Instruction::BitCast, v1, Type::getFloatPtrTy(ctx));
-#endif
-            v3 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
-            v1 = builder->CreateAdd(v1, v3); // add imm
+            // add base+imm
+            v1 = builder->CreateAdd(v1, ConstantInt::get(Type::getInt64Ty(ctx), node->ival));
+            // Cast to pointer
             if (node->type == IRNode::Float) {
                 v1 = builder->CreateCast(Instruction::IntToPtr, v1, Type::getFloatPtrTy(ctx));
             } else {
@@ -331,24 +279,6 @@ void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
             }
             // Load it
             nodeValues[node] = builder->CreateLoad(v1);
-#if 0
-            Assert(gpr1, "Can only load using addresses in gprs\n");
-            Assert(!gpr, "Can only load into sse regs\n");
-            Assert(fits32(node->ival),
-                   "Load may only use a 32-bit signed constant\n");
-            if (node->width == 1) {
-                a.movss(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
-            } else {
-                SteppedInterval i = node->inputs[0]->interval + node->ival;
-                if ((i.modulus() & 0xf) == 0 &&
-                    (i.remainder() & 0xf) == 0) {
-                    a.movaps(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
-                } else {
-                    printf("Unaligned load!\n");
-                    a.movups(dst, AsmX64::Mem(gsrc1, (int32_t)node->ival));
-                }
-            }
-#endif
             break;
             
         case NoOp:
@@ -360,89 +290,60 @@ void LLVMCompiler::compileBody(vector<IRNode::Ptr> code) {
 
         case PlusImm:
             errs() << "Imm ";
-            v2 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
+            // TODO REFACTOR: redundant imm-const-loading code among *Imm ops
+            if (node->type == IRNode::Float) {
+                v2 = ConstantInt::get(Type::getFloatTy(ctx), node->fval);
+            } else {
+                assert(node->type == IRNode::Int);
+                v2 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
+            }
         case Plus:
             errs() << "Plus\n";
-            nodeValues[node] = builder->CreateAdd(loadIfPointer(v1), loadIfPointer(v2));
-#if 0
-            if (gpr && gpr1 && gpr2) {
-                if (gdst == gsrc1)
-                    a.add(gdst, gsrc2);
-                else if (gdst == gsrc2) 
-                    a.add(gdst, gsrc1);
-                else {
-                    a.mov(gdst, gsrc1);
-                    a.add(gdst, gsrc2);
-                }
-            } else if (!gpr && !gpr1 && !gpr2) {
-                if (dst == src1)
-                    a.addps(dst, src2);
-                else if (dst == src2) 
-                    a.addps(dst, src1);
-                else {
-                    a.movaps(dst, src1);
-                    a.addps(dst, src2);
-                }
+            if (node->type == IRNode::Float) {
+                nodeValues[node] = builder->CreateFAdd(loadIfPointer(v1), loadIfPointer(v2));
             } else {
-                panic("Can't add between gpr/sse\n");
+                assert(node->type == IRNode::Int);
+                nodeValues[node] = builder->CreateAdd(loadIfPointer(v1), loadIfPointer(v2));
             }
-#endif
             break;
-#if 0
         case Minus:
-            if (gpr && gpr1 && gpr2) {
-                if (gdst == gsrc1) {
-                    a.sub(gdst, gsrc2);
-                } else if (gdst == gsrc2) {
-                    a.mov(gtmp, gsrc2);
-                    a.mov(gsrc2, gsrc1);
-                    a.sub(gsrc2, gtmp);
-                } else {                         
-                    a.mov(gdst, gsrc1);
-                    a.sub(gdst, gsrc2);
-                }
-            } else if (!gpr && !gpr1 && !gpr2) {
-                if (dst == src1) {
-                    a.subps(dst, src2);
-                } else if (dst == src2) {
-                    a.movaps(tmp, src2);
-                    a.movaps(src2, src1);
-                    a.subps(src2, tmp);
-                } else { 
-                    a.movaps(dst, src1);
-                    a.subps(dst, src2);
-                }
+            errs() << "Minus\n";
+            if (node->type == IRNode::Float) {
+                nodeValues[node] = builder->CreateFSub(loadIfPointer(v1), loadIfPointer(v2));
             } else {
-                panic("Can't sub between gpr/sse\n");
+                assert(node->type == IRNode::Int);
+                nodeValues[node] = builder->CreateSub(loadIfPointer(v1), loadIfPointer(v2));
             }
             break;
-#endif //0
         case TimesImm:
             errs() << "Imm ";
-            v2 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
+            // TODO REFACTOR: redundant imm-const-loading code among *Imm ops
+            if (node->type == IRNode::Float) {
+                v2 = ConstantInt::get(Type::getFloatTy(ctx), node->fval);
+            } else {
+                assert(node->type == IRNode::Int);
+                v2 = ConstantInt::get(Type::getInt64Ty(ctx), node->ival);
+            }
         case Times:
             errs() << "Times\n";
-            if (c1->type == IRNode::Float) {
+            if (node->type == IRNode::Float) {
                 nodeValues[node] = builder->CreateFMul(loadIfPointer(v1), loadIfPointer(v2));
             } else {
                 assert(c1->type == IRNode::Int);
                 nodeValues[node] = builder->CreateMul(loadIfPointer(v1), loadIfPointer(v2));
             }
             break;
-#if 0
-        case Divide: 
-            Assert(!gpr && !gpr1 && !gpr2, "Can only divide in sse regs for now\n");
-            if (dst == src1) {
-                a.divps(dst, src2);
-            } else if (dst == src2) {
-                a.movaps(tmp, src2);
-                a.movaps(src2, src1);
-                a.divps(src2, tmp); 
+        case Divide:
+            errs() << "Divide\n";
+            if (node->type == IRNode::Float) {
+                nodeValues[node] = builder->CreateFDiv(loadIfPointer(v1), loadIfPointer(v2));
             } else {
-                a.movaps(dst, src1);
-                a.divps(dst, src2);
+                assert(c1->type == IRNode::Int);
+                nodeValues[node] = //builder->CreateDiv(loadIfPointer(v1), loadIfPointer(v2));
+                builder->CreateSDiv(loadIfPointer(v1), loadIfPointer(v2));
             }
             break;
+#if 0
         case And:
             Assert(!gpr && !gpr1 && !gpr2, "Can only and in sse regs for now\n");
             if (dst == src1) 
