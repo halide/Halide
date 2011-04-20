@@ -1,6 +1,9 @@
 #include "FImage.h"
-#include "Compiler.h"
-
+#ifdef USE_ASMX64_COMPILER
+#include "AsmX64Compiler.h"
+#else
+#include "LLVMCompiler.h"
+#endif //USE_ASMX64_COMPILER
 
 #ifndef _MSC_VER
 #include <sys/time.h>
@@ -289,17 +292,20 @@ void FImage::debug() {
 
 FImage &FImage::evaluate(time_t *time) {
 
-    Compiler c;
-    AsmX64 a;    
+#ifdef USE_ASMX64_COMPILER
+    Compiler *c = new AsmX64Compiler();
+#else
+    Compiler *c = new LLVMCompiler();
+#endif //USE_ASMX64_COMPILER
     printf("Compiling...\n"); fflush(stdout);
-    c.compile(&a, this);
+    c->compile(this);
     printf("Running...\n"); fflush(stdout);
     time_t t0 = timeGetTime();
-    a.run();
+    c->run();
     time_t t1 = timeGetTime();
     if (time) time[0] = t1-t0;
     printf("Done\n"); fflush(stdout);
-
+    
     return *this;
 }
 

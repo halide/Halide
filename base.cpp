@@ -10,7 +10,7 @@ void panic(const char *fmt, ...) {
     exit(-1);
 }
 
-void assert(bool cond, const char *fmt, ...) {
+void Assert(bool cond, const char *fmt, ...) {
     if (cond) return;
     char message[1024];
     va_list arglist;

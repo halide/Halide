@@ -70,6 +70,7 @@ namespace std {
     }
 }
 
+// jrk 2011-02-23: why only tag on OpCode? Why not subclass IRNode? (e.g. var ref, load, store, assign, binop, unaryop, ...)
 // One node in the intermediate representation
 class IRNode {
 public:
