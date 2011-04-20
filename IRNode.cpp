@@ -93,7 +93,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         w = inputs[0]->width;
         break;
     case Variable:
-        assert(inputs.size() == 0, "Wrong number of inputs for opcode: %s %d\n",
+        Assert(inputs.size() == 0, "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
         t = Int;
         w = 1;
@@ -103,7 +103,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case Times:
     case Power:
     case Mod:
-        assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
+        Assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
         // the output is either int or float
         if (inputs[0]->type == Float ||
@@ -115,7 +115,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         inputs[1] = inputs[1]->as(t);
 
         w = inputs[0]->width;
-        assert(inputs[1]->width == w, "Inputs must have same vector width\n");
+        Assert(inputs[1]->width == w, "Inputs must have same vector width\n");
         break;
     case Divide:
     case ATan2:
@@ -123,7 +123,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         inputs[0] = inputs[0]->as(Float);
         inputs[1] = inputs[1]->as(Float);
         w = inputs[0]->width;
-        assert(inputs[1]->width == w, "Inputs must have same vector width\n");
+        Assert(inputs[1]->width == w, "Inputs must have same vector width\n");
         break;
     case Sin:
     case Cos:
@@ -133,14 +133,14 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case ATan:
     case Exp:
     case Log:
-        assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n", 
+        Assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n", 
                opname(opcode), inputs.size());
         t = Float;
         inputs[0] = inputs[0]->as(Float);
         w = inputs[0]->width;
         break;
     case Abs:
-        assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n", 
+        Assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n", 
                opname(opcode), inputs.size());
         if (inputs[0]->type == Bool) return inputs[0];
         t = inputs[0]->type;
@@ -149,7 +149,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case Floor:
     case Ceil:
     case Round:
-        assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n", 
+        Assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n", 
                opname(opcode), inputs.size());    
         if (inputs[0]->type != Float) return inputs[0];
         t = Float; // TODO: perhaps Int?
@@ -161,7 +161,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
     case GTE:
     case EQ:
     case NEQ:
-        assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
+        Assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());    
         if (inputs[0]->type == Float || inputs[1]->type == Float) {
             t = Float;                    
@@ -172,20 +172,20 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         inputs[1] = inputs[1]->as(t);
         t = Bool;
         w = inputs[0]->width;
-        assert(inputs[1]->width == w, "Inputs must have same vector width\n");
+        Assert(inputs[1]->width == w, "Inputs must have same vector width\n");
         break;
     case And:
     case Nand:
-        assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
+        Assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());    
         // first arg is always bool
         inputs[0] = inputs[0]->as(Bool);
         t = inputs[1]->type;
         w = inputs[0]->width;
-        assert(inputs[1]->width == w, "Inputs must have same vector width\n");
+        Assert(inputs[1]->width == w, "Inputs must have same vector width\n");
         break;
     case Or:               
-        assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
+        Assert(inputs.size() == 2, "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());    
         if (inputs[0]->type == Float || inputs[1]->type == Float) {
             t = Float;
@@ -197,25 +197,25 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         inputs[0] = inputs[0]->as(t);
         inputs[1] = inputs[1]->as(t);
         w = inputs[0]->width;
-        assert(inputs[1]->width == w, "Inputs must have same vector width\n");
+        Assert(inputs[1]->width == w, "Inputs must have same vector width\n");
         break;
     case IntToFloat:
-        assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n",
+        Assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
-        assert(inputs[0]->type == Int, "IntToFloat can only take integers\n");
+        Assert(inputs[0]->type == Int, "IntToFloat can only take integers\n");
         t = Float;
         w = inputs[0]->width;
         break;
     case FloatToInt:
-        assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n",
+        Assert(inputs.size() == 1, "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
-        assert(inputs[0]->type == Float, "FloatToInt can only take floats\n");
+        Assert(inputs[0]->type == Float, "FloatToInt can only take floats\n");
         t = Int;
         w = inputs[0]->width;
         break;
     case PlusImm:
     case TimesImm:
-        assert(inputs.size() == 1,
+        Assert(inputs.size() == 1,
                "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
         t = Int;
@@ -223,13 +223,13 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         break;
     case StoreVector:
     case Store:
-        assert(inputs.size() == 2,
+        Assert(inputs.size() == 2,
                "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
         inputs[0] = inputs[0]->as(Int);
         // Right now we can only store floats
         inputs[1] = inputs[1]->as(Float);
-        assert(inputs[0]->width == 1, "Can only store to scalar addresses\n");
+        Assert(inputs[0]->width == 1, "Can only store to scalar addresses\n");
         // Store has no output. For the type system, it retains the
         // type of the thing stored. This should possibly be replaced
         // with a void type.
@@ -238,42 +238,42 @@ IRNode::Ptr IRNode::make(OpCode opcode,
         break;
     case LoadVector:
     case Load:
-        assert(inputs.size() == 1,
+        Assert(inputs.size() == 1,
                "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
         inputs[0] = inputs[0]->as(Int);
-        assert(inputs[0]->width == 1, "Can only load scalar addresses\n");
+        Assert(inputs[0]->width == 1, "Can only load scalar addresses\n");
         w = (opcode == Load ? 1 : 4);
         t = Float;
         break;
 
     case ExtractVector:
-        assert(inputs.size() == 2, 
+        Assert(inputs.size() == 2, 
                "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
-        assert(inputs[0]->width == inputs[1]->width && inputs[0]->width > 1, 
+        Assert(inputs[0]->width == inputs[1]->width && inputs[0]->width > 1, 
                "ExtractVector requires vector arguments\n");
-        assert(ival > 0 && ival < inputs[0]->width, 
+        Assert(ival > 0 && ival < inputs[0]->width, 
                "ExtractVector requires an int immediate greater than zero and less than the vector width\n");
         w = inputs[0]->width;
         t = inputs[0]->type;
         break;
     case ExtractScalar:
-        assert(inputs.size() == 1, 
+        Assert(inputs.size() == 1, 
                "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
-        assert(inputs[0]->width > 1, 
+        Assert(inputs[0]->width > 1, 
                "Input to ExtractScalar must be a vector\n");
         w = 1;
         t = inputs[0]->type;
         break;
     case Vector:
-        assert(inputs.size() == 4, 
+        Assert(inputs.size() == 4, 
                "Wrong number of inputs for opcode: %s %d\n",
                opname(opcode), inputs.size());
 
         for (size_t i = 0; i < inputs.size(); i++) {
-            assert(inputs[i]->width == 1, "Components of Vector must be scalar\n");
+            Assert(inputs[i]->width == 1, "Components of Vector must be scalar\n");
         }
         
         // Force all inputs to the same type
@@ -345,7 +345,7 @@ IRNode::Ptr IRNode::make(OpCode opcode,
                 return make(!inputs[0]->ival ? inputs[1]->ival : (int64_t)0);
             }
         case IntToFloat:
-            assert(inputs[0]->ival>>32 == 0, "IntToFloat on 64bit value 0x%llx will lose data\n", inputs[0]->ival);
+            Assert(inputs[0]->ival>>32 == 0, "IntToFloat on 64bit value 0x%llx will lose data\n", inputs[0]->ival);
             return make((float)inputs[0]->ival);
         case FloatToInt:
             return make((int64_t)inputs[0]->fval);
@@ -1255,7 +1255,7 @@ void IRNode::analyze() {
 IRNode::~IRNode() {
     // Oh, I guess nobody wants me any more. I'd better not have any live outputs then
     for (size_t i = 0; i < outputs.size(); i++) {
-        assert(outputs[i].expired(), "IRNode with live outputs being destroyed!\n");
+        Assert(outputs[i].expired(), "IRNode with live outputs being destroyed!\n");
     }
 
     // Tell the children not to bother calling anymore
