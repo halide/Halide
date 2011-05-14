@@ -3,6 +3,8 @@
 
 open Llvm
 
+let dbgprint = true
+
 let main filename =
   let c = create_context () in
 
@@ -33,6 +35,9 @@ let main filename =
 
   (* ret void *)
   ignore (build_ret (const_null i32_t) at_entry);
+  
+  (* Print .ll to stderr *)
+  if dbgprint then dump_module m;
 
   (* write the module to a file *)
   if not (Llvm_bitwriter.write_bitcode_file m filename) then exit 1;
