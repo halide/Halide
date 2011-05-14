@@ -5,6 +5,10 @@ ocaml_lib ~extern:true "llvm";;
 ocaml_lib ~extern:true "llvm_analysis";;
 ocaml_lib ~extern:true "llvm_bitwriter";;
 
-(* set ocamlc link flag: -cc g++ *)
+(* define ocamlc link flag: -cc g++ *)
 (* presumably necessary to ensure linkage of libstdc++ for LLVM *)
-flag ["link"; "ocaml"; "g++"] (S[A"-cc"; A"g++"]);;
+(* this actually gets set for a target with the `g++` tag in _tags *)
+(*flag ["link"; "ocaml"; "g++"] (S[A"-cc"; A"g++"]);;*) (* this version spews
+tons of deprecation warning noise with g++ 4.4, just linking stdc++ below works
+better *)
+flag ["link"; "ocaml"; "g++"] (S[A"-cclib"; A"-lstdc++"]);;
