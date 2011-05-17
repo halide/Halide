@@ -10,3 +10,9 @@ test.s
 testX64
 xcuserdata
 in.png
+_build
+*.byte
+*.native
+a.out
+*.cmi
+*.cmo
