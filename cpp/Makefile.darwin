@@ -1,8 +1,8 @@
 HEADERS = FImage.h AsmX64Compiler.h Compiler.h X64.h IRNode.h CImg.h Interval.h
 OBJECTS = AsmX64Compiler.o Compiler.o FImage.o IRNode.o base.o Interval.o
-CXXFLAGS = -g -Wall -Illvm/include -D_GNU_SOURCE -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS
+CXXFLAGS = -g -Wall -I../llvm/include -D_GNU_SOURCE -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS
 #CXXFLAGS = -O3 -Wall -ffast-math -march=core2 -msse3 -mfpmath=sse -I/usr/local/include
-LDFLAGS = -Lllvm/lib -L/usr/local/lib -ljpeg -lpng -ltiff -lpthread -lLLVMCore -lLLVMCodeGen
+LDFLAGS = -L../llvm/lib -L/usr/local/lib -ljpeg -lpng -ltiff -lpthread -lLLVMCore -lLLVMCodeGen
 
 %.o: %.cpp $(HEADERS)
 	g++ $(CXXFLAGS) -c -I /usr/local/include $< 

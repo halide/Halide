@@ -469,10 +469,10 @@
 					__STDC_LIMIT_MACROS,
 					__STDC_CONSTANT_MACROS,
 				);
-				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/llvm/include";
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/../llvm/include";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/llvm/Debug+Asserts/lib",
+					"$(PROJECT_DIR)/../llvm/Debug+Asserts/lib",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -489,10 +489,10 @@
 					__STDC_LIMIT_MACROS,
 					__STDC_CONSTANT_MACROS,
 				);
-				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/llvm/include";
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/../llvm/include";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/llvm/Debug+Asserts/lib",
+					"$(PROJECT_DIR)/../llvm/Debug+Asserts/lib",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
