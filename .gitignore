@@ -16,3 +16,4 @@ _build
 a.out
 *.cmi
 *.cmo
+tags
