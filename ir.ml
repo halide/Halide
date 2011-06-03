@@ -26,6 +26,7 @@ let f64 = Float(64)
  * each subtype? *)
 type expr =
     (* constants *)
+    (* TODO: switch to Int64 type *)
     | IntImm of int
     | UIntImm of int
     | FloatImm of float
@@ -55,10 +56,7 @@ type expr =
     (* memory *)
     | Load of val_type * memref
 
-and binop = {
-    l : expr;
-    r : expr;
-}
+and binop = expr*expr
 
 and memref = {
     (* how do we represent memory references? computed references? *)
@@ -66,7 +64,7 @@ and memref = {
     idx : expr;
 }
 
-and buffer = int (* just an ID for now *)
+and buffer = int (* TODO: just an ID for now *)
 
 (* does this really become a list of domain bindings? *)
 type domain = {
@@ -77,8 +75,15 @@ type domain = {
 and program = int * int (* just intervals for initial testing *)
 
 type stmt =
-    | Store of expr * memref
     | If of expr * stmt
     | IfElse of expr * stmt * stmt
-    | Block of stmt list
     | Map of domain * stmt
+    | Block of stmt list
+    | Reduce of reduce_op * expr * memref
+    | Store of expr * memref
+
+and reduce_op =
+    | AddEq
+    | SubEq
+    | MulEq
+    | DivEq
