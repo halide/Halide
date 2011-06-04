@@ -1,23 +1,28 @@
 open Ir
 
 let rec string_of_val_type = function
-  | Int(w) -> "(" ^ "i" ^ string_of_int w ^ ")"
-  | UInt(w) -> "(" ^ "u" ^ string_of_int w ^ ")"
-  | Float(w) -> "(" ^ "f" ^ string_of_int w ^ ")"
+  | Int(w) -> "[" ^ "i" ^ string_of_int w ^ "]"
+  | UInt(w) -> "[" ^ "u" ^ string_of_int w ^ "]"
+  | Float(w) -> "[" ^ "f" ^ string_of_int w ^ "]"
 
 and string_of_expr = function
   | IntImm(i) -> string_of_int i
-  | UIntImm(i) -> "u" ^ string_of_int i
+  | UIntImm(i) -> string_of_int i ^ "u"
   | FloatImm(f) -> string_of_float f
 
-  | Add(t, (l,r)) -> "(" ^ string_of_val_type t ^ string_of_expr l ^ "+" ^ string_of_expr r ^ ")"
-  | Sub(t, (l,r)) -> "(" ^ string_of_val_type t ^ string_of_expr l ^ "-" ^ string_of_expr r ^ ")"
-  | Mul(t, (l,r)) -> "(" ^ string_of_val_type t ^ string_of_expr l ^ "*" ^ string_of_expr r ^ ")"
-  | Div(t, (l,r)) -> "(" ^ string_of_val_type t ^ string_of_expr l ^ "/" ^ string_of_expr r ^ ")"
+  | Add(t, (l,r)) ->
+      "(" ^ string_of_expr l ^ string_of_val_type t ^ "+" ^ string_of_expr r ^ ")"
+  | Sub(t, (l,r)) ->
+      "(" ^ string_of_expr l ^ string_of_val_type t ^ "-" ^ string_of_expr r ^ ")"
+  | Mul(t, (l,r)) ->
+      "(" ^ string_of_expr l ^ string_of_val_type t ^ "*" ^ string_of_expr r ^ ")"
+  | Div(t, (l,r)) ->
+      "(" ^ string_of_expr l ^ string_of_val_type t ^ "/" ^ string_of_expr r ^ ")"
 
   | Var(s) -> s
 
   | Load(t, mr) -> "load" ^ "(" ^ string_of_val_type t ^ "," ^ string_of_memref mr ^ ")"
+
   | _ -> "<<UNHANDLED>>"
 
 and string_of_stmt = function
