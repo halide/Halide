@@ -4,14 +4,14 @@ let imWidth = 512
 let imHeight = 512
 let winWidth = 16
 let winHeight = 16
-let weight = 1.0 /. float_of_int (winWidth*winHeight)
+let weight = 1.0 /. float_of_int ((winWidth+1)**2)
 
 (* TODO: how to initialize reduction cell to 0? *)
 
 let dom nm rn = { name = nm; range = rn }
 
-let xdom = dom "x" (0,imWidth)
-let ydom = dom "y" (0,imHeight)
+let xdom = dom "x" (0,imWidth-1)
+let ydom = dom "y" (0,imHeight-1)
 let winxdom = dom "i" (-winWidth/2,winWidth/2)
 let winydom = dom "j" (-winHeight/2,winHeight/2)
 
