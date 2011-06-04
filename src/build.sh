@@ -2,7 +2,7 @@
 # From http://nicolaspouillard.fr/ocamlbuild/ocamlbuild-user-guide.html
 set -e
 
-TARGET=convolution
+TARGET=cg_test
 # TODO: change flag paths to infer absolute version of relative path to fimage/llvm/Debug+Asserts/…
 FLAGS="-cflags -I,/usr/local/lib/ocaml/ -lflags -I,/usr/local/lib/ocaml/"
 OCAMLBUILD=ocamlbuild
