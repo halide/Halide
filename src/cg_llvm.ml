@@ -62,8 +62,11 @@ and codegen_stmt (ctx:context) s = match ctx with (_,_,b) ->
     | _ -> build_ret_void b (* TODO: this is our simplest NOP *)
 
 and codegen_memref (ctx:context) mr vt = match ctx with (_,_,b) ->
+  (* load the global buffer** *)
   let base = build_load (ptr_to_buffer ctx mr.buf) "" b in
+  (* build getelementpointer into buffer *)
   let ptr = build_gep base [| codegen_expr ctx mr.idx |] "" b in
+    (* cast pointer to pointer-to-target-type *)
     build_pointercast ptr (pointer_type (type_of_val_type ctx vt)) "" b
 
 let codegen s =
@@ -77,9 +80,15 @@ let codegen s =
     m
 
 exception BCWriteFailed of string
+exception CGFailed of string
 
 let codegen_to_file filename s =
   let m = codegen s in
-    if not (Llvm_bitwriter.write_bitcode_file m filename) then
-      raise(BCWriteFailed(filename));
+    (* verify the generated module *)
+    match Llvm_analysis.verify_module m with
+      | Some reason -> raise(CGFailed(reason))
+      | None -> ();
+    match Llvm_bitwriter.write_bitcode_file m filename with
+      | false -> raise(BCWriteFailed(filename))
+      | true -> ();
     dispose_module m
