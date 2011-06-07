@@ -27,9 +27,9 @@ let type_of_val_type ctx t = match ctx with (c,_,_) ->
 
 let type_of_expr ctx e = type_of_val_type ctx (val_type_of_expr e)
 
-let buffer_name (b:buffer) = "buf" ^ string_of_int b
+let buffer_name b = "buf" ^ string_of_int b
 
-let ptr_to_buffer (ctx:context) (b:buffer) = match ctx with (c,m,_) ->
+let ptr_to_buffer ctx b = match ctx with (c,m,_) ->
   (* TODO: put buffers in their own memory spaces *)
   let g = lookup_global (buffer_name b) m in match g with
     | Some(decl) -> decl
@@ -38,7 +38,7 @@ let ptr_to_buffer (ctx:context) (b:buffer) = match ctx with (c,m,_) ->
 (* Convention: codegen functions unpack context into c[ontext], m[odule],
  * b[uffer], if they need them, with pattern-matching. *)
 
-let rec codegen_expr (ctx:context) e = match ctx with (_,_,b) ->
+let rec codegen_expr ctx e = match ctx with (_,_,b) ->
   match e with
     (* constants *)
     | IntImm(i) | UIntImm(i) -> const_int (int_imm_t ctx) i
@@ -54,14 +54,14 @@ let rec codegen_expr (ctx:context) e = match ctx with (_,_,b) ->
 
     | _ -> build_ret_void b (* TODO: this is our simplest NOP *)
 
-and codegen_stmt (ctx:context) s = match ctx with (_,_,b) ->
+and codegen_stmt ctx s = match ctx with (_,_,b) ->
   match s with
     | Store(e, mr) ->
         let ptr = codegen_memref ctx mr (val_type_of_expr e) in
           build_store (codegen_expr ctx e) ptr b
     | _ -> build_ret_void b (* TODO: this is our simplest NOP *)
 
-and codegen_memref (ctx:context) mr vt = match ctx with (_,_,b) ->
+and codegen_memref ctx mr vt = match ctx with (_,_,b) ->
   (* load the global buffer** *)
   let base = build_load (ptr_to_buffer ctx mr.buf) "" b in
   (* build getelementpointer into buffer *)
