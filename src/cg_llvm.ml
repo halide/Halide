@@ -10,15 +10,22 @@ let dbgprint = true
 type context = llcontext * llmodule * llbuilder
 
 let int_imm_t ctx = match ctx with (c,_,_) -> i32_type c
+let float_imm_t ctx = match ctx with (c,_,_) -> float_type c
 let buffer_t ctx = match ctx with (c,_,_) -> pointer_type (i8_type c)
 
 exception UnsupportedType of val_type
-let val_type_t t ctx = match ctx with (c,_,_) ->
+let type_of_val_type ctx t = match ctx with (c,_,_) ->
   match t with
     | UInt(1) | Int(1) -> i1_type c
+    | UInt(8) | Int(8) -> i8_type c
+    | UInt(16) | Int(16) -> i16_type c
+    | UInt(32) | Int(32) -> i32_type c
+    | UInt(64) | Int(64) -> i1_type c
     | Float(32) -> float_type c
     | Float(64) -> double_type c
     | _ -> raise (UnsupportedType(t))
+
+let type_of_expr ctx e = type_of_val_type ctx (val_type_of_expr e)
 
 let buffer_name (b:buffer) = "buf" ^ string_of_int b
 
@@ -33,21 +40,31 @@ let ptr_to_buffer (ctx:context) (b:buffer) = match ctx with (c,m,_) ->
 
 let rec codegen_expr (ctx:context) e = match ctx with (_,_,b) ->
   match e with
+    (* constants *)
     | IntImm(i) | UIntImm(i) -> const_int (int_imm_t ctx) i
+    | FloatImm(f) -> const_float (float_imm_t ctx) f
+
+    (* TODO: codegen Cast *)
+
+    (* arithmetic *)
     | Add(_, (l, r)) -> build_add (codegen_expr ctx l) (codegen_expr ctx r) "" b
-    | Load(_, mr) -> build_load (codegen_memref ctx mr) "" b
+
+    (* memory *)
+    | Load(t, mr) -> build_load (codegen_memref ctx mr t) "" b
+
     | _ -> build_ret_void b (* TODO: this is our simplest NOP *)
 
 and codegen_stmt (ctx:context) s = match ctx with (_,_,b) ->
   match s with
     | Store(e, mr) ->
-        let ptr = codegen_memref ctx mr in
+        let ptr = codegen_memref ctx mr (val_type_of_expr e) in
           build_store (codegen_expr ctx e) ptr b
     | _ -> build_ret_void b (* TODO: this is our simplest NOP *)
 
-and codegen_memref (ctx:context) mr = match ctx with (_,_,b) ->
-  let ptr = build_load (ptr_to_buffer ctx mr.buf) "" b in
-    build_gep ptr [| codegen_expr ctx mr.idx |] "" b
+and codegen_memref (ctx:context) mr vt = match ctx with (_,_,b) ->
+  let base = build_load (ptr_to_buffer ctx mr.buf) "" b in
+  let ptr = build_gep base [| codegen_expr ctx mr.idx |] "" b in
+    build_pointercast ptr (pointer_type (type_of_val_type ctx vt)) "" b
 
 let codegen s =
   let c = create_context () in
