@@ -31,7 +31,12 @@ type expr =
     | UIntImm of int
     | FloatImm of float
 
+    (* TODO: require casts to match types *)
+    (* TODO: validate operand type matches with Caml type parameters *)
+    | Cast of val_type * expr
+
     (* arithmetic *)
+    (* TODO: drop these types, and just require binops to match *)
     | Add of val_type * binop
     | Sub of val_type * binop
     | Mul of val_type * binop
@@ -65,6 +70,16 @@ and memref = {
 }
 
 and buffer = int (* TODO: just an ID for now *)
+
+let val_type_of_expr = function
+  | IntImm _ -> i32
+  | UIntImm _ -> u32
+  | FloatImm _ -> f32
+  | Cast(t,_) -> t
+  | Add(t,_) | Sub(t,_) | Mul(t,_) | Div(t,_) -> t
+  | Var _ -> i64 (* Vars are only defined as integer programs so must be ints *)
+  | EQ _ | NEQ _ | LT _ | LTE _ | GT _ | GTE _ | And _ | Or _ | Not _ -> bool1
+  | Load(t,_) -> t
 
 (* does this really become a list of domain bindings? *)
 type domain = {

@@ -10,6 +10,8 @@ and string_of_expr = function
   | UIntImm(i) -> string_of_int i ^ "u"
   | FloatImm(f) -> string_of_float f
 
+  | Cast(t, e) -> "cast" ^ "<" ^ string_of_val_type t ^ ">" ^ "(" ^ string_of_expr e ^")"
+
   | Add(t, (l,r)) ->
       "(" ^ string_of_expr l ^ string_of_val_type t ^ "+" ^ string_of_expr r ^ ")"
   | Sub(t, (l,r)) ->
