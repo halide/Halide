@@ -16,4 +16,5 @@ _build
 a.out
 *.cmi
 *.cmo
+*.bc
 tags

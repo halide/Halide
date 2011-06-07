@@ -16,4 +16,4 @@ let prgm = Store( Add( u32, ( IntImm( 0xDEADBEEF ), Load( u32, inref ) ) ), outr
 
 let () =
   Printf.printf "%s\n" (Ir_printer.string_of_stmt prgm);
-  Cg_llvm.codegen_to_file "/tmp/test.bc" prgm
+  Cg_llvm.codegen_to_file "cg_test.bc" prgm
