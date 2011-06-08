@@ -7,7 +7,7 @@ open Llvm
 
 let dbgprint = true
 
-let entrypoint_name = "main"
+let entrypoint_name = "_im_main"
 
 type context = llcontext * llmodule * llbuilder
 
