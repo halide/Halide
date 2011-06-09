@@ -143,12 +143,18 @@ exception BCWriteFailed of string
 exception CGFailed of string
 
 let codegen_to_file filename s =
+  (* codegen *)
   let m = codegen s in
+
     (* verify the generated module *)
     match Llvm_analysis.verify_module m with
       | Some reason -> raise(CGFailed(reason))
       | None -> ();
+
+    (* write to bitcode file *)
     match Llvm_bitwriter.write_bitcode_file m filename with
       | false -> raise(BCWriteFailed(filename))
       | true -> ();
+
+    (* free memory *)
     dispose_module m
