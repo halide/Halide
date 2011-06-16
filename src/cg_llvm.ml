@@ -105,9 +105,15 @@ and buffers_in_expr = function
   (* memory ops *)
   | Load (_, mr) -> BufferSet.singleton mr.buf
 
-let codegen s =
-  (* construct basic LLVM state *)
-  let c = create_context () in
+exception CGFailed of string
+let verify_cg m =
+    (* verify the generated module *)
+    match Llvm_analysis.verify_module m with
+      | Some reason -> raise(CGFailed(reason))
+      | None -> ()
+
+let codegen c s =
+  (* create a new module for this cg result *)
   let m = create_module c "<fimage>" in
 
   (* enumerate all referenced buffers *)
@@ -119,7 +125,7 @@ let codegen s =
 
   (* define `void main(buf1, buf2, ...)` entrypoint*)
   let buf_args =
-    Array.of_list (List.map (fun b -> buffer_t c) (BufferSet.elements buffers)) in
+    Array.map (fun b -> buffer_t c) (Array.of_list (BufferSet.elements buffers)) in
   let main = define_function entrypoint_name (function_type (void_type c) buf_args) m in
 
     (* iterate over args and assign name "bufXXX" with `set_value_name s v` *)
@@ -136,20 +142,19 @@ let codegen s =
 
     if dbgprint then dump_module m;
 
-    (* return generated module *)
-    m
+    ignore (verify_cg m);
+
+    (* return generated module and function *)
+    (m,main)
 
 exception BCWriteFailed of string
-exception CGFailed of string
 
 let codegen_to_file filename s =
-  (* codegen *)
-  let m = codegen s in
+  (* construct basic LLVM state *)
+  let c = create_context () in
 
-    (* verify the generated module *)
-    match Llvm_analysis.verify_module m with
-      | Some reason -> raise(CGFailed(reason))
-      | None -> ();
+  (* codegen *)
+  let (m,_) = codegen c s in
 
     (* write to bitcode file *)
     match Llvm_bitwriter.write_bitcode_file m filename with
