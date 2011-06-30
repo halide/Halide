@@ -24,4 +24,8 @@ void ptr_test(void** val) {
         printf("%s ", binary_fmt(arr[c], tmp));
         //printf("0x%x ", (unsigned)arr[c]);
     }
+    printf("\n");
+
+    long* iarr = (long*)arr;
+    printf("arr[0] = %ld, arr[1] = %ld, arr[2] = %ld\n", iarr[0], iarr[1], iarr[2]);
 }

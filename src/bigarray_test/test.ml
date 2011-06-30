@@ -12,10 +12,10 @@ let () =
     | None -> raise Not_found
   in
 
-  let arr = Bigarray.Array1.create Bigarray.nativeint Bigarray.c_layout 10 in
-    Bigarray.Array1.fill arr (Nativeint.of_int 0);
-    arr.{0} <- Nativeint.of_int 7;
-    arr.{1} <- Nativeint.of_int 6;
+  let arr = Bigarray.Array1.create Bigarray.int Bigarray.c_layout 10 in
+    Bigarray.Array1.fill arr 0;
+    arr.{0} <- 7;
+    arr.{1} <- 6;
 
   (* run *)
   let res = ExecutionEngine.run_function f [| GenericValue.of_pointer arr |] ee in
