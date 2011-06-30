@@ -23,7 +23,7 @@ let type_of_val_type ctx t = match ctx with (c,_,_) ->
     | UInt(8) | Int(8) -> i8_type c
     | UInt(16) | Int(16) -> i16_type c
     | UInt(32) | Int(32) -> i32_type c
-    | UInt(64) | Int(64) -> i1_type c
+    | UInt(64) | Int(64) -> i64_type c
     | Float(32) -> float_type c
     | Float(64) -> double_type c
     | _ -> raise (UnsupportedType(t))
