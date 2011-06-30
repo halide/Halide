@@ -4,6 +4,11 @@ open Ocamlbuild_plugin;;
 ocaml_lib ~extern:true "llvm";;
 ocaml_lib ~extern:true "llvm_analysis";;
 ocaml_lib ~extern:true "llvm_bitwriter";;
+ocaml_lib ~extern:true "llvm_bitreader";;
+ocaml_lib ~extern:true "llvm_target";;
+ocaml_lib ~extern:true "llvm_executionengine";;
+
+ocaml_lib ~extern:true "bigarray";;
 
 (* define ocamlc link flag: -cc g++ *)
 (* presumably necessary to ensure linkage of libstdc++ for LLVM *)
