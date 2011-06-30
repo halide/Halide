@@ -61,6 +61,8 @@ type expr =
     (* memory *)
     | Load of val_type * memref
 
+    (* TODO: function calls? *)
+
 and binop = expr*expr
 
 and memref = {
@@ -84,19 +86,26 @@ let val_type_of_expr = function
 (* does this really become a list of domain bindings? *)
 type domain = {
     name : string; (* name binding *)
-    range : program;
+    range : program; (* TODO: rename - polygon, region, polyhedron, ... *)
 }
 
 and program = int * int (* just intervals for initial testing *)
 
 type stmt =
+    (* TODO: | Blit of -- how to express sub-ranges? -- split and merge
+     * sub-ranges *)
     | If of expr * stmt
     | IfElse of expr * stmt * stmt
     | Map of domain * stmt
+    (* TODO: add For *)
+    (* TODO: For might need landing pad: always executes before, only if *any* iteration
+    * fired. Same for Map - useful for loop invariant code motion. Easier for
+    * Map if multiple dimensions are fused into 1. *)
     | Block of stmt list
-    | Reduce of reduce_op * expr * memref
+    | Reduce of reduce_op * expr * memref (* TODO: initializer expression? *)
     | Store of expr * memref
 
+(* TODO:  *)
 and reduce_op =
     | AddEq
     | SubEq
