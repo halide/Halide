@@ -41,7 +41,8 @@ void save(const FImage &im, const char *fname) {
 FImage doNothing(FImage im) {
     Var x(0, im.size[0]), y(0, im.size[1]), c(0, im.size[2]);
     FImage output(im.size[0], im.size[1], im.size[2]);
-    x.vectorize(4); x.unroll(4);
+    //x.vectorize(4); x.unroll(4);
+    x.unroll(4);
     output(x, y, c) = im(x, y, c);
     return output;
 }
