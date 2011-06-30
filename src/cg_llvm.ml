@@ -39,6 +39,11 @@ let ptr_to_buffer ctx b = match ctx with (c,m,_) ->
     | Some(f) -> param f (b-1)
     | None -> raise (MissingEntrypoint)
 
+(* this should throw errors if used *)
+(* TODO: remove when codegen is ~complete *)
+let nop ctx = match ctx with (_,_,b) ->
+  build_ret_void b
+
 (* Convention: codegen functions unpack context into c[ontext], m[odule],
  * b[uffer], if they need them, with pattern-matching.
  * TODO: cleaner way to carry and match this context state? It may grow... *)
@@ -50,6 +55,7 @@ let rec codegen_expr ctx e = match ctx with (c,_,b) ->
     | FloatImm(f) -> const_float (float_imm_t c) f
 
     (* TODO: codegen Cast *)
+    | Cast(t,e) -> codegen_cast ctx t e
 
     (* arithmetic *)
     | Add(_, (l, r)) -> build_add (codegen_expr ctx l) (codegen_expr ctx r) "" b
@@ -57,7 +63,30 @@ let rec codegen_expr ctx e = match ctx with (c,_,b) ->
     (* memory *)
     | Load(t, mr) -> build_load (codegen_memref ctx mr t) "" b
 
-    | _ -> build_ret_void b (* TODO: this is our simplest NOP *)
+    (* TODO: fill out other ops *)
+    | _ -> nop ctx
+
+and codegen_cast ctx t e = match ctx with (_,_,b) ->
+  match (val_type_of_expr e, t) with
+(*
+    | (UInt(fbits),Int(tbits)) ->
+        if fbits > tbits then build_
+        else if fbits < tbits then 
+        else e
+
+(*
+LLVM Reference:
+ Instruction::CastOps opcode =
+    (SrcBits == DstBits ? Instruction::BitCast :
+     (SrcBits > DstBits ? Instruction::Trunc :
+      (isSigned ? Instruction::SExt : Instruction::ZExt)));
+ *)
+ 
+ *)
+    | (Int(_),Int(_)) -> build_intcast (codegen_expr ctx e) (type_of_val_type ctx t) "" b
+
+    (* TODO: remaining casts *)
+    | _ -> nop ctx
 
 and codegen_stmt ctx s = match ctx with (_,_,b) ->
   match s with
