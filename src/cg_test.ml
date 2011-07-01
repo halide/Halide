@@ -25,7 +25,7 @@ let mkarr sz =
 
 let () =
 
-  (*Cg_llvm.codegen_to_file "cg_test.bc" prgm;*)
+  Cg_llvm.codegen_to_file "cg_test.bc" prgm;
 
   (* JITing requires initializing targetdata to the native target, or else 
    * subtle endianness and similar bugs will crop up in generated code *)

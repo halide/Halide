@@ -1,4 +1,4 @@
-FLAGS=-cflags -I,/Users/jrk/proj/fimage/FImage/llvm/build-Debug+Asserts/lib/ocaml/ -lflags -I,/Users/jrk/proj/fimage/FImage/llvm/build-Debug+Asserts/lib/ocaml/
+FLAGS=-cflags -I,/Users/jrk/proj/fimage/FImage/llvm/build-Debug+Asserts/lib/ocaml/ -lflags -I,/Users/jrk/proj/fimage/FImage/llvm/build-Debug+Asserts/lib/ocaml/ -cflags -I,/usr/local/lib/ocaml/ -lflags -I,/usr/local/lib/ocaml/
 OCAMLBUILD=ocamlbuild
 BUILD_CMD=${OCAMLBUILD} ${FLAGS}
 
