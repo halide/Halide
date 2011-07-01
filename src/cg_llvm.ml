@@ -18,46 +18,40 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
   let int_imm_t = i32_type c in
   let float_imm_t = float_type c in
 
-  let type_of_val_type t =
-    match t with
-      | UInt(1) | Int(1) -> i1_type c
-      | UInt(8) | Int(8) -> i8_type c
-      | UInt(16) | Int(16) -> i16_type c
-      | UInt(32) | Int(32) -> i32_type c
-      | UInt(64) | Int(64) -> i64_type c
-      | Float(32) -> float_type c
-      | Float(64) -> double_type c
-      | _ -> raise (UnsupportedType(t))
+  let type_of_val_type t = match t with
+    | UInt(1) | Int(1) -> i1_type c
+    | UInt(8) | Int(8) -> i8_type c
+    | UInt(16) | Int(16) -> i16_type c
+    | UInt(32) | Int(32) -> i32_type c
+    | UInt(64) | Int(64) -> i64_type c
+    | Float(32) -> float_type c
+    | Float(64) -> double_type c
+    | _ -> raise (UnsupportedType(t))
   in
 
   let ptr_to_buffer buf =
-    (* TODO: put buffers in their own memory spaces *)
+    (* TODO: put buffers in their own LLVM memory spaces *)
     match lookup_function entrypoint_name m with
       | Some(f) -> param f (buf-1)
       | None -> raise (MissingEntrypoint)
   in
 
-  (* Convention: codegen functions unpack context into c[ontext], m[odule],
-   * b[uffer], if they need them, with pattern-matching.
-   * TODO: cleaner way to carry and match this context state? It may grow... *)
+  let rec codegen_expr = function
+    (* constants *)
+    | IntImm(i) | UIntImm(i) -> const_int (int_imm_t) i
+    | FloatImm(f) -> const_float (float_imm_t) f
 
-  let rec codegen_expr e =
-    match e with
-      (* constants *)
-      | IntImm(i) | UIntImm(i) -> const_int (int_imm_t) i
-      | FloatImm(f) -> const_float (float_imm_t) f
+    (* TODO: codegen Cast *)
+    | Cast(t,e) -> codegen_cast t e
 
-      (* TODO: codegen Cast *)
-      | Cast(t,e) -> codegen_cast t e
+    (* arithmetic *)
+    | Add(_, (l, r)) -> build_add (codegen_expr l) (codegen_expr r) "" b
 
-      (* arithmetic *)
-      | Add(_, (l, r)) -> build_add (codegen_expr l) (codegen_expr r) "" b
+    (* memory *)
+    | Load(t, mr) -> build_load (codegen_memref mr t) "" b
 
-      (* memory *)
-      | Load(t, mr) -> build_load (codegen_memref mr t) "" b
-
-      (* TODO: fill out other ops *)
-      | _ -> raise UnimplementedInstruction
+    (* TODO: fill out other ops *)
+    | _ -> raise UnimplementedInstruction
 
   and codegen_cast t e =
     match (val_type_of_expr e, t) with
@@ -98,12 +92,11 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       (* TODO: remaining casts *)
       | _ -> raise UnimplementedInstruction
 
-  and codegen_stmt s =
-    match s with
-      | Store(e, mr) ->
-          let ptr = codegen_memref mr (val_type_of_expr e) in
-            build_store (codegen_expr e) ptr b
-      | _ -> build_ret_void b (* TODO: this is our simplest NOP *)
+  and codegen_stmt = function
+    | Store(e, mr) ->
+        let ptr = codegen_memref mr (val_type_of_expr e) in
+          build_store (codegen_expr e) ptr b
+    | _ -> raise UnimplementedInstruction
 
   and codegen_memref mr vt =
     (* load the global buffer** *)
@@ -114,6 +107,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       build_pointercast ptr (pointer_type (type_of_val_type vt)) "" b
   in
 
+    (* actually generate from the root statement, returning the result *)
     codegen_stmt s
 
 
