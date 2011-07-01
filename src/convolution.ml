@@ -4,7 +4,7 @@ let imWidth = 512
 let imHeight = 512
 let winWidth = 16
 let winHeight = 16
-let weight = 1.0 /. float_of_int ((winWidth+1)**2)
+let weight = 1.0 /. float_of_int ((winWidth+1)*(winWidth+1))
 
 (* TODO: how to initialize reduction cell to 0? *)
 
