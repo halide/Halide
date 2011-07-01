@@ -66,14 +66,30 @@ let rec codegen_expr ctx e = match ctx with (c,_,b) ->
     (* TODO: fill out other ops *)
     | _ -> nop ctx
 
-and codegen_cast ctx t e = match ctx with (_,_,b) ->
+and codegen_cast ctx t e = match ctx with (c,_,b) ->
   match (val_type_of_expr e, t) with
-(*
-    | (UInt(fbits),Int(tbits)) ->
-        if fbits > tbits then build_
-        else if fbits < tbits then 
-        else e
 
+    | (UInt(fbits),Int(tbits)) when fbits > tbits ->
+        (* truncate to t-1 bits, then zero-extend to t bits to avoid sign bit *)
+        build_zext
+          (build_trunc (codegen_expr ctx e) (integer_type c (tbits-1)) "" b)
+          (integer_type c tbits) "" b
+
+    | (UInt(fbits),Int(tbits)) when fbits < tbits ->
+        build_zext (codegen_expr ctx e) (type_of_val_type ctx t) "" b
+
+    | (Int(fbits),UInt(tbits)) when fbits > tbits ->
+        build_trunc (codegen_expr ctx e) (type_of_val_type ctx t) "" b
+
+    | (Int(fbits),UInt(tbits)) when fbits < tbits ->
+        (* truncate to f-1 bits, then zero-extend to t bits to avoid sign bit *)
+        build_zext
+          (build_trunc (codegen_expr ctx e) (integer_type c (fbits-1)) "" b)
+          (integer_type c tbits) "" b
+
+    | (UInt(fbits),Int(tbits)) | (Int(fbits),UInt(tbits)) when fbits < tbits ->
+        (* do nothing *)
+        codegen_expr ctx e
 (*
 LLVM Reference:
  Instruction::CastOps opcode =
@@ -82,7 +98,8 @@ LLVM Reference:
       (isSigned ? Instruction::SExt : Instruction::ZExt)));
  *)
  
- *)
+    (* build_intcast in the C/OCaml interface assumes signed, so only
+     * works for Int *)
     | (Int(_),Int(_)) -> build_intcast (codegen_expr ctx e) (type_of_val_type ctx t) "" b
 
     (* TODO: remaining casts *)
