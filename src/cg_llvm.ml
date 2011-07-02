@@ -45,7 +45,15 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | Cast(t,e) -> codegen_cast t e
 
     (* arithmetic *)
-    | Add(_, (l, r)) -> build_add (codegen_expr l) (codegen_expr r) "" b
+    | Add(Float(_), (l, r)) -> build_fadd (codegen_expr l) (codegen_expr r) "" b
+    | Add(_, (l, r))        -> build_add  (codegen_expr l) (codegen_expr r) "" b
+    | Sub(Float(_), (l, r)) -> build_fsub (codegen_expr l) (codegen_expr r) "" b
+    | Sub(_, (l, r))        -> build_sub  (codegen_expr l) (codegen_expr r) "" b
+    | Mul(Float(_), (l, r)) -> build_fmul (codegen_expr l) (codegen_expr r) "" b
+    | Mul(_, (l, r))        -> build_mul  (codegen_expr l) (codegen_expr r) "" b
+    | Div(Float(_), (l, r)) -> build_fdiv (codegen_expr l) (codegen_expr r) "" b
+    | Div(Int(_), (l, r))   -> build_sdiv (codegen_expr l) (codegen_expr r) "" b
+    | Div(UInt(_), (l, r))  -> build_udiv (codegen_expr l) (codegen_expr r) "" b
 
     (* memory *)
     | Load(t, mr) -> build_load (codegen_memref mr t) "" b
@@ -77,6 +85,14 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       | (UInt(fbits),Int(tbits)) | (Int(fbits),UInt(tbits)) when fbits < tbits ->
           (* do nothing *)
           codegen_expr e
+
+      | (UInt(fbits),UInt(tbits)) when fbits > tbits ->
+          build_trunc (codegen_expr e) (type_of_val_type t) "" b
+
+      | (UInt(fbits),UInt(tbits)) ->
+          codegen_expr e
+          
+
       (*
       LLVM Reference:
        Instruction::CastOps opcode =
@@ -87,7 +103,11 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
    
       (* build_intcast in the C/OCaml interface assumes signed, so only
        * works for Int *)
-      | (Int(_),Int(_)) -> build_intcast (codegen_expr e) (type_of_val_type t) "" b
+      | (Int(_),Int(_)) ->
+          build_intcast (codegen_expr e) (type_of_val_type t) "" b
+
+      | (Float(fbits),Float(tbits)) ->
+          build_fpcast(codegen_expr e) (type_of_val_type t) "" b
 
       (* TODO: remaining casts *)
       | _ -> raise UnimplementedInstruction

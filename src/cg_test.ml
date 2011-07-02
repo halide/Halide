@@ -1,5 +1,6 @@
 open Ir
 open Llvm_executionengine
+open Ir_printer
 
 let dom nm rn = { name = nm; range = rn }
 
@@ -14,8 +15,9 @@ let inref = { buf=inbuf; idx=UIntImm(0) }
 let outref = { buf=outbuf; idx=UIntImm(0) }
 
 (* TODO: test all 64 bits of the word *)
-let prgm = Store( Add( i64, ( Cast( i64, IntImm( 1 ) ), Load( i64, inref ) ) ), outref )
+(*let prgm = Store( Add( i64, ( Cast( i64, IntImm( 1 ) ), Load( i64, inref ) ) ), outref ) *)
 (*let prgm = Store( Load( i64, inref ), outref )*)
+let prgm = Store( Div( f32, ( Cast( f32, FloatImm( 17.4 ) ), Load( f32, inref ) ) ), outref ) 
 
 let mkarr sz =
   let arr =
@@ -24,6 +26,8 @@ let mkarr sz =
     arr
 
 let () =
+
+  Printf.printf "%s\n" (string_of_stmt prgm);
 
   Cg_llvm.codegen_to_file "cg_test.bc" prgm;
 
