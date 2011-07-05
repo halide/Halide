@@ -1,0 +1,14 @@
+test.exe: testml.dll testc.o
+	g++ testc.o testml.dll -o test.exe -lm
+
+testc.o: test.cpp
+	g++ -std=c++0x -g -c test.cpp -o testc.o -Wall
+
+testml.dll: testml.o
+	flexlink testml.o -maindll -o testml.dll -chain cygwin -L /usr/lib/ocaml -lasmrun
+
+testml.o: test.ml
+	ocamlopt -cc g++ -output-obj test.ml -o testml.o
+
+clean:
+	rm -f *.o *.a *.cmi *.cmx test.exe
