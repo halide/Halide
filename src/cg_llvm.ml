@@ -38,10 +38,10 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
   let rec codegen_expr = function
     (* constants *)
-    | IntImm(i) | UIntImm(i) -> const_int (int_imm_t) i
-    | FloatImm(f) -> const_float (float_imm_t) f
+    | IntImm(i) | UIntImm(i) -> const_int   (int_imm_t)   i
+    | FloatImm(f)            -> const_float (float_imm_t) f
 
-    (* TODO: codegen Cast *)
+    (* cast *)
     | Cast(t,e) -> codegen_cast t e
 
     (* arithmetic *)
