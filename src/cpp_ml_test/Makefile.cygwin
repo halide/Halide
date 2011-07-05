@@ -1,0 +1,11 @@
+test.exe: testml.o testc.o
+	flexlink -chain cygwin -exe testc.o testml.o -o test.exe -L /usr/lib/ocaml -lasmrun -lm -ldl /usr/lib/flexdll/flexdll_cygwin.o
+
+testc.o: test.c
+	gcc -c test.c -o testc.o
+
+testml.o: test.ml
+	ocamlopt -output-obj test.ml -o testml.o
+
+clean:
+	rm -f *.o *.cmi *.cmx test
