@@ -10,6 +10,9 @@ exception UnsupportedType of val_type
 exception MissingEntrypoint
 exception UnimplementedInstruction
 
+(* An exception for debugging *)
+exception WTF
+
 let buffer_t c = pointer_type (i8_type c)
 
 (* Function to encapsulate shared state for primary codegen *)
@@ -36,6 +39,18 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       | None -> raise (MissingEntrypoint)
   in
 
+  let sym_table =
+    Hashtbl.create 10 
+  in
+
+  let sym_add name llv =
+    Hashtbl.add sym_table name llv
+  and sym_remove name =
+    Hashtbl.remove sym_table name
+  and sym_get name =
+    Hashtbl.find sym_table name
+  in
+
   let rec codegen_expr = function
     (* constants *)
     | IntImm(i) | UIntImm(i) -> const_int (int_imm_t) i
@@ -57,6 +72,9 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
     (* memory *)
     | Load(t, mr) -> build_load (codegen_memref mr t) "" b
+
+    (* Loop variables *)
+    | Var(name) -> sym_get name
 
     (* TODO: fill out other ops *)
     | _ -> raise UnimplementedInstruction
@@ -112,19 +130,84 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       (* TODO: remaining casts *)
       | _ -> raise UnimplementedInstruction
 
+
+
+  and codegen_for var_name min max body = 
+      (* Emit the start code first, without 'variable' in scope. *)
+      let start_val = const_int int_imm_t min in
+
+      (* Make the new basic block for the loop header, inserting after current
+       * block. *)
+      let preheader_bb = insertion_block b in
+      let the_function = block_parent preheader_bb in
+      let loop_bb = append_block c "loop" the_function in
+
+      (* Insert an explicit fall through from the current block to the
+       * loop_bb. *)
+      ignore (build_br loop_bb b);
+
+      (* Start insertion in loop_bb. *)
+      position_at_end loop_bb b;
+
+      (* Start the PHI node with an entry for start. *)
+      let variable = build_phi [(start_val, preheader_bb)] var_name b in
+
+      (* Within the loop, the variable is defined equal to the PHI node. *)
+      sym_add var_name variable;
+
+      (* Emit the body of the loop.  This, like any other expr, can change the
+       * current BB.  Note that we ignore the value computed by the body, but
+       * don't allow an error *)
+      ignore (codegen_stmt body);
+
+      (* Emit the updated counter value. *)
+      let next_var = build_add variable (const_int int_imm_t 1) "nextvar" b in
+
+      (* Compute the end condition. *)
+      let end_cond = build_icmp Icmp.Slt next_var (const_int int_imm_t max) "" b in
+
+      (* Create the "after loop" block and insert it. *)
+      let loop_end_bb = insertion_block b in
+      let after_bb = append_block c "afterloop" the_function in
+
+      (* Insert the conditional branch into the end of loop_end_bb. *)
+      ignore (build_cond_br end_cond loop_bb after_bb b);
+
+      (* Any new code will be inserted in after_bb. *)
+      position_at_end after_bb b;
+
+      (* Add a new entry to the PHI node for the backedge. *)
+      add_incoming (next_var, loop_end_bb) variable;
+
+      (* Remove the variable binding *)
+      sym_remove var_name;      
+
+      (* Return an ignorable llvalue *)
+      const_int int_imm_t 0
+
   and codegen_stmt = function
     | Store(e, mr) ->
         let ptr = codegen_memref mr (val_type_of_expr e) in
           build_store (codegen_expr e) ptr b
+    | Map( { name=n; range=(min, max) }, stmt) ->
+        codegen_for n min max stmt
+    | Block (first::second::rest) ->
+        ignore(codegen_stmt first);
+        codegen_stmt (Block (second::rest))
+    | Block(first::[]) ->
+        codegen_stmt first
+    | Block _ -> raise WTF
     | _ -> raise UnimplementedInstruction
 
   and codegen_memref mr vt =
     (* load the global buffer** *)
     let base = ptr_to_buffer mr.buf in
+    (* cast pointer to pointer-to-target-type *)
+    let ptr = build_pointercast base (pointer_type (type_of_val_type vt)) "" b in
     (* build getelementpointer into buffer *)
-    let ptr = build_gep base [| codegen_expr mr.idx |] "" b in
-      (* cast pointer to pointer-to-target-type *)
-      build_pointercast ptr (pointer_type (type_of_val_type vt)) "" b
+    build_gep ptr [| codegen_expr mr.idx |] "" b
+
+
   in
 
     (* actually generate from the root statement, returning the result *)
