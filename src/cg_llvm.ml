@@ -21,7 +21,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
   let int_imm_t = i32_type c in
   let float_imm_t = float_type c in
 
-  let type_of_val_type t = match t with
+  let rec type_of_val_type t = match t with
     | UInt(1) | Int(1) -> i1_type c
     | UInt(8) | Int(8) -> i8_type c
     | UInt(16) | Int(16) -> i16_type c
@@ -29,6 +29,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | UInt(64) | Int(64) -> i64_type c
     | Float(32) -> float_type c
     | Float(64) -> double_type c
+    | Vector(t, n) -> vector_type (type_of_val_type t) n
     | _ -> raise (UnsupportedType(t))
   in
 
@@ -39,6 +40,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       | None -> raise (MissingEntrypoint)
   in
 
+  (* The symbol table for loop variables *)
   let sym_table =
     Hashtbl.create 10 
   in
@@ -61,14 +63,23 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
     (* arithmetic *)
     | Add(Float(_), (l, r)) -> build_fadd (codegen_expr l) (codegen_expr r) "" b
-    | Add(_, (l, r))        -> build_add  (codegen_expr l) (codegen_expr r) "" b
+    | Add(Int(_), (l, r))   -> build_add  (codegen_expr l) (codegen_expr r) "" b
+    | Add(UInt(_), (l, r))  -> build_add  (codegen_expr l) (codegen_expr r) "" b
     | Sub(Float(_), (l, r)) -> build_fsub (codegen_expr l) (codegen_expr r) "" b
-    | Sub(_, (l, r))        -> build_sub  (codegen_expr l) (codegen_expr r) "" b
+    | Sub(Int(_), (l, r))   -> build_sub  (codegen_expr l) (codegen_expr r) "" b
+    | Sub(UInt(_), (l, r))  -> build_sub  (codegen_expr l) (codegen_expr r) "" b
     | Mul(Float(_), (l, r)) -> build_fmul (codegen_expr l) (codegen_expr r) "" b
-    | Mul(_, (l, r))        -> build_mul  (codegen_expr l) (codegen_expr r) "" b
+    | Mul(Int(_), (l, r))   -> build_mul  (codegen_expr l) (codegen_expr r) "" b
+    | Mul(UInt(_), (l, r))  -> build_mul  (codegen_expr l) (codegen_expr r) "" b
     | Div(Float(_), (l, r)) -> build_fdiv (codegen_expr l) (codegen_expr r) "" b
     | Div(Int(_), (l, r))   -> build_sdiv (codegen_expr l) (codegen_expr r) "" b
     | Div(UInt(_), (l, r))  -> build_udiv (codegen_expr l) (codegen_expr r) "" b
+
+    (* Arithmetic on vector types uses the same build calls as the scalar versions *)
+    | Add(Vector(t, _), (l, r)) -> codegen_expr (Add(t, (l, r)))
+    | Sub(Vector(t, _), (l, r)) -> codegen_expr (Sub(t, (l, r)))
+    | Mul(Vector(t, _), (l, r)) -> codegen_expr (Mul(t, (l, r)))
+    | Div(Vector(t, _), (l, r)) -> codegen_expr (Div(t, (l, r)))
 
     (* memory *)
     | Load(t, mr) -> build_load (codegen_memref mr t) "" b
