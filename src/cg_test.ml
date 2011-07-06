@@ -4,7 +4,7 @@ open Ir_printer
 
 let dom nm rn = { name = nm; range = rn }
 
-let xdom = dom "x" (0,10)
+let xdom = dom "x" (0,16)
 
 let x = Var("x")
 
@@ -18,14 +18,15 @@ let outref = { buf=outbuf; idx=UIntImm(0) }
 (*let prgm = Store( Add( i64, ( Cast( i64, IntImm( 1 ) ), Load( i64, inref ) ) ), outref ) *)
 (*let prgm = Store( Load( i64, inref ), outref )*)
 (*let prgm = Store( Div( f32, ( Cast( f32, FloatImm( 17.4 ) ), Load( f32, inref ) ) ), outref ) *)
-let prgm = Map(xdom, Store( Add(i64, (Load (i64, {buf = inbuf; idx = x}), 
-                                      Cast (i64, IntImm(1)))),
-                            {buf = outbuf; idx = x}))
+let v = Vector(UInt(8), 16) 
+let load = Load (v, {buf = inbuf; idx = x})
+let store vec = Store(vec, {buf = outbuf; idx = x})
+let prgm = Map(xdom, store (Add(v, (load, load))))
 
 let mkarr sz =
   let arr =
-    Bigarray.Array1.create Bigarray.nativeint Bigarray.c_layout sz in
-    Bigarray.Array1.fill arr (Nativeint.of_int 0);
+    Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout sz in
+    Bigarray.Array1.fill arr 0;
     arr
 
 let () =
@@ -42,11 +43,11 @@ let () =
   
   let ee = ExecutionEngine.create m in
   
-  let inarr = mkarr 10 in
-  let outarr = mkarr 10 in
+  let inarr = mkarr 256 in
+  let outarr = mkarr 256 in
   
-  for i=0 to 9 do
-    inarr.{i} <- Nativeint.of_int (i*17)
+  for i=0 to 255 do
+    inarr.{i} <- i
   done;
   
   ignore (
@@ -56,6 +57,6 @@ let () =
     ee
  );
   
-  for i=0 to 9 do
-    Printf.printf "%nd -> %nd\n" inarr.{i} outarr.{i} 
+  for i=0 to 255 do
+    Printf.printf "%d -> %d\n" inarr.{i} outarr.{i} 
   done
