@@ -4,6 +4,7 @@ let rec string_of_val_type = function
   | Int(w) -> "[" ^ "i" ^ string_of_int w ^ "]"
   | UInt(w) -> "[" ^ "u" ^ string_of_int w ^ "]"
   | Float(w) -> "[" ^ "f" ^ string_of_int w ^ "]"
+  | Vector(t, w) -> "[" ^ (string_of_val_type t) ^ "x" ^ (string_of_int w) ^ "]"
 
 and string_of_expr = function
   | IntImm(i) -> string_of_int i
