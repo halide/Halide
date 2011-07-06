@@ -3,7 +3,7 @@
 (* make different levels of IR subtype off increasingly restrictive, partially
  * compatible interface types? *)
 
-(* bits per element * number of elements *)
+(* bits per element *)
 type val_type = 
     | Int of int 
     | UInt of int 
