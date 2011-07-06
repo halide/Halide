@@ -3,10 +3,12 @@
 (* make different levels of IR subtype off increasingly restrictive, partially
  * compatible interface types? *)
 
+(* bits per element * number of elements *)
 type val_type = 
-    | Int of int
-    | UInt of int
-    | Float of int
+    | Int of int 
+    | UInt of int 
+    | Float of int 
+    | Vector of val_type * int
 
 let bool1 = UInt(1)
 let u8 = UInt(8)
@@ -60,7 +62,12 @@ type expr =
 
     (* memory *)
     | Load of val_type * memref
-
+          
+    (* Make and break vectors? *)
+    (*
+    | PackVector of val_type * (expr list)
+    | UnpackVector of val_type * (expr * int)
+    *)
     (* TODO: function calls? *)
 
 and binop = expr*expr
