@@ -8,3 +8,5 @@ Build env notes:
     `./configure --enable-assertions`
 - enable all targets (e.g. for arm):
     `./configure --enable-targets=all`
+
+CamlImages is used for loading/saving test images in OCaml. It is expected to be build and installed on the system from the ./camlimages/ subdirectory using omake. (It is not yet referenced directly from the subproject since it is not a major dependency, and simply installing it seems sufficient for now.)
