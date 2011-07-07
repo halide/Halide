@@ -1,0 +1,5 @@
+# include camlimages.all_formats
+<*.ml>: package(camlimages.all_formats)
+
+# link camlimages.all_formats
+<*.{byte,native}>: package(camlimages.all_formats)

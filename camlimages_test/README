@@ -1,0 +1,11 @@
+Links camlimages with ocamlfind as per [the official docs](http://brion.inria.fr/gallium/index.php/Using_ocamlfind_with_ocamlbuild). Build with
+
+    ocamlbuild -use-ocamlfind test.byte
+
+To use ocaml REPL with camlimages installed in /usr/local/lib/ocaml/site-lib/camlimages:
+
+    $ ocaml -I /usr/local/lib/ocaml/site-lib/camlimages/
+    # #load "/usr/local/lib/ocaml/site-lib/camlimages/camlimages_core.cma";;
+    # #load "/usr/local/lib/ocaml/site-lib/camlimages/camlimages_png.cma";;
+
+for PNG, etc. formats - Cf. /path/to/ocaml/site-lib/camlimages/META for the relevant library names.
