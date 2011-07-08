@@ -1,1 +1,1 @@
-<*.{byte,native}>: g++, use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine, use_bigarray
+<*.{byte,native}>: g++, use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine, use_bigarray, use_camlimages_core, use_camlimages_png
