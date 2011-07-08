@@ -42,14 +42,19 @@ let () =
   let (m,f) = Cg_llvm.codegen_to_ocaml_callable prgm in
   
   let ee = ExecutionEngine.create m in
-  
+ 
+(*
   let inarr = mkarr 256 in
   let outarr = mkarr 256 in
-  
+ 
   for i=0 to 255 do
     inarr.{i} <- i
   done;
+  *)
   
+  let outarr = mkarr 256 in
+  let (w,h,inarr) = Imageio.load "test.png" in
+
   ignore (
   ExecutionEngine.run_function
     f
