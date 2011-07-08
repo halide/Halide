@@ -1,5 +1,7 @@
 # include camlimages.all_formats
-<*.ml>: package(camlimages.all_formats)
+#<*.ml>: package(camlimages.png)
 
 # link camlimages.all_formats
-<*.{byte,native}>: package(camlimages.all_formats)
+<*.{byte,native}>: g++, use_llvm, use_camlimages_png, use_camlimages_core
+#use_camlimages_core, use_camlimages_png
+#package(camlimages.all_formats)
