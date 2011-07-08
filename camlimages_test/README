@@ -1,3 +1,20 @@
+Build links against project-local camlimages and llvm builds (../llvm and ../camlimages).
+
+Key issues:
+-----------
+
+The `llvm.cma` library's built-in C linking info seems to overload or clobber that for camlimages when both are linked. This manifests itself primarily/only in bytecode (not native) compilation targets.
+
+- camlimages default build configuration generates DLLs (e.g. `dllcamlimages_png.so`) rather than static libraries (`libcamlimages_png.a`) for C bridges. These don't tend to resolve correctly at build time.
+- Modifying it to build static libraries for the bytecode targets, as our camlimages branch currently is, fixes linkage when camlimages is used alone. Adding llvm linkage seems to override the search paths such that the linker fails to find `libcamlimages_*.a`.
+
+The solution is to explicitly specify include paths for both LLVM and camlimages, both to the compiler (`-cflags -I,...`) and linker (`-lflags -I,...`). This is done with the `$FLAGS` arguments to `ocamlbuild` set up in the `Makefile`. Conveniently, this explicit search path specification is already how we're handling inclusion of project-local library paths.
+
+
+***
+
+Older notes
+-----------
 Links camlimages with ocamlfind as per [the official docs](http://brion.inria.fr/gallium/index.php/Using_ocamlfind_with_ocamlbuild). Build with
 
     ocamlbuild -use-ocamlfind test.byte
