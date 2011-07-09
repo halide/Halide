@@ -28,3 +28,21 @@ let load path =
 
     (* NOTE: Rgb24.dump may raise out of memory for large images *)
     (w, h, bigarray_of_string(Rgb24.dump rgb))
+
+let save arr w h path =
+  (* allocate string of equal size and transfer bigarray bytes into it *)
+  let bigarray_to_string arr =
+    let str = String.create (Array1.dim arr) in
+      for i=0 to (Array1.dim arr)-1 do
+        str.[i] <- Char.chr arr.{i}
+      done;
+      str
+  in
+
+  (* create Rgb24 Image.t from a byte buffer *)
+  let create_im w h buf =
+    let rgb = Rgb24.create_with w h [] buf in
+      Images.Rgb24(rgb)
+  in
+
+    Images.save path None [] (create_im w h (bigarray_to_string arr))
