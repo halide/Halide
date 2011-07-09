@@ -43,25 +43,23 @@ let () =
   
   let ee = ExecutionEngine.create m in
  
-(*
-  let inarr = mkarr 256 in
-  let outarr = mkarr 256 in
- 
-  for i=0 to 255 do
-    inarr.{i} <- i
-  done;
-  *)
-  
-  let outarr = mkarr 256 in
   let (w,h,inarr) = Imageio.load "test.png" in
 
-  ignore (
-  ExecutionEngine.run_function
-    f
-    [| GenericValue.of_pointer inarr; GenericValue.of_pointer outarr |]
-    ee
- );
+  let copy_bigarray arr =
+    let cp = Bigarray.Array1.create
+               (Bigarray.Array1.kind arr)
+               (Bigarray.Array1.layout arr)
+               (Bigarray.Array1.dim arr) in
+      Bigarray.Array1.blit arr cp;
+      cp
+  in
+  let outarr = copy_bigarray inarr in
+
+    ignore (
+      ExecutionEngine.run_function
+        f
+        [| GenericValue.of_pointer inarr; GenericValue.of_pointer outarr |]
+        ee
+    );
   
-  for i=0 to 255 do
-    Printf.printf "%d -> %d\n" inarr.{i} outarr.{i} 
-  done
+    Imageio.save outarr w h "test.out.png"
