@@ -1,5 +1,4 @@
 open Ir
-open Ir_printer
 
 let dom nm rn = { name = nm; range = rn }
 
@@ -23,6 +22,5 @@ let load = Load (v, {buf = inbuf; idx = x})
 let store vec = Store(vec, {buf = outbuf; idx = x})
 let prgm w h c = Map((xdom (w*h*c)), store (Add(v, (load, load))))
 
-
 let () =
-  Runner.run_on_image prgm "test.png" "cg_test.png" ~dbgfile:"cg_test.bc"
+  Test_runner.run prgm "cg_test"
