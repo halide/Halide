@@ -18,12 +18,13 @@ let load path =
   in
 
   (* extract raw bytes into 1D uint8 Bigarray *)
-  (* NOTE: Rgb24.dump may raise out of memory for large images *)
-  let bytes = Rgb24.dump rgb in
-  let arr = Array1.create int8_unsigned c_layout (String.length bytes) in
-    
-    for i=0 to (String.length bytes)-1 do
-      arr.{i} <- Char.code bytes.[i]
-    done;
+  let bigarray_of_string str =
+    let arr = Array1.create int8_unsigned c_layout (String.length str) in
+      for i=0 to (String.length str)-1 do
+        arr.{i} <- Char.code str.[i]
+      done;
+      arr
+  in
 
-    (w,h,arr)
+    (* NOTE: Rgb24.dump may raise out of memory for large images *)
+    (w, h, bigarray_of_string(Rgb24.dump rgb))
