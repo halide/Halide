@@ -1,6 +1,5 @@
 open Llvm_executionengine
 
-(* TODO: move into runtime module *)
 (* TODO: support typed args array by defining `argument` algebraic type and
 * defining generic_value_of_argument *)
 let run prgm args =
