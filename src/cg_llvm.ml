@@ -87,9 +87,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | GE(l, r) -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
 
     (* Select *)
-    | Select(c, t, f) ->
-        build_select (cg_expr c) (cg_expr t) (cg_expr f)
-          "Select" b
+    | Select(c, t, f) -> build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
 
     (* memory *)
     | Load(t, mr) -> build_load (cg_memref mr t) "" b
