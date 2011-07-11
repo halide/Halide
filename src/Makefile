@@ -11,7 +11,7 @@ FLAGS=${LLVM_FLAGS} ${CAMLIMAGES_FLAGS} -cflags -annot
 OCAMLBUILD=ocamlbuild
 BUILD_CMD=${OCAMLBUILD} ${FLAGS}
 
-TARGETS=cg_test.ml convolution.ml
+TARGETS=cg_test.ml convolution.ml brightness.ml
 DEBUG_BYTE=$(patsubst %.ml,%.d.byte,${TARGETS})
 DEBUG_NATIVE=$(patsubst %.ml,%.d.native,${TARGETS})
 BYTE=$(patsubst %.ml,%.byte,${TARGETS})
