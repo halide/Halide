@@ -1,13 +1,12 @@
 open Ir
 
-let winWidth = 16
-let winHeight = 16
+let winWidth = 4
+let winHeight = 4
 let weight = 1.0 /. float_of_int ((winWidth+1)*(winWidth+1))
 
-(* TODO: how to initialize reduction cell to 0? *)
 
-let winxdom = { name = "i"; range = (-winWidth/2,winWidth/2) }
-let winydom = { name = "j"; range = (-winHeight/2,winHeight/2) }
+let winxdom = { name = "i"; range = (-winWidth/2,1+winWidth/2) }
+let winydom = { name = "j"; range = (-winHeight/2,1+winHeight/2) }
 
 let x = Var("x")
 let y = Var("y")
@@ -35,16 +34,24 @@ let prgm w h ch =
   let outRef = imRef outbuf x y c in
   let inRef = imRef inbuf inX inY c in
 
+  (* TODO: initialize output to 0? *)
+
   (* No Reduce statement at lowest level *)
   (*let accumStmt = Reduce(AddEq, Mul(u8, (Load(u8, inRef), FloatImm(weight))), outRef) in*)
   let accumStmt =
     Store(
       Add(
+        Div(
+          Load(u8, inRef),
+          Cast(u8, UIntImm((winWidth+1)*(winWidth+1)))
+        ),
+(*
         Cast(u8,
           Mul(
             Cast(f32,
                  Load(u8, inRef)),
             FloatImm(weight))),
+ *)
         Load(u8, outRef)),
       outRef) in
 
