@@ -140,7 +140,19 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
       | (UInt(fbits),UInt(tbits)) ->
           cg_expr e
-          
+
+      (* int -> float *)
+      | Int(_), Float(_) ->
+          build_sitofp (cg_expr e) (type_of_val_type t) "" b
+      | UInt(_), Float(_) ->
+          build_uitofp (cg_expr e) (type_of_val_type t) "" b
+
+      (* TODO: factor out cg_simple_cast builder expr valtype *)
+      (* float -> int *)
+      | Float(_), Int(_) ->
+          build_fptosi (cg_expr e) (type_of_val_type t) "" b
+      | Float(_), UInt(_) ->
+          build_fptoui (cg_expr e) (type_of_val_type t) "" b
 
       (*
       LLVM Reference:
