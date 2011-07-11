@@ -61,6 +61,8 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     (* cast *)
     | Cast(t,e) -> codegen_cast t e
 
+    (* TODO: coding style: use more whitespace, fewer parens in matches? *)
+
     (* arithmetic *)
     (* Arithmetic on vector types uses the same build calls as the scalar versions *)
     (* TODO: refactor into common build_binop? *)

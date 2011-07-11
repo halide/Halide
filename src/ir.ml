@@ -28,7 +28,8 @@ let f64 = Float(64)
  * each subtype? *)
 type expr =
     (* constants *)
-    (* TODO: switch to Int64 type *)
+    (* TODO: switch to Int64 storage type *)
+    (* TODO: add val_type to immediates? *)
     | IntImm of int
     | UIntImm of int
     | FloatImm of float
@@ -39,6 +40,7 @@ type expr =
 
     (* arithmetic *)
     (* TODO: drop these types, and just require binops to match *)
+    (* TODO: replace binop with just expr*expr for cleaner pattern matches *)
     | Add of val_type * binop
     | Sub of val_type * binop
     | Mul of val_type * binop
