@@ -97,8 +97,19 @@ let rec val_type_of_expr = function
       assert (val_type_of_expr l = val_type_of_expr r);
       val_type_of_expr l
   | Var _ -> i64 (* Vars are only defined as integer programs so must be ints *)
-  (* TODO: add comparison/bool1 checks for vector types *)
-  | EQ _ | NE _ | LT _ | LE _ | GT _ | GE _ | And _ | Or _ | Not _ -> bool1
+  (* boolean expressions on vector types return bool vectors of equal length*)
+  (* boolean expressions on scalars return scalar bools *)
+  | EQ(l,r) | NE(l,r) | LT(l,r) | LE(l,r) | GT(l,r) | GE(l,r) ->
+      assert (val_type_of_expr l = val_type_of_expr r);
+      begin
+        match val_type_of_expr l with
+          | Vector(_, length) -> Vector(bool1, length)
+          | _ -> bool1
+      end
+  (* And/Or/Not only allow boolean operands, and return the same type *)
+  | And(e,_) | Or(e,_) | Not e ->
+      (* TODO: add checks *)
+      val_type_of_expr e
   | Load(t,_) -> t
 
 (* does this really become a list of domain bindings? *)
