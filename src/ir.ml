@@ -68,7 +68,7 @@ type expr =
     (* memory *)
     | Load of val_type * memref
           
-    (* Make and break vectors? *)
+    (* TODO: Pack and unpack vectors *)
     (*
     | PackVector of val_type * (expr list)
     | UnpackVector of val_type * (expr * int)
@@ -83,17 +83,18 @@ and memref = {
 
 and buffer = int (* TODO: just an ID for now *)
 
+(* TODO: assert that l,r subexpressions match. Do as separate checking pass? *)
 let rec val_type_of_expr = function
   | IntImm _ -> i32
   | UIntImm _ -> u32
   | FloatImm _ -> f32
   | Cast(t,_) -> t
-  | Add(l,r) | Sub(l,r) | Mul(l,r) | Div(l,r) -> val_type_of_expr l
+  | Add(l,r) | Sub(l,r) | Mul(l,r) | Div(l,r) | Select(_,l,r) ->
+      assert (val_type_of_expr l = val_type_of_expr r);
+      val_type_of_expr l
   | Var _ -> i64 (* Vars are only defined as integer programs so must be ints *)
   (* TODO: add comparison/bool1 checks for vector types *)
   | EQ _ | NE _ | LT _ | LE _ | GT _ | GE _ | And _ | Or _ | Not _ -> bool1
-  (* TODO: check that b matches a *)
-  | Select(_,t,f) -> val_type_of_expr t
   | Load(t,_) -> t
 
 (* does this really become a list of domain bindings? *)
