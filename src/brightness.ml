@@ -30,11 +30,11 @@ let sadd a b =
   in
     Select(
       (* a > 0xFF... - b *)
-      GT(a, Sub(t, (max_val, b))),
+      GT(a, Sub(t, max_val, b)),
       (* ? 0xFF... *)
       max_val,
       (* : a+b *)
-      Add(t, (a, b))
+      Add(t, a, b)
     )
 
 let prgm w h c =

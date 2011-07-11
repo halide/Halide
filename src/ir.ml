@@ -42,26 +42,25 @@ type expr =
 
     (* arithmetic *)
     (* TODO: drop these types, and just require binops to match *)
-    (* TODO: replace binop with just expr*expr for cleaner pattern matches *)
-    | Add of val_type * binop
-    | Sub of val_type * binop
-    | Mul of val_type * binop
-    | Div of val_type * binop
+    | Add of val_type * expr * expr
+    | Sub of val_type * expr * expr
+    | Mul of val_type * expr * expr
+    | Div of val_type * expr * expr
 
     (* only for domain variables? *)
     | Var of string
 
     (* comparison *)
-    | EQ of binop
-    | NE of binop
-    | LT of binop
-    | LE of binop
-    | GT of binop
-    | GE of binop
+    | EQ of expr * expr
+    | NE of expr * expr
+    | LT of expr * expr
+    | LE of expr * expr
+    | GT of expr * expr
+    | GE of expr * expr
 
     (* logical *)
-    | And of binop
-    | Or of binop
+    | And of expr * expr
+    | Or  of expr * expr
     | Not of expr
 
     (* Select of [condition], [true val], [false val] *)
@@ -78,8 +77,6 @@ type expr =
     *)
     (* TODO: function calls? *)
 
-and binop = expr*expr
-
 and memref = {
     (* how do we represent memory references? computed references? *)
     buf : buffer;
@@ -93,7 +90,7 @@ let rec val_type_of_expr = function
   | UIntImm _ -> u32
   | FloatImm _ -> f32
   | Cast(t,_) -> t
-  | Add(t,_) | Sub(t,_) | Mul(t,_) | Div(t,_) -> t
+  | Add(t,_,_) | Sub(t,_,_) | Mul(t,_,_) | Div(t,_,_) -> t
   | Var _ -> i64 (* Vars are only defined as integer programs so must be ints *)
   | EQ _ | NE _ | LT _ | LE _ | GT _ | GE _ | And _ | Or _ | Not _ -> bool1
   (* TODO: check that b matches a *)
