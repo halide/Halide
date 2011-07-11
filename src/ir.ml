@@ -126,7 +126,7 @@ type stmt =
     | If of expr * stmt
     | IfElse of expr * stmt * stmt
     | Map of domain * stmt
-    (* TODO: add For *)
+    | For of domain * stmt
     (* TODO: For might need landing pad: always executes before, only if *any* iteration
     * fired. Same for Map - useful for loop invariant code motion. Easier for
     * Map if multiple dimensions are fused into 1. *)
