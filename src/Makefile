@@ -1,5 +1,5 @@
 # ocamlbuild includes require absolute paths, but do evaluate `..`
-LLVM_ROOT=$(CURDIR)/../llvm/build-Debug+Asserts
+LLVM_ROOT=$(CURDIR)/../llvm/Debug+Asserts
 LLVM_DIR=${LLVM_ROOT}/lib/ocaml/
 CAMLIMAGES_DIR=$(CURDIR)/../camlimages/src/
 
