@@ -22,6 +22,9 @@ and string_of_expr = function
   | Div(t, (l,r)) ->
       "(" ^ string_of_expr l ^ string_of_val_type t ^ "/" ^ string_of_expr r ^ ")"
 
+  | Select(c, t, f) ->
+      "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
+
   | Var(s) -> s
 
   | Load(t, mr) -> "load" ^ "(" ^ string_of_val_type t ^ "," ^ string_of_memref mr ^ ")"
