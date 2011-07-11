@@ -22,7 +22,7 @@ let load = Load (v, {buf = inbuf; idx = x})
 let store vec = Store(vec, {buf = outbuf; idx = x})
 let prgm w h c =
   Map((xdom (w*h*c)),
-      store (Add(v, load, load)))
+      store (Add(load, load)))
 
 let () =
   Test_runner.run prgm "cg_test"

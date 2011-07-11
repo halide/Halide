@@ -68,77 +68,23 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
     (* TODO: coding style: use more whitespace, fewer parens in matches? *)
 
+    (* Binary operators are generated from builders for int, uint, float types *)
+    (* Arithmetic and comparison on vector types use the same build calls as 
+     * the scalar versions *)
+
     (* arithmetic *)
-    (* Arithmetic on vector types uses the same build calls as the scalar versions *)
-    (* Float *)
-    | Add(Float(_), l, r)
-    | Add(Vector(Float(_),_), l, r) -> cg_binop build_fadd l r
-
-    | Sub(Float(_), l, r)
-    | Sub(Vector(Float(_),_), l, r) -> cg_binop build_fsub l r
-
-    | Mul(Float(_), l, r)
-    | Mul(Vector(Float(_),_), l, r) -> cg_binop build_fmul l r
-
-    | Div(Float(_), l, r)
-    | Div(Vector(Float(_),_), l, r) -> cg_binop build_fdiv l r
-
-    (* Int/UInt *)
-    | Add(_, l, r)       -> cg_binop build_add  l r
-    | Sub(_, l, r)       -> cg_binop build_sub  l r
-    | Mul(_, l, r)       -> cg_binop build_mul  l r
-    | Div(Int(_), l, r)  -> cg_binop build_sdiv l r
-    | Div(UInt(_), l, r) -> cg_binop build_udiv l r
+    | Add(l, r) -> cg_binop build_add  build_add  build_fadd l r
+    | Sub(l, r) -> cg_binop build_sub  build_sub  build_fsub l r
+    | Mul(l, r) -> cg_binop build_mul  build_mul  build_fmul l r
+    | Div(l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
 
     (* comparison *)
-    (* TODO: is this factoring overkill? Just directly build_icmp/build_fcmp? *)
-    | EQ(l, r) ->
-        cg_cmp
-          (function
-             | Int _ | UInt _
-             | Vector(Int(_),_) | Vector(UInt(_),_) -> CmpInt(Icmp.Eq)
-             | Float _ | Vector(Float(_),_)         -> CmpFloat(Fcmp.Oeq))
-          l r
-
-    | NE(l, r) ->
-        cg_cmp
-          (function
-             | Int _ | UInt _
-             | Vector(Int(_),_) | Vector(UInt(_),_) -> CmpInt(Icmp.Ne)
-             | Float _ | Vector(Float(_),_)         -> CmpFloat(Fcmp.One))
-          l r
-
-    | LT(l, r) ->
-        cg_cmp
-          (function
-             | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Slt)
-             | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Ult)
-             | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Olt))
-          l r
-
-    | LE(l, r) ->
-        cg_cmp
-          (function
-             | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sle)
-             | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Ule)
-             | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Ole))
-          l r
-
-    | GE(l, r) ->
-        cg_cmp
-          (function
-             | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sge)
-             | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Uge)
-             | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Oge))
-          l r
-
-    | GT(l, r) ->
-        cg_cmp
-          (function
-             | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sgt)
-             | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Ugt)
-             | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Ogt))
-          l r
+    | EQ(l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r
+    | NE(l, r) -> cg_cmp Icmp.Ne  Icmp.Ne  Fcmp.One l r
+    | LT(l, r) -> cg_cmp Icmp.Slt Icmp.Ult Fcmp.Olt l r
+    | LE(l, r) -> cg_cmp Icmp.Sle Icmp.Ule Fcmp.Ole l r
+    | GT(l, r) -> cg_cmp Icmp.Sgt Icmp.Ugt Fcmp.Ogt l r
+    | GE(l, r) -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
 
     (* Select *)
     | Select(c, t, f) ->
@@ -154,16 +100,17 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     (* TODO: fill out other ops *)
     | _ -> raise UnimplementedInstruction
 
-  and cg_binop build l r =
-    build (cg_expr l) (cg_expr r) "" b
-
-  and cg_cmp op_for_val_type l r =
-    let build_cmp =
-      match op_for_val_type (val_type_of_expr l) with
-        | CmpInt(op) -> build_icmp op
-        | CmpFloat(op) -> build_fcmp op
+  and cg_binop iop uop fop l r =
+    let build = match val_type_of_expr l with
+      | Int _   | Vector(Int(_),_)   -> iop
+      | UInt _  | Vector(UInt(_),_)  -> uop
+      | Float _ | Vector(Float(_),_) -> fop
+      | t -> raise (UnsupportedType(t))
     in
-      build_cmp (cg_expr l) (cg_expr r) "" b
+      build (cg_expr l) (cg_expr r) "" b
+
+  and cg_cmp iop uop fop l r =
+    cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
 
   and cg_cast t e =
     match (val_type_of_expr e, t) with
@@ -322,7 +269,7 @@ and buffers_in_expr = function
   | IntImm _ | UIntImm _ | FloatImm _ | Var _ -> BufferSet.empty
 
   (* binary ops *)
-  | Add(_, l, r) | Sub(_, l, r) | Mul(_, l, r) | Div(_, l, r) | EQ(l, r)
+  | Add(l, r) | Sub(l, r) | Mul(l, r) | Div(l, r) | EQ(l, r)
   | NE(l, r) | LT(l, r) | LE(l, r) | GT(l, r) | GE(l, r) | And(l, r) | Or(l, r) ->
       BufferSet.union (buffers_in_expr l) (buffers_in_expr r)
 
