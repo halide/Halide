@@ -480,7 +480,7 @@ void AsmX64Compiler::compileBody(vector<IRNode::Ptr> code) {
                 a.movss(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
             } else {
                 SteppedInterval i = node->inputs[0]->interval + node->ival;
-                printf("%lld %lld %lld %lld\n", i.min(), i.max(), i.remainder(), i.modulus());
+                printf("%ld %ld %ld %ld\n", i.min(), i.max(), i.remainder(), i.modulus());
                 if ((i.modulus() & 0xf) == 0 &&
                     (i.remainder() & 0xf) == 0) {
                     a.movaps(AsmX64::Mem(gsrc1, (int32_t)node->ival), src2);
