@@ -62,6 +62,10 @@ type expr =
     | Or of binop
     | Not of expr
 
+    (* Select of [condition], [true val], [false val] *)
+    (* Type is type of [true val] & [false val], which must match *)
+    | Select of expr * expr * expr
+
     (* memory *)
     | Load of val_type * memref
           
@@ -82,7 +86,7 @@ and memref = {
 
 and buffer = int (* TODO: just an ID for now *)
 
-let val_type_of_expr = function
+let rec val_type_of_expr = function
   | IntImm _ -> i32
   | UIntImm _ -> u32
   | FloatImm _ -> f32
@@ -90,6 +94,8 @@ let val_type_of_expr = function
   | Add(t,_) | Sub(t,_) | Mul(t,_) | Div(t,_) -> t
   | Var _ -> i64 (* Vars are only defined as integer programs so must be ints *)
   | EQ _ | NEQ _ | LT _ | LTE _ | GT _ | GTE _ | And _ | Or _ | Not _ -> bool1
+  (* TODO: check that b matches a *)
+  | Select(_,a,b) -> val_type_of_expr a
   | Load(t,_) -> t
 
 (* does this really become a list of domain bindings? *)

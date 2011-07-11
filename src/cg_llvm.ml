@@ -86,6 +86,11 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | Div(Int(_), (l, r))  -> build_sdiv (codegen_expr l) (codegen_expr r) "" b
     | Div(UInt(_), (l, r)) -> build_udiv (codegen_expr l) (codegen_expr r) "" b
 
+    (* Select *)
+    | Select(c, t, f) ->
+        build_select (codegen_expr c) (codegen_expr t) (codegen_expr f)
+          "Select" b
+
     (* memory *)
     | Load(t, mr) -> build_load (codegen_memref mr t) "" b
 
@@ -258,6 +263,10 @@ and buffers_in_expr = function
 
   (* unary ops *)
   | Not e | Cast (_,e) -> buffers_in_expr e
+
+  (* ternary ops *)
+  | Select (c, t, f) -> BufferSet.union (buffers_in_expr c)
+                          (BufferSet.union (buffers_in_expr t) (buffers_in_expr f))
 
   (* memory ops *)
   | Load (_, mr) -> BufferSet.singleton mr.buf
