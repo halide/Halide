@@ -3,10 +3,10 @@ open Bigarray
 
 let _ =
   let im = load_png "test.png" in 
-  for c = 0 to 2 do 
-    for y = 0 to 15 do
-      for x = 0 to 15 do 
-        Array3.set im c y x ((Array3.get im c y x) + 1)
+  for c = 0 to (Array3.dim1 im)-1 do 
+    for y = 0 to (Array3.dim2 im)-1 do
+      for x = 0 to (Array3.dim3 im)-1 do 
+        Array3.set im c y x (255 - (Array3.get im c y x))
       done
     done
   done;
