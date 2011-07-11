@@ -1,15 +1,13 @@
 # ocamlbuild includes require absolute paths, but do evaluate `..`
 LLVM_ROOT=$(CURDIR)/../llvm/Debug+Asserts
 LLVM_DIR=${LLVM_ROOT}/lib/ocaml/
-CAMLIMAGES_DIR=$(CURDIR)/../camlimages/src/
 
 LLVM_FLAGS=-cflags -I,${LLVM_DIR} -lflags -I,${LLVM_DIR}
-CAMLIMAGES_FLAGS=-cflags -I,${CAMLIMAGES_DIR} -lflags -I,${CAMLIMAGES_DIR}
 
-FLAGS=${LLVM_FLAGS} ${CAMLIMAGES_FLAGS} -cflags -annot
+FLAGS=${LLVM_FLAGS} -cflags -annot
 
 OCAMLBUILD=ocamlbuild
-BUILD_CMD=${OCAMLBUILD} ${FLAGS}
+BUILD_CMD=${OCAMLBUILD} ${FLAGS} -lflags cimg.o,-cclib,-lpng
 
 TARGETS=cg_test.ml convolution.ml brightness.ml
 DEBUG_BYTE=$(patsubst %.ml,%.d.byte,${TARGETS})
@@ -17,17 +15,21 @@ DEBUG_NATIVE=$(patsubst %.ml,%.d.native,${TARGETS})
 BYTE=$(patsubst %.ml,%.byte,${TARGETS})
 NATIVE=$(patsubst %.ml,%.native,${TARGETS})
 
-%.byte: %.ml dummy
+%.byte: %.ml cimg
 	${BUILD_CMD} $@
 
-%.native: %.ml dummy
+%.native: %.ml cimg
 	${BUILD_CMD} $@
 
-%.d.byte: %.ml dummy
+%.d.byte: %.ml cimg
 	${BUILD_CMD} $@
 
-%.d.native: %.ml dummy
+%.d.native: %.ml cimg
 	${BUILD_CMD} $@
+
+_build/cimg.o : cimg.c
+	mkdir -p _build
+	$(CC) -std=c99 -c cimg.c -o _build/cimg.o -Wall
 
 byte: ${BYTE}
 
@@ -35,9 +37,9 @@ native: ${NATIVE}
 
 debug: ${DEBUG_BYTE}
 
-dummy:
+cimg: _build/cimg.o
 
-.PHONY: dummy
+.PHONY: cimg
 
 clean:
 	${OCAMLBUILD} -clean

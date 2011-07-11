@@ -8,11 +8,6 @@ ocaml_lib ~extern:true "llvm_bitreader";;
 ocaml_lib ~extern:true "llvm_target";;
 ocaml_lib ~extern:true "llvm_executionengine";;
 
-ocaml_lib ~extern:true "camlimages_core";;
-ocaml_lib ~extern:true "camlimages_png";;
-
-ocaml_lib ~extern:true "bigarray";;
-
 (* define ocamlc link flag: -cc g++ *)
 (* presumably necessary to ensure linkage of libstdc++ for LLVM *)
 (* this actually gets set for a target with the `g++` tag in _tags *)

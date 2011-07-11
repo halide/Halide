@@ -1,9 +1,7 @@
 open Ir
 
-let winWidth = 4
-let winHeight = 4
-let weight = 1.0 /. float_of_int ((winWidth+1)*(winWidth+1))
-
+let winWidth = 5
+let winHeight = 5
 
 let winxdom = { name = "i"; range = (-winWidth/2,1+winWidth/2) }
 let winydom = { name = "j"; range = (-winHeight/2,1+winHeight/2) }
@@ -21,12 +19,12 @@ let outbuf = 2
 let inbuf = 1
 
 let prgm w h ch =
-  (* imAddr = c + Ch * (x + W * y) *)
+  (* imAddr = x + w * (y + h * c) *)
   let imAddr x y c =
-    Add(c,
-        Mul(IntImm(ch),
-            Add(x,
-                Mul(IntImm(w), y))))
+    Add(x,
+        Mul(IntImm(w),
+            Add(y,
+                Mul(IntImm(h), c))))
   in
 
   let imRef im x y c = { buf = im; idx = imAddr x y c } in
@@ -43,7 +41,7 @@ let prgm w h ch =
       Add(
         Div(
           Load(u8, inRef),
-          Cast(u8, UIntImm((winWidth+1)*(winWidth+1)))
+          Cast(u8, UIntImm((winWidth)*(winHeight)))
         ),
 (*
         Cast(u8,
@@ -58,15 +56,15 @@ let prgm w h ch =
   let winMap = Map(winydom, Map(winxdom, accumStmt)) in
 
   Map(
-    {name = "y"; range = (0, h)},
+    {name = "c"; range = (0, ch)},
     Map(
-      {name = "x"; range = (0, w)},
+      {name = "y"; range = (winHeight/2, h-winHeight/2)},
       Map(
-        {name = "c"; range = (0, 3)},
+        {name = "x"; range = (winWidth/2, w-winWidth/2)},
         winMap
       )
     )
   )
 
 let () =
-  Test_runner.run prgm "convolution"
+  Test_runner.run_on_image prgm ~dbgfile:"convolution" "test.png" "out_convolution.png"
