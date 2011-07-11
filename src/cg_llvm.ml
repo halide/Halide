@@ -71,28 +71,28 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     (* arithmetic *)
     (* Arithmetic on vector types uses the same build calls as the scalar versions *)
     (* Float *)
-    | Add(Float(_), (l, r))
-    | Add(Vector(Float(_),_), (l, r)) -> cg_binop build_fadd l r
+    | Add(Float(_), l, r)
+    | Add(Vector(Float(_),_), l, r) -> cg_binop build_fadd l r
 
-    | Sub(Float(_), (l, r))
-    | Sub(Vector(Float(_),_), (l, r)) -> cg_binop build_fsub l r
+    | Sub(Float(_), l, r)
+    | Sub(Vector(Float(_),_), l, r) -> cg_binop build_fsub l r
 
-    | Mul(Float(_), (l, r))
-    | Mul(Vector(Float(_),_), (l, r)) -> cg_binop build_fmul l r
+    | Mul(Float(_), l, r)
+    | Mul(Vector(Float(_),_), l, r) -> cg_binop build_fmul l r
 
-    | Div(Float(_), (l, r))
-    | Div(Vector(Float(_),_), (l, r)) -> cg_binop build_fdiv l r
+    | Div(Float(_), l, r)
+    | Div(Vector(Float(_),_), l, r) -> cg_binop build_fdiv l r
 
     (* Int/UInt *)
-    | Add(_, (l, r))       -> cg_binop build_add  l r
-    | Sub(_, (l, r))       -> cg_binop build_sub  l r
-    | Mul(_, (l, r))       -> cg_binop build_mul  l r
-    | Div(Int(_), (l, r))  -> cg_binop build_sdiv l r
-    | Div(UInt(_), (l, r)) -> cg_binop build_udiv l r
+    | Add(_, l, r)       -> cg_binop build_add  l r
+    | Sub(_, l, r)       -> cg_binop build_sub  l r
+    | Mul(_, l, r)       -> cg_binop build_mul  l r
+    | Div(Int(_), l, r)  -> cg_binop build_sdiv l r
+    | Div(UInt(_), l, r) -> cg_binop build_udiv l r
 
     (* comparison *)
     (* TODO: is this factoring overkill? Just directly build_icmp/build_fcmp? *)
-    | EQ((l,r)) ->
+    | EQ(l, r) ->
         cg_cmp
           (function
              | Int _ | UInt _
@@ -100,7 +100,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
              | Float _ | Vector(Float(_),_)         -> CmpFloat(Fcmp.Oeq))
           l r
 
-    | NE((l,r)) ->
+    | NE(l, r) ->
         cg_cmp
           (function
              | Int _ | UInt _
@@ -108,7 +108,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
              | Float _ | Vector(Float(_),_)         -> CmpFloat(Fcmp.One))
           l r
 
-    | LT((l,r)) ->
+    | LT(l, r) ->
         cg_cmp
           (function
              | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Slt)
@@ -116,7 +116,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
              | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Olt))
           l r
 
-    | LE((l,r)) ->
+    | LE(l, r) ->
         cg_cmp
           (function
              | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sle)
@@ -124,7 +124,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
              | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Ole))
           l r
 
-    | GE((l,r)) ->
+    | GE(l, r) ->
         cg_cmp
           (function
              | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sge)
@@ -132,7 +132,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
              | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Oge))
           l r
 
-    | GT((l,r)) ->
+    | GT(l, r) ->
         cg_cmp
           (function
              | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sgt)
@@ -322,8 +322,8 @@ and buffers_in_expr = function
   | IntImm _ | UIntImm _ | FloatImm _ | Var _ -> BufferSet.empty
 
   (* binary ops *)
-  | Add(_, (l,r)) | Sub(_, (l,r)) | Mul(_, (l,r)) | Div(_, (l,r)) | EQ(l,r)
-  | NE(l,r) | LT(l,r) | LE(l,r) | GT(l,r) | GE(l,r) | And(l,r) | Or(l,r) ->
+  | Add(_, l, r) | Sub(_, l, r) | Mul(_, l, r) | Div(_, l, r) | EQ(l, r)
+  | NE(l, r) | LT(l, r) | LE(l, r) | GT(l, r) | GE(l, r) | And(l, r) | Or(l, r) ->
       BufferSet.union (buffers_in_expr l) (buffers_in_expr r)
 
   (* unary ops *)
