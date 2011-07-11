@@ -5,10 +5,15 @@ LLVM_DIR=${LLVM_ROOT}/lib/ocaml/
 LLVM_FLAGS=-cflags -I,${LLVM_DIR} -lflags -I,${LLVM_DIR}
 IMG_FLAGS=-lflags cimg.o,-cclib,-lpng
 
-FLAGS=${LLVM_FLAGS} ${IMG_FLAGS} -cflags -annot
+OCAMLBUILDFLAGS=${LLVM_FLAGS} ${IMG_FLAGS} -cflags -annot
 
 OCAMLBUILD=ocamlbuild
-BUILD_CMD=${OCAMLBUILD} ${FLAGS} 
+BUILD_CMD=${OCAMLBUILD} ${OCAMLBUILDFLAGS} 
+
+# Mac Homebrew OCaml bindings install headers under /usr/local/lib/ocaml
+CPPFLAGS=-I/usr/local/lib/ocaml
+CCFLAGS=-std=c99
+CFLAGS=${CPPFLAGS} ${CCFLAGS}
 
 TARGETS=cg_test.ml convolution.ml brightness.ml
 DEBUG_BYTE=$(patsubst %.ml,%.d.byte,${TARGETS})
@@ -32,7 +37,7 @@ all: $(BYTE)
 
 _build/cimg.o : cimg.c
 	mkdir -p _build
-	$(CC) -std=c99 -c cimg.c -o _build/cimg.o -Wall
+	$(CC) ${CFLAGS} -c cimg.c -o _build/cimg.o -Wall
 
 byte: ${BYTE}
 
