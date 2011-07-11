@@ -25,4 +25,4 @@ let prgm w h c =
       store (Add(load, load)))
 
 let () =
-  Test_runner.run prgm "cg_test"
+  Test_runner.run_on_image prgm ~dbgfile:"cg_test" "test.png" "out_cg_test.png"

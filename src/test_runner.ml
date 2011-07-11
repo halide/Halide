@@ -1,4 +1,6 @@
 open Llvm_executionengine
+open Bigarray
+open Img
 
 (* TODO: support typed args array by defining `argument` algebraic type and
 * defining generic_value_of_argument *)
@@ -23,17 +25,17 @@ type program_template = int -> int -> int -> Ir.stmt
  * from infile, saving the results to outfile, and writing  *)
 let run_on_image (prgm:program_template) ?(dbgfile = "") infile outfile = 
   (* load test.png into input and output arrays *)
-  let (w,h,inarr) = Imageio.load infile in
+  let inarr = load_png infile in
   let outarr = Util.clone_bigarray inarr in
 
-  (* instantiate the program with image w,h,channels *)
-  let p = prgm w h 3 in
+  (* instantiate the program *)
+  let p = prgm (Array3.dim3 inarr) (Array3.dim2 inarr) (Array3.dim1 inarr) in
 
-    (* save bitcode for debugging *)
-    if not (dbgfile = "") then Cg_llvm.codegen_to_file dbgfile p;
-
-    (* run the program *)
-    run p [| inarr; outarr |];
-
-    (* save outarr to test.out.png *)
-    Imageio.save outarr w h outfile
+  (* save bitcode for debugging *)
+  if not (dbgfile = "") then Cg_llvm.codegen_to_file dbgfile p;
+  
+  (* run the program *)
+  run p [| inarr; outarr |];
+  
+  (* save outarr to test.out.png *)
+  save_png outarr outfile
