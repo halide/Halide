@@ -24,7 +24,7 @@ type program_template = int -> int -> int -> Ir.stmt
 let run_on_image (prgm:program_template) ?(dbgfile = "") infile outfile = 
   (* load test.png into input and output arrays *)
   let (w,h,inarr) = Imageio.load infile in
-  let outarr = Util.copy_bigarray inarr in
+  let outarr = Util.clone_bigarray inarr in
 
   (* instantiate the program with image w,h,channels *)
   let p = prgm w h 3 in
