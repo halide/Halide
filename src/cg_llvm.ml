@@ -111,69 +111,55 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
 
   and cg_cast t e =
+    (* shorthand for the common case *)
+    let simple_cast build e t = build (cg_expr e) (type_of_val_type t) "" b in
+
     match (val_type_of_expr e, t) with
 
-      | (UInt(fbits),Int(tbits)) when fbits > tbits ->
+      (* TODO: cast vector types *)
+
+      | UInt(fb), Int(tb) when fb > tb ->
+          (* TODO: factor this truncate-then-zext pattern into a helper? *)
           (* truncate to t-1 bits, then zero-extend to t bits to avoid sign bit *)
           build_zext
-            (build_trunc (cg_expr e) (integer_type c (tbits-1)) "" b)
-            (integer_type c tbits) "" b
+            (build_trunc (cg_expr e) (integer_type c (tb-1)) "" b)
+            (integer_type c tb) "" b
 
-      | (UInt(fbits),Int(tbits)) when fbits < tbits ->
-          build_zext (cg_expr e) (type_of_val_type t) "" b
+      | UInt(fb), Int(tb)
+      | UInt(fb), UInt(tb) when fb < tb ->
+          simple_cast build_zext e t
 
-      | (Int(fbits),UInt(tbits)) when fbits > tbits ->
-          build_trunc (cg_expr e) (type_of_val_type t) "" b
-
-      | (Int(fbits),UInt(tbits)) when fbits < tbits ->
+      (* TODO: what to do for negative sign in Int -> UInt? *)
+      | Int(fb), UInt(tb) when fb > tb ->
+          simple_cast build_trunc e t
+      | Int(fb), UInt(tb) when fb < tb ->
           (* truncate to f-1 bits, then zero-extend to t bits to avoid sign bit *)
           build_zext
-            (build_trunc (cg_expr e) (integer_type c (fbits-1)) "" b)
-            (integer_type c tbits) "" b
+            (build_trunc (cg_expr e) (integer_type c (fb-1)) "" b)
+            (integer_type c tb) "" b
 
-      | (UInt(fbits),Int(tbits)) | (Int(fbits),UInt(tbits)) when fbits < tbits ->
+      | UInt(fb), Int(tb)
+      | Int(fb),  UInt(tb)
+      | UInt(fb), UInt(tb)
+      | Int(fb),  Int(tb) when fb = tb ->
           (* do nothing *)
           cg_expr e
 
-      | (UInt(fbits),UInt(tbits)) when fbits > tbits ->
-          build_trunc (cg_expr e) (type_of_val_type t) "" b
+      | UInt(fb), UInt(tb) when fb > tb -> simple_cast build_trunc e t
 
-      | (UInt(fbits),UInt(tbits)) ->
-          cg_expr e
+      (* int <--> float *)
+      | Int(_),   Float(_) -> simple_cast build_sitofp e t
+      | UInt(_),  Float(_) -> simple_cast build_uitofp e t
+      | Float(_), Int(_)   -> simple_cast build_fptosi e t
+      | Float(_), UInt(_)  -> simple_cast build_fptoui e t
 
-      (* int -> float *)
-      | Int(_), Float(_) ->
-          build_sitofp (cg_expr e) (type_of_val_type t) "" b
-      | UInt(_), Float(_) ->
-          build_uitofp (cg_expr e) (type_of_val_type t) "" b
-
-      (* TODO: factor out cg_simple_cast builder expr valtype *)
-      (* float -> int *)
-      | Float(_), Int(_) ->
-          build_fptosi (cg_expr e) (type_of_val_type t) "" b
-      | Float(_), UInt(_) ->
-          build_fptoui (cg_expr e) (type_of_val_type t) "" b
-
-      (*
-      LLVM Reference:
-       Instruction::CastOps opcode =
-          (SrcBits == DstBits ? Instruction::BitCast :
-           (SrcBits > DstBits ? Instruction::Trunc :
-            (isSigned ? Instruction::SExt : Instruction::ZExt)));
-       *)
-   
       (* build_intcast in the C/OCaml interface assumes signed, so only
        * works for Int *)
-      | (Int(_),Int(_)) ->
-          build_intcast (cg_expr e) (type_of_val_type t) "" b
-
-      | (Float(fbits),Float(tbits)) ->
-          build_fpcast(cg_expr e) (type_of_val_type t) "" b
+      | Int(_), Int(_)       -> simple_cast build_intcast e t
+      | Float(fb), Float(tb) -> simple_cast build_fpcast  e t
 
       (* TODO: remaining casts *)
       | _ -> raise UnimplementedInstruction
-
-
 
   and cg_for var_name min max body = 
       (* Emit the start code first, without 'variable' in scope. *)

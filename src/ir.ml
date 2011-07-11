@@ -36,6 +36,10 @@ type expr =
     | UIntImm of int
     | FloatImm of float
 
+    (* TODO: separate "cast" from "convert"?
+     * Cast changes operational interpretation of variables, but doesn't touch
+     * stored bits.
+     * Convert changes data to bits with equivalent interpretation in new type. *)
     (* TODO: validate operand type matches with Caml type parameters *)
     | Cast of val_type * expr
 
@@ -68,7 +72,7 @@ type expr =
     (* memory *)
     | Load of val_type * memref
           
-    (* TODO: Pack and unpack vectors *)
+    (* TODO: Pack and unpack vectors. Broadcast/swizzle vectors? *)
     (*
     | PackVector of val_type * (expr list)
     | UnpackVector of val_type * (expr * int)
