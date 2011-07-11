@@ -39,3 +39,15 @@ let run_on_image (prgm:program_template) ?(dbgfile = "") infile outfile =
   
   (* save outarr to test.out.png *)
   save_png outarr outfile
+
+(* template for running simple test programs with argv[1] = input.png *)
+let main ?(dbg = true) prgm name =
+  (* TODO: extract name from argv[0] *)
+  match Sys.argv with
+    | [| _; infile |] -> run_on_image
+                           prgm
+                           infile
+                           ("out_"^name^".png")
+                           ~dbgfile:(if dbg then name^".bc" else "")
+
+    | _ -> failwith ("Invalid arguments. Usage: "^name^" <input_image>")

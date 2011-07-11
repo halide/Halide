@@ -46,4 +46,4 @@ let prgm w h c =
   )
 
 let () =
-  Test_runner.run_on_image prgm ~dbgfile:"brightness" "test.png" "out_brightness.png"
+  Test_runner.main prgm "brightness"
