@@ -13,14 +13,17 @@ and string_of_expr = function
 
   | Cast(t, e) -> "cast" ^ "<" ^ string_of_val_type t ^ ">" ^ "(" ^ string_of_expr e ^")"
 
-  | Add(t, (l,r)) ->
+  | Add(t, l, r) ->
       "(" ^ string_of_expr l ^ string_of_val_type t ^ "+" ^ string_of_expr r ^ ")"
-  | Sub(t, (l,r)) ->
+  | Sub(t, l, r) ->
       "(" ^ string_of_expr l ^ string_of_val_type t ^ "-" ^ string_of_expr r ^ ")"
-  | Mul(t, (l,r)) ->
+  | Mul(t, l, r) ->
       "(" ^ string_of_expr l ^ string_of_val_type t ^ "*" ^ string_of_expr r ^ ")"
-  | Div(t, (l,r)) ->
+  | Div(t, l, r) ->
       "(" ^ string_of_expr l ^ string_of_val_type t ^ "/" ^ string_of_expr r ^ ")"
+
+  | Select(c, t, f) ->
+      "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
 
   | Var(s) -> s
 

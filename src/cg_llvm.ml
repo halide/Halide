@@ -15,6 +15,11 @@ exception WTF
 
 let buffer_t c = pointer_type (i8_type c)
 
+(* Algebraic type wrapper for LLVM comparison ops *)
+type cmp =
+  | CmpInt of Icmp.t
+  | CmpFloat of Fcmp.t
+
 (* Function to encapsulate shared state for primary codegen *)
 let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
@@ -53,39 +58,39 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     Hashtbl.find sym_table name
   in
 
-  let rec codegen_expr = function
+  let rec cg_expr = function
     (* constants *)
     | IntImm(i) | UIntImm(i) -> const_int   (int_imm_t)   i
     | FloatImm(f)            -> const_float (float_imm_t) f
 
     (* cast *)
-    | Cast(t,e) -> codegen_cast t e
+    | Cast(t,e) -> cg_cast t e
+
+    (* TODO: coding style: use more whitespace, fewer parens in matches? *)
+
+    (* Binary operators are generated from builders for int, uint, float types *)
+    (* Arithmetic and comparison on vector types use the same build calls as 
+     * the scalar versions *)
 
     (* arithmetic *)
-    (* Arithmetic on vector types uses the same build calls as the scalar versions *)
-    (* TODO: refactor into common build_binop? *)
-    (* Float *)
-    | Add(Float(_), (l, r))
-    | Add(Vector(Float(_),_), (l, r)) -> build_fadd (codegen_expr l) (codegen_expr r) "" b
+    | Add(l, r) -> cg_binop build_add  build_add  build_fadd l r
+    | Sub(l, r) -> cg_binop build_sub  build_sub  build_fsub l r
+    | Mul(l, r) -> cg_binop build_mul  build_mul  build_fmul l r
+    | Div(l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
 
-    | Sub(Float(_), (l, r))
-    | Sub(Vector(Float(_),_), (l, r)) -> build_fsub (codegen_expr l) (codegen_expr r) "" b
+    (* comparison *)
+    | EQ(l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r
+    | NE(l, r) -> cg_cmp Icmp.Ne  Icmp.Ne  Fcmp.One l r
+    | LT(l, r) -> cg_cmp Icmp.Slt Icmp.Ult Fcmp.Olt l r
+    | LE(l, r) -> cg_cmp Icmp.Sle Icmp.Ule Fcmp.Ole l r
+    | GT(l, r) -> cg_cmp Icmp.Sgt Icmp.Ugt Fcmp.Ogt l r
+    | GE(l, r) -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
 
-    | Mul(Float(_), (l, r))
-    | Mul(Vector(Float(_),_), (l, r)) -> build_fmul (codegen_expr l) (codegen_expr r) "" b
-
-    | Div(Float(_), (l, r))
-    | Div(Vector(Float(_),_), (l, r)) -> build_fdiv (codegen_expr l) (codegen_expr r) "" b
-
-    (* Int/UInt *)
-    | Add(_, (l, r))       -> build_add  (codegen_expr l) (codegen_expr r) "" b
-    | Sub(_, (l, r))       -> build_sub  (codegen_expr l) (codegen_expr r) "" b
-    | Mul(_, (l, r))       -> build_mul  (codegen_expr l) (codegen_expr r) "" b
-    | Div(Int(_), (l, r))  -> build_sdiv (codegen_expr l) (codegen_expr r) "" b
-    | Div(UInt(_), (l, r)) -> build_udiv (codegen_expr l) (codegen_expr r) "" b
+    (* Select *)
+    | Select(c, t, f) -> build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
 
     (* memory *)
-    | Load(t, mr) -> build_load (codegen_memref mr t) "" b
+    | Load(t, mr) -> build_load (cg_memref mr t) "" b
 
     (* Loop variables *)
     | Var(name) -> sym_get name
@@ -93,60 +98,70 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     (* TODO: fill out other ops *)
     | _ -> raise UnimplementedInstruction
 
-  and codegen_cast t e =
+  and cg_binop iop uop fop l r =
+    let build = match val_type_of_expr l with
+      | Int _   | Vector(Int(_),_)   -> iop
+      | UInt _  | Vector(UInt(_),_)  -> uop
+      | Float _ | Vector(Float(_),_) -> fop
+      | t -> raise (UnsupportedType(t))
+    in
+      build (cg_expr l) (cg_expr r) "" b
+
+  and cg_cmp iop uop fop l r =
+    cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
+
+  and cg_cast t e =
+    (* shorthand for the common case *)
+    let simple_cast build e t = build (cg_expr e) (type_of_val_type t) "" b in
+
     match (val_type_of_expr e, t) with
 
-      | (UInt(fbits),Int(tbits)) when fbits > tbits ->
+      (* TODO: cast vector types *)
+
+      | UInt(fb), Int(tb) when fb > tb ->
+          (* TODO: factor this truncate-then-zext pattern into a helper? *)
           (* truncate to t-1 bits, then zero-extend to t bits to avoid sign bit *)
           build_zext
-            (build_trunc (codegen_expr e) (integer_type c (tbits-1)) "" b)
-            (integer_type c tbits) "" b
+            (build_trunc (cg_expr e) (integer_type c (tb-1)) "" b)
+            (integer_type c tb) "" b
 
-      | (UInt(fbits),Int(tbits)) when fbits < tbits ->
-          build_zext (codegen_expr e) (type_of_val_type t) "" b
+      | UInt(fb), Int(tb)
+      | UInt(fb), UInt(tb) when fb < tb ->
+          simple_cast build_zext e t
 
-      | (Int(fbits),UInt(tbits)) when fbits > tbits ->
-          build_trunc (codegen_expr e) (type_of_val_type t) "" b
-
-      | (Int(fbits),UInt(tbits)) when fbits < tbits ->
+      (* TODO: what to do for negative sign in Int -> UInt? *)
+      | Int(fb), UInt(tb) when fb > tb ->
+          simple_cast build_trunc e t
+      | Int(fb), UInt(tb) when fb < tb ->
           (* truncate to f-1 bits, then zero-extend to t bits to avoid sign bit *)
           build_zext
-            (build_trunc (codegen_expr e) (integer_type c (fbits-1)) "" b)
-            (integer_type c tbits) "" b
+            (build_trunc (cg_expr e) (integer_type c (fb-1)) "" b)
+            (integer_type c tb) "" b
 
-      | (UInt(fbits),Int(tbits)) | (Int(fbits),UInt(tbits)) when fbits < tbits ->
+      | UInt(fb), Int(tb)
+      | Int(fb),  UInt(tb)
+      | UInt(fb), UInt(tb)
+      | Int(fb),  Int(tb) when fb = tb ->
           (* do nothing *)
-          codegen_expr e
+          cg_expr e
 
-      | (UInt(fbits),UInt(tbits)) when fbits > tbits ->
-          build_trunc (codegen_expr e) (type_of_val_type t) "" b
+      | UInt(fb), UInt(tb) when fb > tb -> simple_cast build_trunc e t
 
-      | (UInt(fbits),UInt(tbits)) ->
-          codegen_expr e
-          
+      (* int <--> float *)
+      | Int(_),   Float(_) -> simple_cast build_sitofp e t
+      | UInt(_),  Float(_) -> simple_cast build_uitofp e t
+      | Float(_), Int(_)   -> simple_cast build_fptosi e t
+      | Float(_), UInt(_)  -> simple_cast build_fptoui e t
 
-      (*
-      LLVM Reference:
-       Instruction::CastOps opcode =
-          (SrcBits == DstBits ? Instruction::BitCast :
-           (SrcBits > DstBits ? Instruction::Trunc :
-            (isSigned ? Instruction::SExt : Instruction::ZExt)));
-       *)
-   
       (* build_intcast in the C/OCaml interface assumes signed, so only
        * works for Int *)
-      | (Int(_),Int(_)) ->
-          build_intcast (codegen_expr e) (type_of_val_type t) "" b
-
-      | (Float(fbits),Float(tbits)) ->
-          build_fpcast(codegen_expr e) (type_of_val_type t) "" b
+      | Int(_), Int(_)       -> simple_cast build_intcast e t
+      | Float(fb), Float(tb) -> simple_cast build_fpcast  e t
 
       (* TODO: remaining casts *)
       | _ -> raise UnimplementedInstruction
 
-
-
-  and codegen_for var_name min max body = 
+  and cg_for var_name min max body = 
       (* Emit the start code first, without 'variable' in scope. *)
       let start_val = const_int int_imm_t min in
 
@@ -154,7 +169,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
        * block. *)
       let preheader_bb = insertion_block b in
       let the_function = block_parent preheader_bb in
-      let loop_bb = append_block c "loop" the_function in
+      let loop_bb = append_block c (var_name ^ "_loop") the_function in
 
       (* Insert an explicit fall through from the current block to the
        * loop_bb. *)
@@ -172,17 +187,17 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       (* Emit the body of the loop.  This, like any other expr, can change the
        * current BB.  Note that we ignore the value computed by the body, but
        * don't allow an error *)
-      ignore (codegen_stmt body);
+      ignore (cg_stmt body);
 
       (* Emit the updated counter value. *)
-      let next_var = build_add variable (const_int int_imm_t 1) "nextvar" b in
+      let next_var = build_add variable (const_int int_imm_t 1) (var_name ^ "_nextvar") b in
 
       (* Compute the end condition. *)
       let end_cond = build_icmp Icmp.Slt next_var (const_int int_imm_t max) "" b in
 
       (* Create the "after loop" block and insert it. *)
       let loop_end_bb = insertion_block b in
-      let after_bb = append_block c "afterloop" the_function in
+      let after_bb = append_block c (var_name ^ "_afterloop") the_function in
 
       (* Insert the conditional branch into the end of loop_end_bb. *)
       ignore (build_cond_br end_cond loop_bb after_bb b);
@@ -199,33 +214,35 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       (* Return an ignorable llvalue *)
       const_int int_imm_t 0
 
-  and codegen_stmt = function
+  and cg_stmt = function
     | Store(e, mr) ->
-        let ptr = codegen_memref mr (val_type_of_expr e) in
-          build_store (codegen_expr e) ptr b
+        let ptr = cg_memref mr (val_type_of_expr e) in
+          build_store (cg_expr e) ptr b
     | Map( { name=n; range=(min, max) }, stmt) ->
-        codegen_for n min max stmt
+        cg_for n min max stmt
+    | For( { name=n; range=(min, max) }, stmt) ->
+        cg_for n min max stmt
     | Block (first::second::rest) ->
-        ignore(codegen_stmt first);
-        codegen_stmt (Block (second::rest))
+        ignore(cg_stmt first);
+        cg_stmt (Block (second::rest))
     | Block(first::[]) ->
-        codegen_stmt first
+        cg_stmt first
     | Block _ -> raise WTF
     | _ -> raise UnimplementedInstruction
 
-  and codegen_memref mr vt =
+  and cg_memref mr vt =
     (* load the global buffer** *)
     let base = ptr_to_buffer mr.buf in
     (* cast pointer to pointer-to-target-type *)
     let ptr = build_pointercast base (pointer_type (type_of_val_type vt)) "" b in
     (* build getelementpointer into buffer *)
-    build_gep ptr [| codegen_expr mr.idx |] "" b
+    build_gep ptr [| cg_expr mr.idx |] "" b
 
 
   in
 
     (* actually generate from the root statement, returning the result *)
-    codegen_stmt s
+    cg_stmt s
 
 
 module BufferSet = Set.Make (
@@ -241,6 +258,7 @@ let rec buffers_in_stmt = function
       BufferSet.union (buffers_in_expr e) (
         BufferSet.union (buffers_in_stmt st) (buffers_in_stmt sf))
   | Map(_, s) -> buffers_in_stmt s
+  | For(_, s) -> buffers_in_stmt s
   | Block stmts ->
       List.fold_left BufferSet.union BufferSet.empty (List.map buffers_in_stmt stmts)
   | Reduce (_, e, mr) | Store (e, mr) -> BufferSet.add mr.buf (buffers_in_expr e)
@@ -250,12 +268,16 @@ and buffers_in_expr = function
   | IntImm _ | UIntImm _ | FloatImm _ | Var _ -> BufferSet.empty
 
   (* binary ops *)
-  | Add(_, (l,r)) | Sub(_, (l,r)) | Mul(_, (l,r)) | Div(_, (l,r)) | EQ(l,r)
-  | NEQ(l,r) | LT(l,r) | LTE(l,r) | GT(l,r) | GTE(l,r) | And(l,r) | Or(l,r) ->
+  | Add(l, r) | Sub(l, r) | Mul(l, r) | Div(l, r) | EQ(l, r)
+  | NE(l, r) | LT(l, r) | LE(l, r) | GT(l, r) | GE(l, r) | And(l, r) | Or(l, r) ->
       BufferSet.union (buffers_in_expr l) (buffers_in_expr r)
 
   (* unary ops *)
   | Not e | Cast (_,e) -> buffers_in_expr e
+
+  (* ternary ops *)
+  | Select (c, t, f) -> BufferSet.union (buffers_in_expr c)
+                          (BufferSet.union (buffers_in_expr t) (buffers_in_expr f))
 
   (* memory ops *)
   | Load (_, mr) -> BufferSet.singleton mr.buf

@@ -20,7 +20,9 @@ let outref = { buf=outbuf; idx=UIntImm(0) }
 let v = Vector(UInt(8), vecwidth)
 let load = Load (v, {buf = inbuf; idx = x})
 let store vec = Store(vec, {buf = outbuf; idx = x})
-let prgm w h c = Map((xdom (w*h*c)), store (Add(v, (load, load))))
+let prgm w h c =
+  Map((xdom (w*h*c)),
+      store (Add(load, load)))
 
 let () =
   Test_runner.run prgm "cg_test"

@@ -1,19 +1,20 @@
-HEADERS = FImage.h Compiler.h X64.h IRNode.h CImg.h Interval.h
-OBJECTS = Compiler.o FImage.o IRNode.o base.o Interval.o
-CXXFLAGS = -g -Wall
+HEADERS = FImage.h AsmX64Compiler.h Compiler.h X64.h IRNode.h CImg.h Interval.h
+OBJECTS = AsmX64Compiler.o Compiler.o FImage.o IRNode.o base.o Interval.o LLVMCompiler.o
+CXXFLAGS = -g -Wall -D_GNU_SOURCE -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS
 #CXXFLAGS = -O3 -Wall -ffast-math -march=core2 -msse3 -mfpmath=sse
+LDFLAGS = -Lllvm/lib -L/usr/local/lib -ljpeg -lpng -ltiff -lpthread `llvm-config --libs`
 
 %.o: %.cpp $(HEADERS)
 	g++ $(CXXFLAGS) -c -I /opt/local/include $< 
 
 tests: tests.o $(OBJECTS) 
-	g++ $(CXXFLAGS) -o tests tests.o $(OBJECTS) -L/opt/local/lib -ljpeg -lpng -ltiff -lX11 -lpthread
+	g++ $(CXXFLAGS) -o tests tests.o $(OBJECTS) $(LDFLAGS) -lX11 
 
 testConsole: testConsole.o $(OBJECTS) 
-	g++ $(CXXFLAGS) -o testConsole testConsole.o $(OBJECTS) -ljpeg -lpng -ltiff
+	g++ $(CXXFLAGS) -o testConsole testConsole.o $(OBJECTS) $(LDFLAGS)
 
 testX64: testX64.o $(OBJECTS) 
-	g++ $(CXXFLAGS) -o testX64 testX64.o $(OBJECTS) -ljpeg -lpng -ltiff
+	g++ $(CXXFLAGS) -o testX64 testX64.o $(OBJECTS) $(LDFLAGS)
 
 clean:
 	rm $(OBJECTS) tests
