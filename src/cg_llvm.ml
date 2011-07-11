@@ -58,44 +58,42 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     Hashtbl.find sym_table name
   in
 
-  (* TODO: rename codegen_* to cg_* for terseness? *)
-  let rec codegen_expr = function
+  let rec cg_expr = function
     (* constants *)
     | IntImm(i) | UIntImm(i) -> const_int   (int_imm_t)   i
     | FloatImm(f)            -> const_float (float_imm_t) f
 
     (* cast *)
-    | Cast(t,e) -> codegen_cast t e
+    | Cast(t,e) -> cg_cast t e
 
     (* TODO: coding style: use more whitespace, fewer parens in matches? *)
 
     (* arithmetic *)
     (* Arithmetic on vector types uses the same build calls as the scalar versions *)
-    (* TODO: refactor into common build_binop? *)
     (* Float *)
     | Add(Float(_), (l, r))
-    | Add(Vector(Float(_),_), (l, r)) -> build_fadd (codegen_expr l) (codegen_expr r) "" b
+    | Add(Vector(Float(_),_), (l, r)) -> cg_binop build_fadd l r
 
     | Sub(Float(_), (l, r))
-    | Sub(Vector(Float(_),_), (l, r)) -> build_fsub (codegen_expr l) (codegen_expr r) "" b
+    | Sub(Vector(Float(_),_), (l, r)) -> cg_binop build_fsub l r
 
     | Mul(Float(_), (l, r))
-    | Mul(Vector(Float(_),_), (l, r)) -> build_fmul (codegen_expr l) (codegen_expr r) "" b
+    | Mul(Vector(Float(_),_), (l, r)) -> cg_binop build_fmul l r
 
     | Div(Float(_), (l, r))
-    | Div(Vector(Float(_),_), (l, r)) -> build_fdiv (codegen_expr l) (codegen_expr r) "" b
+    | Div(Vector(Float(_),_), (l, r)) -> cg_binop build_fdiv l r
 
     (* Int/UInt *)
-    | Add(_, (l, r))       -> build_add  (codegen_expr l) (codegen_expr r) "" b
-    | Sub(_, (l, r))       -> build_sub  (codegen_expr l) (codegen_expr r) "" b
-    | Mul(_, (l, r))       -> build_mul  (codegen_expr l) (codegen_expr r) "" b
-    | Div(Int(_), (l, r))  -> build_sdiv (codegen_expr l) (codegen_expr r) "" b
-    | Div(UInt(_), (l, r)) -> build_udiv (codegen_expr l) (codegen_expr r) "" b
+    | Add(_, (l, r))       -> cg_binop build_add  l r
+    | Sub(_, (l, r))       -> cg_binop build_sub  l r
+    | Mul(_, (l, r))       -> cg_binop build_mul  l r
+    | Div(Int(_), (l, r))  -> cg_binop build_sdiv l r
+    | Div(UInt(_), (l, r)) -> cg_binop build_udiv l r
 
     (* comparison *)
     (* TODO: is this factoring overkill? Just directly build_icmp/build_fcmp? *)
     | EQ((l,r)) ->
-        codegen_cmp
+        cg_cmp
           (function
              | Int _ | UInt _
              | Vector(Int(_),_) | Vector(UInt(_),_) -> CmpInt(Icmp.Eq)
@@ -103,7 +101,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
           l r
 
     | NE((l,r)) ->
-        codegen_cmp
+        cg_cmp
           (function
              | Int _ | UInt _
              | Vector(Int(_),_) | Vector(UInt(_),_) -> CmpInt(Icmp.Ne)
@@ -111,7 +109,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
           l r
 
     | LT((l,r)) ->
-        codegen_cmp
+        cg_cmp
           (function
              | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Slt)
              | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Ult)
@@ -119,7 +117,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
           l r
 
     | LE((l,r)) ->
-        codegen_cmp
+        cg_cmp
           (function
              | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sle)
              | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Ule)
@@ -127,7 +125,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
           l r
 
     | GE((l,r)) ->
-        codegen_cmp
+        cg_cmp
           (function
              | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sge)
              | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Uge)
@@ -135,7 +133,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
           l r
 
     | GT((l,r)) ->
-        codegen_cmp
+        cg_cmp
           (function
              | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sgt)
              | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Ugt)
@@ -144,11 +142,11 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
     (* Select *)
     | Select(c, t, f) ->
-        build_select (codegen_expr c) (codegen_expr t) (codegen_expr f)
+        build_select (cg_expr c) (cg_expr t) (cg_expr f)
           "Select" b
 
     (* memory *)
-    | Load(t, mr) -> build_load (codegen_memref mr t) "" b
+    | Load(t, mr) -> build_load (cg_memref mr t) "" b
 
     (* Loop variables *)
     | Var(name) -> sym_get name
@@ -156,50 +154,47 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     (* TODO: fill out other ops *)
     | _ -> raise UnimplementedInstruction
 
-  and codegen_cmp op_for_val_type l r =
+  and cg_binop build l r =
+    build (cg_expr l) (cg_expr r) "" b
+
+  and cg_cmp op_for_val_type l r =
     let build_cmp =
       match op_for_val_type (val_type_of_expr l) with
         | CmpInt(op) -> build_icmp op
         | CmpFloat(op) -> build_fcmp op
     in
-      build_cmp (codegen_expr l) (codegen_expr r) "" b
-(*
-      match t with
-        | Int _   -> build_icmp (match (op_for_val_type t) with CmpInt(c) -> c) lv rv "" b
-        | UInt _  -> build_icmp (op_for_val_type t) lv rv "" b
-        | Float _ -> build_fcmp (op_for_val_type t) lv rv "" b
- *)
+      build_cmp (cg_expr l) (cg_expr r) "" b
 
-  and codegen_cast t e =
+  and cg_cast t e =
     match (val_type_of_expr e, t) with
 
       | (UInt(fbits),Int(tbits)) when fbits > tbits ->
           (* truncate to t-1 bits, then zero-extend to t bits to avoid sign bit *)
           build_zext
-            (build_trunc (codegen_expr e) (integer_type c (tbits-1)) "" b)
+            (build_trunc (cg_expr e) (integer_type c (tbits-1)) "" b)
             (integer_type c tbits) "" b
 
       | (UInt(fbits),Int(tbits)) when fbits < tbits ->
-          build_zext (codegen_expr e) (type_of_val_type t) "" b
+          build_zext (cg_expr e) (type_of_val_type t) "" b
 
       | (Int(fbits),UInt(tbits)) when fbits > tbits ->
-          build_trunc (codegen_expr e) (type_of_val_type t) "" b
+          build_trunc (cg_expr e) (type_of_val_type t) "" b
 
       | (Int(fbits),UInt(tbits)) when fbits < tbits ->
           (* truncate to f-1 bits, then zero-extend to t bits to avoid sign bit *)
           build_zext
-            (build_trunc (codegen_expr e) (integer_type c (fbits-1)) "" b)
+            (build_trunc (cg_expr e) (integer_type c (fbits-1)) "" b)
             (integer_type c tbits) "" b
 
       | (UInt(fbits),Int(tbits)) | (Int(fbits),UInt(tbits)) when fbits < tbits ->
           (* do nothing *)
-          codegen_expr e
+          cg_expr e
 
       | (UInt(fbits),UInt(tbits)) when fbits > tbits ->
-          build_trunc (codegen_expr e) (type_of_val_type t) "" b
+          build_trunc (cg_expr e) (type_of_val_type t) "" b
 
       | (UInt(fbits),UInt(tbits)) ->
-          codegen_expr e
+          cg_expr e
           
 
       (*
@@ -213,17 +208,17 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       (* build_intcast in the C/OCaml interface assumes signed, so only
        * works for Int *)
       | (Int(_),Int(_)) ->
-          build_intcast (codegen_expr e) (type_of_val_type t) "" b
+          build_intcast (cg_expr e) (type_of_val_type t) "" b
 
       | (Float(fbits),Float(tbits)) ->
-          build_fpcast(codegen_expr e) (type_of_val_type t) "" b
+          build_fpcast(cg_expr e) (type_of_val_type t) "" b
 
       (* TODO: remaining casts *)
       | _ -> raise UnimplementedInstruction
 
 
 
-  and codegen_for var_name min max body = 
+  and cg_for var_name min max body = 
       (* Emit the start code first, without 'variable' in scope. *)
       let start_val = const_int int_imm_t min in
 
@@ -249,7 +244,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       (* Emit the body of the loop.  This, like any other expr, can change the
        * current BB.  Note that we ignore the value computed by the body, but
        * don't allow an error *)
-      ignore (codegen_stmt body);
+      ignore (cg_stmt body);
 
       (* Emit the updated counter value. *)
       let next_var = build_add variable (const_int int_imm_t 1) "nextvar" b in
@@ -276,33 +271,33 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       (* Return an ignorable llvalue *)
       const_int int_imm_t 0
 
-  and codegen_stmt = function
+  and cg_stmt = function
     | Store(e, mr) ->
-        let ptr = codegen_memref mr (val_type_of_expr e) in
-          build_store (codegen_expr e) ptr b
+        let ptr = cg_memref mr (val_type_of_expr e) in
+          build_store (cg_expr e) ptr b
     | Map( { name=n; range=(min, max) }, stmt) ->
-        codegen_for n min max stmt
+        cg_for n min max stmt
     | Block (first::second::rest) ->
-        ignore(codegen_stmt first);
-        codegen_stmt (Block (second::rest))
+        ignore(cg_stmt first);
+        cg_stmt (Block (second::rest))
     | Block(first::[]) ->
-        codegen_stmt first
+        cg_stmt first
     | Block _ -> raise WTF
     | _ -> raise UnimplementedInstruction
 
-  and codegen_memref mr vt =
+  and cg_memref mr vt =
     (* load the global buffer** *)
     let base = ptr_to_buffer mr.buf in
     (* cast pointer to pointer-to-target-type *)
     let ptr = build_pointercast base (pointer_type (type_of_val_type vt)) "" b in
     (* build getelementpointer into buffer *)
-    build_gep ptr [| codegen_expr mr.idx |] "" b
+    build_gep ptr [| cg_expr mr.idx |] "" b
 
 
   in
 
     (* actually generate from the root statement, returning the result *)
-    codegen_stmt s
+    cg_stmt s
 
 
 module BufferSet = Set.Make (
