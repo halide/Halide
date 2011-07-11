@@ -19,6 +19,7 @@ let store vec = Store(vec, {buf = outbuf; idx = i})
 exception Unsupported_type of val_type
 
 (* saturating add *)
+(* TODO: use this as model for built-in library functions? *)
 let sadd a b =
   let t = val_type_of_expr a in
   let max_val = match t with
