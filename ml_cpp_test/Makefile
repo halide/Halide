@@ -1,7 +1,7 @@
 all: img.cma img.cmxa
 
 cimg.o:
-	ocamlc -c -cc "gcc cimg.c -Wall -std=c99" cimg.c
+	ocamlc -c -cc "gcc cimg.c -fPIC -Wall -std=c99" cimg.c
 
 cimg.a: cimg.o
 	cp /usr/lib/libpng.a libpng.a
