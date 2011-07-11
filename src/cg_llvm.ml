@@ -169,7 +169,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
        * block. *)
       let preheader_bb = insertion_block b in
       let the_function = block_parent preheader_bb in
-      let loop_bb = append_block c "loop" the_function in
+      let loop_bb = append_block c (var_name ^ "_loop") the_function in
 
       (* Insert an explicit fall through from the current block to the
        * loop_bb. *)
@@ -190,14 +190,14 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       ignore (cg_stmt body);
 
       (* Emit the updated counter value. *)
-      let next_var = build_add variable (const_int int_imm_t 1) "nextvar" b in
+      let next_var = build_add variable (const_int int_imm_t 1) (var_name ^ "_nextvar") b in
 
       (* Compute the end condition. *)
       let end_cond = build_icmp Icmp.Slt next_var (const_int int_imm_t max) "" b in
 
       (* Create the "after loop" block and insert it. *)
       let loop_end_bb = insertion_block b in
-      let after_bb = append_block c "afterloop" the_function in
+      let after_bb = append_block c (var_name ^ "_afterloop") the_function in
 
       (* Insert the conditional branch into the end of loop_end_bb. *)
       ignore (build_cond_br end_cond loop_bb after_bb b);
