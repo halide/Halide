@@ -67,4 +67,4 @@ let prgm w h ch =
   )
 
 let () =
-  Test_runner.run_on_image prgm ~dbgfile:"convolution" "test.png" "out_convolution.png"
+  Test_runner.main prgm "convolution"
