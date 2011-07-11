@@ -94,8 +94,8 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
         end
     | GT((l,r)) ->
         begin match val_type_of_expr l with
-          | Int _   -> codegen_icmp Icmp.Ugt l r
-          | UInt _  -> codegen_icmp Icmp.Sgt l r
+          | Int _   -> codegen_icmp Icmp.Sgt l r
+          | UInt _  -> codegen_icmp Icmp.Ugt l r
           | Float _ -> codegen_fcmp Fcmp.Ogt l r
         end
 
