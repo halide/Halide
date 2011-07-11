@@ -53,6 +53,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     Hashtbl.find sym_table name
   in
 
+  (* TODO: rename codegen_* to cg_* for terseness? *)
   let rec codegen_expr = function
     (* constants *)
     | IntImm(i) | UIntImm(i) -> const_int   (int_imm_t)   i
@@ -98,6 +99,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
           | UInt _  -> codegen_icmp Icmp.Ugt l r
           | Float _ -> codegen_fcmp Fcmp.Ogt l r
         end
+    (* TODO: remaining comparisons... *)
 
     (* Select *)
     | Select(c, t, f) ->
