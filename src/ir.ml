@@ -36,16 +36,14 @@ type expr =
     | UIntImm of int
     | FloatImm of float
 
-    (* TODO: require casts to match types *)
     (* TODO: validate operand type matches with Caml type parameters *)
     | Cast of val_type * expr
 
     (* arithmetic *)
-    (* TODO: drop these types, and just require binops to match *)
-    | Add of val_type * expr * expr
-    | Sub of val_type * expr * expr
-    | Mul of val_type * expr * expr
-    | Div of val_type * expr * expr
+    | Add of expr * expr
+    | Sub of expr * expr
+    | Mul of expr * expr
+    | Div of expr * expr
 
     (* only for domain variables? *)
     | Var of string
@@ -90,11 +88,12 @@ let rec val_type_of_expr = function
   | UIntImm _ -> u32
   | FloatImm _ -> f32
   | Cast(t,_) -> t
-  | Add(t,_,_) | Sub(t,_,_) | Mul(t,_,_) | Div(t,_,_) -> t
+  | Add(l,r) | Sub(l,r) | Mul(l,r) | Div(l,r) -> val_type_of_expr l
   | Var _ -> i64 (* Vars are only defined as integer programs so must be ints *)
+  (* TODO: add comparison/bool1 checks for vector types *)
   | EQ _ | NE _ | LT _ | LE _ | GT _ | GE _ | And _ | Or _ | Not _ -> bool1
   (* TODO: check that b matches a *)
-  | Select(_,a,b) -> val_type_of_expr a
+  | Select(_,t,f) -> val_type_of_expr t
   | Load(t,_) -> t
 
 (* does this really become a list of domain bindings? *)
