@@ -285,7 +285,7 @@ and buffers_in_expr = function
 
   (* binary ops *)
   | Add(_, (l,r)) | Sub(_, (l,r)) | Mul(_, (l,r)) | Div(_, (l,r)) | EQ(l,r)
-  | NEQ(l,r) | LT(l,r) | LTE(l,r) | GT(l,r) | GTE(l,r) | And(l,r) | Or(l,r) ->
+  | NE(l,r) | LT(l,r) | LE(l,r) | GT(l,r) | GE(l,r) | And(l,r) | Or(l,r) ->
       BufferSet.union (buffers_in_expr l) (buffers_in_expr r)
 
   (* unary ops *)

@@ -51,11 +51,11 @@ type expr =
 
     (* comparison *)
     | EQ of binop
-    | NEQ of binop
+    | NE of binop
     | LT of binop
-    | LTE of binop
+    | LE of binop
     | GT of binop
-    | GTE of binop
+    | GE of binop
 
     (* logical *)
     | And of binop
@@ -93,7 +93,7 @@ let rec val_type_of_expr = function
   | Cast(t,_) -> t
   | Add(t,_) | Sub(t,_) | Mul(t,_) | Div(t,_) -> t
   | Var _ -> i64 (* Vars are only defined as integer programs so must be ints *)
-  | EQ _ | NEQ _ | LT _ | LTE _ | GT _ | GTE _ | And _ | Or _ | Not _ -> bool1
+  | EQ _ | NE _ | LT _ | LE _ | GT _ | GE _ | And _ | Or _ | Not _ -> bool1
   (* TODO: check that b matches a *)
   | Select(_,a,b) -> val_type_of_expr a
   | Load(t,_) -> t
