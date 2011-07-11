@@ -3,17 +3,20 @@ LLVM_ROOT=$(CURDIR)/../llvm/Debug+Asserts
 LLVM_DIR=${LLVM_ROOT}/lib/ocaml/
 
 LLVM_FLAGS=-cflags -I,${LLVM_DIR} -lflags -I,${LLVM_DIR}
+IMG_FLAGS=-lflags cimg.o,-cclib,-lpng
 
-FLAGS=${LLVM_FLAGS} -cflags -annot
+FLAGS=${LLVM_FLAGS} ${IMG_FLAGS} -cflags -annot
 
 OCAMLBUILD=ocamlbuild
-BUILD_CMD=${OCAMLBUILD} ${FLAGS} -lflags cimg.o,-cclib,-lpng
+BUILD_CMD=${OCAMLBUILD} ${FLAGS} 
 
 TARGETS=cg_test.ml convolution.ml brightness.ml
 DEBUG_BYTE=$(patsubst %.ml,%.d.byte,${TARGETS})
 DEBUG_NATIVE=$(patsubst %.ml,%.d.native,${TARGETS})
 BYTE=$(patsubst %.ml,%.byte,${TARGETS})
 NATIVE=$(patsubst %.ml,%.native,${TARGETS})
+
+all: $(BYTE)
 
 %.byte: %.ml cimg
 	${BUILD_CMD} $@
