@@ -1,5 +1,6 @@
 #include "Compiler.h"
 #include "base.h"
+#include <algorithm>
 
 void Compiler::compile(FImage *im) {
 
@@ -105,7 +106,7 @@ void Compiler::preCompileDefinition(FImage *im, int definition)
     
     // Check all the vars have sane bounds.
     for (size_t i = 0; i < vars.size(); i++) {
-        printf("Var %d : [%lld %lld]\n", (int)i,
+        printf("Var %d : [%ld %ld]\n", (int)i,
                vars[i]->interval.min(), vars[i]->interval.max());
         Assert(vars[i]->interval.bounded(), "Variable %d has undefined bounds\n");
     }
@@ -205,13 +206,13 @@ void Compiler::preCompileDefinition(FImage *im, int definition)
          storeIter != storeSet.end(); storeIter++) {
         IRNode::Ptr store = *storeIter;        
         SteppedInterval storeRange = lhs->interval + store->ival;
-        printf("Store address bounds: %lld %lld\n", storeRange.min(), storeRange.max());
+        printf("Store address bounds: %ld %ld\n", storeRange.min(), storeRange.max());
         for (IRNode::PtrSet::iterator loadIter = loadSet.begin();
              loadIter != loadSet.end(); loadIter++) {
             IRNode::Ptr load = *loadIter;
             IRNode::Ptr loadAddr = load->inputs[0];
             SteppedInterval loadRange = loadAddr->interval + load->ival;
-            printf("Load address bounds: %lld : %lld\n", loadRange.min(), loadRange.max());
+            printf("Load address bounds: %ld : %ld\n", loadRange.min(), loadRange.max());
             
             int64_t distance = abs(loadRange - storeRange).min();
             if (distance == 0) {
@@ -219,7 +220,7 @@ void Compiler::preCompileDefinition(FImage *im, int definition)
                 printf("Promoting load at loop level %d to loop level %d\n", load->level, store->level);
                 load->assignLevel(def->level);
             } else {
-                printf("Load and store come within %lld of each other\n", distance);
+                printf("Load and store come within %ld of each other\n", distance);
             }
         }
     }
