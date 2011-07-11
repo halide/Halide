@@ -86,6 +86,19 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | Div(Int(_), (l, r))  -> build_sdiv (codegen_expr l) (codegen_expr r) "" b
     | Div(UInt(_), (l, r)) -> build_udiv (codegen_expr l) (codegen_expr r) "" b
 
+    (* comparison *)
+    | EQ((l,r)) ->
+        begin match val_type_of_expr l with
+          | Int _ | UInt _ -> codegen_icmp Icmp.Eq  l r
+          | Float _        -> codegen_fcmp Fcmp.Oeq l r
+        end
+    | GT((l,r)) ->
+        begin match val_type_of_expr l with
+          | Int _   -> codegen_icmp Icmp.Ugt l r
+          | UInt _  -> codegen_icmp Icmp.Sgt l r
+          | Float _ -> codegen_fcmp Fcmp.Ogt l r
+        end
+
     (* Select *)
     | Select(c, t, f) ->
         build_select (codegen_expr c) (codegen_expr t) (codegen_expr f)
@@ -99,6 +112,18 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
     (* TODO: fill out other ops *)
     | _ -> raise UnimplementedInstruction
+
+(*
+  and codegen_cmp op l r =
+    let build_cmp (o:Icmp.t) = build_icmp op in
+    let build_cmp (op:Fcmp.t) = build_fcmp op in
+      build_cmp op (codegen_expr l) (codegen_expr r) "" b
+ *)
+  and codegen_icmp op l r =
+    build_icmp op (codegen_expr l) (codegen_expr r) "" b
+
+  and codegen_fcmp op l r =
+    build_fcmp op (codegen_expr l) (codegen_expr r) "" b
 
   and codegen_cast t e =
     match (val_type_of_expr e, t) with
