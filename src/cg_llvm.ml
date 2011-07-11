@@ -15,6 +15,11 @@ exception WTF
 
 let buffer_t c = pointer_type (i8_type c)
 
+(* Algebraic type wrapper for LLVM comparison ops *)
+type cmp =
+  | CmpInt of Icmp.t
+  | CmpFloat of Fcmp.t
+
 (* Function to encapsulate shared state for primary codegen *)
 let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
@@ -88,18 +93,54 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | Div(UInt(_), (l, r)) -> build_udiv (codegen_expr l) (codegen_expr r) "" b
 
     (* comparison *)
+    (* TODO: is this factoring overkill? Just directly build_icmp/build_fcmp? *)
     | EQ((l,r)) ->
-        begin match val_type_of_expr l with
-          | Int _ | UInt _ -> codegen_icmp Icmp.Eq  l r
-          | Float _        -> codegen_fcmp Fcmp.Oeq l r
-        end
+        codegen_cmp
+          (function
+             | Int _ | UInt _
+             | Vector(Int(_),_) | Vector(UInt(_),_) -> CmpInt(Icmp.Eq)
+             | Float _ | Vector(Float(_),_)         -> CmpFloat(Fcmp.Oeq))
+          l r
+
+    | NE((l,r)) ->
+        codegen_cmp
+          (function
+             | Int _ | UInt _
+             | Vector(Int(_),_) | Vector(UInt(_),_) -> CmpInt(Icmp.Ne)
+             | Float _ | Vector(Float(_),_)         -> CmpFloat(Fcmp.One))
+          l r
+
+    | LT((l,r)) ->
+        codegen_cmp
+          (function
+             | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Slt)
+             | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Ult)
+             | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Olt))
+          l r
+
+    | LE((l,r)) ->
+        codegen_cmp
+          (function
+             | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sle)
+             | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Ule)
+             | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Ole))
+          l r
+
+    | GE((l,r)) ->
+        codegen_cmp
+          (function
+             | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sge)
+             | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Uge)
+             | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Oge))
+          l r
+
     | GT((l,r)) ->
-        begin match val_type_of_expr l with
-          | Int _   -> codegen_icmp Icmp.Sgt l r
-          | UInt _  -> codegen_icmp Icmp.Ugt l r
-          | Float _ -> codegen_fcmp Fcmp.Ogt l r
-        end
-    (* TODO: remaining comparisons... *)
+        codegen_cmp
+          (function
+             | Int _   | Vector(Int(_),_)   -> CmpInt(Icmp.Sgt)
+             | UInt _  | Vector(UInt(_),_)  -> CmpInt(Icmp.Ugt)
+             | Float _ | Vector(Float(_),_) -> CmpFloat(Fcmp.Ogt))
+          l r
 
     (* Select *)
     | Select(c, t, f) ->
@@ -115,17 +156,19 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     (* TODO: fill out other ops *)
     | _ -> raise UnimplementedInstruction
 
+  and codegen_cmp op_for_val_type l r =
+    let build_cmp =
+      match op_for_val_type (val_type_of_expr l) with
+        | CmpInt(op) -> build_icmp op
+        | CmpFloat(op) -> build_fcmp op
+    in
+      build_cmp (codegen_expr l) (codegen_expr r) "" b
 (*
-  and codegen_cmp op l r =
-    let build_cmp (o:Icmp.t) = build_icmp op in
-    let build_cmp (op:Fcmp.t) = build_fcmp op in
-      build_cmp op (codegen_expr l) (codegen_expr r) "" b
+      match t with
+        | Int _   -> build_icmp (match (op_for_val_type t) with CmpInt(c) -> c) lv rv "" b
+        | UInt _  -> build_icmp (op_for_val_type t) lv rv "" b
+        | Float _ -> build_fcmp (op_for_val_type t) lv rv "" b
  *)
-  and codegen_icmp op l r =
-    build_icmp op (codegen_expr l) (codegen_expr r) "" b
-
-  and codegen_fcmp op l r =
-    build_fcmp op (codegen_expr l) (codegen_expr r) "" b
 
   and codegen_cast t e =
     match (val_type_of_expr e, t) with

@@ -8,6 +8,8 @@ type val_type =
     | Int of int 
     | UInt of int 
     | Float of int 
+    (* TODO: this technically allows Vector(Vector(...)) which the pattern
+     * matching checks don't like, among other things. *)
     | Vector of val_type * int
 
 let bool1 = UInt(1)
