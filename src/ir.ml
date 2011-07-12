@@ -30,7 +30,6 @@ let f64 = Float(64)
  * each subtype? *)
 type expr =
     (* constants *)
-    (* TODO: switch to Int64 storage type *)
     (* TODO: add val_type to immediates? *)
     | IntImm of int
     | UIntImm of int
@@ -72,11 +71,12 @@ type expr =
     (* memory *)
     | Load of val_type * memref
           
-    (* TODO: Pack and unpack vectors. Broadcast/swizzle vectors? *)
-    (*
-    | PackVector of val_type * (expr list)
-    | UnpackVector of val_type * (expr * int)
-    *)
+    (* Two different ways to make vectors *)
+    | MakeVector of (expr list)
+    (* | Broadcast of val_type * expr *)
+
+    (* TODO: Unpack/swizzle vectors *)
+
     (* TODO: function calls? *)
 
 and memref = {
@@ -89,8 +89,8 @@ and buffer = int (* TODO: just an ID for now *)
 
 (* TODO: assert that l,r subexpressions match. Do as separate checking pass? *)
 let rec val_type_of_expr = function
-  | IntImm _ -> i32
-  | UIntImm _ -> u32
+  | IntImm _ -> i64
+  | UIntImm _ -> u64
   | FloatImm _ -> f32
   | Cast(t,_) -> t
   | Add(l,r) | Sub(l,r) | Mul(l,r) | Div(l,r) | Select(_,l,r) ->
@@ -111,6 +111,8 @@ let rec val_type_of_expr = function
       (* TODO: add checks *)
       val_type_of_expr e
   | Load(t,_) -> t
+  | MakeVector(l) -> Vector(val_type_of_expr (List.hd l), List.length l)
+  (* | Broadcast(t,_) -> t *)
 
 (* does this really become a list of domain bindings? *)
 type domain = {

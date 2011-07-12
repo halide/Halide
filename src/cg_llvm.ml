@@ -23,7 +23,8 @@ type cmp =
 (* Function to encapsulate shared state for primary codegen *)
 let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
-  let int_imm_t = i32_type c in
+  let int_imm_t = i64_type c in
+  let int32_imm_t = i32_type c in
   let float_imm_t = float_type c in
 
   let rec type_of_val_type t = match t with
@@ -89,14 +90,25 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     (* Select *)
     | Select(c, t, f) -> build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
 
-    (* memory *)
+    (* memory TODO: handle vector loads and stores better *)
     | Load(t, mr) -> build_load (cg_memref mr t) "" b
 
     (* Loop variables *)
     | Var(name) -> sym_get name
 
+    (* Making vectors *)
+    | MakeVector l -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
+
     (* TODO: fill out other ops *)
     | _ -> raise UnimplementedInstruction
+
+  and cg_makevector = function
+    | ([], t, _) -> undef (type_of_val_type t)
+    | (first::rest, t, n) -> build_insertelement
+          (cg_makevector (rest, t, n+1))
+          (cg_expr first)
+          (const_int int32_imm_t n)
+          "" b
 
   and cg_binop iop uop fop l r =
     let build = match val_type_of_expr l with
@@ -215,6 +227,10 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       const_int int_imm_t 0
 
   and cg_stmt = function
+      (* Vector store needs to be handled differently, because they may not be aligned. *)
+      (* Assume unaligned with a stride of 1 for now. *)
+    | Store(MakeVector(l), mr) -> 
+        cg_storevector (List.map cg_expr l, val_type_of_expr (List.hd l), mr, 1)
     | Store(e, mr) ->
         let ptr = cg_memref mr (val_type_of_expr e) in
           build_store (cg_expr e) ptr b
@@ -239,6 +255,12 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     build_gep ptr [| cg_expr mr.idx |] "" b
 
 
+  and cg_storevector = function
+    | ([], _, _, _) -> const_int int_imm_t 0
+    | (first::rest, t, mr, stride) ->
+        ignore(build_store first (cg_memref mr t) b);
+        let nextaddr = {buf=mr.buf; idx=Add(mr.idx, IntImm(stride))} in
+        cg_storevector(rest, t, nextaddr, stride);
   in
 
     (* actually generate from the root statement, returning the result *)
@@ -281,6 +303,11 @@ and buffers_in_expr = function
 
   (* memory ops *)
   | Load (_, mr) -> BufferSet.singleton mr.buf
+
+  (* vector ops *) 
+  | MakeVector l -> 
+      List.fold_left BufferSet.union BufferSet.empty 
+        (List.map buffers_in_expr l)
 
 exception CGFailed of string
 let verify_cg m =

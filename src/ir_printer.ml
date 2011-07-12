@@ -13,14 +13,14 @@ and string_of_expr = function
 
   | Cast(t, e) -> "cast" ^ "<" ^ string_of_val_type t ^ ">" ^ "(" ^ string_of_expr e ^")"
 
-  | Add(t, l, r) ->
-      "(" ^ string_of_expr l ^ string_of_val_type t ^ "+" ^ string_of_expr r ^ ")"
-  | Sub(t, l, r) ->
-      "(" ^ string_of_expr l ^ string_of_val_type t ^ "-" ^ string_of_expr r ^ ")"
-  | Mul(t, l, r) ->
-      "(" ^ string_of_expr l ^ string_of_val_type t ^ "*" ^ string_of_expr r ^ ")"
-  | Div(t, l, r) ->
-      "(" ^ string_of_expr l ^ string_of_val_type t ^ "/" ^ string_of_expr r ^ ")"
+  | Add(l, r) ->
+      "(" ^ string_of_expr l ^ "+" ^ string_of_expr r ^ ")"
+  | Sub(l, r) ->
+      "(" ^ string_of_expr l ^ "-" ^ string_of_expr r ^ ")"
+  | Mul(l, r) ->
+      "(" ^ string_of_expr l ^ "*" ^ string_of_expr r ^ ")"
+  | Div(l, r) ->
+      "(" ^ string_of_expr l ^ "/" ^ string_of_expr r ^ ")"
 
   | Select(c, t, f) ->
       "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
@@ -28,6 +28,15 @@ and string_of_expr = function
   | Var(s) -> s
 
   | Load(t, mr) -> "load" ^ "(" ^ string_of_val_type t ^ "," ^ string_of_memref mr ^ ")"
+
+  | MakeVector [] -> "vec[]"
+  | MakeVector l -> 
+      let els = List.map string_of_expr l in
+      "vec[" ^ (List.fold_right
+                  (fun x y -> x ^ ", " ^ y) 
+                  (List.tl els)
+                  (List.hd els)
+               ) ^ "]"
 
   | _ -> "<<UNHANDLED>>"
 
