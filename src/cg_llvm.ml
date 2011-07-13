@@ -35,7 +35,13 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | UInt(64) | Int(64) -> i64_type c
     | Float(32) -> float_type c
     | Float(64) -> double_type c
-    | Vector(t, n) -> vector_type (type_of_val_type t) n
+    | IntVector( 1, n) | UIntVector( 1, n) -> vector_type (i1_type c) n
+    | IntVector( 8, n) | UIntVector( 8, n) -> vector_type (i8_type c) n
+    | IntVector(16, n) | UIntVector(16, n) -> vector_type (i16_type c) n
+    | IntVector(32, n) | UIntVector(32, n) -> vector_type (i32_type c) n
+    | IntVector(64, n) | UIntVector(64, n) -> vector_type (i64_type c) n
+    | FloatVector(32, n) -> vector_type (float_type c) n
+    | FloatVector(64, n) -> vector_type (double_type c) n
     | _ -> raise (UnsupportedType(t))
   in
 
@@ -112,10 +118,9 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
   and cg_binop iop uop fop l r =
     let build = match val_type_of_expr l with
-      | Int _   | Vector(Int(_),_)   -> iop
-      | UInt _  | Vector(UInt(_),_)  -> uop
-      | Float _ | Vector(Float(_),_) -> fop
-      | t -> raise (UnsupportedType(t))
+      | Int _   | IntVector(_,_)   -> iop
+      | UInt _  | UIntVector(_,_)  -> uop
+      | Float _ | FloatVector(_,_) -> fop
     in
       build (cg_expr l) (cg_expr r) "" b
 

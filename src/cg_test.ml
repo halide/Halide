@@ -17,7 +17,7 @@ let outref = { buf=outbuf; idx=UIntImm(0) }
 (*let prgm = Store( Add( i64, ( Cast( i64, IntImm( 1 ) ), Load( i64, inref ) ) ), outref ) *)
 (*let prgm = Store( Load( i64, inref ), outref )*)
 (*let prgm = Store( Div( f32, ( Cast( f32, FloatImm( 17.4 ) ), Load( f32, inref ) ) ), outref ) *)
-let v = Vector(UInt(8), vecwidth)
+let v = UIntVector(8, vecwidth)
 let load = Load (v, {buf = inbuf; idx = x})
 let store vec = Store(vec, {buf = outbuf; idx = x})
 let prgm w h c =
