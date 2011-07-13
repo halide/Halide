@@ -10,7 +10,11 @@ type val_type =
     | Float of int 
     (* TODO: this technically allows Vector(Vector(...)) which the pattern
      * matching checks don't like, among other things. *)
-    | Vector of val_type * int
+    (* TODO: switch to explicit IntVector, UIntVector, FloatVector? *)
+    (* TODO: separate BoolVector or mask type? *)
+    | IntVector of int * int
+    | UIntVector of int * int
+    | FloatVector of int * int
 
 let bool1 = UInt(1)
 let u8 = UInt(8)
@@ -103,7 +107,8 @@ let rec val_type_of_expr = function
       assert (val_type_of_expr l = val_type_of_expr r);
       begin
         match val_type_of_expr l with
-          | Vector(_, length) -> Vector(bool1, length)
+          | IntVector(_, len) | UIntVector(_, len) | FloatVector(_, len) ->
+              IntVector(1, len)
           | _ -> bool1
       end
   (* And/Or/Not only allow boolean operands, and return the same type *)
@@ -111,7 +116,12 @@ let rec val_type_of_expr = function
       (* TODO: add checks *)
       val_type_of_expr e
   | Load(t,_) -> t
-  | MakeVector(l) -> Vector(val_type_of_expr (List.hd l), List.length l)
+  | MakeVector(l) ->
+      let len = List.length l in
+      match val_type_of_expr (List.hd l) with 
+        | Int(b)   -> IntVector(b,len)
+        | UInt(b)  -> UIntVector(b,len)
+        | Float(b) -> FloatVector(b,len)
   (* | Broadcast(t,_) -> t *)
 
 (* does this really become a list of domain bindings? *)
