@@ -253,8 +253,10 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
   and cg_stmt = function
       (* Vector store needs to be handled differently, because they may not be aligned. *)
       (* Assume unaligned with a stride of 1 for now. *)
+(*
     | Store(MakeVector(l), mr) -> 
         cg_storevector (List.map cg_expr l, val_type_of_expr (List.hd l), mr, 1)
+ *)
     | Store(e, mr) ->
         let ptr = cg_memref mr (val_type_of_expr e) in
           build_store (cg_expr e) ptr b
