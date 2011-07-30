@@ -48,6 +48,7 @@ CAMLprim value load_png(value filename) {
 
     intnat dims[] = {channels, height, width};
     png_byte *data = malloc(width*height*channels);
+    fprintf(stderr, "malloc png data: 0x%px\n", data);
     value im = caml_ba_alloc(BIGARRAY_UINT8 | CAML_BA_MANAGED, 3, data, dims);
 
     number_of_passes = png_set_interlace_handling(png_ptr);
