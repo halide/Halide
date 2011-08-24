@@ -77,7 +77,7 @@ type expr =
           
     (* Two different ways to make vectors *)
     | MakeVector of (expr list)
-    (* | Broadcast of val_type * expr *)
+    | Broadcast of expr * int
 
     (* TODO: Unpack/swizzle vectors *)
 
@@ -117,12 +117,18 @@ let rec val_type_of_expr = function
       val_type_of_expr e
   | Load(t,_) -> t
   | MakeVector(l) ->
+    begin
       let len = List.length l in
       match val_type_of_expr (List.hd l) with 
         | Int(b)   -> IntVector(b,len)
         | UInt(b)  -> UIntVector(b,len)
         | Float(b) -> FloatVector(b,len)
-  (* | Broadcast(t,_) -> t *)
+    end
+  | Broadcast(e,len) -> 
+    match (val_type_of_expr e) with
+      | Int(b)   -> IntVector(b, len)
+      | UInt(b)  -> UIntVector(b, len)
+      | Float(b) -> FloatVector(b, len)
 
 (* does this really become a list of domain bindings? *)
 type domain = {
