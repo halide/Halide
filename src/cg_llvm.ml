@@ -94,7 +94,20 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | GE(l, r) -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
 
     (* Select *)
-    | Select(c, t, f) -> build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
+    | Select(c, t, f) -> 
+      begin
+        match val_type_of_expr t with          
+          | Int _ | UInt _ | Float _ -> 
+            build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
+          | IntVector(bits, n) | UIntVector(bits, n) | FloatVector(bits, n) ->
+            let mask     = cg_expr c in
+            let mask_ext = build_sext mask (type_of_val_type (val_type_of_expr t)) "" b in 
+            let mask_t   = build_and mask_ext (cg_expr t) "" b in
+            let all_ones = Broadcast(Cast(Int(bits), IntImm(-1)), n) in
+            let inv_mask = build_xor mask_ext (cg_expr all_ones) "" b in
+            let mask_f   = build_and inv_mask (cg_expr f) "" b in
+            build_or mask_t mask_f "" b
+      end
 
     (* memory TODO: handle vector loads and stores better *)
     | Load(t, mr) -> build_load (cg_memref mr t) "" b
@@ -103,7 +116,13 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | Var(name) -> sym_get name
 
     (* Making vectors *)
-    | MakeVector l -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
+    | MakeVector(l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
+
+    | Broadcast(e, n) -> 
+      let rec rep = function
+        | 0 -> []
+        | k -> (e :: (rep (k-1))) in
+      cg_expr (MakeVector (rep n))
 
     (* TODO: fill out other ops *)
     | _ -> raise UnimplementedInstruction
@@ -313,6 +332,8 @@ and buffers_in_expr = function
   | MakeVector l -> 
       List.fold_left BufferSet.union BufferSet.empty 
         (List.map buffers_in_expr l)
+
+  | Broadcast (e, n) -> buffers_in_expr e
 
 exception CGFailed of string
 let verify_cg m =
