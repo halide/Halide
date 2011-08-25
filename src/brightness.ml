@@ -29,7 +29,7 @@ let sadd(a, b) =
     | UIntVector(8, w) -> Broadcast(Cast(UInt(8), UIntImm(0xFF)), w)
     | t -> raise (Unsupported_type(t))
   in
-    Select(a >. (max_val -. b), max_val, a +. b)
+    Select(a >~ (max_val -~ b), max_val, a +~ b)
 
 let prgm w h c =
   Map(
