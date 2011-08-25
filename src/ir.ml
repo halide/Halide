@@ -83,10 +83,12 @@ type expr =
 
     (* TODO: function calls? *)
 
+
+
 and memref = {
-    (* how do we represent memory references? computed references? *)
-    buf : buffer;
-    idx : expr;
+  (* how do we represent memory references? computed references? *)
+  buf : buffer;
+  idx : expr;
 }
 
 and buffer = int (* TODO: just an ID for now *)
@@ -158,3 +160,18 @@ and reduce_op =
     | SubEq
     | MulEq
     | DivEq
+
+(* Some sugar for the operators that are naturally infix *)
+let ( +. ) a b = Add (a, b)
+let ( -. ) a b = Sub (a, b)
+let ( *. ) a b = Mul (a, b)
+let ( /. ) a b = Div (a, b) 
+let ( >. ) a b = GT (a, b)
+let ( >=. ) a b = GE (a, b)
+let ( <. ) a b = LT (a, b)
+let ( <=. ) a b = LE (a, b)
+let ( =. ) a b = EQ (a, b)
+let ( !=. ) a b = NE (a, b)
+let ( ||. ) a b = Or (a, b)
+let ( &&. ) a b = And (a, b)
+let ( !. ) a = Not a
