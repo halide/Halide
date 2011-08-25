@@ -1,6 +1,6 @@
 open Ir
 
-let brightness = 50
+let brightness = 100
 
 let i = Var("i")
 
@@ -29,14 +29,7 @@ let sadd(a, b) =
     | UIntVector(8, w) -> Broadcast(Cast(UInt(8), UIntImm(0xFF)), w)
     | t -> raise (Unsupported_type(t))
   in
-    Select(
-      (* a > 0xFF... - b *)
-      GT(a, Sub(max_val, b)),
-      (* ? 0xFF... *)
-      max_val,
-      (* : a+b *)
-      Add(a, b)
-    )
+    Select(a >. (max_val -. b), max_val, a +. b)
 
 let prgm w h c =
   Map(
