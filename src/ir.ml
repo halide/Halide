@@ -104,6 +104,7 @@ type expr =
     | Broadcast of expr * int
 
     (* TODO: Unpack/swizzle vectors *)
+    | ExtractElement of expr * expr
 
     (* TODO: function calls? *)
 
@@ -160,6 +161,13 @@ let rec val_type_of_expr = function
         | Int(b)   -> IntVector(b, len)
         | UInt(b)  -> UIntVector(b, len)
         | Float(b) -> FloatVector(b, len)
+    end
+  | ExtractElement(e, idx) ->
+    begin
+      match (val_type_of_expr e) with
+        | IntVector(b, _)   -> Int(b)
+        | UIntVector(b, _)  -> UInt(b)
+        | FloatVector(b, _) -> Float(b)
     end
 
 (* does this really become a list of domain bindings? *)
