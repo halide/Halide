@@ -1,5 +1,7 @@
 open Ir
 open Llvm
+open List
+open Util
 
 let dbgprint = true
 
@@ -134,6 +136,12 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
         | 0 -> []
         | k -> (e :: (rep (k-1))) in
       cg_expr (MakeVector (rep n))
+
+    (* Unpacking vectors *)
+    | ExtractElement(e, n) ->
+      let v = cg_expr e in
+      let idx = cg_expr (Cast(u32, n)) in
+      build_extractelement v idx "" b
 
     (* TODO: fill out other ops *)
     | _ -> raise UnimplementedInstruction
@@ -353,6 +361,8 @@ and buffers_in_expr = function
         (List.map buffers_in_expr l)
 
   | Broadcast (e, n) -> buffers_in_expr e
+
+  | ExtractElement (e, n) -> BufferSet.union (buffers_in_expr e) (buffers_in_expr n)
 
 exception CGFailed of string
 let verify_cg m =
