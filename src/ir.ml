@@ -1,3 +1,5 @@
+open Util
+
 (* casting or separate op types for float/(u)int? *)
 
 (* make different levels of IR subtype off increasingly restrictive, partially
@@ -28,6 +30,28 @@ let i64 = Int(64)
 let f16 = Float(16)
 let f32 = Float(32)
 let f64 = Float(64)
+
+let element_val_type = function
+  | IntVector(x, _) -> Int(x)
+  | UIntVector(x, _) -> UInt(x)
+  | FloatVector(x, _) -> Float(x)
+  | x -> x
+
+let vector_of_val_type t n = function
+  | Int(x) -> IntVector(x, n)
+  | UInt(x) -> UIntVector(x, n)
+  | Float(x) -> FloatVector(x, n)
+  | _ -> raise (Wtf("vector_of_val_type called on vector type"))
+
+let bit_width = function
+  | Int(x) | UInt(x) | Float(x) -> x
+  | IntVector(x, n) | UIntVector(x, n) | FloatVector(x, n) -> x*n
+
+let element_width t = bit_width (element_val_type t)
+
+let vector_elements = function
+  | Int(x) | UInt(x) | Float(x) -> 1
+  | IntVector(x, n) | UIntVector(x, n) | FloatVector(x, n) -> n
 
 (* how to enforce valid arithmetic subtypes for different subexpressions? 
  * e.g. only logical values expressions for Logical? Declare interfaces for 
@@ -93,6 +117,8 @@ and memref = {
 
 and buffer = int (* TODO: just an ID for now *)
 
+exception ArithmeticTypeMismatch of val_type * val_type
+
 (* TODO: assert that l,r subexpressions match. Do as separate checking pass? *)
 let rec val_type_of_expr = function
   | IntImm _ -> i64
@@ -100,15 +126,17 @@ let rec val_type_of_expr = function
   | FloatImm _ -> f32
   | Cast(t,_) -> t
   | Add(l,r) | Sub(l,r) | Mul(l,r) | Div(l,r) | Select(_,l,r) ->
-      assert (val_type_of_expr l = val_type_of_expr r);
-      val_type_of_expr l
+      let lt = val_type_of_expr l and rt = val_type_of_expr r in
+      if (lt <> rt) then raise (ArithmeticTypeMismatch(lt,rt));
+      lt
   | Var _ -> i64 (* Vars are only defined as integer programs so must be ints *)
   (* boolean expressions on vector types return bool vectors of equal length*)
   (* boolean expressions on scalars return scalar bools *)
   | EQ(l,r) | NE(l,r) | LT(l,r) | LE(l,r) | GT(l,r) | GE(l,r) ->
-      assert (val_type_of_expr l = val_type_of_expr r);
+      let lt = val_type_of_expr l and rt = val_type_of_expr r in
+      if (lt <> rt) then raise (ArithmeticTypeMismatch(lt,rt));
       begin
-        match val_type_of_expr l with
+        match lt with
           | IntVector(_, len) | UIntVector(_, len) | FloatVector(_, len) ->
               IntVector(1, len)
           | _ -> bool1
@@ -122,15 +150,17 @@ let rec val_type_of_expr = function
     begin
       let len = List.length l in
       match val_type_of_expr (List.hd l) with 
-        | Int(b)   -> IntVector(b,len)
-        | UInt(b)  -> UIntVector(b,len)
-        | Float(b) -> FloatVector(b,len)
+        | Int(b)   -> IntVector(b, len)
+        | UInt(b)  -> UIntVector(b, len)
+        | Float(b) -> FloatVector(b, len)
     end
   | Broadcast(e,len) -> 
-    match (val_type_of_expr e) with
-      | Int(b)   -> IntVector(b, len)
-      | UInt(b)  -> UIntVector(b, len)
-      | Float(b) -> FloatVector(b, len)
+    begin
+      match (val_type_of_expr e) with
+        | Int(b)   -> IntVector(b, len)
+        | UInt(b)  -> UIntVector(b, len)
+        | Float(b) -> FloatVector(b, len)
+    end
 
 (* does this really become a list of domain bindings? *)
 type domain = {
