@@ -2,10 +2,10 @@
  * Trivial test harness for cg_test.ml.
  * Compile together with generated asm:
  *
- *  $ ./cg_test.native                            --> cg_test.bc 
- *  $ llc cg_test.bc                              --> cg_test.s
- *  $ g++ cg_test_runner.cpp cg_test.s -o my_test --> my_test
- *  $ ./my_test [in.png]                          --> out_my_test.png
+ *  $ ./cg_test.native                                  --> cg_test.bc 
+ *  $ llc cg_test.bc                                    --> cg_test.s
+ *  $ g++ cg_test_runner.cpp cg_test.s -lpng -o my_test --> my_test
+ *  $ ./my_test [in.png]                                --> out_my_test.png
  */
 #include <stdio.h>
 #include <stdint.h>
