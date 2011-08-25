@@ -11,6 +11,7 @@ let caml_entrypoint_name = entrypoint_name ^ "_caml_runner"
 exception UnsupportedType of val_type
 exception MissingEntrypoint
 exception UnimplementedInstruction
+exception UnalignedVectorMemref
 
 (* An exception for debugging *)
 exception WTF
@@ -123,7 +124,11 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
       end
 
     (* memory TODO: handle vector loads and stores better *)
-    | Load(t, mr) -> build_load (cg_memref mr t) "" b
+    | Load(t, mr) -> 
+      let offset = Analysis.reduce_expr_modulo mr.idx (vector_elements t) in
+      if offset = 0        
+      then build_load (cg_memref mr t) "" b
+      else cg_unaligned_load t mr offset
 
     (* Loop variables *)
     | Var(name) -> sym_get name
@@ -291,19 +296,36 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | Block _ -> raise WTF
     | _ -> raise UnimplementedInstruction
 
+  and cg_unaligned_load t mr offset =
+    let lower_addr = mr.idx -~ (IntImm(offset)) in
+    let upper_addr = lower_addr +~ (IntImm(vector_elements t)) in
+    let lower = Load(t, {buf = mr.buf; idx = lower_addr}) in
+    let upper = Load(t, {buf = mr.buf; idx = upper_addr}) in
+    let lower_indices = offset -- (vector_elements t) in
+    let upper_indices = 0 -- offset in
+    Printf.printf "lower: %d, upper: %d\n%!" (length lower_indices) (length upper_indices);
+    let extract_lower = map (fun x -> ExtractElement(lower, (UIntImm(x)))) lower_indices in
+    let extract_upper = map (fun x -> ExtractElement(upper, (UIntImm(x)))) upper_indices in
+    let vec = MakeVector (extract_lower @ extract_upper) in
+    cg_expr vec
+
   and cg_memref mr vt =
     (* load the global buffer** *)
     let base = ptr_to_buffer mr.buf in
     (* cast pointer to pointer-to-target-type *)
     (* TODO: fix address calculation to use inner type of vector type *)
     let elem_type = match vt with
-      | IntVector(_, _) | UIntVector(_, _) | FloatVector(_, _) -> elem_type_of_vector_val_type vt
+      | IntVector(bits, _) | UIntVector(bits, _) | FloatVector(bits, _) -> 
+        let offset = Analysis.reduce_expr_modulo mr.idx (vector_elements vt) in
+        Printf.printf "Index has an offset of %d\n%!" offset;     
+        if offset != 0 then raise UnalignedVectorMemref;
+        elem_type_of_vector_val_type vt
       | t -> type_of_val_type t
     in
     let ptr = build_pointercast base (pointer_type (elem_type)) "memref_elem_ptr" b in
     (* build getelementpointer into buffer *)
     let gep = build_gep ptr [| cg_expr mr.idx |] "memref" b in
-      build_pointercast gep (pointer_type (type_of_val_type vt)) "typed_memref" b
+    build_pointercast gep (pointer_type (type_of_val_type vt)) "typed_memref" b
 
 
   and cg_storevector = function
