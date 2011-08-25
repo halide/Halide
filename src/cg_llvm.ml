@@ -45,6 +45,17 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | _ -> raise (UnsupportedType(t))
   in
 
+  let elem_type_of_vector_val_type t = match t with
+    | IntVector( 1, n) | UIntVector( 1, n) -> i1_type c
+    | IntVector( 8, n) | UIntVector( 8, n) -> i8_type c
+    | IntVector(16, n) | UIntVector(16, n) -> i16_type c
+    | IntVector(32, n) | UIntVector(32, n) -> i32_type c
+    | IntVector(64, n) | UIntVector(64, n) -> i64_type c
+    | FloatVector(32, n) -> float_type c
+    | FloatVector(64, n) -> double_type c
+    | _ -> raise (UnsupportedType(t))
+  in
+
   let ptr_to_buffer buf =
     (* TODO: put buffers in their own LLVM memory spaces *)
     match lookup_function entrypoint_name m with
@@ -276,9 +287,15 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     (* load the global buffer** *)
     let base = ptr_to_buffer mr.buf in
     (* cast pointer to pointer-to-target-type *)
-    let ptr = build_pointercast base (pointer_type (type_of_val_type vt)) "" b in
+    (* TODO: fix address calculation to use inner type of vector type *)
+    let elem_type = match vt with
+      | IntVector(_, _) | UIntVector(_, _) | FloatVector(_, _) -> elem_type_of_vector_val_type vt
+      | t -> type_of_val_type t
+    in
+    let ptr = build_pointercast base (pointer_type (elem_type)) "memref_elem_ptr" b in
     (* build getelementpointer into buffer *)
-    build_gep ptr [| cg_expr mr.idx |] "" b
+    let gep = build_gep ptr [| cg_expr mr.idx |] "memref" b in
+      build_pointercast gep (pointer_type (type_of_val_type vt)) "typed_memref" b
 
 
   and cg_storevector = function

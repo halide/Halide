@@ -13,8 +13,8 @@ let vt = UIntVector(8, vecwidth)
 (*let vecwidth = 1*)
 (*let vt = u8*)
 
-let load = Load (vt, {buf = inbuf; idx = i})
-let store vec = Store(vec, {buf = outbuf; idx = i})
+let load = Load (vt, {buf = inbuf; idx = Mul(i, IntImm(vecwidth))})
+let store vec = Store(vec, {buf = outbuf; idx = Mul(i, IntImm(vecwidth))})
 
 exception Unsupported_type of val_type
 
@@ -43,6 +43,7 @@ let prgm w h c =
     {name = "i"; range = (0, (w*h*c)/vecwidth)},
     store (
       sadd(load, (Broadcast(Cast(UInt(8), UIntImm(brightness)), vecwidth)))
+      (*sadd(load, (Cast(UInt(8), UIntImm(brightness))))*)
     )
   )
 
