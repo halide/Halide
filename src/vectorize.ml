@@ -2,133 +2,128 @@ open Ir
 open Util
 open List
 
-type vecexpr =
+type vec_expr = 
+  | Scalar of expr
   | Const of expr * int
   | Linear of expr * int
   | Vector of expr
 
 let vectorize_expr expr var width = 
 
-  let rec is_vector e = match val_type_of_expr e with
-    | IntVector _ | UIntVector _ | FloatVector _ -> true
-    | _ -> false
+  let rec is_vector = function
+    | Scalar _ | Const _ -> false
+    | _ -> true
   
-  and expand v s = if (is_vector v) then v else match s with 
-    | 0 -> Broadcast (v, width)
-    | _ -> 
+  and expand = function
+    | Scalar e | Const (e, _) -> Broadcast (e, width)
+    | Linear (e, s) ->
       let range x = IntImm (s * x) in
-      Bop (Add, Broadcast (v, width), MakeVector (map range (0 -- width)))      
+      Bop (Add, Broadcast (e, width), MakeVector (map range (0 -- width)))      
+    | Vector e -> e
 
-  and reconcile a sa b sb = match (is_vector a, is_vector b) with
-    | (false, false) when (sa = sb) -> (a, b)
-    | _ -> (expand a sa, expand b sb)
-
-  and map_bop op x y = match (x, y) with
-    | (Some a, Some b) -> Some (op a b)
-    | _ -> None
+  and unpack_scalar = function
+    | Scalar e | Const (e, _) -> e
+    | _ -> raise (Wtf("Can't unpack a vector into a scalar"))
 
   and vec expr = match expr with
     | IntImm x | UIntImm x -> Const (expr, x)
-    | FloatImm _ -> Linear (expr, 0) (* We give up on constant folding floats. There should be a separate pass for this *)
+    | FloatImm _ -> Scalar expr (* Not strictly true. It's constant, but not a const int *)
     | Cast (t, expr) -> begin match (vec expr) with
-        | Const (e, c) -> Const (Cast (t, e), c)
+        | Const (e, c)  -> Const  (Cast (t, e), c)
+        | Scalar e      -> Scalar (Cast (t, e))
         | Linear (e, s) -> Linear (Cast (t, e), s)
-        | Vector e -> Cast (vector_of_val_type t width, e)
+        | Vector e      -> Vector (Cast (vector_of_val_type t width, e))
     end
-    | Bop (op, a, b) -> begin match (op, vec a, vec b) with
+    | Bop (op, a, b) -> begin
+      let veca = vec a and vecb = vec b in
+      match (op, veca, vecb) with
+        | (_, Vector va, vb) -> Vector (Bop(op, va, expand vb))
+        | (_, va, Vector vb) -> Vector (Bop(op, expand va, vb))
+        | (_, Scalar va, Scalar vb) 
+        | (_, Scalar va, Const (vb, _)) 
+        | (_, Const (va, _), Scalar vb) -> Scalar (Bop(op, va, vb))
         | (_, Const (va, ca), Const (vb, cb))   -> begin match op with
             | Add -> Const (Bop(op, va, vb), ca + cb)
             | Sub -> Const (Bop(op, va, vb), ca - cb)
             | Mul -> Const (Bop(op, va, vb), ca * cb)
             | Div -> Const (Bop(op, va, vb), ca / cb)
         end
+        | (_, Scalar va, Linear (vb, sb)) -> begin match op with
+            | Add -> Linear (Bop(op, va, vb), sb)
+            | Sub -> Linear (Bop(op, va, vb), -sb)
+            | Mul | Div -> Vector (Bop(op, expand veca, expand vecb))
+        end          
+        | (_, Linear (va, sa), Scalar vb) -> begin match op with
+            | Add | Sub -> Linear (Bop(op, va, vb), sa)
+            | Mul | Div -> Vector (Bop(op, expand veca, expand vecb))
+        end
         | (_, Const (va, ca), Linear (vb, sb))  -> begin match op with
             | Add -> Linear (Bop(op, va, vb), sb)
             | Sub -> Linear (Bop(op, va, vb), -sb)
             | Mul -> Linear (Bop(op, va, vb), sb*ca)
-            | Div -> Vector (Bop(op, expand va 0, expand vb sb))
+            | Div -> Vector (Bop(op, expand veca, expand vecb))
         end
         | (_, Linear (va, sa), Const (vb, cb))  -> begin match op with
             | Add | Sub -> Linear (Bop(op, va, vb), sa)
             | Mul -> Linear (Bop(op, va, vb), sa*cb)
-            | Div -> Vector (Bop(op, expand va sa, expand vb 0))
+            | Div -> Vector (Bop(op, expand veca, expand vecb))
         end
         | (_, Linear (va, sa), Linear (vb, sb)) -> begin match op with
             | Add ->  Linear (Bop(op, va, vb), sa + sb)
             | Sub ->  Linear (Bop(op, va, vb), sa - sb)
-            | _ -> Vector (Bop(op, expand va sa, expand vb sb))
+            | _ -> Vector (Bop(op, expand veca, expand vecb))
         end
-        | (_, Const (va, ca), Vector vb)  -> Vector (Bop(op, expand va 0, vb))
-        | (_, Vector va, Const  (vb, cb)) -> Vector (Bop(op, va, expand vb 0))
-        | (_, Vector va, Linear (vb, sb)) -> Vector (Bop(op, va, expand vb sb))
-        | (_, Linear (va, sa), Vector vb) -> Vector (Bop(op, expand va sa, vb))
-        | (_, Vector va, Vector vb)       -> Vector (Bop(op, va, vb))                    
-      end
-
-        let (va, sa, ca) = vec a and (vb, sb, cb) = vec b in
-        match (op, is_vector va, is_vector vb) with
-          (* combine vector with linear *)
-          | (_, true, false) -> (Bop (op, va, expand vb sb), 0, None)
-          | (_, false, true) -> (Bop (op, expand va sa, vb), 0, None)
-            
-          (* add two linear (or two vectors) *)
-          | (Add, _, _) -> (Bop (Add, va, vb), sa + sb, map_bop (+) ca cb)
-          | (Sub, _, _) -> (Bop (Sub, va, vb), sa - sb, map_bop (-) ca cb)
-            
-          (* multiply linear by constant *)
-          | (Mul, false, false) when (is_some ca || is_some cb) -> 
-            begin
-              match (ca, cb) with
-                | (Some ca, None) -> (Bop (Mul, va, vb), ca * sb, None)
-                | (None, Some cb) -> (Bop (Mul, va, vb), sa * cb, None)
-                | (Some ca, Some cb) -> (Bop (Mul, va, vb), 0, Some (ca * cb))
-            end            
-              
-          (* constant division *)
-          | (Div, false, false) when (is_some ca && is_some cb) ->
-            (Bop (Div, va, vb), 0, Some ((get ca) / (get cb)))
-
-          (* give up and expand both sides *)
-          | _ -> (Bop (op, expand va sa, expand vb sb), 0, None)
-      end
-    | Cmp (op, a, b) ->
-        let (va, sa, _) = vec a and (vb, sb, _) = vec b in
-        let (rva, rvb) = reconcile va sa vb sb in
-        (Cmp(op, rva, rvb), 0, None)
-    | And (a, b) ->
-      let (va, sa, _) = vec a and (vb, sb, _) = vec b in
-      (And (reconcile va sa vb sb), 0, None)
-    | Or (a, b) ->
-      let (va, sa, _) = vec a and (vb, sb, _) = vec b in
-      (Or (reconcile va sa vb sb), 0, None)
-    | Not a -> 
-      let (va, _, _) = vec a in
-      (Not va, 0, None)
-    | Select (c, a, b) ->
-      let (va, sa, ca) = vec a and (vb, sb, cb) = vec b and (vc, sc, cc) = vec c in
-      if (!(is_vector va || is_vector vb || is_vector vc) && (sa = sb)) then
-        (* Both linear (or scalar) *)
-        (* Assume constant selects have been folded *)
-        (Select (vc, va, vb), sa, None)
+    end
+    | Cmp (op, a, b) -> 
+      let veca = vec a and vecb = vec b in
+      if (is_vector veca || is_vector vecb) then
+        Vector(Cmp(op, expand veca, expand vecb))
       else
-        (* Give up and expand all three *)
-        (Select (expand vc 0, expand va sa, expand vb sb), 0, None)
-    | Load (t, mr) ->
-      let (vidx, sidx, cidx) = vec mr.idx in
-      if (is_vector vidx) then 
-        (Load (vector_of_val_type t width, {buf = mr.buf; idx = vidx}), 0, None)
-      else begin
-        match sidx with
-          | 0 -> (Load (t, {buf = mr.buf; idx = vidx}), 0, None)
-          | 1 -> (Load (vector_of_val_type t width, {buf = mr.buf; idx = vidx}), 0, None)
-          (* strided load. TODO: handle this. For now just expand the vector *)
-          | _ -> (Load (vector_of_val_type t width, {buf = mr.buf; idx = vidx}), 0, None)
+        Scalar(Cmp(op, a, b))
+    | And (a, b) ->
+      let veca = vec a and vecb = vec b in
+      if (is_vector veca || is_vector vecb) then
+        Vector(And(expand veca, expand vecb))
+      else
+        Scalar(And(a, b))
+    | Or (a, b) ->
+      let veca = vec a and vecb = vec b in
+      if (is_vector veca || is_vector vecb) then
+        Vector(Or(expand veca, expand vecb))
+      else
+        Scalar(Or(a, b))
+    | Not (a) -> 
+      let veca = vec a in
+      if (is_vector veca) then
+        Vector(Not(expand veca))
+      else
+        Scalar(Not(a))
+    | Select (c, a, b) ->
+      let veca = vec a and vecb = vec b and vecc = vec c in
+      if (not (is_vector veca || is_vector vecb || is_vector vecc)) then
+        Scalar(Select(unpack_scalar vecc, unpack_scalar veca, unpack_scalar vecb))
+      else begin match (veca, vecb, vecc) with
+        | (Scalar (vc), Linear (va, sa), Linear (vb, sb)) 
+        | (Const (vc, _), Linear (va, sa), Linear (vb, sb)) when (sa = sb) ->
+          Linear (Select(vc, va, vb), sa)
+        | (Scalar (vc), _, _) | (Const (vc, _), _, _) -> 
+          Vector (Select(vc, expand veca, expand vecb))
+        | _ -> 
+          Vector (Select(expand vecc, expand veca, expand vecb))
       end
-    | _ -> raise Wtf("Can't vectorize vector code")
+    | Load (t, mr) -> begin let veci = (vec mr.idx) in match veci with 
+        | Const (e, _) | Scalar e | Linear (e, 0) -> Scalar (Load (t, mr))
+        | Linear (e, 1) -> Vector (Load (vector_of_val_type t width, mr))
+        | Linear (e, _) (* TODO: strided load *)
+        | Vector (e) -> Vector (Load (vector_of_val_type t width, {buf = mr.buf; idx = expand veci}))
+    end
+    | Var(name) when (name = var) -> Linear (expr, 1)
+    | Var(_) -> Scalar(expr) 
+    | _ -> raise (Wtf("Can't vectorize vector code"))
   in
-  let (ve, vs, _) = vec expr in
-  expand ve vs
-
+  match (vec expr) with
+    | Scalar(e) | Const(e, _) -> e
+    | v -> expand v
 
 (* TODO: vectorize statement *)
   
