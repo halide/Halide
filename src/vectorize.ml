@@ -1,12 +1,16 @@
 open Ir
 open Util
 open List
-open Option
+
+type vecexpr =
+  | Const of expr * int
+  | Linear of expr * int
+  | Vector of expr
 
 let vectorize_expr expr var width = 
 
-  let is_vector e = match val_type_of_expr with
-    | IntVector _ | UIntVector | FloatVector -> true
+  let rec is_vector e = match val_type_of_expr e with
+    | IntVector _ | UIntVector _ | FloatVector _ -> true
     | _ -> false
   
   and expand v s = if (is_vector v) then v else match s with 
@@ -24,14 +28,43 @@ let vectorize_expr expr var width =
     | _ -> None
 
   and vec expr = match expr with
-    | IntImm x | UIntImm x -> (expr, 0, Some x)
-    | FloatImm _ -> (expr, 0, None)
-    | Cast (t, expr) -> 
-      let (v, s, c) = vec expr in
-      if (is_vector v) then (Cast ((vector_of_val_type t width), v), 0, c)
-      else (Cast (t, v), s, c)
-    | Bop (op, a, b) -> 
-      begin
+    | IntImm x | UIntImm x -> Const (expr, x)
+    | FloatImm _ -> Linear (expr, 0) (* We give up on constant folding floats. There should be a separate pass for this *)
+    | Cast (t, expr) -> begin match (vec expr) with
+        | Const (e, c) -> Const (Cast (t, e), c)
+        | Linear (e, s) -> Linear (Cast (t, e), s)
+        | Vector e -> Cast (vector_of_val_type t width, e)
+    end
+    | Bop (op, a, b) -> begin match (op, vec a, vec b) with
+        | (_, Const (va, ca), Const (vb, cb))   -> begin match op with
+            | Add -> Const (Bop(op, va, vb), ca + cb)
+            | Sub -> Const (Bop(op, va, vb), ca - cb)
+            | Mul -> Const (Bop(op, va, vb), ca * cb)
+            | Div -> Const (Bop(op, va, vb), ca / cb)
+        end
+        | (_, Const (va, ca), Linear (vb, sb))  -> begin match op with
+            | Add -> Linear (Bop(op, va, vb), sb)
+            | Sub -> Linear (Bop(op, va, vb), -sb)
+            | Mul -> Linear (Bop(op, va, vb), sb*ca)
+            | Div -> Vector (Bop(op, expand va 0, expand vb sb))
+        end
+        | (_, Linear (va, sa), Const (vb, cb))  -> begin match op with
+            | Add | Sub -> Linear (Bop(op, va, vb), sa)
+            | Mul -> Linear (Bop(op, va, vb), sa*cb)
+            | Div -> Vector (Bop(op, expand va sa, expand vb 0))
+        end
+        | (_, Linear (va, sa), Linear (vb, sb)) -> begin match op with
+            | Add ->  Linear (Bop(op, va, vb), sa + sb)
+            | Sub ->  Linear (Bop(op, va, vb), sa - sb)
+            | _ -> Vector (Bop(op, expand va sa, expand vb sb))
+        end
+        | (_, Const (va, ca), Vector vb)  -> Vector (Bop(op, expand va 0, vb))
+        | (_, Vector va, Const  (vb, cb)) -> Vector (Bop(op, va, expand vb 0))
+        | (_, Vector va, Linear (vb, sb)) -> Vector (Bop(op, va, expand vb sb))
+        | (_, Linear (va, sa), Vector vb) -> Vector (Bop(op, expand va sa, vb))
+        | (_, Vector va, Vector vb)       -> Vector (Bop(op, va, vb))                    
+      end
+
         let (va, sa, ca) = vec a and (vb, sb, cb) = vec b in
         match (op, is_vector va, is_vector vb) with
           (* combine vector with linear *)
