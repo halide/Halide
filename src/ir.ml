@@ -37,7 +37,7 @@ let element_val_type = function
   | FloatVector(x, _) -> Float(x)
   | x -> x
 
-let vector_of_val_type t n = function
+let vector_of_val_type t n = match t with
   | Int(x) -> IntVector(x, n)
   | UInt(x) -> UIntVector(x, n)
   | Float(x) -> FloatVector(x, n)
@@ -142,28 +142,9 @@ let rec val_type_of_expr = function
       (* TODO: add checks *)
       val_type_of_expr e
   | Load(t,_) -> t
-  | MakeVector(l) ->
-    begin
-      let len = List.length l in
-      match val_type_of_expr (List.hd l) with 
-        | Int(b)   -> IntVector(b, len)
-        | UInt(b)  -> UIntVector(b, len)
-        | Float(b) -> FloatVector(b, len)
-    end
-  | Broadcast(e,len) -> 
-    begin
-      match (val_type_of_expr e) with
-        | Int(b)   -> IntVector(b, len)
-        | UInt(b)  -> UIntVector(b, len)
-        | Float(b) -> FloatVector(b, len)
-    end
-  | ExtractElement(e, idx) ->
-    begin
-      match (val_type_of_expr e) with
-        | IntVector(b, _)   -> Int(b)
-        | UIntVector(b, _)  -> UInt(b)
-        | FloatVector(b, _) -> Float(b)
-    end
+  | MakeVector(l) -> vector_of_val_type (val_type_of_expr (List.hd l)) (List.length l)
+  | Broadcast(e,len) -> vector_of_val_type (val_type_of_expr e) len
+  | ExtractElement(e, idx) -> element_val_type (val_type_of_expr e)
 
 (* does this really become a list of domain bindings? *)
 type domain = {
