@@ -26,7 +26,7 @@ type cmp =
 (* Function to encapsulate shared state for primary codegen *)
 let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
 
-  let int_imm_t = i64_type c in
+  let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
   let float_imm_t = float_type c in
 

@@ -122,15 +122,15 @@ exception ArithmeticTypeMismatch of val_type * val_type
 
 (* TODO: assert that l,r subexpressions match. Do as separate checking pass? *)
 let rec val_type_of_expr = function
-  | IntImm _ -> i64
-  | UIntImm _ -> u64
+  | IntImm _ -> i32
+  | UIntImm _ -> u32
   | FloatImm _ -> f32
   | Cast(t,_) -> t
   | Add(l,r) | Sub(l,r) | Mul(l,r) | Div(l,r) | Select(_,l,r) ->
       let lt = val_type_of_expr l and rt = val_type_of_expr r in
       if (lt <> rt) then raise (ArithmeticTypeMismatch(lt,rt));
       lt
-  | Var _ -> i64 (* Vars are only defined as integer programs so must be ints *)
+  | Var _ -> i32 (* Vars are only defined as integer programs so must be ints *)
   (* boolean expressions on vector types return bool vectors of equal length*)
   (* boolean expressions on scalars return scalar bools *)
   | EQ(l,r) | NE(l,r) | LT(l,r) | LE(l,r) | GT(l,r) | GE(l,r) ->
