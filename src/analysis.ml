@@ -16,9 +16,9 @@ let rec binop_remainder_modulus x y op =
 and compute_remainder_modulus = function
   | IntImm(x) | UIntImm(x) -> (x, 0)
   | Cast(t, x) -> compute_remainder_modulus x 
-  | Add(x, y) -> binop_remainder_modulus x y ( + )
-  | Sub(x, y) -> binop_remainder_modulus x y ( - )
-  | Mul(x, y) -> 
+  | Bop(Add, x, y) -> binop_remainder_modulus x y ( + )
+  | Bop(Sub, x, y) -> binop_remainder_modulus x y ( - )
+  | Bop(Mul, x, y) -> 
     let (xr, xm) = compute_remainder_modulus x in
     let (yr, ym) = compute_remainder_modulus y in
     if xm = 0 then
@@ -27,7 +27,7 @@ and compute_remainder_modulus = function
       (yr * xr, yr * xm)
     else 
       binop_remainder_modulus x y ( * )
-  | Div _ | Load _ | Var _ -> (0, 1)
+  | Bop _ | Load _ | Var _ -> (0, 1)
   | _ -> raise ModulusOfNonInteger
 
 (* Reduces an expression modulo n *)
