@@ -53,6 +53,9 @@ let vector_elements = function
   | Int(x) | UInt(x) | Float(x) -> 1
   | IntVector(x, n) | UIntVector(x, n) | FloatVector(x, n) -> n
 
+type binop = Add | Sub | Mul | Div
+type cmpop = EQ | NE | LT | LE | GT | GE
+
 (* how to enforce valid arithmetic subtypes for different subexpressions? 
  * e.g. only logical values expressions for Logical? Declare interfaces for 
  * each subtype? *)
@@ -70,22 +73,14 @@ type expr =
     (* TODO: validate operand type matches with Caml type parameters *)
     | Cast of val_type * expr
 
-    (* arithmetic *)
-    | Add of expr * expr
-    | Sub of expr * expr
-    | Mul of expr * expr
-    | Div of expr * expr
-
     (* only for domain variables? *)
     | Var of string
 
+    (* basic binary ops *)
+    | Bop of binop * expr * expr
+
     (* comparison *)
-    | EQ of expr * expr
-    | NE of expr * expr
-    | LT of expr * expr
-    | LE of expr * expr
-    | GT of expr * expr
-    | GE of expr * expr
+    | Cmp of cmpop * expr * expr
 
     (* logical *)
     | And of expr * expr
@@ -126,14 +121,14 @@ let rec val_type_of_expr = function
   | UIntImm _ -> u32
   | FloatImm _ -> f32
   | Cast(t,_) -> t
-  | Add(l,r) | Sub(l,r) | Mul(l,r) | Div(l,r) | Select(_,l,r) ->
+  | Bop(_, l, r) | Select(_,l,r) ->
       let lt = val_type_of_expr l and rt = val_type_of_expr r in
       if (lt <> rt) then raise (ArithmeticTypeMismatch(lt,rt));
       lt
   | Var _ -> i32 (* Vars are only defined as integer programs so must be ints *)
   (* boolean expressions on vector types return bool vectors of equal length*)
   (* boolean expressions on scalars return scalar bools *)
-  | EQ(l,r) | NE(l,r) | LT(l,r) | LE(l,r) | GT(l,r) | GE(l,r) ->
+  | Cmp(_, l, r) -> 
       let lt = val_type_of_expr l and rt = val_type_of_expr r in
       if (lt <> rt) then raise (ArithmeticTypeMismatch(lt,rt));
       begin
@@ -200,16 +195,16 @@ and reduce_op =
     | DivEq
 
 (* Some sugar for the operators that are naturally infix *)
-let ( +~ ) a b = Add (a, b)
-let ( -~ ) a b = Sub (a, b)
-let ( *~ ) a b = Mul (a, b)
-let ( /~ ) a b = Div (a, b) 
-let ( >~ ) a b = GT (a, b)
-let ( >=~ ) a b = GE (a, b)
-let ( <~ ) a b = LT (a, b)
-let ( <=~ ) a b = LE (a, b)
-let ( =~ ) a b = EQ (a, b)
-let ( !=~ ) a b = NE (a, b)
+let ( +~ ) a b  = Bop (Add, a, b)
+let ( -~ ) a b  = Bop (Sub, a, b)
+let ( *~ ) a b  = Bop (Mul, a, b)
+let ( /~ ) a b  = Bop (Div, a, b) 
+let ( >~ ) a b  = Cmp (GT, a, b)
+let ( >=~ ) a b = Cmp (GE, a, b)
+let ( <~ ) a b  = Cmp (LT, a, b)
+let ( <=~ ) a b = Cmp (LE, a, b)
+let ( =~ ) a b  = Cmp (EQ, a, b)
+let ( <>~ ) a b = Cmp (NE, a, b)
 let ( ||~ ) a b = Or (a, b)
 let ( &&~ ) a b = And (a, b)
-let ( !~ ) a = Not a
+let ( !~ ) a    = Not a

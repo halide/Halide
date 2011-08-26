@@ -94,18 +94,18 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
      * the scalar versions *)
 
     (* arithmetic *)
-    | Add(l, r) -> cg_binop build_add  build_add  build_fadd l r
-    | Sub(l, r) -> cg_binop build_sub  build_sub  build_fsub l r
-    | Mul(l, r) -> cg_binop build_mul  build_mul  build_fmul l r
-    | Div(l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
+    | Bop(Add, l, r) -> cg_binop build_add  build_add  build_fadd l r
+    | Bop(Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
+    | Bop(Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
+    | Bop(Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
 
     (* comparison *)
-    | EQ(l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r
-    | NE(l, r) -> cg_cmp Icmp.Ne  Icmp.Ne  Fcmp.One l r
-    | LT(l, r) -> cg_cmp Icmp.Slt Icmp.Ult Fcmp.Olt l r
-    | LE(l, r) -> cg_cmp Icmp.Sle Icmp.Ule Fcmp.Ole l r
-    | GT(l, r) -> cg_cmp Icmp.Sgt Icmp.Ugt Fcmp.Ogt l r
-    | GE(l, r) -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
+    | Cmp(EQ,  l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r
+    | Cmp(NE, l, r)  -> cg_cmp Icmp.Ne  Icmp.Ne  Fcmp.One l r
+    | Cmp(LT,  l, r) -> cg_cmp Icmp.Slt Icmp.Ult Fcmp.Olt l r
+    | Cmp(LE, l, r)  -> cg_cmp Icmp.Sle Icmp.Ule Fcmp.Ole l r
+    | Cmp(GT,  l, r) -> cg_cmp Icmp.Sgt Icmp.Ugt Fcmp.Ogt l r
+    | Cmp(GE, l, r)  -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
 
     (* Select *)
     | Select(c, t, f) -> 
@@ -332,7 +332,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | ([], _, _, _) -> const_int int_imm_t 0
     | (first::rest, t, mr, stride) ->
         ignore(build_store first (cg_memref mr t) b);
-        let nextaddr = {buf=mr.buf; idx=Add(mr.idx, IntImm(stride))} in
+        let nextaddr = {buf=mr.buf; idx= mr.idx +~ IntImm(stride)} in
         cg_storevector(rest, t, nextaddr, stride);
   in
 
@@ -363,9 +363,8 @@ and buffers_in_expr = function
   | IntImm _ | UIntImm _ | FloatImm _ | Var _ -> BufferSet.empty
 
   (* binary ops *)
-  | Add(l, r) | Sub(l, r) | Mul(l, r) | Div(l, r) | EQ(l, r)
-  | NE(l, r) | LT(l, r) | LE(l, r) | GT(l, r) | GE(l, r) | And(l, r) | Or(l, r) ->
-      BufferSet.union (buffers_in_expr l) (buffers_in_expr r)
+  | Bop(_, l, r) | Cmp(_, l, r) | Or(l, r) | And(l, r) -> 
+    BufferSet.union (buffers_in_expr l) (buffers_in_expr r)
 
   (* unary ops *)
   | Not e | Cast (_,e) -> buffers_in_expr e
