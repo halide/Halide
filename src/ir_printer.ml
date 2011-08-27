@@ -1,43 +1,49 @@
 open Ir
+open Printf
 
 let rec string_of_val_type = function
-  | Int(w) -> "[" ^ "i" ^ string_of_int w ^ "]"
-  | UInt(w) -> "[" ^ "u" ^ string_of_int w ^ "]"
-  | Float(w) -> "[" ^ "f" ^ string_of_int w ^ "]"
-  | Vector(t, w) -> "[" ^ (string_of_val_type t) ^ "x" ^ (string_of_int w) ^ "]"
+  | Int(w) -> sprintf "i%d" w
+  | UInt(w) -> sprintf "u%d" w
+  | Float(w) -> sprintf "f%d" w
+  | IntVector(w, n) -> sprintf "i%dx%d" w n
+  | UIntVector(w, n) -> sprintf "u%dx%d" w n
+  | FloatVector(w, n) -> sprintf "f%dx%d" w n
+
+and string_of_op = function
+  | Add -> "+"
+  | Sub -> "-"
+  | Mul -> "*"
+  | Div -> "/"
+
+and string_of_cmp = function
+  | EQ -> "=="
+  | NE -> "!="
+  | LT -> "<"
+  | LE -> "<="
+  | GT -> ">"
+  | GE -> ">="
 
 and string_of_expr = function
   | IntImm(i) -> string_of_int i
   | UIntImm(i) -> string_of_int i ^ "u"
   | FloatImm(f) -> string_of_float f
-
   | Cast(t, e) -> "cast" ^ "<" ^ string_of_val_type t ^ ">" ^ "(" ^ string_of_expr e ^")"
-
-  | Add(l, r) ->
-      "(" ^ string_of_expr l ^ "+" ^ string_of_expr r ^ ")"
-  | Sub(l, r) ->
-      "(" ^ string_of_expr l ^ "-" ^ string_of_expr r ^ ")"
-  | Mul(l, r) ->
-      "(" ^ string_of_expr l ^ "*" ^ string_of_expr r ^ ")"
-  | Div(l, r) ->
-      "(" ^ string_of_expr l ^ "/" ^ string_of_expr r ^ ")"
-
+  | Bop(op, l, r) -> "(" ^ string_of_expr l ^ string_of_op op ^ string_of_expr r ^ ")"
+  | Cmp(op, l, r) -> "(" ^ string_of_expr l ^ string_of_cmp op ^ string_of_expr r ^ ")"
   | Select(c, t, f) ->
       "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
-
   | Var(s) -> s
-
   | Load(t, mr) -> "load" ^ "(" ^ string_of_val_type t ^ "," ^ string_of_memref mr ^ ")"
-
   | MakeVector [] -> "vec[]"
   | MakeVector l -> 
       let els = List.map string_of_expr l in
-      "vec[" ^ (List.fold_right
+      "vec[" ^ (List.fold_left
                   (fun x y -> x ^ ", " ^ y) 
-                  (List.tl els)
                   (List.hd els)
+                  (List.tl els)
                ) ^ "]"
-
+  | Broadcast(e, n) -> "[" ^ string_of_expr e ^ "x" ^ string_of_int n ^ "]"
+  | ExtractElement(a, b) -> "(" ^ string_of_expr a ^ "@" ^ string_of_expr b ^ ")"
   | _ -> "<<UNHANDLED>>"
 
 and string_of_stmt = function
@@ -45,6 +51,7 @@ and string_of_stmt = function
   | IfElse(e, ts, fs) -> "if (" ^ string_of_expr e ^ ") " ^ string_of_stmt ts ^
                          " else " ^ string_of_stmt fs
   | Map(d, s) -> "map (" ^ string_of_domain d ^ ") " ^ string_of_stmt s
+  | For(d, s) -> "for (" ^ string_of_domain d ^ ") " ^ string_of_stmt s
   | Block(stmts) -> "{" ^ "\n" ^
                     String.concat ";\n" (List.map string_of_stmt stmts) ^
                     "}" ^ "\n"

@@ -102,7 +102,7 @@ let vectorize_expr expr var width =
       let veca = vec a and vecb = vec b and vecc = vec c in
       if (not (is_vector veca || is_vector vecb || is_vector vecc)) then
         Scalar(Select(unpack_scalar vecc, unpack_scalar veca, unpack_scalar vecb))
-      else begin match (veca, vecb, vecc) with
+      else begin match (vecc, veca, vecb) with
         | (Scalar (vc), Linear (va, sa), Linear (vb, sb)) 
         | (Const (vc, _), Linear (va, sa), Linear (vb, sb)) when (sa = sb) ->
           Linear (Select(vc, va, vb), sa)
