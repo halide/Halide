@@ -8,19 +8,19 @@ type vec_expr =
   | Linear of expr * int
   | Vector of expr
 
-let vectorize_expr expr var width = 
+let vectorize_expr_packed expr var width = 
 
-  let rec is_vector = function
-    | Scalar _ | Const _ -> false
-    | _ -> true
-  
-  and expand = function
+  let rec expand = function
     | Scalar e | Const (e, _) -> Broadcast (e, width)
     | Linear (e, s) ->
       let range x = IntImm (s * x) in
       Bop (Add, Broadcast (e, width), MakeVector (map range (0 -- width)))      
     | Vector e -> e
 
+  and is_vector = function
+    | Scalar _ | Const _ -> false
+    | _ -> true
+  
   and unpack_scalar = function
     | Scalar e | Const (e, _) -> e
     | _ -> raise (Wtf("Can't unpack a vector into a scalar"))
@@ -113,18 +113,51 @@ let vectorize_expr expr var width =
       end
     | Load (t, mr) -> begin let veci = (vec mr.idx) in match veci with 
         | Const (e, _) | Scalar e | Linear (e, 0) -> Scalar (Load (t, mr))
-        | Linear (e, 1) -> Vector (Load (vector_of_val_type t width, mr))
+        | Linear (e, 1) -> Vector (Load (vector_of_val_type t width, {buf = mr.buf; idx = e}))
         | Linear (e, _) (* TODO: strided load *)
         | Vector (e) -> Vector (Load (vector_of_val_type t width, {buf = mr.buf; idx = expand veci}))
     end
-    | Var(name) when (name = var) -> Linear (expr, 1)
+    | Var(name) when (name = var) -> Linear (IntImm(width) *~ expr, 1)
     | Var(_) -> Scalar(expr) 
     | _ -> raise (Wtf("Can't vectorize vector code"))
-  in
-  match (vec expr) with
-    | Scalar(e) | Const(e, _) -> e
-    | v -> expand v
-
-(* TODO: vectorize statement *)
+  in vec expr
   
+let vectorize_expr e var width =
+  match (vectorize_expr_packed e var width) with
+    | Scalar(e) | Const(e, _) -> e
+    | Vector(e) -> e
+    | Linear(e, s) -> 
+      let range x = IntImm (s * x) in
+      Bop (Add, Broadcast (e, width), MakeVector (map range (0 -- width)))      
 
+let rec vectorize_stmt stmt var width = 
+
+  let expand = function
+    | Scalar e | Const (e, _) -> Broadcast (e, width)
+    | Linear (e, s) ->
+      let range x = IntImm (s * x) in
+      Bop (Add, Broadcast (e, width), MakeVector (map range (0 -- width)))      
+    | Vector e -> e
+
+  and vec s = vectorize_stmt s var width in
+  match stmt with
+    | Map (name, min, max, stmt) when name = var ->
+      (* TODO: Currently we assume width divides min and max *)
+      Map (name, min/width, max/width, vec stmt)
+    | Map (name, min, max, stmt) -> Map (name, min, max, vec stmt)
+    | Block l -> Block (map vec l)
+    | Store (expr, mr) -> begin
+      let e = vectorize_expr_packed expr var width in
+      let idx = vectorize_expr_packed mr.idx var width in
+      match idx with
+        (* Storing to a scalar address *)
+        | Scalar(i) | Const(i, _) | Linear(i, 0) -> begin match e with
+            | Scalar(a) | Const(a, _) -> Store (a, {buf = mr.buf; idx = i})
+            | _ -> raise (Wtf("Storing a vector at a scalar address. Result undefined."))              
+        end
+        (* Storing to a vector of addresses. *)
+        | Linear(i, 1) -> Store (expand e, {buf = mr.buf; idx = i}) (* dense store *)
+        | Linear(i, n) -> Store (expand e, {buf = mr.buf; idx = expand idx}) (* TODO: strided store *)
+        | _ -> Store (expand e, {buf = mr.buf; idx = expand idx}) (* scatter *)
+    end
+    | _ -> raise (Wtf "don't know how to vectorize this statement yet")

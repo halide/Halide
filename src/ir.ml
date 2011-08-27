@@ -155,18 +155,18 @@ type domain = {
 and program = int * int (* just intervals for initial testing *)
 
 type stmt =
-    (* TODO: | Blit of -- how to express sub-ranges? -- split and merge
-     * sub-ranges *)
-    | If of expr * stmt
-    | IfElse of expr * stmt * stmt
-    | Map of domain * stmt
-    | For of domain * stmt
+  (* TODO: | Blit of -- how to express sub-ranges? -- split and merge
+   * sub-ranges *)
+  (* | If of expr * stmt  *)
+  (* | IfElse of expr * stmt * stmt  *)
+  | Map of string * int * int * stmt
+  (* | For of domain * stmt *)
     (* TODO: For might need landing pad: always executes before, only if *any* iteration
-    * fired. Same for Map - useful for loop invariant code motion. Easier for
-    * Map if multiple dimensions are fused into 1. *)
-    | Block of stmt list
-    | Reduce of reduce_op * expr * memref (* TODO: initializer expression? *)
-    | Store of expr * memref
+     * fired. Same for Map - useful for loop invariant code motion. Easier for
+     * Map if multiple dimensions are fused into 1. *)
+  | Block of stmt list
+  (* | Reduce of reduce_op * expr * memref *) (* TODO: initializer expression? *)
+  | Store of expr * memref
 
 (* TODO:  *)
 and reduce_op =

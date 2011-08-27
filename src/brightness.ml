@@ -1,4 +1,5 @@
 open Ir
+open Vectorize
 
 let brightness = 100
 
@@ -13,8 +14,8 @@ let vt = UIntVector(8, vecwidth)
 (*let vecwidth = 1*)
 (*let vt = u8*)
 
-let load = Load (vt, {buf = inbuf; idx = Mul(i, IntImm(vecwidth))})
-let store vec = Store(vec, {buf = outbuf; idx = Mul(i, IntImm(vecwidth))})
+let load = Load (vt, {buf = inbuf; idx = (i *~ IntImm(vecwidth))})
+let store vec = Store(vec, {buf = outbuf; idx = (i *~ IntImm(vecwidth))})
 
 exception Unsupported_type of val_type
 
@@ -32,12 +33,10 @@ let sadd(a, b) =
     Select(a >~ (max_val -~ b), max_val, a +~ b)
 
 let prgm w h c =
-  Map(
-    {name = "i"; range = (0, (w*h*c)/vecwidth)},
-    store (
-      sadd(load, (Broadcast(Cast(UInt(8), UIntImm(brightness)), vecwidth)))
-      (*sadd(load, (Cast(UInt(8), UIntImm(brightness))))*)
-    )
+  Map("i", 0, (w*h*c)/vecwidth,
+      store (
+        sadd(load, (Broadcast(Cast(UInt(8), UIntImm(brightness)), vecwidth)))
+      )
   )
 
 let () =

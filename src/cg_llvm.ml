@@ -284,9 +284,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | Store(e, mr) ->
         let ptr = cg_memref mr (val_type_of_expr e) in
           build_store (cg_expr e) ptr b
-    | Map( { name=n; range=(min, max) }, stmt) ->
-        cg_for n min max stmt
-    | For( { name=n; range=(min, max) }, stmt) ->
+    | Map(n, min, max, stmt) ->
         cg_for n min max stmt
     | Block (first::second::rest) ->
         ignore(cg_stmt first);
@@ -348,15 +346,15 @@ end)
 (*module BufferMap = Map.Make( BufferOrder )*)
 
 let rec buffers_in_stmt = function
-  | If(e, s) -> BufferSet.union (buffers_in_expr e) (buffers_in_stmt s)
-  | IfElse(e, st, sf) ->
+  (* | If(e, s) -> BufferSet.union (buffers_in_expr e) (buffers_in_stmt s) *)
+  (* | IfElse(e, st, sf) ->
       BufferSet.union (buffers_in_expr e) (
-        BufferSet.union (buffers_in_stmt st) (buffers_in_stmt sf))
-  | Map(_, s) -> buffers_in_stmt s
-  | For(_, s) -> buffers_in_stmt s
+        BufferSet.union (buffers_in_stmt st) (buffers_in_stmt sf)) *)
+  | Map(_, _, _, s) -> buffers_in_stmt s
   | Block stmts ->
       List.fold_left BufferSet.union BufferSet.empty (List.map buffers_in_stmt stmts)
-  | Reduce (_, e, mr) | Store (e, mr) -> BufferSet.add mr.buf (buffers_in_expr e)
+  (* | Reduce (_, e, mr)  *)
+  | Store (e, mr) -> BufferSet.add mr.buf (buffers_in_expr e)
 
 and buffers_in_expr = function
   (* immediates, vars *)
