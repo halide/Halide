@@ -100,12 +100,12 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | Bop(Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
 
     (* comparison *)
-    | Cmp(EQ,  l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r
-    | Cmp(NE, l, r)  -> cg_cmp Icmp.Ne  Icmp.Ne  Fcmp.One l r
-    | Cmp(LT,  l, r) -> cg_cmp Icmp.Slt Icmp.Ult Fcmp.Olt l r
-    | Cmp(LE, l, r)  -> cg_cmp Icmp.Sle Icmp.Ule Fcmp.Ole l r
-    | Cmp(GT,  l, r) -> cg_cmp Icmp.Sgt Icmp.Ugt Fcmp.Ogt l r
-    | Cmp(GE, l, r)  -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
+    | Cmp(EQ, l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r
+    | Cmp(NE, l, r) -> cg_cmp Icmp.Ne  Icmp.Ne  Fcmp.One l r
+    | Cmp(LT, l, r) -> cg_cmp Icmp.Slt Icmp.Ult Fcmp.Olt l r
+    | Cmp(LE, l, r) -> cg_cmp Icmp.Sle Icmp.Ule Fcmp.Ole l r
+    | Cmp(GT, l, r) -> cg_cmp Icmp.Sgt Icmp.Ugt Fcmp.Ogt l r
+    | Cmp(GE, l, r) -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
 
     (* Select *)
     | Select(c, t, f) -> 
