@@ -1,21 +1,15 @@
 open Ir
 open Vectorize
 
-let brightness = 100
+let brightness = Cast(UInt(8), UIntImm(100))
 
 let i = Var("i")
 
 let outbuf = 2
 let inbuf = 1
 
-(* TODO: can't work with vectors until we can lift contstants to vectors *)
-let vecwidth = 16
-let vt = UIntVector(8, vecwidth)
-(*let vecwidth = 1*)
-(*let vt = u8*)
-
-let load = Load (vt, {buf = inbuf; idx = (i *~ IntImm(vecwidth))})
-let store vec = Store(vec, {buf = outbuf; idx = (i *~ IntImm(vecwidth))})
+let load = Load (u8, {buf = inbuf; idx = i})
+let store x = Store(x, {buf = outbuf; idx = i})
 
 exception Unsupported_type of val_type
 
@@ -27,17 +21,19 @@ let sadd(a, b) =
     | UInt(8)  -> Cast(t, UIntImm(0xFF))
     | UInt(16) -> Cast(t, UIntImm(0xFFFF))
     | UInt(32) -> Cast(t, UIntImm(0xFFFFFFFF))
-    | UIntVector(8, w) -> Broadcast(Cast(UInt(8), UIntImm(0xFF)), w)
     | t -> raise (Unsupported_type(t))
   in
     Select(a >~ (max_val -~ b), max_val, a +~ b)
 
 let prgm w h c =
-  Map("i", 0, (w*h*c)/vecwidth,
-      store (
-        sadd(load, (Broadcast(Cast(UInt(8), UIntImm(brightness)), vecwidth)))
-      )
-  )
+  Vectorize.vectorize_stmt
+    (Map("i", 0, (w*h*c),
+        store (
+          sadd(load, brightness)
+        )
+    ))
+    "i"
+    16
 
 let () =
   Test_runner.main prgm "brightness"
