@@ -8,14 +8,16 @@ type vec_expr =
   | Linear of expr * int
   | Vector of expr
 
+let expand e width = match e with
+  | Scalar e | Const (e, _) -> Broadcast (e, width)
+  | Linear (e, s) ->
+      let range x = IntImm (s * x) in
+        Bop (Add, Broadcast (e, width), MakeVector (map range (0 -- width)))
+  | Vector e -> e
+
 let vectorize_expr_packed expr var width = 
 
-  let rec expand = function
-    | Scalar e | Const (e, _) -> Broadcast (e, width)
-    | Linear (e, s) ->
-      let range x = IntImm (s * x) in
-      Bop (Add, Broadcast (e, width), MakeVector (map range (0 -- width)))      
-    | Vector e -> e
+  let expand e = expand e width
 
   and is_vector = function
     | Scalar _ | Const _ -> false
@@ -24,8 +26,9 @@ let vectorize_expr_packed expr var width =
   and unpack_scalar = function
     | Scalar e | Const (e, _) -> e
     | _ -> raise (Wtf("Can't unpack a vector into a scalar"))
+  in
 
-  and vec expr = match expr with
+  let rec vec expr = match expr with
     | IntImm x | UIntImm x -> Const (expr, x)
     | FloatImm _ -> Scalar expr (* Not strictly true. It's constant, but not a const int *)
     | Cast (t, expr) -> begin match (vec expr) with
@@ -123,23 +126,17 @@ let vectorize_expr_packed expr var width =
   in vec expr
   
 let vectorize_expr e var width =
-  match (vectorize_expr_packed e var width) with
-    | Scalar(e) | Const(e, _) -> e
+  let ve = vectorize_expr_packed e var width in
+  match ve with
+    | Scalar(e) | Const(e, _) -> e (* Leave scalar expressions scalar *)
     | Vector(e) -> e
-    | Linear(e, s) -> 
-      let range x = IntImm (s * x) in
-      Bop (Add, Broadcast (e, width), MakeVector (map range (0 -- width)))      
+    | Linear(e, s) -> expand ve width
 
 let rec vectorize_stmt stmt var width = 
 
-  let expand = function
-    | Scalar e | Const (e, _) -> Broadcast (e, width)
-    | Linear (e, s) ->
-      let range x = IntImm (s * x) in
-      Bop (Add, Broadcast (e, width), MakeVector (map range (0 -- width)))      
-    | Vector e -> e
-
+  let expand e = expand e width
   and vec s = vectorize_stmt s var width in
+
   match stmt with
     | Map (name, min, max, stmt) when name = var ->
       (* TODO: Currently we assume width divides min and max *)
