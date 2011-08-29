@@ -45,103 +45,138 @@ let vectorize_expr_packed expr var width =
   in
   
   let rec vec expr = match expr with
+    (* Track Int immediates as Const ints throughout vectorization *)
     | IntImm x | UIntImm x -> Const (expr, x)
     | FloatImm _ -> Scalar expr (* Not strictly true. It's constant, but not a const int *)
+
     | Cast (t, expr) -> begin match (vec expr) with
         | Const (e, c)  -> Const  (Cast (t, e), c)
         | Scalar e      -> Scalar (Cast (t, e))
         | Linear (e, s) -> Linear (Cast (t, e), s)
         | Vector e      -> Vector (Cast (vector_of_val_type t width, e))
     end
+
     | Bop (op, a, b) -> begin
       let veca = vec a and vecb = vec b in
       match (op, veca, vecb) with
-        | (_, Vector va, vb) -> Vector (Bop(op, va, expand vb))
-        | (_, va, Vector vb) -> Vector (Bop(op, expand va, vb))
+        (* Expand whenever either operand is a general Vector *)
+        | (_, Vector _, _)
+        | (_, _, Vector _) -> Vector (Bop(op, expand veca, expand vecb))
+
+        (* Non-Const int Scalar expressions stay Scalar *)
         | (_, Scalar va, Scalar vb) 
         | (_, Scalar va, Const (vb, _)) 
         | (_, Const (va, _), Scalar vb) -> Scalar (Bop(op, va, vb))
-        | (_, Const (va, ca), Const (vb, cb))   -> begin match op with
+
+        (* Propagate Const *)
+        | (_, Const (va, ca), Const (vb, cb)) -> begin match op with
             | Add -> Const (Bop(op, va, vb), ca + cb)
             | Sub -> Const (Bop(op, va, vb), ca - cb)
             | Mul -> Const (Bop(op, va, vb), ca * cb)
             | Div -> Const (Bop(op, va, vb), ca / cb)
         end
+
+        (* Propagate Linearity where possible *)
         | (_, Scalar va, Linear (vb, sb)) -> begin match op with
             | Add -> Linear (Bop(op, va, vb), sb)
             | Sub -> Linear (Bop(op, va, vb), -sb)
-            | Mul | Div -> Vector (Bop(op, expand veca, expand vecb))
-        end          
+            | Mul | Div -> Vector (Bop(op, expand veca, expand vecb)) (* Vectorize *)
+        end
         | (_, Linear (va, sa), Scalar vb) -> begin match op with
             | Add | Sub -> Linear (Bop(op, va, vb), sa)
-            | Mul | Div -> Vector (Bop(op, expand veca, expand vecb))
+            | Mul | Div -> Vector (Bop(op, expand veca, expand vecb)) (* Vectorize *)
         end
-        | (_, Const (va, ca), Linear (vb, sb))  -> begin match op with
+        | (_, Const (va, ca), Linear (vb, sb)) -> begin match op with
             | Add -> Linear (Bop(op, va, vb), sb)
             | Sub -> Linear (Bop(op, va, vb), -sb)
-            | Mul -> Linear (Bop(op, va, vb), sb*ca)
-            | Div -> Vector (Bop(op, expand veca, expand vecb))
+            | Mul -> Linear (Bop(op, va, vb), ca*sb)
+            | Div -> Vector (Bop(op, expand veca, expand vecb))      (* Vectorize *)
         end
-        | (_, Linear (va, sa), Const (vb, cb))  -> begin match op with
+        | (_, Linear (va, sa), Const (vb, cb)) -> begin match op with
             | Add | Sub -> Linear (Bop(op, va, vb), sa)
             | Mul -> Linear (Bop(op, va, vb), sa*cb)
-            | Div -> Vector (Bop(op, expand veca, expand vecb))
+            | Div -> Vector (Bop(op, expand veca, expand vecb))      (* Vectorize *)
         end
         | (_, Linear (va, sa), Linear (vb, sb)) -> begin match op with
-            | Add ->  Linear (Bop(op, va, vb), sa + sb)
-            | Sub ->  Linear (Bop(op, va, vb), sa - sb)
-            | _ -> Vector (Bop(op, expand veca, expand vecb))
+            | Add -> Linear (Bop(op, va, vb), sa + sb)
+            | Sub -> Linear (Bop(op, va, vb), sa - sb)
+            | _ -> Vector (Bop(op, expand veca, expand vecb))        (* Vectorize *)
         end
     end
+
+    (* Cmp/And/Or/Not trivially expand:
+     * vectorize both operands iff either is a vector *)
     | Cmp (op, a, b) -> 
       let veca = vec a and vecb = vec b in
       if (is_vector veca || is_vector vecb) then
         Vector(Cmp(op, expand veca, expand vecb))
       else
         Scalar(Cmp(op, a, b))
+
     | And (a, b) ->
       let veca = vec a and vecb = vec b in
       if (is_vector veca || is_vector vecb) then
         Vector(And(expand veca, expand vecb))
       else
         Scalar(And(a, b))
+
     | Or (a, b) ->
       let veca = vec a and vecb = vec b in
       if (is_vector veca || is_vector vecb) then
         Vector(Or(expand veca, expand vecb))
       else
         Scalar(Or(a, b))
+
     | Not (a) -> 
       let veca = vec a in
       if (is_vector veca) then
         Vector(Not(expand veca))
       else
         Scalar(Not(a))
+
     | Select (c, a, b) ->
       let veca = vec a and vecb = vec b and vecc = vec c in
+      (* Stay scalar iff all operands are scalar, otherwise promote *)
       if (not (is_vector veca || is_vector vecb || is_vector vecc)) then
         Scalar(Select(unpack_scalar vecc, unpack_scalar veca, unpack_scalar vecb))
+
       else begin match (vecc, veca, vecb) with
+        (* Scalar selection between linear expressions of equivalent stride
+         * stays linear *)
         | (Scalar (vc), Linear (va, sa), Linear (vb, sb)) 
         | (Const (vc, _), Linear (va, sa), Linear (vb, sb)) when (sa = sb) ->
           Linear (Select(vc, va, vb), sa)
+
+        (* Scalar condition does scalar select between vectors *)
         | (Scalar (vc), _, _) | (Const (vc, _), _, _) -> 
           Vector (Select(vc, expand veca, expand vecb))
+
+        (* Otherwise, full vector select between vectors *)
         | _ -> 
           Vector (Select(expand vecc, expand veca, expand vecb))
       end
 
     | Load (t, mr) -> begin let veci = (vec mr.idx) in match veci with 
+        (* Scalar load *)
         | Const (e, _) | Scalar e | Linear (e, 0) -> Scalar (Load (t, mr))
+        (* Dense vector load *)
         | Linear (e, 1) -> Vector (Load (vector_of_val_type t width, {buf = mr.buf; idx = e}))
-        | Linear (e, _) (* TODO: strided load *)
+        (* TODO: strided load *)
+        | Linear (e, _)
+        (* Generalized gather *)
         | Vector (e) -> Vector (Load (vector_of_val_type t width, {buf = mr.buf; idx = expand veci}))
     end
+
+    (* Vectorized Var vectorizes to strided expression version of itself *)
     | Var(name) when (name = var) -> Linear (IntImm(width) *~ expr, 1)
+    (* Other Vars are Scalar relative to this vectorization *)
     | Var(_) -> Scalar(expr) 
+
     | _ -> raise (Wtf("Can't vectorize vector code"))
+
   in vec expr
-  
+
+(* Vectorize expr and realize unpacked result *)
 let vectorize_expr e var width =
   unpack (vectorize_expr_packed e var width) width
 
