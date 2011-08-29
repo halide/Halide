@@ -44,7 +44,16 @@ let vectorize_expr_packed expr var width =
     | _ -> raise (Wtf "Can't unpack vector vec_expr as a scalar")
   in
   
-  let rec vec expr = match expr with
+  (* Vectorize a trivial operation over operand list `operands`, with expr
+   * constructor `ctor` *)
+  let rec vec_trivial_op ctor operands =
+    let vec_operands = map vec operands in
+    if exists is_vector vec_operands then
+      Vector(ctor (map expand vec_operands))
+    else
+      Scalar(ctor operands)
+
+  and vec expr = match expr with
     (* Track Int immediates as Const ints throughout vectorization *)
     | IntImm x | UIntImm x -> Const (expr, x)
     | FloatImm _ -> Scalar expr (* Not strictly true. It's constant, but not a const int *)
@@ -68,6 +77,8 @@ let vectorize_expr_packed expr var width =
         | (_, Scalar va, Const (vb, _)) 
         | (_, Const (va, _), Scalar vb) -> Scalar (Bop(op, va, vb))
 
+        (* TODO: it really feels like most Const/Linear code should be
+         * able to be factored out in common *)
         (* Propagate Const *)
         | (_, Const (va, ca), Const (vb, cb)) -> begin match op with
             | Add -> Const (Bop(op, va, vb), ca + cb)
@@ -106,33 +117,10 @@ let vectorize_expr_packed expr var width =
 
     (* Cmp/And/Or/Not trivially expand:
      * vectorize both operands iff either is a vector *)
-    | Cmp (op, a, b) -> 
-      let veca = vec a and vecb = vec b in
-      if (is_vector veca || is_vector vecb) then
-        Vector(Cmp(op, expand veca, expand vecb))
-      else
-        Scalar(Cmp(op, a, b))
-
-    | And (a, b) ->
-      let veca = vec a and vecb = vec b in
-      if (is_vector veca || is_vector vecb) then
-        Vector(And(expand veca, expand vecb))
-      else
-        Scalar(And(a, b))
-
-    | Or (a, b) ->
-      let veca = vec a and vecb = vec b in
-      if (is_vector veca || is_vector vecb) then
-        Vector(Or(expand veca, expand vecb))
-      else
-        Scalar(Or(a, b))
-
-    | Not (a) -> 
-      let veca = vec a in
-      if (is_vector veca) then
-        Vector(Not(expand veca))
-      else
-        Scalar(Not(a))
+    | Cmp (op, a, b) -> vec_trivial_op (fun ops -> Cmp(op, hd ops, nth ops 1)) [a; b]
+    | And (a, b)     -> vec_trivial_op (fun ops -> And(    hd ops, nth ops 1)) [a; b]
+    | Or  (a, b)     -> vec_trivial_op (fun ops ->  Or(    hd ops, nth ops 1)) [a; b]
+    | Not (a)        -> vec_trivial_op (fun ops -> Not(    hd ops))            [a]
 
     | Select (c, a, b) ->
       let veca = vec a and vecb = vec b and vecc = vec c in
