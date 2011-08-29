@@ -8,26 +8,42 @@ type vec_expr =
   | Linear of expr * int
   | Vector of expr
 
+(* Expand a vec_expr to a realized vector expr, of width *)
 let expand e width = match e with
+
+  (* Scalar expressions broadcast up to width *)
   | Scalar e | Const (e, _) -> Broadcast (e, width)
+
+  (* Linear expressions are evaluated across a vector of width *)
   | Linear (e, s) ->
       let range x = IntImm (s * x) in
         Bop (Add, Broadcast (e, width), MakeVector (map range (0 -- width)))
+
+  (* Vectors trivially expand *)
   | Vector e -> e
+
+(* Unpack a vec_expr into the appropriate realized width expr *)
+let unpack e width = match e with
+
+  (* Scalar expressions stay scalar *)
+  | Scalar e | Const (e, _) -> e
+
+  (* Vector expressions are realized as vectors *)
+  | Linear _ -> expand e width
+  | Vector e -> e
+
+let is_vector = function
+  | Scalar _ | Const _ -> false
+  | _ -> true
 
 let vectorize_expr_packed expr var width = 
 
   let expand e = expand e width
-
-  and is_vector = function
-    | Scalar _ | Const _ -> false
-    | _ -> true
-  
-  and unpack_scalar = function
-    | Scalar e | Const (e, _) -> e
-    | _ -> raise (Wtf("Can't unpack a vector into a scalar"))
+  and unpack_scalar e = match e with
+    | Scalar _ | Const _ -> unpack e width
+    | _ -> raise (Wtf "Can't unpack vector vec_expr as a scalar")
   in
-
+  
   let rec vec expr = match expr with
     | IntImm x | UIntImm x -> Const (expr, x)
     | FloatImm _ -> Scalar expr (* Not strictly true. It's constant, but not a const int *)
@@ -114,6 +130,7 @@ let vectorize_expr_packed expr var width =
         | _ -> 
           Vector (Select(expand vecc, expand veca, expand vecb))
       end
+
     | Load (t, mr) -> begin let veci = (vec mr.idx) in match veci with 
         | Const (e, _) | Scalar e | Linear (e, 0) -> Scalar (Load (t, mr))
         | Linear (e, 1) -> Vector (Load (vector_of_val_type t width, {buf = mr.buf; idx = e}))
@@ -126,11 +143,7 @@ let vectorize_expr_packed expr var width =
   in vec expr
   
 let vectorize_expr e var width =
-  let ve = vectorize_expr_packed e var width in
-  match ve with
-    | Scalar(e) | Const(e, _) -> e (* Leave scalar expressions scalar *)
-    | Vector(e) -> e
-    | Linear(e, s) -> expand ve width
+  unpack (vectorize_expr_packed e var width) width
 
 let rec vectorize_stmt stmt var width = 
 
