@@ -1,2 +1,3 @@
-<*.{byte,native,top}>: g++, use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine, use_bigarray
+<*.{byte,native,top}>: g++, use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine, use_bigarray, png, use_cimg
 <*.top>: use_unix
+<*.ml>: use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine
