@@ -18,3 +18,4 @@ a.out
 *.cmo
 *.bc
 tags
+src/*.top
