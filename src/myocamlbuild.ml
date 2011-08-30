@@ -26,10 +26,13 @@ tons of deprecation warning noise with g++ 4.4, just linking stdc++ below works
 better *)
 flag ["link"; "ocaml"; "g++"] (S[A"-cclib"; A"-lstdc++"]);;
 
-(* Link the cimg module *)
-flag ["link"; "ocaml"; "use_cimg"] (S[A"-cclib"; A"-lpng"]);;
-(* When something links cimg, cimg.o needs to be up to date *)
-dep ["link"; "ocaml"; "use_cimg"] ["cimg.o"];;
+(* Link the cimg module.
+ * Based on: 
+ * http://stackoverflow.com/questions/2374136/ocamlbuild-building-toplevel/2377851#2377851 *)
+ocaml_lib "img";
+let libimg_stubs = "libimg_stubs." ^ !Options.ext_lib in
+dep ["link"; "ocaml"; "use_img"] [libimg_stubs];
+flag ["link"; "ocaml"; "use_img"] (S[A"-cclib"; A"-lpng"; A"-cclib"; A libimg_stubs]);;
 
 (* C compiler arguments for building cimg.c -> cimg.o *)
 let include_ocaml = "-I/usr/local/lib/ocaml" in

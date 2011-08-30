@@ -1,7 +1,8 @@
 # Link libstdc++, LLVM libs, libpng/cimg
-<*.{byte,native,top}>: g++, use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine, use_bigarray, use_cimg
+<*.{byte,native,top}>: g++, use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine, use_bigarray, use_img
 
-# Custom toplevels oddly seem to require Unix due to one of the LLVM libs
+# Custom toplevels oddly seem to require Unix due to one of the LLVM libs.
+# TODO: Toplevel currently only discovers libs if run inside _build.
 <*.top>: use_unix
 
 # Include LLVM paths when compiling ml sources
