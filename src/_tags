@@ -1,3 +1,11 @@
-<*.{byte,native,top}>: g++, use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine, use_bigarray, png, use_cimg
+# Link libstdc++, LLVM libs, libpng/cimg
+<*.{byte,native,top}>: g++, use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine, use_bigarray, use_cimg
+
+# Custom toplevels oddly seem to require Unix due to one of the LLVM libs
 <*.top>: use_unix
+
+# Include LLVM paths when compiling ml sources
 <*.ml>: use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine
+
+# Compile cimg.c with appropriate flags
+<cimg.c>: cimg_cflags
