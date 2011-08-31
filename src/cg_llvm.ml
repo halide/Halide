@@ -7,6 +7,7 @@ let dbgprint = true
 
 let entrypoint_name = "_im_main"
 let caml_entrypoint_name = entrypoint_name ^ "_caml_runner"
+let c_entrypoint_name = entrypoint_name ^ "_runner"
 
 exception UnsupportedType of val_type
 exception MissingEntrypoint
@@ -425,23 +426,6 @@ let codegen c s =
     (* return generated module and function *)
     (m,main)
 
-exception BCWriteFailed of string
-
-let codegen_to_file filename s =
-  (* construct basic LLVM state *)
-  let c = create_context () in
-
-  (* codegen *)
-  let (m,_) = codegen c s in
-
-    (* write to bitcode file *)
-    match Llvm_bitwriter.write_bitcode_file m filename with
-      | false -> raise(BCWriteFailed(filename))
-      | true -> ();
-
-    (* free memory *)
-    dispose_module m
-
 (*
  * Wrappers
  *)
@@ -505,3 +489,83 @@ let codegen_to_ocaml_callable s =
   let w = codegen_caml_wrapper c m f in
 
     (m,w)
+
+(* C runner wrapper *)
+let codegen_c_wrapper c m f =
+
+  let buffer_t = buffer_t c in
+  let i32_t = i32_type c in
+
+  let is_buffer p = type_of p = buffer_t in
+(*
+  let wrapper_args = Array.map
+                       (fun p ->
+                          if is_buffer p then pointer_type (buffer_t c)
+                          else type_of p)
+                       (params f) in
+ *)
+
+  let wrapper = define_function
+                  (c_entrypoint_name)
+                  (function_type (void_type c) [|pointer_type buffer_t|])
+                  m in
+
+  let args = param wrapper 0 in
+
+  let b = builder_at_end c (entry_block wrapper) in
+
+  let cg_load_arg i =
+    (* fetch object pointer = (( void* )args)[i] *)
+    let arg_ptr = build_gep args [| const_int i32_t i |] "" b in
+    (* deref object pointer *)
+    let ptr = build_load arg_ptr "" b in
+      (* cast to buffer_t for passing into im function *)
+      build_pointercast ptr buffer_t "" b
+  in
+
+  let args = Array.mapi 
+               (fun i p ->
+                  if is_buffer p then
+                    cg_load_arg i
+                  else
+                    param wrapper i)
+               (params f) in
+
+    (* codegen the call *)
+    ignore (build_call f args "" b);
+
+    (* return *)
+    ignore (build_ret_void b);
+
+    if dbgprint then dump_module m;
+
+    ignore (verify_cg m);
+
+    (* return the wrapper function *)
+    wrapper
+
+let codegen_to_c_callable c s =
+  (* codegen *)
+  let (m,f) = codegen c s in
+
+  (* codegen the wrapper *)
+  let w = codegen_c_wrapper c m f in
+
+    (m,w)
+
+exception BCWriteFailed of string
+
+let codegen_to_file filename s =
+  (* construct basic LLVM state *)
+  let c = create_context () in
+
+  (* codegen *)
+  let (m,_) = codegen_to_c_callable c s in
+
+    (* write to bitcode file *)
+    match Llvm_bitwriter.write_bitcode_file m filename with
+      | false -> raise(BCWriteFailed(filename))
+      | true -> ();
+
+    (* free memory *)
+    dispose_module m
