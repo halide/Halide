@@ -17,8 +17,10 @@ public:
     MLVal operator()(MLVal x, MLVal y);
     MLVal operator()(MLVal x, MLVal y, MLVal z);
 
+
     static MLVal fromString(const char *);
     static MLVal fromInt(int);
+    static MLVal fromPointer(void *);
 };
 
 
