@@ -22,12 +22,9 @@ let prgm w h ch =
   let inRef = imRef inbuf (x *~ IntImm(vecwidth)) y c in
   let inRefNext = imRef inbuf ((x *~ IntImm(vecwidth)) +~ IntImm(1)) y c in
 
-  Map(
-    {name = "c"; range = (0, ch)},
-    Map(
-      {name = "y"; range = (0, h)},
-      Map(
-        {name = "x"; range = (0, (w-1)/vecwidth)},
+  Map("c", 0, ch,
+    Map("y", 0, h,
+      Map("x", 0, (w-1)/vecwidth,
         Store(Broadcast(Cast(u8, IntImm(127)), vecwidth) +~ Load(vt, inRefNext) -~ Load(vt, inRef), outRef)
       )
     )
