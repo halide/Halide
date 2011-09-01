@@ -10,7 +10,6 @@ extern "C" {
 }
 
 
-
 void init_ml() {
     static bool initialized = false;
     if (!initialized) {
@@ -55,6 +54,10 @@ MLVal MLValFromValue(value v) {
     MLVal mlv;
     mlv.val.reset(new _MLValue(v));
     return mlv;
+}
+
+value &MLVal::getValue() {
+    return val->val;
 }
 
 MLVal MLVal::fromInt(int x) {
