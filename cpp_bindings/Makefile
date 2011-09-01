@@ -12,7 +12,7 @@ all: test
 LIBS=-L$(OCAMLLIB) -lbigarray -lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_analysis -lllvm_target $(shell llvm-config --libs all) -lm -ldl -lstdc++
 
 test: MLFImage.a test.cpp 
-	$(CXX) test.cpp $(OCAMLLIB)/libbigarray.a MLFImage.a -o test $(LIBS)
+	$(CXX) test.cpp MLFImage.a -o test $(LIBS)
 
 # Stuff below here is aware of ocaml, and requires it to compile
 

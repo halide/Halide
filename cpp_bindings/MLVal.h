@@ -3,6 +3,10 @@
 
 #include <memory>
 
+extern "C" {
+#include <caml/mlvalues.h>
+}
+
 using std::shared_ptr;
 
 // Opaque ocaml type
@@ -17,6 +21,7 @@ public:
     MLVal operator()(MLVal x, MLVal y);
     MLVal operator()(MLVal x, MLVal y, MLVal z);
 
+    value &getValue();
 
     static MLVal fromString(const char *);
     static MLVal fromInt(int);
