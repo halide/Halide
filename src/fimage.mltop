@@ -1,7 +1,9 @@
 analysis
 cg_llvm
 ir
+ir_printer
 test_runner
 util
 vectorize
+analysis
 img
