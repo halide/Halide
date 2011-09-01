@@ -11,10 +11,10 @@ let vecWidth = 16
 
 let prgm w h ch =
   let imAddr x y c =
-    Add(x,
-        Mul(IntImm(w),
-            Add(y,
-                Mul(IntImm(h), c))))
+    Bop(Add, x,
+        Bop(Mul, IntImm(w),
+            Bop(Add, y,
+                Bop(Mul, IntImm(h), c))))
   in
 
   (* TODO: alignment problem is that 600px * 3 channels does not evenly divide
@@ -22,10 +22,10 @@ let prgm w h ch =
   (* TODO: ...fix by clamping x range to skip non-vector-divisible values *)
   let imRef im x y c = { buf = im; idx = imAddr x y c } in
 
-  let outRef = imRef outbuf (Mul(x, IntImm(vecWidth))) y c in
+  let outRef = imRef outbuf (Bop(Mul, x, IntImm(vecWidth))) y c in
 
   (* Reverse every block of 4 pixels *)
-  let lx k = Load(UInt(8), imRef inbuf (Add(Mul(x, IntImm(vecWidth)), IntImm(k))) y c) in
+  let lx k = Load(UInt(8), imRef inbuf (Bop(Add, Bop(Mul, x, IntImm(vecWidth)), IntImm(k))) y c) in
   
   let stmt = Store(
     MakeVector([
@@ -37,12 +37,10 @@ let prgm w h ch =
     outRef) in
    
 
+  Map("c", 0, ch,
+  Map("y", 0, h,
   Map(
-  {name = "c"; range = (0, ch)},
-  Map(
-  {name = "y"; range = (0, h)},
-  Map(
-  {name = "x"; range = (0, w/vecWidth)},
+  "x", 0, w/vecWidth,
   stmt
  )
  )
@@ -52,10 +50,9 @@ let () =
   (*Test_runner.main prgm "vector_test"*)
 
   let i = Var("i") in
-  let lx k = Load(UInt(8), {buf = inbuf; idx = Add(Mul(i, IntImm(vecWidth)), IntImm(k))}) in
+  let lx k = Load(UInt(8), {buf = inbuf; idx = Bop(Add, Bop(Mul, i, IntImm(vecWidth)), IntImm(k))}) in
 
-  let s = Map(
-    {name = "i"; range = (0, 800*600*3/vecWidth)},
+  let s = Map("i", 0, 800*600*3/vecWidth,
     Store(
       MakeVector([
                  lx 3; lx 2; lx 1; lx 0;
@@ -63,7 +60,7 @@ let () =
                  lx 11; lx 10; lx 9; lx 8;
                  lx 15; lx 14; lx 13; lx 12
                 ]),
-      {buf = outbuf; idx = i})
+      {buf = outbuf; idx = Bop(Mul, i, IntImm(vecWidth))})
   ) in
     
 (*
