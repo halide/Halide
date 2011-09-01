@@ -12,8 +12,12 @@ extern "C" {
 
 
 void init_ml() {
-    char *fake_argv[1] = {NULL};
-    caml_startup(fake_argv);
+    static bool initialized = false;
+    if (!initialized) {
+        char *fake_argv[1] = {NULL};
+        caml_startup(fake_argv);
+        initialized = true;
+    }
 }
 
 struct _MLValue {
@@ -32,12 +36,7 @@ struct _MLValue {
 };
 
 MLVal MLVal::find(const char *name) {
-    static bool initialized = false;
-    if (!initialized) {
-        init_ml();
-        initialized = true;
-    }
-
+    init_ml();
     MLVal v;
     value *result = caml_named_value(name);
     if (!result) {
@@ -49,6 +48,10 @@ MLVal MLVal::find(const char *name) {
 }
 
 MLVal MLValFromValue(value v) {
+    if (Is_exception_result(v)) {
+        printf("Can't make an MLVal from an exception!\n");
+        exit(1);
+    }
     MLVal mlv;
     mlv.val.reset(new _MLValue(v));
     return mlv;
@@ -58,10 +61,16 @@ MLVal MLVal::fromInt(int x) {
     return MLValFromValue(Val_int(x));
 }
 
+
 MLVal MLVal::fromString(const char *str) {
+    init_ml();
     value v = caml_alloc_string(strlen(str)+1);
     strcpy(String_val(v), str);
     return MLValFromValue(v);
+}
+
+MLVal MLVal::fromPointer(void *ptr) {
+    return MLValFromValue((value)ptr);
 }
 
 MLVal MLVal::operator()() {
