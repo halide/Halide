@@ -78,7 +78,7 @@ type expr =
 
     (* scalar arguments *)
     (* TODO: specify type interpretation explicitly for easier val_type_of_expr? *)
-    (*| Arg of val_type * string *)
+    | Arg of val_type * string
 
     (* basic binary ops *)
     | Bop of binop * expr * expr
@@ -130,6 +130,7 @@ let rec val_type_of_expr = function
       if (lt <> rt) then raise (ArithmeticTypeMismatch(lt,rt));
       lt
   | Var _ -> i32 (* Vars are only defined as integer programs so must be ints *)
+  | Arg vt,_ -> vt
   (* boolean expressions on vector types return bool vectors of equal length*)
   (* boolean expressions on scalars return scalar bools *)
   | Cmp(_, l, r) -> 

@@ -9,12 +9,13 @@ let entrypoint_name = "_im_main"
 let caml_entrypoint_name = entrypoint_name ^ "_caml_runner"
 let c_entrypoint_name = entrypoint_name ^ "_runner"
 
-exception ArgumentTypeMismatch of arg * arg
 exception UnsupportedType of val_type
 exception MissingEntrypoint
 exception UnimplementedInstruction
 exception UnalignedVectorMemref
 exception CGFailed of string
+exception ArgExprOfBufferArgument (* The Arg expr can't dereference a Buffer, only Scalars *)
+exception ArgTypeMismatch of val_type * val_type
 
 let buffer_t c = pointer_type (i8_type c)
 
@@ -127,20 +128,21 @@ let codegen (c:llcontext) (e:entrypoint) =
   (* start codegen at entry block of main *)
   let b = builder_at_end c (entry_block entrypoint_fn) in
 
-  let arg_get name = 
-    let arg = ArgMap.find name argmap in
-    match arg with Scalar (s,_), _ | Buffer s, _ -> assert (s = name);
-    arg
+  let arg_find name = 
+    let arg,idx = ArgMap.find name argmap in
+    match arg with Scalar (s,_) | Buffer s -> assert (s = name);
+    (arg,idx)
   in
-  let arg_idx name = match arg_get name with (_,i) -> i in
+  let arg_get name = match arg_find name with (arg,_) -> arg in
+  let arg_idx name = match arg_find name with (_,i) -> i in
   let arg_val name = param entrypoint_fn (arg_idx name) in
 
   let ptr_to_buffer buf =
-    match arg_get buf with
+    match arg_find buf with
       | (Buffer s), i ->
           assert (s = buf);
           param entrypoint_fn i
-      | arg, _ -> raise (ArgumentTypeMismatch(Buffer(buf), arg))
+      | arg, _ -> raise (Wtf "ptr_to_buffer of non-Buffer argument name")
   in
 
   let rec cg_expr = function
@@ -196,6 +198,13 @@ let codegen (c:llcontext) (e:entrypoint) =
 
     (* Loop variables *)
     | Var(name) -> sym_get name
+
+    | Arg(vt, name) ->
+        (match arg_get name with
+          | Scalar (_,avt) when vt = avt -> raise (ArgTypeMismatch(vt,avt))
+          | Buffer _ -> raise ArgExprOfBufferArgument
+          | _ -> ());
+        arg_val name
 
     (* Making vectors *)
     | MakeVector(l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
