@@ -9,13 +9,12 @@ let entrypoint_name = "_im_main"
 let caml_entrypoint_name = entrypoint_name ^ "_caml_runner"
 let c_entrypoint_name = entrypoint_name ^ "_runner"
 
+exception ArgumentTypeMismatch of arg * arg
 exception UnsupportedType of val_type
 exception MissingEntrypoint
 exception UnimplementedInstruction
 exception UnalignedVectorMemref
-
-(* An exception for debugging *)
-exception WTF
+exception CGFailed of string
 
 let buffer_t c = pointer_type (i8_type c)
 
@@ -24,14 +23,23 @@ type cmp =
   | CmpInt of Icmp.t
   | CmpFloat of Fcmp.t
 
-(* Function to encapsulate shared state for primary codegen *)
-let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
+module ArgMap = Map.Make(String)
+type argmap = (arg*int) ArgMap.t (* track args as name -> (Ir.arg,index) *)
+
+let verify_cg m =
+    (* verify the generated module *)
+    match Llvm_analysis.verify_module m with
+      | Some reason -> raise(CGFailed(reason))
+      | None -> ()
+
+let codegen (c:llcontext) (e:entrypoint) =
 
   let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
   let float_imm_t = float_type c in
+  let buffer_t = buffer_t c in
 
-  let rec type_of_val_type t = match t with
+  let type_of_val_type t = match t with
     | UInt(1) | Int(1) -> i1_type c
     | UInt(8) | Int(8) -> i8_type c
     | UInt(16) | Int(16) -> i16_type c
@@ -60,13 +68,6 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     | _ -> raise (UnsupportedType(t))
   in
 
-  let ptr_to_buffer buf =
-    (* TODO: put buffers in their own LLVM memory spaces *)
-    match lookup_function entrypoint_name m with
-      | Some(f) -> param f (buf-1)
-      | None -> raise (MissingEntrypoint)
-  in
-
   (* The symbol table for loop variables *)
   let sym_table =
     Hashtbl.create 10 
@@ -78,6 +79,68 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
     Hashtbl.remove sym_table name
   and sym_get name =
     Hashtbl.find sym_table name
+  in
+
+  (* create a new module for this cg result *)
+  let m = create_module c "<fimage>" in
+  
+  (* unpack the entrypoint *)
+  let arglist,s = e in
+
+  let type_of_arg = function
+    | Scalar (_, vt) -> type_of_val_type vt
+    | Buffer _ -> buffer_t
+  in
+  let name_of_arg = function
+    | Scalar (n,_) | Buffer n -> n
+  in
+  let index_of_arg a =
+    let rec idx a l i = match l with
+      | hd::_ when hd = a -> i
+      | hd::rest -> idx a rest i+1
+      | [] -> raise (Wtf "index_of_arg for arg not in arglist")
+    in idx a arglist 0
+  in
+
+  let argtypes = List.map type_of_arg arglist in
+
+  let argmap =
+    List.fold_left
+      (fun m arg -> ArgMap.add (name_of_arg arg) (arg,(index_of_arg arg)) m)
+      ArgMap.empty
+      arglist
+  in
+
+  (* define `void main(arg1, arg2, ...)` entrypoint*)
+  let entrypoint_fn =
+    define_function
+      entrypoint_name
+      (function_type (void_type c) (Array.of_list argtypes))
+      m
+  in
+
+  (* assign names to args in LLVM *)
+  Array.iteri
+    (fun i v -> set_value_name (name_of_arg (List.nth arglist i)) v)
+    (params entrypoint_fn);
+
+  (* start codegen at entry block of main *)
+  let b = builder_at_end c (entry_block entrypoint_fn) in
+
+  let arg_get name = 
+    let arg = ArgMap.find name argmap in
+    match arg with Scalar (s,_), _ | Buffer s, _ -> assert (s = name);
+    arg
+  in
+  let arg_idx name = match arg_get name with (_,i) -> i in
+  let arg_val name = param entrypoint_fn (arg_idx name) in
+
+  let ptr_to_buffer buf =
+    match arg_get buf with
+      | (Buffer s), i ->
+          assert (s = buf);
+          param entrypoint_fn i
+      | arg, _ -> raise (ArgumentTypeMismatch(Buffer(buf), arg))
   in
 
   let rec cg_expr = function
@@ -292,7 +355,7 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
         cg_stmt (Block (second::rest))
     | Block(first::[]) ->
         cg_stmt first
-    | Block _ -> raise WTF
+    | Block _ -> raise (Wtf "cg_stmt of empty block")
     | _ -> raise UnimplementedInstruction
 
   and cg_unaligned_load t mr offset =
@@ -335,86 +398,8 @@ let codegen_root (c:llcontext) (m:llmodule) (b:llbuilder) (s:stmt) =
         cg_storevector(rest, t, nextaddr, stride);
   in
 
-    (* actually generate from the root statement, returning the result *)
-    cg_stmt s
-
-
-module BufferSet = Set.Make (
-struct
-  type t = int
-  let compare = Pervasives.compare
-end)
-(*module BufferMap = Map.Make( BufferOrder )*)
-
-let rec buffers_in_stmt = function
-  (* | If(e, s) -> BufferSet.union (buffers_in_expr e) (buffers_in_stmt s) *)
-  (* | IfElse(e, st, sf) ->
-      BufferSet.union (buffers_in_expr e) (
-        BufferSet.union (buffers_in_stmt st) (buffers_in_stmt sf)) *)
-  | Map(_, _, _, s) -> buffers_in_stmt s
-  | Block stmts ->
-      List.fold_left BufferSet.union BufferSet.empty (List.map buffers_in_stmt stmts)
-  (* | Reduce (_, e, mr)  *)
-  | Store (e, mr) -> BufferSet.add mr.buf (buffers_in_expr e)
-
-and buffers_in_expr = function
-  (* immediates, vars *)
-  | IntImm _ | UIntImm _ | FloatImm _ | Var _ -> BufferSet.empty
-
-  (* binary ops *)
-  | Bop(_, l, r) | Cmp(_, l, r) | Or(l, r) | And(l, r) -> 
-    BufferSet.union (buffers_in_expr l) (buffers_in_expr r)
-
-  (* unary ops *)
-  | Not e | Cast (_,e) -> buffers_in_expr e
-
-  (* ternary ops *)
-  | Select (c, t, f) -> BufferSet.union (buffers_in_expr c)
-                          (BufferSet.union (buffers_in_expr t) (buffers_in_expr f))
-
-  (* memory ops *)
-  | Load (_, mr) -> BufferSet.singleton mr.buf
-
-  (* vector ops *) 
-  | MakeVector l -> 
-      List.fold_left BufferSet.union BufferSet.empty 
-        (List.map buffers_in_expr l)
-
-  | Broadcast (e, n) -> buffers_in_expr e
-
-  | ExtractElement (e, n) -> BufferSet.union (buffers_in_expr e) (buffers_in_expr n)
-
-exception CGFailed of string
-let verify_cg m =
-    (* verify the generated module *)
-    match Llvm_analysis.verify_module m with
-      | Some reason -> raise(CGFailed(reason))
-      | None -> ()
-
-let codegen c s =
-  (* create a new module for this cg result *)
-  let m = create_module c "<fimage>" in
-
-  (* enumerate all referenced buffers *)
-  let buffers = buffers_in_stmt s in
-
-    (* TODO: assert that all buffer IDs are represented in ordinal positions in list? *)
-    (* TODO: build and carry buffer ID -> param Llvm.value map *)
-    (* TODO: set readonly attributes on buffer args which aren't written *)
-
-  (* define `void main(buf1, buf2, ...)` entrypoint*)
-  let buf_args =
-    Array.map (fun b -> buffer_t c) (Array.of_list (BufferSet.elements buffers)) in
-  let main = define_function entrypoint_name (function_type (void_type c) buf_args) m in
-
-    (* iterate over args and assign name "bufXXX" with `set_value_name s v` *)
-    Array.iteri (fun i v -> set_value_name ("buf" ^ string_of_int (i+1)) v) (params main);
-
-  (* start codegen at entry block of main *)
-  let b = builder_at_end c (entry_block main) in
-
-    (* codegen body *)
-    ignore (codegen_root c m b s);
+    (* actually generate from the root statement *)
+    ignore (cg_stmt s);
 
     (* return void from main *)
     ignore (build_ret_void b);
@@ -424,7 +409,7 @@ let codegen c s =
     ignore (verify_cg m);
 
     (* return generated module and function *)
-    (m,main)
+    (m,entrypoint_fn)
 
 (*
  * Wrappers
@@ -478,12 +463,12 @@ let codegen_caml_wrapper c m f =
     (* return the wrapper function *)
     wrapper
 
-let codegen_to_ocaml_callable s =
+let codegen_to_ocaml_callable e =
   (* construct basic LLVM state *)
   let c = create_context () in
 
   (* codegen *)
-  let (m,f) = codegen c s in
+  let (m,f) = codegen c e in
 
   (* codegen the wrapper *)
   let w = codegen_caml_wrapper c m f in
@@ -544,9 +529,10 @@ let codegen_c_wrapper c m f =
     (* return the wrapper function *)
     wrapper
 
-let codegen_to_c_callable c s =
+let codegen_to_c_callable c e =
   (* codegen *)
-  let (m,f) = codegen c s in
+  (*let (args,s) = e in*)
+  let (m,f) = codegen c e in
 
   (* codegen the wrapper *)
   let w = codegen_c_wrapper c m f in
@@ -555,12 +541,12 @@ let codegen_to_c_callable c s =
 
 exception BCWriteFailed of string
 
-let codegen_to_file filename s =
+let codegen_to_file filename e =
   (* construct basic LLVM state *)
   let c = create_context () in
 
   (* codegen *)
-  let (m,_) = codegen_to_c_callable c s in
+  let (m,_) = codegen_to_c_callable c e in
 
     (* write to bitcode file *)
     match Llvm_bitwriter.write_bitcode_file m filename with
