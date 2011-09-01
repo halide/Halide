@@ -5,8 +5,8 @@ let brightness = Cast(UInt(8), UIntImm(100))
 
 let i = Var("i")
 
-let outbuf = 2
-let inbuf = 1
+let outbuf = "out"
+let inbuf = "in"
 
 let load = Load (u8, {buf = inbuf; idx = i})
 let store x = Store(x, {buf = outbuf; idx = i})
@@ -36,4 +36,5 @@ let prgm w h c =
     16
 
 let () =
-  Test_runner.main prgm "brightness"
+  Cg_llvm.codegen_to_file "brightness.bc" ([ Buffer "in";  Buffer "out" ], prgm 800 600 3)
+  (*Test_runner.main prgm "brightness"*)

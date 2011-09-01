@@ -76,6 +76,10 @@ type expr =
     (* only for domain variables? *)
     | Var of string
 
+    (* scalar arguments *)
+    (* TODO: specify type interpretation explicitly for easier val_type_of_expr? *)
+    (*| Arg of val_type * string *)
+
     (* basic binary ops *)
     | Bop of binop * expr * expr
 
@@ -111,7 +115,7 @@ and memref = {
   idx : expr;
 }
 
-and buffer = int (* TODO: just an ID for now *)
+and buffer = string (* TODO: just an ID for now *)
 
 exception ArithmeticTypeMismatch of val_type * val_type
 
@@ -174,6 +178,12 @@ and reduce_op =
     | SubEq
     | MulEq
     | DivEq
+
+type arg =
+  | Scalar of string * val_type
+  | Buffer of string
+
+type entrypoint = arg list * stmt
 
 (* Some sugar for the operators that are naturally infix *)
 let ( +~ ) a b  = Bop (Add, a, b)
