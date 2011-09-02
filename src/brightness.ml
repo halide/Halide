@@ -26,7 +26,7 @@ let sadd(a, b) =
 
 let prgm =
   Vectorize.vectorize_stmt
-    (Map("i", IntImm(0), Cast(i32, Arg(i64, "w")) *~ Cast(i32, Arg(i64, "h")) *~ Cast(i32, Arg(i64, "c")),
+    (Map("i", IntImm(0), Arg(i32, "w") *~ Arg(i32, "h") *~ Arg(i32, "c"),
         store (
           sadd(load, brightness)
         )
@@ -35,5 +35,5 @@ let prgm =
     16
 
 let () =
-  Cg_llvm.codegen_to_file "brightness.bc" ([ Buffer "in";  Buffer "out"; Scalar("w", i64); Scalar("h", i64); Scalar("c", i64)], prgm)
+  Cg_llvm.codegen_to_file "brightness.bc" ([ Buffer "in";  Buffer "out"; Scalar("w", i32); Scalar("h", i32); Scalar("c", i32)], prgm)
   (*Test_runner.main prgm "brightness"*)

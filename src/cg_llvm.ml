@@ -505,12 +505,7 @@ let codegen_c_wrapper c m f =
     let args_array = param wrapper 0 in
     let arg_ptr = build_gep args_array [| const_int i32_t i |] "" b in
     (* deref arg pointer *)
-    let arg = build_load arg_ptr "" b in
-    (* cast to target buffer or int type for passing into im function *)
-    if t = buffer_t then
-      build_pointercast arg t "" b
-    else
-      build_intcast (build_ptrtoint arg i64_t "" b) t "" b
+    build_load (build_pointercast arg_ptr (pointer_type t) "" b) "" b
   in
 
   (* build inner function argument list from args array *)
