@@ -296,7 +296,7 @@ let codegen (c:llcontext) (e:entrypoint) =
 
   and cg_for var_name min max body = 
       (* Emit the start code first, without 'variable' in scope. *)
-      let start_val = const_int int_imm_t min in
+      let start_val = min (* const_int int_imm_t min *) in
 
       (* Make the new basic block for the loop header, inserting after current
        * block. *)
@@ -326,7 +326,7 @@ let codegen (c:llcontext) (e:entrypoint) =
       let next_var = build_add variable (const_int int_imm_t 1) (var_name ^ "_nextvar") b in
 
       (* Compute the end condition. *)
-      let end_cond = build_icmp Icmp.Slt next_var (const_int int_imm_t max) "" b in
+      let end_cond = build_icmp Icmp.Slt next_var max "" b in
 
       (* Create the "after loop" block and insert it. *)
       let loop_end_bb = insertion_block b in
@@ -358,7 +358,7 @@ let codegen (c:llcontext) (e:entrypoint) =
         let ptr = cg_memref mr (val_type_of_expr e) in
           build_store (cg_expr e) ptr b
     | Map(n, min, max, stmt) ->
-        cg_for n min max stmt
+        cg_for n (cg_expr min) (cg_expr max) stmt
     | Block (first::second::rest) ->
         ignore(cg_stmt first);
         cg_stmt (Block (second::rest))
