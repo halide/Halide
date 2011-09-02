@@ -50,7 +50,7 @@ and string_of_stmt = function
   (*  | If(e, s) -> "if (" ^ string_of_expr e ^ ") " ^ string_of_stmt s *)
   (* | IfElse(e, ts, fs) -> "if (" ^ string_of_expr e ^ ") " ^ string_of_stmt ts ^ 
                          " else " ^ string_of_stmt fs *)
-  | Map(n, min, max, s) -> sprintf "map (%s from %d to %d) %s" n min max (string_of_stmt s)
+  | Map(n, min, max, s) -> sprintf "map (%s from %s to %s) %s" n (string_of_expr min) (string_of_expr max) (string_of_stmt s)
   | Block(stmts) -> "{" ^ "\n" ^
                     String.concat ";\n" (List.map string_of_stmt stmts) ^
                     "}" ^ "\n"
@@ -67,7 +67,7 @@ and string_of_reduce_op = function
 
 and string_of_memref mr = string_of_buffer mr.buf ^ "[" ^ string_of_expr mr.idx ^ "]"
 
-and string_of_buffer b = "buf" ^ b
+and string_of_buffer b = b
 
 and string_of_domain d = d.name ^ "=" ^ string_of_program d.range
 
