@@ -57,11 +57,13 @@ and string_of_stmt = function
   (* | Reduce(op, e, mr) -> string_of_memref mr ^ string_of_reduce_op op ^ string_of_expr e *)
   | Store(e, mr) -> string_of_memref mr ^ " = " ^ string_of_expr e
 
+(*
 and string_of_reduce_op = function
   | AddEq -> "+="
   | SubEq -> "-="
   | MulEq -> "*="
   | DivEq -> "/="
+ *)
 
 and string_of_memref mr = string_of_buffer mr.buf ^ "[" ^ string_of_expr mr.idx ^ "]"
 

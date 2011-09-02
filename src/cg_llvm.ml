@@ -9,12 +9,13 @@ let entrypoint_name = "_im_main"
 let caml_entrypoint_name = entrypoint_name ^ "_caml_runner"
 let c_entrypoint_name = entrypoint_name ^ "_runner"
 
-exception ArgumentTypeMismatch of arg * arg
 exception UnsupportedType of val_type
 exception MissingEntrypoint
 exception UnimplementedInstruction
 exception UnalignedVectorMemref
 exception CGFailed of string
+exception ArgExprOfBufferArgument (* The Arg expr can't dereference a Buffer, only Scalars *)
+exception ArgTypeMismatch of val_type * val_type
 
 let buffer_t c = pointer_type (i8_type c)
 
@@ -127,20 +128,21 @@ let codegen (c:llcontext) (e:entrypoint) =
   (* start codegen at entry block of main *)
   let b = builder_at_end c (entry_block entrypoint_fn) in
 
-  let arg_get name = 
-    let arg = ArgMap.find name argmap in
-    match arg with Scalar (s,_), _ | Buffer s, _ -> assert (s = name);
-    arg
+  let arg_find name = 
+    let arg,idx = ArgMap.find name argmap in
+    match arg with Scalar (s,_) | Buffer s -> assert (s = name);
+    (arg,idx)
   in
-  let arg_idx name = match arg_get name with (_,i) -> i in
+  let arg_get name = match arg_find name with (arg,_) -> arg in
+  let arg_idx name = match arg_find name with (_,i) -> i in
   let arg_val name = param entrypoint_fn (arg_idx name) in
 
   let ptr_to_buffer buf =
-    match arg_get buf with
+    match arg_find buf with
       | (Buffer s), i ->
           assert (s = buf);
           param entrypoint_fn i
-      | arg, _ -> raise (ArgumentTypeMismatch(Buffer(buf), arg))
+      | arg, _ -> raise (Wtf "ptr_to_buffer of non-Buffer argument name")
   in
 
   let rec cg_expr = function
@@ -196,6 +198,13 @@ let codegen (c:llcontext) (e:entrypoint) =
 
     (* Loop variables *)
     | Var(name) -> sym_get name
+
+    | Arg(vt, name) ->
+        (match arg_get name with
+          | Scalar (_,avt) when vt <> avt -> raise (ArgTypeMismatch(vt,avt))
+          | Buffer _ -> raise ArgExprOfBufferArgument
+          | _ -> ());
+        arg_val name
 
     (* Making vectors *)
     | MakeVector(l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
@@ -287,7 +296,7 @@ let codegen (c:llcontext) (e:entrypoint) =
 
   and cg_for var_name min max body = 
       (* Emit the start code first, without 'variable' in scope. *)
-      let start_val = const_int int_imm_t min in
+      let start_val = min (* const_int int_imm_t min *) in
 
       (* Make the new basic block for the loop header, inserting after current
        * block. *)
@@ -317,7 +326,7 @@ let codegen (c:llcontext) (e:entrypoint) =
       let next_var = build_add variable (const_int int_imm_t 1) (var_name ^ "_nextvar") b in
 
       (* Compute the end condition. *)
-      let end_cond = build_icmp Icmp.Slt next_var (const_int int_imm_t max) "" b in
+      let end_cond = build_icmp Icmp.Slt next_var max "" b in
 
       (* Create the "after loop" block and insert it. *)
       let loop_end_bb = insertion_block b in
@@ -349,7 +358,7 @@ let codegen (c:llcontext) (e:entrypoint) =
         let ptr = cg_memref mr (val_type_of_expr e) in
           build_store (cg_expr e) ptr b
     | Map(n, min, max, stmt) ->
-        cg_for n min max stmt
+        cg_for n (cg_expr min) (cg_expr max) stmt
     | Block (first::second::rest) ->
         ignore(cg_stmt first);
         cg_stmt (Block (second::rest))
@@ -480,40 +489,28 @@ let codegen_c_wrapper c m f =
 
   let buffer_t = buffer_t c in
   let i32_t = i32_type c in
+  let i64_t = i64_type c in
 
-  let is_buffer p = type_of p = buffer_t in
-(*
-  let wrapper_args = Array.map
-                       (fun p ->
-                          if is_buffer p then pointer_type (buffer_t c)
-                          else type_of p)
-                       (params f) in
- *)
-
+  (* define wrapper entrypoint: void name(void* args[]) *)
   let wrapper = define_function
                   (c_entrypoint_name)
                   (function_type (void_type c) [|pointer_type buffer_t|])
                   m in
 
-  let args = param wrapper 0 in
-
   let b = builder_at_end c (entry_block wrapper) in
 
-  let cg_load_arg i =
+  (* codegen load and cast from arg array slot i to lltype t *)
+  let cg_load_arg i t =
     (* fetch object pointer = (( void* )args)[i] *)
-    let arg_ptr = build_gep args [| const_int i32_t i |] "" b in
-    (* deref object pointer *)
-    let ptr = build_load arg_ptr "" b in
-      (* cast to buffer_t for passing into im function *)
-      build_pointercast ptr buffer_t "" b
+    let args_array = param wrapper 0 in
+    let arg_ptr = build_gep args_array [| const_int i32_t i |] "" b in
+    (* deref arg pointer *)
+    build_load (build_pointercast arg_ptr (pointer_type t) "" b) "" b
   in
 
+  (* build inner function argument list from args array *)
   let args = Array.mapi 
-               (fun i p ->
-                  if is_buffer p then
-                    cg_load_arg i
-                  else
-                    param wrapper i)
+               (fun i p -> cg_load_arg i (type_of p))
                (params f) in
 
     (* codegen the call *)

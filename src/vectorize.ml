@@ -176,7 +176,7 @@ let rec vectorize_stmt stmt var width =
   match stmt with
     | Map (name, min, max, stmt) when name = var ->
       (* TODO: Currently we assume width divides min and max *)
-      Map (name, min/width, max/width, vec stmt)
+      Map (name, min /~ IntImm(width), max /~ IntImm(width), vec stmt)
     | Map (name, min, max, stmt) -> Map (name, min, max, vec stmt)
     | Block l -> Block (map vec l)
     | Store (expr, mr) -> begin
