@@ -65,7 +65,7 @@ and string_of_reduce_op = function
 
 and string_of_memref mr = string_of_buffer mr.buf ^ "[" ^ string_of_expr mr.idx ^ "]"
 
-and string_of_buffer b = "buf" ^ string_of_int b
+and string_of_buffer b = "buf" ^ b
 
 and string_of_domain d = d.name ^ "=" ^ string_of_program d.range
 
