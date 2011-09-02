@@ -10,6 +10,12 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <assert.h>
+#include <time.h>
+#include <sys/time.h>
+#ifdef __MACH__
+#include <mach/clock.h>
+#include <mach/mach.h>
+#endif
 #include <png.h>
 
 typedef union {
@@ -32,6 +38,47 @@ png_byte* malloc_aligned(size_t bytes) {
     void* mem;
     assert( posix_memalign(&mem, 16, bytes) == 0 );
     return (png_byte*)mem;
+}
+
+void current_time(timespec *ts) {
+#ifdef __MACH__ // OS X does not have clock_gettime, use clock_get_time
+    clock_serv_t cclock;
+    mach_timespec_t mts;
+    host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+    clock_get_time(cclock, &mts);
+    mach_port_deallocate(mach_task_self(), cclock);
+    ts->tv_sec = mts.tv_sec;
+    ts->tv_nsec = mts.tv_nsec;
+#else
+    clock_gettime(CLOCK_REALTIME, ts);
+#endif
+}
+
+/* Subtract the `struct timeval' values X and Y,
+   storing the result in RESULT.
+   Return 1 if the difference is negative, otherwise 0.  */
+int
+timeval_subtract (timespec *result, timespec *x, timespec *y)
+{
+    /* Perform the carry for the later subtraction by updating y. */
+    if (x->tv_nsec < y->tv_nsec) {
+        int nsec = (y->tv_nsec - x->tv_nsec) / 1000000000 + 1;
+        y->tv_nsec -= 1000000000 * nsec;
+        y->tv_sec += nsec;
+    }
+    if (x->tv_nsec - y->tv_nsec > 1000000000) {
+        int nsec = (x->tv_nsec - y->tv_nsec) / 1000000000;
+        y->tv_nsec += 1000000000 * nsec;
+        y->tv_sec -= nsec;
+    }
+   
+    /* Compute the time remaining to wait.
+       tv_usec is certainly positive. */
+    result->tv_sec = x->tv_sec - y->tv_sec;
+    result->tv_nsec = x->tv_nsec - y->tv_nsec;
+   
+    /* Return 1 if result is negative. */
+    return x->tv_sec < y->tv_sec;
 }
 
 // returned bytes are allocated by load_png, owned by caller
@@ -69,7 +116,20 @@ int main(int argc, const char* argv[]) {
     args[2].i32 = width;
     args[3].i32 = height;
     args[4].i32 = channels;
-    _im_main_runner(args);
+
+    timespec start, end;
+    current_time(&start);
+
+    const int iterations = 1000;
+    for (int i = 0; i < iterations; i++) {
+        _im_main_runner(args);
+    }
+    current_time(&end);
+    
+    timespec diff;
+    timeval_subtract(&diff, &end, &start);
+    double elapsed = diff.tv_sec + (diff.tv_nsec/1000000000.0);
+    printf("done %d iterations in %fs (%fns/pixel)\n", iterations, elapsed, elapsed*1000000000/(iterations*width*height));
 
     save_png(outpath, width, height, channels, out);
 
