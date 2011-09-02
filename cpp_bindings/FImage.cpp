@@ -16,51 +16,418 @@
 
 ML_FUNC1(makeIntImm);
 ML_FUNC2(makeAdd);
+ML_FUNC2(makeSub);
+ML_FUNC2(makeMul);
+ML_FUNC2(makeDiv);
+ML_FUNC2(makeEQ);
+ML_FUNC2(makeNE);
+ML_FUNC2(makeLT);
+ML_FUNC2(makeGT);
+ML_FUNC2(makeGE);
+ML_FUNC2(makeLE);
+ML_FUNC3(makeSelect);
 ML_FUNC1(doPrint);
 ML_FUNC1(makeVar);
 ML_FUNC2(makeLoad); // buffer id, idx
 ML_FUNC3(makeStore); // value, buffer id, idx
+ML_FUNC1(makeBufferArg); // name
 ML_FUNC1(doCompile); // stmt
+ML_FUNC0(makeArgList); 
+ML_FUNC2(addArgToList); // old arg list, new arg -> new list
+ML_FUNC2(makeFunction); // stmt, arg list
+ML_FUNC4(makeMap); // var name, min, max, stmt
+ML_FUNC3(doVectorize);
 
 namespace FImage {
-    Expr Add(const Expr &a, const Expr &b) {
-        return Expr(makeAdd(a.val, b.val));
+
+    template<typename T>
+    void unify(std::vector<T *> &a, const std::vector<T *> &b) {
+        for (size_t i = 0; i < b.size(); i++) {
+            bool is_in_a = false;
+            for (size_t j = 0; j < a.size(); j++) {
+                if (a[j] == b[i]) is_in_a = true;
+            }
+            if (!is_in_a) a.push_back(b[i]);
+        }
     }
 
-    Expr IntImm(int a) {
-        return Expr(makeIntImm(MLVal::fromInt(a)));
+    // An Expr is a wrapper around the node structure used by the compiler
+    Expr::Expr() {}
+
+    Expr::Expr(MLVal n) : node(n) {}
+
+    Expr::Expr(int32_t val) {
+        node = makeIntImm(MLVal::fromInt(val));
     }
 
-    Var::Var() : Expr(makeVar(MLVal::fromString("var"))) {
-    }
-
-    Var::Var(const char *a) : Expr(makeVar(MLVal::fromString(a))) {
-    }
-
-    void print(const Expr &a) {
-        doPrint(a.val);
+    void Expr::operator+=(const Expr & other) {
+        node = makeAdd(node, other.node);
+        unify(args, other.args);
+        unify(vars, other.vars);
     }
     
-    Expr::Expr(int x) : val(makeIntImm(MLVal::fromInt(x))), function_ptr(NULL) {
+    void Expr::operator*=(const Expr & other) {
+        node = makeMul(node, other.node);
+        unify(args, other.args);
+        unify(vars, other.vars);
     }
 
-    Expr::Expr(MLVal v) : val(v), function_ptr(NULL) {
+    void Expr::operator/=(const Expr & other) {
+        node = makeDiv(node, other.node);
+        unify(args, other.args);
+        unify(vars, other.vars);
     }
 
-    Expr Expr::operator+(const Expr &b) {
-        return Add(*this, b);
+    void Expr::operator-=(const Expr & other) {
+        node = makeSub(node, other.node);
+        unify(args, other.args);
+        unify(vars, other.vars);
     }
 
-    void run(const Expr &stmt, void *args) {        
+
+    Expr operator+(const Expr & a, const Expr & b) {
+        Expr e(makeAdd(a.node, b.node));
+        unify(e.args, a.args);
+        unify(e.args, b.args);
+        unify(e.vars, a.vars);
+        unify(e.vars, b.vars);
+        return e;
+    }
+
+    Expr operator-(const Expr & a, const Expr & b) {
+        Expr e(makeSub(a.node, b.node));
+        unify(e.args, a.args);
+        unify(e.args, b.args);
+        unify(e.vars, a.vars);
+        unify(e.vars, b.vars);
+        return e;
+    }
+
+    Expr operator*(const Expr & a, const Expr & b) {
+        Expr e(makeMul(a.node, b.node));
+        unify(e.args, a.args);
+        unify(e.args, b.args);
+        unify(e.vars, a.vars);
+        unify(e.vars, b.vars);
+
+        printf("%d %d -> %d\n", a.vars.size(), b.vars.size(), e.vars.size());
+
+        return e;
+    }
+
+    Expr operator/(const Expr & a, const Expr & b) {
+        Expr e(makeDiv(a.node, b.node));
+        unify(e.args, a.args);
+        unify(e.args, b.args);
+        unify(e.vars, a.vars);
+        unify(e.vars, b.vars);
+        return e;
+    }
+
+    Expr operator>(const Expr & a, const Expr & b) {
+        Expr e(makeGT(a.node, b.node));
+        unify(e.args, a.args);
+        unify(e.args, b.args);
+        unify(e.vars, a.vars);
+        unify(e.vars, b.vars);
+        return e;
+    }
+    
+    Expr operator<(const Expr & a, const Expr & b) {
+        Expr e(makeLT(a.node, b.node));
+        unify(e.args, a.args);
+        unify(e.args, b.args);
+        unify(e.vars, a.vars);
+        unify(e.vars, b.vars);
+        return e;
+    }
+    
+    Expr operator>=(const Expr & a, const Expr & b) {
+        Expr e(makeGE(a.node, b.node));
+        unify(e.args, a.args);
+        unify(e.args, b.args);
+        unify(e.vars, a.vars);
+        unify(e.vars, b.vars);
+        return e;
+    }
+    
+    Expr operator<=(const Expr & a, const Expr & b) {
+        Expr e(makeLE(a.node, b.node));
+        unify(e.args, a.args);
+        unify(e.args, b.args);
+        unify(e.vars, a.vars);
+        unify(e.vars, b.vars);
+        return e;
+    }
+    
+    Expr operator!=(const Expr & a, const Expr & b) {
+        Expr e(makeNE(a.node, b.node));
+        unify(e.args, a.args);
+        unify(e.args, b.args);
+        unify(e.vars, a.vars);
+        unify(e.vars, b.vars);
+        return e;
+    }
+
+    Expr operator==(const Expr & a, const Expr & b) {
+        Expr e(makeEQ(a.node, b.node));
+        unify(e.args, a.args);
+        unify(e.args, b.args);
+        unify(e.vars, a.vars);
+        unify(e.vars, b.vars);
+        return e;
+    }
+    
+    Expr select(const Expr & cond, const Expr & thenCase, const Expr & elseCase) {
+        Expr e(makeSelect(cond.node, thenCase.node, elseCase.node));
+        unify(e.args, cond.args);
+        unify(e.args, thenCase.args);
+        unify(e.args, elseCase.args);
+        unify(e.vars, cond.vars);
+        unify(e.vars, thenCase.vars);
+        unify(e.vars, elseCase.vars);
+        return e;
+    }
+    
+    // Print out an expression
+    void Expr::debug() {
+        doPrint(node);
+    }
+
+    Var::Var(int a, int b) : _min(a), _max(b) {
+        snprintf(_name, sizeof(_name), "var%d", _instances++);
+        node = makeVar(MLVal::fromString(_name));
+        vars.push_back(this);
+    }
+
+    // Make an MemRef reference to a particular pixel. It can be used as an
+    // assignment target or cast to a load operation. In the future it may
+    // also serve as a marker for a site in an expression that can be
+    // fused.
+    MemRef::MemRef(Image *im_, const Expr & a) : im(im_), function_ptr(NULL) {
+        
+        // If you upcast this to an Expr it gets treated as a load
+        addr = a * im->stride[0];
+        // TODO: replace this name with topological position
+        node = makeLoad(MLVal::fromString(im->name()), addr.node);
+
+        args.push_back(im);
+        unify(args, a.args);
+        unify(vars, a.vars);
+
+        indices.resize(1);
+        indices[0] = a;
+    }
+
+    MemRef::MemRef(Image *im_, const Expr & a, const Expr & b) : im(im_), function_ptr(NULL) {
+        
+        // If you upcast this to an Expr it gets treated as a load
+        addr = a * im->stride[0] + b * im->stride[1];
+        node = makeLoad(MLVal::fromString(im->name()), addr.node);
+        args.push_back(im);
+        unify(args, a.args);
+        unify(args, b.args);
+        unify(vars, a.vars);
+        unify(vars, b.vars);
+        
+        indices.resize(2);
+        indices[0] = a;
+        indices[1] = b;
+    }
+
+    MemRef::MemRef(Image *im_, const Expr & a, const Expr & b, const Expr & c) : im(im_), function_ptr(NULL) {
+        
+        // If you upcast this to an Expr it gets treated as a load
+        addr = a * im->stride[0] + b * im->stride[1] + c * im->stride[2];
+        node = makeLoad(MLVal::fromString(im->name()), addr.node);
+        args.push_back(im);
+        unify(args, a.args);
+        unify(args, b.args);
+        unify(args, c.args);
+        unify(vars, a.vars);
+        unify(vars, b.vars);
+        unify(vars, c.vars);
+
+        indices.resize(3);
+        indices[0] = a;
+        indices[1] = b;
+        indices[2] = c;
+    }
+    
+    MemRef::MemRef(Image *im_, const Expr & a, const Expr & b, const Expr & c, const Expr & d) : im(im_), function_ptr(NULL) {
+        
+        // If you upcast this to an Expr it gets treated as a load
+        addr = a * im->stride[0] + b * im->stride[1] + c * im->stride[2] + d * im->stride[3];
+        node = makeLoad(MLVal::fromString(im->name()), addr.node);
+        args.push_back(im);
+        unify(args, a.args);
+        unify(args, b.args);
+        unify(args, c.args);
+        unify(args, d.args);
+        unify(vars, a.vars);
+        unify(vars, b.vars);
+        unify(vars, c.vars);
+        unify(vars, d.vars);
+
+        indices.resize(4);
+        indices[0] = a;
+        indices[1] = b;
+        indices[2] = c;
+        indices[3] = d;
+    }
+
+    void MemRef::operator=(const Expr &e) {
+        // We were a load - convert to a store instead
+        node = makeStore(e.node, MLVal::fromString(im->name()), addr.node);
+
+        unify(vars, e.vars);
+
+        // Add this to the list of definitions of im
+        printf("Adding a definition\n");
+        im->definitions.push_back(*this);
+    }
+
+    Image::Image(uint32_t a) {
+        size.resize(1);
+        stride.resize(1);
+        size[0] = a;
+        stride[0] = 1;
+        // TODO: enforce alignment, lazy allocation, etc, etc
+        buffer.reset(new std::vector<uint32_t>(a + 8));
+        data = &(*buffer)[0] + 4;
+        snprintf(_name, sizeof(_name), "im%d", _instances++);
+    }
+
+    Image::Image(uint32_t a, uint32_t b) {
+        size.resize(2);
+        stride.resize(2);
+        size[0] = a;
+        size[1] = b;
+        stride[0] = 1;
+        stride[1] = a;
+        buffer.reset(new std::vector<uint32_t>(a*b + 8));
+        data = &(*buffer)[0] + 4;
+        snprintf(_name, sizeof(_name), "im%d", _instances++);
+    }
+    
+    Image::Image(uint32_t a, uint32_t b, uint32_t c) {
+        size.resize(3);
+        stride.resize(3);
+        size[0] = a;
+        size[1] = b;
+        size[2] = c;
+        stride[0] = 1;
+        stride[1] = a;
+        stride[2] = a*b;
+        buffer.reset(new std::vector<uint32_t>(a*b*c + 8));
+        data = &(*buffer)[0] + 4;
+        snprintf(_name, sizeof(_name), "im%d", _instances++);
+    }
+
+    Image::Image(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+        size.resize(4);
+        stride.resize(4);
+        size[0] = a;
+        size[1] = b;
+        size[2] = c;
+        size[3] = d;
+        stride[0] = 1;
+        stride[1] = a;
+        stride[2] = a*b;
+        stride[3] = a*b*c;
+        buffer.reset(new std::vector<uint32_t>(a*b*c*d + 8));
+        data = &(*buffer)[0] + 4;
+        snprintf(_name, sizeof(_name), "im%d", _instances++);
+    }
+    
+    Image::~Image() {
+        //delete[] (data-4);
+    }
+
+    // Generate an MemRef reference to a (computed) location in this image
+    // that can be used as an assignment target, and can also be cast to
+    // the Expr version (a load of a computed address)
+    MemRef Image::operator()(const Expr & a) {
+        return MemRef(this, a);
+    }
+
+    MemRef Image::operator()(const Expr & a, const Expr & b) {
+        return MemRef(this, a, b);
+    }
+
+    MemRef Image::operator()(const Expr & a, const Expr & b, const Expr & c) {
+        return MemRef(this, a, b, c);
+    }
+
+    MemRef Image::operator()(const Expr & a, const Expr & b, const Expr & c, const Expr & d) {
+        return MemRef(this, a, b, c, d);
+    }
+
+    // Print out a particular definition. We assume the MemRef has already been assigned to.
+    void MemRef::debug() {
+        printf("[");
+        for (size_t i = 0; i < indices.size(); i++) {
+            doPrint(indices[i].node);
+            printf(", ");
+        }
+        printf("\b\b]\n");
+    }
+
+
+    // Print out all the definitions of this Image
+    void Image::debug() {
+        for (size_t i = 0; i < definitions.size(); i++) {
+            definitions[i].debug();
+        }
+    }
+
+    Image &Image::evaluate() {
+        // Just evaluate the first definition
+        MemRef &stmt = definitions[0];
+
         static llvm::ExecutionEngine *ee = NULL;
 
         if (!ee) {
             llvm::InitializeNativeTarget();
         }
 
-
         if (!stmt.function_ptr) {
-            MLVal tuple = doCompile(stmt.val);
+
+            // Surround it with the appropriate number of maps
+            MLVal loop = stmt.node;
+            for (size_t i = 0; i < stmt.vars.size(); i++) {
+                printf("Wrapping statement in a loop...\n");
+                loop = makeMap(MLVal::fromString(stmt.vars[i]->name()),
+                               Expr(stmt.vars[i]->min()).node,
+                               Expr(stmt.vars[i]->max()).node,
+                               loop);
+            }
+
+            // Perform any requested transformations
+            for (size_t i = 0; i < stmt.vars.size(); i++) {
+                int v = stmt.vars[i]->vectorize();
+                if (v > 1) {
+                    loop = doVectorize(loop, MLVal::fromString(stmt.vars[i]->name()), MLVal::fromInt(v));
+                }
+            }
+
+            // Create a function around it with the appropriate number of args
+            MLVal args = makeArgList();
+            for (size_t i = 0; i < stmt.args.size(); i++) {
+                MLVal arg = makeBufferArg(MLVal::fromString(stmt.args[i]->name()));
+                args = addArgToList(args, arg);
+            }
+            
+            //printf("Making function...\n");
+            
+            MLVal function = makeFunction(args, loop);
+
+            doPrint(loop);
+
+            printf("compiling IR -> ll\n");
+            MLVal tuple = doCompile(function);
+
+            printf("Extracting the resulting module and function\n");
             LLVMModuleRef module = (LLVMModuleRef)Field(tuple.getValue(), 0);
             LLVMValueRef func = (LLVMValueRef)Field(tuple.getValue(), 1);
             llvm::Function *f = llvm::unwrap<llvm::Function>(func);
@@ -76,36 +443,25 @@ namespace FImage {
             } else { 
                 ee->addModule(m);
             }            
-            /*
-            // Set up the pass manager
-            // TODO: Where do these things get cleaned up?
-            llvm::FunctionPassManager *passMgr = new llvm::FunctionPassManager(m);
-            passMgr->add(new llvm::TargetData(*ee->getTargetData()));
-            // AliasAnalysis support for GVN
-            passMgr->add(llvm::createBasicAliasAnalysisPass());
-            // Peephole, bit-twiddling optimizations
-            passMgr->add(llvm::createInstructionCombiningPass());
-            // Reassociate expressions
-            passMgr->add(llvm::createReassociatePass());
-            // Eliminate common sub-expressions
-            passMgr->add(llvm::createGVNPass());
-            // Simplify CFG (delete unreachable blocks, etc.)
-            passMgr->add(llvm::createCFGSimplificationPass());            
-            passMgr->doInitialization();            
-            */
 
+            printf("compiling ll -> machine code...\n");
             void *ptr = ee->getPointerToFunction(f);
             stmt.function_ptr = (void (*)(void*))ptr;
         }
-        stmt.function_ptr(args);
+
+        //printf("Constructing argument list...\n");
+        static void *arguments[256];
+        for (size_t i = 0; i < stmt.args.size(); i++) {
+            arguments[i] = (void *)stmt.args[i]->data;
+        }
+
+        //printf("Calling function...\n");
+        stmt.function_ptr(&arguments[0]); 
+
+        return *this;
     }
 
-    Expr Load(int buf, const Expr &idx) {
-        return makeLoad(MLVal::fromInt(buf), idx.val);
-    }
 
-    Expr Store(const Expr &val, int buf, const Expr &idx) {
-        return makeStore(val.val, MLVal::fromInt(buf), idx.val);
-    }
-
+    int Image::_instances = 0;
+    int Var::_instances = 0;
 }

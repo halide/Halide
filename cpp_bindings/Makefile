@@ -24,7 +24,7 @@ MLFImage.a: _MLFImage.o FImage.o MLVal.o
 	$(CXX) -c $< -o $@
 
 OCAML_LIBS=bigarray.cmxa llvm.cmxa llvm_executionengine.cmxa
-OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx MLFImage.cmx
+OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx vectorize.cmx MLFImage.cmx
 
 _MLFImage.o: $(OCAML_MODULES)
 	$(OCAMLC) $(OCAML_LIBS) $(OCAML_MODULES) -output-obj -o _MLFImage.o

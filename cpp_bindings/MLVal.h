@@ -20,6 +20,7 @@ public:
     MLVal operator()(MLVal x);
     MLVal operator()(MLVal x, MLVal y);
     MLVal operator()(MLVal x, MLVal y, MLVal z);
+    MLVal operator()(MLVal x, MLVal y, MLVal z, MLVal w);
 
     value &getValue();
 
@@ -57,6 +58,13 @@ public:
         static MLVal callback;                                 \
         if (!callback.val) callback = MLVal::find(#n);         \
         return callback(x, y, z);                              \
+    }
+
+#define ML_FUNC4(n)                                            \
+  MLVal n(MLVal x, MLVal y, MLVal z, MLVal w) {                \
+        static MLVal callback;                                 \
+        if (!callback.val) callback = MLVal::find(#n);         \
+        return callback(x, y, z, w);                           \
     }
 
 #endif

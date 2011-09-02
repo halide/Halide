@@ -95,3 +95,7 @@ MLVal MLVal::operator()(MLVal x, MLVal y, MLVal z) {
                                          y.val->val,
                                          z.val->val));
 }
+
+MLVal MLVal::operator()(MLVal x, MLVal y, MLVal z, MLVal w) {
+    return (*this)(x, y, z)(w);
+}
