@@ -1,5 +1,4 @@
 open Ir
-open Vectorize
 
 let brightness = Cast(UInt(8), UIntImm(100))
 
@@ -25,9 +24,9 @@ let sadd(a, b) =
   in
     Select(a >~ (max_val -~ b), max_val, a +~ b)
 
-let prgm w h c =
+let prgm =
   Vectorize.vectorize_stmt
-    (Map("i", 0, (w*h*c),
+    (Map("i", IntImm(0), Cast(i32, Arg(i64, "w")) *~ Cast(i32, Arg(i64, "h")) *~ Cast(i32, Arg(i64, "c")),
         store (
           sadd(load, brightness)
         )
@@ -36,5 +35,5 @@ let prgm w h c =
     16
 
 let () =
-  Cg_llvm.codegen_to_file "brightness.bc" ([ Buffer "in";  Buffer "out" ], prgm 800 600 3)
+  Cg_llvm.codegen_to_file "brightness.bc" ([ Buffer "in";  Buffer "out"; Scalar("w", i64); Scalar("h", i64); Scalar("c", i64)], prgm)
   (*Test_runner.main prgm "brightness"*)

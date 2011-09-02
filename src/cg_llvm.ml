@@ -489,40 +489,33 @@ let codegen_c_wrapper c m f =
 
   let buffer_t = buffer_t c in
   let i32_t = i32_type c in
+  let i64_t = i64_type c in
 
-  let is_buffer p = type_of p = buffer_t in
-(*
-  let wrapper_args = Array.map
-                       (fun p ->
-                          if is_buffer p then pointer_type (buffer_t c)
-                          else type_of p)
-                       (params f) in
- *)
-
+  (* define wrapper entrypoint: void name(void* args[]) *)
   let wrapper = define_function
                   (c_entrypoint_name)
                   (function_type (void_type c) [|pointer_type buffer_t|])
                   m in
 
-  let args = param wrapper 0 in
-
   let b = builder_at_end c (entry_block wrapper) in
 
-  let cg_load_arg i =
+  (* codegen load and cast from arg array slot i to lltype t *)
+  let cg_load_arg i t =
     (* fetch object pointer = (( void* )args)[i] *)
-    let arg_ptr = build_gep args [| const_int i32_t i |] "" b in
-    (* deref object pointer *)
-    let ptr = build_load arg_ptr "" b in
-      (* cast to buffer_t for passing into im function *)
-      build_pointercast ptr buffer_t "" b
+    let args_array = param wrapper 0 in
+    let arg_ptr = build_gep args_array [| const_int i32_t i |] "" b in
+    (* deref arg pointer *)
+    let arg = build_load arg_ptr "" b in
+    (* cast to target buffer or int type for passing into im function *)
+    if t = buffer_t then
+      build_pointercast arg t "" b
+    else
+      build_intcast (build_ptrtoint arg i64_t "" b) t "" b
   in
 
+  (* build inner function argument list from args array *)
   let args = Array.mapi 
-               (fun i p ->
-                  if is_buffer p then
-                    cg_load_arg i
-                  else
-                    param wrapper i)
+               (fun i p -> cg_load_arg i (type_of p))
                (params f) in
 
     (* codegen the call *)

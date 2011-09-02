@@ -57,7 +57,7 @@ int main(int argc, const char* argv[]) {
     out = (unsigned char*)malloc_aligned(width*height*channels);
 
     printf("running...\n");
-    char* args[] = {(char*)in, (char*)out};
+    char* args[] = {(char*)in, (char*)out, (char*)width, (char*)height, (char*)channels};
     _im_main_runner(args);
 
     save_png(outpath, width, height, channels, out);
