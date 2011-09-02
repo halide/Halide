@@ -19,3 +19,7 @@ a.out
 *.bc
 tags
 src/*.top
+src/brightness.ll
+src/brightness.s
+src/gradientx.s
+src/out.png
