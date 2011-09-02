@@ -201,7 +201,7 @@ let codegen (c:llcontext) (e:entrypoint) =
 
     | Arg(vt, name) ->
         (match arg_get name with
-          | Scalar (_,avt) when vt = avt -> raise (ArgTypeMismatch(vt,avt))
+          | Scalar (_,avt) when vt <> avt -> raise (ArgTypeMismatch(vt,avt))
           | Buffer _ -> raise ArgExprOfBufferArgument
           | _ -> ());
         arg_val name
