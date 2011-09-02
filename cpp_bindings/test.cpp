@@ -2,50 +2,22 @@
 
 using namespace FImage;
 
-void pgm_static(void *args) {
-    unsigned *arg = ((unsigned **)args)[0];
-    arg[0] += 17;
-}
-
 int main(int argc, char **argv) {
-    Var x;
+    Var x(0, 100), y(0, 100);
+    Image im(100, 100);       
 
-    unsigned int memory[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    im(x, y) = x*y;
 
-    void *buf1 = &(memory[0]);
+    x.vectorize(4);
 
-    void *args = &buf1;
+    im.evaluate();
 
-    Expr pgm = Load(1, 0);
-    for (int i = 1; i < 10; i++) {
-        pgm = pgm + Load(1, i);
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            printf("%d ", im(x, y));
+        }
+        printf("\n");
     }
-    for (int i = 1; i < 10; i++) {
-        pgm = pgm + Load(1, i);
-    }
-    pgm = Store(pgm, 1, 0);
-
-    printf("Running...\n");
-
-    printf("memory before = %u\n", memory[0]);
-
-    run(pgm, args);
-
-    printf("memory after = %u\n", memory[0]);
-
-    printf("Running again...\n");
-
-    run(pgm, args);
-
-    printf("memory after = %u\n", memory[0]);
-
-    printf("Running it a bunch of times\n");
-    printf("memory before = %u\n", memory[0]);    
-    for (int i = 0; i < 10000000; i++) {
-        run(pgm, args);
-        //pgm_static(args);
-    } 
-    printf("memory after = %u\n", memory[0]);    
 
     return 0;
 }
