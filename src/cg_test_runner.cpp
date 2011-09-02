@@ -12,8 +12,14 @@
 #include <assert.h>
 #include <png.h>
 
+typedef union {
+    void* ptr;
+    int64_t i64;
+    int32_t i32;
+} ArgT;
+
 extern "C" {
-    void _im_main_runner(char* args[]);
+    void _im_main_runner(ArgT args[]);
 }
 
 #ifndef PATH_MAX
@@ -57,7 +63,12 @@ int main(int argc, const char* argv[]) {
     out = (unsigned char*)malloc_aligned(width*height*channels);
 
     printf("running...\n");
-    char* args[] = {(char*)in, (char*)out};
+    ArgT args[5];
+    args[0].ptr = in;
+    args[1].ptr = out;
+    args[2].i32 = width;
+    args[3].i32 = height;
+    args[4].i32 = channels;
     _im_main_runner(args);
 
     save_png(outpath, width, height, channels, out);

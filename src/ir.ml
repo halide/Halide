@@ -78,7 +78,7 @@ type expr =
 
     (* scalar arguments *)
     (* TODO: specify type interpretation explicitly for easier val_type_of_expr? *)
-    (*| Arg of val_type * string *)
+    | Arg of val_type * string
 
     (* basic binary ops *)
     | Bop of binop * expr * expr
@@ -130,6 +130,7 @@ let rec val_type_of_expr = function
       if (lt <> rt) then raise (ArithmeticTypeMismatch(lt,rt));
       lt
   | Var _ -> i32 (* Vars are only defined as integer programs so must be ints *)
+  | Arg (vt,_) -> vt
   (* boolean expressions on vector types return bool vectors of equal length*)
   (* boolean expressions on scalars return scalar bools *)
   | Cmp(_, l, r) -> 
@@ -163,7 +164,7 @@ type stmt =
    * sub-ranges *)
   (* | If of expr * stmt  *)
   (* | IfElse of expr * stmt * stmt  *)
-  | Map of string * int * int * stmt
+  | Map of string * expr * expr * stmt
   (* | For of domain * stmt *)
     (* TODO: For might need landing pad: always executes before, only if *any* iteration
      * fired. Same for Map - useful for loop invariant code motion. Easier for
