@@ -172,12 +172,14 @@ type stmt =
   (* | Reduce of reduce_op * expr * memref *) (* TODO: initializer expression? *)
   | Store of expr * memref
 
+(*
 (* TODO:  *)
 and reduce_op =
     | AddEq
     | SubEq
     | MulEq
     | DivEq
+ *)
 
 type arg =
   | Scalar of string * val_type
