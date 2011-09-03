@@ -8,7 +8,7 @@ let dbgprint = true
 let entrypoint_name = "_im_main"
 let caml_entrypoint_name = entrypoint_name ^ "_caml_runner"
 let c_entrypoint_name = entrypoint_name ^ "_runner"
-
+  
 exception UnsupportedType of val_type
 exception MissingEntrypoint
 exception UnimplementedInstruction
@@ -191,10 +191,21 @@ let codegen (c:llcontext) (e:entrypoint) =
 
     (* memory TODO: handle vector loads and stores better *)
     | Load(t, mr) -> 
-      let offset = Analysis.reduce_expr_modulo mr.idx (vector_elements t) in
-      if offset = 0        
-      then build_load (cg_memref mr t) "" b
-      else cg_unaligned_load t mr offset
+      (* Handle gather as a make vector of scalar loads *)
+      let elems = (vector_elements (val_type_of_expr mr.idx)) in
+      Printf.printf "Loading a vector of %d addresses\n%!" elems;
+      if (elems > 1) then begin
+        Printf.printf "Codegenning a gather\n%!";
+        let result = cg_expr (MakeVector (List.map (fun x ->
+          Load (element_val_type t, {buf = mr.buf; idx = ExtractElement (mr.idx, IntImm(x))})) 
+                                            (0 -- elems))) in
+        Printf.printf "Done\n%!"; result
+      end else begin  
+        let offset = Analysis.reduce_expr_modulo mr.idx (vector_elements t) in
+        if offset = 0        
+        then build_load (cg_memref mr t) "" b
+        else cg_unaligned_load t mr offset
+      end
 
     (* Loop variables *)
     | Var(name) -> sym_get name
@@ -365,7 +376,7 @@ let codegen (c:llcontext) (e:entrypoint) =
     | Block(first::[]) ->
         cg_stmt first
     | Block _ -> raise (Wtf "cg_stmt of empty block")
-    | _ -> raise UnimplementedInstruction
+    (* | _ -> raise UnimplementedInstruction *)
 
   and cg_unaligned_load t mr offset =
     let lower_addr = mr.idx -~ (IntImm(offset)) in
@@ -489,7 +500,7 @@ let codegen_c_wrapper c m f =
 
   let buffer_t = buffer_t c in
   let i32_t = i32_type c in
-  let i64_t = i64_type c in
+  (* let i64_t = i64_type c in *)
 
   (* define wrapper entrypoint: void name(void* args[]) *)
   let wrapper = define_function
