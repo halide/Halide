@@ -1,40 +1,47 @@
-OCAMLLIB=/usr/local/lib/ocaml
-SRCDIR=../src
-CXX=gcc-4.6 -std=c++0x -I$(OCAMLLIB) -I$(SRCDIR) -Wall -g
-OCAMLC=ocamlopt -cc gcc-4.6 -I $(SRCDIR) 
-
-# Stuff in this section doesn't need ocaml to compile. It is assumed
-# that MLFImage.a and MLVal.h and MLFImage.h have been distributed.
+OCAML_LIB_DIR=/usr/local/lib/ocaml
+CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -O2
 
 all: test
 
-
-LIBS=-L$(OCAMLLIB) -lbigarray -lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_analysis -lllvm_target $(shell llvm-config --libs all) -lm -ldl -lstdc++
-
+LLVM_LIBS_CXX=$(shell llvm-config --libs codegen jit x86 bitwriter interpreter)
+LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_analysis -lllvm_target
+OCAML_LIBS_C=-L$(OCAML_LIB_DIR) -lbigarray
+LIBS=$(OCAML_LIBS_C) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lm -lstdc++
+ 
 test: MLFImage.a test.cpp 
 	$(CXX) test.cpp MLFImage.a -o test $(LIBS)
 
-# Stuff below here is aware of ocaml, and requires it to compile
+MLFImage.a: build/_MLFImage.o build/FImage.o build/MLVal.o
+	cp $(OCAML_LIB_DIR)/libasmrun.a MLFImage.a
+	ar q MLFImage.a build/_MLFImage.o build/MLVal.o build/FImage.o
 
-MLFImage.a: _MLFImage.o FImage.o MLVal.o
-	cp $(OCAMLLIB)/libasmrun.a MLFImage.a
-	ar q MLFImage.a _MLFImage.o MLVal.o FImage.o
-
-%.o: %.cpp
+build/%.o: %.cpp
 	$(CXX) -c $< -o $@
 
 OCAML_LIBS=bigarray.cmxa llvm.cmxa llvm_executionengine.cmxa
 OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx vectorize.cmx MLFImage.cmx
+OCAMLC=ocamlopt -cc gcc-4.6 -I ../../src -ccopt -O2
 
-_MLFImage.o: $(OCAML_MODULES)
-	$(OCAMLC) $(OCAML_LIBS) $(OCAML_MODULES) -output-obj -o _MLFImage.o
+build/_MLFImage.o: $(addprefix build/,$(OCAML_MODULES))
+	cd build && \
+	cp ../MLFImage.ml . && \
+	$(OCAMLC) $(OCAML_LIBS) $(OCAML_MODULES) -output-obj -o _MLFImage.o && \
+	rm MLFImage.ml &&\
+	cd ..
 
-%.cmx: $(SRCDIR)/%.ml
-	$(OCAMLC) -c $< -o $@
+build/%.cmx: ../src/%.ml 
+	cd build && \
+	cp ../$< ./ && \
+	$(OCAMLC) -c $(notdir $<) && \
+	rm $(notdir $<) && \
+	cd ..
 
-%.cmx: %.ml
-	$(OCAMLC) -c $< -o $@
-
+build/%.cmx: %.ml
+	cd build && \
+	cp ../$< ./ && \
+	$(OCAMLC) -c $(notdir $<) && \
+	rm $(notdir $<) && \
+	cd ..
 
 clean:
-	rm -f *.o *.cmi *.cmx *.cmo *.a test
+	rm -f test build/*
