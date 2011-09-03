@@ -30,6 +30,9 @@ namespace FImage {
 
         // The list of free variables found
         std::vector<Var *> vars;
+
+        // declare that this node has a child for bookkeeping
+        void child(const Expr &c);
     };
 
     Expr operator+(const Expr &, const Expr &);

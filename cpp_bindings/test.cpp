@@ -8,13 +8,19 @@ int main(int argc, char **argv) {
 
     im(x, y) = x*y;
 
-    x.vectorize(4);
+    y.vectorize(4);
 
     im.evaluate();
 
+    Image im2(100, 100);
+
+    im2(x, y) = im(99-x, 99-y);
+
+    im2.evaluate();
+
     for (int y = 0; y < 16; y++) {
         for (int x = 0; x < 16; x++) {
-            printf("%d ", im(x, y));
+            printf("%d ", im2(x, y));
         }
         printf("\n");
     }

@@ -60,132 +60,108 @@ namespace FImage {
         node = makeIntImm(MLVal::fromInt(val));
     }
 
+    // declare that this node has a child for bookkeeping
+    void Expr::child(const Expr &c) {
+        unify(args, c.args);
+        unify(vars, c.vars);
+    }
+
     void Expr::operator+=(const Expr & other) {
         node = makeAdd(node, other.node);
-        unify(args, other.args);
-        unify(vars, other.vars);
+        child(other);
     }
     
     void Expr::operator*=(const Expr & other) {
         node = makeMul(node, other.node);
-        unify(args, other.args);
-        unify(vars, other.vars);
+        child(other);
     }
 
     void Expr::operator/=(const Expr & other) {
         node = makeDiv(node, other.node);
-        unify(args, other.args);
-        unify(vars, other.vars);
+        child(other);
     }
 
     void Expr::operator-=(const Expr & other) {
         node = makeSub(node, other.node);
-        unify(args, other.args);
-        unify(vars, other.vars);
+        child(other);
     }
 
 
     Expr operator+(const Expr & a, const Expr & b) {
         Expr e(makeAdd(a.node, b.node));
-        unify(e.args, a.args);
-        unify(e.args, b.args);
-        unify(e.vars, a.vars);
-        unify(e.vars, b.vars);
+        e.child(a);
+        e.child(b);
         return e;
     }
 
     Expr operator-(const Expr & a, const Expr & b) {
         Expr e(makeSub(a.node, b.node));
-        unify(e.args, a.args);
-        unify(e.args, b.args);
-        unify(e.vars, a.vars);
-        unify(e.vars, b.vars);
+        e.child(a);
+        e.child(b);
         return e;
     }
 
     Expr operator*(const Expr & a, const Expr & b) {
         Expr e(makeMul(a.node, b.node));
-        unify(e.args, a.args);
-        unify(e.args, b.args);
-        unify(e.vars, a.vars);
-        unify(e.vars, b.vars);
-
-        printf("%d %d -> %d\n", a.vars.size(), b.vars.size(), e.vars.size());
-
+        e.child(a);
+        e.child(b);
         return e;
     }
 
     Expr operator/(const Expr & a, const Expr & b) {
         Expr e(makeDiv(a.node, b.node));
-        unify(e.args, a.args);
-        unify(e.args, b.args);
-        unify(e.vars, a.vars);
-        unify(e.vars, b.vars);
+        e.child(a);
+        e.child(b);
         return e;
     }
 
     Expr operator>(const Expr & a, const Expr & b) {
         Expr e(makeGT(a.node, b.node));
-        unify(e.args, a.args);
-        unify(e.args, b.args);
-        unify(e.vars, a.vars);
-        unify(e.vars, b.vars);
+        e.child(a);
+        e.child(b);
         return e;
     }
     
     Expr operator<(const Expr & a, const Expr & b) {
         Expr e(makeLT(a.node, b.node));
-        unify(e.args, a.args);
-        unify(e.args, b.args);
-        unify(e.vars, a.vars);
-        unify(e.vars, b.vars);
+        e.child(a);
+        e.child(b);
         return e;
     }
     
     Expr operator>=(const Expr & a, const Expr & b) {
         Expr e(makeGE(a.node, b.node));
-        unify(e.args, a.args);
-        unify(e.args, b.args);
-        unify(e.vars, a.vars);
-        unify(e.vars, b.vars);
+        e.child(a);
+        e.child(b);
         return e;
     }
     
     Expr operator<=(const Expr & a, const Expr & b) {
         Expr e(makeLE(a.node, b.node));
-        unify(e.args, a.args);
-        unify(e.args, b.args);
-        unify(e.vars, a.vars);
-        unify(e.vars, b.vars);
+        e.child(a);
+        e.child(b);
         return e;
     }
     
     Expr operator!=(const Expr & a, const Expr & b) {
         Expr e(makeNE(a.node, b.node));
-        unify(e.args, a.args);
-        unify(e.args, b.args);
-        unify(e.vars, a.vars);
-        unify(e.vars, b.vars);
+        e.child(a);
+        e.child(b);
         return e;
     }
 
     Expr operator==(const Expr & a, const Expr & b) {
         Expr e(makeEQ(a.node, b.node));
-        unify(e.args, a.args);
-        unify(e.args, b.args);
-        unify(e.vars, a.vars);
-        unify(e.vars, b.vars);
+        e.child(a);
+        e.child(b);
         return e;
     }
     
     Expr select(const Expr & cond, const Expr & thenCase, const Expr & elseCase) {
         Expr e(makeSelect(cond.node, thenCase.node, elseCase.node));
-        unify(e.args, cond.args);
-        unify(e.args, thenCase.args);
-        unify(e.args, elseCase.args);
-        unify(e.vars, cond.vars);
-        unify(e.vars, thenCase.vars);
-        unify(e.vars, elseCase.vars);
+        e.child(cond);
+        e.child(thenCase);
+        e.child(elseCase);
         return e;
     }
     
@@ -212,8 +188,7 @@ namespace FImage {
         node = makeLoad(MLVal::fromString(im->name()), addr.node);
 
         args.push_back(im);
-        unify(args, a.args);
-        unify(vars, a.vars);
+        child(a);
 
         indices.resize(1);
         indices[0] = a;
@@ -224,11 +199,12 @@ namespace FImage {
         // If you upcast this to an Expr it gets treated as a load
         addr = a * im->stride[0] + b * im->stride[1];
         node = makeLoad(MLVal::fromString(im->name()), addr.node);
+
         args.push_back(im);
-        unify(args, a.args);
-        unify(args, b.args);
-        unify(vars, a.vars);
-        unify(vars, b.vars);
+        child(a);
+        child(b);
+
+        printf("%d %d %d\n", a.args.size(), b.args.size(), args.size());
         
         indices.resize(2);
         indices[0] = a;
@@ -240,13 +216,11 @@ namespace FImage {
         // If you upcast this to an Expr it gets treated as a load
         addr = a * im->stride[0] + b * im->stride[1] + c * im->stride[2];
         node = makeLoad(MLVal::fromString(im->name()), addr.node);
+
         args.push_back(im);
-        unify(args, a.args);
-        unify(args, b.args);
-        unify(args, c.args);
-        unify(vars, a.vars);
-        unify(vars, b.vars);
-        unify(vars, c.vars);
+        child(a);
+        child(b);
+        child(c);
 
         indices.resize(3);
         indices[0] = a;
@@ -259,15 +233,12 @@ namespace FImage {
         // If you upcast this to an Expr it gets treated as a load
         addr = a * im->stride[0] + b * im->stride[1] + c * im->stride[2] + d * im->stride[3];
         node = makeLoad(MLVal::fromString(im->name()), addr.node);
+
         args.push_back(im);
-        unify(args, a.args);
-        unify(args, b.args);
-        unify(args, c.args);
-        unify(args, d.args);
-        unify(vars, a.vars);
-        unify(vars, b.vars);
-        unify(vars, c.vars);
-        unify(vars, d.vars);
+        child(a);
+        child(b);
+        child(c);
+        child(d);
 
         indices.resize(4);
         indices[0] = a;
@@ -280,7 +251,7 @@ namespace FImage {
         // We were a load - convert to a store instead
         node = makeStore(e.node, MLVal::fromString(im->name()), addr.node);
 
-        unify(vars, e.vars);
+        child(e);
 
         // Add this to the list of definitions of im
         printf("Adding a definition\n");
