@@ -72,3 +72,9 @@ and string_of_buffer b = b
 and string_of_domain d = d.name ^ "=" ^ string_of_program d.range
 
 and string_of_program p = match p with (lo,hi) -> string_of_int lo ^ ".." ^ string_of_int hi
+
+and string_of_toplevel (a, s) = "func(" ^ String.concat ", " (List.map string_of_arg a) ^ ") = " ^ (string_of_stmt s)
+
+and string_of_arg = function 
+  | Buffer (b) -> b
+  | Scalar (s, t) -> (string_of_val_type t) ^ " " ^ s
