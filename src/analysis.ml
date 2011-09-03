@@ -2,7 +2,9 @@ open Ir
 open Ir_printer
 open Util
 
-exception ModulusOfNonInteger of string
+exception ModulusOfNonInteger 
+exception ModulusOfMakeVector
+exception ModulusOfBroadcast
 
 let rec gcd x y = match (x, y) with
   | (0, n) | (n, 0) -> n
@@ -29,9 +31,9 @@ and compute_remainder_modulus = function
     else 
       binop_remainder_modulus x y ( * )
   | Bop _ | Load _ | Var _ | ExtractElement _ -> (0, 1)
-  | MakeVector _ -> raise (Wtf("Modulus of MakeVector"))
-  | Broadcast _ -> raise (Wtf("Modulus of Broadcast"))
-  | e -> raise (ModulusOfNonInteger (string_of_expr e))
+  | MakeVector _ -> raise ModulusOfMakeVector
+  | Broadcast _ -> raise ModulusOfBroadcast
+  | e -> raise ModulusOfNonInteger
 
 (* Reduces an expression modulo n *)
 (* returns an integer in [0, m-1], or m if unknown *)
