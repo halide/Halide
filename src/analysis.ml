@@ -1,7 +1,8 @@
 open Ir
+open Ir_printer
 open Util
 
-exception ModulusOfNonInteger
+exception ModulusOfNonInteger of string
 
 let rec gcd x y = match (x, y) with
   | (0, n) | (n, 0) -> n
@@ -27,8 +28,10 @@ and compute_remainder_modulus = function
       (yr * xr, yr * xm)
     else 
       binop_remainder_modulus x y ( * )
-  | Bop _ | Load _ | Var _ -> (0, 1)
-  | _ -> raise ModulusOfNonInteger
+  | Bop _ | Load _ | Var _ | ExtractElement _ -> (0, 1)
+  | MakeVector _ -> raise (Wtf("Modulus of MakeVector"))
+  | Broadcast _ -> raise (Wtf("Modulus of Broadcast"))
+  | e -> raise (ModulusOfNonInteger (string_of_expr e))
 
 (* Reduces an expression modulo n *)
 (* returns an integer in [0, m-1], or m if unknown *)
