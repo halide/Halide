@@ -193,4 +193,4 @@ let rec vectorize_stmt stmt var width =
         | Linear(i, n) -> Store (expand e, {buf = mr.buf; idx = expand idx}) (* TODO: strided store *)
         | _ -> Store (expand e, {buf = mr.buf; idx = expand idx}) (* scatter *)
     end
-    | _ -> raise (Wtf "don't know how to vectorize this statement yet")
+    (* | _ -> raise (Wtf "don't know how to vectorize this statement yet") *)
