@@ -2,6 +2,7 @@ open Ir
 open Llvm
 open List
 open Util
+open Ir_printer
 
 let dbgprint = true
 
@@ -127,6 +128,14 @@ let codegen (c:llcontext) (e:entrypoint) =
 
   (* start codegen at entry block of main *)
   let b = builder_at_end c (entry_block entrypoint_fn) in
+  
+  let alloca_bb = append_block c ("alloca") (block_parent (insertion_block b)) in
+  ignore(build_br alloca_bb b);
+  let after_alloca_bb = append_block c ("after_alloca") (block_parent (insertion_block b)) in
+  position_at_end alloca_bb b;  
+  let alloca_end = build_br after_alloca_bb b in
+  position_at_end after_alloca_bb b;  
+
 
   let arg_find name = 
     let arg,idx = ArgMap.find name argmap in
@@ -392,6 +401,22 @@ let codegen (c:llcontext) (e:entrypoint) =
     let vec = MakeVector (extract_lower @ extract_upper) in
     cg_expr vec
 
+  and cg_unknown_alignment_load t mr =
+    let current = insertion_block b in
+    position_before alloca_end b;
+    let scratch = build_alloca (type_of_val_type t) "" b in      
+    position_at_end current b;
+    let memcpy     = declare_function "llvm.memcpy.p0i8.p0i8.i32"
+      (function_type (void_type c) [|buffer_t; buffer_t; int32_imm_t; int32_imm_t; i1_type c|]) m in
+    let stack_addr = build_pointercast scratch buffer_t "" b in
+    let mem_addr   = build_pointercast (cg_memref mr t) buffer_t "" b in
+    let length     = const_int int_imm_t ((bit_width t)/8) in
+    let length64   = const_int (i64_type c) ((bit_width t)/8) in
+    let alignment  = const_int int_imm_t ((bit_width (element_val_type t))/8) in
+    let volatile   = const_int (i1_type c) 0 in
+    let to_stack   = build_call memcpy [|stack_addr; mem_addr; length; alignment; volatile|] "" b in
+    build_load (scratch) "" b
+
   and cg_gather t mr =
     let elem_type     = type_of_val_type (element_val_type t) in
     let base_ptr      = build_pointercast (ptr_to_buffer mr.buf) (pointer_type elem_type) "" b in
@@ -420,14 +445,7 @@ let codegen (c:llcontext) (e:entrypoint) =
     let base = ptr_to_buffer mr.buf in
     (* cast pointer to pointer-to-target-type *)
     (* TODO: fix address calculation to use inner type of vector type *)
-    let elem_type = match vt with
-      | IntVector(bits, _) | UIntVector(bits, _) | FloatVector(bits, _) -> 
-        let offset = Analysis.reduce_expr_modulo mr.idx (vector_elements vt) in
-        Printf.printf "Index has an offset of %d\n%!" offset;     
-        if offset != 0 then raise UnalignedVectorMemref;
-        elem_type_of_vector_val_type vt
-      | t -> type_of_val_type t
-    in
+    let elem_type = type_of_val_type (element_val_type vt) in
     let ptr = build_pointercast base (pointer_type (elem_type)) "memref_elem_ptr" b in
     (* build getelementpointer into buffer *)
     let gep = build_gep ptr [| cg_expr mr.idx |] "memref" b in
@@ -454,7 +472,7 @@ let codegen (c:llcontext) (e:entrypoint) =
 
     (* return generated module and function *)
     (m,entrypoint_fn)
-
+      
 (*
  * Wrappers
  *)
@@ -523,6 +541,7 @@ let codegen_to_ocaml_callable e =
 let codegen_c_wrapper c m f =
 
   let buffer_t = buffer_t c in
+  let i8_t = i8_type c in
   let i32_t = i32_type c in
   (* let i64_t = i64_type c in *)
 
