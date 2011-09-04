@@ -191,21 +191,13 @@ let codegen (c:llcontext) (e:entrypoint) =
 
     (* memory TODO: handle vector loads and stores better *)
     | Load(t, mr) -> 
-      (* Handle gather as a make vector of scalar loads *)
       let elems = (vector_elements (val_type_of_expr mr.idx)) in
-      Printf.printf "Loading a vector of %d addresses\n%!" elems;
-      if (elems > 1) then begin
-        Printf.printf "Codegenning a gather\n%!";
-        let result = cg_expr (MakeVector (List.map (fun x ->
-          Load (element_val_type t, {buf = mr.buf; idx = ExtractElement (mr.idx, IntImm(x))})) 
-                                            (0 -- elems))) in
-        Printf.printf "Done\n%!"; result
-      end else begin  
+      if (elems > 1) then cg_gather t mr
+      else 
         let offset = Analysis.reduce_expr_modulo mr.idx (vector_elements t) in
         if offset = 0        
         then build_load (cg_memref mr t) "" b
         else cg_unaligned_load t mr offset
-      end
 
     (* Loop variables *)
     | Var(name) -> sym_get name
@@ -221,10 +213,13 @@ let codegen (c:llcontext) (e:entrypoint) =
     | MakeVector(l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
 
     | Broadcast(e, n) -> 
+      let elem_type = val_type_of_expr e in
+      let vec_type  = vector_of_val_type elem_type n in
+      let expr      = cg_expr e in
       let rec rep = function
-        | 0 -> []
-        | k -> (e :: (rep (k-1))) in
-      cg_expr (MakeVector (rep n))
+        | 0 -> undef (type_of_val_type vec_type)
+        | i -> build_insertelement (rep (i-1)) expr (const_int int_imm_t (i-1)) "" b
+      in rep n
 
     (* Unpacking vectors *)
     | ExtractElement(e, n) ->
@@ -359,24 +354,24 @@ let codegen (c:llcontext) (e:entrypoint) =
       const_int int_imm_t 0
 
   and cg_stmt = function
-      (* Vector store needs to be handled differently, because they may not be aligned. *)
-      (* Assume unaligned with a stride of 1 for now. *)
-(*
-    | Store(MakeVector(l), mr) -> 
-        cg_storevector (List.map cg_expr l, val_type_of_expr (List.hd l), mr, 1)
- *)
-    | Store(e, mr) ->
-        let ptr = cg_memref mr (val_type_of_expr e) in
-          build_store (cg_expr e) ptr b
+    (* TODO: unaligned vector store *)
+    | Store(e, mr) -> cg_store e mr
     | Map(n, min, max, stmt) ->
-        cg_for n (cg_expr min) (cg_expr max) stmt
+      cg_for n (cg_expr min) (cg_expr max) stmt
     | Block (first::second::rest) ->
-        ignore(cg_stmt first);
-        cg_stmt (Block (second::rest))
+      ignore(cg_stmt first);
+      cg_stmt (Block (second::rest))
     | Block(first::[]) ->
-        cg_stmt first
+      cg_stmt first
     | Block _ -> raise (Wtf "cg_stmt of empty block")
     (* | _ -> raise UnimplementedInstruction *)
+
+  and cg_store e mr =
+    let elems = (vector_elements (val_type_of_expr mr.idx)) in
+    if (elems > 1) then cg_scatter e mr
+    else
+      let ptr = cg_memref mr (val_type_of_expr e) in
+      build_store (cg_expr e) ptr b
 
   and cg_unaligned_load t mr offset =
     let lower_addr = mr.idx -~ (IntImm(offset)) in
@@ -390,6 +385,29 @@ let codegen (c:llcontext) (e:entrypoint) =
     let extract_upper = map (fun x -> ExtractElement(upper, (UIntImm(x)))) upper_indices in
     let vec = MakeVector (extract_lower @ extract_upper) in
     cg_expr vec
+
+  and cg_gather t mr =
+    let elem_type     = type_of_val_type (element_val_type t) in
+    let base_ptr      = build_pointercast (ptr_to_buffer mr.buf) (pointer_type elem_type) "" b in
+    let addr_vec      = cg_expr mr.idx in
+    let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
+    let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
+    let load_idx i    = build_load (addr_of_idx i) "" b in
+    let rec insert_idx = function
+      | -1 -> undef (type_of_val_type t)
+      | i -> build_insertelement (insert_idx (i-1)) (load_idx i) (const_int int_imm_t i) "" b
+    in insert_idx ((vector_elements t) - 1)
+
+  and cg_scatter e mr =
+    let elem_type     = type_of_val_type (element_val_type (val_type_of_expr e)) in
+    let base_ptr      = build_pointercast (ptr_to_buffer mr.buf) (pointer_type elem_type) "" b in
+    let addr_vec      = cg_expr mr.idx in
+    let value_vec     = cg_expr e in
+    let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
+    let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
+    let get_elem i    = build_extractelement value_vec (const_int int_imm_t i) "" b in
+    let store_idx i   = build_store (get_elem i) (addr_of_idx i) b in
+    List.hd (List.map store_idx (0 -- vector_elements (val_type_of_expr e)))
 
   and cg_memref mr vt =
     (* load the global buffer** *)
