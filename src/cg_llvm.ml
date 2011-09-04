@@ -190,15 +190,21 @@ let codegen (c:llcontext) (e:entrypoint) =
       end
 
     (* memory TODO: handle vector loads and stores better *)
-    | Load(t, mr) -> 
-      let elems = (vector_elements (val_type_of_expr mr.idx)) in
-      if (elems > 1) then cg_gather t mr
-      else 
-        let offset = Analysis.reduce_expr_modulo mr.idx (vector_elements t) in
-        if offset = 0        
-        then build_load (cg_memref mr t) "" b
-        else cg_unaligned_load t mr offset
-
+    | Load(t, mr) -> begin
+      match (vector_elements t, vector_elements (val_type_of_expr mr.idx)) with 
+        (* scalar load *)
+        | (1, 1) -> build_load (cg_memref mr t) "" b 
+          
+        (* vector load of scalar address *)
+        | (w, 1) -> begin match Analysis.reduce_expr_modulo mr.idx w with 
+            | Some 0      -> build_load (cg_memref mr t) "" b
+            | Some offset -> cg_unaligned_load t mr offset
+            | None        -> cg_unknown_alignment_load t mr
+        end
+          
+        (* general gather *)
+        | (_, _) -> cg_gather t mr
+    end
     (* Loop variables *)
     | Var(name) -> sym_get name
 

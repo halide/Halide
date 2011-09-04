@@ -40,5 +40,5 @@ and compute_remainder_modulus = function
 let reduce_expr_modulo expr n = 
   let (r, m) = compute_remainder_modulus expr in
   Printf.printf "Remainder is %d modulo %d (querying for %d)\n%!" r m n; 
-  if (m mod n = 0) then (r mod n) else raise (Wtf("Unknown remainder"))
+  if (m mod n = 0) then Some (r mod n) else None;
 
