@@ -3,26 +3,23 @@
 using namespace FImage;
 
 int main(int argc, char **argv) {
-    Var x(0, 100), y(0, 100);
-    Image im(100, 100);       
+    Var x(0, 100);
+    Image im(100);       
 
-    im(x, y) = x*y;
+    im(x) = x;
 
-    y.vectorize(4);
+    x.vectorize(4);
 
     im.evaluate();
 
-    Image im2(100, 100);
+    Image im2(100);
 
-    im2(x, y) = im(99-x, 99-y);
+    im2(x) = im(x + 1);
 
     im2.evaluate();
 
-    for (int y = 0; y < 16; y++) {
-        for (int x = 0; x < 16; x++) {
-            printf("%d ", im2(x, y));
-        }
-        printf("\n");
+    for (int x = 0; x < 16; x++) {
+        printf("%d ", im2(x));
     }
 
     return 0;
