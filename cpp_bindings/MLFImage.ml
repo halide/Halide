@@ -4,6 +4,7 @@ open Cg_llvm
 open Llvm
 open Llvm_executionengine
 open Vectorize
+open Unroll
 
 let compilation_cache = 
   Hashtbl.create 16
@@ -64,6 +65,7 @@ let _ =
   Callback.register "makeArgList" (fun _ -> []);
   Callback.register "makeBufferArg" (fun str -> Buffer str);
   Callback.register "addArgToList" (fun l x -> x::l);
+  Callback.register "doUnroll" (fun stmt var w -> unroll_stmt stmt var w);
 
   (* Debugging, compilation, and transformations *)
   Callback.register "doPrint" (fun a -> Printf.printf "%s\n%!" (string_of_stmt a));

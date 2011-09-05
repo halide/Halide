@@ -3,18 +3,18 @@
 using namespace FImage;
 
 int main(int argc, char **argv) {
-    Var x(0, 100);
-    Image im(100);       
+    Var x(0, 128);
+    Image im(128);       
 
-    im(x) = x;
+    for (int i = 0; i < 128; i++) 
+        im(i) = i;
 
     x.vectorize(4);
+    x.unroll(4);
 
-    im.evaluate();
+    Image im2(128);
 
-    Image im2(100);
-
-    im2(x) = im(x + 1);
+    im2(x) = im(x) + im(x+1);
 
     im2.evaluate();
 

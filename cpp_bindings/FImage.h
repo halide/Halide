@@ -60,12 +60,15 @@ namespace FImage {
         void vectorize(int n) {_vectorize = n;}
         int vectorize() {return _vectorize;}
 
+        void unroll(int n) {_unroll = n;}
+        int unroll() {return _unroll;}
+
         int min() {return _min;}
         int max() {return _max;}
         
         const char *name() {return _name;}
       private:
-        int _vectorize;
+        int _vectorize, _unroll;
         int _min, _max;
         char _name[16];
         static int _instances;
