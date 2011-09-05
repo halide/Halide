@@ -149,8 +149,9 @@ let codegen (c:llcontext) (e:entrypoint) =
   let ptr_to_buffer buf =
     match arg_find buf with
       | (Buffer s), i ->
-          assert (s = buf);
-          param entrypoint_fn i
+        assert (s = buf);
+        let p = param entrypoint_fn i in
+        add_param_attr p Attribute.Noalias; p
       | arg, _ -> raise (Wtf "ptr_to_buffer of non-Buffer argument name")
   in
 
