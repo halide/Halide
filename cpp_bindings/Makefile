@@ -19,7 +19,7 @@ build/%.o: %.cpp
 	$(CXX) -c $< -o $@
 
 OCAML_LIBS=bigarray.cmxa llvm.cmxa llvm_executionengine.cmxa
-OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx vectorize.cmx MLFImage.cmx
+OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx vectorize.cmx unroll.cmx MLFImage.cmx
 OCAMLC=ocamlopt -cc gcc-4.6 -I ../../src -ccopt -O2
 
 build/_MLFImage.o: $(addprefix build/,$(OCAML_MODULES))

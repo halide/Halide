@@ -41,6 +41,7 @@ ML_FUNC2(addArgToList); // old arg list, new arg -> new list
 ML_FUNC2(makeFunction); // stmt, arg list
 ML_FUNC4(makeMap); // var name, min, max, stmt
 ML_FUNC3(doVectorize);
+ML_FUNC3(doUnroll);
 
 namespace FImage {
 
@@ -361,6 +362,7 @@ namespace FImage {
         MemRef &stmt = definitions[0];
 
         static llvm::ExecutionEngine *ee = NULL;
+        static llvm::FunctionPassManager *passMgr = NULL;
 
         if (!ee) {
             llvm::InitializeNativeTarget();
@@ -384,6 +386,14 @@ namespace FImage {
                 if (v > 1) {
                     loop = doVectorize(loop, MLVal::fromString(stmt.vars[i]->name()), MLVal::fromInt(v));
                 }
+                int u = stmt.vars[i]->unroll();
+                if (u > 1) {
+                    printf("Before unrolling:\n");
+                    doPrint(loop);
+                    loop = doUnroll(loop, MLVal::fromString(stmt.vars[i]->name()), MLVal::fromInt(u));
+                    printf("After unrolling:\n");
+                    doPrint(loop);
+                }                    
             }
 
             // Create a function around it with the appropriate number of args
@@ -415,9 +425,38 @@ namespace FImage {
                     printf("Couldn't create execution engine: %s\n", errStr.c_str()); 
                     exit(1);
                 }
+
+                // Set up the pass manager
+                passMgr = new llvm::FunctionPassManager(m);
+
             } else { 
                 ee->addModule(m);
             }            
+
+            printf("optimizing ll...\n");
+
+            passMgr->add(new llvm::TargetData(*ee->getTargetData()));
+            // AliasAnalysis support for GVN
+            passMgr->add(llvm::createBasicAliasAnalysisPass());
+            // Peephole, bit-twiddling optimizations
+            passMgr->add(llvm::createInstructionCombiningPass());
+            // Reassociate expressions
+            passMgr->add(llvm::createReassociatePass());
+            // Simplify CFG (delete unreachable blocks, etc.)
+            passMgr->add(llvm::createCFGSimplificationPass());
+            // Eliminate common sub-expressions
+            passMgr->add(llvm::createGVNPass());
+
+            
+            passMgr->doInitialization();
+
+            if (passMgr->run(*f)) {
+                printf("optimization did something.\n");
+            } else {
+                printf("optimization did nothing.\n");
+            }
+            
+            passMgr->doFinalization();
 
             printf("compiling ll -> machine code...\n");
             void *ptr = ee->getPointerToFunction(f);
