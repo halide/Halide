@@ -1,6 +1,8 @@
 #define __STDC_LIMIT_MACROS
 #define __STDC_CONSTANT_MACROS
 
+#include <fcntl.h>
+
 #include "FImage.h"
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/GenericValue.h>
@@ -11,6 +13,8 @@
 #include <llvm/Analysis/Passes.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Target/TargetData.h>
+
+#include "elf.h"
 
 // declare the functions that live on the ml side
 
@@ -418,6 +422,9 @@ namespace FImage {
             printf("compiling ll -> machine code...\n");
             void *ptr = ee->getPointerToFunction(f);
             stmt.function_ptr = (void (*)(void*))ptr;
+
+            printf("dumping machine code to file...\n");
+            saveELF("generated.o", ptr, 1024);            
         }
 
         //printf("Constructing argument list...\n");

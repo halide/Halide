@@ -1,5 +1,5 @@
 OCAML_LIB_DIR=/usr/local/lib/ocaml
-CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -O2
+CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -g
 
 all: test
 
@@ -11,9 +11,9 @@ LIBS=$(OCAML_LIBS_C) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lm -lstdc++
 test: MLFImage.a test.cpp 
 	$(CXX) test.cpp MLFImage.a -o test $(LIBS)
 
-MLFImage.a: build/_MLFImage.o build/FImage.o build/MLVal.o
+MLFImage.a: build/_MLFImage.o build/FImage.o build/MLVal.o build/elf.o
 	cp $(OCAML_LIB_DIR)/libasmrun.a MLFImage.a
-	ar q MLFImage.a build/_MLFImage.o build/MLVal.o build/FImage.o
+	ar q MLFImage.a build/_MLFImage.o build/MLVal.o build/FImage.o build/elf.o
 
 build/%.o: %.cpp
 	$(CXX) -c $< -o $@
