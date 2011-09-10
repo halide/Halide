@@ -1,5 +1,5 @@
 OCAML_LIB_DIR=/usr/local/lib/ocaml
-CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -g
+CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -O1
 
 all: test
 
@@ -20,6 +20,7 @@ build/%.o: %.cpp
 
 OCAML_LIBS=bigarray.cmxa llvm.cmxa llvm_executionengine.cmxa
 OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx vectorize.cmx unroll.cmx MLFImage.cmx
+OCAML_SOURCES=$(OCAML_MODULES:%.cmx=%.ml)
 OCAMLC=ocamlopt -cc gcc-4.6 -I ../../src -ccopt -O2
 
 build/_MLFImage.o: $(addprefix build/,$(OCAML_MODULES))
@@ -45,3 +46,10 @@ build/%.cmx: %.ml
 
 clean:
 	rm -f test build/*
+
+dep: 		
+	cd ../src/ 
+	ocamldep *.ml | sed "s/\([^ ]*.cmx\)/build\/\1/g" | grep -v cmo > Makefile.dep
+	cd $(PWD)
+
+include Makefile.dep
