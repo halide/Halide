@@ -124,19 +124,19 @@ namespace FImage {
         
         // Actually look something up in the image. Won't return anything
         // interesting if the image hasn't been evaluated yet.
-        uint32_t &operator()(int a) {
-            return data[a*stride[0]];
+        float &operator()(int a) {
+          return data[a*stride[0]];
         }
         
-        uint32_t &operator()(int a, int b) {
+        float &operator()(int a, int b) {
             return data[a*stride[0] + b*stride[1]];
         }
         
-        uint32_t &operator()(int a, int b, int c) {
+        float &operator()(int a, int b, int c) {
             return data[a*stride[0] + b*stride[1] + c*stride[2]];
         }
         
-        uint32_t &operator()(int a, int b, int c, int d) {
+        float &operator()(int a, int b, int c, int d) {
             return data[a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]];
         }
         
@@ -167,10 +167,10 @@ namespace FImage {
         // The point of the start of the first scanline. Public for now
         // for inspection, but don't assume anything about the way data is
         // stored.
-        uint32_t *data;
+        float *data;
         
         // How the data is actually stored
-        std::shared_ptr<std::vector<uint32_t> > buffer;
+        std::shared_ptr<std::vector<float> > buffer;
         
         // The vector of definitions of this image. Right now all but the first is ignored.
         std::vector<MemRef> definitions;

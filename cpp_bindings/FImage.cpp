@@ -13,6 +13,8 @@
 #include <llvm/Analysis/Passes.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Target/TargetData.h>
+#include <llvm/Assembly/PrintModulePass.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include "elf.h"
 
@@ -175,7 +177,7 @@ namespace FImage {
         doPrint(node);
     }
 
-    Var::Var(int a, int b) : _min(a), _max(b) {
+    Var::Var(int a, int b) : _min(a), _max(b), _vectorize(1), _unroll(1) {
         snprintf(_name, sizeof(_name), "var%d", _instances++);
         node = makeVar(MLVal::fromString(_name));
         vars.push_back(this);
@@ -269,7 +271,7 @@ namespace FImage {
         size[0] = a;
         stride[0] = 1;
         // TODO: enforce alignment, lazy allocation, etc, etc
-        buffer.reset(new std::vector<uint32_t>(a + 8));
+        buffer.reset(new std::vector<float>(a + 8));
         data = &(*buffer)[0] + 4;
         snprintf(_name, sizeof(_name), "im%d", _instances++);
     }
@@ -281,7 +283,7 @@ namespace FImage {
         size[1] = b;
         stride[0] = 1;
         stride[1] = a;
-        buffer.reset(new std::vector<uint32_t>(a*b + 8));
+        buffer.reset(new std::vector<float>(a*b + 8));
         data = &(*buffer)[0] + 4;
         snprintf(_name, sizeof(_name), "im%d", _instances++);
     }
@@ -295,7 +297,7 @@ namespace FImage {
         stride[0] = 1;
         stride[1] = a;
         stride[2] = a*b;
-        buffer.reset(new std::vector<uint32_t>(a*b*c + 8));
+        buffer.reset(new std::vector<float>(a*b*c + 8));
         data = &(*buffer)[0] + 4;
         snprintf(_name, sizeof(_name), "im%d", _instances++);
     }
@@ -311,7 +313,7 @@ namespace FImage {
         stride[1] = a;
         stride[2] = a*b;
         stride[3] = a*b*c;
-        buffer.reset(new std::vector<uint32_t>(a*b*c*d + 8));
+        buffer.reset(new std::vector<float>(a*b*c*d + 8));
         data = &(*buffer)[0] + 4;
         snprintf(_name, sizeof(_name), "im%d", _instances++);
     }
@@ -433,29 +435,49 @@ namespace FImage {
                 ee->addModule(m);
             }            
 
+            llvm::Function *inner = m->getFunction("_im_main");
+
+            if (!inner) {
+                printf("Could not find function _im_main");
+                exit(1);
+            }
+
             printf("optimizing ll...\n");
 
+            std::string errstr;
+            llvm::raw_fd_ostream stdout("passes.txt", errstr);
+  
             passMgr->add(new llvm::TargetData(*ee->getTargetData()));
+            //passMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
+
             // AliasAnalysis support for GVN
             passMgr->add(llvm::createBasicAliasAnalysisPass());
-            // Peephole, bit-twiddling optimizations
-            passMgr->add(llvm::createInstructionCombiningPass());
+            //passMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
+
             // Reassociate expressions
             passMgr->add(llvm::createReassociatePass());
+            //passMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
+
             // Simplify CFG (delete unreachable blocks, etc.)
             passMgr->add(llvm::createCFGSimplificationPass());
+            //passMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
+
             // Eliminate common sub-expressions
             passMgr->add(llvm::createGVNPass());
+            //passMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
 
+            // Peephole, bit-twiddling optimizations
+            passMgr->add(llvm::createInstructionCombiningPass());
+            //passMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
             
             passMgr->doInitialization();
 
-            if (passMgr->run(*f)) {
+            if (passMgr->run(*inner)) {
                 printf("optimization did something.\n");
             } else {
                 printf("optimization did nothing.\n");
             }
-            
+
             passMgr->doFinalization();
 
             printf("compiling ll -> machine code...\n");
@@ -463,16 +485,17 @@ namespace FImage {
             stmt.function_ptr = (void (*)(void*))ptr;
 
             printf("dumping machine code to file...\n");
-            saveELF("generated.o", ptr, 1024);            
+            saveELF("generated.o", ptr, 8192);            
+            printf("Done dumping machine code to file\n");
         }
 
-        //printf("Constructing argument list...\n");
+        printf("Constructing argument list...\n");
         static void *arguments[256];
         for (size_t i = 0; i < stmt.args.size(); i++) {
             arguments[i] = (void *)stmt.args[i]->data;
         }
 
-        //printf("Calling function...\n");
+        printf("Calling function...\n"); 
         stmt.function_ptr(&arguments[0]); 
 
         return *this;
