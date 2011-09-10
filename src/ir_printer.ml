@@ -53,7 +53,7 @@ and string_of_stmt = function
   | Map(n, min, max, s) -> sprintf "map (%s from %s to %s) %s" n (string_of_expr min) (string_of_expr max) (string_of_stmt s)
   | Block(stmts) -> "{" ^ "\n" ^
                     String.concat ";\n" (List.map string_of_stmt stmts) ^
-                    "}" ^ "\n"
+                    "\n}" ^ "\n"
   (* | Reduce(op, e, mr) -> string_of_memref mr ^ string_of_reduce_op op ^ string_of_expr e *)
   | Store(e, mr) -> string_of_memref mr ^ " = " ^ string_of_expr e
 
