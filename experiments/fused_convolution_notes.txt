@@ -1,0 +1,117 @@
+SUMMARY
+-------
+Fusion definitely matters for reducing bandwidth.
+
+Using a small, in-cache (4 scanline) temp buffer, rather than a full-image temp buffer, substantially improves performance on both architectures.
+
+We achieve 3-4.5GB/sec on Woodcrest Core 2 Duo with 1333mhz FSB = 10.6GB/sec/socket.
+
+We achieve ~500MB/sec on OMAP4 Cortex A9 with ~6.4GB/sec LPDDR2 and measured ~1.6GB/sec peak CPU write (~1GB/sec peak read) bandwidth.
+
+Cachegrind simulation suggests that simple (memcpy?) test has 1 write miss per output line and 1 read miss per input line. It's unclear how this factors in allocates of the written data. Presumably "write miss" implies a fetch, and this data is then ultimately written back out, while the read data is silently evicted without a write back.
+
+DETAILS
+-------
+A9 specs:
+http://www.7-cpu.com/cpu/Cortex-A9.html
+
+2x32 bit 800mhz LPDDR2 = 6.4GB/sec
+
+But only 1.6GB/sec peak bandwidth (dense aligned writes)!? Reads circa 1GB/sec or less.
+
+Our results peak at ~500MB/sec:
+ 
+> abadams@omap4:~$ ./a.out 
+> 
+> Copying input to output: 89.783005 ms
+> Memcpy input to output:  81.543007 ms
+> Unfused scalar:          274.597015 ms
+> Fused scalar:            189.422012 ms
+> Fused with memory reuse: 141.724014 ms
+> 
+> Copying input to output: 89.783005 ms
+> Memcpy input to output:  81.665001 ms
+> Unfused scalar:          274.871002 ms
+> Fused scalar:            190.063004 ms
+> Fused with memory reuse: 141.724014 ms
+> 
+> Copying input to output: 90.057983 ms
+> Memcpy input to output:  81.604004 ms
+> Unfused scalar:          274.933014 ms
+> Fused scalar:            189.911011 ms
+> Fused with memory reuse: 141.785004 ms
+> abadams@omap4:~$ ./a.out 
+> 
+> Copying input to output: 97.442001 ms
+> Memcpy input to output:  82.519005 ms
+> Unfused scalar:          275.513000 ms
+> Fused scalar:            191.223007 ms
+> Fused with memory reuse: 142.364929 ms
+> 
+> Copying input to output: 91.523003 ms
+> Memcpy input to output:  82.977005 ms
+> Unfused scalar:          275.787018 ms
+> Fused scalar:            190.430008 ms
+> Fused with memory reuse: 142.304001 ms
+> 
+> Copying input to output: 90.789978 ms
+> Memcpy input to output:  82.337006 ms
+> Unfused scalar:          275.542999 ms
+> Fused scalar:            190.643005 ms
+> Fused with memory reuse: 142.456009 ms
+> abadams@omap4:~$ g++ fused_convolution.cpp -ffast-math -O3 -mcpu=cortex-a9
+> abadams@omap4:~$ ./a.out 
+> 
+> Fused with memory reuse: 173.187012 ms
+> 
+> Fused with memory reuse: 173.461975 ms
+> 
+> Fused with memory reuse: 173.798004 ms
+
+x86 has 7 memory ops in the inner loop.
+
+4 bytes x 640 x 6400 / 64 byte cache lines = 256k lines touched
+x 3 channels = 768k seen in:
+
+Cachegrind on bigboy:
+
+> ==30066== I   refs:      219,985,539
+> ==30066== I1  misses:          1,140
+> ==30066== L2i misses:          1,139
+> ==30066== I1  miss rate:        0.00%
+> ==30066== L2i miss rate:        0.00%
+> ==30066== 
+> ==30066== D   refs:       85,270,760  (60,924,381 rd   + 24,346,379 wr)
+> ==30066== D1  misses:      1,544,968  (   776,199 rd   +    768,769 wr)
+> ==30066== L2d misses:      1,542,060  (   773,646 rd   +    768,414 wr)
+> ==30066== D1  miss rate:         1.8% (       1.2%     +        3.1%  )
+> ==30066== L2d miss rate:         1.8% (       1.2%     +        3.1%  )
+> ==30066== 
+> ==30066== L2 refs:         1,546,108  (   777,339 rd   +    768,769 wr)
+> ==30066== L2 misses:       1,543,199  (   774,785 rd   +    768,414 wr)
+> ==30066== L2 miss rate:          0.5% (       0.2%     +        3.1%  )
+
+On Core 2 Xeon with 667mhz DDR2 x 128bits, seems near bandwidth limited, especially for memcpy, assuming 2 loads and 1 store for each memcpy step (no store-allocate):
+
+> abadams@reptar:~/projects/FImage/cpp_bindings
+> $ gcc-4.6 fused_convolution.cpp -std=c++0x -I /usr/local/lib/ocaml/ -lstdc++ -O3 -ffast-math 
+> abadams@reptar:~/projects/FImage/cpp_bindings
+> $ ./a.out 
+> 
+> Copying input to output: 42.118004 ms
+> Memcpy input to output:  11.926001 ms
+> Unfused scalar:          50.240002 ms
+> Fused scalar:            32.271000 ms
+> Fused with memory reuse: 20.458000 ms
+> 
+> Copying input to output: 15.896001 ms
+> Memcpy input to output:  10.928000 ms
+> Unfused scalar:          40.057003 ms
+> Fused scalar:            32.243000 ms
+> Fused with memory reuse: 20.754002 ms
+> 
+> Copying input to output: 15.999001 ms
+> Memcpy input to output:  11.154000 ms
+> Unfused scalar:          39.417969 ms
+> Fused scalar:            30.776001 ms
+> Fused with memory reuse: 21.033001 ms
