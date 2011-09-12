@@ -115,3 +115,17 @@ On Core 2 Xeon with 667mhz DDR2 x 128bits, seems near bandwidth limited, especia
 > Unfused scalar:          39.417969 ms
 > Fused scalar:            30.776001 ms
 > Fused with memory reuse: 21.033001 ms
+
+TODO
+----
+Some compiler optimization variants people recommend:
+
+-mcpu=cortex-a9 -fprefetch-loop-arrays -mfpu=vfp3 -O3 
+
+or:
+
+-O3 -march=armv7-a -ftree-vectorize -fprefetch-loop-arrays 
+-funroll-loops
+
+and -mfpu=neon 
+or -mvectorize-with-neon-quad 
