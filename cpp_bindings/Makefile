@@ -1,12 +1,18 @@
+LLVM_DIR=../llvm/Debug+Asserts
+LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
+OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
+
 OCAML_LIB_DIR=/usr/local/lib/ocaml
-CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -O1
+LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags)
+CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -O1 $(LLVM_CFLAGS_CXX)
 
 all: test
 
-LLVM_LIBS_CXX=$(shell llvm-config --libs codegen jit x86 bitwriter interpreter)
+LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs codegen jit x86 bitwriter interpreter)
 LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_analysis -lllvm_target
 OCAML_LIBS_C=-L$(OCAML_LIB_DIR) -lbigarray
-LIBS=$(OCAML_LIBS_C) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lm -lstdc++
+LLVM_LDFLAGS=$(shell $(LLVM_CONFIG_EXE) --ldflags)
+LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lstdc++
  
 test: MLFImage.a test.cpp 
 	$(CXX) test.cpp MLFImage.a -o test $(LIBS)
@@ -21,7 +27,7 @@ build/%.o: %.cpp
 OCAML_LIBS=bigarray.cmxa llvm.cmxa llvm_executionengine.cmxa
 OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx vectorize.cmx unroll.cmx MLFImage.cmx
 OCAML_SOURCES=$(OCAML_MODULES:%.cmx=%.ml)
-OCAMLC=ocamlopt -cc gcc-4.6 -I ../../src -ccopt -O2
+OCAMLC=ocamlopt -cc gcc-4.6 -I ../$(OCAML_LLVM_LIB_DIR) -I ../../src -ccopt -O2
 
 build/_MLFImage.o: $(addprefix build/,$(OCAML_MODULES))
 	cd build && \
