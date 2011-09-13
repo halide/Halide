@@ -7,3 +7,4 @@ vectorize
 img
 split
 unroll
+constant_fold
