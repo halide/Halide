@@ -16,6 +16,8 @@ namespace FImage {
         Expr();
         Expr(MLVal);
         Expr(int32_t);
+        Expr(unsigned);
+        Expr(float);
 
         void operator+=(const Expr &);
         void operator-=(const Expr &);

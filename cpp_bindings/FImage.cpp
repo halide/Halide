@@ -26,6 +26,7 @@
 // declare the functions that live on the ml side
 
 ML_FUNC1(makeIntImm);
+ML_FUNC1(makeFloatImm);
 ML_FUNC2(makeAdd);
 ML_FUNC2(makeSub);
 ML_FUNC2(makeMul);
@@ -72,6 +73,14 @@ namespace FImage {
 
     Expr::Expr(int32_t val) {
         node = makeIntImm(MLVal::fromInt(val));
+    }
+
+    Expr::Expr(unsigned val) {
+        node = makeIntImm(MLVal::fromInt(val));
+    }
+
+    Expr::Expr(float val) {
+        node = makeFloatImm(MLVal::fromFloat(val));
     }
 
     // declare that this node has a child for bookkeeping
