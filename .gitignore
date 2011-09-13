@@ -1,4 +1,7 @@
+\#*\#
+*~
 *.o
+*.a
 *.dot
 .DS_Store
 *.log
@@ -16,6 +19,8 @@ _build
 a.out
 *.cmi
 *.cmo
+*.cmx
+*.cmxa
 *.bc
 tags
 src/*.top
@@ -23,3 +28,4 @@ src/brightness.ll
 src/brightness.s
 src/gradientx.s
 src/out.png
+llvm_svn
