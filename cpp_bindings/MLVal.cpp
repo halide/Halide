@@ -65,6 +65,9 @@ MLVal MLVal::fromInt(int x) {
     return MLValFromValue(Val_int(x));
 }
 
+MLVal MLVal::fromFloat(float x) {
+    return MLValFromValue(caml_copy_double(x));
+}
 
 MLVal MLVal::fromString(const char *str) {
     init_ml();

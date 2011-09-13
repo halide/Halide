@@ -48,6 +48,7 @@ let compile f =
 let _ = 
   (* Make IR nodes *)
   Callback.register "makeIntImm" (fun a -> IntImm a);
+  Callback.register "makeFloatImm" (fun a -> FloatImm a);
   Callback.register "makeAdd" (fun a b -> Bop (Add, a, b));
   Callback.register "makeMul" (fun a b -> Bop (Mul, a, b));
   Callback.register "makeSub" (fun a b -> Bop (Sub, a, b));

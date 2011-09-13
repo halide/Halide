@@ -28,6 +28,7 @@ public:
     static MLVal fromString(const char *);
     static MLVal fromString(const std::string &);
     static MLVal fromInt(int);
+    static MLVal fromFloat(float);
     static MLVal fromPointer(void *);
 };
 
