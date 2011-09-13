@@ -39,7 +39,6 @@ and compute_remainder_modulus = function
 (* returns an integer in [0, m-1], or m if unknown *)
 let reduce_expr_modulo expr n = 
   let (r, m) = compute_remainder_modulus expr in
-  Printf.printf "Remainder is %d modulo %d (querying for %d)\n%!" r m n; 
   if (m mod n = 0) then Some (r mod n) else None
 
 
