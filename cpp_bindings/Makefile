@@ -1,4 +1,4 @@
-LLVM_DIR=../llvm/Debug+Asserts
+LLVM_DIR ?= ../llvm/Debug+Asserts
 LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
 OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
 
