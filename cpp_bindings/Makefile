@@ -8,8 +8,8 @@ LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_analysis -lllv
 OCAML_LIBS_C=-L$(OCAML_LIB_DIR) -lbigarray
 LIBS=$(OCAML_LIBS_C) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lm -lstdc++
  
-test: MLFImage.a test.cpp 
-	$(CXX) test.cpp MLFImage.a -o test $(LIBS)
+test: MLFImage.a build/test.o
+	$(CXX) build/test.o MLFImage.a -o test $(LIBS)
 
 MLFImage.a: build/_MLFImage.o build/FImage.o build/MLVal.o build/elf.o
 	cp $(OCAML_LIB_DIR)/libasmrun.a MLFImage.a
