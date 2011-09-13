@@ -9,11 +9,21 @@ let rec constant_fold_expr expr =
 
     (* basic binary ops *)
     | Bop (op, a, b) ->
-      begin match (recurse a, recurse b) with
-        | (IntImm   x, IntImm   y) -> IntImm   (caml_iop_of_bop op x y)
-        | (UIntImm  x, UIntImm  y) -> UIntImm  (caml_iop_of_bop op x y)
-        | (FloatImm x, FloatImm y) -> FloatImm (caml_fop_of_bop op x y)
-        | (x, y) -> Bop (op, x, y)
+      begin match (op, recurse a, recurse b) with
+        | (_, IntImm   x, IntImm   y) -> IntImm   (caml_iop_of_bop op x y)
+        | (_, UIntImm  x, UIntImm  y) -> UIntImm  (caml_iop_of_bop op x y)
+        | (_, FloatImm x, FloatImm y) -> FloatImm (caml_fop_of_bop op x y)
+
+        (* Identity operations. These are not strictly constant
+           folding, but they tend to come up at the same time *)
+        | (Sub, IntImm 0, x) | (Sub, UIntImm 0, x) | (Sub, FloatImm 0.0, x) 
+        | (Add, IntImm 0, x) | (Add, UIntImm 0, x) | (Add, FloatImm 0.0, x) 
+        | (Add, x, IntImm 0) | (Add, x, UIntImm 0) | (Add, x, FloatImm 0.0) 
+        | (Mul, IntImm 1, x) | (Mul, UIntImm 1, x) | (Mul, FloatImm 1.0, x) 
+        | (Mul, x, IntImm 1) | (Mul, x, UIntImm 1) | (Mul, x, FloatImm 1.0) 
+        | (Div, x, IntImm 1) | (Div, x, UIntImm 1) | (Div, x, FloatImm 1.0) -> x
+
+        | (op, x, y) -> Bop (op, x, y)
       end
 
     (* comparison *)
