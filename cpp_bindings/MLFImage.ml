@@ -5,6 +5,8 @@ open Llvm
 open Llvm_executionengine
 open Vectorize
 open Unroll
+open Split
+open Constant_fold
 
 let compilation_cache = 
   Hashtbl.create 16
@@ -65,11 +67,13 @@ let _ =
   Callback.register "makeArgList" (fun _ -> []);
   Callback.register "makeBufferArg" (fun str -> Buffer str);
   Callback.register "addArgToList" (fun l x -> x::l);
-  Callback.register "doUnroll" (fun stmt var w -> unroll_stmt stmt var w);
 
-  (* Debugging, compilation, and transformations *)
+  (* Debugging, compilation *)
   Callback.register "doPrint" (fun a -> Printf.printf "%s\n%!" (string_of_stmt a));
   Callback.register "doCompile" compile;
-  Callback.register "doVectorize" (fun stmt var w -> vectorize_stmt stmt var w);
-  
-  
+
+  (* Transformations *)
+  Callback.register "doVectorize" (fun var stmt -> vectorize_stmt var stmt);
+  Callback.register "doUnroll" (fun var stmt -> unroll_stmt var stmt);
+  Callback.register "doSplit" (fun var outer inner n stmt -> split_stmt var outer inner n stmt);
+  Callback.register "doConstantFold" (fun stmt -> constant_fold_stmt stmt);

@@ -36,7 +36,7 @@ let is_vector = function
   | Scalar _ | Const _ -> false
   | _ -> true
 
-let vectorize_expr_packed expr var width = 
+let vectorize_expr_packed (var:string) (min:int) (width:int) (expr:expr) = 
 
   let expand e = expand e width
   and unpack_scalar e = match e with
@@ -156,7 +156,7 @@ let vectorize_expr_packed expr var width =
     end
 
     (* Vectorized Var vectorizes to strided expression version of itself *)
-    | Var(name) when (name = var) -> Linear (IntImm(width) *~ expr, 1)
+    | Var(name) when (name = var) -> Linear (IntImm(min), 1)
     (* Other Vars are Scalar relative to this vectorization *)
     | Var(_) -> Scalar(expr) 
 
@@ -164,33 +164,39 @@ let vectorize_expr_packed expr var width =
 
   in vec expr
 
-(* Vectorize expr and realize unpacked result *)
-let vectorize_expr e var width =
-  unpack (vectorize_expr_packed e var width) width
-
-let rec vectorize_stmt stmt var width = 
-
-  let expand e = expand e width
-  and vec s = vectorize_stmt s var width in
-
-  match stmt with
-    | Map (name, min, max, stmt) when name = var ->
-      (* TODO: Currently we assume width divides min and max *)
-      Map (name, min /~ IntImm(width), max /~ IntImm(width), vec stmt)
-    | Map (name, min, max, stmt) -> Map (name, min, max, vec stmt)
-    | Block l -> Block (map vec l)
-    | Store (expr, mr) -> begin
-      let e = vectorize_expr_packed expr var width in
-      let idx = vectorize_expr_packed mr.idx var width in
-      match idx with
+let rec vectorize_stmt var stmt =
+  let rec vectorize_stmt_inner var min width stmt =
+    let expand e = expand e width
+    and vec = vectorize_stmt_inner var min width in
+    match stmt with
+      | Map (v, min, max, stmt) -> Map (v, min, IntImm(width), vec stmt)
+      | Block l -> Block (map vec l)
+      | Store (expr, mr) -> begin
+        let e = vectorize_expr_packed var min width expr in
+        let idx = vectorize_expr_packed var min width mr.idx in
+        match idx with
         (* Storing to a scalar address *)
-        | Scalar(i) | Const(i, _) | Linear(i, 0) -> begin match e with
-            | Scalar(a) | Const(a, _) -> Store (a, {buf = mr.buf; idx = i})
-            | _ -> raise (Wtf("Storing a vector at a scalar address. Result undefined."))              
-        end
-        (* Storing to a vector of addresses. *)
-        | Linear(i, 1) -> Store (expand e, {buf = mr.buf; idx = i}) (* dense store *)
-        | Linear(i, n) -> Store (expand e, {buf = mr.buf; idx = expand idx}) (* TODO: strided store *)
-        | _ -> Store (expand e, {buf = mr.buf; idx = expand idx}) (* scatter *)
-    end
-    (* | _ -> raise (Wtf "don't know how to vectorize this statement yet") *)
+          | Scalar(i) | Const(i, _) | Linear(i, 0) -> begin match e with
+              | Scalar(a) | Const(a, _) -> Store (a, {buf = mr.buf; idx = i})
+              | _ -> raise (Wtf("Storing a vector at a scalar address. Result undefined."))              
+          end
+          (* Storing to a vector of addresses. *)
+          | Linear(i, 1) -> Store (expand e, {buf = mr.buf; idx = i}) (* dense store *)
+          | Linear(i, n) -> Store (expand e, {buf = mr.buf; idx = expand idx}) (* TODO: strided store *)
+          | _ -> Store (expand e, {buf = mr.buf; idx = expand idx}) (* scatter *)    
+      end in
+  
+  match stmt with        
+    | Map (name, min, max, stmt) when name = var ->
+      begin match (min, max) with
+        | (IntImm a, IntImm b) 
+        | (IntImm a, UIntImm b) 
+        | (UIntImm a, IntImm b) 
+        | (UIntImm a, UIntImm b) ->
+          vectorize_stmt_inner var a (b-a) stmt
+        | _ -> raise (Wtf "Can't vectorize map with non-constant bounds")
+      end
+    | Map (name, min, max, stmt) -> Map (name, min, max, vectorize_stmt var stmt)
+    | Block l -> Block (map (vectorize_stmt var) l)
+      (* Anything that doesn't contain a sub-statement is unchanged *)
+    | x -> x
