@@ -17,14 +17,16 @@ public:
     static MLVal find(const char *name);
     MLVal() {};
     MLVal operator()();
-    MLVal operator()(MLVal x);
-    MLVal operator()(MLVal x, MLVal y);
-    MLVal operator()(MLVal x, MLVal y, MLVal z);
-    MLVal operator()(MLVal x, MLVal y, MLVal z, MLVal w);
+    MLVal operator()(MLVal a);
+    MLVal operator()(MLVal a, MLVal b);
+    MLVal operator()(MLVal a, MLVal b, MLVal c);
+    MLVal operator()(MLVal a, MLVal b, MLVal c, MLVal d);
+    MLVal operator()(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e);
 
     value &getValue();
 
     static MLVal fromString(const char *);
+    static MLVal fromString(const std::string &);
     static MLVal fromInt(int);
     static MLVal fromPointer(void *);
 };
@@ -60,6 +62,7 @@ public:
         return callback(x, y, z);                              \
     }
 
+
 #define ML_FUNC4(n)                                            \
   MLVal n(MLVal x, MLVal y, MLVal z, MLVal w) {                \
         static MLVal callback;                                 \
@@ -67,4 +70,12 @@ public:
         return callback(x, y, z, w);                           \
     }
 
+
+#define ML_FUNC5(n)                                            \
+  MLVal n(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e) {       \
+        static MLVal callback;                                 \
+        if (!callback.val) callback = MLVal::find(#n);         \
+        return callback(a, b, c, d, e);                        \
+    }
+ 
 #endif

@@ -1,17 +1,25 @@
 open Ir
 open Util
+open Split
+open Analysis
 
-
-let rec unroll_stmt stmt var width = 
-  let unroll s = unroll_stmt s var width in
-  (* At this stage we're outside the loop in this variable *)
+let rec unroll_stmt var stmt = 
+  let unroll s = unroll_stmt var s in
   match stmt with
-    | Map (name, min, max, stmt) when name = var ->
-      let substmt i = subs_stmt (Var var) (((Var var) *~ IntImm(width)) +~ IntImm(i)) stmt in      
-      let newbody = List.map substmt (0 -- width) in
-      Map (name, min /~ IntImm(width), max /~ IntImm(width), Block newbody)
+    (* At this stage we're outside the loop in this variable *)
+    | Map (v, min, max, substmt) when v = var ->
+      begin match (min, max) with
+        | (IntImm a, IntImm b) 
+        | (IntImm a, UIntImm b) 
+        | (UIntImm a, IntImm b) 
+        | (UIntImm a, UIntImm b) ->
+          let gen_stmt i = subs_stmt (Var var) (IntImm i) substmt in
+          Block (List.map gen_stmt (a -- b))
+        | _ -> raise (Wtf "Can't unroll map with non-constant bounds")
+      end
     | Map (name, min, max, stmt) -> Map (name, min, max, unroll stmt)
     | Block l -> Block (List.map unroll l)
-    | Store (expr, mr) -> Store (expr, mr)
+    (* Anything that does not contain a sub-statement is unchanged *)
+    | x -> x
       
   

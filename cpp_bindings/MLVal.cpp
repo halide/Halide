@@ -9,6 +9,7 @@ extern "C" {
 #include <caml/alloc.h>
 }
 
+#include <string>
 
 void init_ml() {
     static bool initialized = false;
@@ -72,6 +73,10 @@ MLVal MLVal::fromString(const char *str) {
     return MLValFromValue(v);
 }
 
+MLVal MLVal::fromString(const std::string &str) {
+    return MLVal::fromString(str.c_str());
+}
+
 MLVal MLVal::fromPointer(void *ptr) {
     return MLValFromValue((value)ptr);
 }
@@ -96,6 +101,11 @@ MLVal MLVal::operator()(MLVal x, MLVal y, MLVal z) {
                                          z.val->val));
 }
 
+
 MLVal MLVal::operator()(MLVal x, MLVal y, MLVal z, MLVal w) {
     return (*this)(x, y, z)(w);
+}
+
+MLVal MLVal::operator()(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e) {
+    return (*this)(a, b, c)(d, e);
 }

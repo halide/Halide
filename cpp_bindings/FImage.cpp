@@ -47,8 +47,10 @@ ML_FUNC0(makeArgList);
 ML_FUNC2(addArgToList); // old arg list, new arg -> new list
 ML_FUNC2(makeFunction); // stmt, arg list
 ML_FUNC4(makeMap); // var name, min, max, stmt
-ML_FUNC3(doVectorize);
-ML_FUNC3(doUnroll);
+ML_FUNC2(doVectorize);
+ML_FUNC2(doUnroll);
+ML_FUNC5(doSplit);
+ML_FUNC1(doConstantFold);
 
 namespace FImage {
 
@@ -391,13 +393,27 @@ namespace FImage {
             for (size_t i = 0; i < stmt.vars.size(); i++) {
                 int v = stmt.vars[i]->vectorize();
                 if (v > 1) {
-                    loop = doVectorize(loop, MLVal::fromString(stmt.vars[i]->name()), MLVal::fromInt(v));
+                    printf("Before vectorizing:\n");
+                    doPrint(loop);
+                    MLVal outer = MLVal::fromString(stmt.vars[i]->name());
+                    MLVal inner = MLVal::fromString(std::string(stmt.vars[i]->name()) + "_inner");
+                    loop = doSplit(outer, outer, inner, MLVal::fromInt(v), loop);
+                    loop = doConstantFold(loop);
+                    loop = doVectorize(inner, loop);
+                    loop = doConstantFold(loop);
+                    printf("After vectorizing:\n");
+                    doPrint(loop);
                 }
                 int u = stmt.vars[i]->unroll();
                 if (u > 1) {
                     printf("Before unrolling:\n");
                     doPrint(loop);
-                    loop = doUnroll(loop, MLVal::fromString(stmt.vars[i]->name()), MLVal::fromInt(u));
+                    MLVal outer = MLVal::fromString(stmt.vars[i]->name());
+                    MLVal inner = MLVal::fromString(std::string(stmt.vars[i]->name()) + "_inner");
+                    loop = doSplit(outer, outer, inner, MLVal::fromInt(u), loop);
+                    loop = doConstantFold(loop);
+                    loop = doUnroll(inner, loop);
+                    loop = doConstantFold(loop);
                     printf("After unrolling:\n");
                     doPrint(loop);
                 }                    
@@ -410,7 +426,7 @@ namespace FImage {
                 args = addArgToList(args, arg);
             }
             
-            //printf("Making function...\n");
+            printf("\nMaking function...\n");
             
             MLVal function = makeFunction(args, loop);
 
