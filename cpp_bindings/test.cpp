@@ -6,6 +6,22 @@ using namespace FImage;
 #define W 3008
 #define H 3008
 
+template<typename T, int N> 
+struct _do_math {
+    static T go(const T &a, const T &b) {return _do_math<T, N-1>::go(a*b, a+b);}
+};
+
+template<typename T>
+struct _do_math<T, 0> {
+    static T go(const T &a, const T &b) {return a + b;}
+};
+
+template<typename T>
+T do_math(const T &a, const T &b) {
+    return _do_math<T, 0>::go(a, b);
+}
+
+
 float operator-(const timeval &after, const timeval &before) {
     int ds = after.tv_sec - before.tv_sec;
     int du = after.tv_usec - before.tv_usec;
@@ -22,13 +38,13 @@ int main(int argc, char **argv) {
         }
     }
 
-    //x.unroll(4);
+    x.unroll(2);
     x.vectorize(4);
     //y.unroll(4);
 
     Image im2(W, H);
 
-    im2(x, y) = im(x, y) + im(x+1, y);
+    im2(x, y) = do_math(Expr(im(x, y)), Expr(im(x+1, y)));
 
     im2.evaluate();
 
@@ -37,11 +53,16 @@ int main(int argc, char **argv) {
     im2.evaluate();
     gettimeofday(&after, NULL);
     printf("jitted code: %f ms\n", after - before);
+
+    for (int x = 0; x < 16; x++) {
+        printf("%d ", im2(x));
+    }
+    printf("\n");
     
     gettimeofday(&before, NULL);
     for (int y = 0; y < H; y++) {
         for (int x = 64; x < W-64; x++) {
-            im2(x, y) = im(x, y) + im(x+1, y) + im(x, y);
+            im2(x, y) = do_math(im(x, y), im(x+1, y));
         }
     }
     gettimeofday(&after, NULL);
@@ -50,6 +71,7 @@ int main(int argc, char **argv) {
     for (int x = 0; x < 16; x++) {
         printf("%d ", im2(x));
     }
+    printf("\n");
 
     return 0;
 }
