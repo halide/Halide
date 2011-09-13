@@ -4,7 +4,7 @@ open List
 open Util
 open Ir_printer
 
-let dbgprint = true
+let dbgprint = false
 
 let entrypoint_name = "_im_main"
 let caml_entrypoint_name = entrypoint_name ^ "_caml_runner"
@@ -396,7 +396,6 @@ let codegen (c:llcontext) (e:entrypoint) =
     let upper = Load(t, {buf = mr.buf; idx = upper_addr}) in
     let lower_indices = offset -- (vector_elements t) in
     let upper_indices = 0 -- offset in
-    Printf.printf "lower: %d, upper: %d\n%!" (length lower_indices) (length upper_indices);
     let extract_lower = map (fun x -> ExtractElement(lower, (UIntImm(x)))) lower_indices in
     let extract_upper = map (fun x -> ExtractElement(upper, (UIntImm(x)))) upper_indices in
     let vec = MakeVector (extract_lower @ extract_upper) in
