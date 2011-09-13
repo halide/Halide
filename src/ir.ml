@@ -56,6 +56,26 @@ let vector_elements = function
 type binop = Add | Sub | Mul | Div
 type cmpop = EQ | NE | LT | LE | GT | GE
 
+let caml_iop_of_bop = function
+  | Add -> ( + ) 
+  | Sub -> ( - )
+  | Mul -> ( * )
+  | Div -> ( / )
+
+let caml_fop_of_bop = function
+  | Add -> ( +. ) 
+  | Sub -> ( -. )
+  | Mul -> ( *. )
+  | Div -> ( /. )
+
+let caml_op_of_cmp = function
+  | EQ -> ( =  )
+  | NE -> ( <> )
+  | LT -> ( <  )
+  | LE -> ( <= )
+  | GT -> ( >  )
+  | GE -> ( >= )
+
 (* how to enforce valid arithmetic subtypes for different subexpressions? 
  * e.g. only logical values expressions for Logical? Declare interfaces for 
  * each subtype? *)
