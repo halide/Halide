@@ -125,10 +125,8 @@ type expr =
     (* TODO: Unpack/swizzle vectors *)
     | ExtractElement of expr * expr
 
-    (* TODO: function calls? *)
-
-
-
+    (* Function calls *) 
+    | Call of string * (expr list)
 
 and buffer = string (* TODO: just an ID for now *)
 
@@ -166,14 +164,6 @@ let rec val_type_of_expr = function
   | Broadcast(e,len) -> vector_of_val_type (val_type_of_expr e) len
   | ExtractElement(e, idx) -> element_val_type (val_type_of_expr e)
 
-(* does this really become a list of domain bindings? *)
-type domain = {
-    name : string; (* name binding *)
-    range : program; (* TODO: rename - polygon, region, polyhedron, ... *)
-}
-
-and program = int * int (* just intervals for initial testing *)
-
 type stmt =
   (* TODO: | Blit of -- how to express sub-ranges? -- split and merge
    * sub-ranges *)
@@ -188,14 +178,24 @@ type stmt =
   (* | Reduce of reduce_op * expr * memref *) (* TODO: initializer expression? *)
   | Store of expr * buffer * expr
 
+  (* Allocate temporary storage of a given size, produce into it with
+     the first statement, consume from it with the second statement.
+     For the first statement only the temporary storage is writeable.
+     For the second statement the temporary storage is read-only.
+  *)
+  | Let of buffer * val_type * expr * stmt * stmt
+
 (*
 (* TODO:  *)
 and reduce_op =
     | AddEq
-    | SubEq
+    | SubEq\
     | MulEq
     | DivEq
  *)
+
+(* (name, arg names, body). The body is a stmt that fills a buffer called "result" *)
+and definition = (string * (string list) * stmt)
 
 type arg =
   | Scalar of string * val_type
