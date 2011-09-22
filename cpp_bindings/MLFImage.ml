@@ -61,8 +61,8 @@ let _ =
   Callback.register "makeLE" (fun a b -> Cmp (LE, a, b));
   Callback.register "makeSelect" (fun c a b -> Select (c, a, b));
   Callback.register "makeVar" (fun a -> Var a);
-  Callback.register "makeLoad" (fun buf idx -> Load (f32, {buf=buf; idx=idx}));
-  Callback.register "makeStore" (fun a buf idx -> Store (a, {buf=buf; idx=idx}));
+  Callback.register "makeLoad" (fun buf idx -> Load (f32, buf, idx));
+  Callback.register "makeStore" (fun a buf idx -> Store (a, buf, idx));
   Callback.register "makeFunction" (fun args stmt -> ((List.rev args), stmt));
   Callback.register "makeMap" (fun var min max stmt -> Map (var, min, max, stmt));
   Callback.register "makeArgList" (fun _ -> []);

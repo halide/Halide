@@ -116,7 +116,7 @@ type expr =
     | Select of expr * expr * expr
 
     (* memory *)
-    | Load of val_type * memref
+    | Load of val_type * buffer * expr
           
     (* Two different ways to make vectors *)
     | MakeVector of (expr list)
@@ -129,11 +129,6 @@ type expr =
 
 
 
-and memref = {
-  (* how do we represent memory references? computed references? *)
-  buf : buffer;
-  idx : expr;
-}
 
 and buffer = string (* TODO: just an ID for now *)
 
@@ -166,7 +161,7 @@ let rec val_type_of_expr = function
   | And(e,_) | Or(e,_) | Not e ->
       (* TODO: add checks *)
       val_type_of_expr e
-  | Load(t,_) -> t
+  | Load(t,_,_) -> t
   | MakeVector(l) -> vector_of_val_type (val_type_of_expr (List.hd l)) (List.length l)
   | Broadcast(e,len) -> vector_of_val_type (val_type_of_expr e) len
   | ExtractElement(e, idx) -> element_val_type (val_type_of_expr e)
@@ -191,7 +186,7 @@ type stmt =
      * Map if multiple dimensions are fused into 1. *)
   | Block of stmt list
   (* | Reduce of reduce_op * expr * memref *) (* TODO: initializer expression? *)
-  | Store of expr * memref
+  | Store of expr * buffer * expr
 
 (*
 (* TODO:  *)

@@ -33,7 +33,7 @@ and string_of_expr = function
   | Select(c, t, f) ->
     "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
   | Var(s) -> s
-  | Load(t, mr) -> "load" ^ "(" ^ string_of_val_type t ^ "," ^ string_of_memref mr ^ ")"
+  | Load(t, b, i) -> "load(" ^ string_of_val_type t ^ "," ^ string_of_buffer b ^ "[" ^ string_of_expr i ^ "])"
   | MakeVector [] -> "vec[]"
   | MakeVector l -> 
     let els = List.map string_of_expr l in
@@ -55,7 +55,7 @@ and string_of_stmt = function
                     String.concat ";\n" (List.map string_of_stmt stmts) ^
                     "\n}" ^ "\n"
   (* | Reduce(op, e, mr) -> string_of_memref mr ^ string_of_reduce_op op ^ string_of_expr e *)
-  | Store(e, mr) -> string_of_memref mr ^ " = " ^ string_of_expr e
+  | Store(e, b, i) -> string_of_buffer b ^ "[" ^ string_of_expr i ^ "] = " ^ string_of_expr e
 
 (*
 and string_of_reduce_op = function
@@ -64,8 +64,6 @@ and string_of_reduce_op = function
   | MulEq -> "*="
   | DivEq -> "/="
  *)
-
-and string_of_memref mr = string_of_buffer mr.buf ^ "[" ^ string_of_expr mr.idx ^ "]"
 
 and string_of_buffer b = b
 

@@ -200,20 +200,20 @@ let codegen (c:llcontext) (e:entrypoint) =
       end
 
     (* memory TODO: handle vector loads and stores better *)
-    | Load(t, mr) -> begin
-      match (vector_elements t, vector_elements (val_type_of_expr mr.idx)) with 
+    | Load(t, buf, idx) -> begin
+      match (vector_elements t, vector_elements (val_type_of_expr idx)) with 
         (* scalar load *)
-        | (1, 1) -> build_load (cg_memref mr t) "" b 
+        | (1, 1) -> build_load (cg_memref t buf idx) "" b 
           
         (* vector load of scalar address *)
-        | (w, 1) -> begin match Analysis.reduce_expr_modulo mr.idx w with 
-            | Some 0      -> build_load (cg_memref mr t) "" b
-            | Some offset -> cg_unaligned_load t mr offset
-            | None        -> cg_unknown_alignment_load t mr
+        | (w, 1) -> begin match Analysis.reduce_expr_modulo idx w with 
+            | Some 0      -> build_load (cg_memref t buf idx) "" b
+            | Some offset -> cg_unaligned_load t buf idx offset
+            | None        -> cg_unknown_alignment_load t buf idx
         end
           
         (* general gather *)
-        | (_, _) -> cg_gather t mr
+        | (_, _) -> cg_gather t buf idx
     end
     (* Loop variables *)
     | Var(name) -> sym_get name
@@ -371,7 +371,7 @@ let codegen (c:llcontext) (e:entrypoint) =
 
   and cg_stmt = function
     (* TODO: unaligned vector store *)
-    | Store(e, mr) -> cg_store e mr
+    | Store(e, buf, idx) -> cg_store e buf idx
     | Map(n, min, max, stmt) ->
       cg_for n (cg_expr min) (cg_expr max) stmt
     | Block (first::second::rest) ->
@@ -382,18 +382,18 @@ let codegen (c:llcontext) (e:entrypoint) =
     | Block _ -> raise (Wtf "cg_stmt of empty block")
     (* | _ -> raise UnimplementedInstruction *)
 
-  and cg_store e mr =
-    let elems = (vector_elements (val_type_of_expr mr.idx)) in
-    if (elems > 1) then cg_scatter e mr
+  and cg_store e buf idx =
+    let elems = (vector_elements (val_type_of_expr idx)) in
+    if (elems > 1) then cg_scatter e buf idx
     else
-      let ptr = cg_memref mr (val_type_of_expr e) in
+      let ptr = cg_memref (val_type_of_expr e) buf idx in
       build_store (cg_expr e) ptr b
 
-  and cg_unaligned_load t mr offset =
-    let lower_addr = mr.idx -~ (IntImm(offset)) in
+  and cg_unaligned_load t buf idx offset =
+    let lower_addr = idx -~ (IntImm(offset)) in
     let upper_addr = lower_addr +~ (IntImm(vector_elements t)) in
-    let lower = Load(t, {buf = mr.buf; idx = lower_addr}) in
-    let upper = Load(t, {buf = mr.buf; idx = upper_addr}) in
+    let lower = Load(t, buf, lower_addr) in
+    let upper = Load(t, buf, upper_addr) in
     let lower_indices = offset -- (vector_elements t) in
     let upper_indices = 0 -- offset in
     let extract_lower = map (fun x -> ExtractElement(lower, (UIntImm(x)))) lower_indices in
@@ -401,7 +401,7 @@ let codegen (c:llcontext) (e:entrypoint) =
     let vec = MakeVector (extract_lower @ extract_upper) in
     cg_expr vec
 
-  and cg_unknown_alignment_load t mr =
+  and cg_unknown_alignment_load t buf idx =
     let current = insertion_block b in
     position_before alloca_end b;
     let scratch = build_alloca (type_of_val_type t) "" b in      
@@ -409,7 +409,7 @@ let codegen (c:llcontext) (e:entrypoint) =
     let memcpy     = declare_function "llvm.memcpy.p0i8.p0i8.i32"
       (function_type (void_type c) [|buffer_t; buffer_t; int32_imm_t; int32_imm_t; i1_type c|]) m in
     let stack_addr = build_pointercast scratch buffer_t "" b in
-    let mem_addr   = build_pointercast (cg_memref mr t) buffer_t "" b in
+    let mem_addr   = build_pointercast (cg_memref t buf idx) buffer_t "" b in
     let length     = const_int int_imm_t ((bit_width t)/8) in
     let length64   = const_int (i64_type c) ((bit_width t)/8) in
     let alignment  = const_int int_imm_t ((bit_width (element_val_type t))/8) in
@@ -417,10 +417,10 @@ let codegen (c:llcontext) (e:entrypoint) =
     let to_stack   = build_call memcpy [|stack_addr; mem_addr; length; alignment; volatile|] "" b in
     build_load (scratch) "" b
 
-  and cg_gather t mr =
+  and cg_gather t buf idx =
     let elem_type     = type_of_val_type (element_val_type t) in
-    let base_ptr      = build_pointercast (ptr_to_buffer mr.buf) (pointer_type elem_type) "" b in
-    let addr_vec      = cg_expr mr.idx in
+    let base_ptr      = build_pointercast (ptr_to_buffer buf) (pointer_type elem_type) "" b in
+    let addr_vec      = cg_expr idx in
     let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
     let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
     let load_idx i    = build_load (addr_of_idx i) "" b in
@@ -429,10 +429,10 @@ let codegen (c:llcontext) (e:entrypoint) =
       | i -> build_insertelement (insert_idx (i-1)) (load_idx i) (const_int int_imm_t i) "" b
     in insert_idx ((vector_elements t) - 1)
 
-  and cg_scatter e mr =
+  and cg_scatter e buf idx =
     let elem_type     = type_of_val_type (element_val_type (val_type_of_expr e)) in
-    let base_ptr      = build_pointercast (ptr_to_buffer mr.buf) (pointer_type elem_type) "" b in
-    let addr_vec      = cg_expr mr.idx in
+    let base_ptr      = build_pointercast (ptr_to_buffer buf) (pointer_type elem_type) "" b in
+    let addr_vec      = cg_expr idx in
     let value_vec     = cg_expr e in
     let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
     let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
@@ -440,24 +440,23 @@ let codegen (c:llcontext) (e:entrypoint) =
     let store_idx i   = build_store (get_elem i) (addr_of_idx i) b in
     List.hd (List.map store_idx (0 -- vector_elements (val_type_of_expr e)))
 
-  and cg_memref mr vt =
+  and cg_memref vt buf idx =
     (* load the global buffer** *)
-    let base = ptr_to_buffer mr.buf in
+    let base = ptr_to_buffer buf in
     (* cast pointer to pointer-to-target-type *)
     (* TODO: fix address calculation to use inner type of vector type *)
     let elem_type = type_of_val_type (element_val_type vt) in
     let ptr = build_pointercast base (pointer_type (elem_type)) "memref_elem_ptr" b in
     (* build getelementpointer into buffer *)
-    let gep = build_gep ptr [| cg_expr mr.idx |] "memref" b in
+    let gep = build_gep ptr [| cg_expr idx |] "memref" b in
     build_pointercast gep (pointer_type (type_of_val_type vt)) "typed_memref" b
 
 
   and cg_storevector = function
-    | ([], _, _, _) -> const_int int_imm_t 0
-    | (first::rest, t, mr, stride) ->
-        ignore(build_store first (cg_memref mr t) b);
-        let nextaddr = {buf=mr.buf; idx= mr.idx +~ IntImm(stride)} in
-        cg_storevector(rest, t, nextaddr, stride);
+    | ([], _, _, _, _) -> const_int int_imm_t 0
+    | (first::rest, t, buf, idx, stride) ->
+      ignore(build_store first (cg_memref t buf idx) b);
+      cg_storevector(rest, t, buf, idx +~ IntImm(stride), stride);
   in
 
     (* actually generate from the root statement *)
