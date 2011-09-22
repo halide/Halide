@@ -50,7 +50,7 @@ let rec subs_stmt oldexpr newexpr = function
                                        subs_expr oldexpr newexpr max,
                                        subs_stmt oldexpr newexpr stmt)
   | Block l -> Block (List.map (subs_stmt oldexpr newexpr) l)
-  | Store (expr, mr) -> Store (subs_expr oldexpr newexpr expr, {buf=mr.buf; idx=subs_expr oldexpr newexpr mr.idx})
+  | Store (expr, buf, idx) -> Store (subs_expr oldexpr newexpr expr, buf, subs_expr oldexpr newexpr idx)
 
 and subs_expr oldexpr newexpr expr = 
     let subs = subs_expr oldexpr newexpr in
@@ -63,7 +63,7 @@ and subs_expr oldexpr newexpr expr =
         | Or (a, b)             -> Or (subs a, subs b)
         | Not a                 -> Not (subs a)
         | Select (c, a, b)      -> Select (subs c, subs a, subs b)
-        | Load (t, mr)          -> Load (t, {buf = mr.buf; idx = subs mr.idx})
+        | Load (t, b, i)        -> Load (t, b, subs i)
         | MakeVector l          -> MakeVector (List.map subs l)
         | Broadcast (a, n)      -> Broadcast (subs a, n)
         | ExtractElement (a, b) -> ExtractElement (subs a, subs b)
@@ -162,8 +162,8 @@ let rec hash_expr e =
           (c2 land a2) lor ((lnot c2) land b2),
           (c3 land a3) lor ((lnot c3) land b3),
           (c4 land a4) lor ((lnot c4) land b4))
-    | Load (t, mr) ->
-      hash_combine4 (hash_str "<Load>") (hash_type t) (hash_expr mr.idx) (hash_str mr.buf)
+    | Load (t, b, i) ->
+      hash_combine4 (hash_str "<Load>") (hash_type t) (hash_str b) (hash_expr i)
     | MakeVector l -> 
       List.fold_left hash_combine2 (hash_str "<MakeVector>") (List.map hash_expr l)
     | Broadcast (e, n) ->

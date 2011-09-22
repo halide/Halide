@@ -144,15 +144,15 @@ let vectorize_expr_packed (var:string) (min:int) (width:int) (expr:expr) =
           Vector (Select(expand vecc, expand veca, expand vecb))
       end
 
-    | Load (t, mr) -> begin let veci = (vec mr.idx) in match veci with 
+    | Load (t, buf, idx) -> begin let veci = (vec idx) in match veci with 
         (* Scalar load *)
-        | Const (e, _) | Scalar e | Linear (e, 0) -> Scalar (Load (t, mr))
+        | Const (e, _) | Scalar e | Linear (e, 0) -> Scalar (Load (t, buf, idx))
         (* Dense vector load *)
-        | Linear (e, 1) -> Vector (Load (vector_of_val_type t width, {buf = mr.buf; idx = e}))
+        | Linear (e, 1) -> Vector (Load (vector_of_val_type t width, buf, e))
         (* TODO: strided load *)
         | Linear (e, _)
         (* Generalized gather *)
-        | Vector (e) -> Vector (Load (vector_of_val_type t width, {buf = mr.buf; idx = expand veci}))
+        | Vector (e) -> Vector (Load (vector_of_val_type t width, buf, expand veci))
     end
 
     (* Vectorized Var vectorizes to strided expression version of itself *)
@@ -171,19 +171,19 @@ let rec vectorize_stmt var stmt =
     match stmt with
       | Map (v, min, max, stmt) -> Map (v, min, IntImm(width), vec stmt)
       | Block l -> Block (map vec l)
-      | Store (expr, mr) -> begin
+      | Store (expr, buf, idx) -> begin
         let e = vectorize_expr_packed var min width expr in
-        let idx = vectorize_expr_packed var min width mr.idx in
-        match idx with
+        let vidx = vectorize_expr_packed var min width idx in
+        match vidx with
         (* Storing to a scalar address *)
           | Scalar(i) | Const(i, _) | Linear(i, 0) -> begin match e with
-              | Scalar(a) | Const(a, _) -> Store (a, {buf = mr.buf; idx = i})
+              | Scalar(a) | Const(a, _) -> Store (a, buf, i)
               | _ -> raise (Wtf("Storing a vector at a scalar address. Result undefined."))              
           end
           (* Storing to a vector of addresses. *)
-          | Linear(i, 1) -> Store (expand e, {buf = mr.buf; idx = i}) (* dense store *)
-          | Linear(i, n) -> Store (expand e, {buf = mr.buf; idx = expand idx}) (* TODO: strided store *)
-          | _ -> Store (expand e, {buf = mr.buf; idx = expand idx}) (* scatter *)    
+          | Linear(i, 1) -> Store (expand e, buf, i) (* dense store *)
+          | Linear(i, n) -> Store (expand e, buf, expand vidx) (* TODO: strided store *)
+          | _ -> Store (expand e, buf, expand vidx) (* scatter *)    
       end in
   
   match stmt with        

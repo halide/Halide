@@ -64,7 +64,7 @@ let rec constant_fold_expr expr =
         | (UIntImm 1, x, _) -> x
         | (c, x, y) -> Select (c, x, y)
       end
-    | Load (t, mr) -> Load (t, {buf = mr.buf; idx = recurse mr.idx})
+    | Load (t, buf, idx) -> Load (t, buf, recurse idx)
     | MakeVector l -> MakeVector (List.map recurse l)
     | Broadcast (e, n) -> Broadcast (recurse e, n)
     | ExtractElement (a, b) -> ExtractElement (recurse a, recurse b)
@@ -75,4 +75,4 @@ let rec constant_fold_expr expr =
 let rec constant_fold_stmt = function
   | Map (var, min, max, stmt) -> Map (var, constant_fold_expr min, constant_fold_expr max, constant_fold_stmt stmt)
   | Block l -> Block (List.map constant_fold_stmt l)
-  | Store (e, mr) -> Store (constant_fold_expr e, {buf = mr.buf; idx = constant_fold_expr mr.idx})
+  | Store (e, buf, idx) -> Store (constant_fold_expr e, buf, constant_fold_expr idx)
