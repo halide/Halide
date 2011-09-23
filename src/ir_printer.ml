@@ -34,14 +34,8 @@ and string_of_expr = function
     "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
   | Var(s) -> s
   | Load(t, b, i) -> "load(" ^ string_of_val_type t ^ "," ^ string_of_buffer b ^ "[" ^ string_of_expr i ^ "])"
-  | MakeVector [] -> "vec[]"
-  | MakeVector l -> 
-    let els = List.map string_of_expr l in
-    "vec[" ^ (List.fold_left
-                (fun x y -> x ^ ", " ^ y) 
-                (List.hd els)
-                (List.tl els)
-    ) ^ "]"
+  | Call(name, t, args) -> name ^ "<" ^ string_of_val_type t ^ ">(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ")"
+  | MakeVector l -> "vec[" ^ (String.concat ", " (List.map string_of_expr l)) ^ "]"
   | Broadcast(e, n) -> "[" ^ string_of_expr e ^ "x" ^ string_of_int n ^ "]"
   | ExtractElement(a, b) -> "(" ^ string_of_expr a ^ "@" ^ string_of_expr b ^ ")"
   | _ -> "<<UNHANDLED>>"
@@ -56,6 +50,8 @@ and string_of_stmt = function
                     "\n}" ^ "\n"
   (* | Reduce(op, e, mr) -> string_of_memref mr ^ string_of_reduce_op op ^ string_of_expr e *)
   | Store(e, b, i) -> string_of_buffer b ^ "[" ^ string_of_expr i ^ "] = " ^ string_of_expr e
+  | Let(name, ty, size, produce, consume) -> 
+    "let " ^ name ^ "[" ^ string_of_expr size ^ "]\n defined by: " ^ string_of_stmt produce ^ "\n in: " ^ string_of_stmt consume
 
 (*
 and string_of_reduce_op = function
@@ -66,10 +62,6 @@ and string_of_reduce_op = function
  *)
 
 and string_of_buffer b = b
-
-and string_of_domain d = d.name ^ "=" ^ string_of_program d.range
-
-and string_of_program p = match p with (lo,hi) -> string_of_int lo ^ ".." ^ string_of_int hi
 
 and string_of_toplevel (a, s) = "func(" ^ String.concat ", " (List.map string_of_arg a) ^ ") = " ^ (string_of_stmt s)
 

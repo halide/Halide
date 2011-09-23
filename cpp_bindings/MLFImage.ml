@@ -7,6 +7,7 @@ open Vectorize
 open Unroll
 open Split
 open Constant_fold
+open Inline
 
 let compilation_cache = 
   Hashtbl.create 16
@@ -65,9 +66,25 @@ let _ =
   Callback.register "makeStore" (fun a buf idx -> Store (a, buf, idx));
   Callback.register "makeFunction" (fun args stmt -> ((List.rev args), stmt));
   Callback.register "makeMap" (fun var min max stmt -> Map (var, min, max, stmt));
+  Callback.register "makeLet" (fun name size produce consume -> Let (name, f32, size, produce, consume));
+  Callback.register "makeCall" (fun name args -> Call (name, f32, args));
+  Callback.register "makeDefinition" (fun name argnames body -> Printf.printf "I got the name %s\n%!" name; (name, argnames, f32, body));
+  Callback.register "makeEnv" (fun _ -> Environment.empty);
+  Callback.register "addDefinitionToEnv" (fun env def -> 
+    let (n1, a1, t1, b1) = def in 
+    let newenv = Environment.add n1 def env in 
+    let (n2, a2, t2, b2) = Environment.find n1 newenv in 
+    Printf.printf "definition: %s\n%!" n2; 
+    newenv);
+  Callback.register "makeStringList" (fun _ -> []);
+  Callback.register "addStringToList" (fun l s -> s::l);
+  Callback.register "makeExprList" (fun _ -> []);
+  Callback.register "addExprToList" (fun l e -> e::l);
+
   Callback.register "makeArgList" (fun _ -> []);
   Callback.register "makeBufferArg" (fun str -> Buffer str);
   Callback.register "addArgToList" (fun l x -> x::l);
+
 
   (* Debugging, compilation *)
   Callback.register "doPrint" (fun a -> Printf.printf "%s\n%!" (string_of_stmt a));
@@ -78,3 +95,5 @@ let _ =
   Callback.register "doUnroll" (fun var stmt -> unroll_stmt var stmt);
   Callback.register "doSplit" (fun var outer inner n stmt -> split_stmt var outer inner n stmt);
   Callback.register "doConstantFold" (fun stmt -> constant_fold_stmt stmt);
+  (* Callback.register "doShift" (fun var expr stmt -> shift var expr stmt); *)
+  Callback.register "doInline" (fun stmt env -> inline_stmt stmt env);

@@ -51,6 +51,10 @@ let rec subs_stmt oldexpr newexpr = function
                                        subs_stmt oldexpr newexpr stmt)
   | Block l -> Block (List.map (subs_stmt oldexpr newexpr) l)
   | Store (expr, buf, idx) -> Store (subs_expr oldexpr newexpr expr, buf, subs_expr oldexpr newexpr idx)
+  | Let (name, ty, size, produce, consume) -> Let (name, ty,
+                                                   subs_expr oldexpr newexpr size,
+                                                   subs_stmt oldexpr newexpr produce,
+                                                   subs_stmt oldexpr newexpr consume)
 
 and subs_expr oldexpr newexpr expr = 
     let subs = subs_expr oldexpr newexpr in
@@ -69,19 +73,49 @@ and subs_expr oldexpr newexpr expr =
         | ExtractElement (a, b) -> ExtractElement (subs a, subs b)
         | x -> x
     
+and subs_buffer_name_stmt oldname newname stmt =
+  let subs = subs_buffer_name_stmt oldname newname in
+  let subs_expr = subs_buffer_name_expr oldname newname in
+  match stmt with
+    | Map (name, min, max, body) -> Map (name, subs_expr min, subs_expr max, subs body)
+    | Block l -> Block (List.map subs l)
+    | Store (expr, buf, idx) -> 
+      Printf.printf "subs_buffer_name_stmt: %s(%d) %s(%d) %s(%d) %s\n%!" oldname (String.length oldname) newname (String.length newname) buf (String.length buf) (if buf = oldname then "match" else "not a match"); 
+      Store (subs_expr expr,
+             (if buf = oldname then newname else buf),
+             subs_expr idx)
+    | Let (name, ty, size, produce, consume) -> Let ((if name = oldname then newname else name), 
+                                                     ty, 
+                                                     subs_expr size,
+                                                     subs produce,
+                                                     subs consume)      
 
-
+and subs_buffer_name_expr oldname newname expr =
+  let subs = subs_buffer_name_expr oldname newname in
+  match expr with 
+    | Cast (t, e)           -> Cast (t, subs e)
+    | Bop (op, a, b)        -> Bop (op, subs a, subs b)
+    | Cmp (op, a, b)        -> Cmp (op, subs a, subs b)
+    | And (a, b)            -> And (subs a, subs b)
+    | Or (a, b)             -> Or (subs a, subs b)
+    | Not a                 -> Not (subs a)
+    | Select (c, a, b)      -> Select (subs c, subs a, subs b)
+    | Load (t, b, i)        -> Load (t, (if b = oldname then newname else b), subs i)
+    | MakeVector l          -> MakeVector (List.map subs l)
+    | Broadcast (a, n)      -> Broadcast (subs a, n)
+    | ExtractElement (a, b) -> ExtractElement (subs a, subs b)
+    | x -> x
 
 
 (* Assuming a program has 1024 expressions, the probability of a collision using a k-bit hash is roughly:
 
-k = 32: 10^-4
-k = 64: 10^-14
-k = 128: 10^-33
-k = 256: 10^-72
+   k = 32: 10^-4
+   k = 64: 10^-14
+   k = 128: 10^-33
+   k = 256: 10^-72
 
-A tuple of 4 ocaml ints represents at least 124 bits, which should be
-enough to make collisions less likely than being eaten by wolves *)
+   A tuple of 4 ocaml ints represents at least 124 bits, which should be
+   enough to make collisions less likely than being eaten by wolves *)
 
 (* Furthermore, we preserve algebraic properties while hashing, so
    that e.g. hash (a*(b+c)) = hash (a*c + b*a) *)
@@ -170,4 +204,5 @@ let rec hash_expr e =
       hash_combine3 (hash_str "<Broadcast>") (hash_expr e) (hash_int n)
     | ExtractElement (a, b) ->
       hash_combine3 (hash_str "<ExtractElement>") (hash_expr a) (hash_expr b)
-
+    | Call (name, ty, args) ->
+      List.fold_left hash_combine2 (hash_combine2 (hash_str "<Call>") (hash_type ty)) (List.map hash_expr args)

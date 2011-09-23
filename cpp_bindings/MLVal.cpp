@@ -71,7 +71,7 @@ MLVal MLVal::fromFloat(float x) {
 
 MLVal MLVal::fromString(const char *str) {
     init_ml();
-    value v = caml_alloc_string(strlen(str)+1);
+    value v = caml_alloc_string(strlen(str));
     strcpy(String_val(v), str);
     return MLValFromValue(v);
 }

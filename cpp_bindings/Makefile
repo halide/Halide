@@ -4,9 +4,9 @@ OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
 
 OCAML_LIB_DIR=/usr/local/lib/ocaml
 LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags)
-CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -O1 $(LLVM_CFLAGS_CXX)
+CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -O3 -ffast-math $(LLVM_CFLAGS_CXX)
 
-all: test
+all: test test_functions
 
 LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs codegen jit x86 bitwriter interpreter)
 LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_analysis -lllvm_target
@@ -17,6 +17,9 @@ LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lstdc
 test: MLFImage.a build/test.o
 	$(CXX) build/test.o MLFImage.a -o test $(LIBS)
 
+test_functions: MLFImage.a build/test_functions.o
+	$(CXX) build/test_functions.o MLFImage.a -o test_functions $(LIBS)
+
 MLFImage.a: build/_MLFImage.o build/FImage.o build/MLVal.o build/elf.o
 	cp $(OCAML_LIB_DIR)/libasmrun.a MLFImage.a
 	ar q MLFImage.a build/_MLFImage.o build/MLVal.o build/FImage.o build/elf.o
@@ -25,7 +28,7 @@ build/%.o: %.cpp
 	$(CXX) -c $< -o $@
 
 OCAML_LIBS=bigarray.cmxa llvm.cmxa llvm_executionengine.cmxa
-OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx split.cmx vectorize.cmx unroll.cmx constant_fold.cmx MLFImage.cmx
+OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx split.cmx vectorize.cmx unroll.cmx constant_fold.cmx inline.cmx MLFImage.cmx 
 OCAML_SOURCES=$(OCAML_MODULES:%.cmx=%.ml)
 OCAMLC=ocamlopt -cc gcc-4.6 -I ../$(OCAML_LLVM_LIB_DIR) -I ../../src -ccopt -O2
 

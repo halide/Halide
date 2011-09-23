@@ -126,7 +126,7 @@ type expr =
     | ExtractElement of expr * expr
 
     (* Function calls *) 
-    | Call of string * (expr list)
+    | Call of string * val_type * (expr list)
 
 and buffer = string (* TODO: just an ID for now *)
 
@@ -163,6 +163,7 @@ let rec val_type_of_expr = function
   | MakeVector(l) -> vector_of_val_type (val_type_of_expr (List.hd l)) (List.length l)
   | Broadcast(e,len) -> vector_of_val_type (val_type_of_expr e) len
   | ExtractElement(e, idx) -> element_val_type (val_type_of_expr e)
+  | Call(_, ty, _) -> ty
 
 type stmt =
   (* TODO: | Blit of -- how to express sub-ranges? -- split and merge
@@ -194,8 +195,11 @@ and reduce_op =
     | DivEq
  *)
 
-(* (name, arg names, body). The body is a stmt that fills a buffer called "result" *)
-and definition = (string * (string list) * stmt)
+(* (name, arg names, return type, body). The body is a stmt that fills a buffer called "result" *)
+and definition = (string * (string list) * val_type * stmt)
+
+module Environment = Map.Make(String)
+type environment = definition Environment.t
 
 type arg =
   | Scalar of string * val_type
