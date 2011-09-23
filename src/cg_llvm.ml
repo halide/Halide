@@ -25,9 +25,9 @@ type cmp =
   | CmpInt of Icmp.t
   | CmpFloat of Fcmp.t
 
-(*
+
 module ArgMap = Map.Make(String)
-type argmap = (arg*int) ArgMap.t (* track args as name -> (Ir.arg,index) *) *)
+type argmap = (arg*int) ArgMap.t (* track args as name -> (Ir.arg,index) *) 
 
 let verify_cg m =
     (* verify the generated module *)
@@ -113,12 +113,6 @@ let codegen (c:llcontext) (e:entrypoint) =
       ArgMap.empty
       arglist
   in
-
-  let argmap = 
-    Hashtbl.create 10
-  in
-  let 
-  List.iter (fun arg -> Hashtbl.add (name_of_arg arg) (arg,(index_of_arg arg)) argmap)
 
   (* define `void main(arg1, arg2, ...)` entrypoint*)
   let entrypoint_fn =
@@ -394,9 +388,17 @@ let codegen (c:llcontext) (e:entrypoint) =
       position_before alloca_end b;
       let scratch = build_alloca (type_of_val_type ty) "" b in
       position_at_end current b;
+
+      (* push the symbol environment *)
+      sym_add name scratch;
+
       ignore (cg_stmt produce);
-      cg_stmt consume
-    (* Todo: Free? *)
+      let res = cg_stmt consume in
+
+      (* pop the symbol environment *)
+      sym_remove name;
+
+      res
 
   and cg_store e buf idx =
     let elems = (vector_elements (val_type_of_expr idx)) in
