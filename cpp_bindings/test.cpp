@@ -6,19 +6,29 @@ using namespace FImage;
 #define W 3008
 #define H 3008
 
+template<typename T, int N>
+struct _sum {
+    static inline T go(const T &a) {return _sum<T, N-1>::go(a) + a;}
+};
+
+template<typename T>
+struct _sum<T, 1> {
+    static inline T go(const T &a) {return a;}
+};
+
 template<typename T, int N> 
 struct _do_math {
-    static T go(const T &a, const T &b) {return _do_math<T, N-1>::go(a*b, a+b);}
+    static inline T go(const T &a, const T &b) {return _do_math<T, N-1>::go(a, b) * (a + _sum<T, N>::go(b));}
 };
 
 template<typename T>
 struct _do_math<T, 0> {
-    static T go(const T &a, const T &b) {return a + b;}
+    static inline T go(const T &a, const T &b) {return a;}
 };
 
 template<typename T>
 T do_math(const T &a, const T &b) {
-    return _do_math<T, 0>::go(a, b);
+    return _do_math<T,10>::go(a, b);
 }
 
 
@@ -38,13 +48,13 @@ int main(int argc, char **argv) {
         }
     }
 
-    x.unroll(2);
-    x.vectorize(4);
+    //x.unroll(2);
+    //x.vectorize(4);
     //y.unroll(4);
 
     Image im2(W, H);
 
-    im2(x, y) = do_math(Expr(im(x, y)), Expr(im(x+1, y)));
+    im2(x, y) = do_math<Expr>(im(x, y), im(x+1, y));
 
     im2.evaluate();
 
@@ -62,7 +72,7 @@ int main(int argc, char **argv) {
     gettimeofday(&before, NULL);
     for (int y = 0; y < H; y++) {
         for (int x = 64; x < W-64; x++) {
-            im2(x, y) = do_math(im(x, y), im(x+1, y));
+            im2(x, y) = do_math<float>(im(x, y), im(x+1, y));
         }
     }
     gettimeofday(&after, NULL);

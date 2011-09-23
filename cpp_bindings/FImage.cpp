@@ -53,6 +53,19 @@ ML_FUNC2(doUnroll);
 ML_FUNC5(doSplit);
 ML_FUNC1(doConstantFold);
 
+// Function call stuff
+ML_FUNC4(makeLet);
+ML_FUNC2(makeCall);
+ML_FUNC3(makeDefinition);
+ML_FUNC0(makeEnv);
+ML_FUNC2(addDefinitionToEnv);
+ML_FUNC0(makeStringList);
+ML_FUNC2(addStringToList);
+ML_FUNC0(makeExprList);
+ML_FUNC2(addExprToList);
+
+ML_FUNC2(doInline);
+
 namespace FImage {
 
     template<typename T>
@@ -198,6 +211,35 @@ namespace FImage {
         node = makeVar(MLVal::fromString(_name));
         vars.push_back(this);
     }
+
+
+    Func::Func(const std::string &name, Var arg1, Var arg2, const Expr &body) :
+        name(name), body(body) {
+
+        if (!environment) {
+            environment = new MLVal(makeEnv());
+        }
+        
+        MLVal arglist = makeStringList();
+        arglist = addStringToList(arglist, MLVal::fromString(arg2.name()));
+        arglist = addStringToList(arglist, MLVal::fromString(arg1.name()));
+        definition = makeDefinition(MLVal::fromString(name), arglist, 
+                                    makeStore(body.node, MLVal::fromString("result"), 
+                                              makeIntImm(MLVal::fromInt(0))));
+        *environment = addDefinitionToEnv(*environment, definition);
+    }
+
+    // Generate a call to the function
+    Expr Func::operator()(const Expr &x, const Expr &y) {
+        MLVal exprlist = makeExprList();
+        exprlist = addExprToList(exprlist, y.node);
+        exprlist = addExprToList(exprlist, x.node);
+        Expr call = makeCall(MLVal::fromString(name), exprlist);
+        unify(call.args, body.args);
+        return call;
+    }
+
+    MLVal *Func::environment = NULL;
 
     // Make an MemRef reference to a particular pixel. It can be used as an
     // assignment target or cast to a load operation. In the future it may
@@ -428,14 +470,17 @@ namespace FImage {
                 }                    
             }
 
+            // Do inlining of all the calls
+            printf("\nInlining used functions\n");
+            loop = doInline(loop, *Func::environment);
+
             // Create a function around it with the appropriate number of args
+            printf("\nMaking function...\n");           
             MLVal args = makeArgList();
             for (size_t i = 0; i < stmt.args.size(); i++) {
                 MLVal arg = makeBufferArg(MLVal::fromString(stmt.args[i]->name()));
                 args = addArgToList(args, arg);
             }
-            
-            printf("\nMaking function...\n");
             
             MLVal function = makeFunction(args, loop);
 

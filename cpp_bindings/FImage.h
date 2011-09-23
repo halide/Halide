@@ -4,11 +4,13 @@
 #include "MLVal.h"
 #include <vector>
 #include <stdint.h>
+#include <string>
 
 namespace FImage {
 
     class Image;
     class Var;
+    class Func;
 
     // A node in an expression tree.
     class Expr {
@@ -106,6 +108,22 @@ namespace FImage {
 
         // If this is a store, it can be executed
         mutable void (*function_ptr)(void *); 
+    };
+
+    class Func {
+    public:
+      // Define a function. Can only be a gather over two variables for now
+      Func(const std::string &name, Var arg1, Var arg2, const Expr &body);
+
+      // Generate a call to the function
+      Expr operator()(const Expr &, const Expr &);
+
+      static MLVal *environment;
+
+    protected:
+      std::string name;
+      MLVal definition;
+      Expr body;
     };
 
     // The lazily evaluated image type. Has from 1 to 4 dimensions.
