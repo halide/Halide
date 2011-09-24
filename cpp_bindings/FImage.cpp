@@ -471,8 +471,10 @@ namespace FImage {
             }
 
             // Do inlining of all the calls
-            printf("\nInlining used functions\n");
-            loop = doInline(loop, *Func::environment);
+            if (Func::environment) {
+                printf("\nInlining used functions\n");
+                loop = doInline(loop, *Func::environment);
+            }
 
             // Create a function around it with the appropriate number of args
             printf("\nMaking function...\n");           
