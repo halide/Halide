@@ -1,4 +1,5 @@
 analysis
+inline
 cg_llvm
 ir
 ir_printer
