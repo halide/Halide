@@ -19,12 +19,12 @@ timeval now() {
 }
 
 int main(int argc, char **argv) {
-    Var x(64, W-64), y(0, H);
+    Var x(0, W), y(0, H);
     Image im(W, H);       
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            im(x, y) = y*H+x;
+            im(x, y) = x+y;
         }
     }
 
@@ -32,12 +32,27 @@ int main(int argc, char **argv) {
     //x.vectorize(4);
     //y.unroll(4);
 
-    Func im2("im2", x, y, im(x, y)*3.0f);
+    Func im2("func", x, y, im(x, y)*3.0f);    
 
     Image im3(W, H);
-    im3(x, y) = im2(x, y);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            im3(x, y) = -1;
+        }
+    }
+
+    im3(x, y) = im2(x, y)+1.0f;
 
     im3.evaluate();
+
+    printf("im3:\n");
+    for (int y = 0; y < 10; y++) {
+        for (int x = 0; x < 10; x++) {
+            printf("%5.0f ", im3(x, y));
+        }
+        printf("\n");
+    }
 
     return 0;
 }
