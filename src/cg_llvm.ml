@@ -89,30 +89,15 @@ let codegen (c:llcontext) (e:entrypoint) =
   
   (* unpack the entrypoint *)
   let arglist,s = e in
-
   let type_of_arg = function
     | Scalar (_, vt) -> type_of_val_type vt
     | Buffer _ -> buffer_t
-  in
-  let name_of_arg = function
-    | Scalar (n,_) | Buffer n -> n
-  in
-  let index_of_arg a =
-    let rec idx a l i = match l with
-      | hd::_ when hd = a -> i
-      | hd::rest -> idx a rest i+1
-      | [] -> raise (Wtf "index_of_arg for arg not in arglist")
-    in idx a arglist 0
+  and name_of_arg = function
+    | Scalar (n, _) -> n
+    | Buffer n -> n 
   in
 
   let argtypes = List.map type_of_arg arglist in
-
-  let argmap =
-    List.fold_left
-      (fun m arg -> ArgMap.add (name_of_arg arg) (arg,(index_of_arg arg)) m)
-      ArgMap.empty
-      arglist
-  in
 
   (* define `void main(arg1, arg2, ...)` entrypoint*)
   let entrypoint_fn =
@@ -122,13 +107,24 @@ let codegen (c:llcontext) (e:entrypoint) =
       m
   in
 
-  (* assign names to args in LLVM *)
+
+  (* Put args in the sym table *)
   Array.iteri
-    (fun i v -> set_value_name (name_of_arg (List.nth arglist i)) v)
-    (params entrypoint_fn);
+    (fun idx arg -> 
+      let name = name_of_arg arg in
+      let llval = param entrypoint_fn idx in
+      sym_add name llval;
+      (* Also assign llvm names to them for easier debugging *)
+      set_value_name name llval;
+      (* And mark each buffer arg as Noalias *)
+      match arg with 
+        | Buffer b -> add_param_attr llval Attribute.Noalias
+        | _ -> ()
+    ) (Array.of_list arglist);
+
 
   (* start codegen at entry block of main *)
-  let b = builder_at_end c (entry_block entrypoint_fn) in
+let b = builder_at_end c (entry_block entrypoint_fn) in
   
   let alloca_bb = append_block c ("alloca") (block_parent (insertion_block b)) in
   ignore(build_br alloca_bb b);
@@ -136,25 +132,6 @@ let codegen (c:llcontext) (e:entrypoint) =
   position_at_end alloca_bb b;  
   let alloca_end = build_br after_alloca_bb b in
   position_at_end after_alloca_bb b;  
-
-  (* START FROM HERE *)
-  let arg_find name = 
-    let arg,idx = ArgMap.find name argmap in
-    match arg with Scalar (s,_) | Buffer s -> assert (s = name);
-    (arg,idx)
-  in
-  let arg_get name = match arg_find name with (arg,_) -> arg in
-  let arg_idx name = match arg_find name with (_,i) -> i in
-  let arg_val name = param entrypoint_fn (arg_idx name) in
-
-  let ptr_to_buffer buf =
-    match arg_find buf with
-      | (Buffer s), i ->
-        assert (s = buf);
-        let p = param entrypoint_fn i in
-        add_param_attr p Attribute.Noalias; p
-      | arg, _ -> raise (Wtf "ptr_to_buffer of non-Buffer argument name")
-  in
 
   let rec cg_expr = function
     (* constants *)
@@ -219,12 +196,7 @@ let codegen (c:llcontext) (e:entrypoint) =
     (* Loop variables *)
     | Var(name) -> sym_get name
 
-    | Arg(vt, name) ->
-        (match arg_get name with
-          | Scalar (_,avt) when vt <> avt -> raise (ArgTypeMismatch(vt,avt))
-          | Buffer _ -> raise ArgExprOfBufferArgument
-          | _ -> ());
-        arg_val name
+    | Arg(vt, name) -> sym_get name
 
     (* Making vectors *)
     | MakeVector(l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
@@ -437,7 +409,7 @@ let codegen (c:llcontext) (e:entrypoint) =
 
   and cg_gather t buf idx =
     let elem_type     = type_of_val_type (element_val_type t) in
-    let base_ptr      = build_pointercast (ptr_to_buffer buf) (pointer_type elem_type) "" b in
+    let base_ptr      = build_pointercast (sym_get buf) (pointer_type elem_type) "" b in
     let addr_vec      = cg_expr idx in
     let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
     let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
@@ -449,7 +421,7 @@ let codegen (c:llcontext) (e:entrypoint) =
 
   and cg_scatter e buf idx =
     let elem_type     = type_of_val_type (element_val_type (val_type_of_expr e)) in
-    let base_ptr      = build_pointercast (ptr_to_buffer buf) (pointer_type elem_type) "" b in
+    let base_ptr      = build_pointercast (sym_get buf) (pointer_type elem_type) "" b in
     let addr_vec      = cg_expr idx in
     let value_vec     = cg_expr e in
     let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
@@ -460,7 +432,7 @@ let codegen (c:llcontext) (e:entrypoint) =
 
   and cg_memref vt buf idx =
     (* load the global buffer** *)
-    let base = ptr_to_buffer buf in
+    let base = sym_get buf in
     (* cast pointer to pointer-to-target-type *)
     (* TODO: fix address calculation to use inner type of vector type *)
     let elem_type = type_of_val_type (element_val_type vt) in
