@@ -79,6 +79,10 @@ namespace FImage {
         }
     }
 
+    template<> int Named<'v'>::_instances = 0;
+    template<> int Named<'f'>::_instances = 0;
+    template<> int Named<'i'>::_instances = 0;
+
     // An Expr is a wrapper around the node structure used by the compiler
     Expr::Expr() {}
 
@@ -98,7 +102,7 @@ namespace FImage {
 
     // declare that this node has a child for bookkeeping
     void Expr::child(const Expr &c) {
-        unify(args, c.args);
+        unify(bufs, c.bufs);
         unify(vars, c.vars);
     }
 
@@ -124,9 +128,10 @@ namespace FImage {
 
 
     Expr operator+(const Expr & a, const Expr & b) {
+        printf("Making an addition node\n");
         Expr e(makeAdd(a.node, b.node));
-        e.child(a);
-        e.child(b);
+        e.child(a); 
+        e.child(b); 
         return e;
     }
 
@@ -206,221 +211,92 @@ namespace FImage {
         doPrint(node);
     }
 
-    Var::Var(int a, int b) : _min(a), _max(b), _vectorize(1), _unroll(1) {
-        snprintf(_name, sizeof(_name), "var%d", _instances++);
-        node = makeVar(MLVal::fromString(_name));
+    Var::Var() {
+        node = makeVar(MLVal::fromString(name()));
         vars.push_back(this);
     }
 
 
-    Func::Func(const std::string &name, Var arg1, Var arg2, const Expr &body) :
-        name(name), body(body) {
-
-        if (!environment) {
-            environment = new MLVal(makeEnv());
-        }
-        
-        MLVal arglist = makeStringList();
-        arglist = addStringToList(arglist, MLVal::fromString(arg2.name()));
-        arglist = addStringToList(arglist, MLVal::fromString(arg1.name()));
-        definition = makeDefinition(MLVal::fromString(name), arglist, 
-                                    makeStore(body.node, MLVal::fromString("result"), 
-                                              makeIntImm(MLVal::fromInt(0))));
-        *environment = addDefinitionToEnv(*environment, definition);
+    void FuncRef::operator=(const Expr &e) {
+        f->define(func_args, e);
     }
 
-    // Generate a call to the function
-    Expr Func::operator()(const Expr &x, const Expr &y) {
+    FuncRef::operator Expr() {
+        // make a call node
         MLVal exprlist = makeExprList();
-        exprlist = addExprToList(exprlist, y.node);
-        exprlist = addExprToList(exprlist, x.node);
-        Expr call = makeCall(MLVal::fromString(name), exprlist);
-        unify(call.args, body.args);
+        for (size_t i = func_args.size(); i > 0; i--) {
+            exprlist = addExprToList(exprlist, func_args[i-1].node);            
+        }
+        Expr call = makeCall(MLVal::fromString(f->name()), exprlist);
+
+        for (size_t i = 0; i < func_args.size(); i++) {
+            call.child(func_args[i]);
+        }
+
+        // Reach through the call to extract buffer dependencies (but not free vars)
+        unify(call.bufs, f->rhs.bufs);
+
         return call;
     }
 
-    MLVal *Func::environment = NULL;
-
-    // Make an MemRef reference to a particular pixel. It can be used as an
-    // assignment target or cast to a load operation. In the future it may
-    // also serve as a marker for a site in an expression that can be
-    // fused.
-    MemRef::MemRef(Image *im_, const Expr & a) : im(im_), function_ptr(NULL) {
-        
-        // If you upcast this to an Expr it gets treated as a load
-        addr = a * im->stride[0];
-        // TODO: replace this name with topological position
-        node = makeLoad(MLVal::fromString(im->name()), addr.node);
-
-        args.push_back(im);
-        child(a);
-
-        indices.resize(1);
-        indices[0] = a;
-    }
-
-    MemRef::MemRef(Image *im_, const Expr & a, const Expr & b) : im(im_), function_ptr(NULL) {
-        
-        // If you upcast this to an Expr it gets treated as a load
-        addr = a * im->stride[0] + b * im->stride[1];
-        node = makeLoad(MLVal::fromString(im->name()), addr.node);
-
-        args.push_back(im);
-        child(a);
-        child(b);
-
-        printf("%d %d %d\n", a.args.size(), b.args.size(), args.size());
-        
-        indices.resize(2);
-        indices[0] = a;
-        indices[1] = b;
-    }
-
-    MemRef::MemRef(Image *im_, const Expr & a, const Expr & b, const Expr & c) : im(im_), function_ptr(NULL) {
-        
-        // If you upcast this to an Expr it gets treated as a load
-        addr = a * im->stride[0] + b * im->stride[1] + c * im->stride[2];
-        node = makeLoad(MLVal::fromString(im->name()), addr.node);
-
-        args.push_back(im);
-        child(a);
-        child(b);
-        child(c);
-
-        indices.resize(3);
-        indices[0] = a;
-        indices[1] = b;
-        indices[2] = c;
-    }
-    
-    MemRef::MemRef(Image *im_, const Expr & a, const Expr & b, const Expr & c, const Expr & d) : im(im_), function_ptr(NULL) {
-        
-        // If you upcast this to an Expr it gets treated as a load
-        addr = a * im->stride[0] + b * im->stride[1] + c * im->stride[2] + d * im->stride[3];
-        node = makeLoad(MLVal::fromString(im->name()), addr.node);
-
-        args.push_back(im);
-        child(a);
-        child(b);
-        child(c);
-        child(d);
-
-        indices.resize(4);
-        indices[0] = a;
-        indices[1] = b;
-        indices[2] = c;
-        indices[3] = d;
-    }
-
-    void MemRef::operator=(const Expr &e) {
-        // We were a load - convert to a store instead
-        node = makeStore(e.node, MLVal::fromString(im->name()), addr.node);
-
-        child(e);
-
-        // Add this to the list of definitions of im
-        printf("Adding a definition\n");
-        im->definitions.push_back(*this);
-    }
-
-    Image::Image(uint32_t a) {
-        size.resize(1);
-        stride.resize(1);
-        size[0] = a;
-        stride[0] = 1;
-        // TODO: enforce alignment, lazy allocation, etc, etc
-        buffer.reset(new std::vector<float>(a + 8));
-        data = &(*buffer)[0] + 4;
-        snprintf(_name, sizeof(_name), "im%d", _instances++);
-    }
-
-    Image::Image(uint32_t a, uint32_t b) {
-        size.resize(2);
-        stride.resize(2);
-        size[0] = a;
-        size[1] = b;
-        stride[0] = 1;
-        stride[1] = a;
-        buffer.reset(new std::vector<float>(a*b + 8));
-        data = &(*buffer)[0] + 4;
-        snprintf(_name, sizeof(_name), "im%d", _instances++);
-    }
-    
-    Image::Image(uint32_t a, uint32_t b, uint32_t c) {
-        size.resize(3);
-        stride.resize(3);
-        size[0] = a;
-        size[1] = b;
-        size[2] = c;
-        stride[0] = 1;
-        stride[1] = a;
-        stride[2] = a*b;
-        buffer.reset(new std::vector<float>(a*b*c + 8));
-        data = &(*buffer)[0] + 4;
-        snprintf(_name, sizeof(_name), "im%d", _instances++);
-    }
-
-    Image::Image(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
-        size.resize(4);
-        stride.resize(4);
-        size[0] = a;
-        size[1] = b;
-        size[2] = c;
-        size[3] = d;
-        stride[0] = 1;
-        stride[1] = a;
-        stride[2] = a*b;
-        stride[3] = a*b*c;
-        buffer.reset(new std::vector<float>(a*b*c*d + 8));
-        data = &(*buffer)[0] + 4;
-        snprintf(_name, sizeof(_name), "im%d", _instances++);
-    }
-    
-    Image::~Image() {
-        //delete[] (data-4);
-    }
-
-    // Generate an MemRef reference to a (computed) location in this image
-    // that can be used as an assignment target, and can also be cast to
-    // the Expr version (a load of a computed address)
-    MemRef Image::operator()(const Expr & a) {
-        return MemRef(this, a);
-    }
-
-    MemRef Image::operator()(const Expr & a, const Expr & b) {
-        return MemRef(this, a, b);
-    }
-
-    MemRef Image::operator()(const Expr & a, const Expr & b, const Expr & c) {
-        return MemRef(this, a, b, c);
-    }
-
-    MemRef Image::operator()(const Expr & a, const Expr & b, const Expr & c, const Expr & d) {
-        return MemRef(this, a, b, c, d);
-    }
-
-    // Print out a particular definition. We assume the MemRef has already been assigned to.
-    void MemRef::debug() {
-        printf("[");
-        for (size_t i = 0; i < indices.size(); i++) {
-            doPrint(indices[i].node);
-            printf(", ");
+    void Func::define(const std::vector<Expr> &func_args, const Expr &r) {
+        if (!environment) {
+            environment = new MLVal(makeEnv());
         }
-        printf("\b\b]\n");
-    }
 
+        // Start off my rhs as the expression given.
+        rhs = r;
 
-    // Print out all the definitions of this Image
-    void Image::debug() {
-        for (size_t i = 0; i < definitions.size(); i++) {
-            definitions[i].debug();
+        // TODO: Mutate the rhs: Convert scatters to scalar-valued functions by wrapping them in a let
+        
+        MLVal arglist = makeStringList();
+        for (size_t i = func_args.size(); i > 0; i--) {
+            if (1 /* dangerously assume it's a var */) {
+                if (func_args[i-1].vars.size() != 1) {
+                    printf("This was supposed to be a var:\n");
+                    doPrint(func_args[i].node);
+                    exit(1);
+                }
+                arglist = addStringToList(arglist, MLVal::fromString(func_args[i-1].vars[0]->name()));
+            } else {
+                printf("Scalar valued functions should only have vars as arguments\n");
+            }
         }
+
+        // Wrap the rhs in a result[0] = 
+        MLVal body = makeStore(rhs.node, MLVal::fromString("result"), 
+                               makeIntImm(MLVal::fromInt(0)));
+
+        definition = makeDefinition(MLVal::fromString(name()), arglist, body);
+
+        *environment = addDefinitionToEnv(*environment, definition);
     }
 
-    Image &Image::evaluate() {
-        // Just evaluate the first definition
-        MemRef &stmt = definitions[0];
+    Image Func::realize(int a) {        
+        Image im(a);
+        realize(im);
+        return im;
+    }
 
+    Image Func::realize(int a, int b) {
+        Image im(a, b);
+        realize(im);
+        return im;
+    }
+
+    Image Func::realize(int a, int b, int c) {
+        Image im(a, b, c);
+        realize(im);
+        return im;
+    }
+
+    Image Func::realize(int a, int b, int c, int d) {
+        Image im(a, b, c, d);
+        realize(im);
+        return im;
+    }
+
+    void Func::realize(Image result) {
         static llvm::ExecutionEngine *ee = NULL;
         static llvm::FunctionPassManager *passMgr = NULL;
 
@@ -428,19 +304,31 @@ namespace FImage {
             llvm::InitializeNativeTarget();
         }
 
-        if (!stmt.function_ptr) {
+        if (!function_ptr) {
 
-            // Surround it with the appropriate number of maps
-            MLVal loop = stmt.node;
-            for (size_t i = 0; i < stmt.vars.size(); i++) {
+            // Make some iterands
+            std::vector<Var> iter(result.size.size());
+            std::vector<Expr> iterexprs(iter.begin(), iter.end());
+
+            // Make an outer statement to execute
+            Expr call = (*this)(iterexprs);
+            Expr addr = 0;
+            for (size_t i = 0; i < iter.size(); i++) {
+                addr += iter[i] * result.stride[i];
+            }
+            MLVal loop = makeStore(call.node, MLVal::fromString("result"), addr.node);                                   
+            
+            // Surround it with the appropriate number of maps.
+            for (size_t i = 0; i < iter.size(); i++) {
                 printf("Wrapping statement in a loop...\n");
-                loop = makeMap(MLVal::fromString(stmt.vars[i]->name()),
-                               Expr(stmt.vars[i]->min()).node,
-                               Expr(stmt.vars[i]->max()).node,
+                loop = makeMap(MLVal::fromString(iter[i].name()),
+                               Expr(0).node,
+                               Expr(result.size[i]).node,
                                loop);
             }
 
             // Perform any requested transformations
+            /*
             for (size_t i = 0; i < stmt.vars.size(); i++) {
                 int v = stmt.vars[i]->vectorize();
                 if (v > 1) {
@@ -469,21 +357,29 @@ namespace FImage {
                     doPrint(loop);
                 }                    
             }
+            */
 
             // Do inlining of all the calls
             if (Func::environment) {
+                printf("Before inlining:\n");
+                doPrint(loop);
+            
                 printf("\nInlining used functions\n");
                 loop = doInline(loop, *Func::environment);
+
+                printf("After inlining:\n");
+                doPrint(loop);
             }
 
             // Create a function around it with the appropriate number of args
             printf("\nMaking function...\n");           
             MLVal args = makeArgList();
-            for (size_t i = 0; i < stmt.args.size(); i++) {
-                MLVal arg = makeBufferArg(MLVal::fromString(stmt.args[i]->name()));
+            for (size_t i = 0; i< call.bufs.size(); i++) {
+                MLVal arg = makeBufferArg(MLVal::fromString(call.bufs[i]->name()));
                 args = addArgToList(args, arg);
             }
-            
+            args = addArgToList(args, makeBufferArg(MLVal::fromString("result")));
+
             MLVal function = makeFunction(args, loop);
 
             doPrint(loop);
@@ -559,7 +455,7 @@ namespace FImage {
 
             printf("compiling ll -> machine code...\n");
             void *ptr = ee->getPointerToFunction(f);
-            stmt.function_ptr = (void (*)(void*))ptr;
+            function_ptr = (void (*)(void*))ptr;
 
             printf("dumping machine code to file...\n");
             saveELF("generated.o", ptr, 8192);            
@@ -568,17 +464,104 @@ namespace FImage {
 
         printf("Constructing argument list...\n");
         static void *arguments[256];
-        for (size_t i = 0; i < stmt.args.size(); i++) {
-            arguments[i] = (void *)stmt.args[i]->data;
+        for (size_t i = 0; i < rhs.bufs.size(); i++) {
+            arguments[i] = (void *)rhs.bufs[i]->data;
         }
+        arguments[rhs.bufs.size()] = result.data;
 
         printf("Calling function...\n"); 
-        stmt.function_ptr(&arguments[0]); 
-
-        return *this;
+        function_ptr(&arguments[0]); 
     }
 
+    MLVal *Func::environment = NULL;
 
-    int Image::_instances = 0;
-    int Var::_instances = 0;
+    Image::Image(uint32_t a) {
+        size.resize(1);
+        stride.resize(1);
+        size[0] = a;
+        stride[0] = 1;
+        // TODO: enforce alignment, lazy allocation, etc, etc
+        buffer.reset(new std::vector<float>(a + 8));
+        data = &(*buffer)[0] + 4;
+    }
+
+    Image::Image(uint32_t a, uint32_t b) {
+        size.resize(2);
+        stride.resize(2);
+        size[0] = a;
+        size[1] = b;
+        stride[0] = 1;
+        stride[1] = a;
+        buffer.reset(new std::vector<float>(a*b + 8));
+        data = &(*buffer)[0] + 4;
+    }
+    
+    Image::Image(uint32_t a, uint32_t b, uint32_t c) {
+        size.resize(3);
+        stride.resize(3);
+        size[0] = a;
+        size[1] = b;
+        size[2] = c;
+        stride[0] = 1;
+        stride[1] = a;
+        stride[2] = a*b;
+        buffer.reset(new std::vector<float>(a*b*c + 8));
+        data = &(*buffer)[0] + 4;
+    }
+
+    Image::Image(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
+        size.resize(4);
+        stride.resize(4);
+        size[0] = a;
+        size[1] = b;
+        size[2] = c;
+        size[3] = d;
+        stride[0] = 1;
+        stride[1] = a;
+        stride[2] = a*b;
+        stride[3] = a*b*c;
+        buffer.reset(new std::vector<float>(a*b*c*d + 8));
+        data = &(*buffer)[0] + 4;
+    }
+    
+    Image::~Image() {
+        //delete[] (data-4);
+    }
+
+    Expr Image::operator()(const Expr & a) {        
+        Expr addr = a * stride[0];
+        Expr load(makeLoad(MLVal::fromString(name()), addr.node));
+        load.child(addr);
+        load.bufs.push_back(this);
+        return load;
+    }
+
+    Expr Image::operator()(const Expr & a, const Expr & b) {
+        printf("a\n");
+        Expr addr = (a * stride[0]) + (b * stride[1]);
+        printf("b\n");
+        Expr load(makeLoad(MLVal::fromString(name()), addr.node));
+        printf("c\n");
+        load.child(addr);
+        load.bufs.push_back(this);
+        printf("d\n");
+        return load;
+    }
+
+    Expr Image::operator()(const Expr & a, const Expr & b, const Expr & c) {
+        Expr addr = a * stride[0] + b * stride[1] + c * stride[2];
+        Expr load(makeLoad(MLVal::fromString(name()), addr.node));
+        load.child(addr);
+        load.bufs.push_back(this);
+        return load;
+    }
+
+    Expr Image::operator()(const Expr & a, const Expr & b, const Expr & c, const Expr & d) {
+        Expr addr = a * stride[0] + b * stride[1] + c * stride[2] + d * stride[3];
+        Expr load(makeLoad(MLVal::fromString(name()), addr.node));
+        load.child(addr);
+        load.bufs.push_back(this);
+        return load;
+    }
+
 }

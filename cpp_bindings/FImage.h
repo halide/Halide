@@ -5,12 +5,31 @@
 #include <vector>
 #include <stdint.h>
 #include <string>
+#include <sstream>
 
 namespace FImage {
 
     class Image;
     class Var;
     class Func;
+
+    // objects with unique auto-generated names
+    template<char c>
+    class Named {
+      public:        
+        Named() {
+            std::ostringstream ss;
+            ss << c;
+            ss << _instances++;
+            _name = ss.str();
+        }
+
+        const std::string &name() const {return _name;}
+
+      private:
+        static int _instances;
+        std::string _name;
+    };
 
     // A node in an expression tree.
     class Expr {
@@ -30,7 +49,7 @@ namespace FImage {
         void debug();
 
         // The list of argument buffers contained within subexpressions
-        std::vector<Image *> args;
+        std::vector<Image *> bufs;
 
         // The list of free variables found
         std::vector<Var *> vars;
@@ -53,81 +72,83 @@ namespace FImage {
     Expr operator==(const Expr &, const Expr &);
 
     // A loop variable with the given (static) range [min, max)
-    class Var : public Expr {
+    class Var : public Expr, public Named<'v'> {
       public:
-        Var(int a = 0, int b = 0);
-    
-        // Evaluation of expressions in this variable should be vectorized
-        // in this variable. Must be a multiple of one of the system's
-        // native vectorization widths. Larger multiples than 1 are
-        // converted to unrolling instead.
-        void vectorize(int n) {_vectorize = n;}
-        int vectorize() {return _vectorize;}
-
-        void unroll(int n) {_unroll = n;}
-        int unroll() {return _unroll;}
-
-        int min() {return _min;}
-        int max() {return _max;}
-        
-        const char *name() {return _name;}
-      private:
-        int _vectorize, _unroll;
-        int _min, _max;
-        char _name[16];
-        static int _instances;
+        Var();
     };
 
-    // An assignable reference to a memory location (e.g. im(x, y, c), or im(sin(x), y, c))
-    class MemRef : public Expr {
+    // A function call (if you cast it to an expr), or a function definition lhs (if you assign an expr to it).
+    class FuncRef {
       public:
-        MemRef(Image *, const Expr &);
-        MemRef(Image *, const Expr &, const Expr &);
-        MemRef(Image *, const Expr &, const Expr &, const Expr &);
-        MemRef(Image *, const Expr &, const Expr &, const Expr &, const Expr &);
+        // Yay C++0x initializer lists
+      FuncRef(Func *f, const Expr &a) : 
+        f(f), func_args{a} {}
+      FuncRef(Func *f, const Expr &a, const Expr &b) :
+        f(f), func_args{a, b} {}
+      FuncRef(Func *f, const Expr &a, const Expr &b, const Expr &c) :
+        f(f), func_args{a, b, c} {}
+      FuncRef(Func *f, const Expr &a, const Expr &b, const Expr &c, const Expr &d) : 
+        f(f), func_args{a, b, c, d} {}
+      FuncRef(Func *f, const std::vector<Expr> &args) :
+        f(f), func_args(args) {}
 
-        // This assignment corresponds to definition. This MemRef is
+        // Turn it into a function call
+        operator Expr();
+
+        // This assignment corresponds to definition. This FuncRef is
         // defined to have the given expression as its value.
-        void operator=(const Expr &);
+        void operator=(const Expr &e);
         
-        // In these recursive definitions, the rhs version of (*this) will
-        // be interpreted as a load, and the lhs version will be a store.
-        void operator+=(const Expr &e) {*this = (*this + e);}
-        void operator-=(const Expr &e) {*this = (*this - e);}
-        void operator*=(const Expr &e) {*this = (*this * e);}
-        void operator/=(const Expr &e) {*this = (*this / e);}
-        
-        // Always use the above assignment operator, don't assign an MemRef to an MemRef
-        void operator=(const MemRef &other) {*this = (const Expr &)other;}
+        // Make sure we don't directly assign an FuncRef to an FuncRef (but instead treat it as a definition)
+        void operator=(const FuncRef &other) {*this = (const Expr &)other;}
                         
-        void debug();
+        // A pointer to the function object that this lhs defines.
+        Func *f;
 
-        Image *im;
-        std::vector<Expr> indices;
-        Expr addr;
+        std::vector<Expr> func_args;
 
-        // If this is a store, it can be executed
-        mutable void (*function_ptr)(void *); 
     };
 
-    class Func {
+    class Func : public Named<'f'> {
     public:
-      // Define a function. Can only be a gather over two variables for now
-      Func(const std::string &name, Var arg1, Var arg2, const Expr &body);
+      // Define a function
+      void define(const std::vector<Expr> &func_args, const Expr &rhs);
 
-      // Generate a call to the function
-      Expr operator()(const Expr &, const Expr &);
+      // Generate a call to the function (or the lhs of a definition)
+      FuncRef operator()(const Expr &a) {return FuncRef(this, a);}
+      FuncRef operator()(const Expr &a, const Expr &b) {return FuncRef(this, a, b);}
+      FuncRef operator()(const Expr &a, const Expr &b, const Expr &c) {return FuncRef(this, a, b, c);}     
+      FuncRef operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) {return FuncRef(this, a, b, c, d);}  
+      FuncRef operator()(const std::vector<Expr> &args) {return FuncRef(this, args);}
 
+      // Generate an image from this function
+      Image realize(int);
+      Image realize(int, int);
+      Image realize(int, int, int);
+      Image realize(int, int, int, int);
+      void realize(Image);
+
+      /* The space of all living functions (TODO: remove a function
+         from the environment when it goes out of scope) */
       static MLVal *environment;
 
+      // The scalar value returned by the function
+      Expr rhs;
+
     protected:
-      std::string name;
+
+      /* The ML definition object (name, return type, argnames, body)
+         The body here evaluates the function over an entire range,
+         and the arg list will include a min and max value for every
+         free variable. */
       MLVal definition;
-      Expr body;
+
+      // The compiled form of this function
+      mutable void (*function_ptr)(void *); 
     };
 
-    // The lazily evaluated image type. Has from 1 to 4 dimensions.
-    class Image {
+    // The image type. Has from 1 to 4 dimensions.
+    class Image : public Named<'i'> {
       public:
         Image(uint32_t);
         Image(uint32_t, uint32_t);
@@ -136,11 +157,11 @@ namespace FImage {
         
         ~Image();
         
-        // Make an assignable reference to a location in the image (e.g. im(x, y, c))
-        MemRef operator()(const Expr &);
-        MemRef operator()(const Expr &, const Expr &);
-        MemRef operator()(const Expr &, const Expr &, const Expr &);
-        MemRef operator()(const Expr &, const Expr &, const Expr &, const Expr &);
+        // make a Load
+        Expr operator()(const Expr &);
+        Expr operator()(const Expr &, const Expr &);
+        Expr operator()(const Expr &, const Expr &, const Expr &);
+        Expr operator()(const Expr &, const Expr &, const Expr &, const Expr &);
         
         // Actually look something up in the image. Won't return anything
         // interesting if the image hasn't been evaluated yet.
@@ -160,26 +181,6 @@ namespace FImage {
             return data[a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]];
         }
         
-        uint32_t operator()(int a) const {
-            return data[a*stride[0]];
-        }
-        
-        uint32_t operator()(int a, int b) const {
-            return data[a*stride[0] + b*stride[1]];
-        }
-        
-        uint32_t operator()(int a, int b, int c) const {
-            return data[a*stride[0] + b*stride[1] + c*stride[2]];
-        }
-        
-        uint32_t operator()(int a, int b, int c, int d) const {
-            return data[a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]];
-        }
-        
-        // Evaluate the image and return a reference to it. In the future
-        // this may return a vanilla image type instead.
-        Image &evaluate();
-        
         // Dimensions
         std::vector<uint32_t> size;
         std::vector<uint32_t> stride;
@@ -190,22 +191,7 @@ namespace FImage {
         float *data;
         
         // How the data is actually stored
-        std::shared_ptr<std::vector<float> > buffer;
-        
-        // The vector of definitions of this image. Right now all but the first is ignored.
-        std::vector<MemRef> definitions;
-        
-        // Print out the definitions of the image.
-        void debug();
-
-        // A unique id
-        const char *name() {
-            return _name;
-        }
-        
-      private:
-        static int _instances;
-        char _name[16];
+        std::shared_ptr<std::vector<float> > buffer;       
     };
 
 }
