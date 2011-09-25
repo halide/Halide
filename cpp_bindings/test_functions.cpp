@@ -28,11 +28,14 @@ int main(int argc, char **argv) {
         }
     }
 
-    Func f;
-    f(x, y) = im(x, y)*3.0f;
+    Func f1;
+    f1(x, y) = im(x, y)+im(x-1, y);
+
+    Func f2;
+    f2(x, y) = f1(x, y)+f1(x, y-1);
 
     // Evaluate all of f into a buffer
-    Image im3 = f.realize(W, H);
+    Image im3 = f2.realize(W, H);
 
     printf("im3:\n");
     for (int y = 0; y < 10; y++) {
