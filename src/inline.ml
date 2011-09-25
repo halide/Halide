@@ -3,6 +3,8 @@ open List
 open Map
 open Analysis
 open Ir
+open Printf
+open Ir_printer
 
 (* Generate a unique name for each call site *)
 let name_counter = ref 0 
@@ -17,19 +19,23 @@ let rec inline_stmt (stmt : stmt) (env : environment) =
       | (name, ty, args) :: rest ->
         let tmpname = "C" ^ (mkname ()) ^ "_" in
         let (_, argnames, t, f_body) = Environment.find name env in
-        (* prefix body var names with callsite prefix to prevent nonsense when inserting arguments *)
+        printf "argnames: %s\n" (String.concat ", " argnames);
+        printf "body: %s\n" (string_of_stmt f_body);
+        (* prefix body var names with callsite prefix to prevent nonsense when inserting arguments *)        
         let prefixed = List.fold_left (fun s x -> subs_stmt (Var x) (Var (tmpname ^ x)) s) f_body argnames in
+        printf "prefixed: %s\n" (string_of_stmt prefixed);
         (* subs body var names for args *)
         let substituted = List.fold_left2 (fun s x e -> subs_stmt (Var (tmpname ^ x)) e s) prefixed argnames args in
+        printf "substituted: %s\n" (string_of_stmt substituted);
         (* subs tmpname for result *)
         let result = subs_buffer_name_stmt "result" (tmpname ^ "result") substituted in
-        Printf.printf "After buffer renaming: %s\n%!" (Ir_printer.string_of_stmt result); 
+        Printf.printf "result renamed: %s\n%!" (Ir_printer.string_of_stmt result); 
         (* Recursively precompute the rest of the calls *)
         let recurse = xform stmt rest in
         (* Replace the call to this function in the current expressions with a load *)          
         let newstmt = subs_stmt (Call (name, ty, args)) (Load (ty, tmpname ^ "result", IntImm 0)) recurse in
         (* Return the statement wrapped in a let *)
-        Let(tmpname ^ "result", ty, IntImm 1, result, newstmt)
+        Let(tmpname ^ "result", ty, IntImm 1, inline_stmt result env, newstmt)
       | [] -> stmt end
   in 
 
