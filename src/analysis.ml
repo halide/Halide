@@ -71,6 +71,7 @@ and subs_expr oldexpr newexpr expr =
         | MakeVector l          -> MakeVector (List.map subs l)
         | Broadcast (a, n)      -> Broadcast (subs a, n)
         | ExtractElement (a, b) -> ExtractElement (subs a, subs b)
+        | Call (f, t, args)     -> Call (f, t, List.map subs args)
         | x -> x
     
 and subs_buffer_name_stmt oldname newname stmt =
@@ -80,7 +81,6 @@ and subs_buffer_name_stmt oldname newname stmt =
     | Map (name, min, max, body) -> Map (name, subs_expr min, subs_expr max, subs body)
     | Block l -> Block (List.map subs l)
     | Store (expr, buf, idx) -> 
-      Printf.printf "subs_buffer_name_stmt: %s(%d) %s(%d) %s(%d) %s\n%!" oldname (String.length oldname) newname (String.length newname) buf (String.length buf) (if buf = oldname then "match" else "not a match"); 
       Store (subs_expr expr,
              (if buf = oldname then newname else buf),
              subs_expr idx)
