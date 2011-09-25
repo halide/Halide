@@ -28,7 +28,7 @@ struct _do_math<T, 0> {
 
 template<typename T>
 T do_math(const T &a, const T &b) {
-    return _do_math<T,10>::go(a, b);
+    return _do_math<T,2>::go(a, b);
 }
 
 
@@ -39,12 +39,12 @@ float operator-(const timeval &after, const timeval &before) {
 }
 
 int main(int argc, char **argv) {
-    Var x(64, W-64), y(0, H);
+    Var x, y;
     Image im(W, H);       
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            im(x, y) = y*H+x;
+            im(x, y) = x+y;
         }
     }
 
@@ -52,34 +52,52 @@ int main(int argc, char **argv) {
     //x.vectorize(4);
     //y.unroll(4);
 
-    Image im2(W, H);
+    printf("Defining function...\n");
+    /*
+    Func f;
+    printf("Making funcref\n");
+    FuncRef fr = f(x, y);
+    printf("Making rhs\n");
+    Expr rhs = im(x, y)+1.0f;
+    printf("Defining...\n");
+    fr = rhs;
+    */
+    Func f;
+    f(x, y) = im(x, y) + im(x+1, y);
 
-    im2(x, y) = do_math<Expr>(im(x, y), im(x+1, y));
+    printf("Realizing function...\n");
 
-    im2.evaluate();
+    Image im2 = f.realize(W-1, H);
 
     timeval before, after;
     gettimeofday(&before, NULL);
-    im2.evaluate();
+    f.realize(im2);
     gettimeofday(&after, NULL);
     printf("jitted code: %f ms\n", after - before);
 
     for (int x = 0; x < 16; x++) {
-        printf("%d ", im2(x));
+        printf("%3.1f ", im2(x, 10));
     }
     printf("\n");
+
+    // Clear it before the next run
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W-1; x++) {
+            im2(x, y) = -1; 
+        }
+    }    
     
     gettimeofday(&before, NULL);
     for (int y = 0; y < H; y++) {
-        for (int x = 64; x < W-64; x++) {
-            im2(x, y) = do_math<float>(im(x, y), im(x+1, y));
+        for (int x = 0; x < W-1; x++) {
+            im2(x, y) = im(x, y) + im(x+1, y);
         }
     }
     gettimeofday(&after, NULL);
     printf("compiled code: %f ms\n", after - before);
 
     for (int x = 0; x < 16; x++) {
-        printf("%d ", im2(x));
+        printf("%3.1f ", im2(x, 10));
     }
     printf("\n");
 
