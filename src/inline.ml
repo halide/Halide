@@ -18,6 +18,7 @@ let rec inline_stmt (stmt : stmt) (env : environment) =
     match calls with
       | (name, ty, args) :: rest ->
         let tmpname = "C" ^ (mkname ()) ^ "_" in
+        (* Lookup the function type signature and body in the environment *)
         let (_, argnames, t, f_body) = Environment.find name env in
         printf "argnames: %s\n" (String.concat ", " argnames);
         printf "body: %s\n" (string_of_stmt f_body);
