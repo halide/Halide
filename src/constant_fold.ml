@@ -67,6 +67,7 @@ let rec constant_fold_expr expr =
     | Load (t, buf, idx) -> Load (t, buf, recurse idx)
     | MakeVector l -> MakeVector (List.map recurse l)
     | Broadcast (e, n) -> Broadcast (recurse e, n)
+    | Ramp (b, s, n) -> Ramp (recurse b, recurse s, n)
     | ExtractElement (a, b) -> ExtractElement (recurse a, recurse b)
 
     (* Immediates are unchanged *)
