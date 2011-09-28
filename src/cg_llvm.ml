@@ -60,17 +60,6 @@ let codegen (c:llcontext) (e:entrypoint) =
     | _ -> raise (UnsupportedType(t))
   in
 
-  let elem_type_of_vector_val_type t = match t with
-    | IntVector( 1, n) | UIntVector( 1, n) -> i1_type c
-    | IntVector( 8, n) | UIntVector( 8, n) -> i8_type c
-    | IntVector(16, n) | UIntVector(16, n) -> i16_type c
-    | IntVector(32, n) | UIntVector(32, n) -> i32_type c
-    | IntVector(64, n) | UIntVector(64, n) -> i64_type c
-    | FloatVector(32, n) -> float_type c
-    | FloatVector(64, n) -> double_type c
-    | _ -> raise (UnsupportedType(t))
-  in
-
   (* The symbol table for loop variables *)
   let sym_table =
     Hashtbl.create 10 
@@ -178,21 +167,8 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       end
 
     (* memory TODO: handle vector loads and stores better *)
-    | Load(t, buf, idx) -> begin
-      match (vector_elements t, vector_elements (val_type_of_expr idx)) with 
-        (* scalar load *)
-        | (1, 1) -> build_load (cg_memref t buf idx) "" b 
-          
-        (* vector load of scalar address *)
-        | (w, 1) -> begin match Analysis.reduce_expr_modulo idx w with 
-            | Some 0      -> build_load (cg_memref t buf idx) "" b
-            | Some offset -> cg_unaligned_load t buf idx offset
-            | None        -> cg_unknown_alignment_load t buf idx
-        end
-          
-        (* general gather *)
-        | (_, _) -> cg_gather t buf idx
-    end
+    | Load(t, buf, idx) -> cg_load t buf idx
+
     (* Loop variables *)
     | Var(name) -> sym_get name
 
@@ -209,6 +185,20 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
         | 0 -> undef (type_of_val_type vec_type)
         | i -> build_insertelement (rep (i-1)) expr (const_int int_imm_t (i-1)) "" b
       in rep n
+
+    | Ramp (base_expr, stride_expr, n) ->
+      let elem_type = val_type_of_expr base_expr in
+      let vec_type  = vector_of_val_type elem_type n in
+      let base      = cg_expr base_expr in
+      let stride    = cg_expr stride_expr in
+      let rec rep = function
+        (* build the empty vector and the first value to insert *)
+        | 0 -> (undef (type_of_val_type vec_type)), base
+        (* insert each value, and add to pass up the recursive chain *)
+        | i -> let vec, value = rep (i-1) in               
+               (build_insertelement vec value (const_int int_imm_t (i-1)) "" b,
+                build_add value stride "" b)
+      in fst (rep n)
 
     (* Unpacking vectors *)
     | ExtractElement(e, n) ->
@@ -373,11 +363,62 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       res
 
   and cg_store e buf idx =
-    let elems = (vector_elements (val_type_of_expr idx)) in
-    if (elems > 1) then cg_scatter e buf idx
-    else
-      let ptr = cg_memref (val_type_of_expr e) buf idx in
-      build_store (cg_expr e) ptr b
+    match (is_vector e, is_vector idx) with
+      | (_, true) ->
+        begin match idx with
+          (* Aligned dense vector store: ramp stride 1 && idx base % vec width = 0 *)
+          | Ramp(b, IntImm(1), n) when Analysis.reduce_expr_modulo b n = Some 0 ->            
+            cg_aligned_store e buf b
+          (* All other vector stores become scatters (even if dense) *)
+          | _ -> cg_scatter e buf idx
+        end
+
+      | (false, false) -> build_store (cg_expr e) (cg_memref (val_type_of_expr e) buf idx) b
+
+      | (true, false)  -> raise (Wtf "Can't store a vector to a scalar address")
+
+  and cg_aligned_store e buf idx =
+    let w = vector_elements (val_type_of_expr idx) in
+    (* Handle aligned dense vector store of scalar by broadcasting first *)
+    let expr = if is_scalar e then Broadcast(e, w) else e in
+    build_store (cg_expr expr) (cg_memref (val_type_of_expr expr) buf idx) b
+
+  and cg_scatter e buf idx =
+    let elem_type     = type_of_val_type (element_val_type (val_type_of_expr e)) in
+    let base_ptr      = build_pointercast (sym_get buf) (pointer_type elem_type) "" b in
+    let addr_vec      = cg_expr idx in
+    let value         = cg_expr e in
+    let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
+    let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
+    let get_elem i    = build_extractelement value (const_int int_imm_t i) "" b in
+    let store_idx i   = build_store (if is_vector e then (get_elem i) else value) (addr_of_idx i) b in
+    List.hd (List.map store_idx (0 -- vector_elements (val_type_of_expr e)))
+
+
+  and cg_load t buf idx =
+    match (vector_elements t, is_vector idx) with 
+        (* scalar load *)
+      | (1, false) -> build_load (cg_memref t buf idx) "" b 
+        
+        (* vector load of scalar address *)
+      | (_, false) -> raise (Wtf "Vector load from a scalar address")
+
+      | (w, true) ->
+        begin match idx with 
+          (* dense vector load *)
+          | Ramp(b, IntImm(1), _) ->
+            begin match Analysis.reduce_expr_modulo b w with
+              | Some 0      -> cg_aligned_load t buf b
+              | Some offset -> cg_unaligned_load t buf b offset
+              | None        -> cg_unknown_alignment_load t buf b
+            end
+          (* TODO: consider strided loads *)
+          (* gather *)
+          | _ -> cg_gather t buf idx
+        end          
+          
+  and cg_aligned_load t buf idx =
+    build_load (cg_memref t buf idx) "" b
 
   and cg_unaligned_load t buf idx offset =
     let lower_addr = idx -~ (IntImm(offset)) in
@@ -401,10 +442,9 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
     let stack_addr = build_pointercast scratch buffer_t "" b in
     let mem_addr   = build_pointercast (cg_memref t buf idx) buffer_t "" b in
     let length     = const_int int_imm_t ((bit_width t)/8) in
-    let length64   = const_int (i64_type c) ((bit_width t)/8) in
     let alignment  = const_int int_imm_t ((bit_width (element_val_type t))/8) in
     let volatile   = const_int (i1_type c) 0 in
-    let to_stack   = build_call memcpy [|stack_addr; mem_addr; length; alignment; volatile|] "" b in
+    ignore(build_call memcpy [|stack_addr; mem_addr; length; alignment; volatile|] "to_stack" b);
     build_load (scratch) "" b
 
   and cg_gather t buf idx =
@@ -419,17 +459,6 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       | i -> build_insertelement (insert_idx (i-1)) (load_idx i) (const_int int_imm_t i) "" b
     in insert_idx ((vector_elements t) - 1)
 
-  and cg_scatter e buf idx =
-    let elem_type     = type_of_val_type (element_val_type (val_type_of_expr e)) in
-    let base_ptr      = build_pointercast (sym_get buf) (pointer_type elem_type) "" b in
-    let addr_vec      = cg_expr idx in
-    let value_vec     = cg_expr e in
-    let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
-    let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
-    let get_elem i    = build_extractelement value_vec (const_int int_imm_t i) "" b in
-    let store_idx i   = build_store (get_elem i) (addr_of_idx i) b in
-    List.hd (List.map store_idx (0 -- vector_elements (val_type_of_expr e)))
-
   and cg_memref vt buf idx =
     (* load the global buffer** *)
     let base = sym_get buf in
@@ -440,28 +469,21 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
     (* build getelementpointer into buffer *)
     let gep = build_gep ptr [| cg_expr idx |] "memref" b in
     build_pointercast gep (pointer_type (type_of_val_type vt)) "typed_memref" b
-
-
-  and cg_storevector = function
-    | ([], _, _, _, _) -> const_int int_imm_t 0
-    | (first::rest, t, buf, idx, stride) ->
-      ignore(build_store first (cg_memref t buf idx) b);
-      cg_storevector(rest, t, buf, idx +~ IntImm(stride), stride);
   in
 
-    (* actually generate from the root statement *)
-    ignore (cg_stmt s);
-
-    (* return void from main *)
-    ignore (build_ret_void b);
-
-    if dbgprint then dump_module m;
-
-    ignore (verify_cg m);
-
-    (* return generated module and function *)
-    (m,entrypoint_fn)
-      
+  (* actually generate from the root statement *)
+  ignore (cg_stmt s);
+  
+  (* return void from main *)
+  ignore (build_ret_void b);
+  
+  if dbgprint then dump_module m;
+  
+  ignore (verify_cg m);
+  
+  (* return generated module and function *)
+  (m,entrypoint_fn)
+    
 (*
  * Wrappers
  *)
@@ -530,9 +552,7 @@ let codegen_to_ocaml_callable e =
 let codegen_c_wrapper c m f =
 
   let buffer_t = buffer_t c in
-  let i8_t = i8_type c in
   let i32_t = i32_type c in
-  (* let i64_t = i64_type c in *)
 
   (* define wrapper entrypoint: void name(void* args[]) *)
   let wrapper = define_function

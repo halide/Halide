@@ -70,7 +70,7 @@ and find_calls_in_expr = function
     (name, ty, args) :: (List.concat (List.map find_calls_in_expr args))
   | Cast (_, a) | Not a | Load (_, _, a) | Broadcast (a, _) ->
     find_calls_in_expr a
-  | Bop (_, a, b) | Cmp(_, a, b) | And (a, b) | Or (a, b) | ExtractElement (a, b) ->
+  | Bop (_, a, b) | Cmp(_, a, b) | And (a, b) | Or (a, b) | ExtractElement (a, b) | Ramp (a, b, _) ->
     (find_calls_in_expr a) @ (find_calls_in_expr b)
   | Select (c, a, b) -> 
     (find_calls_in_expr c) @ (find_calls_in_expr a) @ (find_calls_in_expr b)

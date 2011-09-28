@@ -5,6 +5,7 @@ open Util
 exception ModulusOfNonInteger 
 exception ModulusOfMakeVector
 exception ModulusOfBroadcast
+exception ModulusOfRamp
 
 let rec gcd x y = match (x, y) with
   | (0, n) | (n, 0) -> n
@@ -33,6 +34,7 @@ and compute_remainder_modulus = function
   | Bop _ | Load _ | Var _ | ExtractElement _ -> (0, 1)
   | MakeVector _ -> raise ModulusOfMakeVector
   | Broadcast _ -> raise ModulusOfBroadcast
+  | Ramp _ -> raise ModulusOfRamp
   | e -> raise ModulusOfNonInteger
 
 (* Reduces an expression modulo n *)
@@ -41,6 +43,31 @@ let reduce_expr_modulo expr n =
   let (r, m) = compute_remainder_modulus expr in
   if (m mod n = 0) then Some (r mod n) else None
 
+
+(* Expression search *)
+let expr_contains_expr query e =
+  let rec recurse = function
+    | x when x = query -> true
+      
+    | Not e
+    | Load (_, _, e)
+    | Broadcast (e, _)
+    | Cast (_, e)           -> recurse e
+
+    | Ramp (a, b, _)
+    | ExtractElement (a, b)
+    | Bop (_, a, b)
+    | Cmp (_, a, b)
+    | And (a, b)
+    | Or (a, b)             -> recurse a or recurse b
+
+    | Select (c, a, b)      -> recurse c or recurse a or recurse b
+
+    | MakeVector l
+    | Call (_, _, l)        -> List.exists recurse l
+
+    | x -> false
+  in recurse e
 
     
 (* Expression subsitution *)
@@ -70,6 +97,7 @@ and subs_expr oldexpr newexpr expr =
         | Load (t, b, i)        -> Load (t, b, subs i)
         | MakeVector l          -> MakeVector (List.map subs l)
         | Broadcast (a, n)      -> Broadcast (subs a, n)
+        | Ramp (b, s, n)        -> Ramp (subs b, subs s, n)
         | ExtractElement (a, b) -> ExtractElement (subs a, subs b)
         | Call (f, t, args)     -> Call (f, t, List.map subs args)
         | x -> x
@@ -103,6 +131,7 @@ and subs_buffer_name_expr oldname newname expr =
     | Load (t, b, i)        -> Load (t, (if b = oldname then newname else b), subs i)
     | MakeVector l          -> MakeVector (List.map subs l)
     | Broadcast (a, n)      -> Broadcast (subs a, n)
+    | Ramp (b, s, n)        -> Ramp (subs b, subs s, n)
     | ExtractElement (a, b) -> ExtractElement (subs a, subs b)
     | x -> x
 
@@ -202,6 +231,8 @@ let rec hash_expr e =
       List.fold_left hash_combine2 (hash_str "<MakeVector>") (List.map hash_expr l)
     | Broadcast (e, n) ->
       hash_combine3 (hash_str "<Broadcast>") (hash_expr e) (hash_int n)
+    | Ramp (b, s, n) ->
+      hash_combine4 (hash_str "<Ramp>") (hash_expr b) (hash_expr s) (hash_int n)
     | ExtractElement (a, b) ->
       hash_combine3 (hash_str "<ExtractElement>") (hash_expr a) (hash_expr b)
     | Call (name, ty, args) ->

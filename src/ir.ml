@@ -118,9 +118,10 @@ type expr =
     (* memory *)
     | Load of val_type * buffer * expr
           
-    (* Two different ways to make vectors *)
+    (* Three different ways to make vectors *)
     | MakeVector of (expr list)
     | Broadcast of expr * int
+    | Ramp of expr * expr * int (* Base, stride, length *)
 
     (* TODO: Unpack/swizzle vectors *)
     | ExtractElement of expr * expr
@@ -162,6 +163,7 @@ let rec val_type_of_expr = function
   | Load(t,_,_) -> t
   | MakeVector(l) -> vector_of_val_type (val_type_of_expr (List.hd l)) (List.length l)
   | Broadcast(e,len) -> vector_of_val_type (val_type_of_expr e) len
+  | Ramp(b, s, len) -> vector_of_val_type (val_type_of_expr b) len
   | ExtractElement(e, idx) -> element_val_type (val_type_of_expr e)
   | Call(_, ty, _) -> ty
 
@@ -221,3 +223,8 @@ let ( <>~ ) a b = Cmp (NE, a, b)
 let ( ||~ ) a b = Or (a, b)
 let ( &&~ ) a b = And (a, b)
 let ( !~ ) a    = Not a
+
+(* more helpers *)
+let is_scalar x = (vector_elements (val_type_of_expr x)) = 1
+
+let is_vector x = not (is_scalar x)

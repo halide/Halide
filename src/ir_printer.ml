@@ -36,7 +36,8 @@ and string_of_expr = function
   | Load(t, b, i) -> "load(" ^ string_of_val_type t ^ "," ^ string_of_buffer b ^ "[" ^ string_of_expr i ^ "])"
   | Call(name, t, args) -> name ^ "<" ^ string_of_val_type t ^ ">(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ")"
   | MakeVector l -> "vec[" ^ (String.concat ", " (List.map string_of_expr l)) ^ "]"
-  | Broadcast(e, n) -> "[" ^ string_of_expr e ^ "x" ^ string_of_int n ^ "]"
+  | Broadcast(e, n) -> "broadcast[" ^ string_of_expr e ^ ", " ^ string_of_int n ^ "]"
+  | Ramp(b, s, n) -> "ramp[" ^ string_of_expr b ^ ", " ^ string_of_expr s ^ ", " ^ string_of_int n ^ "]"
   | ExtractElement(a, b) -> "(" ^ string_of_expr a ^ "@" ^ string_of_expr b ^ ")"
   | _ -> "<<UNHANDLED>>"
 
