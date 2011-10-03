@@ -13,31 +13,47 @@ let mkname () = name_counter := (!name_counter)+1; string_of_int (!name_counter)
 (* inline everything - replace all calls with inlined versions of the function in question *)
 let rec inline_stmt (stmt : stmt) (env : environment) =
   (* Transform a statement using each call provided *)
-  let rec xform stmt (calls : (string * val_type * (expr list)) list) = begin 
+  let rec xform stmt (calls : (string * val_type * (expr list)) list) = 
     (* TODO: factor this out into the subsitution part and the enclose part *)
-    match calls with
+    begin match calls with
       | (name, ty, args) :: rest ->
         let tmpname = "C" ^ (mkname ()) ^ "_" in
         (* Lookup the function type signature and body in the environment *)
         let (_, argnames, t, f_body) = Environment.find name env in
         printf "argnames: %s\n" (String.concat ", " argnames);
-        printf "body: %s\n" (string_of_stmt f_body);
-        (* prefix body var names with callsite prefix to prevent nonsense when inserting arguments *)        
-        let prefixed = List.fold_left (fun s x -> subs_name_stmt x (tmpname ^ x) s) f_body argnames in
-        printf "prefixed: %s\n" (string_of_stmt prefixed);
-        (* subs body var names for args *)
-        let substituted = List.fold_left2 (fun s x e -> subs_stmt (Var (i32, tmpname ^ x)) e s) prefixed argnames args in
-        printf "substituted: %s\n" (string_of_stmt substituted);
-        (* subs tmpname for result *)
-        let result = subs_name_stmt "result" (tmpname ^ "result") substituted in
-        Printf.printf "result renamed: %s\n%!" (Ir_printer.string_of_stmt result); 
-        (* Recursively precompute the rest of the calls *)
-        let recurse = xform stmt rest in
-        (* Replace the call to this function in the current expressions with a load *)          
-        let newstmt = subs_stmt (Call (name, ty, args)) (Load (ty, tmpname ^ "result", IntImm 0)) recurse in
-        (* Return the statement wrapped in a pipeline *)
-        Pipeline(tmpname ^ "result", ty, IntImm 1, inline_stmt result env, newstmt)
-      | [] -> stmt end
+        begin match f_body with 
+
+          | Impure f_body ->            
+            printf "body: %s\n" (string_of_stmt f_body);
+            (* prefix body var names with callsite prefix to prevent nonsense when inserting arguments *)        
+            let prefixed = List.fold_left (fun s x -> subs_name_stmt x (tmpname ^ x) s) f_body argnames in
+            printf "prefixed: %s\n" (string_of_stmt prefixed);
+            (* subs body var names for args *)
+            let substituted = List.fold_left2 (fun s x e -> subs_stmt (Var (i32, tmpname ^ x)) e s) prefixed argnames args in
+            printf "substituted: %s\n" (string_of_stmt substituted);
+            (* subs tmpname for result *)
+            let result = subs_name_stmt "result" (tmpname ^ "result") substituted in
+            printf "result renamed: %s\n%!" (string_of_stmt result); 
+            (* Recursively precompute the rest of the calls *)
+            let recurse = xform stmt rest in
+            (* Replace the call to this function in the current expressions with a load *)          
+            let newstmt = subs_stmt (Call (name, ty, args)) (Load (ty, tmpname ^ "result", IntImm 0)) recurse in
+            (* Return the statement wrapped in a pipeline *)
+            Pipeline(tmpname ^ "result", ty, IntImm 1, inline_stmt result env, newstmt)
+
+          | Pure f_body -> 
+            let prefixed = List.fold_left (fun e name -> subs_name_expr name (tmpname ^ name) e) f_body argnames in
+            let bound = List.fold_left2 (fun e name v -> Let (tmpname ^ name, v, e)) prefixed argnames args in
+            printf "Bound body of %s: %s\n" name (string_of_expr bound);
+            printf "  Found %d calls\n" (List.length (find_calls_in_expr bound));
+            let newstmt = subs_stmt (Call (name, ty, args)) bound stmt in
+            printf "  stmt: %s\n  newstmt: %s\n" (string_of_stmt stmt) (string_of_stmt newstmt);
+            let res = xform newstmt (find_calls_in_stmt newstmt) in
+            printf "inlined version of %s: %s\n" name (string_of_stmt res);
+            res
+        end
+      | [] -> stmt
+    end
   in 
 
   match stmt with 
@@ -76,6 +92,8 @@ and find_calls_in_expr = function
     (find_calls_in_expr c) @ (find_calls_in_expr a) @ (find_calls_in_expr b)
   | MakeVector l ->
     List.concat (List.map find_calls_in_expr l)        
+  | Let (n, a, b) ->
+    (find_calls_in_expr a) @ (find_calls_in_expr b)
   | x -> []
 
 
