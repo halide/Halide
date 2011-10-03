@@ -54,7 +54,7 @@ ML_FUNC5(doSplit);
 ML_FUNC1(doConstantFold);
 
 // Function call stuff
-ML_FUNC4(makeLet);
+ML_FUNC4(makePipeline);
 ML_FUNC2(makeCall);
 ML_FUNC3(makeDefinition);
 ML_FUNC0(makeEnv);

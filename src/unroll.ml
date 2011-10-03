@@ -13,7 +13,7 @@ let rec unroll_stmt var stmt =
         | (IntImm a, UIntImm b) 
         | (UIntImm a, IntImm b) 
         | (UIntImm a, UIntImm b) ->
-          let gen_stmt i = subs_stmt (Var var) (IntImm i) substmt in
+          let gen_stmt i = subs_stmt (Var (i32, var)) (IntImm i) substmt in
           Block (List.map gen_stmt (a -- b))
         | _ -> raise (Wtf "Can't unroll map with non-constant bounds")
       end

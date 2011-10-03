@@ -74,6 +74,13 @@ let rec constant_fold_expr expr =
     | x -> x
 
 let rec constant_fold_stmt = function
-  | Map (var, min, max, stmt) -> Map (var, constant_fold_expr min, constant_fold_expr max, constant_fold_stmt stmt)
-  | Block l -> Block (List.map constant_fold_stmt l)
-  | Store (e, buf, idx) -> Store (constant_fold_expr e, buf, constant_fold_expr idx)
+  | Map (var, min, max, stmt) ->
+    Map (var, constant_fold_expr min, constant_fold_expr max, constant_fold_stmt stmt)
+  | Block l ->
+    Block (List.map constant_fold_stmt l)
+  | Store (e, buf, idx) ->
+    Store (constant_fold_expr e, buf, constant_fold_expr idx)
+  | Pipeline (n, ty, size, produce, consume) -> 
+    Pipeline (n, ty, constant_fold_expr size,
+              constant_fold_stmt produce,
+              constant_fold_stmt consume)

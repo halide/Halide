@@ -32,7 +32,7 @@ and string_of_expr = function
   | Cmp(op, l, r) -> "(" ^ string_of_expr l ^ string_of_cmp op ^ string_of_expr r ^ ")"
   | Select(c, t, f) ->
     "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
-  | Var(s) -> s
+  | Var(t, s) -> s
   | Load(t, b, i) -> "load(" ^ string_of_val_type t ^ "," ^ string_of_buffer b ^ "[" ^ string_of_expr i ^ "])"
   | Call(name, t, args) -> name ^ "<" ^ string_of_val_type t ^ ">(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ")"
   | MakeVector l -> "vec[" ^ (String.concat ", " (List.map string_of_expr l)) ^ "]"
@@ -51,8 +51,8 @@ and string_of_stmt = function
                     "\n}" ^ "\n"
   (* | Reduce(op, e, mr) -> string_of_memref mr ^ string_of_reduce_op op ^ string_of_expr e *)
   | Store(e, b, i) -> string_of_buffer b ^ "[" ^ string_of_expr i ^ "] = " ^ string_of_expr e
-  | Let(name, ty, size, produce, consume) -> 
-    "let " ^ name ^ "[" ^ string_of_expr size ^ "]\n defined by: " ^ string_of_stmt produce ^ "\n in: " ^ string_of_stmt consume
+  | Pipeline(name, ty, size, produce, consume) -> 
+    "pipeline " ^ name ^ "[" ^ string_of_expr size ^ "]\n producer: " ^ string_of_stmt produce ^ "\n consumer: " ^ string_of_stmt consume
 
 (*
 and string_of_reduce_op = function
