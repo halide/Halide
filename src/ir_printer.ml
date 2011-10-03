@@ -39,6 +39,7 @@ and string_of_expr = function
   | Broadcast(e, n) -> "broadcast[" ^ string_of_expr e ^ ", " ^ string_of_int n ^ "]"
   | Ramp(b, s, n) -> "ramp[" ^ string_of_expr b ^ ", " ^ string_of_expr s ^ ", " ^ string_of_int n ^ "]"
   | ExtractElement(a, b) -> "(" ^ string_of_expr a ^ "@" ^ string_of_expr b ^ ")"
+  | Let(n, a, b) -> "(let " ^ n ^ " = " ^ string_of_expr a ^ " in " ^ string_of_expr b ^ ")"
   | _ -> "<<UNHANDLED>>"
 
 and string_of_stmt = function
