@@ -61,12 +61,12 @@ let _ =
   Callback.register "makeGE" (fun a b -> Cmp (GE, a, b));
   Callback.register "makeLE" (fun a b -> Cmp (LE, a, b));
   Callback.register "makeSelect" (fun c a b -> Select (c, a, b));
-  Callback.register "makeVar" (fun a -> Var a);
+  Callback.register "makeVar" (fun a -> Var (i32, a));
   Callback.register "makeLoad" (fun buf idx -> Load (f32, buf, idx));
   Callback.register "makeStore" (fun a buf idx -> Store (a, buf, idx));
   Callback.register "makeFunction" (fun args stmt -> ((List.rev args), stmt));
   Callback.register "makeMap" (fun var min max stmt -> Map (var, min, max, stmt));
-  Callback.register "makeLet" (fun name size produce consume -> Let (name, f32, size, produce, consume));
+  Callback.register "makePipeline" (fun name size produce consume -> Pipeline (name, f32, size, produce, consume));
   Callback.register "makeCall" (fun name args -> Call (name, f32, args));
   Callback.register "makeDefinition" (fun name argnames body -> Printf.printf "I got the name %s\n%!" name; (name, argnames, f32, body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);

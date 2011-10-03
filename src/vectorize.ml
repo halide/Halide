@@ -9,7 +9,7 @@ let expand e width =
 let vectorize_expr (var:string) (min:int) (width:int) (expr:expr) = 
   let expand e = expand e width in
   let rec vec expr = match expr with
-    | x when is_scalar x && not (expr_contains_expr (Var var) expr) -> x
+    | x when is_scalar x && not (expr_contains_expr (Var (i32, var)) expr) -> x
 
     | Cast (t, expr) -> Cast (vector_of_val_type t width, vec expr)
 
@@ -35,6 +35,8 @@ let vectorize_expr (var:string) (min:int) (width:int) (expr:expr) =
     | Or (a, b)      -> Or (expand (vec a), expand (vec b))
     | Not (a)        -> Not (vec a)
 
+    | Let (name, a, b) -> Let (name, expand (vec a), expand (vec b))
+
     | Select (c, a, b) ->
       let va = vec a and vb = vec b and vc = vec c in
       if is_scalar vc then
@@ -51,8 +53,8 @@ let vectorize_expr (var:string) (min:int) (width:int) (expr:expr) =
     | Load (t, buf, idx) -> Load (vector_of_val_type t width, buf, vec idx)
 
     (* Vectorized Var vectorizes to strided expression version of itself *)
-    | Var name -> assert (name = var); Ramp (IntImm min, IntImm 1, width)
-
+    | Var (t, name) -> assert (name = var && t = i32); Ramp (IntImm min, IntImm 1, width)
+      
     | _ -> raise (Wtf("Can't vectorize vector code"))
   in vec expr
 
@@ -64,7 +66,7 @@ let rec vectorize_stmt var stmt =
       | Map (v, min, max, stmt) -> Map (v, min, max, vec stmt)
       | Block l -> Block (map vec l)
       | Store (expr, buf, idx) -> Store (vec_expr expr, buf, vec_expr idx)
-      | Let _ -> raise (Wtf "Can't vectorize an inner let (yet?)")
+      | Pipeline _ -> raise (Wtf "Can't vectorize an inner pipeline (yet?)")
   in
   match stmt with        
     | Map (name, min, max, stmt) when name = var ->
@@ -78,8 +80,9 @@ let rec vectorize_stmt var stmt =
       end
     | Map (name, min, max, stmt) -> Map (name, min, max, vectorize_stmt var stmt)
     | Block l -> Block (map (vectorize_stmt var) l)
-    | Let (name, ty, size, produce, consume) -> Let (name, ty, size,
-                                                     vectorize_stmt var produce,
-                                                     vectorize_stmt var consume)
-      (* Anything that doesn't contain a sub-statement is unchanged *)
+    | Pipeline (name, ty, size, produce, consume) -> 
+      Pipeline (name, ty, size,
+                vectorize_stmt var produce,
+                vectorize_stmt var consume)
+    (* Anything that doesn't contain a sub-statement is unchanged *)
     | x -> x

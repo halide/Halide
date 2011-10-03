@@ -78,10 +78,10 @@ let rec subs_stmt oldexpr newexpr = function
                                        subs_stmt oldexpr newexpr stmt)
   | Block l -> Block (List.map (subs_stmt oldexpr newexpr) l)
   | Store (expr, buf, idx) -> Store (subs_expr oldexpr newexpr expr, buf, subs_expr oldexpr newexpr idx)
-  | Let (name, ty, size, produce, consume) -> Let (name, ty,
-                                                   subs_expr oldexpr newexpr size,
-                                                   subs_stmt oldexpr newexpr produce,
-                                                   subs_stmt oldexpr newexpr consume)
+  | Pipeline (name, ty, size, produce, consume) -> Pipeline (name, ty,
+                                                             subs_expr oldexpr newexpr size,
+                                                             subs_stmt oldexpr newexpr produce,
+                                                             subs_stmt oldexpr newexpr consume)
 
 and subs_expr oldexpr newexpr expr = 
     let subs = subs_expr oldexpr newexpr in
@@ -102,24 +102,24 @@ and subs_expr oldexpr newexpr expr =
         | Call (f, t, args)     -> Call (f, t, List.map subs args)
         | x -> x
     
-and subs_buffer_name_stmt oldname newname stmt =
-  let subs = subs_buffer_name_stmt oldname newname in
-  let subs_expr = subs_buffer_name_expr oldname newname in
+and subs_name_stmt oldname newname stmt =
+  let subs = subs_name_stmt oldname newname in
+  let subs_expr = subs_name_expr oldname newname in
   match stmt with
-    | Map (name, min, max, body) -> Map (name, subs_expr min, subs_expr max, subs body)
+    | Map (name, min, max, body) ->
+      Map ((if name = oldname then newname else name), 
+        subs_expr min, subs_expr max, subs body)
     | Block l -> Block (List.map subs l)
     | Store (expr, buf, idx) -> 
       Store (subs_expr expr,
              (if buf = oldname then newname else buf),
              subs_expr idx)
-    | Let (name, ty, size, produce, consume) -> Let ((if name = oldname then newname else name), 
-                                                     ty, 
-                                                     subs_expr size,
-                                                     subs produce,
-                                                     subs consume)      
+    | Pipeline (name, ty, size, produce, consume) -> 
+      Pipeline ((if name = oldname then newname else name), 
+                ty, subs_expr size, subs produce, subs consume)      
 
-and subs_buffer_name_expr oldname newname expr =
-  let subs = subs_buffer_name_expr oldname newname in
+and subs_name_expr oldname newname expr =
+  let subs = subs_name_expr oldname newname in
   match expr with 
     | Cast (t, e)           -> Cast (t, subs e)
     | Bop (op, a, b)        -> Bop (op, subs a, subs b)
@@ -133,8 +133,9 @@ and subs_buffer_name_expr oldname newname expr =
     | Broadcast (a, n)      -> Broadcast (subs a, n)
     | Ramp (b, s, n)        -> Ramp (subs b, subs s, n)
     | ExtractElement (a, b) -> ExtractElement (subs a, subs b)
+    | Var (t, n)            -> Var (t, if n = oldname then newname else n)
+    | Let (n, a, b)         -> Let ((if n = oldname then newname else n), subs a, subs b)
     | x -> x
-
 
 (* Assuming a program has 1024 expressions, the probability of a collision using a k-bit hash is roughly:
 
@@ -190,8 +191,8 @@ let rec hash_expr e =
     | UIntImm n -> hash_int n
     | FloatImm n -> hash_float n
     | Cast (t, e) -> hash_combine3 (hash_str "<Cast>") (hash_type t) (hash_expr e)
-    | Var str -> hash_str ("var" ^ str)
-    | Arg (t, s) -> hash_combine3 (hash_str "<Arg>") (hash_type t) (hash_str s)
+    | Var (t, str) -> hash_combine2 (hash_type t) (hash_str ("<Var>" ^ str))
+    | Let (n, a, b) -> hash_combine4 (hash_str "<Let>") (hash_str n) (hash_expr a) (hash_expr b)
     | Bop (Add, a, b) -> 
       let (a1, a2, a3, a4) = hash_expr a 
       and (b1, b2, b3, b4) = hash_expr b 

@@ -66,6 +66,7 @@ let codegen (c:llcontext) (e:entrypoint) =
   in
 
   let sym_add name llv =
+    set_value_name name llv;
     Hashtbl.add sym_table name llv
   and sym_remove name =
     Hashtbl.remove sym_table name
@@ -170,9 +171,14 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
     | Load(t, buf, idx) -> cg_load t buf idx
 
     (* Loop variables *)
-    | Var(name) -> sym_get name
+    | Var(vt, name) -> sym_get name
 
-    | Arg(vt, name) -> sym_get name
+    (* Let expressions *)
+    | Let(name, l, r) -> 
+      sym_add name (cg_expr l);
+      let result = cg_expr r in
+      sym_remove name;
+      result        
 
     (* Making vectors *)
     | MakeVector(l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
@@ -344,7 +350,7 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       cg_stmt first
     | Block _ -> raise (Wtf "cg_stmt of empty block")
     (* | _ -> raise UnimplementedInstruction *)
-    | Let (name, ty, size, produce, consume) ->
+    | Pipeline (name, ty, size, produce, consume) ->
       (* Todo: codegen size and alloc more than one *)
       let current = insertion_block b in
       position_before alloca_end b;

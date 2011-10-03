@@ -93,12 +93,7 @@ type expr =
     (* TODO: validate operand type matches with Caml type parameters *)
     | Cast of val_type * expr
 
-    (* only for domain variables? *)
-    | Var of string
-
-    (* scalar arguments *)
-    (* TODO: specify type interpretation explicitly for easier val_type_of_expr? *)
-    | Arg of val_type * string
+    | Var of val_type * string
 
     (* basic binary ops *)
     | Bop of binop * expr * expr
@@ -129,6 +124,9 @@ type expr =
     (* Function calls *) 
     | Call of string * val_type * (expr list)
 
+    (* Let expressions *)
+    | Let of string * expr * expr
+
 and buffer = string (* TODO: just an ID for now *)
 
 exception ArithmeticTypeMismatch of val_type * val_type
@@ -143,8 +141,7 @@ let rec val_type_of_expr = function
       let lt = val_type_of_expr l and rt = val_type_of_expr r in
       if (lt <> rt) then raise (ArithmeticTypeMismatch(lt,rt));
       lt
-  | Var _ -> i32 (* Vars are only defined as integer programs so must be ints *)
-  | Arg (vt,_) -> vt
+  | Var (vt,_) -> vt
   (* boolean expressions on vector types return bool vectors of equal length*)
   (* boolean expressions on scalars return scalar bools *)
   | Cmp(_, l, r) -> 
@@ -166,6 +163,7 @@ let rec val_type_of_expr = function
   | Ramp(b, s, len) -> vector_of_val_type (val_type_of_expr b) len
   | ExtractElement(e, idx) -> element_val_type (val_type_of_expr e)
   | Call(_, ty, _) -> ty
+  | Let(_, _, b) -> val_type_of_expr b
 
 type stmt =
   (* TODO: | Blit of -- how to express sub-ranges? -- split and merge
@@ -186,7 +184,7 @@ type stmt =
      For the first statement only the temporary storage is writeable.
      For the second statement the temporary storage is read-only.
   *)
-  | Let of buffer * val_type * expr * stmt * stmt
+  | Pipeline of buffer * val_type * expr * stmt * stmt
 
 (*
 (* TODO:  *)

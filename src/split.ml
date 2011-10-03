@@ -4,7 +4,7 @@ open Util
 
 let rec split_stmt (var:string) (outer:string) (inner:string) (n:int) (stmt:stmt) =
   let recurse = split_stmt var outer inner n 
-  and patch = subs_stmt (Var var) (((Var outer) *~ (IntImm n)) +~ (Var inner)) in
+  and patch = subs_stmt (Var (i32, var)) (((Var (i32, outer)) *~ (IntImm n)) +~ (Var (i32, inner))) in
 
   match stmt with
   | Map (v, min, max, stmt) when v = var ->
