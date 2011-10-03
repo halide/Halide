@@ -58,6 +58,7 @@ let expr_contains_expr query e =
     | ExtractElement (a, b)
     | Bop (_, a, b)
     | Cmp (_, a, b)
+    | Let (_, a, b)
     | And (a, b)
     | Or (a, b)             -> recurse a or recurse b
 
@@ -100,6 +101,7 @@ and subs_expr oldexpr newexpr expr =
         | Ramp (b, s, n)        -> Ramp (subs b, subs s, n)
         | ExtractElement (a, b) -> ExtractElement (subs a, subs b)
         | Call (f, t, args)     -> Call (f, t, List.map subs args)
+        | Let (n, a, b)         -> Let (n, subs a, subs b)
         | x -> x
     
 and subs_name_stmt oldname newname stmt =
@@ -135,6 +137,7 @@ and subs_name_expr oldname newname expr =
     | ExtractElement (a, b) -> ExtractElement (subs a, subs b)
     | Var (t, n)            -> Var (t, if n = oldname then newname else n)
     | Let (n, a, b)         -> Let ((if n = oldname then newname else n), subs a, subs b)
+    | Call (f, t, args)     -> Call (f, t, List.map subs args)
     | x -> x
 
 (* Assuming a program has 1024 expressions, the probability of a collision using a k-bit hash is roughly:
