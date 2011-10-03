@@ -196,7 +196,11 @@ and reduce_op =
  *)
 
 (* (name, arg names, return type, body). The body is a stmt that fills a buffer called "result" *)
-and definition = (string * (string list) * val_type * stmt)
+and definition = (string * (string list) * val_type * function_body)
+
+and function_body = 
+  | Pure of expr (* Evaluates to the return value *)
+  | Impure of stmt (* Fills in an array called "result" *)
 
 module Environment = Map.Make(String)
 type environment = definition Environment.t

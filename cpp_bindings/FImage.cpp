@@ -263,11 +263,7 @@ namespace FImage {
             }
         }
 
-        // Wrap the rhs in a result[0] = 
-        MLVal body = makeStore(rhs.node, MLVal::fromString("result"), 
-                               makeIntImm(MLVal::fromInt(0)));
-
-        definition = makeDefinition(MLVal::fromString(name()), arglist, body);
+        definition = makeDefinition(MLVal::fromString(name()), arglist, rhs.node);
 
         *environment = addDefinitionToEnv(*environment, definition);
     }
