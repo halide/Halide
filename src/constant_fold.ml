@@ -74,8 +74,8 @@ let rec constant_fold_expr expr =
     | x -> x
 
 let rec constant_fold_stmt = function
-  | Map (var, min, max, stmt) ->
-    Map (var, constant_fold_expr min, constant_fold_expr max, constant_fold_stmt stmt)
+  | For (var, min, n, order, stmt) ->
+    For (var, constant_fold_expr min, constant_fold_expr n, order, constant_fold_stmt stmt)
   | Block l ->
     Block (List.map constant_fold_stmt l)
   | Store (e, buf, idx) ->

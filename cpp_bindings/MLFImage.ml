@@ -65,10 +65,10 @@ let _ =
   Callback.register "makeLoad" (fun buf idx -> Load (f32, buf, idx));
   Callback.register "makeStore" (fun a buf idx -> Store (a, buf, idx));
   Callback.register "makeFunction" (fun args stmt -> ((List.rev args), stmt));
-  Callback.register "makeMap" (fun var min max stmt -> Map (var, min, max, stmt));
+  Callback.register "makeFor" (fun var min n stmt -> For (var, min, n, true, stmt));
   Callback.register "makePipeline" (fun name size produce consume -> Pipeline (name, f32, size, produce, consume));
   Callback.register "makeCall" (fun name args -> Call (name, f32, args));
-  Callback.register "makeDefinition" (fun name argnames body -> Printf.printf "I got the name %s\n%!" name; (name, argnames, f32, Pure body));
+  Callback.register "makeDefinition" (fun name argnames body -> Printf.printf "I got the name %s\n%!" name; (name, List.map (fun x -> (x, i32)) argnames, f32, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);
   Callback.register "addDefinitionToEnv" (fun env def -> 
     let (n1, a1, t1, b1) = def in 
@@ -96,4 +96,4 @@ let _ =
   Callback.register "doSplit" (fun var outer inner n stmt -> split_stmt var outer inner n stmt);
   Callback.register "doConstantFold" (fun stmt -> constant_fold_stmt stmt);
   (* Callback.register "doShift" (fun var expr stmt -> shift var expr stmt); *)
-  Callback.register "doInline" (fun stmt env -> inline_stmt stmt env);
+  Callback.register "doInline" (fun stmt env -> inline_stmt stmt env); 

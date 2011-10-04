@@ -4,7 +4,7 @@ OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
 
 OCAML_LIB_DIR=/usr/local/lib/ocaml
 LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags)
-CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -Werror -O3 -ffast-math $(LLVM_CFLAGS_CXX)
+CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -Werror -ffast-math $(LLVM_CFLAGS_CXX) -O0 -g
 
 all: test test_functions
 

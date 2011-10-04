@@ -63,22 +63,23 @@ let rec vectorize_stmt var stmt =
     let vec = vectorize_stmt_inner min width 
     and vec_expr = vectorize_expr var min width in
     match stmt with
-      | Map (v, min, max, stmt) -> Map (v, min, max, vec stmt)
+      | For (v, min, n, order, stmt) -> For (v, min, n, order, vec stmt)
       | Block l -> Block (map vec l)
       | Store (expr, buf, idx) -> Store (vec_expr expr, buf, vec_expr idx)
       | Pipeline _ -> raise (Wtf "Can't vectorize an inner pipeline (yet?)")
   in
   match stmt with        
-    | Map (name, min, max, stmt) when name = var ->
-      begin match (min, max) with
+    | For (name, min, n, order, stmt) when name = var ->
+      assert (not order); (* Doesn't make sense to vectorize ordered For *)
+      begin match (min, n) with
         | (IntImm a, IntImm b) 
         | (IntImm a, UIntImm b) 
         | (UIntImm a, IntImm b) 
         | (UIntImm a, UIntImm b) ->
-          vectorize_stmt_inner a (b-a) stmt
+          vectorize_stmt_inner a b stmt
         | _ -> raise (Wtf "Can't vectorize map with non-constant bounds")
       end
-    | Map (name, min, max, stmt) -> Map (name, min, max, vectorize_stmt var stmt)
+    | For (name, min, n, order, stmt) -> For (name, min, n, order, vectorize_stmt var stmt)
     | Block l -> Block (map (vectorize_stmt var) l)
     | Pipeline (name, ty, size, produce, consume) -> 
       Pipeline (name, ty, size,

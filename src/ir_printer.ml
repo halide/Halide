@@ -46,7 +46,9 @@ and string_of_stmt = function
   (*  | If(e, s) -> "if (" ^ string_of_expr e ^ ") " ^ string_of_stmt s *)
   (* | IfElse(e, ts, fs) -> "if (" ^ string_of_expr e ^ ") " ^ string_of_stmt ts ^ 
                          " else " ^ string_of_stmt fs *)
-  | Map(n, min, max, s) -> sprintf "map (%s from %s to %s) %s" n (string_of_expr min) (string_of_expr max) (string_of_stmt s)
+  | For(name, min, n, order, s) -> 
+    sprintf "for (%s from %s to %s%s) %s" name (string_of_expr min) (string_of_expr n) 
+      (if order then " - ordered" else "") (string_of_stmt s)
   | Block(stmts) -> "{" ^ "\n" ^
                     String.concat ";\n" (List.map string_of_stmt stmts) ^
                     "\n}" ^ "\n"

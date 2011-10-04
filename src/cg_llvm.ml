@@ -341,8 +341,8 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
   and cg_stmt = function
     (* TODO: unaligned vector store *)
     | Store(e, buf, idx) -> cg_store e buf idx
-    | Map(n, min, max, stmt) ->
-      cg_for n (cg_expr min) (cg_expr max) stmt
+    | For(name, min, n, _, stmt) ->
+      cg_for name (cg_expr min) (cg_expr (min +~ n)) stmt
     | Block (first::second::rest) ->
       ignore(cg_stmt first);
       cg_stmt (Block (second::rest))

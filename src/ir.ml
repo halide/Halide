@@ -170,8 +170,7 @@ type stmt =
    * sub-ranges *)
   (* | If of expr * stmt  *)
   (* | IfElse of expr * stmt * stmt  *)
-  | Map of string * expr * expr * stmt
-  (* | For of domain * stmt *)
+  | For of string * expr * expr * bool * stmt
     (* TODO: For might need landing pad: always executes before, only if *any* iteration
      * fired. Same for Map - useful for loop invariant code motion. Easier for
      * Map if multiple dimensions are fused into 1. *)

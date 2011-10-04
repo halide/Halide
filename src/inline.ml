@@ -19,7 +19,8 @@ let rec inline_stmt (stmt : stmt) (env : environment) =
       | (name, ty, args) :: rest ->
         let tmpname = "C" ^ (mkname ()) ^ "_" in
         (* Lookup the function type signature and body in the environment *)
-        let (_, argnames, t, f_body) = Environment.find name env in
+        let (_, typed_argnames, t, f_body) = Environment.find name env in
+        let argnames = List.map fst typed_argnames in
         printf "argnames: %s\n" (String.concat ", " argnames);
         begin match f_body with 
 
@@ -57,10 +58,10 @@ let rec inline_stmt (stmt : stmt) (env : environment) =
   in 
 
   match stmt with 
-    | Map (name, min, max, body) -> 
+    | For (name, min, n, order, body) -> 
       let newbody = inline_stmt body env in
-      let calls = (find_calls_in_expr min) @ (find_calls_in_expr max) in
-      xform (Map(name, min, max, newbody)) calls
+      let calls = (find_calls_in_expr min) @ (find_calls_in_expr n) in
+      xform (For(name, min, n, order, newbody)) calls
     | Store (e, buf, idx) ->
       let calls = (find_calls_in_expr e) @ (find_calls_in_expr idx) in
       xform stmt calls
@@ -72,8 +73,8 @@ let rec inline_stmt (stmt : stmt) (env : environment) =
       xform (Pipeline(name, ty, size, newproduce, newconsume)) calls
 
 and find_calls_in_stmt = function 
-  | Map (var, min, max, body) -> 
-    (find_calls_in_expr min) @ (find_calls_in_expr max) @ (find_calls_in_stmt body)
+  | For (var, min, n, order, body) -> 
+    (find_calls_in_expr min) @ (find_calls_in_expr n) @ (find_calls_in_stmt body)
   | Store (v, buf, idx) -> 
     (find_calls_in_expr v) @ (find_calls_in_expr idx)
   | Block l -> 
