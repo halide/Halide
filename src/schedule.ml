@@ -1,11 +1,13 @@
-
+open Ir
+open Ir_printer
+open Util
 
 (*
                                 
 f(x, y) = g(A(x, y), B(x, y)) + g(C(x, y), D(x, y))
 
 The fully specified way to schedule f/g is to put it inside some maps and lets - i.e. wrap it up in imperative code.
-
+  
 Any externally imposed schedule is a recipe to help us do this.
 
 How can we specify such a schedule more tersely from the outside while losing a minimum of generality?
@@ -15,6 +17,8 @@ How can we specify such a schedule more tersely from the outside while losing a 
 (* Every (transitive) function has a schedule. Every callsite has a call_schedule. *)
 
 (* How can we schedule a single function - i.e. what kind of Maps do we insert. The following options create a perfectly nested set of maps. You get a list of them, where each dimension must be handled. *) 
+type dimension = string
+
 type schedule = 
   | Split of dimension * int * dimension * dimension (* dimension, tile size, names of dimensions introduced *)
 
@@ -24,9 +28,9 @@ type schedule =
 
 (* How should a sub-function be called - i.e. what lets do we introduce? A sufficient representation is (with reference to the schedule of the caller), to what caller dimension should I hoist this out to, and should I fuse with other calls to the same callee *)
 type call_schedule =
-  | Block dimension (* of caller *) * bool (* unify all calls within this function? *)
-  | Dynamic dimension (* level in callee where dynamic/static transition happens - chunk granularity *)
-  | Coiterate dimension (* of caller - always pairs with outermost dimension of callee *) * int (* offset *) * int (* modulus *)
+  | Chunk of dimension (* of caller *) * bool (* unify all calls within this function? *)
+  | Dynamic of dimension (* level in callee where dynamic/static transition happens - chunk granularity *)
+  | Coiterate of dimension (* of caller - always pairs with outermost dimension of callee *) * int (* offset *) * int (* modulus *)
   | Inline (* block over nothing - just do in place *)
   | Root (* There is no calling context *)
 
@@ -34,17 +38,59 @@ type call_schedule =
 module StringMap = Map.Make(String)
 
 (* Schedule for this function, schedule for sub-functions *)
-type schedule_tree = (call_schedule * schedule list) * (schedule_tree StringMap.t) 
+type schedule_tree = 
+  | Tree of ((call_schedule * (schedule list) * schedule_tree) StringMap.t) 
 
-let find_schedule (tree:schedule_tree) (call:string list) =
-  let sched, map = tree in
-  match call with
-    | [] -> sched
-    | (first::rest) -> 
-      find_schedule (StringMap.find first map) rest        
+let rec find_schedule (tree:schedule_tree) = function
+  | [] -> raise (Wtf "find_schedule of empty list")
+  | (first::rest) -> 
+    let (Tree map) = tree in
+    let (cs, sl, subtree) = StringMap.find first map in
+    if rest = [] then (cs, sl) else find_schedule subtree rest
 
-(* For each function, give the list of functions it depends on, and what region of that function *)
-type dependence_map = ((string * ((expr * expr) list)) list) StringMap.t
+
+let rec set_schedule (tree: schedule_tree) (call: string list) (call_sched: call_schedule) (sched_list: schedule list) =
+  match call with 
+    | [] -> raise (Wtf "set_schedule of empty list")
+    | (first::rest) ->
+      let (Tree map) = tree in
+      let (old_cs, old_sl, old_tree) = 
+        if StringMap.mem first map then
+          StringMap.find first map 
+        else
+          (Root, [], empty_schedule) 
+      in
+      if (rest = []) then
+        Tree (StringMap.add first (call_sched, sched_list, old_tree) map)
+      else        
+        Tree (StringMap.add first (old_cs, old_sl, set_schedule old_tree rest call_sched sched_list) map)
+
+and empty_schedule = Tree StringMap.empty
+
+let print_schedule (tree : schedule_tree) = 
+  let string_of_call_schedule = function
+    | Chunk (d, f) -> "Chunk " ^ d ^ (if f then " true" else " false")
+    | Dynamic d -> "Dynamic " ^ d
+    | Coiterate (d, offset, modulus) -> "Coiterate " ^ d ^ " " ^ (string_of_int offset) ^ " " ^ (string_of_int modulus)
+    | Inline -> "Inline"
+    | Root -> "Root"      
+
+  and string_of_schedule = function
+    | Split (d, s, d_o, d_i) -> "Split " ^ d ^ " " ^ (string_of_int s) ^ " " ^ d_o ^ " " ^ d_i
+    | Serial (d, min, max)   -> "Serial " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr max)
+    | Parallel (d, min, max) -> "Parallel " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr max)
+    | Vectorized d           -> "Vectorized " ^ d
+  in
+
+  let rec inner tree prefix = 
+    let Tree map = tree in
+    StringMap.iter (fun k (cs, sl, st) -> 
+      let call_sched_string = string_of_call_schedule cs in
+      let sched_list_string = "[" ^ (String.concat ", " (List.map string_of_schedule sl)) ^ "]" in
+      let newprefix = prefix ^ "." ^ k in
+      Printf.printf "%s -> %s %s\n" newprefix call_sched_string sched_list_string;
+      inner st newprefix) map
+  in inner tree ""
 
 (* Take 
    
@@ -56,7 +102,7 @@ type dependence_map = ((string * ((expr * expr) list)) list) StringMap.t
    Serial ("fxi"); --> 0,16
    Serial ("fxo")] --> 0,10 - implied by realize f [0,100] and split by 16
 
-   call_schedule for f.g is Block ("fxi", true)
+   call_schedule for f.g is Chunk ("fxi", true)
    schedule for f.g(gx) 
    [Serial ("gx")]
 
@@ -113,7 +159,7 @@ type dependence_map = ((string * ((expr * expr) list)) list) StringMap.t
    schedule for f(fx, fy):
    [Serial ("fy", 0, 100); Serial ("fx", 0, 100)]
 
-   call schedule for hist: (Block ("fy", true))
+   call schedule for hist: (Chunk ("fy", true))
 
    schedule for f.hist: [Serial ("i", 0, 256)]
 
