@@ -92,8 +92,8 @@ let fold_children_in_expr mutator combiner base_case = function
   | x                     -> base_case
 
 let fold_children_in_stmt expr_mutator stmt_mutator combiner = function
-  | Map (name, min, max, body) ->
-    combiner (combiner (expr_mutator min) (expr_mutator max)) (stmt_mutator body)
+  | For (name, min, n, order, body) ->
+    combiner (combiner (expr_mutator min) (expr_mutator n)) (stmt_mutator body)
   | Block l -> List.fold_left combiner (stmt_mutator (List.hd l)) (List.map stmt_mutator (List.tl l))
   | Store (expr, buf, idx) -> combiner (expr_mutator expr) (expr_mutator idx)
   | Pipeline (name, ty, size, produce, consume) -> 
@@ -131,8 +131,8 @@ let mutate_children_in_expr mutator = function
   | x -> x
     
 let mutate_children_in_stmt expr_mutator stmt_mutator = function
-  | Map (name, min, max, body) ->
-    Map (name, expr_mutator min, expr_mutator max, stmt_mutator body)
+  | For (name, min, n, order, body) ->
+    For (name, expr_mutator min, expr_mutator n, order, stmt_mutator body)
   | Block l -> Block (List.map stmt_mutator l)
   | Store (expr, buf, idx) -> 
     Store (expr_mutator expr, buf, expr_mutator idx)
@@ -153,9 +153,9 @@ and subs_name_stmt oldname newname stmt =
   let subs = subs_name_stmt oldname newname in
   let subs_expr = subs_name_expr oldname newname in
   match stmt with
-    | Map (name, min, max, body) ->
-      Map ((if name = oldname then newname else name), 
-        subs_expr min, subs_expr max, subs body)
+    | For (name, min, n, order, body) ->
+      For ((if name = oldname then newname else name), 
+        subs_expr min, subs_expr n, order, subs body)
     | Block l -> Block (List.map subs l)
     | Store (expr, buf, idx) -> 
       Store (subs_expr expr,
@@ -187,8 +187,8 @@ and prefix_name_stmt prefix stmt =
   let recurse_stmt = prefix_name_stmt prefix in
   let recurse_expr = prefix_name_expr prefix in
   match stmt with
-    | Map (name, min, max, body) ->
-      Map (prefix ^ name, recurse_expr min, recurse_expr max, recurse_stmt body)
+    | For (name, min, n, order, body) ->
+      For (prefix ^ name, recurse_expr min, recurse_expr n, order, recurse_stmt body)
     | Block l -> Block (List.map recurse_stmt l)
     | Store (expr, buf, idx) -> 
       Store (recurse_expr expr, prefix ^ buf, recurse_expr idx)

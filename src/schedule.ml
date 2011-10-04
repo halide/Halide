@@ -93,8 +93,8 @@ let string_of_call_schedule = function
     
 let string_of_schedule = function
   | Split (d, s, d_o, d_i) -> "Split " ^ d ^ " " ^ (string_of_int s) ^ " " ^ d_o ^ " " ^ d_i
-  | Serial (d, min, max)   -> "Serial " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr max)
-  | Parallel (d, min, max) -> "Parallel " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr max)
+  | Serial (d, min, n)   -> "Serial " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
+  | Parallel (d, min, n) -> "Parallel " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
   | Vectorized d           -> "Vectorized " ^ d
 
 let print_schedule (tree : schedule_tree) = 

@@ -47,7 +47,7 @@ ML_FUNC1(doCompile); // stmt
 ML_FUNC0(makeArgList); 
 ML_FUNC2(addArgToList); // old arg list, new arg -> new list
 ML_FUNC2(makeFunction); // stmt, arg list
-ML_FUNC4(makeMap); // var name, min, max, stmt
+ML_FUNC4(makeFor); // var name, min, n, stmt
 ML_FUNC2(doVectorize);
 ML_FUNC2(doUnroll);
 ML_FUNC5(doSplit);
@@ -317,7 +317,7 @@ namespace FImage {
             // Surround it with the appropriate number of maps.
             for (size_t i = 0; i < iter.size(); i++) {
                 printf("Wrapping statement in a loop...\n");
-                loop = makeMap(MLVal::fromString(iter[i].name()),
+                loop = makeFor(MLVal::fromString(iter[i].name()),
                                Expr(0).node,
                                Expr(result.size[i]).node,
                                loop);
