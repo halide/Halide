@@ -196,7 +196,7 @@ and reduce_op =
  *)
 
 (* (name, arg names, return type, body). The body is a stmt that fills a buffer called "result" *)
-and definition = (string * (string list) * val_type * function_body)
+and definition = (string * ((string * val_type) list) * val_type * function_body)
 
 and function_body = 
   | Pure of expr (* Evaluates to the return value *)

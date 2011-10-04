@@ -41,12 +41,29 @@ module StringMap = Map.Make(String)
 type schedule_tree = 
   | Tree of ((call_schedule * (schedule list) * schedule_tree) StringMap.t) 
 
-let rec find_schedule (tree:schedule_tree) = function
-  | [] -> raise (Wtf "find_schedule of empty list")
-  | (first::rest) -> 
-    let (Tree map) = tree in
-    let (cs, sl, subtree) = StringMap.find first map in
-    if rest = [] then (cs, sl) else find_schedule subtree rest
+(*
+(* Return a list of expressions for computing the stride of each dimension of a function given the schedule*)
+let stride_list (sched:schedule list) (args:string list) =
+*)
+
+
+let rec split_name n =
+  try
+    let i = (String.index n '.') in
+    (String.sub n 0 i) :: (split_name (String.sub n (i+1) ((String.length n)-(i+1))))
+  with Not_found -> [n]
+
+let find_schedule (tree:schedule_tree) (name:string) =
+  let rec find (tree:schedule_tree) = function
+    | [] -> raise (Wtf "find_schedule of empty list")
+    | (first::rest) -> 
+      let (Tree map) = tree in
+      let (cs, sl, subtree) = StringMap.find first map in
+      if rest = [] then (cs, sl) else find subtree rest
+  in
+  let name_parts = split_name name in
+  (* Printf.printf "split_name %s = %s\n%!" name (String.concat "|" name_parts); *)
+  find tree name_parts
 
 
 let rec set_schedule (tree: schedule_tree) (call: string list) (call_sched: call_schedule) (sched_list: schedule list) =
@@ -67,20 +84,20 @@ let rec set_schedule (tree: schedule_tree) (call: string list) (call_sched: call
 
 and empty_schedule = Tree StringMap.empty
 
-let print_schedule (tree : schedule_tree) = 
-  let string_of_call_schedule = function
-    | Chunk (d, f) -> "Chunk " ^ d ^ (if f then " true" else " false")
-    | Dynamic d -> "Dynamic " ^ d
-    | Coiterate (d, offset, modulus) -> "Coiterate " ^ d ^ " " ^ (string_of_int offset) ^ " " ^ (string_of_int modulus)
-    | Inline -> "Inline"
-    | Root -> "Root"      
+let string_of_call_schedule = function
+  | Chunk (d, f) -> "Chunk " ^ d ^ (if f then " true" else " false")
+  | Dynamic d -> "Dynamic " ^ d
+  | Coiterate (d, offset, modulus) -> "Coiterate " ^ d ^ " " ^ (string_of_int offset) ^ " " ^ (string_of_int modulus)
+  | Inline -> "Inline"
+  | Root -> "Root"      
+    
+let string_of_schedule = function
+  | Split (d, s, d_o, d_i) -> "Split " ^ d ^ " " ^ (string_of_int s) ^ " " ^ d_o ^ " " ^ d_i
+  | Serial (d, min, max)   -> "Serial " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr max)
+  | Parallel (d, min, max) -> "Parallel " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr max)
+  | Vectorized d           -> "Vectorized " ^ d
 
-  and string_of_schedule = function
-    | Split (d, s, d_o, d_i) -> "Split " ^ d ^ " " ^ (string_of_int s) ^ " " ^ d_o ^ " " ^ d_i
-    | Serial (d, min, max)   -> "Serial " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr max)
-    | Parallel (d, min, max) -> "Parallel " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr max)
-    | Vectorized d           -> "Vectorized " ^ d
-  in
+let print_schedule (tree : schedule_tree) = 
 
   let rec inner tree prefix = 
     let Tree map = tree in
