@@ -20,8 +20,7 @@ How can we specify such a schedule more tersely from the outside while losing a 
 type dimension = string
 
 type schedule = 
-  | Split of dimension * dimension * dimension (* dimension, tile size, names of dimensions introduced *)
-
+  | Split of dimension * dimension * dimension * expr (* dimension, names of dimensions introduced, min of old dimension *)
   | Serial     of dimension * expr * expr (* Serialize across a dimension between the specified bounds *)
   | Vectorized of dimension * expr * int
   | Parallel   of dimension * expr * expr
@@ -49,12 +48,12 @@ let rec stride_for_dim dim = function
       | Serial (d, min, n)
       | Parallel (d, min, n) when d = dim -> (min,n)
       | Vectorized (d, min, n) when d = dim -> (min, IntImm n)
-      | Split (d, outer, inner) when d = dim ->
+      | Split (d, outer, inner, offset) when d = dim ->
         (* search for new dimensions on rest of the sched list -
            they are only allowed after defined by the split *)
         let (min_outer, size_outer) = stride_for_dim outer rest in
         let (_,         size_inner) = stride_for_dim inner rest in
-        (min_outer *~ size_inner, size_outer *~ size_inner)
+        ((min_outer *~ size_inner) +~ offset, size_outer *~ size_inner)
       (* recurse if not found *)
       | _ -> stride_for_dim dim rest
     end
@@ -111,7 +110,7 @@ let string_of_call_schedule = function
   | Root -> "Root"      
     
 let string_of_schedule = function
-  | Split (d, d_o, d_i) -> "Split " ^ d ^ " " ^ d_o ^ " " ^ d_i
+  | Split (d, d_o, d_i, offset) -> "Split " ^ d ^ " " ^ d_o ^ " " ^ d_i ^ " " ^ (string_of_expr offset)
   | Serial (d, min, n)   -> "Serial " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
   | Parallel (d, min, n) -> "Parallel " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
   | Vectorized (d, min, n) -> "Vectorized " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_int n)

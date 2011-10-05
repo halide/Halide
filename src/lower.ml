@@ -87,7 +87,7 @@ let rec lower (stmt:stmt) (env:environment) (schedule:schedule_tree) =
         | Serial     (name, min, size) -> Serial     (prefix ^ name, prefix_expr min, prefix_expr size)
         | Parallel   (name, min, size) -> Parallel   (prefix ^ name, prefix_expr min, prefix_expr size)
         | Vectorized (name, min, size) -> Vectorized (prefix ^ name, prefix_expr min, size)
-        | Split (old_dim, new_dim_1, new_dim_2) -> Split (prefix ^ old_dim, prefix ^ new_dim_1, prefix ^ new_dim_2)
+        | Split (old_dim, new_dim_1, new_dim_2, offset) -> Split (prefix ^ old_dim, prefix ^ new_dim_1, prefix ^ new_dim_2, offset)
       in
       let prefixed_sched_list = List.map prefix_schedule sched_list in
       
@@ -169,11 +169,11 @@ and realize (args, return_type, body) sched_list buffer_name strides =
         | Serial     (name, min, size) -> For (name, min, size, true, stmt)
         | Parallel   (name, min, size) -> For (name, min, size, false, stmt)
         | Vectorized (name, min, size) -> Vectorize.vectorize_stmt name (For (name, min, IntImm size, false, stmt))
-        | Split (old_dim, new_dim_outer, new_dim_inner) -> 
+        | Split (old_dim, new_dim_outer, new_dim_inner, offset) -> 
           let (_, size_new_dim_inner) = stride_for_dim new_dim_inner sched_list in
           let rec expand_old_dim_expr = function
             | Var (i32, dim) when dim = old_dim -> 
-              ((Var (i32, new_dim_outer)) *~ size_new_dim_inner) +~ (Var (i32, new_dim_inner))
+              ((Var (i32, new_dim_outer)) *~ size_new_dim_inner) +~ (Var (i32, new_dim_inner)) +~ offset
             | x -> mutate_children_in_expr expand_old_dim_expr x 
           and expand_old_dim_stmt stmt = mutate_children_in_stmt expand_old_dim_expr expand_old_dim_stmt stmt in
           expand_old_dim_stmt stmt in
