@@ -174,13 +174,17 @@ and subs_name_expr oldname newname expr =
     | Call (f, t, args) -> Call ((if f = oldname then newname else f), t, List.map subs args)
     | x                 -> mutate_children_in_expr subs x
 
+and prefix_non_global prefix name =
+  let is_global = String.contains name '.' in
+  if is_global then name else prefix ^ name
+
 and prefix_name_expr prefix expr =
   let recurse = prefix_name_expr prefix in
   match expr with 
-    | Load (t, b, i)    -> Load (t, prefix ^ b, recurse i)
-    | Var (t, n)        -> Var (t, prefix ^ n)
+    | Load (t, b, i)    -> Load (t, prefix_non_global prefix b, recurse i)
+    | Var (t, n)        -> Var (t, prefix_non_global prefix n)
     | Let (n, a, b)     -> Let (prefix ^ n, recurse a, recurse b)
-    | Call (f, t, args) -> Call (prefix ^ f, t, List.map recurse args)
+    | Call (f, t, args) -> Call (prefix_non_global prefix f, t, List.map recurse args)
     | x                 -> mutate_children_in_expr recurse x  
 
 and prefix_name_stmt prefix stmt =
@@ -191,7 +195,7 @@ and prefix_name_stmt prefix stmt =
       For (prefix ^ name, recurse_expr min, recurse_expr n, order, recurse_stmt body)
     | Block l -> Block (List.map recurse_stmt l)
     | Store (expr, buf, idx) -> 
-      Store (recurse_expr expr, prefix ^ buf, recurse_expr idx)
+      Store (recurse_expr expr, prefix_non_global prefix buf, recurse_expr idx)
     | Pipeline (name, ty, size, produce, consume) -> 
       Pipeline (prefix ^ name, ty, recurse_expr size, recurse_stmt produce, recurse_stmt consume)      
 
