@@ -9,3 +9,5 @@ img
 split
 unroll
 constant_fold
+inline
+schedule
