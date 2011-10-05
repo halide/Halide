@@ -41,11 +41,23 @@ module StringMap = Map.Make(String)
 type schedule_tree = 
   | Tree of ((call_schedule * (schedule list) * schedule_tree) StringMap.t) 
 
-(*
 (* Return a list of expressions for computing the stride of each dimension of a function given the schedule*)
 let stride_list (sched:schedule list) (args:string list) =
-*)
-
+  let rec stride_for_dim dim = function
+    | [] -> raise (Wtf ("failed to find schedule for dimension " ^ dim))
+    | hd::rest ->
+        begin match hd with
+          | Serial (d, min, n)
+          | Parallel (d, min, n) when d = dim -> n
+          | Vectorized d when d = dim -> IntImm 1
+          | Split (d, i, outer, inner) when d = dim ->
+              (* search for new dimensions on *original* sched list *)
+              (stride_for_dim outer sched) *~ (stride_for_dim inner sched)
+          (* recurse if not found *)
+          | _ -> stride_for_dim dim rest
+        end
+  in
+  List.map (fun arg -> stride_for_dim arg sched) args
 
 let rec split_name n =
   try
