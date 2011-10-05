@@ -437,10 +437,11 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
     build_load (cg_memref t buf idx) "" b
 
   and cg_unaligned_load t buf idx offset =
+    let vec_width = vector_elements t in
     let lower_addr = idx -~ (IntImm(offset)) in
-    let upper_addr = lower_addr +~ (IntImm(vector_elements t)) in
-    let lower = Load(t, buf, lower_addr) in
-    let upper = Load(t, buf, upper_addr) in
+    let upper_addr = lower_addr +~ (IntImm(vec_width)) in
+    let lower = Load(t, buf, Ramp(lower_addr, IntImm 1, vec_width)) in
+    let upper = Load(t, buf, Ramp(upper_addr, IntImm 1, vec_width)) in
     let lower_indices = offset -- (vector_elements t) in
     let upper_indices = 0 -- offset in
     let extract_lower = map (fun x -> ExtractElement(lower, (UIntImm(x)))) lower_indices in
