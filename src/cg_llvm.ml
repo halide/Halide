@@ -213,7 +213,9 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       build_extractelement v idx "" b
 
     (* TODO: fill out other ops *)
-    | _ -> raise UnimplementedInstruction
+    | e ->
+      Printf.printf "Unimplemented: %s\n%!" (string_of_expr e);
+      raise UnimplementedInstruction
 
   and cg_makevector = function
     | ([], t, _) -> undef (type_of_val_type t)
@@ -283,7 +285,9 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       | Float(fb), Float(tb) -> simple_cast build_fpcast  e t
 
       (* TODO: remaining casts *)
-      | _ -> raise UnimplementedInstruction
+      | f,t ->
+        Printf.printf "Unimplemented cast: %s -> %s (of %s)\n%!" (string_of_val_type f) (string_of_val_type t) (string_of_expr e);
+        raise UnimplementedInstruction
 
   and cg_for var_name min max body = 
       (* Emit the start code first, without 'variable' in scope. *)
@@ -407,7 +411,9 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       | (1, false) -> build_load (cg_memref t buf idx) "" b 
         
         (* vector load of scalar address *)
-      | (_, false) -> raise (Wtf "Vector load from a scalar address")
+      | (_, false) ->
+        Printf.printf "scalar expr %s loaded as vector type %s\n%!" (string_of_expr idx) (string_of_val_type t);
+        raise (Wtf "Vector load from a scalar address")
 
       | (w, true) ->
         begin match idx with 
