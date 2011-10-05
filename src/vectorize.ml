@@ -6,7 +6,7 @@ open Analysis
 let expand e width = 
   if (is_scalar e) then Broadcast (e, width) else e
 
-let vectorize_expr (var:string) (min:int) (width:int) (expr:expr) = 
+let vectorize_expr (var:string) (min:expr) (width:int) (expr:expr) = 
   let expand e = expand e width in
   let rec vec expr = match expr with
     | x when is_scalar x && not (expr_contains_expr (Var (i32, var)) expr) -> x
@@ -53,13 +53,13 @@ let vectorize_expr (var:string) (min:int) (width:int) (expr:expr) =
     | Load (t, buf, idx) -> Load (vector_of_val_type t width, buf, vec idx)
 
     (* Vectorized Var vectorizes to strided expression version of itself *)
-    | Var (t, name) -> assert (name = var && t = i32); Ramp (IntImm min, IntImm 1, width)
+    | Var (t, name) -> assert (name = var && t = i32); Ramp (min, IntImm 1, width)
       
     | _ -> raise (Wtf("Can't vectorize vector code"))
   in vec expr
 
 let rec vectorize_stmt var stmt =
-  let rec vectorize_stmt_inner (min:int) (width:int) stmt =
+  let rec vectorize_stmt_inner (min:expr) (width:int) stmt =
     let vec = vectorize_stmt_inner min width 
     and vec_expr = vectorize_expr var min width in
     match stmt with
@@ -71,13 +71,11 @@ let rec vectorize_stmt var stmt =
   match stmt with        
     | For (name, min, n, order, stmt) when name = var ->
       assert (not order); (* Doesn't make sense to vectorize ordered For *)
-      begin match (min, n) with
-        | (IntImm a, IntImm b) 
-        | (IntImm a, UIntImm b) 
-        | (UIntImm a, IntImm b) 
-        | (UIntImm a, UIntImm b) ->
-          vectorize_stmt_inner a b stmt
-        | _ -> raise (Wtf "Can't vectorize map with non-constant bounds")
+      begin match n with
+        | IntImm size
+        | UIntImm size ->
+          vectorize_stmt_inner min size stmt
+        | _ -> raise (Wtf "Can't vectorize map with non-constant size")
       end
     | For (name, min, n, order, stmt) -> For (name, min, n, order, vectorize_stmt var stmt)
     | Block l -> Block (map (vectorize_stmt var) l)
