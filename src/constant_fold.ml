@@ -17,6 +17,7 @@ let rec constant_fold_expr expr =
         (* Identity operations. These are not strictly constant
            folding, but they tend to come up at the same time *)
         | (Sub, IntImm 0, x) | (Sub, UIntImm 0, x) | (Sub, FloatImm 0.0, x) 
+        | (Sub, x, IntImm 0) | (Sub, x, UIntImm 0) | (Sub, x, FloatImm 0.0) 
         | (Add, IntImm 0, x) | (Add, UIntImm 0, x) | (Add, FloatImm 0.0, x) 
         | (Add, x, IntImm 0) | (Add, x, UIntImm 0) | (Add, x, FloatImm 0.0) 
         | (Mul, IntImm 1, x) | (Mul, UIntImm 1, x) | (Mul, FloatImm 1.0, x) 
