@@ -274,9 +274,13 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       | UInt(fb), UInt(tb) when fb > tb -> simple_cast build_trunc e t
 
       (* int <--> float *)
+      | IntVector _, FloatVector _
       | Int(_),   Float(_) -> simple_cast build_sitofp e t
+      | UIntVector _, FloatVector _
       | UInt(_),  Float(_) -> simple_cast build_uitofp e t
+      | FloatVector _, IntVector _
       | Float(_), Int(_)   -> simple_cast build_fptosi e t
+      | FloatVector _, UIntVector _
       | Float(_), UInt(_)  -> simple_cast build_fptoui e t
 
       (* build_intcast in the C/OCaml interface assumes signed, so only
