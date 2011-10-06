@@ -42,7 +42,7 @@ let rec lower (stmt:stmt) (env:environment) (schedule:schedule_tree) =
     let fname = String.sub name idx_after_last_dot (String.length name - idx_after_last_dot) in 
     let (_, args, return_type, body) = Environment.find fname env in
     let prefix = name ^ "." in
-    let renamed_args = List.map (fun (n, t) -> (prefix ^ n, t)) args in
+    let renamed_args = List.map (fun (t, n) -> (t, prefix ^ n)) args in
     let renamed_body = match body with
         | Pure expr -> Pure (prefix_name_expr prefix expr)
         | Impure stmt -> Impure (prefix_name_stmt prefix stmt)
@@ -97,7 +97,7 @@ let rec lower (stmt:stmt) (env:environment) (schedule:schedule_tree) =
       Printf.printf "It has schedule: %s %s\n" call_sched_string sched_list_string;
 
       (* Make the strides list for this schedule *)
-      let strides = stride_list prefixed_sched_list (List.map fst args) in
+      let strides = stride_list prefixed_sched_list (List.map snd args) in
 
       let scheduled_call =
         match call_sched with
@@ -159,7 +159,7 @@ and realize (args, return_type, body) sched_list buffer_name strides =
       (* Make the store index *)
       let index = List.fold_right2 
         (fun arg (min,size) subindex -> (size *~ subindex) +~ (Var (i32, arg)) -~ min)
-        (List.map fst args) (* TODO, vars and function type signatures should have matching order *)
+        (List.map snd args) (* TODO, vars and function type signatures should have matching order *)
         strides (IntImm 0) in
 
       (* Make the innermost store *)
