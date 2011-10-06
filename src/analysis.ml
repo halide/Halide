@@ -15,7 +15,7 @@ let rec binop_remainder_modulus x y op =
     let (xr, xm) = compute_remainder_modulus x in
     let (yr, ym) = compute_remainder_modulus y in
     let g = gcd xm ym in
-    (((op xr yr) + g) mod g, g)
+    if g = 0 then (0, 0) else (((op xr yr) + g) mod g, g)
 
 and compute_remainder_modulus = function
   | IntImm(x) | UIntImm(x) -> (x, 0)
