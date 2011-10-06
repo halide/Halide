@@ -1,5 +1,4 @@
 global naming starts with .?
-unroll schedule option
 use consistent style for constructors (IntImm(1) vs IntImm 1), indentation, line width, etc
 generate basic schedules from cpp bindings and codegen
 add types to the cpp bindings
@@ -21,5 +20,4 @@ Reductions
 Language design
 Serialize IR?
 Python embedding
-
-
+autotuner
