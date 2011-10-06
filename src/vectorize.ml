@@ -51,10 +51,11 @@ let vectorize_expr (var:string) (min:expr) (width:int) (expr:expr) =
         Select (vc, expand va, expand vb)
           
     | Load (t, buf, idx) -> Load (vector_of_val_type t width, buf, vec idx)
+    | Call (t, f, args) -> Call (vector_of_val_type t width, f, List.map vec args)     
 
     (* Vectorized Var vectorizes to strided expression version of itself *)
     | Var (t, name) -> assert (name = var && t = i32); Ramp (min, IntImm 1, width)
-      
+
     | _ -> raise (Wtf("Can't vectorize vector code"))
   in vec expr
 
