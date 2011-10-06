@@ -6,6 +6,7 @@ Fix build system (at least fix deps for cpp bindings build system)
 Proper interface files (mli)
 Static test runner
 Organize, automate tests
+Chunking of impure functions
 Implement inline schedule
 Implement coiterate schedule
 Implement dynamic schedule
