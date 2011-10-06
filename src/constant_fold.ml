@@ -23,7 +23,6 @@ let rec constant_fold_expr expr =
         | (Mul, IntImm 1, x) | (Mul, UIntImm 1, x) | (Mul, FloatImm 1.0, x) 
         | (Mul, x, IntImm 1) | (Mul, x, UIntImm 1) | (Mul, x, FloatImm 1.0) 
         | (Div, x, IntImm 1) | (Div, x, UIntImm 1) | (Div, x, FloatImm 1.0) -> x
-
         | (op, x, y) -> Bop (op, x, y)
       end
 
@@ -75,8 +74,14 @@ let rec constant_fold_expr expr =
     | x -> x
 
 let rec constant_fold_stmt = function
-  | For (var, min, n, order, stmt) ->
-    For (var, constant_fold_expr min, constant_fold_expr n, order, constant_fold_stmt stmt)
+  | For (var, min, size, order, stmt) ->
+    (* Remove trivial for loops *)
+    let min = constant_fold_expr min in 
+    let size = constant_fold_expr size in
+    if size = IntImm 1 or size = UIntImm 1 then
+      constant_fold_stmt (subs_stmt (Var (i32, var)) min stmt)
+    else
+      For (var, min, size, order, constant_fold_stmt stmt)
   | Block l ->
     Block (List.map constant_fold_stmt l)
   | Store (e, buf, idx) ->
