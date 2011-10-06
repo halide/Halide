@@ -212,21 +212,52 @@ type arg =
 
 type entrypoint = arg list * stmt
 
+exception BadTypeCoercion
+
+(* Make the types of the args of a binary op or comparison match *)
+let match_types expr =
+  let fix (a, b) =
+    match (val_type_of_expr a, val_type_of_expr b) with
+      | (ta, tb) when ta = tb -> (a, b)
+      | (IntVector (vb, n), Int sb) when vb = sb -> (a, Broadcast (b, n))
+      | (Int sb, IntVector (vb, n)) when vb = sb -> (Broadcast (a, n), b)
+      | (UIntVector (vb, n), UInt sb) when vb = sb -> (a, Broadcast (b, n))
+      | (UInt sb, UIntVector (vb, n)) when vb = sb -> (Broadcast (a, n), b)
+      | (FloatVector (vb, n), Float sb) when vb = sb -> (a, Broadcast (b, n))
+      | (Float sb, FloatVector (vb, n)) when vb = sb -> (Broadcast (a, n), b)
+  in match expr with      
+    | Bop (op, a, b) -> let (ma, mb) = fix (a, b) in Bop (op, ma, mb)
+    | Cmp (op, a, b) -> let (ma, mb) = fix (a, b) in Cmp (op, ma, mb)
+    | Or (a, b)      -> let (ma, mb) = fix (a, b) in Or (ma, mb)
+    | And (a, b)     -> let (ma, mb) = fix (a, b) in And (ma, mb)
+    | x -> x
+
 (* Some sugar for the operators that are naturally infix *)
-let ( +~ ) a b  = Bop (Add, a, b)
-let ( -~ ) a b  = Bop (Sub, a, b)
-let ( *~ ) a b  = Bop (Mul, a, b)
-let ( /~ ) a b  = Bop (Div, a, b) 
-let ( >~ ) a b  = Cmp (GT, a, b)
-let ( >=~ ) a b = Cmp (GE, a, b)
-let ( <~ ) a b  = Cmp (LT, a, b)
-let ( <=~ ) a b = Cmp (LE, a, b)
-let ( =~ ) a b  = Cmp (EQ, a, b)
-let ( <>~ ) a b = Cmp (NE, a, b)
-let ( ||~ ) a b = Or (a, b)
-let ( &&~ ) a b = And (a, b)
+let ( +~ ) a b  = match_types (Bop (Add, a, b))
+let ( -~ ) a b  = match_types (Bop (Sub, a, b))
+let ( *~ ) a b  = match_types (Bop (Mul, a, b))
+let ( /~ ) a b  = match_types (Bop (Div, a, b))
+let ( >~ ) a b  = match_types (Cmp (GT, a, b))
+let ( >=~ ) a b = match_types (Cmp (GE, a, b))
+let ( <~ ) a b  = match_types (Cmp (LT, a, b))
+let ( <=~ ) a b = match_types (Cmp (LE, a, b))
+let ( =~ ) a b  = match_types (Cmp (EQ, a, b))
+let ( <>~ ) a b = match_types (Cmp (NE, a, b))
+let ( ||~ ) a b = match_types (Or (a, b))
+let ( &&~ ) a b = match_types (And (a, b))
 let ( !~ ) a    = Not a
 
 (* More helpers for examining ir nodes *)
 let is_scalar x = (vector_elements (val_type_of_expr x)) = 1
 let is_vector x = not (is_scalar x)
+
+let rec make_zero = function
+  | Int 32   -> IntImm 0
+  | UInt 32  -> UIntImm 0
+  | Float 32 -> FloatImm 0.0
+  | Int b   -> Cast (Int b, IntImm 0)
+  | UInt b  -> Cast (UInt b, UIntImm 0)
+  | Float b -> Cast (Float b, FloatImm 0.0)
+  | IntVector (b, n)   -> Broadcast (make_zero (Int b), n)
+  | UIntVector (b, n)  -> Broadcast (make_zero (UInt b), n)
+  | FloatVector (b, n) -> Broadcast (make_zero (Float b), n)
