@@ -126,7 +126,7 @@ let mutate_children_in_expr mutator = function
   | Broadcast (a, n)      -> Broadcast (mutator a, n)
   | Ramp (b, s, n)        -> Ramp (mutator b, mutator s, n)
   | ExtractElement (a, b) -> ExtractElement (mutator a, mutator b)
-  | Call (f, t, args)     -> Call (f, t, List.map mutator args)
+  | Call (t, f, args)     -> Call (t, f, List.map mutator args)
   | Let (n, a, b)         -> Let (n, mutator a, mutator b)
   | x -> x
     
@@ -171,7 +171,7 @@ and subs_name_expr oldname newname expr =
     | Load (t, b, i)    -> Load (t, (if b = oldname then newname else b), subs i)
     | Var (t, n)        -> Var (t, if n = oldname then newname else n)
     | Let (n, a, b)     -> Let ((if n = oldname then newname else n), subs a, subs b)
-    | Call (f, t, args) -> Call ((if f = oldname then newname else f), t, List.map subs args)
+    | Call (t, f, args) -> Call (t, (if f = oldname then newname else f), List.map subs args)
     | x                 -> mutate_children_in_expr subs x
 
 and prefix_non_global prefix name =
@@ -184,7 +184,7 @@ and prefix_name_expr prefix expr =
     | Load (t, b, i)    -> Load (t, prefix_non_global prefix b, recurse i)
     | Var (t, n)        -> Var (t, prefix_non_global prefix n)
     | Let (n, a, b)     -> Let (prefix ^ n, recurse a, recurse b)
-    | Call (f, t, args) -> Call (prefix_non_global prefix f, t, List.map recurse args)
+    | Call (t, f, args) -> Call (t, prefix_non_global prefix f, List.map recurse args)
     | x                 -> mutate_children_in_expr recurse x  
 
 and prefix_name_stmt prefix stmt =
@@ -299,5 +299,7 @@ let rec hash_expr e =
       hash_combine4 (hash_str "<Ramp>") (hash_expr b) (hash_expr s) (hash_int n)
     | ExtractElement (a, b) ->
       hash_combine3 (hash_str "<ExtractElement>") (hash_expr a) (hash_expr b)
-    | Call (name, ty, args) ->
-      List.fold_left hash_combine2 (hash_combine2 (hash_str "<Call>") (hash_type ty)) (List.map hash_expr args)
+    | Call (ty, name, args) ->
+      List.fold_left hash_combine2 
+        (hash_combine3 (hash_str "<Call>") (hash_str name) (hash_type ty))
+        (List.map hash_expr args)

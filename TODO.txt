@@ -10,7 +10,6 @@ Chunking of impure functions
 Implement inline schedule
 Implement coiterate schedule
 Implement dynamic schedule
-Fix Load vs Call argument order
 
 Later
 -----

@@ -57,7 +57,7 @@ let rec lower (stmt:stmt) (env:environment) (schedule:schedule_tree) =
       | (None, b) -> b
     in
     let rec find_callname_expr = function
-      | Call (name, _, _) -> Some name
+      | Call (_, name, _) -> Some name
       | x -> fold_children_in_expr find_callname_expr combiner None x
     in
     fold_children_in_stmt find_callname_expr find_callname_stmt combiner stmt
@@ -121,7 +121,7 @@ let rec lower (stmt:stmt) (env:environment) (schedule:schedule_tree) =
               | For (for_dim, min, size, order, body) when for_dim = chunk_dim -> begin
                 (* Replace calls to function with loads from buffer in body *)
                 let rec replace_calls_in_expr = function
-                  | Call (func_name, ty, args) when func_name = name ->
+                  | Call (ty, func_name, args) when func_name = name ->
                     let index = List.fold_right2 (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) args strides (IntImm 0) in
                     Load (ty, buffer_name, index)
                   | x -> mutate_children_in_expr replace_calls_in_expr x
