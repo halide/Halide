@@ -74,7 +74,7 @@ let rec vectorize_stmt var stmt =
       begin match n with
         | IntImm size
         | UIntImm size ->
-          vectorize_stmt_inner min size stmt
+          For (name, IntImm 0, IntImm 1, false, vectorize_stmt_inner min size stmt)
         | _ -> raise (Wtf "Can't vectorize map with non-constant size")
       end
     | For (name, min, n, order, stmt) -> For (name, min, n, order, vectorize_stmt var stmt)

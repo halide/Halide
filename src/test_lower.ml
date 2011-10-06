@@ -13,12 +13,12 @@ let _ =
   let f_call_sched = (Chunk "g.xi") in
   (*let f_sched = [Serial ("x", ((Var (i32, "g.xo")) *~ (IntImm 4)) -~ one, IntImm 6)] in *)
   let f_sched = [Split ("x", "xo", "xi", (Var (i32, "g.xo") *~ (IntImm 4)) -~ (IntImm 1));
-                 Vectorized ("xi", IntImm 0, 4); Serial ("xo", IntImm 0, IntImm 2)] in 
+                 Vectorized ("xi", IntImm 0, 4); Unrolled ("xo", IntImm 0, 2)] in 
 
   let g = ("g", [("x", i32)], f32, Pure ((Call ("f", f32, [x +~ one])) +~ (Call ("f", f32, [x -~ one])))) in
   
   let g_call_sched = Root in
-  let g_sched = [Split ("x", "xo", "xi", IntImm 0); Serial ("xi", IntImm 0, IntImm 4); Parallel ("xo", IntImm 0, IntImm 25)] in
+  let g_sched = [Split ("x", "xo", "xi", IntImm 0); Unrolled ("xi", IntImm 0, 4); Parallel ("xo", IntImm 0, IntImm 25)] in
 
   let env = Environment.empty in
   let env = Environment.add "f" f env in
