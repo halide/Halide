@@ -104,8 +104,6 @@ let codegen (c:llcontext) (e:entrypoint) =
       let name = name_of_arg arg in
       let llval = param entrypoint_fn idx in
       sym_add name llval;
-      (* Also assign llvm names to them for easier debugging *)
-      set_value_name name llval;
       (* And mark each buffer arg as Noalias *)
       match arg with 
         | Buffer b -> add_param_attr llval Attribute.Noalias
@@ -461,8 +459,8 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
     let length     = const_int int_imm_t ((bit_width t)/8) in
     let alignment  = const_int int_imm_t ((bit_width (element_val_type t))/8) in
     let volatile   = const_int (i1_type c) 0 in
-    ignore(build_call memcpy [|stack_addr; mem_addr; length; alignment; volatile|] "to_stack" b);
-    build_load (scratch) "" b
+    ignore(build_call memcpy [|stack_addr; mem_addr; length; alignment; volatile|] "" b);
+    build_load (scratch) "" b 
 
   and cg_gather t buf idx =
     let elem_type     = type_of_val_type (element_val_type t) in
