@@ -8,18 +8,15 @@ let rec unroll_stmt var stmt =
   match stmt with
     (* At this stage we're outside the loop in this variable *)
     | For (v, min, n, order, substmt) when v = var ->
-      begin match (min, n) with
-        (* TODO: this could actually work with only cost size - min doesn't need to be const *)
-        | (IntImm a, IntImm b) 
-        | (IntImm a, UIntImm b) 
-        | (UIntImm a, IntImm b) 
-        | (UIntImm a, UIntImm b) ->
-          let gen_stmt i = subs_stmt (Var (i32, var)) (IntImm i) substmt in
-          Block (List.map gen_stmt (a -- (a+b)))
+      begin match n with
+        | IntImm size | UIntImm size ->
+          let gen_stmt i = subs_stmt (Var (i32, var)) (min +~ (IntImm i)) substmt in
+          For (v, IntImm 0, IntImm 1, false, Block (List.map gen_stmt (0 -- size)))
         | _ -> raise (Wtf "Can't unroll for with non-constant bounds")
       end
     | For (name, min, n, order, stmt) -> For (name, min, n, order, unroll stmt)
     | Block l -> Block (List.map unroll l)
+    | Pipeline (name, ty, size, produce, consume) -> Pipeline (name, ty, size, unroll produce, unroll consume)
     (* Anything that does not contain a sub-statement is unchanged *)
     | x -> x
       

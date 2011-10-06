@@ -22,8 +22,10 @@ type dimension = string
 type schedule = 
   | Split of dimension * dimension * dimension * expr (* dimension, names of dimensions introduced, min of old dimension *)
   | Serial     of dimension * expr * expr (* Serialize across a dimension between the specified bounds *)
-  | Vectorized of dimension * expr * int
   | Parallel   of dimension * expr * expr
+  | Unrolled   of dimension * expr * int
+  | Vectorized of dimension * expr * int
+
 
 (* How should a sub-function be called - i.e. what lets do we introduce? A sufficient representation is (with reference to the schedule of the caller), to what caller dimension should I hoist this out to, and should I fuse with other calls to the same callee *)
 type call_schedule =
@@ -47,6 +49,7 @@ let rec stride_for_dim dim = function
     begin match hd with
       | Serial (d, min, n)
       | Parallel (d, min, n) when d = dim -> (min,n)
+      | Unrolled (d, min, n)
       | Vectorized (d, min, n) when d = dim -> (min, IntImm n)
       | Split (d, outer, inner, offset) when d = dim ->
         (* search for new dimensions on rest of the sched list -
@@ -105,18 +108,19 @@ and empty_schedule = Tree StringMap.empty
 let string_of_call_schedule = function
   | Chunk d -> "Chunk " ^ d 
   | Dynamic d -> "Dynamic " ^ d
-  | Coiterate (d, offset, modulus) -> "Coiterate " ^ d ^ " " ^ (string_of_int offset) ^ " " ^ (string_of_int modulus)
+  | Coiterate (d, offset, modulus) -> 
+    "Coiterate " ^ d ^ " " ^ (string_of_int offset) ^ " " ^ (string_of_int modulus)
   | Inline -> "Inline"
   | Root -> "Root"      
     
 let string_of_schedule = function
   | Split (d, d_o, d_i, offset) -> "Split " ^ d ^ " " ^ d_o ^ " " ^ d_i ^ " " ^ (string_of_expr offset)
-  | Serial (d, min, n)   -> "Serial " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
-  | Parallel (d, min, n) -> "Parallel " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
+  | Serial (d, min, n)     -> "Serial "     ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
+  | Parallel (d, min, n)   -> "Parallel "   ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
+  | Unrolled (d, min, n)   -> "Unrolled "   ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_int n)
   | Vectorized (d, min, n) -> "Vectorized " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_int n)
 
 let print_schedule (tree : schedule_tree) = 
-
   let rec inner tree prefix = 
     let Tree map = tree in
     StringMap.iter (fun k (cs, sl, st) -> 

@@ -86,6 +86,7 @@ let rec lower (stmt:stmt) (env:environment) (schedule:schedule_tree) =
       let prefix_schedule = function      
         | Serial     (name, min, size) -> Serial     (prefix ^ name, prefix_expr min, prefix_expr size)
         | Parallel   (name, min, size) -> Parallel   (prefix ^ name, prefix_expr min, prefix_expr size)
+        | Unrolled   (name, min, size) -> Unrolled   (prefix ^ name, prefix_expr min, size)
         | Vectorized (name, min, size) -> Vectorized (prefix ^ name, prefix_expr min, size)
         | Split (old_dim, new_dim_1, new_dim_2, offset) -> Split (prefix ^ old_dim, prefix ^ new_dim_1, prefix ^ new_dim_2, offset)
       in
@@ -168,6 +169,7 @@ and realize (args, return_type, body) sched_list buffer_name strides =
       let wrap (stmt:stmt) = function 
         | Serial     (name, min, size) -> For (name, min, size, true, stmt)
         | Parallel   (name, min, size) -> For (name, min, size, false, stmt)
+        | Unrolled   (name, min, size) -> Unroll.unroll_stmt name (For (name, min, IntImm size, false, stmt))
         | Vectorized (name, min, size) -> Vectorize.vectorize_stmt name (For (name, min, IntImm size, false, stmt))
         | Split (old_dim, new_dim_outer, new_dim_inner, offset) -> 
           let (_, size_new_dim_inner) = stride_for_dim new_dim_inner sched_list in
