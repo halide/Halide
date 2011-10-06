@@ -122,7 +122,7 @@ type expr =
     | ExtractElement of expr * expr
 
     (* Function calls *) 
-    | Call of string * val_type * (expr list)
+    | Call of val_type * string * (expr list)
 
     (* Let expressions *)
     | Let of string * expr * expr
@@ -162,7 +162,7 @@ let rec val_type_of_expr = function
   | Broadcast(e,len) -> vector_of_val_type (val_type_of_expr e) len
   | Ramp(b, s, len) -> vector_of_val_type (val_type_of_expr b) len
   | ExtractElement(e, idx) -> element_val_type (val_type_of_expr e)
-  | Call(_, ty, _) -> ty
+  | Call(ty, _, _) -> ty
   | Let(_, _, b) -> val_type_of_expr b
 
 type stmt =
