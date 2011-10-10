@@ -623,10 +623,15 @@ let codegen_to_file filename e =
   (* codegen *)
   let (m,_) = codegen_to_c_callable c e in
 
-    (* write to bitcode file *)
-    match Llvm_bitwriter.write_bitcode_file m filename with
-      | false -> raise(BCWriteFailed(filename))
-      | true -> ();
+  (* Set the target triple and target data for our dev machines *)
+  set_target_triple "x86_64-apple-darwin11.1.0" m;
+  set_data_layout "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64" m;
 
-    (* free memory *)
-    dispose_module m
+  (* write to bitcode file *)
+  begin match Llvm_bitwriter.write_bitcode_file m filename with
+    | false -> raise(BCWriteFailed(filename))
+    | true -> ()
+  end;
+        
+  (* free memory *)
+  dispose_module m
