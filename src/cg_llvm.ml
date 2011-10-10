@@ -360,7 +360,7 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       (* Todo: codegen size and alloc more than one *)
       let current = insertion_block b in
       position_before alloca_end b;
-      let scratch = build_alloca (type_of_val_type ty) "" b in
+      let scratch = build_array_alloca (type_of_val_type ty) (cg_expr size) "" b in
       position_at_end current b;
 
       (* push the symbol environment *)
