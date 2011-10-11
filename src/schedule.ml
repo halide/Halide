@@ -6,32 +6,41 @@ open Util
                                 
 f(x, y) = g(A(x, y), B(x, y)) + g(C(x, y), D(x, y))
 
-The fully specified way to schedule f/g is to put it inside some maps and lets - i.e. wrap it up in imperative code.
+The fully specified way to schedule f/g is to put it inside some maps and lets - i.e. wrap it up in
+imperative code.
   
 Any externally imposed schedule is a recipe to help us do this.
 
-How can we specify such a schedule more tersely from the outside while losing a minimum of generality?
+How can we specify such a schedule more tersely from the outside while losing a minimum of
+generality?
 
 *)
 
 (* Every (transitive) function has a schedule. Every callsite has a call_schedule. *)
 
-(* How can we schedule a single function - i.e. what kind of Maps do we insert. The following options create a perfectly nested set of maps. You get a list of them, where each dimension must be handled. *) 
+(* How can we schedule a single function - i.e. what kind of Maps do we insert. The following
+ * options create a perfectly nested set of maps. You get a list of them, where each dimension must
+ * be handled. *) 
 type dimension = string
 
 type schedule = 
-  | Split of dimension * dimension * dimension * expr (* dimension, names of dimensions introduced, min of old dimension *)
-  | Serial     of dimension * expr * expr (* Serialize across a dimension between the specified bounds *)
+  (* dimension, names of dimensions introduced, min of old dimension *)
+  | Split of dimension * dimension * dimension * expr
+  (* Serialize across a dimension between the specified bounds *)
+  | Serial     of dimension * expr * expr
   | Parallel   of dimension * expr * expr
   | Unrolled   of dimension * expr * int
   | Vectorized of dimension * expr * int
 
-
-(* How should a sub-function be called - i.e. what lets do we introduce? A sufficient representation is (with reference to the schedule of the caller), to what caller dimension should I hoist this out to, and should I fuse with other calls to the same callee *)
+(* How should a sub-function be called - i.e. what lets do we introduce? A sufficient
+ * representation is (with reference to the schedule of the caller), to what caller dimension
+ * should I hoist this out to, and should I fuse with other calls to the same callee *)
 type call_schedule =
   | Chunk of dimension (* of caller *)
-  | Dynamic of dimension (* level in callee where dynamic/static transition happens - chunk granularity *)
-  | Coiterate of dimension (* of caller - always pairs with outermost dimension of callee *) * int (* offset *) * int (* modulus *)
+  (* level in callee where dynamic/static transition happens - chunk granularity *)
+  | Dynamic of dimension
+  (* dimension of caller always pairs with outermost dimension of callee *)
+  | Coiterate of dimension * int (* offset *) * int (* modulus *)
   | Inline (* block over nothing - just do in place *)
   | Root (* There is no calling context *)
 
@@ -46,22 +55,23 @@ type schedule_tree =
 let rec stride_for_dim dim = function
   | [] -> raise (Wtf ("failed to find schedule for dimension " ^ dim))
   | hd::rest ->
-    begin match hd with
-      | Serial (d, min, n)
-      | Parallel (d, min, n) when d = dim -> (min,n)
-      | Unrolled (d, min, n)
-      | Vectorized (d, min, n) when d = dim -> (min, IntImm n)
-      | Split (d, outer, inner, offset) when d = dim ->
-        (* search for new dimensions on rest of the sched list -
-           they are only allowed after defined by the split *)
-        let (min_outer, size_outer) = stride_for_dim outer rest in
-        let (_,         size_inner) = stride_for_dim inner rest in
-        ((min_outer *~ size_inner) +~ offset, size_outer *~ size_inner)
-      (* recurse if not found *)
-      | _ -> stride_for_dim dim rest
-    end
+      begin match hd with
+        | Serial (d, min, n)
+        | Parallel (d, min, n) when d = dim -> (min,n)
+        | Unrolled (d, min, n)
+        | Vectorized (d, min, n) when d = dim -> (min, IntImm n)
+        | Split (d, outer, inner, offset) when d = dim ->
+            (* search for new dimensions on rest of the sched list -
+             they are only allowed after defined by the split *)
+            let (min_outer, size_outer) = stride_for_dim outer rest in
+            let (_,         size_inner) = stride_for_dim inner rest in
+            ((min_outer *~ size_inner) +~ offset, size_outer *~ size_inner)
+        (* recurse if not found *)
+        | _ -> stride_for_dim dim rest
+      end
 
-(* Return a list of expressions for computing the stride of each dimension of a function given the schedule*)
+(* Return a list of expressions for computing the stride of each dimension of a function given the
+ * schedule*)
 let stride_list (sched:schedule list) (args:string list) =
   List.map (fun arg -> stride_for_dim arg sched) args
 
@@ -75,31 +85,32 @@ let find_schedule (tree:schedule_tree) (name:string) =
   let rec find (tree:schedule_tree) = function
     | [] -> raise (Wtf "find_schedule of empty list")
     | (first::rest) -> 
-      Printf.printf "Resolving %s\n" first;
-      let (Tree map) = tree in
-      let (cs, sl, subtree) = StringMap.find first map in
-      if rest = [] then (cs, sl) else find subtree rest
+        Printf.printf "Resolving %s\n" first;
+        let (Tree map) = tree in
+        let (cs, sl, subtree) = StringMap.find first map in
+        if rest = [] then (cs, sl) else find subtree rest
   in
   let name_parts = split_name name in
   Printf.printf "split_name %s = %s\n%!" name (String.concat "|" name_parts);
   find tree name_parts
 
 
-let rec set_schedule (tree: schedule_tree) (call: string) (call_sched: call_schedule) (sched_list: schedule list) =
+let rec set_schedule
+      (tree: schedule_tree) (call: string) (call_sched: call_schedule) (sched_list: schedule list) =
   let rec set tree = function
     | [] -> raise (Wtf "set_schedule of empty list")
     | (first::rest) ->
-      let (Tree map) = tree in
-      let (old_cs, old_sl, old_tree) = 
-        if StringMap.mem first map then
-          StringMap.find first map 
-        else
-          (Root, [], empty_schedule) 
-      in
-      if (rest = []) then
-        Tree (StringMap.add first (call_sched, sched_list, old_tree) map)
-      else        
-        Tree (StringMap.add first (old_cs, old_sl, set old_tree rest) map)
+        let (Tree map) = tree in
+        let (old_cs, old_sl, old_tree) = 
+          if StringMap.mem first map then
+            StringMap.find first map 
+          else
+            (Root, [], empty_schedule) 
+        in
+        if (rest = []) then
+          Tree (StringMap.add first (call_sched, sched_list, old_tree) map)
+        else        
+          Tree (StringMap.add first (old_cs, old_sl, set old_tree rest) map)
   in
   set tree (split_name call)
 
@@ -109,16 +120,21 @@ let string_of_call_schedule = function
   | Chunk d -> "Chunk " ^ d 
   | Dynamic d -> "Dynamic " ^ d
   | Coiterate (d, offset, modulus) -> 
-    "Coiterate " ^ d ^ " " ^ (string_of_int offset) ^ " " ^ (string_of_int modulus)
+      "Coiterate " ^ d ^ " " ^ (string_of_int offset) ^ " " ^ (string_of_int modulus)
   | Inline -> "Inline"
   | Root -> "Root"      
     
 let string_of_schedule = function
-  | Split (d, d_o, d_i, offset) -> "Split " ^ d ^ " " ^ d_o ^ " " ^ d_i ^ " " ^ (string_of_expr offset)
-  | Serial (d, min, n)     -> "Serial "     ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
-  | Parallel (d, min, n)   -> "Parallel "   ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
-  | Unrolled (d, min, n)   -> "Unrolled "   ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_int n)
-  | Vectorized (d, min, n) -> "Vectorized " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_int n)
+  | Split (d, d_o, d_i, offset) ->
+      "Split " ^ d ^ " " ^ d_o ^ " " ^ d_i ^ " " ^ (string_of_expr offset)
+  | Serial (d, min, n) ->
+      "Serial "     ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
+  | Parallel (d, min, n) ->
+      "Parallel "   ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_expr n)
+  | Unrolled (d, min, n) ->
+      "Unrolled "   ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_int n)
+  | Vectorized (d, min, n) ->
+      "Vectorized " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_int n)
 
 let print_schedule (tree : schedule_tree) = 
   let rec inner tree prefix = 
