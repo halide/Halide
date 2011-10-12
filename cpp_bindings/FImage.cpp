@@ -43,10 +43,13 @@ ML_FUNC1(makeVar);
 ML_FUNC2(makeLoad); // buffer id, idx
 ML_FUNC3(makeStore); // value, buffer id, idx
 ML_FUNC1(makeBufferArg); // name
-ML_FUNC1(doCompile); // stmt
-ML_FUNC0(makeArgList); 
-ML_FUNC2(addArgToList); // old arg list, new arg -> new list
-ML_FUNC2(makeFunction); // stmt, arg list
+ML_FUNC2(doCompile); // stmt
+
+ML_FUNC0(makeList); 
+ML_FUNC2(addToList); // cons
+ML_FUNC2(makePair);
+ML_FUNC3(makeTriple);
+
 ML_FUNC4(makeFor); // var name, min, n, stmt
 ML_FUNC2(doVectorize);
 ML_FUNC2(doUnroll);
@@ -59,12 +62,8 @@ ML_FUNC2(makeCall);
 ML_FUNC3(makeDefinition);
 ML_FUNC0(makeEnv);
 ML_FUNC2(addDefinitionToEnv);
-ML_FUNC0(makeStringList);
-ML_FUNC2(addStringToList);
-ML_FUNC0(makeExprList);
-ML_FUNC2(addExprToList);
 
-ML_FUNC2(doInline);
+ML_FUNC3(doLower);
 
 namespace FImage {
 
@@ -223,9 +222,9 @@ namespace FImage {
 
     FuncRef::operator Expr() {
         // make a call node
-        MLVal exprlist = makeExprList();
+        MLVal exprlist = makeList();
         for (size_t i = func_args.size(); i > 0; i--) {
-            exprlist = addExprToList(exprlist, func_args[i-1].node);            
+            exprlist = addToList(exprlist, func_args[i-1].node);            
         }
         Expr call = makeCall(MLVal::fromString(f->name()), exprlist);
 
@@ -249,15 +248,15 @@ namespace FImage {
 
         // TODO: Mutate the rhs: Convert scatters to scalar-valued functions by wrapping them in a let
         
-        MLVal arglist = makeStringList();
+        MLVal arglist = makeList();
         for (size_t i = func_args.size(); i > 0; i--) {
             if (1 /* dangerously assume it's a var */) {
                 if (func_args[i-1].vars.size() != 1) {
                     printf("This was supposed to be a var:\n");
-                    doPrint(func_args[i].node);
+                    doPrint(func_args[i-1].node);
                     exit(1);
                 }
-                arglist = addStringToList(arglist, MLVal::fromString(func_args[i-1].vars[0]->name()));
+                arglist = addToList(arglist, MLVal::fromString(func_args[i-1].vars[0]->name()));
             } else {
                 printf("Scalar valued functions should only have vars as arguments\n");
             }
@@ -302,86 +301,29 @@ namespace FImage {
 
         if (!function_ptr) {
 
-            // Make some iterands
-            std::vector<Var> iter(result.size.size());
-            std::vector<Expr> iterexprs(iter.begin(), iter.end());
-
-            // Make an outer statement to execute
-            Expr call = (*this)(iterexprs);
-            Expr addr = 0;
-            for (size_t i = 0; i < iter.size(); i++) {
-                addr += iter[i] * result.stride[i];
-            }
-            MLVal loop = makeStore(call.node, MLVal::fromString("result"), addr.node);                                   
-            
-            // Surround it with the appropriate number of maps.
-            for (size_t i = 0; i < iter.size(); i++) {
-                printf("Wrapping statement in a loop...\n");
-                loop = makeFor(MLVal::fromString(iter[i].name()),
-                               Expr(0).node,
-                               Expr(result.size[i]).node,
-                               loop);
+            // Make a region to evaluate this over
+            MLVal sizes = makeList();
+            for (size_t i = result.size.size(); i > 0; i--) {                
+                sizes = addToList(sizes, MLVal::fromInt(result.size[i-1]));
             }
 
-            // Perform any requested transformations
-            /*
-            for (size_t i = 0; i < stmt.vars.size(); i++) {
-                int v = stmt.vars[i]->vectorize();
-                if (v > 1) {
-                    printf("Before vectorizing:\n");
-                    doPrint(loop);
-                    MLVal outer = MLVal::fromString(stmt.vars[i]->name());
-                    MLVal inner = MLVal::fromString(std::string(stmt.vars[i]->name()) + "_inner");
-                    loop = doSplit(outer, outer, inner, MLVal::fromInt(v), loop);
-                    loop = doConstantFold(loop);
-                    loop = doVectorize(inner, loop);
-                    loop = doConstantFold(loop);
-                    printf("After vectorizing:\n");
-                    doPrint(loop);
-                }
-                int u = stmt.vars[i]->unroll();
-                if (u > 1) {
-                    printf("Before unrolling:\n");
-                    doPrint(loop);
-                    MLVal outer = MLVal::fromString(stmt.vars[i]->name());
-                    MLVal inner = MLVal::fromString(std::string(stmt.vars[i]->name()) + "_inner");
-                    loop = doSplit(outer, outer, inner, MLVal::fromInt(u), loop);
-                    loop = doConstantFold(loop);
-                    loop = doUnroll(inner, loop);
-                    loop = doConstantFold(loop);
-                    printf("After unrolling:\n");
-                    doPrint(loop);
-                }                    
-            }
-            */
-
-            // Do inlining of all the calls
-            if (Func::environment) {
-                printf("Before inlining:\n");
-                doPrint(loop);
-            
-                printf("\nInlining used functions\n");
-                loop = doInline(loop, *Func::environment);
-
-                printf("After inlining:\n");
-                doPrint(loop);
-            }
+            MLVal stmt = doLower(MLVal::fromString(name()), 
+                                 sizes, 
+                                 *Func::environment);                                 
 
             // Create a function around it with the appropriate number of args
             printf("\nMaking function...\n");           
-            MLVal args = makeArgList();
-            for (size_t i = 0; i< call.bufs.size(); i++) {
-                MLVal arg = makeBufferArg(MLVal::fromString(call.bufs[i]->name()));
-                args = addArgToList(args, arg);
+            MLVal args = makeList();
+            args = addToList(args, makeBufferArg(MLVal::fromString("result")));
+            for (size_t i = rhs.bufs.size(); i > 0; i--) {
+                MLVal arg = makeBufferArg(MLVal::fromString(rhs.bufs[i-1]->name()));
+                args = addToList(args, arg);
             }
-            args = addArgToList(args, makeBufferArg(MLVal::fromString("result")));
 
-            MLVal function = makeFunction(args, loop);
-
-            doPrint(loop);
+            doPrint(stmt);
 
             printf("compiling IR -> ll\n");
-            MLVal tuple = doCompile(function);
+            MLVal tuple = doCompile(args, stmt);
 
             printf("Extracting the resulting module and function\n");
             LLVMModuleRef module = (LLVMModuleRef)Field(tuple.getValue(), 0);
