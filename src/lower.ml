@@ -83,7 +83,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
 
         Printf.printf "Found a call to %s\n" name;
 
-      (* Grab the body *)
+        (* Grab the body *)
         let (args, return_type, body) = make_function_body name env in
         
         Printf.printf "Found a function: %s = %s\n" name 
@@ -188,10 +188,10 @@ and realize (args, return_type, body) sched_list buffer_name strides =
           (List.map snd args) 
           strides (IntImm 0) in
 
-      (* Make the innermost store *)
+        (* Make the innermost store *)
         let inner_stmt = Store (body, buffer_name, index) in     
-
-      (* Wrap it in for loops *)
+        
+        (* Wrap it in for loops *)
         let wrap (stmt:stmt) = function 
           | Serial     (name, min, size) -> 
               For (name, min, size, true, stmt)
