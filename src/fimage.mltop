@@ -1,5 +1,4 @@
 analysis
-inline
 cg_llvm
 ir
 ir_printer
@@ -9,5 +8,4 @@ img
 split
 unroll
 constant_fold
-inline
 schedule
