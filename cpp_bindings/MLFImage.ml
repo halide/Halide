@@ -7,31 +7,21 @@ open Vectorize
 open Unroll
 open Split
 open Constant_fold
-open Inline
+open Schedule
+open Lower
+open Schedule_transforms
 
 let compilation_cache = 
   Hashtbl.create 16
 
-let compile f =
+let compile args stmt =
 
-  (* Canonicalize names. Variables get renamed to v0 v1
+  (* TODO: Canonicalize names. Variables get renamed to v0 v1
      v2... depending on the order in which they're found, arguments to
      a0, a1, a2, depending on the order that they occur in the
      arguments list. This is done to assist hashing. *)
 
-  (* TODO *)
-  let func = 
-    let canonicalize (args, stmt) = 
-      let rec canonicalize_stmt = function
-        | x -> x
-      and canonicalize_expr = function
-        | x -> x        
-      in (args, canonicalize_stmt stmt)
-    in (canonicalize f) in
-  
-  (* Next check the compilation cache *)
-
-  let (args, stmt) = func in 
+  let func = (args, stmt) in
   let c = create_context() in
   if Hashtbl.mem compilation_cache func then begin
     (* Printf.printf "Found function in cache\n%!";  *)
@@ -62,13 +52,12 @@ let _ =
   Callback.register "makeLE" (fun a b -> Cmp (LE, a, b));
   Callback.register "makeSelect" (fun c a b -> Select (c, a, b));
   Callback.register "makeVar" (fun a -> Var (i32, a));
-  Callback.register "makeLoad" (fun buf idx -> Load (f32, buf, idx));
-  Callback.register "makeStore" (fun a buf idx -> Store (a, buf, idx));
-  Callback.register "makeFunction" (fun args stmt -> ((List.rev args), stmt));
+  Callback.register "makeLoad" (fun buf idx -> Load (f32, "." ^ buf, idx));
+  Callback.register "makeStore" (fun a buf idx -> Store (a, "." ^ buf, idx));
   Callback.register "makeFor" (fun var min n stmt -> For (var, min, n, true, stmt));
   Callback.register "makePipeline" (fun name size produce consume -> Pipeline (name, f32, size, produce, consume));
-  Callback.register "makeCall" (fun name args -> Call (name, f32, args));
-  Callback.register "makeDefinition" (fun name argnames body -> Printf.printf "I got the name %s\n%!" name; (name, List.map (fun x -> (x, i32)) argnames, f32, Pure body));
+  Callback.register "makeCall" (fun name args -> Call (f32, name, args));
+  Callback.register "makeDefinition" (fun name argnames body -> Printf.printf "I got the name %s\n%!" name; (name, List.map (fun x -> (i32, x)) argnames, f32, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);
   Callback.register "addDefinitionToEnv" (fun env def -> 
     let (n1, a1, t1, b1) = def in 
@@ -76,24 +65,31 @@ let _ =
     let (n2, a2, t2, b2) = Environment.find n1 newenv in 
     Printf.printf "definition: %s\n%!" n2; 
     newenv);
-  Callback.register "makeStringList" (fun _ -> []);
-  Callback.register "addStringToList" (fun l s -> s::l);
-  Callback.register "makeExprList" (fun _ -> []);
-  Callback.register "addExprToList" (fun l e -> e::l);
 
-  Callback.register "makeArgList" (fun _ -> []);
-  Callback.register "makeBufferArg" (fun str -> Buffer str);
-  Callback.register "addArgToList" (fun l x -> x::l);
-
+  Callback.register "makeList" (fun _ -> []);
+  Callback.register "addToList" (fun l x -> x::l);  
+  Callback.register "makePair" (fun x y -> (x, y));
+  Callback.register "makeTriple" (fun x y z -> (x, y, z));
+  
+  Callback.register "makeBufferArg" (fun str -> Buffer ("." ^ str));
 
   (* Debugging, compilation *)
   Callback.register "doPrint" (fun a -> Printf.printf "%s\n%!" (string_of_stmt a));
-  Callback.register "doCompile" compile;
+  Callback.register "doLower" (fun (f:string) (sizes:int list) (env:environment) -> 
+    let (_, args, _, _) = Environment.find f env in
+    let region = List.map2 (fun (t, v) x -> Printf.printf "%s\n" v; (v, IntImm 0, IntImm x)) args sizes in
+    let lowered = lower_function f env (make_default_schedule f env region) in
+    let lowered = Break_false_dependence.break_false_dependence_stmt lowered in
+    let lowered = Constant_fold.constant_fold_stmt lowered in
+    lowered
+  );
+  Callback.register "doCompile" (fun a s -> compile a s);
 
   (* Transformations *)
   Callback.register "doVectorize" (fun var stmt -> vectorize_stmt var stmt);
   Callback.register "doUnroll" (fun var stmt -> unroll_stmt var stmt);
   Callback.register "doSplit" (fun var outer inner n stmt -> split_stmt var outer inner n stmt);
   Callback.register "doConstantFold" (fun stmt -> constant_fold_stmt stmt);
-  (* Callback.register "doShift" (fun var expr stmt -> shift var expr stmt); *)
-  Callback.register "doInline" (fun stmt env -> inline_stmt stmt env); 
+
+
+
