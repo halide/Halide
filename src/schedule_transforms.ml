@@ -41,10 +41,5 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
     List.map (fun x -> f ^ "." ^ x) calls 
   in
 
-  let sched = List.fold_left (fun s f -> set_schedule s f Inline []) schedule (called_functions func) in
-  
-  Printf.printf "Made a default schedule:\n";
-  print_schedule sched;
-  Printf.printf "-----\n";
+  List.fold_left (fun s f -> set_schedule s f Inline []) schedule (called_functions func)
 
-  sched
