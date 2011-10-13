@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-# Requires Python 2.7 for the subprocess module
+# Requires Python 2.6 for the subprocess module
 
-from subprocess import check_output,check_call
+import subprocess
 from os import chdir
 from os.path import isfile
 
@@ -23,6 +23,33 @@ def check_llvm():
         return True
     except:
         return False
+
+
+check_call = subprocess.check_call
+try:
+    check_output = subprocess.check_output
+except:
+    # backport from https://gist.github.com/1027906
+    def _check_output(*popenargs, **kwargs):
+        r"""Run command with arguments and return its output as a byte string.
+
+        Backported from Python 2.7 as it's implemented as pure python on stdlib.
+
+        >>> check_output(['/usr/bin/python', '--version'])
+        Python 2.6.2
+        """
+        process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)
+        output, unused_err = process.communicate()
+        retcode = process.poll()
+        if retcode:
+            cmd = kwargs.get("args")
+            if cmd is None:
+                cmd = popenargs[0]
+            error = subprocess.CalledProcessError(retcode, cmd)
+            error.output = output
+            raise error
+        return output
+    check_output = _check_output
 
 # Test for ocaml 3.12.*
 status('Testing for OCaml 3.12.*')
