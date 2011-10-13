@@ -2,4 +2,7 @@ build
 MLFImage.a
 passes.txt
 test
+test_functions
 test.dSYM
+*.ll
+*.s
