@@ -1,4 +1,5 @@
 analysis
+hash
 cg_llvm
 ir
 ir_printer

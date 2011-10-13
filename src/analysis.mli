@@ -20,18 +20,4 @@ val subs_name_expr : Ir.buffer -> Ir.buffer -> Ir.expr -> Ir.expr
 val prefix_name_expr : string -> Ir.expr -> Ir.expr
 val prefix_name_stmt : string -> Ir.stmt -> Ir.stmt
 
-val hash_int : int -> int * int * int * int
-val hash_float : float -> int * int * int * int
-val hash_str : string -> int * int * int * int
-val hash_combine2 :
-  'a * 'b * 'c * 'd -> 'e * 'f * 'g * 'h -> int * int * int * int
-val hash_combine3 :
-  'a * 'b * 'c * 'd ->
-  'e * 'f * 'g * 'h -> 'i * 'j * 'k * 'l -> int * int * int * int
-val hash_combine4 :
-  'a * 'b * 'c * 'd ->
-  'e * 'f * 'g * 'h ->
-  'i * 'j * 'k * 'l -> 'm * 'n * 'o * 'p -> int * int * int * int
-val hash_expand : 'a -> int * int * int * int
-val hash_type : Ir.val_type -> int * int * int * int
-val hash_expr : Ir.expr -> int * int * int * int
+
