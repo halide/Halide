@@ -225,6 +225,7 @@ let match_types expr =
       | (UInt sb, UIntVector (vb, n)) when vb = sb -> (Broadcast (a, n), b)
       | (FloatVector (vb, n), Float sb) when vb = sb -> (a, Broadcast (b, n))
       | (Float sb, FloatVector (vb, n)) when vb = sb -> (Broadcast (a, n), b)
+      | _ -> raise (Wtf "I can't perform this cast")
   in match expr with      
     | Bop (op, a, b) -> let (ma, mb) = fix (a, b) in Bop (op, ma, mb)
     | Cmp (op, a, b) -> let (ma, mb) = fix (a, b) in Cmp (op, ma, mb)

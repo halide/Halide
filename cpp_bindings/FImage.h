@@ -111,6 +111,8 @@ namespace FImage {
 
     class Func : public Named<'f'> {
     public:
+      Func() : function_ptr(NULL) {}
+
       // Define a function
       void define(const std::vector<Expr> &func_args, const Expr &rhs);
 
