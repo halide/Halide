@@ -1,5 +1,6 @@
 open Ir
 open Analysis
+open Hash
 
 module ExprSet = Set.Make (
   struct
