@@ -127,7 +127,6 @@ namespace FImage {
 
 
     Expr operator+(const Expr & a, const Expr & b) {
-        printf("Making an addition node\n");
         Expr e(makeAdd(a.node, b.node));
         e.child(a); 
         e.child(b); 
@@ -407,7 +406,7 @@ namespace FImage {
         }
         arguments[rhs.bufs.size()] = result.data;
 
-        printf("Calling function...\n"); 
+        printf("Calling function at %p\n", function_ptr); 
         function_ptr(&arguments[0]); 
     }
 
@@ -475,14 +474,10 @@ namespace FImage {
     }
 
     Expr Image::operator()(const Expr & a, const Expr & b) {
-        printf("a\n");
         Expr addr = (a * stride[0]) + (b * stride[1]);
-        printf("b\n");
         Expr load(makeLoad(MLVal::fromString(name()), addr.node));
-        printf("c\n");
         load.child(addr);
         load.bufs.push_back(this);
-        printf("d\n");
         return load;
     }
 
