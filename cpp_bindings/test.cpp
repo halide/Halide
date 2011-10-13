@@ -40,6 +40,7 @@ float operator-(const timeval &after, const timeval &before) {
 
 int main(int argc, char **argv) {
     Var x, y;
+    Func f, g;
     Image im(W, H);       
 
     for (int y = 0; y < H; y++) {
@@ -48,30 +49,19 @@ int main(int argc, char **argv) {
         }
     }
 
-    //x.unroll(2);
-    //x.vectorize(4);
-    //y.unroll(4);
-
     printf("Defining function...\n");
-    /*
-    Func f;
-    printf("Making funcref\n");
-    FuncRef fr = f(x, y);
-    printf("Making rhs\n");
-    Expr rhs = im(x, y)+1.0f;
-    printf("Defining...\n");
-    fr = rhs;
-    */
-    Func f;
-    f(x, y) = im(x, y) + im(x+1, y);
+
+    
+    f(x, y) = im(x, y) * im(x+1, y);
+    g(x, y) = f(x, y) * f(x, y+1);
 
     printf("Realizing function...\n");
 
-    Image im2 = f.realize(W-1, H);
+    Image im2 = g.realize(W-1, H-1);
 
     timeval before, after;
     gettimeofday(&before, NULL);
-    f.realize(im2);
+    g.realize(im2);
     gettimeofday(&after, NULL);
     printf("jitted code: %f ms\n", after - before);
 
@@ -87,12 +77,23 @@ int main(int argc, char **argv) {
         }
     }    
     
+    Image tmp(W-1, H);
+    
+
     gettimeofday(&before, NULL);
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W-1; x++) {
-            im2(x, y) = im(x, y) + im(x+1, y);
+            tmp(x, y) = im(x, y) * im(x+1, y);
         }
     }
+
+    for (int y = 0; y < H-1; y++) {
+        for (int x = 0; x < W-1; x++) {
+            im2(x, y) = tmp(x, y) * tmp(x, y+1);
+        }
+    }
+
     gettimeofday(&after, NULL);
     printf("compiled code: %f ms\n", after - before);
 
