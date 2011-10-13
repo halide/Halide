@@ -6,7 +6,7 @@
 <*.top>: use_unix
 
 # Include LLVM paths when compiling ml sources
-<*.ml>: use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine
+<*.{ml,mli}>: use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine
 
 # Compile cimg.c with appropriate flags
 <cimg.c>: cimg_cflags
