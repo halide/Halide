@@ -28,7 +28,7 @@ build/%.o: %.cpp
 	$(CXX) -c $< -o $@
 
 OCAML_LIBS=bigarray.cmxa llvm.cmxa llvm_executionengine.cmxa
-OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx split.cmx vectorize.cmx unroll.cmx constant_fold.cmx schedule.cmx schedule_transforms.cmx lower.cmx break_false_dependence.cmx MLFImage.cmx 
+OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx split.cmx vectorize.cmx unroll.cmx constant_fold.cmx schedule.cmx schedule_transforms.cmx lower.cmx hash.cmx break_false_dependence.cmx MLFImage.cmx 
 OCAML_SOURCES=$(OCAML_MODULES:%.cmx=%.ml)
 OCAMLC=ocamlopt -cc gcc-4.6 -I ../$(OCAML_LLVM_LIB_DIR) -I ../../src -ccopt -O2
 
