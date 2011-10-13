@@ -117,6 +117,32 @@ On Core 2 Xeon with 667mhz DDR2 x 128bits, seems near bandwidth limited, especia
 > Fused with memory reuse: 21.033001 ms
 
 
+2011-10-13 on Reptar:
+
+> Copying input to output: 22.764000 ms
+> Memcpy input to output:  11.235000 ms
+> Unfused scalar:          49.644001 ms
+> Fused scalar:            30.268000 ms
+> Fused with memory reuse: 20.598000 ms
+> Scanline fusion:         23.521999 ms
+> Dynamic scheduling:      31.412001 ms
+> 
+> Copying input to output: 11.756000 ms
+> Memcpy input to output:  9.798000 ms
+> Unfused scalar:          37.836975 ms
+> Fused scalar:            30.445000 ms
+> Fused with memory reuse: 20.625999 ms
+> Scanline fusion:         23.367001 ms
+> Dynamic scheduling:      31.518999 ms
+> 
+> Copying input to output: 12.569000 ms
+> Memcpy input to output:  9.674000 ms
+> Unfused scalar:          38.908001 ms
+> Fused scalar:            30.480000 ms
+> Fused with memory reuse: 20.525999 ms
+> Scanline fusion:         23.396999 ms
+> Dynamic scheduling:      31.327999 ms
+
 2011-10-13 Nehalem (with 4 sockets of bandwidth driving 1 core) behaves very differently
 
 > jrk@bigboy:~/FImage/experiments$ ./a.out 
@@ -170,6 +196,32 @@ On Core 2 Xeon with 667mhz DDR2 x 128bits, seems near bandwidth limited, especia
 > Fused with memory reuse: 20.773001 ms
 > Scanline fusion:         23.183001 ms
 > Dynamic scheduling:      33.490002 ms
+
+2011-10-13 on omap4 (simple gcc -O3):
+
+> Copying input to output: 152.923996 ms
+> Memcpy input to output:  99.945000 ms
+> Unfused scalar:          309.631989 ms
+> Fused scalar:            220.886993 ms
+> Fused with memory reuse: 173.675003 ms
+> Scanline fusion:         220.367004 ms
+> Dynamic scheduling:      245.910995 ms
+> 
+> Copying input to output: 152.068970 ms
+> Memcpy input to output:  100.005997 ms
+> Unfused scalar:          308.807007 ms
+> Fused scalar:            212.981995 ms
+> Fused with memory reuse: 173.186996 ms
+> Scanline fusion:         222.289993 ms
+> Dynamic scheduling:      245.971985 ms
+> 
+> Copying input to output: 152.436005 ms
+> Memcpy input to output:  100.037003 ms
+> Unfused scalar:          308.562988 ms
+> Fused scalar:            213.227005 ms
+> Fused with memory reuse: 173.798004 ms
+> Scanline fusion:         220.612000 ms
+> Dynamic scheduling:      246.582001 ms
 
 
 TODO
