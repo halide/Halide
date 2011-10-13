@@ -1,9 +1,6 @@
 [submodule "llvm"]
 	path = llvm
 	url = git@github.com:jrk/llvm.git
-[submodule "camlimages"]
-	path = camlimages
-	url = https://github.com/jrk/camlimages.git
 [submodule "ImageStack"]
 	path = ImageStack
 	url = git@github.com:mit-gfx/ImageStack.git
