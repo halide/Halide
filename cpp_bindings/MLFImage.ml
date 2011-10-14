@@ -74,22 +74,32 @@ let _ =
   Callback.register "makeBufferArg" (fun str -> Buffer ("." ^ str));
 
   (* Debugging, compilation *)
-  Callback.register "doPrint" (fun a -> Printf.printf "%s\n%!" (string_of_stmt a));
-  Callback.register "doLower" (fun (f:string) (sizes:int list) (env:environment) -> 
+  Callback.register "printStmt" (fun a -> Printf.printf "%s\n%!" (string_of_stmt a));
+
+  Callback.register "printSchedule" (fun s -> print_schedule s);
+
+  Callback.register "makeSchedule" (fun (f: string) (sizes: int list) (env: environment) ->
     let (_, args, _, _) = Environment.find f env in
     let region = List.map2 (fun (t, v) x -> Printf.printf "%s\n" v; (v, IntImm 0, IntImm x)) args sizes in
-    let lowered = lower_function f env (make_default_schedule f env region) in
+    make_default_schedule f env region
+  );
+
+  Callback.register "doLower" (fun (f:string) (env:environment) (sched: schedule_tree) -> 
+    let lowered = lower_function f env sched in
     let lowered = Break_false_dependence.break_false_dependence_stmt lowered in
     let lowered = Constant_fold.constant_fold_stmt lowered in
     lowered
   );
+
   Callback.register "doCompile" (fun a s -> compile a s);
 
-  (* Transformations *)
-  Callback.register "doVectorize" (fun var stmt -> vectorize_stmt var stmt);
-  Callback.register "doUnroll" (fun var stmt -> unroll_stmt var stmt);
-  Callback.register "doSplit" (fun var outer inner n stmt -> split_stmt var outer inner n stmt);
-  Callback.register "doConstantFold" (fun stmt -> constant_fold_stmt stmt);
+  (* Schedule transformations. These partially apply the various ml
+     functions to return an unary function that will transform a schedule
+     in the specified way. *)
+  Callback.register "makeVectorizeTransform" (fun func var -> vectorize_schedule func var);
+  Callback.register "makeUnrollTransform" (fun func var -> unroll_schedule func var);
+  Callback.register "makeSplitTransform" (fun func var outer inner n -> split_schedule func var outer inner n);
+  Callback.register "makeTransposeTransform" (fun func var1 var2 -> transpose_schedule func var1 var2);
 
 
 

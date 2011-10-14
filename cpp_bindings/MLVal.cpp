@@ -112,3 +112,7 @@ MLVal MLVal::operator()(MLVal x, MLVal y, MLVal z, MLVal w) {
 MLVal MLVal::operator()(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e) {
     return (*this)(a, b, c)(d, e);
 }
+
+MLVal MLVal::operator()(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e, MLVal f) {
+    return (*this)(a, b, c)(d, e, f);
+}

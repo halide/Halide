@@ -38,7 +38,8 @@ ML_FUNC2(makeGT);
 ML_FUNC2(makeGE);
 ML_FUNC2(makeLE);
 ML_FUNC3(makeSelect);
-ML_FUNC1(doPrint);
+ML_FUNC1(printStmt);
+ML_FUNC1(printSchedule);
 ML_FUNC1(makeVar);
 ML_FUNC2(makeLoad); // buffer id, idx
 ML_FUNC3(makeStore); // value, buffer id, idx
@@ -51,9 +52,10 @@ ML_FUNC2(makePair);
 ML_FUNC3(makeTriple);
 
 ML_FUNC4(makeFor); // var name, min, n, stmt
-ML_FUNC2(doVectorize);
-ML_FUNC2(doUnroll);
-ML_FUNC5(doSplit);
+ML_FUNC2(makeVectorizeTransform);
+ML_FUNC2(makeUnrollTransform);
+ML_FUNC5(makeSplitTransform);
+ML_FUNC3(makeTransposeTransform);
 ML_FUNC1(doConstantFold);
 
 // Function call stuff
@@ -63,6 +65,7 @@ ML_FUNC3(makeDefinition);
 ML_FUNC0(makeEnv);
 ML_FUNC2(addDefinitionToEnv);
 
+ML_FUNC3(makeSchedule);
 ML_FUNC3(doLower);
 
 namespace FImage {
@@ -206,7 +209,7 @@ namespace FImage {
     
     // Print out an expression
     void Expr::debug() {
-        doPrint(node);
+        printStmt(node);
     }
 
     Var::Var() {
@@ -252,7 +255,7 @@ namespace FImage {
             if (1 /* dangerously assume it's a var */) {
                 if (func_args[i-1].vars.size() != 1) {
                     printf("This was supposed to be a var:\n");
-                    doPrint(func_args[i-1].node);
+                    printStmt(func_args[i-1].node);
                     exit(1);
                 }
                 arglist = addToList(arglist, MLVal::fromString(func_args[i-1].vars[0]->name()));
@@ -264,6 +267,34 @@ namespace FImage {
         definition = makeDefinition(MLVal::fromString(name()), arglist, rhs.node);
 
         *environment = addDefinitionToEnv(*environment, definition);
+    }
+
+    void Func::vectorize(const Var &v) {
+        MLVal t = makeVectorizeTransform(MLVal::fromString(name()),
+                                         MLVal::fromString(v.name()));
+        schedule_transforms.push_back(t);
+    }
+
+    void Func::unroll(const Var &v) {
+        MLVal t = makeUnrollTransform(MLVal::fromString(name()),
+                                      MLVal::fromString(v.name()));        
+        schedule_transforms.push_back(t);
+    }
+
+    void Func::split(const Var &old, const Var &newout, const Var &newin, int factor) {
+        MLVal t = makeSplitTransform(MLVal::fromString(name()),
+                                     MLVal::fromString(old.name()),
+                                     MLVal::fromString(newout.name()),
+                                     MLVal::fromString(newin.name()),
+                                     MLVal::fromInt(factor));
+        schedule_transforms.push_back(t);
+    }
+
+    void Func::transpose(const Var &outer, const Var &inner) {
+        MLVal t = makeTransposeTransform(MLVal::fromString(name()),
+                                         MLVal::fromString(outer.name()),
+                                         MLVal::fromString(inner.name()));
+        schedule_transforms.push_back(t);
     }
 
     Image Func::realize(int a) {        
@@ -306,9 +337,21 @@ namespace FImage {
                 sizes = addToList(sizes, MLVal::fromInt(result.size[i-1]));
             }
 
+            MLVal sched = makeSchedule(MLVal::fromString(name()),
+                                       sizes,
+                                       *Func::environment);
+
+            printf("Transforming schedule...\n");
+            printSchedule(sched);
+            for (size_t i = 0; i < schedule_transforms.size(); i++) {
+                sched = schedule_transforms[i](sched);
+                printSchedule(sched);
+            }
+            printf("Done transforming schedule\n");
+
             MLVal stmt = doLower(MLVal::fromString(name()), 
-                                 sizes, 
-                                 *Func::environment);                                 
+                                 *Func::environment,
+                                 sched);   
 
             // Create a function around it with the appropriate number of args
             printf("\nMaking function...\n");           
@@ -319,7 +362,7 @@ namespace FImage {
                 args = addToList(args, arg);
             }
 
-            doPrint(stmt);
+            printStmt(stmt);
 
             printf("compiling IR -> ll\n");
             MLVal tuple = doCompile(args, stmt);
