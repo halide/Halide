@@ -55,9 +55,17 @@ int main(int argc, char **argv) {
     f(x, y) = im(x, y) * im(x+1, y);
     g(x, y) = f(x, y) * f(x, y+1);
 
+    Var xo, xi;
+
+    g.split(x, xo, xi, 4);
+    //f.chunk(xi);
+    //f.chunk(xi, Range(xo*4, 4) * Range(y, 2));
+    //f.vectorize(x);
+    //g.vectorize(xi);
+
     printf("Realizing function...\n");
 
-    Image im2 = g.realize(W-1, H-1);
+    Image im2 = g.realize(W, H);
 
     timeval before, after;
     gettimeofday(&before, NULL);
