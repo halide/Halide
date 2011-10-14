@@ -85,13 +85,11 @@ let find_schedule (tree:schedule_tree) (name:string) =
   let rec find (tree:schedule_tree) = function
     | [] -> raise (Wtf "find_schedule of empty list")
     | (first::rest) -> 
-        Printf.printf "Resolving %s\n" first;
         let (Tree map) = tree in
         let (cs, sl, subtree) = StringMap.find first map in
         if rest = [] then (cs, sl) else find subtree rest
   in
   let name_parts = split_name name in
-  Printf.printf "split_name %s = %s\n%!" name (String.concat "|" name_parts);
   find tree name_parts
 
 
