@@ -171,6 +171,33 @@ On Core 2 Xeon with 667mhz DDR2 x 128bits, seems near bandwidth limited, especia
 > Scanline fusion:         10.669000 ms
 > Dynamic scheduling:      30.566999 ms
 
+bigboy with 64 parallel processes to eat bandwidth:
+
+> Copying input to output: 120.204002 ms
+> Memcpy input to output:  194.841980 ms
+> Unfused scalar:          234.345001 ms
+> Fused scalar:            196.076996 ms
+> Fused with memory reuse: 109.306000 ms
+> Scanline fusion:         109.264000 ms
+> Dynamic scheduling:      110.752991 ms
+> 
+> Copying input to output: 94.914001 ms
+> Memcpy input to output:  99.106003 ms
+> Unfused scalar:          223.884003 ms
+> Fused scalar:            179.865005 ms
+> Fused with memory reuse: 97.263977 ms
+> Scanline fusion:         97.541000 ms
+> Dynamic scheduling:      101.578003 ms
+> 
+> Copying input to output: 78.621002 ms
+> Memcpy input to output:  86.837997 ms
+> Unfused scalar:          226.574005 ms
+> Fused scalar:            188.838989 ms
+> Fused with memory reuse: 108.750000 ms
+> Scanline fusion:         108.593002 ms
+> Dynamic scheduling:      112.177002 ms
+
+
 2011-10-13 on jrk@luxosr:
 
 > Copying input to output: 16.809000 ms

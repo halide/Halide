@@ -1,6 +1,7 @@
 #include <sys/time.h>
 #include <stdio.h>
 #include <string.h>
+#include "fused_convolution_ispc.h"
 
 #define W 640
 #define H 6400
@@ -120,6 +121,20 @@ int go() {
 
         {
             Image tmp(W, H), output(W, H);
+        
+            before = now();
+
+            ispc::unfused_scalar(W, H, input.data, tmp.data, output.data);
+
+            after = now();
+
+            check(output);
+
+            printf("Unfused scalar ispc:    %f ms\n", after - before);
+        }
+
+        {
+            Image tmp(W, H), output(W, H);
             before = now();
 
             for (int y = 4; y < H - 4; y++) {
@@ -135,6 +150,19 @@ int go() {
             check(output);
 
             printf("Fused scalar:            %f ms\n", after - before);
+        }
+
+        {
+            Image tmp(W, H), output(W, H);
+            before = now();
+            
+            ispc::fused_scalar(W, H, input.data, tmp.data, output.data);
+        
+            after = now();
+
+            check(output);
+
+            printf("Fused scalar ispc:      %f ms\n", after - before);
         }
 
         {
@@ -154,6 +182,19 @@ int go() {
             check(output);
 
             printf("Fused with memory reuse: %f ms\n", after - before);
+        }
+
+        {
+            Image tmp(W, 4), output(W, H);
+            before = now();
+
+            ispc::fused_memory_reuse(W, H, input.data, tmp.data, output.data);
+        
+            after = now();
+
+            check(output);
+
+            printf("Fused with reuse - ispc: %f ms\n", after - before);
         }
 
         {
