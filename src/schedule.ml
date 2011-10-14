@@ -44,6 +44,53 @@ type call_schedule =
   | Inline (* block over nothing - just do in place *)
   | Root (* There is no calling context *)
 
+(* min/size exprs *)
+type region = (dimension * expr * expr) list
+
+let union_region ra rb =
+  (* TODO: this needs to tolerate nil regions for ease of code below *)
+  (* TODO: simplify min/max of exprs *)
+
+let provides (_,args,_,_):definition sched =
+  let args = List.map fst args in
+  let dim_region d =
+    let (min, n) = stride_for_dim d in
+    (d, min, n)
+  in
+  List.fold_left (fun r d -> r @ [dim_region d]) [] args
+
+(* Point requirements, in terms of dimensions of def *)
+let requires (_,_,_,body):definition (callee_name,callee_args,_,_):definition =
+  let rec expr_requires = function
+    | Cast (_, e)
+    | Not e
+    | Load (_, _, e)
+    | Broadcast (e, _) -> expr_requires e
+
+    | Bop (_, a, b)
+    | Cmp (_, a, b)
+    | And (a, b)
+    | Or  (a, b)
+    | Ramp (a, b, _)
+    | ExtractElement (a, b)
+    | Let (_, a, b) -> union_region (expr_requires a) (expr_requires b)
+
+    | Select (a, b, c) ->
+        union_region
+          (expr_requires a)
+          (union_region (expr_requires b) (expr_requires c))
+
+    | MakeVector es ->
+        List.fold_left (fun r e -> union_region r (expr_requires e)) [] es
+
+    | Call (_, name, call_args) when name = callee_name ->
+        List.fold_left2
+          (* concat name, argval, size=1 onto list *)
+          (fun r arg (_,nm) -> r @ [(nm, arg, IntImm(1))])
+          [] call_args callee_args
+
+    (* Immediates, vars, and other calls fall through *)
+    | _ -> []
 
 module StringMap = Map.Make(String)
 
