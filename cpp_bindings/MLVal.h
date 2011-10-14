@@ -22,6 +22,7 @@ public:
     MLVal operator()(MLVal a, MLVal b, MLVal c);
     MLVal operator()(MLVal a, MLVal b, MLVal c, MLVal d);
     MLVal operator()(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e);
+    MLVal operator()(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e, MLVal f);
 
     value &getValue();
 
@@ -73,10 +74,17 @@ public:
 
 
 #define ML_FUNC5(n)                                            \
-  MLVal n(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e) {       \
+    MLVal n(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e) {     \
         static MLVal callback;                                 \
         if (!callback.val) callback = MLVal::find(#n);         \
         return callback(a, b, c, d, e);                        \
+    }
+
+#define ML_FUNC6(n)                                                    \
+    MLVal n(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e, MLVal f) {    \
+        static MLVal callback;                                         \
+        if (!callback.val) callback = MLVal::find(#n);                 \
+        return callback(a, b, c, d, e, f);                             \
     }
  
 #endif

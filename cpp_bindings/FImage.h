@@ -123,12 +123,22 @@ namespace FImage {
       FuncRef operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) {return FuncRef(this, a, b, c, d);}  
       FuncRef operator()(const std::vector<Expr> &args) {return FuncRef(this, args);}
 
-      // Generate an image from this function
+      // Generate an image from this function by Jitting the IR and running it.
       Image realize(int);
       Image realize(int, int);
       Image realize(int, int, int);
       Image realize(int, int, int, int);
       void realize(Image);
+
+      /* These methods generate a partially applied function that
+       * takes a schedule and modifies it. These functions get pushed
+       * onto the schedule_transforms vector, which is traversed in
+       * order starting from an initial default schedule to create a
+       * mutated schedule */
+      void split(const Var &, const Var &, const Var &, int factor);
+      void vectorize(const Var &);
+      void unroll(const Var &);
+      void transpose(const Var &, const Var &);
 
       /* The space of all living functions (TODO: remove a function
          from the environment when it goes out of scope) */
@@ -144,6 +154,10 @@ namespace FImage {
          and the arg list will include a min and max value for every
          free variable. */
       MLVal definition;
+
+      /* A list of schedule transforms to apply when realizing. These should be
+         partially applied ML functions that map a schedule to a schedule. */
+      std::vector<MLVal> schedule_transforms;
 
       // The compiled form of this function
       mutable void (*function_ptr)(void *); 
