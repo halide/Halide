@@ -9,7 +9,9 @@ let make_function_body (name:string) (env:environment) =
     try (String.rindex name '.' + 1)
     with Not_found -> 0 in
   let fname = String.sub name idx_after_last_dot (String.length name - idx_after_last_dot) in 
+  Printf.printf "Looking up %s in the environment\n%!" fname;
   let (_, args, return_type, body) = Environment.find fname env in
+  Printf.printf "Found it\n%!";
   let prefix = name ^ "." in
   let renamed_args = List.map (fun (t, n) -> (t, prefix ^ n)) args in
   let renamed_body = match body with
@@ -19,10 +21,25 @@ let make_function_body (name:string) (env:environment) =
   (renamed_args, return_type, renamed_body)
 
 let make_schedule (name:string) (schedule:schedule_tree) =
+  Printf.printf "Looking up %s in the schedule\n" name;
   let (call_sched, sched_list) = find_schedule schedule name in
+
   (* Prefix all the stuff in the schedule_list *)
+  Printf.printf "Prefixing schedule entry\n";
+
+  (* The prefix for this function *)
   let prefix = (name ^ ".") in
-  let prefix_expr = prefix_name_expr prefix in
+
+  (* The prefix for the calling context *)
+  let caller = 
+    if (String.contains name '.') then
+      let last_dot = String.rindex name '.' in
+      String.sub name 0 (last_dot+1) 
+    else
+      "" 
+  in
+
+  let prefix_expr = prefix_name_expr caller in
   let prefix_schedule = function      
     | Serial     (name, min, size) -> Serial     (prefix ^ name, prefix_expr min, prefix_expr size)
     | Parallel   (name, min, size) -> Parallel   (prefix ^ name, prefix_expr min, prefix_expr size)
@@ -31,7 +48,13 @@ let make_schedule (name:string) (schedule:schedule_tree) =
     | Split (old_dim, new_dim_1, new_dim_2, offset) -> 
         Split (prefix ^ old_dim, prefix ^ new_dim_1, prefix ^ new_dim_2, offset)
   in
-  (call_sched, List.map prefix_schedule sched_list)
+  let prefix_call_sched = function
+    (* Refers to a var in the calling context *)
+    | Chunk v -> 
+        Chunk (caller ^ v)
+    | x -> x
+  in
+  (prefix_call_sched call_sched, List.map prefix_schedule sched_list)
 
 let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
 
@@ -217,9 +240,14 @@ and realize (args, return_type, body) sched_list buffer_name strides =
     | Impure body -> raise (Wtf "I don't know how to realize impure functions yet")            
 
 and lower_function (func:string) (env:environment) (schedule:schedule_tree) =
+  Printf.printf "Making function body\n%!";
   let (args, return_type, body) = make_function_body func env in
+  Printf.printf "Making schedule\n%!";
   let (_, sched_list) = make_schedule func schedule in
+  Printf.printf "Making stride list\n%!";
   let strides = stride_list sched_list (List.map snd args) in
+  Printf.printf "Realizing initial statement\n%!";
   let core = (realize (args, return_type, body) sched_list ".result" strides) in
+  Printf.printf "Recursively lowering function calls\n%!";
   lower_stmt core env schedule
 

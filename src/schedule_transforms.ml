@@ -3,6 +3,7 @@ open Ir
 open Schedule
 open Analysis
 open Util
+open Ir_printer
 
 (* A function definition: (name, args, return type, body) *)
 
@@ -126,3 +127,29 @@ let transpose_schedule (func: string) (outer: string) (inner: string) (schedule:
   in
   let sched_list = fix sched_list None in
   set_schedule schedule func call_sched sched_list  
+
+
+let chunk_schedule (func: string) (var: string) (args: string list) (region: (expr * expr) list) (schedule: schedule_tree) = 
+  Printf.printf "Chunk %s over %s\n" func var;
+  List.iter 
+    (fun (x, y) ->
+      Printf.printf " (%s, %s)\n" (string_of_expr x) (string_of_expr y))
+    region;   
+
+  (* Make a sub-schedule using the arg names and the region. We're
+     assuming all the args are region args for now *)
+  let make_sched name (min, size) = Parallel (name, min, size) in
+  let sched_list = List.map2 make_sched args region in
+
+  (* Find all the calls to func in the schedule *)
+  let calls = find_all_schedule schedule func in
+
+  (* Set each one to be chunked over var with the given region. Note
+     that this doesn't allow for different callsites to be chunked
+     differently! Maybe the argument to this function should be a
+     fully qualified call? *)
+  let set sched call =
+    set_schedule sched call (Chunk var) sched_list 
+  in
+  List.fold_left set schedule calls
+    

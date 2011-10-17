@@ -16,7 +16,7 @@ namespace FImage {
     // objects with unique auto-generated names
     template<char c>
     class Named {
-      public:        
+    public:        
         Named() {
             std::ostringstream ss;
             ss << c;
@@ -26,14 +26,14 @@ namespace FImage {
 
         const std::string &name() const {return _name;}
 
-      private:
+    private:
         static int _instances;
         std::string _name;
     };
 
     // A node in an expression tree.
     class Expr {
-      public:
+    public:
         Expr();
         Expr(MLVal);
         Expr(int32_t);
@@ -54,6 +54,9 @@ namespace FImage {
         // The list of free variables found
         std::vector<Var *> vars;
 
+        // The list of functions directly called
+        std::vector<Func *> funcs;
+
         // declare that this node has a child for bookkeeping
         void child(const Expr &c);
     };
@@ -73,24 +76,33 @@ namespace FImage {
 
     // A loop variable with the given (static) range [min, max)
     class Var : public Expr, public Named<'v'> {
-      public:
+    public:
         Var();
     };
 
+    class Range {
+    public:
+        Range() {}
+        Range(Expr min, Expr size) : range {std::pair<Expr, Expr> {min, size}} {}
+        std::vector<std::pair<Expr, Expr> > range;
+    };
+
+    Range operator*(const Range &a, const Range &b);
+
     // A function call (if you cast it to an expr), or a function definition lhs (if you assign an expr to it).
     class FuncRef {
-      public:
+    public:
         // Yay C++0x initializer lists
-      FuncRef(Func *f, const Expr &a) : 
-        f(f), func_args{a} {}
-      FuncRef(Func *f, const Expr &a, const Expr &b) :
-        f(f), func_args{a, b} {}
-      FuncRef(Func *f, const Expr &a, const Expr &b, const Expr &c) :
-        f(f), func_args{a, b, c} {}
-      FuncRef(Func *f, const Expr &a, const Expr &b, const Expr &c, const Expr &d) : 
-        f(f), func_args{a, b, c, d} {}
-      FuncRef(Func *f, const std::vector<Expr> &args) :
-        f(f), func_args(args) {}
+        FuncRef(Func *f, const Expr &a) : 
+            f(f), func_args{a} {}
+        FuncRef(Func *f, const Expr &a, const Expr &b) :
+            f(f), func_args{a, b} {}
+        FuncRef(Func *f, const Expr &a, const Expr &b, const Expr &c) :
+            f(f), func_args{a, b, c} {}
+        FuncRef(Func *f, const Expr &a, const Expr &b, const Expr &c, const Expr &d) : 
+            f(f), func_args{a, b, c, d} {}
+        FuncRef(Func *f, const std::vector<Expr> &args) :
+            f(f), func_args(args) {}
 
         // Turn it into a function call
         operator Expr();
@@ -111,61 +123,63 @@ namespace FImage {
 
     class Func : public Named<'f'> {
     public:
-      Func() : function_ptr(NULL) {}
+        Func() : function_ptr(NULL) {}
+        
+        // Define a function
+        void define(const std::vector<Expr> &func_args, const Expr &rhs);
+        
+        // Generate a call to the function (or the lhs of a definition)
+        FuncRef operator()(const Expr &a) {return FuncRef(this, a);}
+        FuncRef operator()(const Expr &a, const Expr &b) {return FuncRef(this, a, b);}
+        FuncRef operator()(const Expr &a, const Expr &b, const Expr &c) {return FuncRef(this, a, b, c);}     
+        FuncRef operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) {return FuncRef(this, a, b, c, d);}  
+        FuncRef operator()(const std::vector<Expr> &args) {return FuncRef(this, args);}
+        
+        // Generate an image from this function by Jitting the IR and running it.
+        Image realize(int);
+        Image realize(int, int);
+        Image realize(int, int, int);
+        Image realize(int, int, int, int);
+        void realize(Image);
+        
+        /* These methods generate a partially applied function that
+         * takes a schedule and modifies it. These functions get pushed
+         * onto the schedule_transforms vector, which is traversed in
+         * order starting from an initial default schedule to create a
+         * mutated schedule */
+        void split(const Var &, const Var &, const Var &, int factor);
+        void vectorize(const Var &);
+        void unroll(const Var &);
+        void transpose(const Var &, const Var &);
+        void chunk(const Var &, const Range &);
 
-      // Define a function
-      void define(const std::vector<Expr> &func_args, const Expr &rhs);
+        /* The space of all living functions (TODO: remove a function
+           from the environment when it goes out of scope) */
+        static MLVal *environment;
 
-      // Generate a call to the function (or the lhs of a definition)
-      FuncRef operator()(const Expr &a) {return FuncRef(this, a);}
-      FuncRef operator()(const Expr &a, const Expr &b) {return FuncRef(this, a, b);}
-      FuncRef operator()(const Expr &a, const Expr &b, const Expr &c) {return FuncRef(this, a, b, c);}     
-      FuncRef operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) {return FuncRef(this, a, b, c, d);}  
-      FuncRef operator()(const std::vector<Expr> &args) {return FuncRef(this, args);}
-
-      // Generate an image from this function by Jitting the IR and running it.
-      Image realize(int);
-      Image realize(int, int);
-      Image realize(int, int, int);
-      Image realize(int, int, int, int);
-      void realize(Image);
-
-      /* These methods generate a partially applied function that
-       * takes a schedule and modifies it. These functions get pushed
-       * onto the schedule_transforms vector, which is traversed in
-       * order starting from an initial default schedule to create a
-       * mutated schedule */
-      void split(const Var &, const Var &, const Var &, int factor);
-      void vectorize(const Var &);
-      void unroll(const Var &);
-      void transpose(const Var &, const Var &);
-
-      /* The space of all living functions (TODO: remove a function
-         from the environment when it goes out of scope) */
-      static MLVal *environment;
-
-      // The scalar value returned by the function
-      Expr rhs;
+        // The scalar value returned by the function
+        Expr rhs;
+        MLVal arglist;
 
     protected:
 
-      /* The ML definition object (name, return type, argnames, body)
-         The body here evaluates the function over an entire range,
-         and the arg list will include a min and max value for every
-         free variable. */
-      MLVal definition;
+        /* The ML definition object (name, return type, argnames, body)
+           The body here evaluates the function over an entire range,
+           and the arg list will include a min and max value for every
+           free variable. */
+        MLVal definition;
 
-      /* A list of schedule transforms to apply when realizing. These should be
-         partially applied ML functions that map a schedule to a schedule. */
-      std::vector<MLVal> schedule_transforms;
+        /* A list of schedule transforms to apply when realizing. These should be
+           partially applied ML functions that map a schedule to a schedule. */
+        std::vector<MLVal> schedule_transforms;
 
-      // The compiled form of this function
-      mutable void (*function_ptr)(void *); 
+        // The compiled form of this function
+        mutable void (*function_ptr)(void *); 
     };
 
     // The image type. Has from 1 to 4 dimensions.
     class Image : public Named<'i'> {
-      public:
+    public:
         Image(uint32_t);
         Image(uint32_t, uint32_t);
         Image(uint32_t, uint32_t, uint32_t);
@@ -182,7 +196,7 @@ namespace FImage {
         // Actually look something up in the image. Won't return anything
         // interesting if the image hasn't been evaluated yet.
         float &operator()(int a) {
-          return data[a*stride[0]];
+            return data[a*stride[0]];
         }
         
         float &operator()(int a, int b) {

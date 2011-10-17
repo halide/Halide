@@ -76,7 +76,7 @@ let _ =
   (* Debugging, compilation *)
   Callback.register "printStmt" (fun a -> Printf.printf "%s\n%!" (string_of_stmt a));
 
-  Callback.register "printSchedule" (fun s -> print_schedule s);
+  Callback.register "printSchedule" (fun s -> print_schedule s; Printf.printf "%!");
 
   Callback.register "makeSchedule" (fun (f: string) (sizes: int list) (env: environment) ->
     let (_, args, _, _) = Environment.find f env in
@@ -85,8 +85,11 @@ let _ =
   );
 
   Callback.register "doLower" (fun (f:string) (env:environment) (sched: schedule_tree) -> 
+    Printf.printf "Lowering function\n";
     let lowered = lower_function f env sched in
+    Printf.printf "Breaking false dependences\n";
     let lowered = Break_false_dependence.break_false_dependence_stmt lowered in
+    Printf.printf "Constant folding\n";
     let lowered = Constant_fold.constant_fold_stmt lowered in
     lowered
   );
@@ -100,6 +103,6 @@ let _ =
   Callback.register "makeUnrollTransform" (fun func var -> unroll_schedule func var);
   Callback.register "makeSplitTransform" (fun func var outer inner n -> split_schedule func var outer inner n);
   Callback.register "makeTransposeTransform" (fun func var1 var2 -> transpose_schedule func var1 var2);
-
+  Callback.register "makeChunkTransform" (fun func var args region -> chunk_schedule func var args region);
 
 

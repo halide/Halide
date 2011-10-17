@@ -4,9 +4,9 @@ OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
 
 OCAML_LIB_DIR=/usr/local/lib/ocaml
 LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags)
-CXX=gcc-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -Werror -ffast-math $(LLVM_CFLAGS_CXX) -O3
+CXX=g++-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -Werror -ffast-math $(LLVM_CFLAGS_CXX) -O3
 
-all: test test_functions
+all: test test_functions test_chunk
 
 LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs codegen jit x86 bitwriter interpreter)
 LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_analysis -lllvm_target
@@ -19,6 +19,9 @@ test: MLFImage.a build/test.o
 
 test_functions: MLFImage.a build/test_functions.o
 	$(CXX) build/test_functions.o MLFImage.a -o test_functions $(LIBS)
+
+test_chunk: MLFImage.a build/test_chunk.o
+	$(CXX) build/test_chunk.o MLFImage.a -o test_chunk $(LIBS)
 
 MLFImage.a: build/_MLFImage.o build/FImage.o build/MLVal.o build/elf.o
 	cp $(OCAML_LIB_DIR)/libasmrun.a MLFImage.a
