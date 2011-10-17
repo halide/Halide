@@ -48,85 +48,113 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
 (* Add a split to a schedule *)
 let split_schedule (func: string) (var: string) (newouter: string) 
     (newinner: string) (factor: int) (schedule: schedule_tree) =
-  let (call_sched, sched_list) = find_schedule schedule func in
-  (* Find var in the sched_list *)
-  let fix = function
-    | Parallel (v, min, size) when v = var ->
-        assert (Analysis.reduce_expr_modulo size factor = Some 0);
-        [Split (var, newouter, newinner, min);
-         Parallel (newinner, IntImm 0, IntImm factor);
-         Parallel (newouter, IntImm 0, Constant_fold.constant_fold_expr (size /~ (IntImm factor)))]
-    | Serial (v, min, size) when v = var ->
-        assert (Analysis.reduce_expr_modulo size factor = Some 0);
-        [Split (var, newouter, newinner, min);
-         Serial (newinner, IntImm 0, IntImm factor);
-         Serial (newouter, IntImm 0, Constant_fold.constant_fold_expr (size /~ (IntImm factor)))]
-    | x -> [x]
-  in
 
-  let sched_list = List.concat (List.map fix sched_list) in
-  set_schedule schedule func call_sched sched_list
-  
+  Printf.printf "Splitting %s into %s * %d + %s in %s\n" var newouter factor newinner func;
+
+  (* Find all the calls to func in the schedule *)
+  let calls = find_all_schedule schedule func in
+
+  let set schedule func = 
+    let (call_sched, sched_list) = find_schedule schedule func in
+    (* Find var in the sched_list *)
+    let fix = function
+      | Parallel (v, min, size) when v = var ->
+          assert (Analysis.reduce_expr_modulo size factor = Some 0);
+          [Split (var, newouter, newinner, min);
+           Parallel (newinner, IntImm 0, IntImm factor);
+           Parallel (newouter, IntImm 0, Constant_fold.constant_fold_expr (size /~ (IntImm factor)))]
+      | Serial (v, min, size) when v = var ->
+          assert (Analysis.reduce_expr_modulo size factor = Some 0);
+          [Split (var, newouter, newinner, min);
+           Serial (newinner, IntImm 0, IntImm factor);
+           Serial (newouter, IntImm 0, Constant_fold.constant_fold_expr (size /~ (IntImm factor)))]
+      | x -> [x]
+    in
+    let sched_list = List.concat (List.map fix sched_list) in
+    set_schedule schedule func call_sched sched_list
+  in
+  List.fold_left set schedule calls
+
 (* Vectorize a parallel for *)
 let vectorize_schedule (func: string) (var: string) (schedule: schedule_tree) =
-  let (call_sched, sched_list) = find_schedule schedule func in
-  (* Find var in the sched_list *)
-  let fix = function
-    | Parallel (v, min, size) when v = var ->
-        begin match size with 
-          | IntImm x -> Vectorized (v, min, x)
-          | _ -> raise (Wtf "Can't vectorize a var with non-const bounds")
-        end
-    | x -> x
-  in
 
-  let sched_list = List.map fix sched_list in
-  set_schedule schedule func call_sched sched_list
+  (* Find all the calls to func in the schedule *)
+  let calls = find_all_schedule schedule func in
+
+  let set schedule func = 
+    let (call_sched, sched_list) = find_schedule schedule func in
+    (* Find var in the sched_list *)
+    Printf.printf "Vectorizing %s over %s\n%!" func var;
+    let fix = function
+      | Parallel (v, min, size) when v = var ->
+          begin match size with 
+            | IntImm x -> Vectorized (v, min, x)
+            | _ -> raise (Wtf "Can't vectorize a var with non-const bounds")
+          end
+      | x -> x
+    in    
+    let sched_list = List.map fix sched_list in
+    set_schedule schedule func call_sched sched_list
+  in
+  List.fold_left set schedule calls
 
 (* Unroll a parallel or serial for *)
 let unroll_schedule (func: string) (var: string) (schedule: schedule_tree) =
-  let (call_sched, sched_list) = find_schedule schedule func in
-  (* Find var in the sched_list *)
-  let fix = function
-    | Serial (v, min, size) 
-    | Parallel (v, min, size) when v = var ->
-        begin match size with 
-          | IntImm x -> Unrolled (v, min, x)
-          | _ -> raise (Wtf "Can't unroll a var with non-const bounds")
-        end
-    | x -> x
-  in
 
-  let sched_list = List.map fix sched_list in
-  set_schedule schedule func call_sched sched_list
-    
+  (* Find all the calls to func in the schedule *)
+  let calls = find_all_schedule schedule func in
+  
+  let set schedule func =
+    let (call_sched, sched_list) = find_schedule schedule func in
+    (* Find var in the sched_list *)
+    Printf.printf "Unrolling %s over %s\n%!" func var;
+    let fix = function
+      | Serial (v, min, size) 
+      | Parallel (v, min, size) when v = var ->
+          begin match size with 
+            | IntImm x -> Unrolled (v, min, x)
+            | _ -> raise (Wtf "Can't unroll a var with non-const bounds")
+          end
+      | x -> x
+    in
+    let sched_list = List.map fix sched_list in
+    set_schedule schedule func call_sched sched_list
+  in
+  List.fold_left set schedule calls
+
 (* Push one var to be outside another *)
 let transpose_schedule (func: string) (outer: string) (inner: string) (schedule: schedule_tree) = 
-  let (call_sched, sched_list) = find_schedule schedule func in
-  (* Find var in the sched_list *)
-  Printf.printf "Moving %s outside %s\n" outer inner;
-  let rec fix l x = match l with
-    | [] -> raise (Wtf (inner ^ " does not exist in this schedule"))
-    | ((Serial (v, _, _))::rest)
-    | ((Parallel (v, _, _))::rest)
-    | ((Vectorized (v, _, _))::rest) 
-    | ((Unrolled (v, _, _))::rest) ->
-        if v = outer then begin
-          Printf.printf "Found %s\n" outer;
-          fix rest (Some (List.hd l))
-        end else if v = inner then begin
-          Printf.printf "Found %s\n" inner;
-          begin match x with 
-            | Some x -> (List.hd l) :: (x :: rest)
-            | None -> raise (Wtf (outer ^ "is already outside" ^ inner ^ "\n"))
+  (* Find all the calls to func in the schedule *)
+  let calls = find_all_schedule schedule func in
+
+  let set schedule func =
+    let (call_sched, sched_list) = find_schedule schedule func in
+    (* Find var in the sched_list *)
+    Printf.printf "Moving %s outside %s in %s\n%!" outer inner func;
+    let rec fix l x = match l with
+      | [] -> raise (Wtf (inner ^ " does not exist in this schedule"))
+      | ((Serial (v, _, _))::rest)
+      | ((Parallel (v, _, _))::rest)
+      | ((Vectorized (v, _, _))::rest) 
+      | ((Unrolled (v, _, _))::rest) ->
+          if v = outer then begin
+            Printf.printf "Found %s\n" outer;
+            fix rest (Some (List.hd l))
+          end else if v = inner then begin
+            Printf.printf "Found %s\n" inner;
+            begin match x with 
+              | Some x -> (List.hd l) :: (x :: rest)
+              | None -> raise (Wtf (outer ^ "is already outside" ^ inner ^ "\n"))
+            end
+          end else begin
+            (List.hd l)::(fix rest x)
           end
-        end else begin
-          (List.hd l)::(fix rest x)
-        end
-    | (first::rest) -> first :: (fix rest x)
+      | (first::rest) -> first :: (fix rest x)
+    in
+    let sched_list = fix sched_list None in
+    set_schedule schedule func call_sched sched_list  
   in
-  let sched_list = fix sched_list None in
-  set_schedule schedule func call_sched sched_list  
+  List.fold_left set schedule calls
 
 
 let chunk_schedule (func: string) (var: string) (args: string list) (region: (expr * expr) list) (schedule: schedule_tree) = 
@@ -151,5 +179,8 @@ let chunk_schedule (func: string) (var: string) (args: string list) (region: (ex
   let set sched call =
     set_schedule sched call (Chunk var) sched_list 
   in
+
+  Printf.printf "Done chunking\n%!";
+
   List.fold_left set schedule calls
     
