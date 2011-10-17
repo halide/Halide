@@ -46,7 +46,7 @@ let make_schedule (name:string) (schedule:schedule_tree) =
     | Unrolled   (name, min, size) -> Unrolled   (prefix ^ name, prefix_expr min, size)
     | Vectorized (name, min, size) -> Vectorized (prefix ^ name, prefix_expr min, size)
     | Split (old_dim, new_dim_1, new_dim_2, offset) -> 
-        Split (prefix ^ old_dim, prefix ^ new_dim_1, prefix ^ new_dim_2, offset)
+        Split (prefix ^ old_dim, prefix ^ new_dim_1, prefix ^ new_dim_2, prefix_expr offset)
   in
   let prefix_call_sched = function
     (* Refers to a var in the calling context *)
