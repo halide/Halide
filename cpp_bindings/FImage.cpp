@@ -56,6 +56,7 @@ ML_FUNC2(makeVectorizeTransform);
 ML_FUNC2(makeUnrollTransform);
 ML_FUNC5(makeSplitTransform);
 ML_FUNC3(makeTransposeTransform);
+ML_FUNC4(makeChunkTransform);
 ML_FUNC1(doConstantFold);
 
 // Function call stuff
@@ -106,6 +107,7 @@ namespace FImage {
     void Expr::child(const Expr &c) {
         unify(bufs, c.bufs);
         unify(vars, c.vars);
+        unify(funcs, c.funcs);
     }
 
     void Expr::operator+=(const Expr & other) {
@@ -237,6 +239,10 @@ namespace FImage {
         // Reach through the call to extract buffer dependencies (but not free vars)
         unify(call.bufs, f->rhs.bufs);
 
+        // Add this function call to the calls list
+        call.funcs.push_back(f);
+        unify(call.funcs, f->rhs.funcs);
+
         return call;
     }
 
@@ -250,7 +256,7 @@ namespace FImage {
 
         // TODO: Mutate the rhs: Convert scatters to scalar-valued functions by wrapping them in a let
         
-        MLVal arglist = makeList();
+        arglist = makeList();
         for (size_t i = func_args.size(); i > 0; i--) {
             if (1 /* dangerously assume it's a var */) {
                 if (func_args[i-1].vars.size() != 1) {
@@ -294,6 +300,19 @@ namespace FImage {
         MLVal t = makeTransposeTransform(MLVal::fromString(name()),
                                          MLVal::fromString(outer.name()),
                                          MLVal::fromString(inner.name()));
+        schedule_transforms.push_back(t);
+    }
+
+    void Func::chunk(const Var &caller_var, const Range &region) {
+        MLVal r = makeList();
+        for (size_t i = region.range.size(); i > 0; i--) {
+            r = addToList(r, makePair(region.range[i-1].first.node, region.range[i-1].second.node));
+        }
+
+        MLVal t = makeChunkTransform(MLVal::fromString(name()),
+                                     MLVal::fromString(caller_var.name()),
+                                     arglist,
+                                     r);
         schedule_transforms.push_back(t);
     }
 
@@ -347,6 +366,16 @@ namespace FImage {
                 sched = schedule_transforms[i](sched);
                 printSchedule(sched);
             }
+            
+            for (size_t i = 0; i < rhs.funcs.size(); i++) {
+                Func *f = rhs.funcs[i];
+                for (size_t j = 0; j < f->schedule_transforms.size(); j++) {
+                    MLVal t = f->schedule_transforms[j];
+                    sched = t(sched);
+                    printSchedule(sched);
+                }
+            }
+
             printf("Done transforming schedule\n");
 
             MLVal stmt = doLower(MLVal::fromString(name()), 
@@ -540,4 +569,15 @@ namespace FImage {
         return load;
     }
 
+    Range operator*(const Range &a, const Range &b) {
+        Range region;
+        region.range.resize(a.range.size() + b.range.size());
+        for (size_t i = 0; i < a.range.size(); i++) {
+            region.range[i] = a.range[i];
+        }
+        for (size_t i = 0; i < b.range.size(); i++) {
+            region.range[a.range.size() + i] = b.range[i];
+        }
+        return region;
+    }
 }

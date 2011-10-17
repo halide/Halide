@@ -55,11 +55,13 @@ int main(int argc, char **argv) {
     f(x, y) = im(x, y) * im(x+1, y);
     g(x, y) = f(x, y) * f(x, y+1);
 
-    Var xo, xi;
+    Var xo, xi, yo, yi;
 
+    g.split(y, yo, yi, 4);
     g.split(x, xo, xi, 4);
+    g.transpose(xo, yi);
     //f.chunk(xi);
-    //f.chunk(xi, Range(xo*4, 4) * Range(y, 2));
+    f.chunk(yi, Range(xo*4, 4) * Range(yo*4, 5));
     //f.vectorize(x);
     //g.vectorize(xi);
 

@@ -45,9 +45,10 @@ type call_schedule =
   | Root (* There is no calling context *)
 
 (* min/size exprs *)
+(*
 type region = (dimension * expr * expr) list
 
-let union_region ra rb =
+let union_region ra rb = 
   (* TODO: this needs to tolerate nil regions for ease of code below *)
   (* TODO: simplify min/max of exprs *)
 
@@ -91,6 +92,7 @@ let requires (_,_,_,body):definition (callee_name,callee_args,_,_):definition =
 
     (* Immediates, vars, and other calls fall through *)
     | _ -> []
+        *)
 
 module StringMap = Map.Make(String)
 
@@ -160,6 +162,27 @@ let rec set_schedule
   set tree (split_name call)
 
 and empty_schedule = Tree StringMap.empty
+
+let find_all_schedule (tree:schedule_tree) (name:string) =
+  let ends_with substr str =
+    let strlen = String.length str in
+    let substrlen = String.length substr in
+    let suffix = String.sub str (strlen - substrlen) substrlen in
+    substr = suffix      
+  in
+  let rec find prefix = function
+    | Tree tree ->
+        let process_key key (_, _, subtree) list = 
+          let prefixed_key = prefix ^ key in
+          let subresults = (find (prefixed_key ^ ".") subtree) @ list in
+          if ends_with name key then
+            prefixed_key :: subresults
+          else
+            subresults
+        in
+        StringMap.fold process_key tree []
+  in
+  find "" (tree)
 
 let string_of_call_schedule = function
   | Chunk d -> "Chunk " ^ d 
