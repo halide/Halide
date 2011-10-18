@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            im(x, y) = 0.11;
+            im(x, y) = 1;
         }
     }
 
@@ -53,31 +53,35 @@ int main(int argc, char **argv) {
     
 
 
-    f(x, y) = do_math<Expr>(im(x, y), im(x+3, y));
-    h(x, y) = Debug(f(x, y), "Evaluating f at: ", x, y, f(x, y));
-    g(x, y) = do_math<Expr>(h(x, y), h(x, y+3));
+    //f(x, y) = Debug(do_math<Expr>(im(x, y), im(x+3, y)), "Evaluating f at: ", x, y);
+    //g(x, y) = Debug(do_math<Expr>(f(x, y), f(x, y+3)), "Evaluating g at: ", x, y);
 
-    //f(x, y) = im(x, y) + im(x+1, y);
-    //g(x, y) = f(x, y) + f(x, y+1);
+    f(x, y) = do_math<Expr>(im(x, y), im(x+3, y));
+    g(x, y) = do_math<Expr>(f(x, y), f(x, y+3));
+    h(x, y) = do_math<Expr>(g(x+3, y), g(x, y));
 
     Var xo, xi, yo, yi;
 
     if (argc > 1) {
         int chunk = atoi(argv[1]);
-        g.split(y, yo, yi, chunk);
-        h.chunk(yi, Range(0, W) * Range(yo*chunk, chunk+4));
-
-        //g.split(x, xo, xi, 4);
-        //g.vectorize(xi);
+        h.split(y, yo, yi, chunk);
+        g.chunk(yi, Range(0, W+4) * Range(yo*chunk, chunk));
+        f.chunk(y, Range(0, W+4) * Range(yo*chunk, chunk+3)); 
 
         h.split(x, xo, xi, 4);
         h.vectorize(xi);
+
+        g.split(x, xo, xi, 4);
+        g.vectorize(xi);
+
+        f.split(x, xo, xi, 4);
+        f.vectorize(xi);
     }
 
 
     printf("Realizing function...\n");
 
-    Image im2 = g.realize(W, H);
+    Image im2 = h.realize(W, H);
 
     timeval before, after;
     gettimeofday(&before, NULL);
