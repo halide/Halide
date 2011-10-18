@@ -206,9 +206,11 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
 
     (* Unpacking vectors *)
     | ExtractElement(e, n) ->
-      let v = cg_expr e in
-      let idx = cg_expr (Cast(u32, n)) in
-      build_extractelement v idx "" b
+        let v = cg_expr e in
+        let idx = cg_expr (Cast(u32, n)) in
+        build_extractelement v idx "" b
+
+    | Debug(e, prefix, args) -> cg_debug e prefix args
 
     (* TODO: fill out other ops *)
     | e ->
@@ -484,6 +486,42 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
     (* build getelementpointer into buffer *)
     let gep = build_gep ptr [| cg_expr idx |] "memref" b in
     build_pointercast gep (pointer_type (type_of_val_type vt)) "typed_memref" b
+      
+  and cg_debug e prefix args =
+    let ll_e = cg_expr e in
+
+    (* Generate a format string and values to print for a printf *)
+    let rec fmt_string x = match val_type_of_expr x with
+      | Int _ -> ("%d", [Cast (i32, x)])
+      | Float _ -> ("%f", [Cast (f32, x)])
+      | UInt _ -> ("%u", [Cast (u32, x)])
+      | IntVector (_, n) | UIntVector (_, n) | FloatVector (_, n) -> 
+          let elements = List.map (fun idx -> ExtractElement (x, IntImm idx)) (0 -- n) in
+          let subformats = List.map fmt_string elements in
+          ("[" ^ (String.concat ", " (List.map fst subformats)) ^ "]",
+           List.concat (List.map snd subformats))
+    in
+    
+    let fmts = List.map fmt_string args in
+    let fmt = String.concat ", " (List.map fst fmts) in
+    let args = List.concat (List.map snd fmts) in
+
+    let ll_fmt = const_stringz c (prefix ^ fmt ^ "\n") in    
+    let ll_args = List.map cg_expr args in
+
+    let global_fmt = define_global "debug_fmt" ll_fmt m in
+    let global_fmt = build_pointercast global_fmt (pointer_type (i8_type c)) "" b in
+
+    Printf.printf "cg_debug: %s %s %s\n" (string_of_expr e) (prefix^fmt) (String.concat ", " (List.map string_of_expr args));
+
+    Printf.printf "%s\n%!" (string_of_lltype (type_of global_fmt));
+
+    let ll_printf = declare_function "printf" 
+      (var_arg_function_type (i32_type c) [|pointer_type (i8_type c)|]) m in
+    ignore(build_call ll_printf (Array.of_list (global_fmt::ll_args)) "" b);
+
+    ll_e
+      
   in
 
   (* actually generate from the root statement *)
@@ -498,7 +536,8 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
   
   (* return generated module and function *)
   (m,entrypoint_fn)
-    
+
+
 (*
  * Wrappers
  *)

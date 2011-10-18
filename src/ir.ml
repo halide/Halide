@@ -125,6 +125,9 @@ type expr =
   (* Let expressions *)
   | Let of string * expr * expr
 
+  (* An IR node for debugging. Evaluates to the sub-expression, but printf out to stderr when it gets evaluated *)
+  | Debug of expr * string * (expr list)
+
 and buffer = string (* just a name for now *)
 
 exception ArithmeticTypeMismatch of val_type * val_type
@@ -147,6 +150,7 @@ let rec val_type_of_expr = function
      should be a bool or bool vector) *)
   | And (e, _) 
   | Or (e, _) 
+  | Debug (e, _, _) 
   | Not e -> val_type_of_expr e
 
   (* Comparisons on vector types return bool vectors of equal length*)

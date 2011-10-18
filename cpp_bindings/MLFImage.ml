@@ -57,6 +57,7 @@ let _ =
   Callback.register "makeFor" (fun var min n stmt -> For (var, min, n, true, stmt));
   Callback.register "makePipeline" (fun name size produce consume -> Pipeline (name, f32, size, produce, consume));
   Callback.register "makeCall" (fun name args -> Call (f32, name, args));
+  Callback.register "makeDebug" (fun e prefix args -> Debug (e, prefix, args));
   Callback.register "makeDefinition" (fun name argnames body -> Printf.printf "I got the name %s\n%!" name; (name, List.map (fun x -> (i32, x)) argnames, f32, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);
   Callback.register "addDefinitionToEnv" (fun env def -> 

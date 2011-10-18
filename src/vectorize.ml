@@ -56,6 +56,8 @@ let vectorize_expr (var:string) (min:expr) (width:int) (expr:expr) =
     (* Vectorized Var vectorizes to strided expression version of itself *)
     | Var (t, name) -> assert (name = var && t = i32); Ramp (min, IntImm 1, width)
 
+    | Debug (e, prefix, args) -> Debug (vec e, prefix, List.map vec args)
+
     | _ -> raise (Wtf("Can't vectorize vector code"))
   in vec expr
 
