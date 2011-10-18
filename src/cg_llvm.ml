@@ -359,24 +359,43 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
     | Block _ -> raise (Wtf "cg_stmt of empty block")
     (* | _ -> raise UnimplementedInstruction *)
     | Pipeline (name, ty, size, produce, consume) ->
-      (* Todo: codegen size and alloc more than one *)
-      let current = insertion_block b in
-      position_before alloca_end b;
-      let scratch = build_array_alloca (type_of_val_type ty) (cg_expr size) "" b in
-      position_at_end current b;
 
-      (* push the symbol environment *)
-      sym_add name scratch;
+        (* Force the alignment to be a multiple of 128 bits. This is
+           platform specific, but we're planning to remove alloca at some
+           stage anyway *)
+        let width_multiplier = 128 / (bit_width ty) in
+        let upgraded_type = 
+          if width_multiplier > 1 then
+            vector_of_val_type ty width_multiplier 
+          else
+            ty
+        in
 
-      ignore (cg_stmt produce);
-      let res = cg_stmt consume in
+        let upgraded_size = 
+          if width_multiplier > 1 then
+            (size /~ (IntImm width_multiplier)) +~ (IntImm 1)
+          else
+            size
+        in
 
-      (* pop the symbol environment *)
-      sym_remove name;
+        let current = insertion_block b in
+        position_before alloca_end b;
+        let scratch = build_array_alloca (type_of_val_type upgraded_type) (cg_expr upgraded_size) "" b in
+        position_at_end current b;
 
-      res
+        (* push the symbol environment *)
+        sym_add name scratch;
+
+        ignore (cg_stmt produce);
+        let res = cg_stmt consume in
+
+        (* pop the symbol environment *)
+        sym_remove name;
+
+        res
 
   and cg_store e buf idx =
+    (* ignore(cg_debug e ("Store to " ^ buf ^ " ") [idx; e]); *)
     match (is_vector e, is_vector idx) with
       | (_, true) ->
         begin match idx with
@@ -410,6 +429,7 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
 
 
   and cg_load t buf idx =
+    (* ignore(cg_debug idx ("Load " ^ (string_of_val_type t) ^ " from " ^ buf ^ " ") [idx]); *)
     match (vector_elements t, is_vector idx) with 
         (* scalar load *)
       | (1, false) -> build_load (cg_memref t buf idx) "" b 
@@ -508,7 +528,7 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
 
     let ll_fmt = const_stringz c (prefix ^ fmt ^ "\n") in    
     let ll_args = List.map cg_expr args in
-
+    
     let global_fmt = define_global "debug_fmt" ll_fmt m in
     let global_fmt = build_pointercast global_fmt (pointer_type (i8_type c)) "" b in
 
