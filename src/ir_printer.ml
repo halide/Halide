@@ -40,6 +40,8 @@ and string_of_expr = function
   | Ramp(b, s, n) -> "ramp[" ^ string_of_expr b ^ ", " ^ string_of_expr s ^ ", " ^ string_of_int n ^ "]"
   | ExtractElement(a, b) -> "(" ^ string_of_expr a ^ "@" ^ string_of_expr b ^ ")"
   | Let(n, a, b) -> "(let " ^ n ^ " = " ^ string_of_expr a ^ " in " ^ string_of_expr b ^ ")"
+  | Debug(e, prefix, args) -> "Debug(" ^ string_of_expr e ^ ", " ^ prefix ^ " " ^ 
+      (String.concat ", " (List.map string_of_expr args)) ^ ")"
   | _ -> "<<UNHANDLED>>"
 
 and string_of_stmt = function

@@ -38,6 +38,7 @@ ML_FUNC2(makeGT);
 ML_FUNC2(makeGE);
 ML_FUNC2(makeLE);
 ML_FUNC3(makeSelect);
+ML_FUNC3(makeDebug);
 ML_FUNC1(printStmt);
 ML_FUNC1(printSchedule);
 ML_FUNC1(makeVar);
@@ -580,4 +581,51 @@ namespace FImage {
         }
         return region;
     }
+
+    Expr Debug(Expr e, const std::string &prefix, const std::vector<Expr> &args) {
+        MLVal mlargs = makeList();
+        for (size_t i = args.size(); i > 0; i--) {
+            mlargs = addToList(mlargs, args[i-1].node);
+        }
+
+        Expr d(makeDebug(e.node, MLVal::fromString(prefix), mlargs));        
+        d.child(e);
+        for (size_t i = 0; i < args.size(); i++) {
+            d.child(args[i]);
+        }
+        return d;
+    }
+
+    Expr Debug(Expr expr, const std::string &prefix) {
+        std::vector<Expr> args;
+        return Debug(expr, prefix, args);
+    }
+
+    Expr Debug(Expr expr, const std::string &prefix, Expr a) {
+        std::vector<Expr> args {a};
+        return Debug(expr, prefix, args);
+    }
+
+    Expr Debug(Expr expr, const std::string &prefix, Expr a, Expr b) {
+        std::vector<Expr> args {a, b};
+        return Debug(expr, prefix, args);
+    }
+
+    Expr Debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c) {
+        std::vector<Expr> args {a, b, c};
+        return Debug(expr, prefix, args);
+    }
+
+
+    Expr Debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d) {
+        std::vector<Expr> args {a, b, c, d};
+        return Debug(expr, prefix, args);
+    }
+
+    Expr Debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d, Expr e) {
+        std::vector<Expr> args {a, b, c, d, e};
+        return Debug(expr, prefix, args);
+    }
+
+
 }

@@ -100,6 +100,10 @@ let rec hash_expr e =
     | ExtractElement (a, b) ->
       hash_combine3 (hash_str "<ExtractElement>") (hash_expr a) (hash_expr b)
     | Call (ty, name, args) ->
-      List.fold_left hash_combine2 
-        (hash_combine3 (hash_str "<Call>") (hash_str name) (hash_type ty))
-        (List.map hash_expr args)
+        List.fold_left hash_combine2 
+          (hash_combine3 (hash_str "<Call>") (hash_str name) (hash_type ty))
+          (List.map hash_expr args)
+    | Debug (e, fmt, args) ->
+        List.fold_left hash_combine2 
+          (hash_combine3 (hash_str "<Debug>") (hash_str fmt) (hash_expr e))
+          (List.map hash_expr args)

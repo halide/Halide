@@ -27,8 +27,8 @@ struct _do_math<T, 0> {
 };
 
 template<typename T>
-T do_math(const T &a, const T &b) {
-    return _do_math<T,2>::go(a, b);
+inline T do_math(const T &a, const T &b) {
+    return _do_math<T,0>::go(a, b);
 }
 
 
@@ -40,20 +40,22 @@ float operator-(const timeval &after, const timeval &before) {
 
 int main(int argc, char **argv) {
     Var x, y;
-    Func f, g;
+    Func f, g, h;
     Image im(W+16, H+16);       
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            im(x, y) = x+y;
+            im(x, y) = 0.11;
         }
     }
 
     printf("Defining function...\n");
     
 
-    f(x, y) = im(x, y) + im(x+1, y) + im(x+2, y) + im(x+3, y) + im(x+4, y);
-    g(x, y) = f(x, y) + f(x, y+1) + f(x, y+2) + f(x, y+3) + f(x, y+4);
+
+    f(x, y) = do_math<Expr>(im(x, y), im(x+3, y));
+    h(x, y) = Debug(f(x, y), "Evaluating f at: ", x, y, f(x, y));
+    g(x, y) = do_math<Expr>(h(x, y), h(x, y+3));
 
     //f(x, y) = im(x, y) + im(x+1, y);
     //g(x, y) = f(x, y) + f(x, y+1);
@@ -63,13 +65,13 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         int chunk = atoi(argv[1]);
         g.split(y, yo, yi, chunk);
-        f.chunk(yi, Range(0, W) * Range(yo*chunk, chunk+4));
+        h.chunk(yi, Range(0, W) * Range(yo*chunk, chunk+4));
 
-        g.split(x, xo, xi, 4);
-        g.vectorize(xi);
+        //g.split(x, xo, xi, 4);
+        //g.vectorize(xi);
 
-        f.split(x, xo, xi, 4);
-        f.vectorize(xi);
+        h.split(x, xo, xi, 4);
+        h.vectorize(xi);
     }
 
 
@@ -102,13 +104,13 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            tmp(x, y) = im(x, y) + im(x+1, y) + im(x+2, y) + im(x+3, y) + im(x+4, y);
+            tmp(x, y) = do_math(im(x, y), im(x+3, y));
         }
     }
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            im2(x, y) = tmp(x, y) + tmp(x, y+1) + tmp(x, y+2) + tmp(x, y+3) + tmp(x, y+4);
+            im2(x, y) = do_math(tmp(x, y), tmp(x, y+3));
         }
     }
 

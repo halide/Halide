@@ -74,6 +74,14 @@ namespace FImage {
     Expr operator!=(const Expr &, const Expr &);
     Expr operator==(const Expr &, const Expr &);
 
+    // Make a debug node
+    Expr Debug(Expr, const std::string &prefix);
+    Expr Debug(Expr, const std::string &prefix, Expr a);
+    Expr Debug(Expr, const std::string &prefix, Expr a, Expr b);
+    Expr Debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c);
+    Expr Debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d);
+    Expr Debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d, Expr e);
+
     // A loop variable with the given (static) range [min, max)
     class Var : public Expr, public Named<'v'> {
     public:

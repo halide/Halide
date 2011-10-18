@@ -89,6 +89,8 @@ let fold_children_in_expr mutator combiner base_case = function
   | MakeVector l
   | Call (_, _, l)        -> List.fold_left combiner base_case (List.map mutator l)
 
+  | Debug (e, _, l)       -> List.fold_left combiner (mutator e) (List.map mutator l)
+
   | x                     -> base_case
 
 let fold_children_in_stmt expr_mutator stmt_mutator combiner = function
@@ -128,6 +130,7 @@ let mutate_children_in_expr mutator = function
   | ExtractElement (a, b) -> ExtractElement (mutator a, mutator b)
   | Call (t, f, args)     -> Call (t, f, List.map mutator args)
   | Let (n, a, b)         -> Let (n, mutator a, mutator b)
+  | Debug (e, fmt, args)  -> Debug (mutator e, fmt, List.map mutator args)
   | x -> x
     
 let mutate_children_in_stmt expr_mutator stmt_mutator = function
