@@ -22,6 +22,7 @@ typedef union {
     void* ptr;
     int64_t i64;
     int32_t i32;
+    float f32;
 } ArgT;
 
 extern "C" {
@@ -99,28 +100,38 @@ int main(int argc, const char* argv[]) {
 
     printf("in: %s, out: %s\n", inpath, outpath);
 
-    unsigned char *in, *out;
+    unsigned char *inpng, *outpng;
     int width, height, channels;
     
-    if (!load_png(inpath, &width, &height, &channels, &in)) {
+    if (!load_png(inpath, &width, &height, &channels, &inpng)) {
         fprintf(stderr, "Error loading '%s'\n", inpath);
         exit(1);
     }
 
-    out = (unsigned char*)malloc_aligned(width*height*channels);
+    float *in = (float*)malloc_aligned(width*height*channels * sizeof(float));
+    float *out = (float*)malloc_aligned(width*height*channels * sizeof(float));
+
+    for (int i = 0; i < width*height*channels; i++) {
+        in[i] = inpng[i] * 1.0/255.0;
+    }
+
+    outpng = (unsigned char*)malloc_aligned(width*height*channels);
 
     printf("running...\n");
-    ArgT args[5];
-    args[0].ptr = in;
-    args[1].ptr = out;
+    ArgT args[6];
+    args[0].ptr = out;
+    args[1].ptr = in;
     args[2].i32 = width;
     args[3].i32 = height;
     args[4].i32 = channels;
+    args[5].f32 = 2.0;
+
+    fprintf(stderr, "out: %p, in: %p, width: %d, height: %d, channels: %d\n", args[0].ptr, args[1].ptr, args[2].i32, args[3].i32, args[4].i32);
 
     timespec start, end;
     current_time(&start);
 
-    const int iterations = 1000;
+    const int iterations = 1;
     for (int i = 0; i < iterations; i++) {
         _im_main_runner(args);
     }
@@ -131,7 +142,11 @@ int main(int argc, const char* argv[]) {
     double elapsed = diff.tv_sec + (diff.tv_nsec/1000000000.0);
     printf("done %d iterations in %fs (%fns/pixel)\n", iterations, elapsed, elapsed*1000000000/(iterations*width*height));
 
-    save_png(outpath, width, height, channels, out);
+    for (int i = 0; i < width*height*channels; i++) {
+        outpng[i] = out[i] * 255;
+    }
+
+    save_png(outpath, width, height, channels, outpng);
 
     return 0;
 }
