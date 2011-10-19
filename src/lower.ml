@@ -4,6 +4,37 @@ open Schedule
 open Analysis
 open Util
 
+(* Lowering produces references to names either in the context of the
+   callee or caller. The ones in the context of the caller may in fact
+   refer to ones in the caller of the caller, or so on up the
+   chain. E.g. f.g.x actually refers to f.x if g does not provide an x
+   in its schedule. *)
+let rec resolve_name (context: string) (var: string) (schedule: schedule_tree) =
+  
+  let (call_sched, sched_list) = find_schedule schedule context in
+  
+  let provides_name = function
+    | Serial (n, _, _)
+    | Parallel (n, _, _)
+    | Vectorized (n, _, _)
+    | Split (n, _, _, _)
+    | Unrolled (n, _, _) when n = var -> true
+    | _ -> false
+  in
+  
+  let found = List.fold_left (or) false (List.map provides_name sched_list) in
+  
+  if found then
+    (context ^ "." ^ var)
+  else 
+    (* Cut the last item off the context and recurse *)
+    let last_dot =
+      try (String.rindex context '.')
+      with Not_found -> raise (Wtf ("Could not resolve name " ^ var ^ " in " ^ context))
+    in    
+    let parent = String.sub context 0 last_dot in
+    resolve_name parent var schedule      
+
 let make_function_body (name:string) (env:environment) =
   let idx_after_last_dot =
     try (String.rindex name '.' + 1)
@@ -28,30 +59,34 @@ let make_schedule (name:string) (schedule:schedule_tree) =
   Printf.printf "Prefixing schedule entry\n";
 
   (* The prefix for this function *)
-  let prefix = (name ^ ".") in
+  let prefix x = (name ^ "." ^ x) in
 
   (* The prefix for the calling context *)
   let caller = 
     if (String.contains name '.') then
       let last_dot = String.rindex name '.' in
-      String.sub name 0 (last_dot+1) 
+      String.sub name 0 last_dot 
     else
       "" 
   in
 
-  let prefix_expr = prefix_name_expr caller in
+  let rec prefix_expr = function
+    | Var (t, n) -> Var (t, resolve_name caller n schedule)
+    | x -> mutate_children_in_expr prefix_expr x
+  in
+
   let prefix_schedule = function      
-    | Serial     (name, min, size) -> Serial     (prefix ^ name, prefix_expr min, prefix_expr size)
-    | Parallel   (name, min, size) -> Parallel   (prefix ^ name, prefix_expr min, prefix_expr size)
-    | Unrolled   (name, min, size) -> Unrolled   (prefix ^ name, prefix_expr min, size)
-    | Vectorized (name, min, size) -> Vectorized (prefix ^ name, prefix_expr min, size)
+    | Serial     (name, min, size) -> Serial     (prefix name, prefix_expr min, prefix_expr size)
+    | Parallel   (name, min, size) -> Parallel   (prefix name, prefix_expr min, prefix_expr size)
+    | Unrolled   (name, min, size) -> Unrolled   (prefix name, prefix_expr min, size)
+    | Vectorized (name, min, size) -> Vectorized (prefix name, prefix_expr min, size)
     | Split (old_dim, new_dim_1, new_dim_2, offset) -> 
-        Split (prefix ^ old_dim, prefix ^ new_dim_1, prefix ^ new_dim_2, prefix_expr offset)
+        Split (prefix old_dim, prefix new_dim_1, prefix new_dim_2, prefix_expr offset)
   in
   let prefix_call_sched = function
     (* Refers to a var in the calling context *)
     | Chunk v -> 
-        Chunk (caller ^ v)
+        Chunk (resolve_name caller v schedule)
     | x -> x
   in
   (prefix_call_sched call_sched, List.map prefix_schedule sched_list)
@@ -121,6 +156,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
         let scheduled_call =
           match call_sched with
             | Chunk chunk_dim -> begin
+
               (* A buffer to dump the intermediate result into *)
               let buffer_name = name ^ ".result" in          
 
@@ -137,6 +173,9 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
               Printf.printf "Realized chunk: %s\n" (string_of_stmt produce);
 
               Printf.printf "Looking for For over %s in %s\n" chunk_dim (string_of_stmt stmt);
+              (* TODO: what if the chunk dimension has been split? Is
+                 this allowed? If so we should chunk over the outer
+                 variable produced *)
               
               (* Recursively descend the statement until we get to the loop in question *)
               let rec inner substmt = match substmt with
@@ -249,5 +288,8 @@ and lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   Printf.printf "Realizing initial statement\n%!";
   let core = (realize (args, return_type, body) sched_list ".result" strides) in
   Printf.printf "Recursively lowering function calls\n%!";
-  lower_stmt core env schedule
+  lower_stmt core env schedule 
 
+
+        
+  
