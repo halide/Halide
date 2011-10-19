@@ -5,6 +5,8 @@ import subprocess
 from os import chdir
 from os.path import isfile
 
+import os
+
 status_str = '''
 %(bars)s
 %(status)s
@@ -63,17 +65,24 @@ print '...OK!'
 status('Checking out submodules')
 check_call('git submodule update --init --recursive'.split(' '))
 
+# TODO: make install in subdir, with docs
+#        requires graphviz, doxygen; target ocamlbuild to alt dir?; make clean?
 # Build llvm
 if check_llvm():
     status('llvm appears to be present -- skipping')
 else:
     chdir('llvm')
+    llvm_cfg = ['--enable-assertions', '--enable-targets=all', '--enable-docs', '--enable-doxygen']
+    cfg_str = ' '.join(llvm_cfg)
     status('''Configuring llvm:
-    --enable-assertions --enable-targets=all''')
-    check_call('./configure --enable-assertions --enable-targets=all'.split(' '))
+    %s''' % cfg_str)
+    check_call(['./configure'] + llvm_cfg)
     status('Building llvm')
     check_call('make -j12'.split(' '))
-    chdir('..')
+    chdir('docs')
+    check_call('make ocamldoc'.split(' '))
+    # optional: check_call('make doxygen'.split(' '))
+    chdir('../..')
     assert check_llvm()
 
 # Test building 
