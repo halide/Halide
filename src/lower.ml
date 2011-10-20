@@ -11,30 +11,36 @@ open Util
    in its schedule. *)
 let rec resolve_name (context: string) (var: string) (schedule: schedule_tree) =
   
-  let (call_sched, sched_list) = find_schedule schedule context in
-  
-  let provides_name = function
-    | Serial (n, _, _)
-    | Parallel (n, _, _)
-    | Vectorized (n, _, _)
-    | Split (n, _, _, _)
-    | Unrolled (n, _, _) when n = var -> true
-    | _ -> false
-  in
-  
-  let found = List.fold_left (or) false (List.map provides_name sched_list) in
-  
-  if found then
-    (context ^ "." ^ var)
-  else 
-    (* Cut the last item off the context and recurse *)
-    let last_dot =
-      try (String.rindex context '.')
-      with Not_found -> raise (Wtf ("Could not resolve name " ^ var ^ " in " ^ context))
-    in    
-    let parent = String.sub context 0 last_dot in
-    resolve_name parent var schedule      
-
+  (* names starting with . are global, and so are already resolved *)
+  if (String.get var 0 = '.') then var else begin
+    
+    Printf.printf "Looking up %s in the context %s\n" var context;
+    
+    let (call_sched, sched_list) = find_schedule schedule context in
+    
+    let provides_name = function
+      | Serial (n, _, _)
+      | Parallel (n, _, _)
+      | Vectorized (n, _, _)
+      | Split (n, _, _, _)
+      | Unrolled (n, _, _) when n = var -> true
+      | _ -> false
+    in
+    
+    let found = List.fold_left (or) false (List.map provides_name sched_list) in
+    
+    if found then
+      (context ^ "." ^ var)
+    else 
+      (* Cut the last item off the context and recurse *)
+      let last_dot =
+        try (String.rindex context '.')
+        with Not_found -> raise (Wtf ("Could not resolve name " ^ var ^ " in " ^ context))
+      in    
+      let parent = String.sub context 0 last_dot in
+      resolve_name parent var schedule      
+  end
+        
 let make_function_body (name:string) (env:environment) =
   let idx_after_last_dot =
     try (String.rindex name '.' + 1)

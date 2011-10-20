@@ -5,7 +5,6 @@ ir
 ir_printer
 util
 vectorize
-img
 split
 unroll
 constant_fold

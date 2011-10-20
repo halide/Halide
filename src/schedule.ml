@@ -139,7 +139,11 @@ let find_schedule (tree:schedule_tree) (name:string) =
         if rest = [] then (cs, sl) else find subtree rest
   in
   let name_parts = split_name name in
-  find tree name_parts
+  try 
+    find tree name_parts 
+  with
+    | Not_found -> raise (Wtf (name ^ " not found in schedule tree"))
+    
 
 
 let rec set_schedule
