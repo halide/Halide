@@ -1,67 +1,49 @@
-LLVM_DIR ?= ../llvm/Debug+Asserts
-LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
-OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
-
-OCAML_LIB_DIR=/usr/local/lib/ocaml
-LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags)
-CXX=g++-4.6 -std=c++0x -I$(OCAML_LIB_DIR) -I$(SRC_DIR) -Wall -Werror -ffast-math $(LLVM_CFLAGS_CXX) -O3
+CXX=g++-4.6 -std=c++0x -Wall -Werror -ffast-math -O2 -msse 
 
 all: test test_functions test_chunk
 
-LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs codegen jit x86 bitwriter interpreter)
+test: FImage.a 
+	$(CXX) test.cpp FImage.a -o test 
+
+test_functions: FImage.a
+	$(CXX) test_functions.cpp FImage.a -o test_functions 
+
+test_chunk: FImage.a 
+	$(CXX) test_chunk.cpp FImage.a -o test_chunk 
+
+# Everything above this line just uses FImage.a and FImage.h. It has
+# no knowledge of llvm or ocaml
+#------------------------------------------------
+# Everything below this line exists to build FImage.a
+
+LLVM_DIR ?= ../llvm/Debug+Asserts
+LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
+LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags)
+LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter x86 interpreter)
 LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_analysis -lllvm_target
-OCAML_LIBS_C=-L$(OCAML_LIB_DIR) -lbigarray
+
+OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
+OCAML_LIB_DIR=/usr/local/lib/ocaml
 LLVM_LDFLAGS=$(shell $(LLVM_CONFIG_EXE) --ldflags)
 LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lstdc++
  
-test: MLFImage.a build/test.o
-	$(CXX) build/test.o MLFImage.a -o test $(LIBS)
+FImage.a: _build/_MLFImage.o _build/FImage.o _build/MLVal.o _build/elf.o
+	ld -r -o FImage.o _build/_MLFimage.o $(OCAML_LIB_DIR)/libasmrun.a _build/MLVal.o _build/FImage.o _build/elf.o -L$(OCAML_LLVM_LIB_DIR) $(LLVM_LIBS_CXX) $(LLVM_LIBS_C)
+	rm -f FImage.a
+	ar q FImage.a FImage.o
+	ranlib FImage.a
 
-test_functions: MLFImage.a build/test_functions.o
-	$(CXX) build/test_functions.o MLFImage.a -o test_functions $(LIBS)
+_build/%.o: %.cpp
+	$(CXX) $(LLVM_CFLAGS_CXX) -I $(OCAML_LIB_DIR) -c $< -o $@
 
-test_chunk: MLFImage.a build/test_chunk.o
-	$(CXX) build/test_chunk.o MLFImage.a -o test_chunk $(LIBS)
+_build/_MLFImage.o: ../src/_build/fimage.cmxa
+	ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLFImage.o $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa ../src/_build/fimage.cmxa
 
-MLFImage.a: build/_MLFImage.o build/FImage.o build/MLVal.o build/elf.o
-	cp $(OCAML_LIB_DIR)/libasmrun.a MLFImage.a
-	ar q MLFImage.a build/_MLFImage.o build/MLVal.o build/FImage.o build/elf.o
-
-build/%.o: %.cpp
-	$(CXX) -c $< -o $@
-
-OCAML_LIBS=bigarray.cmxa llvm.cmxa llvm_executionengine.cmxa
-OCAML_MODULES=util.cmx ir.cmx ir_printer.cmx analysis.cmx cg_llvm.cmx split.cmx vectorize.cmx unroll.cmx constant_fold.cmx schedule.cmx schedule_transforms.cmx lower.cmx hash.cmx break_false_dependence.cmx MLFImage.cmx 
-OCAML_SOURCES=$(OCAML_MODULES:%.cmx=%.ml)
-OCAMLC=ocamlopt -cc gcc-4.6 -I ../$(OCAML_LLVM_LIB_DIR) -I ../../src -ccopt -O2
-
-build/_MLFImage.o: $(addprefix build/,$(OCAML_MODULES))
-	cd build && \
-	cp ../MLFImage.ml . && \
-	$(OCAMLC) $(OCAML_LIBS) $(OCAML_MODULES) -output-obj -o _MLFImage.o && \
-	rm MLFImage.ml &&\
-	cd ..
-
-build/%.cmx: ../src/%.ml 
-	cd build && \
-	cp ../$< ./ && \
-	$(OCAMLC) -c $(notdir $<) && \
-	rm $(notdir $<) && \
-	cd ..
-
-build/%.cmx: %.ml
-	cd build && \
-	cp ../$< ./ && \
-	$(OCAMLC) -c $(notdir $<) && \
-	rm $(notdir $<) && \
-	cd ..
+../src/_build/fimage.cmxa: ../src/*.ml
+	cd ../src && \
+	ocamlbuild fimage.cmxa && \
+	cd $(PWD)	
 
 clean:
-	rm -f test build/*
-
-dep: 		
-	cd ../src/ 
-	ocamldep *.ml | sed "s/\([^ ]*.cmx\)/build\/\1/g" | grep -v cmo > Makefile.dep
-	cd $(PWD)
-
-include Makefile.dep
+	rm -f test test_functions test_chunk _build/*
+	rm FImage.a FImage.o

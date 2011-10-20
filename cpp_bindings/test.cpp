@@ -6,30 +6,15 @@ using namespace FImage;
 #define W 3072
 #define H 3072
 
-template<typename T, int N>
-struct _sum {
-    static inline T go(const T &a) {return _sum<T, N-1>::go(a) + a;}
-};
-
-template<typename T>
-struct _sum<T, 1> {
-    static inline T go(const T &a) {return a;}
-};
-
-template<typename T, int N> 
-struct _do_math {
-    static inline T go(const T &a, const T &b) {return _do_math<T, N-1>::go(a, b) * (a + _sum<T, N>::go(b));}
-};
-
-template<typename T>
-struct _do_math<T, 0> {
-    static inline T go(const T &a, const T &b) {return a;}
-};
-
 template<typename T>
 inline T do_math(const T &a, const T &b) {
-    return _do_math<T,0>::go(a, b);
+    T acc = 1.0f;
+    for (int i = 0; i < 1; i++) {
+        acc *= a - b;
+    }
+    return acc;
 }
+
 
 
 float operator-(const timeval &after, const timeval &before) {
@@ -45,7 +30,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            im(x, y) = 1;
+            im(x, y) = ((double)rand())/RAND_MAX;
         }
     }
 
@@ -65,9 +50,10 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         int chunk = atoi(argv[1]);
         h.split(y, yo, yi, chunk);
-        g.chunk(yi, Range(0, W+4) * Range(yo*chunk, chunk));
-        f.chunk(y, Range(0, W+4) * Range(yo*chunk, chunk+3)); 
+        g.chunk(xo, Range(0, W+4) * Range(yo*chunk + yi, 1));
+        f.chunk(yi, Range(0, W+4) * Range(yo*chunk, chunk+3)); 
 
+        
         h.split(x, xo, xi, 4);
         h.vectorize(xi);
 
@@ -76,6 +62,7 @@ int main(int argc, char **argv) {
 
         f.split(x, xo, xi, 4);
         f.vectorize(xi);
+        
     }
 
 
@@ -85,7 +72,7 @@ int main(int argc, char **argv) {
 
     timeval before, after;
     gettimeofday(&before, NULL);
-    g.realize(im2);
+    h.realize(im2);
     gettimeofday(&after, NULL);
     printf("jitted code: %f ms\n", after - before);
 
@@ -101,20 +88,27 @@ int main(int argc, char **argv) {
         }
     }    
     
-    Image tmp(W+16, H+16);
+    Image tmp1(W+16, H+16);
+    Image tmp2(W+16, H+16);
     
 
     gettimeofday(&before, NULL);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            tmp(x, y) = do_math(im(x, y), im(x+3, y));
+            tmp1(x, y) = do_math(im(x, y), im(x+3, y));
         }
     }
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            im2(x, y) = do_math(tmp(x, y), tmp(x, y+3));
+            tmp2(x, y) = do_math(tmp1(x, y), tmp1(x, y+3));
+        }
+    }
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            im2(x, y) = do_math(tmp2(x+3, y), tmp2(x, y));
         }
     }
 

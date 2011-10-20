@@ -398,8 +398,12 @@ namespace FImage {
             MLVal tuple = doCompile(args, stmt);
 
             printf("Extracting the resulting module and function\n");
-            LLVMModuleRef module = (LLVMModuleRef)Field(tuple.getValue(), 0);
-            LLVMValueRef func = (LLVMValueRef)Field(tuple.getValue(), 1);
+            MLVal first, second;
+            MLVal::unpackPair(tuple, first, second);
+            //LLVMModuleRef module = *((LLVMModuleRef *)(first.asVoidPtr()));
+            //LLVMValueRef func = *((LLVMValueRef *)(second.asVoidPtr()));
+            LLVMModuleRef module = (LLVMModuleRef)(first.asVoidPtr());
+            LLVMValueRef func = (LLVMValueRef)(second.asVoidPtr());
             llvm::Function *f = llvm::unwrap<llvm::Function>(func);
             llvm::Module *m = llvm::unwrap(module);
 

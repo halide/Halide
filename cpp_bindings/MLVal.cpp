@@ -57,8 +57,9 @@ MLVal MLValFromValue(value v) {
     return mlv;
 }
 
-value &MLVal::getValue() {
-    return val->val;
+void *MLVal::asVoidPtr() {
+    //return (void *)(&(val->val));
+    return (void *)(val->val);
 }
 
 MLVal MLVal::fromInt(int x) {
@@ -82,6 +83,11 @@ MLVal MLVal::fromString(const std::string &str) {
 
 MLVal MLVal::fromPointer(void *ptr) {
     return MLValFromValue((value)ptr);
+}
+
+void MLVal::unpackPair(MLVal tuple, MLVal &first, MLVal &second) {
+    first = MLValFromValue(Field(tuple.val->val, 0));
+    second = MLValFromValue(Field(tuple.val->val, 1));
 }
 
 MLVal MLVal::operator()() {
