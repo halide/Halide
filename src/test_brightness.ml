@@ -26,11 +26,7 @@ let _ =
       Let (
         "load_addr",
         addr_expr,
-        Debug (
-          Load (f32, ".input", load_addr),
-          "Load input: ",
-          [x; y; c; load_addr]
-        )
+        Load (f32, ".input", load_addr)
       )
     )
   ) in
