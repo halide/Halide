@@ -95,8 +95,7 @@ int main(int argc, const char* argv[]) {
     char outpath[PATH_MAX];
 
     const char* inpath = argv[1];
-    //snprintf(outpath, PATH_MAX, "out_%s.png", argv[0]);
-    snprintf(outpath, PATH_MAX, "out.png", argv[0]);
+    snprintf(outpath, PATH_MAX, "out.png");
 
     printf("in: %s, out: %s\n", inpath, outpath);
 
@@ -175,7 +174,7 @@ bool load_png(const char* filename, int* w, int* h, int* ch, png_byte** bytes) {
     info_ptr = png_create_info_struct(png_ptr);
     check(info_ptr, "[load_png] png_create_info_struct failed\n");
     
-    check(!setjmp(png_jmpbuf(png_ptr)), "[load_png] Error during init_io\n");
+    //check(!setjmp(png_jmpbuf(png_ptr)), "[load_png] Error during init_io\n");
     
     png_init_io(png_ptr, f);
     png_set_sig_bytes(png_ptr, 8);
@@ -200,7 +199,7 @@ bool load_png(const char* filename, int* w, int* h, int* ch, png_byte** bytes) {
     png_read_update_info(png_ptr, info_ptr);
     
     // read the file
-    check(!setjmp(png_jmpbuf(png_ptr)), "[load_png] Error during read_image\n");
+    //check(!setjmp(png_jmpbuf(png_ptr)), "[load_png] Error during read_image\n");
     
     row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * height);
     for (int y = 0; y < height; y++)
@@ -261,12 +260,12 @@ bool save_png(const char* filename, int width, int height, int channels, const p
     info_ptr = png_create_info_struct(png_ptr);
     check(info_ptr, "[save_png] png_create_info_struct failed\n");
     
-    check(!setjmp(png_jmpbuf(png_ptr)), "[save_png] Error during init_io\n");
+    //check(!setjmp(png_jmpbuf(png_ptr)), "[save_png] Error during init_io\n");
     
     png_init_io(png_ptr, f);
     
     // write header
-    check(!setjmp(png_jmpbuf(png_ptr)), "[save_png] Error during writing header\n");
+    //check(!setjmp(png_jmpbuf(png_ptr)), "[save_png] Error during writing header\n");
     
     png_set_IHDR(png_ptr, info_ptr, width, height,
                  8, color_type, PNG_INTERLACE_NONE,
@@ -287,12 +286,12 @@ bool save_png(const char* filename, int width, int height, int channels, const p
     }
     
     // write data
-    check(!setjmp(png_jmpbuf(png_ptr)), "[save_png] Error during writing bytes");
+    //check(!setjmp(png_jmpbuf(png_ptr)), "[save_png] Error during writing bytes");
     
     png_write_image(png_ptr, row_pointers);
     
     // finish write
-    check(!setjmp(png_jmpbuf(png_ptr)), "[save_png] Error during end of write");
+    //check(!setjmp(png_jmpbuf(png_ptr)), "[save_png] Error during end of write");
     
     png_write_end(png_ptr, NULL);
     
