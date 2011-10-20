@@ -1,8 +1,0 @@
-build/MLFImage.cmx: build/vectorize.cmx build/unroll.cmx build/ir_printer.cmx build/ir.cmx build/cg_llvm.cmx
-build/analysis.cmx: build/util.cmx build/ir_printer.cmx build/ir.cmx
-build/cg_llvm.cmx: build/util.cmx build/ir_printer.cmx build/ir.cmx build/analysis.cmx
-build/ir.cmx: build/util.cmx
-build/ir_printer.cmx: build/ir.cmx
-build/unroll.cmx: build/util.cmx build/ir.cmx
-build/util.cmx:
-build/vectorize.cmx: build/util.cmx build/ir.cmx

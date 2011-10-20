@@ -9,8 +9,8 @@ using namespace FImage;
 template<typename T>
 inline T do_math(const T &a, const T &b) {
     T acc = 1.0f;
-    for (int i = 0; i < 10; i++) {
-        acc *= a + b;
+    for (int i = 0; i < 1; i++) {
+        acc *= a - b;
     }
     return acc;
 }
