@@ -3,10 +3,6 @@
 
 #include <memory>
 
-extern "C" {
-#include <caml/mlvalues.h>
-}
-
 using std::shared_ptr;
 
 // Opaque ocaml type
@@ -24,13 +20,15 @@ public:
     MLVal operator()(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e);
     MLVal operator()(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e, MLVal f);
 
-    value &getValue();
+    void *asVoidPtr();
 
     static MLVal fromString(const char *);
     static MLVal fromString(const std::string &);
     static MLVal fromInt(int);
     static MLVal fromFloat(float);
     static MLVal fromPointer(void *);
+
+    static void unpackPair(MLVal input, MLVal &first, MLVal &second);
 };
 
 
