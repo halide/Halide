@@ -220,6 +220,11 @@ namespace FImage {
         vars.push_back(this);
     }
 
+    Var::Var(const std::string &name) : Named<'v'>(name) {
+        node = makeVar(MLVal::fromString(name));
+        vars.push_back(this);
+    }
+
 
     void FuncRef::operator=(const Expr &e) {
         f->define(func_args, e);
@@ -256,7 +261,8 @@ namespace FImage {
         rhs = r;
 
         // TODO: Mutate the rhs: Convert scatters to scalar-valued functions by wrapping them in a let
-        
+        args = func_args;
+
         arglist = makeList();
         for (size_t i = func_args.size(); i > 0; i--) {
             if (1 /* dangerously assume it's a var */) {
@@ -273,6 +279,15 @@ namespace FImage {
 
         definition = makeDefinition(MLVal::fromString(name()), arglist, rhs.node);
 
+        *environment = addDefinitionToEnv(*environment, definition);
+    }
+
+    void Func::trace() {
+        char fmt[256];
+        snprintf(fmt, 256, "Evaluating %s at: ", name().c_str());
+        printf("Wrapping rhs in a debug node\n");
+        rhs = Debug(rhs, fmt, args);
+        definition = makeDefinition(MLVal::fromString(name()), arglist, rhs.node);
         *environment = addDefinitionToEnv(*environment, definition);
     }
 
