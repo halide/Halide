@@ -165,7 +165,6 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
             build_or mask_t mask_f "" b
       end
 
-    (* memory TODO: handle vector loads and stores better *)
     | Load(t, buf, idx) -> cg_load t buf idx
 
     (* Loop variables *)
@@ -212,7 +211,6 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
 
     | Debug(e, prefix, args) -> cg_debug e prefix args
 
-    (* TODO: fill out other ops *)
     | e ->
       Printf.printf "Unimplemented: %s\n%!" (string_of_expr e);
       raise UnimplementedInstruction
@@ -500,7 +498,6 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
     (* load the global buffer** *)
     let base = sym_get buf in
     (* cast pointer to pointer-to-target-type *)
-    (* TODO: fix address calculation to use inner type of vector type *)
     let elem_type = type_of_val_type (element_val_type vt) in
     let ptr = build_pointercast base (pointer_type (elem_type)) "memref_elem_ptr" b in
     (* build getelementpointer into buffer *)
@@ -513,7 +510,7 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
     (* Generate a format string and values to print for a printf *)
     let rec fmt_string x = match val_type_of_expr x with
       | Int _ -> ("%d", [Cast (i32, x)])
-      | Float _ -> ("%f", [Cast (f32, x)])
+      | Float _ -> ("%3.3f", [Cast (f32, x)])
       | UInt _ -> ("%u", [Cast (u32, x)])
       | IntVector (_, n) | UIntVector (_, n) | FloatVector (_, n) -> 
           let elements = List.map (fun idx -> ExtractElement (x, IntImm idx)) (0 -- n) in
@@ -532,9 +529,9 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
     let global_fmt = define_global "debug_fmt" ll_fmt m in
     let global_fmt = build_pointercast global_fmt (pointer_type (i8_type c)) "" b in
 
-    Printf.printf "cg_debug: %s %s %s\n" (string_of_expr e) (prefix^fmt) (String.concat ", " (List.map string_of_expr args));
+    (*Printf.printf "cg_debug: %s %s %s\n" (string_of_expr e) (prefix^fmt) (String.concat ", " (List.map string_of_expr args));
 
-    Printf.printf "%s\n%!" (string_of_lltype (type_of global_fmt));
+    Printf.printf "%s\n%!" (string_of_lltype (type_of global_fmt)); *)
 
     let ll_printf = declare_function "printf" 
       (var_arg_function_type (i32_type c) [|pointer_type (i8_type c)|]) m in
