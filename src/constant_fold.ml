@@ -3,6 +3,25 @@ open Analysis
 
 let rec constant_fold_expr expr = 
   let recurse = constant_fold_expr in
+  
+  let is_const_zero = function
+    | IntImm 0 
+    | UIntImm 0
+    | FloatImm 0.0
+    | Broadcast (IntImm 0, _)
+    | Broadcast (UIntImm 0, _)
+    | Broadcast (FloatImm 0.0, _) -> true
+    | _ -> false
+  and is_const_one = function
+    | IntImm 1
+    | UIntImm 1
+    | FloatImm 1.0
+    | Broadcast (IntImm 1, _)
+    | Broadcast (UIntImm 1, _)
+    | Broadcast (FloatImm 1.0, _) -> true
+    | _ -> false
+  in
+
   match expr with
     (* Ignoring const-casts for now, because we can't represent immediates of arbitrary types *)
     | Cast (t, e) -> Cast (t, recurse e) 
@@ -16,13 +35,14 @@ let rec constant_fold_expr expr =
 
         (* Identity operations. These are not strictly constant
            folding, but they tend to come up at the same time *)
-        | (Sub, IntImm 0, x) | (Sub, UIntImm 0, x) | (Sub, FloatImm 0.0, x) 
-        | (Sub, x, IntImm 0) | (Sub, x, UIntImm 0) | (Sub, x, FloatImm 0.0) 
-        | (Add, IntImm 0, x) | (Add, UIntImm 0, x) | (Add, FloatImm 0.0, x) 
-        | (Add, x, IntImm 0) | (Add, x, UIntImm 0) | (Add, x, FloatImm 0.0) 
-        | (Mul, IntImm 1, x) | (Mul, UIntImm 1, x) | (Mul, FloatImm 1.0, x) 
-        | (Mul, x, IntImm 1) | (Mul, x, UIntImm 1) | (Mul, x, FloatImm 1.0) 
-        | (Div, x, IntImm 1) | (Div, x, UIntImm 1) | (Div, x, FloatImm 1.0) -> x
+        | (Add, x, y) when is_const_zero x -> y
+        | (Add, x, y) when is_const_zero y -> x
+        | (Sub, x, y) when is_const_zero y -> x
+        | (Mul, x, y) when is_const_one x -> y
+        | (Mul, x, y) when is_const_one y -> x
+        | (Mul, x, y) when is_const_zero x -> x
+        | (Mul, x, y) when is_const_zero y -> y
+        | (Div, x, y) when is_const_one y -> x
 
         (* op (Ramp, Broadcast) should be folded into the ramp *)
         | (Add, Broadcast (e, _), Ramp (b, s, n)) 
