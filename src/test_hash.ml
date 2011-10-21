@@ -1,4 +1,4 @@
-open Analysis
+open Hash
 open Ir
 open Ir_printer
 
@@ -13,7 +13,12 @@ let _ =
                   x -~ x;
                   x *~ (y +~ z);
                   (x *~ y) +~ (x *~ z);
-                  (Load ((Float 32), "im0", x))
+                  (Load ((Float 32), "im0", x));
+                  (Load ((Float 32), "im0", x +~ (IntImm 3)));
+                  (Load ((Float 32), "im0", (IntImm 0)));
+                  (Load ((Float 32), "im0", (IntImm 0) +~ (IntImm 3)));
+                  (Load ((Float 32), "im0", x)) -~ (Load ((Float 32), "im0", x +~ (IntImm 3)));
+                  (Load ((Float 32), "im0", IntImm 0)) -~ (Load ((Float 32), "im0", (IntImm 0) +~ (IntImm 3)));
                  ] in
   List.iter (fun e -> 
     let (a, b, c, d) = hash_expr e in

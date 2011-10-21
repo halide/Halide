@@ -29,13 +29,16 @@ let hash_str str = (Hashtbl.hash str,
                     Hashtbl.hash (str ^ "   "))
 
 let hash_combine2 (a, b, c, d) (e, f, g, h) =
-  (Hashtbl.hash (a, e), Hashtbl.hash (b, f), Hashtbl.hash (c, g), Hashtbl.hash (d, h))
+  (Hashtbl.hash ((a + 1) * (h + 2)), 
+   Hashtbl.hash ((b + 3) * (g + 4)), 
+   Hashtbl.hash ((c + 5) * (f + 6)), 
+   Hashtbl.hash ((d + 7) * (e + 8)))
 
-let hash_combine3 (a, b, c, d) (e, f, g, h) (i, j, k, l) =
-  (Hashtbl.hash (a, e, i), Hashtbl.hash (b, f, j), Hashtbl.hash (c, g, k), Hashtbl.hash (d, h, l))  
+let hash_combine3 a b c =
+  hash_combine2 (hash_combine2 a b) c
 
-let hash_combine4 (a, b, c, d) (e, f, g, h) (i, j, k, l) (m, n, o, p) =
-  (Hashtbl.hash (a, e, i, m), Hashtbl.hash (b, f, j, n), Hashtbl.hash (c, g, k, o), Hashtbl.hash (d, h, l, p))  
+let hash_combine4 a b c d =
+  hash_combine2 (hash_combine2 a b) (hash_combine2 c d)
 
 let hash_expand n = (Hashtbl.hash n, Hashtbl.hash n, Hashtbl.hash n, Hashtbl.hash n)
 
