@@ -29,10 +29,8 @@ let hash_str str = (Hashtbl.hash str,
                     Hashtbl.hash (str ^ "   "))
 
 let hash_combine2 (a, b, c, d) (e, f, g, h) =
-  (Hashtbl.hash ((a + 1) * (h + 2)), 
-   Hashtbl.hash ((b + 3) * (g + 4)), 
-   Hashtbl.hash ((c + 5) * (f + 6)), 
-   Hashtbl.hash ((d + 7) * (e + 8)))
+  let rand = Random.State.make [|a; b; c; d; e; f; g; h|] in  
+  (Random.State.bits rand, Random.State.bits rand, Random.State.bits rand, Random.State.bits rand)
 
 let hash_combine3 a b c =
   hash_combine2 (hash_combine2 a b) c
