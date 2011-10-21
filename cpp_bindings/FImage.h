@@ -24,6 +24,8 @@ namespace FImage {
             _name = ss.str();
         }
 
+        Named(const std::string &name) : _name(name) {}
+
         const std::string &name() const {return _name;}
 
     private:
@@ -75,6 +77,7 @@ namespace FImage {
     Expr operator==(const Expr &, const Expr &);
 
     // Make a debug node
+    Expr Debug(Expr, const std::string &prefix, const std::vector<Expr> &args);
     Expr Debug(Expr, const std::string &prefix);
     Expr Debug(Expr, const std::string &prefix, Expr a);
     Expr Debug(Expr, const std::string &prefix, Expr a, Expr b);
@@ -86,6 +89,7 @@ namespace FImage {
     class Var : public Expr, public Named<'v'> {
     public:
         Var();
+        Var(const std::string &name);
     };
 
     class Range {
@@ -132,7 +136,8 @@ namespace FImage {
     class Func : public Named<'f'> {
     public:
         Func() : function_ptr(NULL) {}
-        
+        Func(const std::string &name) : Named<'f'>(name), function_ptr(NULL) {}
+
         // Define a function
         void define(const std::vector<Expr> &func_args, const Expr &rhs);
         
@@ -142,6 +147,9 @@ namespace FImage {
         FuncRef operator()(const Expr &a, const Expr &b, const Expr &c) {return FuncRef(this, a, b, c);}     
         FuncRef operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) {return FuncRef(this, a, b, c, d);}  
         FuncRef operator()(const std::vector<Expr> &args) {return FuncRef(this, args);}
+
+        // Print every time this function gets evaluated
+        void trace();
         
         // Generate an image from this function by Jitting the IR and running it.
         Image realize(int);
@@ -167,6 +175,7 @@ namespace FImage {
 
         // The scalar value returned by the function
         Expr rhs;
+        std::vector<Expr> args;
         MLVal arglist;
 
     protected:
