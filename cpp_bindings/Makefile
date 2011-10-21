@@ -1,14 +1,14 @@
-CXX=g++-4.6 -std=c++0x -Wall -Werror -ffast-math -O2 -msse 
+CXX=g++-4.6 -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O2 -msse -Wl,-dead_strip
 
 all: test test_functions test_chunk
 
-test: FImage.a 
+test: FImage.a test.cpp
 	$(CXX) test.cpp FImage.a -o test 
 
-test_functions: FImage.a
+test_functions: FImage.a test_functions.cpp
 	$(CXX) test_functions.cpp FImage.a -o test_functions 
 
-test_chunk: FImage.a 
+test_chunk: FImage.a test_chunk.cpp
 	$(CXX) test_chunk.cpp FImage.a -o test_chunk 
 
 # Everything above this line just uses FImage.a and FImage.h. It has
@@ -16,7 +16,7 @@ test_chunk: FImage.a
 #------------------------------------------------
 # Everything below this line exists to build FImage.a
 
-LLVM_DIR ?= ../llvm/Debug+Asserts
+LLVM_DIR ?= ../llvm/Release
 LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
 LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags)
 LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter x86 interpreter)
