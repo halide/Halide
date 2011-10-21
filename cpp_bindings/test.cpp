@@ -24,8 +24,8 @@ float operator-(const timeval &after, const timeval &before) {
 }
 
 int main(int argc, char **argv) {
-    Var x, y;
-    Func f, g, h;
+    Var x("x"), y("y");
+    Func f("f"), g("g"), h("h");
     Image im(W+16, H+16);       
 
     for (int y = 0; y < H; y++) {
@@ -45,15 +45,19 @@ int main(int argc, char **argv) {
     g(x, y) = do_math<Expr>(f(x, y), f(x, y+3));
     h(x, y) = do_math<Expr>(g(x+3, y), g(x, y));
 
-    Var xo, xi, yo, yi;
+    //f.trace();
+    //g.trace();
+    //h.trace(); 
+
+    Var xo("xo"), xi("xi"), yo("yo"), yi("yi");
 
     if (argc > 1) {
         int chunk = atoi(argv[1]);
         h.split(y, yo, yi, chunk);
-        g.chunk(xo, Range(0, W+4) * Range(yo*chunk + yi, 1));
+        g.chunk(x, Range(0, W+4) * Range(yo*chunk + yi, 1));
         f.chunk(yi, Range(0, W+4) * Range(yo*chunk, chunk+3)); 
 
-        
+        /*
         h.split(x, xo, xi, 4);
         h.vectorize(xi);
 
@@ -62,7 +66,7 @@ int main(int argc, char **argv) {
 
         f.split(x, xo, xi, 4);
         f.vectorize(xi);
-        
+        */
     }
 
 
