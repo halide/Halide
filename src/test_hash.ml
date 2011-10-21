@@ -19,6 +19,15 @@ let _ =
                   (Load ((Float 32), "im0", (IntImm 0) +~ (IntImm 3)));
                   (Load ((Float 32), "im0", x)) -~ (Load ((Float 32), "im0", x +~ (IntImm 3)));
                   (Load ((Float 32), "im0", IntImm 0)) -~ (Load ((Float 32), "im0", (IntImm 0) +~ (IntImm 3)));
+
+
+                  (Load ((Float 32), "im0", x *~ (IntImm 2))) -~ (Load ((Float 32), "im0", (x *~ (IntImm 2)) +~ (IntImm 5)));
+                  (Load ((Float 32), "im0", (IntImm 0) *~ (IntImm 2))) -~ 
+                    (Load ((Float 32), "im0", ((IntImm 0) *~ (IntImm 2)) +~ (IntImm 5)));
+                  
+(* load(f32,h.g.f.result[(((3076*(((5*0)+h.g.y)-(h.yo*2)))+h.g.x)-0)])-load(f32,h.g.f.result[(((3076*(((5*0)+(h.g.y+3))-(h.yo*2)) *)
+   
+   
                  ] in
   List.iter (fun e -> 
     let (a, b, c, d) = hash_expr e in
