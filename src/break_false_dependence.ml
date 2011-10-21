@@ -1,6 +1,7 @@
 open Ir
 open Analysis
 open Hash
+open Ir_printer
 
 module ExprSet = Set.Make (
   struct
@@ -26,7 +27,11 @@ let break_false_dependence_expr expr =
   let break_dependence unknown expr =
     let zero = make_zero (val_type_of_expr unknown) in
     let newexpr = (subs_expr unknown zero expr) in
-    if (hash_expr expr) = (hash_expr newexpr) then newexpr else expr
+    if (hash_expr expr) = (hash_expr newexpr) then begin
+      newexpr 
+    end else begin
+      expr
+    end
   in
   
   ExprSet.fold break_dependence (find_unknowns expr) expr
