@@ -52,7 +52,7 @@ and string_of_stmt stmt =
       (* | IfElse(e, ts, fs) -> "if (" ^ string_of_expr e ^ ") " ^ string_of_stmt ts ^ 
        " else " ^ string_of_stmt fs *)
       | For(name, min, n, order, s) -> 
-          (p ^ (sprintf "%s (%s start %s length %s) {\n" 
+          (p ^ (sprintf "%s (%s: %s, %s) {\n" 
                   (if order then "for" else "pfor")
                   name (string_of_expr min) (string_of_expr n)) ^
              (string_stmt sp s) ^ 
@@ -85,7 +85,7 @@ and string_of_reduce_op = function
 
 and string_of_buffer b = b
 
-and string_of_toplevel (a, s) = "func(" ^ String.concat ", " (List.map string_of_arg a) ^ ") = " ^ (string_of_stmt s)
+and string_of_toplevel (a, s) = "func(" ^ String.concat ", " (List.map string_of_arg a) ^ ") =\n" ^ (string_of_stmt s)
 
 and string_of_arg = function 
   | Buffer (b) -> b
