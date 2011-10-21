@@ -44,21 +44,37 @@ and string_of_expr = function
       (String.concat ", " (List.map string_of_expr args)) ^ ")"
   | _ -> "<<UNHANDLED>>"
 
-and string_of_stmt = function
-  (*  | If(e, s) -> "if (" ^ string_of_expr e ^ ") " ^ string_of_stmt s *)
-  (* | IfElse(e, ts, fs) -> "if (" ^ string_of_expr e ^ ") " ^ string_of_stmt ts ^ 
-                         " else " ^ string_of_stmt fs *)
-  | For(name, min, n, order, s) -> 
-    sprintf "for (%s from %s to %s%s) %s" name (string_of_expr min) (string_of_expr n) 
-      (if order then " - ordered" else "") (string_of_stmt s)
-  | Block(stmts) -> "{" ^ "\n" ^
-                    String.concat ";\n" (List.map string_of_stmt stmts) ^
-                    "\n}" ^ "\n"
-  (* | Reduce(op, e, mr) -> string_of_memref mr ^ string_of_reduce_op op ^ string_of_expr e *)
-  | Store(e, b, i) -> string_of_buffer b ^ "[" ^ string_of_expr i ^ "] = " ^ string_of_expr e
-  | Pipeline(name, ty, size, produce, consume) -> 
-    "pipeline " ^ name ^ "[" ^ string_of_expr size ^ "]\n producer: " ^ string_of_stmt produce ^ "\n consumer: " ^ string_of_stmt consume
-
+and string_of_stmt stmt = 
+  let rec string_stmt p stmt =
+    let sp = p ^ "  " in
+    match stmt with
+      (* | If(e, s) -> "if (" ^ string_of_expr e ^ ") " ^ string_of_stmt s *)
+      (* | IfElse(e, ts, fs) -> "if (" ^ string_of_expr e ^ ") " ^ string_of_stmt ts ^ 
+       " else " ^ string_of_stmt fs *)
+      | For(name, min, n, order, s) -> 
+          (p ^ (sprintf "%s (%s start %s length %s) {\n" 
+                  (if order then "for" else "pfor")
+                  name (string_of_expr min) (string_of_expr n)) ^
+             (string_stmt sp s) ^ 
+             p ^ "}\n")
+      | Block(stmts) -> 
+          (p ^ "{" ^ "\n" ^
+             String.concat "" (List.map (string_stmt sp) stmts) ^
+             p ^ "}\n")
+      (* | Reduce(op, e, mr) -> string_of_memref mr ^ string_of_reduce_op op ^ string_of_expr e *)
+      | Store(e, b, i) -> 
+          (p ^ string_of_buffer b ^ "[" ^ string_of_expr i ^ "] = \n" ^
+             sp ^ string_of_expr e ^ ";\n")             
+        
+      | Pipeline(name, ty, size, produce, consume) -> 
+          (p ^ "pipeline " ^ name ^ "[" ^ string_of_expr size ^ "] {\n" ^ 
+             string_stmt sp produce ^ 
+             p ^ "} consumer {" ^ "\n" ^ 
+             string_stmt sp consume ^
+             p ^ "}\n")
+  in
+  string_stmt "" stmt
+    
 (*
 and string_of_reduce_op = function
   | AddEq -> "+="
