@@ -29,7 +29,7 @@ let compile args stmt =
   end else begin 
     Printf.printf "Initializing native target\n%!"; 
     ignore (initialize_native_target());
-    Printf.printf "Compiling %s to C callable\n%!" (string_of_toplevel func);
+    Printf.printf "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
     let (m, f) = codegen_to_c_callable c func in
     ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc");
     Hashtbl.add compilation_cache func (m, f);
@@ -89,7 +89,11 @@ let _ =
     Printf.printf "Lowering function\n";
     let lowered = lower_function f env sched in
     Printf.printf "Breaking false dependences\n";
-    let lowered = Break_false_dependence.break_false_dependence_stmt lowered in
+    let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
+    Printf.printf "Constant folding\n";
+    let lowered = Constant_fold.constant_fold_stmt lowered in
+    Printf.printf "Breaking false dependences\n";
+    let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
     Printf.printf "Constant folding\n";
     let lowered = Constant_fold.constant_fold_stmt lowered in
     lowered
