@@ -170,17 +170,22 @@ let chunk_schedule (func: string) (var: string) (args: string list) (region: (ex
   let sched_list = List.map2 make_sched args region in
 
   (* Find all the calls to func in the schedule *)
-  let calls = find_all_schedule schedule func in
+  let (first::rest) = find_all_schedule schedule func in
+
+  (* Set one to be chunked over var with the given region. Tell the
+     others to reuse this chunk. *)
 
   (* Set each one to be chunked over var with the given region. Note
      that this doesn't allow for different callsites to be chunked
      differently! Maybe the argument to this function should be a
      fully qualified call? *)
   let set sched call =
-    set_schedule sched call (Chunk var) sched_list 
+    set_schedule sched call (Reuse first) []
   in
 
   Printf.printf "Done chunking\n%!";
 
-  List.fold_left set schedule calls
+  let chunk_first = set_schedule schedule first (Chunk var) sched_list in
+
+  List.fold_left set chunk_first rest
     

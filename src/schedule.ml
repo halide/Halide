@@ -43,6 +43,7 @@ type call_schedule =
   | Coiterate of dimension * int (* offset *) * int (* modulus *)
   | Inline (* block over nothing - just do in place *)
   | Root (* There is no calling context *)
+  | Reuse of string (* Just do what some other function does, using the same data structure *)
 
 (* min/size exprs *)
 (*
@@ -195,7 +196,8 @@ let string_of_call_schedule = function
       "Coiterate " ^ d ^ " " ^ (string_of_int offset) ^ " " ^ (string_of_int modulus)
   | Inline -> "Inline"
   | Root -> "Root"      
-    
+  | Reuse s -> "Reuse " ^ s
+
 let string_of_schedule = function
   | Split (d, d_o, d_i, offset) ->
       "Split " ^ d ^ " " ^ d_o ^ " " ^ d_i ^ " " ^ (string_of_expr offset)
