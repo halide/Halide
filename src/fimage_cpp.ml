@@ -39,11 +39,13 @@ let compile args stmt =
 let _ = 
   (* Make IR nodes *)
   Callback.register "makeIntImm" (fun a -> IntImm a);
+  Callback.register "makeUIntImm" (fun a -> IntImm a);
   Callback.register "makeFloatImm" (fun a -> FloatImm a);
-  Callback.register "makeAdd" (fun a b -> Bop (Add, a, b));
-  Callback.register "makeMul" (fun a b -> Bop (Mul, a, b));
-  Callback.register "makeSub" (fun a b -> Bop (Sub, a, b));
-  Callback.register "makeDiv" (fun a b -> Bop (Div, a, b));
+  Callback.register "makeCast" (fun t x -> Cast(t, x));
+  Callback.register "makeAdd" (fun a b -> a +~ b);
+  Callback.register "makeMul" (fun a b -> a *~ b);
+  Callback.register "makeSub" (fun a b -> a -~ b);
+  Callback.register "makeDiv" (fun a b -> a /~ b);
   Callback.register "makeEQ" (fun a b -> Cmp (EQ, a, b));
   Callback.register "makeNE" (fun a b -> Cmp (NE, a, b));
   Callback.register "makeGT" (fun a b -> Cmp (GT, a, b));
@@ -52,13 +54,16 @@ let _ =
   Callback.register "makeLE" (fun a b -> Cmp (LE, a, b));
   Callback.register "makeSelect" (fun c a b -> Select (c, a, b));
   Callback.register "makeVar" (fun a -> Var (i32, a));
-  Callback.register "makeLoad" (fun buf idx -> Load (f32, "." ^ buf, idx));
+  Callback.register "makeFloatType" (fun a -> Float a);
+  Callback.register "makeIntType" (fun a -> Int a);
+  Callback.register "makeUIntType" (fun a -> UInt a);
+  Callback.register "makeLoad" (fun t buf idx -> Load (t, "." ^ buf, idx));
   Callback.register "makeStore" (fun a buf idx -> Store (a, "." ^ buf, idx));
   Callback.register "makeFor" (fun var min n stmt -> For (var, min, n, true, stmt));
-  Callback.register "makePipeline" (fun name size produce consume -> Pipeline (name, f32, size, produce, consume));
-  Callback.register "makeCall" (fun name args -> Call (f32, name, args));
+  Callback.register "inferType" (fun expr -> val_type_of_expr expr);
+  Callback.register "makeCall" (fun t name args -> Call (t, name, args));
   Callback.register "makeDebug" (fun e prefix args -> Debug (e, prefix, args));
-  Callback.register "makeDefinition" (fun name argnames body -> Printf.printf "I got the name %s\n%!" name; (name, List.map (fun x -> (i32, x)) argnames, f32, Pure body));
+  Callback.register "makeDefinition" (fun name argnames body -> Printf.printf "I got the name %s\n%!" name; (name, List.map (fun x -> (i32, x)) argnames, val_type_of_expr body, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);
   Callback.register "addDefinitionToEnv" (fun env def -> 
     let (n1, a1, t1, b1) = def in 
