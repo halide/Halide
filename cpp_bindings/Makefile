@@ -1,4 +1,4 @@
-CXX=g++-4.6 -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O2 -msse -Wl,-dead_strip
+CXX=g++-4.6 -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
 
 all: test test_functions test_chunk
 

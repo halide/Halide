@@ -238,6 +238,32 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
                       inline_calls_in_stmt stmt
                   | Impure stmt -> raise (Wtf "I don't know how to inline impure functions yet")
                 end
+            | Reuse s -> begin
+                let (call_sched, sched_list) = make_schedule s schedule in
+                match call_sched with
+                  | Chunk dim -> begin
+                    (* Replace calls to name in stmt with loads from s.result *)
+
+                    (* Grab the arg names of the parent in order to make the strides list *)
+                    let (args, _, _) = make_function_body s env in
+
+                    (* Make the strides list for indexing the buffer *)
+                    let strides = stride_list sched_list (List.map snd args) in
+                    let buffer_name = s ^ ".result" in
+                    let rec replace_calls_in_expr = function
+                      | Call (ty, func_name, args) when func_name = name ->
+                          let index = List.fold_right2 
+                            (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
+                            args strides (IntImm 0) in
+                          Load (ty, buffer_name, index)
+                      | x -> mutate_children_in_expr replace_calls_in_expr x
+                    and replace_calls_in_stmt stmt = 
+                      mutate_children_in_stmt replace_calls_in_expr replace_calls_in_stmt stmt in                    
+                    replace_calls_in_stmt stmt
+
+                  end
+                  | _ -> raise (Wtf ("Can't reuse something with call schedule " ^ (string_of_call_schedule call_sched)))
+            end
             | _ -> raise (Wtf "I don't know how to schedule this yet")
         in
         Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);
