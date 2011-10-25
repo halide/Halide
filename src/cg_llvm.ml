@@ -243,34 +243,53 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       (* TODO: cast vector types *)
 
       | UInt(fb), Int(tb) when fb > tb ->
-          (* TODO: factor this truncate-then-zext pattern into a helper? *)
-          (* truncate to t-1 bits, then zero-extend to t bits to avoid sign bit *)
-          build_zext
-            (build_trunc (cg_expr e) (integer_type c (tb-1)) "" b)
-            (integer_type c tb) "" b
+          simple_cast build_trunc e t
 
       | UInt(fb), Int(tb)
       | UInt(fb), UInt(tb) when fb < tb ->
           simple_cast build_zext e t
 
-      (* TODO: what to do for negative sign in Int -> UInt? *)
-      | Int(fb), UInt(tb) when fb > tb ->
-          simple_cast build_trunc e t
-      | Int(fb), UInt(tb) when fb < tb ->
-          (* truncate to f-1 bits, then zero-extend to t bits to avoid sign bit *)
-          build_zext
-            (build_trunc (cg_expr e) (integer_type c (fb-1)) "" b)
-            (integer_type c tb) "" b
-
-      | UInt(fb), Int(tb)
-      | Int(fb),  UInt(tb)
+      (* Narrowing integer casts always truncate *)
+      | UIntVector(fb, fw), UIntVector(tb, tw)
+      | IntVector(fb, fw), IntVector(tb, tw)
+      | UIntVector(fb, fw), IntVector(tb, tw)
+      | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb > tb ->
+          simple_cast build_trunc e t            
       | UInt(fb), UInt(tb)
-      | Int(fb),  Int(tb) when fb = tb ->
-          (* do nothing *)
-          cg_expr e
+      | UInt(fb), Int(tb)
+      | Int(fb), UInt(tb)
+      | Int(fb), Int(tb) when fb > tb ->
+          simple_cast build_trunc e t
 
-      | UInt(fb), UInt(tb) when fb > tb -> simple_cast build_trunc e t
+      (* Widening integer casts from signed types sign extend then bitcast (like C does) *)
+      | IntVector(fb, fw), IntVector(tb, tw)
+      | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb < tb ->
+          simple_cast build_sext e t
+      | Int(fb), Int(tb)
+      | Int(fb), UInt(tb) when fb < tb ->
+          simple_cast build_sext e t
+            
+      (* Widening integer casts from unsigned types zero extend then bitcast *)
+      | UIntVector(fb, fw), IntVector(tb, tw)
+      | UIntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb < tb ->
+          simple_cast build_zext e t
+      | UInt(fb), Int(tb)
+      | UInt(fb), UInt(tb) when fb < tb ->
+          simple_cast build_zext e t
 
+      (* If the bit counts match, just bitcast, but llvm treats ints
+         and uints the same, so do nothing. *)
+      | UIntVector(fb, fw), IntVector(tb, tw)
+      | IntVector(fb, fw),  UIntVector(tb, tw) 
+      | UIntVector(fb, fw), UIntVector(tb, tw) 
+      | IntVector(fb, fw),  IntVector(tb, tw) when fw = tw && fb = tb -> 
+          cg_expr e 
+      | UInt(fb), Int(tb)
+      | Int(fb),  UInt(tb) 
+      | UInt(fb), UInt(tb) 
+      | Int(fb),  Int(tb) when fb = tb -> 
+          cg_expr e 
+            
       (* int <--> float *)
       | IntVector _, FloatVector _
       | Int(_),   Float(_) -> simple_cast build_sitofp e t
@@ -281,9 +300,7 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       | FloatVector _, UIntVector _
       | Float(_), UInt(_)  -> simple_cast build_fptoui e t
 
-      (* build_intcast in the C/OCaml interface assumes signed, so only
-       * works for Int *)
-      | Int(_), Int(_)       -> simple_cast build_intcast e t
+      (* float widening or narrowing *)
       | Float(fb), Float(tb) -> simple_cast build_fpcast  e t
 
       (* TODO: remaining casts *)
