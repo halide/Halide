@@ -76,10 +76,3 @@ let _ =
   ) in
   
   Cg_llvm.codegen_to_file "brightness.bc" entry;
-
-  let json = open_out "brightness.json" in
-  Printf.fprintf json "{\"name\": \"%s\", \"num_popped\": %d, \"helpstr\": \"%s\"}"
-    "brightness"
-    1
-    "input, width, height, channels, coefficient";
-  close_out json
