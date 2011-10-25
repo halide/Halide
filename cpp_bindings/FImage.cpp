@@ -27,6 +27,11 @@
 
 ML_FUNC1(makeIntImm);
 ML_FUNC1(makeFloatImm);
+ML_FUNC1(makeUIntImm);
+ML_FUNC1(makeFloatType);
+ML_FUNC1(makeIntType);
+ML_FUNC1(makeUIntType);
+ML_FUNC2(makeCast);
 ML_FUNC2(makeAdd);
 ML_FUNC2(makeSub);
 ML_FUNC2(makeMul);
@@ -42,10 +47,11 @@ ML_FUNC3(makeDebug);
 ML_FUNC1(printStmt);
 ML_FUNC1(printSchedule);
 ML_FUNC1(makeVar);
-ML_FUNC2(makeLoad); // buffer id, idx
+ML_FUNC3(makeLoad); // buffer id, idx
 ML_FUNC3(makeStore); // value, buffer id, idx
 ML_FUNC1(makeBufferArg); // name
 ML_FUNC2(doCompile); // stmt
+ML_FUNC1(inferType);
 
 ML_FUNC0(makeList); 
 ML_FUNC2(addToList); // cons
@@ -61,8 +67,7 @@ ML_FUNC4(makeChunkTransform);
 ML_FUNC1(doConstantFold);
 
 // Function call stuff
-ML_FUNC4(makePipeline);
-ML_FUNC2(makeCall);
+ML_FUNC3(makeCall);
 ML_FUNC3(makeDefinition);
 ML_FUNC0(makeEnv);
 ML_FUNC2(addDefinitionToEnv);
@@ -90,19 +95,13 @@ namespace FImage {
     // An Expr is a wrapper around the node structure used by the compiler
     Expr::Expr() {}
 
-    Expr::Expr(MLVal n) : node(n) {}
+    Expr::Expr(MLVal n, Type t) : node(n), type(t) {}
 
-    Expr::Expr(int32_t val) {
-        node = makeIntImm(MLVal::fromInt(val));
-    }
+    Expr::Expr(int32_t val) : node(makeIntImm(MLVal::fromInt(val))), type(Int(32)) {}
 
-    Expr::Expr(unsigned val) {
-        node = makeIntImm(MLVal::fromInt(val));
-    }
+    Expr::Expr(uint32_t val) : node(makeIntImm(MLVal::fromInt(val))), type(UInt(32)) {}
 
-    Expr::Expr(float val) {
-        node = makeFloatImm(MLVal::fromFloat(val));
-    }
+    Expr::Expr(float val) : node(makeFloatImm(MLVal::fromFloat(val))), type(Float(32)) {}
 
     // declare that this node has a child for bookkeeping
     void Expr::child(const Expr &c) {
@@ -111,7 +110,7 @@ namespace FImage {
         unify(funcs, c.funcs);
     }
 
-    void Expr::operator+=(const Expr & other) {
+    void Expr::operator+=(const Expr & other) {        
         node = makeAdd(node, other.node);
         child(other);
     }
@@ -131,79 +130,78 @@ namespace FImage {
         child(other);
     }
 
-
     Expr operator+(const Expr & a, const Expr & b) {
-        Expr e(makeAdd(a.node, b.node));
+        Expr e(makeAdd(a.node, b.node), a.type);
         e.child(a); 
         e.child(b); 
         return e;
     }
 
     Expr operator-(const Expr & a, const Expr & b) {
-        Expr e(makeSub(a.node, b.node));
+        Expr e(makeSub(a.node, b.node), a.type);
         e.child(a);
         e.child(b);
         return e;
     }
 
     Expr operator*(const Expr & a, const Expr & b) {
-        Expr e(makeMul(a.node, b.node));
+        Expr e(makeMul(a.node, b.node), a.type);
         e.child(a);
         e.child(b);
         return e;
     }
 
     Expr operator/(const Expr & a, const Expr & b) {
-        Expr e(makeDiv(a.node, b.node));
+        Expr e(makeDiv(a.node, b.node), a.type);
         e.child(a);
         e.child(b);
         return e;
     }
 
     Expr operator>(const Expr & a, const Expr & b) {
-        Expr e(makeGT(a.node, b.node));
+        Expr e(makeGT(a.node, b.node), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
     
     Expr operator<(const Expr & a, const Expr & b) {
-        Expr e(makeLT(a.node, b.node));
+        Expr e(makeLT(a.node, b.node), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
     
     Expr operator>=(const Expr & a, const Expr & b) {
-        Expr e(makeGE(a.node, b.node));
+        Expr e(makeGE(a.node, b.node), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
     
     Expr operator<=(const Expr & a, const Expr & b) {
-        Expr e(makeLE(a.node, b.node));
+        Expr e(makeLE(a.node, b.node), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
     
     Expr operator!=(const Expr & a, const Expr & b) {
-        Expr e(makeNE(a.node, b.node));
+        Expr e(makeNE(a.node, b.node), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
 
     Expr operator==(const Expr & a, const Expr & b) {
-        Expr e(makeEQ(a.node, b.node));
+        Expr e(makeEQ(a.node, b.node), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
     
     Expr select(const Expr & cond, const Expr & thenCase, const Expr & elseCase) {
-        Expr e(makeSelect(cond.node, thenCase.node, elseCase.node));
+        Expr e(makeSelect(cond.node, thenCase.node, elseCase.node), thenCase.type);
         e.child(cond);
         e.child(thenCase);
         e.child(elseCase);
@@ -236,7 +234,7 @@ namespace FImage {
         for (size_t i = func_args.size(); i > 0; i--) {
             exprlist = addToList(exprlist, func_args[i-1].node);            
         }
-        Expr call = makeCall(MLVal::fromString(f->name()), exprlist);
+        Expr call(makeCall(f->rhs.type.mlval, MLVal::fromString(f->name()), exprlist), f->rhs.type);
 
         for (size_t i = 0; i < func_args.size(); i++) {
             call.child(func_args[i]);
@@ -332,31 +330,7 @@ namespace FImage {
         schedule_transforms.push_back(t);
     }
 
-    Image Func::realize(int a) {        
-        Image im(a);
-        realize(im);
-        return im;
-    }
-
-    Image Func::realize(int a, int b) {
-        Image im(a, b);
-        realize(im);
-        return im;
-    }
-
-    Image Func::realize(int a, int b, int c) {
-        Image im(a, b, c);
-        realize(im);
-        return im;
-    }
-
-    Image Func::realize(int a, int b, int c, int d) {
-        Image im(a, b, c, d);
-        realize(im);
-        return im;
-    }
-
-    void Func::realize(Image result) {
+    void Func::realize(const DynImage &im) {
         static llvm::ExecutionEngine *ee = NULL;
         static llvm::FunctionPassManager *passMgr = NULL;
 
@@ -368,8 +342,8 @@ namespace FImage {
 
             // Make a region to evaluate this over
             MLVal sizes = makeList();
-            for (size_t i = result.size.size(); i > 0; i--) {                
-                sizes = addToList(sizes, MLVal::fromInt(result.size[i-1]));
+            for (size_t i = im.size.size(); i > 0; i--) {                
+                sizes = addToList(sizes, MLVal::fromInt(im.size[i-1]));
             }
 
             MLVal sched = makeSchedule(MLVal::fromString(name()),
@@ -496,7 +470,7 @@ namespace FImage {
         for (size_t i = 0; i < rhs.bufs.size(); i++) {
             arguments[i] = (void *)rhs.bufs[i]->data;
         }
-        arguments[rhs.bufs.size()] = result.data;
+        arguments[rhs.bufs.size()] = im.data;
 
         printf("Calling function at %p\n", function_ptr); 
         function_ptr(&arguments[0]); 
@@ -504,89 +478,53 @@ namespace FImage {
 
     MLVal *Func::environment = NULL;
 
-    Image::Image(uint32_t a) {
-        size.resize(1);
-        stride.resize(1);
-        size[0] = a;
-        stride[0] = 1;
-        // TODO: enforce alignment, lazy allocation, etc, etc
-        buffer.reset(new std::vector<float>(a + 8));
-        data = &(*buffer)[0] + 4;
+    Type Float(unsigned char bits) {
+        return Type {makeFloatType(MLVal::fromInt(bits)), bits};
     }
 
-    Image::Image(uint32_t a, uint32_t b) {
-        size.resize(2);
-        stride.resize(2);
-        size[0] = a;
-        size[1] = b;
-        stride[0] = 1;
-        stride[1] = a;
-        buffer.reset(new std::vector<float>(a*b + 8));
-        data = &(*buffer)[0] + 4;
+    Type Int(unsigned char bits) {
+        return Type {makeIntType(MLVal::fromInt(bits)), bits};
+    }
+
+    Type UInt(unsigned char bits) {
+        return Type {makeUIntType(MLVal::fromInt(bits)), bits};
+    }
+
+    DynImage::DynImage(size_t bytes, uint32_t a) : 
+        size{a}, stride{1} {
+        allocate(bytes);
+    }
+
+    DynImage::DynImage(size_t bytes, uint32_t a, uint32_t b) : 
+        size{a, b}, stride{1, a} {
+        allocate(bytes);
     }
     
-    Image::Image(uint32_t a, uint32_t b, uint32_t c) {
-        size.resize(3);
-        stride.resize(3);
-        size[0] = a;
-        size[1] = b;
-        size[2] = c;
-        stride[0] = 1;
-        stride[1] = a;
-        stride[2] = a*b;
-        buffer.reset(new std::vector<float>(a*b*c + 8));
-        data = &(*buffer)[0] + 4;
+    DynImage::DynImage(size_t bytes, uint32_t a, uint32_t b, uint32_t c) : 
+        size{a, b, c}, stride{1, a, a*b} {
+        allocate(bytes);
     }
 
-    Image::Image(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
-        size.resize(4);
-        stride.resize(4);
-        size[0] = a;
-        size[1] = b;
-        size[2] = c;
-        size[3] = d;
-        stride[0] = 1;
-        stride[1] = a;
-        stride[2] = a*b;
-        stride[3] = a*b*c;
-        buffer.reset(new std::vector<float>(a*b*c*d + 8));
-        data = &(*buffer)[0] + 4;
-    }
-    
-    Image::~Image() {
-        //delete[] (data-4);
+    DynImage::DynImage(size_t bytes, uint32_t a, uint32_t b, uint32_t c, uint32_t d) : 
+        size{a, b, c, d}, stride{1, a, a*b, a*b*c} {
+        allocate(bytes);
     }
 
-    Expr Image::operator()(const Expr & a) {        
-        Expr addr = a * stride[0];
-        Expr load(makeLoad(MLVal::fromString(name()), addr.node));
-        load.child(addr);
-        load.bufs.push_back(this);
-        return load;
+
+    void DynImage::allocate(size_t bytes) {
+        buffer.reset(new std::vector<unsigned char>(bytes+16));
+        data = &(*buffer)[0];
+        unsigned char offset = ((size_t)data) & 0xf;
+        if (offset) {
+            data += 16 - offset;
+        }
     }
 
-    Expr Image::operator()(const Expr & a, const Expr & b) {
-        Expr addr = (a * stride[0]) + (b * stride[1]);
-        Expr load(makeLoad(MLVal::fromString(name()), addr.node));
-        load.child(addr);
-        load.bufs.push_back(this);
-        return load;
-    }
-
-    Expr Image::operator()(const Expr & a, const Expr & b, const Expr & c) {
-        Expr addr = a * stride[0] + b * stride[1] + c * stride[2];
-        Expr load(makeLoad(MLVal::fromString(name()), addr.node));
-        load.child(addr);
-        load.bufs.push_back(this);
-        return load;
-    }
-
-    Expr Image::operator()(const Expr & a, const Expr & b, const Expr & c, const Expr & d) {
-        Expr addr = a * stride[0] + b * stride[1] + c * stride[2] + d * stride[3];
-        Expr load(makeLoad(MLVal::fromString(name()), addr.node));
-        load.child(addr);
-        load.bufs.push_back(this);
-        return load;
+    Expr DynImage::load(Type type, const Expr &idx) {
+        Expr l(makeLoad(type.mlval, MLVal::fromString(name()), idx.node), type);
+        l.child(idx);
+        l.bufs.push_back(this);
+        return l;
     }
 
     Range operator*(const Range &a, const Range &b) {
@@ -601,13 +539,19 @@ namespace FImage {
         return region;
     }
 
+    Expr Cast(const Type &t, const Expr &e) {
+        Expr cast(makeCast(t.mlval, e.node), t);
+        cast.child(e);
+        return cast;
+    }
+
     Expr Debug(Expr e, const std::string &prefix, const std::vector<Expr> &args) {
         MLVal mlargs = makeList();
         for (size_t i = args.size(); i > 0; i--) {
             mlargs = addToList(mlargs, args[i-1].node);
         }
 
-        Expr d(makeDebug(e.node, MLVal::fromString(prefix), mlargs));        
+        Expr d(makeDebug(e.node, MLVal::fromString(prefix), mlargs), e.type);        
         d.child(e);
         for (size_t i = 0; i < args.size(); i++) {
             d.child(args[i]);

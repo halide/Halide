@@ -43,6 +43,7 @@ type call_schedule =
   | Coiterate of dimension * int (* offset *) * int (* modulus *)
   | Inline (* block over nothing - just do in place *)
   | Root (* There is no calling context *)
+  | Reuse of string (* Just do what some other function does, using the same data structure *)
 
 (* min/size exprs *)
 (*
@@ -169,14 +170,17 @@ and empty_schedule = Tree StringMap.empty
 
 let find_all_schedule (tree:schedule_tree) (name:string) =
   let ends_with substr str =
+    Printf.printf "ends_with %s %s\n%!" substr str;
     let strlen = String.length str in
     let substrlen = String.length substr in
-    let suffix = String.sub str (strlen - substrlen) substrlen in
-    substr = suffix      
+    if substrlen > strlen then false else
+      let suffix = String.sub str (strlen - substrlen) substrlen in
+      substr = suffix      
   in
   let rec find prefix = function
     | Tree tree ->
         let process_key key (_, _, subtree) list = 
+          Printf.printf "Prefix: %s Key: %s\n%!" prefix key;
           let prefixed_key = prefix ^ key in
           let subresults = (find (prefixed_key ^ ".") subtree) @ list in
           if ends_with name key then
@@ -195,7 +199,8 @@ let string_of_call_schedule = function
       "Coiterate " ^ d ^ " " ^ (string_of_int offset) ^ " " ^ (string_of_int modulus)
   | Inline -> "Inline"
   | Root -> "Root"      
-    
+  | Reuse s -> "Reuse " ^ s
+
 let string_of_schedule = function
   | Split (d, d_o, d_i, offset) ->
       "Split " ^ d ^ " " ^ d_o ^ " " ^ d_i ^ " " ^ (string_of_expr offset)
