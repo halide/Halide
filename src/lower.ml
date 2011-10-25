@@ -3,6 +3,7 @@ open Ir_printer
 open Schedule
 open Analysis
 open Util
+open Vectorize
 
 (* Lowering produces references to names either in the context of the
    callee or caller. The ones in the context of the caller may in fact
@@ -225,10 +226,14 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
                   | Pure expr ->
                       let rec inline_calls_in_expr = function
                         | Call (t, n, call_args) when n = name -> 
-                          (* TODO: Check the types match (TODO: vectorize the function if necessary) *)
+                            (* TODO: Check the types match *)
                             List.fold_left2 
-                            (* Replace an argument with its value in e *)
-                              (fun e (t, var) value -> subs_expr (Var (t, var)) value e)
+                              (* Replace an argument with its value in e, possibly vectorizing as we go for i32 args *)
+                              (fun e (t, var) value -> 
+                                if (t = i32) then 
+                                  vector_subs_expr var value e 
+                                else
+                                  subs_expr (Var (t, var)) value e)
                               expr args call_args 
                               
                         | x -> mutate_children_in_expr inline_calls_in_expr x
