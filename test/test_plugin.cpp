@@ -17,19 +17,8 @@
 //
 // clang++ -g -O0 -DCLASSNAME='TestBrightness' -DNUM_POPPED=1 -DHELPSTR='"input, width, height, channels, coefficient"' -DNAMESTR='"test_brightness"' test_plugin.cpp test_brightness.s -I ../ImageStack/src -Xlinker -dylib -Xlinker -undefined -Xlinker dynamic_lookup -o test_brightness.so
 
+#include "test_plugin.h"
 #define MAX_NAME 256
-
-#include <ImageStack.h>
-#include <vector>
-#include <string>
-#include <stdlib.h>
-#include <stdint.h>
-#include <time.h>
-#include <sys/time.h>
-#ifdef __MACH__
-#include <mach/clock.h>
-#include <mach/mach.h>
-#endif
 
 using std::vector;
 using std::string;
