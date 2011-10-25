@@ -63,7 +63,7 @@ let _ =
   Callback.register "inferType" (fun expr -> val_type_of_expr expr);
   Callback.register "makeCall" (fun t name args -> Call (t, name, args));
   Callback.register "makeDebug" (fun e prefix args -> Debug (e, prefix, args));
-  Callback.register "makeDefinition" (fun name argnames body -> Printf.printf "I got the name %s\n%!" name; (name, List.map (fun x -> (i32, x)) argnames, val_type_of_expr body, Pure body));
+  Callback.register "makeDefinition" (fun name argnames body -> (name, List.map (fun x -> (i32, x)) argnames, val_type_of_expr body, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);
   Callback.register "addDefinitionToEnv" (fun env def -> 
     let (n1, a1, t1, b1) = def in 
