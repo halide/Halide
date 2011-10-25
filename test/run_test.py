@@ -1,8 +1,15 @@
+#!/usr/bin/env python
+
 from subprocess import check_call,check_output
 import os
 import json
 
 verbose = False
+dry_run = False
+
+if dry_run:
+    check_call = lambda c: status('run', ' '.join(c))
+    check_output = lambda c: status('run', ' '.join(c))
 
 def status(name, s):
     print '%s: %s' % (name, s)
@@ -23,7 +30,7 @@ clang_exe = os.path.join(llvm_path, 'clang++')
 imagestack_path = os.path.join(proj_root, 'ImageStack', 'bin')
 imagestack_exe = os.path.join(imagestack_path, 'ImageStack')
 
-def build_kernel(name):
+def test(name):
     status(name, 'Building bitcode')
 
     # Build the ocaml test
@@ -39,17 +46,13 @@ def build_kernel(name):
 
     # Compile the plugin
     status(name, 'Building plugin')
-    # TODO: load name, num_popped, helpstr from json?
+    # Load plugin info from generated json
     opts = json.load(open('%s.json' % name))
+    # TODO: move helpstr, num_popped into externs imported straight from the LLVM module?
     assert opts['name'] == name
     opts['classname'] = 'Test'+name.title()
     opts['namestr'] = 'test_'+name
-    #opts = {
-        #'classname': 'Test'+name.title(),
-        #'num_popped': 1,
-        #'namestr': 'test_'+name,
-        #'helpstr': 'help: %s' % name
-    #}
+    # Compile the thing
     cmd = [
         clang_exe,
         "-O3",
@@ -67,13 +70,14 @@ def build_kernel(name):
 
     # Run the plugin
     status(name, 'Running plugin')
-    check_call([
+    cmd = [
         imagestack_exe,
         '-plugin', '%s.so' % name,
-        '-help', 'test_%s' % name
-    ])
+    ]
+    cmd = cmd + opts['before_run'] + ['-test_%s' % name] + opts['args'] + ['-save', '%s.png' % name]
+    run(cmd)
     
     # Pop out
     os.chdir("..")
 
-build_kernel('brightness')
+test('brightness')
