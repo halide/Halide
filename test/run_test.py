@@ -4,6 +4,8 @@ from subprocess import check_call,check_output
 import os
 import json
 
+# TODO: make pch: `g++ -x c++-header -I ../ImageStack/src test_plugin.h`
+
 verbose = False
 dry_run = False
 
@@ -26,9 +28,11 @@ def run(cmd):
 
 proj_root = os.path.join('..', '..')
 llvm_path = os.path.join(proj_root, 'llvm', 'Debug+Asserts', 'bin')
+llc_exe = os.path.join(llvm_path, 'llc')
 clang_exe = os.path.join(llvm_path, 'clang++')
 imagestack_path = os.path.join(proj_root, 'ImageStack', 'bin')
 imagestack_exe = os.path.join(imagestack_path, 'ImageStack')
+cxx_exe = 'g++'
 
 def test(name):
     status(name, 'Building bitcode')
@@ -46,6 +50,8 @@ def test(name):
 
     # Compile the plugin
     status(name, 'Building plugin')
+    # Codegen the bitcode
+    run([llc_exe, "-O3", "-disable-cfi", "%s.bc" % name])
     # Load plugin info from generated json
     opts = json.load(open('%s.json' % name))
     # TODO: move helpstr, num_popped into externs imported straight from the LLVM module?
@@ -54,7 +60,7 @@ def test(name):
     opts['namestr'] = 'test_'+name
     # Compile the thing
     cmd = [
-        clang_exe,
+        cxx_exe,
         "-O3",
         "-Xlinker", "-dylib", "-Xlinker", "-undefined", "-Xlinker", "dynamic_lookup",
         "-DCLASSNAME=%(classname)s" % opts,
@@ -62,7 +68,7 @@ def test(name):
         "-DHELPSTR=\"%(helpstr)s\"" % opts,
         "-DNAMESTR=\"%(namestr)s\"" % opts,
         "../test_plugin.cpp",
-        "%s.bc" % name,
+        "%s.s" % name,
         "-I../../ImageStack/src",
         "-o", "%s.so" % name
     ]
