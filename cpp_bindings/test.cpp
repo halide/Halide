@@ -8,9 +8,9 @@ using namespace FImage;
 
 template<typename T>
 inline T do_math(const T &a, const T &b) {
-    T acc = 1.0f;
-    for (int i = 0; i < 1; i++) {
-        acc *= a - b;
+    T acc = a - b;
+    for (int i = 0; i < 0; i++) {
+        acc += a - b;
     }
     return acc;
 }
@@ -25,25 +25,23 @@ float operator-(const timeval &after, const timeval &before) {
 
 int main(int argc, char **argv) {
     Var x("x"), y("y");
-    Func f("f"), g("g"), h("h");
-    Image im(W+16, H+16);       
+    Func f("f"), g("g"), h("h"), i("i");
+    Image<unsigned char> im(W+32, H+32);       
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            im(x, y) = ((double)rand())/RAND_MAX;
+            im(x, y) = (x > 24) ? 40 : 20;
         }
     }
 
     printf("Defining function...\n");
     
-
-
-    //f(x, y) = Debug(do_math<Expr>(im(x, y), im(x+3, y)), "Evaluating f at: ", x, y);
-    //g(x, y) = Debug(do_math<Expr>(f(x, y), f(x, y+3)), "Evaluating g at: ", x, y);
-
-    f(x, y) = do_math<Expr>(im(x, y), im(x+3, y));
-    g(x, y) = do_math<Expr>(f(x, y), f(x, y+3));
-    h(x, y) = do_math<Expr>(g(x+3, y), g(x, y));
+    Func in("in"), blurx("blurx"), blury("blury"), high("high"), out("out");
+    in(x, y)    = Cast(UInt(16), im(x+16, y+16));
+    blurx(x, y) = (in(x-1, y) + in(x, y)*2 + in(x+1, y))/4;
+    blury(x, y) = (blurx(x, y-1) + blurx(x, y)*2 + blurx(x, y+1))/4;
+    high(x, y)  = in(x, y) - blury(x, y);
+    out(x, y)   = Cast(UInt(8), in(x, y) + high(x, y));
 
     //f.trace();
     //g.trace();
@@ -52,75 +50,47 @@ int main(int argc, char **argv) {
     Var xo("xo"), xi("xi"), yo("yo"), yi("yi");
 
     if (argc > 1) {
-        int chunk = atoi(argv[1]);
-        h.split(y, yo, yi, chunk);
-        g.chunk(x, Range(0, W+4) * Range(yo*chunk + yi, 1));
-        f.chunk(yi, Range(0, W+4) * Range(yo*chunk, chunk+3)); 
+        //int chunk = atoi(argv[1]);
+        // Compute out scanline-at-a-time in vectors
+        out.split(x, xo, xi, 8);
+        out.vectorize(xi);
 
-        /*
-        h.split(x, xo, xi, 4);
-        h.vectorize(xi);
+        // Compute high scanline-at-a-time
+        //high.chunk(xo, Range(0, W) * Range(y, 1));
+        //high.split(x, xo, xi, 8);
+        //high.vectorize(xi);
 
-        g.split(x, xo, xi, 4);
-        g.vectorize(xi);
+        //blury.chunk(xo, Range(0, W) * Range(y, 1));
+        //blury.split(x, xo, xi, 8);
+        //blury.vectorize(xi);
 
-        f.split(x, xo, xi, 4);
-        f.vectorize(xi);
-        */
+        // blury needs three scanlines of blurx
+        //blurx.chunk(xo, Range(0, W) * Range(y-1, 3));
+        //blurx.split(x, xo, xi, 8);
+        //blurx.vectorize(xi);
+
+        //in.chunk(xo, Range(-8, W+8) * Range(y-1, 3));
+        //in.split(x, xo, xi, 8);
+        //in.vectorize(xi);
     }
 
 
     printf("Realizing function...\n");
 
-    Image im2 = h.realize(W, H);
+    Image<unsigned char> im_out = out.realize(W, H);
 
     timeval before, after;
     gettimeofday(&before, NULL);
-    h.realize(im2);
+    out.realize(im_out);
     gettimeofday(&after, NULL);
     printf("jitted code: %f ms\n", after - before);
 
     for (int x = 0; x < 16; x++) {
-        printf("%3.1f ", im2(x, 10));
+        printf("%d ", im(x+16, 26));
     }
     printf("\n");
-
-    // Clear it before the next run
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            im2(x, y) = -1; 
-        }
-    }    
-    
-    Image tmp1(W+16, H+16);
-    Image tmp2(W+16, H+16);
-    
-
-    gettimeofday(&before, NULL);
-
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            tmp1(x, y) = do_math(im(x, y), im(x+3, y));
-        }
-    }
-
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            tmp2(x, y) = do_math(tmp1(x, y), tmp1(x, y+3));
-        }
-    }
-
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            im2(x, y) = do_math(tmp2(x+3, y), tmp2(x, y));
-        }
-    }
-
-    gettimeofday(&after, NULL);
-    printf("compiled code: %f ms\n", after - before);
-
     for (int x = 0; x < 16; x++) {
-        printf("%3.1f ", im2(x, 10));
+        printf("%d ", im_out(x, 10));
     }
     printf("\n");
 

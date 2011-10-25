@@ -9,10 +9,6 @@
 
 namespace FImage {
 
-    class Image;
-    class Var;
-    class Func;
-
     // objects with unique auto-generated names
     template<char c>
     class Named {
@@ -33,11 +29,27 @@ namespace FImage {
         std::string _name;
     };
 
+
+    class DynImage;
+    class Var;
+    class Func;
+
+    // Possible types for image data
+    class Type {
+      public:
+        MLVal mlval;
+        unsigned char bits;
+    };
+
+    Type Float(unsigned char bits);
+    Type Int(unsigned char bits);
+    Type UInt(unsigned char bits);
+
     // A node in an expression tree.
     class Expr {
     public:
         Expr();
-        Expr(MLVal);
+        Expr(MLVal, Type);
         Expr(int32_t);
         Expr(unsigned);
         Expr(float);
@@ -48,10 +60,12 @@ namespace FImage {
         void operator/=(const Expr &);
         
         MLVal node;
-        void debug();
+        Type type;
+
+        void debug();        
 
         // The list of argument buffers contained within subexpressions
-        std::vector<Image *> bufs;
+        std::vector<DynImage *> bufs;
 
         // The list of free variables found
         std::vector<Var *> vars;
@@ -85,6 +99,123 @@ namespace FImage {
     Expr Debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d);
     Expr Debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d, Expr e);
 
+    // Make a cast node
+    Expr Cast(const Type &, const Expr &);
+
+    // The base image type with no typed accessors
+    class DynImage : public Named<'i'> {
+    public:
+
+        DynImage(size_t bytes, uint32_t a);
+        DynImage(size_t bytes, uint32_t a, uint32_t b);
+        DynImage(size_t bytes, uint32_t a, uint32_t b, uint32_t c);
+        DynImage(size_t bytes, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
+
+        Expr load(Type type, const Expr &idx);
+
+        std::vector<uint32_t> size, stride;
+        unsigned char *data;
+
+    private:
+        void allocate(size_t bytes);
+        std::shared_ptr<std::vector<unsigned char> >buffer;
+    };
+
+    template<typename T>
+    Type TypeOf();
+
+    template<>
+    Type TypeOf<float>() {
+        return Float(32);
+    }
+
+    template<>
+    Type TypeOf<double>() {
+        return Float(64);
+    }
+
+    template<>
+    Type TypeOf<unsigned char>() {
+        return UInt(8);
+    }
+
+    template<>
+    Type TypeOf<unsigned short>() {
+        return UInt(16);
+    }
+
+    template<>
+    Type TypeOf<unsigned int>() {
+        return UInt(32);
+    }
+
+    template<>
+    Type TypeOf<bool>() {
+        return Int(1);
+    }
+
+    template<>
+    Type TypeOf<char>() {
+        return Int(8);
+    }
+
+    template<>
+    Type TypeOf<short>() {
+        return Int(16);
+    }
+
+    template<>
+    Type TypeOf<int>() {
+        return Int(32);
+    }
+
+    // The (typed) image type
+    template<typename T>
+    class Image : public DynImage {
+    public:
+        Image(uint32_t a) : DynImage(a * sizeof(T), a) {}
+        Image(uint32_t a, uint32_t b) : DynImage(a*b*sizeof(T), a, b) {}
+        Image(uint32_t a, uint32_t b, uint32_t c) : DynImage(a*b*c*sizeof(T), a, b, c) {}
+        Image(uint32_t a, uint32_t b, uint32_t c, uint32_t d) : DynImage(a*b*c*d*sizeof(T), a, b, c, d) {}
+        Image(DynImage im) : DynImage(im) {}
+
+        // make a Load
+        Expr operator()(const Expr &a) {
+            return load(TypeOf<T>(), a*stride[0]);
+        }
+
+        Expr operator()(const Expr &a, const Expr &b) {
+            return load(TypeOf<T>(), a*stride[0] + b*stride[1]);
+        }
+
+        Expr operator()(const Expr &a, const Expr &b, const Expr &c) {
+            return load(TypeOf<T>(), a*stride[0] + b*stride[1] + c*stride[2]);
+        }
+
+
+        Expr operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) {
+            return load(TypeOf<T>(), a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]);
+        }
+        
+        // Actually look something up in the image. Won't return anything
+        // interesting if the image hasn't been evaluated yet.
+        T &operator()(int a) {
+            return ((T*)data)[a*stride[0]];
+        }
+        
+        T &operator()(int a, int b) {
+            return ((T*)data)[a*stride[0] + b*stride[1]];
+        }
+        
+        T &operator()(int a, int b, int c) {
+            return ((T*)data)[a*stride[0] + b*stride[1] + c*stride[2]];
+        }
+        
+        T &operator()(int a, int b, int c, int d) {
+            return ((T*)data)[a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]];
+        }
+    };
+
     // A loop variable with the given (static) range [min, max)
     class Var : public Expr, public Named<'v'> {
     public:
@@ -100,6 +231,8 @@ namespace FImage {
     };
 
     Range operator*(const Range &a, const Range &b);
+
+    class Func;
 
     // A function call (if you cast it to an expr), or a function definition lhs (if you assign an expr to it).
     class FuncRef {
@@ -152,11 +285,32 @@ namespace FImage {
         void trace();
         
         // Generate an image from this function by Jitting the IR and running it.
-        Image realize(int);
-        Image realize(int, int);
-        Image realize(int, int, int);
-        Image realize(int, int, int, int);
-        void realize(Image);
+
+        DynImage realize(int a) {
+            DynImage im(a * 4, a);
+            realize(im);
+            return im;
+        }
+
+        DynImage realize(int a, int b) {        
+            DynImage im(a * b * 4, a, b);
+            realize(im);
+            return im;
+        }
+
+        DynImage realize(int a, int b, int c) {        
+            DynImage im(a * b * c * 4, a, b, c);
+            realize(im);
+            return im;
+        }
+
+        DynImage realize(int a, int b, int c, int d) {        
+            DynImage im(a * b * c * d * 4, a, b, c, d);
+            realize(im);
+            return im;
+        }
+        
+        void realize(const DynImage &im);
         
         /* These methods generate a partially applied function that
          * takes a schedule and modifies it. These functions get pushed
@@ -194,52 +348,6 @@ namespace FImage {
         mutable void (*function_ptr)(void *); 
     };
 
-    // The image type. Has from 1 to 4 dimensions.
-    class Image : public Named<'i'> {
-    public:
-        Image(uint32_t);
-        Image(uint32_t, uint32_t);
-        Image(uint32_t, uint32_t, uint32_t);
-        Image(uint32_t, uint32_t, uint32_t, uint32_t);
-        
-        ~Image();
-        
-        // make a Load
-        Expr operator()(const Expr &);
-        Expr operator()(const Expr &, const Expr &);
-        Expr operator()(const Expr &, const Expr &, const Expr &);
-        Expr operator()(const Expr &, const Expr &, const Expr &, const Expr &);
-        
-        // Actually look something up in the image. Won't return anything
-        // interesting if the image hasn't been evaluated yet.
-        float &operator()(int a) {
-            return data[a*stride[0]];
-        }
-        
-        float &operator()(int a, int b) {
-            return data[a*stride[0] + b*stride[1]];
-        }
-        
-        float &operator()(int a, int b, int c) {
-            return data[a*stride[0] + b*stride[1] + c*stride[2]];
-        }
-        
-        float &operator()(int a, int b, int c, int d) {
-            return data[a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]];
-        }
-        
-        // Dimensions
-        std::vector<uint32_t> size;
-        std::vector<uint32_t> stride;
-        
-        // The point of the start of the first scanline. Public for now
-        // for inspection, but don't assume anything about the way data is
-        // stored.
-        float *data;
-        
-        // How the data is actually stored
-        std::shared_ptr<std::vector<float> > buffer;       
-    };
 
 }
 
