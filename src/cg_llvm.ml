@@ -136,6 +136,54 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
      * the scalar versions *)
 
     (* arithmetic *)
+
+    (* llvm doesn't seem very good about converting common vector muls to vector shifts *)
+        
+    | Bop(Mul, Broadcast(IntImm 2, n), v) 
+    | Bop(Mul, v, Broadcast(IntImm 2, n))
+    | Bop(Mul, Broadcast(UIntImm 2, n), v) 
+    | Bop(Mul, v, Broadcast(UIntImm 2, n)) -> 
+        build_shl (cg_expr v) (cg_expr (Broadcast (IntImm 1, n))) "" b
+
+    | Bop(Mul, Broadcast(Cast (Int x, IntImm 2), n), v)
+    | Bop(Mul, v, Broadcast(Cast (Int x, IntImm 2), n))
+    | Bop(Mul, Broadcast(Cast (Int x, UIntImm 2), n), v) 
+    | Bop(Mul, v, Broadcast(Cast (Int x, UIntImm 2), n)) -> 
+        build_shl (cg_expr v) (cg_expr (Broadcast (Cast (Int x, IntImm 1), n))) "" b
+
+    | Bop(Mul, Broadcast(Cast (UInt x, IntImm 2), n), v)
+    | Bop(Mul, v, Broadcast(Cast (UInt x, IntImm 2), n))
+    | Bop(Mul, Broadcast(Cast (UInt x, UIntImm 2), n), v)
+    | Bop(Mul, v, Broadcast(Cast (UInt x, UIntImm 2), n)) -> 
+        build_shl (cg_expr v) (cg_expr (Broadcast (Cast (UInt x, UIntImm 1), n))) "" b
+
+    | Bop(Div, v, Broadcast(IntImm 2, n)) ->
+        build_ashr (cg_expr v) (cg_expr (Broadcast (IntImm 1, n))) "" b
+    | Bop(Div, v, Broadcast(UIntImm 2, n)) -> 
+        build_lshr (cg_expr v) (cg_expr (Broadcast (IntImm 1, n))) "" b
+
+    | Bop(Div, v, Broadcast(Cast (Int x, IntImm 2), n)) 
+    | Bop(Div, v, Broadcast(Cast (Int x, UIntImm 2), n)) -> 
+        build_ashr (cg_expr v) (cg_expr (Broadcast (Cast (Int x, IntImm 1), n))) "" b
+
+    | Bop(Div, v, Broadcast(Cast (UInt x, IntImm 2), n))
+    | Bop(Div, v, Broadcast(Cast (UInt x, UIntImm 2), n)) -> 
+        build_lshr (cg_expr v) (cg_expr (Broadcast (Cast (UInt x, UIntImm 1), n))) "" b
+
+    | Bop(Div, v, Broadcast(IntImm 4, n)) ->
+        build_ashr (cg_expr v) (cg_expr (Broadcast (IntImm 2, n))) "" b
+    | Bop(Div, v, Broadcast(UIntImm 4, n)) -> 
+        build_lshr (cg_expr v) (cg_expr (Broadcast (IntImm 2, n))) "" b
+
+    | Bop(Div, v, Broadcast(Cast (Int x, IntImm 4), n)) 
+    | Bop(Div, v, Broadcast(Cast (Int x, UIntImm 4), n)) -> 
+        build_ashr (cg_expr v) (cg_expr (Broadcast (Cast (Int x, IntImm 2), n))) "" b
+
+    | Bop(Div, v, Broadcast(Cast (UInt x, IntImm 4), n))
+    | Bop(Div, v, Broadcast(Cast (UInt x, UIntImm 4), n)) -> 
+        build_lshr (cg_expr v) (cg_expr (Broadcast (Cast (UInt x, UIntImm 2), n))) "" b
+        
+
     | Bop(Add, l, r) -> cg_binop build_add  build_add  build_fadd l r
     | Bop(Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
     | Bop(Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r

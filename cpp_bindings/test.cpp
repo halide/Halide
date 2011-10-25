@@ -37,11 +37,11 @@ int main(int argc, char **argv) {
     printf("Defining function...\n");
     
     Func in("in"), blurx("blurx"), blury("blury"), high("high"), out("out");
-    in(x, y)    = Cast(Int(16), im(x+16, y+16));
+    in(x, y)    = Cast(UInt(16), im(x+16, y+16));
     blurx(x, y) = (in(x-1, y) + in(x, y)*2 + in(x+1, y))/4;
     blury(x, y) = (blurx(x, y-1) + blurx(x, y)*2 + blurx(x, y+1))/4;
     high(x, y)  = in(x, y) - blury(x, y);
-    out(x, y)   = Cast(Int(8), in(x, y) + high(x, y));
+    out(x, y)   = Cast(UInt(8), in(x, y) + high(x, y));
 
     //f.trace();
     //g.trace();
@@ -52,26 +52,26 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         //int chunk = atoi(argv[1]);
         // Compute out scanline-at-a-time in vectors
-        out.split(x, xo, xi, 16);
+        out.split(x, xo, xi, 8);
         out.vectorize(xi);
 
         // Compute high scanline-at-a-time
-        high.chunk(xo, Range(0, W) * Range(y, 1));
-        high.split(x, xo, xi, 16);
-        high.vectorize(xi);
+        //high.chunk(xo, Range(0, W) * Range(y, 1));
+        //high.split(x, xo, xi, 8);
+        //high.vectorize(xi);
 
-        blury.chunk(xo, Range(0, W) * Range(y, 1));
-        blury.split(x, xo, xi, 16);
-        blury.vectorize(xi);
+        //blury.chunk(xo, Range(0, W) * Range(y, 1));
+        //blury.split(x, xo, xi, 8);
+        //blury.vectorize(xi);
 
         // blury needs three scanlines of blurx
-        blurx.chunk(xo, Range(0, W) * Range(y-1, 3));
-        blurx.split(x, xo, xi, 16);
-        blurx.vectorize(xi);
+        //blurx.chunk(xo, Range(0, W) * Range(y-1, 3));
+        //blurx.split(x, xo, xi, 8);
+        //blurx.vectorize(xi);
 
-        in.chunk(xo, Range(-16, W+16) * Range(y-1, 3));
-        in.split(x, xo, xi, 16);
-        in.vectorize(xi);
+        //in.chunk(xo, Range(-8, W+8) * Range(y-1, 3));
+        //in.split(x, xo, xi, 8);
+        //in.vectorize(xi);
     }
 
 
