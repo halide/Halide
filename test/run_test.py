@@ -5,6 +5,7 @@ import os
 import json
 
 # TODO: make pch: `g++ -x c++-header -I ../ImageStack/src test_plugin.h`
+EPSILON = 0.001
 
 verbose = False
 dry_run = False
@@ -18,13 +19,15 @@ def status(name, s):
 
 def run(cmd):
     global verbose
-    if not verbose:
-        check_output(cmd)
-    else:
+    if verbose:
         print '------------------------------------------------------------'
         print (' '.join(cmd))+':'
         print '------------------------------------------------------------'
-        print check_call(cmd)
+        #print check_call(cmd)
+    res = check_output(cmd)
+    if verbose:
+        print res
+    return res
 
 proj_root = os.path.join('..', '..')
 llvm_path = os.path.join(proj_root, 'llvm', 'Debug+Asserts', 'bin')
@@ -81,8 +84,18 @@ def test(name):
         '-plugin', '%s.so' % name,
     ]
     cmd = cmd + opts['before_run'] + ['-test_%s' % name] + opts['args'] + ['-save', '%s.png' % name]
-    run(cmd)
-    
+    cmd = cmd + opts['validation']
+    out = run(cmd)
+    # Expect result as float in last line of output
+    try:
+        residual = float(out.splitlines()[-1])
+        assert(residual < EPSILON)
+        print "."
+    except:
+        print "%s failed!" % name
+        if verbose:
+            print "Output:\n%s" % out
+
     # Pop out
     os.chdir("..")
 
