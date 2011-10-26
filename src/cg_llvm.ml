@@ -3,6 +3,7 @@ open Llvm
 open List
 open Util
 open Ir_printer
+open Architecture
 
 let dbgprint = false
 
@@ -35,7 +36,7 @@ let verify_cg m =
       | Some reason -> raise(CGFailed(reason))
       | None -> ()
 
-let codegen (c:llcontext) (e:entrypoint) =
+let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
 
   let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
@@ -112,7 +113,7 @@ let codegen (c:llcontext) (e:entrypoint) =
 
 
   (* start codegen at entry block of main *)
-let b = builder_at_end c (entry_block entrypoint_fn) in
+  let b = builder_at_end c (entry_block entrypoint_fn) in
   
   let alloca_bb = append_block c ("alloca") (block_parent (insertion_block b)) in
   ignore(build_br alloca_bb b);
@@ -121,13 +122,15 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
   let alloca_end = build_br after_alloca_bb b in
   position_at_end after_alloca_bb b;  
 
-  let rec cg_expr = function
+  let rec cg_expr e = arch.cg_expr c b cg_expr_inner e
+  and cg_expr_inner = function
     (* constants *)
-    | IntImm(i) | UIntImm(i) -> const_int   (int_imm_t)   i
-    | FloatImm(f)            -> const_float (float_imm_t) f
+    | IntImm i 
+    | UIntImm i  -> const_int   (int_imm_t)   i
+    | FloatImm f -> const_float (float_imm_t) f
 
     (* cast *)
-    | Cast(t,e) -> cg_cast t e
+    | Cast (t, e) -> cg_cast t e
 
     (* TODO: coding style: use more whitespace, fewer parens in matches? *)
 
@@ -409,7 +412,8 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       (* Return an ignorable llvalue *)
       const_int int_imm_t 0
 
-  and cg_stmt = function
+  and cg_stmt stmt = arch.cg_stmt c b cg_stmt_inner stmt
+  and cg_stmt_inner = function
     (* TODO: unaligned vector store *)
     | Store(e, buf, idx) -> cg_store e buf idx
     | For(name, min, n, _, stmt) ->
@@ -677,7 +681,7 @@ let codegen_to_ocaml_callable e =
   let c = create_context () in
 
   (* codegen *)
-  let (m,f) = codegen c e in
+  let (m,f) = codegen c e (Architecture.host) in
 
   (* codegen the wrapper *)
   let w = codegen_caml_wrapper c m f in
@@ -728,7 +732,7 @@ let codegen_c_wrapper c m f =
 let codegen_to_c_callable c e =
   (* codegen *)
   (*let (args,s) = e in*)
-  let (m,f) = codegen c e in
+  let (m,f) = codegen c e Architecture.host in
 
   (* codegen the wrapper *)
   let w = codegen_c_wrapper c m f in
