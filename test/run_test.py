@@ -121,6 +121,17 @@ def test(name):
         if verbose:
             print "Output:\n%s" % out
 
+    # Expect runtime as float (seconds) in some line like "_im_time: %f"
+    time = 0.0
+    try:
+        timestr = "_im_time: "
+        times = [l.split(timestr)[-1] for l in out.splitlines() if l.startswith(timestr)]
+        time = [float(t) for t in times][0]
+        with open(timefile, "w") as f:
+            f.write("%f" % time)
+    except:
+       print "Failed to get time!"
+
     # Pop out
     os.chdir("..")
 
