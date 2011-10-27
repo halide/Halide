@@ -99,9 +99,6 @@ namespace FImage {
     Expr Debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d);
     Expr Debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d, Expr e);
 
-    // Make a cast node
-    Expr Cast(const Type &, const Expr &);
-
     // The base image type with no typed accessors
     class DynImage : public Named<'i'> {
     public:
@@ -168,6 +165,18 @@ namespace FImage {
     Type TypeOf<int>() {
         return Int(32);
     }
+
+    template<>
+    Type TypeOf<signed char>() {
+        return Int(8);
+    }
+
+    // Make a cast node
+    Expr Cast(const Type &, const Expr &);
+
+    template<typename T>
+    Expr Cast(const Expr &e) {return Cast(TypeOf<T>(), e);}
+
 
     // The (typed) image type
     template<typename T>
@@ -286,30 +295,11 @@ namespace FImage {
         
         // Generate an image from this function by Jitting the IR and running it.
 
-        DynImage realize(int a) {
-            DynImage im(a * 4, a);
-            realize(im);
-            return im;
-        }
+        DynImage realize(int a);
+        DynImage realize(int a, int b);
+        DynImage realize(int a, int b, int c);
+        DynImage realize(int a, int b, int c, int d);
 
-        DynImage realize(int a, int b) {        
-            DynImage im(a * b * 4, a, b);
-            realize(im);
-            return im;
-        }
-
-        DynImage realize(int a, int b, int c) {        
-            DynImage im(a * b * c * 4, a, b, c);
-            realize(im);
-            return im;
-        }
-
-        DynImage realize(int a, int b, int c, int d) {        
-            DynImage im(a * b * c * d * 4, a, b, c, d);
-            realize(im);
-            return im;
-        }
-        
         void realize(const DynImage &im);
         
         /* These methods generate a partially applied function that
@@ -322,6 +312,10 @@ namespace FImage {
         void unroll(const Var &);
         void transpose(const Var &, const Var &);
         void chunk(const Var &, const Range &);
+
+        // Convenience methods for common transforms
+        void vectorize(const Var &, int factor);
+
 
         /* The space of all living functions (TODO: remove a function
            from the environment when it goes out of scope) */

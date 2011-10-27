@@ -295,6 +295,13 @@ namespace FImage {
         schedule_transforms.push_back(t);
     }
 
+    void Func::vectorize(const Var &v, int factor) {
+        if (factor == 1) return;
+        Var vi;
+        split(v, v, vi, factor);
+        vectorize(vi);        
+    }
+
     void Func::unroll(const Var &v) {
         MLVal t = makeUnrollTransform(MLVal::fromString(name()),
                                       MLVal::fromString(v.name()));        
@@ -328,6 +335,31 @@ namespace FImage {
                                      arglist,
                                      r);
         schedule_transforms.push_back(t);
+    }
+
+    DynImage Func::realize(int a) {
+        DynImage im(a * (rhs.type.bits / 8), a);
+        realize(im);
+        return im;
+    }
+
+    DynImage Func::realize(int a, int b) {
+        DynImage im(a * b * (rhs.type.bits / 8), a, b);
+        realize(im);
+        return im;
+    }
+
+    DynImage Func::realize(int a, int b, int c) {
+        DynImage im(a * b * c * (rhs.type.bits / 8), a, b, c);
+        realize(im);
+        return im;
+    }
+
+
+    DynImage Func::realize(int a, int b, int c, int d) {
+        DynImage im(a * b * c * (rhs.type.bits / 8), a, b, c, d);
+        realize(im);
+        return im;
     }
 
     void Func::realize(const DynImage &im) {
