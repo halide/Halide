@@ -30,3 +30,4 @@ llvm_svn
 test/*/*.so
 test/*/*.s
 test/*/*.png
+test/*/*.time
