@@ -1,3 +1,7 @@
+architecture
+x86
+arm
+schedule_transforms
 analysis
 hash
 cg_llvm
@@ -8,4 +12,7 @@ vectorize
 split
 unroll
 constant_fold
+break_false_dependence
 schedule
+lower
+fimage_cpp
