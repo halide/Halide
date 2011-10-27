@@ -86,6 +86,12 @@ def test(name):
     cmd = cmd + opts['before_run'] + ['-test_%s' % name] + opts['args'] + ['-save', '%s.png' % name]
     cmd = cmd + opts['validation']
     out = run(cmd)
+
+    # TODO: change this to actually redirect stdout, stderr to .log and .err while running
+    # Save stdout to <name>.log
+    with open("%s.log" % name, "w") as f:
+        f.write(out)
+
     # Expect result as float in last line of output
     try:
         residual = float(out.splitlines()[-1])
