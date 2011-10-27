@@ -1,3 +1,6 @@
+architecture
+x86
+arm
 schedule_transforms
 analysis
 hash

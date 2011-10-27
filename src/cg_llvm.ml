@@ -3,6 +3,7 @@ open Llvm
 open List
 open Util
 open Ir_printer
+open Architecture
 
 let dbgprint = false
 
@@ -35,7 +36,7 @@ let verify_cg m =
       | Some reason -> raise(CGFailed(reason))
       | None -> ()
 
-let codegen (c:llcontext) (e:entrypoint) =
+let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
 
   let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
@@ -88,7 +89,7 @@ let codegen (c:llcontext) (e:entrypoint) =
   in
 
   let argtypes = List.map type_of_arg arglist in
-
+  
   (* define `void main(arg1, arg2, ...)` entrypoint*)
   let entrypoint_fn =
     define_function
@@ -112,7 +113,7 @@ let codegen (c:llcontext) (e:entrypoint) =
 
 
   (* start codegen at entry block of main *)
-let b = builder_at_end c (entry_block entrypoint_fn) in
+  let b = builder_at_end c (entry_block entrypoint_fn) in
   
   let alloca_bb = append_block c ("alloca") (block_parent (insertion_block b)) in
   ignore(build_br alloca_bb b);
@@ -121,13 +122,15 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
   let alloca_end = build_br after_alloca_bb b in
   position_at_end after_alloca_bb b;  
 
-  let rec cg_expr = function
+  let rec cg_expr e = arch.cg_expr c m b cg_expr_inner e
+  and cg_expr_inner = function
     (* constants *)
-    | IntImm(i) | UIntImm(i) -> const_int   (int_imm_t)   i
-    | FloatImm(f)            -> const_float (float_imm_t) f
+    | IntImm i 
+    | UIntImm i  -> const_int   (int_imm_t)   i
+    | FloatImm f -> const_float (float_imm_t) f
 
     (* cast *)
-    | Cast(t,e) -> cg_cast t e
+    | Cast (t, e) -> cg_cast t e
 
     (* TODO: coding style: use more whitespace, fewer parens in matches? *)
 
@@ -297,6 +300,36 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       | UInt(fb), UInt(tb) when fb < tb ->
           simple_cast build_zext e t
 
+      (* Some common casts can be done more efficiently by bitcasting
+         and doing vector shuffles (assuming little-endianness) *)
+
+      (* Narrowing ints by a factor of 2 *)
+      | UIntVector(fb, fw), UIntVector(tb, tw)
+      | IntVector(fb, fw), IntVector(tb, tw)
+      | UIntVector(fb, fw), IntVector(tb, tw)
+      | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb = tb*2 ->
+          (* Bitcast to split hi and lo halves of each int *)
+          let intermediate_type = type_of_val_type (IntVector (tb, tw*2)) in
+          let split_hi_lo = build_bitcast (cg_expr e) intermediate_type "" b in
+          let indices = const_vector (Array.of_list (List.map (fun x -> const_int int_imm_t (x*2)) (0 -- tw))) in
+          (* Shuffle vector to grab the low halves *)
+          build_shufflevector split_hi_lo (undef intermediate_type) indices "" b
+
+      (* Widening unsigned ints by a factor of 2 *)
+      | UIntVector(fb, fw), UIntVector(tb, tw)
+      | UIntVector(fb, fw), IntVector(tb, tw) ->
+          (* Make a zero vector of the same size *)
+          let zero_vector = const_null (type_of_val_type (IntVector (fb, fw))) in
+          let rec indices = function
+            | 0 -> []
+            | x -> (const_int int_imm_t (fw-x))::(const_int int_imm_t (2*fw-x))::(indices (x-1)) in                
+          let shuffle = build_shufflevector (cg_expr e) zero_vector (const_vector (Array.of_list (indices fw))) "" b in
+          build_bitcast shuffle (type_of_val_type t) "" b
+          
+      (* For signed ints we need to do sign extension 
+      | IntVector(fb, fw), UIntVector(tb, tw) 
+      | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb*2 = tb ->             *)          
+
       (* Narrowing integer casts always truncate *)
       | UIntVector(fb, fw), UIntVector(tb, tw)
       | IntVector(fb, fw), IntVector(tb, tw)
@@ -409,7 +442,8 @@ let b = builder_at_end c (entry_block entrypoint_fn) in
       (* Return an ignorable llvalue *)
       const_int int_imm_t 0
 
-  and cg_stmt = function
+  and cg_stmt stmt = arch.cg_stmt c m b cg_stmt_inner stmt
+  and cg_stmt_inner = function
     (* TODO: unaligned vector store *)
     | Store(e, buf, idx) -> cg_store e buf idx
     | For(name, min, n, _, stmt) ->
@@ -677,7 +711,7 @@ let codegen_to_ocaml_callable e =
   let c = create_context () in
 
   (* codegen *)
-  let (m,f) = codegen c e in
+  let (m,f) = codegen c e (Architecture.host) in
 
   (* codegen the wrapper *)
   let w = codegen_caml_wrapper c m f in
@@ -728,7 +762,7 @@ let codegen_c_wrapper c m f =
 let codegen_to_c_callable c e =
   (* codegen *)
   (*let (args,s) = e in*)
-  let (m,f) = codegen c e in
+  let (m,f) = codegen c e Architecture.host in
 
   (* codegen the wrapper *)
   let w = codegen_c_wrapper c m f in
