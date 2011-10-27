@@ -89,7 +89,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
   in
 
   let argtypes = List.map type_of_arg arglist in
-
+  
   (* define `void main(arg1, arg2, ...)` entrypoint*)
   let entrypoint_fn =
     define_function
@@ -299,6 +299,36 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
       | UInt(fb), Int(tb)
       | UInt(fb), UInt(tb) when fb < tb ->
           simple_cast build_zext e t
+
+      (* Some common casts can be done more efficiently by bitcasting
+         and doing vector shuffles (assuming little-endianness) *)
+
+      (* Narrowing ints by a factor of 2 *)
+      | UIntVector(fb, fw), UIntVector(tb, tw)
+      | IntVector(fb, fw), IntVector(tb, tw)
+      | UIntVector(fb, fw), IntVector(tb, tw)
+      | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb = tb*2 ->
+          (* Bitcast to split hi and lo halves of each int *)
+          let intermediate_type = type_of_val_type (IntVector (tb, tw*2)) in
+          let split_hi_lo = build_bitcast (cg_expr e) intermediate_type "" b in
+          let indices = const_vector (Array.of_list (List.map (fun x -> const_int int_imm_t (x*2)) (0 -- tw))) in
+          (* Shuffle vector to grab the low halves *)
+          build_shufflevector split_hi_lo (undef intermediate_type) indices "" b
+
+      (* Widening unsigned ints by a factor of 2 *)
+      | UIntVector(fb, fw), UIntVector(tb, tw)
+      | UIntVector(fb, fw), IntVector(tb, tw) ->
+          (* Make a zero vector of the same size *)
+          let zero_vector = const_null (type_of_val_type (IntVector (fb, fw))) in
+          let rec indices = function
+            | 0 -> []
+            | x -> (const_int int_imm_t (fw-x))::(const_int int_imm_t (2*fw-x))::(indices (x-1)) in                
+          let shuffle = build_shufflevector (cg_expr e) zero_vector (const_vector (Array.of_list (indices fw))) "" b in
+          build_bitcast shuffle (type_of_val_type t) "" b
+          
+      (* For signed ints we need to do sign extension 
+      | IntVector(fb, fw), UIntVector(tb, tw) 
+      | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb*2 = tb ->             *)          
 
       (* Narrowing integer casts always truncate *)
       | UIntVector(fb, fw), UIntVector(tb, tw)
