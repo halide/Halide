@@ -22,22 +22,25 @@ int main(int argc, char **argv) {
             im(x, y) = rand() & 255;
         }
     }
-
-    printf("Defining function...\n");
-    
     
     Var xi("xi");
     f(x, y)  = Cast(UInt(16), im(x, y));
     f.split(x, x, xi, 8);
     f.vectorize(xi);
 
-    printf("Realizing function...\n");
-
     Image<unsigned short> out = f.realize(W, H);
+    
+    Func g("g");
+    g(x, y) = Cast(UInt(8), out(x, y));
+    g.split(x, x, xi, 8);
+    g.vectorize(xi);
+
+    Image<unsigned char> out2 = g.realize(W, H);
 
     timeval before, after;
     gettimeofday(&before, NULL);
     f.realize(out);
+    g.realize(out2);
     gettimeofday(&after, NULL);
     printf("jitted code: %f ms\n", after - before);
 
@@ -47,6 +50,10 @@ int main(int argc, char **argv) {
     printf("\n");
     for (int x = 0; x < 16; x++) {
         printf("%d ", out(x, 10));
+    }
+    printf("\n");
+    for (int x = 0; x < 16; x++) {
+        printf("%d ", out2(x, 10));
     }
     printf("\n");
 
