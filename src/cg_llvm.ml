@@ -122,7 +122,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
   let alloca_end = build_br after_alloca_bb b in
   position_at_end after_alloca_bb b;  
 
-  let rec cg_expr e = arch.cg_expr c b cg_expr_inner e
+  let rec cg_expr e = arch.cg_expr c m b cg_expr_inner e
   and cg_expr_inner = function
     (* constants *)
     | IntImm i 
@@ -442,7 +442,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
       (* Return an ignorable llvalue *)
       const_int int_imm_t 0
 
-  and cg_stmt stmt = arch.cg_stmt c b cg_stmt_inner stmt
+  and cg_stmt stmt = arch.cg_stmt c m b cg_stmt_inner stmt
   and cg_stmt_inner = function
     (* TODO: unaligned vector store *)
     | Store(e, buf, idx) -> cg_store e buf idx
