@@ -87,5 +87,5 @@ else:
 
 # Test building 
 chdir('src')
-status('Test: building fimage.top')
-check_call('ocamlbuild fimage.top'.split(' '))
+status('Test: building fimage.cma')
+check_call('ocamlbuild fimage.cma'.split(' '))
