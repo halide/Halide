@@ -7,5 +7,7 @@
 # Ignore test sos which we generate ourselves
 <*/*.so>: not_hygienic
 
+<cpp/*>: not_hygienic
+
 # Include FImage when compiling ml sources
 <*/*.{ml,mli}>: use_fimage
