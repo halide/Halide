@@ -291,8 +291,10 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
 
     match (val_type_of_expr e, t) with
 
-      (* TODO: cast vector types *)
+      (* Trivial cast *)
+      | a, b when a = b -> cg_expr e
 
+      (* Scalar int casts *)
       | UInt(fb), Int(tb) when fb > tb ->
           simple_cast build_trunc e t
 
@@ -317,7 +319,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
 
       (* Widening unsigned ints by a factor of 2 *)
       | UIntVector(fb, fw), UIntVector(tb, tw)
-      | UIntVector(fb, fw), IntVector(tb, tw) ->
+      | UIntVector(fb, fw), IntVector(tb, tw) when fw = tw && fb*2 = tb ->
           (* Make a zero vector of the same size *)
           let zero_vector = const_null (type_of_val_type (IntVector (fb, fw))) in
           let rec indices = function
@@ -382,7 +384,9 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
       | Float(_), UInt(_)  -> simple_cast build_fptoui e t
 
       (* float widening or narrowing *)
-      | Float(fb), Float(tb) -> simple_cast build_fpcast  e t
+      | Float(fb), Float(tb) -> simple_cast build_fpcast e t
+      | FloatVector(fb, fw), FloatVector(tb, tw) when fw = tw -> 
+          simple_cast build_fpcast e t
 
       (* TODO: remaining casts *)
       | f,t ->
@@ -498,7 +502,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
         begin match idx with
           (* Aligned dense vector store: ramp stride 1 && idx base % vec width = 0 *)
           | Ramp(b, IntImm(1), n) when Analysis.reduce_expr_modulo b n = Some 0 ->            
-            cg_aligned_store e buf b
+              cg_aligned_store e buf b
           (* All other vector stores become scatters (even if dense) *)
           | _ -> cg_scatter e buf idx
         end
@@ -561,6 +565,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     let upper = Load(t, buf, Ramp(upper_addr, IntImm 1, vec_width)) in
     let lower_indices = offset -- (vector_elements t) in
     let upper_indices = 0 -- offset in
+    
     let extract_lower = map (fun x -> ExtractElement(lower, (UIntImm(x)))) lower_indices in
     let extract_upper = map (fun x -> ExtractElement(upper, (UIntImm(x)))) upper_indices in
     let vec = MakeVector (extract_lower @ extract_upper) in
