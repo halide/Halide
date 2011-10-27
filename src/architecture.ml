@@ -5,8 +5,8 @@ open Arm
 open Ir
 
 type architecture = {
-  cg_expr : llcontext -> llbuilder -> (expr -> llvalue) -> expr -> llvalue;
-  cg_stmt : llcontext -> llbuilder -> (stmt -> llvalue) -> stmt -> llvalue
+  cg_expr : llcontext -> llmodule -> llbuilder -> (expr -> llvalue) -> expr -> llvalue;
+  cg_stmt : llcontext -> llmodule -> llbuilder -> (stmt -> llvalue) -> stmt -> llvalue
 }
 
 let x86 = {cg_expr = cg_expr_x86; cg_stmt = cg_stmt_x86}
