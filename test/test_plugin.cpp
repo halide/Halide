@@ -19,6 +19,7 @@
 
 #include "test_plugin.h"
 #define MAX_NAME 256
+#define TIME_RUNS 100
 
 using std::vector;
 using std::string;
@@ -134,8 +135,17 @@ public:
             fprintf(stderr, "\t0x%p\n", args[i].ptr);
         }
         fprintf(stderr, "}\n\n");
-        // Run the generated function
-        _im_main_runner(&(args[0]));
+
+        float start = currentTime();
+        for (int i = 0; i < TIME_RUNS; i++) {
+            // Run the generated function
+            _im_main_runner(&(args[0]));
+        }
+        float end = currentTime();
+        float endOverhead = currentTime();
+        float time = (end - start - (endOverhead-end)) / TIME_RUNS;
+        printf("_im_time: %f\n", time);
+
         store_im_f32(out, outim);
 
         for (int i = 0; i < NUM_POPPED; ++i) { pop(); }
