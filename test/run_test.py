@@ -40,6 +40,17 @@ cxx_exe = 'g++'
 def test(name):
     status(name, 'Building bitcode')
 
+    # Set up filenames
+    cfgfile = "%s.json" % name
+
+    bcfile = "%s.bc" % name
+    asmfile = "%s.s" % name
+    sofile = "%s.so" % name
+
+    outfile = "%s.png" % name
+    logfile = "%s.log" % name
+    timefile = "%s.time" % name
+
     # Build the ocaml test
     target = '%s/%s.byte' % (name, name)
     cmd = "ocamlbuild -no-links %s" % target
@@ -48,15 +59,23 @@ def test(name):
     # Dive in
     os.chdir(name)
     
+    # Clean up old cruft
+    os.remove(bcfile)
+    os.remove(asmfile)
+    os.remove(sofile)
+    os.remove(outfile)
+    os.remove(logfile)
+    os.remove(timefile)
+
     # Codegen the bitcode
     run("../_build/%s" % target)
 
     # Compile the plugin
     status(name, 'Building plugin')
     # Codegen the bitcode
-    run([llc_exe, "-O3", "-disable-cfi", "%s.bc" % name])
+    run([llc_exe, "-O3", "-disable-cfi", bcfile])
     # Load plugin info from generated json
-    opts = json.load(open('%s.json' % name))
+    opts = json.load(open(cfgfile))
     # TODO: move helpstr, num_popped into externs imported straight from the LLVM module?
     assert opts['name'] == name
     opts['classname'] = 'Test'+name.title()
@@ -71,9 +90,9 @@ def test(name):
         "-DHELPSTR=\"%(helpstr)s\"" % opts,
         "-DNAMESTR=\"%(namestr)s\"" % opts,
         "../test_plugin.cpp",
-        "%s.s" % name,
+        asmfile,
         "-I../../ImageStack/src",
-        "-o", "%s.so" % name
+        "-o", sofile
     ]
     run(cmd)
 
@@ -81,15 +100,15 @@ def test(name):
     status(name, 'Running plugin')
     cmd = [
         imagestack_exe,
-        '-plugin', '%s.so' % name,
+        '-plugin', sofile,
     ]
-    cmd = cmd + opts['before_run'] + ['-test_%s' % name] + opts['args'] + ['-save', '%s.png' % name]
+    cmd = cmd + opts['before_run'] + ['-test_%s' % name] + opts['args'] + ['-save', outfile]
     cmd = cmd + opts['validation']
     out = run(cmd)
 
     # TODO: change this to actually redirect stdout, stderr to .log and .err while running
     # Save stdout to <name>.log
-    with open("%s.log" % name, "w") as f:
+    with open(logfile, "w") as f:
         f.write(out)
 
     # Expect result as float in last line of output
@@ -101,6 +120,17 @@ def test(name):
         print "%s failed!" % name
         if verbose:
             print "Output:\n%s" % out
+
+    # Expect runtime as float (seconds) in some line like "_im_time: %f"
+    time = 0.0
+    try:
+        timestr = "_im_time: "
+        times = [l.split(timestr)[-1] for l in out.splitlines() if l.startswith(timestr)]
+        time = [float(t) for t in times][0]
+        with open(timefile, "w") as f:
+            f.write("%f" % time)
+    except:
+       print "Failed to get time!"
 
     # Pop out
     os.chdir("..")
