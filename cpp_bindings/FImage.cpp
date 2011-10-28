@@ -475,7 +475,8 @@ namespace FImage {
             //passMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
 
             // Peephole, bit-twiddling optimizations
-            passMgr->add(llvm::createInstructionCombiningPass());
+            // This pass makes a mess of vector x + x
+            //passMgr->add(llvm::createInstructionCombiningPass());
             //passMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
             
             passMgr->doInitialization();
