@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from subprocess import check_call,check_output
+from subprocess import check_call,check_output,CalledProcessError
 import os
 import json
 
@@ -39,9 +39,55 @@ llc_exe = os.path.join(llvm_path, 'llc')
 clang_exe = os.path.join(llvm_path, 'clang++')
 imagestack_path = os.path.join(proj_root, 'ImageStack', 'bin')
 imagestack_exe = os.path.join(imagestack_path, 'ImageStack')
-cxx_exe = 'g++'
+cxx_exe = 'g++-4.6'
+
+def test_cpp(name):
+    # Make sure FImage.a is built
+    cmd = "make -C ../cpp_bindings/ FImage.a"
+    run(cmd.split(' '))
+
+    curdir = os.getcwd()
+
+    # Dive in
+    os.chdir(name)
+
+    basename = name.split('/')[-1]
+    srcfile = "%s.cpp" % basename
+    logfile = "%s.log" % basename
+    
+    # Clean up old stuff
+    remove("generated.o")
+    remove("generated.bc")
+    remove("passes.txt")
+    remove("a.out")
+    remove(logfile)
+
+    run([cxx_exe,
+         "-std=c++0x",
+         "-I../../../cpp_bindings/",
+         "../../../cpp_bindings/FImage.a",
+         "-Wl,-dead_strip",
+         srcfile])
+         
+    # Run the test
+    try:
+        out = run(["./a.out"])
+        print "."
+    except CalledProcessError:
+        print "%s failed!" % name
+        if verbose:
+            print "Output:\n%s" % out
+    finally:
+        # Save the log
+        with open(logfile, "w") as f:
+            f.write(out)
+
+    # Pop back up
+    os.chdir(curdir)
 
 def test(name):
+    if name.startswith('cpp/'): return test_cpp(name)
+
     status(name, 'Building bitcode')
 
     # Set up filenames
@@ -59,6 +105,7 @@ def test(name):
     target = '%s/%s.byte' % (name, name)
     cmd = "ocamlbuild -no-links %s" % target
     run(cmd.split(' '))
+    
     
     # Dive in
     os.chdir(name)
@@ -139,4 +186,11 @@ def test(name):
     # Pop out
     os.chdir("..")
 
-test('brightness')
+
+import sys
+if len(sys.argv) > 1:
+    test(sys.argv[1])
+else:
+    test('brightness')
+    test('cpp/vector_cast')
+    test('cpp/vectorize')
