@@ -77,6 +77,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
 
   (* create a new module for this cg result *)
   let m = create_module c "<fimage>" in
+  (* let m = Llvm_bitreader.parse_bitcode c (MemoryBuffer.of_file arch.initial_module) in *)
   
   (* unpack the entrypoint *)
   let arglist,s = e in
@@ -141,7 +142,8 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     (* arithmetic *)
 
     (* llvm doesn't seem very good about converting common vector muls to vector shifts *)
-        
+
+    (*
     | Bop(Mul, Broadcast(IntImm 2, n), v) 
     | Bop(Mul, v, Broadcast(IntImm 2, n))
     | Bop(Mul, Broadcast(UIntImm 2, n), v) 
@@ -185,7 +187,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     | Bop(Div, v, Broadcast(Cast (UInt x, IntImm 4), n))
     | Bop(Div, v, Broadcast(Cast (UInt x, UIntImm 4), n)) -> 
         build_lshr (cg_expr v) (cg_expr (Broadcast (Cast (UInt x, UIntImm 2), n))) "" b
-        
+    *)
 
     | Bop(Add, l, r) -> cg_binop build_add  build_add  build_fadd l r
     | Bop(Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
