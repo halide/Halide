@@ -29,6 +29,10 @@ def run(cmd):
         print res
     return res
 
+def remove(filename):
+    try: os.remove(filename)
+    except: pass
+
 proj_root = os.path.join('..', '..')
 llvm_path = os.path.join(proj_root, 'llvm', 'Debug+Asserts', 'bin')
 llc_exe = os.path.join(llvm_path, 'llc')
@@ -60,12 +64,12 @@ def test(name):
     os.chdir(name)
     
     # Clean up old cruft
-    os.remove(bcfile)
-    os.remove(asmfile)
-    os.remove(sofile)
-    os.remove(outfile)
-    os.remove(logfile)
-    os.remove(timefile)
+    remove(bcfile)
+    remove(asmfile)
+    remove(sofile)
+    remove(outfile)
+    remove(logfile)
+    remove(timefile)
 
     # Codegen the bitcode
     run("../_build/%s" % target)
