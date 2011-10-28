@@ -122,54 +122,34 @@ namespace FImage {
     Type TypeOf();
 
     template<>
-    Type TypeOf<float>() {
-        return Float(32);
-    }
+    Type TypeOf<float>();
 
     template<>
-    Type TypeOf<double>() {
-        return Float(64);
-    }
+    Type TypeOf<double>();
 
     template<>
-    Type TypeOf<unsigned char>() {
-        return UInt(8);
-    }
+    Type TypeOf<unsigned char>();
 
     template<>
-    Type TypeOf<unsigned short>() {
-        return UInt(16);
-    }
+    Type TypeOf<unsigned short>();
 
     template<>
-    Type TypeOf<unsigned int>() {
-        return UInt(32);
-    }
+    Type TypeOf<unsigned int>();
 
     template<>
-    Type TypeOf<bool>() {
-        return Int(1);
-    }
+    Type TypeOf<bool>();
 
     template<>
-    Type TypeOf<char>() {
-        return Int(8);
-    }
+    Type TypeOf<char>();
 
     template<>
-    Type TypeOf<short>() {
-        return Int(16);
-    }
+    Type TypeOf<short>();
 
     template<>
-    Type TypeOf<int>() {
-        return Int(32);
-    }
+    Type TypeOf<int>();
 
     template<>
-    Type TypeOf<signed char>() {
-        return Int(8);
-    }
+    Type TypeOf<signed char>();
 
     // Make a cast node
     Expr Cast(const Type &, const Expr &);
