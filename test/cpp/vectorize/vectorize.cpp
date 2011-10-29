@@ -59,9 +59,13 @@ bool test(int vec_width, int attempts = 0) {
 
 
     double t1 = currentTime();
-    g.realize(outputg);
+    for (int i = 0; i < 10; i++) {
+        g.realize(outputg);
+    }
     double t2 = currentTime();
-    f.realize(outputf);
+    for (int i = 0; i < 10; i++) {
+        f.realize(outputf);
+    }
     double t3 = currentTime();
 
     printf("%g %g %g\n", t1, t2, t3);
@@ -79,16 +83,10 @@ bool test(int vec_width, int attempts = 0) {
         }
     }
 
-    printf("Vectorized vs scalar (%s x %d): %1.3gms %1.3gms\n", string_of_type<A>(), vec_width, (t3-t2), (t2-t1));
+    printf("Vectorized vs scalar (%s x %d): %1.3gms %1.3gms. Speedup = %1.3f\n", string_of_type<A>(), vec_width, (t3-t2), (t2-t1), (t2-t1)/(t3-t2));
 
     if ((t3 - t2) > (t2 - t1)) {
-        if (attempts < 1) {
-            if (test<A>(vec_width, attempts+1)) return true;
-        } else {
-            printf("For 5 attempts, vectorizing was slower than not vectorizing: %f vs %f\n",
-                   t3-t2, t2-t1);
-            return false;
-        }                
+        return false;
     } 
 
 
@@ -99,31 +97,15 @@ int main(int argc, char **argv) {
 
     bool ok = true;
 
-    //test<uint8_t>(16);
-    //test<uint8_t>(16);
-
-
-    test<double>(2);
-    test<float>(4);
-    test<uint8_t>(16);
-    test<int8_t>(16);
-    test<uint16_t>(8);
-    test<int16_t>(8);
-    test<uint32_t>(4);
-    test<int32_t>(4);
-    return 0;
-
-    // We only support power-of-two vector widths for now
-    for (int vec_width = 2; vec_width < 32; vec_width*=2) {
-        ok = ok && test<float>(vec_width);
-        ok = ok && test<double>(vec_width);
-        ok = ok && test<uint8_t>(vec_width);
-        ok = ok && test<int8_t>(vec_width);
-        ok = ok && test<uint16_t>(vec_width);
-        ok = ok && test<int16_t>(vec_width);
-        ok = ok && test<uint32_t>(vec_width);
-        ok = ok && test<int32_t>(vec_width);
-    }
+    // Only native vector widths for now
+    ok = ok && test<float>(4);
+    ok = ok && test<double>(2);
+    ok = ok && test<uint8_t>(16);
+    ok = ok && test<int8_t>(16);
+    ok = ok && test<uint16_t>(8);
+    ok = ok && test<int16_t>(8);
+    ok = ok && test<uint32_t>(4);
+    ok = ok && test<int32_t>(4);
 
     if (!ok) return -1;
     printf("Success!\n");
