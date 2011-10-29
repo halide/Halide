@@ -98,6 +98,7 @@ def test(name):
     sofile = "%s.so" % name
 
     outfile = "%s.png" % name
+    tmpfile = "%s.tmp" % name
     logfile = "%s.log" % name
     timefile = "%s.time" % name
 
@@ -153,7 +154,7 @@ def test(name):
         imagestack_exe,
         '-plugin', sofile,
     ]
-    cmd = cmd + opts['before_run'] + ['-test_%s' % name] + opts['args'] + ['-save', outfile]
+    cmd = cmd + opts['before_run'] + ['-test_%s' % name] + opts['args'] + ['-save', outfile] + ['-save', tmpfile]
     cmd = cmd + opts['validation']
     out = run(cmd)
 

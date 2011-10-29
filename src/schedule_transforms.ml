@@ -33,7 +33,7 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
 
       match body with 
         | Pure expr -> find_calls_expr expr
-        | Impure stmt -> find_calls_stmt stmt            
+        | Impure (str, ty, size, stmt, expr) -> (find_calls_stmt stmt) @ (find_calls_expr size) @ (find_calls_expr expr)
     in
 
     (* Recursively find more calls in the called functions *)

@@ -90,7 +90,7 @@ public:
         ArgT a;
 
         // TODO: output size/allocation? For now, allocate based on stack head
-        Image outim = stack(0).copy();
+        Image outim(stack(0).width, stack(0).height, stack(0).frames, stack(0).channels);
         float* out = load_im_f32(outim);
         a.ptr = out;
         args.push_back(a);

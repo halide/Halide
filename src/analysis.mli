@@ -10,6 +10,7 @@ val fold_children_in_expr :
 val fold_children_in_stmt :
   (Ir.expr -> 'a) -> (Ir.stmt -> 'a) -> ('a -> 'a -> 'a) -> Ir.stmt -> 'a
 val expr_contains_expr : Ir.expr -> Ir.expr -> bool
+val stmt_contains_expr : Ir.expr -> Ir.stmt -> bool
 val mutate_children_in_expr : (Ir.expr -> Ir.expr) -> Ir.expr -> Ir.expr
 val mutate_children_in_stmt :
   (Ir.expr -> Ir.expr) -> (Ir.stmt -> Ir.stmt) -> Ir.stmt -> Ir.stmt

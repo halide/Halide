@@ -54,7 +54,11 @@ let make_function_body (name:string) (env:environment) =
   let renamed_args = List.map (fun (t, n) -> (t, prefix ^ n)) args in
   let renamed_body = match body with
     | Pure expr -> Pure (prefix_name_expr prefix expr)
-    | Impure stmt -> Impure (prefix_name_stmt prefix stmt)
+    | Impure (name, ty, size, stmt, expr) -> 
+        Impure (prefix ^ name, ty, 
+                prefix_name_expr prefix size,
+                prefix_name_stmt prefix stmt,
+                prefix_name_expr prefix expr)
   in
   (renamed_args, return_type, renamed_body)
 
@@ -154,7 +158,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
         Printf.printf "Found a function: %s = %s\n" name 
           (match body with 
             | Pure expr -> string_of_expr expr 
-            | Impure stmt -> string_of_stmt stmt);
+            | Impure (storage, ty, size, stmt, expr) -> (string_of_stmt stmt) ^ "\n" ^ (string_of_expr expr));
         
         print_schedule schedule;
 
@@ -278,43 +282,48 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
 (* Evaluate a function according to a schedule and put the results in
    the output_buf_name using the given strides *)
 and realize (args, return_type, body) sched_list buffer_name strides = 
+  (* Make the store index *)
+  (* TODO, vars and function type signatures should have matching order *)
+  let index = List.fold_right2 
+    (fun arg (min,size) subindex -> (size *~ subindex) +~ (Var (i32, arg)) -~ min)
+    (List.map snd args) 
+    strides (IntImm 0) in
+  
+  (* Make the innermost statement *)
+  let inner_stmt = 
   match body with
     | Pure body ->
-        (* Make the store index *)
-        (* TODO, vars and function type signatures should have matching order *)
-        let index = List.fold_right2 
-          (fun arg (min,size) subindex -> (size *~ subindex) +~ (Var (i32, arg)) -~ min)
-          (List.map snd args) 
-          strides (IntImm 0) in
-
-        (* Make the innermost store *)
-        let inner_stmt = Store (body, buffer_name, index) in     
+        (* Just a store for pure functions *)
+        Store (body, buffer_name, index)
+    | Impure (storage, ty, size, stmt, body) -> 
+        (* Some general computation into a scratch buffer for impure functions *)
+        Pipeline (storage, ty, size, stmt, 
+                  Store (body, buffer_name, index))
+  in 
         
-        (* Wrap it in for loops *)
-        let wrap (stmt:stmt) = function 
-          | Serial     (name, min, size) -> 
-              For (name, min, size, true, stmt)
-          | Parallel   (name, min, size) -> 
-              For (name, min, size, false, stmt)
-          | Unrolled   (name, min, size) -> 
-              Unroll.unroll_stmt name (For (name, min, IntImm size, false, stmt))
-          | Vectorized (name, min, size) -> 
-              Vectorize.vectorize_stmt name (For (name, min, IntImm size, false, stmt))
-          | Split (old_dim, new_dim_outer, new_dim_inner, offset) -> 
-              let (_, size_new_dim_inner) = stride_for_dim new_dim_inner sched_list in
-              let rec expand_old_dim_expr = function
-                | Var (i32, dim) when dim = old_dim -> 
-                    ((Var (i32, new_dim_outer)) *~ size_new_dim_inner) +~ 
-                      (Var (i32, new_dim_inner)) +~ offset
-                | x -> mutate_children_in_expr expand_old_dim_expr x 
-              and expand_old_dim_stmt stmt = 
-                mutate_children_in_stmt expand_old_dim_expr expand_old_dim_stmt stmt in
-              expand_old_dim_stmt stmt in
-        
-        List.fold_left wrap inner_stmt sched_list
-
-    | Impure body -> raise (Wtf "I don't know how to realize impure functions yet")            
-
+  (* Wrap it in for loops *)
+  let wrap (stmt:stmt) = function 
+    | Serial     (name, min, size) -> 
+        For (name, min, size, true, stmt)
+    | Parallel   (name, min, size) -> 
+        For (name, min, size, false, stmt)
+    | Unrolled   (name, min, size) -> 
+        Unroll.unroll_stmt name (For (name, min, IntImm size, false, stmt))
+    | Vectorized (name, min, size) -> 
+        Vectorize.vectorize_stmt name (For (name, min, IntImm size, false, stmt))
+    | Split (old_dim, new_dim_outer, new_dim_inner, offset) -> 
+        let (_, size_new_dim_inner) = stride_for_dim new_dim_inner sched_list in
+        let rec expand_old_dim_expr = function
+          | Var (i32, dim) when dim = old_dim -> 
+              ((Var (i32, new_dim_outer)) *~ size_new_dim_inner) +~ 
+                (Var (i32, new_dim_inner)) +~ offset
+          | x -> mutate_children_in_expr expand_old_dim_expr x 
+        and expand_old_dim_stmt stmt = 
+          mutate_children_in_stmt expand_old_dim_expr expand_old_dim_stmt stmt in
+        expand_old_dim_stmt stmt in
+  
+  List.fold_left wrap inner_stmt sched_list
+    
 and lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   Printf.printf "Making function body\n%!";
   let (args, return_type, body) = make_function_body func env in
