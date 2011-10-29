@@ -205,7 +205,7 @@ and definition = (string * ((val_type * string) list) * val_type * function_body
 
 and function_body = 
   | Pure of expr (* Evaluates to the return value *)
-  | Impure of stmt (* Fills in an array called "result" *)
+  | Impure of (buffer * val_type * expr * stmt * expr) (* Allocates string * size, executes stmt, then evaluates to expr *)
 
 module Environment = Map.Make(String)
 type environment = definition Environment.t

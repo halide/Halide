@@ -26,7 +26,7 @@ double currentTime() {
 }
 
 template<typename A>
-bool test(int vec_width, int attempts = 0) {
+bool test(int vec_width) {
     
     int W = vec_width*1;
     int H = 40000;

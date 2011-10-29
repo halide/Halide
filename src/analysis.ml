@@ -43,33 +43,6 @@ let reduce_expr_modulo expr n =
   let (r, m) = compute_remainder_modulus expr in
   if (m mod n = 0) then Some (r mod n) else None
 
-
-(* Expression search *)
-let expr_contains_expr query e =
-  let rec recurse = function
-    | x when x = query -> true
-      
-    | Not e
-    | Load (_, _, e)
-    | Broadcast (e, _)
-    | Cast (_, e)           -> recurse e
-
-    | Ramp (a, b, _)
-    | ExtractElement (a, b)
-    | Bop (_, a, b)
-    | Cmp (_, a, b)
-    | Let (_, a, b)
-    | And (a, b)
-    | Or (a, b)             -> recurse a or recurse b
-
-    | Select (c, a, b)      -> recurse c or recurse a or recurse b
-
-    | MakeVector l
-    | Call (_, _, l)        -> List.exists recurse l
-
-    | x -> false
-  in recurse e
-
 let fold_children_in_expr mutator combiner base_case = function
   | Not e
   | Load (_, _, e)
@@ -109,11 +82,13 @@ let rec stmt_contains_zero stmt =
   fold_children_in_stmt expr_mutator stmt_contains_zero (or)
 *)
 
-let expr_contains_expr query e =
-  if (query = e) then 
-    true 
-  else
-    fold_children_in_expr (expr_contains_expr query) (or) false e
+let rec expr_contains_expr query expr = 
+  if (query = expr) then true else
+    fold_children_in_expr (expr_contains_expr query) (or) false expr
+
+let rec stmt_contains_expr query stmt =
+  fold_children_in_stmt (expr_contains_expr query) (stmt_contains_expr query) (or) stmt
+
 
 let mutate_children_in_expr mutator = function
   | Cast (t, e)           -> Cast (t, mutator e)
