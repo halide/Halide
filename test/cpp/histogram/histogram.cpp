@@ -21,8 +21,18 @@ int main(int argc, char **argv) {
     Var x, y, i;
     Func hist;
 
-    hist(input(x, y)) += 1;
+    hist(i) = 0;
+    hist(input(x, y)) = hist(input(x, y)) + 1;
+
+    hist.range(x, 0, W);
+    hist.range(y, 0, H);
+
+    Var xo, xi;
+    hist.split(x, xo, xi, 4);
+    hist.unroll(xi);
     
+    Image<int32_t> h = hist.realize(256);
+
     Func f;
     f(x, y) = hist(input(x, y));
 

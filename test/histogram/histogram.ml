@@ -30,34 +30,30 @@ let _ =
     )
   ) in
 
+  let call_im = Call (i32, "im", [x; y; c]) in
+
   let im_call_sched = (Inline) in
   let im_sched = [] in
 
   let hist = (
     "hist",
     [(i32, "i")],
-    f32,
+    i32,
     Impure (
-      "inner", i32, IntImm 256,
-      Block [
-        For ("x", IntImm 0, IntImm 256, false, Store (IntImm 0, "inner", x));
-        For ("c", IntImm 0, ch, false,
-             For ("y", IntImm 0, h, false,
-                  For ("x", IntImm 0, w, false,                       
-                       Store ((Load (i32, "inner", (Call (i32, "im", [x; y; c])))) +~ (IntImm 1),
-                              "inner",
-                              Call (i32, "im", [x; y; c])
-                       )
-                  )
-             )
-        )
-      ],
-      Cast(f32, (Load (i32, "inner", i)))
-    )
+      (* Initial value - some expr in function arguments *)
+      IntImm 0, 
+      (* arg value to modify *)
+      [call_im],
+      (* Modified value *)
+      call_im +~ (IntImm 1))
   ) in
   
   let hist_call_sched = Root in
-  let hist_sched = [Serial ("i", IntImm 0, IntImm 256)] in
+  let hist_sched = [Serial ("i", IntImm 0, IntImm 256);
+                    Serial ("x", IntImm 0, w);
+                    Serial ("y", IntImm 0, h);
+                    Serial ("c", IntImm 0, ch)
+                   ] in
     
   let env = Environment.empty in
   let env = Environment.add "im" im env in

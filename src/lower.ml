@@ -5,6 +5,13 @@ open Analysis
 open Util
 open Vectorize
 
+module StringSet = Set.Make (
+  struct
+    let compare = Pervasives.compare
+    type t = string
+  end
+)
+
 (* Lowering produces references to names either in the context of the
    callee or caller. The ones in the context of the caller may in fact
    refer to ones in the caller of the caller, or so on up the
@@ -54,11 +61,10 @@ let make_function_body (name:string) (env:environment) =
   let renamed_args = List.map (fun (t, n) -> (t, prefix ^ n)) args in
   let renamed_body = match body with
     | Pure expr -> Pure (prefix_name_expr prefix expr)
-    | Impure (name, ty, size, stmt, expr) -> 
-        Impure (prefix ^ name, ty, 
-                prefix_name_expr prefix size,
-                prefix_name_stmt prefix stmt,
-                prefix_name_expr prefix expr)
+    | Impure (expr, modified_args, modified_val) -> 
+        Impure (prefix_name_expr prefix expr,
+                List.map (prefix_name_expr prefix) modified_args, 
+                prefix_name_expr prefix modified_val)
   in
   (renamed_args, return_type, renamed_body)
 
@@ -158,7 +164,10 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
         Printf.printf "Found a function: %s = %s\n" name 
           (match body with 
             | Pure expr -> string_of_expr expr 
-            | Impure (storage, ty, size, stmt, expr) -> (string_of_stmt stmt) ^ "\n" ^ (string_of_expr expr));
+            | Impure (initial_value, modified_args, modified_value) ->
+                (string_of_expr initial_value) ^ "\n[" ^ 
+                  (String.concat ", " (List.map string_of_expr modified_args)) ^ "] <- " ^
+                  (string_of_expr modified_value));
         
         print_schedule schedule;
 
@@ -179,7 +188,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
               let buffer_size = List.fold_left ( *~ ) (List.hd sizes) (List.tl sizes) in
 
               (* Generate a statement that evaluates the function over its schedule *)
-              let produce = realize (args, return_type, body) sched_list buffer_name strides in
+              let produce = realize (name, args, return_type, body) sched_list buffer_name strides in
 
               Printf.printf "Realized chunk: %s\n" (string_of_stmt produce);
 
@@ -223,7 +232,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
                 (* Make the strides list for indexing the output buffer *)
                 let strides = stride_list sched_list (List.map snd args) in
 
-                realize (args, return_type, body) sched_list "result" strides
+                realize (name, args, return_type, body) sched_list "result" strides
 
             | Inline ->
                 begin match body with 
@@ -245,7 +254,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
                         mutate_children_in_stmt inline_calls_in_expr inline_calls_in_stmt s
                       in
                       inline_calls_in_stmt stmt
-                  | Impure stmt -> raise (Wtf "I don't know how to inline impure functions yet")
+                  | Impure _ -> raise (Wtf "I don't know how to inline impure functions yet")
                 end
             | Reuse s -> begin
                 let (call_sched, sched_list) = make_schedule s schedule in
@@ -278,30 +287,18 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) =
         Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);
         recurse scheduled_call
 
-
 (* Evaluate a function according to a schedule and put the results in
    the output_buf_name using the given strides *)
-and realize (args, return_type, body) sched_list buffer_name strides = 
+and realize (name, args, return_type, body) sched_list buffer_name strides = 
   (* Make the store index *)
   (* TODO, vars and function type signatures should have matching order *)
-  let index = List.fold_right2 
-    (fun arg (min,size) subindex -> (size *~ subindex) +~ (Var (i32, arg)) -~ min)
-    (List.map snd args) 
-    strides (IntImm 0) in
-  
-  (* Make the innermost statement *)
-  let inner_stmt = 
-  match body with
-    | Pure body ->
-        (* Just a store for pure functions *)
-        Store (body, buffer_name, index)
-    | Impure (storage, ty, size, stmt, body) -> 
-        (* Some general computation into a scratch buffer for impure functions *)
-        Pipeline (storage, ty, size, stmt, 
-                  Store (body, buffer_name, index))
-  in 
-        
-  (* Wrap it in for loops *)
+  let make_buffer_index args =
+    List.fold_right2 
+      (fun arg (min,size) subindex -> (size *~ subindex) +~ arg -~ min)
+      args strides (IntImm 0) in
+  let index = make_buffer_index (List.map (fun (t, v) -> Var (t, v)) args) in
+
+  (* Wrap a statement in for loops using a schedule *)
   let wrap (stmt:stmt) = function 
     | Serial     (name, min, size) -> 
         For (name, min, size, true, stmt)
@@ -320,11 +317,72 @@ and realize (args, return_type, body) sched_list buffer_name strides =
           | x -> mutate_children_in_expr expand_old_dim_expr x 
         and expand_old_dim_stmt stmt = 
           mutate_children_in_stmt expand_old_dim_expr expand_old_dim_stmt stmt in
-        expand_old_dim_stmt stmt in
+        expand_old_dim_stmt stmt 
+  in
   
-  List.fold_left wrap inner_stmt sched_list
-    
-and lower_function (func:string) (env:environment) (schedule:schedule_tree) =
+  (* Deal with recursion by replacing calls to the same
+     function in the realized body with loads from the buffer *)
+  let rec remove_recursion = function
+    | Call (ty, n, args) when n = name ->
+        Load (ty, buffer_name, make_buffer_index args)
+    | x -> mutate_children_in_expr remove_recursion x
+  in
+
+  match body with
+    | Pure body ->
+        let inner_stmt = Store (remove_recursion body, buffer_name, index) in
+        List.fold_left wrap inner_stmt sched_list
+    | Impure (initial_value, modified_args, modified_val) ->
+        (* Remove recursive references *)
+        let initial_value = remove_recursion initial_value in
+        let modified_idx = make_buffer_index (List.map remove_recursion modified_args) in
+        let modified_val = remove_recursion modified_val in
+
+        (* Split the sched_list into terms refering to the initial
+           value, and terms refering to free vars *)
+
+        (* Args are: Var names refering to function args, sched_list
+           for function args, sched_list for free vars, sched_list
+           remaining to be processed *)
+        let rec partition_sched_list = function
+          | (_, arg_sched_list, free_sched_list, []) -> (List.rev arg_sched_list, List.rev free_sched_list)
+          | (arg_set, arg_sched_list, free_sched_list, first::rest) ->
+              begin match first with 
+                | Serial (name, _, _)
+                | Parallel (name, _, _) 
+                | Unrolled (name, _, _) 
+                | Vectorized (name, _, _) ->
+                    Printf.printf "Looking up %s in arg set\n%!" name;
+                    if StringSet.mem name arg_set then
+                      partition_sched_list (arg_set, first::arg_sched_list, free_sched_list, rest)
+                    else
+                      partition_sched_list (arg_set, arg_sched_list, first::free_sched_list, rest)
+                | Split (name, outer, inner, _) ->
+                    Printf.printf "Looking up %s in arg set\n%!" name;
+                    if StringSet.mem name arg_set then
+                      let arg_set = StringSet.add outer arg_set in
+                      let arg_set = StringSet.add inner arg_set in
+                      partition_sched_list (arg_set, first::arg_sched_list, free_sched_list, rest)
+                    else
+                      partition_sched_list (arg_set, arg_sched_list, first::free_sched_list, rest)
+              end
+        in 
+
+        let arg_set = List.fold_right (StringSet.add) (List.map snd args) StringSet.empty in
+        let (arg_sched_list, free_sched_list) = partition_sched_list (arg_set, [], [], sched_list) in
+
+        (* Wrap the initial value in for loops corresponding to the function args *)
+        let inner_init_stmt = Store (initial_value, buffer_name, index) in
+        let init_wrapped = List.fold_left wrap inner_init_stmt arg_sched_list in
+        
+        (* Wrap the modifier in for loops corresponding to the free vars in modified_idx and modified_val *)
+        let inner_modifier_stmt = Store (modified_val, buffer_name, modified_idx) in
+        let modifier_wrapped = List.fold_left wrap inner_modifier_stmt free_sched_list in
+        
+        (* Put them in a block *)
+        Block [init_wrapped; modifier_wrapped]
+
+let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   Printf.printf "Making function body\n%!";
   let (args, return_type, body) = make_function_body func env in
   Printf.printf "Making schedule\n%!";
@@ -332,10 +390,6 @@ and lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   Printf.printf "Making stride list\n%!";
   let strides = stride_list sched_list (List.map snd args) in
   Printf.printf "Realizing initial statement\n%!";
-  let core = (realize (args, return_type, body) sched_list ".result" strides) in
+  let core = (realize (func, args, return_type, body) sched_list ".result" strides) in
   Printf.printf "Recursively lowering function calls\n%!";
-  lower_stmt core env schedule 
-
-
-        
-  
+  lower_stmt core env schedule    
