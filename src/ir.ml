@@ -204,8 +204,10 @@ type stmt =
 and definition = (string * ((val_type * string) list) * val_type * function_body)
 
 and function_body = 
-  | Pure of expr (* Evaluates to the return value *)
-  | Impure of (buffer * val_type * expr * stmt * expr) (* Allocates string * size, executes stmt, then evaluates to expr *)
+  (* Evaluates to the return value *)
+  | Pure of expr 
+  (* Initializes to expr, modifies return value at expr list to be expr *)
+  | Impure of (expr * (expr list) * expr)
 
 module Environment = Map.Make(String)
 type environment = definition Environment.t
