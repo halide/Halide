@@ -23,7 +23,10 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
     let l = 
 
       let rec find_calls_expr = function
-        | Call (_, name, args) -> name :: (List.concat (List.map find_calls_expr args))
+        | Call (_, name, args) when List.mem name (split_name f) ->
+            (List.concat (List.map find_calls_expr args))
+        | Call (_, name, args) -> 
+            name :: (List.concat (List.map find_calls_expr args))
         | x -> fold_children_in_expr find_calls_expr (@) [] x
       in
 
@@ -192,3 +195,24 @@ let chunk_schedule (func: string) (var: string) (args: string list) (region: (ex
 
   List.fold_left set chunk_first rest
     
+let parallel_schedule (func: string) (var: string) (min: expr) (size: expr) (schedule: schedule_tree) =
+
+  let calls = find_all_schedule schedule func in
+  
+  let set schedule func =
+    let (call_sched, sched_list) = find_schedule schedule func in
+    set_schedule schedule func call_sched ((Parallel (var, min, size))::sched_list)
+  in
+  
+  List.fold_left set schedule calls
+
+let serial_schedule (func: string) (var: string) (min: expr) (size: expr) (schedule: schedule_tree) =
+
+  let calls = find_all_schedule schedule func in
+  
+  let set schedule func =
+    let (call_sched, sched_list) = find_schedule schedule func in
+    set_schedule schedule func call_sched ((Serial (var, min, size))::sched_list)
+  in
+  
+  List.fold_left set schedule calls

@@ -75,6 +75,8 @@ namespace FImage {
 
         // declare that this node has a child for bookkeeping
         void child(const Expr &c);
+
+        bool isVar;
     };
 
     Expr operator+(const Expr &, const Expr &);
@@ -82,7 +84,7 @@ namespace FImage {
     Expr operator*(const Expr &, const Expr &);
     Expr operator/(const Expr &, const Expr &);
     
-    Expr select(const Expr &, const Expr &, const Expr &);
+    Expr Select(const Expr &, const Expr &, const Expr &);
     Expr operator>(const Expr &, const Expr &);
     Expr operator>=(const Expr &, const Expr &);
     Expr operator>(const Expr &, const Expr &);
@@ -281,7 +283,7 @@ namespace FImage {
         DynImage realize(int a, int b, int c, int d);
 
         void realize(const DynImage &im);
-        
+
         /* These methods generate a partially applied function that
          * takes a schedule and modifies it. These functions get pushed
          * onto the schedule_transforms vector, which is traversed in
@@ -293,9 +295,13 @@ namespace FImage {
         void transpose(const Var &, const Var &);
         void chunk(const Var &, const Range &);
 
+        /* Add an explicit Serial or Parallel to the schedule. Useful
+         * for defining reduction domains */
+        void range(const Var &, const Expr &min, const Expr &size, bool serial = false); 
+
         // Convenience methods for common transforms
         void vectorize(const Var &, int factor);
-
+        void unroll(const Var &, int factor);
 
         /* The space of all living functions (TODO: remove a function
            from the environment when it goes out of scope) */

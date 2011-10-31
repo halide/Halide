@@ -293,10 +293,15 @@ and realize (name, args, return_type, body) sched_list buffer_name strides =
   (* Make the store index *)
   (* TODO, vars and function type signatures should have matching order *)
   let make_buffer_index args =
+    Printf.printf "strides: %s\n%!" (String.concat ", " (List.map (fun (x, y) -> ((string_of_expr x) ^ "~" ^ (string_of_expr y))) strides));
+    Printf.printf "args: %s\n%!" (String.concat ", " (List.map string_of_expr args));
     List.fold_right2 
       (fun arg (min,size) subindex -> (size *~ subindex) +~ arg -~ min)
       args strides (IntImm 0) in
+
+  Printf.printf "Making index into %s for the result\n%!" buffer_name;
   let index = make_buffer_index (List.map (fun (t, v) -> Var (t, v)) args) in
+  Printf.printf "index: %s\n%!" (string_of_expr index);
 
   (* Wrap a statement in for loops using a schedule *)
   let wrap (stmt:stmt) = function 
@@ -323,8 +328,13 @@ and realize (name, args, return_type, body) sched_list buffer_name strides =
   (* Deal with recursion by replacing calls to the same
      function in the realized body with loads from the buffer *)
   let rec remove_recursion = function
-    | Call (ty, n, args) when n = name ->
-        Load (ty, buffer_name, make_buffer_index args)
+    | Call (ty, n, args) ->
+        begin match List.rev (split_name n) with 
+          | a::b::_ when a = b ->
+              Printf.printf "Replacing recursive call to %s with load from %s\n%!" n, buffer_name;
+              Load (ty, buffer_name, make_buffer_index args)        
+          | x -> Call (ty, n, args)
+        end
     | x -> mutate_children_in_expr remove_recursion x
   in
 
@@ -336,6 +346,7 @@ and realize (name, args, return_type, body) sched_list buffer_name strides =
         (* Remove recursive references *)
         let initial_value = remove_recursion initial_value in
         let modified_idx = make_buffer_index (List.map remove_recursion modified_args) in
+        Printf.printf "index: %s\n%!" (string_of_expr modified_idx);
         let modified_val = remove_recursion modified_val in
 
         (* Split the sched_list into terms refering to the initial
