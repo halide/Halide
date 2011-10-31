@@ -64,11 +64,15 @@ ML_FUNC2(makeUnrollTransform);
 ML_FUNC5(makeSplitTransform);
 ML_FUNC3(makeTransposeTransform);
 ML_FUNC4(makeChunkTransform);
+ML_FUNC4(makeSerialTransform);
+ML_FUNC4(makeParallelTransform);
+
 ML_FUNC1(doConstantFold);
 
 // Function call stuff
 ML_FUNC3(makeCall);
 ML_FUNC3(makeDefinition);
+ML_FUNC4(addScatterToDefinition);
 ML_FUNC0(makeEnv);
 ML_FUNC2(addDefinitionToEnv);
 
@@ -93,15 +97,15 @@ namespace FImage {
     template<> int Named<'i'>::_instances = 0;
 
     // An Expr is a wrapper around the node structure used by the compiler
-    Expr::Expr() {}
+    Expr::Expr() : isVar(false) {}
 
-    Expr::Expr(MLVal n, Type t) : node(n), type(t) {}
+    Expr::Expr(MLVal n, Type t) : node(n), type(t), isVar(false) {}
 
-    Expr::Expr(int32_t val) : node(makeIntImm(MLVal::fromInt(val))), type(Int(32)) {}
+    Expr::Expr(int32_t val) : node(makeIntImm(MLVal::fromInt(val))), type(Int(32)), isVar(false) {}
 
-    Expr::Expr(uint32_t val) : node(makeIntImm(MLVal::fromInt(val))), type(UInt(32)) {}
+    Expr::Expr(uint32_t val) : node(makeIntImm(MLVal::fromInt(val))), type(UInt(32)), isVar(false) {}
 
-    Expr::Expr(float val) : node(makeFloatImm(MLVal::fromFloat(val))), type(Float(32)) {}
+    Expr::Expr(float val) : node(makeFloatImm(MLVal::fromFloat(val))), type(Float(32)), isVar(false) {}
 
     // declare that this node has a child for bookkeeping
     void Expr::child(const Expr &c) {
@@ -200,7 +204,7 @@ namespace FImage {
         return e;
     }
     
-    Expr select(const Expr & cond, const Expr & thenCase, const Expr & elseCase) {
+    Expr Select(const Expr & cond, const Expr & thenCase, const Expr & elseCase) {
         Expr e(makeSelect(cond.node, thenCase.node, elseCase.node), thenCase.type);
         e.child(cond);
         e.child(thenCase);
@@ -216,11 +220,13 @@ namespace FImage {
     Var::Var() {
         node = makeVar(MLVal::fromString(name()));
         vars.push_back(this);
+        isVar = true;
     }
 
     Var::Var(const std::string &name) : Named<'v'>(name) {
         node = makeVar(MLVal::fromString(name));
         vars.push_back(this);
+        isVar = true;
     }
 
 
@@ -251,33 +257,53 @@ namespace FImage {
     }
 
     void Func::define(const std::vector<Expr> &func_args, const Expr &r) {
+        // Make sure the environment exists
         if (!environment) {
+            printf("Creating environment\n");
             environment = new MLVal(makeEnv());
         }
 
-        // Start off my rhs as the expression given.
-        rhs = r;
+        printf("Detecting type of definition\n");
 
-        // TODO: Mutate the rhs: Convert scatters to scalar-valued functions by wrapping them in a let
-        args = func_args;
-
-        arglist = makeList();
-        for (size_t i = func_args.size(); i > 0; i--) {
-            if (1 /* dangerously assume it's a var */) {
-                if (func_args[i-1].vars.size() != 1) {
-                    printf("This was supposed to be a var:\n");
-                    printStmt(func_args[i-1].node);
-                    exit(1);
-                }
-                arglist = addToList(arglist, MLVal::fromString(func_args[i-1].vars[0]->name()));
-            } else {
-                printf("Scalar valued functions should only have vars as arguments\n");
-            }
+        // Are we talking about a scatter or a gather here?
+        bool gather = true;
+        printf("%u args\n", (unsigned)func_args.size());
+        for (size_t i = 0; i < func_args.size(); i++) {            
+            if (!func_args[i].isVar) gather = false;
         }
 
-        definition = makeDefinition(MLVal::fromString(name()), arglist, rhs.node);
+        if (gather) {
+            printf("Gather definition for %s\n", name().c_str());
+            rhs = r;            
+            args = func_args;
+            arglist = makeList();
+            for (size_t i = func_args.size(); i > 0; i--) {
+                arglist = addToList(arglist, MLVal::fromString(func_args[i-1].vars[0]->name()));
+            }
+             
+            definition = makeDefinition(MLVal::fromString(name()), arglist, rhs.node);
+            
+            *environment = addDefinitionToEnv(*environment, definition);
 
-        *environment = addDefinitionToEnv(*environment, definition);
+        } else {
+            printf("Scatter definition for %s\n", name().c_str());
+            MLVal scatter_args = makeList();
+            for (size_t i = func_args.size(); i > 0; i--) {
+                scatter_args = addToList(scatter_args, func_args[i-1].node);
+                unify(rhs.bufs, func_args[i-1].bufs);
+                unify(rhs.vars, func_args[i-1].vars);
+                unify(rhs.funcs, func_args[i-1].funcs);
+                //rhs.child(func_args[i-1]);
+            }                                                            
+
+            unify(rhs.bufs, r.bufs);
+            unify(rhs.vars, r.vars);
+            unify(rhs.funcs, r.funcs);
+            //rhs.child(r);
+            
+            // There should already be a gathering definition of this function. Add the scattering term.
+            *environment = addScatterToDefinition(*environment, MLVal::fromString(name()), scatter_args, r.node);
+        }
     }
 
     void Func::trace() {
@@ -305,6 +331,30 @@ namespace FImage {
     void Func::unroll(const Var &v) {
         MLVal t = makeUnrollTransform(MLVal::fromString(name()),
                                       MLVal::fromString(v.name()));        
+        schedule_transforms.push_back(t);
+    }
+
+    void Func::unroll(const Var &v, int factor) {
+        if (factor == 1) return;
+        Var vi;
+        split(v, v, vi, factor);
+        unroll(vi);
+    }
+
+
+    void Func::range(const Var &v, const Expr &min, const Expr &size, bool serial) {
+        MLVal t;
+        if (serial) {
+            t = makeSerialTransform(MLVal::fromString(name()),
+                                    MLVal::fromString(v.name()),
+                                    min.node,
+                                    size.node);
+        } else {
+            t = makeParallelTransform(MLVal::fromString(name()),
+                                      MLVal::fromString(v.name()),
+                                      min.node,
+                                      size.node);
+        }
         schedule_transforms.push_back(t);
     }
 
@@ -391,6 +441,10 @@ namespace FImage {
             
             for (size_t i = 0; i < rhs.funcs.size(); i++) {
                 Func *f = rhs.funcs[i];
+                // Don't consider recursive dependencies for the
+                // purpose of applying schedule transformations. We
+                // already did that above.
+                if (f == this) continue;
                 for (size_t j = 0; j < f->schedule_transforms.size(); j++) {
                     MLVal t = f->schedule_transforms[j];
                     sched = t(sched);

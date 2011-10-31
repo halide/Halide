@@ -66,11 +66,14 @@ let _ =
   Callback.register "makeDefinition" (fun name argnames body -> (name, List.map (fun x -> (i32, x)) argnames, val_type_of_expr body, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);
   Callback.register "addDefinitionToEnv" (fun env def -> 
-    let (n1, a1, t1, b1) = def in 
-    let newenv = Environment.add n1 def env in 
-    let (n2, a2, t2, b2) = Environment.find n1 newenv in 
-    Printf.printf "definition: %s\n%!" n2; 
-    newenv);
+    let (n, _, _, _) = def in 
+    Environment.add n def env
+  );
+  
+  Callback.register "addScatterToDefinition" (fun env name args rhs ->
+    let (n, a, r, Pure gather) = Environment.find name env in
+    Environment.add n (n, a, r, Impure (gather, args, rhs)) env
+  );
 
   Callback.register "makeList" (fun _ -> []);
   Callback.register "addToList" (fun l x -> x::l);  
@@ -86,7 +89,8 @@ let _ =
 
   Callback.register "makeSchedule" (fun (f: string) (sizes: int list) (env: environment) ->
     let (_, args, _, _) = Environment.find f env in
-    let region = List.map2 (fun (t, v) x -> Printf.printf "%s\n" v; (v, IntImm 0, IntImm x)) args sizes in
+    let region = List.map2 (fun (t, v) x -> Printf.printf "making default schedule: %s\n" v; (v, IntImm 0, IntImm x)) args sizes in
+    Printf.printf("About to make default schedule...\n%!");
     make_default_schedule f env region
   );
 
@@ -114,5 +118,6 @@ let _ =
   Callback.register "makeSplitTransform" (fun func var outer inner n -> split_schedule func var outer inner n);
   Callback.register "makeTransposeTransform" (fun func var1 var2 -> transpose_schedule func var1 var2);
   Callback.register "makeChunkTransform" (fun func var args region -> chunk_schedule func var args region);
-
-
+  Callback.register "makeParallelTransform" (fun func var min size -> parallel_schedule func var min size);
+  Callback.register "makeSerialTransform" (fun func var min size -> serial_schedule func var min size);
+  

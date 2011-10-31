@@ -125,12 +125,6 @@ let rec stride_for_dim dim = function
 let stride_list (sched:schedule list) (args:string list) =
   List.map (fun arg -> stride_for_dim arg sched) args
 
-let rec split_name n =
-  try
-    let i = (String.index n '.') in
-    (String.sub n 0 i) :: (split_name (String.sub n (i+1) ((String.length n)-(i+1))))
-  with Not_found -> [n]
-
 let find_schedule (tree:schedule_tree) (name:string) =
   let rec find (tree:schedule_tree) = function
     | [] -> raise (Wtf "find_schedule of empty list")
