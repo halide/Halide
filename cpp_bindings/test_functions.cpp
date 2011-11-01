@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     f1(x, y) = input(x, y) + input(x-1, y);
 
     Func f2;
-    f2(x, y) = f1(x, y);// + f1(x, y-1);
+    f2(x, y) = Cast<float>(x);// + f1(x, y-1);
 
     // Evaluate all of f into a buffer
     Image<float> im3 = f2.realize(W, H);

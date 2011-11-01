@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <string>
 #include <sstream>
+#include <assert.h>
 
 namespace FImage {
 
@@ -39,6 +40,10 @@ namespace FImage {
       public:
         MLVal mlval;
         unsigned char bits;
+        enum {FLOAT = 0, INT = 1, UINT = 2} code;
+        bool operator==(const Type &other) {
+            return bits == other.bits && code == other.code;
+        }
     };
 
     Type Float(unsigned char bits);
@@ -105,15 +110,22 @@ namespace FImage {
     class DynImage : public Named<'i'> {
     public:
 
-        DynImage(size_t bytes, uint32_t a);
-        DynImage(size_t bytes, uint32_t a, uint32_t b);
-        DynImage(size_t bytes, uint32_t a, uint32_t b, uint32_t c);
-        DynImage(size_t bytes, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
+        DynImage(Type t, uint32_t a);
+        DynImage(Type t, uint32_t a, uint32_t b);
+        DynImage(Type t, uint32_t a, uint32_t b, uint32_t c);
+        DynImage(Type t, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
 
-        Expr load(Type type, const Expr &idx);
+        Expr operator()(const Expr &a);
+        Expr operator()(const Expr &a, const Expr &b);
+        Expr operator()(const Expr &a, const Expr &b, const Expr &c);
+        Expr operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d);
 
+        Type type;
         std::vector<uint32_t> size, stride;
         unsigned char *data;
+
+    protected:
+        Expr load(const Expr &idx);
 
     private:
         void allocate(size_t bytes);
@@ -164,30 +176,32 @@ namespace FImage {
     template<typename T>
     class Image : public DynImage {
     public:
-        Image(uint32_t a) : DynImage(a * sizeof(T), a) {}
-        Image(uint32_t a, uint32_t b) : DynImage(a*b*sizeof(T), a, b) {}
-        Image(uint32_t a, uint32_t b, uint32_t c) : DynImage(a*b*c*sizeof(T), a, b, c) {}
-        Image(uint32_t a, uint32_t b, uint32_t c, uint32_t d) : DynImage(a*b*c*d*sizeof(T), a, b, c, d) {}
-        Image(DynImage im) : DynImage(im) {}
+        Image(uint32_t a) : DynImage(TypeOf<T>(), a) {}
+        Image(uint32_t a, uint32_t b) : DynImage(TypeOf<T>(), a, b) {}
+        Image(uint32_t a, uint32_t b, uint32_t c) : DynImage(TypeOf<T>(), a, b, c) {}
+        Image(uint32_t a, uint32_t b, uint32_t c, uint32_t d) : DynImage(TypeOf<T>(), a, b, c, d) {}
+        Image(DynImage im) : DynImage(im) {
+            // Type-check
+            assert(TypeOf<T>() == im.type);
+        }
 
-        // make a Load
+        // Construct a load expression
         Expr operator()(const Expr &a) {
-            return load(TypeOf<T>(), a*stride[0]);
+            return load(a*stride[0]);
         }
 
         Expr operator()(const Expr &a, const Expr &b) {
-            return load(TypeOf<T>(), a*stride[0] + b*stride[1]);
+            return load(a*stride[0] + b*stride[1]);
         }
 
         Expr operator()(const Expr &a, const Expr &b, const Expr &c) {
-            return load(TypeOf<T>(), a*stride[0] + b*stride[1] + c*stride[2]);
+            return load(a*stride[0] + b*stride[1] + c*stride[2]);
         }
-
 
         Expr operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) {
-            return load(TypeOf<T>(), a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]);
+            return load(a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]);
         }
-        
+
         // Actually look something up in the image. Won't return anything
         // interesting if the image hasn't been evaluated yet.
         T &operator()(int a) {

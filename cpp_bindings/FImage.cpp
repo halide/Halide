@@ -388,26 +388,26 @@ namespace FImage {
     }
 
     DynImage Func::realize(int a) {
-        DynImage im(a * (rhs.type.bits / 8), a);
+        DynImage im(rhs.type, a);
         realize(im);
         return im;
     }
 
     DynImage Func::realize(int a, int b) {
-        DynImage im(a * b * (rhs.type.bits / 8), a, b);
+        DynImage im(rhs.type, a, b);
         realize(im);
         return im;
     }
 
     DynImage Func::realize(int a, int b, int c) {
-        DynImage im(a * b * c * (rhs.type.bits / 8), a, b, c);
+        DynImage im(rhs.type, a, b, c);
         realize(im);
         return im;
     }
 
 
     DynImage Func::realize(int a, int b, int c, int d) {
-        DynImage im(a * b * c * (rhs.type.bits / 8), a, b, c, d);
+        DynImage im(rhs.type, a, b, c, d);
         realize(im);
         return im;
     }
@@ -565,35 +565,35 @@ namespace FImage {
     MLVal *Func::environment = NULL;
 
     Type Float(unsigned char bits) {
-        return Type {makeFloatType(MLVal::fromInt(bits)), bits};
+        return Type {makeFloatType(MLVal::fromInt(bits)), bits, Type::FLOAT};
     }
 
     Type Int(unsigned char bits) {
-        return Type {makeIntType(MLVal::fromInt(bits)), bits};
+        return Type {makeIntType(MLVal::fromInt(bits)), bits, Type::INT};
     }
 
     Type UInt(unsigned char bits) {
-        return Type {makeUIntType(MLVal::fromInt(bits)), bits};
+        return Type {makeUIntType(MLVal::fromInt(bits)), bits, Type::UINT};
     }
 
-    DynImage::DynImage(size_t bytes, uint32_t a) : 
-        size{a}, stride{1} {
-        allocate(bytes);
+    DynImage::DynImage(Type t, uint32_t a) : 
+        type(t), size{a}, stride{1} {
+        allocate(a * (t.bits/8));
     }
 
-    DynImage::DynImage(size_t bytes, uint32_t a, uint32_t b) : 
-        size{a, b}, stride{1, a} {
-        allocate(bytes);
+    DynImage::DynImage(Type t, uint32_t a, uint32_t b) : 
+        type(t), size{a, b}, stride{1, a} {
+        allocate(a * b * (t.bits/8));
     }
     
-    DynImage::DynImage(size_t bytes, uint32_t a, uint32_t b, uint32_t c) : 
-        size{a, b, c}, stride{1, a, a*b} {
-        allocate(bytes);
+    DynImage::DynImage(Type t, uint32_t a, uint32_t b, uint32_t c) : 
+        type(t), size{a, b, c}, stride{1, a, a*b} {
+        allocate(a * b * c * (t.bits/8));
     }
 
-    DynImage::DynImage(size_t bytes, uint32_t a, uint32_t b, uint32_t c, uint32_t d) : 
-        size{a, b, c, d}, stride{1, a, a*b, a*b*c} {
-        allocate(bytes);
+    DynImage::DynImage(Type t, uint32_t a, uint32_t b, uint32_t c, uint32_t d) : 
+        type(t), size{a, b, c, d}, stride{1, a, a*b, a*b*c} {
+        allocate(a * b * c * d * (t.bits/8));
     }
 
 
@@ -606,12 +606,29 @@ namespace FImage {
         }
     }
 
-    Expr DynImage::load(Type type, const Expr &idx) {
+    Expr DynImage::load(const Expr &idx) {
         Expr l(makeLoad(type.mlval, MLVal::fromString(name()), idx.node), type);
         l.child(idx);
         l.bufs.push_back(this);
         return l;
     }
+
+    Expr DynImage::operator()(const Expr &a) {
+        return (*this)(a*stride[0]);
+    }
+
+    Expr DynImage::operator()(const Expr &a, const Expr &b) {
+        return (*this)(a*stride[0] + b*stride[1]);
+    }
+    
+    Expr DynImage::operator()(const Expr &a, const Expr &b, const Expr &c) {
+        return (*this)(a*stride[0] + b*stride[1] + c*stride[2]);
+    }
+    
+    Expr DynImage::operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) {
+        return (*this)(a*stride[0] + b*stride[1] + c*stride[2] + d*stride[3]);
+    }
+
 
     Range operator*(const Range &a, const Range &b) {
         Range region;
