@@ -234,7 +234,7 @@ namespace FImage {
         f->define(func_args, e);
     }
 
-    FuncRef::operator Expr() {
+    FuncRef::operator Expr() const {
         // make a call node
         MLVal exprlist = makeList();
         for (size_t i = func_args.size(); i > 0; i--) {
@@ -529,8 +529,7 @@ namespace FImage {
             //passMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
 
             // Peephole, bit-twiddling optimizations
-            // This pass makes a mess of vector x + x
-            //passMgr->add(llvm::createInstructionCombiningPass());
+            passMgr->add(llvm::createInstructionCombiningPass());
             //passMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
             
             passMgr->doInitialization();

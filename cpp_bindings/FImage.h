@@ -241,19 +241,21 @@ namespace FImage {
             f(f), func_args(args) {}
 
         // Turn it into a function call
-        operator Expr();
+        operator Expr() const;
 
         // This assignment corresponds to definition. This FuncRef is
         // defined to have the given expression as its value.
         void operator=(const Expr &e);
         
         // Make sure we don't directly assign an FuncRef to an FuncRef (but instead treat it as a definition)
-        void operator=(const FuncRef &other) {*this = (const Expr &)other;}
-                        
+        void operator=(const FuncRef &other) {*this = (Expr)other;}
+
         // A pointer to the function object that this lhs defines.
         Func *f;
 
         std::vector<Expr> func_args;
+
+
 
     };
 
