@@ -21,21 +21,24 @@ timeval now() {
 int main(int argc, char **argv) {
     Var x, y;
 
-    Image im(W, H);
+    Image<float> im(W+8, H+8);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             im(x, y) = x+y;
         }
     }
 
+    Func input;
+    input(x, y) = im(x+4, y+4);
+
     Func f1;
-    f1(x, y) = im(x, y)+im(x-1, y);
+    f1(x, y) = input(x, y) + input(x-1, y);
 
     Func f2;
-    f2(x, y) = f1(x, y)+f1(x, y-1);
+    f2(x, y) = f1(x, y);// + f1(x, y-1);
 
     // Evaluate all of f into a buffer
-    Image im3 = f2.realize(W, H);
+    Image<float> im3 = f2.realize(W, H);
 
     printf("im3:\n");
     for (int y = 0; y < 10; y++) {
