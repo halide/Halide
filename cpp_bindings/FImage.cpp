@@ -97,15 +97,15 @@ namespace FImage {
     template<> int Named<'i'>::_instances = 0;
 
     // An Expr is a wrapper around the node structure used by the compiler
-    Expr::Expr() : isVar(false) {}
+    Expr::Expr() : isVar(false), isDefined(false) {}
 
-    Expr::Expr(MLVal n, Type t) : node(n), type(t), isVar(false) {}
+    Expr::Expr(MLVal n, Type t) : node(n), type(t), isVar(false), isDefined(true) {}
 
-    Expr::Expr(int32_t val) : node(makeIntImm(MLVal::fromInt(val))), type(Int(32)), isVar(false) {}
+    Expr::Expr(int32_t val) : node(makeIntImm(MLVal::fromInt(val))), type(Int(32)), isVar(false), isDefined(true) {}
 
-    Expr::Expr(uint32_t val) : node(makeIntImm(MLVal::fromInt(val))), type(UInt(32)), isVar(false) {}
+    Expr::Expr(uint32_t val) : node(makeIntImm(MLVal::fromInt(val))), type(UInt(32)), isVar(false), isDefined(true) {}
 
-    Expr::Expr(float val) : node(makeFloatImm(MLVal::fromFloat(val))), type(Float(32)), isVar(false) {}
+    Expr::Expr(float val) : node(makeFloatImm(MLVal::fromFloat(val))), type(Float(32)), isVar(false), isDefined(true) {}
 
     // declare that this node has a child for bookkeeping
     void Expr::child(const Expr &c) {
@@ -221,12 +221,14 @@ namespace FImage {
         node = makeVar(MLVal::fromString(name()));
         vars.push_back(this);
         isVar = true;
+        isDefined = true;
     }
 
     Var::Var(const std::string &name) : Named<'v'>(name) {
         node = makeVar(MLVal::fromString(name));
         vars.push_back(this);
         isVar = true;
+        isDefined = true;
     }
 
 
@@ -240,19 +242,24 @@ namespace FImage {
         for (size_t i = func_args.size(); i > 0; i--) {
             exprlist = addToList(exprlist, func_args[i-1].node);            
         }
-        Expr call(makeCall(f->rhs.type.mlval, MLVal::fromString(f->name()), exprlist), f->rhs.type);
+        printf("Making a call node\n");
+        if (!f->rhs.isDefined) {
+            printf("Can't infer the return type when calling a function that hasn't been defined yet\n");
+        }
 
+        Expr call(makeCall(f->returnType.mlval, MLVal::fromString(f->name()), exprlist), f->returnType);
+        
         for (size_t i = 0; i < func_args.size(); i++) {
             call.child(func_args[i]);
         }
-
+        
         // Reach through the call to extract buffer dependencies (but not free vars)
         unify(call.bufs, f->rhs.bufs);
-
+        
         // Add this function call to the calls list
         call.funcs.push_back(f);
         unify(call.funcs, f->rhs.funcs);
-
+        
         return call;
     }
 
@@ -275,6 +282,7 @@ namespace FImage {
         if (gather) {
             printf("Gather definition for %s\n", name().c_str());
             rhs = r;            
+            returnType = rhs.type;
             args = func_args;
             arglist = makeList();
             for (size_t i = func_args.size(); i > 0; i--) {
@@ -420,7 +428,7 @@ namespace FImage {
             llvm::InitializeNativeTarget();
         }
 
-        if (!function_ptr) {
+        if (!functionPtr) {
 
             // Make a region to evaluate this over
             MLVal sizes = makeList();
@@ -544,7 +552,7 @@ namespace FImage {
 
             printf("compiling ll -> machine code...\n");
             void *ptr = ee->getPointerToFunction(f);
-            function_ptr = (void (*)(void*))ptr;
+            functionPtr = (void (*)(void*))ptr;
 
             printf("dumping machine code to file...\n");
             saveELF("generated.o", ptr, 8192);            
@@ -558,8 +566,8 @@ namespace FImage {
         }
         arguments[rhs.bufs.size()] = im.data;
 
-        printf("Calling function at %p\n", function_ptr); 
-        function_ptr(&arguments[0]); 
+        printf("Calling function at %p\n", functionPtr); 
+        functionPtr(&arguments[0]); 
     }
 
     MLVal *Func::environment = NULL;
@@ -743,5 +751,5 @@ namespace FImage {
     Type TypeOf<signed char>() {
         return Int(8);
     }
-
+    
 }

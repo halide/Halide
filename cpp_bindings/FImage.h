@@ -82,6 +82,8 @@ namespace FImage {
         void child(const Expr &c);
 
         bool isVar;
+
+        bool isDefined;
     };
 
     Expr operator+(const Expr &, const Expr &);
@@ -275,8 +277,10 @@ namespace FImage {
 
     class Func : public Named<'f'> {
     public:
-        Func() : function_ptr(NULL) {}
-        Func(const std::string &name) : Named<'f'>(name), function_ptr(NULL) {}
+        Func() : functionPtr(NULL) {}
+        Func(const std::string &name) : Named<'f'>(name), functionPtr(NULL) {}
+        Func(Type t) : returnType(t), functionPtr(NULL) {}
+        Func(const std::string &name, Type t) : Named<'f'>(name), returnType(t), functionPtr(NULL) {}
 
         // Define a function
         void define(const std::vector<Expr> &func_args, const Expr &rhs);
@@ -327,6 +331,7 @@ namespace FImage {
         Expr rhs;
         std::vector<Expr> args;
         MLVal arglist;
+        Type returnType;
 
     protected:
 
@@ -341,7 +346,7 @@ namespace FImage {
         std::vector<MLVal> schedule_transforms;
 
         // The compiled form of this function
-        mutable void (*function_ptr)(void *); 
+        mutable void (*functionPtr)(void *); 
     };
 
 
