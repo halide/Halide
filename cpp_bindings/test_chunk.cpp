@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Image im = g.realize(1024);
+    Image<double> im = g.realize(1024);
 
     return 0;
 }
