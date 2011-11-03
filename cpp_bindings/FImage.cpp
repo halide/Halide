@@ -253,13 +253,13 @@ namespace FImage {
             call.child(func_args[i]);
         }
         
-        // Reach through the call to extract buffer dependencies (but not free vars)
-        unify(call.bufs, f->rhs.bufs);
-        
         // Add this function call to the calls list
-        call.funcs.push_back(f);
+        call.funcs.push_back(f);       
+
+        // Reach through the call to extract buffer dependencies and function dependencies (but not free vars)
+        unify(call.bufs, f->rhs.bufs);
         unify(call.funcs, f->rhs.funcs);
-        
+
         return call;
     }
 
@@ -298,16 +298,10 @@ namespace FImage {
             MLVal scatter_args = makeList();
             for (size_t i = func_args.size(); i > 0; i--) {
                 scatter_args = addToList(scatter_args, func_args[i-1].node);
-                unify(rhs.bufs, func_args[i-1].bufs);
-                unify(rhs.vars, func_args[i-1].vars);
-                unify(rhs.funcs, func_args[i-1].funcs);
-                //rhs.child(func_args[i-1]);
+                rhs.child(func_args[i-1]);
             }                                                            
 
-            unify(rhs.bufs, r.bufs);
-            unify(rhs.vars, r.vars);
-            unify(rhs.funcs, r.funcs);
-            //rhs.child(r);
+            rhs.child(r);
             
             // There should already be a gathering definition of this function. Add the scattering term.
             *environment = addScatterToDefinition(*environment, MLVal::fromString(name()), scatter_args, r.node);

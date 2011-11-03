@@ -55,6 +55,7 @@ namespace FImage {
     public:
         Expr();
         Expr(MLVal, Type);
+
         Expr(int32_t);
         Expr(unsigned);
         Expr(float);
@@ -75,7 +76,7 @@ namespace FImage {
         // The list of free variables found
         std::vector<Var *> vars;
 
-        // The list of functions directly called
+        // The list of functions directly called        
         std::vector<Func *> funcs;
 
         // declare that this node has a child for bookkeeping
@@ -349,6 +350,31 @@ namespace FImage {
         mutable void (*functionPtr)(void *); 
     };
 
+    /* We implement uniforms using size-1 images. They are treated as
+     * expressions that load index 0 from that image. */
+    template<typename T>
+    class Uniform {
+    public:        
+        Uniform(const T &v = 0) : im(1) { 
+            printf("Making uniform: %s\n", im.name().c_str());
+            im(0) = v; 
+        }
+
+        void operator=(T v) {
+            im(0) = v;
+        }
+        
+        operator Expr() {
+            return im(Expr((int32_t)0));
+        }
+
+        Image<T> im;
+
+        // These should not be copy-constructed. It won't do what you would expect.
+        Uniform(const Uniform<T> &) = delete;
+        Uniform &operator=(const Uniform<T> &) = delete;
+
+    };
 
 }
 
