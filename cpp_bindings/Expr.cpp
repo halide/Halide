@@ -82,6 +82,9 @@ namespace FImage {
     Expr::Expr(float val) : contents(new Contents(makeFloatImm(val), Float(32))) {
     }
 
+    Expr::Expr(double val) : contents(new Contents(makeCast(Float(64).mlval, makeFloatImm(val)), Float(64))) {
+    }
+
     Expr::Expr(const Var &v) : contents(new Contents(makeVar((v.name())), Int(32))) {
         contents->isVar = true;
         contents->vars.push_back(v);

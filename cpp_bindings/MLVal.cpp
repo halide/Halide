@@ -65,7 +65,14 @@ MLVal::MLVal(int x) : contents(new Contents(Val_int(x))) {
 MLVal::MLVal(uint32_t x) : contents(new Contents(Val_int(x))) {
 }
 
-MLVal::MLVal(float x) : contents(new Contents(caml_copy_double(x))) {
+MLVal::MLVal(float x) {
+    init_ml();
+    contents.reset(new Contents(caml_copy_double((double)x)));
+}
+
+MLVal::MLVal(double x) {
+    init_ml();
+    contents.reset(new Contents(caml_copy_double(x)));
 }
 
 MLVal::MLVal(const char *str) {
