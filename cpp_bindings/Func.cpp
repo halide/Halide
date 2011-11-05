@@ -363,7 +363,7 @@ namespace FImage {
 
             MLVal stmt = doLower((name()), 
                                  *Func::environment,
-                                 sched, true);
+                                 sched, contents->tracing);
 
             // Create a function around it with the appropriate number of args
             printf("\nMaking function...\n");           
