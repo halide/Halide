@@ -22,8 +22,8 @@ DECL_SOT(double);
 template<typename A, typename B>
 bool test(int vec_width) {
     
-    int W = vec_width*10;
-    int H = 4;
+    int W = vec_width*4;
+    int H = 1;
 
     Image<A> input(W, H);
     for (int y = 0; y < H; y++) {
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
 
 
     // We only support power-of-two vector widths for now
-    for (int vec_width = 1; vec_width < 64; vec_width*=2) {
+    for (int vec_width = 1; vec_width < 32; vec_width*=2) {
         ok = ok && test_all<float>(vec_width);
         ok = ok && test_all<double>(vec_width);
         ok = ok && test_all<uint8_t>(vec_width);
