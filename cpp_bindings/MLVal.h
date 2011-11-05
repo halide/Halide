@@ -15,6 +15,7 @@ public:
     MLVal(int);
     MLVal(uint32_t);
     MLVal(float);
+    MLVal(double);
     MLVal(void *);
     MLVal operator()() const;
     MLVal operator()(const MLVal &a) const;

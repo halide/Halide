@@ -29,6 +29,7 @@ namespace FImage {
         Expr(int32_t);
         Expr(unsigned);
         Expr(float);
+        Expr(double);
         Expr(const Var &);
         Expr(const FuncRef &);
         Expr(const DynUniform &);

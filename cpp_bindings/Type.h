@@ -10,7 +10,7 @@ namespace FImage {
         MLVal mlval;
         unsigned char bits;
         enum {FLOAT = 0, INT = 1, UINT = 2} code;
-        bool operator==(const Type &other) {
+        bool operator==(const Type &other) const {
             return bits == other.bits && code == other.code;
         }
     };
