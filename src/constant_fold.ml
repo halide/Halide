@@ -110,18 +110,20 @@ let rec constant_fold_expr expr =
 
 let rec constant_fold_stmt = function
   | For (var, min, size, order, stmt) ->
-    (* Remove trivial for loops *)
-    let min = constant_fold_expr min in 
-    let size = constant_fold_expr size in
-    if size = IntImm 1 or size = UIntImm 1 then
-      constant_fold_stmt (subs_stmt (Var (i32, var)) min stmt)
-    else
-      For (var, min, size, order, constant_fold_stmt stmt)
+      (* Remove trivial for loops *)
+      let min = constant_fold_expr min in 
+      let size = constant_fold_expr size in
+      if size = IntImm 1 or size = UIntImm 1 then
+        constant_fold_stmt (subs_stmt (Var (i32, var)) min stmt)
+      else
+        For (var, min, size, order, constant_fold_stmt stmt)
   | Block l ->
-    Block (List.map constant_fold_stmt l)
+      Block (List.map constant_fold_stmt l)
   | Store (e, buf, idx) ->
-    Store (constant_fold_expr e, buf, constant_fold_expr idx)
+      Store (constant_fold_expr e, buf, constant_fold_expr idx)
   | Pipeline (n, ty, size, produce, consume) -> 
-    Pipeline (n, ty, constant_fold_expr size,
-              constant_fold_stmt produce,
-              constant_fold_stmt consume)
+      Pipeline (n, ty, constant_fold_expr size,
+                constant_fold_stmt produce,
+                constant_fold_stmt consume)
+  | Print (p, l) -> 
+      Print (p, List.map constant_fold_expr l)

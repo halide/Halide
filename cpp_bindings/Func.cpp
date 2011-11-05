@@ -34,7 +34,7 @@ namespace FImage {
     ML_FUNC2(addDefinitionToEnv);
     
     ML_FUNC3(makeSchedule);
-    ML_FUNC3(doLower);
+    ML_FUNC4(doLower);
 
     ML_FUNC1(printStmt);
     ML_FUNC1(printSchedule);
@@ -60,13 +60,13 @@ namespace FImage {
 
     struct Func::Contents {
         Contents() :
-            name(uniqueName('f')), functionPtr(NULL) {}
+            name(uniqueName('f')), functionPtr(NULL), tracing(false) {}
         Contents(Type returnType) : 
-            name(uniqueName('f')), returnType(returnType), functionPtr(NULL) {}
+            name(uniqueName('f')), returnType(returnType), functionPtr(NULL), tracing(false) {}
         Contents(std::string name) : 
-            name(name), functionPtr(NULL) {}
+            name(name), functionPtr(NULL), tracing(false) {}
         Contents(std::string name, Type returnType) : 
-            name(name), returnType(returnType), functionPtr(NULL) {}
+            name(name), returnType(returnType), functionPtr(NULL), tracing(false) {}
         
         const std::string name;
         
@@ -88,6 +88,9 @@ namespace FImage {
         
         // The compiled form of this function
         mutable void (*functionPtr)(void *); 
+        
+        // Should this function be compiled with tracing enabled
+        bool tracing;
     };    
 
     Range operator*(const Range &a, const Range &b) {
@@ -170,7 +173,6 @@ namespace FImage {
         return contents->scheduleTransforms;
     }
 
-
     void Func::define(const std::vector<Expr> &args, const Expr &r) {
         // Make sure the environment exists
         if (!environment) {
@@ -217,12 +219,7 @@ namespace FImage {
     }
 
     void Func::trace() {
-        char fmt[256];
-        snprintf(fmt, 256, "Evaluating %s at: ", name().c_str());
-        printf("Wrapping rhs in a debug node\n");
-        contents->rhs = Debug(rhs(), fmt, args());
-        contents->definition = makeDefinition((name()), contents->arglist, rhs().node());
-        *environment = addDefinitionToEnv(*environment, contents->definition);
+        contents->tracing = true;
     }
 
     void Func::vectorize(const Var &v) {
@@ -366,7 +363,7 @@ namespace FImage {
 
             MLVal stmt = doLower((name()), 
                                  *Func::environment,
-                                 sched);   
+                                 sched, true);
 
             // Create a function around it with the appropriate number of args
             printf("\nMaking function...\n");           

@@ -200,6 +200,9 @@ type stmt =
   *)
   | Pipeline of buffer * val_type * expr * stmt * stmt
 
+  (* For debugging *)
+  | Print of string * (expr list)
+
 (* A function definition: (name, args, return type, body) *)
 and definition = (string * ((val_type * string) list) * val_type * function_body)
 

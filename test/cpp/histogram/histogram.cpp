@@ -21,8 +21,11 @@ int main(int argc, char **argv) {
     Var x("x"), y("y"), i("i");
     Func hist("hist");
 
+    Func in("in");
+    in(x, y) = input(x, y);
+
     hist(i) = 0;
-    hist(input(x, y)) = hist(input(x, y)) + 1;
+    hist(input(x, y)) = hist(in(x, y)) + 1;
 
     hist.range(y, 0, H);
     hist.range(x, 0, W);
