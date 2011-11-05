@@ -1,26 +1,6 @@
 CXX=g++-4.6 -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
 
-all: test test_functions test_chunk test_vector_cast
-
-#test: FImage.a test.cpp
-#	$(CXX) test.cpp FImage.a -o test 
-
-test_%: test_%.cpp FImage.a
-	$(CXX) FImage.a $< -o $@
-
-#test_vector_cast: FImage.a test_vector_cast.cpp
-#	$(CXX) test_vector_cast.cpp -o test_vector_cast
-
-#test_functions: FImage.a test_functions.cpp
-#	$(CXX) test_functions.cpp FImage.a -o test_functions 
-
-#test_chunk: FImage.a test_chunk.cpp
-#	$(CXX) test_chunk.cpp FImage.a -o test_chunk 
-
-# Everything above this line just uses FImage.a and FImage.h. It has
-# no knowledge of llvm or ocaml
-#------------------------------------------------
-# Everything below this line exists to build FImage.a
+all: FImage.a
 
 LLVM_DIR ?= ../llvm/Release+Asserts
 LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
@@ -53,5 +33,5 @@ _build/_MLFImage.o: ../src/_build/fimage.cmxa
 	cd $(PWD)	
 
 clean:
-	rm -f test test_functions test_chunk _build/*
+	rm -f _build/*
 	rm FImage.a FImage.o

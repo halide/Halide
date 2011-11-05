@@ -42,6 +42,8 @@ imagestack_exe = os.path.join(imagestack_path, 'ImageStack')
 cxx_exe = 'g++-4.6'
 
 def test_cpp(name):
+
+    status(name, "Building FImage.a")
     # Make sure FImage.a is built
     cmd = "make -C ../cpp_bindings/ FImage.a"
     run(cmd.split(' '))
@@ -62,6 +64,7 @@ def test_cpp(name):
     remove("a.out")
     remove(logfile)
 
+    status(name, "Compiling %s" % srcfile)
     run([cxx_exe,
          "-std=c++0x",
          "-I../../../cpp_bindings/",
@@ -71,6 +74,7 @@ def test_cpp(name):
          
     # Run the test
     try:
+        status(name, "Running test")
         out = run(["./a.out"])
         print "."
     except CalledProcessError:
