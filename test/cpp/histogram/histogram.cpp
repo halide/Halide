@@ -30,6 +30,8 @@ int main(int argc, char **argv) {
     hist.range(y, 0, H);
     hist.range(x, 0, W);
 
+    //hist.trace();
+
     //Func cdf("cdf");
     //cdf(i) = Select(i > 0, cdf(i-1) + hist(i), hist(0));
 

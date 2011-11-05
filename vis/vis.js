@@ -16,6 +16,11 @@
              return a;
          };
 
+     debug = function(line) {
+         $('#scratch').val($('#scratch').val() + line + '\n');         
+     }
+     $('#scratch').val('');
+
      $.ajax({
          url: "trace.txt",
          context: document.body,
@@ -26,21 +31,21 @@
 
              // Parse lines starting with "Evaluating" or "Realizing"
              evals = lines.filter(function(line) {
-                 return (line.substring(0, 10) == "Evaluating" ||
-                         line.substring(0, 9) == "Realizing");
+                 return line.substring(0, 3) == "###";
              })             
 
              // Find lines of interest
              evals = evals.map(function(line) {
                  var pieces = line.split(' ');
-                 var name = pieces[1].replace('.', '_');
-                 var coords = pieces.slice(3);
+                 var name = pieces[2].replace('.', '_');
+                 var coords = pieces.slice(4);
 
-                 coords = coords.map(function(c) {
-                     return parseInt(c.split(',')[0])
-                 })
+                 //debug(pieces[1] + ', ' + name + ', ' + coords[0] + '**' + coords[1]); 
 
-                 return {type:pieces[0], name:name, coords:coords};
+                 coords = coords.map(function(l) {return parseInt(l);});
+
+                 return {type:pieces[1], name:name, coords:coords};
+
              })
 
              // Detect unique functions
@@ -56,23 +61,35 @@
                  // Make a canvas
                  $('#main').append('<canvas id="' + f + '" width=300 height=300></canvas>');
 
-                 alert(f);
-
                  // And a context
                  var surface = $('#' + f)[0].getContext("2d");
+                 surface.strokeStyle = "rgba(0, 0, 0, 1)";
                  surface.strokeRect(0, 0, 300, 300);
+                 surface.lineWidth = 2;
+                 surface.lineJoin = 'miter';
                  surfaces[f] = surface;
              });
 
              // Make the function that will draw our events
              drawEvent = function(event) {
+
                  if (event.type == "Evaluating") {
                      surfaces[event.name].fillStyle = "rgba(0, 0, 200, 1)";
-                     surfaces[event.name].fillRect(event.coords[0]*3, event.coords[1]*3, 3, 3);  
+                     surfaces[event.name].fillRect(event.coords[0]*7+1, event.coords[1]*7+1, 5, 5);  
                  } else if (event.type == "Realizing") {
-                     surfaces[event.name].fillStyle = "rgba(255, 255, 255, 1)";
-                     surfaces[event.name].fillRect(1, 1, 298, 298);
-                     surfaces[event.name].strokeRect(event.coords[0]*3, event.coords[2]*3, event.coords[1]*3, event.coords[3]*3); 
+                     //surfaces[event.name].fillStyle = "rgba(255, 255, 255, 1)";
+                     //surfaces[event.name].fillRect(1, 1, 298, 298);
+                     surfaces[event.name].strokeStyle = "rgba(0, 0, 0, 1)";
+                     surfaces[event.name].strokeRect(event.coords[0]*7, event.coords[2]*7, event.coords[1]*7, event.coords[3]*7); 
+                 } else if (event.type == "Discarding") {
+                     //debug(event.coords);
+                     for (var y = event.coords[2]; y < event.coords[2] + event.coords[3]; y++) {
+                         for (var x = event.coords[0]; x < event.coords[0] + event.coords[1]; x++) {
+                             surfaces[event.name].strokeStyle = "rgba(255, 255, 255, 1)";
+                             surfaces[event.name].strokeRect(x*7+1, y*7+1, 5, 5);  
+                         }
+                     }
+                     surfaces[event.name].strokeRect(event.coords[0]*7, event.coords[2]*7, event.coords[1]*7, event.coords[3]*7); 
                  }
              };
 
@@ -82,7 +99,7 @@
                  if (evals.length < count) return;
                  drawEvent(evals[count]);
                  count++;
-                 t = setTimeout("loop()", 10);
+                 t = setTimeout("loop()", 1);
              }
 
              loop();

@@ -62,15 +62,15 @@ let make_function_body (name:string) (env:environment) (debug:bool) =
   let renamed_body = match body with
     | Pure expr -> 
         let expr = if debug then
-            Debug (expr, "Evaluating " ^ name ^ " at ", List.map (fun (t, n) -> Var (t, n)) renamed_args) 
+            Debug (expr, "### Evaluating " ^ name ^ " at ", List.map (fun (t, n) -> Var (t, n)) renamed_args) 
           else expr in
         Pure (prefix_name_expr prefix expr)
     | Impure (expr, modified_args, modified_val) -> 
         let expr = if debug then
-            Debug (expr, "Evaluating " ^ name ^ " at ", List.map (fun (t, n) -> Var (t, n)) renamed_args) 
+            Debug (expr, "### Initializing " ^ name ^ " at ", List.map (fun (t, n) -> Var (t, n)) renamed_args) 
           else expr in
         let modified_val = if debug then 
-            Debug (modified_val, "Modifying " ^ name ^ " at ", modified_args) 
+            Debug (modified_val, "### Modifying " ^ name ^ " at ", modified_args) 
           else modified_val in
         Impure (prefix_name_expr prefix expr,
                 List.map (prefix_name_expr prefix) modified_args, 
@@ -225,8 +225,18 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
 
                   (* If there are no calls to the function inside
                      body, we shouldn't be introducing a useless let *)
-                  if consume = body then body else              
-                    Pipeline (buffer_name, return_type, buffer_size, produce, consume)
+                  let pipeline = 
+                    if consume = body then body else              
+                      Pipeline (buffer_name, return_type, buffer_size, produce, consume)
+                  in
+
+                  if debug then
+                    let sizes = List.fold_left
+                      (fun l (a, b) -> a::b::l)    
+                      [] (List.rev strides) in  
+                    Block [pipeline; Print ("### Discarding " ^ name ^ " over ", sizes)]
+                  else
+                    pipeline
                 end
                 | For (for_dim, min, size, order, body) -> 
                     For (for_dim, min, size, order, inner body)
@@ -408,7 +418,7 @@ and realize (name, args, return_type, body) sched_list buffer_name strides debug
     let sizes = List.fold_left
       (fun l (a, b) -> a::b::l)    
       [] (List.rev strides) in  
-    Block [Print ("Realizing " ^ name ^ " over ", sizes); produce]
+    Block [Print ("### Realizing " ^ name ^ " over ", sizes); produce]
   else
     produce
 
