@@ -625,7 +625,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     in
     
     let fmts = List.map fmt_string args in
-    let fmt = String.concat ", " (List.map fst fmts) in
+    let fmt = String.concat " " (List.map fst fmts) in
     let args = List.concat (List.map snd fmts) in
 
     let ll_fmt = const_stringz c (prefix ^ fmt ^ "\n") in    
@@ -776,7 +776,9 @@ let codegen_to_c_callable c e =
   (* codegen the wrapper *)
   let w = codegen_c_wrapper c m f in
 
-    (m,w)
+  (* Clear the output buffers in case we run this code and it prints something *)
+  Printf.printf "%!";
+  (m,w)
 
 exception BCWriteFailed of string
 
