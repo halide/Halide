@@ -424,27 +424,27 @@ namespace FImage {
             llvm::raw_fd_ostream stdout("passes.txt", errstr);
   
             passMgr->add(new llvm::TargetData(*ee->getTargetData()));
-            //passMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
+            passMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
 
             // AliasAnalysis support for GVN
             passMgr->add(llvm::createBasicAliasAnalysisPass());
-            //passMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
+            passMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
 
             // Reassociate expressions
             passMgr->add(llvm::createReassociatePass());
-            //passMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
+            passMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
 
             // Simplify CFG (delete unreachable blocks, etc.)
             passMgr->add(llvm::createCFGSimplificationPass());
-            //passMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
+            passMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
 
             // Eliminate common sub-expressions
             passMgr->add(llvm::createGVNPass());
-            //passMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
+            passMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
 
             // Peephole, bit-twiddling optimizations
             passMgr->add(llvm::createInstructionCombiningPass());
-            //passMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
+            passMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
             
             passMgr->doInitialization();
 
