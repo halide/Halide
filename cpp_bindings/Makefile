@@ -22,7 +22,7 @@ test_%: test_%.cpp FImage.a
 #------------------------------------------------
 # Everything below this line exists to build FImage.a
 
-LLVM_DIR ?= ../llvm/Release
+LLVM_DIR ?= ../llvm/Release+Asserts
 LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
 LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags)
 LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter bitreader x86 interpreter)
@@ -33,8 +33,10 @@ OCAML_LIB_DIR=/usr/local/lib/ocaml
 LLVM_LDFLAGS=$(shell $(LLVM_CONFIG_EXE) --ldflags)
 LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lstdc++
  
-FImage.a: _build/_MLFImage.o _build/FImage.o _build/MLVal.o _build/elf.o
-	ld -r -o FImage.o _build/_MLFimage.o $(OCAML_LIB_DIR)/libasmrun.a _build/MLVal.o _build/FImage.o _build/elf.o -L$(OCAML_LLVM_LIB_DIR) $(LLVM_LIBS_CXX) $(LLVM_LIBS_C)
+FIMAGE_OBJS=$(addprefix _build/,_MLFImage.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o)
+
+FImage.a: $(FIMAGE_OBJS)
+	ld -r -o FImage.o $(OCAML_LIB_DIR)/libasmrun.a $(FIMAGE_OBJS) -L$(OCAML_LLVM_LIB_DIR) $(LLVM_LIBS_CXX) $(LLVM_LIBS_C)
 	rm -f FImage.a
 	ar q FImage.a FImage.o
 	ranlib FImage.a
