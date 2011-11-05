@@ -308,7 +308,7 @@ namespace FImage {
     Expr Debug(Expr e, const std::string &prefix, const std::vector<Expr> &args) {
         MLVal mlargs = makeList();
         for (size_t i = args.size(); i > 0; i--) {
-            mlargs = addToList(mlargs, args[i-1].node()());
+            mlargs = addToList(mlargs, args[i-1].node());
         }
 
         Expr d(makeDebug(e.node(), (prefix), mlargs), e.type());        
