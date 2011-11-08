@@ -16,6 +16,7 @@
 #include "Image.h"
 #include "Uniform.h"
 #include "elf.h"
+#include <sstream>
 
 namespace FImage {
     ML_FUNC2(makeVectorizeTransform);
@@ -43,6 +44,8 @@ namespace FImage {
     ML_FUNC2(makePair);
 
     struct FuncRef::Contents {
+        Contents(const Func &f) :
+            f(f) {}
         Contents(const Func &f, const Expr &a) :
             f(f), args {a} {}
         Contents(const Func &f, const Expr &a, const Expr &b) :
@@ -103,6 +106,10 @@ namespace FImage {
             region.range[a.range.size() + i] = b.range[i];
         }
         return region;
+    }
+
+    FuncRef::FuncRef(const Func &f) :
+        contents(new FuncRef::Contents(f)) {
     }
 
     FuncRef::FuncRef(const Func &f, const Expr &a) : 
@@ -173,11 +180,23 @@ namespace FImage {
         return contents->scheduleTransforms;
     }
 
-    void Func::define(const std::vector<Expr> &args, const Expr &r) {
+    void Func::define(const std::vector<Expr> &_args, const Expr &r) {
         // Make sure the environment exists
         if (!environment) {
             printf("Creating environment\n");
             environment = new MLVal(makeEnv());
+        }
+
+        // Make a local copy of the argument list
+        std::vector<Expr> args = _args;
+
+        // Add any implicit arguments 
+        printf("Adding %d implicit arguments\n", r.implicitArgs());
+        for (int i = 0; i < r.implicitArgs(); i++) {
+            std::ostringstream ss;
+            ss << "iv"; // implicit var
+            ss << i;
+            args.push_back(Var(ss.str()));
         }
 
         printf("Detecting type of definition\n");
@@ -421,27 +440,27 @@ namespace FImage {
             llvm::raw_fd_ostream stdout("passes.txt", errstr);
   
             passMgr->add(new llvm::TargetData(*ee->getTargetData()));
-            passMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
+            //passMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
 
             // AliasAnalysis support for GVN
             passMgr->add(llvm::createBasicAliasAnalysisPass());
-            passMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
+            //passMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
 
             // Reassociate expressions
             passMgr->add(llvm::createReassociatePass());
-            passMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
+            //passMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
 
             // Simplify CFG (delete unreachable blocks, etc.)
             passMgr->add(llvm::createCFGSimplificationPass());
-            passMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
+            //passMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
 
             // Eliminate common sub-expressions
             passMgr->add(llvm::createGVNPass());
-            passMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
+            //passMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
 
             // Peephole, bit-twiddling optimizations
             passMgr->add(llvm::createInstructionCombiningPass());
-            passMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
+            //passMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
             
             passMgr->doInitialization();
 

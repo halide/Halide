@@ -26,6 +26,7 @@ namespace FImage {
     class FuncRef {
     public:
 
+        FuncRef(const Func &f);
         FuncRef(const Func &f, const Expr &a); 
         FuncRef(const Func &f, const Expr &a, const Expr &b);
         FuncRef(const Func &f, const Expr &a, const Expr &b, const Expr &c);
@@ -57,6 +58,7 @@ namespace FImage {
 
         // Define a function
         void define(const std::vector<Expr> &args, const Expr &rhs);
+        void operator=(const Expr &rhs) {define(std::vector<Expr>(), rhs);}
         
         // Generate a call to the function (or the lhs of a definition)
         FuncRef operator()(const Expr &a) {return FuncRef(*this, a);}

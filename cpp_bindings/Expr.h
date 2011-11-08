@@ -34,6 +34,7 @@ namespace FImage {
         Expr(const FuncRef &);
         Expr(const DynUniform &);
         Expr(const ImageRef &);
+        Expr(const Func &);
         
         template<typename T> Expr(const Uniform<T> &u) : contents(Expr((DynUniform)u).contents) {}
 
@@ -51,6 +52,7 @@ namespace FImage {
         const std::vector<DynImage> &images() const;
         const std::vector<Var> &vars() const;
         const std::vector<Func> &funcs() const;
+        int implicitArgs() const;
 
         bool isVar() const;
         bool isDefined() const;

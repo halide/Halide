@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     in(x, y) = input(x, y);
 
     hist(i) = 0;
-    hist(input(x, y)) = hist(in(x, y)) + 1;
+    hist(in(x, y)) = hist(in(x, y)) + 1;
 
     hist.range(y, 0, H);
     hist.range(x, 0, W);
