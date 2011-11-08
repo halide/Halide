@@ -6,6 +6,7 @@
 #include "Func.h"
 #include "Uniform.h"
 #include "Image.h"
+#include <sstream>
 
 namespace FImage {
 
@@ -40,31 +41,38 @@ namespace FImage {
         }
     }
 
-  struct Expr::Contents {
-      Contents(MLVal n, Type t) : node(n), type(t), isVar(false) {}
-      // The ML-value of the expression
-      MLVal node;
-      
-      // The (dynamic) type of the expression
-      Type type;
-      
-      // The list of argument buffers contained within subexpressions            
-      std::vector<DynImage> images;
-      
-      // The list of free variables found
-      std::vector<Var> vars;
-      
-      // The list of functions directly called        
-      std::vector<Func> funcs;
-      
-      // The list of uniforms referred to
-      std::vector<DynUniform> uniforms;
-      
-      // Sometimes it's useful to be able to tell if an expression is a simple var or not
-      bool isVar;
-  };       
+    struct Expr::Contents {
+        Contents(MLVal n, Type t) : node(n), type(t), isVar(false), implicitArgs(0) {}
+        Contents(const FuncRef &f);
 
+        // Declare that this expression is the child of another for bookkeeping
+        void child(const Expr &);
 
+        // The ML-value of the expression
+        MLVal node;
+        
+        // The (dynamic) type of the expression
+        Type type;
+        
+        // The list of argument buffers contained within subexpressions            
+        std::vector<DynImage> images;
+        
+        // The list of free variables found
+        std::vector<Var> vars;
+        
+        // The list of functions directly called        
+        std::vector<Func> funcs;
+        
+        // The list of uniforms referred to
+        std::vector<DynUniform> uniforms;
+        
+        // Sometimes it's useful to be able to tell if an expression is a simple var or not
+        bool isVar;
+        
+        // The number of arguments that remain implicit
+        int implicitArgs;
+    }; 
+    
 
 
     Expr::Expr() {
@@ -112,8 +120,12 @@ namespace FImage {
         return contents->type;
     }
 
-    bool  Expr::isVar() const {
+    bool Expr::isVar() const {
         return contents->isVar;
+    }
+
+    int Expr::implicitArgs() const {
+        return contents->implicitArgs;
     }
 
     const std::vector<DynUniform> &Expr::uniforms() const {
@@ -137,11 +149,16 @@ namespace FImage {
     }
 
     // declare that this node has a child for bookkeeping
+    void Expr::Contents::child(const Expr &c) {
+        unify(images, c.images());
+        unify(vars, c.vars());
+        unify(funcs, c.funcs());
+        unify(uniforms, c.uniforms());
+        implicitArgs = c.implicitArgs();
+    }
+
     void Expr::child(const Expr &c) {
-        unify(contents->images, c.images());
-        unify(contents->vars, c.vars());
-        unify(contents->funcs, c.funcs());
-        unify(contents->uniforms, c.uniforms());
+        contents->child(c);
     }
 
     void Expr::operator+=(const Expr & other) {        
@@ -242,9 +259,27 @@ namespace FImage {
         return e;
     }
     
-    Expr::Expr(const FuncRef &f) {
+    Expr::Expr(const FuncRef &f) : contents(new Contents(f)) {}
+
+    Expr::Expr(const Func &f) : contents(new Contents(f)) {}
+
+    Expr::Contents::Contents(const FuncRef &f) {
         // make a call node
         MLVal exprlist = makeList();
+
+        // Start with the implicit arguments
+        printf("This call to %s has %d arguments when %s takes %d args\n", 
+               f.f().name().c_str(),
+               (int)f.args().size(),
+               f.f().name().c_str(),
+               (int)f.f().args().size());
+        int iArgs = (int)f.f().args().size() - (int)f.args().size();
+        for (int i = iArgs-1; i >= 0; i--) {
+            std::ostringstream ss;
+            ss << "iv" << i; // implicit var
+            exprlist = addToList(exprlist, makeVar(ss.str()));
+        }
+
         for (size_t i = f.args().size(); i > 0; i--) {
             exprlist = addToList(exprlist, f.args()[i-1].node());            
         }
@@ -254,23 +289,29 @@ namespace FImage {
             //printf("Can't infer the return type when calling a function that hasn't been defined yet\n");
         //}
 
-        contents.reset(new Contents(makeCall(f.f().returnType().mlval, 
-                                             (f.f().name()),
-                                             exprlist), 
-                                    f.f().returnType()));
-        
+        node = makeCall(f.f().returnType().mlval, 
+                        (f.f().name()),
+                        exprlist);
+        type = f.f().returnType();
+
         for (size_t i = 0; i < f.args().size(); i++) {
+            if (f.args()[i].implicitArgs() != 0) {
+                printf("Can't use a partially applied function as an argument. We don't support higher-order functions.\n");
+                exit(-1);
+            }
             child(f.args()[i]);
         }
+
+        implicitArgs = iArgs;
         
         // Add this function call to the calls list
-        contents->funcs.push_back(f.f());  
+        funcs.push_back(f.f());  
 
         // Reach through the call to extract buffer dependencies and function dependencies (but not free vars)
         if (f.f().rhs().isDefined()) {
-            unify(contents->images, f.f().rhs().images());
-            unify(contents->funcs, f.f().rhs().funcs());
-            unify(contents->uniforms, f.f().rhs().uniforms());
+            unify(images, f.f().rhs().images());
+            unify(funcs, f.f().rhs().funcs());
+            unify(uniforms, f.f().rhs().uniforms());
         }
     }
 
