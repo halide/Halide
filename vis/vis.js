@@ -73,8 +73,11 @@
              // Make the function that will draw our events
              drawEvent = function(event) {
 
-                 if (event.type == "Evaluating") {
+                 if (event.type == "Evaluating" || event.type == "Initializing") {
                      surfaces[event.name].fillStyle = "rgba(0, 0, 200, 1)";
+                     surfaces[event.name].fillRect(event.coords[0]*7+1, event.coords[1]*7+1, 5, 5);  
+                 } else if (event.type == "Modifying") {
+                     surfaces[event.name].fillStyle = "rgba(0, 200, 0, 1)";
                      surfaces[event.name].fillRect(event.coords[0]*7+1, event.coords[1]*7+1, 5, 5);  
                  } else if (event.type == "Realizing") {
                      //surfaces[event.name].fillStyle = "rgba(255, 255, 255, 1)";
