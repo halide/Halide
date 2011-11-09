@@ -21,7 +21,7 @@ let _ =
 
   let callg = Call(f32, "g", [x]) in
 
-  let lowered = lower_function "g" env sched in
+  let lowered = lower_function "g" env sched true in
   let lowered = Break_false_dependence.break_false_dependence_stmt lowered in
   let lowered = Constant_fold.constant_fold_stmt lowered in
 
