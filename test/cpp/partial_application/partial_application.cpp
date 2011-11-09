@@ -13,9 +13,9 @@ int main(int argc, char **argv) {
     // implicit for all y
     g(x) = f(x) + f(x-1);
 
-    // implicit for all x, y on both sides
+    // implicit for all x, y on both sides, except for the float which has zero implicit args
     Func h;
-    h = g + f;
+    h = (g + f)*6.0f;
 
     printf("Realizing function...\n");
 
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 4; x++) {
-            if (im(x, y) != 6.0f) {
+            if (im(x, y) != 36.0f) {
                 printf("im(%d, %d) = %f\n", x, y, im(x, y));
                 return -1;
             }

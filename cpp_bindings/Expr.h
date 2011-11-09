@@ -64,6 +64,7 @@ namespace FImage {
 
     // Make a binary op node
     Expr operator+(const Expr &, const Expr &);
+    Expr operator-(const Expr &);
     Expr operator-(const Expr &, const Expr &);
     Expr operator*(const Expr &, const Expr &);
     Expr operator/(const Expr &, const Expr &);
@@ -71,7 +72,7 @@ namespace FImage {
     // Make a comparison node
     Expr operator>(const Expr &, const Expr &);
     Expr operator>=(const Expr &, const Expr &);
-    Expr operator>(const Expr &, const Expr &);
+    Expr operator<(const Expr &, const Expr &);
     Expr operator<=(const Expr &, const Expr &);
     Expr operator!=(const Expr &, const Expr &);
     Expr operator==(const Expr &, const Expr &);
