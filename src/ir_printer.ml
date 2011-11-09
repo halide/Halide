@@ -14,6 +14,7 @@ and string_of_op = function
   | Sub -> "-"
   | Mul -> "*"
   | Div -> "/"
+  | Mod -> "%"
 
 and string_of_cmp = function
   | EQ -> "=="

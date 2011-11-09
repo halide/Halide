@@ -88,13 +88,11 @@ Func upsample(Func f) {
 
     printf("Upsampling in x\n");
     // Upsample in x using linear interpolation
-    upx(2*x, y) = f(x-1, y) + 3*f(x, y);
-    upx(2*x+1, y) = f(x+1, y) + 3*f(x, y);
+    upx(x, y) = f((x/2) - 1 + 2*(x % 2), y) + 3*f(x/2, y);
 
     printf("Upsampling in y\n");
     // Upsample in y using linear interpolation
-    upy(x, 2*y) = upx(x, y-1) + 3*upx(x, y);
-    upy(x, 2*y+1) = upx(x, y+1) + 3*upx(x, y);
+    upy(x, y) = upx(x, (y/2) - 1 + 2*(y % 2)) + 3*f(x, y/2);
 
     printf("Renormalizing\n");
     // Normalize
@@ -137,12 +135,12 @@ int main(int argc, char **argv) {
     // Compute gaussian and laplacian pyramids of the input
     inGPyramid[0](x, y) = input(x, y);
     for (int j = 1; j < J; j++)
-        inGPyramid[j](x, y) = downsample(inGPyramid[J-1])(x, y, k);
+        inGPyramid[j](x, y) = downsample(inGPyramid[j-1])(x, y);
 
     printf("Defining laplacian pyramid of input\n");
     inLPyramid[J-1](x, y) = inGPyramid[J-1](x, y);
     for (int j = J-2; j >= 0; j--) 
-        inLPyramid[j](x, y) = inGPyramid[j](x, y) - upsample(inLPyramid[J+1])(x, y);
+        inLPyramid[j](x, y) = inGPyramid[j](x, y) - upsample(inLPyramid[j+1])(x, y);
     
     // Contruct the laplacian pyramid of the output, by blending
     // between the processed laplacian pyramids
