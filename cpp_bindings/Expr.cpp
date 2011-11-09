@@ -20,6 +20,7 @@ namespace FImage {
     ML_FUNC2(makeSub);
     ML_FUNC2(makeMul);
     ML_FUNC2(makeDiv);
+    ML_FUNC2(makeMod);
     ML_FUNC2(makeEQ);
     ML_FUNC2(makeNE);
     ML_FUNC2(makeLT);
@@ -208,6 +209,13 @@ namespace FImage {
 
     Expr operator/(const Expr & a, const Expr & b) {
         Expr e(makeDiv(a.node(), b.node()), a.type());
+        e.child(a);
+        e.child(b);
+        return e;
+    }
+
+    Expr operator%(const Expr &a, const Expr &b) {
+        Expr e(makeMod(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;

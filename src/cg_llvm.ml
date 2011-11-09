@@ -193,6 +193,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     | Bop(Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
     | Bop(Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
     | Bop(Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
+    | Bop(Mod, l, r) -> cg_binop build_srem build_urem build_frem l r
 
     (* comparison *)
     | Cmp(EQ, l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r

@@ -68,7 +68,8 @@ namespace FImage {
     Expr operator-(const Expr &, const Expr &);
     Expr operator*(const Expr &, const Expr &);
     Expr operator/(const Expr &, const Expr &);
-    
+    Expr operator%(const Expr &, const Expr &);
+
     // Make a comparison node
     Expr operator>(const Expr &, const Expr &);
     Expr operator>=(const Expr &, const Expr &);

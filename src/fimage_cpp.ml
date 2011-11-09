@@ -46,6 +46,7 @@ let _ =
   Callback.register "makeMul" (fun a b -> a *~ b);
   Callback.register "makeSub" (fun a b -> a -~ b);
   Callback.register "makeDiv" (fun a b -> a /~ b);
+  Callback.register "makeMod" (fun a b -> a %~ b);
   Callback.register "makeEQ" (fun a b -> Cmp (EQ, a, b));
   Callback.register "makeNE" (fun a b -> Cmp (NE, a, b));
   Callback.register "makeGT" (fun a b -> Cmp (GT, a, b));

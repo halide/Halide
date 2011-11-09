@@ -57,6 +57,7 @@ let rec constant_fold_expr expr =
         | (Sub, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a -~ b), n)
         | (Mul, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a *~ b), n)
         | (Div, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a /~ b), n)
+        | (Mod, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a %~ b), n)
 
         | (op, x, y) -> Bop (op, x, y)
       end
