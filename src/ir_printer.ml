@@ -72,6 +72,8 @@ and string_of_stmt stmt =
              p ^ "} consumer {" ^ "\n" ^ 
              string_stmt sp consume ^
              p ^ "}\n")
+      | Print (m, l) -> p ^ "Print(" ^ m ^ (String.concat ", " (List.map string_of_expr l)) ^ ")"
+          
   in
   string_stmt "" stmt
     
