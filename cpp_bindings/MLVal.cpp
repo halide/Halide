@@ -20,16 +20,16 @@ void init_ml() {
     }
 }
 
-struct _MLValue {
-    _MLValue() : val(Val_unit) {
+struct MLVal::Contents {
+    Contents() : val(Val_unit) {
         register_global_root(&val);
     }
 
-    _MLValue(value v) : val(v) {
+    Contents(value v) : val(v) {
         register_global_root(&val);
     } 
 
-    ~_MLValue() {
+    ~Contents() {
         remove_global_root(&val);
     }
     value val;
@@ -43,7 +43,7 @@ MLVal MLVal::find(const char *name) {
         printf("%s not found!\n", name);
         exit(1);
     }
-    v.val.reset(new _MLValue(*result));
+    v.contents.reset(new Contents(*result));
     return v;
 }
 
@@ -52,73 +52,80 @@ MLVal MLValFromValue(value v) {
         printf("Can't make an MLVal from an exception!\n");
         exit(1);
     }
-    MLVal mlv;
-    mlv.val.reset(new _MLValue(v));
-    return mlv;
+    return MLVal((void *)v);
 }
 
-void *MLVal::asVoidPtr() {
-    //return (void *)(&(val->val));
-    return (void *)(val->val);
+void *MLVal::asVoidPtr() const {
+    return (void *)(contents->val);
 }
 
-MLVal MLVal::fromInt(int x) {
-    return MLValFromValue(Val_int(x));
+MLVal::MLVal(int x) : contents(new Contents(Val_int(x))) {
 }
 
-MLVal MLVal::fromFloat(float x) {
-    return MLValFromValue(caml_copy_double(x));
+MLVal::MLVal(uint32_t x) : contents(new Contents(Val_int(x))) {
 }
 
-MLVal MLVal::fromString(const char *str) {
+MLVal::MLVal(float x) {
+    init_ml();
+    contents.reset(new Contents(caml_copy_double((double)x)));
+}
+
+MLVal::MLVal(double x) {
+    init_ml();
+    contents.reset(new Contents(caml_copy_double(x)));
+}
+
+MLVal::MLVal(const char *str) {
     init_ml();
     value v = caml_alloc_string(strlen(str));
     strcpy(String_val(v), str);
-    return MLValFromValue(v);
+    contents.reset(new Contents(v));
 }
 
-MLVal MLVal::fromString(const std::string &str) {
-    return MLVal::fromString(str.c_str());
+MLVal::MLVal(const std::string &str) {
+    init_ml();
+    value v = caml_alloc_string(str.size());
+    strcpy(String_val(v), &str[0]);
+    contents.reset(new Contents(v));    
 }
 
-MLVal MLVal::fromPointer(void *ptr) {
-    return MLValFromValue((value)ptr);
+MLVal::MLVal(void *ptr) : contents(new Contents((value)ptr)) {
 }
 
-void MLVal::unpackPair(MLVal tuple, MLVal &first, MLVal &second) {
-    first = MLValFromValue(Field(tuple.val->val, 0));
-    second = MLValFromValue(Field(tuple.val->val, 1));
+void MLVal::unpackPair(const MLVal &tuple, MLVal &first, MLVal &second) {
+    first = MLValFromValue(Field(tuple.contents->val, 0));
+    second = MLValFromValue(Field(tuple.contents->val, 1));
 }
 
-MLVal MLVal::operator()() {
-    return MLValFromValue(caml_callback(val->val, Val_unit));
+MLVal MLVal::operator()() const {
+    return MLValFromValue(caml_callback(contents->val, Val_unit));
 }
 
-MLVal MLVal::operator()(MLVal x) {
-    return MLValFromValue(caml_callback(val->val, x.val->val));
+MLVal MLVal::operator()(const MLVal &x) const {
+    return MLValFromValue(caml_callback(contents->val, x.contents->val));
 }
 
-MLVal MLVal::operator()(MLVal x, MLVal y) {
-    return MLValFromValue(caml_callback2(val->val, x.val->val, y.val->val));
-}
-
-
-MLVal MLVal::operator()(MLVal x, MLVal y, MLVal z) {
-    return MLValFromValue(caml_callback3(val->val, 
-                                         x.val->val,
-                                         y.val->val,
-                                         z.val->val));
+MLVal MLVal::operator()(const MLVal &x, const MLVal &y) const {
+    return MLValFromValue(caml_callback2(contents->val, x.contents->val, y.contents->val));
 }
 
 
-MLVal MLVal::operator()(MLVal x, MLVal y, MLVal z, MLVal w) {
+MLVal MLVal::operator()(const MLVal &x, const MLVal &y, const MLVal &z) const {
+    return MLValFromValue(caml_callback3(contents->val, 
+                                         x.contents->val,
+                                         y.contents->val,
+                                         z.contents->val));
+}
+
+
+MLVal MLVal::operator()(const MLVal &x, const MLVal &y, const MLVal &z, const MLVal &w) const {
     return (*this)(x, y, z)(w);
 }
 
-MLVal MLVal::operator()(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e) {
+MLVal MLVal::operator()(const MLVal &a, const MLVal &b, const MLVal &c, const MLVal &d, const MLVal &e) const {
     return (*this)(a, b, c)(d, e);
 }
 
-MLVal MLVal::operator()(MLVal a, MLVal b, MLVal c, MLVal d, MLVal e, MLVal f) {
+MLVal MLVal::operator()(const MLVal &a, const MLVal &b, const MLVal &c, const MLVal &d, const MLVal &e, const MLVal &f) const {
     return (*this)(a, b, c)(d, e, f);
 }

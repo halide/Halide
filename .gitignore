@@ -31,3 +31,4 @@ test/*/*.so
 test/*/*.s
 test/*/*.png
 test/*/*.time
+test/cpp/*/passes.txt

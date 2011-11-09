@@ -73,6 +73,7 @@ let fold_children_in_stmt expr_mutator stmt_mutator combiner = function
   | Store (expr, buf, idx) -> combiner (expr_mutator expr) (expr_mutator idx)
   | Pipeline (name, ty, size, produce, consume) -> 
     combiner (combiner (expr_mutator size) (stmt_mutator produce)) (stmt_mutator consume)
+  | Print (_, l) -> List.fold_left combiner (expr_mutator (List.hd l)) (List.map expr_mutator (List.tl l))
 
 (* E.g:
 let rec stmt_contains_zero stmt =
@@ -116,6 +117,7 @@ let mutate_children_in_stmt expr_mutator stmt_mutator = function
     Store (expr_mutator expr, buf, expr_mutator idx)
   | Pipeline (name, ty, size, produce, consume) -> 
     Pipeline (name, ty, expr_mutator size, stmt_mutator produce, stmt_mutator consume)
+  | Print (p, l) -> Print (p, List.map expr_mutator l)
 
 (* Expression subsitution *)
 let rec subs_stmt oldexpr newexpr stmt =
@@ -142,6 +144,7 @@ and subs_name_stmt oldname newname stmt =
     | Pipeline (name, ty, size, produce, consume) -> 
       Pipeline ((if name = oldname then newname else name), 
                 ty, subs_expr size, subs produce, subs consume)      
+    | Print (p, l) -> Print (p, List.map subs_expr l)
 
 and subs_name_expr oldname newname expr =
   let subs = subs_name_expr oldname newname in
@@ -170,9 +173,11 @@ and prefix_name_stmt prefix stmt =
   let recurse_expr = prefix_name_expr prefix in
   match stmt with
     | For (name, min, n, order, body) ->
-      For (prefix ^ name, recurse_expr min, recurse_expr n, order, recurse_stmt body)
+        For (prefix ^ name, recurse_expr min, recurse_expr n, order, recurse_stmt body)
     | Block l -> Block (List.map recurse_stmt l)
     | Store (expr, buf, idx) -> 
-      Store (recurse_expr expr, prefix_non_global prefix buf, recurse_expr idx)
+        Store (recurse_expr expr, prefix_non_global prefix buf, recurse_expr idx)
     | Pipeline (name, ty, size, produce, consume) -> 
-      Pipeline (prefix ^ name, ty, recurse_expr size, recurse_stmt produce, recurse_stmt consume)      
+        Pipeline (prefix ^ name, ty, recurse_expr size, recurse_stmt produce, recurse_stmt consume)      
+    | Print (p, l) ->
+        Print (p, List.map recurse_expr l)

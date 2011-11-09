@@ -496,6 +496,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
         sym_remove name;
 
         res
+    | Print (fmt, args) -> cg_print fmt args
 
   and cg_store e buf idx =
     (* ignore(cg_debug e ("Store to " ^ buf ^ " ") [idx; e]); *)
@@ -610,9 +611,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     let gep = build_gep ptr [| cg_expr idx |] "memref" b in
     build_pointercast gep (pointer_type (type_of_val_type vt)) "typed_memref" b
       
-  and cg_debug e prefix args =
-    let ll_e = cg_expr e in
-
+  and cg_print prefix args =
     (* Generate a format string and values to print for a printf *)
     let rec fmt_string x = match val_type_of_expr x with
       | Int _ -> ("%d", [Cast (i32, x)])
@@ -626,7 +625,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     in
     
     let fmts = List.map fmt_string args in
-    let fmt = String.concat ", " (List.map fst fmts) in
+    let fmt = String.concat " " (List.map fst fmts) in
     let args = List.concat (List.map snd fmts) in
 
     let ll_fmt = const_stringz c (prefix ^ fmt ^ "\n") in    
@@ -641,8 +640,11 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
 
     let ll_printf = declare_function "printf" 
       (var_arg_function_type (i32_type c) [|pointer_type (i8_type c)|]) m in
-    ignore(build_call ll_printf (Array.of_list (global_fmt::ll_args)) "" b);
+    build_call ll_printf (Array.of_list (global_fmt::ll_args)) "" b    
 
+  and cg_debug e prefix args =
+    let ll_e = cg_expr e in
+    ignore(cg_print prefix args);
     ll_e
       
   in
@@ -774,7 +776,9 @@ let codegen_to_c_callable c e =
   (* codegen the wrapper *)
   let w = codegen_c_wrapper c m f in
 
-    (m,w)
+  (* Clear the output buffers in case we run this code and it prints something *)
+  Printf.printf "%!";
+  (m,w)
 
 exception BCWriteFailed of string
 

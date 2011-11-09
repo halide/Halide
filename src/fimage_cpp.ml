@@ -94,9 +94,9 @@ let _ =
     make_default_schedule f env region
   );
 
-  Callback.register "doLower" (fun (f:string) (env:environment) (sched: schedule_tree) -> 
+  Callback.register "doLower" (fun (f:string) (env:environment) (sched: schedule_tree) (debug: int)-> 
     Printf.printf "Lowering function\n";
-    let lowered = lower_function f env sched in
+    let lowered = lower_function f env sched (if (debug = 1) then true else false) in
     Printf.printf "Breaking false dependences\n";
     let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
     Printf.printf "Constant folding\n";
