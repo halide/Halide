@@ -38,7 +38,7 @@ namespace FImage {
         void operator=(const Expr &e);
         
         // Make sure we don't directly assign an FuncRef to an FuncRef (but instead treat it as a definition)
-        void operator=(const FuncRef &other) = delete;
+        void operator=(const FuncRef &other) {*this = Expr(other);}
 
         const Func &f() const;
         const std::vector<Expr> &args() const;

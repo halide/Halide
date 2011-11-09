@@ -154,7 +154,7 @@ namespace FImage {
         unify(vars, c.vars());
         unify(funcs, c.funcs());
         unify(uniforms, c.uniforms());
-        implicitArgs = c.implicitArgs();
+        if (c.implicitArgs() > implicitArgs) implicitArgs = c.implicitArgs();
     }
 
     void Expr::child(const Expr &c) {
@@ -193,6 +193,10 @@ namespace FImage {
         e.child(a);
         e.child(b);
         return e;
+    }
+
+    Expr operator-(const Expr &a) {
+        return Cast(a.type(), 0) - a;
     }
 
     Expr operator*(const Expr & a, const Expr & b) {
@@ -274,6 +278,11 @@ namespace FImage {
                f.f().name().c_str(),
                (int)f.f().args().size());
         int iArgs = (int)f.f().args().size() - (int)f.args().size();
+        if (iArgs < 0) {
+            printf("Too many arguments in call!\n");
+            exit(-1);
+        }
+
         for (int i = iArgs-1; i >= 0; i--) {
             std::ostringstream ss;
             ss << "iv" << i; // implicit var
@@ -313,6 +322,8 @@ namespace FImage {
             unify(funcs, f.f().rhs().funcs());
             unify(uniforms, f.f().rhs().uniforms());
         }
+
+        printf("Done making call node with %d implicit args\n", implicitArgs);
     }
 
     Expr Debug(Expr expr, const std::string &prefix) {

@@ -29,6 +29,11 @@ namespace FImage {
         unsigned char *data() const;
         const std::string &name() const;
         
+        // Convenience functions for typical interpretations of dimensions
+        uint32_t width() const {return size(0);}
+        uint32_t height() const {return size(1);}
+        uint32_t channels() const {return size(2);}
+
         // Compare for identity (not equality of contents)
         bool operator==(const DynImage &other) const {
             return other.contents == contents;
@@ -93,6 +98,13 @@ namespace FImage {
             return ((T*)im.data())[a*im.stride(0) + b*im.stride(1) + c*im.stride(2) + d*im.stride(3)];
         }
 
+        // Convenience functions for typical interpretations of dimensions
+        uint32_t width() const {return im.width();}
+        uint32_t height() const {return im.height();}
+        uint32_t channels() const {return im.channels();}
+        uint32_t size(int i) const {return im.size(i);}
+        int dimensions() const {return im.dimensions();}
+        unsigned char *data() const {return im.data();}
     };
 
     class ImageRef {

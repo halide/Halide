@@ -199,7 +199,7 @@ namespace FImage {
             args.push_back(Var(ss.str()));
         }
 
-        printf("Detecting type of definition\n");
+        printf("Defining %s\n", name().c_str());
 
         // Are we talking about a scatter or a gather here?
         bool gather = true;
