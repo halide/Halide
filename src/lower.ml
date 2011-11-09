@@ -422,6 +422,7 @@ and realize (name, args, return_type, body) sched_list buffer_name strides debug
   else
     produce
 
+(* TODO: @jrk Make debug an optional arg? *)
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) (debug:bool) =
   Printf.printf "Making function body\n%!";
   let (args, return_type, body) = make_function_body func env debug in
