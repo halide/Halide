@@ -93,3 +93,24 @@ and string_of_toplevel (a, s) = "func(" ^ String.concat ", " (List.map string_of
 and string_of_arg = function 
   | Buffer (b) -> b
   | Scalar (s, t) -> (string_of_val_type t) ^ " " ^ s
+
+and string_of_definition (name, args, rtype, body) =
+  let s = name ^ "(" ^
+          List.fold_left
+            (fun s (t,n) ->
+               (if String.length s > 0 then s ^ ", " else "") ^
+               n ^ ":" ^ (string_of_val_type t))
+            ""
+            args ^
+          ")" ^ " -> " ^ (string_of_val_type rtype)
+  in
+  match body with
+    | Pure(e) -> s ^ " = " ^ (string_of_expr e)
+    | _ -> s ^ " = {IMPURE}"
+
+and string_of_environment env =
+  let (_,defs) = List.split (Environment.bindings env) in
+  List.fold_left
+    (fun s d -> (if String.length s > 0 then s ^ "\n" else "") ^ (string_of_definition d))
+    ""
+    defs

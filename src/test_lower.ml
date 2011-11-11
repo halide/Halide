@@ -36,11 +36,13 @@ let _ =
 
   print_schedule sched;
 
-  let lowered = lower_function "g" env sched true in
+  let lowered = lower_function "g" env sched false in
   let lowered = Break_false_dependence.break_false_dependence_stmt lowered in
   let lowered = Constant_fold.constant_fold_stmt lowered in
 
-  Printf.printf "\n\nLowered to:\n%s\n" (Ir_printer.string_of_stmt lowered);
+  Printf.printf "\n\nLowered\n%s\nto:\n%s\n"
+    (Ir_printer.string_of_environment env)
+    (Ir_printer.string_of_stmt lowered);
   
   Cg_llvm.codegen_to_file "test_lower.bc" ([Buffer ".input"; Buffer ".result"], lowered)
     

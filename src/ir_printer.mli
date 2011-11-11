@@ -6,3 +6,5 @@ val string_of_stmt : Ir.stmt -> string
 val string_of_buffer : Ir.buffer -> Ir.buffer
 val string_of_toplevel : Ir.arg list * Ir.stmt -> string
 val string_of_arg : Ir.arg -> string
+val string_of_definition : Ir.definition -> string
+val string_of_environment : Ir.environment -> string
