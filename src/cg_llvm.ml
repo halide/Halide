@@ -225,6 +225,18 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     (* Loop variables *)
     | Var(vt, name) -> sym_get name
 
+    (* Extern calls *)
+    | Call(t, name, args) ->
+        (* declare the extern function *)
+        let arg_types = List.map (fun arg -> type_of_val_type (val_type_of_expr arg)) args in
+        let name = base_name name in
+        let llfunc = declare_function name
+          (function_type (type_of_val_type t) (Array.of_list arg_types)) m in
+
+        (* codegen args and call *)
+        let llargs = List.map (fun arg -> cg_expr arg) args in
+        build_call llfunc (Array.of_list (llargs)) ("extern_" ^ name) b
+
     (* Let expressions *)
     | Let(name, l, r) -> 
       sym_add name (cg_expr l);
