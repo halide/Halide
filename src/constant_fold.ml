@@ -23,8 +23,17 @@ let rec constant_fold_expr expr =
   in
 
   match expr with
-    (* Ignoring const-casts for now, because we can't represent immediates of arbitrary types *)
-    | Cast (t, e) -> Cast (t, recurse e) 
+    (* Ignoring most const-casts for now, because we can't represent immediates of arbitrary types *)
+    | Cast (t, e) -> 
+        begin match (t, recurse e) with
+          | (Int 32, UIntImm x)   -> IntImm x
+          | (Int 32, FloatImm x)  -> IntImm (int_of_float x)
+          | (UInt 32, IntImm x)   -> UIntImm x
+          | (UInt 32, FloatImm x) -> UIntImm (int_of_float x)
+          | (Float 32, IntImm x)  -> FloatImm (float_of_int x)
+          | (Float 32, UIntImm x) -> FloatImm (float_of_int x)
+          | (t, e)                -> Cast(t, e)
+        end
 
     (* basic binary ops *)
     | Bop (op, a, b) ->
