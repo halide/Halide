@@ -187,6 +187,7 @@ let rec val_type_of_expr = function
 
 
 type stmt =
+  (* var name, base, width, ordered?, body *)
   | For of string * expr * expr * bool * stmt
 
   (* An in-order sequence of statements *)
@@ -206,6 +207,7 @@ type stmt =
   | Print of string * (expr list)
 
 (* A function definition: (name, args, return type, body) *)
+(* TODO: drop redundant name from definition? *)
 and definition = (string * ((val_type * string) list) * val_type * function_body)
 
 and function_body = 
@@ -213,9 +215,24 @@ and function_body =
   | Pure of expr 
   (* Initializes to expr, modifies return value at expr list to be expr *)
   | Impure of (expr * (expr list) * expr)
+  (* Passes through to a C function call of the same name *)
+  | Extern
 
 module Environment = Map.Make(String)
 type environment = definition Environment.t
+
+let base_name name =
+  let idx_after_last_dot =
+    try (String.rindex name '.' + 1)
+    with Not_found -> 0 in
+  String.sub name idx_after_last_dot (String.length name - idx_after_last_dot)
+
+let find_function (name:string) (env:environment) =
+  let fname = base_name name in
+  Printf.printf "Looking up %s in the environment\n%!" fname;
+  let (_, args, return_type, body) = Environment.find fname env in
+  Printf.printf "Found it\n%!";
+  (args, return_type, body)
 
 type arg =
   | Scalar of string * val_type

@@ -45,13 +45,7 @@ let rec resolve_name (context: string) (var: string) (schedule: schedule_tree) =
   end
         
 let make_function_body (name:string) (env:environment) (debug:bool) =
-  let idx_after_last_dot =
-    try (String.rindex name '.' + 1)
-    with Not_found -> 0 in
-  let fname = String.sub name idx_after_last_dot (String.length name - idx_after_last_dot) in 
-  Printf.printf "Looking up %s in the environment\n%!" fname;
-  let (_, args, return_type, body) = Environment.find fname env in
-  Printf.printf "Found it\n%!";
+  let (args, return_type, body) = find_function name env in
   let prefix = name ^ "." in
   let renamed_args = List.map (fun (t, n) -> (t, prefix ^ n)) args in
   let renamed_body = match body with
@@ -159,7 +153,12 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
       | (None, b) -> b
     in
     let rec find_callname_expr = function
-      | Call (_, name, _) -> Some name
+      | Call (_, name, _) ->
+          (* only return non-extern calls for further lowering *)
+          begin match find_function name env with
+            | _, _, Extern -> None
+            | _, _, _ -> Some name
+          end
       | x -> fold_children_in_expr find_callname_expr combiner None x
     in
     fold_children_in_stmt find_callname_expr find_callname_stmt combiner stmt
