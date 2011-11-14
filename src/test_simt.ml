@@ -9,13 +9,19 @@ For now, SIMT doesn't support:
 
 And has bugs which require manual patches of the output LLVM bitcode:
 
-- main entrypoint should have calling convention qualifier "ptx_device void @_im_main"
+- main entrypoint should have calling convention qualifier "ptx_kernel void @_im_main"
+- other functions must have convention "ptx_device"
 - PTX thread ID intrinsics get codegenerated with their dotted name components mangled. Replace e.g. @x with @llvm.ptx.read.tid.x()
 - _im_main_runner trampoline should be dropped (no support for device function calls)
 
 All that said, this actually generates PTX once patched with:
 
-    llc -O0 -march=ptx32 -o=/dev/stdout < test_simt.ll
+    llc -O0 -march=ptx32 -o=/dev/stdout < test_simt.ll > test_simt.ptx
+
+and compiles with:
+
+    ptxas -v test_simt.ptx -o test_simt.o               # -v prints interesting info
+    cuobjdump --dump-sass test_simt.o > test_simt.sass  # print out actual SASS machine code
 *)
 
 let _ =
