@@ -99,13 +99,13 @@ let _ =
     Printf.printf "Lowering function\n";
     let lowered = lower_function f env sched (if (debug = 1) then true else false) in
     Printf.printf "Breaking false dependences\n";
-    let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
+    (* let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
     Printf.printf "Constant folding\n";
     let lowered = Constant_fold.constant_fold_stmt lowered in
     Printf.printf "Breaking false dependences\n";
-    let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
+    let lowered = Break_false_dependence.break_false_dependence_stmt lowered in  *)
     Printf.printf "Constant folding\n";
-    let lowered = Constant_fold.constant_fold_stmt lowered in
+    let lowered = Constant_fold.constant_fold_stmt lowered in 
     lowered
   );
 
