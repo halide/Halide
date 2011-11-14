@@ -217,11 +217,14 @@ and function_body =
 module Environment = Map.Make(String)
 type environment = definition Environment.t
 
-let find_function (name:string) (env:environment) =
+let base_name name =
   let idx_after_last_dot =
     try (String.rindex name '.' + 1)
     with Not_found -> 0 in
-  let fname = String.sub name idx_after_last_dot (String.length name - idx_after_last_dot) in 
+  String.sub name idx_after_last_dot (String.length name - idx_after_last_dot)
+
+let find_function (name:string) (env:environment) =
+  let fname = base_name name in
   Printf.printf "Looking up %s in the environment\n%!" fname;
   let (_, args, return_type, body) = Environment.find fname env in
   Printf.printf "Found it\n%!";
