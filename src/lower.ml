@@ -49,6 +49,7 @@ let make_function_body (name:string) (env:environment) (debug:bool) =
   let prefix = name ^ "." in
   let renamed_args = List.map (fun (t, n) -> (t, prefix ^ n)) args in
   let renamed_body = match body with
+    | Extern -> raise (Wtf ("Can't lookup body of extern function: " ^ name))
     | Pure expr -> 
         let expr = if debug then
             Debug (expr, "### Evaluating " ^ name ^ " at ", List.map (fun (t, n) -> Var (t, n)) renamed_args) 
@@ -269,6 +270,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
 
             | Inline ->
                 begin match body with 
+                  | Extern -> raise (Wtf ("Can't inline extern function " ^ name))
                   | Pure expr ->
                       let rec inline_calls_in_expr = function
                         | Call (t, n, call_args) when n = name -> 
@@ -372,6 +374,7 @@ and realize (name, args, return_type, body) sched_list buffer_name strides debug
   
   let produce =
     match body with
+      | Extern -> raise (Wtf ("Can't lower extern function call " ^ name))          
       | Pure body ->
           let inner_stmt = Store (remove_recursion body, buffer_name, index) in
           List.fold_left wrap inner_stmt sched_list
