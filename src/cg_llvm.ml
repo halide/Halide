@@ -72,7 +72,8 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
   and sym_remove name =
     Hashtbl.remove sym_table name
   and sym_get name =
-    Hashtbl.find sym_table name
+    try Hashtbl.find sym_table name
+    with Not_found -> raise (Wtf ("symbol " ^ name ^ " not found"))
   in
 
   (* create a new module for this cg result *)
