@@ -150,7 +150,12 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
       | (None, b) -> b
     in
     let rec find_callname_expr = function
-      | Call (_, name, _) -> Some name
+      | Call (_, name, _) ->
+          (* only return non-extern calls for further lowering *)
+          begin match find_function name env with
+            | _, _, Extern -> None
+            | _, _, _ -> Some name
+          end
       | x -> fold_children_in_expr find_callname_expr combiner None x
     in
     fold_children_in_stmt find_callname_expr find_callname_stmt combiner stmt

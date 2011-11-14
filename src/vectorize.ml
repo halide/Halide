@@ -58,6 +58,8 @@ let vector_subs_expr (var:string) (replacement:expr) (expr:expr) =
             Select (vc, expand va, expand vb)
               
       | Load (t, buf, idx) -> Load (vector_of_val_type t width, buf, vec idx)
+      (* TODO: detect calls to extern functions, and replicate them instead. *)
+      (* Currently requires the environment to find out...*)
       | Call (t, f, args) -> Call (vector_of_val_type t width, f, List.map vec args)     
 
       | Var (t, name) -> assert (name = var && t = i32); replacement

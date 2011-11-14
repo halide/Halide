@@ -3,7 +3,7 @@ open Ir
 open Schedule
 
 let _ =
-  let x = Var (f32, "x") in
+  let x = Var (i32, "x") in
   let one = IntImm 1 in
   let two = IntImm 2 in
   
@@ -15,8 +15,10 @@ let _ =
   let g = ("g", [(i32, "x")], f32, Pure ((c (x +~ one)) +~ (c (x -~ one)))) in
   
   let g_call_sched = Root in
-  let g_sched = [Split ("x", "gxo", "gxi", IntImm 0); Vectorized ("gxi", IntImm 0, 4); Parallel ("gxo", IntImm 0, IntImm 25)] in
-    
+  (* TODO: vectorized schedule doesn't work yet for extern calls *)
+  (* let g_sched = [Split ("x", "gxo", "gxi", IntImm 0); Vectorized ("gxi", IntImm 0, 4); Parallel ("gxo", IntImm 0, IntImm 25)] in *)
+  let g_sched = [Parallel ("x", IntImm 0, IntImm 100)] in
+  
   let env = Environment.empty in
   let env = Environment.add "cosf" cos env in
   let env = Environment.add "g" g env in
@@ -34,4 +36,4 @@ let _ =
     (Ir_printer.string_of_environment env)
     (Ir_printer.string_of_stmt lowered);
   
-  (*Cg_llvm.codegen_to_file "test_extern.bc" ([Buffer ".input"; Buffer ".result"], lowered)*)
+  Cg_llvm.codegen_to_file "test_extern.bc" ([Buffer ".input"; Buffer ".result"], lowered)
