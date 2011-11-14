@@ -5,12 +5,7 @@ open Analysis
 open Util
 open Vectorize
 
-module StringSet = Set.Make (
-  struct
-    let compare = Pervasives.compare
-    type t = string
-  end
-)
+
 
 (* Lowering produces references to names either in the context of the
    callee or caller. The ones in the context of the caller may in fact
@@ -152,7 +147,15 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
   (* Find the name of any function referred to in a statement *)
   let rec find_callname_stmt stmt = 
     let combiner op1 op2 = match (op1, op2) with
-      | (Some a, _) -> Some a
+      | (Some a, Some b) -> 
+          (* We have a choice - do a reuse first so they end up innermost *)
+          let (call_sched, _) = find_schedule schedule a in
+          begin match call_sched with
+            | Reuse _ -> Some a
+            | _ -> Some b
+          end
+      | (None, Some a)
+      | (Some a, None) -> Some a
       | (None, b) -> b
     in
     let rec find_callname_expr = function
@@ -166,22 +169,22 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
     | None -> stmt (* No more function calls. We're done lowering. *)
     | Some name -> (* Found a function call to pull in *)
 
-        Printf.printf "Found a call to %s\n" name;
-
         (* Grab the body *)
         let (args, return_type, body) = make_function_body name env debug in
         
-        Printf.printf "Found a function: %s = %s\n" name 
+        (* Printf.printf "Found a function: %s = %s\n" name 
           (match body with 
             | Pure expr -> string_of_expr expr 
             | Impure (initial_value, modified_args, modified_value) ->
                 (string_of_expr initial_value) ^ "\n[" ^ 
                   (String.concat ", " (List.map string_of_expr modified_args)) ^ "] <- " ^
-                  (string_of_expr modified_value));
+                  (string_of_expr modified_value)); *)
         
-        print_schedule schedule;
+        (* print_schedule schedule; *)
 
         let (call_sched, sched_list) = make_schedule name schedule in
+
+        Printf.printf "Lowering function %s with call_sched %s\n" name (string_of_call_schedule call_sched);
 
         let scheduled_call =
           match call_sched with
@@ -208,43 +211,54 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
                  variable produced *)
               
               (* Recursively descend the statement until we get to the loop in question *)
-              let rec inner substmt = match substmt with
-                | For (for_dim, min, size, order, body) when for_dim = chunk_dim -> begin
-                  (* Replace calls to function with loads from buffer in body *)
-                  let rec replace_calls_in_expr = function
-                    | Call (ty, func_name, args) when func_name = name ->
-                        let index = List.fold_right2 
-                          (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
-                          args strides (IntImm 0) in
-                        Load (ty, buffer_name, index)
-                    | x -> mutate_children_in_expr replace_calls_in_expr x
-                  and replace_calls_in_stmt stmt = 
-                    mutate_children_in_stmt replace_calls_in_expr replace_calls_in_stmt stmt in
+              let rec inner substmt = 
 
-                  let consume = replace_calls_in_stmt substmt in
+                (* Search for the outer-most for loop *)
+                let rec outermost_for_stmt = function
+                  | For (a, b, c, d, e) -> Some (For (a, b, c, d, e))
+                  | x -> fold_children_in_stmt (fun _ -> None) outermost_for_stmt (option_either) x
+                in
 
-                  (* If there are no calls to the function inside
-                     body, we shouldn't be introducing a useless let *)
-                  let pipeline = 
-                    if consume = body then body else              
-                      Pipeline (buffer_name, return_type, buffer_size, produce, consume)
-                  in
+                match outermost_for_stmt substmt with
+                  | Some (For (for_dim, min, size, order, body)) when for_dim = chunk_dim -> begin
+                    (* Replace calls to function with loads from buffer in body *)
+                    let rec replace_calls_in_expr = function
+                      | Call (ty, func_name, args) when func_name = name ->
+                          let index = List.fold_right2 
+                            (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
+                            args strides (IntImm 0) in
+                          Load (ty, buffer_name, index)
+                      | x -> mutate_children_in_expr replace_calls_in_expr x
+                    and replace_calls_in_stmt stmt = 
+                      mutate_children_in_stmt replace_calls_in_expr replace_calls_in_stmt stmt in
 
-                  if debug then
-                    let sizes = List.fold_left
-                      (fun l (a, b) -> a::b::l)    
-                      [] (List.rev strides) in  
-                    Block [pipeline; Print ("### Discarding " ^ name ^ " over ", sizes)]
-                  else
-                    pipeline
-                end
-                | For (for_dim, min, size, order, body) -> 
-                    For (for_dim, min, size, order, inner body)
-                | Block l ->
-                    Block (List.map inner l)
-                | Pipeline (name, ty, size, produce, consume) ->
-                    Pipeline (name, ty, size, inner produce, inner consume)
-                | x -> x
+                    let consume = replace_calls_in_stmt substmt in
+
+                    (* If there are no calls to the function inside
+                       body, we shouldn't be introducing a useless let *)
+                    (* let pipeline = 
+                      if consume = body then body else              
+                        Pipeline (buffer_name, return_type, buffer_size, produce, consume)
+                    in *)
+                    let pipeline = Pipeline (buffer_name, return_type, buffer_size, produce, consume) in
+                    
+                    if debug then
+                      let sizes = List.fold_left
+                        (fun l (a, b) -> a::b::l)    
+                        [] (List.rev strides) in  
+                      Block [pipeline; Print ("### Discarding " ^ name ^ " over ", sizes)]
+                    else
+                      pipeline
+                  end
+                  | _ -> begin match substmt with
+                      | For (for_dim, min, size, order, body) -> 
+                          For (for_dim, min, size, order, inner body)
+                      | Block l ->
+                          Block (List.map inner l)
+                      | Pipeline (name, ty, size, produce, consume) ->
+                          Pipeline (name, ty, size, inner produce, inner consume)
+                      | x -> x
+                  end
               in inner stmt
             end
 
