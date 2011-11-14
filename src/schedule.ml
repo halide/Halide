@@ -167,14 +167,6 @@ let rec set_schedule
 and empty_schedule = Tree StringMap.empty
 
 let find_all_schedule (tree:schedule_tree) (name:string) =
-  let ends_with substr str =
-    (* Printf.printf "ends_with %s %s\n%!" substr str; *)
-    let strlen = String.length str in
-    let substrlen = String.length substr in
-    if substrlen > strlen then false else
-      let suffix = String.sub str (strlen - substrlen) substrlen in
-      substr = suffix      
-  in
   let rec find prefix = function
     | Tree tree ->
         let process_key key (_, _, subtree) list = 

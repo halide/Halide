@@ -81,6 +81,7 @@ let rec vectorize_stmt var stmt =
       | Block l -> Block (map vec l)
       | Store (expr, buf, idx) -> Store (vec_expr expr, buf, vec_expr idx)
       | Pipeline _ -> raise (Wtf "Can't vectorize an inner pipeline (yet?)")
+      | Print (prefix, args) -> Print (prefix, List.map vec_expr args)
   in
   match stmt with        
     | For (name, min, n, order, stmt) when name = var ->

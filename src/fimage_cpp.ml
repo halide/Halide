@@ -10,6 +10,7 @@ open Constant_fold
 open Schedule
 open Lower
 open Schedule_transforms
+open Util
 
 let compilation_cache = 
   Hashtbl.create 16
@@ -72,7 +73,10 @@ let _ =
   );
   
   Callback.register "addScatterToDefinition" (fun env name args rhs ->
-    let (n, a, r, Pure gather) = Environment.find name env in
+    let (n, a, r, gather) = match Environment.find name env with
+      | (n, a, r, Pure gather) -> (n, a, r, gather)
+      | _ -> raise (Wtf "Can only add a scatter definition to a function already defined as a gather")
+    in
     Environment.add n (n, a, r, Impure (gather, args, rhs)) env
   );
 
