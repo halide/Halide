@@ -187,6 +187,7 @@ let rec val_type_of_expr = function
 
 
 type stmt =
+  (* var name, base, width, ordered?, body *)
   | For of string * expr * expr * bool * stmt
 
   (* An in-order sequence of statements *)
