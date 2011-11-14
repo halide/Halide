@@ -36,6 +36,7 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
       in
 
       match body with 
+        | Extern -> StringSet.empty
         | Pure expr -> find_calls_expr expr
         | Impure (initial_value, modified_args, modified_value) ->
             let s = StringSet.union (find_calls_expr initial_value) (find_calls_expr modified_value) in
@@ -183,7 +184,10 @@ let chunk_schedule (func: string) (var: string) (args: string list) (region: (ex
   let string_cmp s1 s2 = if s1 < s2 then -1 else 1 in
   Printf.printf "Looking up %s in schedule\n%!" func;
   let unsorted = (find_all_schedule schedule func) in
-  let (first::rest) = List.sort string_cmp unsorted in
+  let (first, rest) = match (List.sort string_cmp unsorted) with
+    | (a::b) -> (a, b)
+    | [] -> raise (Wtf ("Could not find " ^ func ^ " in schedule\n"))
+  in
 
   (* Set one to be chunked over var with the given region. Tell the
      others to reuse this chunk. *)
