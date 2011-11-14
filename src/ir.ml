@@ -206,6 +206,7 @@ type stmt =
   | Print of string * (expr list)
 
 (* A function definition: (name, args, return type, body) *)
+(* TODO: drop redundant name from definition? *)
 and definition = (string * ((val_type * string) list) * val_type * function_body)
 
 and function_body = 
@@ -213,6 +214,8 @@ and function_body =
   | Pure of expr 
   (* Initializes to expr, modifies return value at expr list to be expr *)
   | Impure of (expr * (expr list) * expr)
+  (* Passes through to a C function call of the same name *)
+  | Extern
 
 module Environment = Map.Make(String)
 type environment = definition Environment.t
