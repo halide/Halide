@@ -63,52 +63,54 @@ Expr remap(Expr x, Expr y, float alpha, float sigma) {
 }
 
 Func downsample(Func f) {
-    Func downx, downy, scaled;
+    Func simple;
     Var x, y;
+
+    simple(x, y) = f(2*x, 2*y);
+    return simple;
+
+    Func downx, downy;
     
     printf("Downsampling in x\n");
     // Downsample in x using 1 3 3 1
-    downx(x, y) = f(2*x-1, y) + 3*f(2*x, y) + 3*f(2*x+1, y) + f(2*x+2, y);
+    downx(x, y) = (1.0f/8) * f(2*x-1, y) + (3.0f/8) * f(2*x, y) + (3.0f/8) * f(2*x+1, y) + (1.0f/8) * f(2*x+2, y);
 
     printf("Downsampling in y\n");
     // Downsample in y using 1 3 3 1
-    downy(x, y) = downx(x, 2*y-1) + 3*downx(x, 2*y) + 3*downx(x, 2*y+1) + downx(x, 2*y+2);
-
-    printf("Renormalizing\n");
-    // Normalize
-    scaled = downy / 64.0f;
+    downy(x, y) = (1.0f/8) * downx(x, 2*y-1) + (3.0f/8) * downx(x, 2*y) + (3.0f/8) * downx(x, 2*y+1) + (1.0f/8) * downx(x, 2*y+2);
 
     printf("Returning\n");                     
-    return scaled;
+    return downy;
 }
 
 Func upsample(Func f) {
     Var x, y;
+    Func simple;
+
+    simple(x, y) = f(x/2, y/2);
+    return simple;
+
     Func upx, upy, scaled;
 
     printf("Upsampling in x\n");
     // Upsample in x using linear interpolation
-    upx(x, y) = f((x/2) - 1 + 2*(x % 2), y) + 3*f(x/2, y);
+    upx(x, y) = 0.25f * f((x/2) - 1 + 2*(x % 2), y) + 0.75f * f(x/2, y);
 
     printf("Upsampling in y\n");
     // Upsample in y using linear interpolation
-    upy(x, y) = upx(x, (y/2) - 1 + 2*(y % 2)) + 3*f(x, y/2);
-
-    printf("Renormalizing\n");
-    // Normalize
-    scaled = upy / 16.0f;
+    upy(x, y) = 0.25f * upx(x, (y/2) - 1 + 2*(y % 2)) + 0.75f * upx(x, y/2);
 
     printf("Returning\n");
-    return scaled;
+    return upy;
 }
 
 int main(int argc, char **argv) {
 
     // intensity levels
-    const int K = 8;
+    const int K = 2;
 
     // pyramid levels
-    const int J = 8;
+    const int J = 2;
     
     // loop variables
     Var x("x"), y("y"), k("k"), j("j"), dx("dx"), dy("dy");
@@ -137,20 +139,22 @@ int main(int argc, char **argv) {
     for (int j = 1; j < J; j++)
         inGPyramid[j](x, y) = downsample(inGPyramid[j-1])(x, y);
 
+    /*
     printf("Defining laplacian pyramid of input\n");
     inLPyramid[J-1](x, y) = inGPyramid[J-1](x, y);
     for (int j = J-2; j >= 0; j--) 
         inLPyramid[j](x, y) = inGPyramid[j](x, y) - upsample(inLPyramid[j+1])(x, y);
-    
+    */
+
     // Contruct the laplacian pyramid of the output, by blending
     // between the processed laplacian pyramids
     printf("Defining laplacian pyramid of output\n");
     Func outLPyramid[J];
-    Expr l = inGPyramid[J](x, y);
-    // Split into integer and floating parts
-    Expr li = Cast<int>(inGPyramid[J](x, y)), lf = inGPyramid[J](x, y) - Cast<float>(li);
-    for (int j = 0; j < J; j++) 
+    for (int j = 0; j < J; j++) {
+        // Split into integer and floating parts
+        Expr li = Cast<int>(inGPyramid[j](x, y)), lf = inGPyramid[j](x, y) - Cast<float>(li);
         outLPyramid[j](x, y) = (1 - lf) * lPyramid[j](x, y, li) + lf * lPyramid[j](x, y, li+1);
+    }
 
     printf("Defining gaussian pyramid of output\n");
     // Collapse output pyramid
@@ -159,8 +163,24 @@ int main(int argc, char **argv) {
     for (int j = J-2; j >= 0; j--) 
         outGPyramid[j](x, y) = upsample(outGPyramid[j+1])(x, y) + outLPyramid[j](x, y);
 
+    printf("Specifying schedule...\n");
+    for (int j = 0; j < J; j++) {
+        uint32_t w = in.width() >> j;
+        uint32_t h = in.height() >> j;
+
+        gPyramid[j].transpose(y, k);
+        lPyramid[j].transpose(y, k);
+        
+        gPyramid[j].chunk(y, Range(0, w)*Range(0, h)*Range(0, K));
+        lPyramid[j].chunk(y, Range(0, w)*Range(0, h)*Range(0, K));
+        inGPyramid[j].chunk(y, Range(0, w)*Range(0, h));
+        inLPyramid[j].chunk(y, Range(0, w)*Range(0, h));
+        outLPyramid[j].chunk(y, Range(0, w)*Range(0, h));
+        if (j > 0) outGPyramid[j].chunk(y, Range(0, w)*Range(0, h));
+    }
+
     printf("Realizing...\n");
-    Image<float> out = outGPyramid[0].realize(in.width()-8, in.height()-8);
+    Image<float> out = outGPyramid[0].realize(in.width(), in.height());
 
     save(out, argv[2]);
 

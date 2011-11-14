@@ -154,7 +154,11 @@ let rec set_schedule
             (Root, [], empty_schedule) 
         in
         if (rest = []) then
-          Tree (StringMap.add first (call_sched, sched_list, old_tree) map)
+          begin match call_sched with
+            (* A reuse node has no children *)
+            | Reuse _ -> Tree (StringMap.add first (call_sched, sched_list, Tree StringMap.empty) map)
+            | _ -> Tree (StringMap.add first (call_sched, sched_list, old_tree) map)
+          end
         else        
           Tree (StringMap.add first (old_cs, old_sl, set old_tree rest) map)
   in
@@ -164,7 +168,7 @@ and empty_schedule = Tree StringMap.empty
 
 let find_all_schedule (tree:schedule_tree) (name:string) =
   let ends_with substr str =
-    Printf.printf "ends_with %s %s\n%!" substr str;
+    (* Printf.printf "ends_with %s %s\n%!" substr str; *)
     let strlen = String.length str in
     let substrlen = String.length substr in
     if substrlen > strlen then false else
@@ -174,10 +178,10 @@ let find_all_schedule (tree:schedule_tree) (name:string) =
   let rec find prefix = function
     | Tree tree ->
         let process_key key (_, _, subtree) list = 
-          Printf.printf "Prefix: %s Key: %s\n%!" prefix key;
+          (* Printf.printf "Prefix: %s Key: %s\n%!" prefix key; *)
           let prefixed_key = prefix ^ key in
           let subresults = (find (prefixed_key ^ ".") subtree) @ list in
-          if ends_with name key then
+          if name = key then
             prefixed_key :: subresults
           else
             subresults

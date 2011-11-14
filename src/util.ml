@@ -1,3 +1,21 @@
+module StringSet = Set.Make (
+  struct
+    let compare = Pervasives.compare
+    type t = string
+  end
+)
+
+let string_set_concat (s: StringSet.t list) =
+  List.fold_left StringSet.union StringSet.empty s
+
+let string_set_map (f: string -> string) (s: StringSet.t) =
+  StringSet.fold (fun x s -> StringSet.add (f x) s) s StringSet.empty
+
+(* An or operator for options *)
+let option_either x y =
+  match (x, y) with
+    | (Some a, _) -> Some a
+    | (_, b) -> b
 
 (* A range operator *)
 let (--) i j = 

@@ -24,32 +24,32 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
 
       let rec find_calls_expr = function
         | Call (_, name, args) when List.mem name (split_name f) ->
-            (List.concat (List.map find_calls_expr args))
+            (string_set_concat (List.map find_calls_expr args))
         | Call (_, name, args) -> 
-            name :: (List.concat (List.map find_calls_expr args))
-        | x -> fold_children_in_expr find_calls_expr (@) [] x
+            let rest = (string_set_concat (List.map find_calls_expr args)) in
+            StringSet.add name rest
+        | x -> fold_children_in_expr find_calls_expr StringSet.union (StringSet.empty) x
       in
 
       let rec find_calls_stmt stmt =
-        fold_children_in_stmt find_calls_expr find_calls_stmt (@) stmt 
+        fold_children_in_stmt find_calls_expr find_calls_stmt StringSet.union stmt 
       in
 
       match body with 
         | Pure expr -> find_calls_expr expr
         | Impure (initial_value, modified_args, modified_value) ->
-            (find_calls_expr initial_value) @
-              (List.concat (List.map find_calls_expr modified_args)) @
-              (find_calls_expr modified_value)
+            let s = StringSet.union (find_calls_expr initial_value) (find_calls_expr modified_value) in
+            string_set_concat (s::(List.map find_calls_expr modified_args))
     in
 
     (* Recursively find more calls in the called functions *)
-    let calls = l @ (List.concat (List.map called_functions l)) in
+    let calls = string_set_concat (l::(List.map called_functions (StringSet.elements l))) in
 
     (* Prefix them all with this function name. *)
-    List.map (fun x -> f ^ "." ^ x) calls 
+    string_set_map (fun x -> f ^ "." ^ x) calls 
   in
 
-  List.fold_left (fun s f -> set_schedule s f Inline []) schedule (called_functions func)
+  StringSet.fold (fun f s -> set_schedule s f Inline []) (called_functions func) schedule
     
 (* Add a split to a schedule *)
 let split_schedule (func: string) (var: string) (newouter: string) 
@@ -175,8 +175,15 @@ let chunk_schedule (func: string) (var: string) (args: string list) (region: (ex
   let make_sched name (min, size) = Parallel (name, min, size) in
   let sched_list = List.map2 make_sched args region in
 
-  (* Find all the calls to func in the schedule *)
-  let (first::rest) = find_all_schedule schedule func in
+  (* Find all the calls to func in the schedule. Sort them
+     lexicographically so we can always mark the first one returned as
+     the chunk provider and the others as reuse. Otherwise we risk
+     marking a node as reuse when it has chunk providers as
+     children. *)
+  let string_cmp s1 s2 = if s1 < s2 then -1 else 1 in
+  Printf.printf "Looking up %s in schedule\n%!" func;
+  let unsorted = (find_all_schedule schedule func) in
+  let (first::rest) = List.sort string_cmp unsorted in
 
   (* Set one to be chunked over var with the given region. Tell the
      others to reuse this chunk. *)
