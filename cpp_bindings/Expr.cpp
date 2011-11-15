@@ -286,10 +286,10 @@ namespace FImage {
                f.f().name().c_str(),
                (int)f.f().args().size());
         int iArgs = (int)f.f().args().size() - (int)f.args().size();
-        if (iArgs < 0) {
+        if (iArgs < 0 && f.f().args().size() > 0) {
             printf("Too many arguments in call!\n");
             exit(-1);
-        }
+        } 
 
         for (int i = iArgs-1; i >= 0; i--) {
             std::ostringstream ss;
