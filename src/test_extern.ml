@@ -7,10 +7,9 @@ let _ =
   let one = IntImm 1 in
   let two = IntImm 2 in
   
+  let cos = (".llvm.cos.f32", [(f32, "x")], f32, Extern) in
 
-  let cos = ("cosf", [(f32, "x")], f32, Extern) in
-
-  let c x = Call (f32, ".cosf", [Cast(f32, x)]) in
+  let c x = Call (f32, ".llvm.cos.f32", [Cast(f32, x)]) in
 
   let g = ("g", [(i32, "x")], f32, Pure ((c (x +~ one)) +~ (c (x -~ one)))) in
   
@@ -20,7 +19,7 @@ let _ =
   let g_sched = [Parallel ("x", IntImm 0, IntImm 100)] in
   
   let env = Environment.empty in
-  let env = Environment.add "cosf" cos env in
+  let env = Environment.add "llvm.cos.f32" cos env in
   let env = Environment.add "g" g env in
   
   let sched = empty_schedule in

@@ -13,14 +13,14 @@ exception Unknown_intrinsic of string
 let simt_intrinsic name =
   (* TODO: pass through dotted extern function names *)
   match base_name name with
-    | "threadidx" -> "llvm.ptx.read.tid.x"
-    | "threadidy" -> "llvm.ptx.read.tid.y"
-    | "threadidz" -> "llvm.ptx.read.tid.z"
-    | "threadidw" -> "llvm.ptx.read.tid.w"
-    | "blockidx"  -> "llvm.ptx.read.ctaid.x"
-    | "blockidy"  -> "llvm.ptx.read.ctaid.y"
-    | "blockidz"  -> "llvm.ptx.read.ctaid.z"
-    | "blockidw"  -> "llvm.ptx.read.ctaid.w"
+    | "threadidx" -> ".llvm.ptx.read.tid.x"
+    | "threadidy" -> ".llvm.ptx.read.tid.y"
+    | "threadidz" -> ".llvm.ptx.read.tid.z"
+    | "threadidw" -> ".llvm.ptx.read.tid.w"
+    | "blockidx"  -> ".llvm.ptx.read.ctaid.x"
+    | "blockidy"  -> ".llvm.ptx.read.ctaid.y"
+    | "blockidz"  -> ".llvm.ptx.read.ctaid.z"
+    | "blockidw"  -> ".llvm.ptx.read.ctaid.w"
     | n -> raise (Unknown_intrinsic n)
     (* Can also support:
         laneid

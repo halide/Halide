@@ -207,7 +207,10 @@ type stmt =
   | Print of string * (expr list)
 
 (* A function definition: (name, args, return type, body) *)
-(* TODO: drop redundant name from definition? *)
+(* TODO: drop redundant name from definition?
+ * Resolved: No! For externs, this name becomes the symbol of the actual call.
+ * Separating this from the Halide environment symbols allows trivial remapping
+ * from internal to external names (e.g. `cos` to `@llvm.cos.f32`) *)
 and definition = (string * ((val_type * string) list) * val_type * function_body)
 
 and function_body = 
@@ -218,14 +221,21 @@ and function_body =
   (* Passes through to a C function call of the same name *)
   | Extern
 
+(* By convention, extern functions have fully qualified names, beginning with ".",
+ * to prevent our namespacing from trying to parse/split llvm.* intrinsic names. *)
 module Environment = Map.Make(String)
 type environment = definition Environment.t
 
 let base_name name =
-  let idx_after_last_dot =
-    try (String.rindex name '.' + 1)
-    with Not_found -> 0 in
-  String.sub name idx_after_last_dot (String.length name - idx_after_last_dot)
+  (* Fully qualified names start with ".", and should be left alone, but have
+   * the leading dot pruned. *)
+  if name.[0] = '.' then
+    String.sub name 1 (String.length name - 1)
+  else
+    let idx_after_last_dot =
+      try (String.rindex name '.' + 1)
+      with Not_found -> 0 in
+    String.sub name idx_after_last_dot (String.length name - idx_after_last_dot)
 
 let find_function (name:string) (env:environment) =
   let fname = base_name name in
