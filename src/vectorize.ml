@@ -58,9 +58,15 @@ let vector_subs_expr (var:string) (replacement:expr) (expr:expr) =
             Select (vc, expand va, expand vb)
               
       | Load (t, buf, idx) -> Load (vector_of_val_type t width, buf, vec idx)
-      (* TODO: detect calls to extern functions, and replicate them instead. *)
-      (* Currently requires the environment to find out...*)
-      | Call (t, f, args) -> Call (vector_of_val_type t width, f, List.map vec args)     
+      (* Function names beginning with `.` are globally qualified, so assumed to
+       * be extern. *)
+      | Call (t, f, args) when f.[0] = '.' ->
+          (* TODO: detect calls to extern functions, and replicate them instead.
+           * This is slightly complicated by the need to vectorize the args then
+           * build a MakeVector of Calls, using ExtractElement on the args--but
+           * ideally only doing so if the given arg was actually vectorized. *)
+          raise (Wtf("Can't vectorize extern calls (yet)"))
+      | Call (t, f, args) -> Call (vector_of_val_type t width, f, List.map vec args)
 
       | Var (t, name) -> assert (name = var && t = i32); replacement
 
