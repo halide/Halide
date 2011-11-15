@@ -229,9 +229,7 @@ let base_name name =
 
 let find_function (name:string) (env:environment) =
   let fname = base_name name in
-  Printf.printf "Looking up %s in the environment\n%!" fname;
   let (_, args, return_type, body) = Environment.find fname env in
-  Printf.printf "Found it\n%!";
   (args, return_type, body)
 
 type arg =

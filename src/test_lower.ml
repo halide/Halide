@@ -10,7 +10,7 @@ let _ =
 
   let f = ("f", [(i32, "x")], f32, Pure ((Load (f32, ".input", x)) *~ (FloatImm 2.7))) in
 
-  let f_call_sched = (Chunk "gxi") in
+  let f_call_sched = (Chunk "gxo") in
   (*let f_call_sched = Inline in*)
   (* let f_sched = [Vectorized ("x", ((Var (i32, "g.xo")) *~ (IntImm 4)) -~ two, 8)] in *)
   (* let f_sched = [Split ("x", "xo", "xi", (Var (i32, "g.xo") *~ (IntImm 4)) -~ (IntImm 1));
