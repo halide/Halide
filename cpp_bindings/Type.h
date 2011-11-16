@@ -2,6 +2,7 @@
 #define FIMAGE_TYPE_H
 
 #include "MLVal.h"
+#include <sstream>
 
 namespace FImage {
     // Possible types for image data
@@ -12,6 +13,13 @@ namespace FImage {
         enum {FLOAT = 0, INT = 1, UINT = 2} code;
         bool operator==(const Type &other) const {
             return bits == other.bits && code == other.code;
+        }
+        std::string str() const {
+            std::string codes[] = {"float", "int", "uint"};
+            std::ostringstream ss;
+            ss << ((code < 3 && code >= 0) ? codes[code] : "malformed_type_");
+            ss << (int)(bits);
+            return ss.str();
         }
     };
 

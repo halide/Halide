@@ -66,9 +66,15 @@ namespace FImage {
             name(uniqueName('f')), functionPtr(NULL), tracing(false) {}
         Contents(Type returnType) : 
             name(uniqueName('f')), returnType(returnType), functionPtr(NULL), tracing(false) {}
+      
         Contents(std::string name) : 
             name(name), functionPtr(NULL), tracing(false) {}
         Contents(std::string name, Type returnType) : 
+            name(name), returnType(returnType), functionPtr(NULL), tracing(false) {}
+      
+        Contents(const char * name) : 
+            name(name), functionPtr(NULL), tracing(false) {}
+        Contents(const char * name, Type returnType) : 
             name(name), returnType(returnType), functionPtr(NULL), tracing(false) {}
         
         const std::string name;
@@ -146,14 +152,20 @@ namespace FImage {
 
     Func::Func() : contents(new Contents()) {
     }
-
+ 
     Func::Func(const std::string &name) : contents(new Contents(name)) {
+    }
+
+    Func::Func(const char *name) : contents(new Contents(name)) {
     }
 
     Func::Func(const Type &t) : contents(new Contents(t)) {
     }
 
     Func::Func(const std::string &name, Type t) : contents(new Contents(name, t)) {
+    }
+
+    Func::Func(const char *name, Type t) : contents(new Contents(name, t)) {
     }
 
     bool Func::operator==(const Func &other) const {
@@ -172,7 +184,7 @@ namespace FImage {
         return contents->args;
     }
 
-    const std::string &Func::name() const {
+    const std::string &Func::name() const { 
         return contents->name;
     }
 

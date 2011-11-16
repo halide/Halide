@@ -52,6 +52,8 @@ namespace FImage {
     class Func {
     public:
         Func();
+        Func(const char *name);
+        Func(const char *name, Type t);
         Func(const std::string &name);
         Func(const Type &t);
         Func(const std::string &name, Type t);
