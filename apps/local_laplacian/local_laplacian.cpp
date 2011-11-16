@@ -176,14 +176,14 @@ int main(int argc, char **argv) {
 
     printf("Specifying schedule...\n");
     for (int j = 0; j < J; j++) {
-        uint32_t w = in.width() >> j;
-        uint32_t h = in.height() >> j;
+        uint32_t w = (in.width() - 32) >> j;
+        uint32_t h = (in.height() - 32) >> j;
 
-        //gPyramid[j].chunk(y, Range(0, w)*Range(0, h)*Range(0, K));
-        //lPyramid[j].chunk(y, Range(0, w)*Range(0, h)*Range(0, K));
-        //inGPyramid[j].chunk(y, Range(0, w)*Range(0, h));
-        //outLPyramid[j].chunk(y, Range(0, w)*Range(0, h));
-        //if (j > 0) outGPyramid[j].chunk(y, Range(0, w)*Range(0, h));
+        gPyramid[j].root(Range(0, w)*Range(0, h)*Range(0, K));
+        lPyramid[j].root(Range(0, w)*Range(0, h)*Range(0, K));
+        inGPyramid[j].root(Range(0, w)*Range(0, h));
+        outLPyramid[j].root(Range(0, w)*Range(0, h));
+        if (j > 0) outGPyramid[j].root(Range(0, w)*Range(0, h));
     }
 
     printf("Output has type %s\n", outGPyramid[0].returnType().str().c_str());

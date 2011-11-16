@@ -163,14 +163,8 @@ let transpose_schedule (func: string) (outer: string) (inner: string) (schedule:
   in
   List.fold_left set schedule calls
 
-
-let chunk_schedule (func: string) (var: string) (args: string list) (region: (expr * expr) list) (schedule: schedule_tree) = 
-  Printf.printf "Chunk %s over %s\n" func var;
-  List.iter 
-    (fun (x, y) ->
-      Printf.printf " (%s, %s)\n" (string_of_expr x) (string_of_expr y))
-    region;   
-
+let root_or_chunk_schedule (func: string) (call_sched: call_schedule)
+    (args: string list) (region: (expr * expr) list) (schedule: schedule_tree) = 
   (* Make a sub-schedule using the arg names and the region. We're
      assuming all the args are region args for now *)
   let make_sched name (min, size) = Parallel (name, min, size) in
@@ -202,10 +196,16 @@ let chunk_schedule (func: string) (var: string) (args: string list) (region: (ex
 
   Printf.printf "Done chunking\n%!";
 
-  let chunk_first = set_schedule schedule first (Chunk var) sched_list in
+  let chunk_first = set_schedule schedule first call_sched sched_list in
 
   List.fold_left set chunk_first rest
-    
+
+let chunk_schedule func var args region schedule = 
+  root_or_chunk_schedule func (Chunk var) args region schedule
+
+let root_schedule func args region schedule = 
+  root_or_chunk_schedule func Root args region schedule
+
 let parallel_schedule (func: string) (var: string) (min: expr) (size: expr) (schedule: schedule_tree) =
 
   let calls = find_all_schedule schedule func in
