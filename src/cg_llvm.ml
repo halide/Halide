@@ -487,18 +487,39 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
             ty
         in
 
-        let upgraded_size = 
+        let upgraded_size =
           if width_multiplier > 1 then
             (size /~ (IntImm width_multiplier)) +~ (IntImm 1)
           else
             size
         in
-
-        let current = insertion_block b in
-        position_before alloca_end b;
-        let scratch = build_array_alloca (type_of_val_type upgraded_type) (cg_expr upgraded_size) "" b in
-        position_at_end current b;
-
+        
+        (* See if we can't reduce it to a constant... *)
+        let upgraded_size = Constant_fold.constant_fold_expr upgraded_size in
+        
+        let scratch =
+          match upgraded_size with
+            | IntImm sz ->
+                (* Constant size *)
+                (* Generate a global array *)
+                (* TODO: add arch.addrspace to Architecture interface, for use here *)
+                let buf_t = array_type (type_of_val_type upgraded_type) sz in
+                let buf = define_qualified_global name (const_null buf_t) 4 m in
+                (* set_linkage Linkage.Internal buf; *)
+                (* TODO: add arch.alignment to Architecture interface *)
+                (* set_alignment arch.alignment buf; *)
+                buf
+            | sz -> begin
+                (* Dynamic size *)
+                (* Generate an alloca for this block at the top of the function *)
+                let current = insertion_block b in
+                position_before alloca_end b;
+                let buf = build_array_alloca (type_of_val_type upgraded_type) (cg_expr upgraded_size) "" b in
+                position_at_end current b;
+                buf
+              end
+        in
+        
         (* push the symbol environment *)
         sym_add name scratch;
 
