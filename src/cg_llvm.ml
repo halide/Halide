@@ -77,8 +77,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
   in
 
   (* create a new module for this cg result *)
-  let m = create_module c "<fimage>" in
-  (* let m = Llvm_bitreader.parse_bitcode c (MemoryBuffer.of_file arch.initial_module) in *)
+  let m = arch.initial_module c in
   
   (* unpack the entrypoint *)
   let arglist,s = e in
@@ -488,18 +487,39 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
             ty
         in
 
-        let upgraded_size = 
+        let upgraded_size =
           if width_multiplier > 1 then
             (size /~ (IntImm width_multiplier)) +~ (IntImm 1)
           else
             size
         in
-
-        let current = insertion_block b in
-        position_before alloca_end b;
-        let scratch = build_array_alloca (type_of_val_type upgraded_type) (cg_expr upgraded_size) "" b in
-        position_at_end current b;
-
+        
+        (* See if we can't reduce it to a constant... *)
+        let upgraded_size = Constant_fold.constant_fold_expr upgraded_size in
+        
+        let scratch =
+          match upgraded_size with
+            | IntImm sz ->
+                (* Constant size *)
+                (* Generate a global array *)
+                (* TODO: add arch.addrspace to Architecture interface, for use here *)
+                let buf_t = array_type (type_of_val_type upgraded_type) sz in
+                let buf = define_qualified_global name (const_null buf_t) 4 m in
+                (* set_linkage Linkage.Internal buf; *)
+                (* TODO: add arch.alignment to Architecture interface *)
+                (* set_alignment arch.alignment buf; *)
+                buf
+            | sz -> begin
+                (* Dynamic size *)
+                (* Generate an alloca for this block at the top of the function *)
+                let current = insertion_block b in
+                position_before alloca_end b;
+                let buf = build_array_alloca (type_of_val_type upgraded_type) (cg_expr upgraded_size) "" b in
+                position_at_end current b;
+                buf
+              end
+        in
+        
         (* push the symbol environment *)
         sym_add name scratch;
 
@@ -782,10 +802,10 @@ let codegen_c_wrapper c m f =
     (* return the wrapper function *)
     wrapper
 
-let codegen_to_c_callable c e =
+let codegen_to_c_callable c e a =
   (* codegen *)
   (*let (args,s) = e in*)
-  let (m,f) = codegen c e Architecture.host in
+  let (m,f) = codegen c e a in
 
   (* codegen the wrapper *)
   let w = codegen_c_wrapper c m f in
@@ -796,16 +816,16 @@ let codegen_to_c_callable c e =
 
 exception BCWriteFailed of string
 
-let codegen_to_file filename e =
+let codegen_to_file filename e a =
   (* construct basic LLVM state *)
   let c = create_context () in
 
   (* codegen *)
-  let (m,_) = codegen_to_c_callable c e in
-
-  (* Set the target triple and target data for our dev machines *)
-  set_target_triple "x86_64-apple-darwin11.1.0" m;
-  set_data_layout "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64" m;
+  (* TODO: add this switch logic to architecture once possible.
+   * Currently infeasible because of circular module dependencies. *)
+  let cg = if (a == Architecture.ptx) then codegen else codegen_to_c_callable in
+  let (m, f) = cg c e a in
+  a.postprocess_function f;
 
   (* write to bitcode file *)
   begin match Llvm_bitwriter.write_bitcode_file m filename with

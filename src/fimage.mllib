@@ -2,6 +2,7 @@ loop_lifting
 architecture
 x86
 arm
+ptx
 schedule_transforms
 analysis
 hash
