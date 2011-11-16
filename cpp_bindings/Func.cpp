@@ -24,6 +24,7 @@ namespace FImage {
     ML_FUNC5(makeSplitTransform);
     ML_FUNC3(makeTransposeTransform);
     ML_FUNC4(makeChunkTransform);
+    ML_FUNC3(makeRootTransform);
     ML_FUNC4(makeSerialTransform);
     ML_FUNC4(makeParallelTransform);
     
@@ -318,11 +319,23 @@ namespace FImage {
             r = addToList(r, makePair(region.range[i-1].first.node(), region.range[i-1].second.node()));
         }
 
-        MLVal t = makeChunkTransform((name()),
-                                     (caller_var.name()),
+        MLVal t = makeChunkTransform(name(),
+                                     caller_var.name(),
                                      contents->arglist,
                                      r);
         contents->scheduleTransforms.push_back(t);
+    }
+  
+    void Func::root(const Range &region) {
+        MLVal r = makeList();
+        for (size_t i = region.range.size(); i > 0; i--) {
+            r = addToList(r, makePair(region.range[i-1].first.node(), region.range[i-1].second.node()));
+        }
+
+        MLVal t = makeRootTransform(name(),
+                                    contents->arglist,
+                                    r);
+        contents->scheduleTransforms.push_back(t);        
     }
 
     DynImage Func::realize(int a) {
