@@ -108,6 +108,8 @@ let make_schedule (name:string) (schedule:schedule_tree) =
   in
   (prefix_call_sched call_sched, List.map prefix_schedule sched_list)
 
+
+
 let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug:bool) =
 
   let recurse s = lower_stmt s env schedule debug in
@@ -165,112 +167,75 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
     fold_children_in_stmt find_callname_expr find_callname_stmt combiner stmt
   in
 
+  (* Replace calls to function with loads from buffer in body *)
+  let rec replace_calls_with_loads_in_expr function_name buffer_name strides = function
+    | Call (ty, func_name, args) when func_name = function_name ->
+        let index = List.fold_right2 
+          (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
+          args strides (IntImm 0) in
+        Load (ty, buffer_name, index)
+    | x -> mutate_children_in_expr (replace_calls_with_loads_in_expr function_name buffer_name strides) x
+  and replace_calls_with_loads_in_stmt function_name buffer_name strides stmt = 
+    mutate_children_in_stmt 
+      (replace_calls_with_loads_in_expr function_name buffer_name strides)
+      (replace_calls_with_loads_in_stmt function_name buffer_name strides) 
+      stmt
+  in
+
   match find_callname_stmt stmt with
     | None -> stmt (* No more function calls. We're done lowering. *)
     | Some name -> (* Found a function call to pull in *)
 
-        (* Grab the body *)
+        (* Grab the body of the function call *)
         let (args, return_type, body) = make_function_body name env debug in
         
-        (* Printf.printf "Found a function: %s = %s\n" name 
-          (match body with 
-            | Pure expr -> string_of_expr expr 
-            | Impure (initial_value, modified_args, modified_value) ->
-                (string_of_expr initial_value) ^ "\n[" ^ 
-                  (String.concat ", " (List.map string_of_expr modified_args)) ^ "] <- " ^
-                  (string_of_expr modified_value)); *)
-        
-        (* print_schedule schedule; *)
-
+        (* Grab the schedule for function call *)
         let (call_sched, sched_list) = make_schedule name schedule in
 
         Printf.printf "Lowering function %s with call_sched %s\n" name (string_of_call_schedule call_sched);
 
-        let scheduled_call =
+        (* Make a function to use for scheduling chunks and roots *)
+        let make_pipeline stmt = 
+          (* Make a name for the output buffer *)
+          let buffer_name = name ^ ".result" in
+          (* Figure out how to index it *)
+          let strides = stride_list sched_list (List.map snd args) in
+          (* Figure out how much storage to allocate for it *)
+          let sizes = List.map snd strides in
+          let buffer_size = List.fold_left ( *~ ) (IntImm 1) sizes in                      
+          (* Generate a statement that evaluates the function over its schedule *)
+          let produce = realize (name, args, return_type, body) sched_list buffer_name strides debug in
+          (* Generate the code that consumes the result by replacing calls with loads *)
+          let consume = replace_calls_with_loads_in_stmt name buffer_name strides stmt in
+          (* Wrap the pair into a pipeline object *)
+          let pipeline = Pipeline (buffer_name, return_type, buffer_size, produce, consume) in
+                      
+          (* Maybe wrap the pipeline in some debugging code *)
+          if debug then
+            let sizes = List.fold_left
+              (fun l (a, b) -> a::b::l)    
+              [] (List.rev strides) in  
+            Block [pipeline; Print ("### Discarding " ^ name ^ " over ", sizes)]
+          else
+            pipeline
+        in
+
+        let scheduled_call = 
           match call_sched with
             | Chunk chunk_dim -> begin
-
-              (* A buffer to dump the intermediate result into *)
-              let buffer_name = name ^ ".result" in          
-
-              (* Make the strides list for indexing the buffer *)
-              let strides = stride_list sched_list (List.map snd args) in
-
-              (* Use the strides list to figure out the size of the intermediate buffer *)
-              let sizes = List.map snd strides in
-              let buffer_size = List.fold_left ( *~ ) (List.hd sizes) (List.tl sizes) in
-
-              (* Generate a statement that evaluates the function over its schedule *)
-              let produce = realize (name, args, return_type, body) sched_list buffer_name strides debug in
-
-              Printf.printf "Realized chunk: %s\n" (string_of_stmt produce);
-
-              Printf.printf "Looking for For over %s in %s\n" chunk_dim (string_of_stmt stmt);
-              (* TODO: what if the chunk dimension has been split? Is
-                 this allowed? If so we should chunk over the outer
-                 variable produced *)
-              
               (* Recursively descend the statement until we get to the loop in question *)
-              let rec inner substmt = 
-
-                (* Search for the outer-most for loop *)
-                let rec outermost_for_stmt = function
-                  | For (a, b, c, d, e) -> Some (For (a, b, c, d, e))
-                  | x -> fold_children_in_stmt (fun _ -> None) outermost_for_stmt (option_either) x
-                in
-
-                match outermost_for_stmt substmt with
-                  | Some (For (for_dim, min, size, order, body)) when for_dim = chunk_dim -> begin
-                    (* Replace calls to function with loads from buffer in body *)
-                    let rec replace_calls_in_expr = function
-                      | Call (ty, func_name, args) when func_name = name ->
-                          let index = List.fold_right2 
-                            (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
-                            args strides (IntImm 0) in
-                          Load (ty, buffer_name, index)
-                      | x -> mutate_children_in_expr replace_calls_in_expr x
-                    and replace_calls_in_stmt stmt = 
-                      mutate_children_in_stmt replace_calls_in_expr replace_calls_in_stmt stmt in
-
-                    let consume = replace_calls_in_stmt substmt in
-
-                    (* If there are no calls to the function inside
-                       body, we shouldn't be introducing a useless let *)
-                    (* let pipeline = 
-                      if consume = body then body else              
-                        Pipeline (buffer_name, return_type, buffer_size, produce, consume)
-                    in *)
-                    let pipeline = Pipeline (buffer_name, return_type, buffer_size, produce, consume) in
-                    
-                    if debug then
-                      let sizes = List.fold_left
-                        (fun l (a, b) -> a::b::l)    
-                        [] (List.rev strides) in  
-                      Block [pipeline; Print ("### Discarding " ^ name ^ " over ", sizes)]
-                    else
-                      pipeline
-                  end
-                  | _ -> begin match substmt with
-                      | For (for_dim, min, size, order, body) -> 
-                          For (for_dim, min, size, order, inner body)
-                      | Block l ->
-                          Block (List.map inner l)
-                      | Pipeline (name, ty, size, produce, consume) ->
-                          Pipeline (name, ty, size, inner produce, inner consume)
-                      | x -> x
-                  end
+              let rec inner = function
+                | For (for_dim, min, size, order, for_body) when for_dim = chunk_dim -> 
+                    For (for_dim, min, size, order, make_pipeline for_body)
+                | stmt -> mutate_children_in_stmt (fun x -> x) inner stmt
               in inner stmt
             end
-
-            | Root ->
-                (* Make the strides list for indexing the output buffer *)
-                let strides = stride_list sched_list (List.map snd args) in
-
-                realize (name, args, return_type, body) sched_list "result" strides debug
-
+            | Root -> make_pipeline stmt
             | Inline ->
+                (* Just replace all calls to the function with the body of the function *)
                 begin match body with 
                   | Extern -> raise (Wtf ("Can't inline extern function " ^ name))
+                  | Impure _ -> raise (Wtf ("Can't inline impure function " ^ name))
                   | Pure expr ->
                       let rec inline_calls_in_expr = function
                         | Call (t, n, call_args) when n = name -> 
@@ -278,44 +243,32 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
                             List.fold_left2 
                               (* Replace an argument with its value in e, possibly vectorizing as we go for i32 args *)
                               (fun e (t, var) value -> 
-                                if (t = i32) then 
-                                  vector_subs_expr var value e 
-                                else
-                                  subs_expr (Var (t, var)) value e)
-                              expr args call_args 
-                              
+                                if (t = i32) then vector_subs_expr var value e 
+                                else subs_expr (Var (t, var)) value e)
+                              expr args call_args                               
                         | x -> mutate_children_in_expr inline_calls_in_expr x
                       and inline_calls_in_stmt s =
                         mutate_children_in_stmt inline_calls_in_expr inline_calls_in_stmt s
                       in
-                      inline_calls_in_stmt stmt
-                  | Impure _ -> raise (Wtf "I don't know how to inline impure functions yet")
+                      inline_calls_in_stmt stmt                        
                 end
             | Reuse s -> begin
-                let (call_sched, sched_list) = make_schedule s schedule in
-                match call_sched with
-                  | Chunk dim -> begin
-                    (* Replace calls to name in stmt with loads from s.result *)
-
-                    (* Grab the arg names of the parent in order to make the strides list *)
-                    let (args, _, _) = make_function_body s env debug in
-
-                    (* Make the strides list for indexing the buffer *)
-                    let strides = stride_list sched_list (List.map snd args) in
-                    let buffer_name = s ^ ".result" in
-                    let rec replace_calls_in_expr = function
-                      | Call (ty, func_name, args) when func_name = name ->
-                          let index = List.fold_right2 
-                            (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
-                            args strides (IntImm 0) in
-                          Load (ty, buffer_name, index)
-                      | x -> mutate_children_in_expr replace_calls_in_expr x
-                    and replace_calls_in_stmt stmt = 
-                      mutate_children_in_stmt replace_calls_in_expr replace_calls_in_stmt stmt in                    
-                    replace_calls_in_stmt stmt
-
-                  end
-                  | _ -> raise (Wtf ("Can't reuse something with call schedule " ^ (string_of_call_schedule call_sched)))
+              (* Grab the sub-schedule that this refers to *)
+              let (call_sched, sched_list) = make_schedule s schedule in
+              match call_sched with
+                | Root 
+                | Chunk _ -> begin
+                  (* Grab the arg names of the parent in order to make the strides list *)
+                  let (args, _, _) = make_function_body s env debug in
+                  
+                  (* Make the strides list for indexing the buffer *)
+                  let strides = stride_list sched_list (List.map snd args) in
+                  let buffer_name = s ^ ".result" in
+                  
+                  (* Replace calls to name in stmt with loads from s.result *)                 
+                  replace_calls_with_loads_in_stmt name buffer_name strides stmt
+                end
+                | _ -> raise (Wtf ("Can't reuse something with call schedule " ^ (string_of_call_schedule call_sched)))
             end
             | _ -> raise (Wtf "I don't know how to schedule this yet")
         in
@@ -328,15 +281,10 @@ and realize (name, args, return_type, body) sched_list buffer_name strides debug
   (* Make the store index *)
   (* TODO, vars and function type signatures should have matching order *)
   let make_buffer_index args =
-    Printf.printf "strides: %s\n%!" (String.concat ", " (List.map (fun (x, y) -> ((string_of_expr x) ^ "~" ^ (string_of_expr y))) strides));
-    Printf.printf "args: %s\n%!" (String.concat ", " (List.map string_of_expr args));
     List.fold_right2 
       (fun arg (min,size) subindex -> (size *~ subindex) +~ arg -~ min)
       args strides (IntImm 0) in
-
-  Printf.printf "Making index into %s for the result\n%!" buffer_name;
   let index = make_buffer_index (List.map (fun (t, v) -> Var (t, v)) args) in
-  Printf.printf "index: %s\n%!" (string_of_expr index);
 
   (* Wrap a statement in for loops using a schedule *)
   let wrap (stmt:stmt) = function 
@@ -399,13 +347,11 @@ and realize (name, args, return_type, body) sched_list buffer_name strides debug
                   | Parallel (name, _, _) 
                   | Unrolled (name, _, _) 
                   | Vectorized (name, _, _) ->
-                      Printf.printf "Looking up %s in arg set\n%!" name;
                       if StringSet.mem name arg_set then
                         partition_sched_list (arg_set, first::arg_sched_list, free_sched_list, rest)
                       else
                         partition_sched_list (arg_set, arg_sched_list, first::free_sched_list, rest)
                   | Split (name, outer, inner, _) ->
-                      Printf.printf "Looking up %s in arg set\n%!" name;
                       if StringSet.mem name arg_set then
                         let arg_set = StringSet.add outer arg_set in
                         let arg_set = StringSet.add inner arg_set in
