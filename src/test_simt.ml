@@ -27,7 +27,6 @@ and compiles with:
 let _ =
   let x = Var (i32, "x") in
   let one = IntImm 1 in
-  let two = IntImm 2 in
   
   let f = ("f", [(i32, "x")], f32, Pure ((Load (f32, ".input", x)) *~ (FloatImm 2.7))) in
 
@@ -66,6 +65,7 @@ let _ =
     (Ir_printer.string_of_environment env)
     (Ir_printer.string_of_stmt lowered);
   
-  Cg_llvm.codegen_to_file "test_simt.bc" ([Buffer ".input"; Buffer ".result"], lowered)
-    
-    
+  Cg_llvm.codegen_to_file
+    "test_simt.bc"
+    ([Buffer ".input"; Buffer ".result"], lowered)
+    Architecture.ptx

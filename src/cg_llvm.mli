@@ -10,7 +10,6 @@ exception BCWriteFailed of string
 val codegen_to_ocaml_callable : 
   Ir.entrypoint -> Llvm.llmodule * Llvm.llvalue
 val codegen_to_c_callable :
-  Llvm.llcontext -> Ir.entrypoint -> Llvm.llmodule * Llvm.llvalue
-val codegen_to_file : string -> Ir.entrypoint -> unit
-
+  Llvm.llcontext -> Ir.entrypoint -> Architecture.architecture -> Llvm.llmodule * Llvm.llvalue
+val codegen_to_file : string -> Ir.entrypoint -> Architecture.architecture -> unit
 

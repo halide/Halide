@@ -65,7 +65,7 @@ let _ =
 
   print_schedule sched;
 
-  let lowered_body = lower_function "hist" env sched in
+  let lowered_body = lower_function "hist" env sched false in
   let lowered_body = Break_false_dependence.break_false_dependence_stmt lowered_body in
   let lowered_body = Constant_fold.constant_fold_stmt lowered_body in
   let lowered_body = Loop_lifting.loop_lifting lowered_body in
@@ -78,4 +78,4 @@ let _ =
     lowered_body
   ) in
   
-  Cg_llvm.codegen_to_file "histogram.bc" entry;
+  Cg_llvm.codegen_to_file "histogram.bc" entry Architecture.host;
