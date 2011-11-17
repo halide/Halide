@@ -53,7 +53,7 @@ let vector_elements = function
   | UIntVector (x, n)
   | FloatVector (x, n) -> n
 
-type binop = Add | Sub | Mul | Div | Mod
+type binop = Add | Sub | Mul | Div | Mod | Min | Max
 type cmpop = EQ | NE | LT | LE | GT | GE
 
 let caml_iop_of_bop = function
@@ -62,6 +62,8 @@ let caml_iop_of_bop = function
   | Mul -> ( * )
   | Div -> ( / )
   | Mod -> ( mod )
+  | Min -> ( min )
+  | Max -> ( max )
       
 let caml_fop_of_bop = function
   | Add -> ( +. ) 
@@ -69,6 +71,8 @@ let caml_fop_of_bop = function
   | Mul -> ( *. )
   | Div -> ( /. )
   | Mod -> mod_float
+  | Min -> ( min )
+  | Max -> ( max )
 
 let caml_op_of_cmp = function
   | EQ -> ( =  )
