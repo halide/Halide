@@ -649,7 +649,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     (* Generate a format string and values to print for a printf *)
     let rec fmt_string x = match val_type_of_expr x with
       | Int _ -> ("%d", [Cast (i32, x)])
-      | Float _ -> ("%3.3f", [Cast (f32, x)])
+      | Float _ -> ("%3.3f", [Cast (f64, x)])
       | UInt _ -> ("%u", [Cast (u32, x)])
       | IntVector (_, n) | UIntVector (_, n) | FloatVector (_, n) -> 
           let elements = List.map (fun idx -> ExtractElement (x, IntImm idx)) (0 -- n) in
