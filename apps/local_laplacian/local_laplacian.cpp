@@ -15,11 +15,13 @@ Image<float> load(const char *filename) {
 
     Image<float> im(h.width, h.height);
 
+    printf("Fread\n");
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             fread(&(im(x, y)), sizeof(float), 1, f);
         }
     }
+    printf("Done\n");
 
     fclose(f);
     return im;
@@ -49,6 +51,7 @@ void save(Image<float> im, const char *filename) {
 Expr gaussian(Expr x) {
     return 1.0f/(x*x+1.0f);
     
+    
     x = Select(x < 0.0f, -x, x);
     Expr y = 2.0f - x;
     return Select(x < 1.0f, 4.0f - 6.0f*x*x + 3.0f*x*x*x,
@@ -57,15 +60,15 @@ Expr gaussian(Expr x) {
 
 // Remap x using y as the central point, an amplitude of alpha, and a std.dev of sigma
 Expr remap(Expr x, Expr y, float alpha, float sigma) {
-    return x + ((x - y)/sigma) * alpha * gaussian((x - y)/sigma);
+    return x + ((x - y)/sigma) * (alpha * sigma) * gaussian((x - y)/sigma);
 }
 
 Func downsample(Func f) {
     Func simple;
     Var x, y;
 
-    //simple(x, y) = f(2*x, 2*y);
-    //return simple;
+    simple(x, y) = 0.25f * (f(2*x, 2*y) + f(2*x+1, 2*y) + f(2*x, 2*y+1) + f(2*x+1, 2*y+1));
+    return simple;
 
     Func downx, downy;
     
@@ -85,8 +88,8 @@ Func upsample(Func f) {
     Var x, y;
     Func simple;
 
-    //simple(x, y) = f(x/2, y/2);
-    //return simple;
+    simple(x, y) = f(x/2, y/2);
+    return simple;
 
     Func upx, upy;
 
@@ -102,13 +105,17 @@ Func upsample(Func f) {
     return upy;
 }
 
+Expr Clamp(Expr a, Expr min, Expr max) {
+    return Select(a > max, max, Select(a < min, min, a));
+}
+
 int main(int argc, char **argv) {
 
     // intensity levels
-    const int K = 3;
+    const int K = 8;
 
     // pyramid levels
-    const int J = 3;
+    const int J = 4;
     
     // loop variables
     Var x("x"), y("y"), k("k"), j("j"), dx("dx"), dy("dy");
@@ -116,14 +123,14 @@ int main(int argc, char **argv) {
     Image<float> in = load(argv[1]);
 
     Func input("input");
-    input(x, y) = in(x+16, y+16);
+    input(x, y) = in(Clamp(x, 0, in.width()-1), Clamp(y, 0, in.height()-1));
     
     printf("Defining processed gaussian pyramid\n");
     // Compute gaussian pyramids of the processed images. k is target intensity and j is pyramid level.
     Func gPyramid[J] = {"gp0", "gp1"};
     Func lPyramid[J] = {"lp0", "lp1"};
     Func inGPyramid[J] = {"igp0", "igp1"};
-    gPyramid[0](x, y, k) = remap(input(x, y), Cast<float>(k) / (K-1), 1, 1.0f / (K-1));
+    gPyramid[0](x, y, k) = remap(input(x, y), Cast<float>(k) / (K-1), 1.0f, 1.0f / (K-1));
     for (int j = 1; j < J; j++)
         gPyramid[j] = downsample(gPyramid[j-1]);
 
@@ -131,7 +138,7 @@ int main(int argc, char **argv) {
     // Compute laplacian pyramids of the processed images.
     lPyramid[J-1] = gPyramid[J-1];
     for (int j = J-2; j >= 0; j--)
-        lPyramid[j] = gPyramid[j] - upsample(lPyramid[j+1]);    
+        lPyramid[j] = gPyramid[j] - upsample(gPyramid[j+1]);    
 
     printf("Defining gaussian pyramid of input\n");
     // Compute gaussian and laplacian pyramids of the input
@@ -152,8 +159,11 @@ int main(int argc, char **argv) {
     Func outLPyramid[J] = {"olp0", "olp1"};
     for (int j = 0; j < J; j++) {
         // Split into integer and floating parts
-        Expr li = Cast<int>(inGPyramid[j](x, y)), lf = inGPyramid[j](x, y) - Cast<float>(li);
-        outLPyramid[j](x, y) = (1.0f - lf) * lPyramid[j](x, y, li) + lf * lPyramid[j](x, y, li+1);
+        Expr level = inGPyramid[j](x, y) * float(K-1);
+        Expr li = Clamp(Cast<int>(level), 0, K-1);
+        Expr lf = level - Cast<float>(li);
+        Expr e = (1.0f - lf) * lPyramid[j](x, y, li) + lf * lPyramid[j](x, y, li+1);
+        outLPyramid[j](x, y) = e;
     }
 
     printf("Defining gaussian pyramid of output\n");
@@ -175,23 +185,49 @@ int main(int argc, char **argv) {
     // gPyramid[1]:    gPyramid[0]
 
     printf("Specifying schedule...\n");
-    for (int j = 0; j < J; j++) {
-        uint32_t w = (in.width() - 32) >> j;
-        uint32_t h = (in.height() - 32) >> j;
+    uint32_t w = in.width();
+    uint32_t h = in.height();
+    //gPyramid[0].root(Range(-16, w) * Range(-16, h) * Range(0, K));    
+    //gPyramid[1].root(Range(-6, w/2-4) * Range(-6, h/2-4) * Range(0, K));
+    //gPyramid[2].root(Range(-1, w/4-6) * Range(-1, h/4-6) * Range(0, K));
+    //lPyramid[1].root(Range(0, w/2-16) * Range(0, h/2-16) * Range(0, K));
+    //lPyramid[0].root(Range(2, w - 36) * Range(2, h - 36) * Range(0, K));
+    //outLPyramid[0].root(Range(0, in.width()-32) * Range(0, in.height()-32));
+    //gPyramid[1].root(Range(-16, in.width()/2) * Range(-16, in.height()));
 
-        gPyramid[j].root(Range(0, w)*Range(0, h)*Range(0, K));
-        lPyramid[j].root(Range(0, w)*Range(0, h)*Range(0, K));
-        inGPyramid[j].root(Range(0, w)*Range(0, h));
-        outLPyramid[j].root(Range(0, w)*Range(0, h));
-        if (j > 0) outGPyramid[j].root(Range(0, w)*Range(0, h));
-    }
+    input.root(Range(-128, w+256) * Range(-128, h+256));
+    //outLPyramid[0].root(Range(0, w) * Range(0, h));
+    //outGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
+    //outLPyramid[1].root(Range(0, w/2) * Range(0, h/2));
+    //outLPyramid[2].root(Range(0, w/4) * Range(0, h/4));
+    
+    lPyramid[3].root(Range(0, w/8) * Range(0, h/8) * Range(0, K));
+    lPyramid[2].root(Range(0, w/4) * Range(0, h/4) * Range(0, K));
+    lPyramid[1].root(Range(0, w/2) * Range(0, h/2) * Range(0, K));
+    lPyramid[0].root(Range(0, w) * Range(0, h) * Range(0, K));
+    gPyramid[3].root(Range(0, w/8) * Range(0, h/8) * Range(0, K));
+    gPyramid[2].root(Range(0, w/4) * Range(0, h/4) * Range(0, K));
+    gPyramid[1].root(Range(0, w/2) * Range(0, h/2) * Range(0, K));
+    gPyramid[0].root(Range(0, w) * Range(0, h) * Range(0, K));
+    outLPyramid[3].root(Range(0, w/8) * Range(0, h/8));
+    outLPyramid[2].root(Range(0, w/4) * Range(0, h/4));
+    outLPyramid[1].root(Range(0, w/2) * Range(0, h/2));
+    outLPyramid[0].root(Range(0, w) * Range(0, h));
+    outGPyramid[3].root(Range(0, w/8) * Range(0, h/8));
+    outGPyramid[2].root(Range(0, w/4) * Range(0, h/4));
+    outGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
+    outGPyramid[0].root(Range(0, w) * Range(0, h));
+    inGPyramid[3].root(Range(0, w/8) * Range(0, h/8));
+    inGPyramid[2].root(Range(0, w/4) * Range(0, h/4));
+    inGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
+    inGPyramid[0].root(Range(0, w) * Range(0, h));
 
     printf("Output has type %s\n", outGPyramid[0].returnType().str().c_str());
 
     //outGPyramid[0].trace();
 
     printf("Realizing...\n"); fflush(stdout);
-    Image<float> out = outGPyramid[0].realize(in.width()-32, in.height()-32);
+    Image<float> out = outGPyramid[0].realize(w, h);
 
     save(out, argv[2]);
 
