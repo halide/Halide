@@ -173,7 +173,11 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
         let index = List.fold_right2 
           (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
           args strides (IntImm 0) in
-        Load (ty, buffer_name, index)
+        let load = Load (ty, buffer_name, index) in
+        if debug then
+          Debug (load, "### Loading " ^ function_name ^ " at ", args)
+        else
+          load
     | x -> mutate_children_in_expr (replace_calls_with_loads_in_expr function_name buffer_name strides) x
   and replace_calls_with_loads_in_stmt function_name buffer_name strides stmt = 
     mutate_children_in_stmt 
@@ -211,7 +215,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
           let pipeline = Pipeline (buffer_name, return_type, buffer_size, produce, consume) in
                       
           (* Maybe wrap the pipeline in some debugging code *)
-          if debug then
+          if false then
             let sizes = List.fold_left
               (fun l (a, b) -> a::b::l)    
               [] (List.rev strides) in  
@@ -384,6 +388,48 @@ and realize (name, args, return_type, body) sched_list buffer_name strides debug
   else
     produce
 
+let rec topological_sort = function
+  | Pipeline (n1, t1, s1, produce, consume) as pipeline ->
+      (* Pull a nested chain of pipelines into a list *)
+      let rec listify_pipeline_chain = function
+        | Pipeline (n, t, s, p, c) ->
+            let (list, tail) = listify_pipeline_chain c in
+            ((n, t, s, p) :: list, tail)
+        | x -> ([], x)
+      in
+      let (chain, tail) = listify_pipeline_chain pipeline in
+
+      (* Do a selection-sort by repeatedly looking for an element that
+         does not depend on anything else in the todo list *)
+
+      let depends (_, _, s1, p1) (n2, _, _, _) = 
+        (* Does a reference to n2 appear in p1 or s1? *)
+        let rec expr_mutator = function
+          | Load (_, buf, _) when buf = n2 -> true
+          | x -> fold_children_in_expr expr_mutator (or) false x
+        and stmt_mutator x = fold_children_in_stmt expr_mutator stmt_mutator (or) x
+        in (stmt_mutator p1) or (expr_mutator s1)
+      in
+
+      let rec selection_sort = function
+        | (first::rest) ->
+            let rec find_first elems_before elem elems_after = 
+              let dep_before = List.fold_left (fun x y -> x or (depends elem y)) false elems_before in
+              let dep_after = List.fold_left (fun x y -> x or (depends elem y)) false elems_after in                  
+              if dep_before or dep_after then
+                match elems_after with
+                  | (first::rest) -> find_first (elem::elems_before) first rest
+                  | [] -> raise (Wtf "Circular dependency detected")
+              else
+                let (n, t, s, p) = elem in
+                Pipeline (n, t, s, p, selection_sort (elems_before @ elems_after))
+            in find_first [] first rest 
+        | [] -> tail
+      in
+
+      selection_sort chain
+  | x -> mutate_children_in_stmt (fun x -> x) topological_sort x
+
 (* TODO: @jrk Make debug an optional arg? *)
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) (debug:bool) =
   Printf.printf "Making function body\n%!";
@@ -395,4 +441,9 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   Printf.printf "Realizing initial statement\n%!";
   let core = (realize (func, args, return_type, body) sched_list ".result" strides debug) in
   Printf.printf "Recursively lowering function calls\n%!";
-  lower_stmt core env schedule debug
+  let stmt = lower_stmt core env schedule debug in
+  Printf.printf "Topologically sorting pipeline chains";
+  topological_sort stmt    
+
+
+
