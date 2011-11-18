@@ -194,6 +194,8 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     | Bop(Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
     | Bop(Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
     | Bop(Mod, l, r) -> cg_binop build_srem build_urem build_frem l r
+    | Bop(Min, l, r) -> cg_minmax Min r l
+    | Bop(Max, l, r) -> cg_minmax Max l r
 
     (* comparison *)
     | Cmp(EQ, l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r
@@ -297,6 +299,10 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     in
       build (cg_expr l) (cg_expr r) "" b
 
+  and cg_minmax op l r =
+    let cmp = match op with Min -> LT | Max -> GT | _ -> raise (Wtf "cg_minmax with non-min/max op") in
+    cg_expr (Select (Cmp (cmp, l, r), l, r))
+  
   and cg_cmp iop uop fop l r =
     cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
 

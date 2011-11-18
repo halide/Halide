@@ -15,6 +15,8 @@ and string_of_op = function
   | Mul -> "*"
   | Div -> "/"
   | Mod -> "%"
+  | Min -> "(min)"
+  | Max -> "(max)"
 
 and string_of_cmp = function
   | EQ -> "=="
