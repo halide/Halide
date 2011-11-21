@@ -167,7 +167,7 @@ let rec val_type_of_expr = function
       begin match lt with
         | IntVector (_, n) 
         | UIntVector (_, n) 
-        | FloatVector (_, n) -> IntVector (1, n)
+        | FloatVector (_, n) -> UIntVector (1, n)
         | _ -> bool1
       end
 
@@ -304,3 +304,5 @@ let rec make_zero = function
   | IntVector (b, n)   -> Broadcast (make_zero (Int b), n)
   | UIntVector (b, n)  -> Broadcast (make_zero (UInt b), n)
   | FloatVector (b, n) -> Broadcast (make_zero (Float b), n)
+
+let bool_imm x = if x then UIntImm 1 else UIntImm 0
