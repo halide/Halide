@@ -95,8 +95,6 @@ let requires (_,_,_,body):definition (callee_name,callee_args,_,_):definition =
     | _ -> []
         *)
 
-module StringMap = Map.Make(String)
-
 (* Schedule for this function, schedule for sub-functions *)
 type schedule_tree = 
   | Tree of ((call_schedule * (schedule list) * schedule_tree) StringMap.t) 

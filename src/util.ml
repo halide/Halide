@@ -11,6 +11,8 @@ let string_set_concat (s: StringSet.t list) =
 let string_set_map (f: string -> string) (s: StringSet.t) =
   StringSet.fold (fun x s -> StringSet.add (f x) s) s StringSet.empty
 
+module StringMap = Map.Make(String)
+
 (* An or operator for options *)
 let option_either x y =
   match (x, y) with
