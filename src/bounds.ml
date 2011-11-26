@@ -1,6 +1,7 @@
 open Constant_fold
 open Ir
 open Util
+open Analysis
 
 type bounds_result = Range of (expr * expr) | Unbounded
 
@@ -177,6 +178,29 @@ let rec bounds_of_expr_in_env env expr =
         | _ -> Unbounded
     end
         
+    (* The Clamp pattern *)
+    | Bop (Max, Bop (Min, a, b), c)
+    | Bop (Max, c, Bop (Min, a, b))
+    | Bop (Min, Bop (Max, a, c), b)
+    | Bop (Min, b, Bop (Max, a, c)) when
+        recurse a = Unbounded -> begin
+          (* a is unbounded, b is the upper bound, c is the lower bound *)
+          match (recurse b, recurse c) with
+            | Range (minb, maxb), Range (minc, maxc) ->
+                Range (minc, maxb)
+            | _ -> Unbounded
+        end
+    | Bop (Max, Bop (Min, b, a), c)
+    | Bop (Max, c, Bop (Min, b, a))
+    | Bop (Min, Bop (Max, c, a), b)
+    | Bop (Min, b, Bop (Max, c, a)) when
+        recurse a = Unbounded -> begin
+          (* a is unbounded, b is the upper bound, c is the lower bound *)
+          match (recurse b, recurse c) with
+            | Range (minb, maxb), Range (minc, maxc) ->
+                Range (minc, maxb)
+            | _ -> Unbounded
+        end
     | Bop (Max, a, b) -> begin
       match (recurse a, recurse b) with
         | Range (mina, maxa), Range (minb, maxb) ->
@@ -238,3 +262,36 @@ let rec bounds_of_expr_in_env env expr =
 let bounds_of_expr var (min, max) expr = 
   bounds_of_expr_in_env (StringMap.add var (Range (min, max)) StringMap.empty) expr
 
+
+let range_union a b = match (a, b) with
+  | Range (mina, maxa), Range (minb, maxb) ->
+      Range (Bop (Min, mina, minb), Bop (Max, maxa, maxb))
+  | _ -> Unbounded
+     
+let region_union a b = match (a, b) with
+  | [], _ -> b
+  | _, [] -> a
+  | _ -> List.map2 range_union a b
+
+(* What region of func is used by expr with variable ranges in env *)
+let rec required_of_expr func env = function
+  | Call (_, f, args) when f = func -> 
+      List.map (fun arg -> bounds_of_expr_in_env env arg) args
+  | expr -> fold_children_in_expr (required_of_expr func env) region_union [] expr  
+  
+(* What region of the func is used by the statement *)
+let rec required_of_stmt func env = function
+  | For (var, min, size, order, body) ->
+      let env = StringMap.add var (Range (min, min +~ size -~ (IntImm 1))) env in
+      required_of_stmt func env body
+  | stmt -> fold_children_in_stmt (required_of_expr func env) (required_of_stmt func env) region_union stmt
+  
+(* What region of the func is used by an entire function body *)
+let required_of_body func env = function
+  | Pure expr -> required_of_expr func env expr 
+  | Impure (init, update_loc, update_val) -> 
+      let r1 = required_of_expr func env init in
+      let r2 = required_of_expr func env update_val in
+      let rest = List.map (required_of_expr func env) update_loc in
+      List.fold_left region_union (region_union r1 r2) rest
+        

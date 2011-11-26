@@ -227,3 +227,71 @@ let serial_schedule (func: string) (var: string) (min: expr) (size: expr) (sched
   in
   
   List.fold_left set schedule calls
+
+(*
+let infer_regions (env: environment) (schedule: schedule_tree) =
+  let rec infer (func: string) (schedule: schedule_tree) (region: (expr * expr) list) =
+    let (Tree map) = schedule in
+
+    (* Grab the body of the function in question *)
+    let (_, args, return_type, body) = Environment.find func env in
+
+    (* Compute and update the region for a callee given a region for the caller *)
+    let update_region callee value map =
+      (* Unpack the current schedule for the callee *)
+      let (call_sched, sched_list, sub_sched) = value in
+
+      (* Create the binding from variable names to ranges *)
+      let add_binding map (arg_type, arg_name) (min, max) = StringMap.add arg_name (min, max) map
+      let bindings = List.fold_left2 add_binding StringMap.empty args region in
+
+      (* Given that binding, inspect the body of the caller to see what callee regions are used *)
+      let callee_region = 
+        match body with 
+          | Pure expr -> required_of_expr callee bindings expr 
+          | Impure (init_val, update_loc, update_val) ->
+              let init_region = required_of_expr callee bindings init_val in
+              (* Make a new binding for the iteration domain of the update step *)
+              let new_bindings = 
+in
+
+
+
+      (* Update the sched_list to cover this region *)
+      let new_sched_list = some function of callee_region in
+      
+
+      (* Set it, and recursively descend the subtree *)
+      StringMap.add key (call_sched, new_sched_list, infer key sub_sched callee_region)
+    in
+
+    (* Update all keys (recursively descending) *)
+    Tree (StringMap.fold update_region map)
+
+(* Compute the region over which a (fully-qualified) function should be realized to satisfy everyone who uses it *)
+let required_region (func: string) (env: environment) (schedule: schedule_tree) =
+
+
+  (* Find the schedule for this function, and all other schedules that are marked to reuse it *)  
+  let is_instances name call_sched _ = ((name = func) || (call_sched = Reuse func)) in
+  let instances = filter_schedule schedule is_user in
+  let users = List.map (fun name call_sched sched_list
+
+  (* Find the region over which each will be computed (which may require some recursion) *)
+  let user_regions = 
+    let user_region name call_sched sched_list =
+      match call_sched with 
+        | Chunk _ | Coiterate | Root ->
+        | Inline | Reuse
+    in
+    List.map user_region users
+  in
+
+  (* Convert that information to the region that each requires of this function *)
+  let required_regions = in
+
+  (* Take the union of all the regions and update the schedule tree *)
+  let union = in
+
+  set_schedule ...
+*)
