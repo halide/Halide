@@ -104,7 +104,8 @@ and string_of_definition (name, args, rtype, body) =
   in
   match body with
     | Pure(e) -> s ^ " = " ^ (string_of_expr e)
-    | _ -> s ^ " = {IMPURE}"
+    | Extern -> s ^ " = {EXTERN}"
+    | _ -> s ^ " = {IMPURE}" (* TODO *)
 
 and string_of_environment env =
   let (_,defs) = List.split (Environment.bindings env) in
