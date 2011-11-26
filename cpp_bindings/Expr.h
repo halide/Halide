@@ -90,6 +90,10 @@ namespace FImage {
     // Make a ternary operator
     Expr Select(const Expr &, const Expr &, const Expr &);
 
+    Expr Max(const Expr &, const Expr &);
+    Expr Min(const Expr &, const Expr &);
+    Expr Clamp(const Expr &, const Expr &, const Expr &);
+
     // Make a cast node
     Expr Cast(const Type &, const Expr &);
 

@@ -27,6 +27,8 @@ namespace FImage {
     ML_FUNC2(makeGT);
     ML_FUNC2(makeGE);
     ML_FUNC2(makeLE);
+    ML_FUNC2(makeMax);
+    ML_FUNC2(makeMin);
     ML_FUNC3(makeSelect);
     ML_FUNC3(makeDebug);
     ML_FUNC3(makeCall);
@@ -271,6 +273,25 @@ namespace FImage {
         return e;
     }
     
+    Expr Max(const Expr &a, const Expr &b) {
+        Expr e(makeMax(a.node(), b.node()), a.type());
+        e.child(a);
+        e.child(b);
+        return e;
+    }
+
+    Expr Min(const Expr &a, const Expr &b) {
+        Expr e(makeMin(a.node(), b.node()), a.type());
+        e.child(a);
+        e.child(b);
+        return e;
+    }
+    
+    Expr Clamp(const Expr &a, const Expr &min, const Expr &max) {
+        return Max(Min(a, max), min);
+    }
+
+
     Expr::Expr(const FuncRef &f) : contents(new Contents(f)) {}
 
     Expr::Expr(const Func &f) : contents(new Contents(f)) {}

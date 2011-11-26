@@ -109,92 +109,50 @@ let make_schedule (name:string) (schedule:schedule_tree) =
   (prefix_call_sched call_sched, List.map prefix_schedule sched_list)
 
 
+let simplify_range = function
+  | Bounds.Unbounded -> Bounds.Unbounded
+  | Bounds.Range (a, b) -> Bounds.Range (Constant_fold.constant_fold_expr a, Constant_fold.constant_fold_expr b)
+let simplify_region r = List.map simplify_range r 
+let string_of_range = function  
+  | Bounds.Unbounded -> "[Unbounded]"
+  | Bounds.Range (a, b) -> "[" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ "]" 
+let bounds f stmt = simplify_region (Bounds.required_of_stmt f (StringMap.empty) stmt) 
 
-let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug:bool) =
+let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (functions:string list) (debug:bool) =
 
-  let recurse s = lower_stmt s env schedule debug in
+  (* let recurse s = lower_stmt s env schedule debug in  *)
 
-  (* Find a function called in the statement. If none, terminate.
-     Look up its schedule. 
-       If Chunk:
-         Allocate some storage
-         producer = realize the function according to its schedule
-         Inject producer at the appropriate place according to the call_schedule.
-         Replace calls in consumer with loads
-       If Inline:
-         If Impure:
-           For each call to this function
-             Wrap the statement containing it in a Pipeline that produces then consumes it
-         If Pure:
-           Lookup the function body
-           wrap it in lets to bind the arguments
-           Subs it into the call site
-       If dynamic:
-         punt for now, seems possible
-       If coiterate:         
-         Generate scratch storage
-         Split loop into unordered startup, ordered steady state, unordered wind down that use the scratch node
-
-
-     To lookup a function body:
-     Search the environment for the last element of the function name
-     prefix all names in the body with (fully qualified callee function name + '.')
-  *)
-
-  (* Find the name of any function referred to in a statement *)
-  let rec find_callname_stmt stmt = 
-    let combiner op1 op2 = match (op1, op2) with
-      | (Some a, Some b) -> 
-          (* We have a choice - do a reuse first so they end up innermost *)
-          let (call_sched, _) = find_schedule schedule a in
-          begin match call_sched with
-            | Reuse _ -> Some a
-            | _ -> Some b
-          end
-      | (None, Some a)
-      | (Some a, None) -> Some a
-      | (None, b) -> b
-    in
-    let rec find_callname_expr = function
-      | Call (_, name, _) ->
-          (* only return non-extern calls for further lowering *)
-          begin match find_function name env with
-            | _, _, Extern -> None
-            | _, _, _ -> Some name
-          end
-      | x -> fold_children_in_expr find_callname_expr combiner None x
-    in
-    fold_children_in_stmt find_callname_expr find_callname_stmt combiner stmt
-  in
-
-  (* Replace calls to function with loads from buffer in body *)
-  let rec replace_calls_with_loads_in_expr function_name buffer_name strides = function
-    | Call (ty, func_name, args) when func_name = function_name ->
-        let index = List.fold_right2 
-          (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
-          args strides (IntImm 0) in
-        let load = Load (ty, buffer_name, index) in
-        if debug then
-          Debug (load, "### Loading " ^ function_name ^ " at ", args)
-        else
-          load
-    | x -> mutate_children_in_expr (replace_calls_with_loads_in_expr function_name buffer_name strides) x
-  and replace_calls_with_loads_in_stmt function_name buffer_name strides stmt = 
-    mutate_children_in_stmt 
-      (replace_calls_with_loads_in_expr function_name buffer_name strides)
-      (replace_calls_with_loads_in_stmt function_name buffer_name strides) 
-      stmt
-  in
-
-  match find_callname_stmt stmt with
-    | None -> stmt (* No more function calls. We're done lowering. *)
-    | Some name -> (* Found a function call to pull in *)
+  match functions with
+    | [] -> stmt (* Done lowering *)
+    | (name::rest) ->
 
         (* Grab the body of the function call *)
         let (args, return_type, body) = make_function_body name env debug in
         
         (* Grab the schedule for function call *)
         let (call_sched, sched_list) = make_schedule name schedule in
+
+        (* Complete the sched_list (it may not contain explicit bounds for some dimensions) *)
+        let region_used = bounds name stmt in
+        let range_of_dim d =
+          List.find (fun (dim, _) -> d = dim) (list_zip (List.map snd args) region_used)
+        in
+
+        let fix_bounds = function
+          | Serial (name, IntImm 0, IntImm 0) -> begin
+            match snd (range_of_dim name) with
+              | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
+              | Bounds.Range (min, max) -> Serial (name, min, max -~ min +~ IntImm 1)
+          end
+          | Parallel (name, IntImm 0, IntImm 0) -> begin
+            match snd (range_of_dim name) with
+              | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
+              | Bounds.Range (min, max) -> Parallel (name, min, max -~ min +~ IntImm 1)
+          end
+          | x -> x
+        in
+
+        let sched_list = List.map fix_bounds sched_list in
 
         Printf.printf "Lowering function %s with call_sched %s\n" name (string_of_call_schedule call_sched);
 
@@ -210,7 +168,8 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
           (* Generate a statement that evaluates the function over its schedule *)
           let produce = realize (name, args, return_type, body) sched_list buffer_name strides debug in
           (* Generate the code that consumes the result by replacing calls with loads *)
-          let consume = replace_calls_with_loads_in_stmt name buffer_name strides stmt in
+          (* let consume = replace_calls_with_loads_in_stmt name buffer_name strides stmt in *)
+          let consume = stmt in
           (* Wrap the pair into a pipeline object *)
           let pipeline = Pipeline (buffer_name, return_type, buffer_size, produce, consume) in
                       
@@ -257,27 +216,19 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug
                       inline_calls_in_stmt stmt                        
                 end
             | Reuse s -> begin
-              (* Grab the sub-schedule that this refers to *)
-              let (call_sched, sched_list) = make_schedule s schedule in
-              match call_sched with
-                | Root 
-                | Chunk _ -> begin
-                  (* Grab the arg names of the parent in order to make the strides list *)
-                  let (args, _, _) = make_function_body s env debug in
-                  
-                  (* Make the strides list for indexing the buffer *)
-                  let strides = stride_list sched_list (List.map snd args) in
-                  let buffer_name = s ^ ".result" in
-                  
-                  (* Replace calls to name in stmt with loads from s.result *)                 
-                  replace_calls_with_loads_in_stmt name buffer_name strides stmt
-                end
-                | _ -> raise (Wtf ("Can't reuse something with call schedule " ^ (string_of_call_schedule call_sched)))
+              (* Replace calls to name with calls to s in stmt *)
+              let rec fix_expr = function
+                | Call (ty, n, args) when n = name -> 
+                    Call (ty, s, args)
+                | expr -> mutate_children_in_expr fix_expr expr
+              in
+              let rec fix_stmt stmt = mutate_children_in_stmt fix_expr fix_stmt stmt in
+              fix_stmt stmt
             end
             | _ -> raise (Wtf "I don't know how to schedule this yet")
         in
         Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);
-        recurse scheduled_call
+        lower_stmt scheduled_call env schedule rest debug
 
 (* Evaluate a function according to a schedule and put the results in
    the output_buf_name using the given strides *)
@@ -430,20 +381,94 @@ let rec topological_sort = function
       selection_sort chain
   | x -> mutate_children_in_stmt (fun x -> x) topological_sort x
 
+(* Replace calls to function with loads from buffer in body *)
+let rec replace_calls_with_loads_in_expr function_name buffer_name strides debug = function
+  | Call (ty, func_name, args) when func_name = function_name ->
+      let index = List.fold_right2 
+        (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
+        args strides (IntImm 0) in
+      let load = Load (ty, buffer_name, index) in
+      if debug then
+        Debug (load, "### Loading " ^ function_name ^ " at ", args)
+      else
+        load
+  | x -> mutate_children_in_expr (replace_calls_with_loads_in_expr function_name buffer_name strides debug) x
+
+let rec replace_calls_with_loads_in_stmt function_name buffer_name strides debug stmt = 
+  mutate_children_in_stmt 
+    (replace_calls_with_loads_in_expr function_name buffer_name strides debug)
+    (replace_calls_with_loads_in_stmt function_name buffer_name strides debug) 
+    stmt
+
 (* TODO: @jrk Make debug an optional arg? *)
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) (debug:bool) =
-  Printf.printf "Making function body\n%!";
+  let starts_with a b =    
+    String.length a >= String.length b &&
+      String.sub a 0 (String.length b) = b
+  in
+  (* A partial order on realization order of functions *)        
+  let lt a b =
+    (* If a requires b directly, a should be realized first *)
+    if (starts_with b a) then (Some true)
+    else if (starts_with a b) then (Some false)
+    else
+      let (call_sched_a, _) = (find_schedule schedule a) in
+      let (call_sched_b, _) = (find_schedule schedule b) in
+      (* If a reuses the computation of b, a should be 'realized' first (which just rewrites calls to a into calls to b) *)
+      if (call_sched_a = Reuse b) then (Some true)
+      else if (call_sched_b = Reuse a) then (Some false)
+      else None
+  in
+
+  let functions = partial_sort lt (list_of_schedule schedule) in
+  Printf.printf "Realization order: %s\n" (String.concat "\n" functions);
+
+  Printf.printf "Making root function body\n%!";
   let (args, return_type, body) = make_function_body func env debug in
-  Printf.printf "Making schedule\n%!";
+  Printf.printf "Making root schedule\n%!";
   let (_, sched_list) = make_schedule func schedule in
-  Printf.printf "Making stride list\n%!";
+  Printf.printf "Making root stride list\n%!";
   let strides = stride_list sched_list (List.map snd args) in
-  Printf.printf "Realizing initial statement\n%!";
+  Printf.printf "Realizing root statement\n%!";
   let core = (realize (func, args, return_type, body) sched_list ".result" strides debug) in
   Printf.printf "Recursively lowering function calls\n%!";
-  let stmt = lower_stmt core env schedule debug in
-  Printf.printf "Topologically sorting pipeline chains";
-  topological_sort stmt    
+  let stmt = lower_stmt core env schedule (List.filter (fun x -> x <> func) functions) debug in
+  Printf.printf "Static bounds checking\n%!";
+  let simplify_range = function
+    | Bounds.Unbounded -> Bounds.Unbounded
+    | Bounds.Range (a, b) -> Bounds.Range (Constant_fold.constant_fold_expr a, Constant_fold.constant_fold_expr b)
+  in
+  let simplify_region r = List.map simplify_range r in 
+  let string_of_range = function  
+      | Bounds.Unbounded -> "[Unbounded]"
+      | Bounds.Range (a, b) -> "[" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ "]" 
+  in  
+  let bounds f = simplify_region (Bounds.required_of_stmt f (StringMap.empty) stmt) in
+  let check f = function
+    | [] -> ()
+    | region_used ->
+        Printf.printf "This region of %s is used: %s\n%!"  f
+          (String.concat "*" (List.map string_of_range region_used))
+  in
+
+  List.iter (fun f -> check f (bounds f)) functions;
+  Printf.printf "Replacing calls with loads\n%!";
+
+  let lower_calls stmt f =
+    (* TODO: somewhat inefficient to rebuild the function bodies and schedules here *)
+    let (args, _, _) = make_function_body f env debug in
+    let (_, sched_list) = make_schedule f schedule in 
+    if sched_list = [] then 
+      stmt 
+    else begin
+      let strides = stride_list sched_list (List.map snd args) in 
+      replace_calls_with_loads_in_stmt f (f ^ ".result") strides debug stmt
+    end
+  in
+
+  List.fold_left lower_calls stmt functions
+
+
 
 
 

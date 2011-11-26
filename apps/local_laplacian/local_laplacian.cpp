@@ -1,4 +1,5 @@
 #include <FImage.h>
+#include <sys/time.h>
 
 using namespace FImage;
 
@@ -105,10 +106,6 @@ Func upsample(Func f) {
     return upy;
 }
 
-Expr Clamp(Expr a, Expr min, Expr max) {
-    return Select(a > max, max, Select(a < min, min, a));
-}
-
 int main(int argc, char **argv) {
 
     // intensity levels
@@ -160,7 +157,7 @@ int main(int argc, char **argv) {
     for (int j = 0; j < J; j++) {
         // Split into integer and floating parts
         Expr level = inGPyramid[j](x, y) * float(K-1);
-        Expr li = Clamp(Cast<int>(level), 0, K-1);
+        Expr li = Clamp(Cast<int>(level), 0, K-2);
         Expr lf = level - Cast<float>(li);
         Expr e = (1.0f - lf) * lPyramid[j](x, y, li) + lf * lPyramid[j](x, y, li+1);
         outLPyramid[j](x, y) = e;
@@ -200,36 +197,97 @@ int main(int argc, char **argv) {
     //outGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
     //outLPyramid[1].root(Range(0, w/2) * Range(0, h/2));
     //outLPyramid[2].root(Range(0, w/4) * Range(0, h/4));
+
+    // For each image, root, or chunk on var of consumer, or inline
+    // if root or chunk, then split and vectorize? or unroll?
     
-    lPyramid[3].root(Range(0, w/8) * Range(0, h/8) * Range(0, K));
-    lPyramid[2].root(Range(0, w/4) * Range(0, h/4) * Range(0, K));
-    lPyramid[1].root(Range(0, w/2) * Range(0, h/2) * Range(0, K));
-    lPyramid[0].root(Range(0, w) * Range(0, h) * Range(0, K));
-    gPyramid[3].root(Range(0, w/8) * Range(0, h/8) * Range(0, K));
-    gPyramid[2].root(Range(0, w/4) * Range(0, h/4) * Range(0, K));
-    gPyramid[1].root(Range(0, w/2) * Range(0, h/2) * Range(0, K));
-    gPyramid[0].root(Range(0, w) * Range(0, h) * Range(0, K));
-    outLPyramid[3].root(Range(0, w/8) * Range(0, h/8));
-    outLPyramid[2].root(Range(0, w/4) * Range(0, h/4));
-    outLPyramid[1].root(Range(0, w/2) * Range(0, h/2));
-    outLPyramid[0].root(Range(0, w) * Range(0, h));
-    outGPyramid[3].root(Range(0, w/8) * Range(0, h/8));
-    outGPyramid[2].root(Range(0, w/4) * Range(0, h/4));
-    outGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
-    outGPyramid[0].root(Range(0, w) * Range(0, h));
-    inGPyramid[3].root(Range(0, w/8) * Range(0, h/8));
-    inGPyramid[2].root(Range(0, w/4) * Range(0, h/4));
-    inGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
-    inGPyramid[0].root(Range(0, w) * Range(0, h));
+
+    srand(atoi(argv[3]));
+    int decision[20];
+    for (int i = 0; i < 20; i++) {
+        // 0 -> inline
+        // 1 -> root
+        // 2 -> root + vectorize
+        //decision[i] = rand() % 3;
+        decision[i] = 1;
+    }
+
+    /*
+    if (decision[0]) lPyramid[3].root(Range(0, w/8) * Range(0, h/8) * Range(0, K));
+    if (decision[1]) lPyramid[2].root(Range(0, w/4) * Range(0, h/4) * Range(0, K));
+    if (decision[2]) lPyramid[1].root(Range(0, w/2) * Range(0, h/2) * Range(0, K));
+    if (decision[3]) lPyramid[0].root(Range(0, w) * Range(0, h) * Range(0, K));
+    if (decision[4]) gPyramid[3].root(Range(0, w/8) * Range(0, h/8) * Range(0, K));
+    if (decision[5]) gPyramid[2].root(Range(0, w/4) * Range(0, h/4) * Range(0, K));
+    if (decision[6]) gPyramid[1].root(Range(0, w/2) * Range(0, h/2) * Range(0, K));
+    if (decision[7]) gPyramid[0].root(Range(0, w) * Range(0, h) * Range(0, K));
+    if (decision[8]) outLPyramid[3].root(Range(0, w/8) * Range(0, h/8));
+    if (decision[9]) outLPyramid[2].root(Range(0, w/4) * Range(0, h/4));
+    if (decision[10]) outLPyramid[1].root(Range(0, w/2) * Range(0, h/2));
+    if (decision[11]) outLPyramid[0].root(Range(0, w) * Range(0, h));
+    if (decision[12]) outGPyramid[3].root(Range(0, w/8) * Range(0, h/8));
+    if (decision[13]) outGPyramid[2].root(Range(0, w/4) * Range(0, h/4));
+    if (decision[14]) outGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
+    if (decision[15]) outGPyramid[0].root(Range(0, w) * Range(0, h));
+    if (decision[16]) inGPyramid[3].root(Range(0, w/8) * Range(0, h/8));
+    if (decision[17]) inGPyramid[2].root(Range(0, w/4) * Range(0, h/4));
+    if (decision[18]) inGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
+    if (decision[19]) inGPyramid[0].root(Range(0, w) * Range(0, h));
+    */
+
+    if (decision[0]) lPyramid[3].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
+    if (decision[1]) lPyramid[2].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
+    if (decision[2]) lPyramid[1].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
+    if (decision[3]) lPyramid[0].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
+    if (decision[4]) gPyramid[3].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
+    if (decision[5]) gPyramid[2].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
+    if (decision[6]) gPyramid[1].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
+    if (decision[7]) gPyramid[0].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
+    if (decision[8]) outLPyramid[3].root(Range(0, 0) * Range(0, 0));
+    if (decision[9]) outLPyramid[2].root(Range(0, 0) * Range(0, 0));
+    if (decision[10]) outLPyramid[1].root(Range(0, 0) * Range(0, 0));
+    if (decision[11]) outLPyramid[0].root(Range(0, w) * Range(0, 0));
+    if (decision[12]) outGPyramid[3].root(Range(0, 0) * Range(0, 0));
+    if (decision[13]) outGPyramid[2].root(Range(0, 0) * Range(0, 0));
+    if (decision[14]) outGPyramid[1].root(Range(0, 0) * Range(0, 0));
+    //if (decision[15]) outGPyramid[0].root(Range(0, 0) * Range(0, 0));
+    if (decision[16]) inGPyramid[3].root(Range(0, 0) * Range(0, 0));
+    if (decision[17]) inGPyramid[2].root(Range(0, 0) * Range(0, 0));
+    if (decision[18]) inGPyramid[1].root(Range(0, 0) * Range(0, 0));
+    if (decision[19]) inGPyramid[0].root(Range(0, 0) * Range(0, 0));
 
     printf("Output has type %s\n", outGPyramid[0].returnType().str().c_str());
+
+    Func funcs[] = {lPyramid[3], lPyramid[2], lPyramid[1], lPyramid[0],
+                    gPyramid[3], gPyramid[2], gPyramid[1], gPyramid[0],
+                    outLPyramid[3], outLPyramid[2], outLPyramid[1], outLPyramid[0],
+                    outGPyramid[3], outGPyramid[2], outGPyramid[1], outGPyramid[0],
+                    inGPyramid[3], inGPyramid[2], inGPyramid[1], inGPyramid[0]};
+
+    for (int i = 0; i < 20; i++) {
+        if (decision[i] == 2) funcs[i].vectorize(x, 4);
+    }
 
     //outGPyramid[0].trace();
 
     printf("Realizing...\n"); fflush(stdout);
     Image<float> out = outGPyramid[0].realize(w, h);
 
+    timeval t1, t2;
+    gettimeofday(&t1, NULL);
+    out = outGPyramid[0].realize(w, h);
+    gettimeofday(&t2, NULL);
+    double dt = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) * 0.000001;
+
+    printf("Time: %f\n", dt);
+
     save(out, argv[2]);
+
+    srand(atoi(argv[3]));
+    for (int i = 0; i < 20; i++) {
+        printf("%d\n", rand() % 3);
+    }
+
 
     return 0;
 }
