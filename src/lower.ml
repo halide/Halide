@@ -118,10 +118,25 @@ let string_of_range = function
   | Bounds.Range (a, b) -> "[" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ "]" 
 let bounds f stmt = simplify_region (Bounds.required_of_stmt f (StringMap.empty) stmt) 
 
+let rec replace_calls_with_loads_in_expr function_name buffer_name strides debug = function
+  | Call (ty, func_name, args) when func_name = function_name ->
+      let index = List.fold_right2 
+        (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
+        args strides (IntImm 0) in
+      let load = Load (ty, buffer_name, index) in
+      if debug then
+        Debug (load, "### Loading " ^ function_name ^ " at ", args)
+      else
+        load
+  | x -> mutate_children_in_expr (replace_calls_with_loads_in_expr function_name buffer_name strides debug) x
+
+let rec replace_calls_with_loads_in_stmt function_name buffer_name strides debug stmt = 
+  mutate_children_in_stmt 
+    (replace_calls_with_loads_in_expr function_name buffer_name strides debug)
+    (replace_calls_with_loads_in_stmt function_name buffer_name strides debug) 
+    stmt
+
 let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (functions:string list) (debug:bool) =
-
-  (* let recurse s = lower_stmt s env schedule debug in  *)
-
   match functions with
     | [] -> stmt (* Done lowering *)
     | (name::rest) ->
@@ -168,8 +183,8 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
           (* Generate a statement that evaluates the function over its schedule *)
           let produce = realize (name, args, return_type, body) sched_list buffer_name strides debug in
           (* Generate the code that consumes the result by replacing calls with loads *)
-          (* let consume = replace_calls_with_loads_in_stmt name buffer_name strides stmt in *)
-          let consume = stmt in
+          let consume = replace_calls_with_loads_in_stmt name buffer_name strides debug stmt in 
+          (* let consume = stmt in *)
           (* Wrap the pair into a pipeline object *)
           let pipeline = Pipeline (buffer_name, return_type, buffer_size, produce, consume) in
                       
@@ -227,8 +242,10 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
             end
             | _ -> raise (Wtf "I don't know how to schedule this yet")
         in
-        Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);
+        (* Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call); *)
         lower_stmt scheduled_call env schedule rest debug
+
+
 
 (* Evaluate a function according to a schedule and put the results in
    the output_buf_name using the given strides *)
@@ -381,24 +398,6 @@ let rec topological_sort = function
       selection_sort chain
   | x -> mutate_children_in_stmt (fun x -> x) topological_sort x
 
-(* Replace calls to function with loads from buffer in body *)
-let rec replace_calls_with_loads_in_expr function_name buffer_name strides debug = function
-  | Call (ty, func_name, args) when func_name = function_name ->
-      let index = List.fold_right2 
-        (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
-        args strides (IntImm 0) in
-      let load = Load (ty, buffer_name, index) in
-      if debug then
-        Debug (load, "### Loading " ^ function_name ^ " at ", args)
-      else
-        load
-  | x -> mutate_children_in_expr (replace_calls_with_loads_in_expr function_name buffer_name strides debug) x
-
-let rec replace_calls_with_loads_in_stmt function_name buffer_name strides debug stmt = 
-  mutate_children_in_stmt 
-    (replace_calls_with_loads_in_expr function_name buffer_name strides debug)
-    (replace_calls_with_loads_in_stmt function_name buffer_name strides debug) 
-    stmt
 
 (* TODO: @jrk Make debug an optional arg? *)
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) (debug:bool) =
@@ -433,6 +432,10 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   let core = (realize (func, args, return_type, body) sched_list ".result" strides debug) in
   Printf.printf "Recursively lowering function calls\n%!";
   let stmt = lower_stmt core env schedule (List.filter (fun x -> x <> func) functions) debug in
+
+  stmt
+
+  (*
   Printf.printf "Static bounds checking\n%!";
   let simplify_range = function
     | Bounds.Unbounded -> Bounds.Unbounded
@@ -454,6 +457,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   List.iter (fun f -> check f (bounds f)) functions;
   Printf.printf "Replacing calls with loads\n%!";
 
+  
   let lower_calls stmt f =
     (* TODO: somewhat inefficient to rebuild the function bodies and schedules here *)
     let (args, _, _) = make_function_body f env debug in
@@ -462,12 +466,13 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
       stmt 
     else begin
       let strides = stride_list sched_list (List.map snd args) in 
+      Printf.printf "Replacing calls to %s with loads using strides %s\n" f (String.concat ", " (List.map (fun (x, y) -> ("[" ^ string_of_expr x ^ ", " ^ string_of_expr y ^ "]")) strides));
       replace_calls_with_loads_in_stmt f (f ^ ".result") strides debug stmt
     end
   in
 
   List.fold_left lower_calls stmt functions
-
+  *)
 
 
 

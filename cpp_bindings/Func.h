@@ -91,6 +91,7 @@ namespace FImage {
         void transpose(const Var &, const Var &);
         void chunk(const Var &, const Range &);
         void root(const Range &);
+        void root();
 
         /* Add an explicit Serial or Parallel to the schedule. Useful
          * for defining reduction domains */

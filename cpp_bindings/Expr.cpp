@@ -321,7 +321,6 @@ namespace FImage {
         for (size_t i = f.args().size(); i > 0; i--) {
             exprlist = addToList(exprlist, f.args()[i-1].node());            
         }
-        printf("Making a call node\n");
 
         //if (!f.f().rhs().isDefined()) {
             //printf("Can't infer the return type when calling a function that hasn't been defined yet\n");

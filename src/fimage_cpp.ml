@@ -48,7 +48,7 @@ let _ =
   Callback.register "makeSub" (fun a b -> a -~ b);
   Callback.register "makeDiv" (fun a b -> a /~ b);
   Callback.register "makeMod" (fun a b -> a %~ b);
-  Callback.register "makeMax" (fun a b -> Printf.printf "Making a max node: %s %s\n%!" (string_of_expr a) (string_of_expr b); Bop (Max, a, b));
+  Callback.register "makeMax" (fun a b -> Bop (Max, a, b));
   Callback.register "makeMin" (fun a b -> Bop (Min, a, b));
   Callback.register "makeEQ" (fun a b -> Cmp (EQ, a, b));
   Callback.register "makeNE" (fun a b -> Cmp (NE, a, b));

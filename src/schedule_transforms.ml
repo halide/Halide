@@ -165,10 +165,18 @@ let transpose_schedule (func: string) (outer: string) (inner: string) (schedule:
 
 let root_or_chunk_schedule (func: string) (call_sched: call_schedule)
     (args: string list) (region: (expr * expr) list) (schedule: schedule_tree) = 
+
+  Printf.printf "root or chunk %s with region %s\n" func 
+    (String.concat ", " (List.map (fun (x, y) -> "[" ^ string_of_expr x ^ ", " ^ string_of_expr y ^ "]") region));
+
   (* Make a sub-schedule using the arg names and the region. We're
      assuming all the args are region args for now *)
   let make_sched name (min, size) = Parallel (name, min, size) in
-  let sched_list = List.map2 make_sched args region in
+  let sched_list = match region with
+    (* To be inferred later *)
+    | [] -> List.map (fun n -> make_sched n (IntImm 0, IntImm 0)) args
+    | _ -> List.map2 make_sched args region 
+  in
 
   (* Find all the calls to func in the schedule. Sort them
      lexicographically so we can always mark the first one returned as

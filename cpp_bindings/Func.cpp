@@ -338,6 +338,11 @@ namespace FImage {
         contents->scheduleTransforms.push_back(t);        
     }
 
+    void Func::root() {
+        MLVal t = makeRootTransform(name(), contents->arglist, makeList());
+        contents->scheduleTransforms.push_back(t);
+    }
+
     DynImage Func::realize(int a) {
         DynImage im(returnType(), a);
         realize(im);

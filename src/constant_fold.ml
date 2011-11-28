@@ -71,6 +71,12 @@ let rec constant_fold_expr expr =
         | (Div, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a /~ b), n)
         | (Mod, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a %~ b), n)
 
+        (* Converting subtract negatives to addition (mostly for readability) *)
+        | (Sub, x, IntImm y) when y < 0 -> Bop (Add, x, IntImm (-y))
+
+        (* Convert divide by float constants to multiplication *)
+        | (Div, x, FloatImm y) -> Bop (Mul, x, FloatImm (1.0 /. y))
+
         | (op, x, y) -> Bop (op, x, y)
       end
 
