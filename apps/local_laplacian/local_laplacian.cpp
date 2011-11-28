@@ -14,12 +14,14 @@ Image<float> load(const char *filename) {
 
     fread(&h, sizeof(header_t), 1, f);
 
-    Image<float> im(h.width, h.height);
+    Image<float> im(h.width, h.height, h.channels);
 
     printf("Fread\n");
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
-            fread(&(im(x, y)), sizeof(float), 1, f);
+            for (int c = 0; c < im.channels(); c++) {
+                fread(&(im(x, y, c)), sizeof(float), 1, f);
+            }
         }
     }
     printf("Done\n");
@@ -34,14 +36,16 @@ void save(Image<float> im, const char *filename) {
     // get the dimensions
     struct header_t {
         int frames, width, height, channels, typeCode;
-    } h {1, im.width(), im.height(), 1, 0};
+    } h {1, im.width(), im.height(), im.channels(), 0};
 
     
     fwrite(&h, sizeof(header_t), 1, f);
 
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
-            fwrite(&im(x, y), sizeof(float), 1, f);
+            for (int c = 0; c < im.channels(); c++) {
+                fwrite(&im(x, y, c), sizeof(float), 1, f);
+            }
         }
     }
 
@@ -65,11 +69,11 @@ Expr remap(Expr x, Expr y, float alpha, float sigma) {
 }
 
 Func downsample(Func f) {
-    Func simple;
     Var x, y;
 
-    simple(x, y) = 0.25f * (f(2*x, 2*y) + f(2*x+1, 2*y) + f(2*x, 2*y+1) + f(2*x+1, 2*y+1));
-    return simple;
+    //Func simple;
+    //simple(x, y) = 0.25f * (f(2*x, 2*y) + f(2*x+1, 2*y) + f(2*x, 2*y+1) + f(2*x+1, 2*y+1));
+    //return simple;
 
     Func downx, downy;
     
@@ -87,10 +91,10 @@ Func downsample(Func f) {
 
 Func upsample(Func f) {
     Var x, y;
-    Func simple;
 
-    simple(x, y) = f(x/2, y/2);
-    return simple;
+    //Func simple;
+    //simple(x, y) = f(x/2, y/2);
+    //return simple;
 
     Func upx, upy;
 
@@ -115,19 +119,24 @@ int main(int argc, char **argv) {
     const int J = 4;
     
     // loop variables
-    Var x("x"), y("y"), k("k"), j("j"), dx("dx"), dy("dy");
+    Var x("x"), y("y"), k("k"), j("j"), dx("dx"), dy("dy"), c("c");
 
     Image<float> in = load(argv[1]);
 
+    // Enforce a boundary condition
     Func input("input");
-    input(x, y) = in(Clamp(x, 0, in.width()-1), Clamp(y, 0, in.height()-1));
-    
+    input(x, y, c) = in(Clamp(x, 0, in.width()-1), Clamp(y, 0, in.height()-1), c);
+
+    // Compute luminance
+    Func gray("gray");
+    gray(x, y) = 0.299f * input(x, y, 0) + 0.587f * input(x, y, 1) + 0.114f * input(x, y, 2);
+
     printf("Defining processed gaussian pyramid\n");
     // Compute gaussian pyramids of the processed images. k is target intensity and j is pyramid level.
     Func gPyramid[J] = {"gp0", "gp1"};
     Func lPyramid[J] = {"lp0", "lp1"};
     Func inGPyramid[J] = {"igp0", "igp1"};
-    gPyramid[0](x, y, k) = remap(input(x, y), Cast<float>(k) / (K-1), 1.0f, 1.0f / (K-1));
+    gPyramid[0](x, y, k) = remap(gray(x, y), Cast<float>(k) / (K-1), 1.0f, 1.0f / (K-1));
     for (int j = 1; j < J; j++)
         gPyramid[j] = downsample(gPyramid[j-1]);
 
@@ -139,7 +148,7 @@ int main(int argc, char **argv) {
 
     printf("Defining gaussian pyramid of input\n");
     // Compute gaussian and laplacian pyramids of the input
-    inGPyramid[0] = input;
+    inGPyramid[0] = gray;
     for (int j = 1; j < J; j++)
         inGPyramid[j] = downsample(inGPyramid[j-1]);
 
@@ -170,124 +179,46 @@ int main(int argc, char **argv) {
     for (int j = J-2; j >= 0; j--) 
         outGPyramid[j] = upsample(outGPyramid[j+1]) + outLPyramid[j];
 
-    // Dependencies:
-    // outGPyramid[0]: outLPyramid[0], outLPyramid[1]
-    // outLPyramid[0]: lPyramid[0], inGPyramid[0]
-    // outLPyramid[1]: lPyramid[1], inGPyramid[1]
-    // inGPyramid[0]:  input
-    // inGPyramid[1]:  inGPyramid[0]
-    // lPyramid[0]:    gPyramid[0], lPyramid[1]
-    // lPyramid[1]:    gPyramid[1]
-    // gPyramid[0]:    input
-    // gPyramid[1]:    gPyramid[0]
+    // Reintroduce chrominance
+    Func out;
+    out(x, y, c) = outGPyramid[0](x, y) * input(x, y, c) / gray(x, y);
 
-    printf("Specifying schedule...\n");
-    uint32_t w = in.width();
-    uint32_t h = in.height();
-    //gPyramid[0].root(Range(-16, w) * Range(-16, h) * Range(0, K));    
-    //gPyramid[1].root(Range(-6, w/2-4) * Range(-6, h/2-4) * Range(0, K));
-    //gPyramid[2].root(Range(-1, w/4-6) * Range(-1, h/4-6) * Range(0, K));
-    //lPyramid[1].root(Range(0, w/2-16) * Range(0, h/2-16) * Range(0, K));
-    //lPyramid[0].root(Range(2, w - 36) * Range(2, h - 36) * Range(0, K));
-    //outLPyramid[0].root(Range(0, in.width()-32) * Range(0, in.height()-32));
-    //gPyramid[1].root(Range(-16, in.width()/2) * Range(-16, in.height()));
+    printf("Specifying a random schedule...\n");
 
-    input.root(Range(-128, w+256) * Range(-128, h+256));
-    //outLPyramid[0].root(Range(0, w) * Range(0, h));
-    //outGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
-    //outLPyramid[1].root(Range(0, w/2) * Range(0, h/2));
-    //outLPyramid[2].root(Range(0, w/4) * Range(0, h/4));
-
-    // For each image, root, or chunk on var of consumer, or inline
-    // if root or chunk, then split and vectorize? or unroll?
-    
-
-    srand(atoi(argv[3]));
-    int decision[20];
-    for (int i = 0; i < 20; i++) {
-        // 0 -> inline
-        // 1 -> root
-        // 2 -> root + vectorize
-        //decision[i] = rand() % 3;
-        decision[i] = 1;
-    }
-
-    /*
-    if (decision[0]) lPyramid[3].root(Range(0, w/8) * Range(0, h/8) * Range(0, K));
-    if (decision[1]) lPyramid[2].root(Range(0, w/4) * Range(0, h/4) * Range(0, K));
-    if (decision[2]) lPyramid[1].root(Range(0, w/2) * Range(0, h/2) * Range(0, K));
-    if (decision[3]) lPyramid[0].root(Range(0, w) * Range(0, h) * Range(0, K));
-    if (decision[4]) gPyramid[3].root(Range(0, w/8) * Range(0, h/8) * Range(0, K));
-    if (decision[5]) gPyramid[2].root(Range(0, w/4) * Range(0, h/4) * Range(0, K));
-    if (decision[6]) gPyramid[1].root(Range(0, w/2) * Range(0, h/2) * Range(0, K));
-    if (decision[7]) gPyramid[0].root(Range(0, w) * Range(0, h) * Range(0, K));
-    if (decision[8]) outLPyramid[3].root(Range(0, w/8) * Range(0, h/8));
-    if (decision[9]) outLPyramid[2].root(Range(0, w/4) * Range(0, h/4));
-    if (decision[10]) outLPyramid[1].root(Range(0, w/2) * Range(0, h/2));
-    if (decision[11]) outLPyramid[0].root(Range(0, w) * Range(0, h));
-    if (decision[12]) outGPyramid[3].root(Range(0, w/8) * Range(0, h/8));
-    if (decision[13]) outGPyramid[2].root(Range(0, w/4) * Range(0, h/4));
-    if (decision[14]) outGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
-    if (decision[15]) outGPyramid[0].root(Range(0, w) * Range(0, h));
-    if (decision[16]) inGPyramid[3].root(Range(0, w/8) * Range(0, h/8));
-    if (decision[17]) inGPyramid[2].root(Range(0, w/4) * Range(0, h/4));
-    if (decision[18]) inGPyramid[1].root(Range(0, w/2) * Range(0, h/2));
-    if (decision[19]) inGPyramid[0].root(Range(0, w) * Range(0, h));
-    */
-
-    if (decision[0]) lPyramid[3].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
-    if (decision[1]) lPyramid[2].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
-    if (decision[2]) lPyramid[1].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
-    if (decision[3]) lPyramid[0].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
-    if (decision[4]) gPyramid[3].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
-    if (decision[5]) gPyramid[2].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
-    if (decision[6]) gPyramid[1].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
-    if (decision[7]) gPyramid[0].root(Range(0, 0) * Range(0, 0) * Range(0, 0));
-    if (decision[8]) outLPyramid[3].root(Range(0, 0) * Range(0, 0));
-    if (decision[9]) outLPyramid[2].root(Range(0, 0) * Range(0, 0));
-    if (decision[10]) outLPyramid[1].root(Range(0, 0) * Range(0, 0));
-    if (decision[11]) outLPyramid[0].root(Range(0, w) * Range(0, 0));
-    if (decision[12]) outGPyramid[3].root(Range(0, 0) * Range(0, 0));
-    if (decision[13]) outGPyramid[2].root(Range(0, 0) * Range(0, 0));
-    if (decision[14]) outGPyramid[1].root(Range(0, 0) * Range(0, 0));
-    //if (decision[15]) outGPyramid[0].root(Range(0, 0) * Range(0, 0));
-    if (decision[16]) inGPyramid[3].root(Range(0, 0) * Range(0, 0));
-    if (decision[17]) inGPyramid[2].root(Range(0, 0) * Range(0, 0));
-    if (decision[18]) inGPyramid[1].root(Range(0, 0) * Range(0, 0));
-    if (decision[19]) inGPyramid[0].root(Range(0, 0) * Range(0, 0));
-
-    printf("Output has type %s\n", outGPyramid[0].returnType().str().c_str());
-
-    Func funcs[] = {lPyramid[3], lPyramid[2], lPyramid[1], lPyramid[0],
+    Func funcs[] = {gray, lPyramid[3], lPyramid[2], lPyramid[1], lPyramid[0],
                     gPyramid[3], gPyramid[2], gPyramid[1], gPyramid[0],
                     outLPyramid[3], outLPyramid[2], outLPyramid[1], outLPyramid[0],
                     outGPyramid[3], outGPyramid[2], outGPyramid[1], outGPyramid[0],
                     inGPyramid[3], inGPyramid[2], inGPyramid[1], inGPyramid[0]};
 
+    if (argc > 3) 
+        srand(atoi(argv[3]));
     for (int i = 0; i < 20; i++) {
-        if (decision[i] == 2) funcs[i].vectorize(x, 4);
+        int decision = rand() % 3;
+        switch (rand() % 3) {
+        case 0:
+            // inline
+            printf("Scheduling %s as inline\n", funcs[i].name().c_str());
+            break;
+        default:
+            // root
+            printf("Scheduling %s as root\n", funcs[i].name().c_str());
+            funcs[i].root();            
+        }
     }
 
-    //outGPyramid[0].trace();
-
     printf("Realizing...\n"); fflush(stdout);
-    Image<float> out = outGPyramid[0].realize(w, h);
+    Image<float> output = out.realize(in.width(), in.height(), in.channels());
 
     timeval t1, t2;
     gettimeofday(&t1, NULL);
-    out = outGPyramid[0].realize(w, h);
+    output = out.realize(in.width(), in.height(), in.channels());
     gettimeofday(&t2, NULL);
     double dt = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) * 0.000001;
 
     printf("Time: %f\n", dt);
 
-    save(out, argv[2]);
-
-    srand(atoi(argv[3]));
-    for (int i = 0; i < 20; i++) {
-        printf("%d\n", rand() % 3);
-    }
-
+    save(output, argv[2]);
 
     return 0;
 }
