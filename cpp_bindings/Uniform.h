@@ -3,6 +3,7 @@
 
 #include "Type.h"
 #include "Util.h"
+#include <assert.h>
 
 namespace FImage {
 

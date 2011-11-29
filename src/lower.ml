@@ -5,8 +5,6 @@ open Analysis
 open Util
 open Vectorize
 
-
-
 (* Lowering produces references to names either in the context of the
    callee or caller. The ones in the context of the caller may in fact
    refer to ones in the caller of the caller, or so on up the
@@ -204,7 +202,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
 
         let sched_list = List.map fix_bounds sched_list in
 
-        (* Pull nasty terms in the sched_list out so that they don't cascade *)
+        (* Pull nasty terms in the sched_list out so that they don't cascade when doing boundary inference *)
         let rec precompute_bounds (old_list: schedule list) (new_list: schedule list) (precomp: stmt list) (count: int) =
           let load1 = Load (Int 32, bounds_buffer_name, IntImm count) in
           let store1 x = Store (x, bounds_buffer_name, IntImm count) in
@@ -272,26 +270,20 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
           (* Wrap the pair into a pipeline object *)
           let pipeline = Pipeline (buffer_name, return_type, buffer_size, produce, consume) in
 
-          (* Maybe wrap the result in the code that precomputes the non-trivial strides *)
-          (*
-          let pipeline = 
-            if (precomp = []) then pipeline else
-              Pipeline (bounds_buffer_name, Int 32, IntImm (List.length precomp), Block precomp, pipeline)
-          in
-          *)
-
           (* Do a constant-folding pass 
           let pipeline = Constant_fold.constant_fold_stmt pipeline in *)
                       
-          (* Maybe wrap the pipeline in some debugging code  
-          let pipeline = if false then
-              let sizes = List.fold_left
-                (fun l (a, b) -> a::b::l)    
-                [] (List.rev strides) in  
-              Block [Print ("### Allocating " ^ name ^ " over ", sizes); Print ("### Using offset ", List.map fst strides); pipeline; Print ("### Discarding " ^ name ^ " over ", sizes)]
+          (* Maybe wrap the pipeline in some debugging code *)
+          let pipeline = if debug then
+              let sizes = List.fold_left 
+                (fun l (a, b) -> a::b::l)     
+                [] (List.rev strides) in   
+              Block [Print ("### Allocating " ^ name ^ " over ", sizes); 
+                     pipeline; 
+                     Print ("### Discarding " ^ name ^ " over ", sizes)]
             else
               pipeline 
-          in *)
+          in 
           
           pipeline
         in 
@@ -454,49 +446,6 @@ and realize (name, args, return_type, body) sched_list buffer_name strides debug
   else
     produce
 
-let rec topological_sort = function
-  | Pipeline (n1, t1, s1, produce, consume) as pipeline ->
-      (* Pull a nested chain of pipelines into a list *)
-      let rec listify_pipeline_chain = function
-        | Pipeline (n, t, s, p, c) ->
-            let (list, tail) = listify_pipeline_chain c in
-            ((n, t, s, p) :: list, tail)
-        | x -> ([], x)
-      in
-      let (chain, tail) = listify_pipeline_chain pipeline in
-
-      (* Do a selection-sort by repeatedly looking for an element that
-         does not depend on anything else in the todo list *)
-
-      let depends (_, _, s1, p1) (n2, _, _, _) = 
-        (* Does a reference to n2 appear in p1 or s1? *)
-        let rec expr_mutator = function
-          | Load (_, buf, _) when buf = n2 -> true
-          | x -> fold_children_in_expr expr_mutator (or) false x
-        and stmt_mutator x = fold_children_in_stmt expr_mutator stmt_mutator (or) x
-        in (stmt_mutator p1) or (expr_mutator s1)
-      in
-
-      let rec selection_sort = function
-        | (first::rest) ->
-            let rec find_first elems_before elem elems_after = 
-              let dep_before = List.fold_left (fun x y -> x or (depends elem y)) false elems_before in
-              let dep_after = List.fold_left (fun x y -> x or (depends elem y)) false elems_after in                  
-              if dep_before or dep_after then
-                match elems_after with
-                  | (first::rest) -> find_first (elem::elems_before) first rest
-                  | [] -> raise (Wtf "Circular dependency detected")
-              else
-                let (n, t, s, p) = elem in
-                Pipeline (n, t, s, p, selection_sort (elems_before @ elems_after))
-            in find_first [] first rest 
-        | [] -> tail
-      in
-
-      selection_sort chain
-  | x -> mutate_children_in_stmt (fun x -> x) topological_sort x
-
-
 (* TODO: @jrk Make debug an optional arg? *)
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) (debug:bool) =
   let starts_with a b =    
@@ -533,9 +482,9 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
 
   stmt
 
-  (* topological_sort stmt *)
-
   (*
+    TODO: move this into lower where bounds are inferred 
+    
   Printf.printf "Static bounds checking\n%!";
   let simplify_range = function
     | Bounds.Unbounded -> Bounds.Unbounded
@@ -553,25 +502,6 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
         Printf.printf "This region of %s is used: %s\n%!"  f
           (String.concat "*" (List.map string_of_range region_used))
   in
-
-  List.iter (fun f -> check f (bounds f)) functions;
-  Printf.printf "Replacing calls with loads\n%!";
-
-  
-  let lower_calls stmt f =
-    (* TODO: somewhat inefficient to rebuild the function bodies and schedules here *)
-    let (args, _, _) = make_function_body f env debug in
-    let (_, sched_list) = make_schedule f schedule in 
-    if sched_list = [] then 
-      stmt 
-    else begin
-      let strides = stride_list sched_list (List.map snd args) in 
-      Printf.printf "Replacing calls to %s with loads using strides %s\n" f (String.concat ", " (List.map (fun (x, y) -> ("[" ^ string_of_expr x ^ ", " ^ string_of_expr y ^ "]")) strides));
-      replace_calls_with_loads_in_stmt f (f ^ ".result") strides debug stmt
-    end
-  in
-
-  List.fold_left lower_calls stmt functions
   *)
 
 

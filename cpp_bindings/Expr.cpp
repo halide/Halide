@@ -68,6 +68,9 @@ namespace FImage {
         
         // The list of uniforms referred to
         std::vector<DynUniform> uniforms;
+
+        // The list of uniform images referred to
+        std::vector<UniformImage> uniformImages;
         
         // Sometimes it's useful to be able to tell if an expression is a simple var or not
         bool isVar;
@@ -113,6 +116,15 @@ namespace FImage {
                                                                    l.idx.node()),
                                                           l.image.type())) {
         contents->images.push_back(l.image);
+        child(l.idx);
+    }
+
+    Expr::Expr(const UniformImageRef &l) : contents(new Contents(makeLoad(l.image.type().mlval, 
+                                                                          (l.image.name()),
+                                                                          l.idx.node()),
+                                                                 l.image.type())) {
+        contents->uniformImages.push_back(l.image);
+        child(l.idx);
     }
 
     const MLVal &Expr::node() const {
@@ -147,6 +159,10 @@ namespace FImage {
         return contents->funcs;
     }
 
+    const std::vector<UniformImage> &Expr::uniformImages() const {
+        return contents->uniformImages;
+    }
+
     bool Expr::isDefined() const {
         return (bool)(contents);
     }
@@ -157,6 +173,7 @@ namespace FImage {
         unify(vars, c.vars());
         unify(funcs, c.funcs());
         unify(uniforms, c.uniforms());
+        unify(uniformImages, c.uniformImages());
         if (c.implicitArgs() > implicitArgs) implicitArgs = c.implicitArgs();
     }
 
@@ -349,6 +366,7 @@ namespace FImage {
             unify(images, f.f().rhs().images());
             unify(funcs, f.f().rhs().funcs());
             unify(uniforms, f.f().rhs().uniforms());
+            unify(uniformImages, f.f().rhs().uniformImages());
         }
 
         printf("Done making call node with %d implicit args\n", implicitArgs);
