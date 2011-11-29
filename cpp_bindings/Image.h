@@ -107,12 +107,48 @@ namespace FImage {
         unsigned char *data() const {return im.data();}
     };
 
+    
     class ImageRef {
     public:
         ImageRef(const DynImage &im, const Expr &idx) : image(im), idx(idx) {}
         const DynImage image;
         const Expr idx;
     };       
+    
+    class UniformImage {
+    public:
+        UniformImage(const Type &t, int dims);
+
+        void operator=(const DynImage &image);
+        unsigned char *data() const;
+
+        Expr operator()(const Expr &a) const;
+        Expr operator()(const Expr &a, const Expr &b) const;
+        Expr operator()(const Expr &a, const Expr &b, const Expr &c) const;
+        Expr operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) const;
+        Type type() const;
+        const std::string &name() const;
+        int dimensions() const;
+        const Uniform<int> &size(int i) const;
+
+        const Uniform<int> &width() const {return size(0);}
+        const Uniform<int> &height() const {return size(1);}
+        const Uniform<int> &channels() const {return size(2);}
+
+        // Compare for identity (not equality of contents)
+        bool operator==(const UniformImage &other) const;
+        
+    private:
+        struct Contents;
+        std::shared_ptr<Contents> contents;
+    };
+
+    class UniformImageRef {
+      public:
+        UniformImageRef(const UniformImage &im, const Expr &idx) : image(im), idx(idx) {}
+        const UniformImage image;
+        const Expr idx;
+    };
 
 }
 

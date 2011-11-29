@@ -418,16 +418,20 @@ namespace FImage {
         printf("\nMaking function...\n");           
         MLVal args = makeList();
         args = addToList(args, makeBufferArg(("result")));
+        for (size_t i = rhs().uniformImages().size(); i > 0; i--) {
+            MLVal arg = makeBufferArg(rhs().uniformImages()[i-1].name());
+            args = addToList(args, arg);
+        }
         for (size_t i = rhs().images().size(); i > 0; i--) {
-            MLVal arg = makeBufferArg((rhs().images()[i-1].name()));
+            MLVal arg = makeBufferArg(rhs().images()[i-1].name());
             args = addToList(args, arg);
         }
         for (size_t i = rhs().uniforms().size(); i > 0; i--) {
-            MLVal arg = makeBufferArg((rhs().uniforms()[i-1].name()));
+            MLVal arg = makeBufferArg(rhs().uniforms()[i-1].name());
             args = addToList(args, arg);
         }
         for (size_t i = contents->outputSize.size(); i > 0; i--) {
-            MLVal arg = makeBufferArg((contents->outputSize[i-1].name()));
+            MLVal arg = makeBufferArg(contents->outputSize[i-1].name());
             args = addToList(args, arg);
         }
         
@@ -534,6 +538,9 @@ namespace FImage {
         }
         for (size_t i = 0; i < rhs().images().size(); i++) {
             arguments[j++] = (void *)rhs().images()[i].data();
+        }       
+        for (size_t i = 0; i < rhs().uniformImages().size(); i++) {
+            arguments[j++] = (void *)rhs().uniformImages()[i].data();
         }
         arguments[j] = im.data();
 

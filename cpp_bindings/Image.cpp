@@ -1,6 +1,8 @@
 #include "Image.h"
 #include "Type.h"
 #include "Util.h"
+#include "Uniform.h"
+#include <assert.h>
 
 namespace FImage {
     struct DynImage::Contents {
@@ -95,4 +97,70 @@ namespace FImage {
         return ImageRef(*this, a*stride(0) + b*stride(1) + c*stride(2) + d*stride(3));
     }
 
+    struct UniformImage::Contents {
+        Contents(const Type &t, int dims) :
+            t(t), name(uniqueName('m')) {
+            sizes.resize(dims);
+        }
+
+        Type t;
+        std::unique_ptr<DynImage> image;
+        std::vector<Uniform<int>> sizes;
+        const std::string name;
+    };
+
+    UniformImage::UniformImage(const Type &t, int dims) : 
+        contents(new Contents(t, dims)) {
+    }
+
+    void UniformImage::operator=(const DynImage &image) {
+        assert(image.type() == contents->t);
+        assert((size_t)image.dimensions() == contents->sizes.size());
+        contents->image.reset(new DynImage(image));
+        for (int i = 0; i < image.dimensions(); i++) {
+            contents->sizes[i] = image.size(i);
+        }
+    }
+         
+    unsigned char *UniformImage::data() const {
+        assert(contents->image);
+        return contents->image->data();
+    }
+
+    bool UniformImage::operator==(const UniformImage &other) const {
+        return contents == other.contents;
+    }
+
+    Expr UniformImage::operator()(const Expr &a) const {
+        return UniformImageRef(*this, a);
+    }
+
+    Expr UniformImage::operator()(const Expr &a, const Expr &b) const {
+        return UniformImageRef(*this, a + size(0) * b);
+    }
+
+    Expr UniformImage::operator()(const Expr &a, const Expr &b, const Expr &c) const {
+        return UniformImageRef(*this, a + size(0) * (b + size(1) * c));
+    }
+
+    Expr UniformImage::operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) const {
+        return UniformImageRef(*this, a + size(0) * (b + size(1) * (c + size(2) * d)));
+    }
+    
+    Type UniformImage::type() const {
+        return contents->t;
+    }
+
+    const std::string &UniformImage::name() const {
+        return contents->name;
+    }
+    
+    int UniformImage::dimensions() const {
+        return contents->sizes.size();
+    }
+
+    const Uniform<int> &UniformImage::size(int i) const {
+        return contents->sizes[i];
+    }
+        
 }
