@@ -20,6 +20,14 @@ let rec constant_fold_expr expr =
     | Broadcast (UIntImm 1, _)
     | Broadcast (FloatImm 1.0, _) -> true
     | _ -> false
+  and is_const = function
+    | IntImm _ 
+    | UIntImm _ 
+    | FloatImm _
+    | Broadcast (IntImm _, _)
+    | Broadcast (UIntImm _, _)
+    | Broadcast (FloatImm _, _) -> true
+    | _ -> false
   in
 
   match expr with
@@ -71,11 +79,25 @@ let rec constant_fold_expr expr =
         | (Div, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a /~ b), n)
         | (Mod, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a %~ b), n)
 
-        (* Converting subtract negatives to addition (mostly for readability) *)
-        | (Sub, x, IntImm y) when y < 0 -> Bop (Add, x, IntImm (-y))
+        (* Converting subtraction to addition *)
+        | (Sub, x, IntImm y) -> recurse (x +~ (IntImm (-y)))
+        | (Sub, x, UIntImm y) -> recurse (x +~ (UIntImm (-y)))
+        | (Sub, x, FloatImm y) -> recurse (x +~ (FloatImm (-.y)))
+
+        (* Convert const + varying to varying + const (reduces the number of cases to check later) *)
+        | (Add, x, y) when is_const x -> recurse (y +~ x)
 
         (* Convert divide by float constants to multiplication *)
         | (Div, x, FloatImm y) -> Bop (Mul, x, FloatImm (1.0 /. y))
+
+        (* Ternary expressions that can be reassociated. Previous passes have cut down on the number we need to check. *)
+        (* (X + y) + z -> X + (y + z) *)
+        | (Add, Bop (Add, x, y), z) when is_const y && is_const z -> recurse (x +~ (y +~ z))
+        (* (x - Y) + z -> (x + z) - Y *)
+        | (Add, Bop (Sub, x, y), z) when is_const x && is_const z -> recurse ((x +~ z) -~ y)            
+
+        | (Min, x, y)
+        | (Max, x, y) when x = y -> x
 
         | (op, x, y) -> Bop (op, x, y)
       end
@@ -114,6 +136,7 @@ let rec constant_fold_expr expr =
       end
     | Select (c, a, b) ->
       begin match (recurse c, recurse a, recurse b) with
+        | (_, x, y) when x = y -> x
         | (UIntImm 0, _, x) -> x
         | (UIntImm 1, x, _) -> x
         | (c, x, y) -> Select (c, x, y)
@@ -123,6 +146,8 @@ let rec constant_fold_expr expr =
     | Broadcast (e, n) -> Broadcast (recurse e, n)
     | Ramp (b, s, n) -> Ramp (recurse b, recurse s, n)
     | ExtractElement (a, b) -> ExtractElement (recurse a, recurse b)
+
+    | Debug (e, n, args) -> Debug (recurse e, n, args)
 
     (* Immediates are unchanged *)
     | x -> x

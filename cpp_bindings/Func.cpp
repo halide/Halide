@@ -101,6 +101,9 @@ namespace FImage {
         
         // Should this function be compiled with tracing enabled
         bool tracing;
+
+        // The region over which the function is evaluated
+        std::vector<Uniform<int>> outputSize;
     };    
 
     Range operator*(const Range &a, const Range &b) {
@@ -368,7 +371,7 @@ namespace FImage {
         return im;
     }
 
-    void Func::realize(const DynImage &im) {
+    void Func::compile() {
         static llvm::ExecutionEngine *ee = NULL;
         static llvm::FunctionPassManager *passMgr = NULL;
 
@@ -376,144 +379,156 @@ namespace FImage {
             llvm::InitializeNativeTarget();
         }
 
-        if (!contents->functionPtr) {
-
-            // Make a region to evaluate this over
-            MLVal sizes = makeList();
-            for (size_t i = im.dimensions(); i > 0; i--) {                
-                sizes = addToList(sizes, (im.size(i-1)));
+        // Make a region to evaluate this over
+        contents->outputSize.resize(args().size());
+        MLVal sizes = makeList();        
+        for (size_t i = args().size(); i > 0; i--) {                
+            sizes = addToList(sizes, Expr(contents->outputSize[i-1]).node());
+        }
+        
+        MLVal sched = makeSchedule((name()),
+                                   sizes,
+                                   *Func::environment);
+        
+        printf("Transforming schedule...\n");
+        for (size_t i = 0; i < contents->scheduleTransforms.size(); i++) {
+            sched = contents->scheduleTransforms[i](sched);
+        }
+        
+        for (size_t i = 0; i < rhs().funcs().size(); i++) {
+            const Func &f = rhs().funcs()[i];
+            // Don't consider recursive dependencies for the
+            // purpose of applying schedule transformations. We
+            // already did that above.
+            if (f == *this) continue;
+            for (size_t j = 0; j < f.scheduleTransforms().size(); j++) {
+                MLVal t = f.scheduleTransforms()[j];
+                sched = t(sched);
             }
+        }
+        
+        printf("Done transforming schedule\n");
+        printSchedule(sched);
+        
+        MLVal stmt = doLower((name()), 
+                             *Func::environment,
+                             sched, contents->tracing);
+        
+        // Create a function around it with the appropriate number of args
+        printf("\nMaking function...\n");           
+        MLVal args = makeList();
+        args = addToList(args, makeBufferArg(("result")));
+        for (size_t i = rhs().images().size(); i > 0; i--) {
+            MLVal arg = makeBufferArg((rhs().images()[i-1].name()));
+            args = addToList(args, arg);
+        }
+        for (size_t i = rhs().uniforms().size(); i > 0; i--) {
+            MLVal arg = makeBufferArg((rhs().uniforms()[i-1].name()));
+            args = addToList(args, arg);
+        }
+        for (size_t i = contents->outputSize.size(); i > 0; i--) {
+            MLVal arg = makeBufferArg((contents->outputSize[i-1].name()));
+            args = addToList(args, arg);
+        }
+        
+        printf("compiling IR -> ll\n");
+        MLVal tuple = doCompile(args, stmt);
+        
+        printf("Extracting the resulting module and function\n");
+        MLVal first, second;
+        MLVal::unpackPair(tuple, first, second);
+        //LLVMModuleRef module = *((LLVMModuleRef *)(first.asVoidPtr()));
+        //LLVMValueRef func = *((LLVMValueRef *)(second.asVoidPtr()));
+        LLVMModuleRef module = (LLVMModuleRef)(first.asVoidPtr());
+        LLVMValueRef func = (LLVMValueRef)(second.asVoidPtr());
+        llvm::Function *f = llvm::unwrap<llvm::Function>(func);
+        llvm::Module *m = llvm::unwrap(module);
 
-            MLVal sched = makeSchedule((name()),
-                                       sizes,
-                                       *Func::environment);
-
-            printf("Transforming schedule...\n");
-            printSchedule(sched);
-            for (size_t i = 0; i < contents->scheduleTransforms.size(); i++) {
-                sched = contents->scheduleTransforms[i](sched);
-                printSchedule(sched);
-            }
-            
-            for (size_t i = 0; i < rhs().funcs().size(); i++) {
-                const Func &f = rhs().funcs()[i];
-                // Don't consider recursive dependencies for the
-                // purpose of applying schedule transformations. We
-                // already did that above.
-                if (f == *this) continue;
-                for (size_t j = 0; j < f.scheduleTransforms().size(); j++) {
-                    MLVal t = f.scheduleTransforms()[j];
-                    sched = t(sched);
-                    printSchedule(sched);
-                }
-            }
-
-            printf("Done transforming schedule\n");
-
-            MLVal stmt = doLower((name()), 
-                                 *Func::environment,
-                                 sched, contents->tracing);
-
-            // Create a function around it with the appropriate number of args
-            printf("\nMaking function...\n");           
-            MLVal args = makeList();
-            args = addToList(args, makeBufferArg(("result")));
-            for (size_t i = rhs().images().size(); i > 0; i--) {
-                MLVal arg = makeBufferArg((rhs().images()[i-1].name()));
-                args = addToList(args, arg);
-            }
-            for (size_t i = rhs().uniforms().size(); i > 0; i--) {
-                MLVal arg = makeBufferArg((rhs().uniforms()[i-1].name()));
-                args = addToList(args, arg);
-            }
-
-            printStmt(stmt);
-
-            printf("compiling IR -> ll\n");
-            MLVal tuple = doCompile(args, stmt);
-
-            printf("Extracting the resulting module and function\n");
-            MLVal first, second;
-            MLVal::unpackPair(tuple, first, second);
-            //LLVMModuleRef module = *((LLVMModuleRef *)(first.asVoidPtr()));
-            //LLVMValueRef func = *((LLVMValueRef *)(second.asVoidPtr()));
-            LLVMModuleRef module = (LLVMModuleRef)(first.asVoidPtr());
-            LLVMValueRef func = (LLVMValueRef)(second.asVoidPtr());
-            llvm::Function *f = llvm::unwrap<llvm::Function>(func);
-            llvm::Module *m = llvm::unwrap(module);
-
+        if (!ee) {
+            std::string errStr;
+            ee = llvm::EngineBuilder(m).setErrorStr(&errStr).setOptLevel(llvm::CodeGenOpt::Aggressive).create();
             if (!ee) {
-                std::string errStr;
-                ee = llvm::EngineBuilder(m).setErrorStr(&errStr).setOptLevel(llvm::CodeGenOpt::Aggressive).create();
-                if (!ee) {
-                    printf("Couldn't create execution engine: %s\n", errStr.c_str()); 
-                    exit(1);
-                }
-
-                // Set up the pass manager
-                passMgr = new llvm::FunctionPassManager(m);
-
-            } else { 
-                ee->addModule(m);
-            }            
-
-            llvm::Function *inner = m->getFunction("_im_main");
-
-            if (!inner) {
-                printf("Could not find function _im_main");
+                printf("Couldn't create execution engine: %s\n", errStr.c_str()); 
                 exit(1);
             }
-
-            printf("optimizing ll...\n");
-
-            std::string errstr;
-            llvm::raw_fd_ostream stdout("passes.txt", errstr);
-  
-            passMgr->add(new llvm::TargetData(*ee->getTargetData()));
-            //passMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
-
-            // AliasAnalysis support for GVN
-            passMgr->add(llvm::createBasicAliasAnalysisPass());
-            //passMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
-
-            // Reassociate expressions
-            passMgr->add(llvm::createReassociatePass());
-            //passMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
-
-            // Simplify CFG (delete unreachable blocks, etc.)
-            passMgr->add(llvm::createCFGSimplificationPass());
-            //passMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
-
-            // Eliminate common sub-expressions
-            passMgr->add(llvm::createGVNPass());
-            //passMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
-
-            // Peephole, bit-twiddling optimizations
-            passMgr->add(llvm::createInstructionCombiningPass());
-            //passMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
             
-            passMgr->doInitialization();
-
-            if (passMgr->run(*inner)) {
-                printf("optimization did something.\n");
-            } else {
-                printf("optimization did nothing.\n");
-            }
-
-            passMgr->doFinalization();
-
-            printf("compiling ll -> machine code...\n");
-            void *ptr = ee->getPointerToFunction(f);
-            contents->functionPtr = (void (*)(void*))ptr;
-
-            printf("dumping machine code to file...\n");
-            saveELF("generated.o", ptr, 8192);            
-            printf("Done dumping machine code to file\n");
+            // Set up the pass manager
+            passMgr = new llvm::FunctionPassManager(m);
+            
+        } else { 
+            ee->addModule(m);
+        }            
+        
+        llvm::Function *inner = m->getFunction("_im_main");
+        
+        if (!inner) {
+            printf("Could not find function _im_main");
+            exit(1);
         }
+        
+        printf("optimizing ll...\n");
+        
+        std::string errstr;
+        llvm::raw_fd_ostream stdout("passes.txt", errstr);
+        
+        passMgr->add(new llvm::TargetData(*ee->getTargetData()));
+        //passMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
+        
+        // AliasAnalysis support for GVN
+        passMgr->add(llvm::createBasicAliasAnalysisPass());
+        //passMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
+        
+        // Reassociate expressions
+        passMgr->add(llvm::createReassociatePass());
+        //passMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
+        
+        // Simplify CFG (delete unreachable blocks, etc.)
+        passMgr->add(llvm::createCFGSimplificationPass());
+        //passMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
+        
+        // Eliminate common sub-expressions
+        passMgr->add(llvm::createGVNPass());
+        //passMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
+        
+        // Peephole, bit-twiddling optimizations
+        passMgr->add(llvm::createInstructionCombiningPass());
+        //passMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
+        
+        passMgr->doInitialization();
+        
+        if (passMgr->run(*inner)) {
+            printf("optimization did something.\n");
+        } else {
+            printf("optimization did nothing.\n");
+        }
+        
+        passMgr->doFinalization();
+        
+        printf("compiling ll -> machine code...\n");
+        void *ptr = ee->getPointerToFunction(f);
+        contents->functionPtr = (void (*)(void*))ptr;
+        
+        printf("dumping machine code to file...\n");
+        saveELF("generated.o", ptr, 8192);            
+        printf("Done dumping machine code to file\n");
+        
+    }
+
+    void Func::realize(const DynImage &im) {
+
+        if (!contents->functionPtr) compile();
 
         printf("Constructing argument list...\n");
         static void *arguments[256];
         size_t j = 0;
+        for (size_t i = 0; i < contents->outputSize.size(); i++) {
+            // Set and use the uniform in one place. It's a little
+            // useless because nobody ever actually uses the value
+            // of the uniform, but better to be consistent in case it
+            // comes up later.
+            contents->outputSize[i] = im.size(i);
+            arguments[j++] = contents->outputSize[i].data();
+        }
         for (size_t i = 0; i < rhs().uniforms().size(); i++) {
             arguments[j++] = rhs().uniforms()[i].data();
         }
@@ -521,6 +536,12 @@ namespace FImage {
             arguments[j++] = (void *)rhs().images()[i].data();
         }
         arguments[j] = im.data();
+
+        printf("Args: ");
+        for (size_t i = 0; i <= j; i++) {
+            printf("%p ", arguments[i]);
+        }
+        printf("\n");
 
         printf("Calling function at %p\n", contents->functionPtr); 
         contents->functionPtr(&arguments[0]); 
