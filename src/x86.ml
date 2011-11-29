@@ -25,3 +25,10 @@ let initial_module_x86 c =
 
   m
 
+let malloc_x86 (c:llcontext) (m:llmodule) (b:llbuilder) (cg_expr : expr -> llvalue) (expr : expr) =
+  let malloc = declare_function "malloc" (function_type (pointer_type (i8_type c)) [|i64_type c|]) m in
+  build_call malloc [|cg_expr (Cast (Int 64, expr))|] "" b  
+
+let free_x86 (c:llcontext) (m:llmodule) (b:llbuilder) (address:llvalue) =
+  let free = declare_function "free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
+  build_call free [|address|] "" b   

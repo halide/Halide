@@ -8,6 +8,8 @@ open Ir
 type architecture = {
   cg_expr : llcontext -> llmodule -> llbuilder -> (expr -> llvalue) -> expr -> llvalue;
   cg_stmt : llcontext -> llmodule -> llbuilder -> (stmt -> llvalue) -> stmt -> llvalue;
+  malloc : llcontext -> llmodule -> llbuilder -> (expr -> llvalue) -> expr -> llvalue;
+  free : llcontext -> llmodule -> llbuilder -> llvalue -> llvalue;
   (* codegen : llcontext -> entrypoint -> llmodule * llvalue; *)
   (* TODO: this postprocess_function interface is ugly, but the easiest hack around
    * circular dependencies for now. *)
@@ -29,6 +31,8 @@ let codegen_ptx c e =
 let x86 = {
   cg_expr = cg_expr_x86;
   cg_stmt = cg_stmt_x86;
+  malloc = malloc_x86;
+  free = free_x86;
   (* codegen = codegen_x86; *)
   postprocess_function = (fun _ -> ());
   initial_module = initial_module_x86
@@ -37,6 +41,8 @@ let x86 = {
 let arm = {
   cg_expr = cg_expr_arm;
   cg_stmt = cg_stmt_arm;
+  malloc = (fun _ _ _ _ _ -> raise (Wtf "No malloc for arm yet"));
+  free = (fun _ _ _ _ -> raise (Wtf "No free for arm yet"));
   (* codegen = codegen_arm; *)
   postprocess_function = (fun _ -> ());
   initial_module = initial_module_arm
@@ -45,6 +51,8 @@ let arm = {
 let ptx = {
   cg_expr = cg_expr_ptx;
   cg_stmt = cg_stmt_ptx;
+  malloc = (fun _ _ _ _ _ -> raise (Wtf "No malloc for ptx yet"));
+  free = (fun _ _ _ _ -> raise (Wtf "No free for ptx yet"));
   (* codegen = codegen_ptx; *)
   postprocess_function = postprocess_function_ptx;
   initial_module = initial_module_ptx

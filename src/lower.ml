@@ -136,10 +136,45 @@ let rec replace_calls_with_loads_in_stmt function_name buffer_name strides debug
     (replace_calls_with_loads_in_stmt function_name buffer_name strides debug) 
     stmt
 
-let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (functions:string list) (debug:bool) =
+let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (functions:string list) (precomp: stmt list) (debug:bool) =
+  let bounds_buffer_name = "_size" in
   match functions with
-    | [] -> stmt (* Done lowering *)
-    | (name::rest) ->
+    | [] -> 
+        (* Nearly done lowering, now inject all the precomputations of buffer sizes at the start *)
+        let lt a b =
+          (* does the values consumed by a require the value stored by b? *)
+          let load_b = match b with
+            | Store (expr, buf, idx) -> Load (i32, buf, idx)
+            | _ -> raise (Wtf "found a statement in the precomputations list that isn't a store\n")                
+          and load_a = match a with
+            | Store (expr, buf, idx) -> Load (i32, buf, idx)
+            | _ -> raise (Wtf "found a statement in the precomputations list that isn't a store\n")
+          in 
+          match (stmt_contains_expr load_b a, stmt_contains_expr load_a b) with
+            | (false, false) -> None
+            | (true, false) -> Some false
+            | (false, true) -> Some true
+            | (true, true) -> raise (Wtf "circular dependence found in precomputation list\n")
+        in
+
+        (* Print out all the sizes  *)
+        let print_sizes = if debug then List.map
+            (fun x -> Print ("_size ", [IntImm x; Load (i32, bounds_buffer_name, IntImm x)])) 
+            (0 -- (List.length precomp))
+          else []
+        in
+
+        let precomp = partial_sort lt precomp in
+
+        let produce = Block (precomp @ print_sizes) in
+
+        begin match produce with 
+          | (Block []) -> stmt
+          | _ ->
+              Pipeline (bounds_buffer_name, Int 32, IntImm (List.length precomp), produce, stmt)
+        end
+
+    | (name::rest) ->        
 
         (* Grab the body of the function call *)
         let (args, return_type, body) = make_function_body name env debug in
@@ -157,19 +192,68 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
           | Serial (name, IntImm 0, IntImm 0) -> begin
             match snd (range_of_dim name) with
               | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
-              | Bounds.Range (min, max) -> Serial (name, min, max -~ min +~ IntImm 1)
+              | Bounds.Range (min, max) -> Serial (name, min, Constant_fold.constant_fold_expr (max -~ min +~ IntImm 1))
           end
           | Parallel (name, IntImm 0, IntImm 0) -> begin
             match snd (range_of_dim name) with
               | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
-              | Bounds.Range (min, max) -> Parallel (name, min, max -~ min +~ IntImm 1)
+              | Bounds.Range (min, max) -> Parallel (name, min, Constant_fold.constant_fold_expr (max -~ min +~ IntImm 1))
           end
           | x -> x
         in
 
         let sched_list = List.map fix_bounds sched_list in
 
-        Printf.printf "Lowering function %s with call_sched %s\n" name (string_of_call_schedule call_sched);
+        (* Pull nasty terms in the sched_list out so that they don't cascade *)
+        let rec precompute_bounds (old_list: schedule list) (new_list: schedule list) (precomp: stmt list) (count: int) =
+          let load1 = Load (Int 32, bounds_buffer_name, IntImm count) in
+          let store1 x = Store (x, bounds_buffer_name, IntImm count) in
+          let load2 = Load (Int 32, bounds_buffer_name, IntImm (count+1)) in
+          let store2 x = Store (x, bounds_buffer_name, IntImm (count+1)) in
+          let recurse1 rest s p = precompute_bounds rest (s::new_list) (p::precomp) (count+1) in
+          let recurse2 rest s p1 p2 = precompute_bounds rest (s::new_list) (p1::p2::precomp) (count+2) in
+          let is_trivial = function
+            | IntImm _ -> true
+            | Load (_, _, IntImm _) -> true
+            | expr -> 
+                Printf.printf "Non-trivial: %s\n%!" (string_of_expr expr);
+                false;
+          in
+          (* TODO: this will break if we have bounds that depend on a loop variable *)
+          match old_list with
+            (* Constant terms don't need lifting *)
+            | [] -> (List.rev new_list, List.rev precomp)
+            | (Unrolled (_, m, _))::rest
+            | (Vectorized (_, m, _))::rest 
+            | (Split (_, _, _, m))::rest when is_trivial m ->
+                precompute_bounds rest ((List.hd old_list)::new_list) precomp count                
+            | (Parallel (_, m, s))::rest
+            | (Serial (_, m, s))::rest when is_trivial m && is_trivial s ->
+                precompute_bounds rest ((List.hd old_list)::new_list) precomp count                
+            (* One term to lift *)
+            | (Unrolled (n, m, s))::rest ->
+                recurse1 rest (Unrolled (n, load1, s)) (store1 m)
+            | (Vectorized (n, m, s))::rest ->
+                recurse1 rest (Vectorized (n, load1, s)) (store1 m)
+            | (Serial (n, m, s))::rest when is_trivial s->
+                recurse1 rest (Serial (n, load1, s)) (store1 m)
+            | (Parallel (n, m, s))::rest when is_trivial s->
+                recurse1 rest (Parallel (n, load1, s)) (store1 m)
+            | (Serial (n, m, s))::rest when is_trivial m ->
+                recurse1 rest (Serial (n, m, load1)) (store1 s)
+            | (Parallel (n, m, s))::rest when is_trivial m ->
+                recurse1 rest (Parallel (n, m, load1)) (store1 s)
+            | (Split (a, b, c, m))::rest ->
+                recurse1 rest (Split (a, b, c, load1)) (store1 m)
+            (* Two terms to lift *)
+            | (Parallel (n, m, s))::rest ->
+                recurse2 rest (Parallel (n, load1, load2)) (store1 m) (store2 s)
+            | (Serial (n, m, s))::rest ->
+                recurse2 rest (Serial (n, load1, load2)) (store1 m) (store2 s)
+        in
+        let (sched_list, precomp) = precompute_bounds sched_list [] precomp (List.length precomp) in 
+
+        Printf.printf "Lowering function %s with call_sched %s\n%!" name (string_of_call_schedule call_sched);
 
         (* Make a function to use for scheduling chunks and roots *)
         let make_pipeline stmt = 
@@ -184,19 +268,33 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
           let produce = realize (name, args, return_type, body) sched_list buffer_name strides debug in
           (* Generate the code that consumes the result by replacing calls with loads *)
           let consume = replace_calls_with_loads_in_stmt name buffer_name strides debug stmt in 
-          (* let consume = stmt in *)
+
           (* Wrap the pair into a pipeline object *)
           let pipeline = Pipeline (buffer_name, return_type, buffer_size, produce, consume) in
+
+          (* Maybe wrap the result in the code that precomputes the non-trivial strides *)
+          (*
+          let pipeline = 
+            if (precomp = []) then pipeline else
+              Pipeline (bounds_buffer_name, Int 32, IntImm (List.length precomp), Block precomp, pipeline)
+          in
+          *)
+
+          (* Do a constant-folding pass 
+          let pipeline = Constant_fold.constant_fold_stmt pipeline in *)
                       
-          (* Maybe wrap the pipeline in some debugging code *)
-          if false then
-            let sizes = List.fold_left
-              (fun l (a, b) -> a::b::l)    
-              [] (List.rev strides) in  
-            Block [pipeline; Print ("### Discarding " ^ name ^ " over ", sizes)]
-          else
-            pipeline
-        in
+          (* Maybe wrap the pipeline in some debugging code  
+          let pipeline = if false then
+              let sizes = List.fold_left
+                (fun l (a, b) -> a::b::l)    
+                [] (List.rev strides) in  
+              Block [Print ("### Allocating " ^ name ^ " over ", sizes); Print ("### Using offset ", List.map fst strides); pipeline; Print ("### Discarding " ^ name ^ " over ", sizes)]
+            else
+              pipeline 
+          in *)
+          
+          pipeline
+        in 
 
         let scheduled_call = 
           match call_sched with
@@ -242,8 +340,8 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
             end
             | _ -> raise (Wtf "I don't know how to schedule this yet")
         in
-        (* Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call); *)
-        lower_stmt scheduled_call env schedule rest debug
+        Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call); 
+        lower_stmt scheduled_call env schedule rest precomp debug
 
 
 
@@ -431,9 +529,11 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   Printf.printf "Realizing root statement\n%!";
   let core = (realize (func, args, return_type, body) sched_list ".result" strides debug) in
   Printf.printf "Recursively lowering function calls\n%!";
-  let stmt = lower_stmt core env schedule (List.filter (fun x -> x <> func) functions) debug in
+  let stmt = lower_stmt core env schedule (List.filter (fun x -> x <> func) functions) [] debug in
 
   stmt
+
+  (* topological_sort stmt *)
 
   (*
   Printf.printf "Static bounds checking\n%!";

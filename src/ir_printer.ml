@@ -36,7 +36,7 @@ and string_of_expr = function
   | Select(c, t, f) ->
     "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
   | Var(t, s) -> s
-  | Load(t, b, i) -> "load(" ^ string_of_val_type t ^ "," ^ string_of_buffer b ^ "[" ^ string_of_expr i ^ "])"
+  | Load(t, b, i) -> string_of_buffer b ^ "[" ^ string_of_expr i ^ "])"
   | Call(t, name, args) -> name ^ "<" ^ string_of_val_type t ^ ">(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ")"
   | MakeVector l -> "vec[" ^ (String.concat ", " (List.map string_of_expr l)) ^ "]"
   | Broadcast(e, n) -> "broadcast[" ^ string_of_expr e ^ ", " ^ string_of_int n ^ "]"
@@ -70,11 +70,10 @@ and string_of_stmt stmt =
              sp ^ string_of_expr e ^ ";\n")             
         
       | Pipeline(name, ty, size, produce, consume) -> 
-          (p ^ "pipeline " ^ name ^ "[" ^ string_of_expr size ^ "] {\n" ^ 
+          (p ^ "produce " ^ name ^ "[" ^ string_of_expr size ^ "] {\n" ^ 
              string_stmt sp produce ^ 
-             p ^ "} consumer {" ^ "\n" ^ 
-             string_stmt sp consume ^
-             p ^ "}\n")
+             p ^ "}\n" ^
+             string_stmt p consume)
       | Print (m, l) -> p ^ "Print(" ^ m ^ (String.concat ", " (List.map string_of_expr l)) ^ ")"
           
   in

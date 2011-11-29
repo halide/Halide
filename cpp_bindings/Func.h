@@ -72,6 +72,8 @@ namespace FImage {
         // Print every time this function gets evaluated
         void trace();
         
+        void compile();
+
         // Generate an image from this function by Jitting the IR and running it.
         DynImage realize(int a);
         DynImage realize(int a, int b);
