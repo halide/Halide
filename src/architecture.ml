@@ -15,6 +15,7 @@ type architecture = {
    * circular dependencies for now. *)
   postprocess_function : llvalue -> unit;
   initial_module : llcontext -> llmodule;
+  env : environment;
 }
 
 (* This is ugly, but these have to live here for the moment to avoid circular dependencies *)
@@ -35,7 +36,8 @@ let x86 = {
   free = free_x86;
   (* codegen = codegen_x86; *)
   postprocess_function = (fun _ -> ());
-  initial_module = initial_module_x86
+  initial_module = initial_module_x86;
+  env = Environment.empty;
 }
 
 let arm = {
@@ -45,7 +47,8 @@ let arm = {
   free = (fun _ _ _ _ -> raise (Wtf "No free for arm yet"));
   (* codegen = codegen_arm; *)
   postprocess_function = (fun _ -> ());
-  initial_module = initial_module_arm
+  initial_module = initial_module_arm;
+  env = Environment.empty;
 }
 
 let ptx = {
@@ -55,7 +58,8 @@ let ptx = {
   free = (fun _ _ _ _ -> raise (Wtf "No free for ptx yet"));
   (* codegen = codegen_ptx; *)
   postprocess_function = postprocess_function_ptx;
-  initial_module = initial_module_ptx
+  initial_module = initial_module_ptx;
+  env = env_ptx;
 }
 
 let host = 
