@@ -196,9 +196,9 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     | Bop(Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
     | Bop(Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
     | Bop(Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
-    | Bop(Mod, l, r) -> cg_binop build_srem build_urem build_frem l r
-    | Bop(Min, l, r) -> cg_minmax Min r l
+    | Bop(Min, l, r) -> cg_minmax Min l r
     | Bop(Max, l, r) -> cg_minmax Max l r
+    | Bop(Mod, l, r) -> cg_mod l r
 
     (* comparison *)
     | Cmp(EQ, l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r
@@ -302,10 +302,22 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     in
       build (cg_expr l) (cg_expr r) "" b
 
+  and cg_mod l r =
+    match val_type_of_expr l with
+      | Float _ | FloatVector (_, _) -> build_frem (cg_expr l) (cg_expr r) "" b
+      | UInt _ | UIntVector (_, _) -> build_urem (cg_expr l) (cg_expr r) "" b
+      | _ -> 
+          (* l % r is not necessarily positive, but ((l % r) + r) % r
+             should be. *)
+          let r = cg_expr r and l = cg_expr l in
+          let initial_mod = build_srem l r "" b in
+          let made_positive = build_add initial_mod r "" b in
+          build_srem made_positive r "" b
+
   and cg_minmax op l r =
     let cmp = match op with Min -> LT | Max -> GT | _ -> raise (Wtf "cg_minmax with non-min/max op") in
     cg_expr (Select (Cmp (cmp, l, r), l, r))
-  
+      
   and cg_cmp iop uop fop l r =
     cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
 
@@ -548,7 +560,7 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
         sym_remove name;
 
         (* free the scratch *)
-        if dynamic then ignore (arch.free c m b scratch) else ();
+        if dynamic then ignore (arch.free c m b scratch) else (); 
 
         res
     | Print (fmt, args) -> cg_print fmt args

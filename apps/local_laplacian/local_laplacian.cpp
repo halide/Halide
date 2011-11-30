@@ -58,8 +58,8 @@ Expr gaussian(Expr x) {
 }
 
 // Remap x using y as the central point, an amplitude of alpha, and a std.dev of sigma
-Expr remap(Expr x, Expr y, float alpha, float sigma) {
-    return x + ((x - y)/sigma) * (alpha * sigma) * gaussian((x - y)/sigma);
+Expr remap(Expr x, Expr y, float alpha, float beta, float sigma) {
+    return y + beta*(x - y) + ((x - y)/sigma) * (alpha * sigma) * gaussian((x - y)/sigma);
 }
 
 Func downsample(Func f) {
@@ -82,6 +82,9 @@ Func upsample(Func f) {
     Var x, y;
     Func upx, upy;
 
+    //upy(x, y) = f(x/2, y/2);
+    //return upy;
+
     printf("Upsampling in x\n");
     upx(x, y) = 0.25f * f((x/2) - 1 + 2*(x % 2), y) + 0.75f * f(x/2, y);
 
@@ -100,7 +103,7 @@ public:
     UniformImage input;
     Func output;
 
-    LocalLaplacian(int K, int J, int seed) : input(Float(32), 3) {
+    LocalLaplacian(int K, int J, float alpha, float beta, int seed) : input(Float(32), 3) {
 
         // K is intensity levels
         // J is pyramid levels
@@ -109,7 +112,7 @@ public:
         Var x, y, c, k;
         
         printf("Setting boundary condition\n");
-        Func clamped("input");
+        Func clamped("clamped");
         clamped(x, y, c) = input(Clamp(x, 0, input.width()-1), Clamp(y, 0, input.height()-1), c);
         
         printf("Defining luminance\n");
@@ -118,7 +121,7 @@ public:
         
         printf("Defining processed gaussian pyramid\n");
         Func gPyramid[J];
-        gPyramid[0](x, y, k) = remap(gray(x, y), Cast<float>(k) / (K-1), 1.0f, 1.0f / (K-1));
+        gPyramid[0](x, y, k) = remap(gray(x, y), Cast<float>(k) / (K-1), alpha, beta, 1.0f / (K-1));
         for (int j = 1; j < J; j++)
             gPyramid[j] = downsample(gPyramid[j-1]);
         
@@ -156,14 +159,16 @@ public:
         output(x, y, c) = outGPyramid[0](x, y) * clamped(x, y, c) / gray(x, y);
         
         printf("Specifying a random schedule...\n");
-        Func funcs[] = {gray, lPyramid[3], lPyramid[2], lPyramid[1], lPyramid[0],
-                        gPyramid[3], gPyramid[2], gPyramid[1], gPyramid[0],
-                        outLPyramid[3], outLPyramid[2], outLPyramid[1], outLPyramid[0],
-                        outGPyramid[3], outGPyramid[2], outGPyramid[1], outGPyramid[0],
-                        inGPyramid[3], inGPyramid[2], inGPyramid[1], inGPyramid[0]};
-        
+        std::vector<Func> funcs;
+        funcs.push_back(clamped);
+        funcs.push_back(gray);
+        funcs.insert(funcs.end(), lPyramid, lPyramid+J);
+        funcs.insert(funcs.end(), gPyramid, gPyramid+J);
+        funcs.insert(funcs.end(), outLPyramid, outLPyramid+J);        
+        funcs.insert(funcs.end(), outGPyramid, outGPyramid+J);        
+        funcs.insert(funcs.end(), inGPyramid, inGPyramid+J);
 
-        for (int i = 0; i < 20; i++) {
+        for (size_t i = 0; i < funcs.size(); i++) {
             int decision = rand() % 3;
             switch (rand() % 3) {
             case 1:
@@ -177,45 +182,31 @@ public:
             }
         }
         
-        //out.trace();
+        //output.trace();
         
         printf("Compiling...\n"); fflush(stdout);
+        // output(x, y, c) = outGPyramid[0];
         output.compile();
     }
     
     Image<float> operator()(Image<float> im) {
         input = im;
-        return output.realize(im.width(), im.height(), im.channels());
+        Image<float> out = output.realize(im.width(), im.height(), im.channels());
+        printf("input = %f, output = %f\n", im(0, 0, 0), out(0, 0, 0));
+        return out;
     }
 };
 
 
 int main(int argc, char **argv) {
 
-    // Compile a local-laplacian operator with 4 intensity levels, 8
-    // pyramid levels, and a scheduling seed given on the command
-    // line.
-    LocalLaplacian ll(4, 8, atoi(argv[3]));
-
-    // Load the input image
-    Image<float> input = load(argv[1]);
-
-    timeval t1, t2;
-    gettimeofday(&t1, NULL);
-
-    // Compute the output
-    Image<float> output = ll(input);
-
-    gettimeofday(&t2, NULL);
-    double dt = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) * 0.000001;
-    printf("Time taken: %f\n", dt);
+    Image<float> im = load(argv[1]);
+    LocalLaplacian ll(8, 8, atof(argv[3]), atof(argv[4]), 1);
+    printf("%f\n", im(0, 0, 0));
+    Image<float> out = ll(im);
+    save(out, argv[2]);
     
-    // Save the output
-    save(output, argv[2]);
-
-    // Compile and run a version with more intensity levels and fewer pyramid levels
-    save(LocalLaplacian(8, 4, 0)(input), "bonus.tmp");
-    
+    printf("Done\n");
     return 0;
 }
 
