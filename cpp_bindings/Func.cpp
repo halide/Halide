@@ -41,7 +41,9 @@ namespace FImage {
     ML_FUNC1(printStmt);
     ML_FUNC1(printSchedule);
     ML_FUNC1(makeBufferArg); // name
-    ML_FUNC2(doCompile); // stmt
+    ML_FUNC2(makeScalarArg); // name, type
+    ML_FUNC3(doCompile); // name, args, stmt
+    ML_FUNC3(doCompileToFile); // name, args, stmt
     ML_FUNC2(makePair);
 
     struct FuncRef::Contents {
@@ -427,17 +429,21 @@ namespace FImage {
             args = addToList(args, arg);
         }
         for (size_t i = rhs().uniforms().size(); i > 0; i--) {
-            MLVal arg = makeBufferArg(rhs().uniforms()[i-1].name());
+            const DynUniform &u = rhs().uniforms()[i-1];
+            MLVal arg = makeScalarArg(u.name(), u.type().mlval);
             args = addToList(args, arg);
         }
         for (size_t i = contents->outputSize.size(); i > 0; i--) {
-            MLVal arg = makeBufferArg(contents->outputSize[i-1].name());
+            const DynUniform &u = contents->outputSize[i-1];
+            MLVal arg = makeScalarArg(u.name(), u.type().mlval);
             args = addToList(args, arg);
         }
         
         printf("compiling IR -> ll\n");
-        MLVal tuple = doCompile(args, stmt);
+        MLVal tuple = doCompile(name(), args, stmt);
         
+        doCompileToFile(name(), args, stmt);
+
         printf("Extracting the resulting module and function\n");
         MLVal first, second;
         MLVal::unpackPair(tuple, first, second);
@@ -463,10 +469,11 @@ namespace FImage {
             ee->addModule(m);
         }            
         
-        llvm::Function *inner = m->getFunction("_im_main");
+        std::string functionName = name() + "_c_wrapper";
+        llvm::Function *inner = m->getFunction(functionName.c_str());
         
         if (!inner) {
-            printf("Could not find function _im_main");
+            printf("Could not find function %s", functionName.c_str());
             exit(1);
         }
         
@@ -524,7 +531,9 @@ namespace FImage {
 
         printf("Constructing argument list...\n");
         static void *arguments[256];
+        static void *imageBase[256];
         size_t j = 0;
+        size_t k = 0;
         for (size_t i = 0; i < contents->outputSize.size(); i++) {
             // Set and use the uniform in one place. It's a little
             // useless because nobody ever actually uses the value
@@ -537,12 +546,15 @@ namespace FImage {
             arguments[j++] = rhs().uniforms()[i].data();
         }
         for (size_t i = 0; i < rhs().images().size(); i++) {
-            arguments[j++] = (void *)rhs().images()[i].data();
+            imageBase[k++] = (void *)rhs().images()[i].data();
+            arguments[j++] = imageBase + (k-1);
         }       
         for (size_t i = 0; i < rhs().uniformImages().size(); i++) {
-            arguments[j++] = (void *)rhs().uniformImages()[i].data();
+            imageBase[k++] = (void *)rhs().uniformImages()[i].data();
+            arguments[j++] = imageBase + (k-1);
         }
-        arguments[j] = im.data();
+        imageBase[k] = im.data();
+        arguments[j] = imageBase + k;
 
         printf("Args: ");
         for (size_t i = 0; i <= j; i++) {

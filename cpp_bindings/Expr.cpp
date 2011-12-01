@@ -14,6 +14,7 @@ namespace FImage {
     ML_FUNC1(makeFloatImm);
     ML_FUNC1(makeUIntImm);
     ML_FUNC1(makeVar);
+    ML_FUNC2(makeUniform);
     ML_FUNC3(makeLoad);
     ML_FUNC2(makeCast);
     ML_FUNC2(makeAdd);
@@ -104,25 +105,19 @@ namespace FImage {
         contents->vars.push_back(v);
     }
 
-    Expr::Expr(const DynUniform &u) : contents(new Contents(makeLoad(u.type().mlval, 
-                                                                     (u.name()), 
-                                                                     makeIntImm((0))), 
-                                                            u.type())) { 
+    Expr::Expr(const DynUniform &u) : 
+        contents(new Contents(makeUniform(u.type().mlval, u.name()), u.type())) {
         contents->uniforms.push_back(u);
     }
 
-    Expr::Expr(const ImageRef &l) : contents(new Contents(makeLoad(l.image.type().mlval, 
-                                                                   (l.image.name()),
-                                                                   l.idx.node()),
-                                                          l.image.type())) {
+    Expr::Expr(const ImageRef &l) :
+        contents(new Contents(makeLoad(l.image.type().mlval, l.image.name(), l.idx.node()), l.image.type())) {
         contents->images.push_back(l.image);
         child(l.idx);
     }
 
-    Expr::Expr(const UniformImageRef &l) : contents(new Contents(makeLoad(l.image.type().mlval, 
-                                                                          (l.image.name()),
-                                                                          l.idx.node()),
-                                                                 l.image.type())) {
+    Expr::Expr(const UniformImageRef &l) : 
+        contents(new Contents(makeLoad(l.image.type().mlval, l.image.name(), l.idx.node()), l.image.type())) {
         contents->uniformImages.push_back(l.image);
         child(l.idx);
     }
