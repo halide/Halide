@@ -25,3 +25,22 @@ ocaml_lib ~extern:true ~dir:"../../llvm/Debug+Asserts/lib/ocaml/" "llvm_executio
 tons of deprecation warning noise with g++ 4.4, just linking stdc++ below works
 better *)
 flag ["link"; "ocaml"; "g++"] (S[A"-cclib"; A"-lstdc++"]);;
+
+(* Compiler support C++ lib *)
+(* ocaml_lib "llsupport"; *)
+let libllsupport_impl = "libllsupport_impl." ^ !Options.ext_lib in
+dep ["link"; "ocaml"; "use_llsupport"] [libllsupport_impl];
+flag ["link"; "ocaml"; "use_llsupport"]
+  (S[A"-cclib"; A libllsupport_impl;
+     A"-cclib"; A "-L../../llvm/Debug+Asserts/lib";
+     A"-cclib"; A "-lLLVMLinker";
+  ]);;
+
+let include_ocaml = "-I/usr/local/lib/ocaml" in
+let include_llvm = "-I../../llvm/include" in
+flag ["c"; "compile"; "llsupport_cflags"]
+  (S[A"-cc"; A"g++";
+     A"-ccopt"; A include_ocaml;
+     A"-ccopt"; A include_llvm;
+     A"-ccopt"; A"-D__STDC_LIMIT_MACROS";
+     A"-ccopt"; A"-D__STDC_CONSTANT_MACROS"]);;

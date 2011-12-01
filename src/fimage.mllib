@@ -18,4 +18,6 @@ constant_fold
 break_false_dependence
 schedule
 lower
+simtfy
 fimage_cpp
+stdlib
