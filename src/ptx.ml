@@ -17,8 +17,9 @@ let postprocess_function_ptx (f:llvalue) =
   set_function_call_conv ptx_kernel f
 
 let initial_module_ptx c =
-  create_module c "<fimage>"
-  (* let m = Llvm_bitreader.parse_bitcode c (MemoryBuffer.of_file "arm.bc") in *)
+  let m = create_module c "<fimage>" in
+  Stdlib.init_module_ptx m;
+  m
 
 let env_ptx =
   let ntid_decl   = (".llvm.ptx.read.ntid.x", [], i32, Extern) in
