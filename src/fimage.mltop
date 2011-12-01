@@ -3,6 +3,7 @@ loop_lifting
 architecture
 x86
 arm
+ptx
 schedule_transforms
 analysis
 hash
@@ -17,4 +18,6 @@ constant_fold
 break_false_dependence
 schedule
 lower
+simtfy
 fimage_cpp
+stdlib
