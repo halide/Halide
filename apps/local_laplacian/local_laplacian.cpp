@@ -201,7 +201,7 @@ public:
 int main(int argc, char **argv) {
 
     Image<float> im = load(argv[1]);
-    LocalLaplacian ll(8, 8, atof(argv[3]), atof(argv[4]), 1);
+    LocalLaplacian ll(4, 8, atof(argv[3]), atof(argv[4]), 1);
     printf("%f\n", im(0, 0, 0));
     Image<float> out = ll(im);
     save(out, argv[2]);

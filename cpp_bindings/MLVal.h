@@ -29,12 +29,6 @@ public:
 
     void *asVoidPtr() const;
 
-    static MLVal fromString(const char *);
-    static MLVal fromString(const std::string &);
-    static MLVal fromInt(int);
-    static MLVal fromFloat(float);
-    static MLVal fromPointer(void *);
-
     static void unpackPair(const MLVal &input, MLVal &first, MLVal &second);
  private:
     struct Contents;

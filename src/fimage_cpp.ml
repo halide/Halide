@@ -15,14 +15,14 @@ open Util
 let compilation_cache = 
   Hashtbl.create 16
 
-let compile args stmt =
+let compile name args stmt =
 
   (* TODO: Canonicalize names. Variables get renamed to v0 v1
      v2... depending on the order in which they're found, arguments to
      a0, a1, a2, depending on the order that they occur in the
      arguments list. This is done to assist hashing. *)
 
-  let func = (args, stmt) in
+  let func = (name, args, stmt) in
   let c = create_context() in
   if Hashtbl.mem compilation_cache func then begin
     (* Printf.printf "Found function in cache\n%!";  *)
@@ -36,7 +36,12 @@ let compile args stmt =
     Hashtbl.add compilation_cache func (m, f);
     (m, f)
   end
-        
+
+let compile_to_file name args stmt =
+  ignore (initialize_native_target());
+  codegen_to_bitcode_and_header (name, args, stmt) Architecture.host
+
+
 let _ = 
   (* Make IR nodes *)
   Callback.register "makeIntImm" (fun a -> IntImm a);
@@ -62,6 +67,7 @@ let _ =
   Callback.register "makeIntType" (fun a -> Int a);
   Callback.register "makeUIntType" (fun a -> UInt a);
   Callback.register "makeLoad" (fun t buf idx -> Load (t, "." ^ buf, idx));
+  Callback.register "makeUniform" (fun t n -> Var (t, "." ^ n));
   Callback.register "makeStore" (fun a buf idx -> Store (a, "." ^ buf, idx));
   Callback.register "makeFor" (fun var min n stmt -> For (var, min, n, true, stmt));
   Callback.register "inferType" (fun expr -> val_type_of_expr expr);
@@ -88,35 +94,37 @@ let _ =
   Callback.register "makeTriple" (fun x y z -> (x, y, z));
   
   Callback.register "makeBufferArg" (fun str -> Buffer ("." ^ str));
-
+  Callback.register "makeScalarArg" (fun n t -> Scalar ("." ^ n, t));
+  
   (* Debugging, compilation *)
   Callback.register "printStmt" (fun a -> Printf.printf "%s\n%!" (string_of_stmt a));
-
+  
   Callback.register "printSchedule" (fun s -> print_schedule s; Printf.printf "%!");
-
+  
   Callback.register "makeSchedule" (fun (f: string) (sizes: expr list) (env: environment) ->
     let (_, args, _, _) = Environment.find f env in
     let region = List.map2 (fun (t, v) x -> Printf.printf "making default schedule: %s\n" v; (v, IntImm 0, x)) args sizes in
     Printf.printf("About to make default schedule...\n%!");
     make_default_schedule f env region
   );
-
-  Callback.register "doLower" (fun (f:string) (env:environment) (sched: schedule_tree) (debug: int)-> 
+  
+  Callback.register "doLower" (fun (f:string) (env:environment) (sched: schedule_tree) (debug: int) -> 
     Printf.printf "Lowering function\n";
     let lowered = lower_function f env sched (if (debug = 1) then true else false) in
     Printf.printf "Breaking false dependences\n";
     (* let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
-    Printf.printf "Constant folding\n";
-    let lowered = Constant_fold.constant_fold_stmt lowered in
-    Printf.printf "Breaking false dependences\n";
-    let lowered = Break_false_dependence.break_false_dependence_stmt lowered in  *)
+       Printf.printf "Constant folding\n";
+       let lowered = Constant_fold.constant_fold_stmt lowered in
+       Printf.printf "Breaking false dependences\n";
+       let lowered = Break_false_dependence.break_false_dependence_stmt lowered in  *)
     Printf.printf "Constant folding\n";
     let lowered = Constant_fold.constant_fold_stmt lowered in 
     lowered
   );
-
-  Callback.register "doCompile" (fun a s -> compile a s);
-
+  
+  Callback.register "doCompile" (fun name a s -> compile name a s);
+  Callback.register "doCompileToFile" (fun name a s -> compile_to_file name a s);
+  
   (* Schedule transformations. These partially apply the various ml
      functions to return an unary function that will transform a schedule
      in the specified way. *)

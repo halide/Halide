@@ -5,7 +5,7 @@ all: FImage.a
 LLVM_DIR ?= ../llvm/Release+Asserts
 LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
 LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags)
-LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter bitreader x86 interpreter)
+LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter bitreader x86 interpreter linker)
 LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_bitreader -lllvm_analysis -lllvm_target
 
 OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
@@ -15,8 +15,8 @@ LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lstdc
  
 FIMAGE_OBJS=$(addprefix _build/,_MLFImage.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o)
 
-FImage.a: $(FIMAGE_OBJS)
-	ld -r -o FImage.o $(OCAML_LIB_DIR)/libasmrun.a $(FIMAGE_OBJS) -L$(OCAML_LLVM_LIB_DIR) $(LLVM_LIBS_CXX) $(LLVM_LIBS_C)
+FImage.a: $(FIMAGE_OBJS) ../src/_build/libllsupport_impl.a
+	ld -r -o FImage.o $(OCAML_LIB_DIR)/libasmrun.a $(FIMAGE_OBJS) -L$(OCAML_LLVM_LIB_DIR) $(LLVM_LIBS_CXX) $(LLVM_LIBS_C) ../src/_build/libllsupport_impl.a
 	rm -f FImage.a
 	ar q FImage.a FImage.o
 	ranlib FImage.a
@@ -24,12 +24,22 @@ FImage.a: $(FIMAGE_OBJS)
 _build/%.o: %.cpp
 	$(CXX) $(LLVM_CFLAGS_CXX) -I $(OCAML_LIB_DIR) -c $< -o $@
 
-_build/_MLFImage.o: ../src/_build/fimage.cmxa
-	ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLFImage.o $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/fimage.cmxa
+_build/_MLFImage.o: ../src/_build/fimage.cmxa 
+	ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLFImage.o $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/fimage.cmxa 
 
 ../src/_build/fimage.cmxa: ../src/*.ml
 	cd ../src && \
 	ocamlbuild fimage.cmxa && \
+	cd $(PWD)	
+
+../src/_build/libllsupport_impl.a: ../src/*.c
+	cd ../src && \
+	ocamlbuild libllsupport_impl.a && \
+	cd $(PWD)	
+
+../src/_build/: ../src/*.c
+	cd ../src && \
+	ocamlbuild libllsupport_impl.a && \
 	cd $(PWD)	
 
 clean:

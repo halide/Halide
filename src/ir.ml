@@ -100,6 +100,10 @@ type expr =
      variable introduced with Let *)
   | Var of val_type * string
 
+  (* Uniforms. Much like vars, but are known to be constant for each
+     invocation of the program. 
+  | Uniform of val_type * string *)
+
   (* basic binary ops *)
   | Bop of binop * expr * expr
 
@@ -250,7 +254,7 @@ type arg =
   | Scalar of string * val_type
   | Buffer of string
 
-type entrypoint = arg list * stmt
+type entrypoint = string * (arg list) * stmt
 
 exception BadTypeCoercion
 

@@ -89,7 +89,7 @@ and string_of_reduce_op = function
 
 and string_of_buffer b = b
 
-and string_of_toplevel (a, s) = "func(" ^ String.concat ", " (List.map string_of_arg a) ^ ") =\n" ^ (string_of_stmt s)
+and string_of_toplevel (n, a, s) = n ^ "(" ^ String.concat ", " (List.map string_of_arg a) ^ ") =\n" ^ (string_of_stmt s)
 
 and string_of_arg = function 
   | Buffer (b) -> b

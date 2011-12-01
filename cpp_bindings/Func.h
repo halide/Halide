@@ -72,15 +72,12 @@ namespace FImage {
         // Print every time this function gets evaluated
         void trace();
         
-        void compile();
-
         // Generate an image from this function by Jitting the IR and running it.
         DynImage realize(int a);
         DynImage realize(int a, int b);
         DynImage realize(int a, int b, int c);
         DynImage realize(int a, int b, int c, int d);
-
-        void realize(const DynImage &im);
+        void realize(const DynImage &);
 
         /* These methods generate a partially applied function that
          * takes a schedule and modifies it. These functions get pushed
@@ -115,6 +112,48 @@ namespace FImage {
         const std::vector<Expr> &args() const;
         const std::string &name() const;
         const std::vector<MLVal> &scheduleTransforms() const;
+
+        /*
+        class CompilationArgBase {
+        public:            
+            // How many slots does it use in the args list
+            virtual int argSlots() const = 0;
+
+            // The internal name of the argument in slot i
+            virtual const std::string &argName(int i) const = 0;
+        };
+
+        template<typename T>
+        class CompileArg : public CompileArgBase {
+        public:
+            CompileArg(const T &obj) : inner(new T(obj)) {}
+            virtual const int argSlots() const {return inner->argSlots();}
+            virtual const std::string &argName(int i) const {return inner->argName(i);}
+        private:
+            std::unique_ptr<T> inner;
+        };
+
+        class RunArgBase {
+        public:
+            // How many slots does it use in the args list
+            virtual int argSlots() const = 0;
+
+            // The value of the argument in slot i
+            virtual void *argValue(int i) const = 0;
+        };
+
+        template<typename T>
+        class RunArg : public RunArgBase {
+        public:
+            RunArg(const T &obj) : inner(new T(obj)) {}
+            virtual const int argSlots() const {return inner->argSlots();}
+            virtual const void *argValue(int i) const {return inner->argValue(i);}
+        private:
+            std::unique_ptr<T> inner;
+        };
+        */
+
+        void compile();
 
     private:
         struct Contents;
