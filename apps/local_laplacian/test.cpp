@@ -1,6 +1,13 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/time.h>
+
+typedef float float32_t;
+
+extern "C" {
 #include "f5.h"
+}
 
 struct Image {
     float *data;
@@ -57,7 +64,18 @@ void save(Image im, const char *filename) {
 int main(int argc, char **argv) {
     Image im = load(argv[1]);
     Image out = {new float[im.width * im.height * im.channels], im.width, im.height, im.channels};
-    f5(im.width, im.height, im.channels, im.width, im.height, im.data, out.data);
+
+    timeval t1, t2;
+    
+    gettimeofday(&t1, NULL);
+
+    f5(im.width, im.height, im.channels, im.width, im.height,
+       atoi(argv[3]), atof(argv[4]), atof(argv[5]), im.data, out.data);
+
+    gettimeofday(&t2, NULL);
+
+    printf("%3.3f ms\n", (t2.tv_sec - t1.tv_sec)*1000.0f + (t2.tv_usec - t1.tv_usec)/1000.0f);
+
     save(out, argv[2]);
     return 0;
 }
