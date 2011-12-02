@@ -256,7 +256,7 @@ let bounds_of_expr_in_env env expr =
       | Debug (e, _, _) -> recurse e
           
       | Var (t, n) -> begin
-        try StringMap.find n env with Not_found -> Unbounded
+        try StringMap.find n env with Not_found -> Range (Var (t, n), Var (t, n))
       end
           
       | IntImm n -> Range (IntImm n, IntImm n)
