@@ -8,5 +8,6 @@ let cg_stmt_arm (c:llcontext) (m:llmodule) (b:llbuilder) (cg_stmt : stmt -> llva
   cg_stmt stmt
 
 let initial_module_arm c =
-  create_module c "<fimage>"
-  (* let m = Llvm_bitreader.parse_bitcode c (MemoryBuffer.of_file "arm.bc") in *)
+  let m = create_module c "<fimage>" in
+  Stdlib.init_module_arm m;
+  m

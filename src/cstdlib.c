@@ -103,13 +103,29 @@ AddBitcodeToModule(const unsigned char *bitcode, int length, llvm::LLVMContext* 
 
 extern "C" {
 
-/* llmodule -> unit */
-CAMLprim value init_module_ptx(LLVMModuleRef mod) {
-    LLVMContextRef ctx = LLVMGetModuleContext(mod);
-    extern unsigned char builtins_bitcode_ptx_target[];
-    extern int builtins_bitcode_ptx_target_length;
-    AddBitcodeToModule(builtins_bitcode_ptx_target, builtins_bitcode_ptx_target_length, llvm::unwrap(ctx), llvm::unwrap(mod));
-    return Val_unit;
-}
+    /* llmodule -> unit */
+    CAMLprim value init_module_ptx(LLVMModuleRef mod) {
+        LLVMContextRef ctx = LLVMGetModuleContext(mod);
+        extern unsigned char builtins_bitcode_ptx_target[];
+        extern int builtins_bitcode_ptx_target_length;
+        AddBitcodeToModule(builtins_bitcode_ptx_target, builtins_bitcode_ptx_target_length, llvm::unwrap(ctx), llvm::unwrap(mod));
+        return Val_unit;
+    }
+    
+    CAMLprim value init_module_x86(LLVMModuleRef mod) {
+        LLVMContextRef ctx = LLVMGetModuleContext(mod);
+        extern unsigned char builtins_bitcode_x86_target[];
+        extern int builtins_bitcode_x86_target_length;
+        AddBitcodeToModule(builtins_bitcode_x86_target, builtins_bitcode_x86_target_length, llvm::unwrap(ctx), llvm::unwrap(mod));
+        return Val_unit;        
+    }
 
+    CAMLprim value init_module_arm(LLVMModuleRef mod) {
+        LLVMContextRef ctx = LLVMGetModuleContext(mod);
+        extern unsigned char builtins_bitcode_arm_target[];
+        extern int builtins_bitcode_arm_target_length;
+        AddBitcodeToModule(builtins_bitcode_arm_target, builtins_bitcode_arm_target_length, llvm::unwrap(ctx), llvm::unwrap(mod));
+        return Val_unit;        
+    }
+    
 }
