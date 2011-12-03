@@ -210,12 +210,16 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
           let store2 x = Store (x, bounds_buffer_name, IntImm (count+1)) in
           let recurse1 rest s p = precompute_bounds rest (s::new_list) (p::precomp) (count+1) in
           let recurse2 rest s p1 p2 = precompute_bounds rest (s::new_list) (p1::p2::precomp) (count+2) in
-          let is_trivial = function
+          let should_not_lift = function
             | IntImm _ -> true
             | Load (_, _, IntImm _) -> true
             | expr -> 
-                Printf.printf "Non-trivial: %s\n%!" (string_of_expr expr);
-                false;
+                let rec only_globals = function
+                  | Call (_, name, args) -> (List.for_all only_globals args) && ((String.get name 0) = '.')
+                  | Var (_, name) -> (String.get name 0) = '.'
+                  | expr -> fold_children_in_expr only_globals (&&) true expr
+                in
+                not (only_globals expr)
           in
           (* TODO: this will break if we have bounds that depend on a loop variable *)
           match old_list with
@@ -223,23 +227,23 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
             | [] -> (List.rev new_list, List.rev precomp)
             | (Unrolled (_, m, _))::rest
             | (Vectorized (_, m, _))::rest 
-            | (Split (_, _, _, m))::rest when is_trivial m ->
+            | (Split (_, _, _, m))::rest when should_not_lift m ->
                 precompute_bounds rest ((List.hd old_list)::new_list) precomp count                
             | (Parallel (_, m, s))::rest
-            | (Serial (_, m, s))::rest when is_trivial m && is_trivial s ->
+            | (Serial (_, m, s))::rest when should_not_lift m && should_not_lift s ->
                 precompute_bounds rest ((List.hd old_list)::new_list) precomp count                
             (* One term to lift *)
             | (Unrolled (n, m, s))::rest ->
                 recurse1 rest (Unrolled (n, load1, s)) (store1 m)
             | (Vectorized (n, m, s))::rest ->
                 recurse1 rest (Vectorized (n, load1, s)) (store1 m)
-            | (Serial (n, m, s))::rest when is_trivial s->
+            | (Serial (n, m, s))::rest when should_not_lift s->
                 recurse1 rest (Serial (n, load1, s)) (store1 m)
-            | (Parallel (n, m, s))::rest when is_trivial s->
+            | (Parallel (n, m, s))::rest when should_not_lift s->
                 recurse1 rest (Parallel (n, load1, s)) (store1 m)
-            | (Serial (n, m, s))::rest when is_trivial m ->
+            | (Serial (n, m, s))::rest when should_not_lift m ->
                 recurse1 rest (Serial (n, m, load1)) (store1 s)
-            | (Parallel (n, m, s))::rest when is_trivial m ->
+            | (Parallel (n, m, s))::rest when should_not_lift m ->
                 recurse1 rest (Parallel (n, m, load1)) (store1 s)
             | (Split (a, b, c, m))::rest ->
                 recurse1 rest (Split (a, b, c, load1)) (store1 m)
