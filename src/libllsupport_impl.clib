@@ -1,2 +1,4 @@
 cstdlib.o
 architecture.ptx.target.o
+architecture.arm.target.o
+architecture.x86.target.o
