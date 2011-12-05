@@ -58,7 +58,7 @@ Expr gaussian(Expr x) {
 }
 
 // Remap x using y as the central point, an amplitude of alpha, and a std.dev of sigma
-Expr remap(Expr x, Expr y, float alpha, float beta, float sigma) {
+Expr remap(Expr x, Expr y, Expr alpha, Expr beta, Expr sigma) {
     return y + beta*(x - y) + ((x - y)/sigma) * (alpha * sigma) * gaussian((x - y)/sigma);
 }
 
@@ -71,9 +71,6 @@ Func downsample(Func f) {
 
     printf("Downsampling in y\n");
     downy(x, y) = (downx(x, 2*y-1) + 3.0f * (downx(x, 2*y) + downx(x, 2*y+1)) + downx(x, 2*y+2)) / 8.0f;
-
-    downx.root();
-    downy.root();
 
     return downy;
 }
@@ -91,9 +88,6 @@ Func upsample(Func f) {
     printf("Upsampling in y\n");
     upy(x, y) = 0.25f * upx(x, (y/2) - 1 + 2*(y % 2)) + 0.75f * upx(x, y/2);
 
-    upx.root();
-    upy.root();
-
     printf("Returning\n");
     return upy;
 }
@@ -102,8 +96,10 @@ class LocalLaplacian {
 public:
     UniformImage input;
     Func output;
+    Uniform<float> alpha, beta;
+    Uniform<int> levels;
 
-    LocalLaplacian(int K, int J, float alpha, float beta, int seed) : input(Float(32), 3) {
+    LocalLaplacian(int J, int seed) : input(Float(32), 3) {
 
         // K is intensity levels
         // J is pyramid levels
@@ -121,7 +117,7 @@ public:
         
         printf("Defining processed gaussian pyramid\n");
         Func gPyramid[J];
-        gPyramid[0](x, y, k) = remap(gray(x, y), Cast<float>(k) / (K-1), alpha, beta, 1.0f / (K-1));
+        gPyramid[0](x, y, k) = remap(gray(x, y), Cast<float>(k) / (levels-1), alpha, beta, 1.0f / (levels-1));
         for (int j = 1; j < J; j++)
             gPyramid[j] = downsample(gPyramid[j-1]);
         
@@ -141,8 +137,8 @@ public:
         Func outLPyramid[J];
         for (int j = 0; j < J; j++) {
             // Split input pyramid value into integer and floating parts
-            Expr level = inGPyramid[j](x, y) * float(K-1);
-            Expr li = Clamp(Cast<int>(level), 0, K-2);
+            Expr level = inGPyramid[j](x, y) * Cast<float>(levels-1);
+            Expr li = Clamp(Cast<int>(level), 0, levels-2);
             Expr lf = level - Cast<float>(li);
             // Linearly interpolate between the nearest processed pyramid levels
             outLPyramid[j](x, y) = (1.0f - lf) * lPyramid[j](x, y, li) + lf * lPyramid[j](x, y, li+1);
@@ -158,16 +154,10 @@ public:
 
         output(x, y, c) = outGPyramid[0](x, y) * clamped(x, y, c) / gray(x, y);
         
-        printf("Specifying a random schedule...\n");
-        std::vector<Func> funcs;
-        funcs.push_back(clamped);
-        funcs.push_back(gray);
-        funcs.insert(funcs.end(), lPyramid, lPyramid+J);
-        funcs.insert(funcs.end(), gPyramid, gPyramid+J);
-        funcs.insert(funcs.end(), outLPyramid, outLPyramid+J);        
-        funcs.insert(funcs.end(), outGPyramid, outGPyramid+J);        
-        funcs.insert(funcs.end(), inGPyramid, inGPyramid+J);
 
+        printf("Specifying a random schedule...\n");
+        srand(seed);
+        std::vector<Func> funcs = output.rhs().funcs();
         for (size_t i = 0; i < funcs.size(); i++) {
             int decision = rand() % 3;
             switch (rand() % 3) {
@@ -185,14 +175,16 @@ public:
         //output.trace();
         
         printf("Compiling...\n"); fflush(stdout);
-        // output(x, y, c) = outGPyramid[0];
         output.compile();
+
     }
     
-    Image<float> operator()(Image<float> im) {
+    Image<float> operator()(Image<float> im, int l, float a, float b) {
         input = im;
+        alpha = a;
+        beta = b;
+        levels = l;
         Image<float> out = output.realize(im.width(), im.height(), im.channels());
-        printf("input = %f, output = %f\n", im(0, 0, 0), out(0, 0, 0));
         return out;
     }
 };
@@ -201,9 +193,12 @@ public:
 int main(int argc, char **argv) {
 
     Image<float> im = load(argv[1]);
-    LocalLaplacian ll(4, 8, atof(argv[3]), atof(argv[4]), 1);
+    int levels = atoi(argv[3]);
+    float alpha = atof(argv[4]);
+    float beta = atof(argv[5]);
+    LocalLaplacian ll(8, atoi(argv[6])); 
     printf("%f\n", im(0, 0, 0));
-    Image<float> out = ll(im);
+    Image<float> out = ll(im, levels, alpha, beta);
     save(out, argv[2]);
     
     printf("Done\n");
