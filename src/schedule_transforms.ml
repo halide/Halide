@@ -66,15 +66,16 @@ let split_schedule (func: string) (var: string) (newouter: string)
     (* Find var in the sched_list *)
     let fix = function
       | Parallel (v, min, size) when v = var ->
-          assert (Analysis.reduce_expr_modulo size factor = Some 0);
+          Printf.printf "%s %s %s\n" v (string_of_expr min) (string_of_expr size);
+          (* assert (Analysis.reduce_expr_modulo size factor = Some 0); *)
           [Split (var, newouter, newinner, min);
            Parallel (newinner, IntImm 0, IntImm factor);
-           Parallel (newouter, IntImm 0, Constant_fold.constant_fold_expr (size /~ (IntImm factor)))]
+           Parallel (newouter, IntImm 0, Constant_fold.constant_fold_expr ((size +~ (IntImm (factor-1))) /~ (IntImm factor)))]
       | Serial (v, min, size) when v = var ->
           assert (Analysis.reduce_expr_modulo size factor = Some 0);
           [Split (var, newouter, newinner, min);
            Serial (newinner, IntImm 0, IntImm factor);
-           Serial (newouter, IntImm 0, Constant_fold.constant_fold_expr (size /~ (IntImm factor)))]
+           Serial (newouter, IntImm 0, Constant_fold.constant_fold_expr ((size +~ (IntImm (factor-1))) /~ (IntImm factor)))]
       | x -> [x]
     in
     let sched_list = List.concat (List.map fix sched_list) in

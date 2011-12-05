@@ -69,6 +69,7 @@ let _ =
   Printf.printf "\n\nLowered to:\n%s\n" (Ir_printer.string_of_stmt lowered_body);
 
   let entry = (
+    "brightness",
     [Buffer ".result"; Buffer ".input";
      Scalar (".width", i32); Scalar (".height", i32); Scalar (".channels", i32);
      Scalar (".coefficient", f32)],
