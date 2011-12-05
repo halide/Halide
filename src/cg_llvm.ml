@@ -576,6 +576,9 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
           (* Aligned dense vector store: ramp stride 1 && idx base % vec width = 0 *)
           | Ramp(b, IntImm(1), n) when Analysis.reduce_expr_modulo b n = Some 0 ->            
               cg_aligned_store e buf b
+          (* Unaligned dense vector store (uses memcpy) *)
+          | Ramp(b, IntImm(1), n) ->
+              cg_unaligned_store e buf b
           (* All other vector stores become scatters (even if dense) *)
           | _ -> cg_scatter e buf idx
         end
@@ -589,6 +592,22 @@ let codegen (c:llcontext) (e:entrypoint) (arch:architecture) =
     (* Handle aligned dense vector store of scalar by broadcasting first *)
     let expr = if is_scalar e then Broadcast(e, w) else e in
     build_store (cg_expr expr) (cg_memref (val_type_of_expr expr) buf idx) b
+
+  and cg_unaligned_store e buf idx =
+    let t = val_type_of_expr e in
+    let current = insertion_block b in
+    position_before alloca_end b;
+    let scratch = build_alloca (type_of_val_type t) "" b in      
+    position_at_end current b;
+    let memcpy     = declare_function "llvm.memcpy.p0i8.p0i8.i32"
+      (function_type (void_type c) [|buffer_t; buffer_t; int32_imm_t; int32_imm_t; i1_type c|]) m in
+    let stack_addr = build_pointercast scratch buffer_t "" b in
+    let mem_addr   = build_pointercast (cg_memref t buf idx) buffer_t "" b in
+    let length     = const_int int_imm_t ((bit_width t)/8) in
+    let alignment  = const_int int_imm_t ((bit_width (element_val_type t))/8) in
+    let volatile   = const_int (i1_type c) 0 in
+    ignore(build_store (cg_expr e) scratch b);
+    build_call memcpy [|mem_addr; stack_addr; length; alignment; volatile|] "" b
 
   and cg_scatter e buf idx =
     let elem_type     = type_of_val_type (element_val_type (val_type_of_expr e)) in
