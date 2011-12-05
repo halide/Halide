@@ -78,6 +78,8 @@ let _ =
 
   test (Bop (Max, Bop (Min, f x y, IntImm 100), IntImm 0));
 
+  test (Ramp (x, one, 4));
+
   test_roe (f x y);
   test_roe (f y y);
   test_roe ((f x y) *~ (f (x +~ one) (y -~ one)));
