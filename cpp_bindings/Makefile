@@ -21,10 +21,11 @@ FImage.a: $(FIMAGE_OBJS) ../src/_build/libllsupport_impl.a
 	ar q FImage.a FImage.o
 	ranlib FImage.a
 
-_build/%.o: %.cpp setup
+_build/%.o: %.cpp 
 	$(CXX) $(LLVM_CFLAGS_CXX) -I $(OCAML_LIB_DIR) -c $< -o $@
 
-_build/_MLFImage.o: ../src/_build/fimage.cmxa setup
+_build/_MLFImage.o: ../src/_build/fimage.cmxa 
+	mkdir -p _build
 	ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLFImage.o $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/fimage.cmxa 
 
 ../src/_build/fimage.cmxa: ../src/*.ml
@@ -46,5 +47,3 @@ clean:
 	rm -f _build/*
 	rm FImage.a FImage.o
 
-setup:
-	mkdir -p _build/
