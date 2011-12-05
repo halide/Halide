@@ -26,17 +26,33 @@ and string_of_cmp = function
   | GT -> ">"
   | GE -> ">="
 
+and can_skip_parens op1 op2 = match (op1, op2) with
+  | (Add, Mul) -> true
+  | (Add, Div) -> true
+  | (Sub, Mul) -> true
+  | (Sub, Div) -> true
+  | (Mul, Div) -> true
+  | (Mul, Mul) -> true
+  | (Add, Add) -> true
+  | (Add, Sub) -> true
+  | _ -> false
+
 and string_of_expr = function
   | IntImm(i) -> string_of_int i
   | UIntImm(i) -> string_of_int i ^ "u"
   | FloatImm(f) -> string_of_float f
-  | Cast(t, e) -> "cast" ^ "<" ^ string_of_val_type t ^ ">" ^ "(" ^ string_of_expr e ^")"
+  | Cast(t, e) -> string_of_val_type t ^ "(" ^ string_of_expr e ^")"
+  | Bop(outer_op, Bop(inner_op, ll, lr), r) when can_skip_parens outer_op inner_op ->
+      "(" ^ string_of_expr ll ^ string_of_op inner_op ^ string_of_expr lr ^ string_of_op outer_op ^ string_of_expr r ^ ")"
+  | Bop(outer_op, l, Bop(inner_op, rl, rr)) when can_skip_parens outer_op inner_op ->
+      "(" ^ string_of_expr l ^ string_of_op outer_op ^ string_of_expr rl ^ string_of_op inner_op ^ string_of_expr rr ^ ")"
+  | Bop(Add, l, IntImm x) when x < 0 -> string_of_expr (l -~ (IntImm (-x)))
   | Bop(op, l, r) -> "(" ^ string_of_expr l ^ string_of_op op ^ string_of_expr r ^ ")"
   | Cmp(op, l, r) -> "(" ^ string_of_expr l ^ string_of_cmp op ^ string_of_expr r ^ ")"
   | Select(c, t, f) ->
     "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
   | Var(t, s) -> s
-  | Load(t, b, i) -> string_of_buffer b ^ "[" ^ string_of_expr i ^ "])"
+  | Load(t, b, i) -> string_of_buffer b ^ "[" ^ string_of_expr i ^ "]"
   | Call(t, name, args) -> name ^ "<" ^ string_of_val_type t ^ ">(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ")"
   | MakeVector l -> "vec[" ^ (String.concat ", " (List.map string_of_expr l)) ^ "]"
   | Broadcast(e, n) -> "broadcast[" ^ string_of_expr e ^ ", " ^ string_of_int n ^ "]"
