@@ -67,5 +67,5 @@ let _ =
   
   Cg_llvm.codegen_to_file
     "test_simt.bc"
-    ([Buffer ".input"; Buffer ".result"], lowered)
+    ("g", [Buffer ".input"; Buffer ".result"], lowered)
     Architecture.ptx

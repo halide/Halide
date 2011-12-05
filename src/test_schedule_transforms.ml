@@ -29,5 +29,5 @@ let _ =
   
   Cg_llvm.codegen_to_file
     "test_schedule_transforms.bc"
-    ([Buffer ".input"; Buffer ".result"], lowered)
+    ("g", [Buffer ".input"; Buffer ".result"], lowered)
     Architecture.host
