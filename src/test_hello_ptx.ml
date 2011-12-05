@@ -48,5 +48,5 @@ let _ =
   
   Cg_llvm.codegen_to_file
     "test_hello_ptx.bc"
-    ([Buffer ".input"; Buffer ".result"; Scalar (".N", i32)], lowered)
+    ("f", [Buffer ".input"; Buffer ".result"; Scalar (".N", i32)], lowered)
     Architecture.ptx

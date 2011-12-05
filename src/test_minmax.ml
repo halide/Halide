@@ -41,5 +41,5 @@ let _ =
   
   Cg_llvm.codegen_to_file
     "test_minmax.bc"
-    ([Buffer ".result"], lowered)
+    ("g", [Buffer ".result"], lowered)
     Architecture.host
