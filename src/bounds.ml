@@ -33,7 +33,7 @@ let bounds_of_expr_in_env env expr =
               let (minc, maxc) = (Bop (Min, Bop (Min, p1, p2), zero),
                                   Bop (Max, Bop (Max, p1, p2), zero)) in              
               (* Add the base term *)
-              Range (mina +~ minc, mina +~ maxc)
+              Range (mina +~ minc, maxa +~ maxc)
         | _ -> Unbounded
       end
       | ExtractElement (a, b) -> recurse a
