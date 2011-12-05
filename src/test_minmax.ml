@@ -39,7 +39,8 @@ let _ =
     (Ir_printer.string_of_environment env)
     (Ir_printer.string_of_stmt lowered);
   
-  Cg_llvm.codegen_to_file
+  let module Cg = Cg_llvm.CodegenForHost in
+  Cg.codegen_to_file
     "test_minmax.bc"
     ("g", [Buffer ".result"], lowered)
     Architecture.host

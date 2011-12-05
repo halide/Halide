@@ -27,7 +27,8 @@ let _ =
 
   Printf.printf "\n\nLowered to:\n%s\n" (Ir_printer.string_of_stmt lowered);
   
-  Cg_llvm.codegen_to_file
+  let module Cg = Cg_llvm.CodegenForHost in
+  Cg.codegen_to_file
     "test_schedule_transforms.bc"
     ("g", [Buffer ".input"; Buffer ".result"], lowered)
     Architecture.host

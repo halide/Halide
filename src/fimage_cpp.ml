@@ -31,7 +31,8 @@ let compile name args stmt =
     Printf.printf "Initializing native target\n%!"; 
     ignore (initialize_native_target());
     Printf.printf "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
-    let (m, f) = codegen_to_c_callable c func Architecture.host in
+    let module Cg = Cg_llvm.CodegenForHost in
+    let (m, f) = Cg.codegen_to_c_callable c func in
     ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc");
     Hashtbl.add compilation_cache func (m, f);
     (m, f)
@@ -39,7 +40,8 @@ let compile name args stmt =
 
 let compile_to_file name args stmt =
   ignore (initialize_native_target());
-  codegen_to_bitcode_and_header (name, args, stmt) Architecture.host
+  let module Cg = Cg_llvm.CodegenForHost in
+  Cg.codegen_to_bitcode_and_header (name, args, stmt)
 
 
 let _ = 
