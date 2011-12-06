@@ -15,7 +15,7 @@ let rec resolve_name (context: string) (var: string) (schedule: schedule_tree) =
   (* names starting with . are global, and so are already resolved *)
   if (String.get var 0 = '.') then var else begin
     
-    Printf.printf "Looking up %s in the context %s\n" var context;
+    (* Printf.printf "Looking up %s in the context %s\n" var context; *)
     
     let (call_sched, sched_list) = find_schedule schedule context in
     
@@ -67,11 +67,11 @@ let make_function_body (name:string) (env:environment) (debug:bool) =
   (renamed_args, return_type, renamed_body)
 
 let make_schedule (name:string) (schedule:schedule_tree) =
-  Printf.printf "Looking up %s in the schedule\n" name;
+  (* Printf.printf "Looking up %s in the schedule\n" name; *)
   let (call_sched, sched_list) = find_schedule schedule name in
 
   (* Prefix all the stuff in the schedule_list *)
-  Printf.printf "Prefixing schedule entry\n";
+  (* Printf.printf "Prefixing schedule entry\n"; *)
 
   (* The prefix for this function *)
   let prefix x = (name ^ "." ^ x) in
@@ -186,21 +186,54 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
           List.find (fun (dim, _) -> d = dim) (list_zip (List.map snd args) region_used)
         in
 
-        let fix_bounds = function
-          | Serial (name, IntImm 0, IntImm 0) -> begin
-            match snd (range_of_dim name) with
-              | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
-              | Bounds.Range (min, max) -> Serial (name, min, Constant_fold.constant_fold_expr (max -~ min +~ IntImm 1))
-          end
-          | Parallel (name, IntImm 0, IntImm 0) -> begin
-            match snd (range_of_dim name) with
-              | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
-              | Bounds.Range (min, max) -> Parallel (name, min, Constant_fold.constant_fold_expr (max -~ min +~ IntImm 1))
-          end
-          | x -> x
+        let rec fix_bounds get_bounds = function
+          | [] -> []
+          | (first::rest) -> begin match first with 
+              | Serial (name, IntImm 0, IntImm 0) -> begin
+                match get_bounds name with
+                  | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
+                  | Bounds.Range (min, max) -> Serial (name, min, Constant_fold.constant_fold_expr (max -~ min +~ IntImm 1))
+              end :: (fix_bounds get_bounds rest)
+              | Parallel (name, IntImm 0, IntImm 0) -> begin
+                match get_bounds name with
+                  | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
+                  | Bounds.Range (min, max) -> Parallel (name, min, Constant_fold.constant_fold_expr (max -~ min +~ IntImm 1))
+              end :: (fix_bounds get_bounds rest)
+              | Split (name, outer, inner, IntImm 0) -> begin
+                let needs_inference = 
+                  match stride_for_dim outer sched_list with
+                    | (IntImm 0, IntImm 0) -> true
+                    | _ -> false
+                in if needs_inference then
+                    match get_bounds name with 
+                      | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
+                      | Bounds.Range (min, max) -> 
+                          (* Inner should have an explicit bound, and we only need to infer outer *)
+                          let (_, inner_size) = stride_for_dim inner sched_list in
+                          assert (inner_size <> IntImm 0);
+                          let one = IntImm 1 in
+                          (* We'll stuff min into the offset
+                             term. What is the maximum value of outer
+                             we need to compute?. It looks like there
+                             are +/- ones missing in this expression
+                             but there aren't. They all cancel. *)
+                          let outer_max = (max -~ min) /~ inner_size in
+                          let new_get_bounds x =
+                            if x = outer then 
+                              (* Round outwards to nearest multiples of
+                                 inner_size. To be robust to negative values,
+                                 these expressions get a little hairy *)
+                              Bounds.Range (IntImm 0, outer_max)
+                            else get_bounds x
+                          in
+                          Split(name, outer, inner, min) :: (fix_bounds new_get_bounds rest)
+                  else first :: (fix_bounds get_bounds rest)
+              end
+              | _ -> first :: (fix_bounds get_bounds rest)
+          end 
         in
 
-        let sched_list = List.map fix_bounds sched_list in
+        let sched_list = fix_bounds (fun x -> snd (range_of_dim x)) sched_list in
 
         (* Pull nasty terms in the sched_list out so that they don't cascade when doing boundary inference *)
         let rec precompute_bounds (old_list: schedule list) (new_list: schedule list) (precomp: stmt list) (count: int) =
@@ -336,7 +369,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
             end
             | _ -> raise (Wtf "I don't know how to schedule this yet")
         in
-        Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call); 
+        Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);  
         lower_stmt scheduled_call env schedule rest precomp debug
 
 
@@ -396,7 +429,6 @@ and realize (name, args, return_type, body) sched_list buffer_name strides debug
           (* Remove recursive references *)
           let initial_value = remove_recursion initial_value in
           let modified_idx = make_buffer_index (List.map remove_recursion modified_args) in
-          Printf.printf "index: %s\n%!" (string_of_expr modified_idx);
           let modified_val = remove_recursion modified_val in
           
           (* Split the sched_list into terms refering to the initial
@@ -471,7 +503,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   in
 
   let functions = partial_sort lt (list_of_schedule schedule) in
-  Printf.printf "Realization order: %s\n" (String.concat "\n" functions);
+  (* Printf.printf "Realization order: %s\n" (String.concat "\n" functions); *)
 
   Printf.printf "Making root function body\n%!";
   let (args, return_type, body) = make_function_body func env debug in
