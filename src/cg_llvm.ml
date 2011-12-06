@@ -13,21 +13,27 @@ exception ArgExprOfBufferArgument (* The Arg expr can't dereference a Buffer, on
 exception ArgTypeMismatch of val_type * val_type
 exception BCWriteFailed of string
 
+type cg_entry = llcontext -> llmodule -> entrypoint -> llvalue
+type cg_expr = expr -> llvalue
+type cg_stmt = stmt -> llvalue
+
 module type Architecture = sig
-  (* val codegen : llcontext -> llmodule -> entrypoint -> llvalue *)
-  val cg_expr : llcontext -> llmodule -> llbuilder -> (expr -> llvalue) -> expr -> llvalue
-  val cg_stmt : llcontext -> llmodule -> llbuilder -> (stmt -> llvalue) -> stmt -> llvalue
-  val malloc : llcontext -> llmodule -> llbuilder -> (expr -> llvalue) -> expr -> llvalue
-  val free : llcontext -> llmodule -> llbuilder -> llvalue -> llvalue
-  val initial_module : llcontext -> llmodule
-  (* val env : environment *)
+  (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)
+  val codegen_entry : llcontext -> llmodule -> cg_entry -> entrypoint -> llvalue
+  val cg_expr : llcontext -> llmodule -> llbuilder -> cg_expr -> expr -> llvalue
+  val cg_stmt : llcontext -> llmodule -> llbuilder -> cg_stmt -> stmt -> llvalue
+  val malloc  : llcontext -> llmodule -> llbuilder -> cg_expr -> expr -> llvalue
+  val free    : llcontext -> llmodule -> llbuilder -> llvalue -> llvalue
+  val env : environment
 end
 
 module type Codegen = sig
-  val codegen_to_c_callable :
-    Llvm.llcontext -> Ir.entrypoint -> Llvm.llmodule * Llvm.llvalue
-  val codegen_to_bitcode_and_header : Ir.entrypoint -> unit
-  val codegen_to_file : string -> Ir.entrypoint -> unit
+  val codegen_entry : entrypoint -> llcontext * llmodule * llvalue
+  val codegen_c_wrapper : llcontext -> llmodule -> llvalue -> llvalue
+  val save_bc_to_file : llmodule -> string -> unit
+  val codegen_c_header : entrypoint -> string -> unit
+  val codegen_to_bitcode_and_header : entrypoint -> unit
+  val codegen_to_file : entrypoint -> string -> unit
 end
 
 module CodegenForArch ( Arch : Architecture ) = struct
@@ -74,7 +80,7 @@ let type_of_val_type c t = match t with
   | FloatVector(64, n) -> vector_type (double_type c) n
   | _ -> raise (UnsupportedType(t))
 
-let codegen (c:llcontext) (e:entrypoint) =
+let cg_entry c m e =
 
   let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
@@ -98,9 +104,6 @@ let codegen (c:llcontext) (e:entrypoint) =
     with Not_found -> raise (Wtf ("symbol " ^ name ^ " not found"))
   in
 
-  (* create a new module for this cg result *)
-  let m = Arch.initial_module c in
-  
   (* unpack the entrypoint *)
   let (entrypoint_name, arglist, s) = e in
   let type_of_arg = function
@@ -121,7 +124,6 @@ let codegen (c:llcontext) (e:entrypoint) =
       m
   in
 
-
   (* Put args in the sym table *)
   Array.iteri
     (fun idx arg -> 
@@ -133,10 +135,6 @@ let codegen (c:llcontext) (e:entrypoint) =
         | Buffer b -> add_param_attr llval Attribute.Noalias
         | _ -> ()
     ) (Array.of_list arglist);
-
-
-
-
 
   (* start codegen at entry block of main *)
   let b = builder_at_end c (entry_block entrypoint_fn) in
@@ -768,7 +766,7 @@ let codegen (c:llcontext) (e:entrypoint) =
   ignore (verify_cg m);
   
   (* return generated module and function *)
-  (m,entrypoint_fn)
+  entrypoint_fn
 
 
 (*
@@ -784,7 +782,7 @@ let codegen_c_wrapper c m f =
   (* define wrapper entrypoint: void name(void **args) *)
   let wrapper = define_function
                   ((value_name f) ^ "_c_wrapper")
-                  (function_type (void_type c) [|pointer_type (pointer_type (i8_type c))|])
+                  (function_type (void_type c) [|pointer_type (buffer_t)|])
                   m in
 
   let b = builder_at_end c (entry_block wrapper) in
@@ -818,38 +816,14 @@ let codegen_c_wrapper c m f =
   (* return the wrapper function *)
   wrapper
 
-let codegen_to_c_callable c e =
-  (* codegen *)
-  (*let (args,s) = e in*)
-  let (m,f) = codegen c e in
-
-  (* codegen the wrapper *)
-  let w = codegen_c_wrapper c m f in
-
-  (* Clear the output buffers in case we run this code and it prints something *)
-  Printf.printf "%!";
-  (m,w)
-
-let codegen_to_bitcode_and_header e =
-  (* construct basic LLVM state *)
-  let c = create_context () in
-
-  let (object_name, args, _) = e in
-
-  let bitcode_file = object_name ^ ".bc" in
-  let header_file = object_name ^ ".h" in
-
-  (* codegen *)
-  let (m, f) = codegen c e in
-
-  (* write to bitcode file *)
-  begin match Llvm_bitwriter.write_bitcode_file m bitcode_file with
-    | false -> raise (BCWriteFailed bitcode_file)
+let save_bc_to_file m fname =
+  begin match Llvm_bitwriter.write_bitcode_file m fname with
+    | false -> raise (BCWriteFailed fname)
     | true -> ()
-  end;
-        
-  (* free memory *)
-  dispose_module m;
+  end
+
+let codegen_c_header e header_file =
+  let (object_name, args, _) = e in
 
   (* Produce a header *)
   let string_of_type = function
@@ -876,25 +850,73 @@ let codegen_to_bitcode_and_header e =
   output_string out (String.concat "\n" lines);
   close_out out
 
-let codegen_to_file filename e =
+(* TODO refactor codegen_to_file into:
+ *  caller creates/frees context, parent module
+ *  Arch.codegen cg_func c m e
+ *      set up module(s)
+ *      cg_func into device mod
+ *      postprocess_function (do whatever it currently does, then drop from Arch interface
+ *      on GPU:
+ *          compile dev module to PTX string (C++ support lib)
+ *          add PTX string as global const_stringz in host ctx
+ *      create host wrapper (Arch_support CPU or Ptx internal variant)
+ *      Arch_support.cg_dynamic_wrapper into host mod
+ *      dispose device context, module
+ *  
+ *  codegen_*wrapper* stuff moves into Arch_support and Ptx
+ *)
+
+(* codegen constructs a new context and module for code generation, which it
+ * returns for the caller to eventually free *)
+let codegen_entry (e:entrypoint) =
+  let (name, _, _) = e in
+
   (* construct basic LLVM state *)
   let c = create_context () in
+  let m = create_module c ("<" ^ name ^ "_halide_host>") in
 
   (* codegen *)
-  (* TODO: add this switch logic to architecture once possible.
-   * Currently infeasible because of circular module dependencies. *)
-  (* let cg = if (a == Architecture.ptx) then codegen else codegen_to_c_callable in *)
-  let cg = codegen_to_c_callable in
-  let (m, f) = cg c e in
+  let f = Arch.codegen_entry c m cg_entry e in
+
+  (c,m,f)
+
+(* TODO: this is fairly redundant with codegen_to_file *)
+let codegen_to_bitcode_and_header (e:entrypoint) =
+  let (object_name, _, _) = e in
+
+  let bitcode_file = object_name ^ ".bc" in
+  let header_file = object_name ^ ".h" in
+
+  (* codegen *)
+  let (c,m,f) = codegen_entry e in
+
+  (* build the convenience wrapper *)
+  ignore (codegen_c_wrapper c m f);
 
   (* write to bitcode file *)
-  begin match Llvm_bitwriter.write_bitcode_file m filename with
-    | false -> raise(BCWriteFailed(filename))
-    | true -> ()
-  end;
-        
+  save_bc_to_file m bitcode_file;
+
+  (* write the header *)
+  codegen_c_header e header_file;
+
   (* free memory *)
-  dispose_module m
+  dispose_module m;
+  dispose_context c
+
+(* TODO: drop this - it's redundant with codegen_to_bitcode_and_header, and can
+ * be trivially reconstituted from the rest of the interfaces available *)
+let codegen_to_file e filename =
+
+  let (c,m,f) = codegen_entry e in
+
+  (* build the convenience wrapper *)
+  ignore (codegen_c_wrapper c m f);
+
+  save_bc_to_file m filename;
+
+  (* free memory *)
+  dispose_module m;
+  dispose_context c
 
 end
 
@@ -907,13 +929,37 @@ module CodegenForHost = struct
       "x86_64"
   
   (* TODO: this is ugly. Not sure there's a better way. *)
-  let codegen_to_c_callable c e = 
+  let codegen_entry e = 
     if hosttype = "arm" then
       let module Cg = CodegenForArch(Arm) in
-      Cg.codegen_to_c_callable c e
+      Cg.codegen_entry e
     else (* if hosttype = "x86_64" then *)
       let module Cg = CodegenForArch(X86) in
-      Cg.codegen_to_c_callable c e
+      Cg.codegen_entry e
+
+  let codegen_c_wrapper c e = 
+    if hosttype = "arm" then
+      let module Cg = CodegenForArch(Arm) in
+      Cg.codegen_c_wrapper c e
+    else (* if hosttype = "x86_64" then *)
+      let module Cg = CodegenForArch(X86) in
+      Cg.codegen_c_wrapper c e
+
+  let save_bc_to_file c e = 
+    if hosttype = "arm" then
+      let module Cg = CodegenForArch(Arm) in
+      Cg.save_bc_to_file c e
+    else (* if hosttype = "x86_64" then *)
+      let module Cg = CodegenForArch(X86) in
+      Cg.save_bc_to_file c e
+
+  let codegen_c_header c e = 
+    if hosttype = "arm" then
+      let module Cg = CodegenForArch(Arm) in
+      Cg.codegen_c_header c e
+    else (* if hosttype = "x86_64" then *)
+      let module Cg = CodegenForArch(X86) in
+      Cg.codegen_c_header c e
 
   let codegen_to_bitcode_and_header e = 
     if hosttype = "arm" then
@@ -923,11 +969,11 @@ module CodegenForHost = struct
       let module Cg = CodegenForArch(X86) in
       Cg.codegen_to_bitcode_and_header e
   
-  let codegen_to_file f e = 
+  let codegen_to_file e f = 
     if hosttype = "arm" then
       let module Cg = CodegenForArch(Arm) in
-      Cg.codegen_to_file f e
+      Cg.codegen_to_file e f
     else (* if hosttype = "x86_64" then *)
       let module Cg = CodegenForArch(X86) in
-      Cg.codegen_to_file f e
+      Cg.codegen_to_file e f
 end

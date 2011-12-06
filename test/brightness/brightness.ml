@@ -76,4 +76,4 @@ let _ =
     lowered_body
   ) in
   
-  Cg_llvm.codegen_to_file "brightness.bc" entry Architecture.host;
+  Cg_llvm.CodegenForHost.codegen_to_file entry "brightness.bc"

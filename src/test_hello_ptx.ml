@@ -46,8 +46,7 @@ let _ =
     (Ir_printer.string_of_environment env)
     (Ir_printer.string_of_stmt lowered);
   
-  let module Cg = Cg_llvm.CodegenForHost in
+  let module Cg = Cg_llvm.CodegenForArch(Ptx) in
   Cg.codegen_to_file
-    "test_hello_ptx.bc"
     ("f", [Buffer ".input"; Buffer ".result"; Scalar (".N", i32)], lowered)
-    Architecture.ptx
+    "test_hello_ptx.bc"

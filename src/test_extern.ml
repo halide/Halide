@@ -37,5 +37,5 @@ let _ =
   
   let module Cg = Cg_llvm.CodegenForHost in
   Cg.codegen_to_file
-    "test_extern.bc"
     ("g", [Buffer ".input"; Buffer ".result"], lowered)
+    "test_extern.bc"
