@@ -46,6 +46,5 @@ let _ =
   
   let module Cg = Cg_llvm.CodegenForHost in
   Cg.codegen_to_file
-    "test_lower.bc"
     ("g", [Buffer ".input"; Buffer ".result"], lowered)
-    Architecture.host
+    "test_lower.bc"

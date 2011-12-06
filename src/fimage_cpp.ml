@@ -15,6 +15,12 @@ open Util
 let compilation_cache = 
   Hashtbl.create 16
 
+let codegen_to_c_callable e =
+  let module Cg = Cg_llvm.CodegenForHost in
+  let (c,m,f) = Cg.codegen_entry e in
+  let w = Cg.codegen_c_wrapper c m f in
+  (c,m,w)
+
 let compile name args stmt =
 
   (* TODO: Canonicalize names. Variables get renamed to v0 v1
@@ -23,7 +29,6 @@ let compile name args stmt =
      arguments list. This is done to assist hashing. *)
 
   let func = (name, args, stmt) in
-  let c = create_context() in
   if Hashtbl.mem compilation_cache func then begin
     (* Printf.printf "Found function in cache\n%!";  *)
     Hashtbl.find compilation_cache func
@@ -31,10 +36,11 @@ let compile name args stmt =
     Printf.printf "Initializing native target\n%!"; 
     ignore (initialize_native_target());
     Printf.printf "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
-    let module Cg = Cg_llvm.CodegenForHost in
-    let (m, f) = Cg.codegen_to_c_callable c func in
+    let (c, m, f) = codegen_to_c_callable func in
     ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc");
     Hashtbl.add compilation_cache func (m, f);
+    (* TODO: this leaks the llcontext, and will leak the module if the cache
+     * doesn't free it eventually. *)
     (m, f)
   end
 

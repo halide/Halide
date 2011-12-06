@@ -41,6 +41,5 @@ let _ =
   
   let module Cg = Cg_llvm.CodegenForHost in
   Cg.codegen_to_file
-    "test_minmax.bc"
     ("g", [Buffer ".result"], lowered)
-    Architecture.host
+    "test_minmax.bc"
