@@ -6,6 +6,6 @@
 <*.top>: use_unix
 
 # Include LLVM paths when compiling ml sources
-<*.{ml,mli}>: use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine
+<*.{ml,mli}>: use_llvm, use_llvm_analysis, use_llvm_bitwriter, use_llvm_bitreader, use_llvm_target, use_llvm_executionengine, annot
 
 <cstdlib.c>: llsupport_cflags
