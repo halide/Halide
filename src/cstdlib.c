@@ -106,25 +106,33 @@ extern "C" {
     /* llmodule -> unit */
     CAMLprim value init_module_ptx(LLVMModuleRef mod) {
         LLVMContextRef ctx = LLVMGetModuleContext(mod);
-        extern unsigned char builtins_bitcode_ptx_target[];
-        extern int builtins_bitcode_ptx_target_length;
-        AddBitcodeToModule(builtins_bitcode_ptx_target, builtins_bitcode_ptx_target_length, llvm::unwrap(ctx), llvm::unwrap(mod));
+        extern unsigned char builtins_bitcode_ptx[];
+        extern int builtins_bitcode_ptx_length;
+        AddBitcodeToModule(builtins_bitcode_ptx, builtins_bitcode_ptx_length, llvm::unwrap(ctx), llvm::unwrap(mod));
         return Val_unit;
     }
-    
+
+    CAMLprim value init_module_ptx_dev(LLVMModuleRef mod) {
+        LLVMContextRef ctx = LLVMGetModuleContext(mod);
+        extern unsigned char builtins_bitcode_ptx_dev[];
+        extern int builtins_bitcode_ptx_dev_length;
+        AddBitcodeToModule(builtins_bitcode_ptx_dev, builtins_bitcode_ptx_dev_length, llvm::unwrap(ctx), llvm::unwrap(mod));
+        return Val_unit;
+    }
+
     CAMLprim value init_module_x86(LLVMModuleRef mod) {
         LLVMContextRef ctx = LLVMGetModuleContext(mod);
-        extern unsigned char builtins_bitcode_x86_target[];
-        extern int builtins_bitcode_x86_target_length;
-        AddBitcodeToModule(builtins_bitcode_x86_target, builtins_bitcode_x86_target_length, llvm::unwrap(ctx), llvm::unwrap(mod));
+        extern unsigned char builtins_bitcode_x86[];
+        extern int builtins_bitcode_x86_length;
+        AddBitcodeToModule(builtins_bitcode_x86, builtins_bitcode_x86_length, llvm::unwrap(ctx), llvm::unwrap(mod));
         return Val_unit;        
     }
 
     CAMLprim value init_module_arm(LLVMModuleRef mod) {
         LLVMContextRef ctx = LLVMGetModuleContext(mod);
-        extern unsigned char builtins_bitcode_arm_target[];
-        extern int builtins_bitcode_arm_target_length;
-        AddBitcodeToModule(builtins_bitcode_arm_target, builtins_bitcode_arm_target_length, llvm::unwrap(ctx), llvm::unwrap(mod));
+        extern unsigned char builtins_bitcode_arm[];
+        extern int builtins_bitcode_arm_length;
+        AddBitcodeToModule(builtins_bitcode_arm, builtins_bitcode_arm_length, llvm::unwrap(ctx), llvm::unwrap(mod));
         return Val_unit;        
     }
     
