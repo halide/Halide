@@ -34,6 +34,11 @@ flag ["link"; "ocaml"; "use_llsupport"]
   (S[A"-cclib"; A libllsupport_impl;
      A"-cclib"; A "-L../../llvm/Debug+Asserts/lib";
      A"-cclib"; A "-lLLVMLinker";
+     (* PTX target libraries *)
+     A"-cclib"; A "-lLLVMPTXCodeGen";
+     A"-cclib"; A "-lLLVMPTXAsmPrinter";
+     A"-cclib"; A "-lLLVMPTXInfo";
+     A"-cclib"; A "-lLLVMPTXDesc";
   ]);;
 
 let include_ocaml = "-I/usr/local/lib/ocaml" in
