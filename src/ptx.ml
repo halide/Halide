@@ -32,6 +32,9 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   (* set calling convention to __global__ for PTX *)
   set_function_call_conv ptx_kernel f;
 
+  let ptx_src = Llutil.compile_module_to_string dev_mod in
+  Printf.printf "PTX:\n%s\n%!" ptx_src;
+
   (* free memory *)
   dispose_module dev_mod;
   dispose_context dev_ctx;
