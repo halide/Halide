@@ -59,9 +59,13 @@ and string_of_expr = function
   | Ramp(b, s, n) -> "ramp[" ^ string_of_expr b ^ ", " ^ string_of_expr s ^ ", " ^ string_of_int n ^ "]"
   | ExtractElement(a, b) -> "(" ^ string_of_expr a ^ "@" ^ string_of_expr b ^ ")"
   | Let(n, a, b) -> "(let " ^ n ^ " = " ^ string_of_expr a ^ " in " ^ string_of_expr b ^ ")"
-  | Debug(e, prefix, args) -> "Debug(" ^ string_of_expr e ^ ", " ^ prefix ^ " " ^ 
-      (String.concat ", " (List.map string_of_expr args)) ^ ")"
-  | _ -> "<<UNHANDLED>>"
+  (* | Debug(e, prefix, args) -> "Debug(" ^ string_of_expr e ^ ", " ^ prefix ^ " " ^  
+      (String.concat ", " (List.map string_of_expr args)) ^ ")" *)
+  | Debug (e, _, _) -> string_of_expr e
+  | Or (a, b) -> "(" ^ string_of_expr a ^ " or " ^ string_of_expr b ^ ")"
+  | And (a, b) -> "(" ^ string_of_expr a ^ " and " ^ string_of_expr b ^ ")"
+  | Not (a) -> "(not " ^ string_of_expr a ^ ")"
+  (* | _ -> "<<UNHANDLED>>" *)
 
 and string_of_stmt stmt = 
   let rec string_stmt p stmt =
@@ -84,13 +88,15 @@ and string_of_stmt stmt =
       | Store(e, b, i) -> 
           (p ^ string_of_buffer b ^ "[" ^ string_of_expr i ^ "] = \n" ^
              sp ^ string_of_expr e ^ ";\n")             
-        
+      | LetStmt (name, value, stmt) ->
+          (p ^ "let " ^ name ^ " = " ^ string_of_expr value ^ "\n" ^ 
+             string_stmt p stmt)            
       | Pipeline(name, ty, size, produce, consume) -> 
           (p ^ "produce " ^ name ^ "[" ^ string_of_expr size ^ "] {\n" ^ 
              string_stmt sp produce ^ 
              p ^ "}\n" ^
              string_stmt p consume)
-      | Print (m, l) -> p ^ "Print(" ^ m ^ (String.concat ", " (List.map string_of_expr l)) ^ ")"
+      | Print (m, l) -> p ^ "Print(" ^ m ^ (String.concat ", " (List.map string_of_expr l)) ^ ")\n"
           
   in
   string_stmt "" stmt

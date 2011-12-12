@@ -153,7 +153,7 @@ let rec val_type_of_expr = function
   | Bop (_, l, r) 
   | Select (_, l, r) ->
       let lt = val_type_of_expr l and rt = val_type_of_expr r in
-      if (lt <> rt) then raise (ArithmeticTypeMismatch (lt, rt));
+      (* if (lt <> rt) then raise (ArithmeticTypeMismatch (lt, rt)); *)
       lt
 
   (* And, Or, and Not all have the same type as their first arg (which
@@ -167,7 +167,7 @@ let rec val_type_of_expr = function
   (* Comparisons on scalars return scalar bools *)
   | Cmp (_, l, r) -> 
       let lt = val_type_of_expr l and rt = val_type_of_expr r in
-      if (lt <> rt) then raise (ArithmeticTypeMismatch (lt, rt));
+      (* if (lt <> rt) then raise (ArithmeticTypeMismatch (lt, rt)); *)
       begin match lt with
         | IntVector (_, n) 
         | UIntVector (_, n) 
@@ -210,6 +210,9 @@ type stmt =
      For the second statement the temporary storage is read-only.
   *)
   | Pipeline of buffer * val_type * expr * stmt * stmt
+
+  (* Assign a scalar value to a variable within the sub-statement *)
+  | LetStmt of string * expr * stmt
 
   (* For debugging *)
   | Print of string * (expr list)

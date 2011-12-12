@@ -66,47 +66,6 @@ let make_function_body (name:string) (env:environment) (debug:bool) =
   in
   (renamed_args, return_type, renamed_body)
 
-let make_schedule (name:string) (schedule:schedule_tree) =
-  (* Printf.printf "Looking up %s in the schedule\n" name; *)
-  let (call_sched, sched_list) = find_schedule schedule name in
-
-  (* Prefix all the stuff in the schedule_list *)
-  (* Printf.printf "Prefixing schedule entry\n"; *)
-
-  (* The prefix for this function *)
-  let prefix x = (name ^ "." ^ x) in
-
-  (* The prefix for the calling context *)
-  let caller = 
-    if (String.contains name '.') then
-      let last_dot = String.rindex name '.' in
-      String.sub name 0 last_dot 
-    else
-      "" 
-  in
-
-  let rec prefix_expr = function
-    | Var (t, n) -> Var (t, resolve_name caller n schedule)
-    | x -> mutate_children_in_expr prefix_expr x
-  in
-
-  let prefix_schedule = function      
-    | Serial     (name, min, size) -> Serial     (prefix name, prefix_expr min, prefix_expr size)
-    | Parallel   (name, min, size) -> Parallel   (prefix name, prefix_expr min, prefix_expr size)
-    | Unrolled   (name, min, size) -> Unrolled   (prefix name, prefix_expr min, size)
-    | Vectorized (name, min, size) -> Vectorized (prefix name, prefix_expr min, size)
-    | Split (old_dim, new_dim_1, new_dim_2, offset) -> 
-        Split (prefix old_dim, prefix new_dim_1, prefix new_dim_2, prefix_expr offset)
-  in
-  let prefix_call_sched = function
-    (* Refers to a var in the calling context *)
-    | Chunk v -> 
-        Chunk (resolve_name caller v schedule)
-    | x -> x
-  in
-  (prefix_call_sched call_sched, List.map prefix_schedule sched_list)
-
-
 let simplify_range = function
   | Bounds.Unbounded -> Bounds.Unbounded
   | Bounds.Range (a, b) -> Bounds.Range (Constant_fold.constant_fold_expr a, Constant_fold.constant_fold_expr b)
@@ -116,179 +75,20 @@ let string_of_range = function
   | Bounds.Range (a, b) -> "[" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ "]" 
 let bounds f stmt = simplify_region (Bounds.required_of_stmt f (StringMap.empty) stmt) 
 
-let rec replace_calls_with_loads_in_expr function_name buffer_name strides debug = function
-  | Call (ty, func_name, args) when func_name = function_name ->
-      let index = List.fold_right2 
-        (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
-        args strides (IntImm 0) in
-      let load = Load (ty, buffer_name, index) in
-      if debug then
-        Debug (load, "### Loading " ^ function_name ^ " at ", args)
-      else
-        load
-  | x -> mutate_children_in_expr (replace_calls_with_loads_in_expr function_name buffer_name strides debug) x
-
-let rec replace_calls_with_loads_in_stmt function_name buffer_name strides debug stmt = 
-  mutate_children_in_stmt 
-    (replace_calls_with_loads_in_expr function_name buffer_name strides debug)
-    (replace_calls_with_loads_in_stmt function_name buffer_name strides debug) 
-    stmt
-
-let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (functions:string list) (precomp: stmt list) (debug:bool) =
-  let bounds_buffer_name = "_size" in
+let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (functions:string list) (debug:bool) =
   match functions with
-    | [] -> 
-        (* Nearly done lowering, now inject all the precomputations of buffer sizes at the start *)
-        let lt a b =
-          (* does the values consumed by a require the value stored by b? *)
-          let load_b = match b with
-            | Store (expr, buf, idx) -> Load (i32, buf, idx)
-            | _ -> raise (Wtf "found a statement in the precomputations list that isn't a store\n")                
-          and load_a = match a with
-            | Store (expr, buf, idx) -> Load (i32, buf, idx)
-            | _ -> raise (Wtf "found a statement in the precomputations list that isn't a store\n")
-          in 
-          match (stmt_contains_expr load_b a, stmt_contains_expr load_a b) with
-            | (false, false) -> None
-            | (true, false) -> Some false
-            | (false, true) -> Some true
-            | (true, true) -> raise (Wtf "circular dependence found in precomputation list\n")
-        in
-
-        (* Print out all the sizes  *)
-        let print_sizes = if debug then List.map
-            (fun x -> Print ("_size ", [IntImm x; Load (i32, bounds_buffer_name, IntImm x)])) 
-            (0 -- (List.length precomp))
-          else []
-        in
-
-        let precomp = partial_sort lt precomp in
-
-        let produce = Block (precomp @ print_sizes) in
-
-        begin match produce with 
-          | (Block []) -> stmt
-          | _ ->
-              Pipeline (bounds_buffer_name, Int 32, IntImm (List.length precomp), produce, stmt)
-        end
-
+    | [] -> stmt
     | (name::rest) ->        
 
         (* Grab the body of the function call *)
         let (args, return_type, body) = make_function_body name env debug in
         
         (* Grab the schedule for function call *)
-        let (call_sched, sched_list) = make_schedule name schedule in
+        let (call_sched, sched_list) = find_schedule schedule name in
 
-        (* Complete the sched_list (it may not contain explicit bounds for some dimensions) *)
-        let region_used = bounds name stmt in
-        let range_of_dim d =
-          List.find (fun (dim, _) -> d = dim) (list_zip (List.map snd args) region_used)
-        in
-
-        let rec fix_bounds get_bounds = function
-          | [] -> []
-          | (first::rest) -> begin match first with 
-              | Serial (name, IntImm 0, IntImm 0) -> begin
-                match get_bounds name with
-                  | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
-                  | Bounds.Range (min, max) -> Serial (name, min, Constant_fold.constant_fold_expr (max -~ min +~ IntImm 1))
-              end :: (fix_bounds get_bounds rest)
-              | Parallel (name, IntImm 0, IntImm 0) -> begin
-                match get_bounds name with
-                  | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
-                  | Bounds.Range (min, max) -> Parallel (name, min, Constant_fold.constant_fold_expr (max -~ min +~ IntImm 1))
-              end :: (fix_bounds get_bounds rest)
-              | Split (name, outer, inner, IntImm 0) -> begin
-                let needs_inference = 
-                  match stride_for_dim outer sched_list with
-                    | (IntImm 0, IntImm 0) -> true
-                    | _ -> false
-                in if needs_inference then
-                    match get_bounds name with 
-                      | Bounds.Unbounded -> raise (Wtf ("Could not infer size of dimension " ^ name))
-                      | Bounds.Range (min, max) -> 
-                          (* Inner should have an explicit bound, and we only need to infer outer *)
-                          let (_, inner_size) = stride_for_dim inner sched_list in
-                          assert (inner_size <> IntImm 0);
-                          let one = IntImm 1 in
-                          (* We'll stuff min into the offset
-                             term. What is the maximum value of outer
-                             we need to compute?. It looks like there
-                             are +/- ones missing in this expression
-                             but there aren't. They all cancel. *)
-                          let outer_max = (max -~ min) /~ inner_size in
-                          let new_get_bounds x =
-                            if x = outer then 
-                              (* Round outwards to nearest multiples of
-                                 inner_size. To be robust to negative values,
-                                 these expressions get a little hairy *)
-                              Bounds.Range (IntImm 0, outer_max)
-                            else get_bounds x
-                          in
-                          Split(name, outer, inner, min) :: (fix_bounds new_get_bounds rest)
-                  else first :: (fix_bounds get_bounds rest)
-              end
-              | _ -> first :: (fix_bounds get_bounds rest)
-          end 
-        in
-
-        let sched_list = fix_bounds (fun x -> snd (range_of_dim x)) sched_list in
-
-        (* Pull nasty terms in the sched_list out so that they don't cascade when doing boundary inference *)
-        let rec precompute_bounds (old_list: schedule list) (new_list: schedule list) (precomp: stmt list) (count: int) =
-          let load1 = Load (Int 32, bounds_buffer_name, IntImm count) in
-          let store1 x = Store (x, bounds_buffer_name, IntImm count) in
-          let load2 = Load (Int 32, bounds_buffer_name, IntImm (count+1)) in
-          let store2 x = Store (x, bounds_buffer_name, IntImm (count+1)) in
-          let recurse1 rest s p = precompute_bounds rest (s::new_list) (p::precomp) (count+1) in
-          let recurse2 rest s p1 p2 = precompute_bounds rest (s::new_list) (p1::p2::precomp) (count+2) in
-          let should_not_lift = function
-            | IntImm _ -> true
-            | Load (_, _, IntImm _) -> true
-            | expr -> 
-                let rec only_globals = function
-                  | Call (_, name, args) -> (List.for_all only_globals args) && ((String.get name 0) = '.')
-                  | Var (_, name) -> (String.get name 0) = '.'
-                  | expr -> fold_children_in_expr only_globals (&&) true expr
-                in
-                not (only_globals expr)
-          in
-          (* TODO: this will break if we have bounds that depend on a loop variable *)
-          match old_list with
-            (* Constant terms don't need lifting *)
-            | [] -> (List.rev new_list, List.rev precomp)
-            | (Unrolled (_, m, _))::rest
-            | (Vectorized (_, m, _))::rest 
-            | (Split (_, _, _, m))::rest when should_not_lift m ->
-                precompute_bounds rest ((List.hd old_list)::new_list) precomp count                
-            | (Parallel (_, m, s))::rest
-            | (Serial (_, m, s))::rest when should_not_lift m && should_not_lift s ->
-                precompute_bounds rest ((List.hd old_list)::new_list) precomp count                
-            (* One term to lift *)
-            | (Unrolled (n, m, s))::rest ->
-                recurse1 rest (Unrolled (n, load1, s)) (store1 m)
-            | (Vectorized (n, m, s))::rest ->
-                recurse1 rest (Vectorized (n, load1, s)) (store1 m)
-            | (Serial (n, m, s))::rest when should_not_lift s->
-                recurse1 rest (Serial (n, load1, s)) (store1 m)
-            | (Parallel (n, m, s))::rest when should_not_lift s->
-                recurse1 rest (Parallel (n, load1, s)) (store1 m)
-            | (Serial (n, m, s))::rest when should_not_lift m ->
-                recurse1 rest (Serial (n, m, load1)) (store1 s)
-            | (Parallel (n, m, s))::rest when should_not_lift m ->
-                recurse1 rest (Parallel (n, m, load1)) (store1 s)
-            | (Split (a, b, c, m))::rest ->
-                recurse1 rest (Split (a, b, c, load1)) (store1 m)
-            (* Two terms to lift *)
-            | (Parallel (n, m, s))::rest ->
-                recurse2 rest (Parallel (n, load1, load2)) (store1 m) (store2 s)
-            | (Serial (n, m, s))::rest ->
-                recurse2 rest (Serial (n, load1, load2)) (store1 m) (store2 s)
-        in
-        let (sched_list, precomp) = precompute_bounds sched_list [] precomp (List.length precomp) in 
-
-        Printf.printf "Lowering function %s with call_sched %s\n%!" name (string_of_call_schedule call_sched);
+        Printf.printf "Lowering function %s with schedule %s [%s]\n%!" name 
+          (string_of_call_schedule call_sched)
+          (String.concat ", " (List.map string_of_schedule sched_list));
 
         (* Make a function to use for scheduling chunks and roots *)
         let make_pipeline stmt = 
@@ -302,7 +102,8 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
           (* Generate a statement that evaluates the function over its schedule *)
           let produce = realize (name, args, return_type, body) sched_list buffer_name strides debug in
           (* Generate the code that consumes the result by replacing calls with loads *)
-          let consume = replace_calls_with_loads_in_stmt name buffer_name strides debug stmt in 
+          (* let consume = replace_calls_with_loads_in_stmt name buffer_name strides debug stmt in  *)
+          let consume = stmt in
 
           (* Wrap the pair into a pipeline object *)
           let pipeline = Pipeline (buffer_name, return_type, buffer_size, produce, consume) in
@@ -344,6 +145,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
                   | Pure expr ->
                       let rec inline_calls_in_expr = function
                         | Call (t, n, call_args) when n = name -> 
+                            let call_args = List.map inline_calls_in_expr call_args in
                             (* TODO: Check the types match *)
                             List.fold_left2 
                               (* Replace an argument with its value in e, possibly vectorizing as we go for i32 args *)
@@ -361,6 +163,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
               (* Replace calls to name with calls to s in stmt *)
               let rec fix_expr = function
                 | Call (ty, n, args) when n = name -> 
+                    let args = List.map (mutate_children_in_expr fix_expr) args in
                     Call (ty, s, args)
                 | expr -> mutate_children_in_expr fix_expr expr
               in
@@ -370,7 +173,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
             | _ -> raise (Wtf "I don't know how to schedule this yet")
         in
         Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);  
-        lower_stmt scheduled_call env schedule rest precomp debug
+        lower_stmt scheduled_call env schedule rest debug
 
 
 
@@ -482,6 +285,232 @@ and realize (name, args, return_type, body) sched_list buffer_name strides debug
   else
     produce
 
+(* Figure out interdependent expressions that give the bounds required
+   by all the functions defined in some block. *)
+(* bounds is a list of (func, var, min, max) *)
+let rec extract_bounds_soup env var_env bounds = function
+  | Pipeline (buf, ty, size, produce, consume) -> 
+      (* What function am I producing? *)
+      let bounds = try
+        let func = String.sub buf 0 (String.rindex buf '.') in        
+
+        (* Compute the extent of that function used in the consume side *)
+        let region = Bounds.required_of_stmt func var_env consume in
+
+        if region = [] then bounds else begin
+
+          (* Get the args list of the function *)
+          let (args, _, _) = find_function func env in
+          let args = List.map snd args in
+
+        
+          let string_of_bound = function
+            | Bounds.Unbounded -> "Unbounded"
+            | Bounds.Range (min, max) -> "Range (" ^ string_of_expr min ^ ", " ^ string_of_expr max ^ ")"
+          in
+          Printf.printf "%s: %s %s\n" func (String.concat ", " args) (String.concat ", " (List.map string_of_bound region));
+        
+          (* Add the extent of those vars to the bounds soup *)
+          let add_bound bounds arg = function
+            | Bounds.Range (min, max) ->              
+                (func, arg, min, max)::bounds
+            | _ -> raise (Wtf ("Could not compute bounds of " ^ func ^ "." ^ arg))
+          in 
+          List.fold_left2 add_bound bounds args region
+        end
+        with Not_found -> bounds
+      in
+
+      (* recurse into both sides *)
+      let bounds = extract_bounds_soup env var_env bounds produce in
+      extract_bounds_soup env var_env bounds consume
+  | Block l -> List.fold_left (extract_bounds_soup env var_env) bounds l
+  | For (n, min, size, order, body) -> 
+      let var_env = StringMap.add n (Bounds.Range (min, size +~ min -~ IntImm 1)) var_env in
+      extract_bounds_soup env var_env bounds body   
+  | x -> bounds
+ 
+
+
+let rec bounds_inference env schedule = function
+  | For (var, min, size, order, body) ->
+      let size_buffer = var ^ "_sizes" in
+      (* Pull out the bounds of all function realizations within this body *)
+      begin match extract_bounds_soup env StringMap.empty [] body with
+        | [] -> 
+            let (body, schedule) = bounds_inference env schedule body in 
+            (For (var, min, size, order, body), schedule)              
+        | bounds ->
+            (* sort the list topologically *)
+            let lt (f1, arg1, min1, max1) (f2, arg2, min2, max2) =
+              let v1m = Var (Int 32, f1 ^ "." ^ arg1 ^ ".min") in
+              let v2m = Var (Int 32, f2 ^ "." ^ arg2 ^ ".min") in
+              let v1e = Var (Int 32, f1 ^ "." ^ arg1 ^ ".extent") in
+              let v2e = Var (Int 32, f2 ^ "." ^ arg2 ^ ".extent") in
+              if expr_contains_expr v1m min2 then Some false
+              else if expr_contains_expr v1m max2 then Some false
+              else if expr_contains_expr v1e min2 then Some false
+              else if expr_contains_expr v1e max2 then Some false
+              else if expr_contains_expr v2m min1 then Some true
+              else if expr_contains_expr v2m max1 then Some true
+              else if expr_contains_expr v2e min1 then Some true
+              else if expr_contains_expr v2e max1 then Some true
+              else None
+            in
+            let bounds = partial_sort lt bounds in
+
+            let subs_schedule old_expr new_expr schedule =
+              let subs_e e = Constant_fold.constant_fold_expr (subs_expr old_expr new_expr e) in
+              let subs_sched = function
+                | Parallel (n, m, s) -> Parallel (n, subs_e m, subs_e s)
+                | Serial (n, m, s) -> Serial (n, subs_e m, subs_e s)
+                | Vectorized (n, m, s) -> Vectorized (n, subs_e m, s)
+                | Unrolled (n, m, s) -> Unrolled (n, subs_e m, s)
+                | Split (n, no, ni, o) -> Split (n, no, ni, subs_e o)
+              in
+              let keys = list_of_schedule schedule in
+              let update_schedule sched key =
+                let (call_sched, sched_list) = find_schedule sched key in
+                set_schedule sched key call_sched (List.map subs_sched sched_list)
+              in
+
+              List.fold_left update_schedule schedule keys
+            in
+
+            (*
+            let lift_var (precomp, body, schedule) var value =
+              let value = Constant_fold.constant_fold_expr value in
+              let value = Break_false_dependence.break_false_dependence_expr value in
+              let value = Constant_fold.constant_fold_expr value in
+              let n = List.length precomp in
+              let new_expr = Load (Int 32, size_buffer, IntImm n) in
+              let assignment = Store (value, size_buffer, IntImm n) in
+              (* let precomp x = LetStmt (var, value, precomp x) in *)
+              let precomp = assignment::(List.map (subs_stmt var new_expr) precomp) in
+              let body = subs_stmt var new_expr body in
+              let schedule = subs_schedule var new_expr schedule in
+              (precomp, body, schedule)
+            in 
+            let rewrite_bound (precomp, body, schedule) (func, arg, min, max) =
+              (* Lift the storage of the min *)              
+              let var = Var (Int 32, func ^ "." ^ arg ^ ".min") in
+              let (precomp, body, schedule) = lift_var (precomp, body, schedule) var min in
+              let var = Var (Int 32, func ^ "." ^ arg ^ ".extent") in
+              lift_var (precomp, body, schedule) var (max -~ min +~ IntImm 1)
+            in
+            *)
+
+            let lift_var precomp var value = 
+              let value = Constant_fold.constant_fold_expr value in
+              let value = Break_false_dependence.break_false_dependence_expr value in
+              let value = Constant_fold.constant_fold_expr value in
+              let precomp x = LetStmt (var, value, precomp x) in
+              precomp
+            in
+
+            let rewrite_bound precomp (func, arg, min, max) =
+              (* Lift the storage of the min *)              
+              let precomp = lift_var precomp (func ^ "." ^ arg ^ ".min") min in
+              let precomp = lift_var precomp (func ^ "." ^ arg ^ ".extent") (max -~ min +~ IntImm 1) in
+              precomp
+            in
+            
+            let precomp = List.fold_left rewrite_bound (fun x -> x) bounds in
+
+            let (body, schedule) = bounds_inference env schedule body in               
+
+            (For (var, min, size, order, precomp body), schedule)
+      end
+  | Block l ->
+      let rec fix sched = function
+        | Block [] -> (Block [], sched)
+        | Block (first::rest) -> 
+            let (Block fix_rest, fix_sched) = fix sched (Block rest) in
+            let (fix_first, fix_sched) = bounds_inference env fix_sched first in
+            (Block (fix_first::fix_rest), fix_sched)
+      in fix schedule (Block l)
+  | Pipeline (name, ty, size, produce, consume) ->
+      let (produce, schedule) = bounds_inference env schedule produce in
+      let (consume, schedule) = bounds_inference env schedule consume in
+      (Pipeline (name, ty, size, produce, consume), schedule)
+  | x -> (x, schedule)
+
+
+let qualify_schedule (sched:schedule_tree) =
+  let make_schedule (name:string) (schedule:schedule_tree) =
+    (* Printf.printf "Looking up %s in the schedule\n" name; *)
+    let (call_sched, sched_list) = find_schedule schedule name in
+
+    (* The prefix for this function *)
+    let prefix x = (name ^ "." ^ x) in
+
+    (* The prefix for the calling context *)
+    let caller = 
+      if (String.contains name '.') then
+        let last_dot = String.rindex name '.' in
+        String.sub name 0 last_dot 
+      else
+        "" 
+    in
+    
+    let rec prefix_expr = function
+      | Var (t, n) -> Var (t, if (String.get n 0 = '.') then n else (caller ^ "." ^ n))
+      | x -> mutate_children_in_expr prefix_expr x
+    in
+    
+    let prefix_schedule = function      
+      | Serial     (name, min, size) -> Serial     (prefix name, prefix_expr min, prefix_expr size)
+      | Parallel   (name, min, size) -> Parallel   (prefix name, prefix_expr min, prefix_expr size)
+      | Unrolled   (name, min, size) -> Unrolled   (prefix name, prefix_expr min, size)
+      | Vectorized (name, min, size) -> Vectorized (prefix name, prefix_expr min, size)
+      | Split (old_dim, new_dim_1, new_dim_2, offset) -> 
+          Split (prefix old_dim, prefix new_dim_1, prefix new_dim_2, prefix_expr offset)
+    in
+
+    (call_sched, List.map prefix_schedule sched_list)     
+  in
+
+  let keys = list_of_schedule sched in
+  let update sched key =
+    let (call_sched, sched_list) = make_schedule key sched in
+    set_schedule sched key call_sched sched_list 
+  in
+  List.fold_left update sched keys    
+
+let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug:bool) =
+  let rec replace_calls_with_loads_in_expr function_name buffer_name strides debug expr = 
+    let recurse = replace_calls_with_loads_in_expr function_name buffer_name strides debug in
+    match expr with 
+      | Call (ty, func_name, args) when func_name = function_name ->
+          let args = List.map recurse args in 
+          let index = List.fold_right2 
+            (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
+            args strides (IntImm 0) in
+          let load = Load (ty, buffer_name, index) in
+          if debug then
+            Debug (load, "### Loading " ^ function_name ^ " at ", args)
+          else
+            load
+      | x -> mutate_children_in_expr recurse x
+  in
+  let rec replace_calls_with_loads_in_stmt function_name buffer_name strides debug stmt = 
+    mutate_children_in_stmt 
+      (replace_calls_with_loads_in_expr function_name buffer_name strides debug)
+      (replace_calls_with_loads_in_stmt function_name buffer_name strides debug) 
+      stmt     
+  in
+
+  let functions = list_of_schedule schedule in
+  let update stmt f =
+    let (args, _, _) = find_function f env in
+    let (_, sched_list) = find_schedule schedule f in
+    if sched_list = [] then stmt else
+      let strides = stride_list sched_list (List.map (fun (_, n) -> f ^ "." ^ n) args) in
+      replace_calls_with_loads_in_stmt f (f ^ ".result") strides debug stmt
+  in
+  List.fold_left update stmt functions 
+
+
 (* TODO: @jrk Make debug an optional arg? *)
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) (debug:bool) =
   let starts_with a b =    
@@ -505,17 +534,32 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   let functions = partial_sort lt (list_of_schedule schedule) in
   (* Printf.printf "Realization order: %s\n" (String.concat "\n" functions); *)
 
+  Printf.printf "Fully qualifying symbols in the schedule\n%!";
+  let schedule = qualify_schedule schedule in
+
   Printf.printf "Making root function body\n%!";
   let (args, return_type, body) = make_function_body func env debug in
   Printf.printf "Making root schedule\n%!";
-  let (_, sched_list) = make_schedule func schedule in
+  let (_, sched_list) = find_schedule schedule func in
   Printf.printf "Making root stride list\n%!";
   let strides = stride_list sched_list (List.map snd args) in
   Printf.printf "Realizing root statement\n%!";
   let core = (realize (func, args, return_type, body) sched_list ".result" strides debug) in
   Printf.printf "Recursively lowering function calls\n%!";
-  let stmt = lower_stmt core env schedule (List.filter (fun x -> x <> func) functions) [] debug in
+  let stmt = lower_stmt core env schedule (List.filter (fun x -> x <> func) functions) debug in
 
+  Printf.printf "Performing bounds inference\n%!";
+  (* Updates stmt and schedule *)
+  let (For (_, _, _, _, stmt), schedule) =
+    bounds_inference env schedule (For ("", IntImm 0, IntImm 0, true, stmt)) in
+
+  print_schedule schedule;
+
+  Printf.printf "Replacing function calls with loads\n%!";
+  let stmt = lower_function_calls stmt env schedule debug in
+
+  print_schedule schedule;
+  
   stmt
 
   (*
