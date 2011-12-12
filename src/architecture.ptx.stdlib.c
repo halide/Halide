@@ -1,5 +1,3 @@
-// Test CUDA kernel runner, using the low-level Driver API
-
 /*
  * Build LL module with:
  *
@@ -7,49 +5,18 @@
  */
 #include <stdio.h>
 //#include <cuda.h>
-//#include <assert.h>
+#include <assert.h>
 
 //#define CHECK_CALL(c) (assert((c) == CUDA_SUCCESS))
 //#define CHECK_CALL(c) (success &&= ((c) == CUDA_SUCCESS))
-#define CHECK_CALL(c) (c)
-
-/*
-typedef union {
-    struct {
-        void* host;
-        CUdeviceptr dev;
-    } ptr;
-    int32_t i32;
-    float f32;
-} ArgT;
-*/
-
-// TODO: convention to track host and device pointers together in args
-
-// TODO: use tags to track arg types for simple, non-dynamically-generated free function? Or just generate free function like allocate/run function, with explicit knowledge of which arguments are which and how to free them?
-
-// Convention: caller passes in args array as would be passed to function, but 
-// with ptr args unset. Buffers are allocated and pointers assigned to ptr args.
-// Useful to automatically preallocate buffers in generated code, while allowing 
-// them to be reused through multiple applications of the same entrypoint.
-/*
- * Punting on this for now
- *
-int allocateBuffers(ArgT* args)
-{
-    int width = args[2].i32;
-    int height = args[3].i32;
-    int channels = args[4].i32;
-
-    size_t inSize = width*height*channels*sizeof(float);
-    args[0].host = malloc(inSize);
-    cuMemAlloc(args[0].device, inSize);
-
-    size_t inSize = width*height*channels*sizeof(float);
-    args[1].host = malloc(outSize);
-    cuMemAlloc(args[1].device, outSize);
-}
-*/
+/*#define CHECK_CALL(c) (c)*/
+#define CHECK_CALL(c,str) {\
+    fprintf(stderr, "Do %s\n", str); \
+    CUresult status = (c); \
+    if (status != CUDA_SUCCESS) \
+        fprintf(stderr, "CUDA: %s returned non-success: %d\n", str, status); \
+    assert(status == CUDA_SUCCESS); \
+    } (c)
 
 #ifndef __cuda_cuda_h__
 #ifdef _WIN32
@@ -70,7 +37,52 @@ typedef struct CUctx_st *CUcontext;                       /**< CUDA context */
 typedef struct CUmod_st *CUmodule;                        /**< CUDA module */
 typedef struct CUfunc_st *CUfunction;                     /**< CUDA function */
 typedef struct CUstream_st *CUstream;                     /**< CUDA stream */
-typedef enum { CUDA_SUCCESS = 0, CUDA_ANY_ERROR = 1 } CUresult; // stub for real enum
+typedef enum {
+    CUDA_SUCCESS                              = 0,
+    CUDA_ERROR_INVALID_VALUE                  = 1,
+    CUDA_ERROR_OUT_OF_MEMORY                  = 2,
+    CUDA_ERROR_NOT_INITIALIZED                = 3,
+    CUDA_ERROR_DEINITIALIZED                  = 4,
+    CUDA_ERROR_PROFILER_DISABLED           = 5,
+    CUDA_ERROR_PROFILER_NOT_INITIALIZED       = 6,
+    CUDA_ERROR_PROFILER_ALREADY_STARTED       = 7,
+    CUDA_ERROR_PROFILER_ALREADY_STOPPED       = 8,  
+    CUDA_ERROR_NO_DEVICE                      = 100,
+    CUDA_ERROR_INVALID_DEVICE                 = 101,
+    CUDA_ERROR_INVALID_IMAGE                  = 200,
+    CUDA_ERROR_INVALID_CONTEXT                = 201,
+    CUDA_ERROR_CONTEXT_ALREADY_CURRENT        = 202,
+    CUDA_ERROR_MAP_FAILED                     = 205,
+    CUDA_ERROR_UNMAP_FAILED                   = 206,
+    CUDA_ERROR_ARRAY_IS_MAPPED                = 207,
+    CUDA_ERROR_ALREADY_MAPPED                 = 208,
+    CUDA_ERROR_NO_BINARY_FOR_GPU              = 209,
+    CUDA_ERROR_ALREADY_ACQUIRED               = 210,
+    CUDA_ERROR_NOT_MAPPED                     = 211,
+    CUDA_ERROR_NOT_MAPPED_AS_ARRAY            = 212,
+    CUDA_ERROR_NOT_MAPPED_AS_POINTER          = 213,
+    CUDA_ERROR_ECC_UNCORRECTABLE              = 214,
+    CUDA_ERROR_UNSUPPORTED_LIMIT              = 215,
+    CUDA_ERROR_CONTEXT_ALREADY_IN_USE         = 216,
+    CUDA_ERROR_INVALID_SOURCE                 = 300,
+    CUDA_ERROR_FILE_NOT_FOUND                 = 301,
+    CUDA_ERROR_SHARED_OBJECT_SYMBOL_NOT_FOUND = 302,
+    CUDA_ERROR_SHARED_OBJECT_INIT_FAILED      = 303,
+    CUDA_ERROR_OPERATING_SYSTEM               = 304,
+    CUDA_ERROR_INVALID_HANDLE                 = 400,
+    CUDA_ERROR_NOT_FOUND                      = 500,
+    CUDA_ERROR_NOT_READY                      = 600,
+    CUDA_ERROR_LAUNCH_FAILED                  = 700,
+    CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES        = 701,
+    CUDA_ERROR_LAUNCH_TIMEOUT                 = 702,
+    CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING  = 703,
+    CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED = 704,
+    CUDA_ERROR_PEER_ACCESS_NOT_ENABLED    = 705,
+    CUDA_ERROR_PRIMARY_CONTEXT_ACTIVE         = 708,
+    CUDA_ERROR_CONTEXT_IS_DESTROYED           = 709,
+    CUDA_ERROR_UNKNOWN                        = 999
+} CUresult;
+
 
 CUresult CUDAAPI cuInit(unsigned int Flags);
 CUresult CUDAAPI cuDeviceGetCount(int *count);
@@ -100,44 +112,37 @@ static CUfunction f = 0;
 static CUdevice dev = 0;
 static CUcontext ctx = 0;
 static CUmodule mod = 0;
-char* ptx_src_ptr;
 
-/*
-typedef enum bool {
-    false = 0,
-    true = 1
-} bool;
-*/
-void init()
+void init(const char* ptx_src, const char* entry_name)
 {
-    /*bool success;*/
+    CUresult status;
+
     if (!f) {
         // Initialize CUDA
-        CHECK_CALL( cuInit(0) );
+        CHECK_CALL( cuInit(0), "cuInit" );
 
         // Make sure we have a device
         int deviceCount = 0;
-        CHECK_CALL( cuDeviceGetCount(&deviceCount) );
-        /*if (deviceCount == 0) return false;*/
+        CHECK_CALL( cuDeviceGetCount(&deviceCount), "cuDeviceGetCount" );
+        assert(deviceCount > 0);
 
         // Get device
-        CHECK_CALL( cuDeviceGet(&dev, 0) );
+        CHECK_CALL( cuDeviceGet(&dev, 0), "cuDeviceGet" );
 
         // Create context
-        CHECK_CALL( cuCtxCreate(&ctx, 0, dev) );
+        CHECK_CALL( cuCtxCreate(&ctx, 0, dev), "cuCtxCreate" );
 
         // Create module
-        CHECK_CALL( cuModuleLoadData(&mod, ptx_src_ptr) );
+        CHECK_CALL( cuModuleLoadData(&mod, ptx_src), "cuModuleLoadData" );
+        
+        fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
 
         // Get kernel function ptr
-        //assert(!f);
-        CHECK_CALL( cuModuleGetFunction(&f, mod, "_im_main") );
-
-        /*if (!success) return false;*/
+        CHECK_CALL( cuModuleGetFunction(&f, mod, entry_name), "cuModuleGetFunction" );
     }
-    /*return true;*/
 }
 
+// TODO: switch to building as C++ with extern "C" linkage on functions
 typedef enum {
     false = 0,
     true = 1
@@ -154,7 +159,7 @@ typedef struct {
 
 CUdeviceptr dev_malloc(size_t bytes) {
     CUdeviceptr p;
-    cuMemAlloc(&p, bytes);
+    CHECK_CALL( cuMemAlloc(&p, bytes), "dev_malloc" );
     return p;
 }
 
@@ -166,12 +171,12 @@ void dev_malloc_if_missing(buffer_t* buf) {
 
 void copy_to_dev(buffer_t* buf) {
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-    cuMemcpyHtoD(buf->dev, buf->host, size);
+    CHECK_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), "copy_to_dev" );
 }
 
 void copy_to_host(buffer_t* buf) {
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-    cuMemcpyDtoH(buf->host, buf->dev, size);
+    CHECK_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), "copy_to_host" );
 }
 
 void dev_run(
@@ -180,28 +185,26 @@ void dev_run(
     int shared_mem_bytes,
     void* args[])
 {
-    cuLaunchKernel(
-        f,
-        blocksX,  blocksY,  blocksZ,
-        threadsX, threadsY, threadsZ,
-        shared_mem_bytes,
-        NULL, // stream
-        args,
-        NULL
+    CHECK_CALL(
+        cuLaunchKernel(
+            f,
+            blocksX,  blocksY,  blocksZ,
+            threadsX, threadsY, threadsZ,
+            shared_mem_bytes,
+            NULL, // stream
+            args,
+            NULL
+        ),
+        "cuLaunchKernel"
     );
 }
 
 #ifdef INCLUDE_WRAPPER
 int kernel_wrapper_tmpl( buffer_t *input, buffer_t *result, int N )
 {
-    /*bool success;*/
-
-    /*if (!init()) return false;*/
-    init();
-
-    // Copy host data to device
-    // NOTE: this is the caller responsibility for now
-    //CHECK_CALL( cuMemcpyHtoD(dIn, hIn, size) );
+    const char* ptx_src = "...";
+    const char* entry_name = "f";
+    init(ptx_src, entry_name);
 
     int threadsX = 16;
     int threadsY =  1;
@@ -214,7 +217,6 @@ int kernel_wrapper_tmpl( buffer_t *input, buffer_t *result, int N )
     dev_malloc_if_missing(result);
 
     copy_to_dev(input);
-    
 
     // Invoke
     void* cuArgs[] = { &input->dev, &result->dev, &N };
