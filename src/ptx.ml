@@ -113,11 +113,13 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   (* build a const data item of the compiled ptx source *)
   let ptx_src_data = build_global_string ptx_src "ptx_src" b in
   let ptx_src_data_ptr = const_in_bounds_gep ptx_src_data [| const_int i32_t 0; const_int i32_t 0 |] in
-  (* copy PTX to ptx_src_ptr *)
-  ignore (build_store ptx_src_data_ptr ptx_src_ptr b);
+  (* copy PTX to ptx_src_ptr global *)
+  build_store ptx_src_data_ptr ptx_src_ptr b;
 
   let ptx_entry_name_str = build_global_string entrypoint_name "ptx_entry_name" b in
-  replace_all_uses_with ptx_entry_name ptx_entry_name_str;
+  let ptx_entry_name_ptr = const_in_bounds_gep ptx_entry_name_str [| const_int i32_t 0; const_int i32_t 0 |] in
+  (* copy entry name to ptx_entry_name global *)
+  build_store ptx_entry_name_ptr ptx_entry_name b;
 
   (* init CUDA *)
   ignore (build_call init [||] "" b);
