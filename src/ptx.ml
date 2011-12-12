@@ -179,7 +179,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
    * call dev_run(threadsX, threadsY, threadsZ, blocksX, blocksY, blocksZ, localmembytes, cuArgsPtr)
    *)
   let cuArgsPtr = build_gep cuArgs [| (const_int i32_t 0); (const_int i32_t 0) |] "cuArgsPtr" b in
-  let threadsX = const_int i32_t 16 in
+  let threadsX = const_int i32_t 256 in
   let threadsY = const_int i32_t  1 in
   let threadsZ = const_int i32_t  1 in
   let blocksX  = const_int i32_t 64 in
