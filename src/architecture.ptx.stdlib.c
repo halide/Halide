@@ -113,6 +113,7 @@ static CUdevice dev = 0;
 static CUcontext ctx = 0;
 static CUmodule mod = 0;
 char* ptx_src_ptr;
+char* ptx_entry_name;
 
 void init()
 {
@@ -139,7 +140,7 @@ void init()
 
         // Get kernel function ptr
         //assert(!f);
-        CHECK_CALL( cuModuleGetFunction(&f, mod, "f"), "cuModuleGetFunction" );
+        CHECK_CALL( cuModuleGetFunction(&f, mod, ptx_entry_name), "cuModuleGetFunction" );
 
         /*if (!success) return false;*/
     }
