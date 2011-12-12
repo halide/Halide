@@ -217,9 +217,7 @@ let chunk_schedule func var args region schedule =
   (* Figure out all the possible vars this could refer to *)
   let rec descend enclosing_var context f (call_sched, sched_list, sched) found_vars =
     if f = func then 
-      match enclosing_var with 
-        | None -> found_vars
-        | Some x -> x :: found_vars
+      enclosing_var :: found_vars
     else
 
       let subcontext = if context = "" then f else (context ^ "." ^ f) in
@@ -293,10 +291,17 @@ let chunk_schedule func var args region schedule =
   let Tree map = schedule in
   let contexts = StringMap.fold (descend None "") map [] in
 
-  Printf.printf "Contexts in which I want to chunk %s over %s: %s\n%!" func var (String.concat ", " contexts);
+  let string_of_context = function
+    | None -> "None"
+    | Some v -> "Some " ^ v
+  in
 
+  Printf.printf "Contexts in which I want to chunk %s over %s: %s\n%!"
+      func var (String.concat ", " (List.map string_of_context contexts));
+
+  (* TODO: allow different meanings in different places *)
   match contexts with 
-    | first::[] -> 
+    | (Some first)::rest when List.for_all (fun x -> x = (Some first)) rest ->  (* single unambiguous meaning *)
         root_or_chunk_schedule func (Chunk (first ^ "." ^ var)) args region schedule
     | _ -> 
         (* Ambiguous or ill-defined. Fall back to Root *)
