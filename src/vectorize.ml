@@ -7,16 +7,29 @@ let expand e width =
   if (is_scalar e) then Broadcast (e, width) else e
 
 (* Substitute var for something that might be a vector in expr and propagate the vectorness upwards *)
-let vector_subs_expr (var:string) (replacement:expr) (expr:expr) =
-  let width = vector_elements (val_type_of_expr replacement) in
+let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
+  let (some_var, some_value) = StringMap.choose env in
+  let width = vector_elements (val_type_of_expr some_value) in
+
+  assert (StringMap.for_all (fun _ value -> vector_elements (val_type_of_expr value) = width) env);
+ 
   if width = 1 then
-    (* If you pass a scalar, vector_subs_expr just acts as subs_expr *)
-    subs_expr (Var (i32, var)) replacement expr
+    (* If you pass a scalar, vector_subs_expr just acts as a bunch of subs_expr *)
+    StringMap.fold (fun key value expr -> subs_expr (Var (i32, key)) value expr) env expr
   else
 
     let expand e = expand e width in
-    let rec vec expr = match expr with
-      | x when is_scalar x && not (expr_contains_expr (Var (i32, var)) expr) -> x
+    let rec vec expr = 
+      assert (is_scalar expr);
+
+      (* Are any of the variables in the expression in the environment *)
+      let rec contains_vars_in_env = function
+        | Var (_, n) -> StringMap.mem n env
+        | x -> fold_children_in_expr contains_vars_in_env (||) false x
+      in
+
+      match expr with
+      | x when not (contains_vars_in_env x) -> x
           
       | Cast (t, expr) -> Cast (vector_of_val_type t width, vec expr)
           
@@ -42,7 +55,16 @@ let vector_subs_expr (var:string) (replacement:expr) (expr:expr) =
       | Or (a, b)      -> Or (expand (vec a), expand (vec b))
       | Not (a)        -> Not (vec a)
           
-      | Let (name, a, b) -> Let (name, expand (vec a), expand (vec b))
+      | Let (name, a, b) -> 
+          assert (not (StringMap.mem name env));
+          let a = vec a in
+          let b = 
+            if is_vector a then
+              let env = StringMap.add name a env in
+              vector_subs_expr env b
+            else vec b
+          in
+          Let (name, a, b)
           
       | Select (c, a, b) ->
           let va = vec a and vb = vec b and vc = vec c in
@@ -66,9 +88,9 @@ let vector_subs_expr (var:string) (replacement:expr) (expr:expr) =
            * build a MakeVector of Calls, using ExtractElement on the args--but
            * ideally only doing so if the given arg was actually vectorized. *)
           raise (Wtf("Can't vectorize extern calls (yet)"))
-      | Call (t, f, args) -> Call (vector_of_val_type t width, f, List.map vec args)
+      | Call (t, f, args) -> Call (vector_of_val_type t width, f, List.map (fun arg -> expand (vec arg)) args)
 
-      | Var (t, name) -> assert (name = var && t = i32); replacement
+      | Var (t, name) -> assert (t = i32); StringMap.find name env
 
       | Debug (e, prefix, args) -> Debug (vec e, prefix, List.map vec args)
           
@@ -76,7 +98,7 @@ let vector_subs_expr (var:string) (replacement:expr) (expr:expr) =
     in vec expr
 
 let vectorize_expr (var:string) (min:expr) (width:int) (expr:expr) = 
-  vector_subs_expr var (Ramp (min, IntImm 1, width)) expr
+  vector_subs_expr (StringMap.add var (Ramp (min, IntImm 1, width)) StringMap.empty) expr
 
 let rec vectorize_stmt var stmt =
   let rec vectorize_stmt_inner (min:expr) (width:int) stmt =

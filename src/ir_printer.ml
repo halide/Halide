@@ -51,7 +51,7 @@ and string_of_expr = function
   | Cmp(op, l, r) -> "(" ^ string_of_expr l ^ string_of_cmp op ^ string_of_expr r ^ ")"
   | Select(c, t, f) ->
     "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
-  | Var(t, s) -> s
+  | Var(t, s) -> s ^ "<" ^ string_of_val_type t ^ ">"
   | Load(t, b, i) -> string_of_buffer b ^ "[" ^ string_of_expr i ^ "]"
   | Call(t, name, args) -> name ^ "<" ^ string_of_val_type t ^ ">(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ")"
   | MakeVector l -> "vec[" ^ (String.concat ", " (List.map string_of_expr l)) ^ "]"

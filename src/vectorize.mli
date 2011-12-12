@@ -1,3 +1,3 @@
-val vector_subs_expr : string -> Ir.expr -> Ir.expr -> Ir.expr
+val vector_subs_expr : Ir.expr Util.StringMap.t -> Ir.expr -> Ir.expr
 val vectorize_expr : string -> Ir.expr -> int -> Ir.expr -> Ir.expr
 val vectorize_stmt : string -> Ir.stmt -> Ir.stmt

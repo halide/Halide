@@ -229,27 +229,32 @@ let cg_entry c m e =
     | MakeVector(l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
 
     | Broadcast(e, n) -> 
-      let elem_type = val_type_of_expr e in
-      let vec_type  = vector_of_val_type elem_type n in
-      let expr      = cg_expr e in
-      let rec rep = function
-        | 0 -> undef (type_of_val_type vec_type)
-        | i -> build_insertelement (rep (i-1)) expr (const_int int_imm_t (i-1)) "" b
-      in rep n
+        Printf.printf "cg_broadcast...\n%!";
+        let elem_type = val_type_of_expr e in
+        let vec_type  = vector_of_val_type elem_type n in
+        let expr      = cg_expr e in
+        let rec rep = function
+          | 0 -> undef (type_of_val_type vec_type)
+          | i -> build_insertelement (rep (i-1)) expr (const_int int_imm_t (i-1)) "" b
+        in      
+        let result = rep n in
+        Printf.printf "done cg_broadcast...\n%!";
+        result
 
     | Ramp (base_expr, stride_expr, n) ->
-      let elem_type = val_type_of_expr base_expr in
-      let vec_type  = vector_of_val_type elem_type n in
-      let base      = cg_expr base_expr in
-      let stride    = cg_expr stride_expr in
-      let rec rep = function
-        (* build the empty vector and the first value to insert *)
-        | 0 -> (undef (type_of_val_type vec_type)), base
-        (* insert each value, and add to pass up the recursive chain *)
-        | i -> let vec, value = rep (i-1) in               
-               (build_insertelement vec value (const_int int_imm_t (i-1)) "" b,
-                build_add value stride "" b)
-      in fst (rep n)
+        Printf.printf "cg_ramp...\n%!";
+        let elem_type = val_type_of_expr base_expr in
+        let vec_type  = vector_of_val_type elem_type n in
+        let base      = cg_expr base_expr in
+        let stride    = cg_expr stride_expr in
+        let rec rep = function
+          (* build the empty vector and the first value to insert *)
+          | 0 -> (undef (type_of_val_type vec_type)), base
+          (* insert each value, and add to pass up the recursive chain *)
+          | i -> let vec, value = rep (i-1) in               
+                 (build_insertelement vec value (const_int int_imm_t (i-1)) "" b,
+                  build_add value stride "" b)
+        in fst (rep n)
 
     (* Unpacking vectors *)
     | ExtractElement(e, n) ->
@@ -265,7 +270,9 @@ let cg_entry c m e =
 
   and cg_makevector = function
     | ([], t, _) -> undef (type_of_val_type t)
-    | (first::rest, t, n) -> build_insertelement
+    | (first::rest, t, n) -> 
+        Printf.printf "cg_makevector...\n%!";
+        build_insertelement
           (cg_makevector (rest, t, n+1))
           (cg_expr first)
           (const_int int32_imm_t n)
@@ -659,6 +666,7 @@ let cg_entry c m e =
     build_load (scratch) "" b 
 
   and cg_gather t buf idx =
+    Printf.printf "cg_gather... %s\n%!" (string_of_expr idx);
     let elem_type     = type_of_val_type (element_val_type t) in
     let base_ptr      = build_pointercast (sym_get buf) (pointer_type elem_type) "" b in
     let addr_vec      = cg_expr idx in
@@ -668,7 +676,21 @@ let cg_entry c m e =
     let rec insert_idx = function
       | -1 -> undef (type_of_val_type t)
       | i -> build_insertelement (insert_idx (i-1)) (load_idx i) (const_int int_imm_t i) "" b
-    in insert_idx ((vector_elements t) - 1)
+    in 
+    Printf.printf "load_idx 0 = %s\n%!" (string_of_lltype (type_of (load_idx 0)));
+    Printf.printf "load_idx 1 = %s\n%!" (string_of_lltype (type_of (load_idx 1)));
+    Printf.printf "load_idx 2 = %s\n%!" (string_of_lltype (type_of (load_idx 2)));
+    Printf.printf "load_idx 3 = %s\n%!" (string_of_lltype (type_of (load_idx 3)));
+    Printf.printf "addr_of_idx 0 = %s\n%!" (string_of_lltype (type_of (addr_of_idx 0)));
+    Printf.printf "addr_of_idx 1 = %s\n%!" (string_of_lltype (type_of (addr_of_idx 1)));
+    Printf.printf "addr_of_idx 2 = %s\n%!" (string_of_lltype (type_of (addr_of_idx 2)));
+    Printf.printf "addr_of_idx 3 = %s\n%!" (string_of_lltype (type_of (addr_of_idx 3)));
+    Printf.printf "result type = %s\n%!" (string_of_lltype (type_of_val_type t));
+
+    let result = insert_idx ((vector_elements t) - 1) in
+    Printf.printf "done cg_gather\n%!";
+    result
+      
 
   and cg_memref vt buf idx =
     (* load the global buffer** *)
