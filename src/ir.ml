@@ -263,16 +263,20 @@ exception BadTypeCoercion
 
 (* Make the types of the args of a binary op or comparison match *)
 let match_types expr =
-  let fix (a, b) =
+  let fix (a, b) =    
     match (val_type_of_expr a, val_type_of_expr b) with
       | (ta, tb) when ta = tb -> (a, b)
+          
       | (IntVector (vb, n), Int sb) when vb = sb -> (a, Broadcast (b, n))
       | (Int sb, IntVector (vb, n)) when vb = sb -> (Broadcast (a, n), b)
       | (UIntVector (vb, n), UInt sb) when vb = sb -> (a, Broadcast (b, n))
       | (UInt sb, UIntVector (vb, n)) when vb = sb -> (Broadcast (a, n), b)
       | (FloatVector (vb, n), Float sb) when vb = sb -> (a, Broadcast (b, n))
       | (Float sb, FloatVector (vb, n)) when vb = sb -> (Broadcast (a, n), b)
-      | (ta, _) -> (a, Cast(ta, b))
+          
+      | (ta, tb) -> 
+          assert (vector_elements ta = vector_elements tb);
+          (a, Cast(ta, b))
       (* | _ -> raise (Wtf "I can't perform this cast") *)
   in match expr with      
     | Bop (op, a, b) -> let (ma, mb) = fix (a, b) in Bop (op, ma, mb)
@@ -311,5 +315,16 @@ let rec make_zero = function
   | IntVector (b, n)   -> Broadcast (make_zero (Int b), n)
   | UIntVector (b, n)  -> Broadcast (make_zero (UInt b), n)
   | FloatVector (b, n) -> Broadcast (make_zero (Float b), n)
+
+let rec make_one = function
+  | Int 32   -> IntImm 1
+  | UInt 32  -> UIntImm 1
+  | Float 32 -> FloatImm 1.0
+  | Int b   -> Cast (Int b, IntImm 1)
+  | UInt b  -> Cast (UInt b, UIntImm 1)
+  | Float b -> Cast (Float b, FloatImm 1.0)
+  | IntVector (b, n)   -> Broadcast (make_one (Int b), n)
+  | UIntVector (b, n)  -> Broadcast (make_one (UInt b), n)
+  | FloatVector (b, n) -> Broadcast (make_one (Float b), n)
 
 let bool_imm x = if x then UIntImm 1 else UIntImm 0

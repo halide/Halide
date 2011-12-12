@@ -1,40 +1,40 @@
 open Ir
 open Analysis
 
+let is_const_zero = function
+  | IntImm 0 
+  | UIntImm 0
+  | FloatImm 0.0
+  | Broadcast (IntImm 0, _)
+  | Broadcast (UIntImm 0, _)
+  | Broadcast (FloatImm 0.0, _) -> true
+  | _ -> false
+and is_const_one = function
+  | IntImm 1
+  | UIntImm 1
+  | FloatImm 1.0
+  | Broadcast (IntImm 1, _)
+  | Broadcast (UIntImm 1, _)
+  | Broadcast (FloatImm 1.0, _) -> true
+  | _ -> false
+and is_const = function
+  | IntImm _ 
+  | UIntImm _ 
+  | FloatImm _
+  | Broadcast (IntImm _, _)
+  | Broadcast (UIntImm _, _)
+  | Broadcast (FloatImm _, _) -> true
+  | _ -> false
+
 (* Is an expression sufficiently simple that it should just be substituted in when it occurs in a let *)
 let is_simple = function
-  | IntImm _ | FloatImm _ | UIntImm _ | Var (_, _) -> true
-  | _ -> false
+  | Var (_, _) -> true
+  | Broadcast (Var (_, _), _) -> true
+  | x -> is_const x
 
 let rec constant_fold_expr expr = 
   let recurse = constant_fold_expr in
   
-  let is_const_zero = function
-    | IntImm 0 
-    | UIntImm 0
-    | FloatImm 0.0
-    | Broadcast (IntImm 0, _)
-    | Broadcast (UIntImm 0, _)
-    | Broadcast (FloatImm 0.0, _) -> true
-    | _ -> false
-  and is_const_one = function
-    | IntImm 1
-    | UIntImm 1
-    | FloatImm 1.0
-    | Broadcast (IntImm 1, _)
-    | Broadcast (UIntImm 1, _)
-    | Broadcast (FloatImm 1.0, _) -> true
-    | _ -> false
-  and is_const = function
-    | IntImm _ 
-    | UIntImm _ 
-    | FloatImm _
-    | Broadcast (IntImm _, _)
-    | Broadcast (UIntImm _, _)
-    | Broadcast (FloatImm _, _) -> true
-    | _ -> false
-  in
-
   match expr with
     (* Ignoring most const-casts for now, because we can't represent immediates of arbitrary types *)
     | Cast (t, e) -> 

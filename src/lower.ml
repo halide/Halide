@@ -83,6 +83,8 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
         (* Grab the body of the function call *)
         let (args, return_type, body) = make_function_body name env debug in
         
+        let arg_names = List.map snd args in
+
         (* Grab the schedule for function call *)
         let (call_sched, sched_list) = find_schedule schedule name in
 
@@ -95,7 +97,7 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
           (* Make a name for the output buffer *)
           let buffer_name = name ^ ".result" in
           (* Figure out how to index it *)
-          let strides = stride_list sched_list (List.map snd args) in
+          let strides = stride_list sched_list arg_names in
           (* Figure out how much storage to allocate for it *)
           let sizes = List.map snd strides in
           let buffer_size = List.fold_left ( *~ ) (IntImm 1) sizes in                      
@@ -147,31 +149,26 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
                         | Call (t, n, call_args) when n = name -> 
                             let call_args = List.map inline_calls_in_expr call_args in
  
-                            (* If the type of any of the args is a
-                               vector, promote all the args to be vectors
-                               of the same length *)
-                            let widths = List.map (fun x -> vector_elements (val_type_of_expr x)) call_args in
-                            let max_width = List.fold_left max 1 widths in
+                            (* If the args have vector type, promote
+                               the function body to also have vector type
+                               in its args *)
 
-                            let (call_args, expr) = 
-                              if max_width > 1 then begin
-                                (* Check we're not vectorizing by different amounts (not sure how this would happen) *)
-                                assert (List.for_all (fun x -> x = 1 || x = max_width) widths);
-                                (* Promote all the args to vectors *)
-                                let promote_arg x w = if w = 1 then Broadcast (x, max_width) else x in
-                                let promoted_args = List.map2 promote_arg call_args widths in
-                                
-                                (* Rewrite the types of the vars inside the body to be vectors *)
-                                let rec rewrite_type = function
-                                  | Var (Int 32, n) when List.mem (Int 32, n) args ->
-                                      Var (IntVector (32, max_width), n)
-                                  | expr -> mutate_children_in_expr rewrite_type expr
-                                in
-                                
-                                (promoted_args, rewrite_type expr)
-                                  
-                              end else (call_args, expr)
-                            in
+                            let widths = List.map (fun x -> vector_elements (val_type_of_expr x)) call_args in
+                            let width = List.hd widths in (* Do we have pure functions with no arguments? *)
+                            assert (List.for_all (fun x -> x = 1 || x = width) widths);                            
+
+                            let expr = 
+                              if width > 1 then begin
+                                Printf.printf "promoting body of %s to vector with args: %s\n%!" 
+                                  name (String.concat ", " (List.map string_of_expr call_args));
+                                Printf.printf "Old body: %s\n%!" (string_of_expr expr);
+                                let promoted_args = List.map (fun (t, n) -> Var (vector_of_val_type t width, n)) args in
+                                let env = List.fold_right2 StringMap.add arg_names promoted_args StringMap.empty in
+                                let expr = vector_subs_expr env expr in
+                                Printf.printf "New body: %s\n%!" (string_of_expr expr);
+                                expr
+                              end else expr
+                            in 
 
                             (* Generate functions that wrap an expression in a let that defines the argument *)
                             let wrap_arg name arg x = Let (name, arg, x) in
@@ -548,8 +545,6 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
   in
   List.fold_left update stmt functions 
 
-
-(* TODO: @jrk Make debug an optional arg? *)
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) (debug:bool) =
   let starts_with a b =    
     String.length a >= String.length b &&

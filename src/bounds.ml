@@ -5,9 +5,40 @@ open Analysis
 
 type bounds_result = Range of (expr * expr) | Unbounded
 
+let make_range (min, max) =
+  Printf.printf "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max);
+  assert (is_scalar min);
+  assert (is_scalar max);
+  Range (min, max)
+
+let check_result expr result = 
+  let result_string = match result with
+    | Unbounded -> "Unbounded"
+    | Range (min, max) -> 
+        "(" ^ 
+          Ir_printer.string_of_expr (constant_fold_expr min) ^ ", " ^ 
+          Ir_printer.string_of_expr (constant_fold_expr max) ^ ")"
+  in
+  
+  Printf.printf "Bounds of %s = %s\n%!" (Ir_printer.string_of_expr expr) result_string;
+  
+  begin match result with 
+    | Range (min, max) -> assert (is_scalar min && is_scalar max)
+    | _ -> ()
+  end
+
+
+
+
 let bounds_of_expr_in_env env expr =
   let rec bounds_of_expr_in_env_inner env expr = 
-    let recurse = bounds_of_expr_in_env_inner env in
+    let recurse expr = 
+      Printf.printf "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr);
+      let result = bounds_of_expr_in_env_inner env expr in
+      check_result expr result;
+      result
+    in
+
     let result = match expr with
       | Load (t, _, idx)   -> 
           (* if idx depends on anything in env then Unbounded else return this  *)
@@ -15,36 +46,36 @@ let bounds_of_expr_in_env env expr =
             | Var (t, n) -> StringMap.mem n env
             | expr -> fold_children_in_expr contains_var_in_env (or) false expr
           in 
-          if contains_var_in_env idx then Unbounded else Range (expr, expr) 
+          if contains_var_in_env idx then Unbounded else make_range (expr, expr) 
       | Broadcast (e, _) -> recurse e
       | Cast (t, e)      -> begin
         match recurse e with
-          | Range (min, max) -> Range (Cast (t, min), Cast (t, max))
+          | Range (min, max) -> make_range (Cast (t, min), Cast (t, max))
           | _ -> Unbounded              
       end
       | Ramp (a, b, n)   -> begin    
-        let n = Cast(val_type_of_expr b, IntImm n) in
+        let maxn = Cast(val_type_of_expr b, IntImm (n-1)) in
         let zero = make_zero (val_type_of_expr a) in
         match (recurse a, recurse b) with
-          | Range (mina, maxa), Range (minb, maxb) -> 
+          | Range (mina, maxa), Range (minb, maxb) ->               
               (* Compute the bounds of the product term *)
-              let p1 = n *~ minb and
-                  p2 = n *~ maxb in
+              let p1 = maxn *~ minb and
+                  p2 = maxn *~ maxb in
               let (minc, maxc) = (Bop (Min, Bop (Min, p1, p2), zero),
                                   Bop (Max, Bop (Max, p1, p2), zero)) in              
               (* Add the base term *)
-              Range (mina +~ minc, maxa +~ maxc)
+              make_range (mina +~ minc, maxa +~ maxc)
         | _ -> Unbounded
       end
       | ExtractElement (a, b) -> recurse a
       | Bop (Add, a, b) -> begin
         match (recurse a, recurse b) with
-          | Range (mina, maxa), Range (minb, maxb) -> Range (mina +~ minb, maxa +~ maxb)
+          | Range (mina, maxa), Range (minb, maxb) -> make_range (mina +~ minb, maxa +~ maxb)
           | _ -> Unbounded        
       end
       | Bop (Sub, a, b) -> begin
         match (recurse a, recurse b) with
-          | Range (mina, maxa), Range (minb, maxb) -> Range (mina -~ maxb, maxa -~ minb)
+          | Range (mina, maxa), Range (minb, maxb) -> make_range (mina -~ maxb, maxa -~ minb)
           | _ -> Unbounded
       end
       | Bop (Mul, a, b) -> begin
@@ -60,7 +91,7 @@ let bounds_of_expr_in_env env expr =
                  complicated expressions, so we break things up by
                  case.  *)
               
-              let zero = make_zero (val_type_of_expr a) in
+              let zero = make_zero (val_type_of_expr mina) in
               let b_positive = minb >=~ zero and
                   b_negative = maxb <=~ zero and
                   a_positive = mina >=~ zero and
@@ -72,7 +103,7 @@ let bounds_of_expr_in_env env expr =
                  Select (cond1, then1b, Select(cond2, then2b, else_case_b)))
               in
               
-              Range (
+              make_range (
                 select3 a_positive (
                   select3 b_positive (
                     (mina *~ minb, maxa *~ maxb)
@@ -146,7 +177,7 @@ let bounds_of_expr_in_env env expr =
                          Select (cond1, then1b, else_case_b))
                       in
                       
-                      Range (
+                      make_range (
                         select3 a_positive (
                           select2 b_positive (
                             (mina /~ maxb, maxa /~ minb)
@@ -178,10 +209,10 @@ let bounds_of_expr_in_env env expr =
         match (recurse a, recurse b) with
           | Range (mina, maxa), Range (minb, maxb) -> 
               let cond = (mina >=~ zero) &&~ (maxa <~ minb) in
-              Range (Select (cond, mina, zero),
+              make_range (Select (cond, mina, zero),
                      Select (cond, maxa, maxb -~ one))
           | Unbounded, Range (minb, maxb) -> 
-              Range (zero, maxb -~ one)
+              make_range (zero, maxb -~ one)
           | _ -> Unbounded
       end
           
@@ -194,7 +225,7 @@ let bounds_of_expr_in_env env expr =
             (* a is unbounded, b is the upper bound, c is the lower bound *)
             match (recurse b, recurse c) with
               | Range (minb, maxb), Range (minc, maxc) ->
-                  Range (minc, maxb)
+                  make_range (minc, maxb)
               | _ -> Unbounded
           end
       | Bop (Max, Bop (Min, b, a), c)
@@ -205,20 +236,20 @@ let bounds_of_expr_in_env env expr =
             (* a is unbounded, b is the upper bound, c is the lower bound *)
             match (recurse b, recurse c) with
               | Range (minb, maxb), Range (minc, maxc) ->
-                Range (minc, maxb)
+                make_range (minc, maxb)
               | _ -> Unbounded
           end
       | Bop (Max, a, b) -> begin
         match (recurse a, recurse b) with
           | Range (mina, maxa), Range (minb, maxb) ->
-              Range (Bop (Max, mina, minb), 
+              make_range (Bop (Max, mina, minb), 
                      Bop (Max, maxa, maxb))
           | _ -> Unbounded
       end
       | Bop (Min, a, b) -> begin
         match (recurse a, recurse b) with
           | Range (mina, maxa), Range (minb, maxb) ->
-              Range (Bop (Min, mina, minb), 
+              make_range (Bop (Min, mina, minb), 
                      Bop (Min, maxa, maxb))
           | _ -> Unbounded
       end
@@ -226,14 +257,18 @@ let bounds_of_expr_in_env env expr =
       | Not _
       | And (_, _)
       | Or (_, _)
-      | Cmp (_, _, _) -> Range (UIntImm 0, UIntImm 1)
+      | Cmp (_, _, _) -> make_range (UIntImm 0, UIntImm 1)
           
-      | Let (n, a, b) -> bounds_of_expr_in_env_inner (StringMap.add n (recurse a) env) b
-          
+      | Let (n, a, b) -> 
+          Printf.printf "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr);
+          let result = bounds_of_expr_in_env_inner (StringMap.add n (recurse a) env) b in
+          check_result expr result;
+          result
+
       | Select (_, a, b) -> begin
         match (recurse a, recurse b) with 
           | Range (mina, maxa), Range (minb, maxb) ->
-              Range (Bop (Min, mina, minb),
+              make_range (Bop (Min, mina, minb),
                      Bop (Max, maxa, maxb))
           | _ -> Unbounded
       end
@@ -244,7 +279,7 @@ let bounds_of_expr_in_env env expr =
           | (first::rest) -> begin 
             match (recurse first, build_range rest) with
               | Range (mina, maxa), Range (minb, maxb) ->
-                  Range (Bop (Min, mina, minb),
+                  make_range (Bop (Min, mina, minb),
                          Bop (Max, maxa, maxb))            
               | _ -> Unbounded
           end
@@ -256,12 +291,14 @@ let bounds_of_expr_in_env env expr =
       | Debug (e, _, _) -> recurse e
           
       | Var (t, n) -> begin
-        try StringMap.find n env with Not_found -> Range (Var (t, n), Var (t, n))
+        try StringMap.find n env with Not_found -> 
+          Printf.printf "Did not find %s in the environment\n%!" n;
+          make_range (Var (t, n), Var (t, n))
       end
           
-      | IntImm n -> Range (IntImm n, IntImm n)
-      | UIntImm n -> Range (UIntImm n, UIntImm n)
-      | FloatImm n -> Range (FloatImm n, FloatImm n)
+      | IntImm n -> make_range (IntImm n, IntImm n)
+      | UIntImm n -> make_range (UIntImm n, UIntImm n)
+      | FloatImm n -> make_range (FloatImm n, FloatImm n)
     in
     (*
     let result_string = match result with
@@ -275,19 +312,23 @@ let bounds_of_expr_in_env env expr =
     *)
     result
   in
+  let result =
   match bounds_of_expr_in_env_inner env expr with
     | Unbounded -> Unbounded
-    | Range (min, max) -> Range (constant_fold_expr min, constant_fold_expr max)
+    | Range (min, max) -> make_range (constant_fold_expr min, constant_fold_expr max)
+  in
+  check_result expr result;
+  result
           
           
           
 let bounds_of_expr var (min, max) expr = 
-  bounds_of_expr_in_env (StringMap.add var (Range (min, max)) StringMap.empty) expr
+  bounds_of_expr_in_env (StringMap.add var (make_range (min, max)) StringMap.empty) expr
 
 
 let range_union a b = match (a, b) with
   | Range (mina, maxa), Range (minb, maxb) ->
-      Range (Bop (Min, mina, minb), Bop (Max, maxa, maxb))
+      make_range (Bop (Min, mina, minb), Bop (Max, maxa, maxb))
   | _ -> Unbounded
      
 let region_union a b = match (a, b) with
@@ -301,12 +342,17 @@ let rec required_of_expr func env = function
       let required_of_args = List.map (required_of_expr func env) args in
       let required_of_call = List.map (fun arg -> bounds_of_expr_in_env env arg) args in
       List.fold_left region_union required_of_call required_of_args
+  | Let (n, a, b) ->
+      let required_of_a = required_of_expr func env a in
+      let bounds_of_a = bounds_of_expr_in_env env a in
+      let required_of_b = required_of_expr func (StringMap.add n bounds_of_a env) b in
+      region_union required_of_a required_of_b
   | expr -> fold_children_in_expr (required_of_expr func env) region_union [] expr  
   
 (* What region of the func is used by the statement *)
 let rec required_of_stmt func env = function
   | For (var, min, size, order, body) ->
-      let env = StringMap.add var (Range (min, min +~ size -~ (IntImm 1))) env in
+      let env = StringMap.add var (make_range (min, min +~ size -~ (IntImm 1))) env in
       required_of_stmt func env body
   | stmt -> fold_children_in_stmt (required_of_expr func env) (required_of_stmt func env) region_union stmt
   
