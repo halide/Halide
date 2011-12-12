@@ -175,7 +175,8 @@ let root_or_chunk_schedule (func: string) (call_sched: call_schedule)
   let make_sched name (min, size) = Parallel (name, min, size) in
   let sched_list = match region with
     (* To be inferred later *)
-    | [] -> List.map (fun n -> make_sched n (IntImm 0, IntImm 0)) args
+    | [] -> List.map (fun n -> make_sched n (Var (Int 32, func ^ "." ^ n ^ ".min"),
+                                             Var (Int 32, func ^ "." ^ n ^ ".extent"))) args
     | _ -> List.map2 make_sched args region 
   in
 
@@ -210,7 +211,96 @@ let root_or_chunk_schedule (func: string) (call_sched: call_schedule)
   List.fold_left set chunk_first rest
 
 let chunk_schedule func var args region schedule = 
-  root_or_chunk_schedule func (Chunk var) args region schedule
+  (* Find all the possible vars that chunk could refer to, and call
+     root_or_chunk_schedule once within each context *)
+
+  (* Figure out all the possible vars this could refer to *)
+  let rec descend enclosing_var context f (call_sched, sched_list, sched) found_vars =
+    if f = func then 
+      match enclosing_var with 
+        | None -> found_vars
+        | Some x -> x :: found_vars
+    else
+
+      let subcontext = if context = "" then f else (context ^ "." ^ f) in
+
+      let rec var_in_sched_list = function
+        | [] -> false
+        | (Serial (v, _, _)::rest)
+        | (Parallel (v, _, _)::rest)
+        | (Vectorized (v, _, _)::rest)
+        | (Unrolled (v, _, _)::rest)
+        | (Split (v, _, _, _)::rest) when v = var -> true
+        | (_::rest) -> var_in_sched_list rest
+      in
+
+      let enclosing_var =
+        if var_in_sched_list sched_list then
+          (* The enclosing var falls out of scope because a new var by the same name hides it *)
+          Some subcontext 
+        else match call_sched with
+          (* The enclosing function is also an enclosing scope, so it's still valid *)
+          | Inline -> enclosing_var 
+          (* The calling function is not an enclosing scope, so the enclosing var gets nuked *)
+          | Root -> None
+
+          (* The var may or may not have fallen out of scope *)
+          | Chunk chunk_dim -> 
+              let idx_after_last_dot =
+                try (String.rindex chunk_dim '.' + 1)
+                with Not_found -> raise (Wtf ("chunk dimensions must be fully qualified: " ^ chunk_dim))
+              in
+              let chunk_var = String.sub chunk_dim idx_after_last_dot (String.length chunk_dim - idx_after_last_dot)
+              and chunk_parent = String.sub chunk_dim 0 (idx_after_last_dot-1) in
+
+              if chunk_var = var then enclosing_var else                
+                let (_, chunk_sched_list) = find_schedule schedule chunk_parent in
+                (* enclosing var is still in scope if we hit a var of
+                   the same name earlier in the sched list of the
+                   parent *)
+                let rec var_occurs_before_chunk_var = function
+                  (* If we don't find chunk_var something is wrong *)
+                  | [] -> raise (Wtf ("Bad chunk dimension detected: " ^ chunk_dim))
+                  (* We can't split on a chunk var *)
+                  | (Split (v, _, _, _)::rest) ->
+                      if v = chunk_var then
+                        raise (Wtf "Can't split on a chunk var")
+                      else
+                        var_occurs_before_chunk_var rest
+                  | (Serial (v, _, _)::rest)
+                  | (Parallel (v, _, _)::rest)
+                  | (Vectorized (v, _, _)::rest)
+                  | (Unrolled (v, _, _)::rest) ->
+                      if v = var then
+                        true
+                      else if v = chunk_var then
+                        false 
+                      else
+                        var_occurs_before_chunk_var rest
+                in
+                if var_occurs_before_chunk_var chunk_sched_list then enclosing_var else None
+              
+          (* Reuse has no children, so it doesn't matter what we
+             return here. Let's say that the enclosing var is still
+             valid. *)
+          | Reuse _ -> enclosing_var 
+      in
+
+      let Tree map = sched in
+      StringMap.fold (descend enclosing_var subcontext) map found_vars
+  in
+
+  let Tree map = schedule in
+  let contexts = StringMap.fold (descend None "") map [] in
+
+  Printf.printf "Contexts in which I want to chunk %s over %s: %s\n%!" func var (String.concat ", " contexts);
+
+  match contexts with 
+    | first::[] -> 
+        root_or_chunk_schedule func (Chunk (first ^ "." ^ var)) args region schedule
+    | _ -> 
+        (* Ambiguous or ill-defined. Fall back to Root *)
+        root_or_chunk_schedule func Root args region schedule
 
 let root_schedule func args region schedule = 
   root_or_chunk_schedule func Root args region schedule
@@ -238,11 +328,11 @@ let serial_schedule (func: string) (var: string) (min: expr) (size: expr) (sched
   List.fold_left set schedule calls
 
 (*
-let infer_regions (env: environment) (schedule: schedule_tree) =
+  let infer_regions (env: environment) (schedule: schedule_tree) =
   let rec infer (func: string) (schedule: schedule_tree) (region: (expr * expr) list) =
-    let (Tree map) = schedule in
+  let (Tree map) = schedule in
 
-    (* Grab the body of the function in question *)
+(* Grab the body of the function in question *)
     let (_, args, return_type, body) = Environment.find func env in
 
     (* Compute and update the region for a callee given a region for the caller *)

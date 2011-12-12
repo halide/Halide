@@ -119,19 +119,19 @@ public:
         Func gPyramid[J];
         gPyramid[0](x, y, k) = remap(gray(x, y), Cast<float>(k) / (levels-1), alpha, beta, 1.0f / (levels-1));
         for (int j = 1; j < J; j++)
-            gPyramid[j] = downsample(gPyramid[j-1]);
+            gPyramid[j](x, y, k) = downsample(gPyramid[j-1])(x, y, k);
         
         printf("Defining processed laplacian pyramid\n");
         Func lPyramid[J];
         lPyramid[J-1] = gPyramid[J-1];
         for (int j = J-2; j >= 0; j--)
-            lPyramid[j] = gPyramid[j] - upsample(gPyramid[j+1]);    
+            lPyramid[j](x, y, k) = gPyramid[j](x, y, k) - upsample(gPyramid[j+1])(x, y, k);    
         
         printf("Defining gaussian pyramid of input\n");
         Func inGPyramid[J];
         inGPyramid[0] = gray;
         for (int j = 1; j < J; j++)
-            inGPyramid[j] = downsample(inGPyramid[j-1]);
+            inGPyramid[j](x, y) = downsample(inGPyramid[j-1])(x, y);
         
         printf("Defining laplacian pyramid of output\n");
         Func outLPyramid[J];
@@ -148,7 +148,7 @@ public:
         Func outGPyramid[J];
         outGPyramid[J-1] = outLPyramid[J-1];
         for (int j = J-2; j >= 0; j--) 
-            outGPyramid[j] = upsample(outGPyramid[j+1]) + outLPyramid[j];
+            outGPyramid[j](x, y) = upsample(outGPyramid[j+1])(x, y) + outLPyramid[j](x, y);
         
         printf("Reintroducing color\n");
 
@@ -158,17 +158,41 @@ public:
         printf("Specifying a random schedule...\n");
         srand(seed);
         std::vector<Func> funcs = output.rhs().funcs();
+        Var xo, xi;
         for (size_t i = 0; i < funcs.size(); i++) {
-            int decision = rand() % 3;
-            switch (rand() % 3) {
-            case 1:
+            switch (rand() % 5) {
+            case 0:
                 // inline
                 printf("Scheduling %s as inline\n", funcs[i].name().c_str());
+                funcs[i].root();
                 break;
-            default:
-                // root
+            case 1: 
+                // root 
                 printf("Scheduling %s as root\n", funcs[i].name().c_str());
                 funcs[i].root();            
+                break;
+            case 2: 
+                // root and vectorize
+                printf("Scheduling %s as root and vectorized over x\n", funcs[i].name().c_str());
+                funcs[i].root();
+                //funcs[i].split(x, xo, xi, 4);
+                //funcs[i].vectorize(xi);
+                break;
+            case 3:
+                // Chunk over x
+                printf("Scheduling %s as chunked over y\n", funcs[i].name().c_str());
+                funcs[i].chunk(y);                
+                break;
+            case 4:
+                // Chunk over x and vectorize
+                printf("Scheduling %s as chunked over y and vectorized over x\n", funcs[i].name().c_str());
+                funcs[i].chunk(y);
+                //funcs[i].split(x, xo, xi, 4);
+                //funcs[i].vectorize(xi);
+                break;
+            default:
+                printf("How did I get here?\n");
+                exit(-1);
             }
         }
         
@@ -196,7 +220,7 @@ int main(int argc, char **argv) {
     int levels = atoi(argv[3]);
     float alpha = atof(argv[4]);
     float beta = atof(argv[5]);
-    LocalLaplacian ll(8, atoi(argv[6])); 
+    LocalLaplacian ll(2, atoi(argv[6])); 
     printf("%f\n", im(0, 0, 0));
     Image<float> out = ll(im, levels, alpha, beta);
     save(out, argv[2]);

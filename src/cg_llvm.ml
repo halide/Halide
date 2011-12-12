@@ -164,54 +164,6 @@ let cg_entry c m e =
 
     (* arithmetic *)
 
-    (* llvm doesn't seem very good about converting common vector muls to vector shifts *)
-
-    (*
-    | Bop(Mul, Broadcast(IntImm 2, n), v) 
-    | Bop(Mul, v, Broadcast(IntImm 2, n))
-    | Bop(Mul, Broadcast(UIntImm 2, n), v) 
-    | Bop(Mul, v, Broadcast(UIntImm 2, n)) -> 
-        build_shl (cg_expr v) (cg_expr (Broadcast (IntImm 1, n))) "" b
-
-    | Bop(Mul, Broadcast(Cast (Int x, IntImm 2), n), v)
-    | Bop(Mul, v, Broadcast(Cast (Int x, IntImm 2), n))
-    | Bop(Mul, Broadcast(Cast (Int x, UIntImm 2), n), v) 
-    | Bop(Mul, v, Broadcast(Cast (Int x, UIntImm 2), n)) -> 
-        build_shl (cg_expr v) (cg_expr (Broadcast (Cast (Int x, IntImm 1), n))) "" b
-
-    | Bop(Mul, Broadcast(Cast (UInt x, IntImm 2), n), v)
-    | Bop(Mul, v, Broadcast(Cast (UInt x, IntImm 2), n))
-    | Bop(Mul, Broadcast(Cast (UInt x, UIntImm 2), n), v)
-    | Bop(Mul, v, Broadcast(Cast (UInt x, UIntImm 2), n)) -> 
-        build_shl (cg_expr v) (cg_expr (Broadcast (Cast (UInt x, UIntImm 1), n))) "" b
-
-    | Bop(Div, v, Broadcast(IntImm 2, n)) ->
-        build_ashr (cg_expr v) (cg_expr (Broadcast (IntImm 1, n))) "" b
-    | Bop(Div, v, Broadcast(UIntImm 2, n)) -> 
-        build_lshr (cg_expr v) (cg_expr (Broadcast (IntImm 1, n))) "" b
-
-    | Bop(Div, v, Broadcast(Cast (Int x, IntImm 2), n)) 
-    | Bop(Div, v, Broadcast(Cast (Int x, UIntImm 2), n)) -> 
-        build_ashr (cg_expr v) (cg_expr (Broadcast (Cast (Int x, IntImm 1), n))) "" b
-
-    | Bop(Div, v, Broadcast(Cast (UInt x, IntImm 2), n))
-    | Bop(Div, v, Broadcast(Cast (UInt x, UIntImm 2), n)) -> 
-        build_lshr (cg_expr v) (cg_expr (Broadcast (Cast (UInt x, UIntImm 1), n))) "" b
-
-    | Bop(Div, v, Broadcast(IntImm 4, n)) ->
-        build_ashr (cg_expr v) (cg_expr (Broadcast (IntImm 2, n))) "" b
-    | Bop(Div, v, Broadcast(UIntImm 4, n)) -> 
-        build_lshr (cg_expr v) (cg_expr (Broadcast (IntImm 2, n))) "" b
-
-    | Bop(Div, v, Broadcast(Cast (Int x, IntImm 4), n)) 
-    | Bop(Div, v, Broadcast(Cast (Int x, UIntImm 4), n)) -> 
-        build_ashr (cg_expr v) (cg_expr (Broadcast (Cast (Int x, IntImm 2), n))) "" b
-
-    | Bop(Div, v, Broadcast(Cast (UInt x, IntImm 4), n))
-    | Bop(Div, v, Broadcast(Cast (UInt x, UIntImm 4), n)) -> 
-        build_lshr (cg_expr v) (cg_expr (Broadcast (Cast (UInt x, UIntImm 2), n))) "" b
-    *)
-
     | Bop(Add, l, r) -> cg_binop build_add  build_add  build_fadd l r
     | Bop(Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
     | Bop(Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
@@ -227,6 +179,11 @@ let cg_entry c m e =
     | Cmp(LE, l, r) -> cg_cmp Icmp.Sle Icmp.Ule Fcmp.Ole l r
     | Cmp(GT, l, r) -> cg_cmp Icmp.Sgt Icmp.Ugt Fcmp.Ogt l r
     | Cmp(GE, l, r) -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
+
+    (* logical *)
+    | And (l, r) -> build_and (cg_expr l) (cg_expr r) "" b
+    | Or (l, r) -> build_or (cg_expr l) (cg_expr r) "" b
+    | Not l -> build_not (cg_expr l) "" b
 
     (* Select *)
     | Select(c, t, f) -> 
@@ -507,14 +464,20 @@ let cg_entry c m e =
     (* TODO: unaligned vector store *)
     | Store(e, buf, idx) -> cg_store e buf idx
     | For(name, min, n, _, stmt) ->
-      cg_for name (cg_expr min) (cg_expr (min +~ n)) stmt
+        cg_for name (cg_expr min) (cg_expr (min +~ n)) stmt
     | Block (first::second::rest) ->
-      ignore(cg_stmt first);
-      cg_stmt (Block (second::rest))
+        ignore(cg_stmt first);
+        cg_stmt (Block (second::rest))
     | Block(first::[]) ->
-      cg_stmt first
+        cg_stmt first
     | Block _ -> raise (Wtf "cg_stmt of empty block")
-    (* | _ -> raise UnimplementedInstruction *)
+
+    | LetStmt (name, value, stmt) ->
+        sym_add name (cg_expr value);
+        let result = cg_stmt stmt in
+        sym_remove name;
+        result    
+
     | Pipeline (name, ty, size, produce, consume) ->
 
         (* Force the alignment to be a multiple of 128 bits. This is

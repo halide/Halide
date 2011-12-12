@@ -8,14 +8,14 @@ type bounds_result = Range of (expr * expr) | Unbounded
 let bounds_of_expr_in_env env expr =
   let rec bounds_of_expr_in_env_inner env expr = 
     let recurse = bounds_of_expr_in_env_inner env in
-    match expr with
+    let result = match expr with
       | Load (t, _, idx)   -> 
-          (* if idx depends on anything in env then Unbounded else return this *)
+          (* if idx depends on anything in env then Unbounded else return this  *)
           let rec contains_var_in_env = function        
             | Var (t, n) -> StringMap.mem n env
             | expr -> fold_children_in_expr contains_var_in_env (or) false expr
           in 
-          if contains_var_in_env idx then Unbounded else Range (expr, expr)
+          if contains_var_in_env idx then Unbounded else Range (expr, expr) 
       | Broadcast (e, _) -> recurse e
       | Cast (t, e)      -> begin
         match recurse e with
@@ -252,7 +252,7 @@ let bounds_of_expr_in_env env expr =
         in build_range l
       end
           
-      | Call (_, _, _) -> Unbounded (* TODO: we could pull in the definition of pure functions here *)
+      | Call (_, _, _) -> Unbounded
       | Debug (e, _, _) -> recurse e
           
       | Var (t, n) -> begin
@@ -262,6 +262,18 @@ let bounds_of_expr_in_env env expr =
       | IntImm n -> Range (IntImm n, IntImm n)
       | UIntImm n -> Range (UIntImm n, UIntImm n)
       | FloatImm n -> Range (FloatImm n, FloatImm n)
+    in
+    (*
+    let result_string = match result with
+      | Unbounded -> "Unbounded"
+      | Range (min, max) -> 
+          "(" ^ 
+            Ir_printer.string_of_expr (constant_fold_expr min) ^ ", " ^ 
+            Ir_printer.string_of_expr (constant_fold_expr max) ^ ")"
+    in
+    Printf.printf "Bounds of %s = %s\n" (Ir_printer.string_of_expr expr) result_string;
+    *)
+    result
   in
   match bounds_of_expr_in_env_inner env expr with
     | Unbounded -> Unbounded
@@ -285,8 +297,10 @@ let region_union a b = match (a, b) with
 
 (* What region of func is used by expr with variable ranges in env *)
 let rec required_of_expr func env = function
-  | Call (_, f, args) when f = func -> 
-      List.map (fun arg -> bounds_of_expr_in_env env arg) args
+  | Call (_, f, args) when f = func ->       
+      let required_of_args = List.map (required_of_expr func env) args in
+      let required_of_call = List.map (fun arg -> bounds_of_expr_in_env env arg) args in
+      List.fold_left region_union required_of_call required_of_args
   | expr -> fold_children_in_expr (required_of_expr func env) region_union [] expr  
   
 (* What region of the func is used by the statement *)

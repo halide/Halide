@@ -71,6 +71,7 @@ let fold_children_in_stmt expr_mutator stmt_mutator combiner = function
     combiner (combiner (expr_mutator min) (expr_mutator n)) (stmt_mutator body)
   | Block l -> List.fold_left combiner (stmt_mutator (List.hd l)) (List.map stmt_mutator (List.tl l))
   | Store (expr, buf, idx) -> combiner (expr_mutator expr) (expr_mutator idx)
+  | LetStmt (name, value, stmt) -> combiner (expr_mutator value) (stmt_mutator stmt)
   | Pipeline (name, ty, size, produce, consume) -> 
     combiner (combiner (expr_mutator size) (stmt_mutator produce)) (stmt_mutator consume)
   | Print (_, l) -> List.fold_left combiner (expr_mutator (List.hd l)) (List.map expr_mutator (List.tl l))
@@ -111,12 +112,14 @@ let mutate_children_in_expr mutator = function
     
 let mutate_children_in_stmt expr_mutator stmt_mutator = function
   | For (name, min, n, order, body) ->
-    For (name, expr_mutator min, expr_mutator n, order, stmt_mutator body)
+      For (name, expr_mutator min, expr_mutator n, order, stmt_mutator body)
   | Block l -> Block (List.map stmt_mutator l)
   | Store (expr, buf, idx) -> 
-    Store (expr_mutator expr, buf, expr_mutator idx)
+      Store (expr_mutator expr, buf, expr_mutator idx)
+  | LetStmt (name, value, stmt) ->
+      LetStmt (name, expr_mutator value, stmt_mutator stmt)
   | Pipeline (name, ty, size, produce, consume) -> 
-    Pipeline (name, ty, expr_mutator size, stmt_mutator produce, stmt_mutator consume)
+      Pipeline (name, ty, expr_mutator size, stmt_mutator produce, stmt_mutator consume)
   | Print (p, l) -> Print (p, List.map expr_mutator l)
 
 (* Expression subsitution *)
@@ -134,16 +137,19 @@ and subs_name_stmt oldname newname stmt =
   let subs_expr = subs_name_expr oldname newname in
   match stmt with
     | For (name, min, n, order, body) ->
-      For ((if name = oldname then newname else name), 
-        subs_expr min, subs_expr n, order, subs body)
+        For ((if name = oldname then newname else name), 
+             subs_expr min, subs_expr n, order, subs body)
     | Block l -> Block (List.map subs l)
     | Store (expr, buf, idx) -> 
-      Store (subs_expr expr,
-             (if buf = oldname then newname else buf),
-             subs_expr idx)
+        Store (subs_expr expr,
+               (if buf = oldname then newname else buf),
+               subs_expr idx)
+    | LetStmt (name, value, stmt) ->
+        LetStmt ((if name = oldname then newname else name), 
+                 subs_expr value, subs stmt)
     | Pipeline (name, ty, size, produce, consume) -> 
-      Pipeline ((if name = oldname then newname else name), 
-                ty, subs_expr size, subs produce, subs consume)      
+        Pipeline ((if name = oldname then newname else name), 
+                  ty, subs_expr size, subs produce, subs consume)      
     | Print (p, l) -> Print (p, List.map subs_expr l)
 
 and subs_name_expr oldname newname expr =
@@ -177,6 +183,8 @@ and prefix_name_stmt prefix stmt =
     | Block l -> Block (List.map recurse_stmt l)
     | Store (expr, buf, idx) -> 
         Store (recurse_expr expr, prefix_non_global prefix buf, recurse_expr idx)
+    | LetStmt (name, value, stmt) ->
+        LetStmt (prefix ^ name, recurse_expr value, recurse_stmt stmt)
     | Pipeline (name, ty, size, produce, consume) -> 
         Pipeline (prefix ^ name, ty, recurse_expr size, recurse_stmt produce, recurse_stmt consume)      
     | Print (p, l) ->

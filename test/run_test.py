@@ -53,9 +53,8 @@ def test_cpp(name):
     # Dive in
     os.chdir(name)
 
-    basename = name.split('/')[-1]
-    srcfile = "%s.cpp" % basename
-    logfile = "%s.log" % basename
+    srcfile = "test.cpp"
+    logfile = "log.txt"
     
     # Clean up old stuff
     remove("generated.o")

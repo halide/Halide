@@ -106,6 +106,11 @@ let rec constant_fold_expr expr =
         | (Max, x, Bop (Add, y, IntImm a)) 
         | (Max, Bop (Add, x, IntImm a), y) when x = y ->
             if a > 0 then x +~ IntImm a else x
+        | (Min, Bop (Add, x, IntImm a), Bop (Add, y, IntImm b)) when x = y ->
+            if a < b then x +~ IntImm a else x +~ IntImm b
+        | (Min, x, Bop (Add, y, IntImm a)) 
+        | (Min, Bop (Add, x, IntImm a), y) when x = y ->
+            if a < 0 then x +~ IntImm a else x
 
         | (Min, x, y)
         | (Max, x, y) when x = y -> x
@@ -176,6 +181,22 @@ let rec constant_fold_stmt = function
       Block (List.map constant_fold_stmt l)
   | Store (e, buf, idx) ->
       Store (constant_fold_expr e, buf, constant_fold_expr idx)
+  | LetStmt (name, value, stmt) ->
+      let value = constant_fold_expr value in
+      let var = Var (val_type_of_expr value, name) in
+      let rec scoped_subs_stmt stmt = match stmt with
+        | LetStmt (n, _, _) when n = name -> stmt
+        | _ -> mutate_children_in_stmt (subs_expr var value) scoped_subs_stmt stmt
+      in
+      (* Fold in values no more complex than the var itself *)
+      let is_simple = function
+        | IntImm _ | FloatImm _ | UIntImm _ | Var (_, _) -> true
+        | _ -> false
+      in
+      if (is_simple value) then
+        constant_fold_stmt (scoped_subs_stmt stmt)
+      else 
+        LetStmt (name, value, constant_fold_stmt stmt)
   | Pipeline (n, ty, size, produce, consume) -> 
       Pipeline (n, ty, constant_fold_expr size,
                 constant_fold_stmt produce,

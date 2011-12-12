@@ -331,6 +331,11 @@ namespace FImage {
         contents->scheduleTransforms.push_back(t);
     }
   
+    void Func::chunk(const Var &caller_var) {
+        MLVal t = makeChunkTransform(name(), caller_var.name(), contents->arglist, makeList());
+        contents->scheduleTransforms.push_back(t);
+    }
+
     void Func::root(const Range &region) {
         MLVal r = makeList();
         for (size_t i = region.range.size(); i > 0; i--) {

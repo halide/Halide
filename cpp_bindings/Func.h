@@ -89,6 +89,7 @@ namespace FImage {
         void unroll(const Var &);
         void transpose(const Var &, const Var &);
         void chunk(const Var &, const Range &);
+        void chunk(const Var &);
         void root(const Range &);
         void root();
 
