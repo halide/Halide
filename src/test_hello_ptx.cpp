@@ -14,34 +14,65 @@
 
 #define CHECK_CALL(c) (assert((c) == CUDA_SUCCESS))
 
-int N = 1024*1024;
-size_t size = N * sizeof(float);
-int threadsPerBlock = 256;
-int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+int threads = 256;
+int blocks = 64;
+int N = threads*blocks;
+size_t size = N * sizeof(int);
 
-void printSample(float* arr, char* name)
+typedef enum {
+    False = 0,
+    True = 1
+} Bool;
+
+typedef struct {
+    char* host;
+    CUdeviceptr dev; // TODO make this opaque
+    Bool host_dirty;
+    Bool dev_dirty;
+    size_t dims[4];
+    size_t elem_size;
+} buffer_t;
+extern "C" void f_wrapper(buffer_t *input, buffer_t *result, int N);
+
+void printSample(int* arr, char* name)
 {
-    for(size_t i = 0; i < N; i += 10000) {
-        printf("%s(%lld): %f\n", name, i, arr[i]);
+    float* arrf = (float*)arr;
+    for(size_t i = 0; i < N; i += 128) {
+        printf("%s(%lld): 0x%x (%d) (%f)\n", name, i, arr[i], arr[i], arrf[i]);
     }
 }
 
 int main(int argc, char const *argv[])
 {
-    CUresult err;
-
     // Allocate host vectors
-    float* hIn = (float*)malloc(size);
-    float* hOut = (float*)malloc(size);
+    int* hIn  = (int*)malloc(size);
+    int* hOut = (int*)malloc(size);
     
     // Initialize input
     // TODO make this an argument
     for(size_t i = 0; i < N; ++i)
-        hIn[i] = float(i);
+        hIn[i] = int(i);
     
     printSample(hOut, "out before");
     printSample(hIn, "in");
     
+#if 1
+    buffer_t in, out;
+    in.host = (char*)hIn;
+    in.dev = 0;
+    in.dims[0] = N;
+    in.dims[1] = in.dims[2] = in.dims[3] = 1;
+    in.elem_size = sizeof(int);
+    out.host = (char*)hOut;
+    out.dev = 0;
+    out.dims[0] = N;
+    out.dims[1] = out.dims[2] = out.dims[3] = 1;
+    out.elem_size = sizeof(int);
+
+    f_wrapper(&in, &out, N);
+#else
+    CUresult err;
+
     // Initialize CUDA
     CHECK_CALL( cuInit(0) );
     
@@ -90,7 +121,7 @@ int main(int argc, char const *argv[])
     //CHECK_CALL( cuCtxSynchronize() ); // only necessary for async copies?
     CHECK_CALL( cuMemcpyDtoH(hOut, dOut, size) );
     //CHECK_CALL( cuCtxSynchronize() );
-    
+#endif
     printSample(hOut, "out after");
     
     return 0;

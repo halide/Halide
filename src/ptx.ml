@@ -85,7 +85,6 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   let get_function = get lookup_function in
   let get_type = get (fun nm m -> type_by_name m nm) in
 
-  let ptx_src_ptr = get_global "ptx_src_ptr" in
   let init = get_function "init" in
   let dev_malloc_if_missing = get_function "dev_malloc_if_missing" in
   let copy_to_host = get_function "copy_to_host" in
@@ -110,13 +109,11 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   let b = builder_at_end c (entry_block f) in
 
   (* build a const data item of the compiled ptx source *)
-  let ptx_src_data = build_global_string ptx_src "ptx_src" b in
-  let ptx_src_data_ptr = const_in_bounds_gep ptx_src_data [| const_int i32_t 0; const_int i32_t 0 |] in
-  (* copy PTX to ptx_src_ptr *)
-  ignore (build_store ptx_src_data_ptr ptx_src_ptr b);
+  let ptx_src_str = build_global_stringptr ptx_src "ptx_src" b in
+  let entry_name_str = build_global_stringptr entrypoint_name "entry_name" b in
 
   (* init CUDA *)
-  ignore (build_call init [||] "" b);
+  build_call init [| ptx_src_str; entry_name_str |] "" b;
 
   (* args array for kernel launch *)
   let arg_t = pointer_type (i8_type c) in (* void* *)
@@ -124,13 +121,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
 
   let paramlist = Array.to_list (params f) in
   let args = List.map2 (fun arg param -> (arg,param)) arglist paramlist in
-  (* allocate device memory for all buffer arguments *)
-  (*let is_buffer = function (Buffer _, _) -> true | _ -> false in*)
-  (*let buffer_args = List.filter is_buffer args in*)
-  (*
-  let alloc_dev_buffer (a,p) =
-    let name = match a with Buffer n -> n | _ -> raise (Wtf "") in
-   *)
+
   (*
    * build llvalue dev_run args array list
    * for each arg:
@@ -179,7 +170,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
    * call dev_run(threadsX, threadsY, threadsZ, blocksX, blocksY, blocksZ, localmembytes, cuArgsPtr)
    *)
   let cuArgsPtr = build_gep cuArgs [| (const_int i32_t 0); (const_int i32_t 0) |] "cuArgsPtr" b in
-  let threadsX = const_int i32_t 16 in
+  let threadsX = const_int i32_t 256 in
   let threadsY = const_int i32_t  1 in
   let threadsZ = const_int i32_t  1 in
   let blocksX  = const_int i32_t 64 in
