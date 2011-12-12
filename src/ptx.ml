@@ -86,6 +86,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   let get_type = get (fun nm m -> type_by_name m nm) in
 
   let ptx_src_ptr = get_global "ptx_src_ptr" in
+  let ptx_entry_name = get_global "ptx_entry_name" in
   let init = get_function "init" in
   let dev_malloc_if_missing = get_function "dev_malloc_if_missing" in
   let copy_to_host = get_function "copy_to_host" in
@@ -114,6 +115,9 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   let ptx_src_data_ptr = const_in_bounds_gep ptx_src_data [| const_int i32_t 0; const_int i32_t 0 |] in
   (* copy PTX to ptx_src_ptr *)
   ignore (build_store ptx_src_data_ptr ptx_src_ptr b);
+
+  let ptx_entry_name_str = build_global_string entrypoint_name "ptx_entry_name" b in
+  replace_all_uses_with ptx_entry_name ptx_entry_name_str;
 
   (* init CUDA *)
   ignore (build_call init [||] "" b);
