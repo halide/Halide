@@ -138,7 +138,7 @@ let bounds_of_expr_in_env env expr =
         match (recurse b) with
           | Unbounded -> Unbounded
           | Range (minb, maxb) ->
-              let zero = make_zero (val_type_of_expr b) in
+              let zero = make_zero (val_type_of_expr minb) in
               let b_positive = 
                 Constant_fold.constant_fold_expr (minb >=~ zero) in
               let b_negative =
@@ -204,15 +204,15 @@ let bounds_of_expr_in_env env expr =
       end
           
       | Bop (Mod, a, b) -> begin
-        let zero = make_zero (val_type_of_expr b) in
-        let one = Cast (val_type_of_expr b, IntImm 1) in
+        let zero e = make_zero (val_type_of_expr e) in
+        let one e = make_one (val_type_of_expr e) in
         match (recurse a, recurse b) with
           | Range (mina, maxa), Range (minb, maxb) -> 
-              let cond = (mina >=~ zero) &&~ (maxa <~ minb) in
-              make_range (Select (cond, mina, zero),
-                     Select (cond, maxa, maxb -~ one))
+              let cond = (mina >=~ (zero mina)) &&~ (maxa <~ minb) in
+              make_range (Select (cond, mina, (zero mina)),
+                     Select (cond, maxa, maxb -~ (one maxb)))
           | Unbounded, Range (minb, maxb) -> 
-              make_range (zero, maxb -~ one)
+              make_range (zero maxb, maxb -~ (one maxb))
           | _ -> Unbounded
       end
           
