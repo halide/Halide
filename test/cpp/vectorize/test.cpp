@@ -29,7 +29,7 @@ template<typename A>
 bool test(int vec_width) {
     
     int W = vec_width*1;
-    int H = 40000;
+    int H = 400000;
 
     Image<A> input(W, H+20);
     for (int y = 0; y < H+20; y++) {
@@ -56,7 +56,6 @@ bool test(int vec_width) {
 
     Image<A> outputg = g.realize(W, H);
     Image<A> outputf = f.realize(W, H);
-
 
     double t1 = currentTime();
     for (int i = 0; i < 10; i++) {
