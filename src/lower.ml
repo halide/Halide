@@ -146,13 +146,51 @@ let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (funct
                       let rec inline_calls_in_expr = function
                         | Call (t, n, call_args) when n = name -> 
                             let call_args = List.map inline_calls_in_expr call_args in
-                            (* TODO: Check the types match *)
+ 
+                            (* Generate functions that wrap an expression in a let that defines the argument *)
+                            let wrap_arg name arg x = Let (name, arg, x) in
+                            let wrappers = List.map2 (fun arg (t, name) -> wrap_arg name arg) call_args args in
+
+                            (* If the type of any of the args is a
+                               vector, promote all the args to be vectors
+                               of the same length *)
+                            let widths = List.map (fun x -> vector_elements (val_type_of_expr x)) call_args in
+                            let max_width = List.fold_left max 1 widths in
+
+                            let expr = 
+                              if max_width > 1 then begin
+                                (* Check we're not vectorizing by different amounts (not sure how this would happen) *)
+                                assert (List.for_all (fun x -> x = 1 || x = max_width) widths);
+                                (* Promote all the args to vectors *)
+                                let promote_arg x w = if w = 1 then Broadcast (x, w) else x in
+                                let promoted_args = List.map2 promote_arg call_args widths in
+                                
+                                (* Rewrite the types of the vars inside the body to be vectors *)
+                                let rec rewrite_type = function
+                                  | Var (Int 32, n) when List.mem (Int 32, n) args ->
+                                      Var (IntVector (32, max_width), n)
+                                  | expr -> mutate_children_in_expr rewrite_type expr
+                                in
+                                
+                                rewrite_type expr
+                                  
+                              end else expr
+                            in
+
+                            (* Apply all those wrappers to the function body *)
+                            List.fold_right (fun f arg -> f arg) wrappers expr
+
+                              
+
+                        (*
+                        (* TODO: Check the types match *)
                             List.fold_left2 
                               (* Replace an argument with its value in e, possibly vectorizing as we go for i32 args *)
                               (fun e (t, var) value -> 
                                 if (t = i32) then vector_subs_expr var value e 
                                 else subs_expr (Var (t, var)) value e)
                               expr args call_args                               
+                              *)
                         | x -> mutate_children_in_expr inline_calls_in_expr x
                       and inline_calls_in_stmt s =
                         mutate_children_in_stmt inline_calls_in_expr inline_calls_in_stmt s
