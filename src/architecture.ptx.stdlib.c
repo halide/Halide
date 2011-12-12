@@ -112,12 +112,11 @@ static CUfunction f = 0;
 static CUdevice dev = 0;
 static CUcontext ctx = 0;
 static CUmodule mod = 0;
-char* ptx_src_ptr;
-char* ptx_entry_name;
 
-void init()
+void init(const char* ptx_src, const char* entry_name)
 {
     CUresult status;
+
     if (!f) {
         // Initialize CUDA
         CHECK_CALL( cuInit(0), "cuInit" );
@@ -125,7 +124,7 @@ void init()
         // Make sure we have a device
         int deviceCount = 0;
         CHECK_CALL( cuDeviceGetCount(&deviceCount), "cuDeviceGetCount" );
-        /*if (deviceCount == 0) return false;*/
+        assert(deviceCount > 0);
 
         // Get device
         CHECK_CALL( cuDeviceGet(&dev, 0), "cuDeviceGet" );
@@ -134,17 +133,13 @@ void init()
         CHECK_CALL( cuCtxCreate(&ctx, 0, dev), "cuCtxCreate" );
 
         // Create module
-        CHECK_CALL( cuModuleLoadData(&mod, ptx_src_ptr), "cuModuleLoadData" );
+        CHECK_CALL( cuModuleLoadData(&mod, ptx_src), "cuModuleLoadData" );
         
-        fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src_ptr);
+        fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
 
         // Get kernel function ptr
-        //assert(!f);
-        CHECK_CALL( cuModuleGetFunction(&f, mod, ptx_entry_name), "cuModuleGetFunction" );
-
-        /*if (!success) return false;*/
+        CHECK_CALL( cuModuleGetFunction(&f, mod, entry_name), "cuModuleGetFunction" );
     }
-    /*return true;*/
 }
 
 // TODO: switch to building as C++ with extern "C" linkage on functions
@@ -207,7 +202,9 @@ void dev_run(
 #ifdef INCLUDE_WRAPPER
 int kernel_wrapper_tmpl( buffer_t *input, buffer_t *result, int N )
 {
-    init();
+    const char* ptx_src = "...";
+    const char* entry_name = "f";
+    init(ptx_src, entry_name);
 
     int threadsX = 16;
     int threadsY =  1;
