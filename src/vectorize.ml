@@ -71,6 +71,7 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
           if is_scalar vc then
             (* Condition is scalar *)
             match (va, vb) with
+              (* TODO: push this special case of ramp/ramp into constant fold *)
               (* Scalar selection between ramps of matching stride we can handle specially *)
               | (Ramp (ba, sa, _), Ramp (bb, sb, _)) when sa = sb -> 
                   Ramp (Select (c, ba, bb), sa, width)

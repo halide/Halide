@@ -187,20 +187,20 @@ let cg_entry c m e =
 
     (* Select *)
     | Select(c, t, f) -> 
-      begin
-        match val_type_of_expr t with          
-          | Int _ | UInt _ | Float _ -> 
-            build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
-          | IntVector(bits, n) | UIntVector(bits, n) | FloatVector(bits, n) ->
-            let mask     = cg_expr c in
-            let mask_ext = build_sext mask (type_of_val_type (val_type_of_expr t)) "" b in 
-            let mask_t   = build_and mask_ext (cg_expr t) "" b in
-            let all_ones = Broadcast(Cast(Int(bits), IntImm(-1)), n) in
-            let inv_mask = build_xor mask_ext (cg_expr all_ones) "" b in
-            let mask_f   = build_and inv_mask (cg_expr f) "" b in
-            build_or mask_t mask_f "" b
-      end
-
+        begin
+          match val_type_of_expr t with          
+            | Int _ | UInt _ | Float _ -> 
+                build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
+            | IntVector(bits, n) | UIntVector(bits, n) | FloatVector(bits, n) ->
+                let mask     = cg_expr c in
+                let mask_ext = build_sext mask (type_of_val_type (val_type_of_expr t)) "" b in 
+                let mask_t   = build_and mask_ext (cg_expr t) "" b in
+                let all_ones = Broadcast(Cast(Int(bits), IntImm(-1)), n) in
+                let inv_mask = build_xor mask_ext (cg_expr all_ones) "" b in
+                let mask_f   = build_and inv_mask (cg_expr f) "" b in
+                build_or mask_t mask_f "" b
+        end
+          
     | Load(t, buf, idx) -> cg_load t buf idx
 
     (* Loop variables *)
@@ -677,16 +677,6 @@ let cg_entry c m e =
       | -1 -> undef (type_of_val_type t)
       | i -> build_insertelement (insert_idx (i-1)) (load_idx i) (const_int int_imm_t i) "" b
     in 
-    Printf.printf "load_idx 0 = %s\n%!" (string_of_lltype (type_of (load_idx 0)));
-    Printf.printf "load_idx 1 = %s\n%!" (string_of_lltype (type_of (load_idx 1)));
-    Printf.printf "load_idx 2 = %s\n%!" (string_of_lltype (type_of (load_idx 2)));
-    Printf.printf "load_idx 3 = %s\n%!" (string_of_lltype (type_of (load_idx 3)));
-    Printf.printf "addr_of_idx 0 = %s\n%!" (string_of_lltype (type_of (addr_of_idx 0)));
-    Printf.printf "addr_of_idx 1 = %s\n%!" (string_of_lltype (type_of (addr_of_idx 1)));
-    Printf.printf "addr_of_idx 2 = %s\n%!" (string_of_lltype (type_of (addr_of_idx 2)));
-    Printf.printf "addr_of_idx 3 = %s\n%!" (string_of_lltype (type_of (addr_of_idx 3)));
-    Printf.printf "result type = %s\n%!" (string_of_lltype (type_of_val_type t));
-
     let result = insert_idx ((vector_elements t) - 1) in
     Printf.printf "done cg_gather\n%!";
     result
