@@ -1,5 +1,3 @@
-// Test CUDA kernel runner, using the low-level Driver API
-
 /*
  * Build LL module with:
  *
@@ -19,44 +17,6 @@
         fprintf(stderr, "CUDA: %s returned non-success: %d\n", str, status); \
     assert(status == CUDA_SUCCESS); \
     } (c)
-
-/*
-typedef union {
-    struct {
-        void* host;
-        CUdeviceptr dev;
-    } ptr;
-    int32_t i32;
-    float f32;
-} ArgT;
-*/
-
-// TODO: convention to track host and device pointers together in args
-
-// TODO: use tags to track arg types for simple, non-dynamically-generated free function? Or just generate free function like allocate/run function, with explicit knowledge of which arguments are which and how to free them?
-
-// Convention: caller passes in args array as would be passed to function, but 
-// with ptr args unset. Buffers are allocated and pointers assigned to ptr args.
-// Useful to automatically preallocate buffers in generated code, while allowing 
-// them to be reused through multiple applications of the same entrypoint.
-/*
- * Punting on this for now
- *
-int allocateBuffers(ArgT* args)
-{
-    int width = args[2].i32;
-    int height = args[3].i32;
-    int channels = args[4].i32;
-
-    size_t inSize = width*height*channels*sizeof(float);
-    args[0].host = malloc(inSize);
-    cuMemAlloc(args[0].device, inSize);
-
-    size_t inSize = width*height*channels*sizeof(float);
-    args[1].host = malloc(outSize);
-    cuMemAlloc(args[1].device, outSize);
-}
-*/
 
 #ifndef __cuda_cuda_h__
 #ifdef _WIN32
@@ -154,12 +114,6 @@ static CUcontext ctx = 0;
 static CUmodule mod = 0;
 char* ptx_src_ptr;
 
-/*
-typedef enum bool {
-    false = 0,
-    true = 1
-} bool;
-*/
 void init()
 {
     CUresult status;
@@ -192,6 +146,7 @@ void init()
     /*return true;*/
 }
 
+// TODO: switch to building as C++ with extern "C" linkage on functions
 typedef enum {
     false = 0,
     true = 1
@@ -251,14 +206,7 @@ void dev_run(
 #ifdef INCLUDE_WRAPPER
 int kernel_wrapper_tmpl( buffer_t *input, buffer_t *result, int N )
 {
-    /*bool success;*/
-
-    /*if (!init()) return false;*/
     init();
-
-    // Copy host data to device
-    // NOTE: this is the caller responsibility for now
-    //CHECK_CALL( cuMemcpyHtoD(dIn, hIn, size) );
 
     int threadsX = 16;
     int threadsY =  1;
@@ -271,7 +219,6 @@ int kernel_wrapper_tmpl( buffer_t *input, buffer_t *result, int N )
     dev_malloc_if_missing(result);
 
     copy_to_dev(input);
-    
 
     // Invoke
     void* cuArgs[] = { &input->dev, &result->dev, &N };
