@@ -1,6 +1,11 @@
 open Ir
 open Analysis
 
+(* Is an expression sufficiently simple that it should just be substituted in when it occurs in a let *)
+let is_simple = function
+  | IntImm _ | FloatImm _ | UIntImm _ | Var (_, _) -> true
+  | _ -> false
+
 let rec constant_fold_expr expr = 
   let recurse = constant_fold_expr in
   
@@ -165,6 +170,13 @@ let rec constant_fold_expr expr =
 
     | Debug (e, n, args) -> Debug (recurse e, n, args)
 
+    | Let (n, a, b) -> 
+        let a = recurse a and b = recurse b in
+        if is_simple a then
+          subs_expr (Var (val_type_of_expr a, n)) a b
+        else
+          Let (n, a, b)
+
     (* Immediates are unchanged *)
     | x -> x
 
@@ -187,11 +199,6 @@ let rec constant_fold_stmt = function
       let rec scoped_subs_stmt stmt = match stmt with
         | LetStmt (n, _, _) when n = name -> stmt
         | _ -> mutate_children_in_stmt (subs_expr var value) scoped_subs_stmt stmt
-      in
-      (* Fold in values no more complex than the var itself *)
-      let is_simple = function
-        | IntImm _ | FloatImm _ | UIntImm _ | Var (_, _) -> true
-        | _ -> false
       in
       if (is_simple value) then
         constant_fold_stmt (scoped_subs_stmt stmt)
