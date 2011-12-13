@@ -63,11 +63,13 @@ let rec constant_fold_expr expr =
         | (Add, x, y) when is_const_zero x -> y
         | (Add, x, y) when is_const_zero y -> x
         | (Sub, x, y) when is_const_zero y -> x
+        | (Sub, x, y) when x = y -> make_zero (val_type_of_expr x)
         | (Mul, x, y) when is_const_one x -> y
         | (Mul, x, y) when is_const_one y -> x
         | (Mul, x, y) when is_const_zero x -> x
         | (Mul, x, y) when is_const_zero y -> y
         | (Div, x, y) when is_const_one y -> x
+        | (Div, x, y) when x = y -> make_one (val_type_of_expr x)
 
         (* op (Ramp, Broadcast) should be folded into the ramp *)
         | (Add, Broadcast (e, _), Ramp (b, s, n)) 
