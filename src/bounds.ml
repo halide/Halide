@@ -356,12 +356,5 @@ let rec required_of_stmt func env = function
       required_of_stmt func env body
   | stmt -> fold_children_in_stmt (required_of_expr func env) (required_of_stmt func env) region_union stmt
   
-(* What region of the func is used by an entire function body *)
-let required_of_body func env = function
-  | Pure expr -> required_of_expr func env expr 
-  | Impure (init, update_loc, update_val) -> 
-      let r1 = required_of_expr func env init in
-      let r2 = required_of_expr func env update_val in
-      let rest = List.map (required_of_expr func env) update_loc in
-      List.fold_left region_union (region_union r1 r2) rest
+
         

@@ -43,8 +43,11 @@ let rec resolve_name (context: string) (var: string) (schedule: schedule_tree) =
   end
         
 let make_function_body (name:string) (env:environment) (debug:bool) =
+  Printf.printf "make_function_body %s\n%!" name;
+  
   let (args, return_type, body) = find_function name env in
   let prefix = name ^ "." in
+  let pre = prefix_name_expr prefix in
   let renamed_args = List.map (fun (t, n) -> (t, prefix ^ n)) args in
   let renamed_body = match body with
     | Extern -> raise (Wtf ("Can't lookup body of extern function: " ^ name))
@@ -52,17 +55,15 @@ let make_function_body (name:string) (env:environment) (debug:bool) =
         let expr = if debug then
             Debug (expr, "### Evaluating " ^ name ^ " at ", List.map (fun (t, n) -> Var (t, n)) renamed_args) 
           else expr in
-        Pure (prefix_name_expr prefix expr)
-    | Impure (expr, modified_args, modified_val) -> 
-        let expr = if debug then
-            Debug (expr, "### Initializing " ^ name ^ " at ", List.map (fun (t, n) -> Var (t, n)) renamed_args) 
-          else expr in
-        let modified_val = if debug then 
-            Debug (modified_val, "### Modifying " ^ name ^ " at ", modified_args) 
-          else modified_val in
-        Impure (prefix_name_expr prefix expr,
-                List.map (prefix_name_expr prefix) modified_args, 
-                prefix_name_expr prefix modified_val)
+        Pure (pre expr)
+    | Reduce (init_expr, modified_args, update_func, reduction_domain) -> 
+        Printf.printf "update_func and prefix: %s %s\n%!" update_func prefix;
+
+        Reduce (pre init_expr,
+                List.map (prefix_name_expr (prefix ^ update_func ^ ".")) modified_args, 
+                prefix ^ update_func,
+                List.map (fun (n, x, y) -> (prefix ^ n, pre x, pre y)) reduction_domain)
+
   in
   (renamed_args, return_type, renamed_body)
 
@@ -75,153 +76,90 @@ let string_of_range = function
   | Bounds.Range (a, b) -> "[" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ "]" 
 let bounds f stmt = simplify_region (Bounds.required_of_stmt f (StringMap.empty) stmt) 
 
-let rec lower_stmt (stmt:stmt) (env:environment) (schedule:schedule_tree) (functions:string list) (debug:bool) =
-  match functions with
-    | [] -> stmt
-    | (name::rest) ->        
+let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug:bool) =
+  (* Grab the schedule for the next function call to lower *)
+  let (call_sched, sched_list) = find_schedule schedule func in
 
-        (* Grab the body of the function call *)
-        let (args, return_type, body) = make_function_body name env debug in
-        
-        let arg_names = List.map snd args in
-
-        (* Grab the schedule for function call *)
-        let (call_sched, sched_list) = find_schedule schedule name in
-
-        Printf.printf "Lowering function %s with schedule %s [%s]\n%!" name 
-          (string_of_call_schedule call_sched)
-          (String.concat ", " (List.map string_of_schedule sched_list));
-
-        (* Make a function to use for scheduling chunks and roots *)
-        let make_pipeline stmt = 
-          (* Make a name for the output buffer *)
-          let buffer_name = name ^ ".result" in
-          (* Figure out how to index it *)
-          let strides = stride_list sched_list arg_names in
-          (* Figure out how much storage to allocate for it *)
-          let sizes = List.map snd strides in
-          let buffer_size = List.fold_left ( *~ ) (IntImm 1) sizes in                      
-          (* Generate a statement that evaluates the function over its schedule *)
-          let produce = realize (name, args, return_type, body) sched_list buffer_name strides debug in
-          (* Generate the code that consumes the result by replacing calls with loads *)
-          (* let consume = replace_calls_with_loads_in_stmt name buffer_name strides debug stmt in  *)
-          let consume = stmt in
-
-          (* Wrap the pair into a pipeline object *)
-          let pipeline = Pipeline (buffer_name, return_type, buffer_size, produce, consume) in
-
-          (* Do a constant-folding pass 
-          let pipeline = Constant_fold.constant_fold_stmt pipeline in *)
+  Printf.printf "Lowering function %s with schedule %s [%s]\n%!" func 
+    (string_of_call_schedule call_sched)
+    (String.concat ", " (List.map string_of_schedule sched_list));
+  
+  let scheduled_call = 
+    match call_sched with
+      | Chunk chunk_dim -> begin
+        (* Recursively descend the statement until we get to the loop in question *)
+        let rec inner = function
+          | For (for_dim, min, size, order, for_body) when for_dim = chunk_dim -> 
+              For (for_dim, min, size, order, realize func for_body env schedule debug)
+          | stmt -> mutate_children_in_stmt (fun x -> x) inner stmt
+        in inner stmt
+      end
+      | Root -> realize func stmt env schedule debug
+      | Inline ->
+          (* grab the body of the function *)
+          let (args, _, body) = make_function_body func env debug in
+          (* Just replace all calls to the function with the body of the function *)
+          begin match body with 
+            | Extern -> raise (Wtf ("Can't inline extern function " ^ func))
+            | Reduce _ -> raise (Wtf ("Can't inline a reduction " ^ func))
+            | Pure expr ->
+                let rec inline_calls_in_expr = function
+                  | Call (t, n, call_args) when n = func -> 
+                      let call_args = List.map inline_calls_in_expr call_args in
                       
-          (* Maybe wrap the pipeline in some debugging code *)
-          let pipeline = if debug then
-              let sizes = List.fold_left 
-                (fun l (a, b) -> a::b::l)     
-                [] (List.rev strides) in   
-              Block [Print ("### Allocating " ^ name ^ " over ", sizes); 
-                     pipeline; 
-                     Print ("### Discarding " ^ name ^ " over ", sizes)]
-            else
-              pipeline 
-          in 
-          
-          pipeline
-        in 
+                      (* If the args have vector type, promote
+                         the function body to also have vector type
+                         in its args *)
+                      
+                      let widths = List.map (fun x -> vector_elements (val_type_of_expr x)) call_args in
+                      let width = List.hd widths in (* Do we have pure functions with no arguments? *)
+                      assert (List.for_all (fun x -> x = 1 || x = width) widths);                            
 
-        let scheduled_call = 
-          match call_sched with
-            | Chunk chunk_dim -> begin
-              (* Recursively descend the statement until we get to the loop in question *)
-              let rec inner = function
-                | For (for_dim, min, size, order, for_body) when for_dim = chunk_dim -> 
-                    For (for_dim, min, size, order, make_pipeline for_body)
-                | stmt -> mutate_children_in_stmt (fun x -> x) inner stmt
-              in inner stmt
-            end
-            | Root -> make_pipeline stmt
-            | Inline ->
-                (* Just replace all calls to the function with the body of the function *)
-                begin match body with 
-                  | Extern -> raise (Wtf ("Can't inline extern function " ^ name))
-                  | Impure _ -> raise (Wtf ("Can't inline impure function " ^ name))
-                  | Pure expr ->
-                      let rec inline_calls_in_expr = function
-                        | Call (t, n, call_args) when n = name -> 
-                            let call_args = List.map inline_calls_in_expr call_args in
- 
-                            (* If the args have vector type, promote
-                               the function body to also have vector type
-                               in its args *)
+                      let expr = 
+                        if width > 1 then begin
+                          let arg_names = List.map snd args in
+                          let promoted_args = List.map (fun (t, n) -> Var (vector_of_val_type t width, n)) args in
+                          let env = List.fold_right2 StringMap.add arg_names promoted_args StringMap.empty in
+                          let expr = vector_subs_expr env expr in
+                          expr
+                        end else expr
+                      in 
 
-                            let widths = List.map (fun x -> vector_elements (val_type_of_expr x)) call_args in
-                            let width = List.hd widths in (* Do we have pure functions with no arguments? *)
-                            assert (List.for_all (fun x -> x = 1 || x = width) widths);                            
+                      (* Generate functions that wrap an expression in a let that defines the argument *)
+                      let wrap_arg name arg x = Let (name, arg, x) in
+                      let wrappers = List.map2 (fun arg (t, name) -> wrap_arg name arg) call_args args in
 
-                            let expr = 
-                              if width > 1 then begin
-                                Printf.printf "promoting body of %s to vector with args: %s\n%!" 
-                                  name (String.concat ", " (List.map string_of_expr call_args));
-                                Printf.printf "Old body: %s\n%!" (string_of_expr expr);
-                                let promoted_args = List.map (fun (t, n) -> Var (vector_of_val_type t width, n)) args in
-                                let env = List.fold_right2 StringMap.add arg_names promoted_args StringMap.empty in
-                                let expr = vector_subs_expr env expr in
-                                Printf.printf "New body: %s\n%!" (string_of_expr expr);
-                                expr
-                              end else expr
-                            in 
+                      (* Apply all those wrappers to the function body *)
+                      List.fold_right (fun f arg -> f arg) wrappers expr
 
-                            (* Generate functions that wrap an expression in a let that defines the argument *)
-                            let wrap_arg name arg x = Let (name, arg, x) in
-                            let wrappers = List.map2 (fun arg (t, name) -> wrap_arg name arg) call_args args in
-
-                            (* Apply all those wrappers to the function body *)
-                            List.fold_right (fun f arg -> f arg) wrappers expr
-
-                              
-
-                        (*
-                        (* TODO: Check the types match *)
-                            List.fold_left2 
-                              (* Replace an argument with its value in e, possibly vectorizing as we go for i32 args *)
-                              (fun e (t, var) value -> 
-                                if (t = i32) then vector_subs_expr var value e 
-                                else subs_expr (Var (t, var)) value e)
-                              expr args call_args                               
-                              *)
-                        | x -> mutate_children_in_expr inline_calls_in_expr x
-                      and inline_calls_in_stmt s =
-                        mutate_children_in_stmt inline_calls_in_expr inline_calls_in_stmt s
-                      in
-                      inline_calls_in_stmt stmt                        
-                end
-            | Reuse s -> begin
-              (* Replace calls to name with calls to s in stmt *)
-              let rec fix_expr = function
-                | Call (ty, n, args) when n = name -> 
-                    let args = List.map (mutate_children_in_expr fix_expr) args in
-                    Call (ty, s, args)
-                | expr -> mutate_children_in_expr fix_expr expr
-              in
-              let rec fix_stmt stmt = mutate_children_in_stmt fix_expr fix_stmt stmt in
-              fix_stmt stmt
-            end
-            | _ -> raise (Wtf "I don't know how to schedule this yet")
+                  | x -> mutate_children_in_expr inline_calls_in_expr x
+                and inline_calls_in_stmt s =
+                  mutate_children_in_stmt inline_calls_in_expr inline_calls_in_stmt s
+                in
+                inline_calls_in_stmt stmt                        
+          end
+      | Reuse s -> begin
+        (* Replace calls to name with calls to s in stmt *)
+        let rec fix_expr = function
+          | Call (ty, n, args) when n = func -> 
+              let args = List.map (mutate_children_in_expr fix_expr) args in
+              Call (ty, s, args)
+          | expr -> mutate_children_in_expr fix_expr expr
         in
-        Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);  
-        lower_stmt scheduled_call env schedule rest debug
+        let rec fix_stmt stmt = mutate_children_in_stmt fix_expr fix_stmt stmt in
+        fix_stmt stmt
+      end
+      | _ -> raise (Wtf "I don't know how to schedule this yet")
+  in
+  Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);  
+  scheduled_call
 
 
 
-(* Evaluate a function according to a schedule and put the results in
-   the output_buf_name using the given strides *)
-and realize (name, args, return_type, body) sched_list buffer_name strides debug = 
-  (* Make the store index *)
-  (* TODO, vars and function type signatures should have matching order *)
-  let make_buffer_index args =
-    List.fold_right2 
-      (fun arg (min,size) subindex -> (size *~ subindex) +~ arg -~ min)
-      args strides (IntImm 0) in
-  let index = make_buffer_index (List.map (fun (t, v) -> Var (t, v)) args) in
+(* Evaluate a function according to a schedule and wrap the stmt consuming it in a pipeline *)
+and realize func consume env schedule debug =
+
+  let (_, sched_list) = find_schedule schedule func in
 
   (* Wrap a statement in for loops using a schedule *)
   let wrap (stmt:stmt) = function 
@@ -245,89 +183,52 @@ and realize (name, args, return_type, body) sched_list buffer_name strides debug
         expand_old_dim_stmt stmt 
   in
   
-  (* Deal with recursion by replacing calls to the same
-     function in the realized body with loads from the buffer *)
-  let rec remove_recursion = function
-    | Call (ty, n, args) ->
-        begin match List.rev (split_name n) with 
-          | a::b::_ when a = b ->
-              Load (ty, buffer_name, make_buffer_index args)        
-          | x -> Call (ty, n, args)
-        end
-    | x -> mutate_children_in_expr remove_recursion x
-  in
-  
-  let produce =
-    match body with
-      | Extern -> raise (Wtf ("Can't lower extern function call " ^ name))          
-      | Pure body ->
-          let inner_stmt = Store (remove_recursion body, buffer_name, index) in
-          List.fold_left wrap inner_stmt sched_list
-      | Impure (initial_value, modified_args, modified_val) ->
-          (* Remove recursive references *)
-          let initial_value = remove_recursion initial_value in
-          let modified_idx = make_buffer_index (List.map remove_recursion modified_args) in
-          let modified_val = remove_recursion modified_val in
-          
-          (* Split the sched_list into terms refering to the initial
-             value, and terms refering to free vars *)
+  let (args, return_type, body) = make_function_body func env debug in
+  let arg_vars = List.map (fun (t, n) -> Var (t, n)) args in
+  let arg_names = List.map snd args in
 
-          (* Args are: Var names refering to function args, sched_list
-             for function args, sched_list for free vars, sched_list
-             remaining to be processed *)
-          let rec partition_sched_list = function
-            | (_, arg_sched_list, free_sched_list, []) -> (List.rev arg_sched_list, List.rev free_sched_list)
-            | (arg_set, arg_sched_list, free_sched_list, first::rest) ->
-                begin match first with 
-                  | Serial (name, _, _)
-                  | Parallel (name, _, _) 
-                  | Unrolled (name, _, _) 
-                  | Vectorized (name, _, _) ->
-                      if StringSet.mem name arg_set then
-                        partition_sched_list (arg_set, first::arg_sched_list, free_sched_list, rest)
-                      else
-                        partition_sched_list (arg_set, arg_sched_list, first::free_sched_list, rest)
-                  | Split (name, outer, inner, _) ->
-                      if StringSet.mem name arg_set then
-                        let arg_set = StringSet.add outer arg_set in
-                        let arg_set = StringSet.add inner arg_set in
-                        partition_sched_list (arg_set, first::arg_sched_list, free_sched_list, rest)
-                      else
-                        partition_sched_list (arg_set, arg_sched_list, first::free_sched_list, rest)
-                end
-          in 
-          
-          let arg_set = List.fold_right (StringSet.add) (List.map snd args) StringSet.empty in
-          let (arg_sched_list, free_sched_list) = partition_sched_list (arg_set, [], [], sched_list) in
-          
-          (* Wrap the initial value in for loops corresponding to the function args *)
-          let inner_init_stmt = Store (initial_value, buffer_name, index) in
-          let init_wrapped = List.fold_left wrap inner_init_stmt arg_sched_list in
-        
-          (* Wrap the modifier in for loops corresponding to the free vars in modified_idx and modified_val *)
-          let inner_modifier_stmt = Store (modified_val, buffer_name, modified_idx) in
-          let modifier_wrapped = List.fold_left wrap inner_modifier_stmt free_sched_list in
-        
-          (* Put them in a block *)
-          Block [init_wrapped; modifier_wrapped]
-  in 
+  let strides = stride_list sched_list arg_names in
+  let buffer_size = List.fold_right (fun (min, size) old_size -> size *~ old_size) strides (IntImm 1) in
 
-  if debug then 
-    let sizes = List.fold_left
-      (fun l (a, b) -> a::b::l)    
-      [] (List.rev strides) in  
-    Block [Print ("### Realizing " ^ name ^ " over ", sizes); produce]
-  else
-    produce
+  match body with
+    | Extern -> raise (Wtf ("Can't lower extern function call " ^ func))          
+    | Pure body ->
+        let inner_stmt = Provide (body, func, arg_vars) in
+        let produce = List.fold_left wrap inner_stmt sched_list in
+        Pipeline (func, return_type, buffer_size, produce, consume)
+    | Reduce (init_expr, update_args, update_func, iteration_domain) ->
+
+        let init_stmt = Provide (init_expr, func, arg_vars) in
+        let initialize = List.fold_left wrap init_stmt sched_list in
+               
+        let (_, _, update_body) = make_function_body update_func env debug in
+        let update_expr = match update_body with
+          | Pure expr -> expr
+          | _ -> raise (Wtf "The update step of a reduction must be pure")
+        in
+        
+        (* remove recursion in the update expr *)
+        let update_expr = subs_name_expr (update_func ^ "." ^ (base_name func)) func update_expr in
+
+        let update_stmt = Provide (update_expr, func, update_args) in
+
+        let (_, update_sched_list) = find_schedule schedule update_func in
+        let update = List.fold_left wrap update_stmt update_sched_list in
+
+        let produce = Block [initialize; update] in
+
+        (* Put the whole thing in a pipeline that exposes the updated
+           result to the consumer *)
+        Pipeline (func, return_type, buffer_size, produce, consume)
+
 
 (* Figure out interdependent expressions that give the bounds required
    by all the functions defined in some block. *)
 (* bounds is a list of (func, var, min, max) *)
 let rec extract_bounds_soup env var_env bounds = function
-  | Pipeline (buf, ty, size, produce, consume) -> 
+  | Pipeline (func, ty, size, produce, consume) -> 
       (* What function am I producing? *)
       let bounds = try
-        let func = String.sub buf 0 (String.rindex buf '.') in        
 
         (* Compute the extent of that function used in the consume side *)
         let region = Bounds.required_of_stmt func var_env consume in
@@ -337,7 +238,6 @@ let rec extract_bounds_soup env var_env bounds = function
           (* Get the args list of the function *)
           let (args, _, _) = find_function func env in
           let args = List.map snd args in
-
         
           let string_of_bound = function
             | Bounds.Unbounded -> "Unbounded"
@@ -411,29 +311,6 @@ let rec bounds_inference env schedule = function
 
               List.fold_left update_schedule schedule keys
             in
-
-            (*
-            let lift_var (precomp, body, schedule) var value =
-              let value = Constant_fold.constant_fold_expr value in
-              let value = Break_false_dependence.break_false_dependence_expr value in
-              let value = Constant_fold.constant_fold_expr value in
-              let n = List.length precomp in
-              let new_expr = Load (Int 32, size_buffer, IntImm n) in
-              let assignment = Store (value, size_buffer, IntImm n) in
-              (* let precomp x = LetStmt (var, value, precomp x) in *)
-              let precomp = assignment::(List.map (subs_stmt var new_expr) precomp) in
-              let body = subs_stmt var new_expr body in
-              let schedule = subs_schedule var new_expr schedule in
-              (precomp, body, schedule)
-            in 
-            let rewrite_bound (precomp, body, schedule) (func, arg, min, max) =
-              (* Lift the storage of the min *)              
-              let var = Var (Int 32, func ^ "." ^ arg ^ ".min") in
-              let (precomp, body, schedule) = lift_var (precomp, body, schedule) var min in
-              let var = Var (Int 32, func ^ "." ^ arg ^ ".extent") in
-              lift_var (precomp, body, schedule) var (max -~ min +~ IntImm 1)
-            in
-            *)
 
             let lift_var precomp var value = 
               let value = Constant_fold.constant_fold_expr value in
@@ -513,26 +390,32 @@ let qualify_schedule (sched:schedule_tree) =
   List.fold_left update sched keys    
 
 let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug:bool) =
-  let rec replace_calls_with_loads_in_expr function_name buffer_name strides debug expr = 
-    let recurse = replace_calls_with_loads_in_expr function_name buffer_name strides debug in
+  let rec replace_calls_with_loads_in_expr func strides debug expr = 
+    let recurse = replace_calls_with_loads_in_expr func strides debug in
     match expr with 
-      | Call (ty, func_name, args) when func_name = function_name ->
+      | Call (ty, f, args) when f = func ->
           let args = List.map recurse args in 
           let index = List.fold_right2 
             (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
             args strides (IntImm 0) in
-          let load = Load (ty, buffer_name, index) in
+          let load = Load (ty, func, index) in
           if debug then
-            Debug (load, "### Loading " ^ function_name ^ " at ", args)
+            Debug (load, "### Loading " ^ func ^ " at ", args)
           else
             load
       | x -> mutate_children_in_expr recurse x
   in
-  let rec replace_calls_with_loads_in_stmt function_name buffer_name strides debug stmt = 
-    mutate_children_in_stmt 
-      (replace_calls_with_loads_in_expr function_name buffer_name strides debug)
-      (replace_calls_with_loads_in_stmt function_name buffer_name strides debug) 
-      stmt     
+  let rec replace_calls_with_loads_in_stmt func strides debug stmt = 
+    let recurse_stmt = replace_calls_with_loads_in_stmt func strides debug in
+    let recurse_expr = replace_calls_with_loads_in_expr func strides debug in
+    match stmt with
+      | Provide (e, f, args) when f = func ->
+          let args = List.map recurse_expr args in
+          let index = List.fold_right2 
+            (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
+            args strides (IntImm 0) in          
+          Store (recurse_expr e, f, index)
+      | _ -> mutate_children_in_stmt recurse_expr recurse_stmt stmt
   in
 
   let functions = list_of_schedule schedule in
@@ -541,7 +424,7 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
     let (_, sched_list) = find_schedule schedule f in
     if sched_list = [] then stmt else
       let strides = stride_list sched_list (List.map (fun (_, n) -> f ^ "." ^ n) args) in
-      replace_calls_with_loads_in_stmt f (f ^ ".result") strides debug stmt
+      replace_calls_with_loads_in_stmt f strides debug stmt
   in
   List.fold_left update stmt functions 
 
@@ -568,18 +451,16 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   (* Printf.printf "Realization order: %s\n" (String.concat "\n" functions); *)
 
   Printf.printf "Fully qualifying symbols in the schedule\n%!";
+  print_schedule schedule;
   let schedule = qualify_schedule schedule in
+  print_schedule schedule;
 
-  Printf.printf "Making root function body\n%!";
-  let (args, return_type, body) = make_function_body func env debug in
-  Printf.printf "Making root schedule\n%!";
-  let (_, sched_list) = find_schedule schedule func in
-  Printf.printf "Making root stride list\n%!";
-  let strides = stride_list sched_list (List.map snd args) in
   Printf.printf "Realizing root statement\n%!";
-  let core = (realize (func, args, return_type, body) sched_list ".result" strides debug) in
+  let (Pipeline (_, _, _, core, _)) = realize func (Block []) env schedule debug in
+
   Printf.printf "Recursively lowering function calls\n%!";
-  let stmt = lower_stmt core env schedule (List.filter (fun x -> x <> func) functions) debug in
+  let functions = List.filter (fun x -> x <> func) functions in  
+  let stmt = List.fold_left (fun stmt f -> lower_stmt f stmt env schedule debug) core functions in
 
   Printf.printf "Performing bounds inference\n%!";
   (* Updates stmt and schedule *)
@@ -588,34 +469,26 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
 
   print_schedule schedule;
 
-  Printf.printf "Replacing function calls with loads\n%!";
+  Printf.printf "Replacing function references with loads and stores\n%!";
   let stmt = lower_function_calls stmt env schedule debug in
+
+  Printf.printf "Replacing stores to %s to stores to .result\n%!" func;
+  let rec rewrite_loads_from_result = function
+    | Load (e, f, idx) when f = func ->
+        Load (e, ".result", idx)
+    | expr -> mutate_children_in_expr rewrite_loads_from_result expr
+  in
+  let rec rewrite_references_to_result = function
+    | Store (e, f, idx) when f = func ->
+        Store (rewrite_loads_from_result e, ".result", rewrite_loads_from_result idx)
+    | stmt -> mutate_children_in_stmt rewrite_loads_from_result rewrite_references_to_result stmt 
+  in
+  let stmt = rewrite_references_to_result stmt in
 
   print_schedule schedule;
   
   stmt
 
-  (*
-    TODO: move this into lower where bounds are inferred 
-    
-  Printf.printf "Static bounds checking\n%!";
-  let simplify_range = function
-    | Bounds.Unbounded -> Bounds.Unbounded
-    | Bounds.Range (a, b) -> Bounds.Range (Constant_fold.constant_fold_expr a, Constant_fold.constant_fold_expr b)
-  in
-  let simplify_region r = List.map simplify_range r in 
-  let string_of_range = function  
-      | Bounds.Unbounded -> "[Unbounded]"
-      | Bounds.Range (a, b) -> "[" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ "]" 
-  in  
-  let bounds f = simplify_region (Bounds.required_of_stmt f (StringMap.empty) stmt) in
-  let check f = function
-    | [] -> ()
-    | region_used ->
-        Printf.printf "This region of %s is used: %s\n%!"  f
-          (String.concat "*" (List.map string_of_range region_used))
-  in
-  *)
 
 
 

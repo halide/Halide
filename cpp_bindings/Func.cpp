@@ -31,7 +31,7 @@ namespace FImage {
     ML_FUNC1(doConstantFold);
     
     ML_FUNC3(makeDefinition);
-    ML_FUNC4(addScatterToDefinition);
+    ML_FUNC6(addScatterToDefinition);
     ML_FUNC0(makeEnv);
     ML_FUNC2(addDefinitionToEnv);
     
@@ -45,6 +45,7 @@ namespace FImage {
     ML_FUNC3(doCompile); // name, args, stmt
     ML_FUNC3(doCompileToFile); // name, args, stmt
     ML_FUNC2(makePair);
+    ML_FUNC3(makeTriple);
 
     struct FuncRef::Contents {
         Contents(const Func &f) :
@@ -242,16 +243,27 @@ namespace FImage {
 
         } else {
             printf("Scatter definition for %s\n", name().c_str());
-            MLVal scatter_args = makeList();
+            MLVal update_args = makeList();
             for (size_t i = args.size(); i > 0; i--) {
-                scatter_args = addToList(scatter_args, args[i-1].node());
+                update_args = addToList(update_args, args[i-1].node());
                 contents->rhs.child(args[i-1]);
             }                                                            
 
             contents->rhs.child(r);
+           
+            MLVal reduction_args = makeList();
+            const std::vector<RVar> &rvars = contents->rhs.rvars();
+            for (size_t i = rvars.size(); i > 0; i--) {
+                reduction_args = addToList(reduction_args, 
+                                           makeTriple(rvars[i-1].name(), 
+                                                      rvars[i-1].min().node(), 
+                                                      rvars[i-1].size().node()));
+            }
             
+            printf("Adding scatter definition for %s\n", name().c_str());
             // There should already be a gathering definition of this function. Add the scattering term.
-            *environment = addScatterToDefinition(*environment, (name()), scatter_args, r.node());
+            *environment = addScatterToDefinition(*environment, name(), uniqueName('p'), 
+                                                  update_args, r.node(), reduction_args);
         }
     }
 
@@ -424,7 +436,7 @@ namespace FImage {
         // Create a function around it with the appropriate number of args
         printf("\nMaking function...\n");           
         MLVal args = makeList();
-        args = addToList(args, makeBufferArg(("result")));
+        args = addToList(args, makeBufferArg("result"));
         for (size_t i = rhs().uniformImages().size(); i > 0; i--) {
             MLVal arg = makeBufferArg(rhs().uniformImages()[i-1].name());
             args = addToList(args, arg);

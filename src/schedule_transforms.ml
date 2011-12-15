@@ -17,40 +17,65 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
   let schedule = set_schedule schedule func Root f_schedule in
 
   (* Find all sub-functions and mark them as inline *)
-  let rec called_functions f =
-    let (_, _, _, body) = Environment.find f env in
+  let rec called_functions f found_calls =
 
-    let l = 
+    Printf.printf "-> %s\n%!" f;
 
-      let rec find_calls_expr = function
-        | Call (_, name, args) when List.mem name (split_name f) ->
-            (string_set_concat (List.map find_calls_expr args))
-        | Call (_, name, args) -> 
-            let rest = (string_set_concat (List.map find_calls_expr args)) in
-            StringSet.add name rest
-        | x -> fold_children_in_expr find_calls_expr StringSet.union (StringSet.empty) x
-      in
+    let (_, _, body) = find_function f env in
 
-      let rec find_calls_stmt stmt =
-        fold_children_in_stmt find_calls_expr find_calls_stmt StringSet.union stmt 
-      in
+    Printf.printf " found_calls -> %s\n%!" (String.concat ", " (StringSet.elements found_calls));
 
+    let rec find_calls_expr = function
+      | Call (_, name, args) when List.mem name (split_name f) ->
+          (string_set_concat (List.map find_calls_expr args))
+      | Call (_, name, args) -> 
+          let rest = (string_set_concat (List.map find_calls_expr args)) in
+          StringSet.add name rest
+      | x -> fold_children_in_expr find_calls_expr StringSet.union (StringSet.empty) x
+    in
+    
+    let rec find_calls_stmt stmt =
+      fold_children_in_stmt find_calls_expr find_calls_stmt StringSet.union stmt 
+    in
+    
+    let new_found_calls = 
       match body with 
         | Extern -> StringSet.empty
         | Pure expr -> find_calls_expr expr
-        | Impure (initial_value, modified_args, modified_value) ->
-            let s = StringSet.union (find_calls_expr initial_value) (find_calls_expr modified_value) in
-            string_set_concat (s::(List.map find_calls_expr modified_args))
+        | Reduce (init_expr, update_args, update_func, bounds) ->
+            let s = StringSet.add update_func (find_calls_expr init_expr) in
+            string_set_concat (s::(List.map find_calls_expr update_args))
     in
 
+    let new_found_calls = string_set_map (fun x -> f ^ "." ^ x) new_found_calls in
+
+    Printf.printf " new_found_calls -> %s\n%!" (String.concat ", " (StringSet.elements new_found_calls));
+
+    let new_found_calls = StringSet.diff new_found_calls found_calls in
+
+    Printf.printf " after exclusion -> %s\n%!" (String.concat ", " (StringSet.elements new_found_calls));
+
     (* Recursively find more calls in the called functions *)
-    let calls = string_set_concat (l::(List.map called_functions (StringSet.elements l))) in
+    let found_calls = StringSet.union new_found_calls found_calls in
+    let found_calls = List.fold_right called_functions (StringSet.elements new_found_calls) found_calls in
 
     (* Prefix them all with this function name. *)
-    string_set_map (fun x -> f ^ "." ^ x) calls 
+    found_calls
   in
 
-  StringSet.fold (fun f s -> set_schedule s f Inline []) (called_functions func) schedule
+  let choose_schedule f s = 
+    let parent = parent_name f in
+    let (_, _, body) = find_function parent env in
+    let sched_list = match body with 
+      | Reduce (_, _, update_func, domain) when update_func = base_name f ->
+          List.map (fun (n, m, s) -> Parallel (n, m, s)) domain
+      | _ ->
+          []
+    in
+    set_schedule s f Inline sched_list
+  in
+
+  StringSet.fold choose_schedule (called_functions func StringSet.empty) schedule
     
 (* Add a split to a schedule *)
 let split_schedule (func: string) (var: string) (newouter: string) 
@@ -301,11 +326,18 @@ let chunk_schedule func var args region schedule =
 
   (* TODO: allow different meanings in different places *)
   match contexts with 
+      (*
+    | [Some first] ->
+        root_or_chunk_schedule func (Chunk (first ^ "." ^ var)) args region schedule        
+      *)  
     | (Some first)::rest when List.for_all (fun x -> x = (Some first)) rest ->  (* single unambiguous meaning *)
-        root_or_chunk_schedule func (Chunk (first ^ "." ^ var)) args region schedule
+        root_or_chunk_schedule func (Chunk (first ^ "." ^ var)) args region schedule 
     | _ -> 
         (* Ambiguous or ill-defined. Fall back to Root *)
         root_or_chunk_schedule func Root args region schedule
+
+(* For a fully qualified function, what are all the variables
+let all_vars_in_scope func *)
 
 let root_schedule func args region schedule = 
   root_or_chunk_schedule func Root args region schedule

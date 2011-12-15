@@ -13,7 +13,7 @@ OCAML_LIB_DIR=/usr/local/lib/ocaml
 LLVM_LDFLAGS=$(shell $(LLVM_CONFIG_EXE) --ldflags)
 LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lstdc++
  
-FIMAGE_OBJS=$(addprefix _build/,_MLFImage.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o)
+FIMAGE_OBJS=$(addprefix _build/,_MLFImage.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o Var.o)
 
 FImage.a: $(FIMAGE_OBJS) ../src/_build/libllsupport_impl.a
 	ld -r -o FImage.o $(OCAML_LIB_DIR)/libasmrun.a $(FIMAGE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L$(LLVM_DIR)/lib $(LLVM_LIBS_CXX) $(LLVM_LIBS_C) ../src/_build/libllsupport_impl.a

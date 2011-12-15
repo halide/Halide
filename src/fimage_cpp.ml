@@ -21,34 +21,72 @@ let codegen_to_c_callable e =
   let w = Cg.codegen_c_wrapper c m f in
   (c,m,w)
 
+let lower (f:string) (env:environment) (sched: schedule_tree) (debug: int) =
+  (* Printexc.record_backtrace true; *)
+
+  begin
+    Printf.printf "Lowering function\n";
+    let lowered = lower_function f env sched (if (debug = 1) then true else false) in
+    Printf.printf "Breaking false dependences\n";
+    (* let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
+     Printf.printf "Constant folding\n";
+     let lowered = Constant_fold.constant_fold_stmt lowered in
+     Printf.printf "Breaking false dependences\n";
+     let lowered = Break_false_dependence.break_false_dependence_stmt lowered in  *)
+    Printf.printf "Constant folding\n";
+    let lowered = Constant_fold.constant_fold_stmt lowered in 
+    lowered
+  end
+
+  (* with x -> begin
+    Printf.printf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
+    raise x
+  end *)
+
 let compile name args stmt =
+
+  Printexc.record_backtrace true;
+
 
   (* TODO: Canonicalize names. Variables get renamed to v0 v1
      v2... depending on the order in which they're found, arguments to
      a0, a1, a2, depending on the order that they occur in the
      arguments list. This is done to assist hashing. *)
 
-  let func = (name, args, stmt) in
-  if Hashtbl.mem compilation_cache func then begin
-    (* Printf.printf "Found function in cache\n%!";  *)
-    Hashtbl.find compilation_cache func
-  end else begin 
-    Printf.printf "Initializing native target\n%!"; 
-    ignore (initialize_native_target());
-    Printf.printf "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
-    let (c, m, f) = codegen_to_c_callable func in
-    ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc");
-    Hashtbl.add compilation_cache func (m, f);
-    (* TODO: this leaks the llcontext, and will leak the module if the cache
-     * doesn't free it eventually. *)
-    (m, f)
+  try begin
+    let func = (name, args, stmt) in
+    if Hashtbl.mem compilation_cache func then begin
+      (* Printf.printf "Found function in cache\n%!";  *)
+      Hashtbl.find compilation_cache func
+    end else begin 
+      Printf.printf "Initializing native target\n%!"; 
+      ignore (initialize_native_target());
+      Printf.printf "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
+      let (c, m, f) = codegen_to_c_callable func in
+      ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc");
+      Hashtbl.add compilation_cache func (m, f);
+      (* TODO: this leaks the llcontext, and will leak the module if the cache
+       * doesn't free it eventually. *)
+      (m, f)
+    end
+  end
+  with x -> begin
+    Printf.printf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
+    raise x
   end
 
 let compile_to_file name args stmt =
-  ignore (initialize_native_target());
-  let module Cg = Cg_llvm.CodegenForHost in
-  Cg.codegen_to_bitcode_and_header (name, args, stmt)
-
+  Printexc.record_backtrace true;
+  
+  try begin
+    ignore (initialize_native_target());
+    let module Cg = Cg_llvm.CodegenForHost in
+    Cg.codegen_to_bitcode_and_header (name, args, stmt)
+  end
+  with x -> begin
+    Printf.printf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
+    raise x
+  end
 
 let _ = 
   (* Make IR nodes *)
@@ -88,12 +126,14 @@ let _ =
     Environment.add n def env
   );
   
-  Callback.register "addScatterToDefinition" (fun env name args rhs ->
-    let (n, a, r, gather) = match Environment.find name env with
-      | (n, a, r, Pure gather) -> (n, a, r, gather)
-      | _ -> raise (Wtf "Can only add a scatter definition to a function already defined as a gather")
-    in
-    Environment.add n (n, a, r, Impure (gather, args, rhs)) env
+  Callback.register "addScatterToDefinition" (fun env name update_name update_args update_var reduction_domain ->
+    let (_, args, return_type, Pure init_expr) = Environment.find name env in
+    let update_arg_names = List.map (fun (n, _, _) -> (Int 32, n)) reduction_domain in
+    let update_func = (update_name, update_arg_names, return_type, Pure update_var) in
+    let env = Environment.add update_name update_func env in
+    let reduce_body =  Reduce (init_expr, update_args, update_name, reduction_domain) in
+    let reduce_func =  (name, args, return_type, reduce_body) in
+    Environment.add name reduce_func env
   );
 
   Callback.register "makeList" (fun _ -> []);
@@ -116,22 +156,9 @@ let _ =
     make_default_schedule f env region
   );
   
-  Callback.register "doLower" (fun (f:string) (env:environment) (sched: schedule_tree) (debug: int) -> 
-    Printf.printf "Lowering function\n";
-    let lowered = lower_function f env sched (if (debug = 1) then true else false) in
-    Printf.printf "Breaking false dependences\n";
-    (* let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
-       Printf.printf "Constant folding\n";
-       let lowered = Constant_fold.constant_fold_stmt lowered in
-       Printf.printf "Breaking false dependences\n";
-       let lowered = Break_false_dependence.break_false_dependence_stmt lowered in  *)
-    Printf.printf "Constant folding\n";
-    let lowered = Constant_fold.constant_fold_stmt lowered in 
-    lowered
-  );
-  
-  Callback.register "doCompile" (fun name a s -> compile name a s);
-  Callback.register "doCompileToFile" (fun name a s -> compile_to_file name a s);
+  Callback.register "doLower" lower;  
+  Callback.register "doCompile" compile;
+  Callback.register "doCompileToFile" compile_to_file;
   
   (* Schedule transformations. These partially apply the various ml
      functions to return an unary function that will transform a schedule

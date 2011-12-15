@@ -10,6 +10,7 @@
 namespace FImage {
 
     class Var;
+    class RVar;
     class FuncRef;
     class DynUniform;
     class ImageRef;
@@ -33,6 +34,7 @@ namespace FImage {
         Expr(float);
         Expr(double);
         Expr(const Var &);
+        Expr(const RVar &);
         Expr(const FuncRef &);
         Expr(const DynUniform &);
         Expr(const ImageRef &);
@@ -54,6 +56,7 @@ namespace FImage {
         const std::vector<DynUniform> &uniforms() const;
         const std::vector<DynImage> &images() const;
         const std::vector<Var> &vars() const;
+        const std::vector<RVar> &rvars() const;
         const std::vector<Func> &funcs() const;
         const std::vector<UniformImage> &uniformImages() const;
         int implicitArgs() const;

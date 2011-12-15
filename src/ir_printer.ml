@@ -84,10 +84,13 @@ and string_of_stmt stmt =
           (p ^ "{" ^ "\n" ^
              String.concat "" (List.map (string_stmt sp) stmts) ^
              p ^ "}\n")
-      (* | Reduce(op, e, mr) -> string_of_memref mr ^ string_of_reduce_op op ^ string_of_expr e *)
+
       | Store(e, b, i) -> 
           (p ^ string_of_buffer b ^ "[" ^ string_of_expr i ^ "] = \n" ^
              sp ^ string_of_expr e ^ ";\n")             
+      | Provide (e, f, args) ->
+          (p ^ f ^ "(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ") = \n" ^
+             sp ^ string_of_expr e ^ ";\n")
       | LetStmt (name, value, stmt) ->
           (p ^ "let " ^ name ^ " = " ^ string_of_expr value ^ "\n" ^ 
              string_stmt p stmt)            

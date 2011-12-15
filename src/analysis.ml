@@ -71,6 +71,7 @@ let fold_children_in_stmt expr_mutator stmt_mutator combiner = function
     combiner (combiner (expr_mutator min) (expr_mutator n)) (stmt_mutator body)
   | Block l -> List.fold_left combiner (stmt_mutator (List.hd l)) (List.map stmt_mutator (List.tl l))
   | Store (expr, buf, idx) -> combiner (expr_mutator expr) (expr_mutator idx)
+  | Provide (expr, func, args) -> List.fold_left combiner (expr_mutator expr) (List.map expr_mutator args)
   | LetStmt (name, value, stmt) -> combiner (expr_mutator value) (stmt_mutator stmt)
   | Pipeline (name, ty, size, produce, consume) -> 
     combiner (combiner (expr_mutator size) (stmt_mutator produce)) (stmt_mutator consume)
@@ -116,6 +117,8 @@ let mutate_children_in_stmt expr_mutator stmt_mutator = function
   | Block l -> Block (List.map stmt_mutator l)
   | Store (expr, buf, idx) -> 
       Store (expr_mutator expr, buf, expr_mutator idx)
+  | Provide (expr, func, args) ->
+      Provide (expr_mutator expr, func, List.map expr_mutator args)
   | LetStmt (name, value, stmt) ->
       LetStmt (name, expr_mutator value, stmt_mutator stmt)
   | Pipeline (name, ty, size, produce, consume) -> 
@@ -144,6 +147,10 @@ and subs_name_stmt oldname newname stmt =
         Store (subs_expr expr,
                (if buf = oldname then newname else buf),
                subs_expr idx)
+    | Provide (expr, func, args) ->
+        Provide (subs_expr expr,
+                 (if func = oldname then newname else func),
+                 List.map subs_expr args)
     | LetStmt (name, value, stmt) ->
         LetStmt ((if name = oldname then newname else name), 
                  subs_expr value, subs stmt)
@@ -183,6 +190,8 @@ and prefix_name_stmt prefix stmt =
     | Block l -> Block (List.map recurse_stmt l)
     | Store (expr, buf, idx) -> 
         Store (recurse_expr expr, prefix_non_global prefix buf, recurse_expr idx)
+    | Provide (expr, func, args) ->
+        Provide (recurse_expr expr, prefix_non_global prefix func, List.map recurse_expr args)
     | LetStmt (name, value, stmt) ->
         LetStmt (prefix ^ name, recurse_expr value, recurse_stmt stmt)
     | Pipeline (name, ty, size, produce, consume) -> 
