@@ -195,14 +195,17 @@ let rec constant_fold_stmt = function
       Block (List.map constant_fold_stmt l)
   | Store (e, buf, idx) ->
       Store (constant_fold_expr e, buf, constant_fold_expr idx)
+  | Provide (e, func, args) ->
+      Provide (constant_fold_expr e, func, List.map constant_fold_expr args)
   | LetStmt (name, value, stmt) ->
+
       let value = constant_fold_expr value in
       let var = Var (val_type_of_expr value, name) in
       let rec scoped_subs_stmt stmt = match stmt with
         | LetStmt (n, _, _) when n = name -> stmt
         | _ -> mutate_children_in_stmt (subs_expr var value) scoped_subs_stmt stmt
       in
-      if (is_simple value) then
+      if (is_simple value) && false then
         constant_fold_stmt (scoped_subs_stmt stmt)
       else 
         LetStmt (name, value, constant_fold_stmt stmt)

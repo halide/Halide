@@ -63,6 +63,9 @@ namespace FImage {
         
         // The list of free variables found
         std::vector<Var> vars;
+
+        // The list of reduction variables found
+        std::vector<RVar> rvars;
         
         // The list of functions directly called        
         std::vector<Func> funcs;
@@ -103,6 +106,10 @@ namespace FImage {
     Expr::Expr(const Var &v) : contents(new Contents(makeVar((v.name())), Int(32))) {
         contents->isVar = true;
         contents->vars.push_back(v);
+    }
+
+    Expr::Expr(const RVar &v) : contents(new Contents(makeVar((v.name())), Int(32))) {
+        contents->rvars.push_back(v);
     }
 
     Expr::Expr(const DynUniform &u) : 
@@ -150,6 +157,10 @@ namespace FImage {
         return contents->vars;
     }
 
+    const std::vector<RVar> &Expr::rvars() const {
+        return contents->rvars;
+    }
+
     const std::vector<Func> &Expr::funcs() const {
         return contents->funcs;
     }
@@ -166,6 +177,7 @@ namespace FImage {
     void Expr::Contents::child(const Expr &c) {
         unify(images, c.images());
         unify(vars, c.vars());
+        unify(rvars, c.rvars());
         unify(funcs, c.funcs());
         unify(uniforms, c.uniforms());
         unify(uniformImages, c.uniformImages());

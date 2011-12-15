@@ -109,6 +109,7 @@ let rec vectorize_stmt var stmt =
       | For (v, min, n, order, stmt) -> For (v, min, n, order, vec stmt)
       | Block l -> Block (map vec l)
       | Store (expr, buf, idx) -> Store (vec_expr expr, buf, vec_expr idx)
+      | Provide (expr, func, args) -> Provide (vec_expr expr, func, List.map vec_expr args)
       | Pipeline _ -> raise (Wtf "Can't vectorize an inner pipeline (yet?)")
       | Print (prefix, args) -> Print (prefix, List.map vec_expr args)
   in

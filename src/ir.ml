@@ -204,6 +204,9 @@ type stmt =
   (* Store an expression to a buffer at a given index *)
   | Store of expr * buffer * expr
 
+  (* Provide the value of a function at a given set of args. This is the pre-storage version of Store *)
+  | Provide of expr * string * (expr list)
+
   (* Allocate temporary storage of a given size, produce into it with
      the first statement, consume from it with the second statement.
      For the first statement only the temporary storage is writeable.
@@ -227,8 +230,8 @@ and definition = (string * ((val_type * string) list) * val_type * function_body
 and function_body = 
   (* Evaluates to the return value *)
   | Pure of expr 
-  (* Initializes to expr, modifies return value at expr list to be expr *)
-  | Impure of (expr * (expr list) * expr)
+  (* Reduction consists of initializer, update location, update function, and iteration domain for the update *)
+  | Reduce of (expr * (expr list) * string * (string * expr * expr) list)
   (* Passes through to a C function call of the same name *)
   | Extern
 
@@ -247,6 +250,12 @@ let base_name name =
       try (String.rindex name '.' + 1)
       with Not_found -> 0 in
     String.sub name idx_after_last_dot (String.length name - idx_after_last_dot)
+
+let parent_name name = 
+  let idx_of_last_dot =
+    try (String.rindex name '.')
+    with Not_found -> 0 in
+  String.sub name 0 idx_of_last_dot
 
 let find_function (name:string) (env:environment) =
   let fname = base_name name in
