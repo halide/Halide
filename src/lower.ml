@@ -393,7 +393,8 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
   let rec replace_calls_with_loads_in_expr func strides debug expr = 
     let recurse = replace_calls_with_loads_in_expr func strides debug in
     match expr with 
-      | Call (ty, f, args) when f = func ->
+      (* Match calls to f from someone else, or recursive calls from f to itself *)
+      | Call (ty, f, args) when f = func || f = (func ^ "." ^ (base_name func)) ->
           let args = List.map recurse args in 
           let index = List.fold_right2 
             (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
@@ -486,7 +487,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   let stmt = rewrite_references_to_result stmt in
 
   print_schedule schedule;
-  
+
   stmt
 
 
