@@ -11,7 +11,8 @@
 #include "math_tools.h"
 
 
-
+// conversion of Matlab code of this paper: http://www.engr.uconn.edu/~cmli/DRLSE/
+// settings tuned for http://www.cap.org/apps/docs/reference/myBiopsy/images/CLL_Normal_1000x.jpg
 
 
 using namespace std;
