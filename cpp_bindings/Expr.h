@@ -85,6 +85,14 @@ namespace FImage {
     Expr operator!=(const Expr &, const Expr &);
     Expr operator==(const Expr &, const Expr &);
 
+    // Transcendentals
+    Expr sqrt(const Expr &);
+    Expr sin(const Expr &);
+    Expr cos(const Expr &);
+    Expr pow(const Expr &, const Expr &);
+    Expr exp(const Expr &);
+    Expr log(const Expr &);
+
     // Make a debug node
     Expr Debug(Expr, const std::string &prefix, const std::vector<Expr> &args);
     Expr Debug(Expr, const std::string &prefix);

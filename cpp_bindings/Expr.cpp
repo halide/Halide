@@ -289,6 +289,52 @@ namespace FImage {
         return e;
     }
     
+    Expr transcendental(const char *name, const Expr &a) {
+        MLVal args = makeList();
+        Expr arg = Cast<float>(a);
+        args = addToList(args, arg.node());
+        Expr e(makeCall(Float(32).mlval, name, args), Float(32));
+        e.child(a);
+        return e;
+    }
+
+    Expr transcendental(const char *name, const Expr &a, const Expr &b) {
+        MLVal args = makeList();
+        Expr arg_a = Cast<float>(a);
+        Expr arg_b = Cast<float>(b);
+        args = addToList(args, arg_b.node());
+        args = addToList(args, arg_a.node());
+        Expr e(makeCall(Float(32).mlval, name, args), Float(32));
+        e.child(a);
+        e.child(b);
+        return e;
+    }
+
+    Expr sqrt(const Expr &a) {
+        return transcendental(".llvm.sqrt.f32", a);
+    }
+
+    Expr sin(const Expr &a) {
+        return transcendental(".llvm.sin.f32", a);
+    }
+    
+    Expr cos(const Expr &a) {
+        return transcendental(".llvm.cos.f32", a);
+    }
+
+    Expr pow(const Expr &a, const Expr &b) {
+        return transcendental(".llvm.pow.f32", a, b);
+    }
+
+    Expr exp(const Expr &a) {
+        return transcendental(".llvm.exp.f32", a);
+    }
+
+    Expr log(const Expr &a) {
+        return transcendental(".llvm.log.f32", a);
+    }
+
+
     Expr Select(const Expr & cond, const Expr & thenCase, const Expr & elseCase) {
         Expr e(makeSelect(cond.node(), thenCase.node(), elseCase.node()), thenCase.type());
         e.child(cond);
@@ -325,11 +371,11 @@ namespace FImage {
         MLVal exprlist = makeList();
 
         // Start with the implicit arguments
-        printf("This call to %s has %d arguments when %s takes %d args\n", 
+        /*printf("This call to %s has %d arguments when %s takes %d args\n", 
                f.f().name().c_str(),
                (int)f.args().size(),
                f.f().name().c_str(),
-               (int)f.f().args().size());
+               (int)f.f().args().size()); */
         int iArgs = (int)f.f().args().size() - (int)f.args().size();
         if (iArgs < 0 && f.f().args().size() > 0) {
             printf("Too many arguments in call!\n");
@@ -376,7 +422,6 @@ namespace FImage {
             unify(uniformImages, f.f().rhs().uniformImages());
         }
 
-        printf("Done making call node with %d implicit args\n", implicitArgs);
     }
 
     Expr Debug(Expr expr, const std::string &prefix) {
