@@ -210,7 +210,7 @@ namespace FImage {
         std::vector<Expr> args = _args;
 
         // Add any implicit arguments 
-        printf("Adding %d implicit arguments\n", r.implicitArgs());
+        //printf("Adding %d implicit arguments\n", r.implicitArgs());
         for (int i = 0; i < r.implicitArgs(); i++) {
             std::ostringstream ss;
             ss << "iv"; // implicit var
@@ -218,14 +218,17 @@ namespace FImage {
             args.push_back(Var(ss.str()));
         }
 
-        printf("Defining %s\n", name().c_str());
+        //printf("Defining %s\n", name().c_str());
 
         // Are we talking about a scatter or a gather here?
         bool gather = true;
-        printf("%u args\n", (unsigned)args.size());
+        printf("%u args %u rvars\n", (unsigned)args.size(), (unsigned)r.rvars().size());
         for (size_t i = 0; i < args.size(); i++) {            
-            if (!args[i].isVar()) gather = false;
+            if (!args[i].isVar()) {
+                gather = false;
+            }
         }
+        if (r.rvars().size() > 0) gather = false;
 
         if (gather) {
             printf("Gather definition for %s\n", name().c_str());
