@@ -5,56 +5,6 @@ using namespace FImage;
 
 
 
-Image<int16_t> load(const char *filename) {
-
-    FILE *f = fopen(filename, "rb");
-
-    // get the dimensions
-    struct header_t {
-        int frames, width, height, channels, typeCode;
-    } h;
-
-    fread(&h, sizeof(header_t), 1, f);
-
-    Image<int16_t> im(h.width, h.height);
-    
-    printf("Fread\n");
-    for (size_t y = 0; y < im.height(); y++) {
-        for (size_t x = 0; x < im.width(); x++) {
-            float val;
-            fread(&val, sizeof(float), 1, f);
-            im(x, y) = int16_t(val * 1024);
-        }
-    }
-    printf("Done\n");
-
-    fclose(f);
-    return im;
-}
-
-void save(Image<int16_t> im, const char *filename) {
-    FILE *f = fopen(filename, "wb");
-
-    // get the dimensions
-    struct header_t {
-        int frames, width, height, channels, typeCode;
-    } h {1, im.width(), im.height(), im.channels(), 0};
-
-    
-    fwrite(&h, sizeof(header_t), 1, f);
-
-    for (size_t y = 0; y < im.height(); y++) {
-        for (size_t x = 0; x < im.width(); x++) {
-            for (size_t c = 0; c < im.channels(); c++) {
-                float val = (float)(im(x, y, c))/1024.0f;
-                fwrite(&val, sizeof(float), 1, f);
-            }
-        }
-    }
-
-    fclose(f);
-}
-
 Var x, y, c;
 
 Func hot_pixel_suppression(Func input) {
@@ -138,7 +88,7 @@ Func demosaic(Func raw) {
 
     correction = g_gb(x, y) - (g_b(x, y) + g_b(x+1, y))/2;
     b_gb(x, y) = correction + (b_b(x, y) + b_b(x+1, y))/2;
-                     
+            
     // Now interpolate diagonally to get red at blue and blue at
     // red. Hold onto your hats; this gets really fancy. We do the
     // same thing as for interpolating green where we try both
@@ -167,7 +117,7 @@ Func demosaic(Func raw) {
     Expr bn_r  = correction + (b_b(x+1, y) + b_b(x, y-1))/2;
     Expr bnd_r = abs(b_b(x+1, y) - b_b(x, y-1));
 
-    b_r(x, y)  = Select(bpd_r < bnd_r, bp_r, bn_r);    
+    b_r(x, y)  =  Select(bpd_r < bnd_r, bp_r, bn_r);    
 
     // Interleave the resulting channels
     Func r = interleave_y(interleave_x(r_gr, r_r),
@@ -176,7 +126,6 @@ Func demosaic(Func raw) {
                           interleave_x(g_b, g_gb));
     Func b = interleave_y(interleave_x(b_gr, b_r),
                           interleave_x(b_b, b_gb));
-
     Func output("dem");
     output(x, y, c) = Select(c == 0, r(x, y), Select(c == 1, g(x, y), b(x, y)));
 
@@ -205,18 +154,23 @@ Func color_correct(Func input, Uniform<float> kelvin) {
 */
 
 Func apply_curve(Func input, Uniform<float> gamma, Uniform<float> contrast) {
-    Func gamma_curve;
-    gamma_curve(x) = x;
+    // copied from FCam
+    Func curve("curve");
 
-    Func contrast_curve;
-    contrast_curve(x) = x;
+    Expr xf = Cast<float>(x)/1024.0f;    
+    Expr g = pow(xf, 1.0f/gamma);
+    Expr b = 2.0f - pow(2.0f, contrast/100.0f);
+    Expr a = 2.0f - 2.0f*b; 
+    Expr z = Select(g > 0.5f,
+                    1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
+                    a*g*g + b*g);
+    curve(x) = Cast<uint8_t>(Clamp(z*256.0f, 0.0f, 255.0f));
 
-    Func combined_curve;
-    combined_curve(x) = contrast_curve(gamma_curve(x));
-
-    Func output;
-    output(x, y) = combined_curve(input(x, y));
-    return output;
+    Func curved("curved");
+    // This is after the color transform, so the input could be
+    // negative or very large. Clamp it back to 10 bits before applying the curve.
+    curved(x, y, c) = curve(Clamp(Cast<int32_t>(input(x, y, c)), 0, 1023));
+    return curved;
 }
 
 /*
@@ -232,35 +186,48 @@ Func rgb_to_yuv422(Func rgb) {
 Func process(Func raw, Uniform<float> color_temp, 
              Uniform<float> gamma, Uniform<float> contrast) {
     Func im = raw;
-    im = hot_pixel_suppression(im);
+    //im = hot_pixel_suppression(im);
     im = demosaic(im);
     //im = color_correct(im, color_temp);
-    //im = apply_curve(im, gamma, contrast);
+    im = apply_curve(im, gamma, contrast);
     //im = rgb_to_yuv422(im);
     return im;
 }
 
 int main(int argc, char **argv) {
-    Image<int16_t> input = load(argv[1]);
+    UniformImage input(Int(16), 2);
     Uniform<float> color_temp = 3200.0f;
-    Uniform<float> gamma = 2.2f;
-    Uniform<float> contrast = 1.0f;
+    Uniform<float> gamma = 1.8f;
+    Uniform<float> contrast = 10.0f;
     Func clamped("in");
-    clamped(x, y) = input(Clamp(x, 0, input.width()),
-                          Clamp(y, 0, input.height()));
+    clamped(x, y) = input(Clamp(x, 0, input.width()-1),
+                          Clamp(y, 0, input.height()-1));
 
     Func output = process(clamped, color_temp, gamma, contrast);
 
+    
+    Var xi, yi, xo, yo;
+    output.split(x, xo, xi, 32);
+    output.split(y, yo, yi, 40);
+    output.transpose(xo, yi);
+    output.transpose(yo, c);
+    output.transpose(xo, c);
+    
+
     std::vector<Func> funcs = output.rhs().funcs();
     for (size_t i = 0; i < funcs.size(); i++) {
-        funcs[i].root();
+        //funcs[i].root();
+        if (funcs[i].name() == "curve") funcs[i].root();
+        else {
+            funcs[i].chunk(xo);
+            funcs[i].unroll(x, 2);
+            funcs[i].unroll(y, 2);
+            //funcs[i].vectorize(x, 8);
+        }
     }
 
-
-    Image<int16_t> out = output.realize(input.width(), input.height(), 3);
-
-    save(out, argv[2]);
-
+    output.compile();
+    
     return 0;
 }
 
