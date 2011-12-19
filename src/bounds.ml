@@ -6,13 +6,13 @@ open Analysis
 type bounds_result = Range of (expr * expr) | Unbounded
 
 let make_range (min, max) =
-  Printf.printf "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max);
+  (* Printf.printf "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max); *)
   assert (is_scalar min);
   assert (is_scalar max);
   Range (min, max)
 
 let check_result expr result = 
-  let result_string = match result with
+  (* let result_string = match result with
     | Unbounded -> "Unbounded"
     | Range (min, max) -> 
         "(" ^ 
@@ -20,12 +20,13 @@ let check_result expr result =
           Ir_printer.string_of_expr (constant_fold_expr max) ^ ")"
   in
   
-  Printf.printf "Bounds of %s = %s\n%!" (Ir_printer.string_of_expr expr) result_string;
+  Printf.printf "Bounds of %s = %s\n%!" (Ir_printer.string_of_expr expr) result_string; 
   
   begin match result with 
     | Range (min, max) -> assert (is_scalar min && is_scalar max)
     | _ -> ()
-  end
+  end *)
+  ()
 
 
 
@@ -33,7 +34,7 @@ let check_result expr result =
 let bounds_of_expr_in_env env expr =
   let rec bounds_of_expr_in_env_inner env expr = 
     let recurse expr = 
-      Printf.printf "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr);
+      (* Printf.printf "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr); *)
       let result = bounds_of_expr_in_env_inner env expr in
       check_result expr result;
       result
@@ -260,7 +261,7 @@ let bounds_of_expr_in_env env expr =
       | Cmp (_, _, _) -> make_range (UIntImm 0, UIntImm 1)
           
       | Let (n, a, b) -> 
-          Printf.printf "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr);
+          (* Printf.printf "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr); *)
           let result = bounds_of_expr_in_env_inner (StringMap.add n (recurse a) env) b in
           check_result expr result;
           result
