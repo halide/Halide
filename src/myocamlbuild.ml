@@ -11,12 +11,12 @@ open Ocamlbuild_plugin;;
 (* ~dir:... specifies search path for each lib. Need on *.ml as well as *.byte
  * to search for includes, not just libs to link. *)
 ocaml_lib ~extern:true "unix";; (* Unix is (oddly) needed by llvm when building a toplevel. Must be first. *)
-ocaml_lib ~extern:true ~dir:"../../llvm/Debug+Asserts/lib/ocaml/" "llvm";;
-ocaml_lib ~extern:true ~dir:"../../llvm/Debug+Asserts/lib/ocaml/" "llvm_analysis";;
-ocaml_lib ~extern:true ~dir:"../../llvm/Debug+Asserts/lib/ocaml/" "llvm_bitwriter";;
-ocaml_lib ~extern:true ~dir:"../../llvm/Debug+Asserts/lib/ocaml/" "llvm_bitreader";;
-ocaml_lib ~extern:true ~dir:"../../llvm/Debug+Asserts/lib/ocaml/" "llvm_target";;
-ocaml_lib ~extern:true ~dir:"../../llvm/Debug+Asserts/lib/ocaml/" "llvm_executionengine";;
+ocaml_lib ~extern:true ~dir:"../../llvm/Release+Asserts/lib/ocaml/" "llvm";;
+ocaml_lib ~extern:true ~dir:"../../llvm/Release+Asserts/lib/ocaml/" "llvm_analysis";;
+ocaml_lib ~extern:true ~dir:"../../llvm/Release+Asserts/lib/ocaml/" "llvm_bitwriter";;
+ocaml_lib ~extern:true ~dir:"../../llvm/Release+Asserts/lib/ocaml/" "llvm_bitreader";;
+ocaml_lib ~extern:true ~dir:"../../llvm/Release+Asserts/lib/ocaml/" "llvm_target";;
+ocaml_lib ~extern:true ~dir:"../../llvm/Release+Asserts/lib/ocaml/" "llvm_executionengine";;
 
 (* Define ocamlc link flag: -cc g++ *)
 (* This is necessary to ensure linkage of libstdc++ for LLVM. *)
@@ -32,7 +32,7 @@ let libllsupport_impl = "libllsupport_impl." ^ !Options.ext_lib in
 dep ["link"; "ocaml"; "use_llsupport"] [libllsupport_impl];
 flag ["link"; "ocaml"; "use_llsupport"]
   (S[A"-cclib"; A libllsupport_impl;
-     A"-cclib"; A "-L../../llvm/Debug+Asserts/lib";
+     A"-cclib"; A "-L../../llvm/Release+Asserts/lib";
      A"-cclib"; A "-lLLVMLinker";
      (* PTX target libraries *)
      A"-cclib"; A "-lLLVMPTXCodeGen";

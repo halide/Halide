@@ -205,7 +205,7 @@ let rec constant_fold_stmt = function
         | LetStmt (n, _, _) when n = name -> stmt
         | _ -> mutate_children_in_stmt (subs_expr var value) scoped_subs_stmt stmt
       in
-      if (is_simple value) && false then
+      if (is_simple value) then
         constant_fold_stmt (scoped_subs_stmt stmt)
       else 
         LetStmt (name, value, constant_fold_stmt stmt)
