@@ -146,7 +146,11 @@ let cg_entry c m e =
   let alloca_end = build_br after_alloca_bb b in
   position_at_end after_alloca_bb b;  
 
-  let rec cg_expr e = Arch.cg_expr c m b cg_expr_inner e
+  let rec cg_expr e = 
+    (* Printf.printf "begin cg_expr %s\n%!" (string_of_expr e);  *)
+    let result = Arch.cg_expr c m b cg_expr_inner e in
+    (* Printf.printf "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result)); *)
+    result
   and cg_expr_inner = function
     (* constants *)
     | IntImm i 
@@ -283,8 +287,7 @@ let cg_entry c m e =
       | Int _   | IntVector(_,_)   -> iop
       | UInt _  | UIntVector(_,_)  -> uop
       | Float _ | FloatVector(_,_) -> fop
-    in
-      build (cg_expr l) (cg_expr r) "" b
+    in build (cg_expr l) (cg_expr r) "" b
 
   and cg_mod l r =
     match val_type_of_expr l with
