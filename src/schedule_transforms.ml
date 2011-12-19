@@ -26,6 +26,8 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
     Printf.printf " found_calls -> %s\n%!" (String.concat ", " (StringSet.elements found_calls));
 
     let rec find_calls_expr = function
+      | Call (_, name, args) when name.[0] = '.' ->
+          (string_set_concat (List.map find_calls_expr args))
       | Call (_, name, args) when List.mem name (split_name f) ->
           (string_set_concat (List.map find_calls_expr args))
       | Call (_, name, args) -> 
@@ -65,17 +67,29 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
 
   let choose_schedule f s = 
     let parent = parent_name f in
-    let (_, _, body) = find_function parent env in
+    let (parent_args, _, body) = find_function parent env in
     let sched_list = match body with 
-      | Reduce (_, _, update_func, domain) when update_func = base_name f ->
-          List.map (fun (n, m, s) -> Parallel (n, m, s)) domain
+      | Reduce (_, update_args, update_func, domain) when update_func = base_name f ->
+          let rec get_gather_args = function
+            | (Var (t, n)::rest) when List.mem (t, n) parent_args -> 
+                (Parallel (n, Var (Int 32, n ^ ".min"), Var (Int 32, n ^ ".extent")))::
+                  (get_gather_args rest)
+            | _::rest -> get_gather_args rest
+            | [] -> []
+          in
+          let reduce_args = (List.map (fun (n, m, s) -> Parallel (n, m, s)) domain) in
+          let gather_args = get_gather_args update_args in
+          reduce_args @ gather_args
+
       | _ ->
           []
     in
     set_schedule s f Inline sched_list
   in
 
-  StringSet.fold choose_schedule (called_functions func StringSet.empty) schedule
+  let schedule = StringSet.fold choose_schedule (called_functions func StringSet.empty) schedule in  
+
+  schedule
     
 (* Add a split to a schedule *)
 let split_schedule (func: string) (var: string) (newouter: string) 
