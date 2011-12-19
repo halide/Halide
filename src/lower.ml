@@ -269,7 +269,6 @@ let rec extract_bounds_soup env var_env bounds = function
 
 let rec bounds_inference env schedule = function
   | For (var, min, size, order, body) ->
-      let size_buffer = var ^ "_sizes" in
       (* Pull out the bounds of all function realizations within this body *)
       begin match extract_bounds_soup env StringMap.empty [] body with
         | [] -> 
@@ -485,8 +484,6 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
     | stmt -> mutate_children_in_stmt rewrite_loads_from_result rewrite_references_to_result stmt 
   in
   let stmt = rewrite_references_to_result stmt in
-
-  print_schedule schedule;
 
   stmt
 
