@@ -1,5 +1,6 @@
 open Ir
 open Analysis
+open Util
 
 let is_const_zero = function
   | IntImm 0 
@@ -27,10 +28,14 @@ and is_const = function
   | _ -> false
 
 (* Is an expression sufficiently simple that it should just be substituted in when it occurs in a let *)
-let is_simple = function
+let is_trivial = function
   | Var (_, _) -> true
   | Broadcast (Var (_, _), _) -> true
   | x -> is_const x
+
+let rec is_simple = function
+  | Bop (_, a, b) when (is_const a && is_simple b) || (is_const b && is_simple a) -> true
+  | x -> is_trivial x
 
 let rec constant_fold_expr expr = 
   let recurse = constant_fold_expr in
@@ -71,6 +76,34 @@ let rec constant_fold_expr expr =
         | (Div, x, y) when is_const_one y -> x
         | (Div, x, y) when x = y -> make_one (val_type_of_expr x)
 
+        (* Commonly occuring reducible integer div/mod operations:
+           when m % n = 0
+           x*m % n -> 0
+           (x*m + y) % n -> (y % n)
+           x*m / n -> x*(m/n)
+           (x*m + y) / n -> x*(m/n) + y/n
+
+           e.g.: (4*x + 1) % 2 -> 1
+        *)
+        | (Mod, Bop (Mul, IntImm m, x), IntImm n) 
+        | (Mod, Bop (Mul, x, IntImm m), IntImm n) when (m mod n = 0) -> 
+            IntImm 0
+        | (Mod, Bop (Add, y, Bop (Mul, x, IntImm m)), IntImm n) 
+        | (Mod, Bop (Add, y, Bop (Mul, IntImm m, x)), IntImm n) 
+        | (Mod, Bop (Add, Bop (Mul, x, IntImm m), y), IntImm n) 
+        | (Mod, Bop (Add, Bop (Mul, IntImm m, x), y), IntImm n) when (m mod n = 0) -> 
+            recurse (y %~ (IntImm n))
+
+        | (Div, Bop (Mul, IntImm m, x), IntImm n) 
+        | (Div, Bop (Mul, x, IntImm m), IntImm n) when (m mod n = 0) -> 
+            recurse (x *~ (IntImm (m/n)))
+        | (Div, Bop (Add, y, Bop (Mul, x, IntImm m)), IntImm n) 
+        | (Div, Bop (Add, y, Bop (Mul, IntImm m, x)), IntImm n) 
+        | (Div, Bop (Add, Bop (Mul, x, IntImm m), y), IntImm n) 
+        | (Div, Bop (Add, Bop (Mul, IntImm m, x), y), IntImm n) when (m mod n = 0) -> 
+            recurse ((x *~ (IntImm (m/n))) +~ (y /~ (IntImm n)))
+
+
         (* op (Ramp, Broadcast) should be folded into the ramp *)
         | (Add, Broadcast (e, _), Ramp (b, s, n)) 
         | (Add, Ramp (b, s, n), Broadcast (e, _)) -> Ramp (recurse (b +~ e), s, n)
@@ -103,6 +136,23 @@ let rec constant_fold_expr expr =
         | (Add, Bop (Add, x, y), z) when is_const y && is_const z -> recurse (x +~ (y +~ z))
         (* (x - Y) + z -> (x + z) - Y *)
         | (Add, Bop (Sub, x, y), z) when is_const x && is_const z -> recurse ((x +~ z) -~ y)            
+
+        (* In ternary expressions with one constant, pull the constant outside *)
+        | (Add, Bop (Add, x, y), z) when is_const y -> recurse ((x +~ z) +~ y)
+        | (Sub, Bop (Add, x, y), z) when is_const y -> recurse ((x -~ z) +~ y)
+        | (Add, z, Bop (Add, x, y)) when is_const y -> recurse ((x +~ z) +~ y)
+        | (Sub, z, Bop (Add, x, y)) when is_const y -> recurse ((z -~ x) -~ y)
+
+        (* Additions or subtractions that cancel an inner term *)
+        | (Sub, Bop (Add, x, y), z) 
+        | (Add, z, Bop (Sub, x, y))
+        | (Add, Bop (Sub, x, y), z) when y = z -> x
+        | (Sub, Bop (Add, x, y), z) when x = z -> y
+
+        | (Sub, Bop (Add, x, Bop (Add, y, z)), w) when w = z -> 
+            recurse (x +~ y)
+        | (Sub, Bop (Add, x, Bop (Add, z, y)), w) when w = z -> 
+            recurse (x +~ y) 
 
         (* Ternary expressions that should be distributed *)
         | (Mul, Bop (Add, x, y), z) when is_const y && is_const z -> recurse ((x *~ z) +~ (y *~ z))     
@@ -182,36 +232,60 @@ let rec constant_fold_expr expr =
     (* Immediates are unchanged *)
     | x -> x
 
-let rec constant_fold_stmt = function
-  | For (var, min, size, order, stmt) ->
-      (* Remove trivial for loops *)
-      let min = constant_fold_expr min in 
-      let size = constant_fold_expr size in
-      if size = IntImm 1 or size = UIntImm 1 then
-        constant_fold_stmt (subs_stmt (Var (i32, var)) min stmt)
-      else
-        For (var, min, size, order, constant_fold_stmt stmt)
-  | Block l ->
-      Block (List.map constant_fold_stmt l)
-  | Store (e, buf, idx) ->
-      Store (constant_fold_expr e, buf, constant_fold_expr idx)
-  | Provide (e, func, args) ->
-      Provide (constant_fold_expr e, func, List.map constant_fold_expr args)
-  | LetStmt (name, value, stmt) ->
-
-      let value = constant_fold_expr value in
-      let var = Var (val_type_of_expr value, name) in
-      let rec scoped_subs_stmt stmt = match stmt with
-        | LetStmt (n, _, _) when n = name -> stmt
-        | _ -> mutate_children_in_stmt (subs_expr var value) scoped_subs_stmt stmt
-      in
-      if (is_simple value) then
-        constant_fold_stmt (scoped_subs_stmt stmt)
-      else 
-        LetStmt (name, value, constant_fold_stmt stmt)
-  | Pipeline (n, ty, size, produce, consume) -> 
-      Pipeline (n, ty, constant_fold_expr size,
-                constant_fold_stmt produce,
-                constant_fold_stmt consume)
-  | Print (p, l) -> 
-      Print (p, List.map constant_fold_expr l)
+let constant_fold_stmt stmt =
+  let rec inner env = function
+    | For (var, min, size, order, stmt) ->
+        (* Remove trivial for loops *)
+        let min = constant_fold_expr min in 
+        let size = constant_fold_expr size in
+        if size = IntImm 1 or size = UIntImm 1 then
+          inner env (LetStmt (var, min, stmt))
+        else
+          (* Consider rewriting the loop from 0 to size - in many cases it will simplify the interior *)
+          let body = inner env stmt in
+          let old_var = Var (Int 32, var) in
+          let new_var = (old_var +~ min) in
+          let alternative = inner env (subs_stmt old_var new_var body) in
+          let complexity stmt = fold_children_in_stmt (fun x -> 1) (fun x -> 1) (+) stmt in
+          if (complexity alternative) <= (complexity body) then
+            For (var, IntImm 0, size, order, alternative)
+          else 
+            For (var, min, size, order, body)
+    | Block l ->
+        Block (List.map (inner env) l)
+    | Store (e, buf, idx) ->
+        Store (constant_fold_expr e, buf, constant_fold_expr idx)
+    | Provide (e, func, args) ->
+        Provide (constant_fold_expr e, func, List.map constant_fold_expr args)
+    | LetStmt (name, value, stmt) ->        
+        let value = constant_fold_expr value in
+        let t = val_type_of_expr value in
+        let var = Var (t, name) in
+        let rec scoped_subs_stmt value stmt = match stmt with
+          | LetStmt (n, _, _) when n = name -> stmt
+          | _ -> mutate_children_in_stmt (subs_expr var value) (scoped_subs_stmt value) stmt
+        in
+        if (is_simple value) then begin
+          Printf.printf "Simple: %s\n%!" (Ir_printer.string_of_expr value);
+          inner env (scoped_subs_stmt value stmt)
+        end else begin
+          Printf.printf "Not Simple: %s\n%!" (Ir_printer.string_of_expr value);
+          try begin
+            (* Check if this value already had a name *)
+            let (n, v) = List.find (fun (n, v) -> v = value) env in
+            Printf.printf "Already has a name: %s\n%!" (Ir_printer.string_of_expr value);
+            inner env (scoped_subs_stmt (Var (t, n)) stmt)
+          end with Not_found -> begin
+            let env = (name, value)::env in
+            Printf.printf "Does not already have a name: %s\n%!" (Ir_printer.string_of_expr value);
+            LetStmt (name, value, inner env stmt)
+          end
+        end
+    | Pipeline (n, ty, size, produce, consume) -> 
+        Pipeline (n, ty, constant_fold_expr size,
+                  inner env produce,
+                  inner env consume)
+    | Print (p, l) -> 
+        Print (p, List.map constant_fold_expr l)
+  in
+  inner [] stmt
