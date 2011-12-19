@@ -169,7 +169,7 @@ and subs_name_expr oldname newname expr =
     | x                 -> mutate_children_in_expr subs x
 
 and prefix_non_global prefix name =
-  let is_global = String.contains name '.' in
+  let is_global = name.[0] = '.' in
   if is_global then name else prefix ^ name
 
 and prefix_name_expr prefix expr =
