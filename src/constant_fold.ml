@@ -93,7 +93,11 @@ let rec constant_fold_expr expr =
         | (Mod, Bop (Add, Bop (Mul, x, IntImm m), y), IntImm n) 
         | (Mod, Bop (Add, Bop (Mul, IntImm m, x), y), IntImm n) when (m mod n = 0) -> 
             recurse (y %~ (IntImm n))
-
+        | (Mod, x, IntImm n) -> begin
+          match reduce_expr_modulo x n with
+            | Some k -> IntImm k
+            | None -> Bop (Mod, x, IntImm n)
+        end
         | (Div, Bop (Mul, IntImm m, x), IntImm n) 
         | (Div, Bop (Mul, x, IntImm m), IntImm n) when (m mod n = 0) -> 
             recurse (x *~ (IntImm (m/n)))
