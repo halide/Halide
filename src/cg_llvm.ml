@@ -147,9 +147,9 @@ let cg_entry c m e =
   position_at_end after_alloca_bb b;  
 
   let rec cg_expr e = 
-    (* Printf.printf "begin cg_expr %s\n%!" (string_of_expr e);  *)
+    (* Printf.printf "begin cg_expr %s\n%!" (string_of_expr e);   *)
     let result = Arch.cg_expr c m b cg_expr_inner e in
-    (* Printf.printf "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result)); *)
+    (* Printf.printf "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));  *)
     result
   and cg_expr_inner = function
     (* constants *)
@@ -192,10 +192,11 @@ let cg_entry c m e =
     (* Select *)
     | Select(c, t, f) -> 
         begin
-          match val_type_of_expr t with          
+          match val_type_of_expr c with          
             | Int _ | UInt _ | Float _ -> 
                 build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
-            | IntVector(bits, n) | UIntVector(bits, n) | FloatVector(bits, n) ->
+            | IntVector(_, n) | UIntVector(_, n) | FloatVector(_, n) ->
+                let bits = element_width (val_type_of_expr t) in
                 let mask     = cg_expr c in
                 let mask_ext = build_sext mask (type_of_val_type (val_type_of_expr t)) "" b in 
                 let mask_t   = build_and mask_ext (cg_expr t) "" b in
@@ -233,7 +234,6 @@ let cg_entry c m e =
     | MakeVector(l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
 
     | Broadcast(e, n) -> 
-        Printf.printf "cg_broadcast...\n%!";
         let elem_type = val_type_of_expr e in
         let vec_type  = vector_of_val_type elem_type n in
         let expr      = cg_expr e in
@@ -242,11 +242,9 @@ let cg_entry c m e =
           | i -> build_insertelement (rep (i-1)) expr (const_int int_imm_t (i-1)) "" b
         in      
         let result = rep n in
-        Printf.printf "done cg_broadcast...\n%!";
         result
 
     | Ramp (base_expr, stride_expr, n) ->
-        Printf.printf "cg_ramp...\n%!";
         let elem_type = val_type_of_expr base_expr in
         let vec_type  = vector_of_val_type elem_type n in
         let base      = cg_expr base_expr in
@@ -275,7 +273,6 @@ let cg_entry c m e =
   and cg_makevector = function
     | ([], t, _) -> undef (type_of_val_type t)
     | (first::rest, t, n) -> 
-        Printf.printf "cg_makevector...\n%!";
         build_insertelement
           (cg_makevector (rest, t, n+1))
           (cg_expr first)
@@ -669,7 +666,6 @@ let cg_entry c m e =
     build_load (scratch) "" b 
 
   and cg_gather t buf idx =
-    Printf.printf "cg_gather... %s\n%!" (string_of_expr idx);
     let elem_type     = type_of_val_type (element_val_type t) in
     let base_ptr      = build_pointercast (sym_get buf) (pointer_type elem_type) "" b in
     let addr_vec      = cg_expr idx in
@@ -681,7 +677,6 @@ let cg_entry c m e =
       | i -> build_insertelement (insert_idx (i-1)) (load_idx i) (const_int int_imm_t i) "" b
     in 
     let result = insert_idx ((vector_elements t) - 1) in
-    Printf.printf "done cg_gather\n%!";
     result
       
 
@@ -773,8 +768,6 @@ let codegen_c_wrapper c m f =
     (* Cast this pointer to the appropriate type and load from it to get the ith argument *)
     build_load (build_pointercast arg_ptr (pointer_type t) "" b) "" b
   in
-
-  Printf.printf "Building argument list for inner function...\n%!";
 
   (* build inner function argument list from args array *)
   let args = Array.mapi 
