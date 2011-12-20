@@ -293,7 +293,6 @@ let bounds_of_expr_in_env env expr =
           
       | Var (t, n) -> begin
         try StringMap.find n env with Not_found -> 
-          Printf.printf "Did not find %s in the environment\n%!" n;
           make_range (Var (t, n), Var (t, n))
       end
           
