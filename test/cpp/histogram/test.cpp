@@ -20,8 +20,7 @@ int main(int argc, char **argv) {
 
     Func hist("hist");
 
-    RVar x(0, W, "hx"), y(0, H, "hy");
-
+    RVar x, y;
     hist(in(x, y))++;
 
     Image<int32_t> h = hist.realize(256);

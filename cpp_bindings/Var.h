@@ -27,9 +27,13 @@ namespace FImage {
     class RVar {
     public:
         // Make a reduction variable 
+        RVar();
+        RVar(const std::string &name);
         RVar(const Expr &min, const Expr &size);
         RVar(const Expr &min, const Expr &size, const std::string &name);
        
+        void bound(const Expr &min, const Expr &size);
+
         const Expr &min() const;
         const Expr &size() const;
         const std::string &name() const;

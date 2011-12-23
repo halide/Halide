@@ -1,5 +1,6 @@
 #include "Var.h"
 #include "Expr.h"
+#include <assert.h>
 
 namespace FImage {
 
@@ -9,17 +10,40 @@ namespace FImage {
         std::string name;
     };
     
+    RVar::RVar(const std::string &name) :
+        contents(new Contents(Expr(), Expr(), name)) {}
+
+    RVar::RVar() :
+        contents(new Contents(Expr(), Expr(), uniqueName('r'))) {}
+
     RVar::RVar(const Expr &min, const Expr &size) : 
         contents(new Contents(min, size, uniqueName('r'))) {}
     
     RVar::RVar(const Expr &min, const Expr &size, const std::string &name) :
         contents(new Contents(min, size, name)) {}
     
+    void RVar::bound(const Expr &min, const Expr &size) {
+        printf("Bounding %s\n", name().c_str());
+        if (contents->min.isDefined()) {
+            contents->min = Max(contents->min, min);
+        } else {
+            contents->min = min;
+        }
+
+        if (contents->size.isDefined()) {
+            contents->size = Min(contents->size, size);
+        } else {
+            contents->size = size;
+        }
+    }
+
     const Expr &RVar::min() const {
+        assert(contents->min.isDefined());
         return contents->min;
     }
     
     const Expr &RVar::size() const {
+        assert(contents->size.isDefined());
         return contents->size;
     }
     

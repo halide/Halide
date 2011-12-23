@@ -62,6 +62,7 @@ namespace FImage {
         int implicitArgs() const;
 
         bool isVar() const;
+        bool isRVar() const;
         bool isDefined() const;
         
       private:

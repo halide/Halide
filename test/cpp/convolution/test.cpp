@@ -16,20 +16,23 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    Image<uint16_t> tent(3);
-    tent(0) = 1;
-    tent(1) = 2;
-    tent(2) = 1;
+    Image<uint16_t> tent(3, 3);
+    tent(0, 0) = 1;
+    tent(0, 1) = 2;
+    tent(0, 2) = 1;
+    tent(1, 0) = 2;
+    tent(1, 1) = 4;
+    tent(1, 2) = 2;
+    tent(2, 0) = 1;
+    tent(2, 1) = 2;
+    tent(2, 2) = 1;
     
     Func input("input");
     input(x, y) = in(Clamp(x, 0, W), Clamp(y, 0, H));
 
-    Func kernel("kernel");
-    kernel(x, y) = tent(x+1)*tent(y+1);
-
     Func blur("blur");
-    RVar i(-1, 3, "i"), j(-1, 3, "j");
-    blur(x, y) = Sum(kernel(i, j) * input(x + i, y + j));
+    RVar i, j; 
+    blur(x, y) = Sum(tent(i, j) * input(x + i - 1, y + j - 1));
 
     Image<uint16_t> out = blur.realize(W, H);
 
