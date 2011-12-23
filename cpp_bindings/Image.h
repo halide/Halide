@@ -59,6 +59,24 @@ namespace FImage {
             assert(TypeOf<T>() == im.type());
         }
 
+        Image(std::initializer_list<T> l) : im(TypeOf<T>(), l.size()) {
+            int x = 0;
+            for (auto &iter: l) {
+                (*this)(x++) = iter;
+            }
+        }
+
+        Image(std::initializer_list<std::initializer_list<T> > l) : im(TypeOf<T>(), l.begin()->size(), l.size()) {
+            int y = 0;
+            for (auto &row: l) {
+                int x = 0;
+                for (auto &elem: row) {
+                    (*this)(x++, y) = elem;
+                }
+                y++;
+            }
+        }
+
         operator DynImage() const {
             return im;
         }
