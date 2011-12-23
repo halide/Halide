@@ -582,19 +582,31 @@ let cg_entry c m e =
 
   and cg_unaligned_store e buf idx =
     let t = val_type_of_expr e in
-    let current = insertion_block b in
-    position_before alloca_end b;
-    let scratch = build_alloca (type_of_val_type t) "" b in      
-    position_at_end current b;
-    let memcpy     = declare_function "llvm.memcpy.p0i8.p0i8.i32"
-      (function_type (void_type c) [|buffer_t; buffer_t; int32_imm_t; int32_imm_t; i1_type c|]) m in
-    let stack_addr = build_pointercast scratch buffer_t "" b in
-    let mem_addr   = build_pointercast (cg_memref t buf idx) buffer_t "" b in
-    let length     = const_int int_imm_t ((bit_width t)/8) in
-    let alignment  = const_int int_imm_t ((bit_width (element_val_type t))/8) in
-    let volatile   = const_int (i1_type c) 0 in
-    ignore(build_store (cg_expr e) scratch b);
-    build_call memcpy [|mem_addr; stack_addr; length; alignment; volatile|] "" b
+
+    (* We special-case a few common sizes *)
+    if (bit_width t = 128) then begin
+      let i8x16_t = vector_type (i8_type c) 16 in
+      let unaligned_store_128 = declare_function "unaligned_store_128"
+        (function_type (void_type c) [|i8x16_t; buffer_t|]) m in
+      let addr = build_pointercast (cg_memref t buf idx) buffer_t "" b in
+      let value = cg_expr e in
+      let value = build_bitcast value i8x16_t "" b in
+      build_call unaligned_store_128 [|value; addr|] "" b
+    end else begin
+      let current = insertion_block b in
+      position_before alloca_end b;
+      let scratch = build_alloca (type_of_val_type t) "" b in      
+      position_at_end current b;
+      let memcpy     = declare_function "llvm.memcpy.p0i8.p0i8.i32"
+        (function_type (void_type c) [|buffer_t; buffer_t; int32_imm_t; int32_imm_t; i1_type c|]) m in
+      let stack_addr = build_pointercast scratch buffer_t "" b in
+      let mem_addr   = build_pointercast (cg_memref t buf idx) buffer_t "" b in
+      let length     = const_int int_imm_t ((bit_width t)/8) in
+      let alignment  = const_int int_imm_t ((bit_width (element_val_type t))/8) in
+      let volatile   = const_int (i1_type c) 0 in
+      ignore(build_store (cg_expr e) scratch b);
+      build_call memcpy [|mem_addr; stack_addr; length; alignment; volatile|] "" b
+    end
 
   and cg_scatter e buf idx =
     let elem_type     = type_of_val_type (element_val_type (val_type_of_expr e)) in
@@ -651,19 +663,30 @@ let cg_entry c m e =
     cg_expr vec
 
   and cg_unknown_alignment_load t buf idx =
-    let current = insertion_block b in
-    position_before alloca_end b;
-    let scratch = build_alloca (type_of_val_type t) "" b in      
-    position_at_end current b;
-    let memcpy     = declare_function "llvm.memcpy.p0i8.p0i8.i32"
-      (function_type (void_type c) [|buffer_t; buffer_t; int32_imm_t; int32_imm_t; i1_type c|]) m in
-    let stack_addr = build_pointercast scratch buffer_t "" b in
-    let mem_addr   = build_pointercast (cg_memref t buf idx) buffer_t "" b in
-    let length     = const_int int_imm_t ((bit_width t)/8) in
-    let alignment  = const_int int_imm_t ((bit_width (element_val_type t))/8) in
-    let volatile   = const_int (i1_type c) 0 in
-    ignore(build_call memcpy [|stack_addr; mem_addr; length; alignment; volatile|] "" b);
-    build_load (scratch) "" b 
+    (* We special-case a few common sizes *)
+    if (bit_width t = 128) then begin
+      let i8x16_t = vector_type (i8_type c) 16 in
+      let unaligned_load_128 = declare_function "unaligned_load_128"
+        (function_type (i8x16_t) [|buffer_t|]) m in
+      let addr = build_pointercast (cg_memref t buf idx) buffer_t "" b in
+      let value = build_call unaligned_load_128 [|addr|] "" b in
+      build_bitcast value (type_of_val_type t) "" b
+    end else begin
+      let current = insertion_block b in
+      position_before alloca_end b;
+      let scratch = build_alloca (type_of_val_type t) "" b in      
+      position_at_end current b;
+      let memcpy     = declare_function "llvm.memcpy.p0i8.p0i8.i32"
+        (function_type (void_type c) [|buffer_t; buffer_t; int32_imm_t; int32_imm_t; i1_type c|]) m in
+      let stack_addr = build_pointercast scratch buffer_t "" b in
+      let mem_addr   = build_pointercast (cg_memref t buf idx) buffer_t "" b in
+      let length     = const_int int_imm_t ((bit_width t)/8) in
+      let alignment  = const_int int_imm_t ((bit_width (element_val_type t))/8) in
+      let volatile   = const_int (i1_type c) 0 in
+      ignore(build_call memcpy [|stack_addr; mem_addr; length; alignment; volatile|] "" b);
+      build_load (scratch) "" b 
+    end
+
 
   and cg_gather t buf idx =
     let elem_type     = type_of_val_type (element_val_type t) in

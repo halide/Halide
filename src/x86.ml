@@ -18,8 +18,20 @@ let cg_expr (c:llcontext) (m:llmodule) (b:llbuilder) (cg_expr : expr -> llvalue)
   (* let paddb_16 = declare_function "paddb_16"
     (function_type (i8x16_t) [|i8x16_t; i8x16_t|]) m in *)
 
+  let i16x8_t = vector_type (i16_type c) 8 in
+  let pmulhw = declare_function "llvm.x86.sse2.pmulh.w"
+    (function_type (i16x8_t) [|i16x8_t; i16x8_t|]) m in
+
   match expr with 
-    (* llvm sometimes codegens vector adds to silly things (e.g. vector shifts) *)
+    (* x86 doesn't do 16 bit vector division, but for constants you can do multiplication instead. *)
+    | Bop (Div, x, Broadcast (Cast (UInt 16, IntImm y), 8)) ->
+        Printf.printf "MOO!\n%!";
+        let z = (65536/y + 1) in
+        let lhs = cg_expr x in
+        let rhs = cg_expr (Broadcast (Cast (UInt 16, IntImm z), 8)) in        
+        build_call pmulhw [|lhs; rhs|] "" b
+
+    (* We don't have any special tricks up our sleeve for this case *)
     | _ -> cg_expr expr 
 
 let cg_stmt (c:llcontext) (m:llmodule) (b:llbuilder) (cg_stmt : stmt -> llvalue) (stmt : stmt) =
