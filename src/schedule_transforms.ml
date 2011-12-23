@@ -65,28 +65,40 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
     found_calls
   in
 
-  let choose_schedule f s = 
-    let parent = parent_name f in
-    let (parent_args, _, body) = find_function parent env in
-    let sched_list = match body with 
-      | Reduce (_, update_args, update_func, domain) when update_func = base_name f ->
-          let rec get_gather_args = function
-            | (Var (t, n)::rest) when List.mem (t, n) parent_args -> 
-                (Parallel (n, Var (Int 32, n ^ ".min"), Var (Int 32, n ^ ".extent")))::
-                  (get_gather_args rest)
-            | _::rest -> get_gather_args rest
-            | [] -> []
-          in
-          let reduce_args = (List.map (fun (n, m, s) -> Parallel (n, m, s)) domain) in
-          let gather_args = get_gather_args update_args in
-          reduce_args @ gather_args
-
-      | _ ->
-          []
-    in
-    set_schedule s f Inline sched_list
-  in
-
+  let rec choose_schedule f s = 
+    (* If there's no dot in our name, we're the root and have already been scheduled *)
+    if not (String.contains f '.') then s else
+      let (args, _, body) = find_function f env in
+      let (call_sched, sched_list ) = begin match body with
+        (* I'm a reduction *)
+        | Reduce (_, _, _, _) -> 
+            let f = base_name f in
+            (Root, List.map (fun (t, n) -> Parallel (n, Var (t, f ^ "." ^ n ^ ".min"),
+                                                     Var (t, f ^ "." ^ n ^ ".extent"))) args)            
+        | _ ->            
+            let parent = parent_name f in
+            let (parent_args, _, parent_body) = find_function parent env in
+            match parent_body with 
+              (* I'm the update step of a reduction *)
+              | Reduce (_, update_args, update_func, domain) when update_func = base_name f ->
+                  let s = choose_schedule parent s in
+                  let (parent_call_sched, parent_sched_list) = find_schedule s parent in
+                  
+                  let rec get_gather_args = function
+                    | (Var (t, n)::rest) when List.mem (t, n) parent_args -> 
+                        (Parallel (n, Var (t, n ^ ".min"), Var(t, n ^ ".extent")))::(get_gather_args rest)
+                    | _::rest -> get_gather_args rest
+                    | [] -> []
+                  in
+                  let reduce_args = (List.map (fun (n, m, s) -> Parallel (n, m, s)) domain) in
+                  let gather_args = get_gather_args update_args in
+                  (Inline, reduce_args @ gather_args)
+                    
+              (* I'm not a reduction or the update step of a reduction *)
+              | _ -> (Inline, [])
+      end in set_schedule s f call_sched sched_list 
+in
+  
   let schedule = StringSet.fold choose_schedule (called_functions func StringSet.empty) schedule in  
 
   schedule
