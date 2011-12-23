@@ -23,8 +23,6 @@ int main(int argc, char **argv) {
     assert(f.returnType() == Float(64));
     assert(g.returnType() == Float(64));
 
-    g.trace();
-
     Image<double> im = g.realize(32, 32);
 
     for (size_t i = 0; i < 32; i++) {

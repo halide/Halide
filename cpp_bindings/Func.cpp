@@ -47,7 +47,7 @@ namespace FImage {
     ML_FUNC2(makePair);
     ML_FUNC3(makeTriple);
 
-    struct FuncRef::Contents {
+     struct FuncRef::Contents {
         Contents(const Func &f) :
             f(f) {}
         Contents(const Func &f, const Expr &a) :
@@ -149,6 +149,26 @@ namespace FImage {
         contents->f.define(contents->args, e);
     }
 
+    void FuncRef::operator+=(const Expr &e) {
+        std::vector<Expr> gather_args(contents->args.size());
+        for (size_t i = 0; i < gather_args.size(); i++) {
+            gather_args[i] = contents->args[i].isVar() ? contents->args[i] : Var();
+        }
+        if (!contents->f.rhs().isDefined())             
+            contents->f.define(gather_args, Cast(e.type(), 0));
+        contents->f.define(contents->args, contents->f(contents->args) + e);
+    }
+
+    void FuncRef::operator*=(const Expr &e) {
+        std::vector<Expr> gather_args(contents->args.size());
+        for (size_t i = 0; i < gather_args.size(); i++) {
+            gather_args[i] = contents->args[i].isVar() ? contents->args[i] : Var();
+        }
+        if (!contents->f.rhs().isDefined()) 
+            contents->f.define(gather_args, Cast(e.type(), 1));
+        contents->f.define(contents->args, contents->f(contents->args) * e);
+    }
+
     const Func &FuncRef::f() const {
         return contents->f;
     }
@@ -200,6 +220,8 @@ namespace FImage {
     }
 
     void Func::define(const std::vector<Expr> &_args, const Expr &r) {
+        printf("Defining %s\n", name().c_str());
+
         // Make sure the environment exists
         if (!environment) {
             printf("Creating environment\n");
@@ -246,6 +268,8 @@ namespace FImage {
 
         } else {
             printf("Scatter definition for %s\n", name().c_str());
+            assert(rhs().isDefined());
+
             MLVal update_args = makeList();
             for (size_t i = args.size(); i > 0; i--) {
                 update_args = addToList(update_args, args[i-1].node());

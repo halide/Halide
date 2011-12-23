@@ -29,16 +29,15 @@ int main(int argc, char **argv) {
 
     Func blur("blur");
     RVar i(-1, 3, "i"), j(-1, 3, "j");
-    blur(x, y) = (int16_t)0;
-    blur(x, y) = blur(x, y) + kernel(i, j) * input(x + i, y + j);
+    blur(x, y) = Sum(kernel(i, j) * input(x + i, y + j));
 
-    Image<int16_t> out = blur.realize(W, H);
+    Image<uint16_t> out = blur.realize(W, H);
 
     for (int y = 1; y < H-1; y++) {
         for (int x = 1; x < W-1; x++) {
-            int16_t correct = (1*in(x-1, y-1) + 2*in(x, y-1) + 1*in(x+1, y-1) + 
-                               2*in(x-1, y)   + 4*in(x, y) +   2*in(x+1, y) +
-                               1*in(x-1, y+1) + 2*in(x, y+1) + 1*in(x+1, y+1));
+            uint16_t correct = (1*in(x-1, y-1) + 2*in(x, y-1) + 1*in(x+1, y-1) + 
+                                2*in(x-1, y)   + 4*in(x, y) +   2*in(x+1, y) +
+                                1*in(x-1, y+1) + 2*in(x, y+1) + 1*in(x+1, y+1));
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), correct);
                 return -1;

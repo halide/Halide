@@ -13,5 +13,6 @@
 #include "Func.h"
 #include "Expr.h"
 #include "Uniform.h"
+#include "Reduction.h"
 
 #endif

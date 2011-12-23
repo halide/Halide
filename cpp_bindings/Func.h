@@ -37,6 +37,12 @@ namespace FImage {
         // defined to have the given expression as its value.
         void operator=(const Expr &e);
         
+        // Syntactic sugar for some reductions        
+        void operator+=(const Expr &e);
+        void operator*=(const Expr &e);
+        void operator++(int) {*this += 1;}
+        void operator--() {*this += -1;}
+
         // Make sure we don't directly assign an FuncRef to an FuncRef (but instead treat it as a definition)
         void operator=(const FuncRef &other) {*this = Expr(other);}
 
@@ -114,46 +120,6 @@ namespace FImage {
         const std::string &name() const;
         const std::vector<MLVal> &scheduleTransforms() const;
 
-        /*
-        class CompilationArgBase {
-        public:            
-            // How many slots does it use in the args list
-            virtual int argSlots() const = 0;
-
-            // The internal name of the argument in slot i
-            virtual const std::string &argName(int i) const = 0;
-        };
-
-        template<typename T>
-        class CompileArg : public CompileArgBase {
-        public:
-            CompileArg(const T &obj) : inner(new T(obj)) {}
-            virtual const int argSlots() const {return inner->argSlots();}
-            virtual const std::string &argName(int i) const {return inner->argName(i);}
-        private:
-            std::unique_ptr<T> inner;
-        };
-
-        class RunArgBase {
-        public:
-            // How many slots does it use in the args list
-            virtual int argSlots() const = 0;
-
-            // The value of the argument in slot i
-            virtual void *argValue(int i) const = 0;
-        };
-
-        template<typename T>
-        class RunArg : public RunArgBase {
-        public:
-            RunArg(const T &obj) : inner(new T(obj)) {}
-            virtual const int argSlots() const {return inner->argSlots();}
-            virtual const void *argValue(int i) const {return inner->argValue(i);}
-        private:
-            std::unique_ptr<T> inner;
-        };
-        */
-
         void compile();
 
     private:
@@ -161,6 +127,7 @@ namespace FImage {
 
         std::shared_ptr<Contents> contents;
     };
+
 }
 
 #endif

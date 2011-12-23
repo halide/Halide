@@ -20,29 +20,11 @@ int main(int argc, char **argv) {
 
     Func hist("hist");
 
-    Var i;
     RVar x(0, W, "hx"), y(0, H, "hy");
 
-    hist(i) = 0;   
-    hist(in(x, y)) = hist(in(x, y)) + 1;
-
-    //hist.trace();
-
-    //Func cdf("cdf");
-    //cdf(i) = Select(i > 0, cdf(i-1) + hist(i), hist(0));
-
-    //Var xo, xi;
-    //hist.split(x, xo, xi, 4);
-    //hist.unroll(xi);
+    hist(in(x, y))++;
 
     Image<int32_t> h = hist.realize(256);
-
-    /*
-    Func f;
-    f(x, y) = hist(input(x, y));
-
-    Image<int32_t> out = f.realize(W, H);
-    */
 
     for (int i = 0; i < 256; i++) {
         if (h(i) != reference_hist[i]) {
