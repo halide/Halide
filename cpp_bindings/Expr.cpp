@@ -46,7 +46,7 @@ namespace FImage {
     }
 
     struct Expr::Contents {
-        Contents(MLVal n, Type t) : node(n), type(t), isVar(false), implicitArgs(0) {}
+        Contents(MLVal n, Type t) : node(n), type(t), isVar(false), isRVar(false), implicitArgs(0) {}
         Contents(const FuncRef &f);
 
         // Declare that this expression is the child of another for bookkeeping
@@ -77,7 +77,7 @@ namespace FImage {
         std::vector<UniformImage> uniformImages;
         
         // Sometimes it's useful to be able to tell if an expression is a simple var or not
-        bool isVar;
+        bool isVar, isRVar;
         
         // The number of arguments that remain implicit
         int implicitArgs;
@@ -109,6 +109,7 @@ namespace FImage {
     }
 
     Expr::Expr(const RVar &v) : contents(new Contents(makeVar((v.name())), Int(32))) {
+        contents->isRVar = true;
         contents->rvars.push_back(v);
     }
 
@@ -139,6 +140,10 @@ namespace FImage {
 
     bool Expr::isVar() const {
         return contents->isVar;
+    }
+
+    bool Expr::isRVar() const {
+        return contents->isRVar;
     }
 
     int Expr::implicitArgs() const {

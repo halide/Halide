@@ -2,6 +2,7 @@
 #include "Type.h"
 #include "Util.h"
 #include "Uniform.h"
+#include "Var.h"
 #include <assert.h>
 
 namespace FImage {
@@ -82,18 +83,28 @@ namespace FImage {
     }    
 
     Expr DynImage::operator()(const Expr &a) const {
+        if (a.isRVar()) RVar(a.rvars()[0]).bound(0, size(0));
         return ImageRef(*this, a*stride(0));
     }
 
     Expr DynImage::operator()(const Expr &a, const Expr &b) const {
+        if (a.isRVar()) RVar(a.rvars()[0]).bound(0, size(0));
+        if (b.isRVar()) RVar(b.rvars()[0]).bound(0, size(1));
         return ImageRef(*this, a*stride(0) + b*stride(1));
     }
     
     Expr DynImage::operator()(const Expr &a, const Expr &b, const Expr &c) const {
+        if (a.isRVar()) RVar(a.rvars()[0]).bound(0, size(0));
+        if (b.isRVar()) RVar(b.rvars()[0]).bound(0, size(1));
+        if (c.isRVar()) RVar(c.rvars()[0]).bound(0, size(2));
         return ImageRef(*this, a*stride(0) + b*stride(1) + c*stride(2));
     }
     
     Expr DynImage::operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) const {
+        if (a.isRVar()) RVar(a.rvars()[0]).bound(0, size(0));
+        if (b.isRVar()) RVar(b.rvars()[0]).bound(0, size(1));
+        if (c.isRVar()) RVar(c.rvars()[0]).bound(0, size(2));
+        if (d.isRVar()) RVar(d.rvars()[0]).bound(0, size(3));
         return ImageRef(*this, a*stride(0) + b*stride(1) + c*stride(2) + d*stride(3));
     }
 
