@@ -6,6 +6,7 @@
 #include "Func.h"
 #include "Uniform.h"
 #include "Image.h"
+#include "Tuple.h"
 #include <sstream>
 
 namespace FImage {
@@ -150,6 +151,17 @@ namespace FImage {
         return contents->implicitArgs;
     }
 
+    void Expr::convertRVarsToVars() {
+        for (size_t i = 0; i < contents->rvars.size(); i++) {
+            contents->vars.push_back(Var(contents->rvars[i].name()));
+        }
+        contents->rvars.clear();
+        if (contents->isRVar) {
+            contents->isRVar = false;
+            contents->isVar = true;
+        }
+    }
+
     const std::vector<DynUniform> &Expr::uniforms() const {
         return contents->uniforms;
     }
@@ -197,6 +209,12 @@ namespace FImage {
         contents->node = makeAdd(node(), other.node());
         child(other);
     }
+
+    /*
+    Tuple Expr::operator,(const Expr &other) {
+        return Tuple(*this, other);
+    }
+    */
     
     void Expr::operator*=(const Expr & other) {
         contents->node = makeMul(node(), other.node());

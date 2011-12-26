@@ -30,6 +30,26 @@ namespace FImage {
         Expr call;
     };
 
+    class Product {
+    public:
+        Product(const Expr &body) {
+            Func anon;
+            std::vector<Expr> args(body.vars().size());
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = body.vars()[i];
+            }            
+            anon(args) = Cast(body.type(), 1);
+            anon(args) = anon(args) * body;
+            call = anon(args);
+        }
+        
+        operator Expr() {
+            return call;
+        }
+    private:
+        Expr call;
+    };
+
 }
 
 #endif
