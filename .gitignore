@@ -25,6 +25,9 @@ tags
 src/*.top
 llvm_svn
 *.h.gch
+src/test_*.ll
+src/test_*.s
+.clang_complete
 
 # test intermediates
 test/*/*.so
@@ -32,3 +35,7 @@ test/*/*.s
 test/*/*.png
 test/*/*.time
 test/cpp/*/passes.txt
+test/cpp/*/*.h
+test/cpp/*/*.o
+test/*.ptx
+test/*/*.tmp
