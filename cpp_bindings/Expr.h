@@ -64,6 +64,11 @@ namespace FImage {
         bool isVar() const;
         bool isRVar() const;
         bool isDefined() const;
+
+        // When an expression is captured and placed inside an
+        // anonymous function body, any reduction vars become regular
+        // vars to the anonymous function
+        void convertRVarsToVars();
         
       private:
         struct Contents;
