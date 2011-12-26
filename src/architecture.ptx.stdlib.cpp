@@ -7,6 +7,8 @@
 //#include <cuda.h>
 #include <assert.h>
 
+extern "C" {
+
 //#define CHECK_CALL(c) (assert((c) == CUDA_SUCCESS))
 //#define CHECK_CALL(c) (success &&= ((c) == CUDA_SUCCESS))
 /*#define CHECK_CALL(c) (c)*/
@@ -143,16 +145,18 @@ void init(const char* ptx_src, const char* entry_name)
 }
 
 // TODO: switch to building as C++ with extern "C" linkage on functions
+/*
 typedef enum {
     false = 0,
     true = 1
 } Bool;
+*/
 
 typedef struct {
     char* host;
     CUdeviceptr dev;
-    Bool host_dirty;
-    Bool dev_dirty;
+    bool host_dirty;
+    bool dev_dirty;
     size_t dims[4];
     size_t elem_size;
 } buffer_t;
@@ -234,4 +238,7 @@ int kernel_wrapper_tmpl( buffer_t *input, buffer_t *result, int N )
     
     return 0;
 }
+
 #endif
+
+} // extern "C" linkage
