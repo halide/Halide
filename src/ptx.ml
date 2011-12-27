@@ -18,6 +18,18 @@ let cg_stmt (c:llcontext) (m:llmodule) (b:llbuilder) (cg_stmt : stmt -> llvalue)
 let postprocess_function (f:llvalue) =
   set_function_call_conv ptx_kernel f
 
+let buffer_t m =
+  get_type m "struct.buffer_t"
+  (*named_struct_type c "struct.buffer_t"*)
+  (*
+   [| pointer_type (i8_type c);  (* host *)
+      i64_type c;                (* dev *)
+      i8_type c;                 (* host_dirty - c++ bool = i8 *)
+      i8_type c;                 (* dev_dirty *)
+      array_type (i64_type c) 4; (* dims[4] *)
+      i64_type c;                (* elem_size - size *) |]
+   *)
+
 let rec codegen_entry host_ctx host_mod cg_entry entry =
   (* create separate device module *)
   let dev_ctx = create_context () in
@@ -61,7 +73,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   let copy_to_host = get_function "copy_to_host" in
   let copy_to_dev = get_function "copy_to_dev" in
   let dev_run = get_function "dev_run" in
-  let buffer_struct_type = get_type "struct.buffer_t" in
+  let buffer_struct_type = buffer_t m in
 
   let type_of_arg = function
     | Scalar (_, vt) -> type_of_val_type c vt
@@ -84,14 +96,14 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   let entry_name_str = build_global_stringptr entrypoint_name "entry_name" b in
 
   (* init CUDA *)
-  build_call init [| ptx_src_str; entry_name_str |] "" b;
+  ignore (build_call init [| ptx_src_str; entry_name_str |] "" b);
 
   (* args array for kernel launch *)
   let arg_t = pointer_type (i8_type c) in (* void* *)
   let cuArgs = build_alloca (array_type arg_t (List.length arglist)) "cuArgs" b in
 
   let paramlist = Array.to_list (params f) in
-  let args = List.map2 (fun arg param -> (arg,param)) arglist paramlist in
+  let args = List.combine arglist paramlist in
 
   (*
    * build llvalue dev_run args array list
@@ -115,7 +127,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
           | Buffer nm ->
               set_value_name nm p;
               (* malloc if missing *)
-              build_call dev_malloc_if_missing [| p |] "" b;
+              ignore (build_call dev_malloc_if_missing [| p |] "" b);
               (* copy to device for all but .result *)
               if nm <> ".result" then ignore (build_call copy_to_dev [| p |] "" b);
               (* return GEP: &(p->dev) *)
@@ -124,7 +136,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
               set_value_name nm p;
               (* store arg to local stack for passing by reference to cuArgs *)
               let stackArg = build_alloca (type_of p) (nm ^ ".stack") b in
-              build_store p stackArg b;
+              ignore (build_store p stackArg b);
               stackArg
       in
       Printf.printf "preprocessed arg %s\n%!" (match a with Buffer nm -> nm | Scalar (nm, _) -> nm);

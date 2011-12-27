@@ -38,14 +38,6 @@ module CodegenForArch ( Arch : Architecture ) = struct
 
 let dbgprint = false
 
-(*
-let entrypoint_name = "_im_main"
-let caml_entrypoint_name = entrypoint_name ^ "_caml_runner"
-let c_entrypoint_name = entrypoint_name ^ "_runner"
-*)  
-
-let buffer_t c = pointer_type (i8_type c)
-
 (* Algebraic type wrapper for LLVM comparison ops *)
 type cmp =
   | CmpInt of Icmp.t
@@ -59,7 +51,7 @@ let cg_entry c m e =
   let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
   let float_imm_t = float_type c in
-  let buffer_t = buffer_t c in
+  let buffer_t = raw_buffer_t c in
 
   let type_of_val_type = type_of_val_type c in
 
@@ -166,7 +158,7 @@ let cg_entry c m e =
     (* Select *)
     | Select(c, t, f) -> 
         begin
-          match val_type_of_expr c with          
+          match val_type_of_expr c with
             | Int _ | UInt _ | Float _ -> 
                 build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
             | IntVector(_, n) | UIntVector(_, n) | FloatVector(_, n) ->
@@ -384,7 +376,9 @@ let cg_entry c m e =
 
       (* TODO: remaining casts *)
       | f,t ->
-        Printf.printf "Unimplemented cast: %s -> %s (of %s)\n%!" (string_of_val_type f) (string_of_val_type t) (string_of_expr e);
+        Printf.printf
+          "Unimplemented cast: %s -> %s (of %s)\n%!"
+          (string_of_val_type f) (string_of_val_type t) (string_of_expr e);
         raise UnimplementedInstruction
 
   and cg_for var_name min max body = 
@@ -746,13 +740,13 @@ let cg_entry c m e =
 (* C runner wrapper *)
 let codegen_c_wrapper c m f =
 
-  let buffer_t = buffer_t c in
+  let raw_buffer_t = raw_buffer_t c in
   let i32_t = i32_type c in
 
   (* define wrapper entrypoint: void name(void **args) *)
   let wrapper = define_function
                   ((value_name f) ^ "_c_wrapper")
-                  (function_type (void_type c) [|pointer_type (buffer_t)|])
+                  (function_type (void_type c) [|pointer_type (raw_buffer_t)|])
                   m in
 
   let b = builder_at_end c (entry_block wrapper) in
@@ -763,7 +757,15 @@ let codegen_c_wrapper c m f =
     let args_array = param wrapper 0 in
     let arg_ptr = build_load (build_gep args_array [| const_int i32_t i |] "" b) "" b in
     (* Cast this pointer to the appropriate type and load from it to get the ith argument *)
-    build_load (build_pointercast arg_ptr (pointer_type t) "" b) "" b
+    match classify_type t with
+      | TypeKind.Pointer ->
+          let typename = match struct_name (element_type t) with Some nm -> nm | None -> "<unnamed>" in
+          Printf.printf "Wrapping buffer arg type %s\n%!" typename;
+          assert (typename = "struct.buffer_t");
+          build_pointercast arg_ptr t "" b
+      | _ ->
+          Printf.printf "Wrapping non-buffer arg type %s\n%!" (string_of_lltype t);
+          build_load (build_pointercast arg_ptr (pointer_type t) "" b) "" b
   in
 
   (* build inner function argument list from args array *)

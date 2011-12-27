@@ -6,6 +6,7 @@
 #include <stdio.h>
 //#include <cuda.h>
 #include <assert.h>
+#include "buffer.h"
 
 extern "C" {
 
@@ -143,23 +144,6 @@ void init(const char* ptx_src, const char* entry_name)
         CHECK_CALL( cuModuleGetFunction(&f, mod, entry_name), "cuModuleGetFunction" );
     }
 }
-
-// TODO: switch to building as C++ with extern "C" linkage on functions
-/*
-typedef enum {
-    false = 0,
-    true = 1
-} Bool;
-*/
-
-typedef struct {
-    char* host;
-    CUdeviceptr dev;
-    bool host_dirty;
-    bool dev_dirty;
-    size_t dims[4];
-    size_t elem_size;
-} buffer_t;
 
 CUdeviceptr dev_malloc(size_t bytes) {
     CUdeviceptr p;

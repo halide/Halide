@@ -2,9 +2,13 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 
+#include "buffer.h"
+
 extern "C" {
 
 #define PTR_OFFSET(ptr,offset)	((void*)((char*)(ptr) + (offset)))
+
+buffer_t* __arm_force_include_buffer_t;
 
 void *safe_malloc(size_t x) {
     void *mem;
