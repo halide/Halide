@@ -109,7 +109,7 @@ namespace FImage {
         bool tracing;
 
         // The region over which the function is evaluated
-        std::vector<Uniform<int>> outputSize;
+        //std::vector<Expr> outputSize;
     };    
 
     Range operator*(const Range &a, const Range &b) {
@@ -439,10 +439,13 @@ namespace FImage {
         }
 
         // Make a region to evaluate this over
-        contents->outputSize.resize(args().size());
+        //contents->outputSize.resize(args().size());
         MLVal sizes = makeList();        
         for (size_t i = args().size(); i > 0; i--) {                
-            sizes = addToList(sizes, Expr(contents->outputSize[i-1]).node());
+            char buf[256];
+            snprintf(buf, 256, ".result.dim.%d", ((int)i)-1);
+            //sizes = addToList(sizes, Expr(contents->outputSize[i-1]).node());
+            sizes = addToList(sizes, Expr(Var(buf)).node());
         }
         
         MLVal sched = makeSchedule((name()),
@@ -490,11 +493,13 @@ namespace FImage {
             MLVal arg = makeScalarArg(u.name(), u.type().mlval);
             args = addToList(args, arg);
         }
+        /*
         for (size_t i = contents->outputSize.size(); i > 0; i--) {
             const DynUniform &u = contents->outputSize[i-1];
             MLVal arg = makeScalarArg(u.name(), u.type().mlval);
             args = addToList(args, arg);
         }
+        */
         
         printf("compiling IR -> ll\n");
         MLVal tuple = doCompile(name(), args, stmt);
@@ -587,7 +592,7 @@ namespace FImage {
     }
     
     size_t im_size(const UniformImage &im, int dim) {
-        return *((size_t *)(im.size(dim).data()));
+        return im.boundImage().size(dim);
     }
 
 
@@ -617,6 +622,7 @@ namespace FImage {
         buffer_t buffers[256];
         size_t j = 0;
         size_t k = 0;
+        /*
         for (size_t i = 0; i < contents->outputSize.size(); i++) {
             // Set and use the uniform in one place. It's a little
             // useless because nobody ever actually uses the value
@@ -625,17 +631,18 @@ namespace FImage {
             contents->outputSize[i] = im.size(i);
             arguments[j++] = contents->outputSize[i].data();
         }
+        */
         for (size_t i = 0; i < rhs().uniforms().size(); i++) {
             arguments[j++] = rhs().uniforms()[i].data();
         }
         for (size_t i = 0; i < rhs().images().size(); i++) {
             buffers[k++] = BufferOfImage(rhs().images()[i]);
             arguments[j++] = buffers + (k-1);
-        }       
+        }               
         for (size_t i = 0; i < rhs().uniformImages().size(); i++) {
             buffers[k++] = BufferOfImage(rhs().uniformImages()[i]);
             arguments[j++] = buffers + (k-1);
-        }
+        }        
         buffers[k] = BufferOfImage(im);
         arguments[j] = buffers + k;
 

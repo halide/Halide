@@ -69,30 +69,30 @@ let cg_wrapper c m e inner =
             m in
   let b = builder_at_end c (entry_block f) in
   
-  let args = Array.of_list
-               (List.combine
-                  arglist
-                  (Array.to_list (params f))) in
+  let args = (List.combine arglist (Array.to_list (params f))) in
 
   Printf.printf "Building wrapper\n%!";
   Printf.printf "  %d args\n" (List.length arglist);
   Printf.printf "  %d params\n%!" (Array.length (params f));
   Printf.printf "  %d inner params\n%!" (Array.length (params inner));
 
-  ignore (
-    build_call
-      inner
-      (Array.map
-         begin function
-           | Buffer nm, param ->
-               build_load (build_struct_gep param 0 (nm ^ ".host") b) "" b
-           | _, param -> param
-         end
-         args
-      )
-      ""
-      b
-  );
+  let toi32 x = build_intcast x (i32_type c) "" b in
+
+  let c x = const_int (i32_type c) x in
+
+  let make_call_arg = function
+    | Buffer nm, param ->
+        [build_load (build_gep param [|c 0; c 0|] (nm ^ ".host") b) "" b;
+         toi32 (build_load (build_gep param [|c 0; c 4; c 0|] (nm ^ ".dim.0") b) "" b);
+         toi32 (build_load (build_gep param [|c 0; c 4; c 1|] (nm ^ ".dim.1") b) "" b);
+         toi32 (build_load (build_gep param [|c 0; c 4; c 2|] (nm ^ ".dim.2") b) "" b);
+         toi32 (build_load (build_gep param [|c 0; c 4; c 3|] (nm ^ ".dim.3") b) "" b)]
+    | _, param -> [param]
+  in
+  
+  let call_args = Array.of_list (List.flatten (List.map make_call_arg args)) in
+
+  ignore (build_call inner call_args "" b);
   ignore (build_ret_void b);
 
   Printf.printf "Built wrapper\n%!";

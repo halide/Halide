@@ -73,14 +73,14 @@ let cg_entry c m e =
   (* unpack the entrypoint *)
   let (entrypoint_name, arglist, s) = e in
   let type_of_arg = function
-    | Scalar (_, vt) -> type_of_val_type vt
-    | Buffer _ -> buffer_t 
+    | Scalar (_, vt) -> [type_of_val_type vt]
+    | Buffer _ -> [buffer_t; int_imm_t; int_imm_t; int_imm_t; int_imm_t]
   and name_of_arg = function
-    | Scalar (n, _) -> n
-    | Buffer n -> n 
+    | Scalar (n, _) -> [n]
+    | Buffer n -> [n; n ^ ".dim.0"; n ^ ".dim.1"; n ^ ".dim.2"; n ^ ".dim.3"] 
   in
 
-  let argtypes = List.map type_of_arg arglist in
+  let argtypes = List.flatten (List.map type_of_arg arglist) in
   
   (* define `void main(arg1, arg2, ...)` entrypoint*)
   let entrypoint_fn =
@@ -90,17 +90,16 @@ let cg_entry c m e =
       m
   in
 
+  let argnames = List.flatten (List.map name_of_arg arglist) in
+  let argvals = List.map (param entrypoint_fn) (0 -- (List.length argnames)) in
+
   (* Put args in the sym table *)
-  Array.iteri
-    (fun idx arg -> 
-      let name = name_of_arg arg in
-      let llval = param entrypoint_fn idx in
-      sym_add name llval;
+  List.iter
+    (fun (n, t, llval) ->
+      sym_add n llval;
       (* And mark each buffer arg as Noalias *)
-      match arg with 
-        | Buffer b -> add_param_attr llval Attribute.Noalias
-        | _ -> ()
-    ) (Array.of_list arglist);
+      if t = buffer_t then add_param_attr llval Attribute.Noalias else ()
+    ) (list_zip3 argnames argtypes argvals);
 
   (* start codegen at entry block of main *)
   let b = builder_at_end c (entry_block entrypoint_fn) in

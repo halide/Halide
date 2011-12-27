@@ -12,6 +12,7 @@ namespace FImage {
     class DynUniform {
     public:
         DynUniform(Type t) : contents(new Contents(t, uniqueName('u'))) {}
+        DynUniform(Type t, const std::string &name) : contents(new Contents(t, name)) {}
 
         Type type() const {return contents->type;}
         const std::string &name() const {return contents->name;}
@@ -46,6 +47,10 @@ namespace FImage {
     class Uniform {
     public:
         Uniform(const T &v = 0) : u(TypeOf<T>()) {
+            u.set(v);
+        }
+
+        Uniform(const std::string &name, const T &v = 0) : u(TypeOf<T>(), name) {
             u.set(v);
         }
 
