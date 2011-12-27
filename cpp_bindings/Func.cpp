@@ -47,7 +47,7 @@ namespace FImage {
     ML_FUNC2(makePair);
     ML_FUNC3(makeTriple);
 
-     struct FuncRef::Contents {
+    struct FuncRef::Contents {
         Contents(const Func &f) :
             f(f) {}
         Contents(const Func &f, const Expr &a) :
@@ -58,6 +58,8 @@ namespace FImage {
             f(f), args {a, b, c} {}
         Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d) :
             f(f), args {a, b, c, d} {}
+        Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d, const Expr &e) :
+            f(f), args {a, b, c, d, e} {}
         Contents(const Func &f, const std::vector<Expr> &args) : f(f), args(args) {}
 
         // A pointer to the function object that this lhs defines.
@@ -139,6 +141,10 @@ namespace FImage {
 
     FuncRef::FuncRef(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d) : 
         contents(new FuncRef::Contents(f, a, b, c, d)) {
+    }
+
+    FuncRef::FuncRef(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d, const Expr &e) : 
+        contents(new FuncRef::Contents(f, a, b, c, d, e)) {
     }
 
     FuncRef::FuncRef(const Func &f, const std::vector<Expr> &args) :
