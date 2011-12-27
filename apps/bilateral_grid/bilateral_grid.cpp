@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     Expr zi = Cast<int>(floor(zv));
     Expr zf = zv - floor(zv);
     Func grid("grid");
-    grid(x, y, zi+k, c) += Select(k == 0, 1.0f-zf, zf) * Select(c == 0, val, 1.0f);
+    grid(x, y, zi+k) += Select(k == 0, 1.0f-zf, zf) * (val, 1.0f);
 
     // Blur the grid
     Func blurx, blury, blurz;
