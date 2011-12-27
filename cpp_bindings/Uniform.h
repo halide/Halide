@@ -61,7 +61,7 @@ namespace FImage {
         const std::string &name() const {return u.name();}
         void *data() const {return u.data();}
 
-        operator size_t() const { return (size_t)data(); }
+        //operator size_t() const { return (size_t)data(); }
 
     private:
         DynUniform u;

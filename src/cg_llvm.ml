@@ -799,17 +799,32 @@ let codegen_c_header e header_file =
   let string_of_type = function
     | Int bits -> "int" ^ (string_of_int bits) ^ "_t"
     | UInt bits -> "uint" ^ (string_of_int bits) ^ "_t"
-    | Float bits -> "float" ^ (string_of_int bits) ^ "_t"
+    | Float 32 -> "float"
+    | Float 64 -> "double"
     | _ -> raise (Wtf "Bad type for toplevel argument")
   in
   let string_of_arg = function
     | Scalar (n, t) -> (string_of_type t) ^ " " ^ (String.sub n 1 ((String.length n)-1))
-    | Buffer n -> "void *" ^ (String.sub n 1 ((String.length n)-1))
+    | Buffer n -> "buffer_t *" ^ (String.sub n 1 ((String.length n)-1))
   in
   let arg_string = String.concat ", " (List.map string_of_arg args) in
   let lines = 
     ["#ifndef " ^ object_name ^ "_h";
      "#define " ^ object_name ^ "_h";
+     "";
+     "#include <stdint.h>";
+     "";
+     "#ifndef buffer_t_defined";
+     "#define buffer_t_defined";
+     "typedef struct buffer_t {";
+     "  uint8_t* host;";
+     "  uint64_t dev;";
+     "  bool host_dirty;";
+     "  bool dev_dirty;";
+     "  size_t dims[4];";
+     "  size_t elem_size;";
+     "} buffer_t;";
+     "#endif";
      "";
      "void " ^ object_name ^ "(" ^ arg_string ^ ");";
      "";
