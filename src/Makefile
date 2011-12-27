@@ -1,10 +1,13 @@
 OCAMLBUILD=ocamlbuild
 BUILD_CMD=${OCAMLBUILD} ${OCAMLBUILDFLAGS} 
 
-# Mac Homebrew OCaml bindings install headers under /usr/local/lib/ocaml
-CPPFLAGS=-I/usr/local/lib/ocaml
-CCFLAGS=-std=c99
-CFLAGS=${CPPFLAGS} ${CCFLAGS}
+LLVM_PATH=../llvm/Release+Asserts/bin
+LLC=${LLVM_PATH}/llc
+CLANG=${LLVM_PATH}/clang
+CLANGPP=${LLVM_PATH}/clang++
+
+CUDA_PATH=/usr/local/cuda
+CUDA_LDFLAGS=-L${CUDA_PATH}/lib -lcuda
 
 TARGETS=test_lower.ml test_stdlib.ml test_hello_ptx.ml
 DEBUG_BYTE=$(patsubst %.ml,%.d.byte,${TARGETS})
@@ -43,3 +46,15 @@ debug: ${DEBUG_BYTE}
 
 clean:
 	${OCAMLBUILD} -clean
+
+%.s: %.bc
+	${LLC} $^
+
+test_%.bc: test_%.byte
+	${OCAMLBUILD} $^ --
+
+test_hello_ptx: test_hello_ptx.cpp test_hello_ptx.s
+	${CLANGPP} $^ ${CUDA_LDFLAGS} -o $@
+
+run_test_hello_ptx: test_hello_ptx
+	./test_hello_ptx
