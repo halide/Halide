@@ -14,5 +14,6 @@
 #include "Expr.h"
 #include "Uniform.h"
 #include "Reduction.h"
+#include "Tuple.h"
 
 #endif

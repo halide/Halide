@@ -1,4 +1,5 @@
 \#*\#
+.\#*
 *~
 *.o
 *.a
@@ -36,6 +37,8 @@ test/*/*.png
 test/*/*.time
 test/cpp/*/passes.txt
 test/cpp/*/*.h
+test/*.h
+test/*.o
 test/cpp/*/*.o
 test/*.ptx
 test/*/*.tmp
