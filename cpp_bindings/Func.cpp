@@ -161,8 +161,11 @@ namespace FImage {
         for (size_t i = 0; i < gather_args.size(); i++) {
             gather_args[i] = contents->args[i].isVar() ? contents->args[i] : Var();
         }
-        if (!contents->f.rhs().isDefined())             
-            contents->f.define(gather_args, Cast(e.type(), 0));
+        if (!contents->f.rhs().isDefined()) {
+            Expr init = Cast(e.type(), 0);
+            init.addImplicitArgs(e.implicitArgs());
+            contents->f.define(gather_args, init);
+        }
         contents->f.define(contents->args, contents->f(contents->args) + e);
     }
 
@@ -171,8 +174,11 @@ namespace FImage {
         for (size_t i = 0; i < gather_args.size(); i++) {
             gather_args[i] = contents->args[i].isVar() ? contents->args[i] : Var();
         }
-        if (!contents->f.rhs().isDefined()) 
-            contents->f.define(gather_args, Cast(e.type(), 1));
+        if (!contents->f.rhs().isDefined()) {
+            Expr init = Cast(e.type(), 1);
+            init.addImplicitArgs(e.implicitArgs());
+            contents->f.define(gather_args, init);
+        }
         contents->f.define(contents->args, contents->f(contents->args) * e);
     }
 
