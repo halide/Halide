@@ -31,6 +31,7 @@ namespace FImage {
         FuncRef(const Func &f, const Expr &a, const Expr &b);
         FuncRef(const Func &f, const Expr &a, const Expr &b, const Expr &c);
         FuncRef(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d);
+        FuncRef(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d, const Expr &e);
         FuncRef(const Func &f, const std::vector<Expr> &args);
 
         // This assignment corresponds to definition. This FuncRef is
@@ -73,6 +74,7 @@ namespace FImage {
         FuncRef operator()(const Expr &a, const Expr &b) {return FuncRef(*this, a, b);}
         FuncRef operator()(const Expr &a, const Expr &b, const Expr &c) {return FuncRef(*this, a, b, c);}     
         FuncRef operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) {return FuncRef(*this, a, b, c, d);}  
+        FuncRef operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d, const Expr &e) {return FuncRef(*this, a, b, c, d, e);}  
         FuncRef operator()(const std::vector<Expr> &args) {return FuncRef(*this, args);}
 
         // Print every time this function gets evaluated
