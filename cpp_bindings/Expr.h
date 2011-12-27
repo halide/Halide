@@ -98,6 +98,7 @@ namespace FImage {
     Expr pow(const Expr &, const Expr &);
     Expr exp(const Expr &);
     Expr log(const Expr &);
+    Expr floor(const Expr &);
 
     // Make a debug node
     Expr Debug(Expr, const std::string &prefix, const std::vector<Expr> &args);

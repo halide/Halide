@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <math.h>
 
 void *safe_malloc(size_t x) {
     void *mem;
@@ -23,4 +24,36 @@ void safe_free(void *ptr) {
     void *end = ((void **)start)[0];
     mprotect(end, 4096, PROT_READ | PROT_WRITE | PROT_EXEC);
     free(start);
+}
+
+float sin_f32(float x) {
+    return sinf(x);
+}
+
+float cos_f32(float x) {
+    return cosf(x);
+}
+
+float exp_f32(float x) {
+    return expf(x);
+}
+
+float log_f32(float x) {
+    return logf(x);
+}
+
+float pow_f32(float x, float y) {
+    return powf(x, y);
+}
+
+float floor_f32(float x) {
+    return floorf(x);
+}
+
+float ceil_f32(float x) {
+    return ceilf(x);
+}
+
+float round_f32(float x) {
+    return roundf(x);
 }

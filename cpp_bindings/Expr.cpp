@@ -334,27 +334,31 @@ namespace FImage {
     }
 
     Expr sqrt(const Expr &a) {
-        return transcendental(".llvm.sqrt.f32", a);
+        return transcendental(".sqrt_f32", a);
     }
 
     Expr sin(const Expr &a) {
-        return transcendental(".llvm.sin.f32", a);
+        return transcendental(".sin_f32", a);
     }
     
     Expr cos(const Expr &a) {
-        return transcendental(".llvm.cos.f32", a);
+        return transcendental(".cos_f32", a);
     }
 
     Expr pow(const Expr &a, const Expr &b) {
-        return transcendental(".llvm.pow.f32", a, b);
+        return transcendental(".pow_f32", a, b);
     }
 
     Expr exp(const Expr &a) {
-        return transcendental(".llvm.exp.f32", a);
+        return transcendental(".exp_f32", a);
     }
 
     Expr log(const Expr &a) {
-        return transcendental(".llvm.log.f32", a);
+        return transcendental(".log_f32", a);
+    }
+
+    Expr floor(const Expr &a) {
+        return transcendental(".floor_f32", a);
     }
 
 
