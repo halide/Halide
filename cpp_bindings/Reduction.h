@@ -4,6 +4,7 @@
 #include "Expr.h"
 #include "Var.h"
 #include "Func.h"
+#include <assert.h>
 #include <vector>
 #include <memory>
 
@@ -15,10 +16,12 @@ namespace FImage {
         Sum(const Expr &body) {
             Func anon;
             std::vector<Expr> args(body.vars().size());
-            for (size_t i = 0; i < args.size(); i++) {
+            for (size_t i = 0; i < body.vars().size(); i++) {
                 args[i] = body.vars()[i];
-            }            
-            anon(args) = Cast(body.type(), 0);
+            }
+            Expr init = Cast(body.type(), 0);
+            init.addImplicitArgs(body.implicitArgs());
+            anon(args) = init;
             anon(args) = anon(args) + body;
             call = anon(args);
         }
@@ -35,10 +38,12 @@ namespace FImage {
         Product(const Expr &body) {
             Func anon;
             std::vector<Expr> args(body.vars().size());
-            for (size_t i = 0; i < args.size(); i++) {
+            for (size_t i = 0; i < body.vars().size(); i++) {
                 args[i] = body.vars()[i];
-            }            
-            anon(args) = Cast(body.type(), 1);
+            }
+            Expr init = Cast(body.type(), 1);
+            init.addImplicitArgs(body.implicitArgs());
+            anon(args) = init;
             anon(args) = anon(args) * body;
             call = anon(args);
         }
