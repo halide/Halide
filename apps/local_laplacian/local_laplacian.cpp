@@ -49,9 +49,9 @@ int main(int argc, char **argv) {
     int seed = atoi(argv[2]);
 
     // number of intensity levels
-    Uniform<int> levels;
+    Uniform<int> levels("levels");
     // Parameters controlling the filter
-    Uniform<float> alpha, beta;
+    Uniform<float> alpha("alpha"), beta("beta");
     // Takes a 16-bit input
     UniformImage input(UInt(16), 3);
 

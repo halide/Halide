@@ -112,11 +112,26 @@ namespace FImage {
         Contents(const Type &t, int dims) :
             t(t), name(uniqueName('m')) {
             sizes.resize(dims);
+            for (int i = 0; i < dims; i++) {
+                std::ostringstream ss;
+                ss << "." << name << ".dim." << i;
+                sizes[i] = Var(ss.str());
+            }
+        }
+
+        Contents(const Type &t, int dims, const std::string &name) :
+            t(t), name(name) {
+            sizes.resize(dims);
+            for (int i = 0; i < dims; i++) {
+                std::ostringstream ss;
+                ss << "." << name << ".dim." << i;
+                sizes[i] = Var(ss.str());
+            }
         }
 
         Type t;
         std::unique_ptr<DynImage> image;
-        std::vector<Uniform<int>> sizes;
+        std::vector<Expr> sizes;
         const std::string name;
     };
 
@@ -124,13 +139,19 @@ namespace FImage {
         contents(new Contents(t, dims)) {
     }
 
+    UniformImage::UniformImage(const Type &t, int dims, const std::string &name) : 
+        contents(new Contents(t, dims, name)) {
+    }
+
     void UniformImage::operator=(const DynImage &image) {
         assert(image.type() == contents->t);
         assert((size_t)image.dimensions() == contents->sizes.size());
         contents->image.reset(new DynImage(image));
-        for (int i = 0; i < image.dimensions(); i++) {
-            contents->sizes[i] = image.size(i);
-        }
+    }
+
+    const DynImage &UniformImage::boundImage() const {
+        assert(contents->image);
+        return *(contents->image);
     }
          
     unsigned char *UniformImage::data() const {
@@ -170,7 +191,7 @@ namespace FImage {
         return contents->sizes.size();
     }
 
-    const Uniform<int> &UniformImage::size(int i) const {
+    const Expr &UniformImage::size(int i) const {
         return contents->sizes[i];
     }
         

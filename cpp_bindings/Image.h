@@ -136,6 +136,7 @@ namespace FImage {
     class UniformImage {
     public:
         UniformImage(const Type &t, int dims);
+        UniformImage(const Type &t, int dims, const std::string &name);
 
         void operator=(const DynImage &image);
         unsigned char *data() const;
@@ -147,11 +148,13 @@ namespace FImage {
         Type type() const;
         const std::string &name() const;
         int dimensions() const;
-        const Uniform<int> &size(int i) const;
 
-        const Uniform<int> &width() const {return size(0);}
-        const Uniform<int> &height() const {return size(1);}
-        const Uniform<int> &channels() const {return size(2);}
+        const DynImage &boundImage() const;
+
+        const Expr &size(int i) const;
+        const Expr &width() const {return size(0);}
+        const Expr &height() const {return size(1);}
+        const Expr &channels() const {return size(2);}
 
         // Compare for identity (not equality of contents)
         bool operator==(const UniformImage &other) const;

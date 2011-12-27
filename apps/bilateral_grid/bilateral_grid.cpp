@@ -11,12 +11,10 @@ int main(int argc, char **argv) {
     // Convert the 16-bit input to floats
     Func floating;
     floating(x, y, c) = Cast<float>(input(x, y, c)) / 65535.0f;
-    floating.root();
 
     // Take the luminance
     Func luminance;
     luminance(x, y) = floating(x, y, 0) * 0.299f + floating(x, y, 1) * 0.587f + floating(x, y, 2) * 0.114f;
-    luminance.root();
 
     // Add a boundary condition 
     Func clamped;
@@ -24,21 +22,20 @@ int main(int argc, char **argv) {
                               Clamp(y, 0, input.height()));                                
 
     // Do linear splats to the grid
-    RVar k(0, 2, "k");
     RVar i(0, s_sigma, "i"), j(0, s_sigma, "j");
     Expr val = clamped(x * s_sigma + i - s_sigma/2, y * s_sigma + j - s_sigma/2);
     Expr zv = val / r_sigma;
     Expr zi = Cast<int>(floor(zv));
     Expr zf = zv - floor(zv);
     Func grid("grid");
+    RVar k(0, 2, "k");
     grid(x, y, zi+k) += Select(k == 0, 1.0f-zf, zf) * (val, 1.0f);
 
     // Blur the grid
     Func blurx, blury, blurz;
-    blurx(x, y, z) = grid(x-1, y, z) + 2.0f*grid(x, y, z) + grid(x+1, y, z);
-    blury(x, y, z) = blurx(x, y-1, z) + 2.0f*blurx(x, y, z) + blurx(x, y+1, z);
-    blurz(x, y, z) = blury(x, y, z-1) + 2.0f*blury(x, y, z) + blury(x, y, z+1);
-
+    blurx(x, y, z) = grid(x-1, y, z) + 2*grid(x, y, z) + grid(x+1, y, z);
+    blury(x, y, z) = blurx(x, y-1, z) + 2*blurx(x, y, z) + blurx(x, y+1, z);
+    blurz(x, y, z) = blury(x, y, z-1) + 2*blury(x, y, z) + blury(x, y, z+1);
     blurz.root();
 
     // Take trilinear samples to compute the output in tiles
@@ -59,11 +56,11 @@ int main(int argc, char **argv) {
          blurz(x, y+1, zi+1, c) * (1.0f - xf) * yf * zf + 
          blurz(x+1, y+1, zi+1, c) * xf * yf * zf);
 
+    outTiles.root();
+
     // Remove tiles to get the result in homogeneous form
     Func homogeneous;
     homogeneous(x, y) = outTiles(x/s_sigma, y/s_sigma, x%s_sigma, y%s_sigma);
-
-    homogeneous.root();
 
     // Normalize
     Func smoothed;
@@ -72,12 +69,10 @@ int main(int argc, char **argv) {
     // Add clarity to the luminance channel by extrapolating away from the smoothed version
     Func clarified;
     clarified = 2.0f*luminance - smoothed;
-    clarified.root();
 
     // reintroduce color
     Func color;
     color(x, y, c) = clarified(x, y) * floating(x, y, c) / luminance(x, y);
-    color.root();
 
     // convert back to 16-bit
     Func output("clarity");
