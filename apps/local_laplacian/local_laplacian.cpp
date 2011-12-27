@@ -99,7 +99,9 @@ public:
     Uniform<float> alpha, beta;
     Uniform<int> levels;
 
-    LocalLaplacian(int J, int seed) : input(Float(32), 3) {
+    LocalLaplacian(int J, int seed) : input(Float(32), 3), output("output") {
+
+        assert(J <= 8);
 
         // K is intensity levels
         // J is pyramid levels
@@ -116,25 +118,26 @@ public:
         gray(x, y) = 0.299f * clamped(x, y, 0) + 0.587f * clamped(x, y, 1) + 0.114f * clamped(x, y, 2);
         
         printf("Defining processed gaussian pyramid\n");
-        Func gPyramid[J];
+
+        Func gPyramid[] = {"gp0", "gp1", "gp2", "gp3", "gp4", "gp5", "gp6", "gp7"};
         gPyramid[0](x, y, k) = remap(gray(x, y), Cast<float>(k) / (levels-1), alpha, beta, 1.0f / (levels-1));
         for (int j = 1; j < J; j++)
             gPyramid[j](x, y, k) = downsample(gPyramid[j-1])(x, y, k);
         
         printf("Defining processed laplacian pyramid\n");
-        Func lPyramid[J];
+        Func lPyramid[] = {"lp0", "lp1", "lp2", "lp3", "lp4", "lp5", "lp6", "lp7"};
         lPyramid[J-1] = gPyramid[J-1];
         for (int j = J-2; j >= 0; j--)
             lPyramid[j](x, y, k) = gPyramid[j](x, y, k) - upsample(gPyramid[j+1])(x, y, k);    
         
         printf("Defining gaussian pyramid of input\n");
-        Func inGPyramid[J];
+        Func inGPyramid[] = {"igp0", "igp1", "igp2", "igp3", "igp4", "igp5", "igp6", "igp7"};
         inGPyramid[0] = gray;
         for (int j = 1; j < J; j++)
             inGPyramid[j](x, y) = downsample(inGPyramid[j-1])(x, y);
         
         printf("Defining laplacian pyramid of output\n");
-        Func outLPyramid[J];
+        Func outLPyramid[] = {"olp0", "olp1", "olp2", "olp3", "olp4", "olp5", "olp6", "olp7"};
         for (int j = 0; j < J; j++) {
             // Split input pyramid value into integer and floating parts
             Expr level = inGPyramid[j](x, y) * Cast<float>(levels-1);
@@ -145,7 +148,7 @@ public:
         }
         
         printf("Defining gaussian pyramid of output\n");
-        Func outGPyramid[J];
+        Func outGPyramid[] = {"ogp0", "ogp1", "ogp2", "ogp3", "ogp4", "ogp5", "ogp6", "ogp7"};
         outGPyramid[J-1] = outLPyramid[J-1];
         for (int j = J-2; j >= 0; j--) 
             outGPyramid[j](x, y) = upsample(outGPyramid[j+1])(x, y) + outLPyramid[j](x, y);
@@ -164,7 +167,6 @@ public:
             case 0:
                 // inline
                 printf("Scheduling %s as inline\n", funcs[i].name().c_str());
-                funcs[i].root();
                 break;
             case 1: 
                 // root 
@@ -175,8 +177,8 @@ public:
                 // root and vectorize
                 printf("Scheduling %s as root and vectorized over x\n", funcs[i].name().c_str());
                 funcs[i].root();
-                //funcs[i].split(x, xo, xi, 4);
-                //funcs[i].vectorize(xi);
+                funcs[i].split(x, xo, xi, 4);
+                funcs[i].vectorize(xi);
                 break;
             case 3:
                 // Chunk over x
@@ -187,8 +189,8 @@ public:
                 // Chunk over x and vectorize
                 printf("Scheduling %s as chunked over y and vectorized over x\n", funcs[i].name().c_str());
                 funcs[i].chunk(y);
-                //funcs[i].split(x, xo, xi, 4);
-                //funcs[i].vectorize(xi);
+                funcs[i].split(x, xo, xi, 4);
+                funcs[i].vectorize(xi);
                 break;
             default:
                 printf("How did I get here?\n");
@@ -220,7 +222,7 @@ int main(int argc, char **argv) {
     int levels = atoi(argv[3]);
     float alpha = atof(argv[4]);
     float beta = atof(argv[5]);
-    LocalLaplacian ll(2, atoi(argv[6])); 
+    LocalLaplacian ll(5, atoi(argv[6])); 
     printf("%f\n", im(0, 0, 0));
     Image<float> out = ll(im, levels, alpha, beta);
     save(out, argv[2]);

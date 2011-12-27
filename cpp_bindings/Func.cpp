@@ -576,13 +576,22 @@ namespace FImage {
         
     }
 
+    size_t im_size(const DynImage &im, int dim) {
+        return im.size(dim);
+    }
+    
+    size_t im_size(const UniformImage &im, int dim) {
+        return *((size_t *)(im.size(dim).data()));
+    }
+
+
     template <class image_t>
-    static buffer_t BufferOfImage(image_t& im) {
+    static buffer_t BufferOfImage(const image_t &im) {
         buffer_t buf;
         buf.host = im.data();
         memset(buf.dims, 0, sizeof(size_t)*4);
         for (int i = 0; i < im.dimensions(); i++) {
-            buf.dims[i] = size_t(im.size(i));
+            buf.dims[i] = im_size(im, i);
         }
         buf.elem_size = im.type().bits / 8;
         buf.dev = 0;
@@ -598,8 +607,8 @@ namespace FImage {
         if (!contents->functionPtr) compile();
 
         printf("Constructing argument list...\n");
-        static void *arguments[256];
-        static buffer_t buffers[256];
+        void *arguments[256];
+        buffer_t buffers[256];
         size_t j = 0;
         size_t k = 0;
         for (size_t i = 0; i < contents->outputSize.size(); i++) {

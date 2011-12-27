@@ -3,8 +3,6 @@
 
 using namespace FImage;
 
-
-
 Var x, y, c;
 
 Func hot_pixel_suppression(Func input) {
@@ -13,10 +11,10 @@ Func hot_pixel_suppression(Func input) {
     Expr min = Min(Min(input(x-2, y), input(x+2, y)),
                    Min(input(x, y-2), input(x, y+2)));
     
-    Func clamped;
-    clamped(x, y) = Clamp(input(x, y), min, max);
+    Func denoised("denoised");
+    denoised(x, y) = Clamp(input(x, y), min, max);
     
-    return clamped;
+    return denoised;
 }
 
 Expr abs(Expr e) {
@@ -186,7 +184,7 @@ Func rgb_to_yuv422(Func rgb) {
 Func process(Func raw, Uniform<float> color_temp, 
              Uniform<float> gamma, Uniform<float> contrast) {
     Func im = raw;
-    //im = hot_pixel_suppression(im);
+    im = hot_pixel_suppression(im);
     im = demosaic(im);
     //im = color_correct(im, color_temp);
     im = apply_curve(im, gamma, contrast);
@@ -195,34 +193,66 @@ Func process(Func raw, Uniform<float> color_temp,
 }
 
 int main(int argc, char **argv) {
-    UniformImage input(Int(16), 2);
+    UniformImage input(UInt(16), 2);
     Uniform<float> color_temp = 3200.0f;
     Uniform<float> gamma = 1.8f;
     Uniform<float> contrast = 10.0f;
-    Func clamped("in");
-    clamped(x, y) = input(Clamp(x, 0, input.width()-1),
-                          Clamp(y, 0, input.height()-1));
 
+    // add a boundary condition and treat things as signed ints
+    // (demosaic might introduce negative values)
+    Func clamped("in");
+    clamped(x, y) = Cast<int16_t>(input(Clamp(x, 0, input.width()-1),
+                                        Clamp(y, 0, input.height()-1)));
+
+    // Run the pipeline
     Func output = process(clamped, color_temp, gamma, contrast);
 
-    
+    // Pick a schedule   
     Var xi, yi, xo, yo;
-    output.split(x, xo, xi, 32);
+    output.split(x, xo, xi, 64);
     output.split(y, yo, yi, 40);
     output.transpose(xo, yi);
     output.transpose(yo, c);
     output.transpose(xo, c);
     
+    if (argc > 1) 
+        srand(atoi(argv[1]));
+    else
+        srand(0);
 
     std::vector<Func> funcs = output.rhs().funcs();
     for (size_t i = 0; i < funcs.size(); i++) {
-        //funcs[i].root();
-        if (funcs[i].name() == "curve") funcs[i].root();
-        else {
+        if (rand() % 4 == 0) continue; // 25% chance of inline
+
+        // we should definitely evaluate the curve ahead of time
+        if (funcs[i].name() == "curve") {
+            funcs[i].root();
+            continue;
+        }
+
+        // Randomly select root or chunk over xo
+        if (rand() % 4 == 0) {
+            funcs[i].root();
+        } else {
             funcs[i].chunk(xo);
-            funcs[i].unroll(x, 2);
+        }
+
+        // Maybe unroll across y by 2
+        if (rand() % 2) {
             funcs[i].unroll(y, 2);
-            //funcs[i].vectorize(x, 8);
+        }
+        
+        // choose between unrolling, vectorizing, or nothing across x
+        switch (rand() % 3) {
+        case 0:
+            funcs[i].unroll(x, 2);
+            break;
+        case 1:
+            if (funcs[i].returnType() == Int(16)) funcs[i].vectorize(x, 8);
+            if (funcs[i].returnType() == UInt(8)) funcs[i].vectorize(x, 16);
+            break;
+        case 2:
+            break;
         }
     }
 
