@@ -12,8 +12,7 @@ class Image {
 
     std::shared_ptr<Contents> contents;
 
-public:
-    Image(int w, int h, int c = 1) {
+    void initialize(int w, int h, int c) {
         buffer_t buf;
         buf.dims[0] = w;
         buf.dims[1] = h;
@@ -30,14 +29,41 @@ public:
         buf.dev = 0;
     }
 
-    T &operator()(int x, int y, int c = 0) {
+public:
+    Image(int w, int h = 1, int c = 1) {
+        initialize(w, h, c);
+    }
+
+
+    Image(std::initializer_list<T> l) {
+        initialize(l.size(), 1, 1);
+        int x = 0;
+        for (auto &iter: l) {
+            (*this)(x++, 0, 0) = iter;
+        }
+    }
+
+    Image(std::initializer_list<std::initializer_list<T> > l) {
+        initialize(l.begin()->size(), l.size(), 1);
+        int y = 0;
+        for (auto &row: l) {
+            int x = 0;
+            for (auto &elem: row) {
+                (*this)(x++, y, 0) = elem;
+            }
+            y++;
+        }
+    }
+
+
+    T &operator()(int x, int y = 0, int c = 0) {
         T *ptr = (T *)contents->buf.host;
         int w = contents->buf.dims[0];
         int h = contents->buf.dims[1];
         return ptr[(c*h + y)*w + x];
     }
 
-    const T &operator()(int x, int y, int c = 0) const {
+    const T &operator()(int x, int y = 0, int c = 0) const {
         const T *ptr = (const T *)contents->buf.host;
         int w = contents->buf.dims[0];
         int h = contents->buf.dims[1];
