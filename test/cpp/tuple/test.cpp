@@ -114,6 +114,27 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Tuples inside reductions
+    Func f7;
+    f7(x, y) = Sum((x*i, y*i+1));
+    Image<int> im7 = f7.realize(32, 32, 2);
+    for (size_t x = 0; x < 32; x++) {
+        for (size_t y = 0; y < 32; y++) {
+            int correct[] = {0, 0};
+            for (size_t i = 0; i < 10; i++) {
+                correct[0] += x*i;
+                correct[1] += y*i+1;
+            }
+            if (im7(x, y, 0) != correct[0] ||
+                im7(x, y, 1) != correct[1]) {
+                printf("im7(%d, %d) = (%d, %d) instead of (%d %d)\n", 
+                       x, y, 
+                       im7(x, y, 0), im7(x, y, 1),
+                       correct[0], correct[1]);
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
