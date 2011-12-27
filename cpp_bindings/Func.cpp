@@ -10,6 +10,7 @@
 #include <llvm/Assembly/PrintModulePass.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include "../src/buffer.h"
 #include "Func.h"
 #include "Util.h"
 #include "Var.h"
@@ -569,13 +570,30 @@ namespace FImage {
         
     }
 
+    template <class image_t>
+    static buffer_t BufferOfImage(image_t& im) {
+        buffer_t buf;
+        buf.host = im.data();
+        memset(buf.dims, 0, sizeof(size_t)*4);
+        for (int i = 0; i < im.dimensions(); i++) {
+            buf.dims[i] = size_t(im.size(i));
+        }
+        buf.elem_size = im.type().bits / 8;
+        buf.dev = 0;
+        buf.dev_dirty = false;
+
+        printf("BufferOfImage: %p (%zux%zux%zu) %zu bytes\n", buf.host, buf.dims[0], buf.dims[1], buf.dims[2], buf.elem_size);
+
+        return buf;
+    }
+
     void Func::realize(const DynImage &im) {
 
         if (!contents->functionPtr) compile();
 
         printf("Constructing argument list...\n");
         static void *arguments[256];
-        static void *imageBase[256];
+        static buffer_t buffers[256];
         size_t j = 0;
         size_t k = 0;
         for (size_t i = 0; i < contents->outputSize.size(); i++) {
@@ -590,15 +608,15 @@ namespace FImage {
             arguments[j++] = rhs().uniforms()[i].data();
         }
         for (size_t i = 0; i < rhs().images().size(); i++) {
-            imageBase[k++] = (void *)rhs().images()[i].data();
-            arguments[j++] = imageBase + (k-1);
+            buffers[k++] = BufferOfImage(rhs().images()[i]);
+            arguments[j++] = buffers + (k-1);
         }       
         for (size_t i = 0; i < rhs().uniformImages().size(); i++) {
-            imageBase[k++] = (void *)rhs().uniformImages()[i].data();
-            arguments[j++] = imageBase + (k-1);
+            buffers[k++] = BufferOfImage(rhs().uniformImages()[i]);
+            arguments[j++] = buffers + (k-1);
         }
-        imageBase[k] = im.data();
-        arguments[j] = imageBase + k;
+        buffers[k] = BufferOfImage(im);
+        arguments[j] = buffers + k;
 
         printf("Args: ");
         for (size_t i = 0; i <= j; i++) {

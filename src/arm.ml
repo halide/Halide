@@ -1,6 +1,7 @@
 open Llvm
 open Ir
 open Util
+open Cg_llvm_util
 
 let codegen_entry c m cg_entry e =
   (* set up module *)
@@ -21,3 +22,6 @@ let cg_stmt (c:llcontext) (m:llmodule) (b:llbuilder) (cg_stmt : stmt -> llvalue)
 let malloc = (fun _ _ _ _ _ -> raise (Wtf "No malloc for arm yet"))
 let free = (fun _ _ _ _ -> raise (Wtf "No free for arm yet"))
 let env = Environment.empty
+
+let buffer_t m =
+  get_type m "struct.buffer_t"
