@@ -8,8 +8,9 @@
  * Requires test_hello_ptx.ptx to be in the same folder at runtime.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <cuda.h>
+//#include <cuda.h>
 #include <assert.h>
 
 #define CHECK_CALL(c) (assert((c) == CUDA_SUCCESS))
@@ -23,6 +24,14 @@ typedef enum {
     False = 0,
     True = 1
 } Bool;
+
+#ifndef __cuda_cuda_h__
+#if defined(__x86_64) || defined(AMD64) || defined(_M_AMD64)
+typedef unsigned long long CUdeviceptr;
+#else
+typedef unsigned int CUdeviceptr;
+#endif
+#endif
 
 typedef struct {
     char* host;
