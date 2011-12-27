@@ -39,3 +39,4 @@ test/cpp/*/*.h
 test/cpp/*/*.o
 test/*.ptx
 test/*/*.tmp
+log.txt
