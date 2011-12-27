@@ -1,6 +1,7 @@
 open Llvm
 open Ir
 open Util
+open Cg_llvm_util
 
 (* Function calling conventions for PTX, from <llvm/CallingConv.h>
  * For whatever reason, the official OCaml binding only exposes a few
@@ -52,38 +53,8 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   let (entrypoint_name, arglist, _) = entry in
 
   let i32_t = i32_type c in
-  let int_imm_t = i32_type c in
-  let int32_imm_t = i32_type c in
-  let float_imm_t = float_type c in
-  let buffer_t c = pointer_type (i8_type c) in
-  let buffer_t = buffer_t c in
-  (* TODO: export this from Cg_llvm to avoid duplicate? Move into Llvm_util? *)
-  let type_of_val_type t = match t with
-    | UInt(1) | Int(1) -> i1_type c
-    | UInt(8) | Int(8) -> i8_type c
-    | UInt(16) | Int(16) -> i16_type c
-    | UInt(32) | Int(32) -> i32_type c
-    | UInt(64) | Int(64) -> i64_type c
-    | Float(32) -> float_type c
-    | Float(64) -> double_type c
-    | IntVector( 1, n) | UIntVector( 1, n) -> vector_type (i1_type c) n
-    | IntVector( 8, n) | UIntVector( 8, n) -> vector_type (i8_type c) n
-    | IntVector(16, n) | UIntVector(16, n) -> vector_type (i16_type c) n
-    | IntVector(32, n) | UIntVector(32, n) -> vector_type (i32_type c) n
-    | IntVector(64, n) | UIntVector(64, n) -> vector_type (i64_type c) n
-    | FloatVector(32, n) -> vector_type (float_type c) n
-    | FloatVector(64, n) -> vector_type (double_type c) n
-    | _ -> raise (Wtf "Unsupported type")
-  in
 
-  (* get references to the support functions *)
-  let get f name = match f name m with
-    | Some v -> v
-    | None -> raise (Wtf ("Couldn't find " ^ name ^ " in initial PTX host module"))
-  in
-  let get_global = get lookup_global in
-  let get_function = get lookup_function in
-  let get_type = get (fun nm m -> type_by_name m nm) in
+  let get_function = get_function m in
 
   let init = get_function "init" in
   let dev_malloc_if_missing = get_function "dev_malloc_if_missing" in
@@ -93,7 +64,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   let buffer_struct_type = get_type "struct.buffer_t" in
 
   let type_of_arg = function
-    | Scalar (_, vt) -> type_of_val_type vt
+    | Scalar (_, vt) -> type_of_val_type c vt
     | Buffer _ -> pointer_type (buffer_struct_type)
   in
 

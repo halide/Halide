@@ -1,14 +1,11 @@
 open Llvm
 open Ir
 
-exception UnsupportedType of Ir.val_type
 exception MissingEntrypoint
 exception UnimplementedInstruction
 exception UnalignedVectorMemref
-exception CGFailed of string
 exception ArgExprOfBufferArgument
 exception ArgTypeMismatch of Ir.val_type * Ir.val_type
-exception BCWriteFailed of string
 
 (* These are not parallel, because Architecture overrides module/context used by cg_entry
  * TODO: make parallel? *)
@@ -48,4 +45,5 @@ end
 
 module CodegenForArch : functor ( Arch : Architecture ) -> Codegen
 
+(* TODO: move into a Host architecture module? *)
 module CodegenForHost : Codegen
