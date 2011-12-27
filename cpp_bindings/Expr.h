@@ -64,6 +64,11 @@ namespace FImage {
         bool isVar() const;
         bool isRVar() const;
         bool isDefined() const;
+
+        // When an expression is captured and placed inside an
+        // anonymous function body, any reduction vars become regular
+        // vars to the anonymous function
+        void convertRVarsToVars();
         
       private:
         struct Contents;
@@ -93,6 +98,7 @@ namespace FImage {
     Expr pow(const Expr &, const Expr &);
     Expr exp(const Expr &);
     Expr log(const Expr &);
+    Expr floor(const Expr &);
 
     // Make a debug node
     Expr Debug(Expr, const std::string &prefix, const std::vector<Expr> &args);

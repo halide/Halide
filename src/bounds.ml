@@ -29,7 +29,13 @@ let check_result expr result =
   ()
 
 
-
+let is_monotonic = function
+  | ".floor_f32"
+  | ".ceil_f32"
+  | ".sqrt_f32"
+  | ".exp_f32"
+  | ".log_f32" -> true
+  | _ -> false
 
 let bounds_of_expr_in_env env expr =
   let rec bounds_of_expr_in_env_inner env expr = 
@@ -288,6 +294,19 @@ let bounds_of_expr_in_env env expr =
         in build_range l
       end
           
+      (* Unary monotonic built-ins *)
+      | Call (t, f, [arg]) when is_monotonic f ->
+          begin match (recurse arg) with 
+            | Range (min, max) ->
+                make_range (Call (t, f, [min]),
+                            Call (t, f, [max]))
+            | _ -> Unbounded
+          end
+             
+      (* Trig built-ins *)
+      | Call (t, f, [arg]) when f = ".sin" || f = ".cos" -> 
+          Range ((make_zero t) -~ (make_one t), make_one t)                  
+
       | Call (_, _, _) -> Unbounded
       | Debug (e, _, _) -> recurse e
           
