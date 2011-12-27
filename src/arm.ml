@@ -7,11 +7,11 @@ let codegen_entry c m cg_entry e =
   (* set up module *)
   Stdlib.init_module_arm m;
 
-  let f = cg_entry c m e in
+  (* build the inner kernel, which takes raw byte*s *)
+  let inner = cg_entry c m e in
 
-  (* TODO: build wrappers *)
-
-  f
+  (* return the wrapper which takes buffer_t*s *)
+  cg_wrapper c m e inner
 
 let cg_expr (c:llcontext) (m:llmodule) (b:llbuilder) (cg_expr : expr -> llvalue) (expr : expr) =
   cg_expr expr
@@ -22,6 +22,3 @@ let cg_stmt (c:llcontext) (m:llmodule) (b:llbuilder) (cg_stmt : stmt -> llvalue)
 let malloc = (fun _ _ _ _ _ -> raise (Wtf "No malloc for arm yet"))
 let free = (fun _ _ _ _ -> raise (Wtf "No free for arm yet"))
 let env = Environment.empty
-
-let buffer_t m =
-  get_type m "struct.buffer_t"
