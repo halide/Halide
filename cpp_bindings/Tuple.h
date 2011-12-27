@@ -1,6 +1,7 @@
 #ifndef FIMAGE_TUPLE_H
 #define FIMAGE_TUPLE_H
 
+#include <assert.h>
 #include <vector>
 #include "Expr.h"
 
