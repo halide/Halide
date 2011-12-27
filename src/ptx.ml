@@ -18,18 +18,6 @@ let cg_stmt (c:llcontext) (m:llmodule) (b:llbuilder) (cg_stmt : stmt -> llvalue)
 let postprocess_function (f:llvalue) =
   set_function_call_conv ptx_kernel f
 
-let buffer_t m =
-  get_type m "struct.buffer_t"
-  (*named_struct_type c "struct.buffer_t"*)
-  (*
-   [| pointer_type (i8_type c);  (* host *)
-      i64_type c;                (* dev *)
-      i8_type c;                 (* host_dirty - c++ bool = i8 *)
-      i8_type c;                 (* dev_dirty *)
-      array_type (i64_type c) 4; (* dims[4] *)
-      i64_type c;                (* elem_size - size *) |]
-   *)
-
 let rec codegen_entry host_ctx host_mod cg_entry entry =
   (* create separate device module *)
   let dev_ctx = create_context () in
