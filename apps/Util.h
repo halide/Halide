@@ -1,19 +1,6 @@
-
 #include <stdint.h>
 #include <memory>
 #include <limits>
-
-#ifndef buffer_t_defined
-#define buffer_t_defined
-typedef struct buffer_t {
-  uint8_t* host;
-  uint64_t dev;
-  bool host_dirty;
-  bool dev_dirty;
-  size_t dims[4];
-  size_t elem_size;
-} buffer_t;
-#endif
 
 template<typename T>
 class Image {
