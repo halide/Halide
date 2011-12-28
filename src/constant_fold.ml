@@ -42,6 +42,7 @@ let rec constant_fold_expr expr =
   
   match expr with
     (* Ignoring most const-casts for now, because we can't represent immediates of arbitrary types *)
+    | Cast (t, e) when val_type_of_expr e = t -> recurse e
     | Cast (t, e) -> 
         begin match (t, recurse e) with
           | (Int 32, IntImm x)    -> IntImm x
@@ -53,7 +54,7 @@ let rec constant_fold_expr expr =
           | (Float 32, IntImm x)  -> FloatImm (float_of_int x)
           | (Float 32, UIntImm x) -> FloatImm (float_of_int x)
           | (Float 32, FloatImm x) -> FloatImm x
-          | (t, e)                -> Cast(t, e)
+          | (t, e)                -> Cast(t, recurse e)
         end
 
     (* basic binary ops *)
@@ -222,8 +223,12 @@ let rec constant_fold_expr expr =
     | MakeVector l -> MakeVector (List.map recurse l)
     | Broadcast (e, n) -> Broadcast (recurse e, n)
     | Ramp (b, s, n) -> Ramp (recurse b, recurse s, n)
+    | ExtractElement (MakeVector l, UIntImm elem)
+    | ExtractElement (MakeVector l, IntImm elem) ->
+        recurse (List.nth l elem)
+    | ExtractElement (Ramp (base, stride, _), elem) ->
+        recurse (base +~ (Cast (val_type_of_expr stride, elem)) *~ stride)
     | ExtractElement (a, b) -> ExtractElement (recurse a, recurse b)
-
     | Debug (e, n, args) -> Debug (recurse e, n, args)
 
     | Let (n, a, b) -> 
@@ -232,6 +237,8 @@ let rec constant_fold_expr expr =
           subs_expr (Var (val_type_of_expr a, n)) a b
         else
           Let (n, a, b)
+
+    | Call (t, n, args) -> Call (t, n, List.map recurse args)
 
     (* Immediates are unchanged *)
     | x -> x
