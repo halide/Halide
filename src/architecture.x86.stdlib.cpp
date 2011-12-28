@@ -34,6 +34,10 @@ void safe_free(void *ptr) {
     free(start);
 }
 
+float sqrt_f32(float x) {
+    return sqrtf(x);
+}
+
 float sin_f32(float x) {
     return sinf(x);
 }
