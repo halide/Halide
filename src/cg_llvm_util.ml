@@ -95,7 +95,4 @@ let cg_wrapper c m e inner =
   ignore (build_call inner call_args "" b);
   ignore (build_ret_void b);
 
-  Printf.printf "Built wrapper\n%!";
-  dump_value f;
-
   f

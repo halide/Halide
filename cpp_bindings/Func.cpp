@@ -26,8 +26,8 @@ namespace FImage {
     ML_FUNC3(makeTransposeTransform);
     ML_FUNC4(makeChunkTransform);
     ML_FUNC3(makeRootTransform);
-    ML_FUNC4(makeSerialTransform);
-    ML_FUNC4(makeParallelTransform);
+    // ML_FUNC4(makeSerialTransform); 
+    ML_FUNC2(makeParallelTransform);
     
     ML_FUNC1(doConstantFold);
     
@@ -335,7 +335,7 @@ namespace FImage {
         unroll(vi);
     }
 
-
+    /*
     void Func::range(const Var &v, const Expr &min, const Expr &size, bool serial) {
         MLVal t;
         if (serial) {
@@ -351,6 +351,7 @@ namespace FImage {
         }
         contents->scheduleTransforms.push_back(t);
     }
+    */
 
     void Func::split(const Var &old, const Var &newout, const Var &newin, int factor) {
         MLVal t = makeSplitTransform((name()),
@@ -400,6 +401,11 @@ namespace FImage {
 
     void Func::root() {
         MLVal t = makeRootTransform(name(), contents->arglist, makeList());
+        contents->scheduleTransforms.push_back(t);
+    }
+
+    void Func::parallel(const Var &caller_var) {
+        MLVal t = makeParallelTransform(name(), caller_var.name());
         contents->scheduleTransforms.push_back(t);
     }
 

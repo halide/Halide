@@ -4,6 +4,7 @@ open List
 open Util
 open Ir_printer
 open Cg_llvm_util
+open Analysis
 
 exception MissingEntrypoint
 exception UnimplementedInstruction
@@ -62,6 +63,8 @@ let cg_entry c m e =
 
   let sym_add name llv =
     set_value_name name llv;
+    Hashtbl.add sym_table name llv
+  and sym_add_no_rename name llv =
     Hashtbl.add sym_table name llv
   and sym_remove name =
     Hashtbl.remove sym_table name
@@ -380,9 +383,9 @@ let cg_entry c m e =
           (string_of_val_type f) (string_of_val_type t) (string_of_expr e);
         raise UnimplementedInstruction
 
-  and cg_for var_name min max body = 
+  and cg_for var_name min size body = 
       (* Emit the start code first, without 'variable' in scope. *)
-      let start_val = min (* const_int int_imm_t min *) in
+      let max = build_add min size "" b in
 
       (* Make the new basic block for the loop header, inserting after current
        * block. *)
@@ -398,7 +401,7 @@ let cg_entry c m e =
       position_at_end loop_bb b;
 
       (* Start the PHI node with an entry for start. *)
-      let variable = build_phi [(start_val, preheader_bb)] var_name b in
+      let variable = build_phi [(min, preheader_bb)] var_name b in
 
       (* Within the loop, the variable is defined equal to the PHI node. *)
       sym_add var_name variable;
@@ -433,12 +436,107 @@ let cg_entry c m e =
       (* Return an ignorable llvalue *)
       const_int int_imm_t 0
 
+  and cg_par_for var_name min size body =
+    (* Find all references in body to things outside of it *)
+    let rec find_names_in_stmt internal = function
+      | Store (e, buf, idx) ->
+          let inner = StringSet.union (find_names_in_expr internal e) (find_names_in_expr internal idx) in
+          if (StringSet.mem buf internal) then inner else (StringSet.add buf inner)
+      | Pipeline (name, ty, size, produce, consume) ->
+          let internal = StringSet.add name internal in
+          string_set_concat [
+            find_names_in_expr internal size;
+            find_names_in_stmt internal produce;
+            find_names_in_stmt internal consume]
+      | LetStmt (name, value, stmt) ->
+          let internal = StringSet.add name internal in
+          StringSet.union (find_names_in_expr internal value) (find_names_in_stmt internal stmt)
+      | Block l ->
+          string_set_concat (List.map (find_names_in_stmt internal) l)
+      | For (var_name, min, size, order, body) ->
+          let internal = StringSet.add var_name internal in
+          string_set_concat [
+            find_names_in_expr internal min;
+            find_names_in_expr internal size;
+            find_names_in_stmt internal body]
+      | Print (fmt, args) ->
+          string_set_concat (List.map (find_names_in_expr internal) args)
+      | Provide (fn, _, _) ->
+          raise (Wtf "Encountered a provide during cg. These should have been lowered away.")
+    and find_names_in_expr internal = function
+      | Load (_, buf, idx) ->
+          let inner = find_names_in_expr internal idx in
+          if (StringSet.mem buf internal) then inner else (StringSet.add buf inner)
+      | Var (_, n) ->
+          if (StringSet.mem n internal) then StringSet.empty else (StringSet.add n StringSet.empty)
+      | Let (n, a, b) ->
+          let internal = StringSet.add n internal in
+          StringSet.union (find_names_in_expr internal a) (find_names_in_expr internal b)
+      | x -> fold_children_in_expr (find_names_in_expr internal) StringSet.union StringSet.empty x
+    in
+
+    (* Dump everything relevant in the symbol table into globals *)
+    let syms = find_names_in_stmt (StringSet.add var_name StringSet.empty) body in
+    StringSet.iter (fun name ->
+      Printf.printf "Need to capture %s\n" name;
+      let current_val = sym_get name in
+      let init = undef (type_of current_val) in
+      let global_name = var_name ^ "_closure_" ^ name in
+      let global_addr = define_global global_name init m in 
+      build_store current_val global_addr b;
+      (* dump the address in the symbol table. Done use sym_add because it renames. *)
+      sym_add_no_rename name global_addr;
+    ) syms;
+
+    (* Make a function that represents the body *)
+    let body_fn_type = (function_type (void_type c) [|int_imm_t|]) in
+    let body_fn = define_function (var_name ^ ".body") body_fn_type m in
+
+    (* Save the old position of the builder *)
+    let current = insertion_block b in
+
+    (* Move the builder inside the function *)
+    position_at_end (entry_block body_fn) b;
+
+    (* Load all the global symbols *)
+    StringSet.iter (fun name ->      
+      (* Get the address from the symbol table and replace it with its
+         value *)
+      let addr = sym_get name in
+      sym_remove name;
+      sym_add name (build_load addr name b);
+    ) syms;
+
+    (* Make the var name refer to the first argument *)
+    Printf.printf "%s = %s\n%!" var_name "param body_fn 0";
+    sym_add var_name (param body_fn 0);    
+
+    (* Generate the function body *)
+    ignore (cg_stmt body);
+    ignore (build_ret_void b);
+
+    sym_remove var_name;
+
+    (* Pop all the symbols we dumped into globals *)
+    StringSet.iter (fun name -> sym_remove name);
+
+    (* Move the builder back *)
+    position_at_end current b;
+
+    (* Call do_par_for *)
+    let do_par_for = declare_function "do_par_for"
+      (function_type (void_type c) [|pointer_type body_fn_type; int_imm_t; int_imm_t|]) m in
+    ignore(build_call do_par_for [|body_fn; min; size|] "" b);
+    
+    (* Return an ignorable llvalue *)
+    const_int int_imm_t 0
+
   and cg_stmt stmt = Arch.cg_stmt c m b cg_stmt_inner stmt
   and cg_stmt_inner = function
     (* TODO: unaligned vector store *)
     | Store(e, buf, idx) -> cg_store e buf idx
-    | For(name, min, n, _, stmt) ->
-        cg_for name (cg_expr min) (cg_expr (min +~ n)) stmt
+    | For(name, min, n, order, stmt) ->
+        (if order then cg_for else cg_par_for) name (cg_expr min) (cg_expr n) stmt
     | Block (first::second::rest) ->
         ignore(cg_stmt first);
         cg_stmt (Block (second::rest))
