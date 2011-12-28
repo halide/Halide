@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <math.h>
+#include <pthread.h>
 
 #include "buffer.h"
 
@@ -32,6 +33,33 @@ void safe_free(void *ptr) {
     void *end = ((void **)start)[0];
     mprotect(end, 4096, PROT_READ | PROT_WRITE | PROT_EXEC);
     free(start);
+}
+
+struct work {
+    void (*f)(int);
+    int idx;
+};
+
+void *do_work(void *arg) {
+    work *job = (work *)arg;
+    printf("Spawning job %d\n", job->idx);
+    job->f(job->idx);
+    printf("Finished job %d\n", job->idx);
+    return NULL;
+}
+
+void do_par_for(void (*f)(int), int min, int size) {
+    // for now, just create a thread for each loop instance
+    pthread_t threads[size];
+    work jobs[size];
+    for (int i = 0; i < size; i++)  {
+        jobs[i].f = f;
+        jobs[i].idx = i;
+        pthread_create(threads+i, NULL, do_work, (void *)(jobs + i));
+    }
+    for (int i = 0; i < size; i++) {
+        pthread_join(threads[i], NULL);
+    }
 }
 
 float sqrt_f32(float x) {

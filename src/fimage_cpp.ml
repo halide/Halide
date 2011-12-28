@@ -169,6 +169,6 @@ let _ =
   Callback.register "makeTransposeTransform" (fun func var1 var2 -> transpose_schedule func var1 var2);
   Callback.register "makeChunkTransform" (fun func var args region -> chunk_schedule func var args region);
   Callback.register "makeRootTransform" (fun func args region -> root_schedule func args region);
-  Callback.register "makeParallelTransform" (fun func var min size -> parallel_schedule func var min size);
-  Callback.register "makeSerialTransform" (fun func var min size -> serial_schedule func var min size);
+  Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);
+  (* Callback.register "makeSerialTransform" (fun func var min size -> serial_schedule func var min size); *)
   
