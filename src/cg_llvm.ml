@@ -440,56 +440,74 @@ let cg_entry c m e =
     (* Find all references in body to things outside of it *)
     let rec find_names_in_stmt internal = function
       | Store (e, buf, idx) ->
-          let inner = StringSet.union (find_names_in_expr internal e) (find_names_in_expr internal idx) in
-          if (StringSet.mem buf internal) then inner else (StringSet.add buf inner)
+          let inner = StringIntSet.union (find_names_in_expr internal e) (find_names_in_expr internal idx) in
+          if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, 8) inner)
       | Pipeline (name, ty, size, produce, consume) ->
           let internal = StringSet.add name internal in
-          string_set_concat [
+          string_int_set_concat [
             find_names_in_expr internal size;
             find_names_in_stmt internal produce;
             find_names_in_stmt internal consume]
       | LetStmt (name, value, stmt) ->
           let internal = StringSet.add name internal in
-          StringSet.union (find_names_in_expr internal value) (find_names_in_stmt internal stmt)
+          StringIntSet.union (find_names_in_expr internal value) (find_names_in_stmt internal stmt)
       | Block l ->
-          string_set_concat (List.map (find_names_in_stmt internal) l)
+          string_int_set_concat (List.map (find_names_in_stmt internal) l)
       | For (var_name, min, size, order, body) ->
           let internal = StringSet.add var_name internal in
-          string_set_concat [
+          string_int_set_concat [
             find_names_in_expr internal min;
             find_names_in_expr internal size;
             find_names_in_stmt internal body]
       | Print (fmt, args) ->
-          string_set_concat (List.map (find_names_in_expr internal) args)
+          string_int_set_concat (List.map (find_names_in_expr internal) args)
       | Provide (fn, _, _) ->
           raise (Wtf "Encountered a provide during cg. These should have been lowered away.")
     and find_names_in_expr internal = function
       | Load (_, buf, idx) ->
           let inner = find_names_in_expr internal idx in
-          if (StringSet.mem buf internal) then inner else (StringSet.add buf inner)
-      | Var (_, n) ->
-          if (StringSet.mem n internal) then StringSet.empty else (StringSet.add n StringSet.empty)
+          if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, 8) inner)
+      | Var (t, n) ->
+          let size = (bit_width t)/8 in
+          if (StringSet.mem n internal) then StringIntSet.empty else (StringIntSet.add (n, size) StringIntSet.empty)
       | Let (n, a, b) ->
           let internal = StringSet.add n internal in
-          StringSet.union (find_names_in_expr internal a) (find_names_in_expr internal b)
-      | x -> fold_children_in_expr (find_names_in_expr internal) StringSet.union StringSet.empty x
+          StringIntSet.union (find_names_in_expr internal a) (find_names_in_expr internal b)
+      | x -> fold_children_in_expr (find_names_in_expr internal) StringIntSet.union StringIntSet.empty x
     in
 
-    (* Dump everything relevant in the symbol table into globals *)
+    (* Dump everything relevant in the symbol table into a closure *)
     let syms = find_names_in_stmt (StringSet.add var_name StringSet.empty) body in
-    StringSet.iter (fun name ->
-      Printf.printf "Need to capture %s\n" name;
+    
+    (* Compute an offset in bytes into a closure for each symbol name, and put
+       that offset into a string map *)
+    let (total_bytes, offset_map) = 
+      StringIntSet.fold (fun (name, size) (offset, offset_map) ->
+        let current_val = sym_get name in
+        (* round size up to the nearest power of two for alignment *)
+        let rec roundup x y = if (x >= y) then x else roundup (x*2) y in
+        let size = roundup 1 size in
+        (* bump offset up to be a multiple of size for alignment *)
+        let offset = ((offset+size-1)/size)*size in
+        Printf.printf "Putting %s at offset %d\n" name offset;
+        (offset + size, StringMap.add name offset offset_map)
+      ) syms (0, StringMap.empty) 
+    in
+
+    (* Allocate a closure *)
+    let closure = Arch.malloc c m b cg_expr (IntImm total_bytes) in
+
+    (* Store everything in the closure *)
+    StringIntSet.iter (fun (name, size) ->      
       let current_val = sym_get name in
-      let init = undef (type_of current_val) in
-      let global_name = var_name ^ "_closure_" ^ name in
-      let global_addr = define_global global_name init m in 
-      build_store current_val global_addr b;
-      (* dump the address in the symbol table. Done use sym_add because it renames. *)
-      sym_add_no_rename name global_addr;
+      let offset = StringMap.find name offset_map in
+      let addr = build_bitcast closure (pointer_type (type_of current_val)) "" b in      
+      let addr = build_gep addr [| const_int int_imm_t (offset/size) |] "" b in
+      ignore (build_store current_val addr b);
     ) syms;
 
     (* Make a function that represents the body *)
-    let body_fn_type = (function_type (void_type c) [|int_imm_t|]) in
+    let body_fn_type = (function_type (void_type c) [|int_imm_t; buffer_t|]) in
     let body_fn = define_function (var_name ^ ".body") body_fn_type m in
 
     (* Save the old position of the builder *)
@@ -498,12 +516,13 @@ let cg_entry c m e =
     (* Move the builder inside the function *)
     position_at_end (entry_block body_fn) b;
 
-    (* Load all the global symbols *)
-    StringSet.iter (fun name ->      
-      (* Get the address from the symbol table and replace it with its
-         value *)
-      let addr = sym_get name in
-      sym_remove name;
+    (* Load everything from the closure *)
+    StringIntSet.iter (fun (name, size) ->      
+      let closure = param body_fn 1 in
+      let current_val = sym_get name in
+      let offset = StringMap.find name offset_map in
+      let addr = build_bitcast closure (pointer_type (type_of current_val)) "" b in      
+      let addr = build_gep addr [| const_int int_imm_t (offset/size) |] "" b in
       sym_add name (build_load addr name b);
     ) syms;
 
@@ -517,16 +536,19 @@ let cg_entry c m e =
 
     sym_remove var_name;
 
-    (* Pop all the symbols we dumped into globals *)
-    StringSet.iter (fun name -> sym_remove name);
+    (* Pop all the symbols we used in the function body *)
+    StringIntSet.iter (fun (name, _) -> sym_remove name);
 
     (* Move the builder back *)
     position_at_end current b;
 
     (* Call do_par_for *)
     let do_par_for = declare_function "do_par_for"
-      (function_type (void_type c) [|pointer_type body_fn_type; int_imm_t; int_imm_t|]) m in
-    ignore(build_call do_par_for [|body_fn; min; size|] "" b);
+      (function_type (void_type c) [|pointer_type body_fn_type; int_imm_t; int_imm_t; buffer_t|]) m in
+    ignore(build_call do_par_for [|body_fn; min; size; closure|] "" b);
+
+    (* Free the closure *)
+    Arch.free c m b closure;
     
     (* Return an ignorable llvalue *)
     const_int int_imm_t 0

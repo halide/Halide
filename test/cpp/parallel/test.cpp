@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 16; i++) {
         if (im(i) != i*3) {
-            printf("im[%d] = %d\n", im(i), i);
+            printf("im(%d) = %d\n", i, im(i));
             return -1;
         }
     }

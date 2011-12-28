@@ -16,7 +16,7 @@ void *safe_malloc(size_t x) {
     void *mem;
     x = ((x + 4095)/4096) * 4096;
     posix_memalign(&mem, 4096, x + 4096 * 3);
-    //printf("Allocated %lu bytes at %p with an electric fence\n", x, mem);
+    printf("Allocated %lu bytes at %p with an electric fence\n", x, mem);
 
     // write the end address to unprotect in the initial fence
     ((void **)mem)[0] = PTR_OFFSET(mem, x + 4096);
@@ -36,30 +36,35 @@ void safe_free(void *ptr) {
 }
 
 struct work {
-    void (*f)(int);
+    void (*f)(int, uint8_t *);
     int idx;
+    uint8_t *closure;
 };
 
 void *do_work(void *arg) {
     work *job = (work *)arg;
     printf("Spawning job %d\n", job->idx);
-    job->f(job->idx);
+    job->f(job->idx, job->closure);
     printf("Finished job %d\n", job->idx);
     return NULL;
 }
 
-void do_par_for(void (*f)(int), int min, int size) {
+void do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {
     // for now, just create a thread for each loop instance
+    printf("Creating %d jobs starting at index %d using closure at %p and function at %p\n", size, min, closure, f);
     pthread_t threads[size];
     work jobs[size];
     for (int i = 0; i < size; i++)  {
         jobs[i].f = f;
         jobs[i].idx = i;
+        jobs[i].closure = closure;
         pthread_create(threads+i, NULL, do_work, (void *)(jobs + i));
     }
+    printf("Waiting for threads to finish\n");
     for (int i = 0; i < size; i++) {
         pthread_join(threads[i], NULL);
     }
+    printf("Parallel for complete\n");
 }
 
 float sqrt_f32(float x) {
