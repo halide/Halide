@@ -595,36 +595,9 @@ let cg_entry c m e =
         (* See if we can't reduce it to a constant... *)
         let upgraded_size = Constant_fold.constant_fold_expr upgraded_size in
         
-        let (scratch, dynamic) =
-          match upgraded_size with
-            | IntImm sz ->
-                (* Constant size *)
-                (* Generate a global array *)
-                (* TODO: add arch.addrspace to Architecture interface, for use here *)
-                let buf_t = array_type (type_of_val_type upgraded_type) sz in
-                let buf = define_qualified_global name (const_null buf_t) 4 m in
-                (* set_linkage Linkage.Internal buf; *)
-                (* TODO: add arch.alignment to Architecture interface *)
-                (* set_alignment arch.alignment buf; *)
-                (buf, false)
-            | sz -> begin
-              (* Dynamic size *)
-              (* Generate an alloca for this block at the top of the function *)
-              (* let current = insertion_block b in
-                 position_before alloca_end b; 
-                 let buf = build_array_alloca (type_of_val_type upgraded_type) (cg_expr upgraded_size) "" b in
-                 position_at_end current b; *)
-              
-              (* AA: if we do that, then computed sizes really don't
-                 work (The size might not yet be defined). Just call
-                 malloc instead. We can replace this with our own
-                 allocator later. *)
-
-              (* Assumes all types consume an integer number of bytes
-                 and we never allocate > 2GB) *)
-              let bytes = size *~ (IntImm ((bit_width ty)/8)) in 
-              (Arch.malloc c m b cg_expr bytes, true)
-            end
+        let scratch = 
+          let bytes = size *~ (IntImm ((bit_width ty)/8)) in 
+          Arch.malloc c m b cg_expr bytes
         in
         
         (* push the symbol environment *)
@@ -637,7 +610,7 @@ let cg_entry c m e =
         sym_remove name;
 
         (* free the scratch *)
-        if dynamic then ignore (Arch.free c m b scratch) else (); 
+        ignore (Arch.free c m b scratch);
 
         res
     | Print (fmt, args) -> cg_print fmt args
