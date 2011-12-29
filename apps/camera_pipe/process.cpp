@@ -1,99 +1,37 @@
-typedef float float32_t;
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/time.h>
+
 extern "C" {
   #include "curved.h"
 }
-
-template<typename T>
-struct Image {
-    Image(int w, int h, int c = 1) {
-        width = w;
-        height = h;
-        channels = c;
-        data = new T[w*h*c+16];
-
-        // Force the base address to be 16-byte aligned
-        base = 0;
-        while ((size_t)(data + base) % 16 != 0) base++;
-    }
-
-    T &operator()(int x, int y, int c = 0) {
-        return data[(c*height + y)*width + x + base];
-    }
-
-    int width, height, channels, base;
-    T *data;
-};
-
-Image<int16_t> load(const char *filename) {
-
-    FILE *f = fopen(filename, "rb");
-
-    // get the dimensions
-    struct header_t {
-        int frames, width, height, channels, typeCode;
-    } h;
-
-    fread(&h, sizeof(header_t), 1, f);
-
-    Image<int16_t> im(h.width, h.height);
-
-    for (int y = 0; y < im.height; y++) {
-        for (int x = 0; x < im.width; x++) {
-            float val;
-            fread(&val, sizeof(float), 1, f);
-            assert(val >= 0 && val <= 1);
-            im(x, y) = int16_t(val * 1023.0f);
-        }
-    }
-
-    fclose(f);
-    return im;
-}
-
-void save(Image<uint8_t> &im, const char *filename) {
-    FILE *f = fopen(filename, "wb");
-
-    // get the dimensions
-    struct header_t {
-        int frames, width, height, channels, typeCode;
-    } h {1, im.width, im.height, im.channels, 0};
-
-    
-    fwrite(&h, sizeof(header_t), 1, f);
-
-    for (int y = 0; y < im.height; y++) {
-        for (int x = 0; x < im.width; x++) {
-            for (int c = 0; c < im.channels; c++) {
-                float val = (float)(im(x, y, c))/256.0f;
-                fwrite(&val, sizeof(float), 1, f);
-            }
-        }
-    }
-
-    fclose(f);
-}
-
+#include "../Util.h"
 
 int main(int argc, char **argv) {
-    Image<int16_t> input = load(argv[1]);
-    Image<uint8_t> output(input.width, input.height, 3);
+    Image<uint16_t> input = load<uint16_t>(argv[1]);
+    Image<uint8_t> output(input.width(), input.height(), 3);
 
     timeval t1, t2;
     
+    // These color matrices are for the sensor in the Nokia N900 and are
+    // taken from the FCam source.
+    Image<float> matrix_3200 = {{ 1.6697f, -0.2693f, -0.4004f, -42.4346f},
+                                {-0.3576f,  1.0615f,  1.5949f, -37.1158f},
+                                {-0.2175f, -1.8751f,  6.9640f, -26.6970f}};
+    
+    Image<float> matrix_7000 = {{ 2.2997f, -0.4478f,  0.1706f, -39.0923f},
+                                {-0.3826f,  1.5906f, -0.2080f, -25.4311f},
+                                {-0.0888f, -0.7344f,  2.2832f, -20.0826f}};    
+
     gettimeofday(&t1, NULL);
-    curved(output.width, output.height, 3,
-           input.width, input.height,
-           atof(argv[2]), atof(argv[3]),
-           &input(0, 0), &output(0, 0));
+    curved(atof(argv[2]), atof(argv[3]), atof(argv[4]),
+           matrix_3200, matrix_7000, input, output);
     gettimeofday(&t2, NULL);
 
     printf("%3.3f ms\n", (t2.tv_sec - t1.tv_sec)*1000.0f + (t2.tv_usec - t1.tv_usec)/1000.0f);
 
-    save(output, argv[4]);
+    save(output, argv[5]);
     return 0;
 }

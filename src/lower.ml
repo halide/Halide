@@ -430,8 +430,8 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
 
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) (debug:bool) =
   let starts_with a b =    
-    String.length a >= String.length b &&
-      String.sub a 0 (String.length b) = b
+    String.length a > String.length b &&
+      String.sub a 0 ((String.length b)+1) = b ^ "."
   in
   (* A partial order on realization order of functions *)        
   let lt a b =

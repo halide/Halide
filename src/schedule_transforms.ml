@@ -12,8 +12,8 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
   (* Make an empty schedule *)
   let schedule = empty_schedule in
 
-  (* Start with a parallel for over the function args over the region *)
-  let f_schedule = List.map (fun (v, m, s) -> Parallel (v, m, s)) region in
+  (* Start with a for over the function args over the region *)
+  let f_schedule = List.map (fun (v, m, s) -> Serial (v, m, s)) region in
   let schedule = set_schedule schedule func Root f_schedule in
 
   (* Find all sub-functions and mark them as inline *)
@@ -73,8 +73,8 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
         (* I'm a reduction *)
         | Reduce (_, _, _, _) -> 
             let f = base_name f in
-            (Root, List.map (fun (t, n) -> Parallel (n, Var (t, f ^ "." ^ n ^ ".min"),
-                                                     Var (t, f ^ "." ^ n ^ ".extent"))) args)            
+            (Root, List.map (fun (t, n) -> Serial (n, Var (t, f ^ "." ^ n ^ ".min"),
+                                                   Var (t, f ^ "." ^ n ^ ".extent"))) args)            
         | _ ->            
             let parent = parent_name f in
             let (parent_args, _, parent_body) = find_function parent env in
@@ -86,11 +86,11 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
                   
                   let rec get_gather_args = function
                     | (Var (t, n)::rest) when List.mem (t, n) parent_args -> 
-                        (Parallel (n, Var (t, n ^ ".min"), Var(t, n ^ ".extent")))::(get_gather_args rest)
+                        (Serial (n, Var (t, n ^ ".min"), Var(t, n ^ ".extent")))::(get_gather_args rest)
                     | _::rest -> get_gather_args rest
                     | [] -> []
                   in
-                  let reduce_args = (List.map (fun (n, m, s) -> Parallel (n, m, s)) domain) in
+                  let reduce_args = (List.map (fun (n, m, s) -> Serial (n, m, s)) domain) in
                   let gather_args = get_gather_args update_args in
                   (Inline, reduce_args @ gather_args)
                     
@@ -123,7 +123,7 @@ let split_schedule (func: string) (var: string) (newouter: string)
            Parallel (newinner, IntImm 0, IntImm factor);
            Parallel (newouter, IntImm 0, Constant_fold.constant_fold_expr ((size +~ (IntImm (factor-1))) /~ (IntImm factor)))]
       | Serial (v, min, size) when v = var ->
-          assert (Analysis.reduce_expr_modulo size factor = Some 0);
+          (* assert (Analysis.reduce_expr_modulo size factor = Some 0); *)
           [Split (var, newouter, newinner, min);
            Serial (newinner, IntImm 0, IntImm factor);
            Serial (newouter, IntImm 0, Constant_fold.constant_fold_expr ((size +~ (IntImm (factor-1))) /~ (IntImm factor)))]
@@ -145,6 +145,7 @@ let vectorize_schedule (func: string) (var: string) (schedule: schedule_tree) =
     (* Find var in the sched_list *)
     Printf.printf "Vectorizing %s over %s\n%!" func var;
     let fix = function
+      | Serial (v, min, size) 
       | Parallel (v, min, size) when v = var ->
           begin match size with 
             | IntImm x -> Vectorized (v, min, x)
@@ -223,7 +224,7 @@ let root_or_chunk_schedule (func: string) (call_sched: call_schedule)
 
   (* Make a sub-schedule using the arg names and the region. We're
      assuming all the args are region args for now *)
-  let make_sched name (min, size) = Parallel (name, min, size) in
+  let make_sched name (min, size) = Serial (name, min, size) in
   let sched_list = match region with
     (* To be inferred later *)
     | [] -> List.map (fun n -> make_sched n (Var (Int 32, func ^ "." ^ n ^ ".min"),
@@ -368,17 +369,25 @@ let all_vars_in_scope func *)
 let root_schedule func args region schedule = 
   root_or_chunk_schedule func Root args region schedule
 
-let parallel_schedule (func: string) (var: string) (min: expr) (size: expr) (schedule: schedule_tree) =
+let parallel_schedule (func: string) (var: string) (schedule: schedule_tree) =
 
   let calls = find_all_schedule schedule func in
   
+  let rec fix = function
+    | [] -> []
+    | (Serial (n, min, size))::rest when n = var ->
+        (Parallel (n, min, size))::rest
+    | first::rest -> first::(fix rest)
+  in
+
   let set schedule func =
     let (call_sched, sched_list) = find_schedule schedule func in
-    set_schedule schedule func call_sched ((Parallel (var, min, size))::sched_list)
+    set_schedule schedule func call_sched (fix sched_list)
   in
   
   List.fold_left set schedule calls
 
+(*
 let serial_schedule (func: string) (var: string) (min: expr) (size: expr) (schedule: schedule_tree) =
 
   let calls = find_all_schedule schedule func in
@@ -389,6 +398,7 @@ let serial_schedule (func: string) (var: string) (min: expr) (size: expr) (sched
   in
   
   List.fold_left set schedule calls
+*)
 
 (*
   let infer_regions (env: environment) (schedule: schedule_tree) =

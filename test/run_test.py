@@ -34,7 +34,7 @@ def remove(filename):
     except: pass
 
 proj_root = os.path.join('..', '..')
-llvm_path = os.path.join(proj_root, 'llvm', 'Debug+Asserts', 'bin')
+llvm_path = os.path.join(proj_root, 'llvm', 'Release+Asserts', 'bin')
 llc_exe = os.path.join(llvm_path, 'llc')
 clang_exe = os.path.join(llvm_path, 'clang++')
 imagestack_path = os.path.join(proj_root, 'ImageStack', 'bin')

@@ -60,6 +60,7 @@ namespace FImage {
         const std::vector<Func> &funcs() const;
         const std::vector<UniformImage> &uniformImages() const;
         int implicitArgs() const;
+        void addImplicitArgs(int);
 
         bool isVar() const;
         bool isRVar() const;

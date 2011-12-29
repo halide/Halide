@@ -9,5 +9,5 @@ curved.o: curved.bc
 	llc curved.bc -O3 -filetype=obj
 
 process: process.cpp curved.o
-	g++-4.6 -std=c++0x -Wall -O3 process.cpp curved.o -o process
+	g++-4.6 -std=c++0x -lpng -Wall -O3 process.cpp curved.o -o process
 

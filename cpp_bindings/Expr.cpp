@@ -151,6 +151,10 @@ namespace FImage {
         return contents->implicitArgs;
     }
 
+    void Expr::addImplicitArgs(int a) {
+        contents->implicitArgs += a;
+    }
+
     void Expr::convertRVarsToVars() {
         for (size_t i = 0; i < contents->rvars.size(); i++) {
             contents->vars.push_back(Var(contents->rvars[i].name()));

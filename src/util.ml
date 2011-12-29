@@ -13,6 +13,16 @@ let string_set_map (f: string -> string) (s: StringSet.t) =
 
 module StringMap = Map.Make(String)
 
+module StringIntSet = Set.Make (
+  struct
+    let compare = Pervasives.compare
+    type t = string * int
+  end
+)
+
+let string_int_set_concat (s: StringIntSet.t list) =
+  List.fold_left StringIntSet.union StringIntSet.empty s
+
 (* An or operator for options *)
 let option_either x y =
   match (x, y) with
@@ -35,6 +45,8 @@ let rec split_name n =
 exception Wtf of string
 
 let list_zip a b = List.map2 (fun x y -> (x, y)) a b
+
+let list_zip3 a b c = List.map2 (fun (x, y) z -> (x, y, z)) (list_zip a b) c
 
 (* Sort a list using a partial order *)
 let rec partial_sort (lt: 'a -> 'a -> bool option) (l : 'a list) =
