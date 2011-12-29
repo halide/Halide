@@ -41,7 +41,7 @@ typedef struct {
     size_t dims[4];
     size_t elem_size;
 } buffer_t;
-extern "C" void f_wrapper(buffer_t *input, buffer_t *result, int N);
+extern "C" void f(buffer_t *input, buffer_t *result, int N);
 
 void printSample(int* arr, char* name)
 {
@@ -78,7 +78,7 @@ int main(int argc, char const *argv[])
     out.dims[1] = out.dims[2] = out.dims[3] = 1;
     out.elem_size = sizeof(int);
 
-    f_wrapper(&in, &out, N);
+    f(&in, &out, N);
 #else
     CUresult err;
 

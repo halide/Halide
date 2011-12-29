@@ -122,7 +122,7 @@ namespace FImage {
         const std::string &name() const;
         const std::vector<MLVal> &scheduleTransforms() const;
 
-        void compile();
+        void compile(bool targetPTX=false);
 
     private:
         struct Contents;

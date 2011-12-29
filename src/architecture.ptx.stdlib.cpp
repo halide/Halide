@@ -111,16 +111,16 @@ CUresult CUDAAPI cuLaunchKernel(CUfunction f,
 
 // Device, Context, Module, and Function for this entrypoint are tracked locally
 // and constructed lazily on first run.
-static CUfunction f = 0;
-static CUdevice dev = 0;
-static CUcontext ctx = 0;
-static CUmodule mod = 0;
+static CUfunction __f = 0;
+static CUdevice __dev = 0;
+static CUcontext __ctx = 0;
+static CUmodule __mod = 0;
 
-void init(const char* ptx_src, const char* entry_name)
+void __init(const char* ptx_src, const char* entry_name)
 {
     CUresult status;
 
-    if (!f) {
+    if (!__f) {
         // Initialize CUDA
         CHECK_CALL( cuInit(0), "cuInit" );
 
@@ -130,44 +130,48 @@ void init(const char* ptx_src, const char* entry_name)
         assert(deviceCount > 0);
 
         // Get device
-        CHECK_CALL( cuDeviceGet(&dev, 0), "cuDeviceGet" );
+        CHECK_CALL( cuDeviceGet(&__dev, 0), "cuDeviceGet" );
 
         // Create context
-        CHECK_CALL( cuCtxCreate(&ctx, 0, dev), "cuCtxCreate" );
+        CHECK_CALL( cuCtxCreate(&__ctx, 0, __dev), "cuCtxCreate" );
 
         // Create module
-        CHECK_CALL( cuModuleLoadData(&mod, ptx_src), "cuModuleLoadData" );
+        CHECK_CALL( cuModuleLoadData(&__mod, ptx_src), "cuModuleLoadData" );
         
         fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
 
         // Get kernel function ptr
-        CHECK_CALL( cuModuleGetFunction(&f, mod, entry_name), "cuModuleGetFunction" );
+        CHECK_CALL( cuModuleGetFunction(&__f, __mod, entry_name), "cuModuleGetFunction" );
     }
 }
 
-CUdeviceptr dev_malloc(size_t bytes) {
+CUdeviceptr __dev_malloc(size_t bytes) {
     CUdeviceptr p;
-    CHECK_CALL( cuMemAlloc(&p, bytes), "dev_malloc" );
+	char msg[256];
+	snprintf(msg, 256, "dev_malloc (%zu bytes)", bytes );
+    CHECK_CALL( cuMemAlloc(&p, bytes), msg );
     return p;
 }
 
-void dev_malloc_if_missing(buffer_t* buf) {
+void __dev_malloc_if_missing(buffer_t* buf) {
     if (buf->dev) return;
+	fprintf(stderr, "dev_malloc_if_missing of %zux%zux%zux%zu (%zu bytes) buffer\n",
+			buf->dims[0], buf->dims[1], buf->dims[2], buf->dims[3], buf->elem_size);
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-    buf->dev = dev_malloc(size);
+    buf->dev = __dev_malloc(size);
 }
 
-void copy_to_dev(buffer_t* buf) {
+void __copy_to_dev(buffer_t* buf) {
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     CHECK_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), "copy_to_dev" );
 }
 
-void copy_to_host(buffer_t* buf) {
+void __copy_to_host(buffer_t* buf) {
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     CHECK_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), "copy_to_host" );
 }
 
-void dev_run(
+void __dev_run(
     int blocksX, int blocksY, int blocksZ,
     int threadsX, int threadsY, int threadsZ,
     int shared_mem_bytes,
@@ -175,7 +179,7 @@ void dev_run(
 {
     CHECK_CALL(
         cuLaunchKernel(
-            f,
+            __f,
             blocksX,  blocksY,  blocksZ,
             threadsX, threadsY, threadsZ,
             shared_mem_bytes,

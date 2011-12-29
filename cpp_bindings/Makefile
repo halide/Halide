@@ -2,16 +2,21 @@ CXX=g++-4.6 -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_s
 
 all: FImage.a
 
+# Set env USE_GPU=1 to build with the GPU target forced
+USE_GPU ?= 0
+GPU_CFLAGS = -DUSE_GPU=$(USE_GPU)
+
+CUDA_LIBS ?= -L/usr/local/cuda/lib -lcuda
 LLVM_DIR ?= ../llvm/Release+Asserts
 LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
-LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags)
+LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags) -I$(LLVM_DIR)/../include
 LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter bitreader x86 interpreter linker ptx)
 LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_bitreader -lllvm_analysis -lllvm_target
 
 OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
 OCAML_LIB_DIR=/usr/local/lib/ocaml
 LLVM_LDFLAGS=$(shell $(LLVM_CONFIG_EXE) --ldflags)
-LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -ldl -lstdc++
+LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) $(CUDA_LIBS) -ldl -lstdc++
  
 FIMAGE_OBJS=$(addprefix _build/,_MLFImage.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o Var.o Tuple.o Reduction.o)
 
@@ -22,7 +27,7 @@ FImage.a: $(FIMAGE_OBJS) ../src/_build/libllsupport_impl.a
 	ranlib FImage.a
 
 _build/%.o: %.cpp 
-	$(CXX) $(LLVM_CFLAGS_CXX) -I $(OCAML_LIB_DIR) -c $< -o $@
+	$(CXX) $(GPU_CFLAGS) $(LLVM_CFLAGS_CXX) -I $(OCAML_LIB_DIR) -c $< -o $@
 
 _build/_MLFImage.o: ../src/_build/fimage.cmxa 
 	mkdir -p _build
