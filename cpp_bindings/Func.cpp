@@ -580,10 +580,16 @@ namespace FImage {
     static buffer_t BufferOfImage(image_t& im) {
         buffer_t buf;
         buf.host = im.data();
-        memset(buf.dims, 0, sizeof(size_t)*4);
-        for (int i = 0; i < im.dimensions(); i++) {
-            buf.dims[i] = size_t(im.size(i));
+		static const int max_dim = 4;
+		int dim = 0;
+        while (dim < im.dimensions()) {
+            buf.dims[dim] = size_t(im.size(dim));
+			dim++;
         }
+		while (dim < max_dim) {
+			buf.dims[dim] = 1;
+			dim++;
+		}
         buf.elem_size = im.type().bits / 8;
         buf.dev = 0;
         buf.dev_dirty = false;
