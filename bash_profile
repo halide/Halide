@@ -1,5 +1,5 @@
 export LLVM_PATH=`pwd`/llvm
-export LLVM_PREFIX=${LLVM_PATH}/Debug+Asserts
+export LLVM_PREFIX=${LLVM_PATH}/Release+Asserts
 export PATH=${LLVM_PREFIX}/bin:${PATH}
 
 # open LLVM ocamldoc
