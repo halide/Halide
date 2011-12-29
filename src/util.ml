@@ -29,7 +29,7 @@ let option_either x y =
     | (Some a, _) -> Some a
     | (_, b) -> b
 
-(* A range operator *)
+(* A range operator - TODO: exclusive, while Batteries equivalent is inclusive *)
 let (--) i j = 
   let rec aux n acc =
     if n < i then acc else aux (n-1) (n :: acc)
