@@ -282,7 +282,8 @@ let match_types expr =
       | (UInt sb, UIntVector (vb, n)) when vb = sb -> (Broadcast (a, n), b)
       | (FloatVector (vb, n), Float sb) when vb = sb -> (a, Broadcast (b, n))
       | (Float sb, FloatVector (vb, n)) when vb = sb -> (Broadcast (a, n), b)
-          
+      | (Int ab, Float bb) -> (Cast (Float bb, a), b)
+      | (UInt ab, Float bb) -> (Cast (Float bb, a), b)
       | (ta, tb) -> 
           assert (vector_elements ta = vector_elements tb);
           (a, Cast(ta, b))

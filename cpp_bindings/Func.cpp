@@ -26,8 +26,8 @@ namespace FImage {
     ML_FUNC3(makeTransposeTransform);
     ML_FUNC4(makeChunkTransform);
     ML_FUNC3(makeRootTransform);
-    ML_FUNC4(makeSerialTransform);
-    ML_FUNC4(makeParallelTransform);
+    // ML_FUNC4(makeSerialTransform); 
+    ML_FUNC2(makeParallelTransform);
     
     ML_FUNC1(doConstantFold);
     
@@ -109,8 +109,6 @@ namespace FImage {
         // Should this function be compiled with tracing enabled
         bool tracing;
 
-        // The region over which the function is evaluated
-        std::vector<Uniform<int>> outputSize;
     };    
 
     Range operator*(const Range &a, const Range &b) {
@@ -162,8 +160,11 @@ namespace FImage {
         for (size_t i = 0; i < gather_args.size(); i++) {
             gather_args[i] = contents->args[i].isVar() ? contents->args[i] : Var();
         }
-        if (!contents->f.rhs().isDefined())             
-            contents->f.define(gather_args, Cast(e.type(), 0));
+        if (!contents->f.rhs().isDefined()) {
+            Expr init = Cast(e.type(), 0);
+            init.addImplicitArgs(e.implicitArgs());
+            contents->f.define(gather_args, init);
+        }
         contents->f.define(contents->args, contents->f(contents->args) + e);
     }
 
@@ -172,8 +173,11 @@ namespace FImage {
         for (size_t i = 0; i < gather_args.size(); i++) {
             gather_args[i] = contents->args[i].isVar() ? contents->args[i] : Var();
         }
-        if (!contents->f.rhs().isDefined()) 
-            contents->f.define(gather_args, Cast(e.type(), 1));
+        if (!contents->f.rhs().isDefined()) {
+            Expr init = Cast(e.type(), 1);
+            init.addImplicitArgs(e.implicitArgs());
+            contents->f.define(gather_args, init);
+        }
         contents->f.define(contents->args, contents->f(contents->args) * e);
     }
 
@@ -332,7 +336,7 @@ namespace FImage {
         unroll(vi);
     }
 
-
+    /*
     void Func::range(const Var &v, const Expr &min, const Expr &size, bool serial) {
         MLVal t;
         if (serial) {
@@ -348,6 +352,7 @@ namespace FImage {
         }
         contents->scheduleTransforms.push_back(t);
     }
+    */
 
     void Func::split(const Var &old, const Var &newout, const Var &newin, int factor) {
         MLVal t = makeSplitTransform((name()),
@@ -400,6 +405,11 @@ namespace FImage {
         contents->scheduleTransforms.push_back(t);
     }
 
+    void Func::parallel(const Var &caller_var) {
+        MLVal t = makeParallelTransform(name(), caller_var.name());
+        contents->scheduleTransforms.push_back(t);
+    }
+
     DynImage Func::realize(int a) {
         DynImage im(returnType(), a);
         realize(im);
@@ -434,10 +444,11 @@ namespace FImage {
         }
 
         // Make a region to evaluate this over
-        contents->outputSize.resize(args().size());
         MLVal sizes = makeList();        
         for (size_t i = args().size(); i > 0; i--) {                
-            sizes = addToList(sizes, Expr(contents->outputSize[i-1]).node());
+            char buf[256];
+            snprintf(buf, 256, ".result.dim.%d", ((int)i)-1);
+            sizes = addToList(sizes, Expr(Var(buf)).node());
         }
         
         MLVal sched = makeSchedule((name()),
@@ -485,12 +496,7 @@ namespace FImage {
             MLVal arg = makeScalarArg(u.name(), u.type().mlval);
             args = addToList(args, arg);
         }
-        for (size_t i = contents->outputSize.size(); i > 0; i--) {
-            const DynUniform &u = contents->outputSize[i-1];
-            MLVal arg = makeScalarArg(u.name(), u.type().mlval);
-            args = addToList(args, arg);
-        }
-        
+
         printf("compiling IR -> ll\n");
         MLVal tuple;
 		if (targetPTX)
@@ -503,8 +509,6 @@ namespace FImage {
         printf("Extracting the resulting module and function\n");
         MLVal first, second;
         MLVal::unpackPair(tuple, first, second);
-        //LLVMModuleRef module = *((LLVMModuleRef *)(first.asVoidPtr()));
-        //LLVMValueRef func = *((LLVMValueRef *)(second.asVoidPtr()));
         LLVMModuleRef module = (LLVMModuleRef)(first.asVoidPtr());
         LLVMValueRef func = (LLVMValueRef)(second.asVoidPtr());
         llvm::Function *f = llvm::unwrap<llvm::Function>(func);
@@ -581,14 +585,23 @@ namespace FImage {
         
     }
 
+    size_t im_size(const DynImage &im, int dim) {
+        return im.size(dim);
+    }
+    
+    size_t im_size(const UniformImage &im, int dim) {
+        return im.boundImage().size(dim);
+    }
+
+
     template <class image_t>
-    static buffer_t BufferOfImage(image_t& im) {
+    static buffer_t BufferOfImage(const image_t &im) {
         buffer_t buf;
         buf.host = im.data();
 		static const int max_dim = 4;
 		int dim = 0;
         while (dim < im.dimensions()) {
-            buf.dims[dim] = size_t(im.size(dim));
+            buf.dims[dim] = im_size(im, dim);
 			dim++;
         }
 		while (dim < max_dim) {
@@ -618,29 +631,22 @@ namespace FImage {
         if (!contents->functionPtr) compile(gpu);
 
         printf("Constructing argument list...\n");
-        static void *arguments[256];
-        static buffer_t buffers[256];
+        void *arguments[256];
+        buffer_t buffers[256];
         size_t j = 0;
         size_t k = 0;
-        for (size_t i = 0; i < contents->outputSize.size(); i++) {
-            // Set and use the uniform in one place. It's a little
-            // useless because nobody ever actually uses the value
-            // of the uniform, but better to be consistent in case it
-            // comes up later.
-            contents->outputSize[i] = im.size(i);
-            arguments[j++] = contents->outputSize[i].data();
-        }
+
         for (size_t i = 0; i < rhs().uniforms().size(); i++) {
             arguments[j++] = rhs().uniforms()[i].data();
         }
         for (size_t i = 0; i < rhs().images().size(); i++) {
             buffers[k++] = BufferOfImage(rhs().images()[i]);
             arguments[j++] = buffers + (k-1);
-        }       
+        }               
         for (size_t i = 0; i < rhs().uniformImages().size(); i++) {
             buffers[k++] = BufferOfImage(rhs().uniformImages()[i]);
             arguments[j++] = buffers + (k-1);
-        }
+        }        
         buffers[k] = BufferOfImage(im);
         arguments[j] = buffers + k;
 

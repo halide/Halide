@@ -4,6 +4,7 @@ open List
 open Util
 open Ir_printer
 open Cg_llvm_util
+open Analysis
 
 exception MissingEntrypoint
 exception UnimplementedInstruction
@@ -63,6 +64,8 @@ let cg_entry c m e =
   let sym_add name llv =
     set_value_name name llv;
     Hashtbl.add sym_table name llv
+  and sym_add_no_rename name llv =
+    Hashtbl.add sym_table name llv
   and sym_remove name =
     Hashtbl.remove sym_table name
   and sym_get name =
@@ -73,14 +76,14 @@ let cg_entry c m e =
   (* unpack the entrypoint *)
   let (entrypoint_name, arglist, s) = e in
   let type_of_arg = function
-    | Scalar (_, vt) -> type_of_val_type vt
-    | Buffer _ -> buffer_t 
+    | Scalar (_, vt) -> [type_of_val_type vt]
+    | Buffer _ -> [buffer_t; int_imm_t; int_imm_t; int_imm_t; int_imm_t]
   and name_of_arg = function
-    | Scalar (n, _) -> n
-    | Buffer n -> n 
+    | Scalar (n, _) -> [n]
+    | Buffer n -> [n; n ^ ".dim.0"; n ^ ".dim.1"; n ^ ".dim.2"; n ^ ".dim.3"] 
   in
 
-  let argtypes = List.map type_of_arg arglist in
+  let argtypes = List.flatten (List.map type_of_arg arglist) in
   
   (* define `void main(arg1, arg2, ...)` entrypoint*)
   let entrypoint_fn =
@@ -90,17 +93,16 @@ let cg_entry c m e =
       m
   in
 
+  let argnames = List.flatten (List.map name_of_arg arglist) in
+  let argvals = List.map (param entrypoint_fn) (0 -- (List.length argnames)) in
+
   (* Put args in the sym table *)
-  Array.iteri
-    (fun idx arg -> 
-      let name = name_of_arg arg in
-      let llval = param entrypoint_fn idx in
-      sym_add name llval;
+  List.iter
+    (fun (n, t, llval) ->
+      sym_add n llval;
       (* And mark each buffer arg as Noalias *)
-      match arg with 
-        | Buffer b -> add_param_attr llval Attribute.Noalias
-        | _ -> ()
-    ) (Array.of_list arglist);
+      if t = buffer_t then add_param_attr llval Attribute.Noalias else ()
+    ) (list_zip3 argnames argtypes argvals);
 
   (* start codegen at entry block of main *)
   let b = builder_at_end c (entry_block entrypoint_fn) in
@@ -381,9 +383,9 @@ let cg_entry c m e =
           (string_of_val_type f) (string_of_val_type t) (string_of_expr e);
         raise UnimplementedInstruction
 
-  and cg_for var_name min max body = 
+  and cg_for var_name min size body = 
       (* Emit the start code first, without 'variable' in scope. *)
-      let start_val = min (* const_int int_imm_t min *) in
+      let max = build_add min size "" b in
 
       (* Make the new basic block for the loop header, inserting after current
        * block. *)
@@ -399,7 +401,7 @@ let cg_entry c m e =
       position_at_end loop_bb b;
 
       (* Start the PHI node with an entry for start. *)
-      let variable = build_phi [(start_val, preheader_bb)] var_name b in
+      let variable = build_phi [(min, preheader_bb)] var_name b in
 
       (* Within the loop, the variable is defined equal to the PHI node. *)
       sym_add var_name variable;
@@ -434,12 +436,129 @@ let cg_entry c m e =
       (* Return an ignorable llvalue *)
       const_int int_imm_t 0
 
+  and cg_par_for var_name min size body =
+    (* Find all references in body to things outside of it *)
+    let rec find_names_in_stmt internal = function
+      | Store (e, buf, idx) ->
+          let inner = StringIntSet.union (find_names_in_expr internal e) (find_names_in_expr internal idx) in
+          if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, 8) inner)
+      | Pipeline (name, ty, size, produce, consume) ->
+          let internal = StringSet.add name internal in
+          string_int_set_concat [
+            find_names_in_expr internal size;
+            find_names_in_stmt internal produce;
+            find_names_in_stmt internal consume]
+      | LetStmt (name, value, stmt) ->
+          let internal = StringSet.add name internal in
+          StringIntSet.union (find_names_in_expr internal value) (find_names_in_stmt internal stmt)
+      | Block l ->
+          string_int_set_concat (List.map (find_names_in_stmt internal) l)
+      | For (var_name, min, size, order, body) ->
+          let internal = StringSet.add var_name internal in
+          string_int_set_concat [
+            find_names_in_expr internal min;
+            find_names_in_expr internal size;
+            find_names_in_stmt internal body]
+      | Print (fmt, args) ->
+          string_int_set_concat (List.map (find_names_in_expr internal) args)
+      | Provide (fn, _, _) ->
+          raise (Wtf "Encountered a provide during cg. These should have been lowered away.")
+    and find_names_in_expr internal = function
+      | Load (_, buf, idx) ->
+          let inner = find_names_in_expr internal idx in
+          if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, 8) inner)
+      | Var (t, n) ->
+          let size = (bit_width t)/8 in
+          if (StringSet.mem n internal) then StringIntSet.empty else (StringIntSet.add (n, size) StringIntSet.empty)
+      | Let (n, a, b) ->
+          let internal = StringSet.add n internal in
+          StringIntSet.union (find_names_in_expr internal a) (find_names_in_expr internal b)
+      | x -> fold_children_in_expr (find_names_in_expr internal) StringIntSet.union StringIntSet.empty x
+    in
+
+    (* Dump everything relevant in the symbol table into a closure *)
+    let syms = find_names_in_stmt (StringSet.add var_name StringSet.empty) body in
+    
+    (* Compute an offset in bytes into a closure for each symbol name, and put
+       that offset into a string map *)
+    let (total_bytes, offset_map) = 
+      StringIntSet.fold (fun (name, size) (offset, offset_map) ->
+        let current_val = sym_get name in
+        (* round size up to the nearest power of two for alignment *)
+        let rec roundup x y = if (x >= y) then x else roundup (x*2) y in
+        let size = roundup 1 size in
+        (* bump offset up to be a multiple of size for alignment *)
+        let offset = ((offset+size-1)/size)*size in
+        Printf.printf "Putting %s at offset %d\n" name offset;
+        (offset + size, StringMap.add name offset offset_map)
+      ) syms (0, StringMap.empty) 
+    in
+
+    (* Allocate a closure *)
+    let closure = Arch.malloc c m b cg_expr (IntImm total_bytes) in
+
+    (* Store everything in the closure *)
+    StringIntSet.iter (fun (name, size) ->      
+      let current_val = sym_get name in
+      let offset = StringMap.find name offset_map in
+      let addr = build_bitcast closure (pointer_type (type_of current_val)) "" b in      
+      let addr = build_gep addr [| const_int int_imm_t (offset/size) |] "" b in
+      ignore (build_store current_val addr b);
+    ) syms;
+
+    (* Make a function that represents the body *)
+    let body_fn_type = (function_type (void_type c) [|int_imm_t; buffer_t|]) in
+    let body_fn = define_function (var_name ^ ".body") body_fn_type m in
+
+    (* Save the old position of the builder *)
+    let current = insertion_block b in
+
+    (* Move the builder inside the function *)
+    position_at_end (entry_block body_fn) b;
+
+    (* Load everything from the closure *)
+    StringIntSet.iter (fun (name, size) ->      
+      let closure = param body_fn 1 in
+      let current_val = sym_get name in
+      let offset = StringMap.find name offset_map in
+      let addr = build_bitcast closure (pointer_type (type_of current_val)) "" b in      
+      let addr = build_gep addr [| const_int int_imm_t (offset/size) |] "" b in
+      sym_add name (build_load addr name b);
+    ) syms;
+
+    (* Make the var name refer to the first argument *)
+    Printf.printf "%s = %s\n%!" var_name "param body_fn 0";
+    sym_add var_name (param body_fn 0);    
+
+    (* Generate the function body *)
+    ignore (cg_stmt body);
+    ignore (build_ret_void b);
+
+    sym_remove var_name;
+
+    (* Pop all the symbols we used in the function body *)
+    StringIntSet.iter (fun (name, _) -> sym_remove name);
+
+    (* Move the builder back *)
+    position_at_end current b;
+
+    (* Call do_par_for *)
+    let do_par_for = declare_function "do_par_for"
+      (function_type (void_type c) [|pointer_type body_fn_type; int_imm_t; int_imm_t; buffer_t|]) m in
+    ignore(build_call do_par_for [|body_fn; min; size; closure|] "" b);
+
+    (* Free the closure *)
+    Arch.free c m b closure;
+    
+    (* Return an ignorable llvalue *)
+    const_int int_imm_t 0
+
   and cg_stmt stmt = Arch.cg_stmt c m b cg_stmt_inner stmt
   and cg_stmt_inner = function
     (* TODO: unaligned vector store *)
     | Store(e, buf, idx) -> cg_store e buf idx
-    | For(name, min, n, _, stmt) ->
-        cg_for name (cg_expr min) (cg_expr (min +~ n)) stmt
+    | For(name, min, n, order, stmt) ->
+        (if order then cg_for else cg_par_for) name (cg_expr min) (cg_expr n) stmt
     | Block (first::second::rest) ->
         ignore(cg_stmt first);
         cg_stmt (Block (second::rest))
@@ -799,17 +918,29 @@ let codegen_c_header e header_file =
   let string_of_type = function
     | Int bits -> "int" ^ (string_of_int bits) ^ "_t"
     | UInt bits -> "uint" ^ (string_of_int bits) ^ "_t"
-    | Float bits -> "float" ^ (string_of_int bits) ^ "_t"
+    | Float 32 -> "float"
+    | Float 64 -> "double"
     | _ -> raise (Wtf "Bad type for toplevel argument")
   in
   let string_of_arg = function
     | Scalar (n, t) -> (string_of_type t) ^ " " ^ (String.sub n 1 ((String.length n)-1))
-    | Buffer n -> "void *" ^ (String.sub n 1 ((String.length n)-1))
+    | Buffer n -> "buffer_t *" ^ (String.sub n 1 ((String.length n)-1))
   in
   let arg_string = String.concat ", " (List.map string_of_arg args) in
   let lines = 
     ["#ifndef " ^ object_name ^ "_h";
      "#define " ^ object_name ^ "_h";
+     "";
+     "#include <stdint.h>";
+     "";
+     "typedef struct buffer_t {";
+     "  uint8_t* host;";
+     "  uint64_t dev;";
+     "  bool host_dirty;";
+     "  bool dev_dirty;";
+     "  size_t dims[4];";
+     "  size_t elem_size;";
+     "} buffer_t;";
      "";
      "void " ^ object_name ^ "(" ^ arg_string ^ ");";
      "";

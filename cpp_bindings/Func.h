@@ -100,10 +100,11 @@ namespace FImage {
         void chunk(const Var &);
         void root(const Range &);
         void root();
+        void parallel(const Var &);
 
         /* Add an explicit Serial or Parallel to the schedule. Useful
          * for defining reduction domains */
-        void range(const Var &, const Expr &min, const Expr &size, bool serial = false); 
+        // void range(const Var &, const Expr &min, const Expr &size, bool serial = false); 
 
         // Convenience methods for common transforms
         void vectorize(const Var &, int factor);

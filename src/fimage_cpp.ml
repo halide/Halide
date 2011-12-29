@@ -157,7 +157,7 @@ let _ =
   
   Callback.register "makeSchedule" (fun (f: string) (sizes: expr list) (env: environment) ->
     let (_, args, _, _) = Environment.find f env in
-    let region = List.map2 (fun (t, v) x -> Printf.printf "making default schedule: %s\n" v; (v, IntImm 0, x)) args sizes in
+    let region = List.map2 (fun (t, v) x -> (v, IntImm 0, x)) args sizes in
     Printf.printf("About to make default schedule...\n%!");
     make_default_schedule f env region
   );
@@ -176,6 +176,6 @@ let _ =
   Callback.register "makeTransposeTransform" (fun func var1 var2 -> transpose_schedule func var1 var2);
   Callback.register "makeChunkTransform" (fun func var args region -> chunk_schedule func var args region);
   Callback.register "makeRootTransform" (fun func args region -> root_schedule func args region);
-  Callback.register "makeParallelTransform" (fun func var min size -> parallel_schedule func var min size);
-  Callback.register "makeSerialTransform" (fun func var min size -> serial_schedule func var min size);
+  Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);
+  (* Callback.register "makeSerialTransform" (fun func var min size -> serial_schedule func var min size); *)
   

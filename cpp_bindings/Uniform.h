@@ -12,6 +12,7 @@ namespace FImage {
     class DynUniform {
     public:
         DynUniform(Type t) : contents(new Contents(t, uniqueName('u'))) {}
+        DynUniform(Type t, const std::string &name) : contents(new Contents(t, name)) {}
 
         Type type() const {return contents->type;}
         const std::string &name() const {return contents->name;}
@@ -49,6 +50,10 @@ namespace FImage {
             u.set(v);
         }
 
+        Uniform(const std::string &name, const T &v = 0) : u(TypeOf<T>(), name) {
+            u.set(v);
+        }
+
         void operator=(T v) {
             u.set(v);
         }
@@ -61,7 +66,7 @@ namespace FImage {
         const std::string &name() const {return u.name();}
         void *data() const {return u.data();}
 
-        operator size_t() const { return (size_t)data(); }
+        //operator size_t() const { return (size_t)data(); }
 
     private:
         DynUniform u;
