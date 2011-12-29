@@ -150,6 +150,7 @@ CUdeviceptr __dev_malloc(size_t bytes) {
 	char msg[256];
 	snprintf(msg, 256, "dev_malloc (%zu bytes)", bytes );
     CHECK_CALL( cuMemAlloc(&p, bytes), msg );
+	fprintf( stderr, "   returned %p\n", (void*)p );
     return p;
 }
 
@@ -163,12 +164,16 @@ void __dev_malloc_if_missing(buffer_t* buf) {
 
 void __copy_to_dev(buffer_t* buf) {
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-    CHECK_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), "copy_to_dev" );
+	char msg[256];
+	snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p", size, buf->host, (void*)buf->dev );
+    CHECK_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
 }
 
 void __copy_to_host(buffer_t* buf) {
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-    CHECK_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), "copy_to_host" );
+	char msg[256];
+	snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
+    CHECK_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
 }
 
 void __dev_run(
