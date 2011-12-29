@@ -20,11 +20,7 @@ int blocks = 64;
 int N = threads*blocks;
 size_t size = N * sizeof(int);
 
-typedef enum {
-    False = 0,
-    True = 1
-} Bool;
-
+#if 0
 #ifndef __cuda_cuda_h__
 #if defined(__x86_64) || defined(AMD64) || defined(_M_AMD64)
 typedef unsigned long long CUdeviceptr;
@@ -32,22 +28,17 @@ typedef unsigned long long CUdeviceptr;
 typedef unsigned int CUdeviceptr;
 #endif
 #endif
+#endif
 
-typedef struct {
-    char* host;
-    CUdeviceptr dev; // TODO make this opaque
-    Bool host_dirty;
-    Bool dev_dirty;
-    size_t dims[4];
-    size_t elem_size;
-} buffer_t;
+#include "buffer.h"
+
 extern "C" void f(buffer_t *input, buffer_t *result, int N);
 
 void printSample(int* arr, char* name)
 {
     float* arrf = (float*)arr;
     for(size_t i = 0; i < N; i += 128) {
-        printf("%s(%lld): 0x%x (%d) (%f)\n", name, i, arr[i], arr[i], arrf[i]);
+        printf("%s(%zu): 0x%x (%d) (%f)\n", name, i, arr[i], arr[i], arrf[i]);
     }
 }
 
@@ -67,12 +58,12 @@ int main(int argc, char const *argv[])
     
 #if 1
     buffer_t in, out;
-    in.host = (char*)hIn;
+    in.host = (uint8_t*)hIn;
     in.dev = 0;
     in.dims[0] = N;
     in.dims[1] = in.dims[2] = in.dims[3] = 1;
     in.elem_size = sizeof(int);
-    out.host = (char*)hOut;
+    out.host = (uint8_t*)hOut;
     out.dev = 0;
     out.dims[0] = N;
     out.dims[1] = out.dims[2] = out.dims[3] = 1;

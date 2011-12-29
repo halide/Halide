@@ -89,9 +89,6 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   ignore (build_call init [| ptx_src_str; entry_name_str |] "" b);
 
   (* args array for kernel launch *)
-  let arg_t = pointer_type (i8_type c) in (* void* *)
-  let cuArgs = build_alloca (array_type arg_t (List.length arglist)) "cuArgs" b in
-
   let paramlist = Array.to_list (params f) in
   let args = List.combine arglist paramlist in
 
@@ -110,39 +107,59 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
    *    ; store to cuArgs:
    *    build_store (build_bitcast %arg.stack arg_t "" b) (build_gep cuArgs [|(i64 0) (i64 arg_idx)|])
    *)
+   
+  let toi32 x = build_intcast x (i32_type c) "" b in
+  let ci x = const_int (i32_type c) x in
+
+  let cuArgs =
+    List.map
+      begin function
+        | Buffer name, param ->
+            set_value_name name param;
+            (* malloc if missing *)
+            ignore (build_call dev_malloc_if_missing [| param |] "" b);
+            (* copy to device for all but .result *)
+            if name <> ".result" then ignore (build_call copy_to_dev [| param |] "" b);
+            Printf.printf "preprocessed buffer arg %s\n%!" name;
+            (* return GEP: &(p->dev) *)
+            let devptr = build_struct_gep param 1 (name ^ ".devptr") b in
+            let dims = List.map
+              begin fun i ->
+                let stackArg = build_alloca (i32_type c) (name ^ ".dim." ^ (string_of_int i)) b in
+                let dimVal = toi32 (build_load (build_gep param [|ci 0; ci 4; ci i|] "" b) "" b) in
+                ignore (build_store dimVal stackArg b);
+                stackArg
+              end
+              (0--4)
+            in devptr::dims
+        | Scalar (name, _), param ->
+            set_value_name name param;
+            (* store arg to local stack for passing by reference to cuArgs *)
+            let stackArg = build_alloca (type_of param) (name ^ ".stack") b in
+            ignore (build_store param stackArg b);
+            Printf.printf "preprocessed scalar arg %s\n%!" name;
+            [stackArg]
+      end
+      args
+  in
+  let cuArgs = List.flatten cuArgs in
+  
+  let arg_t = pointer_type (i8_type c) in (* void* *)
+  let cuArgsArr = build_alloca (array_type arg_t (List.length cuArgs)) "cuArgs" b in
+
   Array.iteri
-    begin fun i (a, p) ->
-      let cuArgval =
-        match a with
-          | Buffer nm ->
-              set_value_name nm p;
-              (* malloc if missing *)
-              ignore (build_call dev_malloc_if_missing [| p |] "" b);
-              (* copy to device for all but .result *)
-              if nm <> ".result" then ignore (build_call copy_to_dev [| p |] "" b);
-              (* return GEP: &(p->dev) *)
-              build_struct_gep p 1 (nm ^ ".devptr") b
-          | Scalar (nm, _) ->
-              set_value_name nm p;
-              (* store arg to local stack for passing by reference to cuArgs *)
-              let stackArg = build_alloca (type_of p) (nm ^ ".stack") b in
-              ignore (build_store p stackArg b);
-              stackArg
-      in
-      Printf.printf "preprocessed arg %s\n%!" (match a with Buffer nm -> nm | Scalar (nm, _) -> nm);
-      ignore(
-        build_store
-          (build_bitcast cuArgval arg_t "" b)
-          (build_gep cuArgs [| (const_int i32_t 0); (const_int i32_t i) |] "cuArg" b)
-          b
-      )
+    begin fun i cuArgval ->
+      ignore (build_store
+        (build_bitcast cuArgval arg_t "" b)
+        (build_gep cuArgsArr [| (ci 0); (ci i) |] "cuArg" b)
+        b)
     end
-    (Array.of_list args);
+    (Array.of_list cuArgs);
 
   (*    
    * call dev_run(threadsX, threadsY, threadsZ, blocksX, blocksY, blocksZ, localmembytes, cuArgsPtr)
    *)
-  let cuArgsPtr = build_gep cuArgs [| (const_int i32_t 0); (const_int i32_t 0) |] "cuArgsPtr" b in
+  let cuArgsPtr = build_gep cuArgsArr [| (const_int i32_t 0); (const_int i32_t 0) |] "cuArgsPtr" b in
   let threadsX = const_int i32_t 256 in
   let threadsY = const_int i32_t  1 in
   let threadsZ = const_int i32_t  1 in
@@ -166,6 +183,8 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
          (function (Buffer nm, _) when nm = ".result" -> true | _ -> false)
          args)
   in
+  assert ((value_name result_buffer) = ".result");
+  Printf.printf "Result name: %s\n%!" (value_name result_buffer);
   ignore (build_call copy_to_host [| result_buffer |] "" b);
 
   ignore (build_ret_void b);
