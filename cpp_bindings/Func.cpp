@@ -44,6 +44,7 @@ namespace FImage {
     ML_FUNC1(makeBufferArg); // name
     ML_FUNC2(makeScalarArg); // name, type
     ML_FUNC3(doCompile); // name, args, stmt
+    ML_FUNC3(doCompileGPU); // name, args, stmt
     ML_FUNC3(doCompileToFile); // name, args, stmt
     ML_FUNC2(makePair);
     ML_FUNC3(makeTriple);
@@ -424,7 +425,7 @@ namespace FImage {
         return im;
     }
 
-    void Func::compile() {
+    void Func::compile(bool targetPTX) {
         static llvm::ExecutionEngine *ee = NULL;
         static llvm::FunctionPassManager *passMgr = NULL;
 
@@ -491,9 +492,13 @@ namespace FImage {
         }
         
         printf("compiling IR -> ll\n");
-        MLVal tuple = doCompile(name(), args, stmt);
+        MLVal tuple;
+		if (targetPTX)
+			tuple = doCompileGPU(name(), args, stmt);
+		else
+			tuple = doCompile(name(), args, stmt);
         
-        doCompileToFile(name(), args, stmt);
+        // doCompileToFile(name(), args, stmt);
 
         printf("Extracting the resulting module and function\n");
         MLVal first, second;
@@ -600,8 +605,17 @@ namespace FImage {
     }
 
     void Func::realize(const DynImage &im) {
+		#ifdef USE_GPU
+		#if(USE_GPU)
+		static const bool gpu = true;
+		#else
+		static const bool gpu = false;
+		#endif
+		#else
+		static const bool gpu = false;
+		#endif
 
-        if (!contents->functionPtr) compile();
+        if (!contents->functionPtr) compile(gpu);
 
         printf("Constructing argument list...\n");
         static void *arguments[256];

@@ -56,11 +56,11 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
 
   let get_function = get_function m in
 
-  let init = get_function "init" in
-  let dev_malloc_if_missing = get_function "dev_malloc_if_missing" in
-  let copy_to_host = get_function "copy_to_host" in
-  let copy_to_dev = get_function "copy_to_dev" in
-  let dev_run = get_function "dev_run" in
+  let init = get_function "__init" in
+  let dev_malloc_if_missing = get_function "__dev_malloc_if_missing" in
+  let copy_to_host = get_function "__copy_to_host" in
+  let copy_to_dev = get_function "__copy_to_dev" in
+  let dev_run = get_function "__dev_run" in
   let buffer_struct_type = buffer_t m in
 
   let type_of_arg = function
@@ -69,7 +69,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   in
 
   (* build function *)
-  let name = entrypoint_name ^ "_wrapper" in
+  let name = entrypoint_name in
   let f = define_function
             name
             (function_type
@@ -77,11 +77,13 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
                (Array.of_list (List.map type_of_arg arglist)))
             m in
 
+  assert (name = (value_name f));
+
   let b = builder_at_end c (entry_block f) in
 
   (* build a const data item of the compiled ptx source *)
-  let ptx_src_str = build_global_stringptr ptx_src "ptx_src" b in
-  let entry_name_str = build_global_stringptr entrypoint_name "entry_name" b in
+  let ptx_src_str = build_global_stringptr ptx_src "__ptx_src" b in
+  let entry_name_str = build_global_stringptr entrypoint_name "__entry_name" b in
 
   (* init CUDA *)
   ignore (build_call init [| ptx_src_str; entry_name_str |] "" b);

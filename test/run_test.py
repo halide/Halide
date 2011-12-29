@@ -64,13 +64,21 @@ def test_cpp(name):
     remove(logfile)
 
     status(name, "Compiling %s" % srcfile)
-    run([cxx_exe,
+    compile_cmd_base = [cxx_exe,
          "-std=c++0x",
          "-I../../../cpp_bindings/",
          "../../../cpp_bindings/FImage.a",
-         "-Wl,-dead_strip",
-         srcfile])
-         
+         "-Wl,-dead_strip"]
+    try:
+        compile_cmd = compile_cmd_base + \
+            ["-L/usr/local/cuda/lib", "-lcuda", srcfile]
+        status(name, " ".join(compile_cmd))
+        run(compile_cmd)
+    except CalledProcessError:
+        compile_cmd = compile_cmd_base + [srcfile]
+        status(name, "retry without CUDA: "+ " ".join(compile_cmd))
+        run(compile_cmd)
+
     # Run the test
     try:
         status(name, "Running test")
