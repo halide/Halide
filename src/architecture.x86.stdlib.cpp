@@ -73,9 +73,9 @@ struct worker_arg {
 void *worker(void *void_arg) {
     worker_arg *arg = (worker_arg *)void_arg;
     while (1) {
-        fprintf(stderr, "About to lock mutex\n");
+        //fprintf(stderr, "About to lock mutex\n");
         pthread_mutex_lock(&work_queue.mutex);
-        fprintf(stderr, "Mutex locked, checking for work\n");
+        //fprintf(stderr, "Mutex locked, checking for work\n");
 
         // we're master, and there's no more work
         if (arg && arg->job->id != arg->id) {
@@ -83,7 +83,7 @@ void *worker(void *void_arg) {
             if (arg->job->active_workers) {
                 pthread_mutex_unlock(&work_queue.mutex);
                 while (true) {
-                    fprintf(stderr, "Master waiting for workers to finish\n");
+                    //fprintf(stderr, "Master waiting for workers to finish\n");
                     pthread_mutex_lock(&work_queue.mutex);
                     if (!arg->job->active_workers)
                         break;
@@ -92,23 +92,23 @@ void *worker(void *void_arg) {
             }
             // job is actually done
             pthread_mutex_unlock(&work_queue.mutex);
-            fprintf(stderr, "My work here is done. I am needed ... elsewhere!\n");
+            //fprintf(stderr, "My work here is done. I am needed ... elsewhere!\n");
             return NULL;
         }
             
         if (work_queue.head == work_queue.tail) {
             assert(!arg); // the master should never get here
-            fprintf(stderr, "No work left. Going to sleep.\n");
+            //fprintf(stderr, "No work left. Going to sleep.\n");
 
             pthread_cond_wait(&work_queue.not_empty, &work_queue.mutex);
             pthread_mutex_unlock(&work_queue.mutex);
             continue;
         }
 
-        fprintf(stderr, "There is work\n");
+        //fprintf(stderr, "There is work\n");
         work *job = work_queue.jobs + work_queue.head;
         if (job->next == job->max) {
-            fprintf(stderr, "Found a finished job. Removing it\n");
+            //fprintf(stderr, "Found a finished job. Removing it\n");
             work_queue.head = (work_queue.head + 1) % MAX_JOBS;            
             job->id = 0; // mark the job done
             pthread_mutex_unlock(&work_queue.mutex);
@@ -118,9 +118,9 @@ void *worker(void *void_arg) {
             job->next++;
             job->active_workers++;
             pthread_mutex_unlock(&work_queue.mutex);
-            fprintf(stderr, "Doing job %d\n", myjob.next);
+            //fprintf(stderr, "Doing job %d\n", myjob.next);
             myjob.f(myjob.next, myjob.closure);
-            fprintf(stderr, "Done with job %d\n", myjob.next);
+            //fprintf(stderr, "Done with job %d\n", myjob.next);
             pthread_mutex_lock(&work_queue.mutex);
             job->active_workers--;
             pthread_mutex_unlock(&work_queue.mutex);
@@ -144,7 +144,7 @@ void do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure) 
 
     // Enqueue the job
     pthread_mutex_lock(&work_queue.mutex);
-    fprintf(stderr, "Enqueuing some work\n");
+    //fprintf(stderr, "Enqueuing some work\n");
     work job = {f, min, min + size, closure, work_queue.ids++, 0};
     if (job.id == 0) job.id = work_queue.ids++; // disallow zero, as it flags a completed job
     work_queue.jobs[work_queue.tail] = job;
