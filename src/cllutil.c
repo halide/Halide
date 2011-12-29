@@ -66,18 +66,44 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
     std::string errStr;
     TheTarget = TargetRegistry::lookupTarget(TheTriple.getTriple(), errStr);
     assert(TheTarget);
-    
+
+    TargetOptions Options;
+    Options.LessPreciseFPMADOption = true;
+    Options.PrintMachineCode = false;
+    Options.NoFramePointerElim = false;
+    Options.NoFramePointerElimNonLeaf = false;
+    Options.NoExcessFPPrecision = false;
+    Options.UnsafeFPMath = true;
+    Options.NoInfsFPMath = false;
+    Options.NoNaNsFPMath = false;
+    Options.HonorSignDependentRoundingFPMathOption = false;
+    Options.UseSoftFloat = false;
+    /* if (FloatABIForCalls != FloatABI::Default) */
+        /* Options.FloatABIType = FloatABIForCalls; */
+    Options.NoZerosInBSS = false;
+    Options.JITExceptionHandling = false;
+    Options.JITEmitDebugInfo = false;
+    Options.JITEmitDebugInfoToDisk = false;
+    Options.GuaranteedTailCallOpt = false;
+    Options.StackAlignmentOverride = 0;
+    Options.RealignStack = true;
+    Options.DisableJumpTables = false;
+    Options.TrapFuncName = "";
+    Options.EnableSegmentedStacks = false;
+
+    CodeGenOpt::Level OLvl = CodeGenOpt::Default;
+
     const std::string FeaturesStr = "";
     std::auto_ptr<TargetMachine>
         target(TheTarget->createTargetMachine(TheTriple.getTriple(),
-                                              MCPU, FeaturesStr,
-                                              llvm::Reloc::Default, llvm::CodeModel::Default));
+                                              MCPU, FeaturesStr, Options,
+                                              llvm::Reloc::Default,
+                                              llvm::CodeModel::Default,
+                                              OLvl));
     assert(target.get() && "Could not allocate target machine!");
     TargetMachine &Target = *target.get();
 
     // Set up passes
-    CodeGenOpt::Level OLvl = CodeGenOpt::Default;
-
     PassManager PM;
     // Add the target data from the target machine
     PM.add(new TargetData(*Target.getTargetData()));
@@ -91,10 +117,9 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
     formatted_raw_ostream ostream(outs);
 
     // Ask the target to add backend passes as necessary.
-    bool fail = Target.addPassesToEmitFile(PM,
-                                           ostream,
+    bool fail = Target.addPassesToEmitFile(PM, ostream,
                                            TargetMachine::CGFT_AssemblyFile,
-                                           OLvl, true);
+                                           true);
     assert(!fail);
 
     PM.run(mod);
