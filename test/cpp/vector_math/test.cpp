@@ -156,6 +156,22 @@ bool test(int vec_width) {
         }
     }
     
+    // Min/max
+    Func f7;
+    f7(x, y) = Clamp(input(x, y), Cast<A>(10), Cast<A>(20));
+    f7.vectorize(x, vec_width);
+    Image<A> im7 = f7.realize(W, H);
+    
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            if (im7(x, y) < (A)10 || im7(x, y) > (A)20) {
+                printf("im7(%d, %d) = %f instead of %f\n", x, y, (double)(im7(x, y)));
+                return false;
+            }
+        }
+    }
+    
+
     return true;
 }
 
