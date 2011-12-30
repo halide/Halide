@@ -134,8 +134,16 @@ let _ =
   
   Callback.register "addScatterToDefinition" (fun env name update_name update_args update_var reduction_domain ->
     let (_, args, return_type, Pure init_expr) = Environment.find name env in
-    let update_arg_names = List.map (fun (n, _, _) -> (Int 32, n)) reduction_domain in
-    let update_func = (update_name, update_arg_names, return_type, Pure update_var) in
+    (* The pure args are the naked vars in the update_args list that aren't in the reduction domain *)
+    let rec get_pure_args = function
+      | [] -> []          
+      | (Var (t, n))::rest ->
+          if (List.exists (fun (x, _, _) -> x = n) reduction_domain) then get_pure_args rest
+          else (t, n)::(get_pure_args rest)
+      | first::rest -> get_pure_args rest
+    in
+    let update_pure_args = get_pure_args update_args in
+    let update_func = (update_name, update_pure_args, return_type, Pure update_var) in
     let env = Environment.add update_name update_func env in
     let reduce_body =  Reduce (init_expr, update_args, update_name, reduction_domain) in
     let reduce_func =  (name, args, return_type, reduce_body) in
@@ -159,7 +167,8 @@ let _ =
     let (_, args, _, _) = Environment.find f env in
     let region = List.map2 (fun (t, v) x -> (v, IntImm 0, x)) args sizes in
     Printf.printf("About to make default schedule...\n%!");
-    make_default_schedule f env region
+    (* make_default_schedule f env region *)
+    generate_schedule f env novice
   );
   
   Callback.register "doLower" lower;  
