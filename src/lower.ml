@@ -58,11 +58,13 @@ let make_function_body (name:string) (env:environment) (debug:bool) =
         Pure (pre expr)
     | Reduce (init_expr, modified_args, update_func, reduction_domain) -> 
         Printf.printf "update_func and prefix: %s %s\n%!" update_func prefix;
-
+        let prefix_update = prefix_name_expr (prefix ^ update_func ^ ".") in
         Reduce (pre init_expr,
                 List.map (prefix_name_expr (prefix ^ update_func ^ ".")) modified_args, 
                 prefix ^ update_func,
-                List.map (fun (n, x, y) -> (prefix ^ n, pre x, pre y)) reduction_domain)
+                List.map (fun (n, x, y) -> 
+                  (prefix ^ update_func ^ "." ^ n,
+                   prefix_update x, prefix_update y)) reduction_domain)
 
   in
   (renamed_args, return_type, renamed_body)
@@ -196,12 +198,12 @@ and realize func consume env schedule debug =
         let inner_stmt = Provide (body, func, arg_vars) in
         let produce = List.fold_left wrap inner_stmt sched_list in
         Pipeline (func, return_type, buffer_size, produce, consume)
-    | Reduce (init_expr, update_args, update_func, iteration_domain) ->
+    | Reduce (init_expr, update_args, update_func, reduction_domain) ->
 
         let init_stmt = Provide (init_expr, func, arg_vars) in
         let initialize = List.fold_left wrap init_stmt sched_list in
                
-        let (_, _, update_body) = make_function_body update_func env debug in
+        let (pure_update_args, _, update_body) = make_function_body update_func env debug in
         let update_expr = match update_body with
           | Pure expr -> expr
           | _ -> raise (Wtf "The update step of a reduction must be pure")
@@ -214,6 +216,24 @@ and realize func consume env schedule debug =
 
         let (_, update_sched_list) = find_schedule schedule update_func in
         let update = List.fold_left wrap update_stmt update_sched_list in
+
+        let pure_domain = List.map 
+          (fun (t, n) -> 
+            let parent_n = (parent_name update_func) ^ "." ^ (base_name n) in
+            (n, Var (t, parent_n ^ ".min"), Var (t, parent_n ^ ".extent")))
+          pure_update_args 
+        in
+
+        (* Wrap it in some let statements that set the bounds of the reduction *)
+        let update = List.fold_left
+          (fun stmt (var, min, size) ->
+            let stmt = LetStmt (var ^ ".min", min, stmt) in
+            let stmt = LetStmt (var ^ ".extent", size, stmt) in
+            stmt
+          )
+          update
+          (reduction_domain @ pure_domain)
+        in
 
         let produce = Block [initialize; update] in
 
@@ -429,7 +449,7 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
   List.fold_left update stmt functions 
 
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) (debug:bool) =
-  let starts_with a b =    
+  let starts_with a b =
     String.length a > String.length b &&
       String.sub a 0 ((String.length b)+1) = b ^ "."
   in
@@ -447,7 +467,25 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
       else None
   in
 
-  let functions = partial_sort lt (list_of_schedule schedule) in
+  (* Get all the functions to lower *)
+  let functions = list_of_schedule schedule in
+
+  (* Filter out the reduction update steps *)
+  let functions = List.filter 
+    (fun func ->
+      if String.contains func '.' then
+        match find_function (parent_name func) env with
+          | (_, _, Reduce _) -> false
+          | _ -> true
+      else
+        true
+    )
+    functions 
+  in
+    
+
+  (* Compute the order in which to realize them *)
+  let functions = partial_sort lt functions in
   (* Printf.printf "Realization order: %s\n" (String.concat "\n" functions); *)
 
   Printf.printf "Fully qualifying symbols in the schedule\n%!";
@@ -485,6 +523,23 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   in
   let stmt = rewrite_references_to_result stmt in
 
+  let args,_,_ = find_function func env in
+  let (stmt,_) =
+    List.fold_left
+      (fun (stmt,i) (t,nm) ->
+        let stmt =
+          LetStmt (
+            ("." ^ func ^ "." ^ nm ^ ".min"),
+            IntImm 0,
+            stmt)
+        in
+        (LetStmt (
+          ("." ^ func ^ "." ^ nm ^ ".extent"),
+          Var (t, ".result.dim." ^ (string_of_int i)),
+          stmt), i+1))
+      (stmt,0)
+      args
+  in
   stmt
 
 
