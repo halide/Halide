@@ -40,7 +40,7 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
             | (Sub, Ramp (ba, sa, _), Ramp (bb, sb, _)) -> Ramp (ba -~ bb, sa -~ sb, width)
             | (Mul, Ramp (b, s, _), x) -> Ramp (b *~ x, s *~ x, width)
             | (Mul, x, Ramp (b, s, _)) -> Ramp (x *~ b, x *~ s, width)
-            | (Div, Ramp (b, s, _), x) -> Ramp (b /~ x, s /~ x, width)
+            (* | (Div, Ramp (b, s, _), x) -> Ramp (b /~ x, s /~ x, width) *)
             | (Add, Ramp (b, s, _), x) -> Ramp (b +~ x, s, width)
             | (Add, x, Ramp (b, s, _)) -> Ramp (x +~ b, s, width)
             | (Sub, Ramp (b, s, _), x) -> Ramp (b -~ x, s, width)
