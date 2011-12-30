@@ -224,7 +224,10 @@ int main(int argc, char **argv) {
     
     for (size_t i = 0; i < funcs.size(); i++) {
         funcs[i].root();
-        funcs[i].vectorize(funcs[i].args()[0].vars()[0], 4);
+        if (funcs[i].name() == "curve") continue;
+        if (funcs[i].returnType() == UInt(8)) funcs[i].vectorize(x, 16);
+        if (funcs[i].returnType() == Int(16)) funcs[i].vectorize(x, 8);
+        if (funcs[i].returnType() == Float(32)) funcs[i].vectorize(x, 4);
     }
 
     /*
