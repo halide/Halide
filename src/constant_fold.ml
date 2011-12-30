@@ -115,7 +115,7 @@ let rec constant_fold_expr expr =
         | (Sub, Ramp (b, s, n), Broadcast (e, _)) -> Ramp (recurse (b -~ e), s, n)
         | (Mul, Broadcast (e, _), Ramp (b, s, n)) 
         | (Mul, Ramp (b, s, n), Broadcast (e, _)) -> Ramp (recurse (b *~ e), recurse (s *~ e), n)
-        | (Div, Ramp (b, s, n), Broadcast (e, _)) -> Ramp (recurse (b /~ e), recurse (s /~ e), n)
+        (* | (Div, Ramp (b, s, n), Broadcast (e, _)) -> Ramp (recurse (b /~ e), recurse (s /~ e), n) *)
 
         (* op (Broadcast, Broadcast) should be folded into the broadcast *)
         | (Add, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a +~ b), n)

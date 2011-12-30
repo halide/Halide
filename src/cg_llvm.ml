@@ -255,8 +255,18 @@ let cg_entry c m e =
           build_srem made_positive r "" b
 
   and cg_minmax op l r =
-    let cmp = match op with Min -> LT | Max -> GT | _ -> raise (Wtf "cg_minmax with non-min/max op") in
-    cg_expr (Select (Cmp (cmp, l, r), l, r))
+    let cmp = match (op, element_val_type (val_type_of_expr l)) with 
+      | (Min, Float _) -> build_fcmp Fcmp.Olt
+      | (Max, Float _) -> build_fcmp Fcmp.Ogt
+      | (Min, Int _) -> build_icmp Icmp.Slt
+      | (Max, Int _) -> build_icmp Icmp.Sgt
+      | (Min, UInt _) -> build_icmp Icmp.Ult
+      | (Max, UInt _) -> build_icmp Icmp.Ugt
+      | (_, _) -> raise (Wtf "cg_minmax with non-min/max op")
+    in
+    let l = cg_expr l in
+    let r = cg_expr r in
+    build_select (cmp l r "" b) l r "" b
       
   and cg_cmp iop uop fop l r =
     cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
