@@ -373,6 +373,15 @@ let rec required_of_stmt func env = function
   | For (var, min, size, order, body) ->
       let env = StringMap.add var (make_range (min, min +~ size -~ (IntImm 1))) env in
       required_of_stmt func env body
+  | LetStmt (name, expr, stmt) ->
+      (* Brute force. Might get really slow for long chains of letstmts *)
+      let subs = subs_stmt (Var (val_type_of_expr expr, name)) expr in
+      required_of_stmt func env (subs stmt)
+      (* TODO: Why doesn't the below work? Does this mean let above is broken too?
+      let required_of_expr = required_of_expr func env expr in
+      let bounds_of_expr = bounds_of_expr_in_env env expr in
+      let required_of_stmt = required_of_stmt func (StringMap.add name bounds_of_expr env) stmt in
+      region_union required_of_a required_of_b *)
   | stmt -> fold_children_in_stmt (required_of_expr func env) (required_of_stmt func env) region_union stmt
   
 
