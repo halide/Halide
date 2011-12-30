@@ -150,22 +150,18 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
     let vars_in_scope = match call_sched with
       | Root -> []
       | Coiterate (var,_,_)
-      | Chunk var ->
-          (list_take_while
-             (fun x -> x <> var)
-             vars_in_scope)
-          @ [var]
-      | Reuse _ -> vars_in_scope (* doesn't matter - never used because it has no children *)
+      | Chunk var -> list_drop_while (fun x -> x <> var) vars_in_scope
+      | Reuse _ (* doesn't matter - never used because it has no children *)
       | Inline -> vars_in_scope
     in
     
     (* add new vars *)
-    let vars_in_scope = vars_in_scope @ (
+    let vars_in_scope = (
       let rec find_vars = function
         | (Serial (v,_,_))::rest
         | (Parallel (v,_,_))::rest -> (func ^ "." ^ v) :: find_vars rest
         | _::rest -> find_vars rest
-        | [] -> []
+        | [] -> vars_in_scope
       in
       find_vars sched_list
     ) in
