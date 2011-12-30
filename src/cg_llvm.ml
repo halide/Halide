@@ -414,10 +414,10 @@ let cg_entry c m e =
       ignore (cg_stmt body);
 
       (* Emit the updated counter value. *)
-      let next_var = build_add variable (const_int int_imm_t 1) (var_name ^ "_nextvar") b in
+      let next_var = build_add variable (const_int int_imm_t 1) (var_name ^ "_nextvar") b in 
 
       (* Compute the end condition. *)
-      let end_cond = build_icmp Icmp.Slt next_var max "" b in
+      let end_cond = build_icmp Icmp.Ne next_var max "" b in
 
       (* Create the "after loop" block and insert it. *)
       let loop_end_bb = insertion_block b in
