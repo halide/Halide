@@ -27,6 +27,14 @@ int main(int argc, char **argv) {
     RVar i, j; 
     blur(x, y) = Sum(tent(i, j) * input(x + i - 1, y + j - 1));
 
+    /*
+    for (size_t i = 0; i < blur.rhs().funcs().size(); i++) {
+        Func f = blur.rhs().funcs()[i];
+        if (f.name() != "input")
+            f.chunk(x);
+    }
+    */
+
     Image<uint16_t> out = blur.realize(W, H);
 
     for (int y = 1; y < H-1; y++) {
