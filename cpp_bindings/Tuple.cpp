@@ -19,42 +19,43 @@ namespace FImage {
         Expr body;
         int idx = 0;
                 
+
+        std::vector<std::string> callArgNames, defArgNames;
+
         // Grab the vars and reduction vars in the tuple args as arguments to the anonymous function
         for (const Expr &expr : contents) {
             Expr e = expr;
-            std::vector<std::string> done;
             for (size_t i = 0; i < e.vars().size(); i++) {
                 bool already_exists = false;
-                for (size_t j = 0; j < done.size(); j++) {
-                    if (e.vars()[i].name() == done[j]) already_exists = true;
+                for (size_t j = 0; j < callArgNames.size(); j++) {
+                    if (e.vars()[i].name() == callArgNames[j]) already_exists = true;
                 }
                 if (!already_exists) {
                     callArgs.push_back(e.vars()[i]);
-                    done.push_back(e.vars()[i].name());
+                    callArgNames.push_back(e.vars()[i].name());
                 }
             }
             for (size_t i = 0; i < e.rvars().size(); i++) {
                 bool already_exists = false;
-                for (size_t j = 0; j < done.size(); j++) {
-                    if (e.rvars()[i].name() == done[j]) already_exists = true;
+                for (size_t j = 0; j < callArgNames.size(); j++) {
+                    if (e.rvars()[i].name() == callArgNames[j]) already_exists = true;
                 }
                 if (!already_exists) {
                     callArgs.push_back(e.rvars()[i]);
-                    done.push_back(e.rvars()[i].name());
+                    callArgNames.push_back(e.rvars()[i].name());
                 }
             }
             
             e.convertRVarsToVars();
-            done.clear();
             
             for (size_t i = 0; i < e.vars().size(); i++) {
                 bool already_exists = false;
-                for (size_t j = 0; j < done.size(); j++) {
-                    if (e.vars()[i].name() == done[j]) already_exists = true;
+                for (size_t j = 0; j < defArgNames.size(); j++) {
+                    if (e.vars()[i].name() == defArgNames[j]) already_exists = true;
                 }
                 if (!already_exists) {
                     definitionArgs.push_back(e.vars()[i]);
-                    done.push_back(e.vars()[i].name());
+                    defArgNames.push_back(e.vars()[i].name());
                 }
             }
 
