@@ -1,4 +1,5 @@
 #include <FImage.h>
+#include <math.h>
 #include <sys/time.h>
 
 using namespace FImage;
@@ -166,6 +167,22 @@ bool test(int vec_width) {
         for (int x = 0; x < W; x++) {
             if (im7(x, y) < (A)10 || im7(x, y) > (A)20) {
                 printf("im7(%d, %d) = %f instead of %f\n", x, y, (double)(im7(x, y)));
+                return false;
+            }
+        }
+    }
+
+    // Extern function call
+    Func f8;
+    f8(x, y) = pow(2.0f, Cast<float>(input(x, y)));
+    f8.vectorize(x, vec_width);
+    Image<float> im8 = f8.realize(W, H);
+    
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            float correct = powf(2.0f, (float)input(x, y));
+            if (im8(x, y) != correct) {
+                printf("im8(%d, %d) = %f instead of %f\n", x, y, im8(x, y));
                 return false;
             }
         }
