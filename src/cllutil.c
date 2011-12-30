@@ -40,6 +40,7 @@ extern "C" {
 
 // TODO: factor this into a C++ core function, and a thin OCaml C wrapper
 CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
+#ifndef __arm__
     Module &mod = *llvm::unwrap(modref);
     LLVMContext &ctx = mod.getContext();
     
@@ -127,6 +128,9 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
     ostream.flush();
     std::string& out = outs.str();
     return copy_string(out.c_str());
+#else
+    return caml_copy_string("NOT IMPLEMENTED ON ARM");
+#endif //disable on ARM
 }
 
 }
