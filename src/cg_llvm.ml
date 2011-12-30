@@ -160,21 +160,7 @@ let cg_entry c m e =
     | Not l -> build_not (cg_expr l) "" b
 
     (* Select *)
-    | Select(c, t, f) -> 
-        begin
-          match val_type_of_expr c with
-            | Int _ | UInt _ | Float _ -> 
-                build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
-            | IntVector(_, n) | UIntVector(_, n) | FloatVector(_, n) ->
-                let bits = element_width (val_type_of_expr t) in
-                let mask     = cg_expr c in
-                let mask_ext = build_sext mask (type_of_val_type (val_type_of_expr t)) "" b in 
-                let mask_t   = build_and mask_ext (cg_expr t) "" b in
-                let all_ones = Broadcast(Cast(Int(bits), IntImm(-1)), n) in
-                let inv_mask = build_xor mask_ext (cg_expr all_ones) "" b in
-                let mask_f   = build_and inv_mask (cg_expr f) "" b in
-                build_or mask_t mask_f "" b
-        end
+    | Select(c, t, f) -> build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
           
     | Load(t, buf, idx) -> cg_load t buf idx
 
