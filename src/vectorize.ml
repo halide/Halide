@@ -84,7 +84,13 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
       (* Function names beginning with `.` are globally qualified, so assumed to
        * be extern. *)
       | Call (t, f, args) when f.[0] = '.' ->
-          let get_args idx = List.map (fun x -> ExtractElement (vec x, IntImm idx)) args in
+          let get_args idx = List.map (fun x ->
+            let x = vec x in
+            if (is_scalar x) then 
+              x 
+            else
+              ExtractElement (x, IntImm idx)
+          ) args in
           let make_call idx = Call (t, f, get_args idx) in
           MakeVector (List.map make_call (0 -- width))
       | Call (t, f, args) -> Call (vector_of_val_type t width, f, List.map (fun arg -> expand (vec arg)) args)
