@@ -27,6 +27,25 @@ double currentTime() {
 }
 
 template<typename A>
+A mod(A x, A y);
+
+template<>
+float mod(float x, float y) {
+    return fmod(x, y);
+}
+
+template<>
+double mod(double x, double y) {
+    return fmod(x, y);
+}
+
+template<typename A>
+A mod(A x, A y) {
+    return x % y;
+}
+    
+
+template<typename A>
 bool test(int vec_width) {
     const int W = 6400;
     const int H = 16;
@@ -86,7 +105,6 @@ bool test(int vec_width) {
             }
         }
     }
-
 
     // Select
     Func f4;
@@ -188,6 +206,59 @@ bool test(int vec_width) {
         }
     }
     
+    // Div
+    Func f9;
+    f9(x, y) = input(x, y) / Clamp(input(x+1, y), Cast<A>(1), Cast<A>(3));
+    f9.vectorize(x, vec_width);
+    Image<A> im9 = f9.realize(W, H);
+    
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A clamped = input(x+1, y);
+            if (clamped < (A)1) clamped = (A)1;
+            if (clamped > (A)3) clamped = (A)3;
+            A correct = input(x, y) / clamped;
+            if (im9(x, y) != correct) {
+                printf("im9(%d, %d) = %f instead of %f\n", x, y, (double)(im9(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    
+    // Mod
+    /*
+    Func f10;
+    f10(x, y) = input(x, y) % Cast<A>(2);
+    f10.vectorize(x, vec_width);
+    Image<A> im10 = f10.realize(W, H);
+    
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = mod(input(x, y), (A)2);
+            if (im10(x, y) != correct) {
+                printf("im10(%d, %d) = %f instead of %f\n", x, y, (double)(im10(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+    */
+
+    // Interleave
+    Func f11;
+    f11(x, y) = Select((x%2)==0, input(x/2, y), input(x/2, y+1));
+    f11.vectorize(x, vec_width);
+    Image<A> im11 = f11.realize(W, H);
+    
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = ((x%2)==0) ? input(x/2, y) : input(x/2, y+1);
+            if (im11(x, y) != correct) {
+                printf("im11(%d, %d) = %f instead of %f\n", x, y, (double)(im11(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
 
     return true;
 }
