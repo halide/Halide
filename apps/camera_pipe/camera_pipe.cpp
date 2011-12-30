@@ -221,8 +221,10 @@ int main(int argc, char **argv) {
         srand(0);
 
     std::vector<Func> funcs = output.rhs().funcs();
+    
     for (size_t i = 0; i < funcs.size(); i++) {
         funcs[i].root();
+        funcs[i].vectorize(funcs[i].args()[0].vars()[0], 4);
     }
 
     /*
@@ -261,7 +263,6 @@ int main(int argc, char **argv) {
         }
     }
     */
-
     output.compile();
     
     return 0;

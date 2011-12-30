@@ -499,12 +499,12 @@ namespace FImage {
 
         printf("compiling IR -> ll\n");
         MLVal tuple;
-		if (targetPTX)
-			tuple = doCompileGPU(name(), args, stmt);
-		else
-			tuple = doCompile(name(), args, stmt);
-        
-        // doCompileToFile(name(), args, stmt);
+        if (targetPTX) {
+            tuple = doCompileGPU(name(), args, stmt);
+        } else {
+            tuple = doCompile(name(), args, stmt);
+            doCompileToFile(name(), args, stmt);
+        }        
 
         printf("Extracting the resulting module and function\n");
         MLVal first, second;
