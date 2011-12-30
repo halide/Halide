@@ -117,9 +117,9 @@ let cg_entry c m e =
   *)
 
   let rec cg_expr e = 
-    Printf.printf "begin cg_expr %s\n%!" (string_of_expr e);   
+    if dbgprint then Printf.printf "begin cg_expr %s\n%!" (string_of_expr e);
     let result = Arch.cg_expr c m b cg_expr_inner e in
-    Printf.printf "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));  
+    if dbgprint then Printf.printf "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));
     result
   and cg_expr_inner = function
     (* constants *)
