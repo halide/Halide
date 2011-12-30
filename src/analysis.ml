@@ -75,6 +75,7 @@ let fold_children_in_stmt expr_mutator stmt_mutator combiner = function
   | LetStmt (name, value, stmt) -> combiner (expr_mutator value) (stmt_mutator stmt)
   | Pipeline (name, ty, size, produce, consume) -> 
     combiner (combiner (expr_mutator size) (stmt_mutator produce)) (stmt_mutator consume)
+  | Print (_, []) -> expr_mutator (IntImm 0)
   | Print (_, l) -> List.fold_left combiner (expr_mutator (List.hd l)) (List.map expr_mutator (List.tl l))
 
 (* E.g:
