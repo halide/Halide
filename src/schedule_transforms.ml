@@ -14,11 +14,13 @@ type scheduling_guru = {
 
 let novice = {
   decide = fun func env sched options ->
+    (* 
     Printf.printf
       "Guru options for %s:\n  %s\n%!"
       func
       (String.concat "\n  " (List.map string_of_call_schedule options));
-    
+    *)
+
     (* Find the pure arguments *)
     let (args, _, body) = find_function func env in
 
@@ -205,7 +207,7 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
             string_set_concat (s::(List.map find_calls_expr update_args))
     in
 
-    Printf.printf " new_found_calls -> %s\n%!" (String.concat ", " (StringSet.elements new_found_calls));
+    (* Printf.printf " new_found_calls -> %s\n%!" (String.concat ", " (StringSet.elements new_found_calls)); *)
 
     let bufs_in_scope,sched =
       StringSet.fold
@@ -240,7 +242,7 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
   (* Find all sub-functions and mark them as inline *)
   let rec called_functions f found_calls =
 
-    Printf.printf "-> %s\n%!" f;
+    (* Printf.printf "-> %s\n%!" f; *)
 
     let (_, _, body) = find_function f env in
 
