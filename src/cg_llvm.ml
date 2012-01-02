@@ -544,7 +544,7 @@ let cg_entry c m e =
     sym_remove var_name;
 
     (* Pop all the symbols we used in the function body *)
-    StringIntSet.iter (fun (name, _) -> sym_remove name);
+    StringIntSet.iter (fun (name, _) -> sym_remove name) syms;
 
     (* Move the builder back *)
     position_at_end current b;
