@@ -9,11 +9,11 @@ open Cg_llvm_util
 let ptx_kernel = 71
 let ptx_device = 72
 
-let cg_expr (c:llcontext) (m:llmodule) (b:llbuilder) (cg_expr : expr -> llvalue) (expr : expr) =
-  cg_expr expr
+let cg_expr (con:cg_context) (expr:expr) = 
+  con.cg_expr expr
 
-let cg_stmt (c:llcontext) (m:llmodule) (b:llbuilder) (cg_stmt : stmt -> llvalue) (stmt : stmt) =
-  cg_stmt stmt
+let cg_stmt (con:cg_context) (stmt:stmt) = 
+  con.cg_stmt stmt
 
 let postprocess_function (f:llvalue) =
   set_function_call_conv ptx_kernel f
@@ -192,8 +192,8 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   (* return the generated function *)
   f
 
-let malloc = (fun _ _ _ _ _ -> raise (Wtf "No malloc for PTX yet"))
-let free = (fun _ _ _ _ -> raise (Wtf "No free for PTX yet"))
+let malloc = (fun _ _ -> raise (Wtf "No malloc for PTX yet"))
+let free = (fun _ _ -> raise (Wtf "No free for PTX yet"))
 
 let env =
   let ntid_decl   = (".llvm.ptx.read.ntid.x", [], i32, Extern) in

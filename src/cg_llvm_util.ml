@@ -6,6 +6,16 @@ exception UnsupportedType of val_type
 exception CGFailed of string
 exception BCWriteFailed of string
 
+type cg_context = {
+  c : llcontext;
+  m : llmodule;
+  b : llbuilder;
+  cg_expr : expr -> llvalue;
+  cg_stmt : stmt -> llvalue;  
+  cg_memref : val_type -> string -> expr -> llvalue;
+  sym_get : string -> llvalue;
+}
+
 let raw_buffer_t c = pointer_type (i8_type c)
 
 let verify_cg m =

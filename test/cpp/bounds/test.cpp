@@ -14,10 +14,6 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    f.compile();
-    g.compile();
-    h.compile();
-
     Image<int> imf = f.realize(32, 32);
     Image<int> img = g.realize(32, 32);
     Image<int> imh = h.realize(32, 32);
