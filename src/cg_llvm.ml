@@ -65,8 +65,6 @@ let cg_entry c m e =
   let sym_add name llv =
     set_value_name name llv;
     Hashtbl.add sym_table name llv
-  and sym_add_no_rename name llv =
-    Hashtbl.add sym_table name llv
   and sym_remove name =
     Hashtbl.remove sym_table name
   and sym_get name =
@@ -230,10 +228,6 @@ let cg_entry c m e =
         build_extractelement v idx "" b
 
     | Debug(e, prefix, args) -> cg_debug e prefix args
-
-    | e ->
-      Printf.printf "Unimplemented: %s\n%!" (string_of_expr e);
-      raise UnimplementedInstruction
 
   and cg_makevector = function
     | ([], t, _) -> undef (type_of_val_type t)
@@ -490,7 +484,6 @@ let cg_entry c m e =
        that offset into a string map *)
     let (total_bytes, offset_map) = 
       StringIntSet.fold (fun (name, size) (offset, offset_map) ->
-        let current_val = sym_get name in
         (* round size up to the nearest power of two for alignment *)
         let rec roundup x y = if (x >= y) then x else roundup (x*2) y in
         let size = roundup 1 size in
@@ -555,7 +548,7 @@ let cg_entry c m e =
     ignore(build_call do_par_for [|body_fn; min; size; closure|] "" b);
 
     (* Free the closure *)
-    Arch.free cg_context closure;
+    ignore (Arch.free cg_context closure);
     
     (* Return an ignorable llvalue *)
     const_int int_imm_t 0
@@ -580,27 +573,6 @@ let cg_entry c m e =
         result    
 
     | Pipeline (name, ty, size, produce, consume) ->
-
-        (* Force the alignment to be a multiple of 128 bits. This is
-           platform specific, but we're planning to remove alloca at some
-           stage anyway *)
-        let width_multiplier = 128 / (bit_width ty) in
-        let upgraded_type = 
-          if width_multiplier > 1 then
-            vector_of_val_type ty width_multiplier 
-          else
-            ty
-        in
-
-        let upgraded_size =
-          if width_multiplier > 1 then
-            (size /~ (IntImm width_multiplier)) +~ (IntImm 1)
-          else
-            size
-        in
-        
-        (* See if we can't reduce it to a constant... *)
-        let upgraded_size = Constant_fold.constant_fold_expr upgraded_size in
         
         let scratch = 
           let bytes = size *~ (IntImm ((bit_width ty)/8)) in 
