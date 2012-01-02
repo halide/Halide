@@ -544,6 +544,7 @@ let cg_entry c m e =
     sym_remove var_name;
 
     (* Pop all the symbols we used in the function body *)
+    (* TODO: factor into sym_pop of scope object/sym list/sym set? *)
     StringIntSet.iter (fun (name, _) -> sym_remove name);
 
     (* Move the builder back *)
