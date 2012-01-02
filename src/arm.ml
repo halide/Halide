@@ -2,6 +2,8 @@ open Llvm
 open Ir
 open Util
 open Cg_llvm_util
+open Analysis
+open Ir_printer
 
 let codegen_entry c m cg_entry e =
   (* set up module *)
@@ -13,12 +15,16 @@ let codegen_entry c m cg_entry e =
   (* return the wrapper which takes buffer_t*s *)
   cg_wrapper c m e inner
 
+
 let rec cg_expr (con : cg_context) (expr : expr) =
   let c = con.c and b = con.b and m = con.m in
+
   let ptr_t = pointer_type (i8_type c) in
   let i32_t = i32_type c in
   let i16x8_t = vector_type (i16_type c) 8 in
   let i16x8x2_t = struct_type c [| i16x8_t; i16x8_t |] in
+  let i16x4_t = vector_type (i16_type c) 4 in
+  let i16x4x2_t = struct_type c [| i16x4_t; i16x4_t |] in
 
   let cg_expr e = cg_expr con e in
 
@@ -33,9 +39,8 @@ let rec cg_expr (con : cg_context) (expr : expr) =
     let inv_mask = build_xor mask ones "" b in
     build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b
   in    
-
+  
   match expr with 
-    (* vector select doesn't work right on arm yet *)
     | Bop (Min, l, r) when is_vector l -> 
         begin match (val_type_of_expr l) with
           | IntVector (16, 8) ->
@@ -55,7 +60,24 @@ let rec cg_expr (con : cg_context) (expr : expr) =
           | _ -> cg_select (l >~ r) l r
         end
 
-    (* intrinsics for strided vector loads/stores *)          
+    (* use intrinsics for vector loads/stores *) 
+    | Load (IntVector (16, 8), buf, Ramp (base, IntImm 1, w)) 
+    | Load (UIntVector (16, 8), buf, Ramp (base, IntImm 1, w)) ->
+        let ld = declare_function "llvm.arm.neon.vld1.v8i16"
+          (function_type (i16x8_t) [|ptr_t; i32_t|]) m in
+        let addr = con.cg_memref (IntVector (16, 8)) buf base in        
+        let addr = build_pointercast addr ptr_t "" b in
+        let result = build_call ld [|addr; const_int (i32_t) 16|] "" b in
+        result
+
+    | Load (IntVector (16, 4), buf, Ramp (base, IntImm 1, w)) 
+    | Load (UIntVector (16, 4), buf, Ramp (base, IntImm 1, w)) ->
+        let ld = declare_function "llvm.arm.neon.vld1.v4i16"
+          (function_type (i16x4_t) [|ptr_t; i32_t|]) m in
+        let addr = con.cg_memref (IntVector (16, 4)) buf base in        
+        let addr = build_pointercast addr ptr_t "" b in
+        let result = build_call ld [|addr; const_int (i32_t) 16|] "" b in
+        result
 
     | Load (IntVector (16, 8), buf, Ramp (base, IntImm 2, w)) 
     | Load (UIntVector (16, 8), buf, Ramp (base, IntImm 2, w)) ->
@@ -65,6 +87,17 @@ let rec cg_expr (con : cg_context) (expr : expr) =
         let addr = build_pointercast addr ptr_t "" b in
         let result = build_call ld [|addr; const_int (i32_t) 16|] "" b in
         build_extractvalue result 0 "" b 
+
+    | Load (IntVector (16, 4), buf, Ramp (base, IntImm 2, w)) 
+    | Load (UIntVector (16, 4), buf, Ramp (base, IntImm 2, w)) ->
+        let ld = declare_function "llvm.arm.neon.vld2.v4i16"
+          (function_type (i16x4x2_t) [|ptr_t; i32_t|]) m in
+        let addr = con.cg_memref (IntVector (16, 4)) buf base in        
+        let addr = build_pointercast addr ptr_t "" b in
+        let result = build_call ld [|addr; const_int (i32_t) 16|] "" b in
+        build_extractvalue result 0 "" b 
+
+
 
     (* 
 
@@ -132,6 +165,11 @@ let rec cg_expr (con : cg_context) (expr : expr) =
     (* TODO: absolute difference and accumulate? *)
     
     *)
+
+
+
+          
+    (* vector select doesn't work right on arm yet *)          
     | Select (cond, thenCase, elseCase) when is_vector cond -> 
         cg_select cond thenCase elseCase
 
@@ -141,7 +179,69 @@ let rec cg_stmt (con : cg_context) (stmt : stmt) =
   let c = con.c and b = con.b and m = con.m in
   let cg_expr e = cg_expr con e in
   let cg_stmt s = cg_stmt con s in
+
+  let ptr_t = pointer_type (i8_type c) in
+  let i32_t = i32_type c in
+  let i16x8_t = vector_type (i16_type c) 8 in
+  let i16x4_t = vector_type (i16_type c) 4 in
+
+  let rec duplicated_lanes expr = match expr with
+    | Broadcast _ -> true
+    | Bop (Div, Ramp (base, one, n), two) 
+        when (one = make_const (val_type_of_expr base) 1 &&
+            two = make_const (val_type_of_expr expr) 2) -> true
+    | MakeVector _ -> false
+    | Ramp _ -> false
+    | expr -> fold_children_in_expr duplicated_lanes (&&) true expr
+  in
+  
+  let rec deduplicate_lanes expr = match expr with
+    | Broadcast (e, n) -> Broadcast (e, n/2)
+    | Bop (Div, Ramp (base, one, n), two) 
+        when (one = make_const (val_type_of_expr base) 1 &&
+            two = make_const (val_type_of_expr expr) 2) -> 
+        Ramp (base /~ (make_const (val_type_of_expr base) 2), one, n/2)
+    | Load (t, buf, idx) when is_vector idx ->
+        Load (vector_of_val_type (element_val_type t) ((vector_elements t)/2), 
+              buf, deduplicate_lanes idx)
+    | MakeVector _ -> raise (Wtf "Can't deduplicate the lanes of a MakeVector")
+    | Ramp _ -> raise (Wtf "Can't deduplicate the lanes of a generic Ramp")
+    | expr -> mutate_children_in_expr deduplicate_lanes expr
+  in
+
   match stmt with
+    (* Look for the vector interleaved store pattern. It should be
+       expressed like so: out(x) = Select(x%2==0, a, b) where a and b
+       don't depend on (x%2) (e.g. they contain only x/2) *)
+    | Store (Select (Cmp (EQ, Bop (Mod, Ramp (x, one, w), two), zero), l, r), buf, Ramp (base, one1, _)) 
+        when (duplicated_lanes l &&
+              duplicated_lanes r &&
+              zero = make_const (vector_of_val_type (val_type_of_expr x) w) 0 &&
+              one = make_const (val_type_of_expr x) 1 && 
+              one1 = make_const (val_type_of_expr base) 1 &&
+              two = make_const (vector_of_val_type (val_type_of_expr x) w) 2) ->
+        
+        let l = deduplicate_lanes l in
+        let r = deduplicate_lanes r in
+        let l = Constant_fold.constant_fold_expr l in
+        let r = Constant_fold.constant_fold_expr r in
+        let t = val_type_of_expr l in
+        let l = cg_expr l in
+        let r = cg_expr r in
+
+        begin match t with 
+          | IntVector (16, 4) 
+          | UIntVector (16, 4) ->
+              let st = declare_function "llvm.arm.neon.vst2.v4i16"
+                (function_type (void_type c) [|ptr_t; i16x4_t; i16x4_t; i32_t|]) m in 
+              let addr = con.cg_memref (IntVector (16, 8)) buf base in        
+              let addr = build_pointercast addr ptr_t "" b in
+              build_call st [|addr; l; r; const_int (i32_t) 2|] "" b 
+          | _ -> con.cg_stmt stmt (* TODO: more types *)
+        end
+
+
+
     | _ -> con.cg_stmt stmt
 
 
