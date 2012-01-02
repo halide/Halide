@@ -12,7 +12,9 @@ let codegen_entry c m cg_entry e =
   (* return the wrapper which takes buffer_t*s *)
   cg_wrapper c m e inner
 
-let cg_expr (c:llcontext) (m:llmodule) (b:llbuilder) (cg_expr : expr -> llvalue) (expr : expr) =
+let rec cg_expr (con:cg_context) (expr:expr) =
+  let c = con.c and m = con.m and b = con.b in
+  let cg_expr = cg_expr con in
 
   (* let i8x16_t = vector_type (i8_type c) 16 in *)
 
@@ -26,23 +28,24 @@ let cg_expr (c:llcontext) (m:llmodule) (b:llbuilder) (cg_expr : expr -> llvalue)
   match expr with 
     (* x86 doesn't do 16 bit vector division, but for constants you can do multiplication instead. *)
     | Bop (Div, x, Broadcast (Cast (UInt 16, IntImm y), 8)) ->
-        Printf.printf "MOO!\n%!";
         let z = (65536/y + 1) in
         let lhs = cg_expr x in
         let rhs = cg_expr (Broadcast (Cast (UInt 16, IntImm z), 8)) in        
         build_call pmulhw [|lhs; rhs|] "" b
 
     (* We don't have any special tricks up our sleeve for this case *)
-    | _ -> cg_expr expr 
+    | _ -> con.cg_expr expr 
 
-let cg_stmt (c:llcontext) (m:llmodule) (b:llbuilder) (cg_stmt : stmt -> llvalue) (stmt : stmt) =
-  cg_stmt stmt
+let cg_stmt (con:cg_context) (stmt:stmt) =
+  con.cg_stmt stmt
 
-let malloc (c:llcontext) (m:llmodule) (b:llbuilder) (cg_expr : expr -> llvalue) (size : expr) =
+let malloc (con:cg_context) (size:expr) = 
+  let c = con.c and m = con.m and b = con.b in  
   let malloc = declare_function "safe_malloc" (function_type (pointer_type (i8_type c)) [|i64_type c|]) m in  
-  build_call malloc [|cg_expr (Cast (Int 64, size))|] "" b 
+  build_call malloc [|cg_expr con (Cast (Int 64, size))|] "" b 
 
-let free (c:llcontext) (m:llmodule) (b:llbuilder) (address:llvalue) =
+let free (con:cg_context) (address:llvalue) =
+  let c = con.c and m = con.m and b = con.b in
   let free = declare_function "safe_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
   build_call free [|address|] "" b   
 

@@ -16,13 +16,14 @@ type cg_entry = llcontext -> llmodule -> entrypoint -> llvalue
 type cg_expr = expr -> llvalue
 type cg_stmt = stmt -> llvalue
 
+
 module type Architecture = sig
   (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)
   val codegen_entry : llcontext -> llmodule -> cg_entry -> entrypoint -> llvalue
-  val cg_expr : llcontext -> llmodule -> llbuilder -> cg_expr -> expr -> llvalue
-  val cg_stmt : llcontext -> llmodule -> llbuilder -> cg_stmt -> stmt -> llvalue
-  val malloc  : llcontext -> llmodule -> llbuilder -> cg_expr -> expr -> llvalue
-  val free    : llcontext -> llmodule -> llbuilder -> llvalue -> llvalue
+  val cg_expr : cg_context -> expr -> llvalue
+  val cg_stmt : cg_context -> stmt -> llvalue
+  val malloc  : cg_context -> expr -> llvalue
+  val free    : cg_context -> llvalue -> llvalue 
   val env : environment
 end
 
@@ -116,9 +117,16 @@ let cg_entry c m e =
   position_at_end after_alloca_bb b;  
   *)
 
-  let rec cg_expr e = 
+  let rec cg_context = {
+    c = c; m = m; b = b;
+    cg_expr = cg_expr_inner;
+    cg_stmt = cg_stmt_inner;
+    cg_memref = cg_memref;
+    sym_get = sym_get;
+  }    
+  and cg_expr e = 
     if dbgprint then Printf.printf "begin cg_expr %s\n%!" (string_of_expr e);
-    let result = Arch.cg_expr c m b cg_expr_inner e in
+    let result = Arch.cg_expr cg_context e in
     if dbgprint then Printf.printf "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));
     result
   and cg_expr_inner = function
@@ -160,7 +168,8 @@ let cg_entry c m e =
     | Not l -> build_not (cg_expr l) "" b
 
     (* Select *)
-    | Select(c, t, f) -> build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
+    | Select(c, t, f) -> 
+        build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
           
     | Load(t, buf, idx) -> cg_load t buf idx
 
@@ -493,7 +502,7 @@ let cg_entry c m e =
     in
 
     (* Allocate a closure *)
-    let closure = Arch.malloc c m b cg_expr (IntImm total_bytes) in
+    let closure = Arch.malloc cg_context (IntImm total_bytes) in
 
     (* Store everything in the closure *)
     StringIntSet.iter (fun (name, size) ->      
@@ -546,12 +555,12 @@ let cg_entry c m e =
     ignore(build_call do_par_for [|body_fn; min; size; closure|] "" b);
 
     (* Free the closure *)
-    Arch.free c m b closure;
+    Arch.free cg_context closure;
     
     (* Return an ignorable llvalue *)
     const_int int_imm_t 0
 
-  and cg_stmt stmt = Arch.cg_stmt c m b cg_stmt_inner stmt
+  and cg_stmt stmt = Arch.cg_stmt cg_context stmt
   and cg_stmt_inner = function
     (* TODO: unaligned vector store *)
     | Store(e, buf, idx) -> cg_store e buf idx
@@ -595,7 +604,7 @@ let cg_entry c m e =
         
         let scratch = 
           let bytes = size *~ (IntImm ((bit_width ty)/8)) in 
-          Arch.malloc c m b cg_expr bytes
+          Arch.malloc cg_context bytes
         in
         
         (* push the symbol environment *)
@@ -608,7 +617,7 @@ let cg_entry c m e =
         sym_remove name;
 
         (* free the scratch *)
-        ignore (Arch.free c m b scratch);
+        ignore (Arch.free cg_context scratch);
 
         res
     | Print (fmt, args) -> cg_print fmt args
@@ -730,7 +739,6 @@ let cg_entry c m e =
     in 
     let result = insert_idx ((vector_elements t) - 1) in
     result
-      
 
   and cg_memref vt buf idx =
     (* load the global buffer** *)
@@ -979,7 +987,7 @@ module CodegenForHost = struct
     else (* if hosttype = "x86_64" then *)
       let module Cg = CodegenForArch(X86) in
       Cg.codegen_entry e
-
+        
   let codegen_c_wrapper c e = 
     if hosttype = "arm" then
       let module Cg = CodegenForArch(Arm) in

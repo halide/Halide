@@ -314,27 +314,23 @@ let ( !~ ) a    = Not a
 (* More helpers for examining ir nodes *)
 let is_scalar x = (vector_elements (val_type_of_expr x)) = 1
 let is_vector x = not (is_scalar x)
+let is_integral x = match (val_type_of_expr x) with
+  | Float _ | FloatVector _ -> false
+  | _ -> true
+let is_floating x = not (is_integral x)
 
-let rec make_zero = function
-  | Int 32   -> IntImm 0
-  | UInt 32  -> UIntImm 0
-  | Float 32 -> FloatImm 0.0
-  | Int b   -> Cast (Int b, IntImm 0)
-  | UInt b  -> Cast (UInt b, UIntImm 0)
-  | Float b -> Cast (Float b, FloatImm 0.0)
-  | IntVector (b, n)   -> Broadcast (make_zero (Int b), n)
-  | UIntVector (b, n)  -> Broadcast (make_zero (UInt b), n)
-  | FloatVector (b, n) -> Broadcast (make_zero (Float b), n)
+let rec make_const x y = match x with 
+  | Int 32   -> IntImm y
+  | UInt 32  -> UIntImm y
+  | Float 32 -> FloatImm (float_of_int y)
+  | Int b   -> Cast (Int b, IntImm y)
+  | UInt b  -> Cast (UInt b, UIntImm y)
+  | Float b -> Cast (Float b, FloatImm (float_of_int y))
+  | IntVector (b, n)   -> Broadcast (make_const (Int b) y, n)
+  | UIntVector (b, n)  -> Broadcast (make_const (UInt b) y, n)
+  | FloatVector (b, n) -> Broadcast (make_const (Float b) y, n)
 
-let rec make_one = function
-  | Int 32   -> IntImm 1
-  | UInt 32  -> UIntImm 1
-  | Float 32 -> FloatImm 1.0
-  | Int b   -> Cast (Int b, IntImm 1)
-  | UInt b  -> Cast (UInt b, UIntImm 1)
-  | Float b -> Cast (Float b, FloatImm 1.0)
-  | IntVector (b, n)   -> Broadcast (make_one (Int b), n)
-  | UIntVector (b, n)  -> Broadcast (make_one (UInt b), n)
-  | FloatVector (b, n) -> Broadcast (make_one (Float b), n)
+let make_zero x = make_const x 0
+let make_one x = make_const x 1
 
 let bool_imm x = if x then UIntImm 1 else UIntImm 0
