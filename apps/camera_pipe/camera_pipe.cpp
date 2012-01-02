@@ -49,7 +49,7 @@ Func demosaic(Func raw) {
     Func b_gr("b_gr"), r_gr("r_gr");
     Func b_gb("b_gb"), r_gb("r_gb");
     Func r_b("r_b"), g_b("g_b");
-    
+
     // First calculate green at the red and blue sites
 
     // Try interpolating vertically and horizontally. Also compute
@@ -122,10 +122,11 @@ Func demosaic(Func raw) {
                           interleave_x(r_b, r_gb));
     Func g = interleave_y(interleave_x(g_gr, g_r),
                           interleave_x(g_b, g_gb));
-    Func b = interleave_y(interleave_x(b_gr, b_r),
+    Func b = interleave_y(interleave_x(b_gr, b_r),                          
                           interleave_x(b_b, b_gb));
+
     Func output("dem");
-    output(x, y, c) = Select(c == 0, r(x, y), Select(c == 1, g(x, y), b(x, y)));
+    output(x, y) = (r(x, y), g(x, y), b(x, y));
 
     return output;
 }
@@ -266,7 +267,7 @@ int main(int argc, char **argv) {
         }
     }
     */
-    output.compile();
+    output.compileToFile("curved");
     
     return 0;
 }

@@ -435,14 +435,8 @@ namespace FImage {
         return im;
     }
 
-    void Func::compile(bool targetPTX) {
-        static llvm::ExecutionEngine *ee = NULL;
-        static llvm::FunctionPassManager *passMgr = NULL;
-
-        if (!ee) {
-            llvm::InitializeNativeTarget();
-        }
-
+    // Returns a stmt, args pair
+    void Func::lower(MLVal &stmt, MLVal &fargs) {
         // Make a region to evaluate this over
         MLVal sizes = makeList();        
         for (size_t i = args().size(); i > 0; i--) {                
@@ -475,27 +469,47 @@ namespace FImage {
         printf("Done transforming schedule\n");
         printSchedule(sched);
         
-        MLVal stmt = doLower((name()), 
-                             *Func::environment,
-                             sched, contents->tracing);
+        stmt = doLower((name()), 
+                       *Func::environment,
+                       sched, contents->tracing);
         
         // Create a function around it with the appropriate number of args
         printf("\nMaking function...\n");           
-        MLVal args = makeList();
-        args = addToList(args, makeBufferArg("result"));
+        fargs = makeList();
+        fargs = addToList(fargs, makeBufferArg("result"));
         for (size_t i = rhs().uniformImages().size(); i > 0; i--) {
             MLVal arg = makeBufferArg(rhs().uniformImages()[i-1].name());
-            args = addToList(args, arg);
+            fargs = addToList(fargs, arg);
         }
         for (size_t i = rhs().images().size(); i > 0; i--) {
             MLVal arg = makeBufferArg(rhs().images()[i-1].name());
-            args = addToList(args, arg);
+            fargs = addToList(fargs, arg);
         }
         for (size_t i = rhs().uniforms().size(); i > 0; i--) {
             const DynUniform &u = rhs().uniforms()[i-1];
             MLVal arg = makeScalarArg(u.name(), u.type().mlval);
-            args = addToList(args, arg);
+            fargs = addToList(fargs, arg);
         }
+    }
+
+    void Func::compileToFile(const std::string &moduleName) {
+ 
+        MLVal stmt, args;
+        lower(stmt, args);
+
+        doCompileToFile(moduleName, args, stmt);
+    }
+
+    void Func::compileJIT(bool targetPTX) {
+        static llvm::ExecutionEngine *ee = NULL;
+        static llvm::FunctionPassManager *passMgr = NULL;
+
+        if (!ee) {
+            llvm::InitializeNativeTarget();
+        }
+
+        MLVal stmt, args;
+        lower(stmt, args);
 
         printf("compiling IR -> ll\n");
         MLVal tuple;
@@ -503,7 +517,6 @@ namespace FImage {
             tuple = doCompileGPU(name(), args, stmt);
         } else {
             tuple = doCompile(name(), args, stmt);
-            doCompileToFile(name(), args, stmt);
         }        
 
         printf("Extracting the resulting module and function\n");
@@ -628,7 +641,7 @@ namespace FImage {
 		static const bool gpu = false;
 		#endif
 
-        if (!contents->functionPtr) compile(gpu);
+        if (!contents->functionPtr) compileJIT(gpu);
 
         printf("Constructing argument list...\n");
         void *arguments[256];

@@ -123,10 +123,13 @@ namespace FImage {
         const std::string &name() const;
         const std::vector<MLVal> &scheduleTransforms() const;
 
-        void compile(bool targetPTX=false);
+        void compileJIT(bool targetPTX=false);
+        void compileToFile(const std::string &name);
 
     private:
         struct Contents;
+
+        void lower(MLVal &, MLVal &);
 
         std::shared_ptr<Contents> contents;
     };
