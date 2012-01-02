@@ -12,4 +12,16 @@ define void @unaligned_store_128(<16 x i8> %arg, i8 * nocapture %ptr) nounwind a
   ret void
 }
 
+define <8 x i8> @unaligned_load_64(i8 * nocapture %ptr) nounwind readonly alwaysinline {
+  %1 = bitcast i8 * %ptr to <8 x i8> *
+  %2 = load <8 x i8>* %1, align 1
+  ret <8 x i8> %2
+}
+
+define void @unaligned_store_64(<8 x i8> %arg, i8 * nocapture %ptr) nounwind alwaysinline {
+  %1 = bitcast i8 * %ptr to <8 x i8> *
+  store <8 x i8> %arg, <8 x i8>* %1, align 1
+  ret void
+}
+
 

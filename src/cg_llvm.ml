@@ -631,6 +631,14 @@ let cg_entry c m e =
       let value = cg_expr e in
       let value = build_bitcast value i8x16_t "" b in
       build_call unaligned_store_128 [|value; addr|] "" b
+    end else if (bit_width t = 64) then begin
+      let i8x8_t = vector_type (i8_type c) 8 in
+      let unaligned_store_64 = declare_function "unaligned_store_64"
+        (function_type (void_type c) [|i8x8_t; buffer_t|]) m in
+      let addr = build_pointercast (cg_memref t buf idx) buffer_t "" b in
+      let value = cg_expr e in
+      let value = build_bitcast value i8x8_t "" b in
+      build_call unaligned_store_64 [|value; addr|] "" b
     end else cg_scatter e buf (Ramp(idx, IntImm 1, vector_elements t))
 
   and cg_scatter e buf idx =
@@ -695,6 +703,13 @@ let cg_entry c m e =
         (function_type (i8x16_t) [|buffer_t|]) m in
       let addr = build_pointercast (cg_memref t buf idx) buffer_t "" b in
       let value = build_call unaligned_load_128 [|addr|] "" b in
+      build_bitcast value (type_of_val_type t) "" b
+    end else if (bit_width t = 64) then begin
+      let i8x8_t = vector_type (i8_type c) 8 in
+      let unaligned_load_64 = declare_function "unaligned_load_64"
+        (function_type (i8x8_t) [|buffer_t|]) m in
+      let addr = build_pointercast (cg_memref t buf idx) buffer_t "" b in
+      let value = build_call unaligned_load_64 [|addr|] "" b in
       build_bitcast value (type_of_val_type t) "" b
     end else cg_gather t buf (Ramp(idx, IntImm 1, vector_elements t))
 
