@@ -15,9 +15,6 @@ let cg_expr (con:cg_context) (expr:expr) =
 let cg_stmt (con:cg_context) (stmt:stmt) = 
   con.cg_stmt stmt
 
-let postprocess_function (f:llvalue) =
-  set_function_call_conv ptx_kernel f
-
 let rec codegen_entry host_ctx host_mod cg_entry entry =
   (* create separate device module *)
   let dev_ctx = create_context () in
