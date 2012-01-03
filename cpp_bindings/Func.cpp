@@ -519,6 +519,34 @@ namespace FImage {
             fPassMgr = new llvm::FunctionPassManager(m);
             mPassMgr = new llvm::PassManager();
 
+            // Inline stuff marked always-inline
+            mPassMgr->add(llvm::createAlwaysInlinerPass());
+            mPassMgr->add(llvm::createDeadCodeEliminationPass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After always inliner ***", &stdout));
+            
+            // Function-level passes on the inner function (TODO: what about parallelism!)
+            fPassMgr->add(new llvm::TargetData(*ee->getTargetData()));
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
+                        
+            // AliasAnalysis support for GVN
+            fPassMgr->add(llvm::createBasicAliasAnalysisPass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
+            
+            // Reassociate expressions
+            fPassMgr->add(llvm::createReassociatePass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
+            
+            // Simplify CFG (delete unreachable blocks, etc.)
+            fPassMgr->add(llvm::createCFGSimplificationPass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
+            
+            // Eliminate common sub-expressions
+            fPassMgr->add(llvm::createGVNPass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
+        
+            // Peephole, bit-twiddling optimizations
+            fPassMgr->add(llvm::createInstructionCombiningPass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));            
         } else { 
             ee->addModule(m);
         }            
@@ -536,38 +564,8 @@ namespace FImage {
         std::string errstr;
         llvm::raw_fd_ostream stdout("passes.txt", errstr);
         
-        // Module-level passes
-
-        // Inline stuff marked always-inline
-        mPassMgr->add(llvm::createAlwaysInlinerPass());
-        //fPassMgr->add(llvm::createPrintFunctionPass("*** After always inliner ***", &stdout));
         mPassMgr->run(*m);
 
-        // Function-level passes on the inner function (TODO: what about parallelism!)
-        fPassMgr->add(new llvm::TargetData(*ee->getTargetData()));
-        //fPassMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
-
-        
-        // AliasAnalysis support for GVN
-        fPassMgr->add(llvm::createBasicAliasAnalysisPass());
-        //fPassMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
-        
-        // Reassociate expressions
-        fPassMgr->add(llvm::createReassociatePass());
-        //fPassMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
-        
-        // Simplify CFG (delete unreachable blocks, etc.)
-        fPassMgr->add(llvm::createCFGSimplificationPass());
-        //fPassMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
-
-        // Eliminate common sub-expressions
-        fPassMgr->add(llvm::createGVNPass());
-        //fPassMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
-        
-        // Peephole, bit-twiddling optimizations
-        fPassMgr->add(llvm::createInstructionCombiningPass());
-        //fPassMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
-        
         fPassMgr->doInitialization();
         
         if (fPassMgr->run(*inner)) {
