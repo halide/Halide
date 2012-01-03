@@ -394,48 +394,9 @@ let make_cg_context c m b sym_table =
       const_int int_imm_t 0
 
   and cg_par_for var_name min size body =
-    (* Find all references in body to things outside of it *)
-    let rec find_names_in_stmt internal = function
-      | Store (e, buf, idx) ->
-          let inner = StringIntSet.union (find_names_in_expr internal e) (find_names_in_expr internal idx) in
-          if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, 8) inner)
-      | Pipeline (name, ty, size, produce, consume) ->
-          let internal = StringSet.add name internal in
-          string_int_set_concat [
-            find_names_in_expr internal size;
-            find_names_in_stmt internal produce;
-            find_names_in_stmt internal consume]
-      | LetStmt (name, value, stmt) ->
-          let internal = StringSet.add name internal in
-          StringIntSet.union (find_names_in_expr internal value) (find_names_in_stmt internal stmt)
-      | Block l ->
-          string_int_set_concat (List.map (find_names_in_stmt internal) l)
-      | For (var_name, min, size, order, body) ->
-          let internal = StringSet.add var_name internal in
-          string_int_set_concat [
-            find_names_in_expr internal min;
-            find_names_in_expr internal size;
-            find_names_in_stmt internal body]
-      | Print (fmt, args) ->
-          string_int_set_concat (List.map (find_names_in_expr internal) args)
-      | Provide (fn, _, _) ->
-          raise (Wtf "Encountered a provide during cg. These should have been lowered away.")
-    and find_names_in_expr internal = function
-      | Load (_, buf, idx) ->
-          let inner = find_names_in_expr internal idx in
-          if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, 8) inner)
-      | Var (t, n) ->
-          let size = (bit_width t)/8 in
-          if (StringSet.mem n internal) then StringIntSet.empty else (StringIntSet.add (n, size) StringIntSet.empty)
-      | Let (n, a, b) ->
-          let internal = StringSet.add n internal in
-          StringIntSet.union (find_names_in_expr internal a) (find_names_in_expr internal b)
-      | x -> fold_children_in_expr (find_names_in_expr internal) StringIntSet.union StringIntSet.empty x
-    in
-
     (* Dump everything relevant in the symbol table into a closure *)
     let syms = find_names_in_stmt (StringSet.add var_name StringSet.empty) body in
-    
+
     (* Compute an offset in bytes into a closure for each symbol name, and put
        that offset into a string map *)
     let (total_bytes, offset_map) = 
