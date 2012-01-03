@@ -6,18 +6,6 @@ exception UnsupportedType of val_type
 exception CGFailed of string
 exception BCWriteFailed of string
 
-type cg_context = {
-  c : llcontext;
-  m : llmodule;
-  b : llbuilder;
-  cg_expr : expr -> llvalue;
-  cg_stmt : stmt -> llvalue;  
-  cg_memref : val_type -> string -> expr -> llvalue;
-  sym_get : string -> llvalue;
-  sym_add : string -> llvalue -> unit;
-  sym_remove : string -> unit;
-}
-
 let raw_buffer_t c = pointer_type (i8_type c)
 
 let verify_cg m =
@@ -25,6 +13,19 @@ let verify_cg m =
     match Llvm_analysis.verify_module m with
       | Some reason -> raise(CGFailed(reason))
       | None -> ()
+
+type 'a cg_context = {
+  c : llcontext;
+  m : llmodule;
+  b : llbuilder;
+  cg_expr : expr -> llvalue;
+  cg_stmt : stmt -> llvalue;
+  cg_memref : val_type -> string -> expr -> llvalue;
+  sym_get : string -> llvalue;
+  sym_add : string -> llvalue -> unit;
+  sym_remove : string -> unit;
+  arch_state : 'a;
+}
 
 let type_of_val_type c t = match t with
   | UInt(1) | Int(1) -> i1_type c
