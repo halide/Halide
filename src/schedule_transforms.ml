@@ -14,12 +14,6 @@ type scheduling_guru = {
 
 let novice = {
   decide = fun func env sched options ->
-    (* 
-    Printf.printf
-      "Guru options for %s:\n  %s\n%!"
-      func
-      (String.concat "\n  " (List.map string_of_call_schedule options));
-    *)
 
     (* Find the pure arguments *)
     let (args, _, body) = find_function func env in
@@ -36,14 +30,24 @@ let novice = {
 
     let args = reduction_args @ args in
 
-    (* let prefix = if is_update then "" else ((base_name func) ^ ".") in *)
     let prefix = (base_name func) ^ "." in
 
-    (Root,
-     List.map
-       (fun (t,nm) ->
-         Serial (nm, Var (t, prefix ^ nm ^ ".min"), Var (t, prefix ^ nm ^ ".extent")))
-       args)
+    (* Pick the first option *)
+    let call_sched = List.hd options in
+
+    let sched_list = 
+      match call_sched with
+        (* If it's inline or reuse, the sched_list is empty *)
+        | Reuse _ | Inline -> []
+        (* Otherwise just make a basic serial schedule *)
+        | _ -> 
+            List.map
+              (fun (t,nm) ->
+                Serial (nm, Var (t, prefix ^ nm ^ ".min"), Var (t, prefix ^ nm ^ ".extent")))
+              args
+    in
+
+    (call_sched, sched_list)
 }
 
 (* Make a schedule which evaluates a function over a region *)
@@ -141,8 +145,18 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
       - pick arg from pending list to schedule next
       - pick any legal schedule for arg
     *)
+
+    Printf.printf "Asking guru to decide for %s from these options: %s\n%!"
+      func
+      (String.concat ", " (List.map string_of_call_schedule call_sched_options));
     
-    let call_sched,sched_list = guru.decide func env sched call_sched_options in
+    let (call_sched, sched_list) = guru.decide func env sched call_sched_options in
+
+    Printf.printf "Decision made for %s: %s %s\n%!"
+      func
+      (string_of_call_schedule call_sched)
+      (String.concat ", " (List.map string_of_schedule sched_list));
+      
 
     (* Update sched using the decisions made *)
     let sched = set_schedule sched func call_sched sched_list in
@@ -168,6 +182,10 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
       find_vars sched_list
     ) in
 
+    Printf.printf "Vars_in_scope after deciding fate of %s: %s\n%!"
+      func
+      (String.concat ", " vars_in_scope);
+
     let add_realization var bufs_in_scope =
       let existing =
         try
@@ -185,39 +203,41 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
       | Inline -> bufs_in_scope
     in
 
-    (* Find called functions (that aren't extern) and recurse *)
-    let rec find_calls_expr = function
-      (* skip externs *)
-      | Call (_, name, args) when name.[0] = '.' ->
-          (string_set_concat (List.map find_calls_expr args))
-      | Call (_, name, args) when List.mem name (split_name func) ->
-          (string_set_concat (List.map find_calls_expr args))
-      | Call (_, name, args) -> 
-          let rest = (string_set_concat (List.map find_calls_expr args)) in
-          StringSet.add (func ^ "." ^ name) rest
-      | x -> fold_children_in_expr find_calls_expr StringSet.union (StringSet.empty) x
+    let should_recurse = match call_sched with
+      | Reuse _ -> false
+      | _ -> true
     in
+
+    if should_recurse then begin
+      (* Find called functions (that aren't extern) and recurse *)
+      let rec find_calls_expr = function
+        (* skip externs *)
+        | Call (_, name, args) when name.[0] = '.' ->
+            (string_set_concat (List.map find_calls_expr args))
+        | Call (_, name, args) when List.mem name (split_name func) ->
+            (string_set_concat (List.map find_calls_expr args))
+        | Call (_, name, args) -> 
+            let rest = (string_set_concat (List.map find_calls_expr args)) in
+            StringSet.add (func ^ "." ^ name) rest
+        | x -> fold_children_in_expr find_calls_expr StringSet.union (StringSet.empty) x
+      in
     
-    let new_found_calls = 
-      match body with 
-        | Extern -> raise (Wtf "enumerating schedules for extern function")
-        | Pure expr -> find_calls_expr expr
-        | Reduce (init_expr, update_args, update_func, bounds) ->
-            let s = StringSet.add (func ^ "." ^ update_func) (find_calls_expr init_expr) in
-            string_set_concat (s::(List.map find_calls_expr update_args))
-    in
+      let new_found_calls = 
+        match body with 
+          | Extern -> raise (Wtf "enumerating schedules for extern function")
+          | Pure expr -> find_calls_expr expr
+          | Reduce (init_expr, update_args, update_func, bounds) ->
+              let s = StringSet.add (func ^ "." ^ update_func) (find_calls_expr init_expr) in
+              string_set_concat (s::(List.map find_calls_expr update_args))
+      in
 
-    (* Printf.printf " new_found_calls -> %s\n%!" (String.concat ", " (StringSet.elements new_found_calls)); *)
-
-    let bufs_in_scope,sched =
       StringSet.fold
         (fun nm (bufs_in_scope,sched) ->
           inner nm env vars_in_scope bufs_in_scope sched)
         new_found_calls
         (bufs_in_scope,sched)
-    in
-
-    (bufs_in_scope,sched)
+    end else (bufs_in_scope, sched)
+      
 
   in
 
@@ -326,6 +346,7 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
 
   schedule
     
+(*
 (* Add a split to a schedule *)
 let split_schedule (func: string) (var: string) (newouter: string) 
     (newinner: string) (factor: int) (schedule: schedule_tree) =
@@ -356,337 +377,131 @@ let split_schedule (func: string) (var: string) (newouter: string)
     set_schedule schedule func call_sched sched_list
   in
   List.fold_left set schedule calls
+*)
+
+(* A guru that uses a sub-guru, then mutates the resulting schedule list *)
+let mutate_sched_list_guru (func: string) (mutator: schedule list -> schedule list) (guru: scheduling_guru) =
+  { decide = fun f env sched_tree legal_call_scheds ->
+    let (call_sched, sched_list) = guru.decide f env sched_tree legal_call_scheds in
+    if (base_name f = func) then begin
+      Printf.printf "Mutating schedule list for %s: %s -> %!"
+        func
+        (String.concat ", " (List.map string_of_schedule sched_list));
+      let new_sched_list = if (f = func) then mutator sched_list else sched_list in
+      Printf.printf "%s\n%!"
+        (String.concat ", " (List.map string_of_schedule new_sched_list));
+      (call_sched, new_sched_list)
+    end else (call_sched, sched_list)
+  }
+
+(* A guru that uses a sub-guru, mutating the legal call schedules *)
+let mutate_legal_call_schedules_guru (func: string) (mutator: call_schedule list -> call_schedule list) (guru: scheduling_guru) = 
+  { decide = fun f env sched_tree options ->
+    if (base_name f = func) then begin
+      Printf.printf "Winnowing call schedule options for %s: %s -> %!"
+        func
+        (String.concat ", " (List.map string_of_call_schedule options));
+      let new_options = mutator options in    
+      Printf.printf "%s\n%!"
+        (String.concat ", " (List.map string_of_call_schedule new_options));
+      guru.decide f env sched_tree new_options
+    end else
+      guru.decide f env sched_tree options
+  }  
 
 (* Vectorize a parallel for *)
-let vectorize_schedule (func: string) (var: string) (schedule: schedule_tree) =
+let vectorize_schedule (func: string) (var: string) (guru: scheduling_guru) =
+  let mutate = function
+    | Serial (v, min, size) 
+    | Parallel (v, min, size) when v = var ->
+        begin match size with 
+          | IntImm x -> Vectorized (v, min, x)
+          | _ -> raise (Wtf "Can't vectorize a var with non-const bounds")
+        end
+    | x -> x
+  in mutate_sched_list_guru func (List.map mutate) guru
 
-  (* Find all the calls to func in the schedule *)
-  let calls = find_all_schedule schedule func in
 
-  let set schedule func = 
-    let (call_sched, sched_list) = find_schedule schedule func in
-    (* Find var in the sched_list *)
-    Printf.printf "Vectorizing %s over %s\n%!" func var;
-    let fix = function
-      | Serial (v, min, size) 
-      | Parallel (v, min, size) when v = var ->
-          begin match size with 
-            | IntImm x -> Vectorized (v, min, x)
-            | _ -> raise (Wtf "Can't vectorize a var with non-const bounds")
-          end
-      | x -> x
-    in    
-    let sched_list = List.map fix sched_list in
-    set_schedule schedule func call_sched sched_list
-  in
-  List.fold_left set schedule calls
+(* Unroll a for *)
+let unroll_schedule (func: string) (var: string) (guru: scheduling_guru) =
+  let mutate = function
+    | Serial (v, min, size) 
+    | Parallel (v, min, size) when v = var ->
+        begin match size with 
+          | IntImm x -> Unrolled (v, min, x)
+          | _ -> raise (Wtf "Can't unroll a var with non-const bounds")
+        end
+    | x -> x
+  in mutate_sched_list_guru func (List.map mutate) guru
 
-(* Unroll a parallel or serial for *)
-let unroll_schedule (func: string) (var: string) (schedule: schedule_tree) =
+(* Unroll a for *)
+let parallel_schedule (func: string) (var: string) (guru: scheduling_guru) =
+  let mutate = function
+    | Serial (v, min, size) when v = var -> Parallel (v, min, size)
+    | x -> x
+  in mutate_sched_list_guru func (List.map mutate) guru
 
-  (* Find all the calls to func in the schedule *)
-  let calls = find_all_schedule schedule func in
-  
-  let set schedule func =
-    let (call_sched, sched_list) = find_schedule schedule func in
-    (* Find var in the sched_list *)
-    Printf.printf "Unrolling %s over %s\n%!" func var;
-    let fix = function
-      | Serial (v, min, size) 
-      | Parallel (v, min, size) when v = var ->
-          begin match size with 
-            | IntImm x -> Unrolled (v, min, x)
-            | _ -> raise (Wtf "Can't unroll a var with non-const bounds")
-          end
-      | x -> x
-    in
-    let sched_list = List.map fix sched_list in
-    set_schedule schedule func call_sched sched_list
-  in
-  List.fold_left set schedule calls
+
+let split_schedule (func: string) (var: string) (outer: string) (inner: string) (n: expr) (guru: scheduling_guru) =
+  let rec mutate = function
+    | (Parallel (v, min, size))::rest when v = var ->
+        (Split (v, outer, inner, min))::
+          (Parallel (inner, IntImm 0, n))::
+          (Parallel (outer, IntImm 0, (size +~ n -~ (IntImm 1)) /~ n))::
+          rest
+    | (Serial (v, min, size))::rest when v = var -> 
+        (Split (v, outer, inner, min))::
+          (Serial (inner, IntImm 0, n))::
+          (Serial (outer, IntImm 0, (size +~ n -~ (IntImm 1)) /~ n))::
+          rest
+    | first::rest -> first::(mutate rest)
+    | [] -> []
+  in mutate_sched_list_guru func mutate guru
 
 (* Push one var to be outside another *)
-let transpose_schedule (func: string) (outer: string) (inner: string) (schedule: schedule_tree) = 
-  (* Find all the calls to func in the schedule *)
-  let calls = find_all_schedule schedule func in
+let transpose_schedule (func: string) (outer: string) (inner: string) (guru: scheduling_guru) = 
+  let rec mutate x l = match l with
+    | [] -> raise (Wtf (inner ^ " does not exist in this schedule"))
+    | ((Serial (v, _, _))::rest)
+    | ((Parallel (v, _, _))::rest)
+    | ((Vectorized (v, _, _))::rest) 
+    | ((Unrolled (v, _, _))::rest) ->
+        if v = outer then mutate (Some (List.hd l)) rest
+        else if v = inner then match x with 
+          | Some x -> (List.hd l) :: (x :: rest)
+          | None -> raise (Wtf (outer ^ "is already outside" ^ inner ^ "\n"))
+        else (List.hd l)::(mutate x rest)
+    | (first::rest) -> first :: (mutate x rest)  
+  in mutate_sched_list_guru func (mutate None) guru
 
-  let set schedule func =
-    let (call_sched, sched_list) = find_schedule schedule func in
-    (* Find var in the sched_list *)
-    Printf.printf "Moving %s outside %s in %s\n%!" outer inner func;
-    let rec fix l x = match l with
-      | [] -> raise (Wtf (inner ^ " does not exist in this schedule"))
-      | ((Serial (v, _, _))::rest)
-      | ((Parallel (v, _, _))::rest)
-      | ((Vectorized (v, _, _))::rest) 
-      | ((Unrolled (v, _, _))::rest) ->
-          if v = outer then begin
-            Printf.printf "Found %s\n" outer;
-            fix rest (Some (List.hd l))
-          end else if v = inner then begin
-            Printf.printf "Found %s\n" inner;
-            begin match x with 
-              | Some x -> (List.hd l) :: (x :: rest)
-              | None -> raise (Wtf (outer ^ "is already outside" ^ inner ^ "\n"))
-            end
-          end else begin
-            (List.hd l)::(fix rest x)
-          end
-      | (first::rest) -> first :: (fix rest x)
-    in
-    let sched_list = fix sched_list None in
-    set_schedule schedule func call_sched sched_list  
-  in
-  List.fold_left set schedule calls
+(* Set a function to be evaluated at the root (or reuse it) *)
+let root_schedule (func: string) (guru: scheduling_guru) =
+  (* Best so far, remainder of list *)
+  let rec mutate x l = match (x, l) with
+    (* Accept root over nothing, but keep looking *)
+    | (None, Root::rest) -> mutate (Some Root) rest
+    (* Take the first reuse, if there is one *)
+    | (_, (Reuse buf)::rest) -> [Reuse buf]
+    (* Skip past uninteresting things *)
+    | (_, first::rest) -> mutate x rest
+    (* If we found something acceptable, return it *)
+    | (Some x, []) -> [x] 
+    (* Otherwise freak out *)
+    | _ -> raise (Wtf ("Could not schedule " ^ func ^ " as root"))
+  in mutate_legal_call_schedules_guru func (mutate None) guru
 
-let root_or_chunk_schedule (func: string) (call_sched: call_schedule)
-    (args: string list) (region: (expr * expr) list) (schedule: schedule_tree) = 
+let chunk_schedule (func: string) (var: string) (guru: scheduling_guru) = 
+  (* Best so far, remainder of list *)
+  let rec mutate x l = match (x, l) with
+    (* Accept chunk over nothing, but keep looking *)
+    | (None, (Chunk v)::rest) when base_name v = var -> mutate (Some (Chunk v)) rest
+    (* Take the first reuse, if there is one *)
+    | (_, (Reuse buf)::rest) -> [Reuse buf]
+    (* Skip past uninteresting things *)
+    | (_, first::rest) -> mutate x rest
+    (* If we found something acceptable, return it *)
+    | (Some x, []) -> [x]
+    (* Otherwise freak out *)
+    | _ -> raise (Wtf ("Could not schedule " ^ func ^ " as chunked over " ^ var))
+  in mutate_legal_call_schedules_guru func (mutate None) guru
 
-  Printf.printf "root or chunk %s with region %s\n" func 
-    (String.concat ", " (List.map (fun (x, y) -> "[" ^ string_of_expr x ^ ", " ^ string_of_expr y ^ "]") region));
-
-  (* Make a sub-schedule using the arg names and the region. We're
-     assuming all the args are region args for now *)
-  let make_sched name (min, size) = Serial (name, min, size) in
-  let sched_list = match region with
-    (* To be inferred later *)
-    | [] -> List.map (fun n -> make_sched n (Var (Int 32, func ^ "." ^ n ^ ".min"),
-                                             Var (Int 32, func ^ "." ^ n ^ ".extent"))) args
-    | _ -> List.map2 make_sched args region 
-  in
-
-  (* Find all the calls to func in the schedule. Sort them
-     lexicographically so we can always mark the first one returned as
-     the chunk provider and the others as reuse. Otherwise we risk
-     marking a node as reuse when it has chunk providers as
-     children. *)
-  let string_cmp s1 s2 = if s1 < s2 then -1 else 1 in
-  Printf.printf "Looking up %s in schedule\n%!" func;
-  let unsorted = (find_all_schedule schedule func) in
-  let (first, rest) = match (List.sort string_cmp unsorted) with
-    | (a::b) -> (a, b)
-    | [] -> raise (Wtf ("Could not find " ^ func ^ " in schedule\n"))
-  in
-
-  (* Set one to be chunked over var with the given region. Tell the
-     others to reuse this chunk. *)
-
-  (* Set each one to be chunked over var with the given region. Note
-     that this doesn't allow for different callsites to be chunked
-     differently! Maybe the argument to this function should be a
-     fully qualified call? *)
-  let set sched call =
-    set_schedule sched call (Reuse first) []
-  in
-
-  Printf.printf "Done chunking\n%!";
-
-  let chunk_first = set_schedule schedule first call_sched sched_list in
-
-  List.fold_left set chunk_first rest
-
-let chunk_schedule func var args region schedule = 
-  (* Find all the possible vars that chunk could refer to, and call
-     root_or_chunk_schedule once within each context *)
-
-  (* Figure out all the possible vars this could refer to *)
-  let rec descend enclosing_var context f (call_sched, sched_list, sched) found_vars =
-    if f = func then 
-      enclosing_var :: found_vars
-    else
-
-      let subcontext = if context = "" then f else (context ^ "." ^ f) in
-
-      let rec var_in_sched_list = function
-        | [] -> false
-        | (Serial (v, _, _)::rest)
-        | (Parallel (v, _, _)::rest)
-        | (Vectorized (v, _, _)::rest)
-        | (Unrolled (v, _, _)::rest)
-        | (Split (v, _, _, _)::rest) when v = var -> true
-        | (_::rest) -> var_in_sched_list rest
-      in
-
-      let enclosing_var =
-        if var_in_sched_list sched_list then
-          (* The enclosing var falls out of scope because a new var by the same name hides it *)
-          Some subcontext 
-        else match call_sched with
-          (* The enclosing function is also an enclosing scope, so it's still valid *)
-          | Inline -> enclosing_var 
-          (* The calling function is not an enclosing scope, so the enclosing var gets nuked *)
-          | Root -> None
-
-          (* The var may or may not have fallen out of scope *)
-          | Chunk chunk_dim -> 
-              let idx_after_last_dot =
-                try (String.rindex chunk_dim '.' + 1)
-                with Not_found -> raise (Wtf ("chunk dimensions must be fully qualified: " ^ chunk_dim))
-              in
-              let chunk_var = String.sub chunk_dim idx_after_last_dot (String.length chunk_dim - idx_after_last_dot)
-              and chunk_parent = String.sub chunk_dim 0 (idx_after_last_dot-1) in
-
-              if chunk_var = var then enclosing_var else                
-                let (_, chunk_sched_list) = find_schedule schedule chunk_parent in
-                (* enclosing var is still in scope if we hit a var of
-                   the same name earlier in the sched list of the
-                   parent *)
-                let rec var_occurs_before_chunk_var = function
-                  (* If we don't find chunk_var something is wrong *)
-                  | [] -> raise (Wtf ("Bad chunk dimension detected: " ^ chunk_dim))
-                  (* We can't split on a chunk var *)
-                  | (Split (v, _, _, _)::rest) ->
-                      if v = chunk_var then
-                        raise (Wtf "Can't split on a chunk var")
-                      else
-                        var_occurs_before_chunk_var rest
-                  | (Serial (v, _, _)::rest)
-                  | (Parallel (v, _, _)::rest)
-                  | (Vectorized (v, _, _)::rest)
-                  | (Unrolled (v, _, _)::rest) ->
-                      if v = var then
-                        true
-                      else if v = chunk_var then
-                        false 
-                      else
-                        var_occurs_before_chunk_var rest
-                in
-                if var_occurs_before_chunk_var chunk_sched_list then enclosing_var else None
-              
-          (* Reuse has no children, so it doesn't matter what we
-             return here. Let's say that the enclosing var is still
-             valid. *)
-          | Reuse _ -> enclosing_var 
-      in
-
-      let Tree map = sched in
-      StringMap.fold (descend enclosing_var subcontext) map found_vars
-  in
-
-  let Tree map = schedule in
-  let contexts = StringMap.fold (descend None "") map [] in
-
-  let string_of_context = function
-    | None -> "None"
-    | Some v -> "Some " ^ v
-  in
-
-  Printf.printf "Contexts in which I want to chunk %s over %s: %s\n%!"
-      func var (String.concat ", " (List.map string_of_context contexts));
-
-  (* TODO: allow different meanings in different places *)
-  match contexts with 
-      (*
-    | [Some first] ->
-        root_or_chunk_schedule func (Chunk (first ^ "." ^ var)) args region schedule        
-      *)  
-    | (Some first)::rest when List.for_all (fun x -> x = (Some first)) rest ->  (* single unambiguous meaning *)
-        root_or_chunk_schedule func (Chunk (first ^ "." ^ var)) args region schedule 
-    | _ -> 
-        (* Ambiguous or ill-defined. Fall back to Root *)
-        root_or_chunk_schedule func Root args region schedule
-
-(* For a fully qualified function, what are all the variables
-let all_vars_in_scope func *)
-
-let root_schedule func args region schedule = 
-  root_or_chunk_schedule func Root args region schedule
-
-let parallel_schedule (func: string) (var: string) (schedule: schedule_tree) =
-
-  let calls = find_all_schedule schedule func in
-  
-  let rec fix = function
-    | [] -> []
-    | (Serial (n, min, size))::rest when n = var ->
-        (Parallel (n, min, size))::rest
-    | first::rest -> first::(fix rest)
-  in
-
-  let set schedule func =
-    let (call_sched, sched_list) = find_schedule schedule func in
-    set_schedule schedule func call_sched (fix sched_list)
-  in
-  
-  List.fold_left set schedule calls
-
-(*
-let serial_schedule (func: string) (var: string) (min: expr) (size: expr) (schedule: schedule_tree) =
-
-  let calls = find_all_schedule schedule func in
-  
-  let set schedule func =
-    let (call_sched, sched_list) = find_schedule schedule func in
-    set_schedule schedule func call_sched ((Serial (var, min, size))::sched_list)
-  in
-  
-  List.fold_left set schedule calls
-*)
-
-(*
-  let infer_regions (env: environment) (schedule: schedule_tree) =
-  let rec infer (func: string) (schedule: schedule_tree) (region: (expr * expr) list) =
-  let (Tree map) = schedule in
-
-(* Grab the body of the function in question *)
-    let (_, args, return_type, body) = Environment.find func env in
-
-    (* Compute and update the region for a callee given a region for the caller *)
-    let update_region callee value map =
-      (* Unpack the current schedule for the callee *)
-      let (call_sched, sched_list, sub_sched) = value in
-
-      (* Create the binding from variable names to ranges *)
-      let add_binding map (arg_type, arg_name) (min, max) = StringMap.add arg_name (min, max) map
-      let bindings = List.fold_left2 add_binding StringMap.empty args region in
-
-      (* Given that binding, inspect the body of the caller to see what callee regions are used *)
-      let callee_region = 
-        match body with 
-          | Pure expr -> required_of_expr callee bindings expr 
-          | Impure (init_val, update_loc, update_val) ->
-              let init_region = required_of_expr callee bindings init_val in
-              (* Make a new binding for the iteration domain of the update step *)
-              let new_bindings = 
-in
-
-
-
-      (* Update the sched_list to cover this region *)
-      let new_sched_list = some function of callee_region in
-      
-
-      (* Set it, and recursively descend the subtree *)
-      StringMap.add key (call_sched, new_sched_list, infer key sub_sched callee_region)
-    in
-
-    (* Update all keys (recursively descending) *)
-    Tree (StringMap.fold update_region map)
-
-(* Compute the region over which a (fully-qualified) function should be realized to satisfy everyone who uses it *)
-let required_region (func: string) (env: environment) (schedule: schedule_tree) =
-
-
-  (* Find the schedule for this function, and all other schedules that are marked to reuse it *)  
-  let is_instances name call_sched _ = ((name = func) || (call_sched = Reuse func)) in
-  let instances = filter_schedule schedule is_user in
-  let users = List.map (fun name call_sched sched_list
-
-  (* Find the region over which each will be computed (which may require some recursion) *)
-  let user_regions = 
-    let user_region name call_sched sched_list =
-      match call_sched with 
-        | Chunk _ | Coiterate | Root ->
-        | Inline | Reuse
-    in
-    List.map user_region users
-  in
-
-  (* Convert that information to the region that each requires of this function *)
-  let required_regions = in
-
-  (* Take the union of all the regions and update the schedule tree *)
-  let union = in
-
-  set_schedule ...
-*)
