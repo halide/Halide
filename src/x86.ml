@@ -2,6 +2,10 @@ open Ir
 open Llvm
 open Cg_llvm_util
 
+type state = int (* dummy - we don't use anything in this Arch for now *)
+type context = state cg_context
+let start_state () = 0
+
 let codegen_entry c m cg_entry e =
   (* set up module *)
   Stdlib.init_module_x86 m;
@@ -12,7 +16,7 @@ let codegen_entry c m cg_entry e =
   (* return the wrapper which takes buffer_t*s *)
   cg_wrapper c m e inner
 
-let rec cg_expr (con:cg_context) (expr:expr) =
+let rec cg_expr (con:context) (expr:expr) =
   let c = con.c and m = con.m and b = con.b in
   let cg_expr = cg_expr con in
 
@@ -45,7 +49,7 @@ let rec cg_expr (con:cg_context) (expr:expr) =
     (* We don't have any special tricks up our sleeve for this case *)
     | _ -> con.cg_expr expr 
         
-let rec cg_stmt (con:cg_context) (stmt:stmt) =
+let rec cg_stmt (con:context) (stmt:stmt) =
   let c = con.c and m = con.m and b = con.b in
   let cg_expr = cg_expr con in
   let cg_stmt = cg_stmt con in
@@ -67,12 +71,12 @@ let rec cg_stmt (con:cg_context) (stmt:stmt) =
         end
     | _ -> con.cg_stmt stmt
 
-let malloc (con:cg_context) (size:expr) = 
+let malloc (con:context) (size:expr) = 
   let c = con.c and m = con.m and b = con.b in  
   let malloc = declare_function "malloc" (function_type (pointer_type (i8_type c)) [|i64_type c|]) m in  
   build_call malloc [|cg_expr con (Cast (Int 64, size))|] "" b 
 
-let free (con:cg_context) (address:llvalue) =
+let free (con:context) (address:llvalue) =
   let c = con.c and m = con.m and b = con.b in
   let free = declare_function "free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
   build_call free [|address|] "" b   

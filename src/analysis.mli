@@ -20,5 +20,6 @@ val subs_name_stmt : Ir.buffer -> Ir.buffer -> Ir.stmt -> Ir.stmt
 val subs_name_expr : Ir.buffer -> Ir.buffer -> Ir.expr -> Ir.expr
 val prefix_name_expr : string -> Ir.expr -> Ir.expr
 val prefix_name_stmt : string -> Ir.stmt -> Ir.stmt
-
+val find_names_in_stmt : Util.StringSet.t -> Ir.stmt -> Util.StringIntSet.t
+val find_names_in_expr : Util.StringSet.t -> Ir.expr -> Util.StringIntSet.t
 
