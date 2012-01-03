@@ -383,11 +383,11 @@ let split_schedule (func: string) (var: string) (newouter: string)
 let mutate_sched_list_guru (func: string) (mutator: schedule list -> schedule list) (guru: scheduling_guru) =
   { decide = fun f env sched_tree legal_call_scheds ->
     let (call_sched, sched_list) = guru.decide f env sched_tree legal_call_scheds in
-    if (base_name f = func) then begin
+    if (base_name f = func && (sched_list <> [])) then begin
       Printf.printf "Mutating schedule list for %s: %s -> %!"
         func
         (String.concat ", " (List.map string_of_schedule sched_list));
-      let new_sched_list = if (f = func) then mutator sched_list else sched_list in
+      let new_sched_list = mutator sched_list in
       Printf.printf "%s\n%!"
         (String.concat ", " (List.map string_of_schedule new_sched_list));
       (call_sched, new_sched_list)
@@ -455,7 +455,7 @@ let split_schedule (func: string) (var: string) (outer: string) (inner: string) 
           (Serial (outer, IntImm 0, (size +~ n -~ (IntImm 1)) /~ n))::
           rest
     | first::rest -> first::(mutate rest)
-    | [] -> []
+    | [] -> raise (Wtf ("Did not find variable " ^ var ^ " in the schedule for " ^ func ^ "\n%!"))
   in mutate_sched_list_guru func mutate guru
 
 (* Push one var to be outside another *)
