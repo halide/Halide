@@ -163,12 +163,14 @@ let _ =
   
   Callback.register "printSchedule" (fun s -> print_schedule s; Printf.printf "%!");
   
-  Callback.register "makeSchedule" (fun (f: string) (sizes: expr list) (env: environment) ->
+  Callback.register "makeNoviceGuru" (fun _ -> novice);
+
+  Callback.register "makeSchedule" (fun (f: string) (sizes: expr list) (env: environment) (guru: scheduling_guru) ->
     let (_, args, _, _) = Environment.find f env in
     let region = List.map2 (fun (t, v) x -> (v, IntImm 0, x)) args sizes in
     Printf.printf("About to make default schedule...\n%!");
     (* make_default_schedule f env region *)
-    generate_schedule f env novice
+    generate_schedule f env guru
   );
   
   Callback.register "doLower" lower;  
@@ -176,15 +178,14 @@ let _ =
   Callback.register "doCompileGPU" (compile true);
   Callback.register "doCompileToFile" compile_to_file;
   
-  (* Schedule transformations. These partially apply the various ml
-     functions to return an unary function that will transform a schedule
+  (* Guru transformations. These partially apply the various ml
+     functions to return an unary function that will transform a guru
      in the specified way. *)
   Callback.register "makeVectorizeTransform" (fun func var -> vectorize_schedule func var);
   Callback.register "makeUnrollTransform" (fun func var -> unroll_schedule func var);
   Callback.register "makeSplitTransform" (fun func var outer inner n -> split_schedule func var outer inner n);
   Callback.register "makeTransposeTransform" (fun func var1 var2 -> transpose_schedule func var1 var2);
-  Callback.register "makeChunkTransform" (fun func var args region -> chunk_schedule func var args region);
-  Callback.register "makeRootTransform" (fun func args region -> root_schedule func args region);
+  Callback.register "makeChunkTransform" (fun func var -> chunk_schedule func var);
+  Callback.register "makeRootTransform" (fun func -> root_schedule func);
   Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);
-  (* Callback.register "makeSerialTransform" (fun func var min size -> serial_schedule func var min size); *)
   
