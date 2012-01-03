@@ -199,3 +199,43 @@ and prefix_name_stmt prefix stmt =
         Pipeline (prefix ^ name, ty, recurse_expr size, recurse_stmt produce, recurse_stmt consume)      
     | Print (p, l) ->
         Print (p, List.map recurse_expr l)
+
+(* Find all references in stmt/expr to things outside of it.
+ * Return a set of pairs of names and their storage sizes, for e.g. building a closure. *)
+let rec find_names_in_stmt internal = function
+  | Store (e, buf, idx) ->
+      let inner = StringIntSet.union (find_names_in_expr internal e) (find_names_in_expr internal idx) in
+      if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, 8) inner)
+  | Pipeline (name, ty, size, produce, consume) ->
+      let internal = StringSet.add name internal in
+      string_int_set_concat [
+        find_names_in_expr internal size;
+        find_names_in_stmt internal produce;
+        find_names_in_stmt internal consume]
+  | LetStmt (name, value, stmt) ->
+      let internal = StringSet.add name internal in
+      StringIntSet.union (find_names_in_expr internal value) (find_names_in_stmt internal stmt)
+  | Block l ->
+      string_int_set_concat (List.map (find_names_in_stmt internal) l)
+  | For (var_name, min, size, order, body) ->
+      let internal = StringSet.add var_name internal in
+      string_int_set_concat [
+        find_names_in_expr internal min;
+        find_names_in_expr internal size;
+        find_names_in_stmt internal body]
+      | Print (fmt, args) ->
+          string_int_set_concat (List.map (find_names_in_expr internal) args)
+      | Provide (fn, _, _) ->
+          raise (Wtf "Encountered a provide during cg. These should have been lowered away.")
+and find_names_in_expr internal = function
+  | Load (_, buf, idx) ->
+      let inner = find_names_in_expr internal idx in
+      if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, 8) inner)
+  | Var (t, n) ->
+      let size = (bit_width t)/8 in
+      if (StringSet.mem n internal) then StringIntSet.empty else (StringIntSet.add (n, size) StringIntSet.empty)
+  | Let (n, a, b) ->
+      let internal = StringSet.add n internal in
+      StringIntSet.union (find_names_in_expr internal a) (find_names_in_expr internal b)
+  | x -> fold_children_in_expr (find_names_in_expr internal) StringIntSet.union StringIntSet.empty x
+
