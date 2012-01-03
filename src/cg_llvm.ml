@@ -18,18 +18,26 @@ type cg_stmt = stmt -> llvalue
 
 
 module type Architecture = sig
+  type state
+  type context = state cg_context
+
+  val start_state : unit -> state
+
   (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)
   val codegen_entry : llcontext -> llmodule -> cg_entry -> entrypoint -> llvalue
-  val cg_expr : cg_context -> expr -> llvalue
-  val cg_stmt : cg_context -> stmt -> llvalue
-  val malloc  : cg_context -> expr -> llvalue
-  val free    : cg_context -> llvalue -> llvalue 
+  val cg_expr : context -> expr -> llvalue
+  val cg_stmt : context -> stmt -> llvalue
+  val malloc  : context -> expr -> llvalue
+  val free    : context -> llvalue -> llvalue 
   val env : environment
 end
 
 module type Codegen = sig
+  type arch_state
+  type context = arch_state cg_context
+
   val make_cg_context : llcontext -> llmodule -> llbuilder ->
-                        (string, llvalue) Hashtbl.t -> cg_context
+                        (string, llvalue) Hashtbl.t -> arch_state -> context
   val codegen_entry : entrypoint -> llcontext * llmodule * llvalue
   val codegen_c_wrapper : llcontext -> llmodule -> llvalue -> llvalue
   val save_bc_to_file : llmodule -> string -> unit
@@ -39,6 +47,9 @@ module type Codegen = sig
 end
 
 module CodegenForArch ( Arch : Architecture ) = struct
+
+type arch_state = Arch.state
+type context = arch_state cg_context
 
 let dbgprint = false
 
@@ -50,7 +61,7 @@ type cmp =
 module ArgMap = Map.Make(String)
 type argmap = (arg*int) ArgMap.t (* track args as name -> (Ir.arg,index) *) 
 
-let make_cg_context c m b sym_table =
+let make_cg_context c m b sym_table arch_state =
 
   let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
@@ -77,6 +88,7 @@ let make_cg_context c m b sym_table =
     sym_get = sym_get;
     sym_add = sym_add;
     sym_remove = sym_remove;
+    arch_state = arch_state;
   }
   and cg_expr e = 
     if dbgprint then Printf.printf "begin cg_expr %s\n%!" (string_of_expr e);
@@ -699,7 +711,7 @@ let cg_entry c m e =
   (* start codegen at entry block of main *)
   let b = builder_at_end c (entry_block entrypoint_fn) in
 
-  let ctx = make_cg_context c m b sym_table in
+  let ctx = make_cg_context c m b sym_table (Arch.start_state ()) in
 
   (* Put args in the sym table *)
   List.iter
@@ -718,7 +730,7 @@ let cg_entry c m e =
   position_at_end after_alloca_bb b;  
   *)
   (* actually generate from the root statement *)
-  ignore (ctx.cg_stmt s);
+  ignore (Arch.cg_stmt ctx s);
 
   (* return void from main *)
   ignore (build_ret_void b);
@@ -909,6 +921,7 @@ module CodegenForHost = struct
       "x86_64"
 
   (* TODO: this is ugly. Not sure there's a better way. *)
+  (* TODO: push this up to the C layer? *)
   let make_cg_context =
     if hosttype = "arm" then
       let module Cg = CodegenForArch(Arm) in
