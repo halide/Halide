@@ -92,7 +92,7 @@ namespace FImage {
          * onto the scheduleTransforms vector, which is traversed in
          * order starting from an initial default schedule to create a
          * mutated schedule */
-        void split(const Var &, const Var &, const Var &, int factor);
+        void split(const Var &, const Var &, const Var &, const Expr &factor);
         void vectorize(const Var &);
         void unroll(const Var &);
         void transpose(const Var &, const Var &);

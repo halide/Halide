@@ -2,6 +2,7 @@
 
 from subprocess import check_call,check_output,CalledProcessError
 import os
+import os.path
 import json
 
 # TODO: make pch: `g++ -x c++-header -I ../ImageStack/src test_plugin.h`
@@ -69,14 +70,14 @@ def test_cpp(name):
          "-I../../../cpp_bindings/",
          "../../../cpp_bindings/FImage.a",
          "-Wl,-dead_strip"]
-    try:
+    if os.path.exists("/usr/local/cuda"):
         compile_cmd = compile_cmd_base + \
             ["-L/usr/local/cuda/lib", "-lcuda", srcfile]
         status(name, " ".join(compile_cmd))
         run(compile_cmd)
-    except CalledProcessError:
+    else:
         compile_cmd = compile_cmd_base + [srcfile]
-        status(name, "retry without CUDA: "+ " ".join(compile_cmd))
+        status(name, ' '.join(compile_cmd))
         run(compile_cmd)
 
     # Run the test

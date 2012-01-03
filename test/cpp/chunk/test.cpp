@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     g.split(x, xo, xi, 4);
     g.split(y, yo, yi, 4);
     g.transpose(xo, yi);
-    f.chunk(xo, Range(xo*4-1, 6) * Range(yo*4, 4));
+    f.chunk(xo);
 
     printf("Realizing function...\n");
 
