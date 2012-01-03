@@ -9,6 +9,7 @@
 #include <llvm/Target/TargetData.h>
 #include <llvm/Assembly/PrintModulePass.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Transforms/IPO.h>
 
 #include "../src/buffer.h"
 #include "Func.h"
@@ -24,9 +25,8 @@ namespace FImage {
     ML_FUNC2(makeUnrollTransform);
     ML_FUNC5(makeSplitTransform);
     ML_FUNC3(makeTransposeTransform);
-    ML_FUNC4(makeChunkTransform);
-    ML_FUNC3(makeRootTransform);
-    // ML_FUNC4(makeSerialTransform); 
+    ML_FUNC2(makeChunkTransform);
+    ML_FUNC1(makeRootTransform);
     ML_FUNC2(makeParallelTransform);
     
     ML_FUNC1(doConstantFold);
@@ -36,8 +36,10 @@ namespace FImage {
     ML_FUNC0(makeEnv);
     ML_FUNC2(addDefinitionToEnv);
     
-    ML_FUNC3(makeSchedule);
+    ML_FUNC4(makeSchedule);
     ML_FUNC4(doLower);
+
+    ML_FUNC0(makeNoviceGuru);
 
     ML_FUNC1(printStmt);
     ML_FUNC1(printSchedule);
@@ -354,12 +356,12 @@ namespace FImage {
     }
     */
 
-    void Func::split(const Var &old, const Var &newout, const Var &newin, int factor) {
-        MLVal t = makeSplitTransform((name()),
-                                     (old.name()),
-                                     (newout.name()),
-                                     (newin.name()),
-                                     (factor));
+    void Func::split(const Var &old, const Var &newout, const Var &newin, const Expr &factor) {
+        MLVal t = makeSplitTransform(name(),
+                                     old.name(),
+                                     newout.name(),
+                                     newin.name(),
+                                     factor.node());
         contents->scheduleTransforms.push_back(t);
     }
 
@@ -370,38 +372,13 @@ namespace FImage {
         contents->scheduleTransforms.push_back(t);
     }
 
-    void Func::chunk(const Var &caller_var, const Range &region) {
-        MLVal r = makeList();
-        for (size_t i = region.range.size(); i > 0; i--) {
-            r = addToList(r, makePair(region.range[i-1].first.node(), region.range[i-1].second.node()));
-        }
-
-        MLVal t = makeChunkTransform(name(),
-                                     caller_var.name(),
-                                     contents->arglist,
-                                     r);
-        contents->scheduleTransforms.push_back(t);
-    }
-  
     void Func::chunk(const Var &caller_var) {
-        MLVal t = makeChunkTransform(name(), caller_var.name(), contents->arglist, makeList());
+        MLVal t = makeChunkTransform(name(), caller_var.name());
         contents->scheduleTransforms.push_back(t);
-    }
-
-    void Func::root(const Range &region) {
-        MLVal r = makeList();
-        for (size_t i = region.range.size(); i > 0; i--) {
-            r = addToList(r, makePair(region.range[i-1].first.node(), region.range[i-1].second.node()));
-        }
-
-        MLVal t = makeRootTransform(name(),
-                                    contents->arglist,
-                                    r);
-        contents->scheduleTransforms.push_back(t);        
     }
 
     void Func::root() {
-        MLVal t = makeRootTransform(name(), contents->arglist, makeList());
+        MLVal t = makeRootTransform(name());
         contents->scheduleTransforms.push_back(t);
     }
 
@@ -444,16 +421,13 @@ namespace FImage {
             snprintf(buf, 256, ".result.dim.%d", ((int)i)-1);
             sizes = addToList(sizes, Expr(Var(buf)).node());
         }
-        
-        MLVal sched = makeSchedule((name()),
-                                   sizes,
-                                   *Func::environment);
-        
-        printf("Transforming schedule...\n");
+
+        MLVal guru = makeNoviceGuru();
+
+        printf("Patching guru...\n");
         for (size_t i = 0; i < contents->scheduleTransforms.size(); i++) {
-            sched = contents->scheduleTransforms[i](sched);
+            guru = contents->scheduleTransforms[i](guru);
         }
-        
         for (size_t i = 0; i < rhs().funcs().size(); i++) {
             const Func &f = rhs().funcs()[i];
             // Don't consider recursive dependencies for the
@@ -462,9 +436,14 @@ namespace FImage {
             if (f == *this) continue;
             for (size_t j = 0; j < f.scheduleTransforms().size(); j++) {
                 MLVal t = f.scheduleTransforms()[j];
-                sched = t(sched);
+                guru = t(guru);
             }
         }
+        
+        MLVal sched = makeSchedule((name()),
+                                   sizes,
+                                   *Func::environment,
+                                   guru);
         
         printf("Done transforming schedule\n");
         printSchedule(sched);
@@ -502,7 +481,8 @@ namespace FImage {
 
     void Func::compileJIT(bool targetPTX) {
         static llvm::ExecutionEngine *ee = NULL;
-        static llvm::FunctionPassManager *passMgr = NULL;
+        static llvm::FunctionPassManager *fPassMgr = NULL;
+        static llvm::PassManager *mPassMgr = NULL;
 
         if (!ee) {
             llvm::InitializeNativeTarget();
@@ -536,8 +516,37 @@ namespace FImage {
             }
             
             // Set up the pass manager
-            passMgr = new llvm::FunctionPassManager(m);
+            fPassMgr = new llvm::FunctionPassManager(m);
+            mPassMgr = new llvm::PassManager();
+
+            // Inline stuff marked always-inline
+            mPassMgr->add(llvm::createAlwaysInlinerPass());
+            mPassMgr->add(llvm::createDeadCodeEliminationPass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After always inliner ***", &stdout));
             
+            // Function-level passes on the inner function (TODO: what about parallelism!)
+            fPassMgr->add(new llvm::TargetData(*ee->getTargetData()));
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
+                        
+            // AliasAnalysis support for GVN
+            fPassMgr->add(llvm::createBasicAliasAnalysisPass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
+            
+            // Reassociate expressions
+            fPassMgr->add(llvm::createReassociatePass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
+            
+            // Simplify CFG (delete unreachable blocks, etc.)
+            fPassMgr->add(llvm::createCFGSimplificationPass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
+            
+            // Eliminate common sub-expressions
+            fPassMgr->add(llvm::createGVNPass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
+        
+            // Peephole, bit-twiddling optimizations
+            fPassMgr->add(llvm::createInstructionCombiningPass());
+            //fPassMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));            
         } else { 
             ee->addModule(m);
         }            
@@ -555,38 +564,17 @@ namespace FImage {
         std::string errstr;
         llvm::raw_fd_ostream stdout("passes.txt", errstr);
         
-        passMgr->add(new llvm::TargetData(*ee->getTargetData()));
-        //passMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
+        mPassMgr->run(*m);
+
+        fPassMgr->doInitialization();
         
-        // AliasAnalysis support for GVN
-        passMgr->add(llvm::createBasicAliasAnalysisPass());
-        //passMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
-        
-        // Reassociate expressions
-        passMgr->add(llvm::createReassociatePass());
-        //passMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
-        
-        // Simplify CFG (delete unreachable blocks, etc.)
-        passMgr->add(llvm::createCFGSimplificationPass());
-        //passMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
-        
-        // Eliminate common sub-expressions
-        passMgr->add(llvm::createGVNPass());
-        //passMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
-        
-        // Peephole, bit-twiddling optimizations
-        passMgr->add(llvm::createInstructionCombiningPass());
-        //passMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));
-        
-        passMgr->doInitialization();
-        
-        if (passMgr->run(*inner)) {
+        if (fPassMgr->run(*inner)) {
             printf("optimization did something.\n");
         } else {
             printf("optimization did nothing.\n");
         }
         
-        passMgr->doFinalization();
+        fPassMgr->doFinalization();
         
         printf("compiling ll -> machine code...\n");
         void *ptr = ee->getPointerToFunction(f);
