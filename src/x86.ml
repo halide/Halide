@@ -33,8 +33,7 @@ let rec cg_expr (con:cg_context) (expr:expr) =
     (* unaligned dense 128-bit loads use movups *)
     | Load (t, buf, Ramp(base, IntImm 1, n)) when (bit_width t = 128) ->
         begin match (Analysis.reduce_expr_modulo base n) with 
-          | Some 0 -> con.cg_expr expr
-          | None   -> con.cg_expr expr
+          | Some _ -> con.cg_expr expr
           | _ ->              
               let unaligned_load_128 = declare_function "unaligned_load_128"
                 (function_type (i8x16_t) [|ptr_t|]) m in
