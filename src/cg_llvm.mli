@@ -28,6 +28,10 @@ module type Architecture = sig
 end
 
 module type Codegen = sig
+  (* make_cg_context ctx module builder symtab -> cg_context *)
+  val make_cg_context : llcontext -> llmodule -> llbuilder ->
+                        (string, llvalue) Hashtbl.t -> cg_context
+
   (* codegen_entry entry -> ctx, module, function *)
   val codegen_entry : entrypoint -> llcontext * llmodule * llvalue
 

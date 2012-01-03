@@ -81,8 +81,8 @@ let rec simtfy_stmt = function
       simtfy_stmt body
 
   (* Recurse *)
-  | For (name, base, width, parallel, body) ->
-      For (name, simtfy_expr base, simtfy_expr width, parallel, simtfy_stmt body)
+  | For (name, base, width, ordered, body) ->
+      For (name, simtfy_expr base, simtfy_expr width, ordered, simtfy_stmt body)
   | Block (stmts) -> Block (List.map simtfy_stmt stmts)
   | Store (e, buf, idx) -> Store (simtfy_expr e, buf, simtfy_expr idx)
   | Pipeline (name, t, e, produce, consume) ->

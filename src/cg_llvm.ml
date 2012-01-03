@@ -28,6 +28,8 @@ module type Architecture = sig
 end
 
 module type Codegen = sig
+  val make_cg_context : llcontext -> llmodule -> llbuilder ->
+                        (string, llvalue) Hashtbl.t -> cg_context
   val codegen_entry : entrypoint -> llcontext * llmodule * llvalue
   val codegen_c_wrapper : llcontext -> llmodule -> llvalue -> llvalue
   val save_bc_to_file : llmodule -> string -> unit
@@ -48,7 +50,7 @@ type cmp =
 module ArgMap = Map.Make(String)
 type argmap = (arg*int) ArgMap.t (* track args as name -> (Ir.arg,index) *) 
 
-let cg_entry c m e =
+let make_cg_context c m b sym_table =
 
   let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
@@ -56,11 +58,6 @@ let cg_entry c m e =
   let buffer_t = raw_buffer_t c in
 
   let type_of_val_type = type_of_val_type c in
-
-  (* The symbol table for loop variables *)
-  let sym_table =
-    Hashtbl.create 10 
-  in
 
   let sym_add name llv =
     set_value_name name llv;
@@ -72,56 +69,15 @@ let cg_entry c m e =
     with Not_found -> raise (Wtf ("symbol " ^ name ^ " not found"))
   in
 
-  (* unpack the entrypoint *)
-  let (entrypoint_name, arglist, s) = e in
-  let type_of_arg = function
-    | Scalar (_, vt) -> [type_of_val_type vt]
-    | Buffer _ -> [buffer_t; int_imm_t; int_imm_t; int_imm_t; int_imm_t]
-  and name_of_arg = function
-    | Scalar (n, _) -> [n]
-    | Buffer n -> [n; n ^ ".dim.0"; n ^ ".dim.1"; n ^ ".dim.2"; n ^ ".dim.3"] 
-  in
-
-  let argtypes = List.flatten (List.map type_of_arg arglist) in
-  
-  (* define `void main(arg1, arg2, ...)` entrypoint*)
-  let entrypoint_fn =
-    define_function
-      entrypoint_name
-      (function_type (void_type c) (Array.of_list argtypes))
-      m
-  in
-
-  let argnames = List.flatten (List.map name_of_arg arglist) in
-  let argvals = List.map (param entrypoint_fn) (0 -- (List.length argnames)) in
-
-  (* Put args in the sym table *)
-  List.iter
-    (fun (n, t, llval) ->
-      sym_add n llval;
-      (* And mark each buffer arg as Noalias *)
-      if t = buffer_t then add_param_attr llval Attribute.Noalias else ()
-    ) (list_zip3 argnames argtypes argvals);
-
-  (* start codegen at entry block of main *)
-  let b = builder_at_end c (entry_block entrypoint_fn) in
-  
-  (* A place for allocas
-  let alloca_bb = append_block c ("alloca") (block_parent (insertion_block b)) in
-  ignore(build_br alloca_bb b);
-  let after_alloca_bb = append_block c ("after_alloca") (block_parent (insertion_block b)) in
-  position_at_end alloca_bb b;  
-  let alloca_end = build_br after_alloca_bb b in
-  position_at_end after_alloca_bb b;  
-  *)
-
   let rec cg_context = {
     c = c; m = m; b = b;
     cg_expr = cg_expr_inner;
     cg_stmt = cg_stmt_inner;
     cg_memref = cg_memref;
     sym_get = sym_get;
-  }    
+    sym_add = sym_add;
+    sym_remove = sym_remove;
+  }
   and cg_expr e = 
     if dbgprint then Printf.printf "begin cg_expr %s\n%!" (string_of_expr e);
     let result = Arch.cg_expr cg_context e in
@@ -168,7 +124,7 @@ let cg_entry c m e =
     (* Select *)
     | Select(c, t, f) -> 
         build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
-          
+
     | Load(t, buf, idx) -> cg_load t buf idx
 
     (* Loop variables *)
@@ -270,7 +226,7 @@ let cg_entry c m e =
     let l = cg_expr l in
     let r = cg_expr r in
     build_select (cmp l r "" b) l r "" b
-      
+
   and cg_cmp iop uop fop l r =
     cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
 
@@ -316,7 +272,7 @@ let cg_entry c m e =
             | x -> (const_int int_imm_t (fw-x))::(const_int int_imm_t (2*fw-x))::(indices (x-1)) in                
           let shuffle = build_shufflevector (cg_expr e) zero_vector (const_vector (Array.of_list (indices fw))) "" b in
           build_bitcast shuffle (type_of_val_type t) "" b
-          
+
       (* For signed ints we need to do sign extension 
       | IntVector(fb, fw), UIntVector(tb, tw) 
       | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb*2 = tb ->             *)          
@@ -340,7 +296,7 @@ let cg_entry c m e =
       | Int(fb), Int(tb)
       | Int(fb), UInt(tb) when fb < tb ->
           simple_cast build_sext e t
-            
+
       (* Widening integer casts from unsigned types zero extend then bitcast *)
       | UIntVector(fb, fw), IntVector(tb, tw)
       | UIntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb < tb ->
@@ -361,7 +317,7 @@ let cg_entry c m e =
       | UInt(fb), UInt(tb) 
       | Int(fb),  Int(tb) when fb = tb -> 
           cg_expr e 
-            
+
       (* int <--> float *)
       | IntVector _, FloatVector _
       | Int(_),   Float(_) -> simple_cast build_sitofp e t
@@ -537,6 +493,7 @@ let cg_entry c m e =
     sym_remove var_name;
 
     (* Pop all the symbols we used in the function body *)
+    (* TODO: factor into sym_pop of scope object/sym list/sym set? *)
     StringIntSet.iter (fun (name, _) -> sym_remove name) syms;
 
     (* Move the builder back *)
@@ -549,7 +506,7 @@ let cg_entry c m e =
 
     (* Free the closure *)
     ignore (Arch.free cg_context closure);
-    
+
     (* Return an ignorable llvalue *)
     const_int int_imm_t 0
 
@@ -573,12 +530,12 @@ let cg_entry c m e =
         result    
 
     | Pipeline (name, ty, size, produce, consume) ->
-        
+
         let scratch = 
           let bytes = size *~ (IntImm ((bit_width ty)/8)) in 
           Arch.malloc cg_context bytes
         in
-        
+
         (* push the symbol environment *)
         sym_add name scratch;
 
@@ -639,7 +596,7 @@ let cg_entry c m e =
     match (vector_elements t, is_vector idx) with 
         (* scalar load *)
       | (1, false) -> build_load (cg_memref t buf idx) "" b 
-        
+
         (* vector load of scalar address *)
       | (_, false) ->
         Printf.printf "scalar expr %s loaded as vector type %s\n%!" (string_of_expr idx) (string_of_val_type t);
@@ -658,7 +615,7 @@ let cg_entry c m e =
           (* gather *)
           | _ -> cg_gather t buf idx
         end          
-          
+
   and cg_aligned_load t buf idx =
     build_load (cg_memref t buf idx) "" b
 
@@ -703,7 +660,7 @@ let cg_entry c m e =
     (* build getelementpointer into buffer *)
     let gep = build_gep ptr [| cg_expr idx |] "memref" b in
     build_pointercast gep (pointer_type (type_of_val_type vt)) "typed_memref" b
-      
+
   and cg_print prefix args =
     (* Generate a format string and values to print for a printf *)
     let rec fmt_string x = match val_type_of_expr x with
@@ -716,14 +673,14 @@ let cg_entry c m e =
           ("[" ^ (String.concat ", " (List.map fst subformats)) ^ "]",
            List.concat (List.map snd subformats))
     in
-    
+
     let fmts = List.map fmt_string args in
     let fmt = String.concat " " (List.map fst fmts) in
     let args = List.concat (List.map snd fmts) in
 
     let ll_fmt = const_stringz c (prefix ^ fmt ^ "\n") in    
     let ll_args = List.map cg_expr args in
-    
+
     let global_fmt = define_global "debug_fmt" ll_fmt m in
     let global_fmt = build_pointercast global_fmt (pointer_type (i8_type c)) "" b in
 
@@ -739,19 +696,76 @@ let cg_entry c m e =
     let ll_e = cg_expr e in
     ignore(cg_print prefix args);
     ll_e
-      
   in
 
+  cg_context
+
+let cg_entry c m e =
+
+  let int_imm_t = i32_type c in
+  let buffer_t = raw_buffer_t c in
+
+  let type_of_val_type = type_of_val_type c in
+
+  (* The symbol table for loop variables *)
+  let sym_table =
+    Hashtbl.create 10 
+  in
+
+  (* unpack the entrypoint *)
+  let (entrypoint_name, arglist, s) = e in
+  let type_of_arg = function
+    | Scalar (_, vt) -> [type_of_val_type vt]
+    | Buffer _ -> [buffer_t; int_imm_t; int_imm_t; int_imm_t; int_imm_t]
+  and name_of_arg = function
+    | Scalar (n, _) -> [n]
+    | Buffer n -> [n; n ^ ".dim.0"; n ^ ".dim.1"; n ^ ".dim.2"; n ^ ".dim.3"] 
+  in
+
+  let argtypes = List.flatten (List.map type_of_arg arglist) in
+
+  (* define `void main(arg1, arg2, ...)` entrypoint*)
+  let entrypoint_fn =
+    define_function
+      entrypoint_name
+      (function_type (void_type c) (Array.of_list argtypes))
+      m
+  in
+
+  let argnames = List.flatten (List.map name_of_arg arglist) in
+  let argvals = List.map (param entrypoint_fn) (0 -- (List.length argnames)) in
+
+  (* start codegen at entry block of main *)
+  let b = builder_at_end c (entry_block entrypoint_fn) in
+
+  let ctx = make_cg_context c m b sym_table in
+
+  (* Put args in the sym table *)
+  List.iter
+    (fun (n, t, llval) ->
+      ctx.sym_add n llval;
+      (* And mark each buffer arg as Noalias *)
+      if t = buffer_t then add_param_attr llval Attribute.Noalias else ()
+    ) (list_zip3 argnames argtypes argvals);
+
+  (* A place for allocas
+  let alloca_bb = append_block c ("alloca") (block_parent (insertion_block b)) in
+  ignore(build_br alloca_bb b);
+  let after_alloca_bb = append_block c ("after_alloca") (block_parent (insertion_block b)) in
+  position_at_end alloca_bb b;  
+  let alloca_end = build_br after_alloca_bb b in
+  position_at_end after_alloca_bb b;  
+  *)
   (* actually generate from the root statement *)
-  ignore (cg_stmt s);
-  
+  ignore (ctx.cg_stmt s);
+
   (* return void from main *)
   ignore (build_ret_void b);
-  
+
   if dbgprint then dump_module m;
-  
+
   ignore (verify_cg m);
-  
+
   (* return generated module and function *)
   entrypoint_fn
 
@@ -932,8 +946,16 @@ module CodegenForHost = struct
     with Not_found ->
       Printf.printf "Could not detect host architecture (HOSTTYPE not set). Assuming x86_64.\n";
       "x86_64"
-  
+
   (* TODO: this is ugly. Not sure there's a better way. *)
+  let make_cg_context =
+    if hosttype = "arm" then
+      let module Cg = CodegenForArch(Arm) in
+      Cg.make_cg_context
+    else (* if hosttype = "x86_64" then *)
+      let module Cg = CodegenForArch(X86) in
+      Cg.make_cg_context
+  
   let codegen_entry e = 
     if hosttype = "arm" then
       let module Cg = CodegenForArch(Arm) in
@@ -941,7 +963,7 @@ module CodegenForHost = struct
     else (* if hosttype = "x86_64" then *)
       let module Cg = CodegenForArch(X86) in
       Cg.codegen_entry e
-        
+
   let codegen_c_wrapper c e = 
     if hosttype = "arm" then
       let module Cg = CodegenForArch(Arm) in
@@ -973,7 +995,7 @@ module CodegenForHost = struct
     else (* if hosttype = "x86_64" then *)
       let module Cg = CodegenForArch(X86) in
       Cg.codegen_to_bitcode_and_header e
-  
+
   let codegen_to_file e f = 
     if hosttype = "arm" then
       let module Cg = CodegenForArch(Arm) in
