@@ -21,6 +21,7 @@ let rec cg_expr (con : cg_context) (expr : expr) =
 
   let ptr_t = pointer_type (i8_type c) in
   let i32_t = i32_type c in
+  let i8x16_t = vector_type (i8_type c) 16 in
   let i16x8_t = vector_type (i16_type c) 8 in
   let i16x8x2_t = struct_type c [| i16x8_t; i16x8_t |] in
   let i16x4_t = vector_type (i16_type c) 4 in
@@ -183,6 +184,7 @@ let rec cg_stmt (con : cg_context) (stmt : stmt) =
   let ptr_t = pointer_type (i8_type c) in
   let i32_t = i32_type c in
   let i16x8_t = vector_type (i16_type c) 8 in
+  let i8x16_t = vector_type (i8_type c) 16 in
   let i16x4_t = vector_type (i16_type c) 4 in
 
   let rec duplicated_lanes expr = match expr with
@@ -240,7 +242,35 @@ let rec cg_stmt (con : cg_context) (stmt : stmt) =
           | _ -> con.cg_stmt stmt (* TODO: more types *)
         end
 
+    (* 128-bit dense stores should always use vst1 *)
+    | Store (e, buf, Ramp(base, IntImm 1, w)) when (bit_width (val_type_of_expr e) = 128) ->
+        let alignment = match (Analysis.reduce_expr_modulo base w, w) with
+          (* 16-byte-aligned *)
+          | (Some 0, _) -> 16 
+          (* 8-byte-aligned cases *)
+          | (Some 1, 2) 
+          | (Some 2, 4) 
+          | (Some 4, 8) 
+          | (Some 8, 16) -> 8 
+          (* 4-byte-aligned cases *)
+          | (Some _, 4) -> 4
+          | (Some x, 8) when x mod 2 = 0 -> 4
+          | (Some x, 16) when x mod 4 = 0 -> 4
+          (* 2-byte-aligned cases *)
+          | (Some _, 8) -> 2
+          | (Some x, 16) when x mod 2 = 0 -> 2
+          (* byte-aligned *)
+          | _ -> 1
+        in
+        let st = declare_function "llvm.arm.neon.vst1.v16i8"
+          (function_type (void_type c) [|ptr_t; i8x16_t; i32_t|]) m in 
+        let addr = con.cg_memref (IntVector (8, 16)) buf base in        
+        let addr = build_pointercast addr ptr_t "" b in
+        let value = build_bitcast (cg_expr e) i8x16_t "" b in
+        build_call st [|addr; value; const_int (i32_t) alignment|] "" b         
 
+        
+        
 
     | _ -> con.cg_stmt stmt
 
