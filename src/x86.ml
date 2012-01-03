@@ -69,12 +69,12 @@ let rec cg_stmt (con:cg_context) (stmt:stmt) =
 
 let malloc (con:cg_context) (size:expr) = 
   let c = con.c and m = con.m and b = con.b in  
-  let malloc = declare_function "safe_malloc" (function_type (pointer_type (i8_type c)) [|i64_type c|]) m in  
+  let malloc = declare_function "malloc" (function_type (pointer_type (i8_type c)) [|i64_type c|]) m in  
   build_call malloc [|cg_expr con (Cast (Int 64, size))|] "" b 
 
 let free (con:cg_context) (address:llvalue) =
   let c = con.c and m = con.m and b = con.b in
-  let free = declare_function "safe_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
+  let free = declare_function "free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
   build_call free [|address|] "" b   
 
 let env = Environment.empty
