@@ -14,6 +14,8 @@ type cg_context = {
   cg_stmt : stmt -> llvalue;  
   cg_memref : val_type -> string -> expr -> llvalue;
   sym_get : string -> llvalue;
+  sym_add : string -> llvalue -> unit;
+  sym_remove : string -> unit;
 }
 
 let raw_buffer_t c = pointer_type (i8_type c)
