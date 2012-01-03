@@ -2,6 +2,7 @@ open Llvm
 open Ir
 open Util
 open Cg_llvm_util
+open Simtfy
 
 (* Function calling conventions for PTX, from <llvm/CallingConv.h>
  * For whatever reason, the official OCaml binding only exposes a few
@@ -9,13 +10,31 @@ open Cg_llvm_util
 let ptx_kernel = 71
 let ptx_device = 72
 
-let cg_expr (con:cg_context) (expr:expr) = 
-  con.cg_expr expr
+type state = {
+  host_state : X86.state
+}
+type context = state cg_context
 
-let cg_stmt (con:cg_context) (stmt:stmt) = 
-  con.cg_stmt stmt
+let start_state () =
+  { host_state = X86.start_state (); }
 
-let rec codegen_entry host_ctx host_mod cg_entry entry =
+(* Package up a context for the X86 codegen module.
+ * The Cg_llvm closures (cg_expr, etc.) will still call back to *this* module,
+ * with our own context, since they are closed over it at construction. *)
+let host_context (con:context) = {
+  c = con.c;
+  m = con.m;
+  b = con.b;
+  cg_expr = con.cg_expr;
+  cg_stmt = con.cg_stmt;
+  cg_memref = con.cg_memref;
+  sym_get = con.sym_get;
+  sym_add = con.sym_add;
+  sym_remove = con.sym_remove;
+  arch_state = con.arch_state.host_state;
+}
+
+let cg_dev_kernel con stmt =
   (* create separate device module *)
   let dev_ctx = create_context () in
   let dev_mod = create_module dev_ctx "<halide-device-ptx>" in
@@ -23,8 +42,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   (* set up module templates *)
   Stdlib.init_module_ptx_dev dev_mod;
 
-  (* TODO: run simtfy here. It should extract bounds expressions for thread ID x,y,z,w
-   * and use those for kernel launch *)
+  (*
 
   (* codegen the main kernel *)
   let f = cg_entry dev_ctx dev_mod entry in
@@ -34,17 +52,39 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
 
   let ptx_src = Llutil.compile_module_to_string dev_mod in
   Printf.printf "PTX:\n%s\n%!" ptx_src;
+   *)
+  let ptx_src = "NOTHING HERE!" in
 
   (* free memory *)
   dispose_module dev_mod;
   dispose_context dev_ctx;
 
+  (* TODO: *)
+  build_global_stringptr ptx_src "__ptx_src" con.b
+
+let cg_expr (con:context) (expr:expr) =
+  (* map base to x86 *)
+  X86.cg_expr (host_context con) expr
+
+let cg_stmt (con:context) stmt = match stmt with
+  (* map topmost ParFor into PTX kernel invocation *)
+  | For (name, base, width, ordered, body) when is_simt_var name ->
+      cg_dev_kernel con stmt
+
+  (* map base to x86 *)
+  | stmt -> X86.cg_stmt (host_context con) stmt
+
+let rec codegen_entry host_ctx host_mod cg_entry entry =
   (*
    * Codegen the host calling module
    *)
   let c = host_ctx in
   let m = host_mod in
   Stdlib.init_module_ptx host_mod;
+
+  (* TODO: store functions strings, kernels, etc. in null-terminated global array,
+   * which init() can walk at runtime?
+   * Or just increment a global ref in this module? *)
 
   (* unpack entrypoint *)
   let (entrypoint_name, arglist, _) = entry in
@@ -65,6 +105,7 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
     | Buffer _ -> pointer_type (buffer_struct_type)
   in
 
+  (*
   (* build function *)
   let name = entrypoint_name in
   let f = define_function
@@ -73,7 +114,13 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
                (void_type c)
                (Array.of_list (List.map type_of_arg arglist)))
             m in
+   *)
 
+  (* TODO! *)
+  let inner = cg_entry c m entry in
+  cg_wrapper c m entry inner
+
+  (*
   assert (name = (value_name f));
 
   let b = builder_at_end c (entry_block f) in
@@ -188,9 +235,14 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
 
   (* return the generated function *)
   f
+  *)
 
-let malloc = (fun _ _ -> raise (Wtf "No malloc for PTX yet"))
-let free = (fun _ _ -> raise (Wtf "No free for PTX yet"))
+let malloc con sz =
+  (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
+  X86.malloc (host_context con) sz
+
+let free con ptr =
+  X86.free (host_context con) ptr
 
 let env =
   let ntid_decl   = (".llvm.ptx.read.ntid.x", [], i32, Extern) in
