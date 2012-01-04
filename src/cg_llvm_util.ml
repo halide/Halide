@@ -67,19 +67,54 @@ let context_of_val v = type_context (type_of v)
 let toi32 x b = build_intcast x (i32_type (context_of_val x)) "" b
 let ci c x = const_int (i32_type c) x
 let param_list f = Array.to_list (params f)
+let const_zero c = ci c 0
+
+type buffer_field =
+  | HostPtr
+  | DevPtr
+  | HostDirty
+  | DevDirty
+  | Dim of int
+  | ElemSize
+
+(* codegen an llvalue which loads buf->{field} *)
+let cg_buffer_field bufptr field b =
+  let idx =
+    Array.map
+      (ci (context_of_val bufptr))
+      (match field with
+        | HostPtr ->   [| 0; 0 |]
+        | DevPtr ->    [| 0; 1 |]
+        | HostDirty -> [| 0; 2 |]
+        | DevDirty ->  [| 0; 3 |]
+        | Dim dim ->   [| 0; 4; dim |]
+        | ElemSize ->  [| 0; 5 |])
+  in
+  let name = match field with
+    | HostPtr -> ".host"
+    | DevPtr -> ".dev"
+    | HostDirty -> ".host_dirty"
+    | DevDirty -> ".dev_dirty"
+    | Dim dim -> ".dim." ^ (string_of_int dim)
+    | ElemSize -> ".elem_size"
+  in
+  
+  let raw =
+    build_load
+      (build_gep bufptr idx "" b)
+      ((value_name bufptr) ^ name)
+      b in
+  match field with
+    | Dim _ | ElemSize -> toi32 raw b
+    | HostPtr | DevPtr | HostDirty | DevDirty -> raw
 
 (* codegen an llvalue which loads buf->dim[i] *)
 let cg_buffer_dim bufptr dim b =
-  let ci = ci (context_of_val bufptr) in
-  toi32 (build_load (build_gep
-                       bufptr
-                       [|ci 0; ci 4; ci dim|]
-                       ((value_name bufptr) ^ ".dim." ^ string_of_int dim) b) "" b) b
+  cg_buffer_field bufptr (Dim dim) b
 
 (* codegen an llvalue which loads buf->host *)
 let cg_buffer_host_ptr bufptr b =
-  let ci = ci (context_of_val bufptr) in
-  build_load (build_gep bufptr [|ci 0; ci 0|] ((value_name bufptr) ^ ".host") b) "" b
+  cg_buffer_field bufptr HostPtr b
 
 (* map an Ir.arg to an ordered list of types for its constituent Var parts *)
 let types_of_arg_vars c = function

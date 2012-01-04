@@ -13,6 +13,8 @@ exception ArgExprOfBufferArgument (* The Arg expr can't dereference a Buffer, on
 exception ArgTypeMismatch of val_type * val_type
 
 type cg_entry = llcontext -> llmodule -> entrypoint -> llvalue
+type 'a make_cg_context = llcontext -> llmodule -> llbuilder ->
+                          (string, llvalue) Hashtbl.t -> 'a -> 'a cg_context
 type cg_expr = expr -> llvalue
 type cg_stmt = stmt -> llvalue
 
@@ -24,7 +26,8 @@ module type Architecture = sig
   val start_state : unit -> state
 
   (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)
-  val codegen_entry : llcontext -> llmodule -> cg_entry -> entrypoint -> llvalue
+  val codegen_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context ->
+                      entrypoint -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
   val malloc  : context -> string -> expr -> expr -> llvalue
@@ -36,8 +39,7 @@ module type Codegen = sig
   type arch_state
   type context = arch_state cg_context
 
-  val make_cg_context : llcontext -> llmodule -> llbuilder ->
-                        (string, llvalue) Hashtbl.t -> arch_state -> context
+  val make_cg_context : arch_state make_cg_context
   val codegen_entry : entrypoint -> llcontext * llmodule * llvalue
   val codegen_c_wrapper : llcontext -> llmodule -> llvalue -> llvalue
   val save_bc_to_file : llmodule -> string -> unit
@@ -93,9 +95,9 @@ let make_cg_context c m b sym_table arch_state =
     arch_state = arch_state;
   }
   and cg_expr e = 
-    if dbgprint then Printf.printf "begin cg_expr %s\n%!" (string_of_expr e);
+    if dbgprint then Printf.eprintf "begin cg_expr %s\n%!" (string_of_expr e);
     let result = Arch.cg_expr cg_context e in
-    if dbgprint then Printf.printf "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));
+    if dbgprint then Printf.eprintf "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));
     result
   and cg_expr_inner = function
     (* constants *)
@@ -834,7 +836,7 @@ let codegen_entry (e:entrypoint) =
   let m = create_module c ("<" ^ name ^ "_halide_host>") in
 
   (* codegen *)
-  let f = Arch.codegen_entry c m cg_entry e in
+  let f = Arch.codegen_entry c m cg_entry make_cg_context e in
 
   (c,m,f)
 
