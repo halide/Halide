@@ -65,20 +65,18 @@ def test_cpp(name):
     remove(logfile)
 
     status(name, "Compiling %s" % srcfile)
-    compile_cmd_base = [cxx_exe,
-         "-std=c++0x",
-         "-I../../../cpp_bindings/",
-         "../../../cpp_bindings/FImage.a",
-         "-Wl,-dead_strip"]
+    compile_cmd = [cxx_exe,
+                   "-std=c++0x", 
+                   "-I../../../cpp_bindings",
+                   srcfile,                   
+                   "../../../cpp_bindings/FImage.a", 
+                   "-ldl", "-lpthread"]
+
     if os.path.exists("/usr/local/cuda"):
-        compile_cmd = compile_cmd_base + \
-            ["-L/usr/local/cuda/lib", "-lcuda", srcfile]
-        status(name, " ".join(compile_cmd))
-        run(compile_cmd)
-    else:
-        compile_cmd = compile_cmd_base + [srcfile]
-        status(name, ' '.join(compile_cmd))
-        run(compile_cmd)
+        compile_cmd = compile_cmd + ["-L/usr/local/cuda/lib", "-lcuda"]
+
+    status(name, " ".join(compile_cmd))
+    run(compile_cmd)
 
     # Run the test
     try:
