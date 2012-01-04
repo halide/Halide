@@ -85,6 +85,7 @@ namespace FImage {
         DynImage realize(int a, int b);
         DynImage realize(int a, int b, int c);
         DynImage realize(int a, int b, int c, int d);
+        DynImage realize(std::vector<uint32_t> sizes);
         void realize(const DynImage &);
 
         /* These methods generate a partially applied function that
@@ -93,13 +94,10 @@ namespace FImage {
          * order starting from an initial default schedule to create a
          * mutated schedule */
         void tile(const Var &, const Var &, const Var &, const Var &, const Expr &f1, const Expr &f2);
-        void split(const Var &, const Var &, const Var &, const Expr &factor);
         void vectorize(const Var &);
         void unroll(const Var &);
         void transpose(const Var &, const Var &);
-        void chunk(const Var &, const Range &);
         void chunk(const Var &);
-        void root(const Range &);
         void root();
         void parallel(const Var &);
         void random(int seed);
@@ -111,6 +109,9 @@ namespace FImage {
         // Convenience methods for common transforms
         void vectorize(const Var &, int factor);
         void unroll(const Var &, int factor);
+        void split(const Var &, const Var &, const Var &, const Expr &factor);
+
+        int autotune(int argc, char **argv, std::vector<uint32_t> sizes);
 
         bool operator==(const Func &other) const;
 

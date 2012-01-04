@@ -16,6 +16,7 @@ namespace FImage {
         DynImage(const Type &t, uint32_t a, uint32_t b);
         DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c);
         DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
+        DynImage(const Type &t, std::vector<uint32_t> sizes);
 
         Expr operator()(const Expr &a) const;
         Expr operator()(const Expr &a, const Expr &b) const;

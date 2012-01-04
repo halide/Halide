@@ -10,6 +10,7 @@
 #include <llvm/Assembly/PrintModulePass.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/IPO.h>
+#include <sys/time.h>
 
 #include "../src/buffer.h"
 #include "Func.h"
@@ -256,7 +257,7 @@ namespace FImage {
             ss << i;
             args.push_back(Var(ss.str()));
         }
-
+        
         //printf("Defining %s\n", name().c_str());
 
         // Are we talking about a scatter or a gather here?
@@ -347,23 +348,62 @@ namespace FImage {
         unroll(vi);
     }
 
-    /*
-    void Func::range(const Var &v, const Expr &min, const Expr &size, bool serial) {
-        MLVal t;
-        if (serial) {
-            t = makeSerialTransform((name()),
-                                    (v.name()),
-                                    min.node(),
-                                    size.node());
-        } else {
-            t = makeParallelTransform((name()),
-                                      (v.name()),
-                                      min.node(),
-                                      size.node());
-        }
-        contents->scheduleTransforms.push_back(t);
+    void *watchdog(void *arg) {
+        useconds_t t = ((useconds_t *)arg)[0];
+        printf("Watchdog sleeping for %d microseconds\n", t);
+        usleep(t);
+        printf("Took too long, bailing out\n");
+        exit(-1);
     }
-    */
+
+    int Func::autotune(int argc, char **argv, std::vector<uint32_t> sizes) {
+        timeval before, after;
+
+        printf("sizes: ");
+        for (size_t i = 0; i < sizes.size(); i++) {
+            printf("%u ", sizes[i]);
+        }
+        printf("\n");
+
+        if (argc == 1) {
+            // Run with default schedule to establish baseline timing (including basic compilation time)
+            gettimeofday(&before, NULL);
+            DynImage im = realize(sizes);
+            for (int i = 0; i < 5; i++) realize(im);
+            gettimeofday(&after, NULL);            
+            useconds_t t = (after.tv_sec - before.tv_sec) * 1000000 + (after.tv_usec - before.tv_usec);
+            printf("%d\n", t);
+            return 0;
+        }        
+
+        // How to schedule it
+        for (int i = 2; i < argc; i++) {
+            // One random transform per function per arg
+            srand(atoi(argv[i]));            
+            for (const Func &_f : rhs().funcs()) {
+                Func f = _f;
+                f.random(rand());
+            }
+            random(rand());
+        }        
+
+        // Set up a watchdog to kill us if we take too long 
+        printf("Setting up watchdog timer\n");
+        useconds_t time_limit = atoi(argv[1]) + 1000000;
+        pthread_t watchdog_thread;
+        pthread_create(&watchdog_thread, NULL, watchdog, &time_limit);
+
+        // Trigger compilation and one round of evaluation
+        DynImage im = realize(sizes);
+
+        // Start the clock
+        gettimeofday(&before, NULL);
+        for (int i = 0; i < 5; i++) realize(im);
+        gettimeofday(&after, NULL);            
+        useconds_t t = (after.tv_sec - before.tv_sec) * 1000000 + (after.tv_usec - before.tv_usec);
+        printf("%d\n", t);        
+        return 0;
+    }
 
     void Func::split(const Var &old, const Var &newout, const Var &newin, const Expr &factor) {
         MLVal t = makeSplitTransform(name(),
@@ -425,6 +465,14 @@ namespace FImage {
         realize(im);
         return im;
     }
+
+    DynImage Func::realize(std::vector<uint32_t> sizes) {
+        DynImage im(returnType(), sizes);
+        realize(im);
+        return im;
+    }
+
+
 
     // Returns a stmt, args pair
     void Func::lower(MLVal &stmt, MLVal &fargs) {
@@ -635,15 +683,15 @@ namespace FImage {
     }
 
     void Func::realize(const DynImage &im) {
-		#ifdef USE_GPU
-		#if(USE_GPU)
-		static const bool gpu = true;
-		#else
-		static const bool gpu = false;
-		#endif
-		#else
-		static const bool gpu = false;
-		#endif
+        #ifdef USE_GPU
+        #if(USE_GPU)
+        static const bool gpu = true;
+        #else
+        static const bool gpu = false;
+        #endif
+        #else
+        static const bool gpu = false;
+        #endif
 
         if (!contents->functionPtr) compileJIT(gpu);
 
