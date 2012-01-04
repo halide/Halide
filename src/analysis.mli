@@ -23,3 +23,6 @@ val prefix_name_stmt : string -> Ir.stmt -> Ir.stmt
 val find_names_in_stmt : Util.StringSet.t -> Ir.stmt -> Util.StringIntSet.t
 val find_names_in_expr : Util.StringSet.t -> Ir.expr -> Util.StringIntSet.t
 
+val find_loads_in_expr : Ir.expr -> Util.StringSet.t
+val find_loads_in_stmt : Ir.stmt -> Util.StringSet.t
+val find_stores_in_stmt : Ir.stmt -> Util.StringSet.t

@@ -83,7 +83,7 @@ let rec stmt_contains_zero stmt =
   let rec expr_mutator = function
     | IntImm 0 -> true
     | x -> fold_children_in_expr expr_mutator (or) false x
-  fold_children_in_stmt expr_mutator stmt_contains_zero (or)
+  fold_children_in_stmt expr_mutator stmt_contains_zero (or) stmt
 *)
 
 let rec expr_contains_expr query expr = 
@@ -240,3 +240,23 @@ and find_names_in_expr internal = function
       StringIntSet.union (find_names_in_expr internal a) (find_names_in_expr internal b)
   | x -> fold_children_in_expr (find_names_in_expr internal) StringIntSet.union StringIntSet.empty x
 
+let rec find_loads_in_expr e =
+  let recurse = fold_children_in_expr find_loads_in_expr StringSet.union in
+  match e with
+    | Load (_, buf, _) ->
+        recurse (StringSet.add buf StringSet.empty) e
+    | _ ->
+        recurse StringSet.empty e
+
+let rec find_loads_in_stmt s =
+  fold_children_in_stmt find_loads_in_expr find_loads_in_stmt StringSet.union s
+
+let rec find_stores_in_stmt = function
+  | Store (_, buf, _) ->
+      StringSet.add buf StringSet.empty
+  | s ->
+      fold_children_in_stmt
+        (fun _ -> StringSet.empty)
+        find_stores_in_stmt
+        StringSet.union
+        s
