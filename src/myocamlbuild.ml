@@ -82,13 +82,25 @@ let llsupport_linkflags = [
   A"-cclib"; A "-lLLVMLinker"
 ] in
 (* PTX target libraries *)
-let ptx_llsupport_linkflags = [
+let ptx_llsupport_linkflags =
+(*[
   A"-cclib"; A "-lLLVMPTXCodeGen";
   A"-cclib"; A "-lLLVMPTXAsmPrinter";
   A"-cclib"; A "-lLLVMPTXInfo";
   A"-cclib"; A "-lLLVMPTXDesc"
-] in
-let llsupport_linkflags =
+] in*)
+List.flatten (
+List.map
+(fun fl -> [A"-cclib"; A fl])
+["-lLLVMPTXCodeGen"; "-lLLVMSelectionDAG"; "-lLLVMAsmPrinter";
+ "-lLLVMMCParser"; "-lLLVMCodeGen"; "-lLLVMScalarOpts";
+ "-lLLVMInstCombine"; "-lLLVMTransformUtils"; "-lLLVMipa"; 
+ "-lLLVMAnalysis"; "-lLLVMPTXDesc"; "-lLLVMPTXInfo"; "-lLLVMTarget";
+ "-lLLVMPTXAsmPrinter"; "-lLLVMMC"; "-lLLVMObject"; "-lLLVMBitReader"; 
+ "-lLLVMCore"; "-lLLVMSupport"]
+) in
+ let 
+llsupport_linkflags =
   if arch <> Arm then
     llsupport_linkflags @ ptx_llsupport_linkflags
   else

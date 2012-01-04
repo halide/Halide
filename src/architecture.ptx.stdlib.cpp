@@ -4,6 +4,7 @@
  *   clang -I/usr/local/cuda/include -c -S -emit-llvm ptx_shim_tmpl.c -o ptx_shim_tmpl.ll
  */
 #include <stdio.h>
+#include <stdlib.h>
 //#include <cuda.h>
 #include <assert.h>
 #include "buffer.h"
