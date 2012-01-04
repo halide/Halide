@@ -11,6 +11,7 @@ namespace FImage {
         Contents(const Type &t, uint32_t a, uint32_t b);
         Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c);
         Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
+        Contents(const Type &t, std::vector<uint32_t> sizes);
         
         void allocate(size_t bytes);
         
@@ -41,6 +42,18 @@ namespace FImage {
         allocate(a * b * c * d * (t.bits/8));
     }
 
+    DynImage::Contents::Contents(const Type &t, std::vector<uint32_t> sizes) :
+        type(t), size(sizes), stride(sizes.size()), name(uniqueName('i')) {
+        
+        size_t total = 1;
+        for (size_t i = 0; i < sizes.size(); i++) {
+            stride[i] = total;
+            total *= sizes[i];
+        }
+
+        allocate(total * (t.bits/8));
+    }
+
     void DynImage::Contents::allocate(size_t bytes) {
         buffer.resize(bytes+16);
         data = &(buffer[0]);
@@ -57,6 +70,7 @@ namespace FImage {
     DynImage::DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c) : contents(new Contents(t, a, b, c)) {}
 
     DynImage::DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d) : contents(new Contents(t, a, b, c, d)) {}
+    DynImage::DynImage(const Type &t, std::vector<uint32_t> sizes) : contents(new Contents(t, sizes)) {}
 
     const Type &DynImage::type() const {
         return contents->type;
