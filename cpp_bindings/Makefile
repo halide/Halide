@@ -22,7 +22,7 @@ LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) $(CUDA_LIBS
 FIMAGE_OBJS=$(addprefix _build/,_MLFImage.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o Var.o Tuple.o Reduction.o)
 
 FImage.a: $(FIMAGE_OBJS) ../src/_build/libllsupport_impl.a
-	ld -Ur -o FImage.o $(FIMAGE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L../src/_build -lllsupport_impl -L$(LLVM_DIR)/lib $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -L$(OCAML_LIB_DIR) -lasmrun
+	ld -r -o FImage.o $(FIMAGE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L../src/_build -lllsupport_impl -L$(LLVM_DIR)/lib $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -L$(OCAML_LIB_DIR) -lasmrun
 	rm -f FImage.a
 	ar q FImage.a FImage.o
 	ranlib FImage.a
