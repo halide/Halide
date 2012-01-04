@@ -3,6 +3,7 @@ loop_lifting
 x86
 arm
 ptx
+ptx_dev
 schedule_transforms
 analysis
 hash
@@ -18,7 +19,6 @@ constant_fold
 break_false_dependence
 schedule
 lower
-simtfy
 fimage_cpp
 stdlib
 llutil

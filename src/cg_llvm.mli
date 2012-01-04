@@ -11,6 +11,8 @@ exception ArgTypeMismatch of Ir.val_type * Ir.val_type
 (* These are not parallel, because Architecture overrides module/context used by cg_entry
  * TODO: make parallel? *)
 type cg_entry = llcontext -> llmodule -> entrypoint -> llvalue
+type 'a make_cg_context = llcontext -> llmodule -> llbuilder ->
+                          (string, llvalue) Hashtbl.t -> 'a -> 'a cg_context
 (*
 type cg_expr = expr -> llvalue
 type cg_stmt = stmt -> llvalue
@@ -24,7 +26,8 @@ module type Architecture = sig
   val start_state : unit -> state
 
   (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)
-  val codegen_entry : llcontext -> llmodule -> cg_entry -> entrypoint -> llvalue
+  val codegen_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context ->
+                      entrypoint -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
   val malloc  : context -> string -> expr -> expr -> llvalue
@@ -37,8 +40,7 @@ module type Codegen = sig
   type context = arch_state cg_context
 
   (* make_cg_context ctx module builder symtab -> cg_context *)
-  val make_cg_context : llcontext -> llmodule -> llbuilder ->
-                        (string, llvalue) Hashtbl.t -> arch_state -> context
+  val make_cg_context : arch_state make_cg_context
 
   (* codegen_entry entry -> ctx, module, function *)
   val codegen_entry : entrypoint -> llcontext * llmodule * llvalue

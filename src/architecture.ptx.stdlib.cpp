@@ -12,7 +12,7 @@ extern "C" {
 
 //#define CHECK_CALL(c) (assert((c) == CUDA_SUCCESS))
 //#define CHECK_CALL(c) (success &&= ((c) == CUDA_SUCCESS))
-/*#define CHECK_CALL(c) (c)*/
+// #define CHECK_CALL(c,str) (c)
 #define CHECK_CALL(c,str) {\
     fprintf(stderr, "Do %s\n", str); \
     CUresult status = (c); \
@@ -31,6 +31,7 @@ extern "C" {
 // API version > 3020
 #define cuCtxCreate                         cuCtxCreate_v2
 #define cuMemAlloc                          cuMemAlloc_v2
+#define cuMemFree                           cuMemFree_v2
 #define cuMemcpyHtoD                        cuMemcpyHtoD_v2
 #define cuMemcpyDtoH                        cuMemcpyDtoH_v2
 
@@ -94,6 +95,7 @@ CUresult CUDAAPI cuCtxCreate(CUcontext *pctx, unsigned int flags, CUdevice dev);
 CUresult CUDAAPI cuModuleLoadData(CUmodule *module, const void *image);
 CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name);
 CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
+CUresult CUDAAPI cuMemFree(CUdeviceptr dptr);
 CUresult CUDAAPI cuMemcpyHtoD(CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount);
 CUresult CUDAAPI cuMemcpyDtoH(void *dstHost, CUdeviceptr srcDevice, size_t ByteCount);
 CUresult CUDAAPI cuLaunchKernel(CUfunction f,
@@ -107,20 +109,59 @@ CUresult CUDAAPI cuLaunchKernel(CUfunction f,
                                 CUstream hStream,
                                 void **kernelParams,
                                 void **extra);
+CUresult CUDAAPI cuCtxSynchronize();
 #endif //__cuda_cuda_h__
 
 // Device, Context, Module, and Function for this entrypoint are tracked locally
 // and constructed lazily on first run.
-static CUfunction __f = 0;
 static CUdevice __dev = 0;
 static CUcontext __ctx = 0;
-static CUmodule __mod = 0;
+// TODO: make __f, __mod into arrays?
+// static vector<CUfunction> __f;
+static CUmodule __mod;
 
-void __init(const char* ptx_src, const char* entry_name)
+// Used to create buffer_ts to track internal allocations caused by our runtime
+// TODO: look into cuMemAllocHost for page-locked host memory, allowing easy transfer?
+// TODO: make Buffer args typed, so elem_size can be statically inferred?
+buffer_t* __make_buffer(uint8_t* host, size_t elem_size,
+                        size_t dim0, size_t dim1,
+                        size_t dim2, size_t dim3)
+{
+    buffer_t* buf = (buffer_t*)malloc(sizeof(buffer_t));
+    buf->host = host;
+    buf->dev = 0;
+    buf->dims[0] = dim0;
+    buf->dims[1] = dim1;
+    buf->dims[2] = dim2;
+    buf->dims[3] = dim3;
+    buf->elem_size = elem_size;
+    buf->host_dirty = true;
+    buf->dev_dirty = false;
+    return buf;
+}
+
+void __release_buffer(buffer_t* buf)
+{
+    free(buf);
+}
+buffer_t* __malloc_buffer(int32_t size)
+{
+    return __make_buffer((uint8_t*)malloc(size), sizeof(uint8_t), size, 1, 1, 1);
+}
+
+void __free_buffer(buffer_t* buf)
+{
+    assert(buf->host);
+    free(buf->host);
+    if (buf->dev) cuMemFree(buf->dev);
+    __release_buffer(buf);
+}
+
+void __init(const char* ptx_src)
 {
     CUresult status;
 
-    if (!__f) {
+    if (!__dev) {
         // Initialize CUDA
         CHECK_CALL( cuInit(0), "cuInit" );
 
@@ -137,54 +178,69 @@ void __init(const char* ptx_src, const char* entry_name)
 
         // Create module
         CHECK_CALL( cuModuleLoadData(&__mod, ptx_src), "cuModuleLoadData" );
-        
-        fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
 
-        // Get kernel function ptr
-        CHECK_CALL( cuModuleGetFunction(&__f, __mod, entry_name), "cuModuleGetFunction" );
+        fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
     }
+}
+
+CUfunction __get_kernel(const char* entry_name)
+{
+    CUfunction f;
+    char msg[256];
+    snprintf(msg, 256, "get_kernel %s", entry_name );
+    // Get kernel function ptr
+    CHECK_CALL( cuModuleGetFunction(&f, __mod, entry_name), msg );
+    return f;
 }
 
 CUdeviceptr __dev_malloc(size_t bytes) {
     CUdeviceptr p;
-	char msg[256];
-	snprintf(msg, 256, "dev_malloc (%zu bytes)", bytes );
+    char msg[256];
+    snprintf(msg, 256, "dev_malloc (%zu bytes)", bytes );
     CHECK_CALL( cuMemAlloc(&p, bytes), msg );
-	fprintf( stderr, "   returned %p\n", (void*)p );
+    fprintf( stderr, "   returned %p\n", (void*)p );
     return p;
 }
 
 void __dev_malloc_if_missing(buffer_t* buf) {
     if (buf->dev) return;
-	fprintf(stderr, "dev_malloc_if_missing of %zux%zux%zux%zu (%zu bytes) buffer\n",
-			buf->dims[0], buf->dims[1], buf->dims[2], buf->dims[3], buf->elem_size);
+    fprintf(stderr, "dev_malloc_if_missing of %zux%zux%zux%zu (%zu bytes) buffer\n",
+            buf->dims[0], buf->dims[1], buf->dims[2], buf->dims[3], buf->elem_size);
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     buf->dev = __dev_malloc(size);
 }
 
 void __copy_to_dev(buffer_t* buf) {
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-	char msg[256];
-	snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p", size, buf->host, (void*)buf->dev );
+    char msg[256];
+    snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p", size, buf->host, (void*)buf->dev );
     CHECK_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
 }
 
 void __copy_to_host(buffer_t* buf) {
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-	char msg[256];
-	snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
+    char msg[256];
+    snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
     CHECK_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
 }
 
 void __dev_run(
+    const char* entry_name,
     int blocksX, int blocksY, int blocksZ,
     int threadsX, int threadsY, int threadsZ,
     int shared_mem_bytes,
     void* args[])
 {
+    CUfunction f = __get_kernel(entry_name);
+    char msg[256];
+    snprintf(
+        msg, 256,
+        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads",
+        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ
+    );
     CHECK_CALL(
         cuLaunchKernel(
-            __f,
+            f,
             blocksX,  blocksY,  blocksZ,
             threadsX, threadsY, threadsZ,
             shared_mem_bytes,
@@ -192,42 +248,63 @@ void __dev_run(
             args,
             NULL
         ),
-        "cuLaunchKernel"
+        msg
     );
 }
 
 #ifdef INCLUDE_WRAPPER
-int kernel_wrapper_tmpl( buffer_t *input, buffer_t *result, int N )
+const char* ptx_src = "\n\
+	.version 2.0\n\
+	.target sm_11, map_f64_to_f32\n\
+    \n\
+.entry kernel (.param .b32 __param_1, .param .b64 __param_2) // @kernel\n\
+{\n\
+	.reg .b32 %r<6>;\n\
+	.reg .b64 %rd<4>;\n\
+// BB#0:                                // %entry\n\
+	ld.param.u64	%rd0, [__param_2];\n\
+	mov.u32	%r5, %ctaid.x;\n\
+	shl.b32	%r1, %r5, 8;\n\
+	mov.u32	%r2, %tid.x;\n\
+	add.u32	%r3, %r1, %r2;\n\
+	cvt.s64.s32	%rd1, %r3;\n\
+	shl.b64	%rd2, %rd1, 2;\n\
+	add.u64	%rd3, %rd0, %rd2;\n\
+	mov.u32	%r4, 1067316150;\n\
+	st.global.u32	[%rd3], %r4;\n\
+	exit;\n\
+}";
+int f( buffer_t *input, buffer_t *result, int N )
 {
-    const char* ptx_src = "...";
-    const char* entry_name = "f";
-    init(ptx_src, entry_name);
+    const char* entry_name = "kernel";
+    __init(ptx_src);
 
-    int threadsX = 16;
+    int threadsX = 256;
     int threadsY =  1;
     int threadsZ =  1;
-    int blocksX = (N + threadsX - 1 ) / threadsX;
+    int blocksX = N / threadsX;
     int blocksY = 1;
     int blocksZ = 1;
 
-    dev_malloc_if_missing(input);
-    dev_malloc_if_missing(result);
+    // __dev_malloc_if_missing(input);
+    __dev_malloc_if_missing(result);
 
-    copy_to_dev(input);
+    // __copy_to_dev(input);
 
     // Invoke
-    void* cuArgs[] = { &input->dev, &result->dev, &N };
-    dev_run(
+    void* cuArgs[] = { &N, &result->dev };
+    __dev_run(
+        entry_name,
         blocksX,  blocksY,  blocksZ,
         threadsX, threadsY, threadsZ,
         0, // sharedMemBytes
         cuArgs
     );
-    
+
     // Sync and copy back
-    //CHECK_CALL( cuCtxSynchronize() ); // only necessary for async copies?
-    copy_to_host(result);
-    //CHECK_CALL( cuCtxSynchronize() );
+    // CHECK_CALL( cuCtxSynchronize(), "pre-sync" ); // only necessary for async copies?
+    __copy_to_host(result);
+    // CHECK_CALL( cuCtxSynchronize(), "post-sync" );
     
     return 0;
 }
