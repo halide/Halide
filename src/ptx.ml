@@ -31,6 +31,7 @@ let host_context (con:context) = {
   sym_get = con.sym_get;
   sym_add = con.sym_add;
   sym_remove = con.sym_remove;
+  dump_syms = con.dump_syms;
   arch_state = con.arch_state.host_state;
 }
 
@@ -237,9 +238,9 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   f
   *)
 
-let malloc con count elem_size =
+let malloc con name count elem_size =
   (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
-  X86.malloc (host_context con) count elem_size
+  X86.malloc (host_context con) name count elem_size
 
 let free con ptr =
   X86.free (host_context con) ptr
