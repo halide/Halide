@@ -75,23 +75,6 @@ and cg_stmt (con:context) = function
       (* Add base to all references to name inside loop, since CTA and Thread IDs start from 0 *)
       let simtvar = (Call (i32, simt_intrinsic name, [])) in
       let loopvar = simtvar +~ base in
-      
-      ignore (
-      match width with
-        | Bop (Div, a, b) ->
-            Printf.eprintf "Caught div\n%!";
-            assert ((val_type_of_expr a) = (val_type_of_expr b));
-            let aa = cg_expr a in
-            let bb = cg_expr b in
-            let ta = type_of aa in
-            let tb = type_of bb in
-            Printf.eprintf "  %s/%s\n%!" (string_of_lltype ta) (string_of_lltype tb);
-            assert ((type_context tb) = c);
-            assert ((type_context ta) = c);
-            assert ((type_context ta) = (type_context tb));
-            assert (ta = tb);
-        | _ -> ()
-      );
 
       (* create the basic blocks for the (start of the) loop body, and continuing after the loop *)
       let the_function = block_parent (insertion_block b) in
@@ -103,8 +86,8 @@ and cg_stmt (con:context) = function
       Printf.eprintf " for -> if (%s)\n%!" (string_of_expr cond);
       (* dump_module con.m; *)
 
-      (* ignore (build_cond_br (cg_expr cond) loop_bb after_bb b); *)
-      ignore (build_br loop_bb b);
+      ignore (build_cond_br (cg_expr cond) loop_bb after_bb b);
+      (* ignore (build_br loop_bb b); *)
 
       (* Start insertion in loop_bb. *)
       position_at_end loop_bb b;
