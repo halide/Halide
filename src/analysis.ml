@@ -202,10 +202,11 @@ and prefix_name_stmt prefix stmt =
 
 (* Find all references in stmt/expr to things outside of it.
  * Return a set of pairs of names and their storage sizes, for e.g. building a closure. *)
+let ptrsize = 64/8 (* always give 64 bits of space for a pointer *)
 let rec find_names_in_stmt internal = function
   | Store (e, buf, idx) ->
       let inner = StringIntSet.union (find_names_in_expr internal e) (find_names_in_expr internal idx) in
-      if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, 8) inner)
+      if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, ptrsize) inner)
   | Pipeline (name, ty, size, produce, consume) ->
       let internal = StringSet.add name internal in
       string_int_set_concat [
@@ -230,7 +231,7 @@ let rec find_names_in_stmt internal = function
 and find_names_in_expr internal = function
   | Load (_, buf, idx) ->
       let inner = find_names_in_expr internal idx in
-      if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, 8) inner)
+      if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, ptrsize) inner)
   | Var (t, n) ->
       let size = (bit_width t)/8 in
       if (StringSet.mem n internal) then StringIntSet.empty else (StringIntSet.add (n, size) StringIntSet.empty)

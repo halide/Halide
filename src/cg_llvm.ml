@@ -27,7 +27,7 @@ module type Architecture = sig
   val codegen_entry : llcontext -> llmodule -> cg_entry -> entrypoint -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
-  val malloc  : context -> expr -> expr -> llvalue
+  val malloc  : context -> string -> expr -> expr -> llvalue
   val free    : context -> llvalue -> llvalue 
   val env : environment
 end
@@ -78,6 +78,7 @@ let make_cg_context c m b sym_table arch_state =
   and sym_get name =
     try Hashtbl.find sym_table name
     with Not_found -> raise (Wtf ("symbol " ^ name ^ " not found"))
+  and dump_syms () = dump_syms sym_table
   in
 
   let rec cg_context = {
@@ -88,6 +89,7 @@ let make_cg_context c m b sym_table arch_state =
     sym_get = sym_get;
     sym_add = sym_add;
     sym_remove = sym_remove;
+    dump_syms = dump_syms;
     arch_state = arch_state;
   }
   and cg_expr e = 
@@ -424,7 +426,11 @@ let make_cg_context c m b sym_table arch_state =
     in
 
     (* Allocate a closure *)
-    let closure = Arch.malloc cg_context (IntImm total_bytes) (IntImm 1) in
+    let closure = Arch.malloc
+                    cg_context
+                    (var_name^"_closure")
+                    (IntImm total_bytes)
+                    (IntImm 1) in
 
     (* Store everything in the closure *)
     StringIntSet.iter (fun (name, size) ->      
@@ -506,7 +512,7 @@ let make_cg_context c m b sym_table arch_state =
 
         let scratch = 
           let elem_size = (IntImm ((bit_width ty)/8)) in 
-          Arch.malloc cg_context size elem_size
+          Arch.malloc cg_context name size elem_size
         in
 
         (* push the symbol environment *)
@@ -674,73 +680,33 @@ let make_cg_context c m b sym_table arch_state =
   cg_context
 
 let cg_entry c m e =
+  let _,args,stmt = e in
 
-  let int_imm_t = i32_type c in
-  let buffer_t = raw_buffer_t c in
+  (* make an entrypoint function *)
+  let f = define_entry c m e in
 
-  let type_of_val_type = type_of_val_type c in
+  (* Put params in a new symbol table *)
+  let param_syms = arg_symtab args (param_list f) in
 
-  (* The symbol table for loop variables *)
-  let sym_table =
-    Hashtbl.create 10 
-  in
-
-  (* unpack the entrypoint *)
-  let (entrypoint_name, arglist, s) = e in
-  let type_of_arg = function
-    | Scalar (_, vt) -> [type_of_val_type vt]
-    | Buffer _ -> [buffer_t; int_imm_t; int_imm_t; int_imm_t; int_imm_t]
-  and name_of_arg = function
-    | Scalar (n, _) -> [n]
-    | Buffer n -> [n; n ^ ".dim.0"; n ^ ".dim.1"; n ^ ".dim.2"; n ^ ".dim.3"] 
-  in
-
-  let argtypes = List.flatten (List.map type_of_arg arglist) in
-
-  (* define `void main(arg1, arg2, ...)` entrypoint*)
-  let entrypoint_fn =
-    define_function
-      entrypoint_name
-      (function_type (void_type c) (Array.of_list argtypes))
-      m
-  in
-
-  let argnames = List.flatten (List.map name_of_arg arglist) in
-  let argvals = List.map (param entrypoint_fn) (0 -- (List.length argnames)) in
+  (* flag all buffer arguments as NoAlias *)
+  make_buffer_params_noalias f;
 
   (* start codegen at entry block of main *)
-  let b = builder_at_end c (entry_block entrypoint_fn) in
+  let b = builder_at_end c (entry_block f) in
 
-  let ctx = make_cg_context c m b sym_table (Arch.start_state ()) in
-
-  (* Put args in the sym table *)
-  List.iter
-    (fun (n, t, llval) ->
-      ctx.sym_add n llval;
-      (* And mark each buffer arg as Noalias *)
-      if t = buffer_t then add_param_attr llval Attribute.Noalias else ()
-    ) (list_zip3 argnames argtypes argvals);
-
-  (* A place for allocas
-  let alloca_bb = append_block c ("alloca") (block_parent (insertion_block b)) in
-  ignore(build_br alloca_bb b);
-  let after_alloca_bb = append_block c ("after_alloca") (block_parent (insertion_block b)) in
-  position_at_end alloca_bb b;  
-  let alloca_end = build_br after_alloca_bb b in
-  position_at_end after_alloca_bb b;  
-  *)
   (* actually generate from the root statement *)
-  ignore (Arch.cg_stmt ctx s);
+  let ctx = make_cg_context c m b param_syms (Arch.start_state ()) in
+  ignore (Arch.cg_stmt ctx stmt);
 
   (* return void from main *)
   ignore (build_ret_void b);
 
+  (* check on our result *)
   if dbgprint then dump_module m;
-
   ignore (verify_cg m);
 
-  (* return generated module and function *)
-  entrypoint_fn
+  (* return generated function *)
+  f
 
 
 (*
