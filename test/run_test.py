@@ -68,6 +68,7 @@ def test_cpp(name):
     compile_cmd = [cxx_exe,
                    "-std=c++0x", 
                    "-I../../../cpp_bindings",
+                   "-Wno-format",
                    srcfile,                   
                    "../../../cpp_bindings/FImage.a", 
                    "-ldl", "-lpthread"]
