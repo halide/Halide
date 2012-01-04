@@ -165,12 +165,16 @@ let _ =
   
   Callback.register "makeNoviceGuru" (fun _ -> novice);
 
+  Callback.register "loadGuruFromFile" (fun filename -> load_guru_from_file filename);
+  Callback.register "saveGuruToFile" (fun guru filename -> save_guru_to_file guru filename);
+
   Callback.register "makeSchedule" (fun (f: string) (sizes: expr list) (env: environment) (guru: scheduling_guru) ->
     let (_, args, _, _) = Environment.find f env in
     let region = List.map2 (fun (t, v) x -> (v, IntImm 0, x)) args sizes in
-    Printf.printf("About to make default schedule...\n%!");
-    (* make_default_schedule f env region *)
+    Printf.printf "Guru:\n%s\n%!" (String.concat "\n" guru.serialized);
+    Printf.printf "About to make default schedule...\n%!";    
     generate_schedule f env guru
+      
   );
   
   Callback.register "doLower" lower;  
@@ -187,5 +191,5 @@ let _ =
   Callback.register "makeTransposeTransform" (fun func var1 var2 -> transpose_schedule func var1 var2);
   Callback.register "makeChunkTransform" (fun func var -> chunk_schedule func var);
   Callback.register "makeRootTransform" (fun func -> root_schedule func);
-  Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);
-  
+  Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);  
+  Callback.register "makeRandomTransform" (fun func seed -> random_schedule func seed);

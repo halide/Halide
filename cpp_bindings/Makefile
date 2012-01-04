@@ -14,14 +14,15 @@ LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter bitreader x86 inte
 LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_bitreader -lllvm_analysis -lllvm_target
 
 OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
-OCAML_LIB_DIR=/usr/local/lib/ocaml
+OCAMLC=$(shell which ocamlc)
+OCAML_LIB_DIR=$(OCAMLC:bin/ocamlc=lib/ocaml)
 LLVM_LDFLAGS=$(shell $(LLVM_CONFIG_EXE) --ldflags)
 LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) $(CUDA_LIBS) -ldl -lstdc++
  
 FIMAGE_OBJS=$(addprefix _build/,_MLFImage.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o Var.o Tuple.o Reduction.o)
 
 FImage.a: $(FIMAGE_OBJS) ../src/_build/libllsupport_impl.a
-	ld -r -o FImage.o $(OCAML_LIB_DIR)/libasmrun.a $(FIMAGE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L$(LLVM_DIR)/lib $(LLVM_LIBS_CXX) $(LLVM_LIBS_C) ../src/_build/libllsupport_impl.a
+	ld -r -o FImage.o $(FIMAGE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L../src/_build -lllsupport_impl -L$(LLVM_DIR)/lib $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -L$(OCAML_LIB_DIR) -lasmrun
 	rm -f FImage.a
 	ar q FImage.a FImage.o
 	ranlib FImage.a

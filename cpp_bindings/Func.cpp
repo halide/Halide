@@ -28,6 +28,7 @@ namespace FImage {
     ML_FUNC2(makeChunkTransform);
     ML_FUNC1(makeRootTransform);
     ML_FUNC2(makeParallelTransform);
+    ML_FUNC2(makeRandomTransform);
     
     ML_FUNC1(doConstantFold);
     
@@ -40,6 +41,8 @@ namespace FImage {
     ML_FUNC4(doLower);
 
     ML_FUNC0(makeNoviceGuru);
+    ML_FUNC1(loadGuruFromFile);
+    ML_FUNC2(saveGuruToFile);
 
     ML_FUNC1(printStmt);
     ML_FUNC1(printSchedule);
@@ -312,6 +315,12 @@ namespace FImage {
         contents->tracing = true;
     }
 
+    void Func::tile(const Var &x, const Var &y, const Var &xi, const Var &yi, const Expr &f1, const Expr &f2) {
+        split(x, x, xi, f1);
+        split(y, y, yi, f2);
+        transpose(x, yi);
+    }
+
     void Func::vectorize(const Var &v) {
         MLVal t = makeVectorizeTransform((name()),
                                          (v.name()));
@@ -382,6 +391,11 @@ namespace FImage {
         contents->scheduleTransforms.push_back(t);
     }
 
+    void Func::random(int seed) {
+        MLVal t = makeRandomTransform(name(), seed);
+        contents->scheduleTransforms.push_back(t);
+    }
+
     void Func::parallel(const Var &caller_var) {
         MLVal t = makeParallelTransform(name(), caller_var.name());
         contents->scheduleTransforms.push_back(t);
@@ -439,6 +453,8 @@ namespace FImage {
                 guru = t(guru);
             }
         }
+
+        saveGuruToFile(guru, name() + ".guru");
         
         MLVal sched = makeSchedule((name()),
                                    sizes,

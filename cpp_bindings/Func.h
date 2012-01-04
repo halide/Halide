@@ -92,6 +92,7 @@ namespace FImage {
          * onto the scheduleTransforms vector, which is traversed in
          * order starting from an initial default schedule to create a
          * mutated schedule */
+        void tile(const Var &, const Var &, const Var &, const Var &, const Expr &f1, const Expr &f2);
         void split(const Var &, const Var &, const Var &, const Expr &factor);
         void vectorize(const Var &);
         void unroll(const Var &);
@@ -101,6 +102,7 @@ namespace FImage {
         void root(const Range &);
         void root();
         void parallel(const Var &);
+        void random(int seed);
 
         /* Add an explicit Serial or Parallel to the schedule. Useful
          * for defining reduction domains */
