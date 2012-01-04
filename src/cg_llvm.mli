@@ -27,7 +27,7 @@ module type Architecture = sig
   val codegen_entry : llcontext -> llmodule -> cg_entry -> entrypoint -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
-  val malloc  : context -> expr -> llvalue
+  val malloc  : context -> expr -> expr -> llvalue
   val free    : context -> llvalue -> llvalue 
   val env : environment
 end

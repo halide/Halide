@@ -237,9 +237,9 @@ let rec codegen_entry host_ctx host_mod cg_entry entry =
   f
   *)
 
-let malloc con sz =
+let malloc con count elem_size =
   (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
-  X86.malloc (host_context con) sz
+  X86.malloc (host_context con) count elem_size
 
 let free con ptr =
   X86.free (host_context con) ptr

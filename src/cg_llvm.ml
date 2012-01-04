@@ -27,7 +27,7 @@ module type Architecture = sig
   val codegen_entry : llcontext -> llmodule -> cg_entry -> entrypoint -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
-  val malloc  : context -> expr -> llvalue
+  val malloc  : context -> expr -> expr -> llvalue
   val free    : context -> llvalue -> llvalue 
   val env : environment
 end
@@ -424,7 +424,7 @@ let make_cg_context c m b sym_table arch_state =
     in
 
     (* Allocate a closure *)
-    let closure = Arch.malloc cg_context (IntImm total_bytes) in
+    let closure = Arch.malloc cg_context (IntImm total_bytes) (IntImm 1) in
 
     (* Store everything in the closure *)
     StringIntSet.iter (fun (name, size) ->      
@@ -500,13 +500,13 @@ let make_cg_context c m b sym_table arch_state =
         sym_add name (cg_expr value);
         let result = cg_stmt stmt in
         sym_remove name;
-        result    
+        result
 
     | Pipeline (name, ty, size, produce, consume) ->
 
         let scratch = 
-          let bytes = size *~ (IntImm ((bit_width ty)/8)) in 
-          Arch.malloc cg_context bytes
+          let elem_size = (IntImm ((bit_width ty)/8)) in 
+          Arch.malloc cg_context size elem_size
         in
 
         (* push the symbol environment *)
