@@ -316,38 +316,6 @@ namespace FImage {
         contents->tracing = true;
     }
 
-    void Func::tile(const Var &x, const Var &y, const Var &xi, const Var &yi, const Expr &f1, const Expr &f2) {
-        split(x, x, xi, f1);
-        split(y, y, yi, f2);
-        transpose(x, yi);
-    }
-
-    void Func::vectorize(const Var &v) {
-        MLVal t = makeVectorizeTransform((name()),
-                                         (v.name()));
-        contents->scheduleTransforms.push_back(t);
-    }
-
-    void Func::vectorize(const Var &v, int factor) {
-        if (factor == 1) return;
-        Var vi;
-        split(v, v, vi, factor);
-        vectorize(vi);        
-    }
-
-    void Func::unroll(const Var &v) {
-        MLVal t = makeUnrollTransform((name()),
-                                      (v.name()));        
-        contents->scheduleTransforms.push_back(t);
-    }
-
-    void Func::unroll(const Var &v, int factor) {
-        if (factor == 1) return;
-        Var vi;
-        split(v, v, vi, factor);
-        unroll(vi);
-    }
-
     void *watchdog(void *arg) {
         useconds_t t = ((useconds_t *)arg)[0];
         printf("Watchdog sleeping for %d microseconds\n", t);
@@ -405,40 +373,83 @@ namespace FImage {
         return 0;
     }
 
-    void Func::split(const Var &old, const Var &newout, const Var &newin, const Expr &factor) {
+    Func &Func::tile(const Var &x, const Var &y, const Var &xi, const Var &yi, const Expr &f1, const Expr &f2) {
+        split(x, x, xi, f1);
+        split(y, y, yi, f2);
+        transpose(x, yi);
+        return *this;
+    }
+
+    Func &Func::vectorize(const Var &v) {
+        MLVal t = makeVectorizeTransform((name()),
+                                         (v.name()));
+        contents->scheduleTransforms.push_back(t);
+        return *this;
+    }
+
+    Func &Func::vectorize(const Var &v, int factor) {
+        if (factor == 1) return *this;
+        Var vi;
+        split(v, v, vi, factor);
+        vectorize(vi);        
+        return *this;
+    }
+
+    Func &Func::unroll(const Var &v) {
+        MLVal t = makeUnrollTransform((name()),
+                                      (v.name()));        
+        contents->scheduleTransforms.push_back(t);
+        return *this;
+    }
+
+    Func &Func::unroll(const Var &v, int factor) {
+        if (factor == 1) return *this;
+        Var vi;
+        split(v, v, vi, factor);
+        unroll(vi);
+        return *this;
+    }
+
+    Func &Func::split(const Var &old, const Var &newout, const Var &newin, const Expr &factor) {
         MLVal t = makeSplitTransform(name(),
                                      old.name(),
                                      newout.name(),
                                      newin.name(),
                                      factor.node());
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
-    void Func::transpose(const Var &outer, const Var &inner) {
+    Func &Func::transpose(const Var &outer, const Var &inner) {
         MLVal t = makeTransposeTransform((name()),
                                          (outer.name()),
                                          (inner.name()));
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
-    void Func::chunk(const Var &caller_var) {
+    Func &Func::chunk(const Var &caller_var) {
         MLVal t = makeChunkTransform(name(), caller_var.name());
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
-    void Func::root() {
+    Func &Func::root() {
         MLVal t = makeRootTransform(name());
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
-    void Func::random(int seed) {
+    Func &Func::random(int seed) {
         MLVal t = makeRandomTransform(name(), seed);
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
-    void Func::parallel(const Var &caller_var) {
+    Func &Func::parallel(const Var &caller_var) {
         MLVal t = makeParallelTransform(name(), caller_var.name());
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
     DynImage Func::realize(int a) {
