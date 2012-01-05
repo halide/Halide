@@ -27,6 +27,7 @@ let rec cg_expr (con : context) (expr : expr) =
   let i32_t = i32_type c in
   let i8x16_t = vector_type (i8_type c) 16 in
   let i16x8_t = vector_type (i16_type c) 8 in
+  let f32x4_t = vector_type (float_type c) 4 in
   let i16x8x2_t = struct_type c [| i16x8_t; i16x8_t |] in
   let i16x4_t = vector_type (i16_type c) 4 in
   let i16x4x2_t = struct_type c [| i16x4_t; i16x4_t |] in
@@ -42,7 +43,11 @@ let rec cg_expr (con : context) (expr : expr) =
     let mask = build_sext mask (type_of_val_type c (IntVector (bits, elts))) "" b in
     let ones = const_all_ones (type_of mask) in
     let inv_mask = build_xor mask ones "" b in
-    build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b
+    let t = type_of l in
+    let l = build_bitcast l (type_of mask) "" b in
+    let r = build_bitcast r (type_of mask) "" b in
+    let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
+    build_bitcast result t "" b       
   in    
   
   match expr with 
@@ -52,6 +57,10 @@ let rec cg_expr (con : context) (expr : expr) =
               let op = declare_function "llvm.arm.neon.vmins.v8i16"
                 (function_type (i16x8_t) [|i16x8_t; i16x8_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
+          | FloatVector (32, 4) ->
+              let op = declare_function "llvm.arm.neon.vmins.v4f32"
+                (function_type (f32x4_t) [|f32x4_t; f32x4_t|]) m in              
+              build_call op [| cg_expr l; cg_expr r |] "" b
           (* TODO: other types *)
           | _ -> cg_select (l <~ r) l r
         end
@@ -60,6 +69,10 @@ let rec cg_expr (con : context) (expr : expr) =
           | IntVector (16, 8) ->
               let op = declare_function "llvm.arm.neon.vmaxs.v8i16"
                 (function_type (i16x8_t) [|i16x8_t; i16x8_t|]) m in              
+              build_call op [| cg_expr l; cg_expr r |] "" b
+          | FloatVector (32, 4) ->
+              let op = declare_function "llvm.arm.neon.vmaxs.v4f32"
+                (function_type (f32x4_t) [|f32x4_t; f32x4_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
           (* TODO: other types *)
           | _ -> cg_select (l >~ r) l r
