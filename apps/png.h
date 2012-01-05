@@ -153,12 +153,13 @@ void save(Image<T> im, std::string filename) {
     row_pointers = new png_bytep[im.height()];
     for (int y = 0; y < im.height(); y++) {
 	row_pointers[y] = new png_byte[png_get_rowbytes(png_ptr, info_ptr)];
-        uint16_t *dstPtr = (uint16_t *)(row_pointers[y]);
+        uint8_t *dstPtr = (uint8_t *)(row_pointers[y]);
         for (int x = 0; x < im.width(); x++) {
             for (int c = 0; c < im.channels(); c++) {
                 uint16_t out;
                 convert(im(x, y, c), out);
-                *dstPtr++ = htons(out);
+                *dstPtr++ = out >> 8; 
+                *dstPtr++ = out & 0xff;
             }
         }
     }
