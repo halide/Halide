@@ -81,6 +81,14 @@ let rec cg_expr (con : context) (expr : expr) =
         end
 
     (* use intrinsics for vector loads/stores *) 
+    | Load (FloatVector (32, 4), buf, Ramp (base, IntImm 1, w))  ->
+        let ld = declare_function "llvm.arm.neon.vld1.v4f32"
+          (function_type (f32x4_t) [|ptr_t; i32_t|]) m in
+        let addr = con.cg_memref (FloatVector (32, 4)) buf base in        
+        let addr = build_pointercast addr ptr_t "" b in
+        let result = build_call ld [|addr; const_int (i32_t) 32|] "" b in
+        result
+
     | Load (IntVector (16, 8), buf, Ramp (base, IntImm 1, w)) 
     | Load (UIntVector (16, 8), buf, Ramp (base, IntImm 1, w)) ->
         let ld = declare_function "llvm.arm.neon.vld1.v8i16"
