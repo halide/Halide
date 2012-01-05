@@ -21,6 +21,8 @@
 #include "elf.h"
 #include <sstream>
 
+#include <dlfcn.h>
+
 namespace FImage {
     ML_FUNC2(makeVectorizeTransform);
     ML_FUNC2(makeUnrollTransform);
@@ -554,7 +556,33 @@ namespace FImage {
         doCompileToFile(moduleName, args, stmt);
     }
 
-    void Func::compileJIT(bool targetPTX) {
+    void Func::compileJIT(bool targetPTX) {        
+        if (getenv("PSUEDOJIT")) {
+            // llvm's ARM jit path has many issues currently. Instead
+            // we'll do static compilation to a shared object, then
+            // dlopen it
+            printf("Psuedo-jitting via static compilation to a shared object\n");
+            std::string name = contents->name + "_psuedojit";
+            std::string bc_name = name + ".bc";
+            std::string so_name = name + ".so";
+            std::string obj_name = name + ".o";
+            std::string entrypoint_name = name + "_c_wrapper";
+            compileToFile(name.c_str());
+            char cmd1[1024], cmd2[1024];
+            snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
+            snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
+            printf("%s\n", cmd1);
+            system(cmd1);
+            printf("%s\n", cmd2);
+            system(cmd2);
+            void *handle = dlopen(so_name.c_str(), RTLD_NOW);
+            assert(handle);
+            void *ptr = dlsym(handle, entrypoint_name.c_str());
+            assert(ptr);
+            contents->functionPtr = (void (*)(void *))ptr;
+            return;
+        }
+
         static llvm::ExecutionEngine *ee = NULL;
         static llvm::FunctionPassManager *fPassMgr = NULL;
         static llvm::PassManager *mPassMgr = NULL;
