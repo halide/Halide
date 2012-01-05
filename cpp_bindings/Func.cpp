@@ -572,9 +572,9 @@ namespace FImage {
             snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
             snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
             printf("%s\n", cmd1);
-            system(cmd1);
+            assert(0 == system(cmd1));
             printf("%s\n", cmd2);
-            system(cmd2);
+            assert(0 == system(cmd2));
             void *handle = dlopen(so_name.c_str(), RTLD_NOW);
             assert(handle);
             void *ptr = dlsym(handle, entrypoint_name.c_str());
