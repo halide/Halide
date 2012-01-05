@@ -111,10 +111,10 @@ int main(int argc, char **argv) {
 
     Var xi, yi;
 
-    // Times are for a quad-core core2, and a 64-core nehalem at a lower clock
+    // Times are for a quad-core core2, and a 64-core nehalem 
     switch (atoi(argv[1])) {
     case 0:
-        // breadth-first scalar: 2159 ms, 2667 ms
+        // breadth-first scalar: 2147 ms, 2667 ms
         output.root();
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root();
@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
         }
         break;        
     case 1:
-        // parallelize each stage across outermost dimension: 944 ms, 617 ms
+        // parallelize each stage across outermost dimension: 899 ms, 617 ms
         output.split(yo, yo, yi, 32).parallel(yo);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y);
@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
         }
         break;        
     case 2:
-        // Same as above, but also vectorize heavily across x: 952 ms, 446 ms
+        // Same as above, but also vectorize heavily across x: 915 ms, 446 ms
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
         }
         break;
     case 3:
-        // parallelize across yi instead of yo: Bad idea - 1747 ms, 1625 ms
+        // parallelize across yi instead of yo: Bad idea - 1760 ms, 1625 ms
         output.split(yo, yo, yi, 8).parallel(yi);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 8).parallel(yi);
@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
     case 4:
         // Parallelize, inlining all the laplacian pyramid levels
         // (they can be computed from the gaussian pyramids on the
-        // fly): 750 ms, 461 ms
+        // fly): 721 ms, 461 ms
         output.split(yo, yo, yi, 32).parallel(yo);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 1).parallel(y);
@@ -174,7 +174,7 @@ int main(int argc, char **argv) {
         break;                
     case 5:
         // Same as above with vectorization (now that we're doing more
-        // math and less memory, maybe it will matter): 646 ms, 304 ms
+        // math and less memory, maybe it will matter): 618 ms, 304 ms
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
         }
         break;
     case 6:
-        // Also inline every other pyramid level: Bad idea - 2109 ms, 656 ms
+        // Also inline every other pyramid level: Bad idea - 2069 ms, 656 ms
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j+=2) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -192,7 +192,8 @@ int main(int argc, char **argv) {
         }
         break;
     case 7:
-        // Take care of the boundary condition earlier to avoid costly branching: 808 ms, 340 ms
+        // Take care of the boundary condition earlier to avoid costly
+        // branching: 791 ms, 340 ms
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         clamped.root().split(y, y, yi, 32).parallel(y).vectorize(x, 4);
         for (int j = 0; j < J; j++) {
@@ -202,7 +203,8 @@ int main(int argc, char **argv) {
         }
         break;
     case 8:
-        // Unroll by a factor of two to try and simplify the upsampling math: not worth it - 836 ms, 607 ms
+        // Unroll by a factor of two to try and simplify the
+        // upsampling math: not worth it - 790 ms, 607 ms
         output.split(yo, yo, yi, 32).parallel(yo).unroll(xo, 2).unroll(yi, 2);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).unroll(x, 2).unroll(y, 2);
@@ -211,7 +213,25 @@ int main(int argc, char **argv) {
         }
         break;                        
     case 9:
-        // 
+        // Same as case 5 but parallelize across y as well as k, in
+        // case k is too small to saturate the machine: 838 ms
+        output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
+        for (int j = 0; j < J; j++) {
+            inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+            gPyramid[j].root().parallel(k).split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+            outGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+        }
+        break;
+    case 10:
+        // Really-fine-grain parallelism. Don't both splitting
+        // y. Should incur too much overhead to be good: 1568 ms
+        output.parallel(yo).vectorize(xo, 4);
+        for (int j = 0; j < J; j++) {
+            inGPyramid[j].root().parallel(y).vectorize(x, 4);
+            gPyramid[j].root().parallel(k).parallel(y).vectorize(x, 4);
+            outGPyramid[j].root().parallel(y).vectorize(x, 4);
+        }
+        break;      
     default: 
         break;
     }
