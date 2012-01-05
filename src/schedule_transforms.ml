@@ -133,7 +133,7 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
           (fun (_,realization) -> Reuse realization)
           options
       in
-      inline_options @ root_options @ chunk_options @ coiterate_options @ reuse_options
+      reuse_options @ inline_options @ root_options @ coiterate_options @ chunk_options
     in
 
     let call_sched_options = 
