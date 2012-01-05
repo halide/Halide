@@ -33,6 +33,7 @@ module type Architecture = sig
   val malloc  : context -> string -> expr -> expr -> llvalue
   val free    : context -> llvalue -> llvalue 
   val env : environment
+  val pointer_size : int
 end
 
 module type Codegen = sig
@@ -411,7 +412,7 @@ let make_cg_context c m b sym_table arch_state =
 
   and cg_par_for var_name min size body =
     (* Dump everything relevant in the symbol table into a closure *)
-    let syms = find_names_in_stmt (StringSet.add var_name StringSet.empty) body in
+    let syms = find_names_in_stmt (StringSet.add var_name StringSet.empty) Arch.pointer_size body in
 
     (* Compute an offset in bytes into a closure for each symbol name, and put
        that offset into a string map *)
@@ -422,7 +423,6 @@ let make_cg_context c m b sym_table arch_state =
         let size = roundup 1 size in
         (* bump offset up to be a multiple of size for alignment *)
         let offset = ((offset+size-1)/size)*size in
-        Printf.printf "Putting %s at offset %d\n" name offset;
         (offset + size, StringMap.add name offset offset_map)
       ) syms (0, StringMap.empty) 
     in
@@ -438,6 +438,7 @@ let make_cg_context c m b sym_table arch_state =
     StringIntSet.iter (fun (name, size) ->      
       let current_val = sym_get name in
       let offset = StringMap.find name offset_map in
+      Printf.printf "Storing %s of size %d at offset %d\n%!" name size offset;
       let addr = build_bitcast closure (pointer_type (type_of current_val)) "" b in      
       let addr = build_gep addr [| const_int int_imm_t (offset/size) |] "" b in
       ignore (build_store current_val addr b);
