@@ -1,6 +1,7 @@
 open Ir
 open Llvm
 open Cg_llvm_util
+open Util
 
 type state = int (* dummy - we don't use anything in this Arch for now *)
 type context = state cg_context
@@ -23,6 +24,7 @@ let rec cg_expr (con:context) (expr:expr) =
   let ptr_t = pointer_type (i8_type c) in
   let i16x8_t = vector_type (i16_type c) 8 in
   let i8x16_t = vector_type (i8_type c) 16 in
+  let i32_t = i32_type c in
 
   match expr with 
     (* x86 doesn't do 16 bit vector division, but for constants you can do multiplication instead. *)
@@ -45,6 +47,13 @@ let rec cg_expr (con:context) (expr:expr) =
               let value = build_call unaligned_load_128 [|addr|] "" b in
               build_bitcast value (type_of_val_type c t) "" b        
         end
+
+    (* Strided loads should load two vectors and then shuffle *)
+    | Load (t, buf, Ramp(base, IntImm 2, n)) when (bit_width t = 128) ->
+        let v1 = cg_expr (Load (t, buf, Ramp(base, IntImm 1, n))) in
+        let v2 = cg_expr (Load (t, buf, Ramp(base +~ IntImm n, IntImm 1, n))) in
+        let mask = List.map (fun x -> const_int i32_t (x*2)) (0 -- n) in
+        build_shufflevector v1 v2 (const_vector (Array.of_list mask)) "" b
 
     (* We don't have any special tricks up our sleeve for this case *)
     | _ -> con.cg_expr expr 
@@ -74,7 +83,8 @@ let rec cg_stmt (con:context) (stmt:stmt) =
 let malloc (con:context) (name:string) (elems:expr) (elem_size:expr) =
   let c = con.c and m = con.m and b = con.b in
   let malloc = declare_function "malloc" (function_type (pointer_type (i8_type c)) [|i64_type c|]) m in
-  build_call malloc [|cg_expr con (Cast (Int 64, elems *~ elem_size))|] "" b
+  let size = Constant_fold.constant_fold_expr (Cast (Int 64, elems *~ elem_size)) in
+  build_call malloc [|cg_expr con size|] "" b
 
 let free (con:context) (address:llvalue) =
   let c = con.c and m = con.m and b = con.b in
