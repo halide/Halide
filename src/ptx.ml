@@ -45,6 +45,8 @@ type state = {
 }
 type context = state cg_context
 
+let pointer_size = 8
+
 let start_state () =
   (* create separate device module *)
   let dev_ctx = create_context () in
@@ -172,7 +174,7 @@ let cg_dev_kernel con stmt =
    *)
 
   (* extract the symbols we need to package up and pass to the kernel *)
-  let names_in_stmt = find_names_in_stmt StringSet.empty stmt in
+  let names_in_stmt = find_names_in_stmt StringSet.empty pointer_size stmt in
   let closure_vars = List.map fst (StringIntSet.elements names_in_stmt) in
   let closure_vals = List.map con.sym_get closure_vars in
   let closure_types = List.map type_of closure_vals in

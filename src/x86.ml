@@ -7,6 +7,8 @@ type state = int (* dummy - we don't use anything in this Arch for now *)
 type context = state cg_context
 let start_state () = 0
 
+let pointer_size = 8
+
 let codegen_entry c m cg_entry _ e =
   (* set up module *)
   Stdlib.init_module_x86 m;
