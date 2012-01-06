@@ -121,6 +121,9 @@ namespace FImage {
         const std::vector<Expr> &args() const;
         const std::string &name() const;
         const std::vector<MLVal> &scheduleTransforms() const;
+        
+        // Get the variable defining argument i
+        const Var &arg(int i) const;
 
         void compileJIT();
         void compileToFile(const std::string &name);
