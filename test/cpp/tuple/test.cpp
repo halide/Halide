@@ -5,10 +5,23 @@ using namespace FImage;
 int main(int argc, char **argv) {
     Var x, y;
 
+    Var bx("blockidx"), tx("threadidx"),
+        by("blockidy"), ty("threadidy");
 
     // Single-dimensional tuples
-    Func f1;
+    Func f1("one_d");
     f1(x, y) = (x, y);
+
+    // TODO: change lower tuples not to reuse f1 - instead make new f1 via C function?
+    if (use_gpu()) {
+        f1.split(x, bx, tx, 16);
+        f1.parallel(bx);
+        f1.parallel(tx);
+        f1.split(y, by, ty, 16);
+        f1.parallel(by);
+        f1.parallel(ty);
+        f1.transpose(bx,ty);
+    }
 
     Image<int> im = f1.realize(32, 32, 2);
 
@@ -23,8 +36,19 @@ int main(int argc, char **argv) {
     }
 
     // Multi-dimensional tuples
-    Func f2;
-    f2(x, y) = (f1(x, y), f1(x, y)+17);
+    Func f2("two_d");
+    Func fi;
+    fi(x, y) = (x, y);
+    f2(x, y) = (fi(x, y), fi(x, y)+17);
+    if (use_gpu()) {
+        f2.split(x, bx, tx, 16);
+        f2.parallel(bx);
+        f2.parallel(tx);
+        f2.split(y, by, ty, 16);
+        f2.parallel(by);
+        f2.parallel(ty);
+        f2.transpose(bx,ty);
+    }
     Image<int> im2 = f2.realize(32, 32, 2, 2);
     for (size_t x = 0; x < 32; x++) {
         for (size_t y = 0; y < 32; y++) {
@@ -44,10 +68,21 @@ int main(int argc, char **argv) {
     }
 
     // Putting the tuple dimension innermost
-    Func f3, f3a, f3b;
+    Func f3("tuple_innermost"), f3a, f3b;
     f3a(x, y) = x;
     f3b(x, y) = y;
     f3 = (f3a, f3b);
+    if (use_gpu()) {
+        Var x = f3.arg(1);
+        Var y = f3.arg(2);
+        f3.split(x, bx, tx, 16);
+        f3.parallel(bx);
+        f3.parallel(tx);
+        f3.split(y, by, ty, 16);
+        f3.parallel(by);
+        f3.parallel(ty);
+        f3.transpose(bx,ty);
+    }
     Image<int> im3 = f3.realize(2, 32, 32);
     for (size_t x = 0; x < 32; x++) {
         for (size_t y = 0; y < 32; y++) {
@@ -60,7 +95,7 @@ int main(int argc, char **argv) {
     }
 
     // A pair of reductions
-    Func f4;
+    Func f4("reduction_pair");
     RVar i(0, 10);
     f4(x, y) = (Sum(x+i), Product(x+y+i));
     Image<int> im4 = f4.realize(32, 32, 2);
@@ -80,9 +115,17 @@ int main(int argc, char **argv) {
     }
 
     // Triples
-    Func f5;
+    Func f5("triple");
     f5(x, y) = (x, y, x+y);
-
+    if (use_gpu()) {
+        f5.split(x, bx, tx, 16);
+        f5.parallel(bx);
+        f5.parallel(tx);
+        f5.split(y, by, ty, 16);
+        f5.parallel(by);
+        f5.parallel(ty);
+        f5.transpose(bx,ty);
+    }
     Image<int> im5 = f5.realize(32, 32, 3);
 
     for (size_t x = 0; x < 32; x++) {
@@ -97,8 +140,17 @@ int main(int argc, char **argv) {
     }
 
     // Multi-dimensional tuple literals
-    Func f6;
+    Func f6("two_d_tuple_literals");
     f6(x, y) = ((x+y, x*y), (x-y, x/(y+1)));
+    if (use_gpu()) {
+        f6.split(x, bx, tx, 16);
+        f6.parallel(bx);
+        f6.parallel(tx);
+        f6.split(y, by, ty, 16);
+        f6.parallel(by);
+        f6.parallel(ty);
+        f6.transpose(bx,ty);
+    }
     Image<int> im6 = f6.realize(32, 32, 2, 2);
     for (size_t x = 0; x < 32; x++) {
         for (size_t y = 0; y < 32; y++) {
@@ -115,7 +167,7 @@ int main(int argc, char **argv) {
     }
 
     // Tuples inside reductions
-    Func f7;
+    Func f7("tuple_inside_reduce");
     f7(x, y) = Sum((x*i, y*i+1));
     Image<int> im7 = f7.realize(32, 32, 2);
     for (size_t x = 0; x < 32; x++) {

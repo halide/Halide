@@ -20,6 +20,29 @@ int main(int argc, char **argv) {
     h.root();
     g.root();
 
+    if (use_gpu()) {
+        Var tidx("threadidx");
+        Var bidx("blockidx");
+        Var tidy("threadidy");
+        Var bidy("blockidy");
+        
+        f.split(x, bidx, tidx, 16);
+        f.parallel(bidx);
+        f.parallel(tidx);
+        f.split(y, bidy, tidy, 16);
+        f.parallel(bidy);
+        f.parallel(tidy);
+        f.transpose(bidx,tidy);
+        
+        g.split(x, bidx, tidx, 128);
+        g.parallel(bidx);
+        g.parallel(tidx);
+        
+        h.split(x, bidx, tidx, 128);
+        h.parallel(bidx);
+        h.parallel(tidx);
+    }
+
     //f.trace();
 
     Image<int> out = f.realize(32, 32);
