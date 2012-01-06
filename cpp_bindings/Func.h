@@ -9,6 +9,8 @@
 #include "Image.h"
 
 namespace FImage {
+    
+    bool use_gpu();
 
     class Func;
     class Var;
@@ -126,7 +128,7 @@ namespace FImage {
         const std::string &name() const;
         const std::vector<MLVal> &scheduleTransforms() const;
 
-        void compileJIT(bool targetPTX=false);
+        void compileJIT();
         void compileToFile(const std::string &name);
 
     private:
