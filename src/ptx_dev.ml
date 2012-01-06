@@ -4,10 +4,22 @@ open Ir_printer
 open Util
 open Cg_llvm_util
 open Analysis
+open Constant_fold
 
-type state = int (* dummy - we don't use anything in this Arch for now *)
+let shared_addrspace = 4
+
+type state = {
+  shared_mem_bytes : int ref;
+  first_block : bool ref;
+}
 type context = state cg_context
-let start_state () = 0
+let start_state () =
+  let sh = 0 in
+  let fst = true in
+  {
+    shared_mem_bytes = ref sh;
+    first_block = ref fst;
+  }
 (* TODO: track current surrounding thread/block nest scope.
  * should allow malloc to compute correct offsets. *)
 
@@ -48,9 +60,16 @@ let simt_intrinsic name =
         pm2
         pm3 *)
 
-let cg_expr con e = con.cg_expr e
+let rec cg_expr con = function
+  | Debug (e, _, _) ->
+      Printf.printf "Skipping Debug expr inside device kernel\n%!";
+      cg_expr con e
+  | e -> con.cg_expr e
 
 let rec cg_stmt con = function
+  | Print _ ->
+      Printf.printf "Dropping Print stmt inside device kernel\n%!";
+      const_zero con.c (* ignorable return value *)
   | For (name, base, width, ordered, body) when is_simt_var name ->
       (* TODO: loop needs to be turned into If (which we don't have in our IR), not dropped *)
       Printf.eprintf "Dropping %s loop on %s (%s..%s)\n%!"
@@ -63,6 +82,29 @@ let rec cg_stmt con = function
       and cg_stmt = cg_stmt con
       and sym_add = con.sym_add
       and sym_remove = con.sym_remove in
+      
+      (* Issue a thread barrier to complete prior ParFor *)
+      (* TODO: this can be optimized out for cases where we don't share chunks downstream *)
+      begin match base_name name with
+        (* | "threadidx" *)
+        | "threadidy"
+        | "threadidz"
+        | "threadidw" ->
+          if not !(con.arch_state.first_block) then begin
+            let barrier = match base_name name with
+              (* | "threadidx" -> 1 *)
+              | "threadidy" -> 0
+              | n -> raise (Wtf ("No barriers defined for ParFor over " ^ n))
+            in
+            let syncthreads = match lookup_function "llvm.ptx.bar.sync" con.m with
+              | Some f -> f
+              | None -> raise (Wtf "failed to find llvm.ptx.bar.sync intrinsic")
+            in
+            ignore (build_call syncthreads [| const_int (i32_type con.c) barrier |] "" con.b)
+          end;
+          con.arch_state.first_block := false
+        | _ -> ()
+      end;
 
       (* Drop this explicit loop, and just SIMTfy variable references in its body *)
       (* Add base to all references to name inside loop, since CTA and Thread IDs start from 0 *)
@@ -89,7 +131,7 @@ let rec cg_stmt con = function
       sym_add name (cg_expr loopvar);
 
       (* codegen the body *)
-      cg_stmt body;
+      ignore (cg_stmt body);
 
       (* pop the loop variable *)
       sym_remove name;
@@ -99,7 +141,7 @@ let rec cg_stmt con = function
 
       (* Any new code will be inserted in after_bb. *)
       position_at_end after_bb b;
-
+      
       (* Return an ignorable llvalue *)
       const_int (i32_type c) 0
 
@@ -108,8 +150,23 @@ let rec cg_stmt con = function
 let rec codegen_entry dev_ctx dev_mod cg_entry entry =
   raise (Wtf "Direct use of Ptx_dev.codegen_entry is not supported")
 
-let malloc = (fun _ _ _ _ -> raise (Wtf "No malloc for PTX yet"))
-let free = (fun _ _ -> raise (Wtf "No free for PTX yet"))
+let malloc con name count elem_size =
+  let zero = const_zero con.c in
+  let size = match constant_fold_expr (count *~ elem_size) with
+    | IntImm sz -> sz
+    | _ -> raise (Wtf "")
+  in
+  Printf.printf "malloc %s[%d bytes] on PTX device\n%!" name size;
+  con.arch_state.shared_mem_bytes := !(con.arch_state.shared_mem_bytes) + size;
+  let elemty = element_type (raw_buffer_t con.c) in
+  let ty = array_type elemty size in
+  let init = undef ty in
+  let buf = define_qualified_global name init shared_addrspace con.m in
+  build_gep buf [| zero; zero |] (name ^ ".buf_base") con.b
+
+let free con ptr =
+  (* Return an ignorable llvalue *)
+  const_zero con.c
 
 let env =
   let ntid_decl   = (".llvm.ptx.read.ntid.x", [], i32, Extern) in
