@@ -35,6 +35,12 @@ extern "C" {
 #define cuMemFree                           cuMemFree_v2
 #define cuMemcpyHtoD                        cuMemcpyHtoD_v2
 #define cuMemcpyDtoH                        cuMemcpyDtoH_v2
+// API version >= 4000
+#define cuCtxDestroy                        cuCtxDestroy_v2
+#define cuCtxPopCurrent                     cuCtxPopCurrent_v2
+#define cuCtxPushCurrent                    cuCtxPushCurrent_v2
+#define cuStreamDestroy                     cuStreamDestroy_v2
+#define cuEventDestroy                      cuEventDestroy_v2
 
 typedef unsigned long long CUdeviceptr; // hard code 64-bits for now
 typedef int CUdevice;                                     /**< CUDA device */
@@ -111,14 +117,18 @@ CUresult CUDAAPI cuLaunchKernel(CUfunction f,
                                 void **kernelParams,
                                 void **extra);
 CUresult CUDAAPI cuCtxSynchronize();
+
+CUresult CUDAAPI cuCtxPushCurrent(CUcontext ctx);
+CUresult CUDAAPI cuCtxPopCurrent(CUcontext *pctx);
 #endif //__cuda_cuda_h__
 
 // Device, Context, Module, and Function for this entrypoint are tracked locally
 // and constructed lazily on first run.
-static CUdevice __dev = 0;
-static CUcontext __ctx = 0;
 // TODO: make __f, __mod into arrays?
 // static vector<CUfunction> __f;
+}
+namespace FImage { extern CUcontext cuda_ctx; } // C++
+extern "C" {
 static CUmodule __mod;
 
 // Used to create buffer_ts to track internal allocations caused by our runtime
@@ -160,9 +170,8 @@ void __free_buffer(buffer_t* buf)
 
 void __init(const char* ptx_src)
 {
-    CUresult status;
-
-    if (!__dev) {
+    // Initialize one shared context for all FImage compiled instances
+    if (!FImage::cuda_ctx) {
         // Initialize CUDA
         CHECK_CALL( cuInit(0), "cuInit" );
 
@@ -170,18 +179,31 @@ void __init(const char* ptx_src)
         int deviceCount = 0;
         CHECK_CALL( cuDeviceGetCount(&deviceCount), "cuDeviceGetCount" );
         assert(deviceCount > 0);
-
+        
+        CUdevice dev;
         // Get device
-        CHECK_CALL( cuDeviceGet(&__dev, 0), "cuDeviceGet" );
+        CHECK_CALL( cuDeviceGet(&dev, 0), "cuDeviceGet" );
+        
+        fprintf(stderr, "Got device %d, about to create context\n", dev);
 
         // Create context
-        CHECK_CALL( cuCtxCreate(&__ctx, 0, __dev), "cuCtxCreate" );
-
-        // Create module
-        CHECK_CALL( cuModuleLoadData(&__mod, ptx_src), "cuModuleLoadData" );
-
-        fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
+        CHECK_CALL( cuCtxCreate(&FImage::cuda_ctx, 0, dev), "cuCtxCreate" );
+    } else {
+        CHECK_CALL( cuCtxPushCurrent(FImage::cuda_ctx), "cuCtxPushCurrent" );
     }
+    
+    // Initialize a module for just this FImage module
+    if (!__mod) {
+      // Create module
+      CHECK_CALL( cuModuleLoadData(&__mod, ptx_src), "cuModuleLoadData" );
+
+      fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
+    }
+}
+
+void __release() {
+    CUcontext ignore;
+    CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
 }
 
 CUfunction __get_kernel(const char* entry_name)
@@ -236,8 +258,8 @@ void __dev_run(
     char msg[256];
     snprintf(
         msg, 256,
-        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads",
-        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ
+        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem",
+        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes
     );
     CHECK_CALL(
         cuLaunchKernel(

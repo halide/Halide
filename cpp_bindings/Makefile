@@ -22,7 +22,7 @@ LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) $(CUDA_LIBS
 FIMAGE_OBJS=$(addprefix _build/,_MLFImage.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o Var.o Tuple.o Reduction.o)
 
 FImage.a: $(FIMAGE_OBJS) ../src/_build/libllsupport_impl.a
-	ld -r -o FImage.o $(FIMAGE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L../src/_build -lllsupport_impl -L$(LLVM_DIR)/lib $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -L$(OCAML_LIB_DIR) -lasmrun
+	ld -r -o FImage.o $(FIMAGE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L../src/_build -lllsupport_impl -L$(LLVM_DIR)/lib $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -L$(OCAML_LIB_DIR) -lasmrun -lunix
 	rm -f FImage.a
 	ar q FImage.a FImage.o
 	ranlib FImage.a
@@ -32,7 +32,7 @@ _build/%.o: %.cpp
 
 _build/_MLFImage.o: ../src/_build/fimage.cmxa 
 	mkdir -p _build
-	ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLFImage.o $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/fimage.cmxa 
+	ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLFImage.o unix.cmxa $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/fimage.cmxa 
 
 ../src/_build/fimage.cmxa: ../src/*.ml
 	cd ../src && \

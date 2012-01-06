@@ -43,8 +43,6 @@ module type Codegen = sig
   val make_cg_context : arch_state make_cg_context
   val codegen_entry : entrypoint -> llcontext * llmodule * llvalue
   val codegen_c_wrapper : llcontext -> llmodule -> llvalue -> llvalue
-  val save_bc_to_file : llmodule -> string -> unit
-  val codegen_c_header : entrypoint -> string -> unit
   val codegen_to_bitcode_and_header : entrypoint -> unit
   val codegen_to_file : entrypoint -> string -> unit
 end
@@ -636,12 +634,14 @@ let make_cg_context c m b sym_table arch_state =
   and cg_memref vt buf idx =
     (* load the global buffer** *)
     let base = sym_get buf in
+    (* capture address space, since we need to propagate it to the ultimate element memref ptrs *)
+    let addrspace = address_space (type_of base) in
     (* cast pointer to pointer-to-target-type *)
     let elem_type = type_of_val_type (element_val_type vt) in
-    let ptr = build_pointercast base (pointer_type (elem_type)) "memref_elem_ptr" b in
+    let ptr = build_pointercast base (qualified_pointer_type (elem_type) addrspace) "memref_elem_ptr" b in
     (* build getelementpointer into buffer *)
     let gep = build_gep ptr [| cg_expr idx |] "memref" b in
-    build_pointercast gep (pointer_type (type_of_val_type vt)) "typed_memref" b
+    build_pointercast gep (qualified_pointer_type (type_of_val_type vt) addrspace) "typed_memref" b
 
   and cg_print prefix args =
     (* Generate a format string and values to print for a printf *)
@@ -765,52 +765,6 @@ let codegen_c_wrapper c m f =
   (* return the wrapper function *)
   wrapper
 
-let save_bc_to_file m fname =
-  begin match Llvm_bitwriter.write_bitcode_file m fname with
-    | false -> raise (BCWriteFailed fname)
-    | true -> ()
-  end
-
-let codegen_c_header e header_file =
-  let (object_name, args, _) = e in
-
-  (* Produce a header *)
-  let string_of_type = function
-    | Int bits -> "int" ^ (string_of_int bits) ^ "_t"
-    | UInt bits -> "uint" ^ (string_of_int bits) ^ "_t"
-    | Float 32 -> "float"
-    | Float 64 -> "double"
-    | _ -> raise (Wtf "Bad type for toplevel argument")
-  in
-  let string_of_arg = function
-    | Scalar (n, t) -> (string_of_type t) ^ " " ^ (String.sub n 1 ((String.length n)-1))
-    | Buffer n -> "buffer_t *" ^ (String.sub n 1 ((String.length n)-1))
-  in
-  let arg_string = String.concat ", " (List.map string_of_arg args) in
-  let lines = 
-    ["#ifndef " ^ object_name ^ "_h";
-     "#define " ^ object_name ^ "_h";
-     "";
-     "#include <stdint.h>";
-     "";
-     "typedef struct buffer_t {";
-     "  uint8_t* host;";
-     "  uint64_t dev;";
-     "  bool host_dirty;";
-     "  bool dev_dirty;";
-     "  size_t dims[4];";
-     "  size_t elem_size;";
-     "} buffer_t;";
-     "";
-     "void " ^ object_name ^ "(" ^ arg_string ^ ");";
-     "";
-     "#endif"]
-  in
-
-  let out = open_out header_file in
-  output_string out (String.concat "\n" lines);
-  close_out out
-
 (* TODO refactor codegen_to_file into:
  *  caller creates/frees context, parent module
  *  Arch.codegen cg_func c m e
@@ -879,71 +833,4 @@ let codegen_to_file e filename =
   dispose_module m;
   dispose_context c
 
-end
-
-module CodegenForHost = struct
-  let hosttype = 
-    try
-      Sys.getenv "HOSTTYPE" 
-    with Not_found ->
-      Printf.printf "Could not detect host architecture (HOSTTYPE not set). Assuming x86_64.\n";
-      "x86_64"
-
-  (* TODO: this is ugly. Not sure there's a better way. *)
-  (* TODO: push this up to the C layer? *)
-  let make_cg_context =
-    if hosttype = "arm" then
-      let module Cg = CodegenForArch(Arm) in
-      Cg.make_cg_context
-    else (* if hosttype = "x86_64" then *)
-      let module Cg = CodegenForArch(X86) in
-      Cg.make_cg_context
-  
-  let codegen_entry e = 
-    if hosttype = "arm" then
-      let module Cg = CodegenForArch(Arm) in
-      Cg.codegen_entry e
-    else (* if hosttype = "x86_64" then *)
-      let module Cg = CodegenForArch(X86) in
-      Cg.codegen_entry e
-
-  let codegen_c_wrapper c e = 
-    if hosttype = "arm" then
-      let module Cg = CodegenForArch(Arm) in
-      Cg.codegen_c_wrapper c e
-    else (* if hosttype = "x86_64" then *)
-      let module Cg = CodegenForArch(X86) in
-      Cg.codegen_c_wrapper c e
-
-  let save_bc_to_file c e = 
-    if hosttype = "arm" then
-      let module Cg = CodegenForArch(Arm) in
-      Cg.save_bc_to_file c e
-    else (* if hosttype = "x86_64" then *)
-      let module Cg = CodegenForArch(X86) in
-      Cg.save_bc_to_file c e
-
-  let codegen_c_header c e = 
-    if hosttype = "arm" then
-      let module Cg = CodegenForArch(Arm) in
-      Cg.codegen_c_header c e
-    else (* if hosttype = "x86_64" then *)
-      let module Cg = CodegenForArch(X86) in
-      Cg.codegen_c_header c e
-
-  let codegen_to_bitcode_and_header e = 
-    if hosttype = "arm" then
-      let module Cg = CodegenForArch(Arm) in
-      Cg.codegen_to_bitcode_and_header e
-    else (* if hosttype = "x86_64" then *)
-      let module Cg = CodegenForArch(X86) in
-      Cg.codegen_to_bitcode_and_header e
-
-  let codegen_to_file e f = 
-    if hosttype = "arm" then
-      let module Cg = CodegenForArch(Arm) in
-      Cg.codegen_to_file e f
-    else (* if hosttype = "x86_64" then *)
-      let module Cg = CodegenForArch(X86) in
-      Cg.codegen_to_file e f
 end

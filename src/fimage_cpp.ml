@@ -15,17 +15,11 @@ open Util
 let compilation_cache = 
   Hashtbl.create 16
 
-let codegen_to_c_callable gpu e =
-  if gpu then
-    let module Cg = Cg_llvm.CodegenForArch(Ptx) in
-    let (c,m,f) = Cg.codegen_entry e in
-    let w = Cg.codegen_c_wrapper c m f in
-    (c,m,w)
-  else
-    let module Cg = Cg_llvm.CodegenForHost in
-    let (c,m,f) = Cg.codegen_entry e in
-    let w = Cg.codegen_c_wrapper c m f in
-    (c,m,w)
+let codegen_to_c_callable e =
+  let module Cg = Cg_for_target in
+  let (c,m,f) = Cg.codegen_entry e in
+  let w = Cg.codegen_c_wrapper c m f in
+  (c,m,w)
 
 let lower (f:string) (env:environment) (sched: schedule_tree) (debug: int) =
   (* Printexc.record_backtrace true; *)
@@ -50,7 +44,7 @@ let lower (f:string) (env:environment) (sched: schedule_tree) (debug: int) =
     raise x
   end *)
 
-let compile gpu name args stmt =
+let compile name args stmt =
 
   Printexc.record_backtrace true;
 
@@ -69,7 +63,7 @@ let compile gpu name args stmt =
       Printf.printf "Initializing native target\n%!"; 
       ignore (initialize_native_target());
       Printf.printf "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
-      let (c, m, f) = codegen_to_c_callable gpu func in
+      let (c, m, f) = codegen_to_c_callable func in
       ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc");
       Hashtbl.add compilation_cache func (m, f);
       (* TODO: this leaks the llcontext, and will leak the module if the cache
@@ -87,7 +81,7 @@ let compile_to_file name args stmt =
   
   try begin
     ignore (initialize_native_target());
-    let module Cg = Cg_llvm.CodegenForHost in
+    let module Cg = Cg_for_target in
     Cg.codegen_to_bitcode_and_header (name, args, stmt)
   end
   with x -> begin
@@ -179,8 +173,7 @@ let _ =
   );
   
   Callback.register "doLower" lower;  
-  Callback.register "doCompile" (compile false);
-  Callback.register "doCompileGPU" (compile true);
+  Callback.register "doCompile" (compile);
   Callback.register "doCompileToFile" compile_to_file;
   
   (* Guru transformations. These partially apply the various ml

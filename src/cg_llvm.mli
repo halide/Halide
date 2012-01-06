@@ -49,12 +49,6 @@ module type Codegen = sig
   (* codegen_c_wrapper ctx mod func -> wrapper_func *)
   val codegen_c_wrapper : llcontext -> llmodule -> llvalue -> llvalue
 
-  (* save_bc_to_file mod filename -> () *)
-  val save_bc_to_file : llmodule -> string -> unit
-
-  (* codegen_c_header entry filename -> () *)
-  val codegen_c_header : entrypoint -> string -> unit
-
   (* codegen_to_bitcode_and_header entry -> () - infers filenames from entrypoint name *)
   val codegen_to_bitcode_and_header : entrypoint -> unit
 
@@ -64,26 +58,3 @@ end
 
 module CodegenForArch : functor ( Arch : Architecture ) ->
   ( Codegen with type arch_state = Arch.state )
-
-(* TODO: move into a Host architecture module? Just detect in a utility? *)
-(* NOTE: this isn't just a Codegen, because it doesn't define concrete Arch-related types *)
-module CodegenForHost : sig
-  (* codegen_entry entry -> ctx, module, function *)
-  val codegen_entry : entrypoint -> llcontext * llmodule * llvalue
-
-  (* codegen_c_wrapper ctx mod func -> wrapper_func *)
-  val codegen_c_wrapper : llcontext -> llmodule -> llvalue -> llvalue
-
-  (* save_bc_to_file mod filename -> () *)
-  val save_bc_to_file : llmodule -> string -> unit
-
-  (* codegen_c_header entry filename -> () *)
-  val codegen_c_header : entrypoint -> string -> unit
-
-  (* codegen_to_bitcode_and_header entry -> () - infers filenames from entrypoint name *)
-  val codegen_to_bitcode_and_header : entrypoint -> unit
-
-  (* codegen_to_file entry filename -> () *)
-  val codegen_to_file : entrypoint -> string -> unit
-end
-

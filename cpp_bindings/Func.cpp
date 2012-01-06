@@ -24,6 +24,15 @@
 #include <dlfcn.h>
 
 namespace FImage {
+    
+    extern "C" { typedef struct CUctx_st *CUcontext; }
+    CUcontext cuda_ctx = 0;
+    
+    bool use_gpu() {
+        char* target = getenv("HLTARGET");
+        return (target != NULL && strcasecmp(target, "ptx") == 0);
+    }
+    
     ML_FUNC2(makeVectorizeTransform);
     ML_FUNC2(makeUnrollTransform);
     ML_FUNC5(makeSplitTransform);
@@ -52,7 +61,6 @@ namespace FImage {
     ML_FUNC1(makeBufferArg); // name
     ML_FUNC2(makeScalarArg); // name, type
     ML_FUNC3(doCompile); // name, args, stmt
-    ML_FUNC3(doCompileGPU); // name, args, stmt
     ML_FUNC3(doCompileToFile); // name, args, stmt
     ML_FUNC2(makePair);
     ML_FUNC3(makeTriple);
@@ -229,6 +237,12 @@ namespace FImage {
 
     const std::vector<Expr> &Func::args() const {
         return contents->args;
+    }
+    
+    const Var &Func::arg(int i) const {
+        const Expr& e = args()[i];
+        assert (e.isVar());
+        return e.vars()[0];
     }
 
     const std::string &Func::name() const { 
@@ -556,7 +570,7 @@ namespace FImage {
         doCompileToFile(moduleName, args, stmt);
     }
 
-    void Func::compileJIT(bool targetPTX) {        
+    void Func::compileJIT() {
         if (getenv("PSUEDOJIT")) {
             // llvm's ARM jit path has many issues currently. Instead
             // we'll do static compilation to a shared object, then
@@ -596,11 +610,7 @@ namespace FImage {
 
         printf("compiling IR -> ll\n");
         MLVal tuple;
-        if (targetPTX) {
-            tuple = doCompileGPU(name(), args, stmt);
-        } else {
-            tuple = doCompile(name(), args, stmt);
-        }        
+        tuple = doCompile(name(), args, stmt);
 
         printf("Extracting the resulting module and function\n");
         MLVal first, second;
@@ -722,17 +732,7 @@ namespace FImage {
     }
 
     void Func::realize(const DynImage &im) {
-        #ifdef USE_GPU
-        #if(USE_GPU)
-        static const bool gpu = true;
-        #else
-        static const bool gpu = false;
-        #endif
-        #else
-        static const bool gpu = false;
-        #endif
-
-        if (!contents->functionPtr) compileJIT(gpu);
+        if (!contents->functionPtr) compileJIT();
 
         printf("Constructing argument list...\n");
         void *arguments[256];

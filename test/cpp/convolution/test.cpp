@@ -4,7 +4,7 @@ using namespace FImage;
 
 int main(int argc, char **argv) {
 
-    int W = 100, H = 100;
+    int W = 128, H = 128;
 
     Image<uint16_t> in(W, H);
     for (int y = 0; y < H; y++) {
@@ -26,6 +26,21 @@ int main(int argc, char **argv) {
     Func blur("blur");
     RVar i, j; 
     blur(x, y) = Sum(tent(i, j) * input(x + i - 1, y + j - 1));
+
+    if (use_gpu()) {
+        Var tidx("threadidx");
+        Var bidx("blockidx");
+        Var tidy("threadidy");
+        Var bidy("blockidy");
+        
+        blur.split(x, bidx, tidx, 16);
+        blur.parallel(bidx);
+        blur.parallel(tidx);
+        blur.split(y, bidy, tidy, 16);
+        blur.parallel(bidy);
+        blur.parallel(tidy);
+        blur.transpose(bidx,tidy);
+    }
 
     /*
     for (size_t i = 0; i < blur.rhs().funcs().size(); i++) {
