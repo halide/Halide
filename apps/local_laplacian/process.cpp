@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
 
     timeval t1, t2;
     gettimeofday(&t1, NULL);
-    local_laplacian(levels, beta, alpha, input, output);
+    local_laplacian(levels, beta, alpha/(levels-1), input, output);
     gettimeofday(&t2, NULL);
 
     int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
