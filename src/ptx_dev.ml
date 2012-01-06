@@ -46,18 +46,9 @@ let simt_intrinsic name =
         pm2
         pm3 *)
 
-let rec cg_expr (con:context) = function
-    (*
-  (* Turn SIMT variables into extern function calls to the corresponding intrinsics *)
-  | Var (t, name) when is_simt_var name ->
-      assert (t = i32); (* Only makes sense with index types *)
-      con.cg_expr (Call (t, simt_intrinsic name, []))
-     *)
+let cg_expr con e = con.cg_expr e
 
-  (* Pass through *)
-  | e -> con.cg_expr e
-
-and cg_stmt (con:context) = function
+let rec cg_stmt con = function
   | For (name, base, width, ordered, body) when is_simt_var name ->
       (* TODO: loop needs to be turned into If (which we don't have in our IR), not dropped *)
       Printf.eprintf "Dropping %s loop on %s (%s..%s)\n%!"
