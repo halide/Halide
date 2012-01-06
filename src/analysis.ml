@@ -240,13 +240,11 @@ and find_names_in_expr internal = function
       StringIntSet.union (find_names_in_expr internal a) (find_names_in_expr internal b)
   | x -> fold_children_in_expr (find_names_in_expr internal) StringIntSet.union StringIntSet.empty x
 
-let rec find_loads_in_expr e =
-  let recurse = fold_children_in_expr find_loads_in_expr StringSet.union in
-  match e with
-    | Load (_, buf, _) ->
-        recurse (StringSet.add buf StringSet.empty) e
-    | _ ->
-        recurse StringSet.empty e
+let rec find_loads_in_expr = function
+  | Load (_, buf, idx) ->
+      StringSet.union (find_loads_in_expr idx) (StringSet.singleton buf)
+  | e ->
+      fold_children_in_expr find_loads_in_expr StringSet.union StringSet.empty e
 
 let rec find_loads_in_stmt s =
   fold_children_in_stmt find_loads_in_expr find_loads_in_stmt StringSet.union s
