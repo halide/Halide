@@ -241,7 +241,6 @@ and find_names_in_expr internal ptrsize expr =
       if (StringSet.mem n internal) then StringIntSet.empty else (StringIntSet.add (n, size) StringIntSet.empty)
   | Let (n, a, b) ->
       let internal = StringSet.add n internal in
-      let recs = find_names_in_stmt internal ptrsize in
       let rece = find_names_in_expr internal ptrsize in
       StringIntSet.union (rece a) (rece b)
   | x -> fold_children_in_expr rece StringIntSet.union StringIntSet.empty x
