@@ -436,8 +436,43 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   f
 
 let malloc con name count elem_size =
+  Printf.eprintf "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
   (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
-  X86.malloc (host_context con) name count elem_size
+  let hostptr = X86.malloc (host_context con) name count elem_size in
+  
+  (* build a buffer_t to track this allocation *)
+  let buf = build_alloca (buffer_struct_type con) ("malloc_" ^ name) con.b in
+  let set_field f v =
+    Printf.eprintf "  set_field %s :=%!" (string_of_buffer_field f);
+    dump_value v;
+    let fptr = cg_buffer_field_ref buf f con.b in
+    let fty = element_type (type_of fptr) in
+    let v = match classify_type fty with
+      | TypeKind.Integer ->
+          Printf.eprintf "  building const_intcast to %s of%!" (string_of_lltype fty);
+          dump_value v;
+          build_intcast v fty (name ^ "_field_type_cast") con.b
+      | _ -> v
+    in
+    Printf.eprintf "   ->%!"; dump_value fptr;
+    ignore (build_store v fptr con.b) in
+
+  let zero = const_zero con.c
+  and one = ci con.c 1 in
+  
+  set_field HostPtr   hostptr;
+  set_field DevPtr    zero;
+  set_field HostDirty one;
+  set_field DevDirty  zero;
+  set_field (Dim 0)   (cg_expr con count);
+  set_field (Dim 1)   one;
+  set_field (Dim 2)   one;
+  set_field (Dim 3)   one;
+  set_field ElemSize  (cg_expr con elem_size);
+
+  con.arch_state.buf_add name buf;
+
+  hostptr
 
 let free con ptr =
   X86.free (host_context con) ptr
