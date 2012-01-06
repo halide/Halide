@@ -28,14 +28,20 @@ and is_const = function
   | _ -> false
 
 (* Is an expression sufficiently simple that it should just be substituted in when it occurs in a let *)
-let is_trivial = function
+let rec is_trivial = function
   | Var (_, _) -> true
   | Broadcast (Var (_, _), _) -> true
   | x -> is_const x
 
-let rec is_simple = function
-  | Bop (_, a, b) when (is_const a && is_simple b) || (is_const b && is_simple a) -> true
-  | x -> is_trivial x
+let rec is_simple x =
+  (* One child simple, other children const *)
+  let check = function
+    | x when is_const x -> 0
+    | x when is_simple x -> 1
+    | _ -> 9999
+  in
+  let complexity = fold_children_in_expr check (+) 0 x in
+  complexity <= 1
 
 let rec constant_fold_expr expr = 
   let recurse = constant_fold_expr in
@@ -233,11 +239,18 @@ let rec constant_fold_expr expr =
 
     | Let (n, a, b) -> 
         let a = recurse a and b = recurse b in
-        if is_simple a then
-          subs_expr (Var (val_type_of_expr a, n)) a b
-        else
-          Let (n, a, b)
-
+        let old = Var (val_type_of_expr a, n) in
+        begin match a with
+          (* It's really important to inline ramps and broadcasts to get good loads and stores *)
+          | Broadcast (x, w) -> 
+              let newvar = Var (val_type_of_expr x, n) in
+              recurse (Let (n, x, subs_expr old (Broadcast (newvar, w)) b))
+          | Ramp (base, stride, w) -> 
+              let newvar = Var (val_type_of_expr base, n) in
+              recurse (Let (n, base, subs_expr old (Ramp (newvar, stride, w)) b))
+          | x when is_simple x -> recurse (subs_expr old a b)
+          | _ -> Let (n, a, b)
+        end
     | Call (t, n, args) -> Call (t, n, List.map recurse args)
 
     (* Immediates are unchanged *)
@@ -277,18 +290,14 @@ let constant_fold_stmt stmt =
           | _ -> mutate_children_in_stmt (subs_expr var value) (scoped_subs_stmt value) stmt
         in
         if (is_simple value) then begin
-          Printf.printf "Simple: %s\n%!" (Ir_printer.string_of_expr value);
           inner env (scoped_subs_stmt value stmt)
         end else begin
-          Printf.printf "Not Simple: %s\n%!" (Ir_printer.string_of_expr value);
           try begin
             (* Check if this value already had a name *)
             let (n, v) = List.find (fun (n, v) -> v = value) env in
-            Printf.printf "Already has a name: %s\n%!" (Ir_printer.string_of_expr value);
             inner env (scoped_subs_stmt (Var (t, n)) stmt)
           end with Not_found -> begin
             let env = (name, value)::env in
-            Printf.printf "Does not already have a name: %s\n%!" (Ir_printer.string_of_expr value);
             LetStmt (name, value, inner env stmt)
           end
         end

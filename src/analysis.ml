@@ -202,43 +202,49 @@ and prefix_name_stmt prefix stmt =
 
 (* Find all references in stmt/expr to things outside of it.
  * Return a set of pairs of names and their storage sizes, for e.g. building a closure. *)
-let ptrsize = 64/8 (* always give 64 bits of space for a pointer *)
-let rec find_names_in_stmt internal = function
+let rec find_names_in_stmt internal ptrsize stmt =
+  let recs = find_names_in_stmt internal ptrsize in
+  let rece = find_names_in_expr internal ptrsize in
+  match stmt with
   | Store (e, buf, idx) ->
-      let inner = StringIntSet.union (find_names_in_expr internal e) (find_names_in_expr internal idx) in
+      let inner = StringIntSet.union (rece e) (rece idx) in
       if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, ptrsize) inner)
   | Pipeline (name, ty, size, produce, consume) ->
       let internal = StringSet.add name internal in
-      string_int_set_concat [
-        find_names_in_expr internal size;
-        find_names_in_stmt internal produce;
-        find_names_in_stmt internal consume]
+      let recs = find_names_in_stmt internal ptrsize in
+      let rece = find_names_in_expr internal ptrsize in
+      string_int_set_concat [rece size; recs produce; recs consume]
   | LetStmt (name, value, stmt) ->
       let internal = StringSet.add name internal in
-      StringIntSet.union (find_names_in_expr internal value) (find_names_in_stmt internal stmt)
+      let recs = find_names_in_stmt internal ptrsize in
+      let rece = find_names_in_expr internal ptrsize in
+      StringIntSet.union (rece value) (recs stmt)
   | Block l ->
-      string_int_set_concat (List.map (find_names_in_stmt internal) l)
+      string_int_set_concat (List.map recs l)
   | For (var_name, min, size, order, body) ->
       let internal = StringSet.add var_name internal in
-      string_int_set_concat [
-        find_names_in_expr internal min;
-        find_names_in_expr internal size;
-        find_names_in_stmt internal body]
-      | Print (fmt, args) ->
-          string_int_set_concat (List.map (find_names_in_expr internal) args)
-      | Provide (fn, _, _) ->
-          raise (Wtf "Encountered a provide during cg. These should have been lowered away.")
-and find_names_in_expr internal = function
+      let recs = find_names_in_stmt internal ptrsize in
+      let rece = find_names_in_expr internal ptrsize in
+      string_int_set_concat [rece min; rece size; recs body]
+  | Print (fmt, args) ->
+      string_int_set_concat (List.map rece args)
+  | Provide (fn, _, _) ->
+      raise (Wtf "Encountered a provide during cg. These should have been lowered away.")
+and find_names_in_expr internal ptrsize expr =
+  let rece = find_names_in_expr internal ptrsize in
+  match expr with 
   | Load (_, buf, idx) ->
-      let inner = find_names_in_expr internal idx in
+      let inner = rece idx in
       if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, ptrsize) inner)
   | Var (t, n) ->
       let size = (bit_width t)/8 in
       if (StringSet.mem n internal) then StringIntSet.empty else (StringIntSet.add (n, size) StringIntSet.empty)
   | Let (n, a, b) ->
       let internal = StringSet.add n internal in
-      StringIntSet.union (find_names_in_expr internal a) (find_names_in_expr internal b)
-  | x -> fold_children_in_expr (find_names_in_expr internal) StringIntSet.union StringIntSet.empty x
+      let recs = find_names_in_stmt internal ptrsize in
+      let rece = find_names_in_expr internal ptrsize in
+      StringIntSet.union (rece a) (rece b)
+  | x -> fold_children_in_expr rece StringIntSet.union StringIntSet.empty x
 
 let rec find_loads_in_expr = function
   | Load (_, buf, idx) ->

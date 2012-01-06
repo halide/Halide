@@ -27,14 +27,15 @@ let lower (f:string) (env:environment) (sched: schedule_tree) (debug: int) =
   begin
     Printf.printf "Lowering function\n";
     let lowered = lower_function f env sched (if (debug = 1) then true else false) in
-    Printf.printf "Breaking false dependences\n";
-    (* let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
+    (* Printf.printf "Breaking false dependences\n";
+     let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
      Printf.printf "Constant folding\n";
      let lowered = Constant_fold.constant_fold_stmt lowered in
      Printf.printf "Breaking false dependences\n";
      let lowered = Break_false_dependence.break_false_dependence_stmt lowered in  *)
     Printf.printf "Constant folding\n";
     let lowered = Constant_fold.constant_fold_stmt lowered in 
+    Printf.printf "Resulting stmt:\n%s\n" (string_of_stmt lowered);
     lowered
   end
 

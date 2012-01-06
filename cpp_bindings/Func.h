@@ -95,23 +95,17 @@ namespace FImage {
          * onto the scheduleTransforms vector, which is traversed in
          * order starting from an initial default schedule to create a
          * mutated schedule */
-        void tile(const Var &, const Var &, const Var &, const Var &, const Expr &f1, const Expr &f2);
-        void vectorize(const Var &);
-        void unroll(const Var &);
-        void transpose(const Var &, const Var &);
-        void chunk(const Var &);
-        void root();
-        void parallel(const Var &);
-        void random(int seed);
-
-        /* Add an explicit Serial or Parallel to the schedule. Useful
-         * for defining reduction domains */
-        // void range(const Var &, const Expr &min, const Expr &size, bool serial = false); 
-
-        // Convenience methods for common transforms
-        void vectorize(const Var &, int factor);
-        void unroll(const Var &, int factor);
-        void split(const Var &, const Var &, const Var &, const Expr &factor);
+        Func &tile(const Var &, const Var &, const Var &, const Var &, const Expr &f1, const Expr &f2);
+        Func &vectorize(const Var &);
+        Func &unroll(const Var &);
+        Func &transpose(const Var &, const Var &);
+        Func &chunk(const Var &);
+        Func &root();
+        Func &parallel(const Var &);
+        Func &random(int seed);
+        Func &vectorize(const Var &, int factor);
+        Func &unroll(const Var &, int factor);
+        Func &split(const Var &, const Var &, const Var &, const Expr &factor);
 
         int autotune(int argc, char **argv, std::vector<uint32_t> sizes);
 

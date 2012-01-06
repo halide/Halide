@@ -33,6 +33,7 @@ module type Architecture = sig
   val malloc  : context -> string -> expr -> expr -> llvalue
   val free    : context -> llvalue -> llvalue 
   val env : environment
+  val pointer_size : int
 end
 
 module type Codegen = sig
