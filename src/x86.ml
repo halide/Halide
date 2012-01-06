@@ -2,6 +2,7 @@ open Ir
 open Llvm
 open Cg_llvm_util
 open Util
+open Analysis
 
 type state = int (* dummy - we don't use anything in this Arch for now *)
 type context = state cg_context
@@ -57,6 +58,23 @@ let rec cg_expr (con:context) (expr:expr) =
         let mask = List.map (fun x -> const_int i32_t (x*2)) (0 -- n) in
         build_shufflevector v1 v2 (const_vector (Array.of_list mask)) "" b
 
+    (* Loads with stride one half should do one load and then shuffle *)
+    (* TODO: this is buggy 
+    | Load (t, buf, idx) when 
+        (bit_width t = 128 && duplicated_lanes idx && false) ->
+        let newidx = Constant_fold.constant_fold_expr (deduplicate_lanes idx) in
+        let vec = match newidx with
+          | Ramp (base, IntImm 1, w) ->
+              cg_expr (Load (t, buf, Ramp (base, IntImm 1, w*2)))
+          | _ -> 
+              cg_expr (Load (t, buf, newidx))
+        in
+        (* Duplicate each lane *)
+        let w = vector_elements (val_type_of_expr newidx) in
+        let mask = List.map (fun x -> const_int i32_t (x/2)) (0 -- (w*2)) in
+        build_shufflevector vec vec (const_vector (Array.of_list mask)) "" b
+    *)
+
     (* We don't have any special tricks up our sleeve for this case *)
     | _ -> con.cg_expr expr 
         
@@ -84,13 +102,13 @@ let rec cg_stmt (con:context) (stmt:stmt) =
 
 let malloc (con:context) (name:string) (elems:expr) (elem_size:expr) =
   let c = con.c and m = con.m and b = con.b in
-  let malloc = declare_function "malloc" (function_type (pointer_type (i8_type c)) [|i64_type c|]) m in
+  let malloc = declare_function "fast_malloc" (function_type (pointer_type (i8_type c)) [|i64_type c|]) m in
   let size = Constant_fold.constant_fold_expr (Cast (Int 64, elems *~ elem_size)) in
   build_call malloc [|cg_expr con size|] "" b
 
 let free (con:context) (address:llvalue) =
   let c = con.c and m = con.m and b = con.b in
-  let free = declare_function "free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
+  let free = declare_function "fast_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
   build_call free [|address|] "" b
 
 let env = Environment.empty
