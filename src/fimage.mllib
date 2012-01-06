@@ -9,6 +9,7 @@ analysis
 hash
 cg_llvm
 cg_llvm_util
+cg_for_target
 ir
 ir_printer
 util

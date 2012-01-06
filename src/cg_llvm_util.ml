@@ -77,33 +77,40 @@ type buffer_field =
   | Dim of int
   | ElemSize
 
+let string_of_buffer_field = function
+  | HostPtr -> "host"
+  | DevPtr -> "dev"
+  | HostDirty -> "host_dirty"
+  | DevDirty -> "dev_dirty"
+  | Dim dim -> "dim." ^ (string_of_int dim)
+  | ElemSize -> "elem_size"
+  
+let buffer_field_offset = function
+  | HostPtr ->   [ 0 ]
+  | DevPtr ->    [ 1 ]
+  | HostDirty -> [ 2 ]
+  | DevDirty ->  [ 3 ]
+  | Dim dim ->   [ 4; dim ]
+  | ElemSize ->  [ 5 ]
+
 (* codegen an llvalue which loads buf->{field} *)
-let cg_buffer_field bufptr field b =
+let cg_buffer_field_ref bufptr field b =
   let idx =
     Array.map
       (ci (context_of_val bufptr))
-      (match field with
-        | HostPtr ->   [| 0; 0 |]
-        | DevPtr ->    [| 0; 1 |]
-        | HostDirty -> [| 0; 2 |]
-        | DevDirty ->  [| 0; 3 |]
-        | Dim dim ->   [| 0; 4; dim |]
-        | ElemSize ->  [| 0; 5 |])
+      (Array.of_list (0::(buffer_field_offset field)))
   in
-  let name = match field with
-    | HostPtr -> ".host"
-    | DevPtr -> ".dev"
-    | HostDirty -> ".host_dirty"
-    | DevDirty -> ".dev_dirty"
-    | Dim dim -> ".dim." ^ (string_of_int dim)
-    | ElemSize -> ".elem_size"
-  in
-  
+  build_gep bufptr idx
+    ((value_name bufptr) ^ "." ^ (string_of_buffer_field field) ^ "_ref")
+    b
+
+let cg_buffer_field bufptr field b =
   let raw =
     build_load
-      (build_gep bufptr idx "" b)
-      ((value_name bufptr) ^ name)
-      b in
+      (cg_buffer_field_ref bufptr field b)
+      ((value_name bufptr) ^ "." ^ (string_of_buffer_field field))
+      b
+  in
   match field with
     | Dim _ | ElemSize -> toi32 raw b
     | HostPtr | DevPtr | HostDirty | DevDirty -> raw
@@ -247,3 +254,51 @@ let cg_wrapper c m e inner =
   ignore (build_ret_void b);
 
   f
+
+(* save_bc_to_file mod filename -> () *)
+let save_bc_to_file m fname =
+  begin match Llvm_bitwriter.write_bitcode_file m fname with
+    | false -> raise (BCWriteFailed fname)
+    | true -> ()
+  end
+
+(* codegen_c_header entry filename -> () *)
+let codegen_c_header e header_file =
+  let (object_name, args, _) = e in
+
+  (* Produce a header *)
+  let string_of_type = function
+    | Int bits -> "int" ^ (string_of_int bits) ^ "_t"
+    | UInt bits -> "uint" ^ (string_of_int bits) ^ "_t"
+    | Float 32 -> "float"
+    | Float 64 -> "double"
+    | _ -> raise (Wtf "Bad type for toplevel argument")
+  in
+  let string_of_arg = function
+    | Scalar (n, t) -> (string_of_type t) ^ " " ^ (String.sub n 1 ((String.length n)-1))
+    | Buffer n -> "buffer_t *" ^ (String.sub n 1 ((String.length n)-1))
+  in
+  let arg_string = String.concat ", " (List.map string_of_arg args) in
+  let lines = 
+    ["#ifndef " ^ object_name ^ "_h";
+     "#define " ^ object_name ^ "_h";
+     "";
+     "#include <stdint.h>";
+     "";
+     "typedef struct buffer_t {";
+     "  uint8_t* host;";
+     "  uint64_t dev;";
+     "  bool host_dirty;";
+     "  bool dev_dirty;";
+     "  size_t dims[4];";
+     "  size_t elem_size;";
+     "} buffer_t;";
+     "";
+     "void " ^ object_name ^ "(" ^ arg_string ^ ");";
+     "";
+     "#endif"]
+  in
+
+  let out = open_out header_file in
+  output_string out (String.concat "\n" lines);
+  close_out out

@@ -11,6 +11,14 @@ int main(int argc, char **argv) {
     Uniform<float> u;
 
     f(x) = u;
+    
+    if (use_gpu()) {
+        Var tid("threadidx");
+        Var bid("blockidx");
+        f.split(x, bid, tid, 256);
+        f.parallel(bid);
+        f.parallel(tid);
+    }
 
     u = 17.0f;
     Image<float> out_17 = f.realize(1024);

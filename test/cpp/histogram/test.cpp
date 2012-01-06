@@ -22,6 +22,15 @@ int main(int argc, char **argv) {
 
     RVar x, y;
     hist(in(x, y))++;
+    
+    if (use_gpu()) {
+        Var tidx("threadidx");
+        Var bidx("blockidx");
+        Var i = hist.arg(0);
+        hist.split(i, bidx, tidx, 128);
+        hist.parallel(bidx);
+        hist.parallel(tidx);
+    }
 
     Image<int32_t> h = hist.realize(256);
 

@@ -29,6 +29,8 @@ llvm_svn
 src/test_*.ll
 src/test_*.s
 .clang_complete
+*.guru
+*.dSYM
 
 # test intermediates
 test/*/*.so
