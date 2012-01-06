@@ -13,6 +13,18 @@ extern "C" {
 
 buffer_t* __posix_force_include_buffer_t;
 
+void *fast_malloc(size_t x) {
+    void *orig = malloc(x+16);
+    // Walk either 8 or 16 bytes forward
+    void *ptr = (void *)((((size_t)orig + 16) >> 4) << 4);
+    ((void **)ptr)[-1] = orig;
+    return ptr;
+}
+
+void fast_free(void *ptr) {
+    free(((void**)ptr)[-1]);
+}
+
 void *safe_malloc(size_t x) {
     void *mem;
     x = ((x + 4095)/4096) * 4096;
