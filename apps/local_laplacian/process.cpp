@@ -15,12 +15,15 @@ int main(int argc, char **argv) {
     Image<uint16_t> output(input.width(), input.height(), 3);
 
     timeval t1, t2;
-    gettimeofday(&t1, NULL);
-    local_laplacian(levels, beta, alpha/(levels-1), input, output);
-    gettimeofday(&t2, NULL);
-
-    int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-    printf("%u\n", t);
+    unsigned int bestT = 0xffffffff;
+    for (int i = 0; i < 5; i++) {
+      gettimeofday(&t1, NULL);
+      local_laplacian(levels, beta, alpha/(levels-1), input, output);
+      gettimeofday(&t2, NULL);
+      unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
+      if (t < bestT) bestT = t;
+    }
+    printf("%u\n", bestT);
 
     save(output, argv[5]);
 
