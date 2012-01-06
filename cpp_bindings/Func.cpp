@@ -238,6 +238,12 @@ namespace FImage {
     const std::vector<Expr> &Func::args() const {
         return contents->args;
     }
+    
+    const Var &Func::arg(int i) const {
+        const Expr& e = args()[i];
+        assert (e.isVar());
+        return e.vars()[0];
+    }
 
     const std::string &Func::name() const { 
         return contents->name;
