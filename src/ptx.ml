@@ -193,8 +193,8 @@ let cg_dev_kernel con stmt =
       (fun (n,v) -> Printf.eprintf "  %s := %!" n; dump_value v)
       (List.combine closure_vars closure_vals);
 
-    List.iter (fun s -> Printf.eprintf "  - Load:  %s\n%!" s) closure_reads;
-    List.iter (fun s -> Printf.eprintf "  - Store: %s\n%!" s) closure_writes;
+    List.iter (Printf.eprintf "  - Load:  %s\n%!") closure_reads;
+    List.iter (Printf.eprintf "  - Store: %s\n%!") closure_writes;
   end;
 
   (* grab ptx_dev state state *)
@@ -205,9 +205,9 @@ let cg_dev_kernel con stmt =
     List.map
       begin fun t ->
         match classify_type t with
-          | Llvm.TypeKind.Float   -> float_type dev_ctx
-          | Llvm.TypeKind.Integer -> integer_type dev_ctx (integer_bitwidth t)
-          | Llvm.TypeKind.Pointer -> raw_buffer_t dev_ctx
+          | TypeKind.Float   -> float_type dev_ctx
+          | TypeKind.Integer -> integer_type dev_ctx (integer_bitwidth t)
+          | TypeKind.Pointer -> raw_buffer_t dev_ctx
           | _ -> raise (Wtf "Trying to build PTX device closure with unsupported type")
       end
       closure_types
@@ -234,16 +234,13 @@ let cg_dev_kernel con stmt =
     (fun (n, v) -> Hashtbl.add dev_syms n v)
     (List.combine closure_vars (param_list k));
   
-  ignore (
-    let tc v = type_context (type_of v) in
-    assert ((tc (param k 0)) <> (tc (con.sym_get ".N")));
-  );
-
   (* TODO: just use Ptx_dev's codegen_entry, with Buffer and Scalar args as needed? Makes it harder to patch in arbitrary context/state info *)
   let module DevCg = Cg_llvm.CodegenForArch(Ptx_dev) in
   let dev_con = DevCg.make_cg_context dev_ctx dev_mod dev_b dev_syms con.arch_state.dev_state in
   
   if dbgprint then dev_con.dump_syms ();
+  
+  Printf.eprintf "--- Starting PTX body codegen ---\n%!";
 
   (* TODO: codegen the main kernel *)
   ignore (Ptx_dev.cg_stmt dev_con stmt);
@@ -418,7 +415,7 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   dispose_module dev_mod;
   dispose_context dev_ctx;
 
-  (* TODO: *)
+  (* compile PTX source to a global string constant *)
   let ptx_src_str = build_global_stringptr ptx_src "__ptx_src" b in
 
   (* jump back to the start; init CUDA *)
@@ -433,116 +430,6 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   (* return the function we've built *)
   assert (name = (value_name f));
   f
-
-  (*
-  (* build a const data item of the compiled ptx source *)
-  let ptx_src_str = build_global_stringptr ptx_src "__ptx_src" b in
-  let entry_name_str = build_global_stringptr entrypoint_name "__entry_name" b in
-
-  (* args array for kernel launch *)
-  let paramlist = Array.to_list (params f) in
-  let args = List.combine arglist paramlist in
-
-  (*
-   * build llvalue dev_run args array list
-   * for each arg:
-   *    if buffer
-   *        ; getelementptr to field 1 of buffer_t = CUdeviceptr:
-   *        %arg.stack = build_struct_gep %arg (const_int i32_t 1) "<arg>.stack" b 
-   *        dev_malloc_if_missing
-   *        if non-result
-   *            copy_to_dev
-   *    else
-   *        %arg.stack = alloca t       (align 4?)
-   *        store t %arg, t* %arg.stack (align 4?)
-   *    ; store to cuArgs:
-   *    build_store (build_bitcast %arg.stack arg_t "" b) (build_gep cuArgs [|(i64 0) (i64 arg_idx)|])
-   *)
-   
-  let toi32 x = build_intcast x (i32_type c) "" b in
-  let ci x = const_int (i32_type c) x in
-
-  let cuArgs =
-    List.map
-      begin function
-        | Buffer name, param ->
-            set_value_name name param;
-            (* malloc if missing *)
-            ignore (build_call dev_malloc_if_missing [| param |] "" b);
-            (* copy to device for all but .result *)
-            if name <> ".result" then ignore (build_call copy_to_dev [| param |] "" b);
-            Printf.printf "preprocessed buffer arg %s\n%!" name;
-            (* return GEP: &(p->dev) *)
-            let devptr = build_struct_gep param 1 (name ^ ".devptr") b in
-            let dims = List.map
-              begin fun i ->
-                let stackArg = build_alloca (i32_type c) (name ^ ".dim." ^ (string_of_int i)) b in
-                let dimVal = toi32 (build_load (build_gep param [|ci 0; ci 4; ci i|] "" b) "" b) in
-                ignore (build_store dimVal stackArg b);
-                stackArg
-              end
-              (0--4)
-            in devptr::dims
-        | Scalar (name, _), param ->
-            set_value_name name param;
-            (* store arg to local stack for passing by reference to cuArgs *)
-            let stackArg = build_alloca (type_of param) (name ^ ".stack") b in
-            ignore (build_store param stackArg b);
-            Printf.printf "preprocessed scalar arg %s\n%!" name;
-            [stackArg]
-      end
-      args
-  in
-  let cuArgs = List.flatten cuArgs in
-  
-  let arg_t = pointer_type (i8_type c) in (* void* *)
-  let cuArgsArr = build_alloca (array_type arg_t (List.length cuArgs)) "cuArgs" b in
-
-  Array.iteri
-    begin fun i cuArgval ->
-      ignore (build_store
-        (build_bitcast cuArgval arg_t "" b)
-        (build_gep cuArgsArr [| (ci 0); (ci i) |] "cuArg" b)
-        b)
-    end
-    (Array.of_list cuArgs);
-
-  (*    
-   * call dev_run(threadsX, threadsY, threadsZ, blocksX, blocksY, blocksZ, localmembytes, cuArgsPtr)
-   *)
-  let cuArgsPtr = build_gep cuArgsArr [| (const_int i32_t 0); (const_int i32_t 0) |] "cuArgsPtr" b in
-  let threadsX = const_int i32_t 256 in
-  let threadsY = const_int i32_t  1 in
-  let threadsZ = const_int i32_t  1 in
-  let blocksX  = const_int i32_t 64 in
-  let blocksY  = const_int i32_t  1 in
-  let blocksZ  = const_int i32_t  1 in
-  let sharedMem = const_int i32_t 0 in
-  ignore (
-    build_call
-      dev_run
-      [| blocksX; blocksY; blocksZ; threadsX; threadsY; threadsZ; sharedMem; cuArgsPtr |]
-      ""
-      b
-  );
-
-  (* find arg named ".result"
-   * call copy_to_host %result *)
-  let (_, result_buffer) =
-    List.hd
-      (List.filter
-         (function (Buffer nm, _) when nm = ".result" -> true | _ -> false)
-         args)
-  in
-  assert ((value_name result_buffer) = ".result");
-  Printf.printf "Result name: %s\n%!" (value_name result_buffer);
-  ignore (build_call copy_to_host [| result_buffer |] "" b);
-
-  ignore (build_ret_void b);
-
-  (* return the generated function *)
-  f
-  *)
 
 let malloc con name count elem_size =
   (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
