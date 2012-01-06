@@ -35,6 +35,12 @@ extern "C" {
 #define cuMemFree                           cuMemFree_v2
 #define cuMemcpyHtoD                        cuMemcpyHtoD_v2
 #define cuMemcpyDtoH                        cuMemcpyDtoH_v2
+// API version >= 4000
+#define cuCtxDestroy                        cuCtxDestroy_v2
+#define cuCtxPopCurrent                     cuCtxPopCurrent_v2
+#define cuCtxPushCurrent                    cuCtxPushCurrent_v2
+#define cuStreamDestroy                     cuStreamDestroy_v2
+#define cuEventDestroy                      cuEventDestroy_v2
 
 typedef unsigned long long CUdeviceptr; // hard code 64-bits for now
 typedef int CUdevice;                                     /**< CUDA device */
@@ -111,6 +117,9 @@ CUresult CUDAAPI cuLaunchKernel(CUfunction f,
                                 void **kernelParams,
                                 void **extra);
 CUresult CUDAAPI cuCtxSynchronize();
+
+CUresult CUDAAPI cuCtxPushCurrent(CUcontext ctx);
+CUresult CUDAAPI cuCtxPopCurrent(CUcontext *pctx);
 #endif //__cuda_cuda_h__
 
 // Device, Context, Module, and Function for this entrypoint are tracked locally
@@ -160,8 +169,6 @@ void __free_buffer(buffer_t* buf)
 
 void __init(const char* ptx_src)
 {
-    CUresult status;
-
     if (!__dev) {
         // Initialize CUDA
         CHECK_CALL( cuInit(0), "cuInit" );
@@ -170,9 +177,11 @@ void __init(const char* ptx_src)
         int deviceCount = 0;
         CHECK_CALL( cuDeviceGetCount(&deviceCount), "cuDeviceGetCount" );
         assert(deviceCount > 0);
-
+        
         // Get device
         CHECK_CALL( cuDeviceGet(&__dev, 0), "cuDeviceGet" );
+        
+        fprintf(stderr, "Got device %d, about to create context\n", __dev);
 
         // Create context
         CHECK_CALL( cuCtxCreate(&__ctx, 0, __dev), "cuCtxCreate" );
@@ -181,7 +190,14 @@ void __init(const char* ptx_src)
         CHECK_CALL( cuModuleLoadData(&__mod, ptx_src), "cuModuleLoadData" );
 
         fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
+    } else {
+        CHECK_CALL( cuCtxPushCurrent(__ctx), "cuCtxPushCurrent" );
     }
+}
+
+void __release() {
+    CUcontext ignore;
+    CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
 }
 
 CUfunction __get_kernel(const char* entry_name)
