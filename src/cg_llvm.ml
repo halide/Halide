@@ -634,12 +634,14 @@ let make_cg_context c m b sym_table arch_state =
   and cg_memref vt buf idx =
     (* load the global buffer** *)
     let base = sym_get buf in
+    (* capture address space, since we need to propagate it to the ultimate element memref ptrs *)
+    let addrspace = address_space (type_of base) in
     (* cast pointer to pointer-to-target-type *)
     let elem_type = type_of_val_type (element_val_type vt) in
-    let ptr = build_pointercast base (pointer_type (elem_type)) "memref_elem_ptr" b in
+    let ptr = build_pointercast base (qualified_pointer_type (elem_type) addrspace) "memref_elem_ptr" b in
     (* build getelementpointer into buffer *)
     let gep = build_gep ptr [| cg_expr idx |] "memref" b in
-    build_pointercast gep (pointer_type (type_of_val_type vt)) "typed_memref" b
+    build_pointercast gep (qualified_pointer_type (type_of_val_type vt) addrspace) "typed_memref" b
 
   and cg_print prefix args =
     (* Generate a format string and values to print for a printf *)
