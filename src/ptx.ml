@@ -108,6 +108,7 @@ let host_context (con:context) = {
 }
 
 let init con = get_function con.m "__init"
+let release con = get_function con.m "__release"
 let dev_malloc_if_missing con = get_function con.m "__dev_malloc_if_missing"
 let copy_to_host con = get_function con.m "__copy_to_host"
 let copy_to_dev con = get_function con.m "__copy_to_dev"
@@ -399,6 +400,9 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   (* codegen the actual function *)
   let con = make_cg_context c m b param_syms state in
   ignore (cg_stmt con body);
+
+  (* release runtime resources before returning *)
+  ignore (build_call (release con) [| |] "" b);
 
   (* return void from main *)
   ignore (build_ret_void b);
