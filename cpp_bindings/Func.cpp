@@ -25,6 +25,9 @@
 
 namespace FImage {
     
+    extern "C" { typedef struct CUctx_st *CUcontext; }
+    CUcontext cuda_ctx = 0;
+    
     bool use_gpu() {
         char* target = getenv("HLTARGET");
         return (target != NULL && strcasecmp(target, "ptx") == 0);
