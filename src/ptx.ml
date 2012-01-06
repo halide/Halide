@@ -124,6 +124,10 @@ let cg_expr (con:context) (expr:expr) =
 let cg_dev_kernel con stmt =
   
   let const_zero = const_zero con.c in
+  
+  (* reset ptx_dev arch_state *)
+  con.arch_state.dev_state.shared_mem_bytes := 0;
+  con.arch_state.dev_state.first_block := true;
 
   (* extract bounds for block/thread loops for kernel launch *)
   let default_bounds = IntImm 1 in
@@ -326,7 +330,7 @@ let cg_dev_kernel con stmt =
     entry_name_str;
     cg_expr con n_blkid_x; cg_expr con n_blkid_y; cg_expr con n_blkid_z;
     cg_expr con n_tid_x; cg_expr con n_tid_y; cg_expr con n_tid_z;
-    const_zero;
+    const_int (i32_type con.c) !(con.arch_state.dev_state.shared_mem_bytes);
     build_gep cuArgsArr [| const_zero; const_zero |] "cuArgsArr" con.b;
   ] in
 
