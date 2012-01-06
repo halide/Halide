@@ -291,7 +291,7 @@ let rec cg_stmt (con : context) (stmt : stmt) =
         in
         let st = declare_function "llvm.arm.neon.vst1.v16i8"
           (function_type (void_type c) [|ptr_t; i8x16_t; i32_t|]) m in 
-        let addr = con.cg_memref (val_type_of_expr base) buf base in        
+        let addr = con.cg_memref (val_type_of_expr e) buf base in        
         let addr = build_pointercast addr ptr_t "" b in
         let value = build_bitcast (cg_expr e) i8x16_t "" b in
         build_call st [|addr; value; const_int (i32_t) alignment|] "" b         
