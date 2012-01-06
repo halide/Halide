@@ -21,6 +21,8 @@
 #include "elf.h"
 #include <sstream>
 
+#include <dlfcn.h>
+
 namespace FImage {
     
     bool use_gpu() {
@@ -321,38 +323,6 @@ namespace FImage {
         contents->tracing = true;
     }
 
-    void Func::tile(const Var &x, const Var &y, const Var &xi, const Var &yi, const Expr &f1, const Expr &f2) {
-        split(x, x, xi, f1);
-        split(y, y, yi, f2);
-        transpose(x, yi);
-    }
-
-    void Func::vectorize(const Var &v) {
-        MLVal t = makeVectorizeTransform((name()),
-                                         (v.name()));
-        contents->scheduleTransforms.push_back(t);
-    }
-
-    void Func::vectorize(const Var &v, int factor) {
-        if (factor == 1) return;
-        Var vi;
-        split(v, v, vi, factor);
-        vectorize(vi);        
-    }
-
-    void Func::unroll(const Var &v) {
-        MLVal t = makeUnrollTransform((name()),
-                                      (v.name()));        
-        contents->scheduleTransforms.push_back(t);
-    }
-
-    void Func::unroll(const Var &v, int factor) {
-        if (factor == 1) return;
-        Var vi;
-        split(v, v, vi, factor);
-        unroll(vi);
-    }
-
     void *watchdog(void *arg) {
         useconds_t t = ((useconds_t *)arg)[0];
         printf("Watchdog sleeping for %d microseconds\n", t);
@@ -410,40 +380,83 @@ namespace FImage {
         return 0;
     }
 
-    void Func::split(const Var &old, const Var &newout, const Var &newin, const Expr &factor) {
+    Func &Func::tile(const Var &x, const Var &y, const Var &xi, const Var &yi, const Expr &f1, const Expr &f2) {
+        split(x, x, xi, f1);
+        split(y, y, yi, f2);
+        transpose(x, yi);
+        return *this;
+    }
+
+    Func &Func::vectorize(const Var &v) {
+        MLVal t = makeVectorizeTransform((name()),
+                                         (v.name()));
+        contents->scheduleTransforms.push_back(t);
+        return *this;
+    }
+
+    Func &Func::vectorize(const Var &v, int factor) {
+        if (factor == 1) return *this;
+        Var vi;
+        split(v, v, vi, factor);
+        vectorize(vi);        
+        return *this;
+    }
+
+    Func &Func::unroll(const Var &v) {
+        MLVal t = makeUnrollTransform((name()),
+                                      (v.name()));        
+        contents->scheduleTransforms.push_back(t);
+        return *this;
+    }
+
+    Func &Func::unroll(const Var &v, int factor) {
+        if (factor == 1) return *this;
+        Var vi;
+        split(v, v, vi, factor);
+        unroll(vi);
+        return *this;
+    }
+
+    Func &Func::split(const Var &old, const Var &newout, const Var &newin, const Expr &factor) {
         MLVal t = makeSplitTransform(name(),
                                      old.name(),
                                      newout.name(),
                                      newin.name(),
                                      factor.node());
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
-    void Func::transpose(const Var &outer, const Var &inner) {
+    Func &Func::transpose(const Var &outer, const Var &inner) {
         MLVal t = makeTransposeTransform((name()),
                                          (outer.name()),
                                          (inner.name()));
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
-    void Func::chunk(const Var &caller_var) {
+    Func &Func::chunk(const Var &caller_var) {
         MLVal t = makeChunkTransform(name(), caller_var.name());
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
-    void Func::root() {
+    Func &Func::root() {
         MLVal t = makeRootTransform(name());
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
-    void Func::random(int seed) {
+    Func &Func::random(int seed) {
         MLVal t = makeRandomTransform(name(), seed);
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
-    void Func::parallel(const Var &caller_var) {
+    Func &Func::parallel(const Var &caller_var) {
         MLVal t = makeParallelTransform(name(), caller_var.name());
         contents->scheduleTransforms.push_back(t);
+        return *this;
     }
 
     DynImage Func::realize(int a) {
@@ -549,6 +562,32 @@ namespace FImage {
     }
 
     void Func::compileJIT() {
+        if (getenv("PSUEDOJIT")) {
+            // llvm's ARM jit path has many issues currently. Instead
+            // we'll do static compilation to a shared object, then
+            // dlopen it
+            printf("Psuedo-jitting via static compilation to a shared object\n");
+            std::string name = contents->name + "_psuedojit";
+            std::string bc_name = name + ".bc";
+            std::string so_name = name + ".so";
+            std::string obj_name = name + ".o";
+            std::string entrypoint_name = name + "_c_wrapper";
+            compileToFile(name.c_str());
+            char cmd1[1024], cmd2[1024];
+            snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
+            snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
+            printf("%s\n", cmd1);
+            assert(0 == system(cmd1));
+            printf("%s\n", cmd2);
+            assert(0 == system(cmd2));
+            void *handle = dlopen(so_name.c_str(), RTLD_NOW);
+            assert(handle);
+            void *ptr = dlsym(handle, entrypoint_name.c_str());
+            assert(ptr);
+            contents->functionPtr = (void (*)(void *))ptr;
+            return;
+        }
+
         static llvm::ExecutionEngine *ee = NULL;
         static llvm::FunctionPassManager *fPassMgr = NULL;
         static llvm::PassManager *mPassMgr = NULL;

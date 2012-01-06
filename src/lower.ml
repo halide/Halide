@@ -153,7 +153,7 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
       end
       | _ -> raise (Wtf "I don't know how to schedule this yet")
   in
-  Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);  
+  (* Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);   *)
   scheduled_call
 
 
@@ -197,6 +197,11 @@ and realize func consume env schedule debug =
     | Pure body ->
         let inner_stmt = Provide (body, func, arg_vars) in
         let produce = List.fold_left wrap inner_stmt sched_list in
+        let rec flatten = function
+          | (x, y)::rest -> x::y::(flatten rest)
+          | [] -> []
+        in
+        let produce = Block [Print ("Realizing " ^ func ^ " over ", flatten strides); produce] in 
         Pipeline (func, return_type, buffer_size, produce, consume)
     | Reduce (init_expr, update_args, update_func, reduction_domain) ->
 
@@ -263,7 +268,7 @@ let rec extract_bounds_soup env var_env bounds = function
             | Bounds.Unbounded -> "Unbounded"
             | Bounds.Range (min, max) -> "Range (" ^ string_of_expr min ^ ", " ^ string_of_expr max ^ ")"
           in
-          Printf.printf "%s: %s %s\n" func (String.concat ", " args) (String.concat ", " (List.map string_of_bound region));
+          (* Printf.printf "%s: %s %s\n" func (String.concat ", " args) (String.concat ", " (List.map string_of_bound region)); *)
         
           (* Add the extent of those vars to the bounds soup *)
           let add_bound bounds arg = function
@@ -333,8 +338,8 @@ let rec bounds_inference env schedule = function
 
             let lift_var precomp var value = 
               let value = Constant_fold.constant_fold_expr value in
-              let value = Break_false_dependence.break_false_dependence_expr value in
-              let value = Constant_fold.constant_fold_expr value in
+              (* let value = Break_false_dependence.break_false_dependence_expr value in
+              let value = Constant_fold.constant_fold_expr value in *)
               let precomp x = LetStmt (var, value, precomp x) in
               precomp
             in

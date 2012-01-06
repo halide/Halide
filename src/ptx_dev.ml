@@ -19,6 +19,8 @@ let is_simt_var name =
 
 exception Unknown_intrinsic of string
 
+let pointer_size = 8
+
 (* TODO: replace references to loop bounds with blockDim, gridDim? *)
 let simt_intrinsic name =
   (* TODO: pass through dotted extern function names *)
