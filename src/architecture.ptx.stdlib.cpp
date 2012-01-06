@@ -258,8 +258,8 @@ void __dev_run(
     char msg[256];
     snprintf(
         msg, 256,
-        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads",
-        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ
+        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem",
+        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes
     );
     CHECK_CALL(
         cuLaunchKernel(
