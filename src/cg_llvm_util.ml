@@ -77,33 +77,40 @@ type buffer_field =
   | Dim of int
   | ElemSize
 
+let string_of_buffer_field = function
+  | HostPtr -> "host"
+  | DevPtr -> "dev"
+  | HostDirty -> "host_dirty"
+  | DevDirty -> "dev_dirty"
+  | Dim dim -> "dim." ^ (string_of_int dim)
+  | ElemSize -> "elem_size"
+  
+let buffer_field_offset = function
+  | HostPtr ->   [ 0 ]
+  | DevPtr ->    [ 1 ]
+  | HostDirty -> [ 2 ]
+  | DevDirty ->  [ 3 ]
+  | Dim dim ->   [ 4; dim ]
+  | ElemSize ->  [ 5 ]
+
 (* codegen an llvalue which loads buf->{field} *)
-let cg_buffer_field bufptr field b =
+let cg_buffer_field_ref bufptr field b =
   let idx =
     Array.map
       (ci (context_of_val bufptr))
-      (match field with
-        | HostPtr ->   [| 0; 0 |]
-        | DevPtr ->    [| 0; 1 |]
-        | HostDirty -> [| 0; 2 |]
-        | DevDirty ->  [| 0; 3 |]
-        | Dim dim ->   [| 0; 4; dim |]
-        | ElemSize ->  [| 0; 5 |])
+      (Array.of_list (0::(buffer_field_offset field)))
   in
-  let name = match field with
-    | HostPtr -> ".host"
-    | DevPtr -> ".dev"
-    | HostDirty -> ".host_dirty"
-    | DevDirty -> ".dev_dirty"
-    | Dim dim -> ".dim." ^ (string_of_int dim)
-    | ElemSize -> ".elem_size"
-  in
-  
+  build_gep bufptr idx
+    ((value_name bufptr) ^ "." ^ (string_of_buffer_field field) ^ "_ref")
+    b
+
+let cg_buffer_field bufptr field b =
   let raw =
     build_load
-      (build_gep bufptr idx "" b)
-      ((value_name bufptr) ^ name)
-      b in
+      (cg_buffer_field_ref bufptr field b)
+      ((value_name bufptr) ^ "." ^ (string_of_buffer_field field))
+      b
+  in
   match field with
     | Dim _ | ElemSize -> toi32 raw b
     | HostPtr | DevPtr | HostDirty | DevDirty -> raw
