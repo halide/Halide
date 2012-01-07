@@ -108,6 +108,9 @@ let _ =
   Callback.register "makeLT" (fun a b -> Cmp (LT, a, b));
   Callback.register "makeGE" (fun a b -> Cmp (GE, a, b));
   Callback.register "makeLE" (fun a b -> Cmp (LE, a, b));
+  Callback.register "makeAnd" (fun a b -> And (a, b));
+  Callback.register "makeOr" (fun a b -> Or (a, b));
+  Callback.register "makeNot" (fun a -> Not (a));
   Callback.register "makeSelect" (fun c a b -> Select (c, a, b));
   Callback.register "makeVar" (fun a -> Var (i32, a));
   Callback.register "makeFloatType" (fun a -> Float a);

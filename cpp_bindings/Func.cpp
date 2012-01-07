@@ -577,13 +577,13 @@ namespace FImage {
             // dlopen it
             printf("Psuedo-jitting via static compilation to a shared object\n");
             std::string name = contents->name + "_psuedojit";
-            std::string bc_name = name + ".bc";
-            std::string so_name = name + ".so";
-            std::string obj_name = name + ".o";
+            std::string bc_name = "./" + name + ".bc";
+            std::string so_name = "./" + name + ".so";
+            std::string obj_name = "./" + name + ".o";
             std::string entrypoint_name = name + "_c_wrapper";
             compileToFile(name.c_str());
             char cmd1[1024], cmd2[1024];
-            snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
+            snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -relocation-model=pic -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
             snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
             printf("%s\n", cmd1);
             assert(0 == system(cmd1));
