@@ -81,30 +81,18 @@ let rec cg_expr (con : context) (expr : expr) =
         end
 
     (* use intrinsics for vector loads/stores *) 
-    | Load (FloatVector (32, 4), buf, Ramp (base, IntImm 1, w))  ->
-        let ld = declare_function "llvm.arm.neon.vld1.v4f32"
-          (function_type (f32x4_t) [|ptr_t; i32_t|]) m in
-        let addr = con.cg_memref (FloatVector (32, 4)) buf base in        
+    | Load (t, buf, Ramp (base, IntImm 1, w)) when (bit_width t = 128) && (t <> (FloatVector (64, 2))) ->
+        let intrin = match t with
+          | FloatVector (_, _) -> "4f32" (* there isn't a v2f64 vld *)
+          | UIntVector (bits, w) 
+          | IntVector (bits, w) -> (string_of_int w) ^ "i" ^ (string_of_int bits)
+        in
+        let llt = type_of_val_type c t in
+        let ld = declare_function ("llvm.arm.neon.vld1.v" ^ intrin) 
+          (function_type llt [|ptr_t; i32_t|]) m in        
+        let addr = con.cg_memref t buf base in        
         let addr = build_pointercast addr ptr_t "" b in
-        let result = build_call ld [|addr; const_int (i32_t) 32|] "" b in
-        result
-
-    | Load (IntVector (16, 8), buf, Ramp (base, IntImm 1, w)) 
-    | Load (UIntVector (16, 8), buf, Ramp (base, IntImm 1, w)) ->
-        let ld = declare_function "llvm.arm.neon.vld1.v8i16"
-          (function_type (i16x8_t) [|ptr_t; i32_t|]) m in
-        let addr = con.cg_memref (IntVector (16, 8)) buf base in        
-        let addr = build_pointercast addr ptr_t "" b in
-        let result = build_call ld [|addr; const_int (i32_t) 16|] "" b in
-        result
-
-    | Load (IntVector (16, 4), buf, Ramp (base, IntImm 1, w)) 
-    | Load (UIntVector (16, 4), buf, Ramp (base, IntImm 1, w)) ->
-        let ld = declare_function "llvm.arm.neon.vld1.v4i16"
-          (function_type (i16x4_t) [|ptr_t; i32_t|]) m in
-        let addr = con.cg_memref (IntVector (16, 4)) buf base in        
-        let addr = build_pointercast addr ptr_t "" b in
-        let result = build_call ld [|addr; const_int (i32_t) 16|] "" b in
+        let result = build_call ld [|addr; const_int (i32_t) ((bit_width (element_val_type t))/8)|] "" b in
         result
 
     | Load (IntVector (16, 8), buf, Ramp (base, IntImm 2, w)) 
@@ -124,9 +112,9 @@ let rec cg_expr (con : context) (expr : expr) =
         let addr = build_pointercast addr ptr_t "" b in
         let result = build_call ld [|addr; const_int (i32_t) 16|] "" b in
         build_extractvalue result 0 "" b 
+    (* TODO: generalize strided loads to other types *)
 
-
-
+          
     (* 
 
     (* absolute difference via the pattern x > y ? x - y : y - x *)
@@ -214,30 +202,6 @@ let rec cg_stmt (con : context) (stmt : stmt) =
   let i8x16_t = vector_type (i8_type c) 16 in
   let i16x4_t = vector_type (i16_type c) 4 in
 
-  let rec duplicated_lanes expr = match expr with
-    | Broadcast _ -> true
-    | Bop (Div, Ramp (base, one, n), two) 
-        when (one = make_const (val_type_of_expr base) 1 &&
-            two = make_const (val_type_of_expr expr) 2) -> true
-    | MakeVector _ -> false
-    | Ramp _ -> false
-    | expr -> fold_children_in_expr duplicated_lanes (&&) true expr
-  in
-  
-  let rec deduplicate_lanes expr = match expr with
-    | Broadcast (e, n) -> Broadcast (e, n/2)
-    | Bop (Div, Ramp (base, one, n), two) 
-        when (one = make_const (val_type_of_expr base) 1 &&
-            two = make_const (val_type_of_expr expr) 2) -> 
-        Ramp (base /~ (make_const (val_type_of_expr base) 2), one, n/2)
-    | Load (t, buf, idx) when is_vector idx ->
-        Load (vector_of_val_type (element_val_type t) ((vector_elements t)/2), 
-              buf, deduplicate_lanes idx)
-    | MakeVector _ -> raise (Wtf "Can't deduplicate the lanes of a MakeVector")
-    | Ramp _ -> raise (Wtf "Can't deduplicate the lanes of a generic Ramp")
-    | expr -> mutate_children_in_expr deduplicate_lanes expr
-  in
-
   match stmt with
     (* Look for the vector interleaved store pattern. It should be
        expressed like so: out(x) = Select(x%2==0, a, b) where a and b
@@ -304,12 +268,13 @@ let rec cg_stmt (con : context) (stmt : stmt) =
 
 let malloc (con : context) (name : string) (elems : expr) (elem_size : expr) =
   let c = con.c and b = con.b and m = con.m in
-  let malloc = declare_function "malloc" (function_type (pointer_type (i8_type c)) [|i64_type c|]) m in  
-  build_call malloc [|con.cg_expr (Cast (Int 64, elems *~ elem_size))|] name b
+  let malloc = declare_function "fast_malloc" (function_type (pointer_type (i8_type c)) [|i32_type c|]) m in  
+  let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
+  build_call malloc [|con.cg_expr size|] name b
 
 let free (con : context) (address:llvalue) =
   let c = con.c and b = con.b and m = con.m in
-  let free = declare_function "free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
+  let free = declare_function "fast_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
   build_call free [|address|] "" b   
 
 let env = Environment.empty

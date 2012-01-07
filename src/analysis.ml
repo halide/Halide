@@ -241,7 +241,6 @@ and find_names_in_expr internal ptrsize expr =
       if (StringSet.mem n internal) then StringIntSet.empty else (StringIntSet.add (n, size) StringIntSet.empty)
   | Let (n, a, b) ->
       let internal = StringSet.add n internal in
-      let recs = find_names_in_stmt internal ptrsize in
       let rece = find_names_in_expr internal ptrsize in
       StringIntSet.union (rece a) (rece b)
   | x -> fold_children_in_expr rece StringIntSet.union StringIntSet.empty x
@@ -264,3 +263,30 @@ let rec find_stores_in_stmt = function
         find_stores_in_stmt
         StringSet.union
         s
+
+(* Is each pair of lanes identical? *)
+let rec duplicated_lanes expr = match expr with
+  | Broadcast _ -> true
+  | Bop (Div, Ramp (base, one, n), two) 
+      when (one = make_const (val_type_of_expr base) 1 &&
+          two = make_const (val_type_of_expr expr) 2) -> true
+  | MakeVector _ -> false
+  | Ramp _ -> false
+  | Var _ -> false
+  | expr -> fold_children_in_expr duplicated_lanes (&&) true expr
+
+(* For a vector in which each pair of lanes is identical, half the vector width and make the lanes unique *)
+let rec deduplicate_lanes expr = match expr with
+  | Broadcast (e, n) -> Broadcast (e, n/2)
+  | Bop (Div, Ramp (base, one, n), two) 
+      when (one = make_const (val_type_of_expr base) 1 &&
+          two = make_const (val_type_of_expr expr) 2) -> 
+      Ramp (base /~ (make_const (val_type_of_expr base) 2), one, n/2)
+  | Load (t, buf, idx) when is_vector idx ->
+      Load (vector_of_val_type (element_val_type t) ((vector_elements t)/2), 
+            buf, deduplicate_lanes idx)
+  | MakeVector _ -> raise (Wtf "Can't deduplicate the lanes of a MakeVector")
+  | Ramp _ -> raise (Wtf "Can't deduplicate the lanes of a generic Ramp")
+  | Var _ -> raise (Wtf "Can't deduplicate the lanes of a generic Var")
+  | expr -> mutate_children_in_expr deduplicate_lanes expr
+

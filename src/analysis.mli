@@ -26,3 +26,6 @@ val find_names_in_expr : Util.StringSet.t -> int -> Ir.expr -> Util.StringIntSet
 val find_loads_in_expr : Ir.expr -> Util.StringSet.t
 val find_loads_in_stmt : Ir.stmt -> Util.StringSet.t
 val find_stores_in_stmt : Ir.stmt -> Util.StringSet.t
+
+val duplicated_lanes : Ir.expr -> bool
+val deduplicate_lanes : Ir.expr -> Ir.expr
