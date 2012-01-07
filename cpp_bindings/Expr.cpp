@@ -34,6 +34,9 @@ namespace FImage {
     ML_FUNC3(makeSelect);
     ML_FUNC3(makeDebug);
     ML_FUNC3(makeCall);
+    ML_FUNC2(makeAnd);
+    ML_FUNC2(makeOr);
+    ML_FUNC1(makeNot);
 
     template<typename T>
     void unify(std::vector<T> &a, const std::vector<T> &b) {
@@ -316,6 +319,26 @@ namespace FImage {
         return e;
     }
     
+    Expr operator&&(const Expr &a, const Expr &b) {
+        Expr e(makeAnd(a.node(), b.node()), Int(1));
+        e.child(a);
+        e.child(b);
+        return e;
+    }
+
+    Expr operator||(const Expr &a, const Expr &b) {
+        Expr e(makeOr(a.node(), b.node()), Int(1));
+        e.child(a);
+        e.child(b);
+        return e;
+    }
+
+    Expr operator!(const Expr &a) {
+        Expr e(makeNot(a.node()), Int(1));
+        e.child(a);
+        return e;
+    }
+
     Expr transcendental(const char *name, const Expr &a) {
         MLVal args = makeList();
         Expr arg = Cast<float>(a);
