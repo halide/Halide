@@ -92,6 +92,11 @@ namespace FImage {
     Expr operator!=(const Expr &, const Expr &);
     Expr operator==(const Expr &, const Expr &);
 
+    // Logical operators
+    Expr operator&&(const Expr &, const Expr &);
+    Expr operator||(const Expr &, const Expr &);
+    Expr operator!(const Expr &);
+
     // Transcendentals
     Expr sqrt(const Expr &);
     Expr sin(const Expr &);
