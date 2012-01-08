@@ -4,6 +4,7 @@ open Schedule
 open Analysis
 open Util
 open Vectorize
+open Bounds
 
 (* Lowering produces references to names either in the context of the
    callee or caller. The ones in the context of the caller may in fact
@@ -70,13 +71,13 @@ let make_function_body (name:string) (env:environment) (debug:bool) =
   (renamed_args, return_type, renamed_body)
 
 let simplify_range = function
-  | Bounds.Unbounded -> Bounds.Unbounded
-  | Bounds.Range (a, b) -> Bounds.Range (Constant_fold.constant_fold_expr a, Constant_fold.constant_fold_expr b)
+  | Unbounded -> Unbounded
+  | Range (a, b) -> Range (Constant_fold.constant_fold_expr a, Constant_fold.constant_fold_expr b)
 let simplify_region r = List.map simplify_range r 
 let string_of_range = function  
-  | Bounds.Unbounded -> "[Unbounded]"
-  | Bounds.Range (a, b) -> "[" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ "]" 
-let bounds f stmt = simplify_region (Bounds.required_of_stmt f (StringMap.empty) stmt) 
+  | Unbounded -> "[Unbounded]"
+  | Range (a, b) -> "[" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ "]" 
+let bounds f stmt = simplify_region (required_of_stmt f (StringMap.empty) stmt) 
 
 let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug:bool) =
   (* Grab the schedule for the next function call to lower *)
@@ -253,34 +254,56 @@ and realize func consume env schedule debug =
 let rec extract_bounds_soup env var_env bounds = function
   | Pipeline (func, ty, size, produce, consume) -> 
       (* What function am I producing? *)
-      let bounds = try
+      let bounds = try          
+        (* Get the args list of the function *)
+        let (args, _, body) = find_function func env in
+        let args = List.map snd args in
+       
 
         (* Compute the extent of that function used in the consume side *)
-        let region = Bounds.required_of_stmt func var_env consume in
+        let region = required_of_stmt func var_env consume in
 
         (* If func is a reduction, also consider the bounds being written to *)
-        let region = match produce with
-          | Block [init; update] ->
-              let update_region = Bounds.required_of_stmt func var_env update in
-              Bounds.region_union region update_region
+        let region = match (body, produce) with
+          | (Reduce _, Block [init; update]) ->
+              let update_region = required_of_stmt func var_env update in
+              let region = region_union region update_region in
+              (* fixup any recursive bounds (TODO: this is a giant hack) *)
+              let fix range var =
+                match range with
+                  | Unbounded -> raise (Wtf ("Reduction writes to unbounded region of " ^ func))
+                  | Range (min, max) -> begin
+                    Printf.printf "Considering %s %s %s\n" var (string_of_expr min) (string_of_expr max);
+                    let rec bad_expr = function
+                      | Var (t, v) when v = func ^ "." ^ var ^ ".extent" -> true
+                      | Var (t, v) when v = func ^ "." ^ var ^ ".min" -> true
+                      | expr -> fold_children_in_expr bad_expr (||) false expr
+                    in
+                    let min = match min with
+                      | Bop (Min, x, v) when bad_expr v -> x
+                      | _ -> min
+                    and max = match max with
+                      | Bop (Max, x, v) when bad_expr v -> x
+                      | _ -> max
+                    in Range (min, max)
+                  end                      
+              in List.map2 fix region args
+                
+          | (Reduce _, _) -> raise (Wtf "Could not understand the produce side of a reduction")
           | _ -> region
         in
 
         if region = [] then bounds else begin
                 
-          (* Get the args list of the function *)
-          let (args, _, _) = find_function func env in
-          let args = List.map snd args in
-        
           let string_of_bound = function
-            | Bounds.Unbounded -> "Unbounded"
-            | Bounds.Range (min, max) -> "Range (" ^ string_of_expr min ^ ", " ^ string_of_expr max ^ ")"
+            | Unbounded -> "Unbounded"
+            | Range (min, max) -> "Range (" ^ string_of_expr min ^ ", " ^ string_of_expr max ^ ")"
           in
           (* Printf.printf "%s: %s %s\n" func (String.concat ", " args) (String.concat ", " (List.map string_of_bound region)); *)
         
           (* Add the extent of those vars to the bounds soup *)
           let add_bound bounds arg = function
-            | Bounds.Range (min, max) ->              
+            | Range (min, max) ->              
                 (func, arg, min, max)::bounds
             | _ -> raise (Wtf ("Could not compute bounds of " ^ func ^ "." ^ arg))
           in 
@@ -294,7 +317,7 @@ let rec extract_bounds_soup env var_env bounds = function
       extract_bounds_soup env var_env bounds consume
   | Block l -> List.fold_left (extract_bounds_soup env var_env) bounds l
   | For (n, min, size, order, body) -> 
-      let var_env = StringMap.add n (Bounds.Range (min, size +~ min -~ IntImm 1)) var_env in
+      let var_env = StringMap.add n (Range (min, size +~ min -~ IntImm 1)) var_env in
       extract_bounds_soup env var_env bounds body   
   | x -> bounds
  
