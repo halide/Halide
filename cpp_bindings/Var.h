@@ -38,6 +38,8 @@ namespace FImage {
         const Expr &size() const;
         const std::string &name() const;
         bool operator==(const RVar &other) const;
+
+        operator Var() {return Var(name());}
         
     private:
 
