@@ -258,8 +258,16 @@ let rec extract_bounds_soup env var_env bounds = function
         (* Compute the extent of that function used in the consume side *)
         let region = Bounds.required_of_stmt func var_env consume in
 
-        if region = [] then bounds else begin
+        (* If func is a reduction, also consider the bounds being written to *)
+        let region = match produce with
+          | Block [init; update] ->
+              let update_region = Bounds.required_of_stmt func var_env update in
+              Bounds.region_union region update_region
+          | _ -> region
+        in
 
+        if region = [] then bounds else begin
+                
           (* Get the args list of the function *)
           let (args, _, _) = find_function func env in
           let args = List.map snd args in
