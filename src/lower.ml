@@ -202,7 +202,11 @@ and realize func consume env schedule debug =
           | (x, y)::rest -> x::y::(flatten rest)
           | [] -> []
         in
-        let produce = Block [Print ("Realizing " ^ func ^ " over ", flatten strides); produce] in 
+        (*
+        let produce = Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
+                             Print ("Realizing " ^ func ^ " over ", flatten strides);
+                             produce] in 
+        *)
         Pipeline (func, return_type, buffer_size, produce, consume)
     | Reduce (init_expr, update_args, update_func, reduction_domain) ->
 
@@ -240,6 +244,21 @@ and realize func consume env schedule debug =
           update
           (reduction_domain @ pure_domain)
         in
+
+        let rec flatten = function
+          | (x, y)::rest -> x::y::(flatten rest)
+          | [] -> []
+        in
+
+        (*
+        let initialize = Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
+                                Print ("Initializing " ^ func ^ " over ", flatten strides);
+                                initialize] in 
+        
+        let update = Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
+                            Print ("Updating " ^ func, []);
+                            update] in 
+        *)
 
         let produce = Block [initialize; update] in
 
@@ -511,7 +530,8 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
     (fun func ->
       if String.contains func '.' then
         match find_function (parent_name func) env with
-          | (_, _, Reduce _) -> false
+          | (_, _, Reduce (_, _, update_func, _)) ->
+              (base_name func) <> update_func
           | _ -> true
       else
         true
@@ -522,7 +542,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
 
   (* Compute the order in which to realize them *)
   let functions = partial_sort lt functions in
-  (* Printf.printf "Realization order: %s\n" (String.concat "\n" functions); *)
+  Printf.printf "Realization order: %s\n" (String.concat ", " functions);
 
   Printf.printf "Fully qualifying symbols in the schedule\n%!";
   print_schedule schedule;
