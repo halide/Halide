@@ -56,15 +56,15 @@ struct work {
     int active_workers;
 };
 
-#define MAX_JOBS 4096
-#define THREADS 4
+#define MAX_JOBS 65536
+#define MAX_THREADS 64
 struct {
     work jobs[MAX_JOBS];
     int head;
     int tail;
     pthread_mutex_t mutex;
     pthread_cond_t not_empty;
-    pthread_t threads[THREADS];
+    pthread_t threads[MAX_THREADS];
     int ids;
 } work_queue;
 
@@ -72,6 +72,8 @@ struct worker_arg {
     int id;
     work *job;
 };
+
+int threads;
 
 void *worker(void *void_arg) {
     worker_arg *arg = (worker_arg *)void_arg;
@@ -116,13 +118,19 @@ void *worker(void *void_arg) {
             job->id = 0; // mark the job done
             pthread_mutex_unlock(&work_queue.mutex);
         } else {
-            // claim this task
+            int remaining = job->max - job->next;
+            // Claim some tasks
+            //int claimed = (remaining + threads - 1)/threads;
+            int claimed = 1;
+            //printf("Claiming %d tasks\n", claimed);
             work myjob = *job;
-            job->next++;
+            job->next += claimed;            
+            myjob.max = job->next;
             job->active_workers++;
             pthread_mutex_unlock(&work_queue.mutex);
             //fprintf(stderr, "Doing job %d\n", myjob.next);
-            myjob.f(myjob.next, myjob.closure);
+            for (; myjob.next < myjob.max; myjob.next++)
+                myjob.f(myjob.next, myjob.closure);
             //fprintf(stderr, "Done with job %d\n", myjob.next);
             pthread_mutex_lock(&work_queue.mutex);
             job->active_workers--;
@@ -138,7 +146,15 @@ void do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure) 
         pthread_cond_init(&work_queue.not_empty, NULL);
         work_queue.head = work_queue.tail = 0;
         work_queue.ids = 1;
-        for (int i = 0; i < THREADS; i++) {
+        char *threadStr = getenv("HL_NUMTHREADS");
+        threads = 8;
+        if (threadStr) {
+            threads = atoi(threadStr);
+        } else {
+            printf("HL_NUMTHREADS not defined. Defaulting to 8 threads.\n");
+        }
+        if (threads > MAX_THREADS) threads = MAX_THREADS;
+        for (int i = 0; i < threads-1; i++) {
             pthread_create(work_queue.threads + i, NULL, worker, NULL);
         }
 
