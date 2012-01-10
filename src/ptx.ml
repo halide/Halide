@@ -368,6 +368,8 @@ let cg_stmt (con:context) stmt = match stmt with
 let rec codegen_entry c m cg_entry make_cg_context e =
   (* load the template PTX host module *)
   Stdlib.init_module_ptx m;
+  (* load the X86 module, too, since we need its helpers for the host-side code *)
+  Stdlib.init_module_x86 m;
 
   (* TODO: store functions strings, kernels, etc. in null-terminated global array,
    * which init() can walk at runtime?
