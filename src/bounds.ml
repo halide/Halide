@@ -6,7 +6,7 @@ open Analysis
 type bounds_result = Range of (expr * expr) | Unbounded
 
 let make_range (min, max) =
-  (* Printf.printf "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max); *)
+  Printf.printf "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max); 
   assert (is_scalar min);
   assert (is_scalar max);
   Range (min, max)
@@ -37,6 +37,17 @@ let is_monotonic = function
   | ".log_f32" -> true
   | _ -> false
 
+let bounds_of_type = function
+  | UIntVector (8, _)
+  | UInt 8  -> Range (Cast (UInt 8, IntImm 0), Cast (UInt 8, IntImm 255))
+  | IntVector (8, _)
+  | Int 8  -> Range (Cast (Int 8, IntImm (-128)), Cast (Int 8, IntImm 127))
+  | UIntVector (16, _)
+  | UInt 16  -> Range (Cast (UInt 16, IntImm 0), Cast (UInt 16, IntImm 65535))
+  | IntVector (16, _)
+  | Int 16  -> Range (Cast (Int 16, IntImm (-32768)), Cast (Int 16, IntImm 32767))
+  | _ -> Unbounded
+
 let bounds_of_expr_in_env env expr =
   let rec bounds_of_expr_in_env_inner env expr = 
     let recurse expr = 
@@ -46,6 +57,8 @@ let bounds_of_expr_in_env env expr =
       result
     in
 
+    let type_bounds = bounds_of_type (val_type_of_expr expr) in
+
     let result = match expr with
       | Load (t, _, idx)   -> 
           (* if idx depends on anything in env then Unbounded else return this  *)
@@ -53,12 +66,12 @@ let bounds_of_expr_in_env env expr =
             | Var (t, n) -> StringMap.mem n env
             | expr -> fold_children_in_expr contains_var_in_env (or) false expr
           in 
-          if contains_var_in_env idx then Unbounded else make_range (expr, expr) 
+          if contains_var_in_env idx then (bounds_of_type t) else make_range (expr, expr) 
       | Broadcast (e, _) -> recurse e
       | Cast (t, e)      -> begin
         match recurse e with
           | Range (min, max) -> make_range (Cast (t, min), Cast (t, max))
-          | _ -> Unbounded              
+          | _ -> type_bounds
       end
       | Ramp (a, b, n)   -> begin    
         let maxn = Cast(val_type_of_expr b, IntImm (n-1)) in
@@ -72,7 +85,7 @@ let bounds_of_expr_in_env env expr =
                                   Bop (Max, Bop (Max, p1, p2), zero)) in              
               (* Add the base term *)
               make_range (mina +~ minc, maxa +~ maxc)
-        | _ -> Unbounded
+          | _ -> Unbounded
       end
       | ExtractElement (a, b) -> recurse a
       | Bop (Add, a, b) -> begin
@@ -307,7 +320,7 @@ let bounds_of_expr_in_env env expr =
       | Call (t, f, [arg]) when f = ".sin" || f = ".cos" -> 
           Range ((make_zero t) -~ (make_one t), make_one t)                  
 
-      | Call (_, _, _) -> Unbounded
+      | Call (t, _, _) -> bounds_of_type t
       | Debug (e, _, _) -> recurse e
           
       | Var (t, n) -> begin

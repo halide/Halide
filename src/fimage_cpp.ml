@@ -33,7 +33,7 @@ let lower (f:string) (env:environment) (sched: schedule_tree) (debug: int) =
      let lowered = Constant_fold.constant_fold_stmt lowered in
      Printf.printf "Breaking false dependences\n";
      let lowered = Break_false_dependence.break_false_dependence_stmt lowered in  *)
-    Printf.printf "Constant folding\n";
+    Printf.printf "Before constant folding:\n%s\n" (string_of_stmt lowered);
     let lowered = Constant_fold.constant_fold_stmt lowered in 
     Printf.printf "Resulting stmt:\n%s\n" (string_of_stmt lowered);
     lowered
@@ -89,6 +89,11 @@ let compile_to_file name args stmt =
     raise x
   end
 
+let cast_to_int x = match val_type_of_expr x with
+  | Int 32 -> x
+  | _ -> Cast (Int 32, x)
+
+
 let _ = 
   (* Make IR nodes *)
   Callback.register "makeIntImm" (fun a -> IntImm a);
@@ -121,7 +126,7 @@ let _ =
   Callback.register "makeStore" (fun a buf idx -> Store (a, "." ^ buf, idx));
   Callback.register "makeFor" (fun var min n stmt -> For (var, min, n, true, stmt));
   Callback.register "inferType" (fun expr -> val_type_of_expr expr);
-  Callback.register "makeCall" (fun t name args -> Call (t, name, args));
+  Callback.register "makeCall" (fun t name args -> Call (t, name, (List.map cast_to_int args)));
   Callback.register "makeDebug" (fun e prefix args -> Debug (e, prefix, args));
   Callback.register "makeDefinition" (fun name argnames body -> (name, List.map (fun x -> (i32, x)) argnames, val_type_of_expr body, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);
@@ -131,6 +136,7 @@ let _ =
   );
   
   Callback.register "addScatterToDefinition" (fun env name update_name update_args update_var reduction_domain ->
+    let update_args = List.map cast_to_int update_args in
     let (_, args, return_type, Pure init_expr) = Environment.find name env in
     (* The pure args are the naked vars in the update_args list that aren't in the reduction domain *)
     let rec get_pure_args = function
@@ -190,3 +196,4 @@ let _ =
   Callback.register "makeRootTransform" (fun func -> root_schedule func);
   Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);  
   Callback.register "makeRandomTransform" (fun func seed -> random_schedule func seed);
+  
