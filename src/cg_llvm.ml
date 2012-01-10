@@ -52,7 +52,7 @@ module CodegenForArch ( Arch : Architecture ) = struct
 type arch_state = Arch.state
 type context = arch_state cg_context
 
-let dbgprint = false
+let dbgprint = true
 
 (* Algebraic type wrapper for LLVM comparison ops *)
 type cmp =
@@ -62,7 +62,7 @@ type cmp =
 module ArgMap = Map.Make(String)
 type argmap = (arg*int) ArgMap.t (* track args as name -> (Ir.arg,index) *) 
 
-let make_cg_context c m b sym_table arch_state =
+let rec make_cg_context c m b sym_table arch_state =
 
   let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
@@ -359,6 +359,10 @@ let make_cg_context c m b sym_table arch_state =
       (* Emit the start code first, without 'variable' in scope. *)
       let max = build_add min size "" b in
 
+      (* let counter_t = i64_type c in
+      let min = build_intcast min counter_t "" b in
+      let max = build_intcast max counter_t "" b in *)
+
       (* Make the new basic block for the loop header, inserting after current
        * block. *)
       let preheader_bb = insertion_block b in
@@ -384,7 +388,8 @@ let make_cg_context c m b sym_table arch_state =
       ignore (cg_stmt body);
 
       (* Emit the updated counter value. *)
-      let next_var = build_add variable (const_int int_imm_t 1) (var_name ^ "_nextvar") b in 
+      (* let next_var = build_add variable (const_int int_imm_t 1) (var_name ^ "_nextvar") b in  *)
+      let next_var = build_add variable (const_int (type_of variable) 1) (var_name ^ "_nextvar") b in       
 
       (* Compute the end condition. *)
       let end_cond = build_icmp Icmp.Ne next_var max "" b in
@@ -446,40 +451,33 @@ let make_cg_context c m b sym_table arch_state =
     let body_fn_type = (function_type (void_type c) [|int_imm_t; buffer_t|]) in
     let body_fn = define_function (var_name ^ ".body") body_fn_type m in
 
-    (* Save the old position of the builder *)
-    let current = insertion_block b in
+    (* make a new context *)
+    let sub_builder = (builder_at_end c (entry_block body_fn)) in
+    let sub_sym_table = Hashtbl.create 10 in
+    let sub_context = make_cg_context c m sub_builder sub_sym_table arch_state in
 
-    (* Move the builder inside the function *)
-    position_at_end (entry_block body_fn) b;
-
-    (* Load everything from the closure *)
+    (* Load everything from the closure into the new symbol table *)
     StringIntSet.iter (fun (name, size) ->      
       let closure = param body_fn 1 in
       let current_val = sym_get name in
       let offset = StringMap.find name offset_map in
-      let addr = build_bitcast closure (pointer_type (type_of current_val)) "" b in      
-      let addr = build_gep addr [| const_int int_imm_t (offset/size) |] "" b in
-      sym_add name (build_load addr name b);
+      let addr = build_bitcast closure (pointer_type (type_of current_val)) "" sub_builder in      
+      let addr = build_gep addr [| const_int int_imm_t (offset/size) |] "" sub_builder in
+      let llv = build_load addr name sub_builder in
+      set_value_name name llv;
+      Hashtbl.add sub_sym_table name llv
     ) syms;
 
     (* Make the var name refer to the first argument *)
     Printf.printf "%s = %s\n%!" var_name "param body_fn 0";
-    sym_add var_name (param body_fn 0);    
+    set_value_name var_name (param body_fn 0);
+    Hashtbl.add sub_sym_table var_name (param body_fn 0);
 
     (* Generate the function body *)
-    ignore (cg_stmt body);
-    ignore (build_ret_void b);
+    ignore (sub_context.cg_stmt body);
+    ignore (build_ret_void sub_builder);
 
-    sym_remove var_name;
-
-    (* Pop all the symbols we used in the function body *)
-    (* TODO: factor into sym_pop of scope object/sym list/sym set? *)
-    StringIntSet.iter (fun (name, _) -> sym_remove name) syms;
-
-    (* Move the builder back *)
-    position_at_end current b;
-
-    (* Call do_par_for *)
+    (* Call do_par_for back in the main function *)
     let do_par_for = declare_function "do_par_for"
       (function_type (void_type c) [|pointer_type body_fn_type; int_imm_t; int_imm_t; buffer_t|]) m in
     ignore(build_call do_par_for [|body_fn; min; size; closure|] "" b);
@@ -511,9 +509,22 @@ let make_cg_context c m b sym_table arch_state =
 
     | Pipeline (name, ty, size, produce, consume) ->
 
-        let scratch = 
-          let elem_size = (IntImm ((bit_width ty)/8)) in 
-          Arch.malloc cg_context name size elem_size
+        let (scratch, needs_freeing) = 
+          match size with
+            | IntImm x -> 
+                let elem_size = (bit_width ty)/8 in
+                let bytes = x * elem_size in
+                let chunks = ((bytes + 15)/16) in (* TODO: stack alignment is architecture specific? *)
+                (* Get the position at the top of the function *)
+                let pos = instr_begin (entry_block (block_parent (insertion_block b))) in
+                (* Make a builder at the start of the entry block *)
+                let b = builder_at c pos in
+                (* Inject an alloca *)
+                let ptr = build_array_alloca (vector_type (i32_type c) 4) (const_int int_imm_t chunks) "" b in
+                (build_pointercast ptr (pointer_type (type_of_val_type ty)) "" b, false)
+            | _ ->                 
+                let elem_size = (IntImm ((bit_width ty)/8)) in 
+                (Arch.malloc cg_context name size elem_size, true)
         in
 
         (* push the symbol environment *)
@@ -526,7 +537,7 @@ let make_cg_context c m b sym_table arch_state =
         sym_remove name;
 
         (* free the scratch *)
-        ignore (Arch.free cg_context scratch);
+        if (needs_freeing) then ignore (Arch.free cg_context scratch);
 
         res
     | Print (fmt, args) -> cg_print fmt args
