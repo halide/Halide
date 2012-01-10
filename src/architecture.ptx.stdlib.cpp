@@ -289,6 +289,7 @@ void __dev_run(
 }
 
 #ifdef INCLUDE_WRAPPER
+#if 0
 const char* ptx_src = "\n\
 	.version 2.0\n\
 	.target sm_11, map_f64_to_f32\n\
@@ -310,6 +311,60 @@ const char* ptx_src = "\n\
 	st.global.u32	[%rd3], %r4;\n\
 	exit;\n\
 }";
+#endif
+const char* ptx_src = "                                               \n\
+	.version 2.0                                                        \n\
+	.target sm_11, map_f64_to_f32                                       \n\
+                                                                      \n\
+.extern .shared .b8 g_2E_f[32];                                       \n\
+                                                                      \n\
+.entry kernel (.param .b64 __param_1, .param .b32 __param_2) // @kerne\n\
+{                                                                     \n\
+	.reg .pred %p<3>;                                                   \n\
+	.reg .b32 %r<15>;                                                   \n\
+	.reg .b64 %rd<12>;                                                  \n\
+	.reg .f32 %f<1>;                                                    \n\
+// BB#0:                                // %entry                     \n\
+	ld.param.u32	%r1, [__param_2];                                     \n\
+	add.u32	%r2, %r1, 7;                                                \n\
+	shr.s32	%r3, %r2, 31;                                               \n\
+	shr.u32	%r4, %r3, 29;                                               \n\
+	add.u32	%r5, %r2, %r4;                                              \n\
+	shr.s32	%r6, %r5, 3;                                                \n\
+	mov.u32	%r7, %ctaid.y;                                              \n\
+	setp.ge.s32	%p0, %r7, %r6;                                          \n\
+	ld.param.u64	%rd0, [__param_1];                                    \n\
+@%p0	bra	$L__BB0_5;                                                  \n\
+// BB#1:                                // %g.blockidy_simt_loop      \n\
+	mov.u32	%r8, %tid.y;                                                \n\
+	setp.lt.s32	%p1, %r8, 8;                                            \n\
+@%p1	bra	$L__BB0_2;                                                  \n\
+	bra	$L__BB0_3;                                                      \n\
+$L__BB0_2:                              // %g.f.threadidy_simt_loop   \n\
+	cvt.s64.s32	%rd1, %r8;                                              \n\
+	shl.b64	%rd2, %rd1, 2;                                              \n\
+	mov.u64	%rd3, g_2E_f;                                               \n\
+	add.u64	%rd4, %rd3, %rd2;                                           \n\
+	mov.u32	%r10, 1073741824;                                           \n\
+	st.global.u32	[%rd4], %r10;                                         \n\
+$L__BB0_3:               tp.gt.s32	%p2, %r8, 7;                      \n\
+@%p2	bra	$L__BB0_5;                                                  \n\
+// BB#4:                                // %g.threadidy_simt_loop     \n\
+	shl.b32	%r12, %r7, 3;                                               \n\
+	add.u32	%r14, %r12, %r8;                                            \n\
+	cvt.s64.s32	%rd5, %r14;                                             \n\
+	shl.b64	%rd6, %rd5, 2;                                              \n\
+	add.u64	%rd7, %rd0, %rd6;                                           \n\
+	cvt.s64.s32	%rd8, %r8;                                              \n\
+	shl.b64	%rd9, %rd8, 2;                                              \n\
+	mov.u64	%rd10, g_2E_f;                                              \n\
+	add.u64	%rd11, %rd10, %rd9;                                         \n\
+	ld.global.f32	%f0, [%rd11];                                         \n\
+	st.global.f32	[%rd7], %f0;                                          \n\
+$L__BB0_5:                              // %g.blockidy_simt_afterloop \n\
+	exit;                                                               \n\
+}                                                                     \n\
+";
 int f( buffer_t *input, buffer_t *result, int N )
 {
     const char* entry_name = "kernel";
@@ -328,12 +383,14 @@ int f( buffer_t *input, buffer_t *result, int N )
     // __copy_to_dev(input);
 
     // Invoke
-    void* cuArgs[] = { &N, &result->dev };
+    // void* cuArgs[] = { &N, &result->dev };
+    // void* cuArgs[] = { &N, &result->dev };
     __dev_run(
         entry_name,
         blocksX,  blocksY,  blocksZ,
         threadsX, threadsY, threadsZ,
-        0, // sharedMemBytes
+        // 0, // sharedMemBytes
+        32,
         cuArgs
     );
 
