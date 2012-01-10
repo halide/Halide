@@ -182,8 +182,17 @@ void __init(const char* ptx_src)
         
         CUdevice dev;
         // Get device
-        CHECK_CALL( cuDeviceGet(&dev, 0), "cuDeviceGet" );
-        
+        CUresult status;
+        for (int id = 2; id >= 0; id--) {
+            // Try to get a device >0 first, since 0 should be our display device
+            status = cuDeviceGet(&dev, id);
+            if ( status == CUDA_SUCCESS ) break;
+        }
+        if (status != CUDA_SUCCESS) {
+            fprintf(stderr, "Failed to get device\n");
+            exit(-1);
+        }
+
         fprintf(stderr, "Got device %d, about to create context\n", dev);
 
         // Create context
@@ -222,6 +231,7 @@ CUdeviceptr __dev_malloc(size_t bytes) {
     snprintf(msg, 256, "dev_malloc (%zu bytes)", bytes );
     CHECK_CALL( cuMemAlloc(&p, bytes), msg );
     fprintf( stderr, "   returned %p\n", (void*)p );
+    assert(p);
     return p;
 }
 
@@ -231,9 +241,11 @@ void __dev_malloc_if_missing(buffer_t* buf) {
             buf->dims[0], buf->dims[1], buf->dims[2], buf->dims[3], buf->elem_size);
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     buf->dev = __dev_malloc(size);
+    assert(buf->dev);
 }
 
 void __copy_to_dev(buffer_t* buf) {
+    assert(buf->host && buf->dev);
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     char msg[256];
     snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p", size, buf->host, (void*)buf->dev );
@@ -241,6 +253,7 @@ void __copy_to_dev(buffer_t* buf) {
 }
 
 void __copy_to_host(buffer_t* buf) {
+    assert(buf->host && buf->dev);
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     char msg[256];
     snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
