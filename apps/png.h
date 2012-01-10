@@ -16,7 +16,7 @@ void convert(uint16_t in, uint8_t &out) {out = in >> 8;}
 void convert(uint16_t in, uint16_t &out) {out = in;}
 void convert(uint16_t in, float &out) {out = in/65535.0f;}
 void convert(float in, uint8_t &out) {out = (uint8_t)(in*255.0f);}
-void convert(float in, uint16_t &out) {out = (uint8_t)(in*65535.0f);}
+void convert(float in, uint16_t &out) {out = (uint16_t)(in*65535.0f);}
 void convert(float in, float &out) {out = in;}
 
 template<typename T>
