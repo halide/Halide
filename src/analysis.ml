@@ -17,7 +17,8 @@ let rec binop_remainder_modulus x y op =
     let g = gcd xm ym in
     if g = 0 then (0, 0) else (((op xr yr) + g) mod g, g)
 
-and compute_remainder_modulus = function
+and compute_remainder_modulus expr =   
+  let (m, r) = match expr with
   | IntImm(x) | UIntImm(x) -> (x, 0)
   | Cast(t, x) -> compute_remainder_modulus x 
   | Bop(Add, x, y) -> binop_remainder_modulus x y ( + )
@@ -29,6 +30,12 @@ and compute_remainder_modulus = function
       (xr * yr, xr * ym)
     else if ym = 0 then
       (yr * xr, yr * xm)
+    else if (xr, yr) = (0, 0) then
+      (0, xm*ym)
+    else if xr = 0 then
+      (0, xm)
+    else if yr = 0 then
+      (0, ym) 
     else 
       binop_remainder_modulus x y ( * )
   | Bop _ | Load _ | Var _ | ExtractElement _ -> (0, 1)
@@ -36,11 +43,15 @@ and compute_remainder_modulus = function
   | Broadcast _ -> raise ModulusOfBroadcast
   | Ramp _ -> raise ModulusOfRamp
   | e -> raise ModulusOfNonInteger
+  in
+  (* Printf.printf "%s -> %d %d\n" (string_of_expr expr) m r; *)
+  (m, r)
 
 (* Reduces an expression modulo n *)
 (* returns an integer in [0, m-1], or m if unknown *)
 let reduce_expr_modulo expr n = 
   let (r, m) = compute_remainder_modulus expr in
+  (* Printf.printf "%s mod %d = (%d, %d)\n" (string_of_expr expr) n r m; *)
   if (m mod n = 0) then Some (r mod n) else None
 
 let fold_children_in_expr mutator combiner base_case = function
