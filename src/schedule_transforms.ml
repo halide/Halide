@@ -25,7 +25,7 @@ let novice = {
     let (reduction_args, is_update) = 
       if String.contains func '.' then
         match find_function (parent_name func) env with 
-          | (_, _, Reduce (_, _, _, domain)) ->
+          | (_, _, Reduce (_, _, update_func, domain)) when update_func = (base_name func) ->
               (List.map (fun (n, _, _) -> (Int 32, n)) domain, true)
           | _ -> ([], false)
       else ([], false)
@@ -94,9 +94,11 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
     let has_parent = String.contains func '.' in
 
     let is_reduction_update =
-      if has_parent then
-        is_reduce (parent_name func)
-      else
+      if has_parent then begin
+        match find_function (parent_name func) env with
+          | (_, _, Reduce (_, _, update_name, _)) when update_name = base_name func -> true
+          | _ -> false
+      end else
         false
     in    
 

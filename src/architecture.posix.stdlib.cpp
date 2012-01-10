@@ -57,7 +57,7 @@ struct work {
 };
 
 #define MAX_JOBS 4096
-#define THREADS 8
+#define THREADS 4
 struct {
     work jobs[MAX_JOBS];
     int head;
@@ -201,6 +201,24 @@ float ceil_f32(float x) {
 
 float round_f32(float x) {
     return roundf(x);
+}
+
+#include <sys/time.h>
+
+int currentTime() {
+    static bool initialized = false;
+    static timeval start;
+    if (!initialized) {
+        gettimeofday(&start, NULL);
+        initialized = true;
+        return 0;
+    } else {
+        timeval now;
+        gettimeofday(&now, NULL);
+        return
+            (now.tv_sec - start.tv_sec)*1000 + 
+            (now.tv_usec - start.tv_usec)/1000;
+    }
 }
 
 }
