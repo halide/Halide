@@ -579,8 +579,10 @@ let rec make_cg_context c m b sym_table arch_state =
     cg_scatter e buf (Ramp(idx, IntImm 1, vector_elements (val_type_of_expr e)))
 
   and cg_scatter e buf idx =
+    let base          = sym_get buf in
+    let addrspace     = address_space (type_of base) in
     let elem_type     = type_of_val_type (element_val_type (val_type_of_expr e)) in
-    let base_ptr      = build_pointercast (sym_get buf) (pointer_type elem_type) "" b in
+    let base_ptr      = build_pointercast base (qualified_pointer_type elem_type addrspace) "" b in
     let addr_vec      = cg_expr idx in
     let value         = cg_expr e in
     let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
@@ -635,8 +637,10 @@ let rec make_cg_context c m b sym_table arch_state =
     cg_gather t buf (Ramp(idx, IntImm 1, vector_elements t))
 
   and cg_gather t buf idx =
+    let base          = sym_get buf in
+    let addrspace     = address_space (type_of base) in
     let elem_type     = type_of_val_type (element_val_type t) in
-    let base_ptr      = build_pointercast (sym_get buf) (pointer_type elem_type) "" b in
+    let base_ptr      = build_pointercast (base) (qualified_pointer_type elem_type addrspace) "" b in
     let addr_vec      = cg_expr idx in
     let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
     let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
