@@ -136,12 +136,12 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
     // Get a color matrix by linearly interpolating between two
     // calibrated matrices using inverse kelvin.
 
-    Func matrix;
+    Func matrix("matrix");
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
     matrix(x, y) = (matrix_3200(x, y) * alpha + 
                     matrix_7000(x, y) * (1 - alpha));
 
-    Func corrected;
+    Func corrected("corrected");
     RVar j(0, 3);
     corrected(x, y, c) = Cast<int16_t>(Sum(matrix(j, c)*Cast<float>(input(x, y, j))) + matrix(3, c));
     return corrected;
@@ -230,7 +230,8 @@ int main(int argc, char **argv) {
     std::vector<Func> funcs = output.rhs().funcs();    
 
     for (size_t i = 0; i < funcs.size(); i++) {
-      if (funcs[i].name() == "curve") funcs[i].root();
+      if (funcs[i] == processed) {} // inline
+      else if (funcs[i].name() == "curve") funcs[i].root();
       else funcs[i].chunk(xo);
       //if (funcs[i].returnType() == UInt(8)) funcs[i].vectorize(x, 16);
       //if (funcs[i].returnType() == Int(16)) funcs[i].vectorize(x, 8);
