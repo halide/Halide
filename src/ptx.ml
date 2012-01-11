@@ -63,10 +63,10 @@ let start_state () =
     Hashtbl.add buf_names v n
   and buf_get n =
     try Hashtbl.find bufs n
-    with Not_found -> raise (Wtf ("buffer " ^ n ^ " not found"))
+    with Not_found -> failwith ("buffer " ^ n ^ " not found")
   and buf_get_name v =
     try Hashtbl.find buf_names v
-    with Not_found -> raise (Wtf ("buffer " ^ (value_name v) ^ " not found"))
+    with Not_found -> failwith ("buffer " ^ (value_name v) ^ " not found")
   in
   let buf_remove n =
     let v = buf_get n in
@@ -215,7 +215,7 @@ let cg_dev_kernel con stmt =
           | TypeKind.Float   -> float_type dev_ctx
           | TypeKind.Integer -> integer_type dev_ctx (integer_bitwidth t)
           | TypeKind.Pointer -> raw_buffer_t dev_ctx
-          | _ -> raise (Wtf "Trying to build PTX device closure with unsupported type")
+          | _ -> failwith "Trying to build PTX device closure with unsupported type"
       end
       closure_types
   in

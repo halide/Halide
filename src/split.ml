@@ -10,7 +10,7 @@ let rec split_stmt (var:string) (outer:string) (inner:string) (factor:int) (stmt
   | For (v, min, n, order, stmt) when v = var ->
     if (reduce_expr_modulo min factor <> Some 0 ||
         reduce_expr_modulo n factor <> Some 0) then 
-      raise (Wtf("Couldn't tell if loop bounds are a multiple of n"))
+      failwith "Couldn't tell if loop bounds are a multiple of n"
     else 
       For (outer, min /~ (IntImm factor), n /~ (IntImm factor), order, 
            For (inner, (IntImm 0), (IntImm factor), order, 

@@ -303,7 +303,7 @@ let bounds_of_expr_in_env env expr =
                          Bop (Max, maxa, maxb))            
               | _ -> Unbounded
           end
-          | [] -> raise (Wtf "Empty MakeVector encountered")
+          | [] -> failwith "Empty MakeVector encountered"
         in build_range l
       end
           

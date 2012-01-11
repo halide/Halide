@@ -240,7 +240,7 @@ let rec find_names_in_stmt internal ptrsize stmt =
   | Print (fmt, args) ->
       string_int_set_concat (List.map rece args)
   | Provide (fn, _, _) ->
-      raise (Wtf "Encountered a provide during cg. These should have been lowered away.")
+      failwith "Encountered a provide during cg. These should have been lowered away."
 and find_names_in_expr internal ptrsize expr =
   let rece = find_names_in_expr internal ptrsize in
   match expr with 
@@ -296,8 +296,8 @@ let rec deduplicate_lanes expr = match expr with
   | Load (t, buf, idx) when is_vector idx ->
       Load (vector_of_val_type (element_val_type t) ((vector_elements t)/2), 
             buf, deduplicate_lanes idx)
-  | MakeVector _ -> raise (Wtf "Can't deduplicate the lanes of a MakeVector")
-  | Ramp _ -> raise (Wtf "Can't deduplicate the lanes of a generic Ramp")
-  | Var _ -> raise (Wtf "Can't deduplicate the lanes of a generic Var")
+  | MakeVector _ -> failwith "Can't deduplicate the lanes of a MakeVector"
+  | Ramp _ -> failwith "Can't deduplicate the lanes of a generic Ramp"
+  | Var _ -> failwith "Can't deduplicate the lanes of a generic Var"
   | expr -> mutate_children_in_expr deduplicate_lanes expr
 

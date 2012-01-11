@@ -44,7 +44,7 @@ let rec resolve_name (context: string) (var: string) (schedule: schedule_tree) =
       (* Cut the last item off the context and recurse *)
       let last_dot =
         try (String.rindex context '.')
-        with Not_found -> raise (Wtf ("Could not resolve name " ^ var ^ " in " ^ context))
+        with Not_found -> failwith ("Could not resolve name " ^ var ^ " in " ^ context)
       in    
       let parent = String.sub context 0 last_dot in
       resolve_name parent var schedule      
@@ -58,7 +58,7 @@ let make_function_body (name:string) (env:environment) =
   let pre = prefix_name_expr prefix in
   let renamed_args = List.map (fun (t, n) -> (t, prefix ^ n)) args in
   let renamed_body = match body with
-    | Extern -> raise (Wtf ("Can't lookup body of extern function: " ^ name))
+    | Extern -> failwith ("Can't lookup body of extern function: " ^ name)
     | Pure expr -> Pure (pre expr)
     | Reduce (init_expr, modified_args, update_func, reduction_domain) -> 
         let prefix_update = prefix_name_expr (prefix ^ update_func ^ ".") in
@@ -105,8 +105,8 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
           let (args, _, body) = make_function_body func env in
           (* Just replace all calls to the function with the body of the function *)
           begin match body with 
-            | Extern -> raise (Wtf ("Can't inline extern function " ^ func))
-            | Reduce _ -> raise (Wtf ("Can't inline a reduction " ^ func))
+            | Extern -> failwith ("Can't inline extern function " ^ func)
+            | Reduce _ -> failwith ("Can't inline a reduction " ^ func)
             | Pure expr ->
                 let rec inline_calls_in_expr = function
                   | Call (t, n, call_args) when n = func -> 
@@ -154,7 +154,7 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
         let rec fix_stmt stmt = mutate_children_in_stmt fix_expr fix_stmt stmt in
         fix_stmt stmt
       end
-      | _ -> raise (Wtf "I don't know how to schedule this yet")
+      | _ -> failwith "I don't know how to schedule this yet"
   in
   (* Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);   *)
   scheduled_call
@@ -196,7 +196,7 @@ and realize func consume env schedule =
   let buffer_size = List.fold_right (fun (min, size) old_size -> size *~ old_size) strides (IntImm 1) in
 
   match body with
-    | Extern -> raise (Wtf ("Can't lower extern function call " ^ func))          
+    | Extern -> failwith ("Can't lower extern function call " ^ func)
     | Pure body ->
         let inner_stmt = Provide (body, func, arg_vars) in
         let produce = List.fold_left wrap inner_stmt sched_list in
@@ -224,7 +224,7 @@ and realize func consume env schedule =
         let (pure_update_args, _, update_body) = make_function_body update_func env in
         let update_expr = match update_body with
           | Pure expr -> expr
-          | _ -> raise (Wtf "The update step of a reduction must be pure")
+          | _ -> failwith "The update step of a reduction must be pure"
         in
         
         (* remove recursion in the update expr *)
@@ -305,7 +305,7 @@ let rec extract_bounds_soup env var_env bounds = function
               (* fixup any recursive bounds (TODO: this is a giant hack) *)
               let fix range var =
                 match range with
-                  | Unbounded -> raise (Wtf ("Reduction writes to unbounded region of " ^ func))
+                  | Unbounded -> failwith ("Reduction writes to unbounded region of " ^ func)
                   | Range (min, max) -> begin
                     let rec bad_expr = function
                       | Var (t, v) when v = func ^ "." ^ var ^ ".extent" -> true
@@ -322,7 +322,7 @@ let rec extract_bounds_soup env var_env bounds = function
                   end                      
               in List.map2 fix region args
                 
-          | (Reduce _, _) -> raise (Wtf "Could not understand the produce side of a reduction")
+          | (Reduce _, _) -> failwith "Could not understand the produce side of a reduction"
           | _ -> region
         in
 
@@ -338,7 +338,7 @@ let rec extract_bounds_soup env var_env bounds = function
           let add_bound bounds arg = function
             | Range (min, max) ->              
                 (func, arg, min, max)::bounds
-            | _ -> raise (Wtf ("Could not compute bounds of " ^ func ^ "." ^ arg))
+            | _ -> failwith ("Could not compute bounds of " ^ func ^ "." ^ arg)
           in 
           List.fold_left2 add_bound bounds args region
         end

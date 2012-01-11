@@ -99,7 +99,7 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
 
       | Debug (e, prefix, args) -> Debug (vec e, prefix, List.map vec args)
           
-      | _ -> raise (Wtf("Can't vectorize vector code"))
+      | _ -> failwith "Can't vectorize vector code"
     in vec expr
 
 let vectorize_expr (var:string) (min:expr) (width:int) (expr:expr) = 
@@ -114,7 +114,7 @@ let rec vectorize_stmt var stmt =
       | Block l -> Block (map vec l)
       | Store (expr, buf, idx) -> Store (vec_expr expr, buf, vec_expr idx)
       | Provide (expr, func, args) -> Provide (vec_expr expr, func, List.map vec_expr args)
-      | Pipeline _ -> raise (Wtf "Can't vectorize an inner pipeline (yet?)")
+      | Pipeline _ -> failwith "Can't vectorize an inner pipeline (yet?)"
       | Print (prefix, args) -> Print (prefix, List.map vec_expr args)
   in
   match stmt with        
@@ -124,7 +124,7 @@ let rec vectorize_stmt var stmt =
         | IntImm size
         | UIntImm size ->
           For (name, IntImm 0, IntImm 1, false, vectorize_stmt_inner min size stmt)
-        | _ -> raise (Wtf "Can't vectorize map with non-constant size")
+        | _ -> failwith "Can't vectorize map with non-constant size"
       end
     | For (name, min, n, order, stmt) -> For (name, min, n, order, vectorize_stmt var stmt)
     | Block l -> Block (map (vectorize_stmt var) l)

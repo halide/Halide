@@ -49,7 +49,7 @@ let type_of_val_type c t = match t with
 (* get references to the support functions *)
 let get f name = match f name with
   | Some v -> v
-  | None -> raise (Wtf ("Couldn't find " ^ name ^ " in module"))
+  | None -> failwith ("Couldn't find " ^ name ^ " in module")
 
 let get_function m = get (fun nm -> lookup_function nm m)
 
@@ -272,7 +272,7 @@ let codegen_c_header e header_file =
     | UInt bits -> "uint" ^ (string_of_int bits) ^ "_t"
     | Float 32 -> "float"
     | Float 64 -> "double"
-    | _ -> raise (Wtf "Bad type for toplevel argument")
+    | _ -> failwith "Bad type for toplevel argument"
   in
   let string_of_arg = function
     | Scalar (n, t) -> (string_of_type t) ^ " " ^ (String.sub n 1 ((String.length n)-1))
