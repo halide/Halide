@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +9,8 @@ extern "C" {
   #include "curved.h"
 }
 #include "../Util.h"
+#include "../png.h"
+using namespace FImage;
 
 int main(int argc, char **argv) {
     Image<uint16_t> input = load<uint16_t>(argv[1]);
@@ -28,6 +31,8 @@ int main(int argc, char **argv) {
     gettimeofday(&t1, NULL);
     curved(atof(argv[2]), atof(argv[3]), atof(argv[4]),
            matrix_3200, matrix_7000, input, output);
+
+    //curved(atof(argv[2]), atof(argv[3]), input, output);
     gettimeofday(&t2, NULL);
 
     printf("%3.3f ms\n", (t2.tv_sec - t1.tv_sec)*1000.0f + (t2.tv_usec - t1.tv_usec)/1000.0f);
