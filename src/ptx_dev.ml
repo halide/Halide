@@ -94,11 +94,11 @@ let rec cg_stmt con = function
             let barrier = match base_name name with
               (* | "threadidx" -> 1 *)
               | "threadidy" -> 0
-              | n -> raise (Wtf ("No barriers defined for ParFor over " ^ n))
+              | n -> failwith ("No barriers defined for ParFor over " ^ n)
             in
             let syncthreads = match lookup_function "llvm.ptx.bar.sync" con.m with
               | Some f -> f
-              | None -> raise (Wtf "failed to find llvm.ptx.bar.sync intrinsic")
+              | None -> failwith "failed to find llvm.ptx.bar.sync intrinsic"
             in
             ignore (build_call syncthreads [| const_int (i32_type con.c) barrier |] "" con.b)
           end;
@@ -148,13 +148,13 @@ let rec cg_stmt con = function
   | stmt -> con.cg_stmt stmt
 
 let rec codegen_entry dev_ctx dev_mod cg_entry entry =
-  raise (Wtf "Direct use of Ptx_dev.codegen_entry is not supported")
+  failwith "Direct use of Ptx_dev.codegen_entry is not supported"
 
 let malloc con name count elem_size =
   let zero = const_zero con.c in
   let size = match constant_fold_expr (count *~ elem_size) with
     | IntImm sz -> sz
-    | _ -> raise (Wtf "")
+    | _ -> failwith ""
   in
   Printf.printf "malloc %s[%d bytes] on PTX device\n%!" name size;
   con.arch_state.shared_mem_bytes := !(con.arch_state.shared_mem_bytes) + size;

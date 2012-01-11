@@ -21,19 +21,19 @@ let codegen_to_c_callable e =
   let w = Cg.codegen_c_wrapper c m f in
   (c,m,w)
 
-let lower (f:string) (env:environment) (sched: schedule_tree) (debug: int) =
+let lower (f:string) (env:environment) (sched: schedule_tree) =
   (* Printexc.record_backtrace true; *)
 
   begin
     Printf.printf "Lowering function\n";
-    let lowered = lower_function f env sched (if (debug = 1) then true else false) in
+    let lowered = lower_function f env sched in
     (* Printf.printf "Breaking false dependences\n";
      let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
      Printf.printf "Constant folding\n";
      let lowered = Constant_fold.constant_fold_stmt lowered in
      Printf.printf "Breaking false dependences\n";
      let lowered = Break_false_dependence.break_false_dependence_stmt lowered in  *)
-    Printf.printf "Constant folding\n";
+    Printf.printf "Before constant folding:\n%s\n" (string_of_stmt lowered);
     let lowered = Constant_fold.constant_fold_stmt lowered in 
     Printf.printf "Resulting stmt:\n%s\n" (string_of_stmt lowered);
     lowered
@@ -88,6 +88,11 @@ let compile_to_file name args stmt =
     Printf.printf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
     raise x
   end
+
+let cast_to_int x = match val_type_of_expr x with
+  | Int 32 -> x
+  | _ -> Cast (Int 32, x)
+
 
 let _ = 
   (* Make IR nodes *)
@@ -190,3 +195,4 @@ let _ =
   Callback.register "makeRootTransform" (fun func -> root_schedule func);
   Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);  
   Callback.register "makeRandomTransform" (fun func seed -> random_schedule func seed);
+  

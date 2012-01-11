@@ -41,9 +41,6 @@ let rec split_name n =
     (String.sub n 0 i) :: (split_name (String.sub n (i+1) ((String.length n)-(i+1))))
   with Not_found -> [n]
 
-(* A general-purpose exception *)
-exception Wtf of string
-
 let list_zip a b = List.map2 (fun x y -> (x, y)) a b
 
 let list_zip3 a b c = List.map2 (fun (x, y) z -> (x, y, z)) (list_zip a b) c
@@ -70,7 +67,7 @@ let rec partial_sort (lt: 'a -> 'a -> bool option) (l : 'a list) =
       elem::(partial_sort lt (before @ after))
     end else begin
       match after with
-        | [] -> raise (Wtf "Invalid partial ordering")
+        | [] -> failwith "Invalid partial ordering"
         | first::rest -> select_smallest (elem::before) first rest
     end
   in

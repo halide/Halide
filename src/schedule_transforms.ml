@@ -229,7 +229,7 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
     
       let new_found_calls = 
         match body with 
-          | Extern -> raise (Wtf "enumerating schedules for extern function")
+          | Extern -> failwith "enumerating schedules for extern function"
           | Pure expr -> find_calls_expr expr
           | Reduce (init_expr, update_args, update_func, bounds) ->
               let s = StringSet.add (func ^ "." ^ update_func) (find_calls_expr init_expr) in
@@ -424,7 +424,7 @@ let vectorize_schedule (func: string) (var: string) (guru: scheduling_guru) =
     | Parallel (v, min, size) when v = var ->
         begin match size with 
           | IntImm x -> Vectorized (v, min, x)
-          | _ -> raise (Wtf "Can't vectorize a var with non-const bounds")
+          | _ -> failwith "Can't vectorize a var with non-const bounds"
         end
     | x -> x
   in mutate_sched_list_guru func (List.map mutate) serialized guru
@@ -438,7 +438,7 @@ let unroll_schedule (func: string) (var: string) (guru: scheduling_guru) =
     | Parallel (v, min, size) when v = var ->
         begin match size with 
           | IntImm x -> Unrolled (v, min, x)
-          | _ -> raise (Wtf "Can't unroll a var with non-const bounds")
+          | _ -> failwith "Can't unroll a var with non-const bounds"
         end
     | x -> x
   in mutate_sched_list_guru func (List.map mutate) serialized guru
@@ -455,7 +455,7 @@ let parallel_schedule (func: string) (var: string) (guru: scheduling_guru) =
 let split_schedule (func: string) (var: string) (outer: string) (inner: string) (n: expr) (guru: scheduling_guru) =
   let int_n = match n with
     | IntImm x -> x
-    | _ -> raise (Wtf "Can only handle const integer splits for now")
+    | _ -> failwith "Can only handle const integer splits for now"
   in
   let serialized = Printf.sprintf "split %s %s %s %s %d" func var outer inner int_n in
   let rec mutate = function
@@ -470,14 +470,14 @@ let split_schedule (func: string) (var: string) (outer: string) (inner: string) 
           (Serial (outer, IntImm 0, (size +~ n -~ (IntImm 1)) /~ n))::
           rest
     | first::rest -> first::(mutate rest)
-    | [] -> raise (Wtf ("Did not find variable " ^ var ^ " in the schedule for " ^ func ^ "\n%!"))
+    | [] -> failwith ("Did not find variable " ^ var ^ " in the schedule for " ^ func ^ "\n%!")
   in mutate_sched_list_guru func mutate serialized guru
 
 (* Push one var to be outside another *)
 let transpose_schedule (func: string) (outer: string) (inner: string) (guru: scheduling_guru) = 
   let serialized = Printf.sprintf "transpose %s %s %s" func outer inner in
   let rec mutate x l = match l with
-    | [] -> raise (Wtf (inner ^ " does not exist in this schedule"))
+    | [] -> failwith (inner ^ " does not exist in this schedule")
     | ((Serial (v, _, _))::rest)
     | ((Parallel (v, _, _))::rest)
     | ((Vectorized (v, _, _))::rest) 
@@ -485,7 +485,7 @@ let transpose_schedule (func: string) (outer: string) (inner: string) (guru: sch
         if v = outer then mutate (Some (List.hd l)) rest
         else if v = inner then match x with 
           | Some x -> (List.hd l) :: (x :: rest)
-          | None -> raise (Wtf (outer ^ "is already outside" ^ inner ^ "\n"))
+          | None -> failwith (outer ^ "is already outside" ^ inner ^ "\n")
         else (List.hd l)::(mutate x rest)
     | (first::rest) -> first :: (mutate x rest)  
   in mutate_sched_list_guru func (mutate None) serialized guru
@@ -504,7 +504,7 @@ let root_schedule (func: string) (guru: scheduling_guru) =
     (* If we found something acceptable, return it *)
     | (Some x, []) -> [x] 
     (* Otherwise freak out *)
-    | _ -> raise (Wtf ("Could not schedule " ^ func ^ " as root"))
+    | _ -> failwith ("Could not schedule " ^ func ^ " as root")
   in mutate_legal_call_schedules_guru func (mutate None) serialized guru
 
 let chunk_schedule (func: string) (var: string) (guru: scheduling_guru) = 
@@ -520,7 +520,7 @@ let chunk_schedule (func: string) (var: string) (guru: scheduling_guru) =
     (* If we found something acceptable, return it *)
     | (Some x, []) -> [x]
     (* Otherwise freak out *)
-    | _ -> raise (Wtf ("Could not schedule " ^ func ^ " as chunked over " ^ var))
+    | _ -> failwith ("Could not schedule " ^ func ^ " as chunked over " ^ var)
   in mutate_legal_call_schedules_guru func (mutate None) serialized guru
 
 let random_schedule (func: string) (seed: int) (guru: scheduling_guru) = {
@@ -640,7 +640,7 @@ let parse_guru (str: string list) =
       | "unroll"    -> (Scanf.sscanf str "unroll %s %s" unroll_schedule) guru
       | "parallel"  -> (Scanf.sscanf str "parallel %s %s" parallel_schedule) guru
       | "random"    -> (Scanf.sscanf str "random %s %d" random_schedule) guru
-      | _ -> raise (Wtf ("Unrecognized guru type: " ^ str))
+      | _ -> failwith ("Unrecognized guru type: " ^ str)
   in
   List.fold_left parse_next novice str 
 
