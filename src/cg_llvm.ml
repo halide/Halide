@@ -52,7 +52,14 @@ module CodegenForArch ( Arch : Architecture ) = struct
 type arch_state = Arch.state
 type context = arch_state cg_context
 
-let dbgprint = true
+let dbgprint = 
+  let str = try Sys.getenv "HL_DEBUG_CODEGEN" with Not_found -> "0" in
+  match str with
+    | "1" -> true
+    | "0" -> false
+    | _ -> 
+        Printf.printf "Could not understand HL_DEBUG_CODEGEN: %s. Should be 0 or 1\n" str;
+        false
 
 (* Algebraic type wrapper for LLVM comparison ops *)
 type cmp =

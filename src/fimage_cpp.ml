@@ -21,12 +21,12 @@ let codegen_to_c_callable e =
   let w = Cg.codegen_c_wrapper c m f in
   (c,m,w)
 
-let lower (f:string) (env:environment) (sched: schedule_tree) (debug: int) =
+let lower (f:string) (env:environment) (sched: schedule_tree) =
   (* Printexc.record_backtrace true; *)
 
   begin
     Printf.printf "Lowering function\n";
-    let lowered = lower_function f env sched (if (debug = 1) then true else false) in
+    let lowered = lower_function f env sched in
     (* Printf.printf "Breaking false dependences\n";
      let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
      Printf.printf "Constant folding\n";
