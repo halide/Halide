@@ -51,7 +51,7 @@ type schedule_tree =
 
 (* What is the extent of a schedule over a given dimension *)
 let rec stride_for_dim dim = function
-  | [] -> raise (Wtf ("failed to find schedule for dimension " ^ dim))
+  | [] -> failwith ("failed to find schedule for dimension " ^ dim)
   | hd::rest ->
       begin match hd with
         | Serial (d, min, n)
@@ -75,7 +75,7 @@ let stride_list (sched:schedule list) (args:string list) =
 
 let find_schedule (tree:schedule_tree) (name:string) =
   let rec find (tree:schedule_tree) = function
-    | [] -> raise (Wtf "find_schedule of empty list")
+    | [] -> failwith "find_schedule of empty list"
     | (first::rest) -> 
         let (Tree map) = tree in
         let (cs, sl, subtree) = StringMap.find first map in
@@ -85,14 +85,14 @@ let find_schedule (tree:schedule_tree) (name:string) =
   try 
     find tree name_parts 
   with
-    | Not_found -> raise (Wtf (name ^ " not found in schedule tree"))
+    | Not_found -> failwith (name ^ " not found in schedule tree")
     
 
 
 let rec set_schedule
       (tree: schedule_tree) (call: string) (call_sched: call_schedule) (sched_list: schedule list) =
   let rec set tree = function
-    | [] -> raise (Wtf "set_schedule of empty list")
+    | [] -> failwith "set_schedule of empty list"
     | (first::rest) ->
         let (Tree map) = tree in
         let (old_cs, old_sl, old_tree) = 

@@ -79,9 +79,6 @@ namespace FImage {
         FuncRef operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d, const Expr &e) {return FuncRef(*this, a, b, c, d, e);}  
         FuncRef operator()(const std::vector<Expr> &args) {return FuncRef(*this, args);}
 
-        // Print every time this function gets evaluated
-        void trace();
-        
         // Generate an image from this function by Jitting the IR and running it.
         DynImage realize(int a);
         DynImage realize(int a, int b);

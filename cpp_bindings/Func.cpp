@@ -50,7 +50,7 @@ namespace FImage {
     ML_FUNC2(addDefinitionToEnv);
     
     ML_FUNC4(makeSchedule);
-    ML_FUNC4(doLower);
+    ML_FUNC3(doLower);
 
     ML_FUNC0(makeNoviceGuru);
     ML_FUNC1(loadGuruFromFile);
@@ -69,16 +69,24 @@ namespace FImage {
         Contents(const Func &f) :
             f(f) {}
         Contents(const Func &f, const Expr &a) :
-            f(f), args {a} {}
+            f(f), args {a} {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b) :
-            f(f), args {a, b} {}
+            f(f), args {a, b} {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c) :
-            f(f), args {a, b, c} {}
+            f(f), args {a, b, c} {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d) :
-            f(f), args {a, b, c, d} {}
+            f(f), args {a, b, c, d} {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d, const Expr &e) :
-            f(f), args {a, b, c, d, e} {}
-        Contents(const Func &f, const std::vector<Expr> &args) : f(f), args(args) {}
+            f(f), args {a, b, c, d, e} {fixArgs();}
+        Contents(const Func &f, const std::vector<Expr> &args) : f(f), args(args) {fixArgs();}
+
+        void fixArgs() {
+            for (size_t i = 0; i < args.size(); i++) {
+                if (args[i].type() != Int(32)) {
+                    args[i] = Cast<int>(args[i]);
+                }
+            }
+        }
 
         // A pointer to the function object that this lhs defines.
         Func f;
@@ -87,19 +95,19 @@ namespace FImage {
 
     struct Func::Contents {
         Contents() :
-            name(uniqueName('f')), functionPtr(NULL), tracing(false) {}
+            name(uniqueName('f')), functionPtr(NULL) {}
         Contents(Type returnType) : 
-            name(uniqueName('f')), returnType(returnType), functionPtr(NULL), tracing(false) {}
+            name(uniqueName('f')), returnType(returnType), functionPtr(NULL) {}
       
         Contents(std::string name) : 
-            name(name), functionPtr(NULL), tracing(false) {}
+            name(name), functionPtr(NULL) {}
         Contents(std::string name, Type returnType) : 
-            name(name), returnType(returnType), functionPtr(NULL), tracing(false) {}
+            name(name), returnType(returnType), functionPtr(NULL) {}
       
         Contents(const char * name) : 
-            name(name), functionPtr(NULL), tracing(false) {}
+            name(name), functionPtr(NULL) {}
         Contents(const char * name, Type returnType) : 
-            name(name), returnType(returnType), functionPtr(NULL), tracing(false) {}
+            name(name), returnType(returnType), functionPtr(NULL) {}
         
         const std::string name;
         
@@ -122,9 +130,6 @@ namespace FImage {
         // The compiled form of this function
         mutable void (*functionPtr)(void *); 
         
-        // Should this function be compiled with tracing enabled
-        bool tracing;
-
     };    
 
     Range operator*(const Range &a, const Range &b) {
@@ -326,10 +331,6 @@ namespace FImage {
             *environment = addScatterToDefinition(*environment, name(), uniqueName('p'), 
                                                   update_args, r.node(), reduction_args);
         }
-    }
-
-    void Func::trace() {
-        contents->tracing = true;
     }
 
     void *watchdog(void *arg) {
@@ -541,7 +542,7 @@ namespace FImage {
         
         stmt = doLower((name()), 
                        *Func::environment,
-                       sched, contents->tracing);
+                       sched);
         
         // Create a function around it with the appropriate number of args
         printf("\nMaking function...\n");           

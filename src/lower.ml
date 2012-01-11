@@ -6,6 +6,13 @@ open Util
 open Vectorize
 open Bounds
 
+let trace_verbosity = 
+  let str = try Sys.getenv "HL_TRACE" with Not_found -> "0" in
+  try int_of_string str with Failure _ -> begin
+    Printf.printf "Could not understand tracing level %s\n" str;
+    0
+  end
+
 (* Lowering produces references to names either in the context of the
    callee or caller. The ones in the context of the caller may in fact
    refer to ones in the caller of the caller, or so on up the
@@ -37,13 +44,13 @@ let rec resolve_name (context: string) (var: string) (schedule: schedule_tree) =
       (* Cut the last item off the context and recurse *)
       let last_dot =
         try (String.rindex context '.')
-        with Not_found -> raise (Wtf ("Could not resolve name " ^ var ^ " in " ^ context))
+        with Not_found -> failwith ("Could not resolve name " ^ var ^ " in " ^ context)
       in    
       let parent = String.sub context 0 last_dot in
       resolve_name parent var schedule      
   end
         
-let make_function_body (name:string) (env:environment) (debug:bool) =
+let make_function_body (name:string) (env:environment) =
   Printf.printf "make_function_body %s\n%!" name;
   
   let (args, return_type, body) = find_function name env in
@@ -51,14 +58,9 @@ let make_function_body (name:string) (env:environment) (debug:bool) =
   let pre = prefix_name_expr prefix in
   let renamed_args = List.map (fun (t, n) -> (t, prefix ^ n)) args in
   let renamed_body = match body with
-    | Extern -> raise (Wtf ("Can't lookup body of extern function: " ^ name))
-    | Pure expr -> 
-        let expr = if debug then
-            Debug (expr, "### Evaluating " ^ name ^ " at ", List.map (fun (t, n) -> Var (t, n)) renamed_args) 
-          else expr in
-        Pure (pre expr)
+    | Extern -> failwith ("Can't lookup body of extern function: " ^ name)
+    | Pure expr -> Pure (pre expr)
     | Reduce (init_expr, modified_args, update_func, reduction_domain) -> 
-        Printf.printf "update_func and prefix: %s %s\n%!" update_func prefix;
         let prefix_update = prefix_name_expr (prefix ^ update_func ^ ".") in
         Reduce (pre init_expr,
                 List.map (prefix_name_expr (prefix ^ update_func ^ ".")) modified_args, 
@@ -79,7 +81,7 @@ let string_of_range = function
   | Range (a, b) -> "[" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ "]" 
 let bounds f stmt = simplify_region (required_of_stmt f (StringMap.empty) stmt) 
 
-let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug:bool) =
+let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedule_tree) =
   (* Grab the schedule for the next function call to lower *)
   let (call_sched, sched_list) = find_schedule schedule func in
 
@@ -93,18 +95,18 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
         (* Recursively descend the statement until we get to the loop in question *)
         let rec inner = function
           | For (for_dim, min, size, order, for_body) when for_dim = chunk_dim -> 
-              For (for_dim, min, size, order, realize func for_body env schedule debug)
+              For (for_dim, min, size, order, realize func for_body env schedule)
           | stmt -> mutate_children_in_stmt (fun x -> x) inner stmt
         in inner stmt
       end
-      | Root -> realize func stmt env schedule debug
+      | Root -> realize func stmt env schedule
       | Inline ->
           (* grab the body of the function *)
-          let (args, _, body) = make_function_body func env debug in
+          let (args, _, body) = make_function_body func env in
           (* Just replace all calls to the function with the body of the function *)
           begin match body with 
-            | Extern -> raise (Wtf ("Can't inline extern function " ^ func))
-            | Reduce _ -> raise (Wtf ("Can't inline a reduction " ^ func))
+            | Extern -> failwith ("Can't inline extern function " ^ func)
+            | Reduce _ -> failwith ("Can't inline a reduction " ^ func)
             | Pure expr ->
                 let rec inline_calls_in_expr = function
                   | Call (t, n, call_args) when n = func -> 
@@ -152,7 +154,7 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
         let rec fix_stmt stmt = mutate_children_in_stmt fix_expr fix_stmt stmt in
         fix_stmt stmt
       end
-      | _ -> raise (Wtf "I don't know how to schedule this yet")
+      | _ -> failwith "I don't know how to schedule this yet"
   in
   (* Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);   *)
   scheduled_call
@@ -160,7 +162,7 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
 
 
 (* Evaluate a function according to a schedule and wrap the stmt consuming it in a pipeline *)
-and realize func consume env schedule debug =
+and realize func consume env schedule =
 
   let (_, sched_list) = find_schedule schedule func in
 
@@ -186,7 +188,7 @@ and realize func consume env schedule debug =
         expand_old_dim_stmt stmt 
   in
   
-  let (args, return_type, body) = make_function_body func env debug in
+  let (args, return_type, body) = make_function_body func env in
   let arg_vars = List.map (fun (t, n) -> Var (t, n)) args in
   let arg_names = List.map snd args in
 
@@ -194,7 +196,7 @@ and realize func consume env schedule debug =
   let buffer_size = List.fold_right (fun (min, size) old_size -> size *~ old_size) strides (IntImm 1) in
 
   match body with
-    | Extern -> raise (Wtf ("Can't lower extern function call " ^ func))          
+    | Extern -> failwith ("Can't lower extern function call " ^ func)
     | Pure body ->
         let inner_stmt = Provide (body, func, arg_vars) in
         let produce = List.fold_left wrap inner_stmt sched_list in
@@ -202,27 +204,38 @@ and realize func consume env schedule debug =
           | (x, y)::rest -> x::y::(flatten rest)
           | [] -> []
         in
-        (*
-        let produce = Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
-                             Print ("Realizing " ^ func ^ " over ", flatten strides);
-                             produce] in 
-        *)
+        let produce = if (trace_verbosity > 0) then            
+            Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
+                   Print ("Realizing " ^ func ^ " over ", flatten strides);
+                   produce] 
+          else produce in
         Pipeline (func, return_type, buffer_size, produce, consume)
     | Reduce (init_expr, update_args, update_func, reduction_domain) ->
 
         let init_stmt = Provide (init_expr, func, arg_vars) in
+
+        let init_stmt = if (trace_verbosity > 1) then 
+            Block [Print ("Initializing " ^ func ^ " at ", arg_vars @ [init_expr]); init_stmt]
+          else init_stmt
+        in
+
         let initialize = List.fold_left wrap init_stmt sched_list in
                
-        let (pure_update_args, _, update_body) = make_function_body update_func env debug in
+        let (pure_update_args, _, update_body) = make_function_body update_func env in
         let update_expr = match update_body with
           | Pure expr -> expr
-          | _ -> raise (Wtf "The update step of a reduction must be pure")
+          | _ -> failwith "The update step of a reduction must be pure"
         in
         
         (* remove recursion in the update expr *)
         let update_expr = subs_name_expr (update_func ^ "." ^ (base_name func)) func update_expr in
 
         let update_stmt = Provide (update_expr, func, update_args) in
+
+        let update_stmt = if (trace_verbosity > 1) then 
+            Block [Print ("Updating " ^ func ^ " at ", update_args @ [update_expr]); update_stmt]
+          else update_stmt
+        in
 
         let (_, update_sched_list) = find_schedule schedule update_func in
         let update = List.fold_left wrap update_stmt update_sched_list in
@@ -250,17 +263,19 @@ and realize func consume env schedule debug =
           | [] -> []
         in
 
-        (*
-        let initialize = Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
-                                Print ("Initializing " ^ func ^ " over ", flatten strides);
-                                initialize] in 
-        
-        let update = Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
-                            Print ("Updating " ^ func, []);
-                            update] in 
-        *)
 
-        let produce = Block [initialize; update] in
+        let produce = 
+          if (trace_verbosity > 0) then 
+            let initialize = Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
+                                    Print ("Initializing " ^ func ^ " over ", flatten strides);
+                                    initialize] in             
+            let update = Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
+                                Print ("Updating " ^ func, []);
+                                update] in 
+            Block [initialize; update]
+          else
+            Block [initialize; update]
+        in
 
         (* Put the whole thing in a pipeline that exposes the updated
            result to the consumer *)
@@ -290,9 +305,8 @@ let rec extract_bounds_soup env var_env bounds = function
               (* fixup any recursive bounds (TODO: this is a giant hack) *)
               let fix range var =
                 match range with
-                  | Unbounded -> raise (Wtf ("Reduction writes to unbounded region of " ^ func))
+                  | Unbounded -> failwith ("Reduction writes to unbounded region of " ^ func)
                   | Range (min, max) -> begin
-                    Printf.printf "Considering %s %s %s\n" var (string_of_expr min) (string_of_expr max);
                     let rec bad_expr = function
                       | Var (t, v) when v = func ^ "." ^ var ^ ".extent" -> true
                       | Var (t, v) when v = func ^ "." ^ var ^ ".min" -> true
@@ -308,7 +322,7 @@ let rec extract_bounds_soup env var_env bounds = function
                   end                      
               in List.map2 fix region args
                 
-          | (Reduce _, _) -> raise (Wtf "Could not understand the produce side of a reduction")
+          | (Reduce _, _) -> failwith "Could not understand the produce side of a reduction"
           | _ -> region
         in
 
@@ -324,7 +338,7 @@ let rec extract_bounds_soup env var_env bounds = function
           let add_bound bounds arg = function
             | Range (min, max) ->              
                 (func, arg, min, max)::bounds
-            | _ -> raise (Wtf ("Could not compute bounds of " ^ func ^ "." ^ arg))
+            | _ -> failwith ("Could not compute bounds of " ^ func ^ "." ^ arg)
           in 
           List.fold_left2 add_bound bounds args region
         end
@@ -463,9 +477,9 @@ let qualify_schedule (sched:schedule_tree) =
   in
   List.fold_left update sched keys    
 
-let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) (debug:bool) =
-  let rec replace_calls_with_loads_in_expr func strides debug expr = 
-    let recurse = replace_calls_with_loads_in_expr func strides debug in
+let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) =
+  let rec replace_calls_with_loads_in_expr func strides expr = 
+    let recurse = replace_calls_with_loads_in_expr func strides in
     match expr with 
       (* Match calls to f from someone else, or recursive calls from f to itself *)
       | Call (ty, f, args) when f = func || f = (func ^ "." ^ (base_name func)) ->
@@ -474,15 +488,15 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
             (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
             args strides (IntImm 0) in
           let load = Load (ty, func, index) in
-          if debug then
-            Debug (load, "### Loading " ^ func ^ " at ", args)
+          if (trace_verbosity > 1) then
+            Debug (load, "Loading " ^ func ^ " at ", args)
           else
             load
       | x -> mutate_children_in_expr recurse x
   in
-  let rec replace_calls_with_loads_in_stmt func strides debug stmt = 
-    let recurse_stmt = replace_calls_with_loads_in_stmt func strides debug in
-    let recurse_expr = replace_calls_with_loads_in_expr func strides debug in
+  let rec replace_calls_with_loads_in_stmt func strides stmt = 
+    let recurse_stmt = replace_calls_with_loads_in_stmt func strides in
+    let recurse_expr = replace_calls_with_loads_in_expr func strides in
     match stmt with
       | Provide (e, f, args) when f = func ->
           let args = List.map recurse_expr args in
@@ -499,11 +513,11 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
     let (_, sched_list) = find_schedule schedule f in
     if sched_list = [] then stmt else
       let strides = stride_list sched_list (List.map (fun (_, n) -> f ^ "." ^ n) args) in
-      replace_calls_with_loads_in_stmt f strides debug stmt
+      replace_calls_with_loads_in_stmt f strides stmt
   in
   List.fold_left update stmt functions 
 
-let lower_function (func:string) (env:environment) (schedule:schedule_tree) (debug:bool) =
+let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let starts_with a b =
     String.length a > String.length b &&
       String.sub a 0 ((String.length b)+1) = b ^ "."
@@ -550,11 +564,11 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   print_schedule schedule;
 
   Printf.printf "Realizing root statement\n%!";
-  let (Pipeline (_, _, _, core, _)) = realize func (Block []) env schedule debug in
+  let (Pipeline (_, _, _, core, _)) = realize func (Block []) env schedule in
 
   Printf.printf "Recursively lowering function calls\n%!";
   let functions = List.filter (fun x -> x <> func) functions in  
-  let stmt = List.fold_left (fun stmt f -> lower_stmt f stmt env schedule debug) core functions in
+  let stmt = List.fold_left (fun stmt f -> lower_stmt f stmt env schedule) core functions in
 
   Printf.printf "Performing bounds inference\n%!";
   (* Updates stmt and schedule *)
@@ -564,7 +578,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) (deb
   print_schedule schedule;
 
   Printf.printf "Replacing function references with loads and stores\n%!";
-  let stmt = lower_function_calls stmt env schedule debug in
+  let stmt = lower_function_calls stmt env schedule in
 
   Printf.printf "Replacing stores to %s to stores to .result\n%!" func;
   let rec rewrite_loads_from_result = function
