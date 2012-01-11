@@ -485,7 +485,7 @@ let transpose_schedule (func: string) (outer: string) (inner: string) (guru: sch
         if v = outer then mutate (Some (List.hd l)) rest
         else if v = inner then match x with 
           | Some x -> (List.hd l) :: (x :: rest)
-          | None -> failwith (outer ^ "is already outside" ^ inner ^ "\n")
+          | None -> failwith (outer ^ " is already outside " ^ inner)
         else (List.hd l)::(mutate x rest)
     | (first::rest) -> first :: (mutate x rest)  
   in mutate_sched_list_guru func (mutate None) serialized guru
