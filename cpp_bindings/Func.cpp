@@ -69,16 +69,24 @@ namespace FImage {
         Contents(const Func &f) :
             f(f) {}
         Contents(const Func &f, const Expr &a) :
-            f(f), args {a} {}
+            f(f), args {a} {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b) :
-            f(f), args {a, b} {}
+            f(f), args {a, b} {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c) :
-            f(f), args {a, b, c} {}
+            f(f), args {a, b, c} {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d) :
-            f(f), args {a, b, c, d} {}
+            f(f), args {a, b, c, d} {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d, const Expr &e) :
-            f(f), args {a, b, c, d, e} {}
-        Contents(const Func &f, const std::vector<Expr> &args) : f(f), args(args) {}
+            f(f), args {a, b, c, d, e} {fixArgs();}
+        Contents(const Func &f, const std::vector<Expr> &args) : f(f), args(args) {fixArgs();}
+
+        void fixArgs() {
+            for (size_t i = 0; i < args.size(); i++) {
+                if (args[i].type() != Int(32)) {
+                    args[i] = Cast<int>(args[i]);
+                }
+            }
+        }
 
         // A pointer to the function object that this lhs defines.
         Func f;
