@@ -14,6 +14,9 @@ namespace FImage {
         bool operator==(const Type &other) const {
             return bits == other.bits && code == other.code;
         }
+        bool operator!=(const Type &other) const {
+            return !(*this == other);
+        }
         std::string str() const {
             std::string codes[] = {"float", "int", "uint"};
             std::ostringstream ss;
