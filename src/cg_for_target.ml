@@ -5,16 +5,16 @@ type arch = X86_64 | PTX | ARM
 let target =
   let targetstr = 
     try
-      Sys.getenv "HLTARGET"
+      Sys.getenv "HL_TARGET"
     with Not_found ->
-      Printf.eprintf "HLTARGET not set - inferring from host architecture...";
+      Printf.eprintf "HL_TARGET not set - inferring from host architecture...";
       let out = Unix.open_process_in "uname -m" in
       let str = input_line out in
       Printf.eprintf "got %s\n%!" str;
       str
   in
   begin match targetstr with
-    | "x86_64" | "amd64" -> X86_64
+    | "x86_64" | "amd64" | "i386" -> X86_64
     | "ptx" -> PTX
     | "armv7l" -> ARM
     | arch -> Printf.eprintf "`%s` is not a supported arch\n%!" arch; exit (-1) end
