@@ -33,7 +33,7 @@ let vector_of_val_type t n = match t with
   | Int x   -> IntVector (x, n)
   | UInt x  -> UIntVector (x, n)
   | Float x -> FloatVector (x, n)
-  | _ -> raise (Wtf("vector_of_val_type called on vector type"))
+  | _ -> failwith "vector_of_val_type called on vector type"
 
 let bit_width = function
   | Int x 
@@ -287,7 +287,7 @@ let match_types expr =
       | (ta, tb) -> 
           assert (vector_elements ta = vector_elements tb);
           (a, Cast(ta, b))
-      (* | _ -> raise (Wtf "I can't perform this cast") *)
+      (* | _ -> failwith "I can't perform this cast" *)
   in match expr with      
     | Bop (op, a, b) -> let (ma, mb) = fix (a, b) in Bop (op, ma, mb)
     | Cmp (op, a, b) -> let (ma, mb) = fix (a, b) in Cmp (op, ma, mb)

@@ -85,7 +85,7 @@ let rec make_cg_context c m b sym_table arch_state =
     Hashtbl.remove sym_table name
   and sym_get name =
     try Hashtbl.find sym_table name
-    with Not_found -> raise (Wtf ("symbol " ^ name ^ " not found"))
+    with Not_found -> failwith ("symbol " ^ name ^ " not found")
   and dump_syms () = dump_syms sym_table
   in
 
@@ -243,7 +243,7 @@ let rec make_cg_context c m b sym_table arch_state =
       | (Max, Int _) -> build_icmp Icmp.Sgt
       | (Min, UInt _) -> build_icmp Icmp.Ult
       | (Max, UInt _) -> build_icmp Icmp.Ugt
-      | (_, _) -> raise (Wtf "cg_minmax with non-min/max op")
+      | (_, _) -> failwith "cg_minmax with non-min/max op"
     in
     let l = cg_expr l in
     let r = cg_expr r in
@@ -506,7 +506,7 @@ let rec make_cg_context c m b sym_table arch_state =
         cg_stmt (Block (second::rest))
     | Block(first::[]) ->
         cg_stmt first
-    | Block _ -> raise (Wtf "cg_stmt of empty block")
+    | Block _ -> failwith "cg_stmt of empty block"
 
     | LetStmt (name, value, stmt) ->
         sym_add name (cg_expr value);
@@ -566,7 +566,7 @@ let rec make_cg_context c m b sym_table arch_state =
 
       | (false, false) -> build_store (cg_expr e) (cg_memref (val_type_of_expr e) buf idx) b
 
-      | (true, false)  -> raise (Wtf "Can't store a vector to a scalar address")
+      | (true, false)  -> failwith "Can't store a vector to a scalar address"
 
   and cg_aligned_store e buf idx =
     let w = vector_elements (val_type_of_expr idx) in
@@ -597,8 +597,7 @@ let rec make_cg_context c m b sym_table arch_state =
 
         (* vector load of scalar address *)
       | (_, false) ->
-        Printf.printf "scalar expr %s loaded as vector type %s\n%!" (string_of_expr idx) (string_of_val_type t);
-        raise (Wtf "Vector load from a scalar address")
+        failwith (Printf.sprintf "scalar expr %s loaded as vector type %s\n%!" (string_of_expr idx) (string_of_val_type t))
 
       | (w, true) ->
         begin match idx with 
