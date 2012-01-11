@@ -152,14 +152,15 @@ Func apply_curve(Func input, Uniform<float> gamma, Uniform<float> contrast) {
     // copied from FCam
     Func curve("curve");
 
-    Expr xf = Cast<float>(x)/1024.0f;    
+    Expr xf = Cast<float>(x)/1024.0f;
     Expr g = pow(xf, 1.0f/gamma);
     Expr b = 2.0f - pow(2.0f, contrast/100.0f);
     Expr a = 2.0f - 2.0f*b; 
     Expr z = Select(g > 0.5f,
                     1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
                     a*g*g + b*g);
-    curve(x) = Cast<uint8_t>(Clamp(z*256.0f, 0.0f, 255.0f));
+    Expr val = Cast<uint8_t>(Clamp(z*256.0f, 0.0f, 255.0f));
+    curve(x) = val; //Debug(val, "curve ", x, xf, g, z, val);
 
     Func curved("curved");
     // This is after the color transform, so the input could be
@@ -212,7 +213,7 @@ int main(int argc, char **argv) {
                                         Clamp(y, 0, input.height()-1)));
 
     // Run the pipeline
-    Func output = process(clamped, matrix_3200, matrix_7000, color_temp, gamma, contrast);
+    Func processed = process(clamped, matrix_3200, matrix_7000, color_temp, gamma, contrast);
 
     // Pick a schedule   
 
@@ -221,52 +222,21 @@ int main(int argc, char **argv) {
     else
         srand(0);
 
-    std::vector<Func> funcs = output.rhs().funcs();
-    
+    Var xo("xo"), yo("yo"), c("c"), xi("xi"), yi("yi");
+    Func output;
+    output(xo, yo, c) = processed(xo, yo, c);
+    output.root().tile(xo, yo, xi, yi, 32, 16).transpose(yo, c).transpose(xo, c);
+
+    std::vector<Func> funcs = output.rhs().funcs();    
+
     for (size_t i = 0; i < funcs.size(); i++) {
-        funcs[i].root();
-        if (funcs[i].name() == "curve") continue;
-        if (funcs[i].returnType() == UInt(8)) funcs[i].vectorize(x, 16);
-        if (funcs[i].returnType() == Int(16)) funcs[i].vectorize(x, 8);
-        if (funcs[i].returnType() == Float(32)) funcs[i].vectorize(x, 4);
+      if (funcs[i].name() == "curve") funcs[i].root();
+      else funcs[i].chunk(xo);
+      //if (funcs[i].returnType() == UInt(8)) funcs[i].vectorize(x, 16);
+      //if (funcs[i].returnType() == Int(16)) funcs[i].vectorize(x, 8);
+      //if (funcs[i].returnType() == Float(32)) funcs[i].vectorize(x, 4);
     }
 
-    /*
-
-        if (rand() % 4 == 0) continue; // 25% chance of inline
-
-        // we should definitely evaluate the curve ahead of time
-        if (funcs[i].name() == "curve") {
-            funcs[i].root();
-            continue;
-        }
-
-        // Randomly select root or chunk over xo
-        if (rand() % 4 == 0) {
-            funcs[i].root();
-        } else {
-            funcs[i].chunk(xo);
-        }
-
-        // Maybe unroll across y by 2
-        if (rand() % 2) {
-            funcs[i].unroll(y, 2);
-        }
-        
-        // choose between unrolling, vectorizing, or nothing across x
-        switch (rand() % 3) {
-        case 0:
-            funcs[i].unroll(x, 2);
-            break;
-        case 1:
-            if (funcs[i].returnType() == Int(16)) funcs[i].vectorize(x, 8);
-            if (funcs[i].returnType() == UInt(8)) funcs[i].vectorize(x, 16);
-            break;
-        case 2:
-            break;
-        }
-    }
-    */
     output.compileToFile("curved");
     
     return 0;
