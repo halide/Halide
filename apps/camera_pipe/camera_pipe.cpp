@@ -3,7 +3,7 @@
 
 using namespace FImage;
 
-Var x, y, c;
+Var x("x"), y("y"), c("c");
 
 Func hot_pixel_suppression(Func input) {
     Expr max = Max(Max(input(x-2, y), input(x+2, y)),
@@ -122,7 +122,7 @@ Func demosaic(Func raw) {
                           interleave_x(r_b, r_gb));
     Func g = interleave_y(interleave_x(g_gr, g_r),
                           interleave_x(g_b, g_gb));
-    Func b = interleave_y(interleave_x(b_gr, b_r),                          
+    Func b = interleave_y(interleave_x(b_gr, b_r),
                           interleave_x(b_b, b_gb));
 
     Func output("dem");
@@ -136,15 +136,22 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
     // Get a color matrix by linearly interpolating between two
     // calibrated matrices using inverse kelvin.
 
-    Func matrix;
+    Func matrix("matrix");
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
     matrix(x, y) = (matrix_3200(x, y) * alpha + 
                     matrix_7000(x, y) * (1 - alpha));
 
-    Func corrected;
-    RVar j(0, 3);
-    corrected(x, y, c) = Cast<int16_t>(Sum(matrix(j, c)*Cast<float>(input(x, y, j))) + matrix(3, c));
+    Func corrected("corrected");
+    //RVar j(0, 3);
+    //corrected(x, y, c) = Cast<int16_t>(Sum(matrix(j, c)*Cast<float>(input(x, y, j))) + matrix(3, c));
+    // TODO: once we can flag the update step of the reduction, this should revert to a per-thread reduce
+    #define MAT(j)  ((matrix((j), c)*Cast<float>(input(x, y, (j)))))
+    corrected(x, y, c) = Cast<int16_t>(
+        MAT(0) + MAT(1) + MAT(2) + matrix(3, c)
+    );
+    #undef MAT
     return corrected;
+    //return input;
 }
 
 
@@ -159,7 +166,7 @@ Func apply_curve(Func input, Uniform<float> gamma, Uniform<float> contrast) {
     Expr z = Select(g > 0.5f,
                     1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
                     a*g*g + b*g);
-    Expr val = Cast<uint8_t>(Clamp(z*256.0f, 0.0f, 255.0f));
+    Expr val = Cast<uint16_t>(Clamp(z*256.0f, 0.0f, 255.0f));
     curve(x) = val; //Debug(val, "curve ", x, xf, g, z, val);
 
     Func curved("curved");
@@ -188,12 +195,10 @@ Func process(Func raw,
     im = color_correct(im, matrix_3200, matrix_7000, color_temp);
     im = apply_curve(im, gamma, contrast);
 
-    /*
-    Func check;
-    Var x, y, c;
-    check(x, y, c) = Debug(im(x, y, c), "after curve ", x, y, c, im(x, y, c));
+    Func check("out");
+    //Var x, y, c;
+    check(x, y, c) = Cast<uint16_t>(im(x,y,c));
     im = check;
-    */
 
     //im = rgb_to_yuv422(im);
     return im;
@@ -222,16 +227,31 @@ int main(int argc, char **argv) {
     else
         srand(0);
 
-    Var xo("xo"), yo("yo"), c("c"), xi("xi"), yi("yi");
-    Func output;
+    Var xo("blockidx"), yo("blockidy"), c("c"), xi("threadidx"), yi("threadidy");
+    Func output("output");
     output(xo, yo, c) = processed(xo, yo, c);
-    output.root().tile(xo, yo, xi, yi, 32, 16).transpose(yo, c).transpose(xo, c);
+    Var nilc("nilc");
+    output.root()
+        .split(c, nilc, c, 3) // split C into a const loop by 3 on the inside
+        .tile(xo, yo, xi, yi, 32, 16).transpose(yo, c).transpose(xo, c)
+        .transpose(yi, c).transpose(xi, c)
+        .parallel(xo).parallel(yo).parallel(xi).parallel(yi);
 
     std::vector<Func> funcs = output.rhs().funcs();    
 
     for (size_t i = 0; i < funcs.size(); i++) {
       if (funcs[i].name() == "curve") funcs[i].root();
-      else funcs[i].chunk(xo);
+      else if (funcs[i].name() == "matrix") funcs[i].root();
+      else if (funcs[i].name() == "dem" || funcs[i].name() == "corrected" || funcs[i].name() == "curved") {
+          // inline
+          continue;
+      }
+      else {
+          printf("scheduling %s as chunk on xo\n", funcs[i].name().c_str());
+          funcs[i].chunk(xo)
+                      .split(x, x, xi, 1).split(y, y, yi, 1)
+                      .parallel(xi).parallel(yi);
+      }
       //if (funcs[i].returnType() == UInt(8)) funcs[i].vectorize(x, 16);
       //if (funcs[i].returnType() == Int(16)) funcs[i].vectorize(x, 8);
       //if (funcs[i].returnType() == Float(32)) funcs[i].vectorize(x, 4);

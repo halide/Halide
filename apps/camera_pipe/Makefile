@@ -6,8 +6,13 @@ curved.bc: camera_pipe
 	./camera_pipe
 
 curved.o: curved.bc
-	cat curved.bc | opt -O3 | llc -O3 -mcpu=cortex-a9 -filetype=obj > curved.o
+	cat curved.bc | opt -O3 | llc -O3 -filetype=obj > curved.o
 
 process: process.cpp curved.o
-	g++-4.6 -std=c++0x -lpng -Wall -O3 process.cpp curved.o -o process -lpthread -ldl -lpng
+	g++-4.6 -std=c++0x -lpng -Wall -O3 process.cpp curved.o -o process -lpthread -ldl -lpng -L/usr/local/cuda/lib -lcuda
 
+out.png: process raw.png
+	./process raw.png 3700 2.0 50 out.png
+
+clean: 
+	rm -f out.png process curved.o curved.bc camera_pipe
