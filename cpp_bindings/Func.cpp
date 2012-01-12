@@ -29,7 +29,7 @@ namespace FImage {
     CUcontext cuda_ctx = 0;
     
     bool use_gpu() {
-        char* target = getenv("HLTARGET");
+        char* target = getenv("HL_TARGET");
         return (target != NULL && strcasecmp(target, "ptx") == 0);
     }
     
