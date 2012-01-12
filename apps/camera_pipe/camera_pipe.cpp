@@ -3,7 +3,7 @@
 
 using namespace FImage;
 
-Var x, y, c;
+Var x, y, tx, ty, c;
 
 Func hot_pixel_suppression(Func input) {
     Expr max = Max(Max(input(x-2, y), input(x+2, y)),
@@ -14,6 +14,8 @@ Func hot_pixel_suppression(Func input) {
     Func denoised("denoised");
     denoised(x, y) = Clamp(input(x, y), min, max);
     
+    denoised.chunk(tx).vectorize(x, 8);
+
     return denoised;
 }
 
@@ -62,12 +64,16 @@ Func demosaic(Func raw) {
 
     g_r(x, y)  = Select(ghd_r < gvd_r, gh_r, gv_r);
 
+    g_r.chunk(tx).vectorize(x, 8);
+
     Expr gv_b  =    (g_gr(x, y+1) + g_gr(x, y))/2;
     Expr gvd_b = abs(g_gr(x, y+1) - g_gr(x, y));
     Expr gh_b  =    (g_gb(x-1, y) + g_gb(x, y))/2;
     Expr ghd_b = abs(g_gb(x-1, y) - g_gb(x, y));
 
     g_b(x, y)  = Select(ghd_b < gvd_b, gh_b, gv_b);
+
+    g_b.chunk(tx).vectorize(x, 8);
 
     // Next interpolate red at gr by first interpolating, then
     // correcting using the error green would have had if we had
@@ -76,16 +82,24 @@ Func demosaic(Func raw) {
     Expr correction;
     correction = g_gr(x, y) - (g_r(x, y) + g_r(x-1, y))/2;
     r_gr(x, y) = correction + (r_r(x-1, y) + r_r(x, y))/2;
+
+    r_gr.chunk(tx).vectorize(x, 8);
     
     // Do the same for other reds and blues at green sites
     correction = g_gr(x, y) - (g_b(x, y) + g_b(x, y-1))/2;
     b_gr(x, y) = correction + (b_b(x, y) + b_b(x, y-1))/2;
 
+    b_gr.chunk(tx).vectorize(x, 8);
+
     correction = g_gb(x, y) - (g_r(x, y) + g_r(x, y+1))/2;
     r_gb(x, y) = correction + (r_r(x, y) + r_r(x, y+1))/2;
 
+    r_gb.chunk(tx).vectorize(x, 8);
+
     correction = g_gb(x, y) - (g_b(x, y) + g_b(x+1, y))/2;
     b_gb(x, y) = correction + (b_b(x, y) + b_b(x+1, y))/2;
+
+    b_gb.chunk(tx).vectorize(x, 8);
             
     // Now interpolate diagonally to get red at blue and blue at
     // red. Hold onto your hats; this gets really fancy. We do the
@@ -106,6 +120,8 @@ Func demosaic(Func raw) {
 
     r_b(x, y)  = Select(rpd_b < rnd_b, rp_b, rn_b);
 
+    r_b.chunk(tx).vectorize(x, 8);
+
     // Same thing for blue at red
     correction = g_r(x, y)  - (g_b(x, y) + g_b(x+1, y-1))/2;
     Expr bp_r  = correction + (b_b(x, y) + b_b(x+1, y-1))/2;
@@ -117,6 +133,8 @@ Func demosaic(Func raw) {
 
     b_r(x, y)  =  Select(bpd_r < bnd_r, bp_r, bn_r);    
 
+    b_r.chunk(tx).vectorize(x, 8);
+
     // Interleave the resulting channels
     Func r = interleave_y(interleave_x(r_gr, r_r),
                           interleave_x(r_b, r_gb));
@@ -124,6 +142,11 @@ Func demosaic(Func raw) {
                           interleave_x(g_b, g_gb));
     Func b = interleave_y(interleave_x(b_gr, b_r),                          
                           interleave_x(b_b, b_gb));
+
+    // Compute these guys in tiles before interleaving
+    r.chunk(tx);
+    g.chunk(tx);
+    b.chunk(tx);
 
     Func output("dem");
     output(x, y) = (r(x, y), g(x, y), b(x, y));
@@ -138,12 +161,20 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
 
     Func matrix("matrix");
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
-    matrix(x, y) = (matrix_3200(x, y) * alpha + 
-                    matrix_7000(x, y) * (1 - alpha));
+    Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
+    matrix(x, y) = Cast<int32_t>(val * 256.0f); // Q8.8 fixed point
+    matrix.root();
 
     Func corrected("corrected");
-    RVar j(0, 3);
-    corrected(x, y, c) = Cast<int16_t>(Sum(matrix(j, c)*Cast<float>(input(x, y, j))) + matrix(3, c));
+    Expr v[] = {matrix(3, 0), matrix(3, 1), matrix(3, 2)};
+    for (int j = 0; j < 3; j++) {
+        for (int i = 0; i < 3; i++) {
+            v[j] = v[j] + matrix(i, j) * Cast<int32_t>(input(x, y, i));
+        }
+        v[j] = Cast<int16_t>(v[j]/256);
+    }
+    
+    corrected(x, y) = (v[0], v[1], v[2]);
     return corrected;
 }
 
@@ -162,6 +193,8 @@ Func apply_curve(Func input, Uniform<float> gamma, Uniform<float> contrast) {
     Expr val = Cast<uint8_t>(Clamp(z*256.0f, 0.0f, 255.0f));
     curve(x) = val; //Debug(val, "curve ", x, xf, g, z, val);
 
+    curve.root(); // It's a LUT, compute it once ahead of time.
+
     Func curved("curved");
     // This is after the color transform, so the input could be
     // negative or very large. Clamp it back to 10 bits before applying the curve.
@@ -169,34 +202,23 @@ Func apply_curve(Func input, Uniform<float> gamma, Uniform<float> contrast) {
     return curved;
 }
 
-/*
-Func rgb_to_yuv422(Func rgb) {
-    Func Y;
-    Func U;
-    Func V;
-    Func UV;
-    Func YUV;    
-}
-*/
-
 Func process(Func raw, 
              UniformImage matrix_3200, UniformImage matrix_7000, Uniform<float> color_temp, 
              Uniform<float> gamma, Uniform<float> contrast) {
+
+    Func processed("p");
+    Var xi, yi;
+
     Func im = raw;
     im = hot_pixel_suppression(im);
     im = demosaic(im);
     im = color_correct(im, matrix_3200, matrix_7000, color_temp);
     im = apply_curve(im, gamma, contrast);
 
-    /*
-    Func check;
-    Var x, y, c;
-    check(x, y, c) = Debug(im(x, y, c), "after curve ", x, y, c, im(x, y, c));
-    im = check;
-    */
+    processed(tx, ty, c) = im(tx, ty, c);
+    processed.tile(tx, ty, xi, yi, 32*3, 16*3).transpose(ty, c).transpose(tx, c);//.vectorize(xi, 8).parallel(ty);
 
-    //im = rgb_to_yuv422(im);
-    return im;
+    return processed;
 }
 
 int main(int argc, char **argv) {
@@ -215,30 +237,8 @@ int main(int argc, char **argv) {
     // Run the pipeline
     Func processed = process(clamped, matrix_3200, matrix_7000, color_temp, gamma, contrast);
 
-    // Pick a schedule   
 
-    if (argc > 1) 
-        srand(atoi(argv[1]));
-    else
-        srand(0);
-
-    Var xo("xo"), yo("yo"), c("c"), xi("xi"), yi("yi");
-    Func output;
-    output(xo, yo, c) = processed(xo, yo, c);
-    output.root().tile(xo, yo, xi, yi, 32, 16).transpose(yo, c).transpose(xo, c);
-
-    std::vector<Func> funcs = output.rhs().funcs();    
-
-    for (size_t i = 0; i < funcs.size(); i++) {
-      if (funcs[i] == processed) {} // inline
-      else if (funcs[i].name() == "curve") funcs[i].root();
-      else funcs[i].chunk(xo);
-      //if (funcs[i].returnType() == UInt(8)) funcs[i].vectorize(x, 16);
-      //if (funcs[i].returnType() == Int(16)) funcs[i].vectorize(x, 8);
-      //if (funcs[i].returnType() == Float(32)) funcs[i].vectorize(x, 4);
-    }
-
-    output.compileToFile("curved");
+    processed.compileToFile("curved");
     
     return 0;
 }
