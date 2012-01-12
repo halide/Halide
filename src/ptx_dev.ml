@@ -154,7 +154,7 @@ let malloc con name count elem_size =
   let zero = const_zero con.c in
   let size = match constant_fold_expr (count *~ elem_size) with
     | IntImm sz -> sz
-    | _ -> failwith ""
+    | sz -> failwith (Printf.sprintf "PTX device malloc of %s with non-const size %s\n" name (string_of_expr sz))
   in
   Printf.printf "malloc %s[%d bytes] on PTX device\n%!" name size;
   con.arch_state.shared_mem_bytes := !(con.arch_state.shared_mem_bytes) + size;
