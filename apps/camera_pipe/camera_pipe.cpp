@@ -216,27 +216,29 @@ Func process(Func raw,
     im = apply_curve(im, gamma, contrast);
 
     processed(tx, ty, c) = im(tx, ty, c);
-    processed.tile(tx, ty, xi, yi, 32*3, 16*3).transpose(ty, c).transpose(tx, c);//.vectorize(xi, 8).parallel(ty);
+    Var co;
+    processed.tile(tx, ty, xi, yi, 32, 32).split(c, co, c, 3).transpose(ty, c).transpose(tx, c).unroll(c);//.vectorize(xi, 8).parallel(ty);
 
     return processed;
 }
 
 int main(int argc, char **argv) {
-    UniformImage input(UInt(16), 2, "raw");
+    // The camera pipe is specialized on the 2592x1968 images that
+    // come in, so we'll just use an image instead of a uniform image.
+    Image<int16_t> input(2592, 1968);
     UniformImage matrix_3200(Float(32), 2, "m3200"), matrix_7000(Float(32), 2, "m7000");
     Uniform<float> color_temp("color_temp", 3200.0f);
     Uniform<float> gamma("gamma", 1.8f);
     Uniform<float> contrast("contrast", 10.0f);
 
-    // add a boundary condition and treat things as signed ints
-    // (demosaic might introduce negative values)
+    // shift things inwards to give us enough padding on the
+    // boundaries so that we don't need to check bounds. We're going
+    // to make a 2560x1920 output image, so shift by 16, 12
     Func clamped("in");
-    clamped(x, y) = Cast<int16_t>(input(Clamp(x, 0, input.width()-1),
-                                        Clamp(y, 0, input.height()-1)));
+    clamped(x, y) = input(x+16, y+12);
 
     // Run the pipeline
     Func processed = process(clamped, matrix_3200, matrix_7000, color_temp, gamma, contrast);
-
 
     processed.compileToFile("curved");
     

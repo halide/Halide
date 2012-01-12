@@ -14,7 +14,7 @@ using namespace FImage;
 
 int main(int argc, char **argv) {
     Image<uint16_t> input = load<uint16_t>(argv[1]);
-    Image<uint8_t> output(input.width(), input.height(), 3);
+    Image<uint8_t> output(2560, 1920, 3);
 
     timeval t1, t2;
     
@@ -30,8 +30,8 @@ int main(int argc, char **argv) {
 
     gettimeofday(&t1, NULL);
     curved(atof(argv[2]), atof(argv[3]), atof(argv[4]),
-           matrix_3200, matrix_7000, input, output);
-
+           input, matrix_3200, matrix_7000, output);
+    
     //curved(atof(argv[2]), atof(argv[3]), input, output);
     gettimeofday(&t2, NULL);
 
