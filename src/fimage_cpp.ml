@@ -25,7 +25,7 @@ let lower (f:string) (env:environment) (sched: schedule_tree) =
   (* Printexc.record_backtrace true; *)
 
   begin
-    Printf.printf "Lowering function\n";
+    dbg 1 "Lowering function\n";
     let lowered = lower_function f env sched in
     (* Printf.printf "Breaking false dependences\n";
      let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
@@ -33,9 +33,9 @@ let lower (f:string) (env:environment) (sched: schedule_tree) =
      let lowered = Constant_fold.constant_fold_stmt lowered in
      Printf.printf "Breaking false dependences\n";
      let lowered = Break_false_dependence.break_false_dependence_stmt lowered in  *)
-    Printf.printf "Before constant folding:\n%s\n" (string_of_stmt lowered);
+    dbg 0 "Before constant folding:\n%s\n" (string_of_stmt lowered);
     let lowered = Constant_fold.constant_fold_stmt lowered in 
-    Printf.printf "Resulting stmt:\n%s\n" (string_of_stmt lowered);
+    dbg 1 "Resulting stmt:\n%s\n" (string_of_stmt lowered);
     lowered
   end
 
@@ -60,9 +60,9 @@ let compile name args stmt =
       (* Printf.printf "Found function in cache\n%!";  *)
       Hashtbl.find compilation_cache func
     end else begin 
-      Printf.printf "Initializing native target\n%!"; 
+      dbg 0 "Initializing native target\n%!"; 
       ignore (initialize_native_target());
-      Printf.printf "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
+      dbg 0 "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
       let (c, m, f) = codegen_to_c_callable func in
       ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc");
       Hashtbl.add compilation_cache func (m, f);
@@ -72,7 +72,7 @@ let compile name args stmt =
     end
   end
   with x -> begin
-    Printf.printf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
+    Printf.eprintf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
     raise x
   end
 
@@ -174,8 +174,8 @@ let _ =
   Callback.register "makeSchedule" (fun (f: string) (sizes: expr list) (env: environment) (guru: scheduling_guru) ->
     let (_, args, _, _) = Environment.find f env in
     let region = List.map2 (fun (t, v) x -> (v, IntImm 0, x)) args sizes in
-    Printf.printf "Guru:\n%s\n%!" (String.concat "\n" guru.serialized);
-    Printf.printf "About to make default schedule...\n%!";    
+    dbg 0 "Guru:\n%s\n%!" (String.concat "\n" guru.serialized);
+    dbg 0 "About to make default schedule...\n%!";    
     generate_schedule f env guru
       
   );

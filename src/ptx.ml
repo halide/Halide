@@ -419,9 +419,12 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   let dev_mod = con.arch_state.dev_mod in
   let dev_ctx = module_context dev_mod in
 
-  dump_module dev_mod;
+  if dump_mod then dump_module dev_mod;
   let ptx_src = Llutil.compile_module_to_string dev_mod in
-  Printf.printf "PTX:\n%s\n%!" ptx_src;
+  dbg 0 "PTX:\n%s\n%!" ptx_src;
+  (* log the PTX module to disk *)
+  save_bc_to_file dev_mod "kernels.bc";
+  Printf.fprintf (open_out "kernels.ptx") "%s%!" ptx_src;
 
   (* free memory *)
   dispose_module dev_mod;
@@ -451,18 +454,18 @@ let malloc con name count elem_size =
   (* build a buffer_t to track this allocation *)
   let buf = build_alloca (buffer_struct_type con) ("malloc_" ^ name) con.b in
   let set_field f v =
-    Printf.eprintf "  set_field %s :=%!" (string_of_buffer_field f);
-    dump_value v;
+    dbg 0 "  set_field %s :=%!" (string_of_buffer_field f);
+    (* dump_value v; *)
     let fptr = cg_buffer_field_ref buf f con.b in
     let fty = element_type (type_of fptr) in
     let v = match classify_type fty with
       | TypeKind.Integer ->
-          Printf.eprintf "  building const_intcast to %s of%!" (string_of_lltype fty);
-          dump_value v;
+          dbg 0 "  building const_intcast to %s of%!" (string_of_lltype fty);
+          (* dump_value v; *)
           build_intcast v fty (name ^ "_field_type_cast") con.b
       | _ -> v
     in
-    Printf.eprintf "   ->%!"; dump_value fptr;
+    dbg 0 "   ->%!"; (* dump_value fptr; *)
     ignore (build_store v fptr con.b) in
 
   let zero = const_zero con.c

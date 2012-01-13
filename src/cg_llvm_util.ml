@@ -240,10 +240,10 @@ let cg_wrapper c m e inner =
   let f = define_wrapper c m e in
   let b = builder_at_end c (entry_block f) in
 
-  Printf.printf "Building wrapper\n%!";
-  Printf.printf "  %d args\n" (List.length arglist);
-  Printf.printf "  %d params\n%!" (Array.length (params f));
-  Printf.printf "  %d inner params\n%!" (Array.length (params inner));
+  dbg 1 "Building wrapper\n%!";
+  dbg 1 "  %d args\n" (List.length arglist);
+  dbg 1 "  %d params\n%!" (Array.length (params f));
+  dbg 1 "  %d inner params\n%!" (Array.length (params inner));
 
   (* construct the argument list from the fields of the params of the wrapper *)
   let call_args = arg_var_vals arglist b in
