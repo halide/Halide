@@ -156,7 +156,7 @@ buffer_t* __make_buffer(uint8_t* host, size_t elem_size,
     buf->dims[2] = dim2;
     buf->dims[3] = dim3;
     buf->elem_size = elem_size;
-    buf->host_dirty = true;
+    buf->host_dirty = false;
     buf->dev_dirty = false;
     return buf;
 }
@@ -211,7 +211,7 @@ void __init(const char* ptx_src)
         cuEventCreate(&__start, 0);
         cuEventCreate(&__end, 0);
     } else {
-        CHECK_CALL( cuCtxPushCurrent(FImage::cuda_ctx), "cuCtxPushCurrent" );
+        //CHECK_CALL( cuCtxPushCurrent(FImage::cuda_ctx), "cuCtxPushCurrent" );
     }
     
     // Initialize a module for just this FImage module
@@ -226,7 +226,7 @@ void __init(const char* ptx_src)
 
 void __release() {
     CUcontext ignore;
-    CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
+    //CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
 }
 
 CUfunction __get_kernel(const char* entry_name)
@@ -270,31 +270,37 @@ void __dev_malloc_if_missing(buffer_t* buf) {
 }
 
 void __copy_to_dev(buffer_t* buf) {
-    assert(buf->host && buf->dev);
-    size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-    char msg[256];
-    snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, currentTime() );
-    cuEventRecord(__start, 0);
-    CHECK_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
-    cuEventRecord(__end, 0);
-    cuEventSynchronize(__end);
-    float msec;
-    cuEventElapsedTime(&msec, __start, __end);
-    printf("   (took %fms, t=%d)\n", msec, currentTime());
+    if (buf->host_dirty) {
+        assert(buf->host && buf->dev);
+        size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
+        char msg[256];
+        snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, currentTime() );
+        cuEventRecord(__start, 0);
+        CHECK_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
+        cuEventRecord(__end, 0);
+        cuEventSynchronize(__end);
+        float msec;
+        cuEventElapsedTime(&msec, __start, __end);
+        printf("   (took %fms, t=%d)\n", msec, currentTime());
+    }
+    buf->host_dirty = false;
 }
 
 void __copy_to_host(buffer_t* buf) {
-    assert(buf->host && buf->dev);
-    size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-    char msg[256];
-    snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
-    cuEventRecord(__start, 0);
-    CHECK_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
-    cuEventRecord(__end, 0);
-    cuEventSynchronize(__end);
-    float msec;
-    cuEventElapsedTime(&msec, __start, __end);
-    printf("   (took %fms, t=%d)\n", msec, currentTime());
+    if (buf->dev_dirty) {
+        assert(buf->host && buf->dev);
+        size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
+        char msg[256];
+        snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
+        cuEventRecord(__start, 0);
+        CHECK_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
+        cuEventRecord(__end, 0);
+        cuEventSynchronize(__end);
+        float msec;
+        cuEventElapsedTime(&msec, __start, __end);
+        printf("   (took %fms, t=%d)\n", msec, currentTime());
+    }
+    buf->dev_dirty = false;
 }
 
 void __dev_run(
