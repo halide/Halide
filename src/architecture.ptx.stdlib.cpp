@@ -226,6 +226,8 @@ void __init(const char* ptx_src)
 
 void __release() {
     CUcontext ignore;
+    // TODO: this is for timing; bad for release-mode performance
+    CHECK_CALL( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
     //CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
 }
 
