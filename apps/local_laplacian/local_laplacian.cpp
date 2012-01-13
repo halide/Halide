@@ -356,6 +356,28 @@ int main(int argc, char **argv) {
                 .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
         }
         break;
+    case 104:
+        // 102, but inline laplacian pyramid levels
+        output.root().split(yo, by, ty, 32).split(xo, bx, tx, 32)
+            .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        for (int j = 0; j < J; j++) {
+            int blockw = 32, blockh = 32;
+            if (j > 3) {
+                blockw = 2;
+                blockh = 2;
+            }
+            inGPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            if (j > 0)
+                gPyramid[j].root()
+                    .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                    .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            outGPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        }
+        break;
     default: 
         break;
     }
