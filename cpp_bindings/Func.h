@@ -87,6 +87,10 @@ namespace FImage {
         DynImage realize(std::vector<uint32_t> sizes);
         void realize(const DynImage &);
 
+        /* If this function is a reduction, get a handle to its update
+           step for scheduling */
+        Func &update();
+
         /* These methods generate a partially applied function that
          * takes a schedule and modifies it. These functions get pushed
          * onto the scheduleTransforms vector, which is traversed in

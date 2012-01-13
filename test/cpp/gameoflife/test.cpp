@@ -105,7 +105,12 @@ int main(int argc, char **argv) {
         life(x, y, t%2) = Select(livingNeighbors == u8(3) || (alive && livingNeighbors == u8(2)), u8(1), u8(0));    
         
         Func output;
-        output(x, y) = life(x, y, 1);
+        output(x, y) = life(x, y, 1);        
+
+        // The update step of life needs to have t
+        // outermost. Schedules can change meaning for reductions!
+        // (but only reductions)
+        life.update().transpose(t, y);
 
         input = board3;
         output.realize(board3);

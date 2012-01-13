@@ -116,6 +116,9 @@ namespace FImage {
         std::vector<Expr> args;
         MLVal arglist;
         Type returnType;
+
+        // A handle to an update function
+        std::unique_ptr<Func> update;
         
         /* The ML definition object (name, return type, argnames, body)
            The body here evaluates the function over an entire range,
@@ -307,7 +310,7 @@ namespace FImage {
 
         } else {
             printf("Scatter definition for %s\n", name().c_str());
-            assert(rhs().isDefined());
+            assert(rhs().isDefined());            
 
             MLVal update_args = makeList();
             for (size_t i = args.size(); i > 0; i--) {
@@ -325,12 +328,22 @@ namespace FImage {
                                                       rvars[i-1].min().node(), 
                                                       rvars[i-1].size().node()));
             }
+
+            // Make an update function as a handle for scheduling
+            contents->update.reset(new Func(uniqueName('p')));
             
             printf("Adding scatter definition for %s\n", name().c_str());
             // There should already be a gathering definition of this function. Add the scattering term.
-            *environment = addScatterToDefinition(*environment, name(), uniqueName('p'), 
+            *environment = addScatterToDefinition(*environment, name(), contents->update->name(), 
                                                   update_args, r.node(), reduction_args);
+
+
         }
+    }
+
+    Func &Func::update() {
+        assert(contents->update);
+        return *contents->update;
     }
 
     void *watchdog(void *arg) {
@@ -518,8 +531,13 @@ namespace FImage {
         for (size_t i = 0; i < contents->scheduleTransforms.size(); i++) {
             guru = contents->scheduleTransforms[i](guru);
         }
+        if (contents->update) {
+            for (size_t i = 0; i < update().contents->scheduleTransforms.size(); i++) {
+                guru = update().contents->scheduleTransforms[i](guru);
+            }
+        }
         for (size_t i = 0; i < rhs().funcs().size(); i++) {
-            const Func &f = rhs().funcs()[i];
+            Func f = rhs().funcs()[i];
             // Don't consider recursive dependencies for the
             // purpose of applying schedule transformations. We
             // already did that above.
@@ -527,6 +545,11 @@ namespace FImage {
             for (size_t j = 0; j < f.scheduleTransforms().size(); j++) {
                 MLVal t = f.scheduleTransforms()[j];
                 guru = t(guru);
+            }
+            if (f.contents->update) {
+                for (size_t i = 0; i < f.update().contents->scheduleTransforms.size(); i++) {
+                    guru = f.update().contents->scheduleTransforms[i](guru);
+                }
             }
         }
 
