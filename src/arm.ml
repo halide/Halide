@@ -36,6 +36,7 @@ let rec cg_expr (con : context) (expr : expr) =
 
   let cg_expr e = cg_expr con e in
 
+  (* 
   let cg_select cond thenCase elseCase =
     let elts = vector_elements (val_type_of_expr cond) in
     let bits = element_width (val_type_of_expr thenCase) in
@@ -51,6 +52,7 @@ let rec cg_expr (con : context) (expr : expr) =
     let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
     build_bitcast result t "" b       
   in    
+  *)
   
   let rec is_power_of_two = function
     | 1 -> true
@@ -74,7 +76,7 @@ let rec cg_expr (con : context) (expr : expr) =
                 (function_type (f32x4_t) [|f32x4_t; f32x4_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
           (* TODO: other types *)
-          | _ -> cg_select (l <~ r) l r
+          | _ -> con.cg_expr (Select (l <~ r, l, r))
         end
     | Bop (Max, l, r) when is_vector l -> 
         begin match (val_type_of_expr l) with
@@ -87,7 +89,7 @@ let rec cg_expr (con : context) (expr : expr) =
                 (function_type (f32x4_t) [|f32x4_t; f32x4_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
           (* TODO: other types *)
-          | _ -> cg_select (l >~ r) l r
+          | _ -> con.cg_expr (Select (l >~ r, l, r))
         end
 
     (* use intrinsics for vector loads/stores *) 
@@ -249,10 +251,6 @@ let rec cg_expr (con : context) (expr : expr) =
         let mask = const_vector (Array.of_list (gen_mask (w/2) (w/2))) in
         build_shufflevector l r mask "" b 
           
-    (* llvm's vector select doesn't work right on arm yet *)          
-    | Select (cond, thenCase, elseCase) when is_vector cond -> 
-        cg_select cond thenCase elseCase
-
     | _ -> con.cg_expr expr
 
 exception DeinterleaveFailed
