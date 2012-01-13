@@ -6,7 +6,9 @@ open Analysis
 type bounds_result = Range of (expr * expr) | Unbounded
 
 let make_range (min, max) =
-  (*Printf.printf "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max);  *)
+  let min = constant_fold_expr min in
+  let max = constant_fold_expr max in
+  (* Printf.printf "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max);  *)
   assert (is_scalar min);
   assert (is_scalar max);
   Range (min, max)
@@ -51,7 +53,7 @@ let bounds_of_type = function
 let bounds_of_expr_in_env env expr =
   let rec bounds_of_expr_in_env_inner env expr = 
     let recurse expr = 
-      (* Printf.printf "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr); *)
+      Printf.printf "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr);
       let result = bounds_of_expr_in_env_inner env expr in
       check_result expr result;
       result
@@ -69,6 +71,7 @@ let bounds_of_expr_in_env env expr =
           if contains_var_in_env idx then (bounds_of_type t) else make_range (expr, expr) 
       | Broadcast (e, _) -> recurse e
       | Cast (t, e)      -> begin
+        let t = element_val_type t in
         match recurse e with
           | Range (min, max) -> make_range (Cast (t, min), Cast (t, max))
           | _ -> type_bounds
@@ -332,7 +335,7 @@ let bounds_of_expr_in_env env expr =
       | UIntImm n -> make_range (UIntImm n, UIntImm n)
       | FloatImm n -> make_range (FloatImm n, FloatImm n)
     in
-    (*
+    
     let result_string = match result with
       | Unbounded -> "Unbounded"
       | Range (min, max) -> 
@@ -341,7 +344,7 @@ let bounds_of_expr_in_env env expr =
             Ir_printer.string_of_expr (constant_fold_expr max) ^ ")"
     in
     Printf.printf "Bounds of %s = %s\n" (Ir_printer.string_of_expr expr) result_string;
-    *)
+    
     result
   in
   let result =
