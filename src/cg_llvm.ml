@@ -513,6 +513,7 @@ let rec make_cg_context c m b sym_table arch_state =
                 let elem_size = (IntImm ((bit_width ty)/8)) in 
                 (Arch.malloc cg_context name size elem_size, true)
                 (* TODO: disable alloca when loop is parallel - e.g. on PTX *)
+(* 
             | IntImm x -> 
                 let elem_size = (bit_width ty)/8 in
                 let bytes = x * elem_size in
@@ -524,6 +525,7 @@ let rec make_cg_context c m b sym_table arch_state =
                 (* Inject an alloca *)
                 let ptr = build_array_alloca (vector_type (i32_type c) 4) (const_int int_imm_t chunks) "" b in
                 (build_pointercast ptr (pointer_type (type_of_val_type ty)) "" b, false)
+ *)                
         in
 
         (* push the symbol environment *)
