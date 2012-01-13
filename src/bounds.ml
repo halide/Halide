@@ -6,7 +6,7 @@ open Analysis
 type bounds_result = Range of (expr * expr) | Unbounded
 
 let make_range (min, max) =
-  Printf.printf "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max); 
+  dbg 0 "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max); 
   assert (is_scalar min);
   assert (is_scalar max);
   Range (min, max)

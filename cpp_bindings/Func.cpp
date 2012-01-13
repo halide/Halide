@@ -538,7 +538,7 @@ namespace FImage {
                                    guru);
         
         printf("Done transforming schedule\n");
-        printSchedule(sched);
+        //printSchedule(sched);
         
         stmt = doLower((name()), 
                        *Func::environment,

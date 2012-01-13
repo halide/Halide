@@ -52,15 +52,6 @@ module CodegenForArch ( Arch : Architecture ) = struct
 type arch_state = Arch.state
 type context = arch_state cg_context
 
-let dbgprint = 
-  let str = try Sys.getenv "HL_DEBUG_CODEGEN" with Not_found -> "0" in
-  match str with
-    | "1" -> true
-    | "0" -> false
-    | _ -> 
-        Printf.printf "Could not understand HL_DEBUG_CODEGEN: %s. Should be 0 or 1\n" str;
-        false
-
 (* Algebraic type wrapper for LLVM comparison ops *)
 type cmp =
   | CmpInt of Icmp.t
@@ -101,9 +92,9 @@ let rec make_cg_context c m b sym_table arch_state =
     arch_state = arch_state;
   }
   and cg_expr e = 
-    if dbgprint then Printf.eprintf "begin cg_expr %s\n%!" (string_of_expr e);
+    dbg 0 "begin cg_expr %s\n%!" (string_of_expr e);
     let result = Arch.cg_expr cg_context e in
-    if dbgprint then Printf.eprintf "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));
+    dbg 0 "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));
     result
   and cg_expr_inner = function
     (* constants *)
@@ -448,7 +439,7 @@ let rec make_cg_context c m b sym_table arch_state =
     StringIntSet.iter (fun (name, size) ->      
       let current_val = sym_get name in
       let offset = StringMap.find name offset_map in
-      Printf.printf "Storing %s of size %d at offset %d\n%!" name size offset;
+      dbg 0 "Storing %s of size %d at offset %d\n%!" name size offset;
       let addr = build_bitcast closure (pointer_type (type_of current_val)) "" b in      
       let addr = build_gep addr [| const_int int_imm_t (offset/size) |] "" b in
       ignore (build_store current_val addr b);
@@ -476,7 +467,7 @@ let rec make_cg_context c m b sym_table arch_state =
     ) syms;
 
     (* Make the var name refer to the first argument *)
-    Printf.printf "%s = %s\n%!" var_name "param body_fn 0";
+    dbg 0 "%s = %s\n%!" var_name "param body_fn 0";
     set_value_name var_name (param body_fn 0);
     Hashtbl.add sub_sym_table var_name (param body_fn 0);
 
@@ -600,7 +591,7 @@ let rec make_cg_context c m b sym_table arch_state =
 
         (* vector load of scalar address *)
       | (_, false) ->
-        failwith (Printf.sprintf "scalar expr %s loaded as vector type %s\n%!" (string_of_expr idx) (string_of_val_type t))
+        failwith "scalar expr %s loaded as vector type %s\n%!" (string_of_expr idx) (string_of_val_type t)
 
       | (w, true) ->
         begin match idx with 
@@ -727,7 +718,7 @@ let cg_entry c m e =
   ignore (build_ret_void b);
 
   (* check on our result *)
-  if dbgprint then dump_module m;
+  if 0 > verbosity then dump_module m;
   ignore (verify_cg m);
 
   (* return generated function *)
@@ -761,11 +752,11 @@ let codegen_c_wrapper c m f =
     match classify_type t with
       | TypeKind.Pointer ->
           let typename = match struct_name (element_type t) with Some nm -> nm | None -> "<unnamed>" in
-          Printf.printf "Wrapping buffer arg type %s\n%!" typename;
+          dbg 0 "Wrapping buffer arg type %s\n%!" typename;
           assert (typename = "struct.buffer_t");
           build_pointercast arg_ptr t "" b
       | _ ->
-          Printf.printf "Wrapping non-buffer arg type %s\n%!" (string_of_lltype t);
+          dbg 0 "Wrapping non-buffer arg type %s\n%!" (string_of_lltype t);
           build_load (build_pointercast arg_ptr (pointer_type t) "" b) "" b
   in
 
@@ -780,7 +771,7 @@ let codegen_c_wrapper c m f =
   (* return *)
   ignore (build_ret_void b);
 
-  if dbgprint then dump_module m;
+  if 0 > verbosity then dump_module m;
   
   ignore (verify_cg m);
   
