@@ -510,10 +510,12 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
   let functions = list_of_schedule schedule in
   let update stmt f =
     let (args, _, _) = find_function f env in
-    let (_, sched_list) = find_schedule schedule f in
-    if sched_list = [] then stmt else
-      let strides = stride_list sched_list (List.map (fun (_, n) -> f ^ "." ^ n) args) in
-      replace_calls_with_loads_in_stmt f strides stmt
+    let (call_sched, sched_list) = find_schedule schedule f in
+    match call_sched with
+      | Inline | Reuse _ -> stmt
+      | _ ->
+          let strides = stride_list sched_list (List.map (fun (_, n) -> f ^ "." ^ n) args) in
+          replace_calls_with_loads_in_stmt f strides stmt
   in
   List.fold_left update stmt functions 
 
