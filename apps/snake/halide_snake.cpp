@@ -5,15 +5,12 @@ using namespace FImage;
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <sys/time.h>
 #include "../png.h"
 
 using namespace std;
 
 Var x, y;
-
-
-
-
 
 // ###### Standard differential quantities ######
 
@@ -41,49 +38,29 @@ Func lap(Func f){
   return out;
 }
 
-
-
-
-
 // ###### Regularization term ######
 
 Func distReg_p2(Func phi){
 
-  Expr phi_x,phi_y;
-  phi_x = dx(phi)(x,y);
-  phi_y = dy(phi)(x,y);
+  Expr phi_x = dx(phi);
+  Expr phi_y = dy(phi);
+  Expr s = sqrt(phi_x * phi_x + phi_y * phi_y);
 
-  Expr s;
-  s = sqrt(phi_x * phi_x + phi_y * phi_y);
+  Expr ps = Select(s <= 1.0f,
+                   sin(2.0f * (float)M_PI * s / (2.0f * (float)M_PI)),
+                   s - 1.0f);
 
-  Expr ps;
-  ps = Select(s <= 1.0f,
-	      sin(2.0f * (float)M_PI * s / (2.0f * (float)M_PI)),
-	      s - 1.0f);
-
-  Expr dps;
-
-  Expr n = Select(ps == 0.0f,
-		  1.0f,
-		  ps);
-
-  Expr d = Select(s == 0.0f,
-		  1.0f,
-		  s);
-  
-  dps = n / d;
+  Expr n = Select(ps == 0.0f, 1.0f, ps);
+  Expr d = Select(s == 0.0f, 1.0f, s);  
 
   Func proxy_x;
-  proxy_x(x,y) = dps * phi_x - phi_x;
+  proxy_x = (n / d) * phi_x - phi_x;
   
   Func proxy_y;
-  proxy_y(x,y) = dps * phi_y - phi_y;
+  proxy_y = (n / d) * phi_y - phi_y;
 
   Func out;
-  out(x,y) =
-    dx(proxy_x)(x,y)
-    + dy(proxy_y)(x,y)
-    + lap(phi)(x,y);
+  out = dx(proxy_x) + dy(proxy_y) + lap(phi);
 
   return out;
 }
@@ -118,37 +95,24 @@ Func drlse_edge(Func phi_0,
 
   for(int k = 0 ; k < iter ; ++k){
     
-    Expr phi_x,phi_y;
-    phi_x = dx(phi[k])(x,y);
-    phi_y = dy(phi[k])(x,y);
+    Expr phi_x = dx(phi[k])(x,y);
+    Expr phi_y = dy(phi[k])(x,y);
 
-    Expr s;
-    s = sqrt(phi_x * phi_x + phi_y * phi_y);
-
+    Expr s = sqrt(phi_x * phi_x + phi_y * phi_y);
+    
     const float smallNumber = 1e-10f;
 
     Func Nx,Ny;
     Nx(x,y) = phi_x / (s + smallNumber);
     Ny(x,y) = phi_y / (s + smallNumber);
-    
-    Expr ddx,ddy;
-    ddx = dx(Nx)(x,y);
-    ddy = dy(Ny)(x,y);
-
-    Expr curvature;
-    curvature = ddx + ddy;
-
-    Expr distRegTerm;
-    distRegTerm = distReg_p2(phi[k])(x,y);
-
-    Expr diracPhi;
-    diracPhi = Dirac(phi[k],epsilon)(x,y);
-
-    Expr areaTerm;
-    areaTerm = diracPhi * g(x,y);
-
-    Expr edgeTerm;
-    edgeTerm = diracPhi * ((vx * Nx(x,y) + vy * Ny(x,y)) + g(x,y) * curvature);
+       
+    Expr ddx = dx(Nx)(x,y);
+    Expr ddy = dy(Ny)(x,y);
+    Expr curvature = ddx + ddy;
+    Expr distRegTerm = distReg_p2(phi[k])(x,y);
+    Expr diracPhi = Dirac(phi[k],epsilon)(x,y);
+    Expr areaTerm = diracPhi * g(x,y);
+    Expr edgeTerm = diracPhi * ((vx * Nx(x,y) + vy * Ny(x,y)) + g(x,y) * curvature);
 
     phi[k+1](x,y) = phi[k](x,y) + timestep * (mu * distRegTerm + lambda * edgeTerm + alpha * areaTerm);
   }
@@ -156,187 +120,133 @@ Func drlse_edge(Func phi_0,
   return phi.back();
 }
 
+Func blur(Func image, const float sigma) {
+  Func gaussian("gaussian");
+  gaussian(x) = exp(-(x/sigma)*(x/sigma)*0.5f);
 
+  // truncate to 3 sigma and normalize
+  int radius = int(3*sigma + 1.0f);
+  RVar i(-radius, 2*radius+1);
+  Func normalized("normalized");
+  normalized(x) = gaussian(x) / Sum(gaussian(i)); // Uses an inline reduction
 
-// Blur function using the heat equation and the formula sigma = sqrt(2t)
-Func blur(Func image,
-	  const float sigma){
+  // Convolve the input using two reductions
+  Func blurx("blurx"), blury("blury");
+  blurx(x, y) += image(x+i, y) * normalized(i);
+  blury(x, y) += blurx(x, y+i) * normalized(i);
 
-  const float dt = 0.25f;
-  const int iter = 0.5f * sigma * sigma / dt;
+  // Schedule the lot as root 
+  image.root();
+  gaussian.root();
+  normalized.root();
+  blurx.root();
+  blury.root();
 
-  vector<Func> out(iter+1);
-  out[0](x,y) = image(x,y);
-  
-  for(int n = 0 ; n < iter ; ++n){
-    out[n+1](x,y) = out[n](x,y) + dt * lap(out[n])(x,y);
-  }
-
-  out.back().root();
-  
-  return out.back();
+  return blury;
 }
-
 
 int main(int argc, char **argv) {
   
   const float timestep = 5.0f;
   const float mu = 0.2f / timestep;
   const int iter_inner = 1; // 5;
-  const int iter_outer = 100; // 1000;
-  const int iter_refine = 10; // 10;
+  const int iter_outer = argc > 3 ? atoi(argv[3]) : 1000;
   const float lambda = 6.0f; //6.0;
   float alpha = 1.5f;
   const float epsilon = 1.5;
   const float sigma = 1.5f;
   const int padding = 5;
   const float background = 255.0f * 0.98f;
-  const int selectPadding = 2;
-  const int phiPadding = selectPadding + 2;
+  const int selectPadding = 10;
 
-  UniformImage image(UInt(8),3);
-
-  printf("Loading input image\n");
-  
-  Image<uint8_t> im = load<uint8_t>(argv[1]);
-  image = im; // This binds a concrete image to the uniform image.
-
-
-
-  
   // ###### Prepare the input image ######
-  // Convert to gray scale, add a border, define boundary conditions
+  // Convert to gray scale, define boundary conditions
+
+  printf("Loading input image\n");  
+  Image<uint8_t> im = load<uint8_t>(argv[1]); 
   
   Func gray;
-  gray(x, y) = Max(Cast<float>(image(x, y, 0)), Max(Cast<float>(image(x, y, 1)), Cast<float>(image(x, y, 2))));
-  
-  Func clampedImage;
-  clampedImage(x,y) = gray(Clamp(x,0,im.width()-1),
-			   Clamp(y,0,im.height()-1));
-  
-  Func paddedImage;
-  paddedImage(x,y) = Select((x < 0)
-			    || (x >= im.width())
-			    || (y < 0)
-			    || (y >= im.height()),
-			    background,
-			    clampedImage(x,y));    
-  
-  Func input("input");
-  input(x,y) = Cast<float>(paddedImage(x,y));
+  gray(x, y) = Max(Cast<float>(im(x, y, 0)), Max(Cast<float>(im(x, y, 1)), Cast<float>(im(x, y, 2))));
 
-
-
-
-
-  
+  Func clamped;
+  clamped(x, y) = gray(Clamp(x, 0, im.width()),
+                       Clamp(y, 0, im.height()));
+    
   // ###### Compute the G function ######
   // Some simple computation, cache the result because never changes later
   
   Func blurred_input("blurred_input");
-  blurred_input = blur(input,sigma);
+  blurred_input = blur(clamped,sigma);
 
-  Expr input_dx,input_dy;
-  input_dx = dx(blurred_input)(x,y);
-  input_dy = dy(blurred_input)(x,y);
+  Func input_dx, input_dy;
+  input_dx = dx(blurred_input);
+  input_dy = dy(blurred_input);
 
-  Func g_proxy("g_proxy");
-  g_proxy(x,y) = 1.0f / (1.0f + input_dx * input_dx + input_dy * input_dy);
-
-  Func offset_g("offset_phi_init");
-  offset_g(x,y) = g_proxy(x - phiPadding, y - phiPadding);
+  Func g_proxy("g");
+  g_proxy = 1.0f / (1.0f + input_dx * input_dx + input_dy * input_dy);
   
-  UniformImage g_buffer(Float(32),2);
-  Image<float> g_buf = offset_g.realize(im.width() + 2 * phiPadding,im.height() + 2 * phiPadding);
-  g_buffer = g_buf;
-  
-  Func g("g");
-  g(x,y) = g_buffer(Clamp(x + phiPadding,0,g_buf.width()-1),
-		    Clamp(y + phiPadding,0,g_buf.height()-1));
-
-
-  
+  // Spill to a concrete array
+  Image<float> g_buf = g_proxy.realize(im.width(), im.height());
 
   // ###### Initialize the selection  ######
-  // Create a big rectangle, store it in the temporary buffer
+  // Create a big rectangle, store it in an array
   
-  float c0 = 2.0f;
-
   Func phi_init("phi_init");
-  phi_init(x,y) = Select((x >= -selectPadding)
-			 && (x < im.width() + selectPadding)
-			 && (y >= -selectPadding)
-			 && (y < im.height() + selectPadding),
-			 -c0,
-			 c0);
-
-  Func offset_phi_init("offset_phi_init");
-  offset_phi_init(x,y) = phi_init(x - phiPadding, y - phiPadding);
-
-  UniformImage phi_buffer(Float(32),2);
-  Image<float> buf = offset_phi_init.realize(im.width() + 2 * phiPadding,im.height() + 2 * phiPadding);
-
-
-
+  phi_init(x,y) = Select((x >= selectPadding)
+			 && (x < im.width() - selectPadding)
+			 && (y >= selectPadding)
+			 && (y < im.height() - selectPadding),
+			 -2.0f, 2.0f);
+  Image<float> phi_buf = phi_init.realize(im.width(), im.height());
 
   // ###### Define the outer loop ######
   // Read from the buffer, compute the result, possibly create code for intermediate images
   
-  Func phi_begin("phi_begin");
-  phi_begin(x,y) = phi_buffer(Clamp(x + phiPadding,0,buf.width()-1),
-			      Clamp(y + phiPadding,0,buf.height()-1));
-  
-  
-  printf("Defining phi_end\n");
-  Func phi_end("phi_end");
-  phi_end = drlse_edge(phi_begin,g,lambda,mu,alpha,epsilon,timestep,iter_inner);
-  
-  Func offset_phi("offset_phi");
-  offset_phi(x,y) = phi_end(x - phiPadding, y - phiPadding);
+  // Make a uniform image to hold this input, because we'll be wanting
+  // to change it every iteration
+  UniformImage phi_input(Float(32), 2);
 
-//   Func output_stage; // for intermediate images
-//   output_stage(x,y,Var()) = Cast<uint8_t>(Select(phi_end(x,y) < 0.0f, 255, 0));
-
-
-
+  Func phi_clamped("phi_clamped");
+  phi_clamped(x,y) = phi_input(Clamp(x,0,phi_buf.width()-1),
+                               Clamp(y,0,phi_buf.height()-1));
   
+  // g stays fixed, so we can skip the uniform image and have it
+  // always read straight from the buffer
+  Func g_clamped("g_clamped");
+  g_clamped(x, y) = g_buf(Clamp(x, 0, g_buf.width()-1),
+                          Clamp(y, 0, g_buf.height()-1));
+    
+  Func phi_new("phi_new");
+  phi_new = drlse_edge(phi_clamped,g_clamped,lambda,mu,alpha,epsilon,timestep,iter_inner);
 
-  // ###### Outer loop ######
+  phi_new.parallel(y).vectorize(x, 4);
+  phi_new.compileJIT();
+
+  // ###### Run the outer loop ######
   
+  timeval t1, t2;
+  gettimeofday(&t1, NULL);
   for(int n = 0 ; n < iter_outer ; ++n){
 
-    clog << "### iteration " << (n + 1) << " of " << iter_outer << endl;
-    
-    phi_buffer = buf;
-    buf = offset_phi.realize(im.width() + 2 * phiPadding,im.height() + 2 * phiPadding);
+    if (n % 10 == 9) {
+      // Timing code. The time per update increases as the distance
+      // function grows inwards.
+      gettimeofday(&t2, NULL);
+      float t = (t2.tv_sec - t1.tv_sec)*1000.0f + (t2.tv_usec - t1.tv_usec)/1000.0f;
+      printf("Iteration %d / %d. Averate time per iteration = %f ms\n", 
+             (n+1), iter_outer, t/n);
+    }
 
-/*
-    ostringstream out_name; // for intermediate images
-    out_name << "output_" << setw(4) << setfill('0') << n << ".png"; 
-    
-//     Image<uint8_t> out = output_stage.realize(im.width() + 2 * phiPadding,im.height() + 2 * phiPadding, 1);
-    Image<uint8_t> out = output_stage.realize(im.width(),im.height(), 1);
-    save(out, out_name.str().c_str());
-*/
+    phi_input = phi_buf;
+    phi_buf = phi_new.realize(im.width(), im.height());
   }
-
-
-
-  
-  
+    
   // ###### Save the result ######
-  // Read data from the buffer, threshold, save
-  
-  Func phi_final("phi_final");
-  
-  phi_final(x,y) = phi_buffer(Clamp(x + phiPadding,0,buf.width()-1),
-			      Clamp(y + phiPadding,0,buf.height()-1));
-  
-  Func output("output");
-  output(x,y,Var()) = Cast<uint8_t>(Select(phi_final(x,y) < 0.0f, 255, 0));
 
-
-  Image<uint8_t> out = output.realize(im.width(),im.height(), 1);
-
+  Func masked;
+  Var c;
+  // Dim the unselected areas for visualization
+  masked(x, y, c) = Select(phi_buf(x, y) < 0.0f, im(x, y, c), im(x, y, c)/4);
+  Image<uint8_t> out = masked.realize(im.width(), im.height(), 3);
   save(out, argv[2]);
 }
