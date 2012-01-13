@@ -507,26 +507,9 @@ let rec make_cg_context c m b sym_table arch_state =
 
     | Pipeline (name, ty, size, produce, consume) ->
 
-        let (scratch, needs_freeing) = 
-          match size with
-            | _ ->                 
-                let elem_size = (IntImm ((bit_width ty)/8)) in 
-                (Arch.malloc cg_context name size elem_size, true)
-                (* TODO: disable alloca when loop is parallel - e.g. on PTX *)
-(* 
-            | IntImm x -> 
-                let elem_size = (bit_width ty)/8 in
-                let bytes = x * elem_size in
-                let chunks = ((bytes + 15)/16) in (* TODO: stack alignment is architecture specific? *)
-                (* Get the position at the top of the function *)
-                let pos = instr_begin (entry_block (block_parent (insertion_block b))) in
-                (* Make a builder at the start of the entry block *)
-                let b = builder_at c pos in
-                (* Inject an alloca *)
-                let ptr = build_array_alloca (vector_type (i32_type c) 4) (const_int int_imm_t chunks) "" b in
-                (build_pointercast ptr (pointer_type (type_of_val_type ty)) "" b, false)
- *)                
-        in
+        (* allocate buffer *)
+        let elem_size = (IntImm ((bit_width ty)/8)) in 
+        let scratch = Arch.malloc cg_context name size elem_size in
 
         (* push the symbol environment *)
         sym_add name scratch;
@@ -538,7 +521,7 @@ let rec make_cg_context c m b sym_table arch_state =
         sym_remove name;
 
         (* free the scratch *)
-        if (needs_freeing) then ignore (Arch.free cg_context scratch);
+        ignore (Arch.free cg_context scratch);
 
         res
     | Print (fmt, args) -> cg_print fmt args
