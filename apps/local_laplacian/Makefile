@@ -7,7 +7,7 @@ local_laplacian: ../../cpp_bindings/ local_laplacian.cpp
 	g++-4.6 local_laplacian.cpp -I ../../cpp_bindings/ ../../cpp_bindings/FImage.a  -std=c++0x -lpng -o local_laplacian -lpthread -ldl $(PNGFLAGS)
 
 local_laplacian.bc: local_laplacian
-	./local_laplacian 101
+	./local_laplacian 103
 
 local_laplacian.o: local_laplacian.bc
 	cat local_laplacian.bc | opt -O3 | llc -O3 -filetype=obj -o local_laplacian.o
