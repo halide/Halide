@@ -11,16 +11,30 @@
 
 extern "C" {
 
+#define NDEBUG
+
+#ifdef NDEBUG
+#define CHECK_CALL(c,str) (c)
+#define TIME_CALL(c,str) (CHECK_CALL((c),(str)))
+#else
 //#define CHECK_CALL(c) (assert((c) == CUDA_SUCCESS))
-//#define CHECK_CALL(c) (success &&= ((c) == CUDA_SUCCESS))
-// #define CHECK_CALL(c,str) (c)
 #define CHECK_CALL(c,str) {\
     fprintf(stderr, "Do %s\n", str); \
     CUresult status = (c); \
     if (status != CUDA_SUCCESS) \
         fprintf(stderr, "CUDA: %s returned non-success: %d\n", str, status); \
     assert(status == CUDA_SUCCESS); \
-    } (c)
+} currentTime() // just *some* expression fragment after which it's legal to put a ;
+#define TIME_CALL(c,str) {\
+    cuEventRecord(__start, 0);                              \
+    CHECK_CALL((c),(str));                                  \
+    cuEventRecord(__end, 0);                                \
+    cuEventSynchronize(__end);                              \
+    float msec;                                             \
+    cuEventElapsedTime(&msec, __start, __end);              \
+    printf("   (took %fms, t=%d)\n", msec, currentTime());  \
+} currentTime() // just *some* expression fragment after which it's legal to put a ;
+#endif //NDEBUG
 
 #ifndef __cuda_cuda_h__
 #ifdef _WIN32
@@ -234,38 +248,36 @@ void __release() {
 CUfunction __get_kernel(const char* entry_name)
 {
     CUfunction f;
+    #ifdef NDEBUG
+    char msg[1];
+    #else
     char msg[256];
     snprintf(msg, 256, "get_kernel %s (t=%d)", entry_name, currentTime() );
+    #endif
     // Get kernel function ptr
-    cuEventRecord(__start, 0);
-    CHECK_CALL( cuModuleGetFunction(&f, __mod, entry_name), msg );
-    cuEventRecord(__end, 0);
-    cuEventSynchronize(__end);
-    float msec;
-    cuEventElapsedTime(&msec, __start, __end);
-    printf("   (took %fms, t=%d)\n", msec, currentTime());
+    TIME_CALL( cuModuleGetFunction(&f, __mod, entry_name), msg );
     return f;
 }
 
 CUdeviceptr __dev_malloc(size_t bytes) {
     CUdeviceptr p;
+    #ifdef NDEBUG
+    char msg[1];
+    #else
     char msg[256];
     snprintf(msg, 256, "dev_malloc (%zu bytes) (t=%d)", bytes, currentTime() );
-    cuEventRecord(__start, 0);
-    CHECK_CALL( cuMemAlloc(&p, bytes), msg );
-    cuEventRecord(__end, 0);
-    cuEventSynchronize(__end);
-    float msec;
-    cuEventElapsedTime(&msec, __start, __end);
-    fprintf( stderr, "   returned %p (in %fms)\n", (void*)p, msec );
+    #endif
+    TIME_CALL( cuMemAlloc(&p, bytes), msg );
     assert(p);
     return p;
 }
 
 void __dev_malloc_if_missing(buffer_t* buf) {
     if (buf->dev) return;
+    #ifndef NDEBUG
     fprintf(stderr, "dev_malloc_if_missing of %zux%zux%zux%zu (%zu bytes) buffer\n",
             buf->dims[0], buf->dims[1], buf->dims[2], buf->dims[3], buf->elem_size);
+    #endif
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     buf->dev = __dev_malloc(size);
     assert(buf->dev);
@@ -275,15 +287,13 @@ void __copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         assert(buf->host && buf->dev);
         size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
+        #ifdef NDEBUG
+        char msg[1];
+        #else
         char msg[256];
         snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, currentTime() );
-        cuEventRecord(__start, 0);
-        CHECK_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
-        cuEventRecord(__end, 0);
-        cuEventSynchronize(__end);
-        float msec;
-        cuEventElapsedTime(&msec, __start, __end);
-        printf("   (took %fms, t=%d)\n", msec, currentTime());
+        #endif
+        TIME_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
     }
     buf->host_dirty = false;
 }
@@ -292,15 +302,13 @@ void __copy_to_host(buffer_t* buf) {
     if (buf->dev_dirty) {
         assert(buf->host && buf->dev);
         size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
+        #ifdef NDEBUG
+        char msg[1];
+        #else
         char msg[256];
         snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
-        cuEventRecord(__start, 0);
-        CHECK_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
-        cuEventRecord(__end, 0);
-        cuEventSynchronize(__end);
-        float msec;
-        cuEventElapsedTime(&msec, __start, __end);
-        printf("   (took %fms, t=%d)\n", msec, currentTime());
+        #endif
+        TIME_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
     }
     buf->dev_dirty = false;
 }
@@ -313,6 +321,9 @@ void __dev_run(
     void* args[])
 {
     CUfunction f = __get_kernel(entry_name);
+    #ifdef NDEBUG
+    char msg[1];
+    #else
     char msg[256];
     snprintf(
         msg, 256,
@@ -320,8 +331,8 @@ void __dev_run(
         entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes,
         currentTime()
     );
-    cuEventRecord(__start, 0);
-    CHECK_CALL(
+    #endif
+    TIME_CALL(
         cuLaunchKernel(
             f,
             blocksX,  blocksY,  blocksZ,
@@ -333,11 +344,6 @@ void __dev_run(
         ),
         msg
     );
-    cuEventRecord(__end, 0);
-    cuEventSynchronize(__end);
-    float msec;
-    cuEventElapsedTime(&msec, __start, __end);
-    printf("   (took %fms, t=%d)\n", msec, currentTime());
 }
 
 #ifdef INCLUDE_WRAPPER
