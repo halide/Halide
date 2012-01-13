@@ -21,7 +21,6 @@ let codegen_entry c m cg_entry _ e =
   (* return the wrapper which takes buffer_t*s *)
   cg_wrapper c m e inner
 
-
 let rec cg_expr (con : context) (expr : expr) =
   let c = con.c and b = con.b and m = con.m in
 
@@ -32,6 +31,7 @@ let rec cg_expr (con : context) (expr : expr) =
   let f32x4_t = vector_type (float_type c) 4 in
   let i16x8x2_t = struct_type c [| i16x8_t; i16x8_t |] in
   let i16x4_t = vector_type (i16_type c) 4 in
+  let i32x4_t = vector_type (i32_type c) 4 in
   let i16x4x2_t = struct_type c [| i16x4_t; i16x4_t |] in
 
   let cg_expr e = cg_expr con e in
@@ -52,6 +52,16 @@ let rec cg_expr (con : context) (expr : expr) =
     build_bitcast result t "" b       
   in    
   
+  let rec is_power_of_two = function
+    | 1 -> true
+    | x -> let y = x/2 in (is_power_of_two y) && (x = y*2)
+  in
+
+  let rec log2 = function
+    | 1 -> 0
+    | x -> 1 + (log2 (x/2))
+  in
+
   match expr with 
     | Bop (Min, l, r) when is_vector l -> 
         begin match (val_type_of_expr l) with
@@ -81,7 +91,7 @@ let rec cg_expr (con : context) (expr : expr) =
         end
 
     (* use intrinsics for vector loads/stores *) 
-    | Load (t, buf, Ramp (base, IntImm 1, w)) when (bit_width t = 128) && (t <> (FloatVector (64, 2))) ->
+    | Load (t, buf, Ramp (base, IntImm 1, w)) when (bit_width t = 128 || bit_width t = 64) && (t <> (FloatVector (64, 2))) ->
         let intrin = match t with
           | FloatVector (_, _) -> "4f32" (* there isn't a v2f64 vld *)
           | UIntVector (bits, w) 
@@ -95,15 +105,49 @@ let rec cg_expr (con : context) (expr : expr) =
         let result = build_call ld [|addr; const_int (i32_t) ((bit_width (element_val_type t))/8)|] "" b in
         result
 
+          
     | Load (IntVector (16, 8), buf, Ramp (base, IntImm 2, w)) 
     | Load (UIntVector (16, 8), buf, Ramp (base, IntImm 2, w)) ->
         let ld = declare_function "llvm.arm.neon.vld2.v8i16"
           (function_type (i16x8x2_t) [|ptr_t; i32_t|]) m in
-        let addr = con.cg_memref (IntVector (16, 8)) buf base in        
-        let addr = build_pointercast addr ptr_t "" b in
-        let result = build_call ld [|addr; const_int (i32_t) 16|] "" b in
-        build_extractvalue result 0 "" b 
+        let (base, which, known) = match (Analysis.reduce_expr_modulo base 2) with
+          | Some 0 -> (base, 0, true)
+          | Some 1 -> (Constant_fold.constant_fold_expr (base -~ IntImm 1), 1, true)
+          | None -> (base, 0, false)
+        in
+        if known then                 
+          let addr = con.cg_memref (IntVector (16, 8)) buf base in        
+          let addr = build_pointercast addr ptr_t "" b in
+          let result = build_call ld [|addr; const_int (i32_t) 16|] "" b in
+          build_extractvalue result which "" b 
+        else
+          failwith "Unknown alignment on vld2"
 
+    (* Narrowing vector shifts intrinsics *)
+
+    (* 32 -> 16 *)
+    | Cast (IntVector(16, 4), Bop (Div, x, Broadcast(IntImm y, w))) when is_power_of_two y ->
+        let shift = log2 y in
+        let intrin = declare_function "llvm.arm.neon.vshiftn.v4i16"
+          (function_type (i16x4_t) [|i32x4_t; i32x4_t|]) m in
+        let arg1 = cg_expr x in
+        let shift = const_int i32_t (-(log2 y)) in
+        let arg2 = const_vector [|shift; shift; shift; shift|] in
+        build_call intrin [|arg1; arg2|] "" b                                      
+        
+    (* Non-narrowing vector shift  *)
+    (* 
+    | Bop (Div, x, Broadcast(IntImm y, w)) when is_power_of_two y ->
+          *)
+
+        
+
+    (* Other integer types ... 
+    | Bop (Div, x, Broadcast(Cast(Int 16, IntImm y), w)) when is_power_of_two y ->
+    *)
+        
+            
+            (* 
     | Load (IntVector (16, 4), buf, Ramp (base, IntImm 2, w)) 
     | Load (UIntVector (16, 4), buf, Ramp (base, IntImm 2, w)) ->
         let ld = declare_function "llvm.arm.neon.vld2.v4i16"
@@ -112,6 +156,8 @@ let rec cg_expr (con : context) (expr : expr) =
         let addr = build_pointercast addr ptr_t "" b in
         let result = build_call ld [|addr; const_int (i32_t) 16|] "" b in
         build_extractvalue result 0 "" b 
+            *)
+
     (* TODO: generalize strided loads to other types *)
 
           
@@ -171,7 +217,7 @@ let rec cg_expr (con : context) (expr : expr) =
         end
       
     (* 
-    (* Broadcast using vdup *)
+    (* Broadcast using vdup? *)
     | Broadcast (x, n) ->        
 
     (* TODO: halving subtract? *)
@@ -183,13 +229,33 @@ let rec cg_expr (con : context) (expr : expr) =
     *)
 
 
-
+    (* Vector interleave *)
+    | Select (Cmp (EQ, Bop (Mod, Ramp (x, one, w), two), zero), l, r) 
+        when ((Analysis.reduce_expr_modulo x 2 = Some 0) &&
+              (duplicated_lanes l) &&
+              (duplicated_lanes r) &&
+              (zero = make_const (vector_of_val_type (val_type_of_expr x) w) 0) &&
+              (one = make_const (val_type_of_expr x) 1) &&
+              (two = make_const (vector_of_val_type (val_type_of_expr x) w) 2)) ->
+        let l = deduplicate_lanes l in
+        let r = deduplicate_lanes r in
+        let l = Constant_fold.constant_fold_expr l in
+        let r = Constant_fold.constant_fold_expr r in
+        let l = cg_expr l in
+        let r = cg_expr r in        
+        let rec gen_mask w = function
+          | 0 -> []
+          | n -> (gen_mask w (n-1)) @ [const_int i32_t (n-1); const_int i32_t (n+w-1)] in
+        let mask = const_vector (Array.of_list (gen_mask (w/2) (w/2))) in
+        build_shufflevector l r mask "" b 
           
-    (* vector select doesn't work right on arm yet *)          
+    (* llvm's vector select doesn't work right on arm yet *)          
     | Select (cond, thenCase, elseCase) when is_vector cond -> 
         cg_select cond thenCase elseCase
 
     | _ -> con.cg_expr expr
+
+exception DeinterleaveFailed
 
 let rec cg_stmt (con : context) (stmt : stmt) =
   let c = con.c and b = con.b and m = con.m in
@@ -202,39 +268,76 @@ let rec cg_stmt (con : context) (stmt : stmt) =
   let i8x16_t = vector_type (i8_type c) 16 in
   let i16x4_t = vector_type (i16_type c) 4 in
 
-  match stmt with
-    (* Look for the vector interleaved store pattern. It should be
-       expressed like so: out(x) = Select(x%2==0, a, b) where a and b
-       don't depend on (x%2) (e.g. they contain only x/2) *)
-    | Store (Select (Cmp (EQ, Bop (Mod, Ramp (x, one, w), two), zero), l, r), buf, Ramp (base, one1, _)) 
-        when (duplicated_lanes l &&
-              duplicated_lanes r &&
-              zero = make_const (vector_of_val_type (val_type_of_expr x) w) 0 &&
-              one = make_const (val_type_of_expr x) 1 && 
-              one1 = make_const (val_type_of_expr base) 1 &&
-              two = make_const (vector_of_val_type (val_type_of_expr x) w) 2) ->
-        
-        let l = deduplicate_lanes l in
-        let r = deduplicate_lanes r in
-        let l = Constant_fold.constant_fold_expr l in
-        let r = Constant_fold.constant_fold_expr r in
-        let t = val_type_of_expr l in
-        let l = cg_expr l in
-        let r = cg_expr r in
+  let rec try_deinterleave expr = 
+    let recurse = try_deinterleave in
+    Printf.printf "try_deinterleave pondering %s\n%!" (string_of_expr expr);
+    match expr with
+      | Select (Cmp (EQ, Bop(Mod, Ramp (base, IntImm 1, _), Broadcast (IntImm 2, _)), Broadcast (IntImm 0, _)), l, r) 
+          when Analysis.reduce_expr_modulo base 2 = Some 0 ->
+          (* This expression is why we're here - it was flagged by should_deinterleave *)
+          let (ll, _) = recurse l 
+          and (_, rr) = recurse r in
+          (ll, rr)              
 
-        begin match t with 
-          | IntVector (16, 4) 
-          | UIntVector (16, 4) ->
-              let st = declare_function "llvm.arm.neon.vst2.v4i16"
-                (function_type (void_type c) [|ptr_t; i16x4_t; i16x4_t; i32_t|]) m in 
-              let addr = con.cg_memref (IntVector (16, 8)) buf base in        
-              let addr = build_pointercast addr ptr_t "" b in
-              build_call st [|addr; l; r; const_int (i32_t) 2|] "" b 
-          | _ -> con.cg_stmt stmt (* TODO: more types *)
-        end
+      | Select (c, a, b) ->
+          let (cl, cr) = recurse c 
+          and (al, ar) = recurse a
+          and (bl, br) = recurse b in
+          (Select (cl, al, bl), Select (cr, ar, br))
+      (* This occurs in the interleave pattern we expect the front-end to provide *)
+      | Bop (Div, Ramp (base, IntImm 1, w), Broadcast (IntImm 2, _)) ->
+          (Ramp (base /~ (IntImm 2), IntImm 1, w/2),
+           Ramp (base /~ (IntImm 2), IntImm 1, w/2))
+      | Ramp (base, stride, w) when w mod 2 = 0 ->
+          (Ramp (base, stride *~ (IntImm 2), w/2),
+           Ramp (base +~ stride, stride *~ (IntImm 2), w/2))
+      | Broadcast (expr, w) when w mod 2 = 0 ->
+          (Broadcast (expr, w/2), Broadcast (expr, w/2))
+      | Cmp (op, l, r) -> 
+          let (ll, lr) = recurse l and (rl, rr) = recurse r in
+          (Cmp (op, ll, rl), Cmp (op, lr, rr))
+      | Bop (op, l, r) -> 
+          let (ll, lr) = recurse l and (rl, rr) = recurse r in
+          (Bop (op, ll, rl), Bop (op, lr, rr))
+      | And (l, r) -> 
+          let (ll, lr) = recurse l and (rl, rr) = recurse r in
+          (And (ll, rl), And (lr, rr))
+      | Or (l, r) -> 
+          let (ll, lr) = recurse l and (rl, rr) = recurse r in
+          (Or (ll, rl), Or (lr, rr))
+      | Not e -> 
+          let (l, r) = recurse e in
+          (Not l, Not r)
+      | Let (n, l, r) when vector_elements (val_type_of_expr l) = 1 ->
+          let (rl, rr) = recurse r in
+          (Let (n, l, rl), Let (n, l, rr))
+      | Load (t, buf, idx) when (vector_elements t) mod 2 = 0 ->
+          let w = vector_elements t in
+          let newt = vector_of_val_type (element_val_type t) (w/2) in
+          let (il, ir) = recurse idx in
+          (Load (newt, buf, il), Load (newt, buf, ir))
+      | Cast (t, e) when (vector_elements t) mod 2 = 0->
+          let w = vector_elements t in
+          let newt = vector_of_val_type (element_val_type t) (w/2) in          
+          let (l, r) = recurse e in
+          (Cast (newt, l), Cast (newt, r))
+      (* TODO: | MakeVector l ->  *)
+          
+      | Debug (e, str, args) -> 
+          let (l, r) = recurse e in
+          (Debug (l, str, args), Debug (r, str, args))
+      (* Barf on anything else *)
+      | _ -> raise DeinterleaveFailed
+  in
 
-    (* 128-bit dense stores should always use vst1 *)
-    | Store (e, buf, Ramp(base, IntImm 1, w)) when (bit_width (val_type_of_expr e) = 128) ->
+  let rec should_deinterleave = function
+    | Select (Cmp (EQ, Bop(Mod, Ramp (base, IntImm 1, _), Broadcast (IntImm 2, _)), Broadcast (IntImm 0, _)), _, _) -> 
+        Analysis.reduce_expr_modulo base 2 = Some 0
+    | expr -> fold_children_in_expr should_deinterleave (||) false expr
+  in
+
+  let cg_dense_store e buf base w =
+    if (bit_width (val_type_of_expr e) = 128) then begin
         let alignment = match (Analysis.reduce_expr_modulo base w, w) with
           (* 16-byte-aligned *)
           | (Some 0, _) -> 16 
@@ -259,10 +362,39 @@ let rec cg_stmt (con : context) (stmt : stmt) =
         let addr = build_pointercast addr ptr_t "" b in
         let value = build_bitcast (cg_expr e) i8x16_t "" b in
         build_call st [|addr; value; const_int (i32_t) alignment|] "" b         
+    end else con.cg_stmt (Store (e, buf, Ramp (base, IntImm 1, w))) 
+  in
 
-        
-        
-
+  match stmt with
+    | Store (e, buf, Ramp (base, IntImm 1, w)) ->
+        if (should_deinterleave e) then begin
+          Printf.printf "Considering deinterleaving %s\n" (string_of_expr e);
+          let result = try (Some (try_deinterleave e)) with DeinterleaveFailed -> None in
+          begin match (result, val_type_of_expr e, Analysis.reduce_expr_modulo base 2) with
+            | (Some (l, r), UIntVector (16, 8), Some 0) 
+            | (Some (l, r), IntVector (16, 8), Some 0)  -> 
+                let l = Constant_fold.constant_fold_expr l in
+                let r = Constant_fold.constant_fold_expr r in          
+                Printf.printf "Let's do it!\n%!";
+                Printf.printf "Resulting children: %s %s\n" (string_of_expr l) (string_of_expr r);
+                let l = cg_expr l in
+                let r = cg_expr r in
+                let st = declare_function "llvm.arm.neon.vst2.v4i16"
+                  (function_type (void_type c) [|ptr_t; i16x4_t; i16x4_t; i32_t|]) m in 
+                let addr = con.cg_memref (IntVector (16, 8)) buf base in        
+                let addr = build_pointercast addr ptr_t "" b in
+                build_call st [|addr; l; r; const_int (i32_t) 2|] "" b               
+            | (None, _, _) -> 
+                Printf.printf "Not doing it because deinterleave failed\n";
+                cg_dense_store e buf base w
+            | (_, _, Some 0) ->
+                Printf.printf "Not doing it because type didn't match a known vst2\n";
+                cg_dense_store e buf base w        
+            | (_, _, _) ->
+                Printf.printf "Not doing it because base of write not a multiple of two\n";
+                cg_dense_store e buf base w
+          end 
+        end else cg_dense_store e buf base w
     | _ -> con.cg_stmt stmt
 
 
