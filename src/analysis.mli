@@ -4,6 +4,7 @@ exception ModulusOfBroadcast
 exception ModulusOfRamp
 
 val reduce_expr_modulo : Ir.expr -> int -> int option
+val compute_remainder_modulus : Ir.expr -> int * int
 
 val fold_children_in_expr :
   (Ir.expr -> 'a) -> ('a -> 'a -> 'a) -> 'a -> Ir.expr -> 'a
