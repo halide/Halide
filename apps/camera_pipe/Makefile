@@ -1,4 +1,4 @@
-camera_pipe: ../../cpp_bindings/ camera_pipe.cpp
+camera_pipe: ../../cpp_bindings/ ../../src/ camera_pipe.cpp
 	$(MAKE) -C ../../cpp_bindings FImage.a
 	g++-4.6 camera_pipe.cpp -I ../../cpp_bindings/ ../../cpp_bindings/FImage.a  -std=c++0x -o camera_pipe -ldl -lpthread
 
