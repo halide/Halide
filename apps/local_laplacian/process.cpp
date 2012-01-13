@@ -8,6 +8,10 @@ extern "C" {
 
 using namespace FImage;
 
+// TODO: fold into module
+extern "C" { typedef struct CUctx_st *CUcontext; }
+namespace FImage { CUcontext cuda_ctx = 0; }
+
 int main(int argc, char **argv) {
     Image<uint16_t> input = load<uint16_t>(argv[1]);
     int levels = atoi(argv[2]);
@@ -16,7 +20,7 @@ int main(int argc, char **argv) {
 
     timeval t1, t2;
     unsigned int bestT = 0xffffffff;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 1; i++) {
       gettimeofday(&t1, NULL);
       local_laplacian(levels, beta, alpha/(levels-1), input, output);
       gettimeofday(&t2, NULL);
