@@ -124,11 +124,13 @@ let rec constant_fold_expr expr =
         (* | (Div, Ramp (b, s, n), Broadcast (e, _)) -> Ramp (recurse (b /~ e), recurse (s /~ e), n) *)
 
         (* op (Broadcast, Broadcast) should be folded into the broadcast *)
-        | (Add, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a +~ b), n)
-        | (Sub, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a -~ b), n)
-        | (Mul, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a *~ b), n)
-        | (Div, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a /~ b), n)
-        | (Mod, Broadcast (a, n), Broadcast(b, _)) -> Broadcast (recurse (a %~ b), n)
+        | (Add, Broadcast (a, n), Broadcast(b, _)) -> recurse (Broadcast (a +~ b, n))
+        | (Sub, Broadcast (a, n), Broadcast(b, _)) -> recurse (Broadcast (a -~ b, n))
+        | (Mul, Broadcast (a, n), Broadcast(b, _)) -> recurse (Broadcast (a *~ b, n))
+        | (Div, Broadcast (a, n), Broadcast(b, _)) -> recurse (Broadcast (a /~ b, n))
+        | (Mod, Broadcast (a, n), Broadcast(b, _)) -> recurse (Broadcast (a %~ b, n))
+        | (Max, Broadcast (a, n), Broadcast(b, _)) -> recurse (Broadcast (Bop (Max, a, b), n))
+        | (Min, Broadcast (a, n), Broadcast(b, _)) -> recurse (Broadcast (Bop (Min, a, b), n))
 
         (* Converting subtraction to addition *)
         | (Sub, x, IntImm y) -> recurse (x +~ (IntImm (-y)))
@@ -256,7 +258,7 @@ let rec constant_fold_expr expr =
               recurse (Let (n, base, subs_expr old (Ramp (newvar, stride, w)) b))
           | x when is_simple x -> recurse (subs_expr old a b)
           (* if a is a multiple of something, that should go to the inside to help out any modulo analysis *)
-          | _ -> begin
+          | _  when (is_scalar a) -> begin            
             match Analysis.compute_remainder_modulus a with
               | (0, 1) -> Let (n, a, b)
               | (_, 0) -> failwith ("lhs of let is apparently a constant but was not folded in by is_simple rule: " ^ (Ir_printer.string_of_expr (Let (n, a, b))))
@@ -266,8 +268,9 @@ let rec constant_fold_expr expr =
                   let oldvar = Var (val_type_of_expr a, n) in
                   let newvar = (old *~ m) +~ r in
                   let a = recurse ((a -~ r) /~ m) in
-                  Let (n, a, recurse (subs_expr oldvar newvar b))
+                  Let (n, a, recurse (subs_expr oldvar newvar b))                    
           end
+          | _ -> Let (n, a, b)
         end
     | Call (t, n, args) -> Call (t, n, List.map recurse args)
 

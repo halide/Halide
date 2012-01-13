@@ -9,7 +9,7 @@ Expr lerp(Expr a, Expr b, Expr alpha) {
 int main(int argc, char **argv) {
     UniformImage input(Float(32), 2);
     Uniform<float> r_sigma;
-    int s_sigma = atoi(argv[1]);
+    Uniform<int> s_sigma;
     Var x("x"), y("y"), z("z"), c("c"), xi("xi"), yi("yi");
 
     // Add a boundary condition 
@@ -23,11 +23,8 @@ int main(int argc, char **argv) {
     val = Clamp(val, 0.0f, 1.0f);
     Expr zi = Cast<int>(val * (1.0f/r_sigma) + 0.5f);
     Func grid("grid");
-    printf("A\n");
     grid(x, y, z, c) = 0.0f;
-    printf("B\n");
     grid(x, y, zi, c) += Select(c == 0, val, 1.0f);
-    printf("C\n");
 
     // Blur the grid using a five-tap filter
     Func blurx("blurx"), blury("blury"), blurz("blurz");
@@ -43,46 +40,44 @@ int main(int argc, char **argv) {
     Expr zf = zv - zi;
     Expr xf = Cast<float>(xi) / s_sigma;
     Expr yf = Cast<float>(yi) / s_sigma;
-
     Func interpolated("interpolated");    
-
-    interpolated(x, y, xi, yi, c) = 
+    interpolated(xi, yi, x, y, c) = 
         lerp(lerp(lerp(blurz(x, y, zi, c), blurz(x+1, y, zi, c), xf),
-                  lerp(blurz(x, y+1, zi, c), blurz(x+1, y+1, zi, c), xf),
-                  yf),
+                  lerp(blurz(x, y+1, zi, c), blurz(x+1, y+1, zi, c), xf), yf),
              lerp(lerp(blurz(x, y, zi+1, c), blurz(x+1, y, zi+1, c), xf),
-                  lerp(blurz(x, y+1, zi+1, c), blurz(x+1, y+1, zi+1, c), xf),
-                  yf),
-             zf);
-
-    /*
-      // Precompute the lerp weights
-    Func bilerpWeight;
-    bilerpWeight(xi, yi) = xf*yf;
-    bilerpWeight.root();
-    
-    
-    interpolated(x, y, xi, yi, c) = 
-        (bilerpWeight(s_sigma-xi-1, s_sigma-yi-1) * lerp(blurz(x,   y,   zi, c), blurz(x,   y, zi+1, c), zf) + 
-         bilerpWeight(xi, s_sigma-yi-1) * lerp(blurz(x+1, y,   zi, c), blurz(x+1, y, zi+1, c), zf) + 
-         bilerpWeight(s_sigma-xi-1, yi) * lerp(blurz(x,   y+1, zi, c), blurz(x,   y+1, zi+1, c), zf) + 
-         bilerpWeight(xi, yi) * lerp(blurz(x+1, y+1, zi, c), blurz(x+1, y+1, zi+1, c), zf));
-    */
+                  lerp(blurz(x, y+1, zi+1, c), blurz(x+1, y+1, zi+1, c), xf), yf), zf);
 
     Func outTiles;
-    outTiles(x, y, xi, yi) = interpolated(x, y, xi, yi, 0) / interpolated(x, y, xi, yi, 1);
+    outTiles(xi, yi, x, y) = interpolated(xi, yi, x, y, 0) / interpolated(xi, yi, x, y, 1);
 
     // Remove tiles to get the result
     Func smoothed("smoothed");
-    smoothed(x, y) = outTiles(x/s_sigma, y/s_sigma, x%s_sigma, y%s_sigma);
+    smoothed(x, y) = outTiles(x%s_sigma, y%s_sigma, x/s_sigma, y/s_sigma);
 
-    grid.root();
-    blurx.root();
-    blury.root();
-    blurz.root();
-    smoothed.root();
+    grid.root().parallel(z);
+    grid.update().transpose(y, c).transpose(x, c).transpose(i, c).transpose(j, c).parallel(y);
+    blurx.root().parallel(z).vectorize(x, 4);
+    blury.root().parallel(z).vectorize(x, 4);
+    blurz.root().parallel(z).vectorize(x, 4);
+    smoothed.root().parallel(y); 
 
     smoothed.compileToFile("bilateral_grid");
+
+    // Compared to Sylvain Paris' implementation from his webpage (on
+    // which this is based), for filter params 8 0.1, on a 4 megapixel
+    // input, on a four core x86 (2 socket core2 mac pro)
+    // Filter s_sigma: 2      4       8       16      32
+    // Paris (ms):     5350   1345    472     245     184
+    // Us (ms):        425    150     80.8    66.6    68.7
+    // Speedup:        12.5   9.0     5.9     3.7     2.7
+
+    // Our schedule and inlining are roughly the same as his, so the
+    // gain is all down to vectorizing and parallelizing. In general
+    // for larger blurs our win shrinks to roughly the number of
+    // cores, as the stages we don't vectorize dominate.  For smaller
+    // blurs, our win grows, because the stages that we vectorize take
+    // up all the time.
+    
 
     return 0;
 }
