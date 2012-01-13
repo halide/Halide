@@ -14,6 +14,7 @@ val stmt_contains_expr : Ir.expr -> Ir.stmt -> bool
 val mutate_children_in_expr : (Ir.expr -> Ir.expr) -> Ir.expr -> Ir.expr
 val mutate_children_in_stmt :
   (Ir.expr -> Ir.expr) -> (Ir.stmt -> Ir.stmt) -> Ir.stmt -> Ir.stmt
+(* val subs_stmt : Ir.stmt -> Ir.stmt -> Ir.stmt -> Ir.stmt *)
 val subs_expr_in_stmt : Ir.expr -> Ir.expr -> Ir.stmt -> Ir.stmt
 val subs_expr : Ir.expr -> Ir.expr -> Ir.expr -> Ir.expr
 val subs_name_stmt : Ir.buffer -> Ir.buffer -> Ir.stmt -> Ir.stmt
