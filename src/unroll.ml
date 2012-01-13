@@ -10,7 +10,7 @@ let rec unroll_stmt var stmt =
     | For (v, min, n, order, substmt) when v = var ->
       begin match n with
         | IntImm size | UIntImm size ->
-          let gen_stmt i = subs_stmt (Var (i32, var)) (min +~ (IntImm i)) substmt in
+          let gen_stmt i = subs_expr_in_stmt (Var (i32, var)) (min +~ (IntImm i)) substmt in
           For (v, IntImm 0, IntImm 1, false, Block (List.map gen_stmt (0 -- size)))
         | _ -> failwith "Can't unroll for with non-constant bounds"
       end

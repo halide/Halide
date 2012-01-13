@@ -269,7 +269,7 @@ let constant_fold_stmt stmt =
           let body = inner env stmt in
           let old_var = Var (Int 32, var) in
           let new_var = (old_var +~ min) in
-          let alternative = inner env (subs_stmt old_var new_var body) in
+          let alternative = inner env (subs_expr_in_stmt old_var new_var body) in
           let complexity stmt = fold_children_in_stmt (fun x -> 1) (fun x -> 1) (+) stmt in
           if (complexity alternative) <= (complexity body) then
             For (var, IntImm 0, size, order, alternative)

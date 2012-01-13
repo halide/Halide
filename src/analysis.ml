@@ -138,8 +138,8 @@ let mutate_children_in_stmt expr_mutator stmt_mutator = function
   | Print (p, l) -> Print (p, List.map expr_mutator l)
 
 (* Expression subsitution *)
-let rec subs_stmt oldexpr newexpr stmt =
-  mutate_children_in_stmt (subs_expr oldexpr newexpr) (subs_stmt oldexpr newexpr) stmt
+let rec subs_expr_in_stmt oldexpr newexpr stmt =
+  mutate_children_in_stmt (subs_expr oldexpr newexpr) (subs_expr_in_stmt oldexpr newexpr) stmt
 
 and subs_expr oldexpr newexpr expr = 
   if expr = oldexpr then 

@@ -388,7 +388,7 @@ let rec required_of_stmt func env = function
       required_of_stmt func env body
   | LetStmt (name, expr, stmt) ->
       (* Brute force. Might get really slow for long chains of letstmts *)
-      let subs = subs_stmt (Var (val_type_of_expr expr, name)) expr in
+      let subs = subs_expr_in_stmt (Var (val_type_of_expr expr, name)) expr in
       required_of_stmt func env (subs stmt)
       (* TODO: Why doesn't the below work? Does this mean let above is broken too?
       let required_of_expr = required_of_expr func env expr in
