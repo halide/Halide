@@ -48,6 +48,7 @@ typedef struct CUctx_st *CUcontext;                       /**< CUDA context */
 typedef struct CUmod_st *CUmodule;                        /**< CUDA module */
 typedef struct CUfunc_st *CUfunction;                     /**< CUDA function */
 typedef struct CUstream_st *CUstream;                     /**< CUDA stream */
+typedef struct CUevent_st *CUevent;                       /**< CUDA event */
 typedef enum {
     CUDA_SUCCESS                              = 0,
     CUDA_ERROR_INVALID_VALUE                  = 1,
@@ -120,6 +121,12 @@ CUresult CUDAAPI cuCtxSynchronize();
 
 CUresult CUDAAPI cuCtxPushCurrent(CUcontext ctx);
 CUresult CUDAAPI cuCtxPopCurrent(CUcontext *pctx);
+
+CUresult CUDAAPI cuEventRecord(CUevent hEvent, CUstream hStream);
+CUresult CUDAAPI cuEventCreate(CUevent *phEvent, unsigned int Flags);
+CUresult CUDAAPI cuEventSynchronize(CUevent hEvent);
+CUresult CUDAAPI cuEventElapsedTime(float *pMilliseconds, CUevent hStart, CUevent hEnd);
+
 #endif //__cuda_cuda_h__
 
 // Device, Context, Module, and Function for this entrypoint are tracked locally
@@ -130,6 +137,9 @@ CUresult CUDAAPI cuCtxPopCurrent(CUcontext *pctx);
 namespace FImage { extern CUcontext cuda_ctx; } // C++
 extern "C" {
 static CUmodule __mod;
+static CUevent __start, __end;
+
+extern int currentTime();
 
 // Used to create buffer_ts to track internal allocations caused by our runtime
 // TODO: look into cuMemAllocHost for page-locked host memory, allowing easy transfer?
@@ -193,10 +203,13 @@ void __init(const char* ptx_src)
             exit(-1);
         }
 
-        fprintf(stderr, "Got device %d, about to create context\n", dev);
+        fprintf(stderr, "Got device %d, about to create context (t=%d)\n", dev, currentTime());
+
 
         // Create context
         CHECK_CALL( cuCtxCreate(&FImage::cuda_ctx, 0, dev), "cuCtxCreate" );
+        cuEventCreate(&__start, 0);
+        cuEventCreate(&__end, 0);
     } else {
         CHECK_CALL( cuCtxPushCurrent(FImage::cuda_ctx), "cuCtxPushCurrent" );
     }
@@ -208,6 +221,7 @@ void __init(const char* ptx_src)
 
       fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
     }
+    printf("Return from __init (t=%d)\n", currentTime());
 }
 
 void __release() {
@@ -219,18 +233,29 @@ CUfunction __get_kernel(const char* entry_name)
 {
     CUfunction f;
     char msg[256];
-    snprintf(msg, 256, "get_kernel %s", entry_name );
+    snprintf(msg, 256, "get_kernel %s (t=%d)", entry_name, currentTime() );
     // Get kernel function ptr
+    cuEventRecord(__start, 0);
     CHECK_CALL( cuModuleGetFunction(&f, __mod, entry_name), msg );
+    cuEventRecord(__end, 0);
+    cuEventSynchronize(__end);
+    float msec;
+    cuEventElapsedTime(&msec, __start, __end);
+    printf("   (took %fms, t=%d)\n", msec, currentTime());
     return f;
 }
 
 CUdeviceptr __dev_malloc(size_t bytes) {
     CUdeviceptr p;
     char msg[256];
-    snprintf(msg, 256, "dev_malloc (%zu bytes)", bytes );
+    snprintf(msg, 256, "dev_malloc (%zu bytes) (t=%d)", bytes, currentTime() );
+    cuEventRecord(__start, 0);
     CHECK_CALL( cuMemAlloc(&p, bytes), msg );
-    fprintf( stderr, "   returned %p\n", (void*)p );
+    cuEventRecord(__end, 0);
+    cuEventSynchronize(__end);
+    float msec;
+    cuEventElapsedTime(&msec, __start, __end);
+    fprintf( stderr, "   returned %p (in %fms)\n", (void*)p, msec );
     assert(p);
     return p;
 }
@@ -248,8 +273,14 @@ void __copy_to_dev(buffer_t* buf) {
     assert(buf->host && buf->dev);
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     char msg[256];
-    snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p", size, buf->host, (void*)buf->dev );
+    snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, currentTime() );
+    cuEventRecord(__start, 0);
     CHECK_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
+    cuEventRecord(__end, 0);
+    cuEventSynchronize(__end);
+    float msec;
+    cuEventElapsedTime(&msec, __start, __end);
+    printf("   (took %fms, t=%d)\n", msec, currentTime());
 }
 
 void __copy_to_host(buffer_t* buf) {
@@ -257,7 +288,13 @@ void __copy_to_host(buffer_t* buf) {
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     char msg[256];
     snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
+    cuEventRecord(__start, 0);
     CHECK_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
+    cuEventRecord(__end, 0);
+    cuEventSynchronize(__end);
+    float msec;
+    cuEventElapsedTime(&msec, __start, __end);
+    printf("   (took %fms, t=%d)\n", msec, currentTime());
 }
 
 void __dev_run(
@@ -271,9 +308,11 @@ void __dev_run(
     char msg[256];
     snprintf(
         msg, 256,
-        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem",
-        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes
+        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%d)",
+        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes,
+        currentTime()
     );
+    cuEventRecord(__start, 0);
     CHECK_CALL(
         cuLaunchKernel(
             f,
@@ -286,6 +325,11 @@ void __dev_run(
         ),
         msg
     );
+    cuEventRecord(__end, 0);
+    cuEventSynchronize(__end);
+    float msec;
+    cuEventElapsedTime(&msec, __start, __end);
+    printf("   (took %fms, t=%d)\n", msec, currentTime());
 }
 
 #ifdef INCLUDE_WRAPPER
