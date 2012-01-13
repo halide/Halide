@@ -122,21 +122,21 @@ let rec make_cg_context c m b sym_table arch_state =
 
     (* arithmetic *)
 
-    | Bop(Add, l, r) -> cg_binop build_add  build_add  build_fadd l r
-    | Bop(Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
-    | Bop(Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
-    | Bop(Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
-    | Bop(Min, l, r) -> cg_minmax Min l r
-    | Bop(Max, l, r) -> cg_minmax Max l r
-    | Bop(Mod, l, r) -> cg_mod l r
+    | Bop (Add, l, r) -> cg_binop build_add  build_add  build_fadd l r
+    | Bop (Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
+    | Bop (Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
+    | Bop (Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
+    | Bop (Min, l, r) -> cg_minmax Min l r
+    | Bop (Max, l, r) -> cg_minmax Max l r
+    | Bop (Mod, l, r) -> cg_mod l r
 
     (* comparison *)
-    | Cmp(EQ, l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r
-    | Cmp(NE, l, r) -> cg_cmp Icmp.Ne  Icmp.Ne  Fcmp.One l r
-    | Cmp(LT, l, r) -> cg_cmp Icmp.Slt Icmp.Ult Fcmp.Olt l r
-    | Cmp(LE, l, r) -> cg_cmp Icmp.Sle Icmp.Ule Fcmp.Ole l r
-    | Cmp(GT, l, r) -> cg_cmp Icmp.Sgt Icmp.Ugt Fcmp.Ogt l r
-    | Cmp(GE, l, r) -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
+    | Cmp (EQ, l, r) -> cg_cmp Icmp.Eq  Icmp.Eq  Fcmp.Oeq l r
+    | Cmp (NE, l, r) -> cg_cmp Icmp.Ne  Icmp.Ne  Fcmp.One l r
+    | Cmp (LT, l, r) -> cg_cmp Icmp.Slt Icmp.Ult Fcmp.Olt l r
+    | Cmp (LE, l, r) -> cg_cmp Icmp.Sle Icmp.Ule Fcmp.Ole l r
+    | Cmp (GT, l, r) -> cg_cmp Icmp.Sgt Icmp.Ugt Fcmp.Ogt l r
+    | Cmp (GE, l, r) -> cg_cmp Icmp.Sge Icmp.Uge Fcmp.Oge l r
 
     (* logical *)
     | And (l, r) -> build_and (cg_expr l) (cg_expr r) "" b
@@ -144,16 +144,31 @@ let rec make_cg_context c m b sym_table arch_state =
     | Not l -> build_not (cg_expr l) "" b
 
     (* Select *)
-    | Select(c, t, f) -> 
-        build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b
+    | Select (cond, thenCase, elseCase) when is_vector cond ->         
+        (* build_select really doesn't work yet for vector conditions *)
+        let elts = vector_elements (val_type_of_expr cond) in
+        let bits = element_width (val_type_of_expr thenCase) in
+        let l = cg_expr thenCase in
+        let r = cg_expr elseCase in
+        let mask = cg_expr cond in
+        let mask = build_sext mask (type_of_val_type (IntVector (bits, elts))) "" b in
+        let ones = const_all_ones (type_of mask) in
+        let inv_mask = build_xor mask ones "" b in
+        let t = type_of l in
+        let l = build_bitcast l (type_of mask) "" b in
+        let r = build_bitcast r (type_of mask) "" b in
+        let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
+        build_bitcast result t "" b
+    | Select (c, t, f) ->
+        build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b 
 
-    | Load(t, buf, idx) -> cg_load t buf idx
+    | Load (t, buf, idx) -> cg_load t buf idx
 
     (* Loop variables *)
-    | Var(vt, name) -> sym_get name
+    | Var (vt, name) -> sym_get name
 
     (* Extern calls *)
-    | Call(t, name, args) ->
+    | Call (t, name, args) ->
         (* declare the extern function *)
         let arg_types = List.map (fun arg -> type_of_val_type (val_type_of_expr arg)) args in
         let name = base_name name in
@@ -165,26 +180,16 @@ let rec make_cg_context c m b sym_table arch_state =
         build_call llfunc (Array.of_list (llargs)) ("extern_" ^ name) b
 
     (* Let expressions *)
-    | Let(name, l, r) -> 
+    | Let (name, l, r) -> 
       sym_add name (cg_expr l);
       let result = cg_expr r in
       sym_remove name;
       result        
 
     (* Making vectors *)
-    | MakeVector(l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
+    | MakeVector (l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
 
-    | Broadcast(e, n) -> 
-        (*
-        let elem_type = val_type_of_expr e in
-        let vec_type  = vector_of_val_type elem_type n in
-        let expr      = cg_expr e in
-        let rec rep = function
-          | 0 -> undef (type_of_val_type vec_type)
-          | i -> build_insertelement (rep (i-1)) expr (const_int int_imm_t (i-1)) "" b
-        in      
-        let result = rep n in
-        *)
+    | Broadcast (e, n) -> 
         let elem_type = val_type_of_expr e in
         let vec_type  = vector_of_val_type elem_type n in
         let expr      = cg_expr e in
@@ -213,7 +218,7 @@ let rec make_cg_context c m b sym_table arch_state =
         in fst (rep n)
 
     (* Unpacking vectors *)
-    | ExtractElement(e, n) ->
+    | ExtractElement (e, n) ->
         let v = cg_expr e in
         let idx = cg_expr (Cast(u32, n)) in
         build_extractelement v idx "" b
