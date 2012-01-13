@@ -572,7 +572,7 @@ namespace FImage {
     }
 
     void Func::compileJIT() {
-        if (getenv("PSUEDOJIT")) {
+        if (getenv("HL_PSUEDOJIT")) {
             // llvm's ARM jit path has many issues currently. Instead
             // we'll do static compilation to a shared object, then
             // dlopen it
