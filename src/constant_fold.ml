@@ -255,7 +255,19 @@ let rec constant_fold_expr expr =
               let newvar = Var (val_type_of_expr base, n) in
               recurse (Let (n, base, subs_expr old (Ramp (newvar, stride, w)) b))
           | x when is_simple x -> recurse (subs_expr old a b)
-          | _ -> Let (n, a, b)
+          (* if a is a multiple of something, that should go to the inside to help out any modulo analysis *)
+          | _ -> begin
+            match Analysis.compute_remainder_modulus a with
+              | (0, 1) -> Let (n, a, b)
+              | (_, 0) -> failwith ("lhs of let is apparently a constant but was not folded in by is_simple rule: " ^ (Ir_printer.string_of_expr (Let (n, a, b))))
+              | (r, m) -> 
+                  let r = Cast (val_type_of_expr a, IntImm r) in
+                  let m = Cast (val_type_of_expr a, IntImm m) in
+                  let oldvar = Var (val_type_of_expr a, n) in
+                  let newvar = (old *~ m) +~ r in
+                  let a = recurse ((a -~ r) /~ m) in
+                  Let (n, a, recurse (subs_expr oldvar newvar b))
+          end
         end
     | Call (t, n, args) -> Call (t, n, List.map recurse args)
 
