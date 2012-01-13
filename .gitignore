@@ -45,3 +45,4 @@ test/cpp/*/*.o
 test/*.ptx
 test/*/*.tmp
 log.txt
+apps/blur/test
