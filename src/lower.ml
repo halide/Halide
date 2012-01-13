@@ -193,7 +193,13 @@ and realize func consume env schedule =
   let arg_names = List.map snd args in
 
   let strides = stride_list sched_list arg_names in
-  let buffer_size = List.fold_right (fun (min, size) old_size -> size *~ old_size) strides (IntImm 1) in
+  let buffer_size =
+    List.fold_right2
+      (fun (min, size) nm old_size ->
+         Debug(size, Printf.sprintf "  dim %s = " nm, [size]) *~ old_size)
+      strides
+      arg_names
+      (IntImm 1) in
 
   match body with
     | Extern -> failwith ("Can't lower extern function call " ^ func)
