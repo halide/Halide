@@ -336,7 +336,7 @@ int main(int argc, char **argv) {
         }
         break;
     case 103:
-        // 102, but inline laplacian pyramid levels
+        // 102, but inline laplacian pyramid levels - 118 on Tesla C2070
         output.root().split(yo, by, ty, 32).split(xo, bx, tx, 32)
             .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
         for (int j = 0; j < J; j++) {
@@ -357,7 +357,7 @@ int main(int argc, char **argv) {
         }
         break;
     case 104:
-        // 102, but inline laplacian pyramid levels
+        // 103, but inline gPyramid[0]
         output.root().split(yo, by, ty, 32).split(xo, bx, tx, 32)
             .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
         for (int j = 0; j < J; j++) {

@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
     timeval t1, t2;
     unsigned int bestT = 0xffffffff;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 5; i++) {
       gettimeofday(&t1, NULL);
       local_laplacian(levels, beta, alpha/(levels-1), input, output);
       gettimeofday(&t2, NULL);
