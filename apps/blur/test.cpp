@@ -13,6 +13,10 @@
 #include "CImg.h"
 using namespace cimg_library;
 
+// TODO: fold into module
+extern "C" { typedef struct CUctx_st *CUcontext; }
+namespace FImage { CUcontext cuda_ctx = 0; }
+
 timeval t1, t2;
 #define begin_timing gettimeofday(&t1, NULL); for (int i = 0; i < 10; i++) {
 #define end_timing } gettimeofday(&t2, NULL);
