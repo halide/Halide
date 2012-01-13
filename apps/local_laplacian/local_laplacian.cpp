@@ -109,7 +109,10 @@ int main(int argc, char **argv) {
     Var xi, yi;
     // Times are for a quad-core core2, a 32-core nehalem, and a 2-core omap4 cortex-a9
 
-    // In any case, the remapping function should be a lut
+    // In any case, the remapping function should be a lut evaluated
+    // ahead of time. It's so small relative to everything else that
+    // its schedule really doesn't matter (provided we don't inline
+    // it).
     remap.root();
 
     switch (atoi(argv[1])) {
@@ -164,12 +167,12 @@ int main(int argc, char **argv) {
     case 4:
         // Parallelize, inlining all the laplacian pyramid levels
         // (they can be computed from the gaussian pyramids on the
-        // fly): 585 240 4258
+        // fly): 499 ??? 4395
         output.split(yo, yo, yi, 32).parallel(yo);
         for (int j = 0; j < J; j++) {
-            inGPyramid[j].root().split(y, y, yi, 1).parallel(y);
+            inGPyramid[j].root().split(y, y, yi, 4).parallel(y);
             gPyramid[j].root().parallel(k);
-            outGPyramid[j].root().split(y, y, yi, 1).parallel(y);
+            outGPyramid[j].root().split(y, y, yi, 4).parallel(y);
         }
         break;                
     case 5:
@@ -233,26 +236,25 @@ int main(int argc, char **argv) {
         }
         break;      
     case 11:
-        // Same as case 5, but don't vectorize or split above a
-        // certain pyramid level to prevent boundaries expanding too
-        // much (computing an 8x8 top pyramid level instead of
-        // e.g. 5x5 requires much much more input). 579 227 4325
+        // Same as case 5, but don't vectorize above a certain pyramid
+        // level to prevent boundaries expanding too much (computing
+        // an 8x8 top pyramid level instead of e.g. 5x5 requires much
+        // much more input). 501 ??? 4944
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j++) {
-            if (J < 5) {
-                inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
-                gPyramid[j].root().parallel(k).vectorize(x, 4);
-                outGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
-            } else {
-                inGPyramid[j].root().parallel(y);
-                gPyramid[j].root().parallel(k);
-                outGPyramid[j].root().parallel(y);
+            inGPyramid[j].root().parallel(y);
+            gPyramid[j].root().parallel(k);
+            outGPyramid[j].root().parallel(y);
+            if (j < 5) {
+                inGPyramid[j].vectorize(x, 4);
+                gPyramid[j].vectorize(x, 4);
+                outGPyramid[j].vectorize(x, 4);
             }
         }
         break;
     case 12:
         // The bottom pyramid level is gigantic. I wonder if we can
-        // just compute those values on demand. Otherwise same as 5: 392 176 5564
+        // just compute those values on demand. Otherwise same as 5: 392 176 5564 (389 on Sylvain Paris' laptop)
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -267,6 +269,26 @@ int main(int argc, char **argv) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
             gPyramid[j].root().parallel(k).vectorize(x, 4);
             outGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+        }
+        break;
+    case 14:
+        // 4 and 11 were pretty good for ARM. Can we do better by inlining
+        // the root pyramid level like in 12? 521 ??? 4257
+        output.split(yo, yo, yi, 32).parallel(yo);
+        for (int j = 0; j < J; j++) {
+            inGPyramid[j].root().parallel(y);
+            if (j > 0) gPyramid[j].root().parallel(k);
+            outGPyramid[j].root().parallel(y);          
+        }
+        break;
+    case 15:
+        // ARM seems really bandwidth constrained. Let's try inlining
+        // another pyramid level of the processed pyramid. Really bad idea: 1138 ??? 13986
+        output.split(yo, yo, yi, 32).parallel(yo);
+        for (int j = 0; j < J; j++) {
+            inGPyramid[j].root().parallel(y);
+            if (j > 1) gPyramid[j].root().parallel(k);
+            outGPyramid[j].root().parallel(y);          
         }
         break;
     default: 
