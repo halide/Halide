@@ -6,6 +6,7 @@
 #include <llvm/PassManager.h>
 #include <llvm/Analysis/Passes.h>
 #include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Target/TargetData.h>
 #include <llvm/Assembly/PrintModulePass.h>
 #include <llvm/Support/raw_ostream.h>
@@ -595,7 +596,7 @@ namespace FImage {
     }
 
     void Func::compileJIT() {
-        if (getenv("HL_PSUEDOJIT")) {
+        if (getenv("HL_PSUEDOJIT") == std::string("1")) {
             // llvm's ARM jit path has many issues currently. Instead
             // we'll do static compilation to a shared object, then
             // dlopen it
@@ -651,10 +652,17 @@ namespace FImage {
                 printf("Couldn't create execution engine: %s\n", errStr.c_str()); 
                 exit(1);
             }
-            
+
             // Set up the pass manager
             fPassMgr = new llvm::FunctionPassManager(m);
             mPassMgr = new llvm::PassManager();
+
+            llvm::PassManagerBuilder builder;
+            builder.OptLevel = 3;
+            builder.populateFunctionPassManager(*fPassMgr);
+            builder.populateModulePassManager(*mPassMgr);
+            
+              /*
 
             // Inline stuff marked always-inline
             mPassMgr->add(llvm::createAlwaysInlinerPass());
@@ -684,6 +692,7 @@ namespace FImage {
             // Peephole, bit-twiddling optimizations
             fPassMgr->add(llvm::createInstructionCombiningPass());
             //fPassMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));            
+            */
         } else { 
             ee->addModule(m);
         }            
@@ -750,7 +759,7 @@ namespace FImage {
         buf.dev = 0;
         buf.dev_dirty = false;
 
-        printf("BufferOfImage: %p (%zux%zux%zu) %zu bytes\n", buf.host, buf.dims[0], buf.dims[1], buf.dims[2], buf.elem_size);
+        //printf("BufferOfImage: %p (%zux%zux%zu) %zu bytes\n", buf.host, buf.dims[0], buf.dims[1], buf.dims[2], buf.elem_size);
 
         return buf;
     }
@@ -758,7 +767,7 @@ namespace FImage {
     void Func::realize(const DynImage &im) {
         if (!contents->functionPtr) compileJIT();
 
-        printf("Constructing argument list...\n");
+        //printf("Constructing argument list...\n");
         void *arguments[256];
         buffer_t buffers[256];
         size_t j = 0;
@@ -778,6 +787,7 @@ namespace FImage {
         buffers[k] = BufferOfImage(im);
         arguments[j] = buffers + k;
 
+        /*
         printf("Args: ");
         for (size_t i = 0; i <= j; i++) {
             printf("%p ", arguments[i]);
@@ -785,6 +795,7 @@ namespace FImage {
         printf("\n");
 
         printf("Calling function at %p\n", contents->functionPtr); 
+        */
         contents->functionPtr(&arguments[0]); 
     }
 
