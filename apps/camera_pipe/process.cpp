@@ -37,6 +37,9 @@ int main(int argc, char **argv) {
 
     printf("%3.3f ms\n", (t2.tv_sec - t1.tv_sec)*1000.0f + (t2.tv_usec - t1.tv_usec)/1000.0f);
 
+    // Current timings on N900 are (best of 10)
+    // Halide: 722ms, FCam: 741ms
+
     save(output, argv[5]);
     return 0;
 }
