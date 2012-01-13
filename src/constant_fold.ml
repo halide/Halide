@@ -189,6 +189,7 @@ let rec constant_fold_expr expr =
     (* comparison *)
     | Cmp (op, a, b) ->
       begin match (recurse a, recurse b) with
+        | (Broadcast (x, w), Broadcast(y, _)) -> Broadcast (recurse (Cmp (op, x, y)), w)
         | (IntImm   x, IntImm   y)
         | (UIntImm  x, UIntImm  y) -> UIntImm (if caml_op_of_cmp op x y then 1 else 0)
         | (FloatImm x, FloatImm y) -> UIntImm (if caml_op_of_cmp op x y then 1 else 0)
@@ -198,6 +199,7 @@ let rec constant_fold_expr expr =
     (* logical *)
     | And (a, b) ->
       begin match (recurse a, recurse b) with
+        | (Broadcast (x, w), Broadcast(y, _)) -> Broadcast (recurse (And (x, y)), w)
         | (UIntImm 0, _)
         | (_, UIntImm 0) -> UIntImm 0
         | (UIntImm 1, x)
@@ -206,6 +208,7 @@ let rec constant_fold_expr expr =
       end
     | Or (a, b) ->
       begin match (recurse a, recurse b) with
+        | (Broadcast (x, w), Broadcast(y, _)) -> Broadcast (recurse (Or (x, y)), w)
         | (UIntImm 1, _)
         | (_, UIntImm 1) -> UIntImm 1
         | (UIntImm 0, x)
@@ -214,6 +217,7 @@ let rec constant_fold_expr expr =
       end
     | Not a ->
       begin match recurse a with
+        | Broadcast (x, w) -> Broadcast (recurse (Not x), w)
         | UIntImm 0 -> UIntImm 1
         | UIntImm 1 -> UIntImm 0
         | x -> Not x
@@ -221,7 +225,9 @@ let rec constant_fold_expr expr =
     | Select (c, a, b) ->
       begin match (recurse c, recurse a, recurse b) with
         | (_, x, y) when x = y -> x
+        | (Broadcast (UIntImm 0, _), _, x) 
         | (UIntImm 0, _, x) -> x
+        | (Broadcast (UIntImm 1, _), x, _) 
         | (UIntImm 1, x, _) -> x
         | (c, x, y) -> Select (c, x, y)
       end
