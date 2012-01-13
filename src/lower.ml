@@ -196,7 +196,10 @@ and realize func consume env schedule =
   let buffer_size =
     List.fold_right2
       (fun (min, size) nm old_size ->
-         Debug(size, Printf.sprintf "  dim %s = " nm, [size]) *~ old_size)
+         (* these debug prints are useful, but break constant folding, particularly
+            essential for CUDA shmem *)
+         (* Debug(size, Printf.sprintf "  dim %s = " nm, [size]) *~ old_size) *)
+         size *~ old_size)
       strides
       arg_names
       (IntImm 1) in
