@@ -112,10 +112,58 @@ let host_context (con:context) = {
 let init con = get_function con.m "__init"
 let release con = get_function con.m "__release"
 let dev_malloc_if_missing con = get_function con.m "__dev_malloc_if_missing"
-let copy_to_host con = get_function con.m "__copy_to_host"
-let copy_to_dev con = get_function con.m "__copy_to_dev"
+let copy_to_host_func con = get_function con.m "__copy_to_host"
+let copy_to_dev_func con = get_function con.m "__copy_to_dev"
 let dev_run con = get_function con.m "__dev_run"
 let buffer_struct_type con = buffer_t con.m
+
+let copy_to_host con buf =
+  ignore (build_call (copy_to_host_func con) [| buf |] "" con.b)
+
+let copy_to_dev con buf =
+  ignore (build_call (copy_to_dev_func con) [| buf |] "" con.b)
+
+(* TODO: generalize this pattern into an Analysis tool *)
+let rec skip_simt_loops f base_case = function
+  | For (name, base, width, ordered, body) when is_simt_var name ->
+      base_case
+  | s -> f s
+
+let find_host_stores s =
+  let rec recurse = function
+    | Store (_, buf, _) ->
+        StringSet.add buf StringSet.empty
+    | s ->
+        fold_children_in_stmt
+          (fun _ -> StringSet.empty)
+          (skip_simt_loops recurse StringSet.empty)
+          StringSet.union
+          s
+  in
+  skip_simt_loops recurse StringSet.empty s
+
+let rec find_host_loads s =
+  fold_children_in_stmt
+    find_loads_in_expr
+    (skip_simt_loops find_host_loads StringSet.empty)
+    StringSet.union
+    s
+
+(* TODO: clean up and lift to cg_llvm_util *)
+let set_buf_field buf name f v b =
+  dbg 0 "  set_field %s :=%!" (string_of_buffer_field f);
+  (* dump_value v; *)
+  let fptr = cg_buffer_field_ref buf f b in
+  let fty = element_type (type_of fptr) in
+  let v = match classify_type fty with
+    | TypeKind.Integer ->
+        dbg 0 "  building const_intcast to %s of%!" (string_of_lltype fty);
+        (* dump_value v; *)
+        build_intcast v fty (name ^ "_field_type_cast") b
+    | _ -> v
+  in
+  dbg 0 "   ->%!"; (* dump_value fptr; *)
+  ignore (build_store v fptr b)
 
 let cg_expr (con:context) (expr:expr) =
   (* map base to x86 *)
@@ -275,13 +323,7 @@ let cg_dev_kernel con stmt =
   
   (* copy_to_dev *)
   List.iter
-    begin fun buf -> ignore (
-      build_call
-        (copy_to_dev con)
-        [| buf |]
-        ""
-        con.b
-    ) end
+    (fun buf -> copy_to_dev con buf)
     closure_read_bufs;
 
   (*
@@ -290,6 +332,11 @@ let cg_dev_kernel con stmt =
   (* track this entrypoint in the PTX module by its uniquified function name *)
   let entry_name = value_name k in
   let entry_name_str = build_global_stringptr entry_name "__entry_name" con.b in
+
+  Printf.eprintf "Kernel %s reads:\n  %s\nwrites:\n  %s\n"
+    entry_name
+    (String.concat ",\n  " closure_reads)
+    (String.concat ",\n  " closure_writes);
   
   (* build the void* kernel args array *)
   let arg_t = pointer_type (i8_type con.c) in (* void* *)
@@ -340,24 +387,89 @@ let cg_dev_kernel con stmt =
 
   ignore (build_call dev_run (Array.of_list launch_args) "" con.b);
 
-  (* copy_to_host *)
-  List.iter
-    begin fun buf -> ignore (
-      build_call
-        (copy_to_host con)
-        [| buf |]
-        ""
-        con.b
-    ) end
-    closure_write_bufs;
+  (* mark dev_dirty *)
+  List.iter2
+    (fun buf name -> set_buf_field buf name DevDirty (ci con.c 1) con.b)
+    closure_write_bufs closure_writes;
 
   (* Return an ignorable llvalue *)
   const_zero
 
-let cg_stmt (con:context) stmt = match stmt with
+let malloc con name count elem_size =
+  Printf.eprintf "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
+  (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
+  let hostptr = X86.malloc (host_context con) name count elem_size in
+  
+  (* build a buffer_t to track this allocation *)
+  let buf = build_alloca (buffer_struct_type con) ("malloc_" ^ name) con.b in
+  let set_field f v = set_buf_field buf name f v con.b in
+
+  let zero = const_zero con.c
+  and one = ci con.c 1 in
+  
+  set_field HostPtr   hostptr;
+  set_field DevPtr    zero;
+  set_field HostDirty zero;
+  set_field DevDirty  zero;
+  set_field (Dim 0)   (cg_expr con count);
+  set_field (Dim 1)   one;
+  set_field (Dim 2)   one;
+  set_field (Dim 3)   one;
+  set_field ElemSize  (cg_expr con elem_size);
+
+  con.arch_state.buf_add name buf;
+
+  hostptr
+
+let free con ptr =
+  X86.free (host_context con) ptr
+
+let rec cg_stmt (con:context) stmt = match stmt with
   (* map topmost ParFor into PTX kernel invocation *)
   | For (name, base, width, ordered, body) when is_simt_var name ->
       cg_dev_kernel con stmt
+
+  (* track dirty data in a pipeline *)
+  | Pipeline (name, ty, size, produce, consume) ->
+
+      (* allocate buffer *)
+      let elem_size = (IntImm ((bit_width ty)/8)) in 
+      let scratch = malloc con name size elem_size in
+
+      (* push the symbol environment *)
+      con.sym_add name scratch;
+
+      (* build the produce *)
+      ignore (cg_stmt con produce);
+
+      (* mark host_dirty if writes by host in produce *)
+      let host_writes = find_host_stores produce in
+      if StringSet.mem name host_writes then begin
+        dbg 2 "found host writes in produce of %s - marking host_dirty\n" name;
+        let buf = con.arch_state.buf_get name in
+        set_buf_field buf name HostDirty (ci con.c 1) con.b;
+      end
+      else
+        dbg 2 "NO host writes in produce of %s\n" name;
+      
+      (* copy_to_host if reads by host in consume *)
+      let host_reads = find_host_loads consume in
+      if StringSet.mem name host_reads then begin
+        dbg 2 "copy back host read of %s\n%!" name;
+        let buf = con.arch_state.buf_get name in
+        copy_to_host con buf
+      end;
+
+      (* build the consumer *)
+      let res = cg_stmt con consume in
+
+      (* pop the symbol environment *)
+      con.sym_remove name;
+
+      (* free the scratch *)
+      ignore (free con scratch);
+
+      res
 
   (* map base to x86 *)
   | stmt -> X86.cg_stmt (host_context con) stmt
@@ -367,9 +479,8 @@ let cg_stmt (con:context) stmt = match stmt with
  *)
 let rec codegen_entry c m cg_entry make_cg_context e =
   (* load the template PTX host module *)
+  (* this has inlined most of the X86 module, too, since we need its helpers for the host-side code *)
   Stdlib.init_module_ptx m;
-  (* load the X86 module, too, since we need its helpers for the host-side code *)
-  Stdlib.init_module_x86 m;
 
   (* TODO: store functions strings, kernels, etc. in null-terminated global array,
    * which init() can walk at runtime?
@@ -419,9 +530,12 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   let dev_mod = con.arch_state.dev_mod in
   let dev_ctx = module_context dev_mod in
 
-  dump_module dev_mod;
+  if dump_mod then dump_module dev_mod;
   let ptx_src = Llutil.compile_module_to_string dev_mod in
-  Printf.printf "PTX:\n%s\n%!" ptx_src;
+  dbg 0 "PTX:\n%s\n%!" ptx_src;
+  (* log the PTX module to disk *)
+  save_bc_to_file dev_mod "kernels.bc";
+  Printf.fprintf (open_out "kernels.ptx") "%s%!" ptx_src;
 
   (* free memory *)
   dispose_module dev_mod;
@@ -442,48 +556,6 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   (* return the function we've built *)
   assert (name = (value_name f));
   f
-
-let malloc con name count elem_size =
-  Printf.eprintf "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
-  (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
-  let hostptr = X86.malloc (host_context con) name count elem_size in
-  
-  (* build a buffer_t to track this allocation *)
-  let buf = build_alloca (buffer_struct_type con) ("malloc_" ^ name) con.b in
-  let set_field f v =
-    Printf.eprintf "  set_field %s :=%!" (string_of_buffer_field f);
-    dump_value v;
-    let fptr = cg_buffer_field_ref buf f con.b in
-    let fty = element_type (type_of fptr) in
-    let v = match classify_type fty with
-      | TypeKind.Integer ->
-          Printf.eprintf "  building const_intcast to %s of%!" (string_of_lltype fty);
-          dump_value v;
-          build_intcast v fty (name ^ "_field_type_cast") con.b
-      | _ -> v
-    in
-    Printf.eprintf "   ->%!"; dump_value fptr;
-    ignore (build_store v fptr con.b) in
-
-  let zero = const_zero con.c
-  and one = ci con.c 1 in
-  
-  set_field HostPtr   hostptr;
-  set_field DevPtr    zero;
-  set_field HostDirty one;
-  set_field DevDirty  zero;
-  set_field (Dim 0)   (cg_expr con count);
-  set_field (Dim 1)   one;
-  set_field (Dim 2)   one;
-  set_field (Dim 3)   one;
-  set_field ElemSize  (cg_expr con elem_size);
-
-  con.arch_state.buf_add name buf;
-
-  hostptr
-
-let free con ptr =
-  X86.free (host_context con) ptr
 
 let env =
   let ntid_decl   = (".llvm.ptx.read.ntid.x", [], i32, Extern) in

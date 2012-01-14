@@ -2,6 +2,8 @@
 #include <memory>
 #include <limits>
 
+extern "C" void __copy_to_host(buffer_t* buf);
+
 template<typename T>
 class Image {
     struct Contents {
@@ -57,6 +59,13 @@ public:
 
 
     T &operator()(int x, int y = 0, int c = 0) {
+        // copy back if needed
+        if (contents->buf.dev_dirty)
+            __copy_to_host(&contents->buf);
+        
+        // mark host dirty
+        contents->buf.host_dirty = true;
+
         T *ptr = (T *)contents->buf.host;
         int w = contents->buf.dims[0];
         int h = contents->buf.dims[1];
@@ -64,6 +73,9 @@ public:
     }
 
     const T &operator()(int x, int y = 0, int c = 0) const {
+        if (contents->buf.dev_dirty)
+            __copy_to_host(&contents->buf);
+
         const T *ptr = (const T *)contents->buf.host;
         int w = contents->buf.dims[0];
         int h = contents->buf.dims[1];

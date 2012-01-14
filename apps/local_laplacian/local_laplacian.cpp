@@ -115,6 +115,8 @@ int main(int argc, char **argv) {
     // it).
     remap.root();
 
+    Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
+
     switch (atoi(argv[1])) {
     case 0:
         // breadth-first scalar: 1635 1800 9746
@@ -288,7 +290,114 @@ int main(int argc, char **argv) {
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().parallel(y);
             if (j > 1) gPyramid[j].root().parallel(k);
-            outGPyramid[j].root().parallel(y);          
+            outGPyramid[j].root().parallel(y);
+        }
+        break;
+    case 100:
+        // output stage only on GPU
+        output.root().split(yo, by, ty, 32).split(xo, bx, tx, 32)
+            .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        for (int j = 0; j < J; j++) {
+            inGPyramid[j].root();
+            gPyramid[j].root();
+            outGPyramid[j].root();
+            if (j == J-1) break;
+            lPyramid[j].root();
+            outLPyramid[j].root();
+        }
+        break;
+    case 101:
+        // all root on GPU, tiny blocks to prevent accidental bounds explosion
+        output.root().split(yo, by, ty, 2).split(xo, bx, tx, 2)
+            .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        for (int j = 0; j < J; j++) {
+            inGPyramid[j].root()
+                .split(y, by, ty, 2).split(x, bx, tx, 2)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            gPyramid[j].root()
+                .split(y, by, ty, 2).split(x, bx, tx, 2)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            outGPyramid[j].root()
+                .split(y, by, ty, 2).split(x, bx, tx, 2)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            if (j == J-1) break;
+            lPyramid[j].root()
+                .split(y, by, ty, 2).split(x, bx, tx, 2)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            outLPyramid[j].root()
+                .split(y, by, ty, 2).split(x, bx, tx, 2)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        }
+        break;
+    case 102:
+        // all root on GPU, tiny blocks to prevent accidental bounds explosion
+        output.root().split(yo, by, ty, 32).split(xo, bx, tx, 32)
+            .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        for (int j = 0; j < J; j++) {
+            int blockw = 32, blockh = 32;
+            if (j > 3) {
+                blockw = 2;
+                blockh = 2;
+            }
+            inGPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            gPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            outGPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            if (j == J-1) break;
+            lPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            outLPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        }
+        break;
+    case 103:
+        // 102, but inline laplacian pyramid levels - 53.8 on Tesla C2070 - 1.5ms malloc
+        output.root().split(yo, by, ty, 32).split(xo, bx, tx, 32)
+            .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        for (int j = 0; j < J; j++) {
+            int blockw = 32, blockh = 32;
+            if (j > 3) {
+                blockw = 2;
+                blockh = 2;
+            }
+            inGPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            gPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            outGPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        }
+        break;
+    case 104:
+        // 103, but inline gPyramid[0]
+        output.root().split(yo, by, ty, 32).split(xo, bx, tx, 32)
+            .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        for (int j = 0; j < J; j++) {
+            int blockw = 32, blockh = 32;
+            if (j > 3) {
+                blockw = 2;
+                blockh = 2;
+            }
+            inGPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            if (j > 0)
+                gPyramid[j].root()
+                    .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                    .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            outGPyramid[j].root()
+                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
+                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
         }
         break;
     default: 

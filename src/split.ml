@@ -4,7 +4,7 @@ open Util
 
 let rec split_stmt (var:string) (outer:string) (inner:string) (factor:int) (stmt:stmt) =
   let recurse = split_stmt var outer inner factor
-  and patch = subs_stmt (Var (i32, var)) (((Var (i32, outer)) *~ (IntImm factor)) +~ (Var (i32, inner))) in
+  and patch = subs_expr_in_stmt (Var (i32, var)) (((Var (i32, outer)) *~ (IntImm factor)) +~ (Var (i32, inner))) in
 
   match stmt with
   | For (v, min, n, order, stmt) when v = var ->

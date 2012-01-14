@@ -13,6 +13,12 @@ extern "C" {
 
 buffer_t* __posix_force_include_buffer_t;
 
+// This only gets defined if it's not already defined by an including module, e.g. PTX
+#ifndef _COPY_TO_HOST
+#define _COPY_TO_HOST
+void __copy_to_host(buffer_t* buf) { /* NOP */ }
+#endif //_COPY_TO_HOST
+
 void *fast_malloc(size_t x) {
     void *orig = malloc(x+16);
     // Walk either 8 or 16 bytes forward
