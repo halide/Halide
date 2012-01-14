@@ -149,8 +149,9 @@ CUresult CUDAAPI cuEventElapsedTime(float *pMilliseconds, CUevent hStart, CUeven
 // TODO: make __f, __mod into arrays?
 // static vector<CUfunction> __f;
 }
-namespace FImage { extern CUcontext cuda_ctx; } // C++
 extern "C" {
+CUcontext cuda_ctx = 0;
+
 static CUmodule __mod;
 static CUevent __start, __end;
 
@@ -196,7 +197,7 @@ void __free_buffer(buffer_t* buf)
 void __init(const char* ptx_src)
 {
     // Initialize one shared context for all FImage compiled instances
-    if (!FImage::cuda_ctx) {
+    if (!cuda_ctx) {
         // Initialize CUDA
         CHECK_CALL( cuInit(0), "cuInit" );
 
@@ -222,11 +223,11 @@ void __init(const char* ptx_src)
 
 
         // Create context
-        CHECK_CALL( cuCtxCreate(&FImage::cuda_ctx, 0, dev), "cuCtxCreate" );
+        CHECK_CALL( cuCtxCreate(&cuda_ctx, 0, dev), "cuCtxCreate" );
         cuEventCreate(&__start, 0);
         cuEventCreate(&__end, 0);
     } else {
-        //CHECK_CALL( cuCtxPushCurrent(FImage::cuda_ctx), "cuCtxPushCurrent" );
+        //CHECK_CALL( cuCtxPushCurrent(cuda_ctx), "cuCtxPushCurrent" );
     }
     
     // Initialize a module for just this FImage module
