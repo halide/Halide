@@ -5,12 +5,7 @@ extern "C" {
 #include "../Util.h"
 #include "../png.h"
 #include <sys/time.h>
-
 using namespace FImage;
-
-// TODO: fold into module
-extern "C" { typedef struct CUctx_st *CUcontext; }
-namespace FImage { CUcontext cuda_ctx = 0; }
 
 int main(int argc, char **argv) {
     Image<uint16_t> input = load<uint16_t>(argv[1]);

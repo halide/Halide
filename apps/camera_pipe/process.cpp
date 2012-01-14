@@ -12,12 +12,6 @@ extern "C" {
 #include "../png.h"
 using namespace FImage;
 
-// void __copy_to_host(buffer_t* b) {}
-
-// TODO: fold into module
-extern "C" { typedef struct CUctx_st *CUcontext; }
-namespace FImage { CUcontext cuda_ctx = 0; }
-
 int main(int argc, char **argv) {
     Image<uint16_t> input = load<uint16_t>(argv[1]);
     printf("Loaded %dx%dx%d\n", input.width(), input.height(), input.channels());

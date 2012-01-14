@@ -704,6 +704,13 @@ namespace FImage {
         std::string functionName = name() + "_c_wrapper";
         llvm::Function *inner = m->getFunction(functionName.c_str());
         
+        // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
+        // CUDA behaves much better when you don't initialize >2 contexts.
+        llvm::GlobalVariable* ctx = m->getNamedGlobal("cuda_ctx");
+        if (ctx) {
+            Contents::ee->addGlobalMapping(ctx, (void*)&cuda_ctx);
+        }
+        
         if (!inner) {
             printf("Could not find function %s", functionName.c_str());
             exit(1);
