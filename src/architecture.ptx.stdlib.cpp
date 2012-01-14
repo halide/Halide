@@ -3,6 +3,7 @@
  *
  *   clang -I/usr/local/cuda/include -c -S -emit-llvm ptx_shim_tmpl.c -o ptx_shim_tmpl.ll
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 //#include <cuda.h>
@@ -11,16 +12,30 @@
 
 extern "C" {
 
+#define NDEBUG // disable logging/asserts for performance
+
+#ifdef NDEBUG
+#define CHECK_CALL(c,str) (c)
+#define TIME_CALL(c,str) (CHECK_CALL((c),(str)))
+#else
 //#define CHECK_CALL(c) (assert((c) == CUDA_SUCCESS))
-//#define CHECK_CALL(c) (success &&= ((c) == CUDA_SUCCESS))
-// #define CHECK_CALL(c,str) (c)
 #define CHECK_CALL(c,str) {\
     fprintf(stderr, "Do %s\n", str); \
     CUresult status = (c); \
     if (status != CUDA_SUCCESS) \
         fprintf(stderr, "CUDA: %s returned non-success: %d\n", str, status); \
     assert(status == CUDA_SUCCESS); \
-    } (c)
+} currentTime() // just *some* expression fragment after which it's legal to put a ;
+#define TIME_CALL(c,str) {\
+    cuEventRecord(__start, 0);                              \
+    CHECK_CALL((c),(str));                                  \
+    cuEventRecord(__end, 0);                                \
+    cuEventSynchronize(__end);                              \
+    float msec;                                             \
+    cuEventElapsedTime(&msec, __start, __end);              \
+    printf("   (took %fms, t=%d)\n", msec, currentTime());  \
+} currentTime() // just *some* expression fragment after which it's legal to put a ;
+#endif //NDEBUG
 
 #ifndef __cuda_cuda_h__
 #ifdef _WIN32
@@ -48,6 +63,7 @@ typedef struct CUctx_st *CUcontext;                       /**< CUDA context */
 typedef struct CUmod_st *CUmodule;                        /**< CUDA module */
 typedef struct CUfunc_st *CUfunction;                     /**< CUDA function */
 typedef struct CUstream_st *CUstream;                     /**< CUDA stream */
+typedef struct CUevent_st *CUevent;                       /**< CUDA event */
 typedef enum {
     CUDA_SUCCESS                              = 0,
     CUDA_ERROR_INVALID_VALUE                  = 1,
@@ -120,6 +136,12 @@ CUresult CUDAAPI cuCtxSynchronize();
 
 CUresult CUDAAPI cuCtxPushCurrent(CUcontext ctx);
 CUresult CUDAAPI cuCtxPopCurrent(CUcontext *pctx);
+
+CUresult CUDAAPI cuEventRecord(CUevent hEvent, CUstream hStream);
+CUresult CUDAAPI cuEventCreate(CUevent *phEvent, unsigned int Flags);
+CUresult CUDAAPI cuEventSynchronize(CUevent hEvent);
+CUresult CUDAAPI cuEventElapsedTime(float *pMilliseconds, CUevent hStart, CUevent hEnd);
+
 #endif //__cuda_cuda_h__
 
 // Device, Context, Module, and Function for this entrypoint are tracked locally
@@ -130,6 +152,9 @@ CUresult CUDAAPI cuCtxPopCurrent(CUcontext *pctx);
 namespace FImage { extern CUcontext cuda_ctx; } // C++
 extern "C" {
 static CUmodule __mod;
+static CUevent __start, __end;
+
+extern int currentTime();
 
 // Used to create buffer_ts to track internal allocations caused by our runtime
 // TODO: look into cuMemAllocHost for page-locked host memory, allowing easy transfer?
@@ -146,7 +171,7 @@ buffer_t* __make_buffer(uint8_t* host, size_t elem_size,
     buf->dims[2] = dim2;
     buf->dims[3] = dim3;
     buf->elem_size = elem_size;
-    buf->host_dirty = true;
+    buf->host_dirty = false;
     buf->dev_dirty = false;
     return buf;
 }
@@ -193,12 +218,15 @@ void __init(const char* ptx_src)
             exit(-1);
         }
 
-        fprintf(stderr, "Got device %d, about to create context\n", dev);
+        fprintf(stderr, "Got device %d, about to create context (t=%d)\n", dev, currentTime());
+
 
         // Create context
         CHECK_CALL( cuCtxCreate(&FImage::cuda_ctx, 0, dev), "cuCtxCreate" );
+        cuEventCreate(&__start, 0);
+        cuEventCreate(&__end, 0);
     } else {
-        CHECK_CALL( cuCtxPushCurrent(FImage::cuda_ctx), "cuCtxPushCurrent" );
+        //CHECK_CALL( cuCtxPushCurrent(FImage::cuda_ctx), "cuCtxPushCurrent" );
     }
     
     // Initialize a module for just this FImage module
@@ -208,57 +236,84 @@ void __init(const char* ptx_src)
 
       fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
     }
+    printf("Return from __init (t=%d)\n", currentTime());
 }
 
 void __release() {
     CUcontext ignore;
-    CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
+    // TODO: this is for timing; bad for release-mode performance
+    CHECK_CALL( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
+    //CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
 }
 
 CUfunction __get_kernel(const char* entry_name)
 {
     CUfunction f;
+    #ifdef NDEBUG
+    char msg[1];
+    #else
     char msg[256];
-    snprintf(msg, 256, "get_kernel %s", entry_name );
+    snprintf(msg, 256, "get_kernel %s (t=%d)", entry_name, currentTime() );
+    #endif
     // Get kernel function ptr
-    CHECK_CALL( cuModuleGetFunction(&f, __mod, entry_name), msg );
+    TIME_CALL( cuModuleGetFunction(&f, __mod, entry_name), msg );
     return f;
 }
 
 CUdeviceptr __dev_malloc(size_t bytes) {
     CUdeviceptr p;
+    #ifdef NDEBUG
+    char msg[1];
+    #else
     char msg[256];
-    snprintf(msg, 256, "dev_malloc (%zu bytes)", bytes );
-    CHECK_CALL( cuMemAlloc(&p, bytes), msg );
-    fprintf( stderr, "   returned %p\n", (void*)p );
+    snprintf(msg, 256, "dev_malloc (%zu bytes) (t=%d)", bytes, currentTime() );
+    #endif
+    TIME_CALL( cuMemAlloc(&p, bytes), msg );
     assert(p);
     return p;
 }
 
 void __dev_malloc_if_missing(buffer_t* buf) {
     if (buf->dev) return;
+    #ifndef NDEBUG
     fprintf(stderr, "dev_malloc_if_missing of %zux%zux%zux%zu (%zu bytes) buffer\n",
             buf->dims[0], buf->dims[1], buf->dims[2], buf->dims[3], buf->elem_size);
+    #endif
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     buf->dev = __dev_malloc(size);
     assert(buf->dev);
 }
 
 void __copy_to_dev(buffer_t* buf) {
-    assert(buf->host && buf->dev);
-    size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-    char msg[256];
-    snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p", size, buf->host, (void*)buf->dev );
-    CHECK_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
+    if (buf->host_dirty) {
+        assert(buf->host && buf->dev);
+        size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
+        #ifdef NDEBUG
+        char msg[1];
+        #else
+        char msg[256];
+        snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, currentTime() );
+        #endif
+        TIME_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
+    }
+    buf->host_dirty = false;
 }
 
 void __copy_to_host(buffer_t* buf) {
-    assert(buf->host && buf->dev);
-    size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
-    char msg[256];
-    snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
-    CHECK_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
+    if (buf->dev_dirty) {
+        assert(buf->host && buf->dev);
+        size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
+        #ifdef NDEBUG
+        char msg[1];
+        #else
+        char msg[256];
+        snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
+        #endif
+        TIME_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
+    }
+    buf->dev_dirty = false;
 }
+#define _COPY_TO_HOST
 
 void __dev_run(
     const char* entry_name,
@@ -268,13 +323,18 @@ void __dev_run(
     void* args[])
 {
     CUfunction f = __get_kernel(entry_name);
+    #ifdef NDEBUG
+    char msg[1];
+    #else
     char msg[256];
     snprintf(
         msg, 256,
-        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem",
-        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes
+        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%d)",
+        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes,
+        currentTime()
     );
-    CHECK_CALL(
+    #endif
+    TIME_CALL(
         cuLaunchKernel(
             f,
             blocksX,  blocksY,  blocksZ,
@@ -405,3 +465,6 @@ int f( buffer_t *input, buffer_t *result, int N )
 #endif
 
 } // extern "C" linkage
+
+// The PTX host extends the x86 target
+#include "architecture.x86.stdlib.cpp"

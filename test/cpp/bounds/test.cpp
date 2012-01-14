@@ -59,10 +59,11 @@ int main(int argc, char **argv) {
                 printf("img[%d, %d] = %d\n", i, j, img(i, j));
                 return -1;
             }
-            if (imh(i, j) != (i+j < 20 ? 20 :
-                              i+j > 100 ? 100 :
-                              i+j)) {
-                printf("imh[%d, %d] = %d\n", i, j, imh(i, j));
+            int href = (i+j < 20 ? 20 :
+                          i+j > 100 ? 100 :
+                          i+j);
+            if (imh(i, j) != href) {
+                printf("imh[%d, %d] = %d (not %d)\n", i, j, imh(i, j), href);
                 return -1;
             }
             

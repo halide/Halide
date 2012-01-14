@@ -75,3 +75,20 @@ let rec partial_sort (lt: 'a -> 'a -> bool option) (l : 'a list) =
     | [] -> []
     | (first::rest) -> select_smallest [] first rest
  
+
+(* TODO: set local debug options and flags per-module *)
+let verbosity = 
+  (* TODO: invert this meaning to a 0..N scale instead of true/false *)
+  let str = try Sys.getenv "HL_DEBUG_CODEGEN" with Not_found -> "0" in
+  match str with
+    | "1" -> 0
+    | "0" -> 1
+    | _ -> 
+        Printf.printf "Could not understand HL_DEBUG_CODEGEN: %s. Should be 0 or 1\n" str;
+        1
+
+let dbg level = 
+  if (level > verbosity) then 
+    Printf.printf 
+  else 
+    Printf.ifprintf stdout 

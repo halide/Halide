@@ -3,7 +3,9 @@
 
 using namespace FImage;
 
-Var x, y, tx, ty, c;
+int schedule;
+
+Var x("x"), y("y"), tx("tx"), ty("ty"), c("c");
 
 Func hot_pixel_suppression(Func input) {
     Expr max = Max(Max(input(x-2, y), input(x+2, y)),
@@ -13,9 +15,6 @@ Func hot_pixel_suppression(Func input) {
     
     Func denoised("denoised");
     denoised(x, y) = Clamp(input(x, y), min, max);
-    
-    // Compute this in chunks over tiles, vectorized by 8
-    denoised.chunk(tx).vectorize(x, 8);
 
     return denoised;
 }
@@ -36,22 +35,22 @@ Func interleave_y(Func a, Func b) {
     return out;
 }
 
-Func demosaic(Func raw) {
+Func deinterleave(Func raw) {
+    // Deinterleave the color channels
+    Func deinterleaved("deinterleaved");
+    Var t;
+    deinterleaved(x, y, t) = Select(t == 0, raw(2*x, 2*y), 
+                                    Select(t == 1, raw(2*x+1, 2*y), 
+                                           Select(t == 2, raw(2*x, 2*y+1), raw(2*x+1, 2*y+1))));
+    
+    return deinterleaved;
+}
+
+Func demosaic(Func deinterleaved) {
     // These are the values we already know from the input
     // x_y = the value of channel x at a site in the input of channel y
     // gb refers to green sites in the blue rows
     // gr refers to green sites in the red rows
-
-    // Deinterleave the color channels
-    Func deinterleaved("deinterleaved");
-    Var t, ti;
-    deinterleaved(x, y, t) = Select(t == 0, raw(2*x, 2*y), 
-                                    Select(t == 1, raw(2*x+1, 2*y), 
-                                           Select(t == 2, raw(2*x, 2*y+1), raw(2*x+1, 2*y+1))));
-
-    // Unroll the tuple part and compute it in the inside loop
-    deinterleaved.split(t, t, ti, 4).unroll(ti).transpose(y, ti).transpose(x, ti);
-    deinterleaved.chunk(tx).vectorize(x, 8);
 
     // Give more convenient names to the four channels we know
     Func r_r("r_r"), g_gr("g_gr"), g_gb("g_gb"), b_b("b_b");    
@@ -139,22 +138,37 @@ Func demosaic(Func raw) {
                           interleave_x(r_b, r_gb));
     Func g = interleave_y(interleave_x(g_gr, g_r),
                           interleave_x(g_b, g_gb));
-    Func b = interleave_y(interleave_x(b_gr, b_r),                          
+    Func b = interleave_y(interleave_x(b_gr, b_r),
                           interleave_x(b_b, b_gb));
-
-    // Compute these in chunks over tiles, vectorized by 8
-    g_r.chunk(tx).vectorize(x, 8);
-    g_b.chunk(tx).vectorize(x, 8);
-    r_gr.chunk(tx).vectorize(x, 8);
-    b_gr.chunk(tx).vectorize(x, 8);
-    r_gb.chunk(tx).vectorize(x, 8);
-    b_gb.chunk(tx).vectorize(x, 8);
-    r_b.chunk(tx).vectorize(x, 8);
-    b_r.chunk(tx).vectorize(x, 8);
-    // These interleave in y, so unrolling them in y might help
-    r.chunk(tx).vectorize(x, 8).unroll(y, 2);
-    g.chunk(tx).vectorize(x, 8).unroll(y, 2);
-    b.chunk(tx).vectorize(x, 8).unroll(y, 2);
+    
+    if (schedule == 0) {
+        // optimized for ARM
+        // Compute these in chunks over tiles, vectorized by 8
+        g_r.chunk(tx).vectorize(x, 8);
+        g_b.chunk(tx).vectorize(x, 8);
+        r_gr.chunk(tx).vectorize(x, 8);
+        b_gr.chunk(tx).vectorize(x, 8);
+        r_gb.chunk(tx).vectorize(x, 8);
+        b_gb.chunk(tx).vectorize(x, 8);
+        r_b.chunk(tx).vectorize(x, 8);
+        b_r.chunk(tx).vectorize(x, 8);
+        // These interleave in y, so unrolling them in y helps
+        r.chunk(tx).vectorize(x, 8).unroll(y, 2);
+        g.chunk(tx).vectorize(x, 8).unroll(y, 2);
+        b.chunk(tx).vectorize(x, 8).unroll(y, 2);
+    } else {
+        g_r.root();
+        g_b.root();
+        r_gr.root();
+        b_gr.root();
+        r_gb.root();
+        b_gb.root();
+        r_b.root();
+        b_r.root();
+        r.root();
+        g.root();
+        b.root();
+    }
 
     Func output("dem");
     output(x, y) = (r(x, y), g(x, y), b(x, y));
@@ -177,7 +191,7 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
     Expr ir = Cast<int32_t>(input(x, y, 0));
     Expr ig = Cast<int32_t>(input(x, y, 1));
     Expr ib = Cast<int32_t>(input(x, y, 2));
-   
+
     Expr r, g, b;
     r = matrix(3, 0) + matrix(0, 0) * ir + matrix(1, 0) * ig + matrix(2, 0) * ib;
     g = matrix(3, 1) + matrix(0, 1) * ir + matrix(1, 1) * ig + matrix(2, 1) * ib;
@@ -185,14 +199,11 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
 
     corrected(x, y) = Cast<int16_t>((r, g, b)/256);
 
-    Var c = corrected.arg(2);
-    corrected.chunk(tx).transpose(y, c).transpose(x, c).vectorize(x, 4).unroll(c, 3);
-    
     return corrected;
 }
 
 
-Func apply_curve(Func input, Uniform<float> gamma, Uniform<float> contrast) {
+Func apply_curve(Func input, Type result_type, Uniform<float> gamma, Uniform<float> contrast) {
     // copied from FCam
     Func curve("curve");
 
@@ -203,7 +214,8 @@ Func apply_curve(Func input, Uniform<float> gamma, Uniform<float> contrast) {
     Expr z = Select(g > 0.5f,
                     1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
                     a*g*g + b*g);
-    Expr val = Cast<uint8_t>(Clamp(z*256.0f, 0.0f, 255.0f));
+
+    Expr val = Cast(result_type, Clamp(z*256.0f, 0.0f, 255.0f));
     curve(x) = val;
     curve.root(); // It's a LUT, compute it once ahead of time.
 
@@ -213,24 +225,43 @@ Func apply_curve(Func input, Uniform<float> gamma, Uniform<float> contrast) {
     return curved;
 }
 
-Func process(Func raw, 
+Func process(Func raw, Type result_type,
              UniformImage matrix_3200, UniformImage matrix_7000, Uniform<float> color_temp, 
              Uniform<float> gamma, Uniform<float> contrast) {
 
     Func processed("p");
     Var xi, yi;
 
-    Func im = raw;
-    im = hot_pixel_suppression(im);
-    im = demosaic(im);
-    im = color_correct(im, matrix_3200, matrix_7000, color_temp);
-    im = apply_curve(im, gamma, contrast);
+    Func denoised = hot_pixel_suppression(raw);
+    Func deinterleaved = deinterleave(denoised);
+    Func demosaiced = demosaic(deinterleaved);
+    Func corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp);
+    Func curved = apply_curve(corrected, result_type, gamma, contrast);
 
-    Var co, ci;    
-    processed(tx, ty, c) = im(tx, ty, ci);
+    // Schedule
+    Var co, ci; 
+    processed(tx, ty, c) = curved(tx, ty, ci);
+    processed.split(c, co, ci, 3); // bound color loop
 
-    processed.split(c, co, ci, 3);
-    processed.tile(tx, ty, xi, yi, 32, 32).transpose(ty, ci).transpose(tx, ci);//.vectorize(xi, 8).parallel(ty);
+    if (schedule == 0) {
+        // Compute in chunks over tiles, vectorized by 8
+        denoised.chunk(tx).vectorize(x, 8);
+
+        // Unroll the tuple part and compute it in the inside loop
+        Var ti, tt = deinterleaved.arg(2);
+        deinterleaved.split(tt, tt, ti, 4).unroll(ti).transpose(y, ti).transpose(x, ti);
+        deinterleaved.chunk(tx).vectorize(x, 8);
+
+        Var cc = corrected.arg(2);
+        corrected.chunk(tx).transpose(y, cc).transpose(x, cc).vectorize(x, 4).unroll(cc, 3);
+
+        processed.tile(tx, ty, xi, yi, 32, 32).transpose(ty, ci).transpose(tx, ci);//.vectorize(xi, 8).parallel(ty);
+    } else {
+        denoised.root();
+        deinterleaved.root();
+        corrected.root();
+        processed.root();
+    }
 
     return processed;
 }
@@ -248,13 +279,55 @@ int main(int argc, char **argv) {
     // boundaries so that we don't need to check bounds. We're going
     // to make a 2560x1920 output image, so shift by 16, 12
     Func clamped("in");
-    clamped(x, y) = input(x+16, y+12);
-
-    // Run the pipeline
-    Func processed = process(clamped, matrix_3200, matrix_7000, color_temp, gamma, contrast);
+    clamped(x, y) = input(x+16, y+12); //Debug( input(x+16, y+12), "Loading input at: ", x, y, x+16, y+12 );
+    
+    // Parameterized output type, because LLVM PTX (GPU) backend does not
+    // currently allow 8-bit computations
+    int bit_width = atoi(argv[1]);
+    Type result_type = UInt(bit_width);
+    
+    // Pick a schedule   
+    schedule = atoi(argv[2]);
+    
+    // Build the pipeline
+    Func processed = process(clamped, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
 
     processed.compileToFile("curved");
-    
+
+#if 0
+    Var xo("blockidx"), yo("blockidy"), c("c"), xi("threadidx"), yi("threadidy");
+    Func output("output");
+    output(xo, yo, c) = processed(xo, yo, c);
+    Var nilc("nilc");
+    output.root()
+        .split(c, nilc, c, 3) // split C into a const loop by 3 on the inside
+        .tile(xo, yo, xi, yi, 32, 16).transpose(yo, c).transpose(xo, c)
+        .transpose(yi, c).transpose(xi, c)
+        .parallel(xo).parallel(yo).parallel(xi).parallel(yi);
+
+    std::vector<Func> funcs = output.rhs().funcs();    
+
+    for (size_t i = 0; i < funcs.size(); i++) {
+      if (funcs[i].name() == "curve") funcs[i].root();
+      else if (funcs[i].name() == "matrix") funcs[i].root();
+      else if (funcs[i].name() == "dem" || funcs[i].name() == "corrected" || funcs[i].name() == "curved") {
+          // inline
+          continue;
+      }
+      else {
+          printf("scheduling %s as chunk on xo\n", funcs[i].name().c_str());
+          funcs[i].chunk(xo)
+                      .split(x, x, xi, 1).split(y, y, yi, 1)
+                      .parallel(xi).parallel(yi);
+      }
+      //if (funcs[i].returnType() == UInt(8)) funcs[i].vectorize(x, 16);
+      //if (funcs[i].returnType() == Int(16)) funcs[i].vectorize(x, 8);
+      //if (funcs[i].returnType() == Float(32)) funcs[i].vectorize(x, 4);
+    }
+
+    output.compileToFile("curved");
+#endif
+
     return 0;
 }
 

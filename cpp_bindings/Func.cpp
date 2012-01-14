@@ -30,7 +30,7 @@ namespace FImage {
     CUcontext cuda_ctx = 0;
     
     bool use_gpu() {
-        char* target = getenv("HLTARGET");
+        char* target = getenv("HL_TARGET");
         return (target != NULL && strcasecmp(target, "ptx") == 0);
     }
     
@@ -112,6 +112,10 @@ namespace FImage {
         
         const std::string name;
         
+        static llvm::ExecutionEngine *ee;
+        static llvm::FunctionPassManager *fPassMgr;
+        static llvm::PassManager *mPassMgr;
+        
         // The scalar value returned by the function
         Expr rhs;
         std::vector<Expr> args;
@@ -132,10 +136,14 @@ namespace FImage {
         std::vector<MLVal> scheduleTransforms;
         
         // The compiled form of this function
-        mutable void (*functionPtr)(void *); 
-        
+        mutable void (*functionPtr)(void *);
+        mutable void (*copy_to_host)(buffer_t *);
     };    
 
+    llvm::ExecutionEngine *Func::Contents::ee = NULL;
+    llvm::FunctionPassManager *Func::Contents::fPassMgr = NULL;
+    llvm::PassManager *Func::Contents::mPassMgr = NULL;
+    
     Range operator*(const Range &a, const Range &b) {
         Range region;
         region.range.resize(a.range.size() + b.range.size());
@@ -562,7 +570,7 @@ namespace FImage {
                                    guru);
         
         printf("Done transforming schedule\n");
-        printSchedule(sched);
+        //printSchedule(sched);
         
         stmt = doLower((name()), 
                        *Func::environment,
@@ -596,7 +604,7 @@ namespace FImage {
     }
 
     void Func::compileJIT() {
-        if (getenv("HL_PSUEDOJIT") == std::string("1")) {
+        if (getenv("HL_PSUEDOJIT") && getenv("HL_PSUEDOJIT") == std::string("1")) {
             // llvm's ARM jit path has many issues currently. Instead
             // we'll do static compilation to a shared object, then
             // dlopen it
@@ -622,11 +630,7 @@ namespace FImage {
             return;
         }
 
-        static llvm::ExecutionEngine *ee = NULL;
-        static llvm::FunctionPassManager *fPassMgr = NULL;
-        static llvm::PassManager *mPassMgr = NULL;
-
-        if (!ee) {
+        if (!Contents::ee) {
             llvm::InitializeNativeTarget();
         }
 
@@ -645,22 +649,22 @@ namespace FImage {
         llvm::Function *f = llvm::unwrap<llvm::Function>(func);
         llvm::Module *m = llvm::unwrap(module);
 
-        if (!ee) {
+        if (!Contents::ee) {
             std::string errStr;
-            ee = llvm::EngineBuilder(m).setErrorStr(&errStr).setOptLevel(llvm::CodeGenOpt::Aggressive).create();
-            if (!ee) {
+            Contents::ee = llvm::EngineBuilder(m).setErrorStr(&errStr).setOptLevel(llvm::CodeGenOpt::Aggressive).create();
+            if (!contents->ee) {
                 printf("Couldn't create execution engine: %s\n", errStr.c_str()); 
                 exit(1);
             }
 
             // Set up the pass manager
-            fPassMgr = new llvm::FunctionPassManager(m);
-            mPassMgr = new llvm::PassManager();
+            Contents::fPassMgr = new llvm::FunctionPassManager(m);
+            Contents::mPassMgr = new llvm::PassManager();
 
             llvm::PassManagerBuilder builder;
             builder.OptLevel = 3;
-            builder.populateFunctionPassManager(*fPassMgr);
-            builder.populateModulePassManager(*mPassMgr);
+            builder.populateFunctionPassManager(*contents->fPassMgr);
+            builder.populateModulePassManager(*contents->mPassMgr);
             
               /*
 
@@ -694,7 +698,7 @@ namespace FImage {
             //fPassMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));            
             */
         } else { 
-            ee->addModule(m);
+            Contents::ee->addModule(m);
         }            
         
         std::string functionName = name() + "_c_wrapper";
@@ -710,22 +714,26 @@ namespace FImage {
         std::string errstr;
         llvm::raw_fd_ostream stdout("passes.txt", errstr);
         
-        mPassMgr->run(*m);
+        Contents::mPassMgr->run(*m);
 
-        fPassMgr->doInitialization();
+        Contents::fPassMgr->doInitialization();
         
-        if (fPassMgr->run(*inner)) {
+        if (Contents::fPassMgr->run(*inner)) {
             printf("optimization did something.\n");
         } else {
             printf("optimization did nothing.\n");
         }
         
-        fPassMgr->doFinalization();
+        Contents::fPassMgr->doFinalization();
         
         printf("compiling ll -> machine code...\n");
-        void *ptr = ee->getPointerToFunction(f);
+        void *ptr = Contents::ee->getPointerToFunction(f);
         contents->functionPtr = (void (*)(void*))ptr;
         
+        llvm::Function *copy_to_host = m->getFunction("__copy_to_host");
+        ptr = Contents::ee->getPointerToFunction(copy_to_host);
+        contents->copy_to_host = (void (*)(buffer_t*))ptr;
+
         printf("dumping machine code to file...\n");
         saveELF("generated.o", ptr, 8192);            
         printf("Done dumping machine code to file\n");
@@ -796,7 +804,11 @@ namespace FImage {
 
         printf("Calling function at %p\n", contents->functionPtr); 
         */
-        contents->functionPtr(&arguments[0]); 
+        contents->functionPtr(&arguments[0]);
+        
+        if (use_gpu()) {
+            contents->copy_to_host(&buffers[k]);
+        }
     }
 
     MLVal *Func::environment = NULL;

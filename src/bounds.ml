@@ -8,7 +8,7 @@ type bounds_result = Range of (expr * expr) | Unbounded
 let make_range (min, max) =
   let min = constant_fold_expr min in
   let max = constant_fold_expr max in
-  (* Printf.printf "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max);  *)
+  dbg 0 "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max); 
   assert (is_scalar min);
   assert (is_scalar max);
   Range (min, max)
@@ -53,7 +53,7 @@ let bounds_of_type = function
 let bounds_of_expr_in_env env expr =
   let rec bounds_of_expr_in_env_inner env expr = 
     let recurse expr = 
-      Printf.printf "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr);
+      dbg 0 "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr);
       let result = bounds_of_expr_in_env_inner env expr in
       check_result expr result;
       result
@@ -343,7 +343,7 @@ let bounds_of_expr_in_env env expr =
             Ir_printer.string_of_expr (constant_fold_expr min) ^ ", " ^ 
             Ir_printer.string_of_expr (constant_fold_expr max) ^ ")"
     in
-    Printf.printf "Bounds of %s = %s\n" (Ir_printer.string_of_expr expr) result_string;
+    dbg 0 "Bounds of %s = %s\n" (Ir_printer.string_of_expr expr) result_string;
     
     result
   in
@@ -391,7 +391,7 @@ let rec required_of_stmt func env = function
       required_of_stmt func env body
   | LetStmt (name, expr, stmt) ->
       (* Brute force. Might get really slow for long chains of letstmts *)
-      let subs = subs_stmt (Var (val_type_of_expr expr, name)) expr in
+      let subs = subs_expr_in_stmt (Var (val_type_of_expr expr, name)) expr in
       required_of_stmt func env (subs stmt)
       (* TODO: Why doesn't the below work? Does this mean let above is broken too?
       let required_of_expr = required_of_expr func env expr in
