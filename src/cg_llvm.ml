@@ -493,6 +493,7 @@ let rec make_cg_context c m b sym_table arch_state =
     (* Call do_par_for back in the main function *)
     let do_par_for = declare_function "do_par_for"
       (function_type (void_type c) [|pointer_type body_fn_type; int_imm_t; int_imm_t; buffer_t|]) m in
+    let closure = build_pointercast closure buffer_t "" b in
     ignore(build_call do_par_for [|body_fn; min; size; closure|] "" b);
 
     (* Free the closure *)
