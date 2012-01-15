@@ -1,5 +1,10 @@
 PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
-CUDA_LFLAGS=$(shell if [[ $HL_TARGET == "ptx" ]]; then echo "-L/usr/local/cuda/lib -lcuda"; else echo ""; fi)
+ifeq ($(HL_TARGET),ptx)
+  SCHEDULE=100
+  CUDA_LFLAGS=-L/usr/local/cuda/lib -lcuda
+else
+  SCHEDULE=0
+endif
 
 camera_pipe: ../../cpp_bindings/ ../../src/ camera_pipe.cpp
 	$(MAKE) -C ../../cpp_bindings FImage.a
