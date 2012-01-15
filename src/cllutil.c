@@ -30,6 +30,7 @@ extern "C" {
 #include <llvm/ADT/Triple.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Bitcode/ReaderWriter.h>
+#include <llvm/Transforms/IPO.h>
 
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/CommandLine.h"
@@ -61,7 +62,7 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
     
     // Allocate target machine
     const std::string MArch = "ptx64";
-    const std::string MCPU = "sm_11";
+    const std::string MCPU = "sm_20";
     const Target* TheTarget = 0;
     
     std::string errStr;
@@ -108,6 +109,9 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
     PassManager PM;
     // Add the target data from the target machine
     PM.add(new TargetData(*Target.getTargetData()));
+
+    // Inlining functions is essential to PTX
+    PM.add(createAlwaysInlinerPass());
 
     // Override default to generate verbose assembly.
     Target.setAsmVerbosityDefault(true);
