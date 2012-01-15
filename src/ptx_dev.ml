@@ -164,7 +164,7 @@ let malloc con name count elem_size =
   let buf = define_qualified_global name init shared_addrspace con.m in
   build_gep buf [| zero; zero |] (name ^ ".buf_base") con.b
 
-let free con ptr =
+let free con name ptr =
   (* Return an ignorable llvalue *)
   const_zero con.c
 

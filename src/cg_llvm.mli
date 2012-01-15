@@ -31,7 +31,7 @@ module type Architecture = sig
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
   val malloc  : context -> string -> expr -> expr -> llvalue
-  val free    : context -> llvalue -> llvalue 
+  val free    : context -> string -> llvalue -> llvalue 
   val env : environment
   val pointer_size : int
 end
