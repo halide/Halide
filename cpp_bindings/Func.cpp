@@ -271,11 +271,11 @@ namespace FImage {
     }
 
     void Func::define(const std::vector<Expr> &_args, const Expr &r) {
-        printf("Defining %s\n", name().c_str());
+        //printf("Defining %s\n", name().c_str());
 
         // Make sure the environment exists
         if (!environment) {
-            printf("Creating environment\n");
+            //printf("Creating environment\n");
             environment = new MLVal(makeEnv());
         }
 
@@ -295,7 +295,7 @@ namespace FImage {
 
         // Are we talking about a scatter or a gather here?
         bool gather = true;
-        printf("%u args %u rvars\n", (unsigned)args.size(), (unsigned)r.rvars().size());
+        //printf("%u args %u rvars\n", (unsigned)args.size(), (unsigned)r.rvars().size());
         for (size_t i = 0; i < args.size(); i++) {            
             if (!args[i].isVar()) {
                 gather = false;
@@ -304,7 +304,7 @@ namespace FImage {
         if (r.rvars().size() > 0) gather = false;
 
         if (gather) {
-            printf("Gather definition for %s\n", name().c_str());
+            //printf("Gather definition for %s\n", name().c_str());
             contents->rhs = r;            
             contents->returnType = r.type();
             contents->args = args;
@@ -318,7 +318,7 @@ namespace FImage {
             *environment = addDefinitionToEnv(*environment, contents->definition);
 
         } else {
-            printf("Scatter definition for %s\n", name().c_str());
+            //printf("Scatter definition for %s\n", name().c_str());
             assert(rhs().isDefined());            
 
             MLVal update_args = makeList();
@@ -341,7 +341,7 @@ namespace FImage {
             // Make an update function as a handle for scheduling
             contents->update.reset(new Func(uniqueName('p')));
             
-            printf("Adding scatter definition for %s\n", name().c_str());
+            //printf("Adding scatter definition for %s\n", name().c_str());
             // There should already be a gathering definition of this function. Add the scattering term.
             *environment = addScatterToDefinition(*environment, name(), contents->update->name(), 
                                                   update_args, r.node(), reduction_args);
@@ -536,7 +536,7 @@ namespace FImage {
 
         MLVal guru = makeNoviceGuru();
 
-        printf("Patching guru...\n");
+        //printf("Patching guru...\n");
         for (size_t i = 0; i < contents->scheduleTransforms.size(); i++) {
             guru = contents->scheduleTransforms[i](guru);
         }
@@ -569,7 +569,7 @@ namespace FImage {
                                    *Func::environment,
                                    guru);
         
-        printf("Done transforming schedule\n");
+        //printf("Done transforming schedule\n");
         //printSchedule(sched);
         
         stmt = doLower((name()), 
@@ -577,7 +577,7 @@ namespace FImage {
                        sched);
         
         // Create a function around it with the appropriate number of args
-        printf("\nMaking function...\n");           
+        //printf("\nMaking function...\n");           
         fargs = makeList();
         fargs = addToList(fargs, makeBufferArg("result"));
         for (size_t i = rhs().uniformImages().size(); i > 0; i--) {
@@ -665,38 +665,7 @@ namespace FImage {
             builder.OptLevel = 3;
             builder.populateFunctionPassManager(*contents->fPassMgr);
             builder.populateModulePassManager(*contents->mPassMgr);
-            
-              /*
 
-            // Inline stuff marked always-inline
-            mPassMgr->add(llvm::createAlwaysInlinerPass());
-            mPassMgr->add(llvm::createDeadCodeEliminationPass());
-            //fPassMgr->add(llvm::createPrintFunctionPass("*** After always inliner ***", &stdout));
-            
-            // Function-level passes on the inner function (TODO: what about parallelism!)
-            fPassMgr->add(new llvm::TargetData(*ee->getTargetData()));
-            //fPassMgr->add(llvm::createPrintFunctionPass("*** Before optimization ***", &stdout));
-                        
-            // AliasAnalysis support for GVN
-            fPassMgr->add(llvm::createBasicAliasAnalysisPass());
-            //fPassMgr->add(llvm::createPrintFunctionPass("*** After basic alias analysis ***", &stdout));
-            
-            // Reassociate expressions
-            fPassMgr->add(llvm::createReassociatePass());
-            //fPassMgr->add(llvm::createPrintFunctionPass("*** After reassociate ***", &stdout));
-            
-            // Simplify CFG (delete unreachable blocks, etc.)
-            fPassMgr->add(llvm::createCFGSimplificationPass());
-            //fPassMgr->add(llvm::createPrintFunctionPass("*** After CFG simplification ***", &stdout));
-            
-            // Eliminate common sub-expressions
-            fPassMgr->add(llvm::createGVNPass());
-            //fPassMgr->add(llvm::createPrintFunctionPass("*** After GVN pass ***", &stdout));
-        
-            // Peephole, bit-twiddling optimizations
-            fPassMgr->add(llvm::createInstructionCombiningPass());
-            //fPassMgr->add(llvm::createPrintFunctionPass("*** After instruction combining ***", &stdout));            
-            */
         } else { 
             Contents::ee->addModule(m);
         }            
@@ -725,11 +694,7 @@ namespace FImage {
 
         Contents::fPassMgr->doInitialization();
         
-        if (Contents::fPassMgr->run(*inner)) {
-            printf("optimization did something.\n");
-        } else {
-            printf("optimization did nothing.\n");
-        }
+        Contents::fPassMgr->run(*inner);
         
         Contents::fPassMgr->doFinalization();
         
@@ -741,10 +706,12 @@ namespace FImage {
         ptr = Contents::ee->getPointerToFunction(copy_to_host);
         contents->copy_to_host = (void (*)(buffer_t*))ptr;
 
+        /*
         printf("dumping machine code to file...\n");
         saveELF("generated.o", ptr, 8192);            
         printf("Done dumping machine code to file\n");
-        
+        */
+
     }
 
     size_t im_size(const DynImage &im, int dim) {

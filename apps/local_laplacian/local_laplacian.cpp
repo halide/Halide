@@ -26,6 +26,8 @@ Func upsample(Func f) {
 
 int main(int argc, char **argv) {
 
+    /* THE ALGORITHM */
+
     // Number of pyramid levels 
     int J = 8;
 
@@ -106,8 +108,8 @@ int main(int argc, char **argv) {
     output(xo, yo, c) = Cast<uint16_t>(Clamp(color(xo, yo, c), 0.0f, 1.0f) * 65535.0f);
 
 
-    Var xi, yi;
-    // Times are for a quad-core core2, a 32-core nehalem, and a 2-core omap4 cortex-a9
+
+    /* THE SCHEDULE */
 
     // In any case, the remapping function should be a lut evaluated
     // ahead of time. It's so small relative to everything else that
@@ -115,11 +117,15 @@ int main(int argc, char **argv) {
     // it).
     remap.root();
 
+    Var yi;
+
+    // Variables to control mapping to GPU
     Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
 
+    // Times are for a quad-core core2, a 32-core nehalem, and a 2-core omap4 cortex-a9
     switch (atoi(argv[1])) {
     case 0:
-        // breadth-first scalar: 1635 1800 9746
+        // breadth-first scalar: 1572 
         output.root();
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root();
@@ -131,7 +137,7 @@ int main(int argc, char **argv) {
         }
         break;        
     case 1:
-        // parallelize each stage across outermost dimension: 759 321 5650
+        // parallelize each stage across outermost dimension: 769 
         output.split(yo, yo, yi, 32).parallel(yo);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y);
@@ -143,7 +149,7 @@ int main(int argc, char **argv) {
         }
         break;        
     case 2:
-        // Same as above, but also vectorize across x: 819 296 7012
+        // Same as above, but also vectorize across x: 855 
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -155,7 +161,7 @@ int main(int argc, char **argv) {
         }
         break;
     case 3:
-        // parallelize across yi instead of yo: Bad idea - 1553 1044 7117
+        // parallelize across yi instead of yo: Bad idea - 1136 
         output.split(yo, yo, yi, 8).parallel(yi);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 8).parallel(yi);
@@ -169,7 +175,7 @@ int main(int argc, char **argv) {
     case 4:
         // Parallelize, inlining all the laplacian pyramid levels
         // (they can be computed from the gaussian pyramids on the
-        // fly): 499 ??? 4395
+        // fly): 491
         output.split(yo, yo, yi, 32).parallel(yo);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y);
@@ -179,7 +185,7 @@ int main(int argc, char **argv) {
         break;                
     case 5:
         // Same as above with vectorization (now that we're doing more
-        // math and less memory, maybe it will matter): 527 209 5445
+        // math and less memory, maybe it will matter): 585
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -188,7 +194,7 @@ int main(int argc, char **argv) {
         }
         break;
     case 6:
-        // Also inline every other pyramid level: Bad idea - 2088 526 16878
+        // Also inline every other pyramid level: Bad idea - 2118
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j+=2) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -198,7 +204,7 @@ int main(int argc, char **argv) {
         break;
     case 7:
         // Take care of the boundary condition earlier to avoid costly
-        // branching: 599 241 6092
+        // branching: 648
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         clamped.root().split(y, y, yi, 32).parallel(y).vectorize(x, 4);
         for (int j = 0; j < J; j++) {
@@ -209,7 +215,7 @@ int main(int argc, char **argv) {
         break;
     case 8:
         // Unroll by a factor of two to try and simplify the
-        // upsampling math: not worth it - 571 342 5712
+        // upsampling math: not worth it - 583
         output.split(yo, yo, yi, 32).parallel(yo).unroll(xo, 2).unroll(yi, 2);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).unroll(x, 2).unroll(y, 2);
@@ -219,7 +225,7 @@ int main(int argc, char **argv) {
         break;                        
     case 9:
         // Same as case 5 but parallelize across y as well as k, in
-        // case k is too small to saturate the machine: 774 254 5811
+        // case k is too small to saturate the machine: 693
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -229,7 +235,7 @@ int main(int argc, char **argv) {
         break;
     case 10:
         // Really-fine-grain parallelism. Don't both splitting
-        // y. Should incur too much overhead to be good: 1468 276 5359
+        // y. Should incur too much overhead to be good: 1083
         output.parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().parallel(y).vectorize(x, 4);
@@ -241,7 +247,7 @@ int main(int argc, char **argv) {
         // Same as case 5, but don't vectorize above a certain pyramid
         // level to prevent boundaries expanding too much (computing
         // an 8x8 top pyramid level instead of e.g. 5x5 requires much
-        // much more input). 501 ??? 4944
+        // much more input). 602
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().parallel(y);
@@ -256,7 +262,9 @@ int main(int argc, char **argv) {
         break;
     case 12:
         // The bottom pyramid level is gigantic. I wonder if we can
-        // just compute those values on demand. Otherwise same as 5: 392 176 5564 (389 on Sylvain Paris' laptop)
+        // just compute those values on demand. Otherwise same as 5:
+        // 301
+        // (377 the machine we used to compare against the IPP/OpenMP version)
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -265,7 +273,7 @@ int main(int argc, char **argv) {
         }
         break;
     case 13:
-        // Should we inline the bottom pyramid level of everything?: 1102 561 18162
+        // Should we inline the bottom pyramid level of everything?: 1044
         output.split(yo, yo, yi, 32).parallel(yo).vectorize(xo, 4);
         for (int j = 1; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -275,7 +283,7 @@ int main(int argc, char **argv) {
         break;
     case 14:
         // 4 and 11 were pretty good for ARM. Can we do better by inlining
-        // the root pyramid level like in 12? 521 ??? 4257
+        // the root pyramid level like in 12? 427
         output.split(yo, yo, yi, 32).parallel(yo);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().parallel(y);
@@ -283,16 +291,7 @@ int main(int argc, char **argv) {
             outGPyramid[j].root().parallel(y);          
         }
         break;
-    case 15:
-        // ARM seems really bandwidth constrained. Let's try inlining
-        // another pyramid level of the processed pyramid. Really bad idea: 1138 ??? 13986
-        output.split(yo, yo, yi, 32).parallel(yo);
-        for (int j = 0; j < J; j++) {
-            inGPyramid[j].root().parallel(y);
-            if (j > 1) gPyramid[j].root().parallel(k);
-            outGPyramid[j].root().parallel(y);
-        }
-        break;
+
     case 100:
         // output stage only on GPU
         output.root().split(yo, by, ty, 32).split(xo, bx, tx, 32)
