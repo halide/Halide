@@ -4,7 +4,7 @@ using namespace FImage;
 
 int main(int argc, char **argv) {
 
-    int W = 128, H = 128;
+    int W = 64*3, H = 64*3;
 
     Image<uint16_t> in(W, H);
     for (int y = 0; y < H; y++) {
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 
     Func blur("blur");
     RVar i, j; 
-    blur(x, y) = Sum(tent(i, j) * input(x + i - 1, y + j - 1));
+    blur(x, y) += tent(i, j) * input(x + i - 1, y + j - 1);
 
     if (use_gpu()) {
         Var tidx("threadidx");
@@ -42,13 +42,10 @@ int main(int argc, char **argv) {
         blur.transpose(bidx,tidy);
     }
 
-    /*
-    for (size_t i = 0; i < blur.rhs().funcs().size(); i++) {
-        Func f = blur.rhs().funcs()[i];
-        if (f.name() != "input")
-            f.chunk(x);
-    }
-    */
+    // Take this opportunity to test tiling reductions
+    Var xi, yi;
+    blur.tile(x, y, xi, yi, 6, 6);
+    blur.update().tile(x, y, xi, yi, 4, 4);
 
     Image<uint16_t> out = blur.realize(W, H);
 
