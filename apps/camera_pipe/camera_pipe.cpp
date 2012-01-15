@@ -140,7 +140,14 @@ Func demosaic(Func deinterleaved) {
                           interleave_x(g_b, g_gb));
     Func b = interleave_y(interleave_x(b_gr, b_r),
                           interleave_x(b_b, b_gb));
-    
+
+
+    Func output("dem");
+    output(x, y) = (r(x, y), g(x, y), b(x, y));
+
+
+
+    /* THE SCHEDULE */    
     if (schedule == 0) {
         // optimized for ARM
         // Compute these in chunks over tiles, vectorized by 8
@@ -157,6 +164,7 @@ Func demosaic(Func deinterleaved) {
         g.chunk(tx).vectorize(x, 8).unroll(y, 2);
         b.chunk(tx).vectorize(x, 8).unroll(y, 2);
     } else {
+        // Basic naive schedule
         g_r.root();
         g_b.root();
         r_gr.root();
@@ -169,10 +177,6 @@ Func demosaic(Func deinterleaved) {
         g.root();
         b.root();
     }
-
-    Func output("dem");
-    output(x, y) = (r(x, y), g(x, y), b(x, y));
-
     return output;
 }
 
@@ -192,10 +196,9 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
     Expr ig = Cast<int32_t>(input(x, y, 1));
     Expr ib = Cast<int32_t>(input(x, y, 2));
 
-    Expr r, g, b;
-    r = matrix(3, 0) + matrix(0, 0) * ir + matrix(1, 0) * ig + matrix(2, 0) * ib;
-    g = matrix(3, 1) + matrix(0, 1) * ir + matrix(1, 1) * ig + matrix(2, 1) * ib;
-    b = matrix(3, 2) + matrix(0, 2) * ir + matrix(1, 2) * ig + matrix(2, 2) * ib;
+    Expr r = matrix(3, 0) + matrix(0, 0) * ir + matrix(1, 0) * ig + matrix(2, 0) * ib;
+    Expr g = matrix(3, 1) + matrix(0, 1) * ir + matrix(1, 1) * ig + matrix(2, 1) * ib;
+    Expr b = matrix(3, 2) + matrix(0, 2) * ir + matrix(1, 2) * ig + matrix(2, 2) * ib;
 
     corrected(x, y) = Cast<int16_t>((r, g, b)/256);
 
@@ -254,8 +257,7 @@ Func process(Func raw, Type result_type,
 
         Var cc = corrected.arg(2);
         corrected.chunk(tx).transpose(y, cc).transpose(x, cc).vectorize(x, 4).unroll(cc, 3);
-
-        processed.tile(tx, ty, xi, yi, 32, 32).transpose(ty, ci).transpose(tx, ci);//.vectorize(xi, 8).parallel(ty);
+        processed.tile(tx, ty, xi, yi, 32, 32).transpose(ty, ci).transpose(tx, ci);
     } else {
         denoised.root();
         deinterleaved.root();
