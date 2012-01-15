@@ -198,6 +198,7 @@ int main(int argc, char **argv) {
 			 && (y < im.height() - selectPadding),
 			 -2.0f, 2.0f);
   Image<float> phi_buf = phi_init.realize(im.width(), im.height());
+  Image<float> phi_buf2 = phi_init.realize(im.width(), im.height());
 
   // ###### Define the outer loop ######
   // Read from the buffer, compute the result, possibly create code for intermediate images
@@ -225,6 +226,7 @@ int main(int argc, char **argv) {
       .split(y, by, ty, 16).split(x, bx, tx, 16)
       .transpose(bx, ty)
       .parallel(bx).parallel(by).parallel(tx).parallel(ty);
+    phi_new.compileJIT();
   } else {
     phi_new.parallel(y).vectorize(x, 4);
     phi_new.compileJIT();
@@ -246,7 +248,10 @@ int main(int argc, char **argv) {
     }
 
     phi_input = phi_buf;
-    phi_buf = phi_new.realize(im.width(), im.height());
+    phi_new.realize(phi_buf2);
+
+    phi_input = phi_buf2;
+    phi_new.realize(phi_buf);
   }
     
   // ###### Save the result ######

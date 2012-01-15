@@ -32,16 +32,23 @@ namespace FImage {
         unsigned char *data() const;
         const std::string &name() const;
         struct buffer_t* buffer() const;
-        void setCopyToHost(void (*func)(buffer_t *)) const;
+        void setRuntimeHooks(void (*copyToHostFn)(buffer_t *), void (*freeFn)(buffer_t *)) const;
         void copyToHost() const;
         void copyToDev() const;
         void markHostDirty() const;
         void markDevDirty() const;
+        bool hostDirty() const;
+        bool devDirty() const;
         
         // Convenience functions for typical interpretations of dimensions
         uint32_t width() const {return size(0);}
         uint32_t height() const {return size(1);}
-        uint32_t channels() const {return size(2);}
+        uint32_t channels() const {
+            if (dimensions() > 2)
+                return size(2);
+            else
+                return 1;
+        }
 
         // Compare for identity (not equality of contents)
         bool operator==(const DynImage &other) const {
