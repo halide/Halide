@@ -563,7 +563,7 @@ namespace FImage {
             }
         }
 
-        saveGuruToFile(guru, name() + ".guru");
+        //saveGuruToFile(guru, name() + ".guru");
         
         MLVal sched = makeSchedule((name()),
                                    sizes,
