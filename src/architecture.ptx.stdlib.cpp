@@ -188,7 +188,9 @@ buffer_t* __malloc_buffer(int32_t size)
 
 void __free_buffer(buffer_t* buf)
 {
+    #ifndef NDEBUG
     fprintf(stderr, "In free_buffer of %p\n", buf);
+    #endif
     //assert(buf->host);
     //free(buf->host);
     //buf->host = NULL;
@@ -286,7 +288,6 @@ void __dev_malloc_if_missing(buffer_t* buf) {
     #endif
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     buf->dev = __dev_malloc(size);
-    buf->host_dirty = true; // if there was no device pointer, the host data is 
     assert(buf->dev);
 }
 
