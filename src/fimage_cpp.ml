@@ -36,7 +36,9 @@ let lower (f:string) (env:environment) (sched: schedule_tree) =
     dbg 0 "Before constant folding:\n%s\n" (string_of_stmt lowered);
     let lowered = Constant_fold.constant_fold_stmt lowered in 
     dbg 1 "Resulting stmt:\n%s\n" (string_of_stmt lowered);
-    Printf.fprintf (open_out (f^".lowered")) "%s%!" (string_of_stmt lowered);
+    let out = open_out (f ^ ".lowered") in
+    Printf.fprintf out "%s%!" (string_of_stmt lowered);
+    close_out out;
     lowered
   end
 
