@@ -111,6 +111,7 @@ let host_context (con:context) = {
 
 let init con = get_function con.m "__init"
 let release con = get_function con.m "__release"
+let free_buffer_func con = get_function con.m "__free_buffer"
 let dev_malloc_if_missing con = get_function con.m "__dev_malloc_if_missing"
 let copy_to_host_func con = get_function con.m "__copy_to_host"
 let copy_to_dev_func con = get_function con.m "__copy_to_dev"
@@ -421,8 +422,11 @@ let malloc con name count elem_size =
 
   hostptr
 
-let free con ptr =
-  X86.free (host_context con) ptr
+let free (con:context) (name:string) ptr =
+  dbg 2 "Ptx.free %s\n%!" name;
+  let buf = con.arch_state.buf_get name in
+  ignore (build_call (free_buffer_func con) [| buf |] "" con.b);
+  X86.free (host_context con) name ptr
 
 let rec cg_stmt (con:context) stmt = match stmt with
   (* map topmost ParFor into PTX kernel invocation *)
@@ -467,7 +471,7 @@ let rec cg_stmt (con:context) stmt = match stmt with
       con.sym_remove name;
 
       (* free the scratch *)
-      ignore (free con scratch);
+      ignore (free con name scratch);
 
       res
 

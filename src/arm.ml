@@ -402,7 +402,7 @@ let malloc (con : context) (name : string) (elems : expr) (elem_size : expr) =
   let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
   build_call malloc [|con.cg_expr size|] name b
 
-let free (con : context) (address:llvalue) =
+let free (con : context) (name:string) (address:llvalue) =
   let c = con.c and b = con.b and m = con.m in
   let free = declare_function "fast_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
   build_call free [|address|] "" b   

@@ -31,7 +31,7 @@ module type Architecture = sig
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
   val malloc  : context -> string -> expr -> expr -> llvalue
-  val free    : context -> llvalue -> llvalue 
+  val free    : context -> string -> llvalue -> llvalue 
   val env : environment
   val pointer_size : int
 end
@@ -499,7 +499,7 @@ let rec make_cg_context c m b sym_table arch_state =
     ignore(build_call do_par_for [|body_fn; min; size; closure|] "" b);
 
     (* Free the closure *)
-    ignore (Arch.free cg_context closure);
+    ignore (Arch.free cg_context (var_name^"_closure") closure);
 
     (* Return an ignorable llvalue *)
     const_int int_imm_t 0
@@ -539,7 +539,7 @@ let rec make_cg_context c m b sym_table arch_state =
         sym_remove name;
 
         (* free the scratch *)
-        ignore (Arch.free cg_context scratch);
+        ignore (Arch.free cg_context name scratch);
 
         res
     | Print (fmt, args) -> cg_print fmt args
