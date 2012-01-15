@@ -396,10 +396,16 @@ let cg_dev_kernel con stmt =
   (* Return an ignorable llvalue *)
   const_zero
 
+let free (con:context) (name:string) host_cleanup ptr =
+  dbg 2 "Ptx.free %s\n%!" name;
+  let buf = con.arch_state.buf_get name in
+  ignore (build_call (free_buffer_func con) [| buf |] "" con.b);
+  host_cleanup (host_context con)
+
 let malloc con name count elem_size =
   Printf.eprintf "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
   (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
-  let hostptr = X86.malloc (host_context con) name count elem_size in
+  let (hostptr, host_cleanup) = X86.malloc (host_context con) name count elem_size in
   
   (* build a buffer_t to track this allocation *)
   let buf = build_alloca (buffer_struct_type con) ("malloc_" ^ name) con.b in
@@ -420,13 +426,7 @@ let malloc con name count elem_size =
 
   con.arch_state.buf_add name buf;
 
-  hostptr
-
-let free (con:context) (name:string) ptr =
-  dbg 2 "Ptx.free %s\n%!" name;
-  let buf = con.arch_state.buf_get name in
-  ignore (build_call (free_buffer_func con) [| buf |] "" con.b);
-  X86.free (host_context con) name ptr
+  (hostptr, fun con -> free con name host_cleanup hostptr)
 
 let rec cg_stmt (con:context) stmt = match stmt with
   (* map topmost ParFor into PTX kernel invocation *)
@@ -438,7 +438,7 @@ let rec cg_stmt (con:context) stmt = match stmt with
 
       (* allocate buffer *)
       let elem_size = (IntImm ((bit_width ty)/8)) in 
-      let scratch = malloc con name size elem_size in
+      let (scratch, cleanup) = malloc con name size elem_size in
 
       (* push the symbol environment *)
       con.sym_add name scratch;
@@ -471,7 +471,7 @@ let rec cg_stmt (con:context) stmt = match stmt with
       con.sym_remove name;
 
       (* free the scratch *)
-      ignore (free con name scratch);
+      cleanup con;
 
       res
 

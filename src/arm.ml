@@ -98,6 +98,7 @@ let rec cg_expr (con : context) (expr : expr) =
           | FloatVector (_, _) -> "4f32" (* there isn't a v2f64 vld *)
           | UIntVector (bits, w) 
           | IntVector (bits, w) -> (string_of_int w) ^ "i" ^ (string_of_int bits)
+          | failwith -> ("ARM vector load of non-vector type " ^ (string_of_val_type t))
         in
         let llt = type_of_val_type c t in
         let ld = declare_function ("llvm.arm.neon.vld1.v" ^ intrin) 
@@ -116,6 +117,7 @@ let rec cg_expr (con : context) (expr : expr) =
           | Some 0 -> (base, 0, true)
           | Some 1 -> (Constant_fold.constant_fold_expr (base -~ IntImm 1), 1, true)
           | None -> (base, 0, false)
+          | _ -> failwith "Math no work"
         in
         if known then                 
           let addr = con.cg_memref (IntVector (16, 8)) buf base in        
@@ -396,15 +398,29 @@ let rec cg_stmt (con : context) (stmt : stmt) =
     | _ -> con.cg_stmt stmt
 
 
-let malloc (con : context) (name : string) (elems : expr) (elem_size : expr) =
-  let c = con.c and b = con.b and m = con.m in
-  let malloc = declare_function "fast_malloc" (function_type (pointer_type (i8_type c)) [|i32_type c|]) m in  
-  let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
-  build_call malloc [|con.cg_expr size|] name b
-
 let free (con : context) (name:string) (address:llvalue) =
   let c = con.c and b = con.b and m = con.m in
   let free = declare_function "fast_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
-  build_call free [|address|] "" b   
+  ignore (build_call free [|address|] "" b)
 
+let malloc (con : context) (name : string) (elems : expr) (elem_size : expr) =
+  let c = con.c and b = con.b and m = con.m in
+  let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
+  match size with
+    | IntImm bytes ->
+        let chunks = ((bytes + 15)/16) in (* 16-byte aligned stack *)
+        (* Get the position at the top of the function *)
+        let pos = instr_begin (entry_block (block_parent (insertion_block b))) in
+        (* Make a builder at the start of the entry block *)
+        let b = builder_at c pos in
+        (* Inject an alloca *)
+        let ptr = build_array_alloca (vector_type (i32_type c) 4) (const_int (i32_type c) chunks) "" b in
+        let ptr = build_pointercast ptr (pointer_type (i8_type c)) "" b in
+        (ptr, fun _ -> ())
+    | _ -> 
+        let malloc = declare_function "fast_malloc" (function_type (pointer_type (i8_type c)) [|i32_type c|]) m in  
+        let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
+        let addr = build_call malloc [|con.cg_expr size|] name b in
+        (addr, fun con -> free con name addr)
+          
 let env = Environment.empty

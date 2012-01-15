@@ -137,8 +137,8 @@ namespace FImage {
         
         // The compiled form of this function
         mutable void (*functionPtr)(void *);
-        mutable void (*copy_to_host)(buffer_t *);
-    };    
+        mutable void (*copyToHost)(buffer_t *);
+    };
 
     llvm::ExecutionEngine *Func::Contents::ee = NULL;
     llvm::FunctionPassManager *Func::Contents::fPassMgr = NULL;
@@ -702,9 +702,9 @@ namespace FImage {
         void *ptr = Contents::ee->getPointerToFunction(f);
         contents->functionPtr = (void (*)(void*))ptr;
         
-        llvm::Function *copy_to_host = m->getFunction("__copy_to_host");
-        ptr = Contents::ee->getPointerToFunction(copy_to_host);
-        contents->copy_to_host = (void (*)(buffer_t*))ptr;
+        llvm::Function *copyToHost = m->getFunction("__copy_to_host");
+        ptr = Contents::ee->getPointerToFunction(copyToHost);
+        contents->copyToHost = (void (*)(buffer_t*))ptr;
 
         /*
         printf("dumping machine code to file...\n");
@@ -722,36 +722,12 @@ namespace FImage {
         return im.boundImage().size(dim);
     }
 
-
-    template <class image_t>
-    static buffer_t BufferOfImage(const image_t &im) {
-        buffer_t buf;
-        buf.host = im.data();
-		static const int max_dim = 4;
-		int dim = 0;
-        while (dim < im.dimensions()) {
-            buf.dims[dim] = im_size(im, dim);
-			dim++;
-        }
-		while (dim < max_dim) {
-			buf.dims[dim] = 1;
-			dim++;
-		}
-        buf.elem_size = im.type().bits / 8;
-        buf.dev = 0;
-        buf.dev_dirty = false;
-
-        //printf("BufferOfImage: %p (%zux%zux%zu) %zu bytes\n", buf.host, buf.dims[0], buf.dims[1], buf.dims[2], buf.elem_size);
-
-        return buf;
-    }
-
     void Func::realize(const DynImage &im) {
         if (!contents->functionPtr) compileJIT();
 
         //printf("Constructing argument list...\n");
         void *arguments[256];
-        buffer_t buffers[256];
+        buffer_t *buffers[256];
         size_t j = 0;
         size_t k = 0;
 
@@ -759,15 +735,15 @@ namespace FImage {
             arguments[j++] = rhs().uniforms()[i].data();
         }
         for (size_t i = 0; i < rhs().images().size(); i++) {
-            buffers[k++] = BufferOfImage(rhs().images()[i]);
-            arguments[j++] = buffers + (k-1);
+            buffers[k++] = rhs().images()[i].buffer();
+            arguments[j++] = buffers[k-1];
         }               
         for (size_t i = 0; i < rhs().uniformImages().size(); i++) {
-            buffers[k++] = BufferOfImage(rhs().uniformImages()[i]);
-            arguments[j++] = buffers + (k-1);
-        }        
-        buffers[k] = BufferOfImage(im);
-        arguments[j] = buffers + k;
+            buffers[k++] = rhs().uniformImages()[i].boundImage().buffer();
+            arguments[j++] = buffers[k-1];
+        }
+        buffers[k] = im.buffer();
+        arguments[j] = buffers[k];
 
         /*
         printf("Args: ");
@@ -781,7 +757,8 @@ namespace FImage {
         contents->functionPtr(&arguments[0]);
         
         if (use_gpu()) {
-            contents->copy_to_host(&buffers[k]);
+            assert(contents->copyToHost);
+            im.setCopyToHost(contents->copyToHost);
         }
     }
 
