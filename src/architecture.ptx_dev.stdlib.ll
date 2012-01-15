@@ -27,3 +27,23 @@ declare i32 @llvm.ptx.read.pm0()
 declare i32 @llvm.ptx.read.pm1()
 declare i32 @llvm.ptx.read.pm2()
 declare i32 @llvm.ptx.read.pm3()
+
+
+declare float @llvm.sin.f32(float)
+declare float @llvm.cos.f32(float)
+declare float @llvm.sqrt.f32(float)
+
+define ptx_device float @sqrt_f32(float %x) alwaysinline {
+    %res = call float @llvm.sqrt.f32(float %x)
+    ret float %res
+}
+
+define ptx_device float @sin_f32(float %x) alwaysinline {
+    %res = call float @llvm.sin.f32(float %x)
+    ret float %res
+}
+
+define ptx_device float @cos_f32(float %x) alwaysinline {
+    %res = call float @llvm.cos.f32(float %x)
+    ret float %res
+}

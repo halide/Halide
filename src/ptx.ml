@@ -62,8 +62,8 @@ let start_state () =
     Hashtbl.add bufs n v;
     Hashtbl.add buf_names v n
   and buf_get n =
-    try Hashtbl.find bufs n
-    with Not_found -> failwith ("buffer " ^ n ^ " not found")
+    Hashtbl.find bufs n
+    (* with Not_found -> failwith ("buffer " ^ n ^ " not found") *)
   and buf_get_name v =
     try Hashtbl.find buf_names v
     with Not_found -> failwith ("buffer " ^ (value_name v) ^ " not found")
@@ -111,6 +111,7 @@ let host_context (con:context) = {
 
 let init con = get_function con.m "__init"
 let release con = get_function con.m "__release"
+let free_buffer_func con = get_function con.m "__free_buffer"
 let dev_malloc_if_missing con = get_function con.m "__dev_malloc_if_missing"
 let copy_to_host_func con = get_function con.m "__copy_to_host"
 let copy_to_dev_func con = get_function con.m "__copy_to_dev"
@@ -395,10 +396,16 @@ let cg_dev_kernel con stmt =
   (* Return an ignorable llvalue *)
   const_zero
 
+let free (con:context) (name:string) host_cleanup ptr =
+  dbg 2 "Ptx.free %s\n%!" name;
+  let buf = con.arch_state.buf_get name in
+  ignore (build_call (free_buffer_func con) [| buf |] "" con.b);
+  host_cleanup (host_context con)
+
 let malloc con name count elem_size =
   Printf.eprintf "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
   (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
-  let (hostptr, cleanup) = X86.malloc (host_context con) name count elem_size in
+  let (hostptr, host_cleanup) = X86.malloc (host_context con) name count elem_size in
   
   (* build a buffer_t to track this allocation *)
   let buf = build_alloca (buffer_struct_type con) ("malloc_" ^ name) con.b in
@@ -419,7 +426,7 @@ let malloc con name count elem_size =
 
   con.arch_state.buf_add name buf;
 
-  (hostptr, fun con -> cleanup (host_context con))
+  (hostptr, fun con -> free con name host_cleanup hostptr)
 
 let rec cg_stmt (con:context) stmt = match stmt with
   (* map topmost ParFor into PTX kernel invocation *)
@@ -513,8 +520,24 @@ let rec codegen_entry c m cg_entry make_cg_context e =
     dump_syms param_syms;
   end;
 
-  (* codegen the actual function *)
+  (* set up the cg context *)
   let con = make_cg_context c m b param_syms state in
+  
+  (* copy_to_host any buffers which are read by host code in the function *)
+  let host_reads = find_host_loads body in
+  List.iter
+    (fun nm ->
+      try
+        dbg 2 "Host reads %s\n%!" nm;
+        dump_syms param_syms;
+        let buf = con.arch_state.buf_get nm in
+        dbg 2 "  copy_to_host at entrypoint\n%!";
+        ignore (copy_to_host con buf);
+      with Not_found -> ()
+    )
+    (StringSet.elements host_reads);
+
+  (* codegen the actual function *)
   ignore (cg_stmt con body);
 
   (* release runtime resources before returning *)

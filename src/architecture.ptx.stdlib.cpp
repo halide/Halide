@@ -12,7 +12,7 @@
 
 extern "C" {
 
-#define NDEBUG // disable logging/asserts for performance
+    #define NDEBUG // disable logging/asserts for performance
 
 #ifdef NDEBUG
 #define CHECK_CALL(c,str) (c)
@@ -188,10 +188,17 @@ buffer_t* __malloc_buffer(int32_t size)
 
 void __free_buffer(buffer_t* buf)
 {
-    assert(buf->host);
-    free(buf->host);
-    if (buf->dev) cuMemFree(buf->dev);
-    __release_buffer(buf);
+    #ifndef NDEBUG
+    fprintf(stderr, "In free_buffer of %p\n", buf);
+    #endif
+    //assert(buf->host);
+    //free(buf->host);
+    //buf->host = NULL;
+    if (buf->dev) {
+        CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
+        buf->dev = 0;
+    }
+    // __release_buffer(buf);
 }
 
 void __init(const char* ptx_src)
@@ -237,7 +244,6 @@ void __init(const char* ptx_src)
 
       fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
     }
-    printf("Return from __init (t=%d)\n", currentTime());
 }
 
 void __release() {
