@@ -163,6 +163,21 @@ Func demosaic(Func deinterleaved) {
         r.chunk(tx).vectorize(x, 8).unroll(y, 2);
         g.chunk(tx).vectorize(x, 8).unroll(y, 2);
         b.chunk(tx).vectorize(x, 8).unroll(y, 2);
+    } else if (schedule == 1) {
+        // optimized for X86
+        // Don't vectorize, because sse is bad a 16-bit interleaving
+        g_r.chunk(tx);
+        g_b.chunk(tx);
+        r_gr.chunk(tx);
+        b_gr.chunk(tx);
+        r_gb.chunk(tx);
+        b_gb.chunk(tx);
+        r_b.chunk(tx);
+        b_r.chunk(tx);
+        // These interleave in x and y, so unrolling them helps
+        r.chunk(tx).unroll(x, 2).unroll(y, 2);
+        g.chunk(tx).unroll(x, 2).unroll(y, 2);
+        b.chunk(tx).unroll(x, 2).unroll(y, 2);
     } else {
         // Basic naive schedule
         g_r.root();
@@ -245,7 +260,6 @@ Func process(Func raw, Type result_type,
     Var co, ci; 
     processed(tx, ty, c) = curved(tx, ty, ci);
     processed.split(c, co, ci, 3); // bound color loop
-
     if (schedule == 0) {
         // Compute in chunks over tiles, vectorized by 8
         denoised.chunk(tx).vectorize(x, 8);
@@ -258,6 +272,20 @@ Func process(Func raw, Type result_type,
         Var cc = corrected.arg(2);
         corrected.chunk(tx).transpose(y, cc).transpose(x, cc).vectorize(x, 4).unroll(cc, 3);
         processed.tile(tx, ty, xi, yi, 32, 32).transpose(ty, ci).transpose(tx, ci);
+        processed.parallel(ty);
+    } else if (schedule == 1) {
+        // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
+        denoised.chunk(tx);
+
+        // Unroll the tuple part and compute it in the inside loop
+        Var ti, tt = deinterleaved.arg(2);
+        deinterleaved.split(tt, tt, ti, 4).unroll(ti).transpose(y, ti).transpose(x, ti);
+        deinterleaved.chunk(tx);
+
+        Var cc = corrected.arg(2);
+        corrected.chunk(tx).transpose(y, cc).transpose(x, cc).unroll(cc, 3);
+        processed.tile(tx, ty, xi, yi, 128, 128).transpose(ty, ci).transpose(tx, ci);
+        processed.parallel(ty);
     } else {
         denoised.root();
         deinterleaved.root();
