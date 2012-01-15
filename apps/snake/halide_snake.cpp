@@ -219,9 +219,17 @@ int main(int argc, char **argv) {
   Func phi_new("phi_new");
   phi_new = drlse_edge(phi_clamped,g_clamped,lambda,mu,alpha,epsilon,timestep,iter_inner);
 
-  phi_new.parallel(y).vectorize(x, 4);
-  phi_new.compileJIT();
-
+  if (use_gpu()) {
+    Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
+    phi_new.root()
+      .split(y, by, ty, 16).split(x, bx, tx, 16)
+      .transpose(bx, ty)
+      .parallel(bx).parallel(by).parallel(tx).parallel(ty);
+  } else {
+    phi_new.parallel(y).vectorize(x, 4);
+    phi_new.compileJIT();
+  }
+  
   // ###### Run the outer loop ######
   
   timeval t1, t2;
