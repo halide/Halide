@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "Expr.h"
 
+struct buffer_t;
+
 namespace FImage {
     
     class Type;
@@ -29,6 +31,12 @@ namespace FImage {
         int dimensions() const;
         unsigned char *data() const;
         const std::string &name() const;
+        struct buffer_t* buffer() const;
+        void setCopyToHost(void (*func)(buffer_t *)) const;
+        void copyToHost() const;
+        void copyToDev() const;
+        void markHostDirty() const;
+        void markDevDirty() const;
         
         // Convenience functions for typical interpretations of dimensions
         uint32_t width() const {return size(0);}
@@ -102,18 +110,46 @@ namespace FImage {
         // Actually look something up in the image. Won't return anything
         // interesting if the image hasn't been evaluated yet.
         T &operator()(int a) {
+            im.copyToHost();
+            im.markHostDirty();
             return ((T*)im.data())[a*im.stride(0)];
         }
         
         T &operator()(int a, int b) {
+            im.copyToHost();
+            im.markHostDirty();
             return ((T*)im.data())[a*im.stride(0) + b*im.stride(1)];
         }
         
         T &operator()(int a, int b, int c) {
+            im.copyToHost();
+            im.markHostDirty();
             return ((T*)im.data())[a*im.stride(0) + b*im.stride(1) + c*im.stride(2)];
         }
         
         T &operator()(int a, int b, int c, int d) {
+            im.copyToHost();
+            im.markHostDirty();
+            return ((T*)im.data())[a*im.stride(0) + b*im.stride(1) + c*im.stride(2) + d*im.stride(3)];
+        }
+
+        const T &operator()(int a) const {
+            im.copyToHost();
+            return ((T*)im.data())[a*im.stride(0)];
+        }
+        
+        const T &operator()(int a, int b) const {
+            im.copyToHost();
+            return ((T*)im.data())[a*im.stride(0) + b*im.stride(1)];
+        }
+        
+        const T &operator()(int a, int b, int c) const {
+            im.copyToHost();
+            return ((T*)im.data())[a*im.stride(0) + b*im.stride(1) + c*im.stride(2)];
+        }
+        
+        const T &operator()(int a, int b, int c, int d) const {
+            im.copyToHost();
             return ((T*)im.data())[a*im.stride(0) + b*im.stride(1) + c*im.stride(2) + d*im.stride(3)];
         }
 
