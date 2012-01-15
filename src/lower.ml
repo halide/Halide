@@ -167,7 +167,7 @@ and realize func consume env schedule =
   let (_, sched_list) = find_schedule schedule func in
 
   (* Wrap a statement in for loops using a schedule *)
-  let wrap (stmt:stmt) = function 
+  let wrap (sched_list: schedule list) (stmt:stmt) = function 
     | Serial     (name, min, size) -> 
         For (name, min, size, true, stmt)
     | Parallel   (name, min, size) -> 
@@ -208,7 +208,7 @@ and realize func consume env schedule =
     | Extern -> failwith ("Can't lower extern function call " ^ func)
     | Pure body ->
         let inner_stmt = Provide (body, func, arg_vars) in
-        let produce = List.fold_left wrap inner_stmt sched_list in
+        let produce = List.fold_left (wrap sched_list) inner_stmt sched_list in
         let rec flatten = function
           | (x, y)::rest -> x::y::(flatten rest)
           | [] -> []
@@ -228,8 +228,9 @@ and realize func consume env schedule =
           else init_stmt
         in
 
-        let initialize = List.fold_left wrap init_stmt sched_list in
-               
+        let initialize = List.fold_left (wrap sched_list) init_stmt sched_list in
+
+        dbg 0 "Making body of update function: %s\n%!" update_func;
         let (pure_update_args, _, update_body) = make_function_body update_func env in
         let update_expr = match update_body with
           | Pure expr -> expr
@@ -246,9 +247,11 @@ and realize func consume env schedule =
           else update_stmt
         in
 
+        dbg 0 "Retrieving schedule of update func\n%!";
         let (_, update_sched_list) = find_schedule schedule update_func in
-        let update = List.fold_left wrap update_stmt update_sched_list in
+        let update = List.fold_left (wrap update_sched_list) update_stmt update_sched_list in
 
+        dbg 0 "Computing pure domain\n%!";
         let pure_domain = List.map 
           (fun (t, n) -> 
             let parent_n = (parent_name update_func) ^ "." ^ (base_name n) in
