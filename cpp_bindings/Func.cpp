@@ -138,6 +138,7 @@ namespace FImage {
         // The compiled form of this function
         mutable void (*functionPtr)(void *);
         mutable void (*copyToHost)(buffer_t *);
+        mutable void (*freeBuffer)(buffer_t *);
     };
 
     llvm::ExecutionEngine *Func::Contents::ee = NULL;
@@ -703,9 +704,17 @@ namespace FImage {
         contents->functionPtr = (void (*)(void*))ptr;
         
         llvm::Function *copyToHost = m->getFunction("__copy_to_host");
-        ptr = Contents::ee->getPointerToFunction(copyToHost);
-        contents->copyToHost = (void (*)(buffer_t*))ptr;
-
+        if (copyToHost) {
+            ptr = Contents::ee->getPointerToFunction(copyToHost);
+            contents->copyToHost = (void (*)(buffer_t*))ptr;
+        }
+        
+        llvm::Function *freeBuffer = m->getFunction("__free_buffer");
+        if (freeBuffer) {
+            ptr = Contents::ee->getPointerToFunction(freeBuffer);
+            contents->freeBuffer = (void (*)(buffer_t*))ptr;
+        }
+        
         /*
         printf("dumping machine code to file...\n");
         saveELF("generated.o", ptr, 8192);            
@@ -758,7 +767,12 @@ namespace FImage {
         
         if (use_gpu()) {
             assert(contents->copyToHost);
-            im.setCopyToHost(contents->copyToHost);
+            im.setRuntimeHooks(contents->copyToHost, contents->freeBuffer);
+        }
+        
+        // TODO: the actual codegen entrypoint should probably set this for x86/ARM targets too
+        if (!im.devDirty()) {
+            im.markHostDirty();
         }
     }
 

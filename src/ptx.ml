@@ -62,8 +62,8 @@ let start_state () =
     Hashtbl.add bufs n v;
     Hashtbl.add buf_names v n
   and buf_get n =
-    try Hashtbl.find bufs n
-    with Not_found -> failwith ("buffer " ^ n ^ " not found")
+    Hashtbl.find bufs n
+    (* with Not_found -> failwith ("buffer " ^ n ^ " not found") *)
   and buf_get_name v =
     try Hashtbl.find buf_names v
     with Not_found -> failwith ("buffer " ^ (value_name v) ^ " not found")
@@ -520,8 +520,24 @@ let rec codegen_entry c m cg_entry make_cg_context e =
     dump_syms param_syms;
   end;
 
-  (* codegen the actual function *)
+  (* set up the cg context *)
   let con = make_cg_context c m b param_syms state in
+  
+  (* copy_to_host any buffers which are read by host code in the function *)
+  let host_reads = find_host_loads body in
+  List.iter
+    (fun nm ->
+      try
+        dbg 2 "Host reads %s\n%!" nm;
+        dump_syms param_syms;
+        let buf = con.arch_state.buf_get nm in
+        dbg 2 "  copy_to_host at entrypoint\n%!";
+        ignore (copy_to_host con buf);
+      with Not_found -> ()
+    )
+    (StringSet.elements host_reads);
+
+  (* codegen the actual function *)
   ignore (cg_stmt con body);
 
   (* release runtime resources before returning *)

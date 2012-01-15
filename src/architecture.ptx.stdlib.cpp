@@ -12,7 +12,7 @@
 
 extern "C" {
 
-//#define NDEBUG // disable logging/asserts for performance
+    #define NDEBUG // disable logging/asserts for performance
 
 #ifdef NDEBUG
 #define CHECK_CALL(c,str) (c)
@@ -242,7 +242,6 @@ void __init(const char* ptx_src)
 
       fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
     }
-    printf("Return from __init (t=%d)\n", currentTime());
 }
 
 void __release() {
@@ -287,6 +286,7 @@ void __dev_malloc_if_missing(buffer_t* buf) {
     #endif
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     buf->dev = __dev_malloc(size);
+    buf->host_dirty = true; // if there was no device pointer, the host data is 
     assert(buf->dev);
 }
 

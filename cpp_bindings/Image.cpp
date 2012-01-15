@@ -13,6 +13,7 @@ namespace FImage {
         Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c);
         Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
         Contents(const Type &t, std::vector<uint32_t> sizes);
+        ~Contents();
         
         void allocate(size_t bytes);
         
@@ -23,30 +24,31 @@ namespace FImage {
         std::vector<unsigned char> host_buffer;
         buffer_t buf;
         mutable void (*copyToHost)(buffer_t*);
+        mutable void (*freeBuffer)(buffer_t*);
     };
 
     DynImage::Contents::Contents(const Type &t, uint32_t a) : 
-        type(t), size{a}, stride{1}, name(uniqueName('i')), copyToHost(NULL) {
+        type(t), size{a}, stride{1}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         allocate(a * (t.bits/8));
     }
     
     DynImage::Contents::Contents(const Type &t, uint32_t a, uint32_t b) : 
-        type(t), size{a, b}, stride{1, a}, name(uniqueName('i')), copyToHost(NULL) {
+        type(t), size{a, b}, stride{1, a}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         allocate(a * b * (t.bits/8));
     }
     
     DynImage::Contents::Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c) : 
-        type(t), size{a, b, c}, stride{1, a, a*b}, name(uniqueName('i')), copyToHost(NULL) {
+        type(t), size{a, b, c}, stride{1, a, a*b}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         allocate(a * b * c * (t.bits/8));
     }
 
     DynImage::Contents::Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d) : 
-        type(t), size{a, b, c, d}, stride{1, a, a*b, a*b*c}, name(uniqueName('i')), copyToHost(NULL) {
+        type(t), size{a, b, c, d}, stride{1, a, a*b, a*b*c}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         allocate(a * b * c * d * (t.bits/8));
     }
 
     DynImage::Contents::Contents(const Type &t, std::vector<uint32_t> sizes) :
-        type(t), size(sizes), stride(sizes.size()), name(uniqueName('i')), copyToHost(NULL) {
+        type(t), size(sizes), stride(sizes.size()), name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         
         size_t total = 1;
         for (size_t i = 0; i < sizes.size(); i++) {
@@ -55,6 +57,13 @@ namespace FImage {
         }
 
         allocate(total * (t.bits/8));
+    }
+    
+    DynImage::Contents::~Contents() {
+        if (freeBuffer) {
+            fprintf(stderr, "freeBuffer %p\n", &buf);
+            freeBuffer(&buf);
+        }
     }
 
     void DynImage::Contents::allocate(size_t bytes) {
@@ -114,8 +123,9 @@ namespace FImage {
         return &contents->buf;
     }
     
-    void DynImage::setCopyToHost(void (*func)(buffer_t *)) const {
-        contents->copyToHost = func;
+    void DynImage::setRuntimeHooks(void (*copyToHostFn)(buffer_t *), void (*freeFn)(buffer_t *)) const {
+        contents->copyToHost = copyToHostFn;
+        contents->freeBuffer = freeFn;
     }
 
     void DynImage::copyToHost() const {
@@ -144,6 +154,13 @@ namespace FImage {
     void DynImage::markDevDirty() const {
         assert(!contents->buf.host_dirty);
         contents->buf.dev_dirty = true;
+    }
+    
+    bool DynImage::hostDirty() const {
+        return contents->buf.host_dirty;
+    }
+    bool DynImage::devDirty() const {
+        return contents->buf.dev_dirty;
     }
 
     Expr DynImage::operator()(const Expr &a) const {
