@@ -30,8 +30,7 @@ module type Architecture = sig
                       entrypoint -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
-  val malloc  : context -> string -> expr -> expr -> llvalue
-  val free    : context -> llvalue -> llvalue 
+  val malloc  : context -> string -> expr -> expr -> (llvalue * (context -> unit))
   val env : environment
   val pointer_size : int
 end
@@ -447,11 +446,9 @@ let rec make_cg_context c m b sym_table arch_state =
     in
 
     (* Allocate a closure *)
-    let closure = Arch.malloc
-                    cg_context
-                    (var_name^"_closure")
-                    (IntImm total_bytes)
-                    (IntImm 1) in
+    let (closure, cleanup_closure) =
+      Arch.malloc cg_context (var_name^"_closure")
+        (IntImm total_bytes) (IntImm 1) in
 
     (* Store everything in the closure *)
     StringIntSet.iter (fun (name, size) ->      
@@ -499,7 +496,7 @@ let rec make_cg_context c m b sym_table arch_state =
     ignore(build_call do_par_for [|body_fn; min; size; closure|] "" b);
 
     (* Free the closure *)
-    ignore (Arch.free cg_context closure);
+    cleanup_closure cg_context;
 
     (* Return an ignorable llvalue *)
     const_int int_imm_t 0
@@ -527,7 +524,7 @@ let rec make_cg_context c m b sym_table arch_state =
 
         (* allocate buffer *)
         let elem_size = (IntImm ((bit_width ty)/8)) in 
-        let scratch = Arch.malloc cg_context name size elem_size in
+        let (scratch, cleanup_scratch) = Arch.malloc cg_context name size elem_size in
 
         (* push the symbol environment *)
         sym_add name scratch;
@@ -539,7 +536,7 @@ let rec make_cg_context c m b sym_table arch_state =
         sym_remove name;
 
         (* free the scratch *)
-        ignore (Arch.free cg_context scratch);
+        cleanup_scratch cg_context;
 
         res
     | Print (fmt, args) -> cg_print fmt args
