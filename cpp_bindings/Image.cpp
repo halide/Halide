@@ -4,6 +4,7 @@
 #include "Uniform.h"
 #include "Var.h"
 #include <assert.h>
+#include "../src/buffer.h"
 
 namespace FImage {
     struct DynImage::Contents {
@@ -19,31 +20,33 @@ namespace FImage {
         std::vector<uint32_t> size, stride;
         const std::string name;
         unsigned char *data;
-        std::vector<unsigned char> buffer;
+        std::vector<unsigned char> host_buffer;
+        buffer_t buf;
+        mutable void (*copyToHost)(buffer_t*);
     };
 
     DynImage::Contents::Contents(const Type &t, uint32_t a) : 
-        type(t), size{a}, stride{1}, name(uniqueName('i')) {
+        type(t), size{a}, stride{1}, name(uniqueName('i')), copyToHost(NULL) {
         allocate(a * (t.bits/8));
     }
     
     DynImage::Contents::Contents(const Type &t, uint32_t a, uint32_t b) : 
-        type(t), size{a, b}, stride{1, a}, name(uniqueName('i')) {
+        type(t), size{a, b}, stride{1, a}, name(uniqueName('i')), copyToHost(NULL) {
         allocate(a * b * (t.bits/8));
     }
     
     DynImage::Contents::Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c) : 
-        type(t), size{a, b, c}, stride{1, a, a*b}, name(uniqueName('i')) {
+        type(t), size{a, b, c}, stride{1, a, a*b}, name(uniqueName('i')), copyToHost(NULL) {
         allocate(a * b * c * (t.bits/8));
     }
 
     DynImage::Contents::Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d) : 
-        type(t), size{a, b, c, d}, stride{1, a, a*b, a*b*c}, name(uniqueName('i')) {
+        type(t), size{a, b, c, d}, stride{1, a, a*b, a*b*c}, name(uniqueName('i')), copyToHost(NULL) {
         allocate(a * b * c * d * (t.bits/8));
     }
 
     DynImage::Contents::Contents(const Type &t, std::vector<uint32_t> sizes) :
-        type(t), size(sizes), stride(sizes.size()), name(uniqueName('i')) {
+        type(t), size(sizes), stride(sizes.size()), name(uniqueName('i')), copyToHost(NULL) {
         
         size_t total = 1;
         for (size_t i = 0; i < sizes.size(); i++) {
@@ -55,12 +58,23 @@ namespace FImage {
     }
 
     void DynImage::Contents::allocate(size_t bytes) {
-        buffer.resize(bytes+16);
-        data = &(buffer[0]);
+        host_buffer.resize(bytes+16);
+        data = &(host_buffer[0]);
         unsigned char offset = ((size_t)data) & 0xf;
         if (offset) {
             data += 16 - offset;
         }
+        
+        assert(size.size() <= 4);
+        buf.host = data;
+        buf.dev = 0;
+        buf.host_dirty = false;
+        buf.dev_dirty = false;
+        buf.dims[0] = buf.dims[1] = buf.dims[2] = buf.dims[3] = 1;
+        for (size_t i = 0; i < size.size(); i++) {
+            buf.dims[i] = size[i];
+        }
+        buf.elem_size = type.bits/8;
     }
     
     DynImage::DynImage(const Type &t, uint32_t a) : contents(new Contents(t, a)) {}
@@ -94,7 +108,43 @@ namespace FImage {
 
     const std::string &DynImage::name() const {
         return contents->name;
-    }    
+    }
+    
+    buffer_t* DynImage::buffer() const {
+        return &contents->buf;
+    }
+    
+    void DynImage::setCopyToHost(void (*func)(buffer_t *)) const {
+        contents->copyToHost = func;
+    }
+
+    void DynImage::copyToHost() const {
+        // printf("%p->copyToHost...", this);
+        if (contents->buf.dev_dirty) {
+            // printf("runs\n");
+            assert(contents->copyToHost);
+            contents->copyToHost(&contents->buf);
+        } else {
+            // printf("skipped - not dirty\n");
+        }
+    }
+
+    void DynImage::copyToDev() const {
+        if (contents->buf.host_dirty) {
+            // TODO
+            assert(false);
+        }
+    }
+
+    void DynImage::markHostDirty() const {
+        assert(!contents->buf.dev_dirty);
+        contents->buf.host_dirty = true;
+    }
+
+    void DynImage::markDevDirty() const {
+        assert(!contents->buf.host_dirty);
+        contents->buf.dev_dirty = true;
+    }
 
     Expr DynImage::operator()(const Expr &a) const {
         if (a.isRVar()) RVar(a.rvars()[0]).bound(0, size(0));
