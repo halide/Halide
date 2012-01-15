@@ -460,13 +460,13 @@ let qualify_schedule (sched:schedule_tree) =
     let caller = 
       if (String.contains name '.') then
         let last_dot = String.rindex name '.' in
-        String.sub name 0 last_dot 
+        String.sub name 0 (last_dot+1)
       else
         "" 
     in
-    
+
     let rec prefix_expr = function
-      | Var (t, n) -> Var (t, if (String.get n 0 = '.') then n else (caller ^ "." ^ n))
+      | Var (t, n) -> Var (t, if (String.get n 0 = '.') then n else (caller ^ n))
       | x -> mutate_children_in_expr prefix_expr x
     in
     
@@ -613,12 +613,12 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
       (fun (stmt,i) (t,nm) ->
         let stmt =
           LetStmt (
-            ("." ^ func ^ "." ^ nm ^ ".min"),
+            (func ^ "." ^ nm ^ ".min"),
             IntImm 0,
             stmt)
         in
         (LetStmt (
-          ("." ^ func ^ "." ^ nm ^ ".extent"),
+          (func ^ "." ^ nm ^ ".extent"),
           Var (t, ".result.dim." ^ (string_of_int i)),
           stmt), i+1))
       (stmt,0)
