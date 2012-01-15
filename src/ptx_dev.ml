@@ -162,12 +162,9 @@ let malloc con name count elem_size =
   let ty = array_type elemty size in
   let init = undef ty in
   let buf = define_qualified_global name init shared_addrspace con.m in
-  build_gep buf [| zero; zero |] (name ^ ".buf_base") con.b
-
-let free con name ptr =
-  (* Return an ignorable llvalue *)
-  const_zero con.c
-
+  let addr = build_gep buf [| zero; zero |] (name ^ ".buf_base") con.b in
+  (addr, fun _ -> ())
+    
 let env =
   let ntid_decl   = (".llvm.ptx.read.ntid.x", [], i32, Extern) in
   let nctaid_decl = (".llvm.ptx.read.nctaid.x", [], i32, Extern) in
