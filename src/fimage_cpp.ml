@@ -64,7 +64,7 @@ let compile name args stmt =
       ignore (initialize_native_target());
       dbg 0 "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
       let (c, m, f) = codegen_to_c_callable func in
-      ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc");
+      (* ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc"); *)
       Hashtbl.add compilation_cache func (m, f);
       (* TODO: this leaks the llcontext, and will leak the module if the cache
        * doesn't free it eventually. *)
