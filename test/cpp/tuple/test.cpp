@@ -5,9 +5,6 @@ using namespace FImage;
 int main(int argc, char **argv) {
     Var x, y;
 
-    Var bx("blockidx"), tx("threadidx"),
-        by("blockidy"), ty("threadidy");
-
     // Single-dimensional tuples
     Func f1("one_d");
     f1(x, y) = (x, y);

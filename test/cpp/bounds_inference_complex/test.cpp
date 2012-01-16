@@ -36,17 +36,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    //f[K-1].trace();
-
     Image<int> out = f[K-1].realize(32, 32);
 
     printf("Success!\n");
     return 0;
 }
 
-/* 
-Images as Functions
-
-We argue for images as (mostly) pure functions because it separates the schedule from the algorithm.
-
-*/
