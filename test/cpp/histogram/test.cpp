@@ -23,15 +23,8 @@ int main(int argc, char **argv) {
     RVar x, y;
     hist(in(x, y))++;
 
-    // if (use_gpu()) {
-    //     Var tidx("threadidx");
-    //     Var bidx("blockidx");
-    //     Var i = hist.arg(0);
-    //     hist.split(i, bidx, tidx, 128);
-    //     hist.parallel(bidx);
-    //     hist.parallel(tidx);
-    // }
-
+    // Grab a handle to the update step of a reduction for scheduling
+    // using the "update()" method.
     Var xi, yi;
     hist.update().tile(x, y, xi, yi, 32, 32);
 

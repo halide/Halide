@@ -109,7 +109,8 @@ int main(int argc, char **argv) {
 
         // The update step of life needs to have t
         // outermost. Schedules can change meaning for reductions!
-        // (but only reductions)
+        // (but only reductions). This is way we say Halide is really
+        // only for feed-forward pipelines.
         life.update().transpose(t, y);
 
         input = board3;

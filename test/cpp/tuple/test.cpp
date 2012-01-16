@@ -14,13 +14,7 @@ int main(int argc, char **argv) {
 
     // TODO: change lower tuples not to reuse f1 - instead make new f1 via C function?
     if (use_gpu()) {
-        f1.split(x, bx, tx, 16);
-        f1.parallel(bx);
-        f1.parallel(tx);
-        f1.split(y, by, ty, 16);
-        f1.parallel(by);
-        f1.parallel(ty);
-        f1.transpose(bx,ty);
+        f1.cudaTile(x, y, 16, 16);
     }
 
     Image<int> im = f1.realize(32, 32, 2);
@@ -41,13 +35,7 @@ int main(int argc, char **argv) {
     fi(x, y) = (x, y);
     f2(x, y) = (fi(x, y), fi(x, y)+17);
     if (use_gpu()) {
-        f2.split(x, bx, tx, 16);
-        f2.parallel(bx);
-        f2.parallel(tx);
-        f2.split(y, by, ty, 16);
-        f2.parallel(by);
-        f2.parallel(ty);
-        f2.transpose(bx,ty);
+        f2.cudaTile(x, y, 16, 16);
     }
     Image<int> im2 = f2.realize(32, 32, 2, 2);
     for (size_t x = 0; x < 32; x++) {
@@ -72,16 +60,10 @@ int main(int argc, char **argv) {
     f3a(x, y) = x;
     f3b(x, y) = y;
     f3 = (f3a, f3b);
-    if (use_gpu()) {
+    if (use_gpu()) {        
         Var x = f3.arg(1);
         Var y = f3.arg(2);
-        f3.split(x, bx, tx, 16);
-        f3.parallel(bx);
-        f3.parallel(tx);
-        f3.split(y, by, ty, 16);
-        f3.parallel(by);
-        f3.parallel(ty);
-        f3.transpose(bx,ty);
+        f3.cudaTile(f3.arg(1), f3.arg(2), 16, 16);
     }
     Image<int> im3 = f3.realize(2, 32, 32);
     for (size_t x = 0; x < 32; x++) {
@@ -118,13 +100,7 @@ int main(int argc, char **argv) {
     Func f5("triple");
     f5(x, y) = (x, y, x+y);
     if (use_gpu()) {
-        f5.split(x, bx, tx, 16);
-        f5.parallel(bx);
-        f5.parallel(tx);
-        f5.split(y, by, ty, 16);
-        f5.parallel(by);
-        f5.parallel(ty);
-        f5.transpose(bx,ty);
+        f5.cudaTile(x, y, 16, 16);
     }
     Image<int> im5 = f5.realize(32, 32, 3);
 
@@ -143,13 +119,7 @@ int main(int argc, char **argv) {
     Func f6("two_d_tuple_literals");
     f6(x, y) = ((x+y, x*y), (x-y, x/(y+1)));
     if (use_gpu()) {
-        f6.split(x, bx, tx, 16);
-        f6.parallel(bx);
-        f6.parallel(tx);
-        f6.split(y, by, ty, 16);
-        f6.parallel(by);
-        f6.parallel(ty);
-        f6.transpose(bx,ty);
+        f6.cudaTile(x, y, 16, 16);
     }
     Image<int> im6 = f6.realize(32, 32, 2, 2);
     for (size_t x = 0; x < 32; x++) {

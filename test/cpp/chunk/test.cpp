@@ -3,26 +3,23 @@
 using namespace FImage;
 
 int main(int argc, char **argv) {
-    Var x("x"), y("y");
-    Var xo("blockidx"), xi("threadidx"), yo("blockidy"), yi("threadidy");
+    Var x, y;
+    Var xo, xi, yo, yi;
     
-    Func f("f"), g("g");
+    Func f, g;
 
     printf("Defining function...\n");
 
-    // This is kind of ugly -- trying to force g.f to be over threadid{x,y} when chunked
-    // Also: CUDA on older machines is unhappy with doubles, so now use floats
-    f(xi, yi) = 2.0f;
+    f(x, y) = 2.0f;
     g(x, y) = f(x+1, y) + f(x-1, y);
 
-    g.split(x, xo, xi, 8);
-    g.split(y, yo, yi, 8);
-    g.transpose(xo, yi);
+    g.tile(x, y, xo, yo, xi, yi, 8, 8);
     f.chunk(xo);
     
     if (use_gpu()) {
-        g.parallel(xo).parallel(xi).parallel(yo).parallel(yi);
-        f.parallel(xi).parallel(yi);
+        g.cuda(xo, yo, xi, yi);
+        // Tell f to directly use the thread ids for x and y
+        f.rename(x, Var("threadidx")).rename(y, Var("threadidy"));
     }
 
     printf("Realizing function...\n");
