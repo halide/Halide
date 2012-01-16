@@ -84,7 +84,7 @@ namespace FImage {
         void fixArgs() {
             for (size_t i = 0; i < args.size(); i++) {
                 if (args[i].type() != Int(32)) {
-                    args[i] = Cast<int>(args[i]);
+                    args[i] = cast<int>(args[i]);
                 }
             }
         }
@@ -195,7 +195,7 @@ namespace FImage {
             gather_args[i] = contents->args[i].isVar() ? contents->args[i] : Var();
         }
         if (!contents->f.rhs().isDefined()) {
-            Expr init = Cast(e.type(), 0);
+            Expr init = cast(e.type(), 0);
             init.addImplicitArgs(e.implicitArgs());
             contents->f.define(gather_args, init);
         }
@@ -208,7 +208,7 @@ namespace FImage {
             gather_args[i] = contents->args[i].isVar() ? contents->args[i] : Var();
         }
         if (!contents->f.rhs().isDefined()) {
-            Expr init = Cast(e.type(), 1);
+            Expr init = cast(e.type(), 1);
             init.addImplicitArgs(e.implicitArgs());
             contents->f.define(gather_args, init);
         }

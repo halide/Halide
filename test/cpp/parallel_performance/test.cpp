@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     Var x, y;
     Func f, g;
 
-    Expr math = Cast<float>(x+y);
+    Expr math = cast<float>(x+y);
     for (int i = 0; i < 10; i++) math = sqrt(cos(sin(math)));
     f(x, y) = math;
     g(x, y) = math;

@@ -45,16 +45,16 @@ int main(int argc, char **argv) {
 
     // Make the remapping function as a lookup table.
     Func remap("remap");
-    Expr fx = Cast<float>(x) / 256.0f;
+    Expr fx = cast<float>(x) / 256.0f;
     remap(x) = alpha*fx*exp(-fx*fx/2.0f);
     
     // Convert to floating point
     Func floating("floating");
-    floating(x, y, c) = Cast<float>(input(x, y, c)) / 65535.0f;
+    floating(x, y, c) = cast<float>(input(x, y, c)) / 65535.0f;
     
     // Set a boundary condition
     Func clamped("clamped");
-    clamped(x, y, c) = floating(Clamp(x, 0, input.width()-1), Clamp(y, 0, input.height()-1), c);
+    clamped(x, y, c) = floating(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
     
     // Get the luminance channel
     Func gray("gray");
@@ -63,9 +63,9 @@ int main(int argc, char **argv) {
     // Make the processed Gaussian pyramid
     Func gPyramid[] = {"gp0", "gp1", "gp2", "gp3", "gp4", "gp5", "gp6", "gp7", "gp8", "gp9", "gp10", "gp11"};
     // Do a lookup into a lut with 256 entires per intensity level
-    Expr idx = Clamp(Cast<int>(gray(x, y)*(levels-1)*256.0f), 0, (levels-1)*256);
+    Expr idx = clamp(cast<int>(gray(x, y)*(levels-1)*256.0f), 0, (levels-1)*256);
     gPyramid[0](x, y, k) = beta*gray(x, y) + remap(idx - 256*k);
-    //gPyramid[0](x, y, k) = remap(gray(x, y), Cast<float>(k) / (levels-1), alpha, beta, levels-1);
+    //gPyramid[0](x, y, k) = remap(gray(x, y), cast<float>(k) / (levels-1), alpha, beta, levels-1);
     for (int j = 1; j < J; j++)
         gPyramid[j](x, y, k) = downsample(gPyramid[j-1])(x, y, k);
     
@@ -85,9 +85,9 @@ int main(int argc, char **argv) {
     Func outLPyramid[] = {"olp0", "olp1", "olp2", "olp3", "olp4", "olp5", "olp6", "olp7", "olp8", "olp9", "olp10", "olp11"};
     for (int j = 0; j < J; j++) {
         // Split input pyramid value into integer and floating parts
-        Expr level = inGPyramid[j](x, y) * Cast<float>(levels-1);
-        Expr li = Clamp(Cast<int>(level), 0, levels-2);
-        Expr lf = level - Cast<float>(li);
+        Expr level = inGPyramid[j](x, y) * cast<float>(levels-1);
+        Expr li = clamp(cast<int>(level), 0, levels-2);
+        Expr lf = level - cast<float>(li);
         // Linearly interpolate between the nearest processed pyramid levels
         outLPyramid[j](x, y) = (1.0f - lf) * lPyramid[j](x, y, li) + lf * lPyramid[j](x, y, li+1);
     }
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     Func output;
     // Convert back to 16-bit
     Var xo, yo;
-    output(xo, yo, c) = Cast<uint16_t>(Clamp(color(xo, yo, c), 0.0f, 1.0f) * 65535.0f);
+    output(xo, yo, c) = cast<uint16_t>(clamp(color(xo, yo, c), 0.0f, 1.0f) * 65535.0f);
 
 
 

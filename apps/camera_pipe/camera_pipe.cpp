@@ -8,30 +8,30 @@ int schedule;
 Var x("x"), y("y"), tx("tx"), ty("ty"), c("c");
 
 Func hot_pixel_suppression(Func input) {
-    Expr max = Max(Max(input(x-2, y), input(x+2, y)),
-                   Max(input(x, y-2), input(x, y+2)));
-    Expr min = Min(Min(input(x-2, y), input(x+2, y)),
-                   Min(input(x, y-2), input(x, y+2)));
+    Expr a = max(max(input(x-2, y), input(x+2, y)),
+                 max(input(x, y-2), input(x, y+2)));
+    Expr b = min(min(input(x-2, y), input(x+2, y)),
+                 min(input(x, y-2), input(x, y+2)));
     
     Func denoised("denoised");
-    denoised(x, y) = Clamp(input(x, y), min, max);
+    denoised(x, y) = clamp(input(x, y), a, b);
 
     return denoised;
 }
 
 Expr abs(Expr e) {
-    return Select(e < Cast(e.type(), 0), -e, e);
+    return select(e < cast(e.type(), 0), -e, e);
 }
 
 Func interleave_x(Func a, Func b) {
     Func out;
-    out(x, y) = Select((x%2)==0, a(x/2, y), b(x/2, y));
+    out(x, y) = select((x%2)==0, a(x/2, y), b(x/2, y));
     return out;
 }
 
 Func interleave_y(Func a, Func b) {
     Func out;
-    out(x, y) = Select((y%2)==0, a(x, y/2), b(x, y/2));
+    out(x, y) = select((y%2)==0, a(x, y/2), b(x, y/2));
     return out;
 }
 
@@ -39,9 +39,9 @@ Func deinterleave(Func raw) {
     // Deinterleave the color channels
     Func deinterleaved("deinterleaved");
     Var t;
-    deinterleaved(x, y, t) = Select(t == 0, raw(2*x, 2*y), 
-                                    Select(t == 1, raw(2*x+1, 2*y), 
-                                           Select(t == 2, raw(2*x, 2*y+1), raw(2*x+1, 2*y+1))));
+    deinterleaved(x, y, t) = select(t == 0, raw(2*x, 2*y), 
+                                    select(t == 1, raw(2*x+1, 2*y), 
+                                           select(t == 2, raw(2*x, 2*y+1), raw(2*x+1, 2*y+1))));
     
     return deinterleaved;
 }
@@ -75,14 +75,14 @@ Func demosaic(Func deinterleaved) {
     Expr gh_r  =    (g_gr(x+1, y) + g_gr(x, y))/2;
     Expr ghd_r = abs(g_gr(x+1, y) - g_gr(x, y));
 
-    g_r(x, y)  = Select(ghd_r < gvd_r, gh_r, gv_r);
+    g_r(x, y)  = select(ghd_r < gvd_r, gh_r, gv_r);
 
     Expr gv_b  =    (g_gr(x, y+1) + g_gr(x, y))/2;
     Expr gvd_b = abs(g_gr(x, y+1) - g_gr(x, y));
     Expr gh_b  =    (g_gb(x-1, y) + g_gb(x, y))/2;
     Expr ghd_b = abs(g_gb(x-1, y) - g_gb(x, y));
 
-    g_b(x, y)  = Select(ghd_b < gvd_b, gh_b, gv_b);
+    g_b(x, y)  = select(ghd_b < gvd_b, gh_b, gv_b);
 
     // Next interpolate red at gr by first interpolating, then
     // correcting using the error green would have had if we had
@@ -119,7 +119,7 @@ Func demosaic(Func deinterleaved) {
     Expr rn_b  = correction + (r_r(x-1, y) + r_r(x, y+1))/2;
     Expr rnd_b = abs(r_r(x-1, y) - r_r(x, y+1));
 
-    r_b(x, y)  = Select(rpd_b < rnd_b, rp_b, rn_b);
+    r_b(x, y)  = select(rpd_b < rnd_b, rp_b, rn_b);
 
 
     // Same thing for blue at red
@@ -131,7 +131,7 @@ Func demosaic(Func deinterleaved) {
     Expr bn_r  = correction + (b_b(x+1, y) + b_b(x, y-1))/2;
     Expr bnd_r = abs(b_b(x+1, y) - b_b(x, y-1));
 
-    b_r(x, y)  =  Select(bpd_r < bnd_r, bp_r, bn_r);    
+    b_r(x, y)  =  select(bpd_r < bnd_r, bp_r, bn_r);    
 
     // Interleave the resulting channels
     Func r = interleave_y(interleave_x(r_gr, r_r),
@@ -203,19 +203,19 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
     Func matrix("matrix");
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
     Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
-    matrix(x, y) = Cast<int32_t>(val * 256.0f); // Q8.8 fixed point
+    matrix(x, y) = cast<int32_t>(val * 256.0f); // Q8.8 fixed point
     matrix.root();
 
     Func corrected("corrected");
-    Expr ir = Cast<int32_t>(input(x, y, 0));
-    Expr ig = Cast<int32_t>(input(x, y, 1));
-    Expr ib = Cast<int32_t>(input(x, y, 2));
+    Expr ir = cast<int32_t>(input(x, y, 0));
+    Expr ig = cast<int32_t>(input(x, y, 1));
+    Expr ib = cast<int32_t>(input(x, y, 2));
 
     Expr r = matrix(3, 0) + matrix(0, 0) * ir + matrix(1, 0) * ig + matrix(2, 0) * ib;
     Expr g = matrix(3, 1) + matrix(0, 1) * ir + matrix(1, 1) * ig + matrix(2, 1) * ib;
     Expr b = matrix(3, 2) + matrix(0, 2) * ir + matrix(1, 2) * ig + matrix(2, 2) * ib;
 
-    corrected(x, y) = Cast<int16_t>((r, g, b)/256);
+    corrected(x, y) = cast<int16_t>((r, g, b)/256);
 
     return corrected;
 }
@@ -225,15 +225,15 @@ Func apply_curve(Func input, Type result_type, Uniform<float> gamma, Uniform<flo
     // copied from FCam
     Func curve("curve");
 
-    Expr xf = Clamp(Cast<float>(x)/1024.0f, 0.0f, 1.0f);
+    Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
     Expr g = pow(xf, 1.0f/gamma);
     Expr b = 2.0f - pow(2.0f, contrast/100.0f);
     Expr a = 2.0f - 2.0f*b; 
-    Expr z = Select(g > 0.5f,
+    Expr z = select(g > 0.5f,
                     1.0f - (a*(1.0f-g)*(1.0f-g) + b*(1.0f-g)),
                     a*g*g + b*g);
 
-    Expr val = Cast(result_type, Clamp(z*256.0f, 0.0f, 255.0f));
+    Expr val = cast(result_type, clamp(z*256.0f, 0.0f, 255.0f));
     curve(x) = val;
     curve.root(); // It's a LUT, compute it once ahead of time.
 
@@ -259,7 +259,7 @@ Func process(Func raw, Type result_type,
     // Schedule
     Var co, ci; 
     processed(tx, ty, c) = curved(tx, ty, ci);
-    processed.split(c, co, ci, 3); // bound color loop
+    processed.split(c, co, ci, 3); // bound color loop to 0-3
     if (schedule == 0) {
         // Compute in chunks over tiles, vectorized by 8
         denoised.chunk(tx).vectorize(x, 8);

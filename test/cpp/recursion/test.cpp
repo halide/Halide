@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
 
     Func fib("fib", Int(32));
     Var x;
-    fib(x) = Select(x > 1, fib(x-1) + fib(x-2), 1);
+    fib(x) = select(x > 1, fib(x-1) + fib(x-2), 1);
 
     Image<int32_t> out = fib.realize(1024);
 

@@ -14,17 +14,16 @@ int main(int argc, char **argv) {
 
     // Add a boundary condition 
     Func clamped("clamped");
-    clamped(x, y) = input(Clamp(x, 0, input.width()),
-                          Clamp(y, 0, input.height()));                                
+    clamped(x, y) = input(clamp(x, 0, input.width()),
+                          clamp(y, 0, input.height()));                                
 
     // Construct the bilateral grid 
     RVar i(0, s_sigma, "i"), j(0, s_sigma, "j");
     Expr val = clamped(x * s_sigma + i - s_sigma/2, y * s_sigma + j - s_sigma/2);
-    val = Clamp(val, 0.0f, 1.0f);
-    Expr zi = Cast<int>(val * (1.0f/r_sigma) + 0.5f);
+    val = clamp(val, 0.0f, 1.0f);
+    Expr zi = cast<int>(val * (1.0f/r_sigma) + 0.5f);
     Func grid("grid");
-    grid(x, y, z, c) = 0.0f;
-    grid(x, y, zi, c) += Select(c == 0, val, 1.0f);
+    grid(x, y, zi, c) += select(c == 0, val, 1.0f);
 
     // Blur the grid using a five-tap filter
     Func blurx("blurx"), blury("blury"), blurz("blurz");
@@ -34,12 +33,12 @@ int main(int argc, char **argv) {
 
     // Take trilinear samples to compute the output in tiles
     val = clamped(x*s_sigma + xi, y*s_sigma + yi);
-    val = Clamp(val, 0.0f, 1.0f);
+    val = clamp(val, 0.0f, 1.0f);
     Expr zv = val * (1.0f/r_sigma);
-    zi = Cast<int>(zv);
+    zi = cast<int>(zv);
     Expr zf = zv - zi;
-    Expr xf = Cast<float>(xi) / s_sigma;
-    Expr yf = Cast<float>(yi) / s_sigma;
+    Expr xf = cast<float>(xi) / s_sigma;
+    Expr yf = cast<float>(yi) / s_sigma;
     Func interpolated("interpolated");    
     interpolated(xi, yi, x, y, c) = 
         lerp(lerp(lerp(blurz(x, y, zi, c), blurz(x+1, y, zi, c), xf),
@@ -59,7 +58,7 @@ int main(int argc, char **argv) {
     blurx.root().parallel(z).vectorize(x, 4);
     blury.root().parallel(z).vectorize(x, 4);
     blurz.root().parallel(z).vectorize(x, 4);
-    smoothed.root().parallel(y); 
+    smoothed.root().parallel(y).vectorize(x, 4); 
 
     smoothed.compileToFile("bilateral_grid");
 

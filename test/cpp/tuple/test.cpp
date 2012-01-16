@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
     // A pair of reductions
     Func f4("reduction_pair");
     RVar i(0, 10);
-    f4(x, y) = (Sum(x+i), Product(x+y+i));
+    f4(x, y) = (sum(x+i), product(x+y+i));
     Image<int> im4 = f4.realize(32, 32, 2);
     for (size_t x = 0; x < 32; x++) {
         for (size_t y = 0; y < 32; y++) {
@@ -168,7 +168,7 @@ int main(int argc, char **argv) {
 
     // Tuples inside reductions
     Func f7("tuple_inside_reduce");
-    f7(x, y) = Sum((x*i, y*i+1));
+    f7(x, y) = sum((x*i, y*i+1));
     Image<int> im7 = f7.realize(32, 32, 2);
     for (size_t x = 0; x < 32; x++) {
         for (size_t y = 0; y < 32; y++) {

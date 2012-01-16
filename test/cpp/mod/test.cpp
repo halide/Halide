@@ -6,7 +6,7 @@ template<typename T>
 bool test() {
     Var x;
     Func f;
-    f(x) = Cast<T>(x) % ((T)2);
+    f(x) = cast<T>(x) % ((T)2);
     
     #if 0
     if (use_gpu()) {
