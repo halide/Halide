@@ -66,7 +66,46 @@ let rec cg_expr con = function
       cg_expr con e
   | e -> con.cg_expr e
 
-let rec cg_stmt con = function
+let rec cg_stmt con stmt = match stmt with
+  | Store (v, st_buf, st_idx) -> begin
+      let ty = val_type_of_expr v in
+      match v with
+        (* TODO: consider hashing load *)
+        | Bop (Add, Load(_, ld_buf, ld_idx), x)
+        | Bop (Add, x, Load(_, ld_buf, ld_idx))
+          when ld_buf = st_buf && ld_idx = st_idx ->
+            (* atomic add reduce *)
+            dbg 0 "Found atomic add: %s\n%!" (string_of_stmt stmt);
+            (* let mr = con.cg_memref ty st_buf (Cast ((Int 64), st_idx)) in *)
+            let mr = con.cg_memref ty st_buf st_idx in
+            (* llvm.ptx.red.[space].[op].[type] e.g. global.add.s32 *)
+            let space = match address_space (type_of mr) with
+              | 0 -> "global"
+              | 4 -> "shared"
+            in
+            let op = "add" in
+            let opty, mr = match ty with
+              | Int 32 ->
+                  "s32", build_pointercast mr (pointer_type (i32_type con.c)) "" con.b
+              | Float 32 ->
+                  "f32", build_pointercast mr (pointer_type (float_type con.c)) "" con.b
+              | UInt 32 ->
+                  "u32", build_pointercast mr (pointer_type (i32_type con.c)) "" con.b
+              | UInt 64 ->
+                  "u64", build_pointercast mr (pointer_type (i64_type con.c)) "" con.b
+              | _ -> failwith "PTX atomics not supported for type %s" (string_of_val_type ty)
+            in
+            let intr = Printf.sprintf "llvm.ptx.red.%s.%s.%s" space op opty in
+            let red = match lookup_function intr con.m with
+              | Some f -> f
+              | None -> failwith (Printf.sprintf "failed to find %s intrinsic" intr)
+            in
+            build_call red [| mr; (cg_expr con x) |] "" con.b
+            (* build_store (cg_expr con x) red con.b *)
+            (* mr *)
+        | _ -> con.cg_stmt stmt
+    end
+
   | Print _ ->
       Printf.printf "Dropping Print stmt inside device kernel\n%!";
       const_zero con.c (* ignorable return value *)
