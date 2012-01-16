@@ -29,6 +29,7 @@ declare i32 @llvm.ptx.read.pm2()
 declare i32 @llvm.ptx.read.pm3()
 
 declare void @llvm.ptx.red.global.add.s32(i32*, i32)
+declare void @llvm.ptx.red.global.add.f32(float*, float)
 declare void @llvm.ptx.red.shared.add.s32(i32 addrspace(4)*, i32)
 
 declare float @llvm.sin.f32(float)
