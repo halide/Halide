@@ -10,23 +10,23 @@ int main(int argc, char **argv) {
     UniformImage input(Float(32), 2);
     Uniform<float> r_sigma;
     Uniform<int> s_sigma;
-    Var x("x"), y("y"), z("z"), c("c");
+    Var x, y, z, c;
 
     // Add a boundary condition 
-    Func clamped("clamped");
+    Func clamped;
     clamped(x, y) = input(clamp(x, 0, input.width()),
                           clamp(y, 0, input.height()));                                
 
     // Construct the bilateral grid 
-    RVar i(0, s_sigma, "i"), j(0, s_sigma, "j");
+    RVar i(0, s_sigma), j(0, s_sigma);
     Expr val = clamped(x * s_sigma + i - s_sigma/2, y * s_sigma + j - s_sigma/2);
     val = clamp(val, 0.0f, 1.0f);
     Expr zi = cast<int>(val * (1.0f/r_sigma) + 0.5f);
-    Func grid("grid");
+    Func grid;
     grid(x, y, zi, c) += select(c == 0, val, 1.0f);
 
     // Blur the grid using a five-tap filter
-    Func blurx("blurx"), blury("blury"), blurz("blurz");
+    Func blurx, blury, blurz;
     blurx(x, y, z) = grid(x-2, y, z) + grid(x-1, y, z)*4 + grid(x, y, z)*6 + grid(x+1, y, z)*4 + grid(x+1, y, z);
     blury(x, y, z) = blurx(x, y-2, z) + blurx(x, y-1, z)*4 + blurx(x, y, z)*6 + blurx(x, y+1, z)*4 + blurx(x, y+2, z);
     blurz(x, y, z) = blury(x, y, z-2) + blury(x, y, z-1)*4 + blury(x, y, z)*6 + blury(x, y, z+1)*4 + blury(x, y, z+2);
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     Expr yf = cast<float>(y % s_sigma) / s_sigma;
     Expr xi = x/s_sigma;
     Expr yi = y/s_sigma;
-    Func interpolated("interpolated");    
+    Func interpolated;
     interpolated(x, y) = 
         lerp(lerp(lerp(blurz(xi, yi, zi), blurz(xi+1, yi, zi), xf),
                   lerp(blurz(xi, yi+1, zi), blurz(xi+1, yi+1, zi), xf), yf),
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
                   lerp(blurz(xi, yi+1, zi+1), blurz(xi+1, yi+1, zi+1), xf), yf), zf);
 
     // Normalize
-    Func smoothed("smoothed");
+    Func smoothed;
     smoothed(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
     grid.root().parallel(z);
