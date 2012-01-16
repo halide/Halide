@@ -18,15 +18,17 @@ int main(int argc, char **argv) {
 
     timeval t1, t2;
 
-    bilateral_grid(atoi(argv[3]), atof(argv[4]), input, output);
+    bilateral_grid(atof(argv[4]), atoi(argv[3]), input, output);
 
-    gettimeofday(&t1, NULL);
-    for (int i = 0; i < 20; i++) 
-        bilateral_grid(atoi(argv[3]), atof(argv[4]), input, output);
-    gettimeofday(&t2, NULL);
+    for (int t = 0; t < 10; t++) {
+        gettimeofday(&t1, NULL);
+        for (int i = 0; i < 4; i++) 
+            bilateral_grid(atof(argv[4]), atoi(argv[3]), input, output);
+        gettimeofday(&t2, NULL);
+        double t = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;
+        printf("Time: %fms\n", t/4);
+    }
 
-    double t = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;
-    printf("Time: %fms\n", t/20);
 
     save(output, argv[2]);
 
