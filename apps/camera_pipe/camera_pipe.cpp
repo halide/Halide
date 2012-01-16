@@ -14,7 +14,7 @@ Func hot_pixel_suppression(Func input) {
                  min(input(x, y-2), input(x, y+2)));
     
     Func denoised("denoised");
-    denoised(x, y) = clamp(input(x, y), a, b);
+    denoised(x, y) = clamp(input(x, y), b, a);
 
     return denoised;
 }
@@ -38,11 +38,10 @@ Func interleave_y(Func a, Func b) {
 Func deinterleave(Func raw) {
     // Deinterleave the color channels
     Func deinterleaved("deinterleaved");
-    Var t;
-    deinterleaved(x, y, t) = select(t == 0, raw(2*x, 2*y), 
-                                    select(t == 1, raw(2*x+1, 2*y), 
-                                           select(t == 2, raw(2*x, 2*y+1), raw(2*x+1, 2*y+1))));
-    
+
+    deinterleaved(x, y) = (raw(2*x, 2*y),   raw(2*x+1, 2*y), 
+                           raw(2*x, 2*y+1), raw(2*x+1, 2*y+1));
+
     return deinterleaved;
 }
 
