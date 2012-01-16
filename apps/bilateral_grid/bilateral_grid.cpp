@@ -7,15 +7,16 @@ Expr lerp(Expr a, Expr b, Expr alpha) {
 }
 
 int main(int argc, char **argv) {
-    UniformImage input(Float(32), 2);
+    UniformImage input(Float(32), 3);
     Uniform<float> r_sigma;
-    Uniform<int> s_sigma;
+    int s_sigma = atoi(argv[1]);
     Var x("x"), y("y"), z("z"), c("c"), xi("xi"), yi("yi");
 
     // Add a boundary condition 
     Func clamped("clamped");
     clamped(x, y) = input(Clamp(x, 0, input.width()),
-                          Clamp(y, 0, input.height()));                                
+                          Clamp(y, 0, input.height()),
+                          0);
 
     // Construct the bilateral grid 
     RVar i(0, s_sigma, "i"), j(0, s_sigma, "j");
@@ -53,13 +54,107 @@ int main(int argc, char **argv) {
     // Remove tiles to get the result
     Func smoothed("smoothed");
     smoothed(x, y) = outTiles(x%s_sigma, y%s_sigma, x/s_sigma, y/s_sigma);
-
+    // smoothed(x, y) = clamped(x, y);
+    
+    #if 0
+    // Var tx("threadidx"), ty("threadidy"), 
+    //     bx("blockidx"), by("blockidy");
+    
+    // Var bxi, byi, txi, tyi;
+    // 
+    // clamped.root();
+    // grid.root()
+    //     .split(x, bx, tx, 8)
+    //     .split(y, by, ty, 8);
+    // grid.update().root()
+    //     // .split(x, bx, bxi, 1)
+    //     // .split(y, by, byi, 1)
+    //     // .split(i, tx, txi, 1)
+    //     // .split(j, ty, tyi, 1);
+    //     .split(x, bx, x, 1)
+    //     .split(y, by, y, 1)
+    //     .split(i, tx, i, 1)
+    //     .split(j, ty, j, 1);
+    
     grid.root().parallel(z);
     grid.update().transpose(y, c).transpose(x, c).transpose(i, c).transpose(j, c).parallel(y);
     blurx.root().parallel(z).vectorize(x, 4);
     blury.root().parallel(z).vectorize(x, 4);
     blurz.root().parallel(z).vectorize(x, 4);
     smoothed.root().parallel(y); 
+    #else
+    Var tx("threadidx"), ty("threadidy"), 
+        bx("blockidx"), by("blockidy");
+    
+    Var bxi, byi, txi, tyi;
+    
+    grid.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
+        .root()
+        .split(x, bx, tx, 16)
+        .split(y, by, ty, 16)
+            .transpose(bx, ty)
+        .parallel(tx)
+        .parallel(ty)
+        .parallel(bx)
+        .parallel(by);
+
+    grid.update().transpose(y, c).transpose(x, c).transpose(i, c).transpose(j, c)
+        .root()
+        .split(x, bx, tx, 16)
+        .split(y, by, ty, 16)
+        // .split(i, tx, txi, 1)
+        // .split(j, ty, tyi, 1)
+        .parallel(tx)
+        .parallel(ty)
+        .parallel(bx)
+        .parallel(by);
+    
+    // clamped.root();
+    
+    c = blurx.arg(3);
+    blurx.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
+        .root()
+        .split(x, bx, tx, 8)
+        .split(y, by, ty, 8)
+            .transpose(bx, ty)
+        .parallel(tx)
+        .parallel(ty)
+        .parallel(bx)
+        .parallel(by);
+    
+    c = blury.arg(3);
+    blury.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
+        .root()
+        .split(x, bx, tx, 8)
+        .split(y, by, ty, 8)
+            .transpose(bx, ty)
+        .parallel(tx)
+        .parallel(ty)
+        .parallel(bx)
+        .parallel(by);
+    
+    c = blurz.arg(3);
+    blurz.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
+        .root()
+        .split(x, bx, tx, 8)
+        .split(y, by, ty, 8)
+            .transpose(bx, ty)
+        .parallel(tx)
+        .parallel(ty)
+        .parallel(bx)
+        .parallel(by);
+    
+    smoothed.root()
+        .split(x, bx, tx, s_sigma)
+        .split(y, by, ty, s_sigma)
+        .transpose(bx, ty)
+        .parallel(tx)
+        .parallel(ty)
+        .parallel(bx)
+        .parallel(by);
+
+    // smoothed.root().parallel(y);
+    #endif
 
     smoothed.compileToFile("bilateral_grid");
 
