@@ -22,16 +22,16 @@ namespace FImage {
     RVar::RVar(const Expr &min, const Expr &size, const std::string &name) :
         contents(new Contents(min, size, name)) {}
     
-    void RVar::bound(const Expr &min, const Expr &size) {
+    void RVar::bound(const Expr &m, const Expr &size) {
         printf("Bounding %s\n", name().c_str());
         if (contents->min.isDefined()) {
-            contents->min = Max(contents->min, min);
+            contents->min = max(contents->min, m);
         } else {
-            contents->min = min;
+            contents->min = m;
         }
 
         if (contents->size.isDefined()) {
-            contents->size = Min(contents->size, size);
+            contents->size = FImage::min(contents->size, size);
         } else {
             contents->size = size;
         }

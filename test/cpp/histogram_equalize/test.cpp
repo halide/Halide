@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
 
     // Scale the result back to 8-bit
     int pixels = in.width()*in.height();
-    rescaled = Cast<uint8_t>((equalized*256)/pixels);
+    rescaled = cast<uint8_t>((equalized*256)/pixels);
 
     Image<uint8_t> out = rescaled.realize(in.width(), in.height());    
 

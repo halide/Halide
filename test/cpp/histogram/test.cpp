@@ -4,7 +4,7 @@ using namespace FImage;
 
 int main(int argc, char **argv) {
 
-    int W = 100, H = 100;
+    int W = 128, H = 128;
 
     // Compute a random image and its true histogram
     int reference_hist[256];
@@ -31,6 +31,9 @@ int main(int argc, char **argv) {
     //     hist.parallel(bidx);
     //     hist.parallel(tidx);
     // }
+
+    Var xi, yi;
+    hist.update().tile(x, y, xi, yi, 32, 32);
 
     Image<int32_t> h = hist.realize(256);
 

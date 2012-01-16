@@ -106,9 +106,9 @@ bool test(int vec_width) {
         }
     }
 
-    // Select
+    // select
     Func f4;
-    f4(x, y) = Select(input(x, y) > input(x+1, y), input(x+2, y), input(x+3, y));
+    f4(x, y) = select(input(x, y) > input(x+1, y), input(x+2, y), input(x+3, y));
     f4.vectorize(x, vec_width);
     Image<A> im4 = f4.realize(W, H);
     
@@ -125,8 +125,8 @@ bool test(int vec_width) {
 
     // Gather
     Func f5;
-    Expr xCoord = Clamp(Cast<int>(input(x, y)), 0, W-1);
-    Expr yCoord = Clamp(Cast<int>(input(x+1, y)), 0, H-1);
+    Expr xCoord = clamp(cast<int>(input(x, y)), 0, W-1);
+    Expr yCoord = clamp(cast<int>(input(x+1, y)), 0, H-1);
     f5(x, y) = input(xCoord, yCoord);
     f5.vectorize(x, vec_width);
     Image<A> im5 = f5.realize(W, H);
@@ -154,7 +154,7 @@ bool test(int vec_width) {
     Func f6;
     RVar i(0, H);
     // Set one entry in each row high
-    xCoord = Clamp(Cast<int>(input(2*i, i)), 0, W-1);
+    xCoord = clamp(cast<int>(input(2*i, i)), 0, W-1);
     f6(x, y) = 0;
     f6(xCoord, i) = 1;
 
@@ -177,7 +177,7 @@ bool test(int vec_width) {
     
     // Min/max
     Func f7;
-    f7(x, y) = Clamp(input(x, y), Cast<A>(10), Cast<A>(20));
+    f7(x, y) = clamp(input(x, y), cast<A>(10), cast<A>(20));
     f7.vectorize(x, vec_width);
     Image<A> im7 = f7.realize(W, H);
     
@@ -192,7 +192,7 @@ bool test(int vec_width) {
 
     // Extern function call
     Func f8;
-    f8(x, y) = pow(2.0f, Cast<float>(input(x, y)));
+    f8(x, y) = pow(2.0f, cast<float>(input(x, y)));
     f8.vectorize(x, vec_width);
     Image<float> im8 = f8.realize(W, H);
     
@@ -208,7 +208,7 @@ bool test(int vec_width) {
     
     // Div
     Func f9;
-    f9(x, y) = input(x, y) / Clamp(input(x+1, y), Cast<A>(1), Cast<A>(3));
+    f9(x, y) = input(x, y) / clamp(input(x+1, y), cast<A>(1), cast<A>(3));
     f9.vectorize(x, vec_width);
     Image<A> im9 = f9.realize(W, H);
     
@@ -225,28 +225,9 @@ bool test(int vec_width) {
         }
     }
 
-    
-    // Mod
-    /*
-    Func f10;
-    f10(x, y) = input(x, y) % Cast<A>(2);
-    f10.vectorize(x, vec_width);
-    Image<A> im10 = f10.realize(W, H);
-    
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            A correct = mod(input(x, y), (A)2);
-            if (im10(x, y) != correct) {
-                printf("im10(%d, %d) = %f instead of %f\n", x, y, (double)(im10(x, y)), (double)(correct));
-                return false;
-            }
-        }
-    }
-    */
-
     // Interleave
     Func f11;
-    f11(x, y) = Select((x%2)==0, input(x/2, y), input(x/2, y+1));
+    f11(x, y) = select((x%2)==0, input(x/2, y), input(x/2, y+1));
     f11.vectorize(x, vec_width);
     Image<A> im11 = f11.realize(W, H);
     
@@ -267,7 +248,7 @@ int main(int argc, char **argv) {
 
     bool ok = true;
 
-    // Only native vector widths for now
+    // Only native vector widths - llvm doesn't handle others well
     ok = ok && test<float>(4);
     ok = ok && test<double>(2);
     ok = ok && test<uint8_t>(16);

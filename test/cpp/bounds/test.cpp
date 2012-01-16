@@ -8,9 +8,9 @@ int main(int argc, char **argv) {
 
     printf("Defining function...\n");
 
-    f(x, y) = Max(x, y);
-    g(x, y) = Min(x, y);
-    h(x, y) = Clamp(x+y, 20, 100);
+    f(x, y) = max(x, y);
+    g(x, y) = min(x, y);
+    h(x, y) = clamp(x+y, 20, 100);
 
     if (use_gpu()) {
         Var tidx("threadidx");
