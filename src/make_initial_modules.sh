@@ -4,7 +4,11 @@ for arch in ptx ptx_dev arm x86; do
     C_STUB=architecture.${arch}.stdlib.cpp
     LL_STUB=architecture.${arch}.stdlib.ll
     RESULT=architecture.${arch}.initmod.c
-
+    
+    if [[ $arch == "ptx" ]]; then
+      LL_STUB="$LL_STUB architecture.x86.stdlib.ll"
+    fi
+    
     clang -emit-llvm -S $C_STUB -o -           \
         | grep -v "^target triple"             \
         | grep -v "^target datalayout"         \
