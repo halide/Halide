@@ -277,15 +277,18 @@ CUdeviceptr __dev_malloc(size_t bytes) {
     #endif
     TIME_CALL( cuMemAlloc(&p, bytes), msg );
     assert(p);
+    #ifndef NDEBUG
+    fprintf(stderr, "    returned: %p\n", (void*)p);
+    #endif
     return p;
 }
 
 void __dev_malloc_if_missing(buffer_t* buf) {
-    if (buf->dev) return;
     #ifndef NDEBUG
-    fprintf(stderr, "dev_malloc_if_missing of %zux%zux%zux%zu (%zu bytes) buffer\n",
-            buf->dims[0], buf->dims[1], buf->dims[2], buf->dims[3], buf->elem_size);
+    fprintf(stderr, "dev_malloc_if_missing of %zux%zux%zux%zu (%zu bytes) (buf->dev = %p) buffer\n",
+            buf->dims[0], buf->dims[1], buf->dims[2], buf->dims[3], buf->elem_size, (void*)buf->dev);
     #endif
+    if (buf->dev) return;
     size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
     buf->dev = __dev_malloc(size);
     assert(buf->dev);
