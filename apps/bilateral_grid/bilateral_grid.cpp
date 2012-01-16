@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     UniformImage input(Float(32), 2);
     Uniform<float> r_sigma;
     Uniform<int> s_sigma;
-    Var x("x"), y("y"), z("z"), c("c"), xi("xi"), yi("yi");
+    Var x("x"), y("y"), z("z"), c("c");
 
     // Add a boundary condition 
     Func clamped("clamped");
@@ -31,27 +31,25 @@ int main(int argc, char **argv) {
     blury(x, y, z) = blurx(x, y-2, z) + blurx(x, y-1, z)*4 + blurx(x, y, z)*6 + blurx(x, y+1, z)*4 + blurx(x, y+2, z);
     blurz(x, y, z) = blury(x, y, z-2) + blury(x, y, z-1)*4 + blury(x, y, z)*6 + blury(x, y, z+1)*4 + blury(x, y, z+2);
 
-    // Take trilinear samples to compute the output in tiles
-    val = clamped(x*s_sigma + xi, y*s_sigma + yi);
-    val = clamp(val, 0.0f, 1.0f);
+    // Take trilinear samples to compute the output
+    val = clamp(clamped(x, y), 0.0f, 1.0f);
     Expr zv = val * (1.0f/r_sigma);
     zi = cast<int>(zv);
     Expr zf = zv - zi;
-    Expr xf = cast<float>(xi) / s_sigma;
-    Expr yf = cast<float>(yi) / s_sigma;
+    Expr xf = cast<float>(x % s_sigma) / s_sigma;
+    Expr yf = cast<float>(y % s_sigma) / s_sigma;
+    Expr xi = x/s_sigma;
+    Expr yi = y/s_sigma;
     Func interpolated("interpolated");    
-    interpolated(xi, yi, x, y, c) = 
-        lerp(lerp(lerp(blurz(x, y, zi, c), blurz(x+1, y, zi, c), xf),
-                  lerp(blurz(x, y+1, zi, c), blurz(x+1, y+1, zi, c), xf), yf),
-             lerp(lerp(blurz(x, y, zi+1, c), blurz(x+1, y, zi+1, c), xf),
-                  lerp(blurz(x, y+1, zi+1, c), blurz(x+1, y+1, zi+1, c), xf), yf), zf);
+    interpolated(x, y) = 
+        lerp(lerp(lerp(blurz(xi, yi, zi), blurz(xi+1, yi, zi), xf),
+                  lerp(blurz(xi, yi+1, zi), blurz(xi+1, yi+1, zi), xf), yf),
+             lerp(lerp(blurz(xi, yi, zi+1), blurz(xi+1, yi, zi+1), xf),
+                  lerp(blurz(xi, yi+1, zi+1), blurz(xi+1, yi+1, zi+1), xf), yf), zf);
 
-    Func outTiles;
-    outTiles(xi, yi, x, y) = interpolated(xi, yi, x, y, 0) / interpolated(xi, yi, x, y, 1);
-
-    // Remove tiles to get the result
+    // Normalize
     Func smoothed("smoothed");
-    smoothed(x, y) = outTiles(x%s_sigma, y%s_sigma, x/s_sigma, y/s_sigma);
+    smoothed(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
     grid.root().parallel(z);
     grid.update().transpose(y, c).transpose(x, c).transpose(i, c).transpose(j, c).parallel(y);
@@ -63,19 +61,21 @@ int main(int argc, char **argv) {
     smoothed.compileToFile("bilateral_grid");
 
     // Compared to Sylvain Paris' implementation from his webpage (on
-    // which this is based), for filter params 8 0.1, on a 4 megapixel
+    // which this is based), for filter params s_sigma 0.1, on a 4 megapixel
     // input, on a four core x86 (2 socket core2 mac pro)
     // Filter s_sigma: 2      4       8       16      32
     // Paris (ms):     5350   1345    472     245     184
-    // Us (ms):        425    150     80.8    66.6    68.7
-    // Speedup:        12.5   9.0     5.9     3.7     2.7
+    // Us (ms):        383    142     77      62      65
+    // Speedup:        14     9.5     6.1     3.9     2.8
 
     // Our schedule and inlining are roughly the same as his, so the
     // gain is all down to vectorizing and parallelizing. In general
     // for larger blurs our win shrinks to roughly the number of
-    // cores, as the stages we don't vectorize dominate.  For smaller
-    // blurs, our win grows, because the stages that we vectorize take
-    // up all the time.
+    // cores, as the stages we don't vectorize as well dominate (we
+    // don't vectorize them well because they do gathers and scatters,
+    // which don't work well on x86).  For smaller blurs, our win
+    // grows, because the stages that we vectorize take up all the
+    // time.
     
 
     return 0;
