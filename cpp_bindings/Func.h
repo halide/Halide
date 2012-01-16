@@ -96,7 +96,14 @@ namespace FImage {
          * onto the scheduleTransforms vector, which is traversed in
          * order starting from an initial default schedule to create a
          * mutated schedule */
-        Func &tile(const Var &, const Var &, const Var &, const Var &, const Expr &f1, const Expr &f2);
+        Func &tile(const Var &, const Var &,
+                   const Var &, const Var &,
+                   const Expr &f1, const Expr &f2);
+        Func &tile(const Var &, const Var &,
+                   const Var &, const Var &, 
+                   const Var &, const Var &, 
+                   const Expr &f1, const Expr &f2);
+        Func &rename(const Var &, const Var &);
         Func &vectorize(const Var &);
         Func &unroll(const Var &);
         Func &transpose(const Var &, const Var &);
@@ -107,6 +114,11 @@ namespace FImage {
         Func &vectorize(const Var &, int factor);
         Func &unroll(const Var &, int factor);
         Func &split(const Var &, const Var &, const Var &, const Expr &factor);
+        Func &cuda(const Var &, const Var &);
+        Func &cuda(const Var &, const Var &, const Var &, const Var &);
+        Func &cudaTile(const Var &, int xFactor);
+        Func &cudaTile(const Var &, const Var &, int xFactor, int yFactor);
+        //Func &cuda(const Var &, const Var &, const Var &, const Var &, const Var &, const Var &);
 
         int autotune(int argc, char **argv, std::vector<uint32_t> sizes);
 
