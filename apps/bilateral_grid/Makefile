@@ -22,7 +22,7 @@ filter: bilateral_grid.o filter.cpp
 	g++-4.6 -Wall -Werror -std=c++0x filter.cpp bilateral_grid.o -lpng -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LFLAGS)
 
 out.png: filter
-    ./filter input.png out.png 0.1
+	./filter input.png out.png 0.1
 
 clean:
 	rm bilateral_grid bilateral_grid.o bilateral_grid.h bilateral_grid.bc filter
