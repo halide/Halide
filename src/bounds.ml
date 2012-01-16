@@ -8,7 +8,7 @@ type bounds_result = Range of (expr * expr) | Unbounded
 let make_range (min, max) =
   let min = constant_fold_expr min in
   let max = constant_fold_expr max in
-  dbg 0 "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max); 
+  dbg 2 "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max); 
   assert (is_scalar min);
   assert (is_scalar max);
   Range (min, max)
@@ -53,7 +53,7 @@ let bounds_of_type = function
 let bounds_of_expr_in_env env expr =
   let rec bounds_of_expr_in_env_inner env expr = 
     let recurse expr = 
-      dbg 0 "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr);
+      dbg 2 "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr);
       let result = bounds_of_expr_in_env_inner env expr in
       check_result expr result;
       result
@@ -343,7 +343,7 @@ let bounds_of_expr_in_env env expr =
             Ir_printer.string_of_expr (constant_fold_expr min) ^ ", " ^ 
             Ir_printer.string_of_expr (constant_fold_expr max) ^ ")"
     in
-    dbg 0 "Bounds of %s = %s\n" (Ir_printer.string_of_expr expr) result_string;
+    dbg 2 "Bounds of %s = %s\n" (Ir_printer.string_of_expr expr) result_string;
     
     result
   in

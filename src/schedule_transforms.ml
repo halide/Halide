@@ -151,13 +151,13 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
       - pick any legal schedule for arg
     *)
 
-    dbg 0 "Asking guru to decide for %s from these options: %s\n%!"
+    dbg 2 "Asking guru to decide for %s from these options: %s\n%!"
       func
       (String.concat ", " (List.map string_of_call_schedule call_sched_options));
     
     let (call_sched, sched_list) = guru.decide func env call_sched_options in
 
-    dbg 0 "Decision made for %s: %s %s\n%!"
+    dbg 2 "Decision made for %s: %s %s\n%!"
       func
       (string_of_call_schedule call_sched)
       (String.concat ", " (List.map string_of_schedule sched_list));
@@ -187,7 +187,7 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
       find_vars sched_list
     ) in
 
-    dbg 0 "Vars_in_scope after deciding fate of %s: %s\n%!"
+    dbg 2 "Vars_in_scope after deciding fate of %s: %s\n%!"
       func
       (String.concat ", " vars_in_scope);
 
@@ -271,7 +271,7 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
 
     let (_, _, body) = find_function f env in
 
-    dbg 0 " found_calls -> %s\n%!" (String.concat ", " (StringSet.elements found_calls));
+    dbg 2 " found_calls -> %s\n%!" (String.concat ", " (StringSet.elements found_calls));
 
     let rec find_calls_expr = function
       | Call (_, name, args) when name.[0] = '.' ->
@@ -299,11 +299,11 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
 
     let new_found_calls = string_set_map (fun x -> f ^ "." ^ x) new_found_calls in
 
-    dbg 0 " new_found_calls -> %s\n%!" (String.concat ", " (StringSet.elements new_found_calls));
+    dbg 2 " new_found_calls -> %s\n%!" (String.concat ", " (StringSet.elements new_found_calls));
 
     let new_found_calls = StringSet.diff new_found_calls found_calls in
 
-    dbg 0 " after exclusion -> %s\n%!" (String.concat ", " (StringSet.elements new_found_calls));
+    dbg 2 " after exclusion -> %s\n%!" (String.concat ", " (StringSet.elements new_found_calls));
 
     (* Recursively find more calls in the called functions *)
     let found_calls = StringSet.union new_found_calls found_calls in
@@ -390,11 +390,11 @@ let mutate_sched_list_guru (func: string) (mutator: schedule list -> schedule li
   decide = fun f env legal_call_scheds ->
     let (call_sched, sched_list) = guru.decide f env legal_call_scheds in
     if (base_name f = func && (sched_list <> [])) then begin
-      dbg 0 "Mutating schedule list for %s: %s -> %!"
+      dbg 2 "Mutating schedule list for %s: %s -> %!"
         func
         (String.concat ", " (List.map string_of_schedule sched_list));
       let new_sched_list = mutator sched_list in
-      dbg 0 "%s\n%!"
+      dbg 2 "%s\n%!"
         (String.concat ", " (List.map string_of_schedule new_sched_list));
       (call_sched, new_sched_list)
     end else (call_sched, sched_list)
@@ -405,11 +405,11 @@ let mutate_legal_call_schedules_guru (func: string) (mutator: call_schedule list
   serialized = guru.serialized @ [serialized];
   decide = fun f env options ->
     if (base_name f = func) then begin
-      dbg 0 "Winnowing call schedule options for %s: %s -> %!"
+      dbg 2 "Winnowing call schedule options for %s: %s -> %!"
         func
         (String.concat ", " (List.map string_of_call_schedule options));
       let new_options = mutator options in    
-      dbg 0 "%s\n%!"
+      dbg 2 "%s\n%!"
         (String.concat ", " (List.map string_of_call_schedule new_options));
       guru.decide f env new_options
     end else
