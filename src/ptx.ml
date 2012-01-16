@@ -7,7 +7,7 @@ open Ptx_dev
 open Analysis
 
 let dbgprint = true
-let dump_mod = dbgprint && false
+let dump_mod = dbgprint && true
 
 (* Function calling conventions for PTX, from <llvm/CallingConv.h>
  * For whatever reason, the official OCaml binding only exposes a few
@@ -397,7 +397,7 @@ let cg_dev_kernel con stmt =
   const_zero
 
 let free (con:context) (name:string) host_cleanup ptr =
-  dbg 2 "Ptx.free %s\n%!" name;
+  dbg 0 "Ptx.free %s\n%!" name;
   let buf = con.arch_state.buf_get name in
   ignore (build_call (free_buffer_func con) [| buf |] "" con.b);
   host_cleanup (host_context con)
@@ -449,17 +449,17 @@ let rec cg_stmt (con:context) stmt = match stmt with
       (* mark host_dirty if writes by host in produce *)
       let host_writes = find_host_stores produce in
       if StringSet.mem name host_writes then begin
-        dbg 2 "found host writes in produce of %s - marking host_dirty\n" name;
+        dbg 0 "found host writes in produce of %s - marking host_dirty\n" name;
         let buf = con.arch_state.buf_get name in
         set_buf_field buf name HostDirty (ci con.c 1) con.b;
       end
       else
-        dbg 2 "NO host writes in produce of %s\n" name;
+        dbg 0 "NO host writes in produce of %s\n" name;
       
       (* copy_to_host if reads by host in consume *)
       let host_reads = find_host_loads consume in
       if StringSet.mem name host_reads then begin
-        dbg 2 "copy back host read of %s\n%!" name;
+        dbg 0 "copy back host read of %s\n%!" name;
         let buf = con.arch_state.buf_get name in
         copy_to_host con buf
       end;
@@ -528,10 +528,10 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   List.iter
     (fun nm ->
       try
-        dbg 2 "Host reads %s\n%!" nm;
+        dbg 0 "Host reads %s\n%!" nm;
         dump_syms param_syms;
         let buf = con.arch_state.buf_get nm in
-        dbg 2 "  copy_to_host at entrypoint\n%!";
+        dbg 0 "  copy_to_host at entrypoint\n%!";
         ignore (copy_to_host con buf);
       with Not_found -> ()
     )
@@ -552,7 +552,7 @@ let rec codegen_entry c m cg_entry make_cg_context e =
 
   if dump_mod then dump_module dev_mod;
   let ptx_src = Llutil.compile_module_to_string dev_mod in
-  dbg 0 "PTX:\n%s\n%!" ptx_src;
+  dbg 2 "PTX:\n%s\n%!" ptx_src;
   (* log the PTX module to disk *)
   save_bc_to_file dev_mod "kernels.bc";
   Printf.fprintf (open_out "kernels.ptx") "%s%!" ptx_src;

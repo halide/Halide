@@ -91,9 +91,9 @@ let rec make_cg_context c m b sym_table arch_state =
     arch_state = arch_state;
   }
   and cg_expr e = 
-    dbg 0 "begin cg_expr %s\n%!" (string_of_expr e);
+    dbg 2 "begin cg_expr %s\n%!" (string_of_expr e);
     let result = Arch.cg_expr cg_context e in
-    dbg 0 "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));
+    dbg 2 "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));
     result
   and cg_expr_inner = function
     (* constants *)
@@ -454,7 +454,7 @@ let rec make_cg_context c m b sym_table arch_state =
     StringIntSet.iter (fun (name, size) ->      
       let current_val = sym_get name in
       let offset = StringMap.find name offset_map in
-      dbg 0 "Storing %s of size %d at offset %d\n%!" name size offset;
+      dbg 2 "Storing %s of size %d at offset %d\n%!" name size offset;
       let addr = build_bitcast closure (pointer_type (type_of current_val)) "" b in      
       let addr = build_gep addr [| const_int int_imm_t (offset/size) |] "" b in
       ignore (build_store current_val addr b);
@@ -482,7 +482,7 @@ let rec make_cg_context c m b sym_table arch_state =
     ) syms;
 
     (* Make the var name refer to the first argument *)
-    dbg 0 "%s = %s\n%!" var_name "param body_fn 0";
+    dbg 2 "%s = %s\n%!" var_name "param body_fn 0";
     set_value_name var_name (param body_fn 0);
     Hashtbl.add sub_sym_table var_name (param body_fn 0);
 
@@ -753,11 +753,11 @@ let codegen_c_wrapper c m f =
     match classify_type t with
       | TypeKind.Pointer ->
           let typename = match struct_name (element_type t) with Some nm -> nm | None -> "<unnamed>" in
-          dbg 0 "Wrapping buffer arg type %s\n%!" typename;
+          dbg 2 "Wrapping buffer arg type %s\n%!" typename;
           assert (typename = "struct.buffer_t");
           build_pointercast arg_ptr t "" b
       | _ ->
-          dbg 0 "Wrapping non-buffer arg type %s\n%!" (string_of_lltype t);
+          dbg 2 "Wrapping non-buffer arg type %s\n%!" (string_of_lltype t);
           build_load (build_pointercast arg_ptr (pointer_type t) "" b) "" b
   in
 

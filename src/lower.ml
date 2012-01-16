@@ -51,7 +51,7 @@ let rec resolve_name (context: string) (var: string) (schedule: schedule_tree) =
   end
         
 let make_function_body (name:string) (env:environment) =
-  dbg 0 "make_function_body %s\n%!" name;
+  dbg 2 "make_function_body %s\n%!" name;
   
   let (args, return_type, body) = find_function name env in
   let prefix = name ^ "." in
@@ -85,7 +85,7 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
   (* Grab the schedule for the next function call to lower *)
   let (call_sched, sched_list) = find_schedule schedule func in
 
-  dbg 0 "Lowering function %s with schedule %s [%s]\n%!" func 
+  dbg 2 "Lowering function %s with schedule %s [%s]\n%!" func 
     (string_of_call_schedule call_sched)
     (String.concat ", " (List.map string_of_schedule sched_list));
   
@@ -230,7 +230,7 @@ and realize func consume env schedule =
 
         let initialize = List.fold_left (wrap sched_list) init_stmt sched_list in
 
-        dbg 0 "Making body of update function: %s\n%!" update_func;
+        dbg 2 "Making body of update function: %s\n%!" update_func;
         let (pure_update_args, _, update_body) = make_function_body update_func env in
         let update_expr = match update_body with
           | Pure expr -> expr
@@ -247,11 +247,11 @@ and realize func consume env schedule =
           else update_stmt
         in
 
-        dbg 0 "Retrieving schedule of update func\n%!";
+        dbg 2 "Retrieving schedule of update func\n%!";
         let (_, update_sched_list) = find_schedule schedule update_func in
         let update = List.fold_left (wrap update_sched_list) update_stmt update_sched_list in
 
-        dbg 0 "Computing pure domain\n%!";
+        dbg 2 "Computing pure domain\n%!";
         let pure_domain = List.map 
           (fun (t, n) -> 
             let parent_n = (parent_name update_func) ^ "." ^ (base_name n) in
@@ -570,31 +570,31 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* Compute the order in which to realize them *)
   let functions = partial_sort lt functions in
-  dbg 0 "Realization order: %s\n" (String.concat ", " functions);
+  dbg 2 "Realization order: %s\n" (String.concat ", " functions);
 
-  dbg 0 "Fully qualifying symbols in the schedule\n%!";
+  dbg 2 "Fully qualifying symbols in the schedule\n%!";
   (* if 0 < verbosity then print_schedule schedule; *)
   let schedule = qualify_schedule schedule in
   (* if 0 < verbosity then print_schedule schedule; *)
 
-  dbg 0 "Realizing root statement\n%!";
+  dbg 2 "Realizing root statement\n%!";
   let (Pipeline (_, _, _, core, _)) = realize func (Block []) env schedule in
 
-  dbg 0 "Recursively lowering function calls\n%!";
+  dbg 2 "Recursively lowering function calls\n%!";
   let functions = List.filter (fun x -> x <> func) functions in  
   let stmt = List.fold_left (fun stmt f -> lower_stmt f stmt env schedule) core functions in
 
-  dbg 0 "Performing bounds inference\n%!";
+  dbg 2 "Performing bounds inference\n%!";
   (* Updates stmt and schedule *)
   let (For (_, _, _, _, stmt), schedule) =
     bounds_inference env schedule (For ("", IntImm 0, IntImm 0, true, stmt)) in
 
   (* if 0 < verbosity then print_schedule schedule; *)
 
-  dbg 0 "Replacing function references with loads and stores\n%!";
+  dbg 2 "Replacing function references with loads and stores\n%!";
   let stmt = lower_function_calls stmt env schedule in
 
-  dbg 0 "Replacing stores to %s to stores to .result\n%!" func;
+  dbg 2 "Replacing stores to %s to stores to .result\n%!" func;
   let rec rewrite_loads_from_result = function
     | Load (e, f, idx) when f = func ->
         Load (e, ".result", idx)
