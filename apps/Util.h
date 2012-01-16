@@ -24,11 +24,11 @@ class Image {
 
         uint8_t *ptr = new uint8_t[sizeof(T)*w*h*c+16];
         buf.host = ptr;
-        while ((size_t)buf.host & 0xf) buf.host++; 
-        contents.reset(new Contents {buf, ptr});
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.dev = 0;
+        while ((size_t)buf.host & 0xf) buf.host++; 
+        contents.reset(new Contents {buf, ptr});
     }
 
 public:
