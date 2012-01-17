@@ -533,7 +533,6 @@ namespace FImage {
         parallel(bidy);
         parallel(tidx);
         parallel(tidy);
-        transpose(bidx, tidy);
         return *this;
     }
 
