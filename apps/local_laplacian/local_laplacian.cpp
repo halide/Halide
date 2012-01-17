@@ -110,10 +110,12 @@ int main(int argc, char **argv) {
 
     /* THE SCHEDULE */
 
+
     // While normally we'd leave in just the best schedule per
     // architecture, here we kept track of everything we tried inside
     // a giant switch statement, to demonstrate how we go about
-    // optimizing the schedule.
+    // optimizing the schedule. The reference implementation on the
+    // quad-core machine took 627 ms.
 
     // In any case, the remapping function should be a lut evaluated
     // ahead of time. It's so small relative to everything else that
@@ -267,8 +269,7 @@ int main(int argc, char **argv) {
     case 12:
         // The bottom pyramid level is gigantic. I wonder if we can
         // just compute those values on demand. Otherwise same as 5:
-        // 301, 170, 5490
-        // (377 the machine we used to compare against the IPP/OpenMP version)
+        // 293, 170, 5490
         output.split(y, y, yi, 32).parallel(y).vectorize(x, 4);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
@@ -408,6 +409,7 @@ int main(int argc, char **argv) {
     }
 
     output.compileToFile("local_laplacian");
+
 
     return 0;
 }
