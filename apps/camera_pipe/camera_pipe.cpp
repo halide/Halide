@@ -1,11 +1,11 @@
-#include <FImage.h>
+#include <Halide.h>
 #include <stdint.h>
 
-using namespace FImage;
+using namespace Halide;
 
 int schedule;
 
-Var x("x"), y("y"), tx("tx"), ty("ty"), c("c");
+Var x, y, tx, ty, c;
 
 Func hot_pixel_suppression(Func input) {
     Expr a = max(max(input(x-2, y), input(x+2, y)),
@@ -13,7 +13,7 @@ Func hot_pixel_suppression(Func input) {
     Expr b = min(min(input(x-2, y), input(x+2, y)),
                  min(input(x, y-2), input(x, y+2)));
     
-    Func denoised("denoised");
+    Func denoised;
     denoised(x, y) = clamp(input(x, y), b, a);
 
     return denoised;
@@ -37,7 +37,7 @@ Func interleave_y(Func a, Func b) {
 
 Func deinterleave(Func raw) {
     // Deinterleave the color channels
-    Func deinterleaved("deinterleaved");
+    Func deinterleaved;
 
     deinterleaved(x, y) = (raw(2*x, 2*y),   raw(2*x+1, 2*y), 
                            raw(2*x, 2*y+1), raw(2*x+1, 2*y+1));
@@ -52,17 +52,14 @@ Func demosaic(Func deinterleaved) {
     // gr refers to green sites in the red rows
 
     // Give more convenient names to the four channels we know
-    Func r_r("r_r"), g_gr("g_gr"), g_gb("g_gb"), b_b("b_b");    
+    Func r_r, g_gr, g_gb, b_b;
     g_gr(x, y) = deinterleaved(x, y, 0);
     r_r(x, y)  = deinterleaved(x, y, 1);
     b_b(x, y)  = deinterleaved(x, y, 2);
     g_gb(x, y) = deinterleaved(x, y, 3);
 
     // These are the ones we need to interpolate
-    Func b_r("b_r"), g_r("g_r");
-    Func b_gr("b_gr"), r_gr("r_gr");
-    Func b_gb("b_gb"), r_gb("r_gb");
-    Func r_b("r_b"), g_b("g_b");
+    Func b_r, g_r, b_gr, r_gr, b_gb, r_gb, r_b, g_b;
 
     // First calculate green at the red and blue sites
 
@@ -141,9 +138,8 @@ Func demosaic(Func deinterleaved) {
                           interleave_x(b_b, b_gb));
 
 
-    Func output("dem");
+    Func output;
     output(x, y) = (r(x, y), g(x, y), b(x, y));
-
 
 
     /* THE SCHEDULE */    
@@ -164,7 +160,7 @@ Func demosaic(Func deinterleaved) {
         b.chunk(tx).vectorize(x, 8).unroll(y, 2);
     } else if (schedule == 1) {
         // optimized for X86
-        // Don't vectorize, because sse is bad a 16-bit interleaving
+        // Don't vectorize, because sse is bad at 16-bit interleaving
         g_r.chunk(tx);
         g_b.chunk(tx);
         r_gr.chunk(tx);
@@ -199,13 +195,13 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
     // Get a color matrix by linearly interpolating between two
     // calibrated matrices using inverse kelvin.
 
-    Func matrix("matrix");
+    Func matrix;
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
     Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
     matrix(x, y) = cast<int32_t>(val * 256.0f); // Q8.8 fixed point
     matrix.root();
 
-    Func corrected("corrected");
+    Func corrected;
     Expr ir = cast<int32_t>(input(x, y, 0));
     Expr ig = cast<int32_t>(input(x, y, 1));
     Expr ib = cast<int32_t>(input(x, y, 2));
@@ -222,7 +218,7 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
 
 Func apply_curve(Func input, Type result_type, Uniform<float> gamma, Uniform<float> contrast) {
     // copied from FCam
-    Func curve("curve");
+    Func curve;
 
     Expr xf = clamp(cast<float>(x)/1024.0f, 0.0f, 1.0f);
     Expr g = pow(xf, 1.0f/gamma);
@@ -236,7 +232,7 @@ Func apply_curve(Func input, Type result_type, Uniform<float> gamma, Uniform<flo
     curve(x) = val;
     curve.root(); // It's a LUT, compute it once ahead of time.
 
-    Func curved("curved");
+    Func curved;
     curved(x, y, c) = curve(input(x, y, c));
 
     return curved;
@@ -246,7 +242,7 @@ Func process(Func raw, Type result_type,
              UniformImage matrix_3200, UniformImage matrix_7000, Uniform<float> color_temp, 
              Uniform<float> gamma, Uniform<float> contrast) {
 
-    Func processed("p");
+    Func processed;
     Var xi, yi;
 
     Func denoised = hot_pixel_suppression(raw);
@@ -306,9 +302,10 @@ int main(int argc, char **argv) {
 
     // shift things inwards to give us enough padding on the
     // boundaries so that we don't need to check bounds. We're going
-    // to make a 2560x1920 output image, so shift by 16, 12
-    Func clamped("in");
-    clamped(x, y) = input(x+16, y+12); //Debug( input(x+16, y+12), "Loading input at: ", x, y, x+16, y+12 );
+    // to make a 2560x1920 output image, just like the FCam pipe, so
+    // shift by 16, 12
+    Func shifted;
+    shifted(x, y) = input(x+16, y+12); 
     
     // Parameterized output type, because LLVM PTX (GPU) backend does not
     // currently allow 8-bit computations
@@ -319,43 +316,9 @@ int main(int argc, char **argv) {
     schedule = atoi(argv[2]);
     
     // Build the pipeline
-    Func processed = process(clamped, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
+    Func processed = process(shifted, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
 
     processed.compileToFile("curved");
-
-#if 0
-    Var xo("blockidx"), yo("blockidy"), c("c"), xi("threadidx"), yi("threadidy");
-    Func output("output");
-    output(xo, yo, c) = processed(xo, yo, c);
-    Var nilc("nilc");
-    output.root()
-        .split(c, nilc, c, 3) // split C into a const loop by 3 on the inside
-        .tile(xo, yo, xi, yi, 32, 16).transpose(yo, c).transpose(xo, c)
-        .transpose(yi, c).transpose(xi, c)
-        .parallel(xo).parallel(yo).parallel(xi).parallel(yi);
-
-    std::vector<Func> funcs = output.rhs().funcs();    
-
-    for (size_t i = 0; i < funcs.size(); i++) {
-      if (funcs[i].name() == "curve") funcs[i].root();
-      else if (funcs[i].name() == "matrix") funcs[i].root();
-      else if (funcs[i].name() == "dem" || funcs[i].name() == "corrected" || funcs[i].name() == "curved") {
-          // inline
-          continue;
-      }
-      else {
-          printf("scheduling %s as chunk on xo\n", funcs[i].name().c_str());
-          funcs[i].chunk(xo)
-                      .split(x, x, xi, 1).split(y, y, yi, 1)
-                      .parallel(xi).parallel(yi);
-      }
-      //if (funcs[i].returnType() == UInt(8)) funcs[i].vectorize(x, 16);
-      //if (funcs[i].returnType() == Int(16)) funcs[i].vectorize(x, 8);
-      //if (funcs[i].returnType() == Float(32)) funcs[i].vectorize(x, 4);
-    }
-
-    output.compileToFile("curved");
-#endif
 
     return 0;
 }

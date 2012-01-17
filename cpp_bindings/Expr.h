@@ -1,5 +1,5 @@
-#ifndef FIMAGE_EXPR_H
-#define FIMAGE_EXPR_H
+#ifndef HALIDE_EXPR_H
+#define HALIDE_EXPR_H
 
 #include <memory>
 #include <string>
@@ -7,7 +7,7 @@
 #include "MLVal.h"
 #include "Type.h"
 
-namespace FImage {
+namespace Halide {
 
     class Var;
     class RVar;

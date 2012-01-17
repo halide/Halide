@@ -1,5 +1,5 @@
 #include "Reduction.h"
 
-namespace FImage {
+namespace Halide {
   
 }

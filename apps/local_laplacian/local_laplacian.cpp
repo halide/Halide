@@ -1,7 +1,9 @@
-#include <FImage.h>
+#include <Halide.h>
+using namespace Halide;
+
 #include "../png.h"
 
-using namespace FImage;
+
 
 // Downsample with a 1 3 3 1 filter
 Func downsample(Func f) {

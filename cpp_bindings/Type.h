@@ -1,10 +1,10 @@
-#ifndef FIMAGE_TYPE_H
-#define FIMAGE_TYPE_H
+#ifndef HALIDE_TYPE_H
+#define HALIDE_TYPE_H
 
 #include "MLVal.h"
 #include <sstream>
 
-namespace FImage {
+namespace Halide {
     // Possible types for image data
     class Type {
       public:

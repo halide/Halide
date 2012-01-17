@@ -1,7 +1,7 @@
-#include "FImage.h"
+#include "Halide.h"
 #include <sys/time.h>
 
-using namespace FImage;
+using namespace Halide;
 
 #define W 10240
 #define H 16

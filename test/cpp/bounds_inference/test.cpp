@@ -1,7 +1,7 @@
-#include <FImage.h>
+#include <Halide.h>
 #include <sys/time.h>
 
-using namespace FImage;
+using namespace Halide;
 
 double currentTime() {
     timeval t;

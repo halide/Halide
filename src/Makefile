@@ -17,8 +17,8 @@ NATIVE=$(patsubst %.ml,%.native,${TARGETS})
 
 all: lib.byte lib.native
 
-lib.byte: fimage.cma
-lib.native: fimage.cmxa
+lib.byte: halide.cma
+lib.native: halide.cmxa
 
 %.cma:
 	${BUILD_CMD} $@

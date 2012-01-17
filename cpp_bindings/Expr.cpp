@@ -9,7 +9,7 @@
 #include "Tuple.h"
 #include <sstream>
 
-namespace FImage {
+namespace Halide {
 
     ML_FUNC1(makeIntImm);
     ML_FUNC1(makeFloatImm);

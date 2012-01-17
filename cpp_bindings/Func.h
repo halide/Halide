@@ -1,5 +1,5 @@
-#ifndef FIMAGE_FUNC_H
-#define FIMAGE_FUNC_H
+#ifndef HALIDE_FUNC_H
+#define HALIDE_FUNC_H
 
 #include <memory>
 #include <string>
@@ -8,7 +8,7 @@
 #include "MLVal.h"
 #include "Image.h"
 
-namespace FImage {
+namespace Halide {
     
     bool use_gpu();
 

@@ -1,8 +1,8 @@
-#include <FImage.h>
+#include <Halide.h>
 #include <math.h>
 #include <sys/time.h>
 
-using namespace FImage;
+using namespace Halide;
 
 template<typename A>
 const char *string_of_type();

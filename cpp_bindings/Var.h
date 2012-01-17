@@ -1,9 +1,9 @@
-#ifndef FIMAGE_VAR_H
-#define FIMAGE_VAR_H
+#ifndef HALIDE_VAR_H
+#define HALIDE_VAR_H
 
 #include "Util.h"
 
-namespace FImage {
+namespace Halide {
 
     class Expr;
 

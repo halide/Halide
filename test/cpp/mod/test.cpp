@@ -1,6 +1,6 @@
-#include "FImage.h"
+#include "Halide.h"
 
-using namespace FImage;
+using namespace Halide;
 
 template<typename T>
 bool test() {

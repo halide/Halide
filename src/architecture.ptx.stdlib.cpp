@@ -209,7 +209,7 @@ void __free_buffer(buffer_t* buf)
 
 void __init(const char* ptx_src)
 {
-    // Initialize one shared context for all FImage compiled instances
+    // Initialize one shared context for all Halide compiled instances
     if (!cuda_ctx) {
         // Initialize CUDA
         CHECK_CALL( cuInit(0), "cuInit" );
@@ -243,7 +243,7 @@ void __init(const char* ptx_src)
         //CHECK_CALL( cuCtxPushCurrent(cuda_ctx), "cuCtxPushCurrent" );
     }
     
-    // Initialize a module for just this FImage module
+    // Initialize a module for just this Halide module
     if (!__mod) {
       // Create module
       CHECK_CALL( cuModuleLoadData(&__mod, ptx_src), "cuModuleLoadData" );

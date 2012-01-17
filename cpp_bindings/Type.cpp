@@ -1,6 +1,6 @@
 #include "Type.h"
 
-namespace FImage {
+namespace Halide {
 
     ML_FUNC1(makeFloatType);
     ML_FUNC1(makeIntType);
