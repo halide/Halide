@@ -31,11 +31,13 @@ int main(int argc, char **argv) {
             ty("threadidy"),
             by("blockidy");
         
-        hist.split(hist.arg(0), bx, tx, 64).parallel(bx).parallel(tx);
+	hist.cudaTile(hist.arg(0), 64);
+        //hist.split(hist.arg(0), bx, tx, 64).parallel(bx).parallel(tx);
         
         Func& update = hist.update();
-        update.split(x, bx, tx, 10).split(y, by, ty, 10).transpose(bx, ty)
-            .parallel(bx).parallel(by).parallel(tx).parallel(ty);
+	update.cudaTile(x, y, 16, 16);
+//        update.split(x, bx, tx, 10).split(y, by, ty, 10).transpose(bx, ty)
+//            .parallel(bx).parallel(by).parallel(tx).parallel(ty);
     } else {
     
         // Grab a handle to the update step of a reduction for scheduling
