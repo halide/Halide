@@ -20,6 +20,6 @@ constant_fold
 break_false_dependence
 schedule
 lower
-fimage_cpp
+halide_cpp
 stdlib
 llutil

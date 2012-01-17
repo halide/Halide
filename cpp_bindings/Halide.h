@@ -1,5 +1,5 @@
-#ifndef FIMAGE_H
-#define FIMAGE_H
+#ifndef HALIDE_H
+#define HALIDE_H
 
 #include "MLVal.h"
 #include <vector>
