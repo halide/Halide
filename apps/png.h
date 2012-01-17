@@ -7,8 +7,6 @@
 
 #define _assert(condition, ...) if (!(condition)) {fprintf(stderr, __VA_ARGS__); exit(-1);}
 
-namespace FImage {
-
 void convert(uint8_t in, uint8_t &out) {out = in;}
 void convert(uint8_t in, uint16_t &out) {out = in << 8;}
 void convert(uint8_t in, float &out) {out = in/255.0f;}
@@ -183,7 +181,6 @@ void save(Image<T> im, std::string filename) {
     fclose(f);
 
     png_destroy_write_struct(&png_ptr, &info_ptr);
-}
 }
 
 #endif

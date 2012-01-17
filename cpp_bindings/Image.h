@@ -1,12 +1,12 @@
-#ifndef FIMAGE_IMAGE_H
-#define FIMAGE_IMAGE_H
+#ifndef HALIDE_IMAGE_H
+#define HALIDE_IMAGE_H
 
 #include <stdint.h>
 #include "Expr.h"
 
 struct buffer_t;
 
-namespace FImage {
+namespace Halide {
     
     class Type;
   

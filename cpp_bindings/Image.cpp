@@ -6,7 +6,7 @@
 #include <assert.h>
 #include "../src/buffer.h"
 
-namespace FImage {
+namespace Halide {
     struct DynImage::Contents {
         Contents(const Type &t, uint32_t a);
         Contents(const Type &t, uint32_t a, uint32_t b);

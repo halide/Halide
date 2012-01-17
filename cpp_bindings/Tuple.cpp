@@ -3,7 +3,7 @@
 #include "Func.h"
 #include "Var.h"
 
-namespace FImage {
+namespace Halide {
 
     Tuple::operator Expr() const {
         std::vector<Expr> callArgs;

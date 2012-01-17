@@ -1,7 +1,7 @@
-#include "FImage.h"
+#include "Halide.h"
 #include <math.h>
 
-using namespace FImage;
+using namespace Halide;
 
 int main(int argc, char **argv) {
     Var x, y;

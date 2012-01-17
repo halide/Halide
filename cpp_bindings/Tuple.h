@@ -1,11 +1,11 @@
-#ifndef FIMAGE_TUPLE_H
-#define FIMAGE_TUPLE_H
+#ifndef HALIDE_TUPLE_H
+#define HALIDE_TUPLE_H
 
 #include <assert.h>
 #include <vector>
 #include "Expr.h"
 
-namespace FImage {
+namespace Halide {
 
     class Tuple {
     public:

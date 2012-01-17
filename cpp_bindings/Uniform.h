@@ -1,11 +1,11 @@
-#ifndef FIMAGE_UNIFORM_H
-#define FIMAGE_UNIFORM_H
+#ifndef HALIDE_UNIFORM_H
+#define HALIDE_UNIFORM_H
 
 #include "Type.h"
 #include "Util.h"
 #include <assert.h>
 
-namespace FImage {
+namespace Halide {
 
     // Dynamically and statically typed uniforms
 

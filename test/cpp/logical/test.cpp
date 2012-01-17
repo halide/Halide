@@ -1,6 +1,6 @@
-#include "FImage.h"
+#include "Halide.h"
 
-using namespace FImage;
+using namespace Halide;
 
 Expr u8(Expr a) {
     return cast<uint8_t>(a);

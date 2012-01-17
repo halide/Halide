@@ -2,7 +2,7 @@
 #include "Expr.h"
 #include <assert.h>
 
-namespace FImage {
+namespace Halide {
 
     struct RVar::Contents {
         Contents(Expr min, Expr size, const std::string &name) : min(min), size(size), name(name) {}
@@ -31,7 +31,7 @@ namespace FImage {
         }
 
         if (contents->size.isDefined()) {
-            contents->size = FImage::min(contents->size, size);
+            contents->size = Halide::min(contents->size, size);
         } else {
             contents->size = size;
         }

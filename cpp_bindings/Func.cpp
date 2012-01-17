@@ -24,7 +24,7 @@
 
 #include <dlfcn.h>
 
-namespace FImage {
+namespace Halide {
     
     extern "C" { typedef struct CUctx_st *CUcontext; }
     CUcontext cuda_ctx = 0;

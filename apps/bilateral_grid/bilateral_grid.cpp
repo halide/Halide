@@ -1,19 +1,25 @@
-#include "FImage.h"
+#include "Halide.h"
 
-using namespace FImage;
+using namespace Halide;
 
 Expr lerp(Expr a, Expr b, Expr alpha) {
     return (1.0f - alpha)*a + alpha*b;
 }
 
 int main(int argc, char **argv) {
+    if (argc < 2) {
+        printf("Spatial sigma is a compile-time parameter, please provide it as an argument.\n"
+               "(llvm's ptx backend doesn't handle integer mods by non-consts yet)\n");
+        return 0;
+    }
+
     UniformImage input(Float(32), 2);
     Uniform<float> r_sigma;
     int s_sigma = atoi(argv[1]);
-    Var x("x"), y("y"), z("z"), c("c");
+    Var x, y, z, c;
 
     // Add a boundary condition 
-    Func clamped("clamped");
+    Func clamped;
     clamped(x, y) = input(clamp(x, 0, input.width()),
                           clamp(y, 0, input.height()));
 
@@ -51,87 +57,36 @@ int main(int argc, char **argv) {
     Func smoothed;
     smoothed(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
-    // Use CPU
-    #if 1
+    #ifndef USE_GPU
+    // Best schedule for CPU
+    printf("Compiling for CPU\n");
     grid.root().parallel(z);
     grid.update().transpose(y, c).transpose(x, c).transpose(i, c).transpose(j, c).parallel(y);
     blurx.root().parallel(z).vectorize(x, 4);
     blury.root().parallel(z).vectorize(x, 4);
     blurz.root().parallel(z).vectorize(x, 4);
     smoothed.root().parallel(y).vectorize(x, 4); 
-#else
+    #else    
 
-    Var tx("threadidx"), ty("threadidy"), 
-        bx("blockidx"), by("blockidy");
-    
-    Var bxi, byi, txi, tyi;
+    printf("Compiling for GPU");
     Var gridz = grid.arg(2);
     grid.transpose(y, gridz).transpose(x, gridz).transpose(y, c).transpose(x, c)
-        .root()
-        .split(x, bx, tx, 16)
-        .split(y, by, ty, 16)
-            .transpose(bx, ty)
-        .parallel(tx)
-        .parallel(ty)
-        .parallel(bx)
-        .parallel(by);
-
+        .root().cudaTile(x, y, 16, 16);
     grid.update().transpose(y, c).transpose(x, c).transpose(i, c).transpose(j, c)
-        .root()
-        .split(x, bx, tx, 16)
-        .split(y, by, ty, 16)
-        // .split(i, tx, txi, 1)
-        // .split(j, ty, tyi, 1)
-        .parallel(tx)
-        .parallel(ty)
-        .parallel(bx)
-        .parallel(by);
-    
-    // clamped.root();
-    
+        .root().cudaTile(x, y, 16, 16);
     c = blurx.arg(3);
     blurx.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
-        .root()
-        .split(x, bx, tx, 8)
-        .split(y, by, ty, 8)
-            .transpose(bx, ty)
-        .parallel(tx)
-        .parallel(ty)
-        .parallel(bx)
-        .parallel(by);
+        .root().cudaTile(x, y, 8, 8);
     
     c = blury.arg(3);
     blury.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
-        .root()
-        .split(x, bx, tx, 8)
-        .split(y, by, ty, 8)
-            .transpose(bx, ty)
-        .parallel(tx)
-        .parallel(ty)
-        .parallel(bx)
-        .parallel(by);
-    
+        .root().cudaTile(x, y, 8, 8);
+
     c = blurz.arg(3);
     blurz.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
-        .root()
-        .split(x, bx, tx, 8)
-        .split(y, by, ty, 8)
-            .transpose(bx, ty)
-        .parallel(tx)
-        .parallel(ty)
-        .parallel(bx)
-        .parallel(by);
+        .root().cudaTile(x, y, 8, 8);
     
-    smoothed.root()
-        .split(x, bx, tx, s_sigma)
-        .split(y, by, ty, s_sigma)
-        .transpose(bx, ty)
-        .parallel(tx)
-        .parallel(ty)
-        .parallel(bx)
-        .parallel(by);
-
-    // smoothed.root().parallel(y);
+    smoothed.root().cudaTile(x, y, s_sigma, s_sigma);
     #endif
 
     smoothed.compileToFile("bilateral_grid");

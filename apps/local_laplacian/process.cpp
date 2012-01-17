@@ -1,18 +1,24 @@
 #include <stdio.h>
 extern "C" {
-    #include "local_laplacian.h"
+#include "local_laplacian.h"
 }
 #include "../Util.h"
 #include "../png.h"
 #include <sys/time.h>
-using namespace FImage;
 
 int main(int argc, char **argv) {
+    if (argc < 4) {
+        printf("Usage: ./process input.png levels alpha beta output.png\n"
+               "e.g.: ./process input.png 8 1 1 output.png\n");
+        return 0;
+    }
+
     Image<uint16_t> input = load<uint16_t>(argv[1]);
     int levels = atoi(argv[2]);
     float alpha = atof(argv[3]), beta = atof(argv[4]);    
     Image<uint16_t> output(input.width(), input.height(), 3);
 
+    /* Timing code
     timeval t1, t2;
     unsigned int bestT = 0xffffffff;
     for (int i = 0; i < 5; i++) {
@@ -23,6 +29,9 @@ int main(int argc, char **argv) {
       if (t < bestT) bestT = t;
     }
     printf("%u\n", bestT);
+    */
+
+    local_laplacian(levels, beta, alpha/(levels-1), input, output);
 
     save(output, argv[5]);
 

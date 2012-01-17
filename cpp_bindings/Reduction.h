@@ -1,5 +1,5 @@
-#ifndef FIMAGE_REDUCTION_H
-#define FIMAGE_REDUCTION_H
+#ifndef HALIDE_REDUCTION_H
+#define HALIDE_REDUCTION_H
 
 #include "Expr.h"
 #include "Var.h"
@@ -8,7 +8,7 @@
 #include <vector>
 #include <memory>
 
-namespace FImage {
+namespace Halide {
   
     // Reductions are anonymous functions that can be cast to an Expr to use
     class sum {

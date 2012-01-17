@@ -70,9 +70,9 @@ cxx_exe = 'g++-4.6'
 
 def test_cpp(name):
 
-    status(name, "Building FImage.a")
-    # Make sure FImage.a is built
-    cmd = "make -C ../cpp_bindings/ FImage.a"
+    status(name, "Building Halide.a")
+    # Make sure Halide.a is built
+    cmd = "make -C ../cpp_bindings/ Halide.a"
     run(cmd.split(' '))
 
     curdir = os.getcwd()
@@ -96,7 +96,7 @@ def test_cpp(name):
                    "-I../../../cpp_bindings",
                    "-Wno-format",
                    srcfile,                   
-                   "../../../cpp_bindings/FImage.a", 
+                   "../../../cpp_bindings/Halide.a", 
                    "-ldl", "-lpthread"]
 
     if os.path.exists("/usr/local/cuda"):

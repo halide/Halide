@@ -1,7 +1,7 @@
 #include "Util.h"
 #include <sstream>
 
-namespace FImage {
+namespace Halide {
     ML_FUNC0(makeList); 
     ML_FUNC2(addToList); // cons
 

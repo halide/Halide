@@ -1,5 +1,5 @@
-#include <FImage.h>
-using namespace FImage;
+#include <Halide.h>
+using namespace Halide;
 
 #include <cmath>
 #include <iomanip>
@@ -121,17 +121,17 @@ Func drlse_edge(Func phi_0,
 }
 
 Func blur(Func image, const float sigma) {
-  Func gaussian("gaussian");
+  Func gaussian;
   gaussian(x) = exp(-(x/sigma)*(x/sigma)*0.5f);
 
   // truncate to 3 sigma and normalize
   int radius = int(3*sigma + 1.0f);
   RVar i(-radius, 2*radius+1);
-  Func normalized("normalized");
+  Func normalized;
   normalized(x) = gaussian(x) / sum(gaussian(i)); // Uses an inline reduction
 
   // Convolve the input using two reductions
-  Func blurx("blurx"), blury("blury");
+  Func blurx, blury;
   blurx(x, y) += image(x+i, y) * normalized(i);
   blury(x, y) += blurx(x, y+i) * normalized(i);
 
@@ -147,6 +147,11 @@ Func blur(Func image, const float sigma) {
 
 int main(int argc, char **argv) {
   
+  if (argc < 2) {
+      printf("Usage: ./halide_snake blood_cells.png max_iterations\n");
+      return 0;
+  }
+
   const float timestep = 5.0f;
   const float mu = 0.2f / timestep;
   const int iter_inner = 1; // 5;
@@ -175,14 +180,14 @@ int main(int argc, char **argv) {
   // ###### Compute the G function ######
   // Some simple computation, cache the result because never changes later
   
-  Func blurred_input("blurred_input");
+  Func blurred_input;
   blurred_input = blur(clamped,sigma);
 
   Func input_dx, input_dy;
   input_dx = dx(blurred_input);
   input_dy = dy(blurred_input);
 
-  Func g_proxy("g");
+  Func g_proxy;
   g_proxy = 1.0f / (1.0f + input_dx * input_dx + input_dy * input_dy);
   
   // Spill to a concrete array
@@ -191,7 +196,7 @@ int main(int argc, char **argv) {
   // ###### Initialize the selection  ######
   // Create a big rectangle, store it in an array
   
-  Func phi_init("phi_init");
+  Func phi_init;
   phi_init(x,y) = select((x >= selectPadding)
 			 && (x < im.width() - selectPadding)
 			 && (y >= selectPadding)
@@ -207,30 +212,25 @@ int main(int argc, char **argv) {
   // to change it every iteration
   UniformImage phi_input(Float(32), 2);
 
-  Func phi_clamped("phi_clamped");
+  Func phi_clamped;
   phi_clamped(x,y) = phi_input(clamp(x,0,phi_buf.width()-1),
                                clamp(y,0,phi_buf.height()-1));
   
   // g stays fixed, so we can skip the uniform image and have it
   // always read straight from the buffer
-  Func g_clamped("g_clamped");
+  Func g_clamped;
   g_clamped(x, y) = g_buf(clamp(x, 0, g_buf.width()-1),
                           clamp(y, 0, g_buf.height()-1));
     
-  Func phi_new("phi_new");
+  Func phi_new;
   phi_new = drlse_edge(phi_clamped,g_clamped,lambda,mu,alpha,epsilon,timestep,iter_inner);
 
   if (use_gpu()) {
-    Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
-    phi_new.root()
-      .split(y, by, ty, 16).split(x, bx, tx, 16)
-      .transpose(bx, ty)
-      .parallel(bx).parallel(by).parallel(tx).parallel(ty);
-    phi_new.compileJIT();
+    phi_new.cudaTile(x, y, 16, 16);
   } else {
     phi_new.parallel(y).vectorize(x, 4);
-    phi_new.compileJIT();
   }
+  phi_new.compileJIT();
   
   // ###### Run the outer loop ######
   

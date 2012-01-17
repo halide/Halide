@@ -1,10 +1,10 @@
-#ifndef FIMAGE_UTIL_H
-#define FIMAGE_UTIL_H
+#ifndef HALIDE_UTIL_H
+#define HALIDE_UTIL_H
 
 #include <string>
 #include "MLVal.h"
 
-namespace FImage {
+namespace Halide {
     // Generate a unique name
     std::string uniqueName(char prefix);
     
