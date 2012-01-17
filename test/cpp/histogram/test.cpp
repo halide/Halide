@@ -4,7 +4,7 @@ using namespace FImage;
 
 int main(int argc, char **argv) {
 
-    int W = 100, H = 100;
+    int W = 128, H = 128;
 
     // Compute a random image and its true histogram
     int reference_hist[256];
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     Func hist("hist");
 
     RVar x, y;
-    hist(Clamp(Cast<int>(in(x, y)), 0, 255))++;
+    hist(clamp(cast<int>(in(x, y)), 0, 255))++;
 
     if (use_gpu()) {
         Var tx("threadidx"),
@@ -36,11 +36,14 @@ int main(int argc, char **argv) {
         Func& update = hist.update();
         update.split(x, bx, tx, 10).split(y, by, ty, 10).transpose(bx, ty)
             .parallel(bx).parallel(by).parallel(tx).parallel(ty);
+    } else {
+    
+        // Grab a handle to the update step of a reduction for scheduling
+        // using the "update()" method.
+        Var xi, yi;
+        hist.update().tile(x, y, xi, yi, 32, 32);
     }
-    
-    // hist.compileJIT();
-    // return 0;
-    
+
     Image<int32_t> h = hist.realize(256);
 
     for (int i = 0; i < 256; i++) {

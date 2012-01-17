@@ -11,15 +11,15 @@
 namespace FImage {
   
     // Reductions are anonymous functions that can be cast to an Expr to use
-    class Sum {
+    class sum {
     public:
-        Sum(const Expr &body) {
+        sum(const Expr &body) {
             Func anon;
             std::vector<Expr> args(body.vars().size());
             for (size_t i = 0; i < body.vars().size(); i++) {
                 args[i] = body.vars()[i];
             }
-            Expr init = Cast(body.type(), 0);
+            Expr init = cast(body.type(), 0);
             init.addImplicitArgs(body.implicitArgs());
             anon(args) = init;
             anon(args) = anon(args) + body;
@@ -33,15 +33,15 @@ namespace FImage {
         Expr call;
     };
 
-    class Product {
+    class product {
     public:
-        Product(const Expr &body) {
+        product(const Expr &body) {
             Func anon;
             std::vector<Expr> args(body.vars().size());
             for (size_t i = 0; i < body.vars().size(); i++) {
                 args[i] = body.vars()[i];
             }
-            Expr init = Cast(body.type(), 1);
+            Expr init = cast(body.type(), 1);
             init.addImplicitArgs(body.implicitArgs());
             anon(args) = init;
             anon(args) = anon(args) * body;
@@ -54,7 +54,6 @@ namespace FImage {
     private:
         Expr call;
     };
-
 }
 
 #endif

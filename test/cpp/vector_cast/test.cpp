@@ -35,7 +35,7 @@ bool test(int vec_width) {
     Var x, y;
     Func f;
 
-    f(x, y) = Cast<B>(input(x, y));
+    f(x, y) = cast<B>(input(x, y));
 
     f.vectorize(x, vec_width);
 

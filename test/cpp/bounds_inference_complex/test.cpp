@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
         int j1 = rand() % i;
         int j2 = rand() % i;
         int j3 = rand() % i; 
-        f[i](x, y) = f[j1](x-1, y-1) + f[j2](x+1, Clamp(f[j3](x+1, y-1), 0, 7));
+        f[i](x, y) = f[j1](x-1, y-1) + f[j2](x+1, clamp(f[j3](x+1, y-1), 0, 7));
 
         if (i < K-1) {
             switch (rand() % 3) {
@@ -36,17 +36,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    //f[K-1].trace();
-
     Image<int> out = f[K-1].realize(32, 32);
 
     printf("Success!\n");
     return 0;
 }
 
-/* 
-Images as Functions
-
-We argue for images as (mostly) pure functions because it separates the schedule from the algorithm.
-
-*/

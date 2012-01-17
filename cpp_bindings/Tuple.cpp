@@ -60,7 +60,7 @@ namespace FImage {
             }
 
             if (idx == 0) body = e;
-            else body = Select(tupleIndex == idx, e, body);
+            else body = select(tupleIndex == idx, e, body);
             idx++;
         }
         

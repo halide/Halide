@@ -3,7 +3,7 @@
 using namespace FImage;
 
 Expr u8(Expr a) {
-    return Cast<uint8_t>(a);
+    return cast<uint8_t>(a);
 }
 
 /* Do n unrolled iterations of game of life on a torus */
@@ -25,7 +25,7 @@ Func gameOfLife(UniformImage input, int n) {
                             in(x, S) + in(E, S));    
     Expr alive = in(x, y) != u8(0);
     Func output;
-    output(x, y) = Select(livingNeighbors == u8(3) || (alive && livingNeighbors == u8(2)), u8(1), u8(0));    
+    output(x, y) = select(livingNeighbors == u8(3) || (alive && livingNeighbors == u8(2)), u8(1), u8(0));    
 
     return output;
 }
@@ -102,14 +102,15 @@ int main(int argc, char **argv) {
                                 life(E, N, lastT) + life(W, y, lastT) + 
                                 life(E, y, lastT) + life(W, S, lastT) +
                                 life(x, S, lastT) + life(E, S, lastT));            
-        life(x, y, t%2) = Select(livingNeighbors == u8(3) || (alive && livingNeighbors == u8(2)), u8(1), u8(0));    
+        life(x, y, t%2) = select(livingNeighbors == u8(3) || (alive && livingNeighbors == u8(2)), u8(1), u8(0));    
         
         Func output;
         output(x, y) = life(x, y, 1);        
 
-        // The update step of life needs to have t
-        // outermost. Schedules can change meaning for reductions!
-        // (but only reductions)
+        // The update step of life needs to have t outermost to be
+        // correct. Schedules can change meaning for reductions!  (but
+        // only reductions). This is why we say Halide is really only
+        // for feed-forward pipelines.
         life.update().transpose(t, y);
 
         input = board3;

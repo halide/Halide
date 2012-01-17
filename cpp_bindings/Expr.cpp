@@ -253,7 +253,7 @@ namespace FImage {
     }
 
     Expr operator-(const Expr &a) {
-        return Cast(a.type(), 0) - a;
+        return cast(a.type(), 0) - a;
     }
 
     Expr operator*(const Expr & a, const Expr & b) {
@@ -341,7 +341,7 @@ namespace FImage {
 
     Expr transcendental(const char *name, const Expr &a) {
         MLVal args = makeList();
-        Expr arg = Cast<float>(a);
+        Expr arg = cast<float>(a);
         args = addToList(args, arg.node());
         Expr e(makeCall(Float(32).mlval, name, args), Float(32));
         e.child(a);
@@ -350,8 +350,8 @@ namespace FImage {
 
     Expr transcendental(const char *name, const Expr &a, const Expr &b) {
         MLVal args = makeList();
-        Expr arg_a = Cast<float>(a);
-        Expr arg_b = Cast<float>(b);
+        Expr arg_a = cast<float>(a);
+        Expr arg_b = cast<float>(b);
         args = addToList(args, arg_b.node());
         args = addToList(args, arg_a.node());
         Expr e(makeCall(Float(32).mlval, name, args), Float(32));
@@ -389,7 +389,7 @@ namespace FImage {
     }
 
 
-    Expr Select(const Expr & cond, const Expr & thenCase, const Expr & elseCase) {
+    Expr select(const Expr & cond, const Expr & thenCase, const Expr & elseCase) {
         Expr e(makeSelect(cond.node(), thenCase.node(), elseCase.node()), thenCase.type());
         e.child(cond);
         e.child(thenCase);
@@ -397,22 +397,22 @@ namespace FImage {
         return e;
     }
     
-    Expr Max(const Expr &a, const Expr &b) {
+    Expr max(const Expr &a, const Expr &b) {
         Expr e(makeMax(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
 
-    Expr Min(const Expr &a, const Expr &b) {
+    Expr min(const Expr &a, const Expr &b) {
         Expr e(makeMin(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
     
-    Expr Clamp(const Expr &a, const Expr &min, const Expr &max) {
-        return Max(Min(a, max), min);
+    Expr clamp(const Expr &a, const Expr &mi, const Expr &ma) {
+        return max(min(a, ma), mi);
     }
 
 
@@ -478,38 +478,38 @@ namespace FImage {
 
     }
 
-    Expr Debug(Expr expr, const std::string &prefix) {
+    Expr debug(Expr expr, const std::string &prefix) {
         std::vector<Expr> args;
-        return Debug(expr, prefix, args);
+        return debug(expr, prefix, args);
     }
 
-    Expr Debug(Expr expr, const std::string &prefix, Expr a) {
+    Expr debug(Expr expr, const std::string &prefix, Expr a) {
         std::vector<Expr> args {a};
-        return Debug(expr, prefix, args);
+        return debug(expr, prefix, args);
     }
 
-    Expr Debug(Expr expr, const std::string &prefix, Expr a, Expr b) {
+    Expr debug(Expr expr, const std::string &prefix, Expr a, Expr b) {
         std::vector<Expr> args {a, b};
-        return Debug(expr, prefix, args);
+        return debug(expr, prefix, args);
     }
 
-    Expr Debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c) {
+    Expr debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c) {
         std::vector<Expr> args {a, b, c};
-        return Debug(expr, prefix, args);
+        return debug(expr, prefix, args);
     }
 
 
-    Expr Debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d) {
+    Expr debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d) {
         std::vector<Expr> args {a, b, c, d};
-        return Debug(expr, prefix, args);
+        return debug(expr, prefix, args);
     }
 
-    Expr Debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d, Expr e) {
+    Expr debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d, Expr e) {
         std::vector<Expr> args {a, b, c, d, e};
-        return Debug(expr, prefix, args);
+        return debug(expr, prefix, args);
     }
 
-    Expr Debug(Expr e, const std::string &prefix, const std::vector<Expr> &args) {
+    Expr debug(Expr e, const std::string &prefix, const std::vector<Expr> &args) {
         MLVal mlargs = makeList();
         for (size_t i = args.size(); i > 0; i--) {
             mlargs = addToList(mlargs, args[i-1].node());
@@ -524,10 +524,10 @@ namespace FImage {
     }
 
 
-    Expr Cast(const Type &t, const Expr &e) {
-        Expr cast(makeCast(t.mlval, e.node()), t);
-        cast.child(e);
-        return cast;
+    Expr cast(const Type &t, const Expr &e) {
+        Expr c(makeCast(t.mlval, e.node()), t);
+        c.child(e);
+        return c;
     }
 
 }

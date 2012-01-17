@@ -7,88 +7,66 @@ Expr lerp(Expr a, Expr b, Expr alpha) {
 }
 
 int main(int argc, char **argv) {
-    UniformImage input(Float(32), 3);
+    UniformImage input(Float(32), 2);
     Uniform<float> r_sigma;
     int s_sigma = atoi(argv[1]);
-    Var x("x"), y("y"), z("z"), c("c"), xi("xi"), yi("yi");
+    Var x("x"), y("y"), z("z"), c("c");
 
     // Add a boundary condition 
     Func clamped("clamped");
-    clamped(x, y) = input(Clamp(x, 0, input.width()),
-                          Clamp(y, 0, input.height()),
-                          0);
+    clamped(x, y) = input(clamp(x, 0, input.width()),
+                          clamp(y, 0, input.height()));
 
     // Construct the bilateral grid 
-    RVar i(0, s_sigma, "i"), j(0, s_sigma, "j");
+    RVar i(0, s_sigma), j(0, s_sigma);
     Expr val = clamped(x * s_sigma + i - s_sigma/2, y * s_sigma + j - s_sigma/2);
-    val = Clamp(val, 0.0f, 1.0f);
-    Expr zi = Cast<int>(val * (1.0f/r_sigma) + 0.5f);
-    Func grid("grid");
-    grid(x, y, z, c) = 0.0f;
-    grid(x, y, zi, c) += Select(c == 0, val, 1.0f);
+    val = clamp(val, 0.0f, 1.0f);
+    Expr zi = cast<int>(val * (1.0f/r_sigma) + 0.5f);
+    Func grid;
+    grid(x, y, zi, c) += select(c == 0, val, 1.0f);
 
     // Blur the grid using a five-tap filter
-    Func blurx("blurx"), blury("blury"), blurz("blurz");
+    Func blurx, blury, blurz;
     blurx(x, y, z) = grid(x-2, y, z) + grid(x-1, y, z)*4 + grid(x, y, z)*6 + grid(x+1, y, z)*4 + grid(x+1, y, z);
     blury(x, y, z) = blurx(x, y-2, z) + blurx(x, y-1, z)*4 + blurx(x, y, z)*6 + blurx(x, y+1, z)*4 + blurx(x, y+2, z);
     blurz(x, y, z) = blury(x, y, z-2) + blury(x, y, z-1)*4 + blury(x, y, z)*6 + blury(x, y, z+1)*4 + blury(x, y, z+2);
 
-    // Take trilinear samples to compute the output in tiles
-    val = clamped(x*s_sigma + xi, y*s_sigma + yi);
-    val = Clamp(val, 0.0f, 1.0f);
+    // Take trilinear samples to compute the output
+    val = clamp(clamped(x, y), 0.0f, 1.0f);
     Expr zv = val * (1.0f/r_sigma);
-    zi = Cast<int>(zv);
+    zi = cast<int>(zv);
     Expr zf = zv - zi;
-    Expr xf = Cast<float>(xi) / s_sigma;
-    Expr yf = Cast<float>(yi) / s_sigma;
-    Func interpolated("interpolated");    
-    interpolated(xi, yi, x, y, c) = 
-        lerp(lerp(lerp(blurz(x, y, zi, c), blurz(x+1, y, zi, c), xf),
-                  lerp(blurz(x, y+1, zi, c), blurz(x+1, y+1, zi, c), xf), yf),
-             lerp(lerp(blurz(x, y, zi+1, c), blurz(x+1, y, zi+1, c), xf),
-                  lerp(blurz(x, y+1, zi+1, c), blurz(x+1, y+1, zi+1, c), xf), yf), zf);
+    Expr xf = cast<float>(x % s_sigma) / s_sigma;
+    Expr yf = cast<float>(y % s_sigma) / s_sigma;
+    Expr xi = x/s_sigma;
+    Expr yi = y/s_sigma;
+    Func interpolated;
+    interpolated(x, y) = 
+        lerp(lerp(lerp(blurz(xi, yi, zi), blurz(xi+1, yi, zi), xf),
+                  lerp(blurz(xi, yi+1, zi), blurz(xi+1, yi+1, zi), xf), yf),
+             lerp(lerp(blurz(xi, yi, zi+1), blurz(xi+1, yi, zi+1), xf),
+                  lerp(blurz(xi, yi+1, zi+1), blurz(xi+1, yi+1, zi+1), xf), yf), zf);
 
-    Func outTiles;
-    outTiles(xi, yi, x, y) = interpolated(xi, yi, x, y, 0) / interpolated(xi, yi, x, y, 1);
+    // Normalize
+    Func smoothed;
+    smoothed(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
-    // Remove tiles to get the result
-    Func smoothed("smoothed");
-    smoothed(x, y) = outTiles(x%s_sigma, y%s_sigma, x/s_sigma, y/s_sigma);
-    // smoothed(x, y) = clamped(x, y);
-    
-    #if 0
-    // Var tx("threadidx"), ty("threadidy"), 
-    //     bx("blockidx"), by("blockidy");
-    
-    // Var bxi, byi, txi, tyi;
-    // 
-    // clamped.root();
-    // grid.root()
-    //     .split(x, bx, tx, 8)
-    //     .split(y, by, ty, 8);
-    // grid.update().root()
-    //     // .split(x, bx, bxi, 1)
-    //     // .split(y, by, byi, 1)
-    //     // .split(i, tx, txi, 1)
-    //     // .split(j, ty, tyi, 1);
-    //     .split(x, bx, x, 1)
-    //     .split(y, by, y, 1)
-    //     .split(i, tx, i, 1)
-    //     .split(j, ty, j, 1);
-    
+    // Use CPU
+    #if 1
     grid.root().parallel(z);
     grid.update().transpose(y, c).transpose(x, c).transpose(i, c).transpose(j, c).parallel(y);
     blurx.root().parallel(z).vectorize(x, 4);
     blury.root().parallel(z).vectorize(x, 4);
     blurz.root().parallel(z).vectorize(x, 4);
-    smoothed.root().parallel(y); 
-    #else
+    smoothed.root().parallel(y).vectorize(x, 4); 
+#else
+
     Var tx("threadidx"), ty("threadidy"), 
         bx("blockidx"), by("blockidy");
     
     Var bxi, byi, txi, tyi;
-    
-    grid.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
+    Var gridz = grid.arg(2);
+    grid.transpose(y, gridz).transpose(x, gridz).transpose(y, c).transpose(x, c)
         .root()
         .split(x, bx, tx, 16)
         .split(y, by, ty, 16)
@@ -159,19 +137,21 @@ int main(int argc, char **argv) {
     smoothed.compileToFile("bilateral_grid");
 
     // Compared to Sylvain Paris' implementation from his webpage (on
-    // which this is based), for filter params 8 0.1, on a 4 megapixel
+    // which this is based), for filter params s_sigma 0.1, on a 4 megapixel
     // input, on a four core x86 (2 socket core2 mac pro)
     // Filter s_sigma: 2      4       8       16      32
     // Paris (ms):     5350   1345    472     245     184
-    // Us (ms):        425    150     80.8    66.6    68.7
-    // Speedup:        12.5   9.0     5.9     3.7     2.7
+    // Us (ms):        383    142     77      62      65
+    // Speedup:        14     9.5     6.1     3.9     2.8
 
     // Our schedule and inlining are roughly the same as his, so the
     // gain is all down to vectorizing and parallelizing. In general
     // for larger blurs our win shrinks to roughly the number of
-    // cores, as the stages we don't vectorize dominate.  For smaller
-    // blurs, our win grows, because the stages that we vectorize take
-    // up all the time.
+    // cores, as the stages we don't vectorize as well dominate (we
+    // don't vectorize them well because they do gathers and scatters,
+    // which don't work well on x86).  For smaller blurs, our win
+    // grows, because the stages that we vectorize take up all the
+    // time.
     
 
     return 0;

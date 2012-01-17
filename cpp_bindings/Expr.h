@@ -107,27 +107,27 @@ namespace FImage {
     Expr floor(const Expr &);
 
     // Make a debug node
-    Expr Debug(Expr, const std::string &prefix, const std::vector<Expr> &args);
-    Expr Debug(Expr, const std::string &prefix);
-    Expr Debug(Expr, const std::string &prefix, Expr a);
-    Expr Debug(Expr, const std::string &prefix, Expr a, Expr b);
-    Expr Debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c);
-    Expr Debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d);
-    Expr Debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d, Expr e);
+    Expr debug(Expr, const std::string &prefix, const std::vector<Expr> &args);
+    Expr debug(Expr, const std::string &prefix);
+    Expr debug(Expr, const std::string &prefix, Expr a);
+    Expr debug(Expr, const std::string &prefix, Expr a, Expr b);
+    Expr debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c);
+    Expr debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d);
+    Expr debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d, Expr e);
 
     // Make a ternary operator
-    Expr Select(const Expr &, const Expr &, const Expr &);
+    Expr select(const Expr &, const Expr &, const Expr &);
 
-    Expr Max(const Expr &, const Expr &);
-    Expr Min(const Expr &, const Expr &);
-    Expr Clamp(const Expr &, const Expr &, const Expr &);
+    Expr max(const Expr &, const Expr &);
+    Expr min(const Expr &, const Expr &);
+    Expr clamp(const Expr &, const Expr &, const Expr &);
 
     // Make a cast node
-    Expr Cast(const Type &, const Expr &);
+    Expr cast(const Type &, const Expr &);
 
     template<typename T>
-    Expr Cast(const Expr &e) {
-        return Cast(TypeOf<T>(), e);
+    Expr cast(const Expr &e) {
+        return cast(TypeOf<T>(), e);
     }
 
 }

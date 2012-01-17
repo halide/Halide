@@ -6,19 +6,8 @@ template<typename T>
 bool test() {
     Var x;
     Func f;
-    f(x) = Cast<T>(x) % ((T)2);
+    f(x) = cast<T>(x) % ((T)2);
     
-    #if 0
-    if (use_gpu()) {
-        Var tidx("threadidx");
-        Var bidx("blockidx");
-        
-        f.split(x, bidx, tidx, 16);
-        f.parallel(bidx);
-        f.parallel(tidx);
-    }
-    #endif
-
     Image<T> im = f.realize(16);
 
     for (int i = 0; i < 16; i++) {
