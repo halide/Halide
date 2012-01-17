@@ -13,11 +13,7 @@ int main(int argc, char **argv) {
     f(x) = u;
     
     if (use_gpu()) {
-        Var tid("threadidx");
-        Var bid("blockidx");
-        f.split(x, bid, tid, 256);
-        f.parallel(bid);
-        f.parallel(tid);
+        f.cudaTile(x, 256);
     }
 
     u = 17.0f;

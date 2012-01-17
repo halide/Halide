@@ -3,7 +3,7 @@
 using namespace FImage;
 
 Expr u8(Expr a) {
-    return Cast<uint8_t>(a);
+    return cast<uint8_t>(a);
 }
 
 int main(int argc, char **argv) {
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
     Func f;
     Var x, y;
-    f(x, y) = Select(((input(x, y) > u8(10)) && (input(x, y) < u8(20))) ||
+    f(x, y) = select(((input(x, y) > u8(10)) && (input(x, y) < u8(20))) ||
                      ((input(x, y) > u8(40)) && (!(input(x, y) > u8(50)))), 
                      u8(255), u8(0));
 

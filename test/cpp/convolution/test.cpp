@@ -21,31 +21,20 @@ int main(int argc, char **argv) {
                             {1, 2, 1}};
     
     Func input("input");
-    input(x, y) = in(Clamp(x, 0, W), Clamp(y, 0, H));
+    input(x, y) = in(clamp(x, 0, W), clamp(y, 0, H));
 
     Func blur("blur");
     RVar i, j; 
     blur(x, y) += tent(i, j) * input(x + i - 1, y + j - 1);
 
     if (use_gpu()) {
-        Var tidx("threadidx");
-        Var bidx("blockidx");
-        Var tidy("threadidy");
-        Var bidy("blockidy");
-        
-        blur.split(x, bidx, tidx, 16);
-        blur.parallel(bidx);
-        blur.parallel(tidx);
-        blur.split(y, bidy, tidy, 16);
-        blur.parallel(bidy);
-        blur.parallel(tidy);
-        blur.transpose(bidx,tidy);
+        blur.cudaTile(x, y, 16, 16);
+    } else {
+        // Take this opportunity to test tiling reductions
+        Var xi, yi;
+        blur.tile(x, y, xi, yi, 6, 6);
+        blur.update().tile(x, y, xi, yi, 4, 4);
     }
-
-    // Take this opportunity to test tiling reductions
-    Var xi, yi;
-    blur.tile(x, y, xi, yi, 6, 6);
-    blur.update().tile(x, y, xi, yi, 4, 4);
 
     Image<uint16_t> out = blur.realize(W, H);
 

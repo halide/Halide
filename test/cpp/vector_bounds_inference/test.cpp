@@ -3,31 +3,17 @@
 
 using namespace FImage;
 
-double currentTime() {
-    timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
-}
-
 int main(int argc, char **argv) {
 
-    Func f, g, h; Var x, y;
-    
+    Func f, g, h; 
+    Var x, y;
+   
     h(x) = x;
     g(x) = h(x-1) + h(x+1);
     f(x, y) = (g(x-1) + g(x+1)) + y;
 
-    Var xo, xi;
-    //f.split(x, xo, xi, 4);
-    //f.vectorize(xi);
-    h.root();
-    h.split(x, xo, xi, 4);
-    h.vectorize(xi);
-    g.root();
-    g.split(x, xo, xi, 4);
-    g.vectorize(xi);
-
-    //f.trace();
+    h.root().vectorize(x, 4);
+    g.root().vectorize(x, 4);
 
     Image<int> out = f.realize(36, 2);
 

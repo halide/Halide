@@ -46,12 +46,12 @@ Func distReg_p2(Func phi){
   Expr phi_y = dy(phi);
   Expr s = sqrt(phi_x * phi_x + phi_y * phi_y);
 
-  Expr ps = Select(s <= 1.0f,
+  Expr ps = select(s <= 1.0f,
                    sin(2.0f * (float)M_PI * s / (2.0f * (float)M_PI)),
                    s - 1.0f);
 
-  Expr n = Select(ps == 0.0f, 1.0f, ps);
-  Expr d = Select(s == 0.0f, 1.0f, s);  
+  Expr n = select(ps == 0.0f, 1.0f, ps);
+  Expr d = select(s == 0.0f, 1.0f, s);  
 
   Func proxy_x;
   proxy_x = (n / d) * phi_x - phi_x;
@@ -70,7 +70,7 @@ Func Dirac(Func input,
 	   const float sigma){
 
   Func out;
-  out(x,y) = Select((input(x,y) <= sigma) && (input(x,y) >= -sigma),
+  out(x,y) = select((input(x,y) <= sigma) && (input(x,y) >= -sigma),
 		    1.0f / (2.0f * sigma) * (1.0f + cos((float)M_PI * input(x,y) / sigma)),
 		    0.0f);
 
@@ -128,7 +128,7 @@ Func blur(Func image, const float sigma) {
   int radius = int(3*sigma + 1.0f);
   RVar i(-radius, 2*radius+1);
   Func normalized("normalized");
-  normalized(x) = gaussian(x) / Sum(gaussian(i)); // Uses an inline reduction
+  normalized(x) = gaussian(x) / sum(gaussian(i)); // Uses an inline reduction
 
   // Convolve the input using two reductions
   Func blurx("blurx"), blury("blury");
@@ -166,11 +166,11 @@ int main(int argc, char **argv) {
   Image<uint8_t> im = load<uint8_t>(argv[1]); 
   
   Func gray;
-  gray(x, y) = Max(Cast<float>(im(x, y, 0)), Max(Cast<float>(im(x, y, 1)), Cast<float>(im(x, y, 2))));
+  gray(x, y) = max(cast<float>(im(x, y, 0)), max(cast<float>(im(x, y, 1)), cast<float>(im(x, y, 2))));
 
   Func clamped;
-  clamped(x, y) = gray(Clamp(x, 0, im.width()),
-                       Clamp(y, 0, im.height()));
+  clamped(x, y) = gray(clamp(x, 0, im.width()),
+                       clamp(y, 0, im.height()));
     
   // ###### Compute the G function ######
   // Some simple computation, cache the result because never changes later
@@ -192,13 +192,13 @@ int main(int argc, char **argv) {
   // Create a big rectangle, store it in an array
   
   Func phi_init("phi_init");
-  phi_init(x,y) = Select((x >= selectPadding)
+  phi_init(x,y) = select((x >= selectPadding)
 			 && (x < im.width() - selectPadding)
 			 && (y >= selectPadding)
 			 && (y < im.height() - selectPadding),
 			 -2.0f, 2.0f);
   Image<float> phi_buf = phi_init.realize(im.width(), im.height());
-  Image<float> phi_buf2 = phi_init.realize(im.width(), im.height());
+  Image<float> phi_buf2(im.width(), im.height());
 
   // ###### Define the outer loop ######
   // Read from the buffer, compute the result, possibly create code for intermediate images
@@ -208,14 +208,14 @@ int main(int argc, char **argv) {
   UniformImage phi_input(Float(32), 2);
 
   Func phi_clamped("phi_clamped");
-  phi_clamped(x,y) = phi_input(Clamp(x,0,phi_buf.width()-1),
-                               Clamp(y,0,phi_buf.height()-1));
+  phi_clamped(x,y) = phi_input(clamp(x,0,phi_buf.width()-1),
+                               clamp(y,0,phi_buf.height()-1));
   
   // g stays fixed, so we can skip the uniform image and have it
   // always read straight from the buffer
   Func g_clamped("g_clamped");
-  g_clamped(x, y) = g_buf(Clamp(x, 0, g_buf.width()-1),
-                          Clamp(y, 0, g_buf.height()-1));
+  g_clamped(x, y) = g_buf(clamp(x, 0, g_buf.width()-1),
+                          clamp(y, 0, g_buf.height()-1));
     
   Func phi_new("phi_new");
   phi_new = drlse_edge(phi_clamped,g_clamped,lambda,mu,alpha,epsilon,timestep,iter_inner);
@@ -249,9 +249,7 @@ int main(int argc, char **argv) {
 
     phi_input = phi_buf;
     phi_new.realize(phi_buf2);
-
-    phi_input = phi_buf2;
-    phi_new.realize(phi_buf);
+    std::swap(phi_buf, phi_buf2);
   }
     
   // ###### Save the result ######
@@ -259,7 +257,7 @@ int main(int argc, char **argv) {
   Func masked;
   Var c;
   // Dim the unselected areas for visualization
-  masked(x, y, c) = Select(phi_buf(x, y) < 0.0f, im(x, y, c), im(x, y, c)/4);
+  masked(x, y, c) = select(phi_buf(x, y) < 0.0f, im(x, y, c), im(x, y, c)/4);
   Image<uint8_t> out = masked.realize(im.width(), im.height(), 3);
   save(out, argv[2]);
 }

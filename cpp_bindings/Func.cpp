@@ -84,7 +84,7 @@ namespace FImage {
         void fixArgs() {
             for (size_t i = 0; i < args.size(); i++) {
                 if (args[i].type() != Int(32)) {
-                    args[i] = Cast<int>(args[i]);
+                    args[i] = cast<int>(args[i]);
                 }
             }
         }
@@ -195,7 +195,7 @@ namespace FImage {
             gather_args[i] = contents->args[i].isVar() ? contents->args[i] : Var();
         }
         if (!contents->f.rhs().isDefined()) {
-            Expr init = Cast(e.type(), 0);
+            Expr init = cast(e.type(), 0);
             init.addImplicitArgs(e.implicitArgs());
             contents->f.define(gather_args, init);
         }
@@ -208,7 +208,7 @@ namespace FImage {
             gather_args[i] = contents->args[i].isVar() ? contents->args[i] : Var();
         }
         if (!contents->f.rhs().isDefined()) {
-            Expr init = Cast(e.type(), 1);
+            Expr init = cast(e.type(), 1);
             init.addImplicitArgs(e.implicitArgs());
             contents->f.define(gather_args, init);
         }
@@ -413,10 +413,22 @@ namespace FImage {
         return 0;
     }
 
-    Func &Func::tile(const Var &x, const Var &y, const Var &xi, const Var &yi, const Expr &f1, const Expr &f2) {
+    Func &Func::tile(const Var &x, const Var &y, 
+                     const Var &xi, const Var &yi, 
+                     const Expr &f1, const Expr &f2) {
         split(x, x, xi, f1);
         split(y, y, yi, f2);
         transpose(x, yi);
+        return *this;
+    }
+
+    Func &Func::tile(const Var &x, const Var &y, 
+                     const Var &xo, const Var &yo,
+                     const Var &xi, const Var &yi, 
+                     const Expr &f1, const Expr &f2) {
+        split(x, xo, xi, f1);
+        split(y, yo, yi, f2);
+        transpose(xo, yi);
         return *this;
     }
 
@@ -489,6 +501,62 @@ namespace FImage {
     Func &Func::parallel(const Var &caller_var) {
         MLVal t = makeParallelTransform(name(), caller_var.name());
         contents->scheduleTransforms.push_back(t);
+        return *this;
+    }
+
+    Func &Func::rename(const Var &oldname, const Var &newname) {
+        Var dummy;
+        return split(oldname, newname, dummy, 1);
+    }
+
+    Func &Func::cuda(const Var &b, const Var &t) {
+        Var tidx("threadidx");
+        Var bidx("blockidx");
+        rename(b, bidx);
+        rename(t, tidx);
+        parallel(bidx);
+        parallel(tidx);
+        return *this;
+    }
+
+    Func &Func::cuda(const Var &bx, const Var &by, 
+                     const Var &tx, const Var &ty) {
+        Var tidx("threadidx");
+        Var bidx("blockidx");
+        Var tidy("threadidy");
+        Var bidy("blockidy");
+        rename(bx, bidx);
+        rename(tx, tidx);
+        rename(by, bidy);
+        rename(ty, tidy);
+        parallel(bidx);
+        parallel(bidy);
+        parallel(tidx);
+        parallel(tidy);
+        transpose(bidx, tidy);
+        return *this;
+    }
+
+
+    Func &Func::cudaTile(const Var &x, int xFactor) {
+        Var tidx("threadidx");
+        Var bidx("blockidx");
+        split(x, bidx, tidx, xFactor);
+        parallel(bidx);
+        parallel(tidx);
+        return *this;
+    }
+
+    Func &Func::cudaTile(const Var &x, const Var &y, int xFactor, int yFactor) {
+        Var tidx("threadidx");
+        Var bidx("blockidx");
+        Var tidy("threadidy");
+        Var bidy("blockidy");
+        tile(x, y, bidx, bidy, tidx, tidy, xFactor, yFactor);
+        parallel(bidx);
+        parallel(tidx);
+        parallel(bidy);
+        parallel(tidy);
         return *this;
     }
 
