@@ -36,6 +36,7 @@ namespace Halide {
     
     ML_FUNC2(makeVectorizeTransform);
     ML_FUNC2(makeUnrollTransform);
+    ML_FUNC4(makeBoundTransform);
     ML_FUNC5(makeSplitTransform);
     ML_FUNC3(makeTransposeTransform);
     ML_FUNC2(makeChunkTransform);
@@ -133,8 +134,9 @@ namespace Halide {
         
         /* A list of schedule transforms to apply when realizing. These should be
            partially applied ML functions that map a schedule to a schedule. */
-        std::vector<MLVal> scheduleTransforms;
-        
+        std::vector<MLVal> scheduleTransforms;        
+        MLVal applyScheduleTransforms(MLVal);
+
         // The compiled form of this function
         mutable void (*functionPtr)(void *);
         mutable void (*copyToHost)(buffer_t *);
@@ -591,6 +593,52 @@ namespace Halide {
     }
 
 
+    MLVal Func::Contents::applyScheduleTransforms(MLVal guru) {
+        // If we're not inline, obey any tuple shape scheduling hints
+        if (scheduleTransforms.size() && rhs.isDefined() && rhs.shape().size()) {
+            /*
+            printf("%s has tuple shape: ", name.c_str());
+            for (size_t i = 0; i < rhs.shape().size(); i++) {
+                printf("%d ", rhs.shape()[i]);
+            }
+            printf("\n");
+            */
+
+            for (size_t i = 0; i < rhs.shape().size(); i++) {
+                assert(args[args.size()-1-i].isVar());
+                // The tuple var is the first implicit var (TODO: this is very very ugly)
+                Var t("iv0");
+                // Pull all the vars inside the tuple var outside
+                bool inside = false;
+                for (size_t j = args.size(); j > 0; j--) {
+                    assert(args[j-1].isVar());
+                    Var x = args[j-1].vars()[0];
+                    if (x.name() == t.name()) {
+                        inside = true;
+                        continue;
+                    }
+                    if (inside) {
+                        //printf("Pulling %s outside of %s\n", x.name().c_str(), t.name().c_str());
+                        MLVal trans = makeTransposeTransform(name, x.name(), t.name());
+                        guru = trans(guru);
+                    }
+                }
+                assert(inside);
+
+                MLVal trans = makeBoundTransform(name, t.name(), Expr(0).node(), Expr(rhs.shape()[i]).node());
+                guru = trans(guru);
+                trans = makeUnrollTransform(name, t.name());
+                guru = trans(guru);
+            }
+        }
+        for (size_t i = 0; i < scheduleTransforms.size(); i++) {
+            guru = scheduleTransforms[i](guru);
+        }
+        if (update) {
+            guru = update->contents->applyScheduleTransforms(guru);
+        }
+        return guru;
+    }
 
     // Returns a stmt, args pair
     void Func::lower(MLVal &stmt, MLVal &fargs) {
@@ -604,30 +652,18 @@ namespace Halide {
 
         MLVal guru = makeNoviceGuru();
 
-        //printf("Patching guru...\n");
-        for (size_t i = 0; i < contents->scheduleTransforms.size(); i++) {
-            guru = contents->scheduleTransforms[i](guru);
-        }
-        if (contents->update) {
-            for (size_t i = 0; i < update().contents->scheduleTransforms.size(); i++) {
-                guru = update().contents->scheduleTransforms[i](guru);
-            }
-        }
+        // Output is always scheduled root
+        root();
+
+        guru = contents->applyScheduleTransforms(guru);
+
         for (size_t i = 0; i < rhs().funcs().size(); i++) {
             Func f = rhs().funcs()[i];
             // Don't consider recursive dependencies for the
             // purpose of applying schedule transformations. We
             // already did that above.
             if (f == *this) continue;
-            for (size_t j = 0; j < f.scheduleTransforms().size(); j++) {
-                MLVal t = f.scheduleTransforms()[j];
-                guru = t(guru);
-            }
-            if (f.contents->update) {
-                for (size_t i = 0; i < f.update().contents->scheduleTransforms.size(); i++) {
-                    guru = f.update().contents->scheduleTransforms[i](guru);
-                }
-            }
+            guru = f.contents->applyScheduleTransforms(guru);
         }
 
         //saveGuruToFile(guru, name() + ".guru");

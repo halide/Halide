@@ -85,6 +85,9 @@ namespace Halide {
         
         // The number of arguments that remain implicit
         int implicitArgs;
+
+        // tuple shape
+        std::vector<int> shape;
     }; 
     
 
@@ -154,6 +157,10 @@ namespace Halide {
         return contents->implicitArgs;
     }
 
+    std::vector<int> &Expr::shape() const {
+        return contents->shape;
+    }
+    
     void Expr::addImplicitArgs(int a) {
         contents->implicitArgs += a;
     }
@@ -206,6 +213,14 @@ namespace Halide {
         unify(uniforms, c.uniforms());
         unify(uniformImages, c.uniformImages());
         if (c.implicitArgs() > implicitArgs) implicitArgs = c.implicitArgs();
+        
+        for (size_t i = 0; i < c.shape().size(); i++) {
+            if (i < shape.size()) {
+                assert(shape[i] == c.shape()[i]);                
+            } else {
+                shape.push_back(c.shape()[i]);
+            }
+        }
     }
 
     void Expr::child(const Expr &c) {
@@ -468,7 +483,9 @@ namespace Halide {
         // Add this function call to the calls list
         funcs.push_back(f.f());  
 
-        // Reach through the call to extract buffer dependencies and function dependencies (but not free vars)
+        // Reach through the call to extract buffer dependencies and
+        // function dependencies (but not free vars, tuple shape,
+        // implicit args)
         if (f.f().rhs().isDefined()) {
             unify(images, f.f().rhs().images());
             unify(funcs, f.f().rhs().funcs());

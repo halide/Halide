@@ -60,14 +60,16 @@ namespace Halide {
             }
 
             if (idx == 0) body = e;
-            else body = select(tupleIndex == idx, e, body);
+            else body = select((tupleIndex % (int)contents.size()) == idx, e, body);
             idx++;
         }
         
         definitionArgs.push_back(tupleIndex);
         Func anon;
         anon(definitionArgs) = body;
-        return anon(callArgs);
+        Expr result = anon(callArgs);
+        result.shape().push_back((int)contents.size());
+        return result;
     }
     
     Tuple operator,(const Expr &a, const Expr &b) {
