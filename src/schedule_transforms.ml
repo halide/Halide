@@ -443,6 +443,20 @@ let unroll_schedule (func: string) (var: string) (guru: scheduling_guru) =
     | x -> x
   in mutate_sched_list_guru func (List.map mutate) serialized guru
 
+(* Mark explicit bounds on a var *)
+let bound_schedule (func: string) (var: string) (min: expr) (size: expr) (guru: scheduling_guru) =
+  let serialized = Printf.sprintf "bound %s %s %s %s" func var (string_of_expr min) (string_of_expr size) in
+  let mutate = function
+    (* TODO: old_min and old_size will be dynamically evaluated to the
+       area used. We should inject a runtime assert that these fall
+       within min and size (the area we're telling it to compute) *)
+    | Serial (v, old_min, old_size) when v = var ->
+        Serial (v, min, size) 
+    | Parallel (v, old_min, old_size) when v = var ->
+        Parallel (v, min, size)
+    | x -> x
+  in mutate_sched_list_guru func (List.map mutate) serialized guru
+
 (* Unroll a for *)
 let parallel_schedule (func: string) (var: string) (guru: scheduling_guru) =
   let serialized = Printf.sprintf "parallel %s %s" func var in

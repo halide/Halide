@@ -192,6 +192,7 @@ let _ =
      in the specified way. *)
   Callback.register "makeVectorizeTransform" (fun func var -> vectorize_schedule func var);
   Callback.register "makeUnrollTransform" (fun func var -> unroll_schedule func var);
+  Callback.register "makeBoundTransform" (fun func var min size -> bound_schedule func var min size);
   Callback.register "makeSplitTransform" (fun func var outer inner n -> split_schedule func var outer inner n);
   Callback.register "makeTransposeTransform" (fun func var1 var2 -> transpose_schedule func var1 var2);
   Callback.register "makeChunkTransform" (fun func var -> chunk_schedule func var);

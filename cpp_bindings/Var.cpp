@@ -23,7 +23,6 @@ namespace Halide {
         contents(new Contents(min, size, name)) {}
     
     void RVar::bound(const Expr &m, const Expr &size) {
-        printf("Bounding %s\n", name().c_str());
         if (contents->min.isDefined()) {
             contents->min = max(contents->min, m);
         } else {
