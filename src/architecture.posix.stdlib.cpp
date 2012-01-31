@@ -11,15 +11,18 @@ extern "C" {
 
 #define PTR_OFFSET(ptr,offset)	((void*)((char*)(ptr) + (offset)))
 
-buffer_t* __posix_force_include_buffer_t;
+// The functions below are all weak so that you can link multiple
+// halide modules without name conflicts
+#define WEAK __attribute__((weak))
 
-// This only gets defined if it's not already defined by an including module, e.g. PTX
+// This only gets defined if it's not already defined by an including module, e.g. PTX.
+// This also serves to forcibly include the buffer_t struct definition
 #ifndef _COPY_TO_HOST
 #define _COPY_TO_HOST
-void __copy_to_host(buffer_t* buf) { /* NOP */ }
+WEAK void __copy_to_host(buffer_t* buf) { /* NOP */ }
 #endif //_COPY_TO_HOST
 
-void *fast_malloc(size_t x) {
+WEAK void *fast_malloc(size_t x) {
     void *orig = malloc(x+16);
     // Walk either 8 or 16 bytes forward
     void *ptr = (void *)((((size_t)orig + 16) >> 4) << 4);
@@ -27,11 +30,11 @@ void *fast_malloc(size_t x) {
     return ptr;
 }
 
-void fast_free(void *ptr) {
+WEAK void fast_free(void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
-void *safe_malloc(size_t x) {
+WEAK void *safe_malloc(size_t x) {
     void *mem;
     x = ((x + 4095)/4096) * 4096;
     posix_memalign(&mem, 4096, x + 4096 * 3);
@@ -46,7 +49,7 @@ void *safe_malloc(size_t x) {
     return PTR_OFFSET(mem, 4096);
 }
 
-void safe_free(void *ptr) {
+WEAK void safe_free(void *ptr) {
     void *start = PTR_OFFSET(ptr, -4096);
     mprotect(start, 4096, PROT_READ | PROT_WRITE | PROT_EXEC);
     void *end = ((void **)start)[0];
@@ -62,9 +65,11 @@ struct work {
     int active_workers;
 };
 
+// The work queue and thread count are static, which means each halide
+// function gets a unique one. Is this a good idea?
 #define MAX_JOBS 65536
 #define MAX_THREADS 64
-struct {
+static struct {
     work jobs[MAX_JOBS];
     int head;
     int tail;
@@ -79,9 +84,9 @@ struct worker_arg {
     work *job;
 };
 
-int threads;
+static int threads;
 
-void *worker(void *void_arg) {
+WEAK void *worker(void *void_arg) {
     worker_arg *arg = (worker_arg *)void_arg;
     while (1) {
         //fprintf(stderr, "About to lock mutex\n");
@@ -145,7 +150,7 @@ void *worker(void *void_arg) {
     }
 }
 
-void do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {
+WEAK void do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {
     static bool thread_pool_initialized = false;
     if (!thread_pool_initialized) {
         pthread_mutex_init(&work_queue.mutex, NULL);
@@ -189,45 +194,47 @@ void do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure) 
     worker((void *)(&arg));
 }
 
-float sqrt_f32(float x) {
+WEAK float sqrt_f32(float x) {
     return sqrtf(x);
 }
 
-float sin_f32(float x) {
+WEAK float sin_f32(float x) {
     return sinf(x);
 }
 
-float cos_f32(float x) {
+WEAK float cos_f32(float x) {
     return cosf(x);
 }
 
-float exp_f32(float x) {
+WEAK float exp_f32(float x) {
     return expf(x);
 }
 
-float log_f32(float x) {
+WEAK float log_f32(float x) {
     return logf(x);
 }
 
-float pow_f32(float x, float y) {
+WEAK float pow_f32(float x, float y) {
     return powf(x, y);
 }
 
-float floor_f32(float x) {
+WEAK float floor_f32(float x) {
     return floorf(x);
 }
 
-float ceil_f32(float x) {
+WEAK float ceil_f32(float x) {
     return ceilf(x);
 }
 
-float round_f32(float x) {
+WEAK float round_f32(float x) {
     return roundf(x);
 }
 
 #include <sys/time.h>
 
-int currentTime() {
+#ifndef current_time_defined
+#define current_time_defined
+WEAK int currentTime() {
     static bool initialized = false;
     static timeval start;
     if (!initialized) {
@@ -242,5 +249,6 @@ int currentTime() {
             (now.tv_usec - start.tv_usec)/1000;
     }
 }
+#endif
 
 }
