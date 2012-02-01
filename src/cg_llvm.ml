@@ -678,6 +678,7 @@ let rec make_cg_context c m b sym_table arch_state =
     let ll_args = List.map cg_expr args in
 
     let global_fmt = define_global "debug_fmt" ll_fmt m in
+    set_linkage Llvm.Linkage.Internal global_fmt;
     let global_fmt = build_pointercast global_fmt (pointer_type (i8_type c)) "" b in
 
     (*Printf.printf "cg_debug: %s %s %s\n" (string_of_expr e) (prefix^fmt) (String.concat ", " (List.map string_of_expr args));
