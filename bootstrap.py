@@ -19,7 +19,7 @@ def status(s):
 
 def check_llvm():
     try:
-        llvm_path = './llvm/Debug+Asserts'
+        llvm_path = './llvm/Release+Asserts'
         assert isfile(llvm_path+'/lib/ocaml/llvm.cma') # is llvm.cma there?
         check_output([llvm_path+'/bin/llvm-config', '--version']) # try calling llvm-config
         return True
@@ -72,7 +72,7 @@ if check_llvm():
     status('llvm appears to be present -- skipping')
 else:
     chdir('llvm')
-    llvm_cfg = ['--enable-assertions', '--enable-targets=all', '--enable-docs', '--enable-doxygen']
+    llvm_cfg = ['--enable-assertions', '--enable-optimized', '--enable-targets=all']#, '--enable-docs', '--enable-doxygen']
     cfg_str = ' '.join(llvm_cfg)
     status('''Configuring llvm:
     %s''' % cfg_str)
@@ -87,5 +87,5 @@ else:
 
 # Test building 
 chdir('src')
-status('Test: building fimage.cma')
-check_call('ocamlbuild fimage.cma'.split(' '))
+status('Test: building halide.cmxa')
+check_call('ocamlbuild halide.cmxa'.split(' '))
