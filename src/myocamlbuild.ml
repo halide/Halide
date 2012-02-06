@@ -122,3 +122,42 @@ flag ["c"; "compile"; "llsupport_cflags"]
      A"-ccopt"; A include_llvm;
      A"-ccopt"; A"-D__STDC_LIMIT_MACROS";
      A"-ccopt"; A"-D__STDC_CONSTANT_MACROS"]);;
+
+rule "Generate initial modules"
+  ~prod: "architecture.%(arch).initmod.c"
+  ~deps: ["architecture.%(arch).stdlib.cpp";
+          "architecture.posix.stdlib.cpp";
+          "architecture.%(arch).stdlib.ll";
+          "buffer.h";
+          "bitcode2cpp.py"]
+  begin fun env build ->
+    let llstub = env "architecture.%(arch).stdlib.ll" in
+    let llstubs =
+      if (env "%(arch)") = "ptx" then
+        let x86_ll = "architecture.x86.stdlib.ll" in
+        let x86_cpp = "architecture.x86.stdlib.cpp" in
+        ignore (build [[x86_ll; x86_cpp]]);
+        [llstub; x86_ll]
+      else [llstub]
+    in
+    let c =
+    Cmd(S([
+      llvm_tool "clang"; A"-emit-llvm"; A"-S"; P(env "architecture.%(arch).stdlib.cpp"); A"-o"; A"-";
+      Sh " | ";
+      A"grep"; A"-v"; A"^target triple";
+      Sh " | ";
+      A"grep"; A"-v"; A"^target datalayout";
+      Sh " | ";
+      A"grep"; A"-v"; A"^; ModuleID";
+      Sh " | "] @
+     [A"cat"; A"-";] @ (List.map (fun s -> (P s)) llstubs) @
+     [Sh " | ";
+      llvm_tool "llvm-as"; A"-"; A"-o"; A"-";
+      Sh " | ";
+      A"python"; A"bitcode2cpp.py"; P(env "%(arch)");
+      Sh " > "; P(env "architecture.%(arch).initmod.c")
+    ]))
+    in
+    (* failwith (Command.to_string c); *)
+    c
+  end;;
