@@ -1,3 +1,8 @@
+LLVM_ROOT=`pwd`/../llvm
+LLVM_PREFIX=${LLVM_ROOT}/Release+Asserts
+LLVM_PATH=${LLVM_PREFIX}/bin
+CLANG=${LLVM_PATH}/clang
+LLVM_AS=${LLVM_PATH}/llvm-as
 
 for arch in ptx ptx_dev arm x86; do 
 
@@ -9,12 +14,12 @@ for arch in ptx ptx_dev arm x86; do
       LL_STUB="$LL_STUB architecture.x86.stdlib.ll"
     fi
     
-    clang -emit-llvm -S $C_STUB -o -           \
+    $CLANG -emit-llvm -S $C_STUB -o -          \
         | grep -v "^target triple"             \
         | grep -v "^target datalayout"         \
         | grep -v "^; ModuleID"                \
         | cat - $LL_STUB                       \
-        | llvm-as - -o -                       \
+        | $LLVM_AS - -o -                      \
         | python bitcode2cpp.py ${arch}        \
         > $RESULT
 
