@@ -4,57 +4,16 @@ from __future__ import with_statement
 import os
 import os.path
 import json
-
-try:
-    from subprocess import check_call,check_output,CalledProcessError
-except:
-    import subprocess
-    def check_output(*popenargs, **kwargs):
-        r"""Run command with arguments and return its output as a byte string.
-    
-        Backported from Python 2.7 as it's implemented as pure python on stdlib.
-    
-        >>> check_output(['/usr/bin/python', '--version'])
-        Python 2.6.2
-        """
-        process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)
-        output, unused_err = process.communicate()
-        retcode = process.poll()
-        if retcode:
-            cmd = kwargs.get("args")
-            if cmd is None:
-                cmd = popenargs[0]
-            error = subprocess.CalledProcessError(retcode, cmd)
-            error.output = output
-            raise error
-        return output
-    check_call=subprocess.check_call
-    CalledProcessError=subprocess.CalledProcessError
+from pbs import Command, make, which, ocamlbuild
+import sys
 
 # TODO: make pch: `g++ -x c++-header -I ../ImageStack/src test_plugin.h`
 EPSILON = 0.001
 
 verbose = False
-dry_run = False
-
-if dry_run:
-    check_call = lambda c: status('run', ' '.join(c))
-    check_output = lambda c: status('run', ' '.join(c))
 
 def status(name, s):
     print '%s: %s' % (name, s)
-
-def run(cmd):
-    global verbose
-    if verbose:
-        print '------------------------------------------------------------'
-        print (' '.join(cmd))+':'
-        print '------------------------------------------------------------'
-        #print check_call(cmd)
-    res = check_output(cmd)
-    if verbose:
-        print res
-    return res
 
 def remove(filename):
     try: os.remove(filename)
@@ -62,18 +21,16 @@ def remove(filename):
 
 proj_root = os.path.join('..', '..')
 llvm_path = os.path.join(proj_root, 'llvm', 'Release+Asserts', 'bin')
-llc_exe = os.path.join(llvm_path, 'llc')
-clang_exe = os.path.join(llvm_path, 'clang++')
-imagestack_path = os.path.join(proj_root, 'ImageStack', 'bin')
-imagestack_exe = os.path.join(imagestack_path, 'ImageStack')
-cxx_exe = 'g++-4.6'
+llc = Command(os.path.join(llvm_path, 'llc'))
+clang = Command(os.path.join(llvm_path, 'clang++'))
+imagestack = Command(os.path.join(proj_root, 'ImageStack', 'bin', 'ImageStack'))
+cxx = Command(which('g++-4.6'))
 
 def test_cpp(name):
 
-    status(name, "Building Halide.a")
+    # status(name, "Building Halide.a")
     # Make sure Halide.a is built
-    cmd = "make -C ../cpp_bindings/ Halide.a"
-    run(cmd.split(' '))
+    make('-C', '../cpp_bindings/', 'Halide.a')
 
     curdir = os.getcwd()
 
@@ -82,6 +39,7 @@ def test_cpp(name):
 
     srcfile = "test.cpp"
     logfile = "log.txt"
+    errfile = "err.txt"
     
     # Clean up old stuff
     remove("generated.o")
@@ -89,35 +47,35 @@ def test_cpp(name):
     remove("passes.txt")
     remove("a.out")
     remove(logfile)
+    remove(errfile)
+    
+    # Threading these through as file handles shared by all PBS tasks makes
+    # sure each task appends to the main logs, and flushes on exception.
+    with open(logfile, "wt") as logfile:
+        with open(errfile, "wt") as errfile:
+            # status(name, "Compiling %s" % srcfile)
+            compile_cmd = ["-std=c++0x", 
+                           "-I../../../cpp_bindings",
+                           "-Wno-format",
+                           srcfile,                   
+                           "../../../cpp_bindings/Halide.a", 
+                           "-ldl", "-lpthread"]
 
-    status(name, "Compiling %s" % srcfile)
-    compile_cmd = [cxx_exe,
-                   "-std=c++0x", 
-                   "-I../../../cpp_bindings",
-                   "-Wno-format",
-                   srcfile,                   
-                   "../../../cpp_bindings/Halide.a", 
-                   "-ldl", "-lpthread"]
+            if os.path.exists("/usr/local/cuda"):
+                compile_cmd = compile_cmd + ["-L/usr/local/cuda/lib", "-lcuda"]
 
-    if os.path.exists("/usr/local/cuda"):
-        compile_cmd = compile_cmd + ["-L/usr/local/cuda/lib", "-lcuda"]
+            # status(name, " ".join(compile_cmd))
+            cxx(compile_cmd, _out=logfile, _err=errfile)
 
-    status(name, " ".join(compile_cmd))
-    run(compile_cmd)
-
-    # Run the test
-    try:
-        status(name, "Running test")
-        out = run(["./a.out"])
-        print "."
-    except CalledProcessError:
-        print "%s failed!" % name
-        if verbose:
-            print "Output:\n%s" % out
-    finally:
-        # Save the log
-        with open(logfile, "w") as f:
-            f.write(out)
+            # Run the test
+            try:
+                # status(name, "Running test")
+                tester = Command("./a.out")
+                tester(_out=logfile, _err=errfile)
+                sys.stdout.write(".")
+                sys.stdout.flush()
+            except CalledProcessError:
+                print "%s failed!" % name
 
     # Pop back up
     os.chdir(curdir)
@@ -125,7 +83,7 @@ def test_cpp(name):
 def test(name):
     if name.startswith('cpp/'): return test_cpp(name)
 
-    status(name, 'Building bitcode')
+    # status(name, 'Building bitcode')
 
     # Set up filenames
     cfgfile = "%s.json" % name
@@ -137,13 +95,13 @@ def test(name):
     outfile = "%s.png" % name
     tmpfile = "%s.tmp" % name
     logfile = "%s.log" % name
+    errfile = "%s.err" % name
     timefile = "%s.time" % name
 
     # Build the ocaml test
     target = '%s/%s.byte' % (name, name)
-    cmd = "ocamlbuild -no-links %s" % target
-    run(cmd.split(' '))
-    
+    cmd = "-no-links %s" % target
+    ocamlbuild(cmd.split(' '))
     
     # Dive in
     os.chdir(name)
@@ -154,15 +112,17 @@ def test(name):
     remove(sofile)
     remove(outfile)
     remove(logfile)
+    remove(errfile)
     remove(timefile)
-
+    
     # Codegen the bitcode
-    run("../_build/%s" % target)
+    runner = Command("../_build/%s" % target)
+    runner()
 
     # Compile the plugin
-    status(name, 'Building plugin')
+    # status(name, 'Building plugin')
     # Codegen the bitcode
-    run([llc_exe, "-O3", "-disable-cfi", bcfile])
+    llc("-O3", "-disable-cfi", bcfile)
     # Load plugin info from generated json
     opts = json.load(open(cfgfile))
     # TODO: move helpstr, num_popped into externs imported straight from the LLVM module?
@@ -171,7 +131,6 @@ def test(name):
     opts['namestr'] = 'test_'+name
     # Compile the thing
     cmd = [
-        cxx_exe,
         "-O3",
         "-Xlinker", "-dylib", "-Xlinker", "-undefined", "-Xlinker", "dynamic_lookup",
         "-DCLASSNAME=%(classname)s" % opts,
@@ -183,28 +142,23 @@ def test(name):
         "-I../../ImageStack/src",
         "-o", sofile
     ]
-    run(cmd)
+    cxx(cmd)
 
     # Run the plugin
-    status(name, 'Running plugin')
+    # status(name, 'Running plugin')
     cmd = [
-        imagestack_exe,
         '-plugin', sofile,
     ]
     cmd = cmd + opts['before_run'] + ['-test_%s' % name] + opts['args'] + ['-save', outfile] + ['-save', tmpfile]
     cmd = cmd + opts['validation']
-    out = run(cmd)
-
-    # TODO: change this to actually redirect stdout, stderr to .log and .err while running
-    # Save stdout to <name>.log
-    with open(logfile, "w") as f:
-        f.write(out)
+    out = imagestack(cmd, _out=logfile, _err=errfile)
 
     # Expect result as float in last line of output
     try:
         residual = float(out.splitlines()[-1])
         assert(residual < EPSILON)
-        print "."
+        sys.stdout.write(".")
+        sys.stdout.flush()
     except:
         print "%s failed!" % name
         if verbose:
@@ -225,10 +179,11 @@ def test(name):
     os.chdir("..")
 
 
-import sys
 if len(sys.argv) > 1:
     for x in sys.argv[1:]: test(x)
 else:
     test('brightness')
     test('cpp/vector_cast')
     test('cpp/vectorize')
+print '\n' + '-'*70
+print '\nOK'
