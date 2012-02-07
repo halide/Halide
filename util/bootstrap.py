@@ -4,20 +4,13 @@
 import subprocess
 from os import chdir
 from os.path import isfile
+import sys
+
+from util import status
 
 from pbs import Command, make, git
 
 import os
-
-status_str = '''
-%(bars)s
-%(status)s
-%(bars)s'''
-
-def status(s):
-    linelength = max([len(l) for l in s.splitlines()])
-    bars = ''.join(['-' for i in range(linelength)])
-    print status_str % {'bars': bars, 'status': s}
 
 def check_llvm():
     try:
