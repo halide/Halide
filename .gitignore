@@ -37,6 +37,8 @@ test/*/*.so
 test/*/*.s
 test/*/*.png
 test/*/*.time
+test/cpp/*/*.lowered
+test/cpp/*/*.ptx
 test/cpp/*/passes.txt
 test/cpp/*/*.h
 test/*.h
@@ -52,3 +54,4 @@ apps/camera_pipe/out.png
 apps/camera_pipe/process
 apps/local_laplacian/local_laplacian
 apps/local_laplacian/local_laplacian.h
+*.pyc
