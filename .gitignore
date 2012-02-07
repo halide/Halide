@@ -22,6 +22,7 @@ a.out
 *.cmx
 *.cmxa
 *.bc
+*.cubin
 tags
 src/*.top
 llvm_svn
@@ -31,6 +32,17 @@ src/test_*.s
 .clang_complete
 *.guru
 *.dSYM
+
+# app intermediates
+apps/*/out*.png
+apps/*/*.lowered
+apps/*/*.ptx
+apps/*/passes.txt
+apps/*/*.ll
+apps/*/*.sass
+apps/*/filter
+apps/bilateral_grid/bilateral_grid
+apps/bilateral_grid/bilateral_grid.h
 
 # test intermediates
 test/*/*.so
@@ -47,6 +59,8 @@ test/cpp/*/*.o
 test/*.ptx
 test/*/*.tmp
 log.txt
+err.txt
+test/*.lowered
 apps/blur/test
 apps/camera_pipe/camera_pipe
 apps/camera_pipe/curved.h
@@ -55,3 +69,5 @@ apps/camera_pipe/process
 apps/local_laplacian/local_laplacian
 apps/local_laplacian/local_laplacian.h
 *.pyc
+
+llvm_test/*.ptx
