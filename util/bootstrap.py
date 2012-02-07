@@ -12,6 +12,13 @@ from pbs import Command, make, git
 
 import os
 
+from multiprocessing import cpu_count
+max_load = cpu_count() * 0.9
+
+minimal = False
+if '--minimal' in sys.argv:
+    minimal = True
+
 def check_llvm():
     try:
         llvm_path = './llvm/Release+Asserts'
@@ -38,6 +45,7 @@ print '...OK!'
 status('Checking out submodules')
 git('submodule', 'update', '--init', '--recursive')
 
+# TODO: always run make -C llvm, just to make sure it's up to date. Does configure cache its settings when a reconfigure is forced?
 # TODO: make install in subdir, with docs
 #        requires graphviz, doxygen; target ocamlbuild to alt dir?; make clean?
 # Build llvm
@@ -46,16 +54,21 @@ if check_llvm():
 else:
     chdir('llvm')
     configure = Command('./configure')
-    llvm_cfg = ['--enable-assertions', '--enable-optimized', '--enable-targets=all']#, '--enable-docs', '--enable-doxygen']
+    llvm_cfg = ['--enable-assertions', '--enable-optimized']
+    if minimal:
+        llvm_cfg = llvm_cfg + ['--enable-targets=host,ptx,x86_64,arm']
+    else:
+        llvm_cfg = llvm_cfg + ['--enable-targets=all', '--enable-docs', '--enable-doxygen']
     status('''Configuring llvm:
-    %s''' % cfg_str)
+    %s''' % llvm_cfg)
     print configure(llvm_cfg)
     
     status('Building llvm')
-    print make('-j12')
+    print make('-j', '--load-average=%f' % max_load)
     
     chdir('docs')
-    #check_call('make ocamldoc'.split(' '))
+    if not minimal:
+        make('ocamldoc', '-j', '--load-average=%f' % max_load)
     # optional: check_call('make doxygen'.split(' '))
     chdir('../..')
     assert check_llvm()
@@ -67,4 +80,4 @@ print ocamlbuild('halide.cmxa')
 chdir('..')
 
 status('Building C++ bindings')
-print make('-C', 'cpp_bindings')
+print make('-C', 'cpp_bindings', '-j1') # can be flakey with first parallel build on SSD
