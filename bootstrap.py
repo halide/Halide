@@ -5,6 +5,8 @@ import subprocess
 from os import chdir
 from os.path import isfile
 
+from pbs import Command, make, git
+
 import os
 
 status_str = '''
@@ -21,41 +23,19 @@ def check_llvm():
     try:
         llvm_path = './llvm/Release+Asserts'
         assert isfile(llvm_path+'/lib/ocaml/llvm.cma') # is llvm.cma there?
-        check_output([llvm_path+'/bin/llvm-config', '--version']) # try calling llvm-config
+        llvm_config = Command(llvm_path+'/bin/llvm-config')
+        ver = llvm_config('--version') # try calling llvm-config
+        print ver
+        assert '3.1' in ver
         return True
     except:
         return False
 
 
-check_call = subprocess.check_call
-try:
-    check_output = subprocess.check_output
-except:
-    # backport from https://gist.github.com/1027906
-    def _check_output(*popenargs, **kwargs):
-        r"""Run command with arguments and return its output as a byte string.
-
-        Backported from Python 2.7 as it's implemented as pure python on stdlib.
-
-        >>> check_output(['/usr/bin/python', '--version'])
-        Python 2.6.2
-        """
-        process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)
-        output, unused_err = process.communicate()
-        retcode = process.poll()
-        if retcode:
-            cmd = kwargs.get("args")
-            if cmd is None:
-                cmd = popenargs[0]
-            error = subprocess.CalledProcessError(retcode, cmd)
-            error.output = output
-            raise error
-        return output
-    check_output = _check_output
-
 # Test for ocaml 3.12.*
 status('Testing for OCaml 3.12.*')
-ver = check_output(['ocaml', '-version'])
+from pbs import ocaml, ocamlbuild
+ver = ocaml('-version')
 print ver
 assert '3.12' in ver
 print '...OK!'
@@ -63,7 +43,7 @@ print '...OK!'
 # Submodule update/init
 # TODO: make --recursive optional
 status('Checking out submodules')
-check_call('git submodule update --init --recursive'.split(' '))
+git('submodule', 'update', '--init', '--recursive')
 
 # TODO: make install in subdir, with docs
 #        requires graphviz, doxygen; target ocamlbuild to alt dir?; make clean?
@@ -72,15 +52,17 @@ if check_llvm():
     status('llvm appears to be present -- skipping')
 else:
     chdir('llvm')
+    configure = Command('./configure')
     llvm_cfg = ['--enable-assertions', '--enable-optimized', '--enable-targets=all']#, '--enable-docs', '--enable-doxygen']
-    cfg_str = ' '.join(llvm_cfg)
     status('''Configuring llvm:
     %s''' % cfg_str)
-    check_call(['./configure'] + llvm_cfg)
+    print configure(llvm_cfg)
+    
     status('Building llvm')
-    check_call('make -j12'.split(' '))
+    print make('-j12')
+    
     chdir('docs')
-    check_call('make ocamldoc'.split(' '))
+    #check_call('make ocamldoc'.split(' '))
     # optional: check_call('make doxygen'.split(' '))
     chdir('../..')
     assert check_llvm()
@@ -88,4 +70,8 @@ else:
 # Test building 
 chdir('src')
 status('Test: building halide.cmxa')
-check_call('ocamlbuild halide.cmxa'.split(' '))
+print ocamlbuild('halide.cmxa')
+chdir('..')
+
+status('Building C++ bindings')
+print make('-C', 'cpp_bindings')
