@@ -127,6 +127,7 @@ rule "Generate initial modules"
   ~prod: "architecture.%(arch).initmod.c"
   ~deps: ["architecture.%(arch).stdlib.cpp";
           "architecture.posix.stdlib.cpp";
+          "architecture.x86.stdlib.cpp";
           "architecture.%(arch).stdlib.ll";
           "buffer.h";
           "bitcode2cpp.py"]
