@@ -26,8 +26,12 @@ clang = Command(os.path.join(llvm_path, 'clang++'))
 imagestack = Command(os.path.join(proj_root, 'ImageStack', 'bin', 'ImageStack'))
 cxx = Command(which('g++-4.6'))
 
-def test_cpp(name):
+failures = []
 
+def test_cpp(name):
+    
+    global failures
+    
     # status(name, "Building Halide.a")
     # Make sure Halide.a is built
     make('-C', '../cpp_bindings/', 'Halide.a')
@@ -51,8 +55,8 @@ def test_cpp(name):
     
     # Threading these through as file handles shared by all PBS tasks makes
     # sure each task appends to the main logs, and flushes on exception.
-    with open(logfile, "wt") as logfile:
-        with open(errfile, "wt") as errfile:
+    with open(logfile, "wt") as log:
+        with open(errfile, "wt") as err:
             # status(name, "Compiling %s" % srcfile)
             compile_cmd = ["-std=c++0x", 
                            "-I../../../cpp_bindings",
@@ -63,19 +67,21 @@ def test_cpp(name):
 
             if os.path.exists("/usr/local/cuda"):
                 compile_cmd = compile_cmd + ["-L/usr/local/cuda/lib", "-lcuda"]
-
-            # status(name, " ".join(compile_cmd))
-            cxx(compile_cmd, _out=logfile, _err=errfile)
-
-            # Run the test
+            
             try:
+                # Build the test
+                # status(name, " ".join(compile_cmd))
+                cxx(compile_cmd, _out=log, _err=err)
+                # Run the test
                 # status(name, "Running test")
                 tester = Command("./a.out")
-                tester(_out=logfile, _err=errfile)
+                tester(_out=log, _err=err)
                 sys.stdout.write(".")
                 sys.stdout.flush()
-            except CalledProcessError:
-                print "%s failed!" % name
+            except:
+                sys.stdout.write("E")
+                sys.stdout.flush()
+                failures.append(name)
 
     # Pop back up
     os.chdir(curdir)
@@ -185,5 +191,14 @@ else:
     test('brightness')
     test('cpp/vector_cast')
     test('cpp/vectorize')
-print '\n' + '-'*70
-print '\nOK'
+
+if not failures:
+    print '\n' + '-'*70
+    print '\nOK'
+    sys.exit(0)
+else:
+    for name in failures:
+        print "\n\n%s failed:" % name
+        print "\n%s" % open(os.path.join(name,"log.txt")).read()
+        print "\n%s" % open(os.path.join(name,"err.txt")).read()
+    sys.exit(-1)
