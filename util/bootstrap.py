@@ -64,8 +64,9 @@ else:
     print configure(llvm_cfg)
     
     status('Building llvm')
-    print make('-j', '--load-average=%f' % max_load)
-    
+    # print make('-j', '--load-average=%f' % max_load)
+    print make('-j12')
+
     chdir('docs')
     if not minimal:
         make('ocamldoc', '-j', '--load-average=%f' % max_load)
