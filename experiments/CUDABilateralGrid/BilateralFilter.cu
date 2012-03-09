@@ -4,6 +4,8 @@
 
 #include <cutil_math.h>
 
+#define JRK_SCHEDULE 1
+
 // TODO: be very careful with this variable
 texture< float2, cudaTextureType2D, cudaReadModeElementType > g_gridTexture( 0, cudaFilterModeLinear );
 
@@ -18,6 +20,7 @@ void createGridKernel( DeviceVector2D< float > inputImage,
 					  int paddingXY, int paddingZ,
 					  DeviceArray3D< float2 > outputGrid )
 {
+    #ifndef JRK_SCHEDULE
 	int x = blockIdx.x * blockDim.x + threadIdx.x;
 	int y = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -39,6 +42,50 @@ void createGridKernel( DeviceVector2D< float > inputImage,
 	float2* pOutputPixel = &( outputGrid( gx, gy, gz ) );
 	atomicAdd( &( pOutputPixel->x ), lum );
 	atomicAdd( &( pOutputPixel->y ), 1 );
+
+    #else
+	int gx = blockIdx.x * blockDim.x + threadIdx.x;
+	int gy = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    for (int ry = 0; ry < samplingSpatial; ry++) {
+        for (int rx = 0; rx < samplingSpatial; rx++) {
+            int x = gx * samplingSpatial + rx - samplingSpatial/2;
+            int y = gy * samplingSpatial + ry - samplingSpatial/2;
+                
+        	if( x >= inputImage.width ||
+        		y >= inputImage.height )
+        	{
+        		continue;
+        	}
+        	
+            float lum = inputImage( x, y );
+        	lum = ( lum - inputMin ) / inputRange;
+        	int gz = roundToInt( lum / samplingRange ) + paddingZ;
+            
+            float *pOutputPixel, *pOutputNorm;
+            #if 0
+            if (gz % 2 == 0) {
+        	    pOutputPixel = &( outputGrid( gx, gy, gz/2 ).x );
+                pOutputNorm = &( outputGrid( gx, gy, gz ).x );
+            } else {
+        	    pOutputPixel = &( outputGrid( gx, gy, gz/2 ).y );
+                pOutputNorm = &( outputGrid( gx, gy, gz ).y );
+            }
+            #else
+    	    pOutputPixel = &( outputGrid( gx, gy, gz ).x );
+            pOutputNorm = &( outputGrid( gx, gy, gz ).y );
+            #endif
+            
+            #if 0
+        	atomicAdd( pOutputPixel, lum );
+            atomicAdd( pOutputNorm, 1 );
+            #else
+        	*pOutputPixel += lum;
+            *pOutputNorm += 1;
+            #endif
+        }
+    }
+    #endif
 }
 
 __global__
@@ -271,8 +318,13 @@ void BilateralFilter::createGrid()
 
 	dim3 blockDim( 16, 16, 1 );
 
+#ifndef JRK_SCHEDULE
 	int gx = numBins( md_dataImage.width(), blockDim.x );
 	int gy = numBins( md_dataImage.height(), blockDim.y );
+#else
+	int gx = numBins( numBins(md_dataImage.width(), m_samplingSpatial), blockDim.x );
+	int gy = numBins( numBins(md_dataImage.height(), m_samplingSpatial), blockDim.y );
+#endif
 	dim3 gridDim( gx, gy, 1 );
 
 	createGridKernel<<< gridDim, blockDim >>>
