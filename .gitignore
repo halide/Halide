@@ -71,3 +71,5 @@ apps/local_laplacian/local_laplacian.h
 *.pyc
 
 llvm_test/*.ptx
+experiments/CUDABilateralGrid/grid
+experiments/CUDABilateralGrid/bf_*.png
