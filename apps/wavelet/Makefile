@@ -16,7 +16,7 @@ filter.o: filter.cpp $(HL_MODULES:%.bc=%.o)
 	g++-4.6 -std=c++0x -O3 -c filter.cpp
 
 filter: filter.o $(HL_MODULES:%.bc=%.o)
-	g++-4.6 filter.o $(HL_MODULES:%.bc=%.o) -lpng -o filter
+	g++-4.6 filter.o $(HL_MODULES:%.bc=%.o) -lpng -o filter -pthread
 
 clean:
 	rm -f wavelet filter filter.o $(HL_MODULES) $(HL_MODULES:%.bc=%.o) $(HL_MODULES:%.bc=%.h) *.lowered
