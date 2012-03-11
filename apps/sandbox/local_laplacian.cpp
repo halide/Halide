@@ -3,8 +3,23 @@ using namespace Halide;
 
 #include "../png.h"
 
-//#define PI 3.14159
-/*
+#define PI 3.14159
+
+Expr gauss1D(RVar x, Uniform<int> sigma) {
+  Expr weight =  (1.0f / (sqrt(2.0f * PI)*sigma)*exp(-(x*x)/(2.0f*sigma*sigma)));
+  return weight;
+}
+
+Func bilateral(Func f, Uniform<int> sigmaR, Uniform<int> sigmaD) {
+  
+  Var x, y, c;
+  int cutoff = 3;
+
+  Func bilateral;
+  
+  return bilateral;
+}
+
 // Blur with gaussian with std dev sigma
 Func gaussBlur(Func f, Uniform<int> sigma) {
 
@@ -12,14 +27,19 @@ Func gaussBlur(Func f, Uniform<int> sigma) {
   int cutoff = 3;
   RVar i(-cutoff*sigma, 1 + 2*cutoff*sigma),
     j(-cutoff*sigma, 1 + 2*cutoff*sigma);
-  Expr weight =  (1.0f / (sqrt(2.0f * PI)*sigma)*exp(-(i*i)/(2.0f*sigma*sigma)));
+  
+  Expr weightX = gauss1D(i, sigma);
+  Expr weightY = gauss1D(j, sigma);
   
   Func blur_x;
-  blur_x(x, y, c) = f(x + i, y, c)*0.1f;
+  blur_x(x, y, c) += weightX*f(x + i, y, c);
+
+  Func blur_y;
+  blur_y(x, y, c) += weightY*blur_x(x, y + j, c);
   
-  return blur_x;
+  return blur_y;
 }
-*/
+
 // Blur with variable size box
 
 Func boxBlur(Func f, Uniform<int> k) {
@@ -58,7 +78,7 @@ int main(int argc, char **argv) {
 
   // Convert back to 16-bit
   Func output;
-  output(x, y, c) = cast<uint16_t>(boxBlur(clamped, k)(x, y, c) * 65535.0f);
+  output(x, y, c) = cast<uint16_t>(gaussBlur(clamped, k)(x, y, c) * 65535.0f);
   
   // schedule
 
