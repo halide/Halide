@@ -17,10 +17,11 @@ int main(int argc, char **argv) {
     Image<uint16_t> input = load<uint16_t>(argv[1]);
     Image<uint16_t> output(input.width(), input.height(), 3);
     int k = atoi(argv[2]);
+    int sigmaD_100 = atoi(argv[3]);
 
-    local_laplacian(k ,input, output);
+    local_laplacian(/*sigmaD_100, */k ,input, output);
     
-    save(output, argv[3]);
+    save(output, argv[4]);
 
     return 0;
 
