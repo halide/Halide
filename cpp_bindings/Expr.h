@@ -40,6 +40,7 @@ namespace Halide {
         Expr(const ImageRef &);
         Expr(const UniformImageRef &);
         Expr(const Func &);
+        Expr(const Expr &);
         
         template<typename T> Expr(const Uniform<T> &u) : contents(Expr((DynUniform)u).contents) {}
 

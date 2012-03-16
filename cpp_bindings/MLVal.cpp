@@ -92,6 +92,9 @@ MLVal::MLVal(const std::string &str) {
 MLVal::MLVal(void *ptr) : contents(new Contents((value)ptr)) {
 }
 
+MLVal::MLVal(const MLVal &other) : contents(other.contents) {
+}
+
 void MLVal::unpackPair(const MLVal &tuple, MLVal &first, MLVal &second) {
     first = MLValFromValue(Field(tuple.contents->val, 0));
     second = MLValFromValue(Field(tuple.contents->val, 1));
