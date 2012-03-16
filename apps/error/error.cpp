@@ -31,12 +31,22 @@ int main(int argc, char **argv) {
     */
 
     /* Using a different number of arguments in the initialize and the update */
+    /*
     Func f4("f4");
     Func f5("f5");
     f5(x, y) = x+y;
     f4(x) = 0;
     f4(rx) = f4(rx) + f5(rx);
     f4.compileToFile("f4");
+    */
+
+    Uniform<float> uf("uf");
+    Expr foo = cast<int>(uf*3);
+    RVar rv(-foo, 1+2*foo, "rv");
+    Func f6("f6"), f7("f7");
+    f6(x) = x*x;
+    f7(x) += f6(x + rv);
+    f7.compileToFile("f7");
 
     return 0;
 }

@@ -45,6 +45,8 @@ let rec is_simple x =
 
 let rec constant_fold_expr expr = 
   let recurse = constant_fold_expr in
+
+  dbg 3 "Constant folding: %s\n" (Ir_printer.string_of_expr expr);
   
   match expr with
     (* Ignoring most const-casts for now, because we can't represent immediates of arbitrary types *)
@@ -258,7 +260,7 @@ let rec constant_fold_expr expr =
               recurse (Let (n, base, subs_expr old (Ramp (newvar, stride, w)) b))
           | x when is_simple x -> recurse (subs_expr old a b)
           (* if a is a multiple of something, that should go to the inside to help out any modulo analysis *)
-          | _  when (is_scalar a) -> begin            
+          | _  when (is_scalar a && is_integral a) -> begin            
             match Analysis.compute_remainder_modulus a with
               | (0, 1) -> Let (n, a, b)
               | (_, 0) -> failwith ("lhs of let is apparently a constant but was not folded in by is_simple rule: " ^ (Ir_printer.string_of_expr (Let (n, a, b))))

@@ -122,8 +122,8 @@ namespace Halide {
     Expr::Expr(const RVar &v) : contents(new Contents(makeVar((v.name())), Int(32))) {
         contents->isRVar = true;
         contents->rvars.push_back(v);
-        child(v.min());
-        child(v.size());
+        if (v.min().isDefined()) child(v.min());
+        if (v.size().isDefined()) child(v.size());
     }
 
     Expr::Expr(const DynUniform &u) : 
