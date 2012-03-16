@@ -147,18 +147,6 @@ namespace Halide {
     llvm::FunctionPassManager *Func::Contents::fPassMgr = NULL;
     llvm::PassManager *Func::Contents::mPassMgr = NULL;
     
-    Range operator*(const Range &a, const Range &b) {
-        Range region;
-        region.range.resize(a.range.size() + b.range.size());
-        for (size_t i = 0; i < a.range.size(); i++) {
-            region.range[i] = a.range[i];
-        }
-        for (size_t i = 0; i < b.range.size(); i++) {
-            region.range[a.range.size() + i] = b.range[i];
-        }
-        return region;
-    }
-
     FuncRef::FuncRef(const Func &f) :
         contents(new FuncRef::Contents(f)) {
     }
@@ -185,6 +173,10 @@ namespace Halide {
 
     FuncRef::FuncRef(const Func &f, const std::vector<Expr> &args) :
         contents(new FuncRef::Contents(f, args)) {
+    }
+
+    FuncRef::FuncRef(const FuncRef &other) :
+        contents(other.contents) {
     }
 
     void FuncRef::operator=(const Expr &e) {
