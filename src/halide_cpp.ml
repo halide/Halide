@@ -151,6 +151,14 @@ let _ =
       | Pure e -> e
       | _ -> failwith ("Can't add multiple reduction update steps to " ^ name)
     in
+
+    let init_dims = List.length args and update_dims = List.length update_args in
+    if List.length args <> List.length update_args then
+      failwith (Printf.sprintf 
+                  "Initial value of %s has %d dimensions, but updated value uses %d dimensions" 
+                  name init_dims update_dims) 
+    else ();
+
     (* The pure args are the naked vars in the update_args list that aren't in the reduction domain *)
     let rec get_pure_args = function
       | [] -> []          
