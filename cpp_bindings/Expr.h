@@ -49,8 +49,17 @@ namespace Halide {
         void operator*=(const Expr &);
         void operator/=(const Expr &);
 
-        // declare that this node has a child for bookkeeping
+        // declare that this node depends on something
         void child(const Expr &c);
+
+        // These calls are only used to inject dependence that isn't
+        // implied by the way the expression was constructed
+        void child(const UniformImage &);
+        void child(const DynUniform &);
+        void child(const DynImage &);
+        void child(const Var &);
+        void child(const RVar &);
+        void child(const Func &);
 
         const MLVal &node() const;
         const Type &type() const;

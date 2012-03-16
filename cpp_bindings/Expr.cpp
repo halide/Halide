@@ -39,13 +39,17 @@ namespace Halide {
     ML_FUNC1(makeNot);
 
     template<typename T>
-    void unify(std::vector<T> &a, const std::vector<T> &b) {
+    void set_add(std::vector<T> &a, const T &b) {
+        for (size_t i = 0; i < a.size(); i++) {
+            if (a[i] == b) return;
+        }
+        a.push_back(b);
+    }
+
+    template<typename T>
+    void set_union(std::vector<T> &a, const std::vector<T> &b) {
         for (size_t i = 0; i < b.size(); i++) {
-            bool is_in_a = false;
-            for (size_t j = 0; j < a.size(); j++) {
-                if (a[j] == b[i]) is_in_a = true;
-            }
-            if (!is_in_a) a.push_back(b[i]);
+            set_add(a, b[i]);
         }
     }
 
@@ -209,12 +213,12 @@ namespace Halide {
 
     // declare that this node has a child for bookkeeping
     void Expr::Contents::child(const Expr &c) {
-        unify(images, c.images());
-        unify(vars, c.vars());
-        unify(rvars, c.rvars());
-        unify(funcs, c.funcs());
-        unify(uniforms, c.uniforms());
-        unify(uniformImages, c.uniformImages());
+        set_union(images, c.images());
+        set_union(vars, c.vars());
+        set_union(rvars, c.rvars());
+        set_union(funcs, c.funcs());
+        set_union(uniforms, c.uniforms());
+        set_union(uniformImages, c.uniformImages());
         if (c.implicitArgs() > implicitArgs) implicitArgs = c.implicitArgs();
         
         for (size_t i = 0; i < c.shape().size(); i++) {
@@ -228,6 +232,30 @@ namespace Halide {
 
     void Expr::child(const Expr &c) {
         contents->child(c);
+    }
+
+    void Expr::child(const UniformImage &im) {
+        set_add(contents->uniformImages, im);
+    }
+
+    void Expr::child(const DynUniform &u) {
+        set_add(contents->uniforms, u);
+    }
+
+    void Expr::child(const DynImage &im) {
+        set_add(contents->images, im);
+    }
+
+    void Expr::child(const Var &v) {
+        set_add(contents->vars, v);
+    }
+
+    void Expr::child(const RVar &v) {
+        set_add(contents->rvars, v);
+    }
+
+    void Expr::child(const Func &f) {
+        set_add(contents->funcs, f);
     }
 
     void Expr::operator+=(const Expr & other) {        
@@ -490,10 +518,10 @@ namespace Halide {
         // function dependencies (but not free vars, tuple shape,
         // implicit args)
         if (f.f().rhs().isDefined()) {
-            unify(images, f.f().rhs().images());
-            unify(funcs, f.f().rhs().funcs());
-            unify(uniforms, f.f().rhs().uniforms());
-            unify(uniformImages, f.f().rhs().uniformImages());
+            set_union(images, f.f().rhs().images());
+            set_union(funcs, f.f().rhs().funcs());
+            set_union(uniforms, f.f().rhs().uniforms());
+            set_union(uniformImages, f.f().rhs().uniformImages());
         }
 
     }
