@@ -142,12 +142,16 @@ let _ =
   Callback.register "makeDefinition" (fun name argnames body -> (name, List.map (fun x -> (i32, x)) argnames, val_type_of_expr body, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);
   Callback.register "addDefinitionToEnv" (fun env def -> 
-    let (n, _, _, _) = def in 
-    Environment.add n def env
+    add_function def env
   );
   
   Callback.register "addScatterToDefinition" (fun env name update_name update_args update_var reduction_domain ->
-    let (_, args, return_type, Pure init_expr) = Environment.find name env in
+    let (args, return_type, body) = find_function name env in
+    let init_expr = match body with
+      | Pure e -> e
+      | _ -> failwith ("Can't add reduction update step " ^ update_name ^ 
+                       " to " ^ name ^ ", which is already a reduction update step")
+    in
     (* The pure args are the naked vars in the update_args list that aren't in the reduction domain *)
     let rec get_pure_args = function
       | [] -> []          
