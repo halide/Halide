@@ -220,10 +220,16 @@ namespace Halide {
 
     UniformImage::UniformImage(const Type &t, int dims) : 
         contents(new Contents(t, dims)) {
+        for (int i = 0; i < dims; i++) {
+            contents->sizes[i].child(*this);
+        }
     }
 
     UniformImage::UniformImage(const Type &t, int dims, const std::string &name) : 
         contents(new Contents(t, dims, name)) {
+        for (int i = 0; i < dims; i++) {
+            contents->sizes[i].child(*this);
+        }
     }
 
     UniformImage::UniformImage(const UniformImage &other) :
