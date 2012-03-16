@@ -19,8 +19,8 @@ for arch in ptx ptx_dev arm x86; do
         | grep -v "^target datalayout"         \
         | grep -v "^; ModuleID"                \
         | cat - $LL_STUB                       \
-        | $LLVM_AS - -o -                      \
-        | python bitcode2cpp.py ${arch}        \
-        > $RESULT
+        | $LLVM_AS - -o stub_${arch}.bc
+
+    cat stub_${arch}.bc | python bitcode2cpp.py ${arch} > $RESULT
 
 done
