@@ -15,15 +15,6 @@ namespace Halide {
     class Func;
     class Var;
 
-    class Range {
-    public:
-        Range() {}
-        Range(Expr min, Expr size) : range {std::pair<Expr, Expr> {min, size}} {}
-        std::vector<std::pair<Expr, Expr> > range;
-    };
-
-    Range operator*(const Range &a, const Range &b);
-
     // A function call (if you cast it to an expr), or a function definition lhs (if you assign an expr to it).
     class FuncRef {
     public:
@@ -35,6 +26,7 @@ namespace Halide {
         FuncRef(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d);
         FuncRef(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d, const Expr &e);
         FuncRef(const Func &f, const std::vector<Expr> &args);
+        FuncRef(const FuncRef &);
 
         // This assignment corresponds to definition. This FuncRef is
         // defined to have the given expression as its value.
