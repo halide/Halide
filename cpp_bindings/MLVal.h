@@ -17,6 +17,7 @@ public:
     MLVal(float);
     MLVal(double);
     MLVal(void *);
+    MLVal(const MLVal &);
     MLVal operator()() const;
     MLVal operator()(const MLVal &a) const;
     MLVal operator()(const MLVal &a, const MLVal &b) const;

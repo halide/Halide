@@ -137,6 +137,9 @@ namespace Halide {
         child(l.idx);
     }
 
+    Expr::Expr(const Expr &other) : contents(other.contents) {        
+    }
+
     const MLVal &Expr::node() const {
         return contents->node;
     }
