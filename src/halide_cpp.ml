@@ -149,8 +149,7 @@ let _ =
     let (args, return_type, body) = find_function name env in
     let init_expr = match body with
       | Pure e -> e
-      | _ -> failwith ("Can't add reduction update step " ^ update_name ^ 
-                       " to " ^ name ^ ", which is already a reduction update step")
+      | _ -> failwith ("Can't add multiple reduction update steps to " ^ name)
     in
     (* The pure args are the naked vars in the update_args list that aren't in the reduction domain *)
     let rec get_pure_args = function
