@@ -194,12 +194,9 @@ let _ =
   Callback.register "saveGuruToFile" (fun guru filename -> save_guru_to_file guru filename);
 
   Callback.register "makeSchedule" (fun (f: string) (sizes: expr list) (env: environment) (guru: scheduling_guru) ->
-    let (_, args, _, _) = Environment.find f env in
-    let region = List.map2 (fun (t, v) x -> (v, IntImm 0, x)) args sizes in
     dbg 2 "Guru:\n%s\n%!" (String.concat "\n" guru.serialized);
     dbg 2 "About to make default schedule...\n%!";    
-    generate_schedule f env guru
-      
+    generate_schedule f env guru      
   );
   
   Callback.register "doLower" lower;  

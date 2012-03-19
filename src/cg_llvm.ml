@@ -541,6 +541,7 @@ let rec make_cg_context c m b sym_table arch_state =
 
         res
     | Print (fmt, args) -> cg_print fmt args
+    | s -> failwith (Printf.sprintf "Can't codegen: %s" (Ir_printer.string_of_stmt s))
 
   and cg_store e buf idx =
     (* ignore(cg_debug e ("Store to " ^ buf ^ " ") [idx; e]); *)
@@ -592,7 +593,8 @@ let rec make_cg_context c m b sym_table arch_state =
 
         (* vector load of scalar address *)
       | (_, false) ->
-        failwith "scalar expr %s loaded as vector type %s\n%!" (string_of_expr idx) (string_of_val_type t)
+        failwith (Printf.sprintf "scalar expr %s loaded as vector type %s\n%!"
+                    (string_of_expr idx) (string_of_val_type t))
 
       | (w, true) ->
         begin match idx with 

@@ -78,9 +78,6 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
       Chunk:
       - legal over any vars in scope
 
-      Coiterate:
-      - legal over any *serial* vars in scope
-
       Reuse:
       - legal as long as a realization of the same function is in scope
     *)
@@ -170,7 +167,6 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
     (* prune stuff we're outside *)
     let vars_in_scope = match call_sched with
       | Root -> []
-      | Coiterate (var,_,_)
       | Chunk var -> list_drop_while (fun x -> x <> var) vars_in_scope
       | Reuse _ (* doesn't matter - never used because it has no children *)
       | Inline -> vars_in_scope
@@ -202,8 +198,7 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
       
     let bufs_in_scope = match call_sched with
       | Root -> add_realization "" bufs_in_scope
-      | Chunk var
-      | Coiterate (var,_,_) -> add_realization var bufs_in_scope
+      | Chunk var -> add_realization var bufs_in_scope
       | Reuse _
       | Inline -> bufs_in_scope
     in
@@ -329,9 +324,6 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
             match parent_body with 
               (* I'm the update step of a reduction *)
               | Reduce (_, update_args, update_func, domain) when update_func = base_name f ->
-                  let s = choose_schedule parent s in
-                  let (parent_call_sched, parent_sched_list) = find_schedule s parent in
-                  
                   let rec get_gather_args = function
                     | (Var (t, n)::rest) when List.mem (t, n) parent_args -> 
                         (Serial (n, Var (t, n ^ ".min"), Var(t, n ^ ".extent")))::(get_gather_args rest)
