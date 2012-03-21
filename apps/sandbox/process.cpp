@@ -8,20 +8,18 @@ extern "C" {
 
 int main(int argc, char **argv) {
 
-    if (argc < 3) {
-        printf("Usage: ./filter input.png kernel_radius output.png"
-               "e.g. ./filter input.png 10 output.png");
+    if (argc < 2) {
+        printf("Usage: ./process input.png output.png"
+               "e.g. ./process input.png output.png");
         return 0;
     }
 
     Image<uint16_t> input = load<uint16_t>(argv[1]);
     Image<uint16_t> output(input.width(), input.height(), 3);
-    int k = atoi(argv[2]);
-    int sigmaD_100 = atoi(argv[3]);
 
-    local_laplacian(/*sigmaD_100, */k ,input, output);
+    local_laplacian(input, output);
     
-    save(output, argv[4]);
+    save(output, argv[2]);
 
     return 0;
 
