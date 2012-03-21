@@ -58,7 +58,7 @@ namespace Halide {
         Contents(const FuncRef &f);
 
         // Declare that this expression is the child of another for bookkeeping
-        void child(const Expr &);
+        void child(Expr );
 
         // The ML-value of the expression
         MLVal node;
@@ -214,7 +214,7 @@ namespace Halide {
     }
 
     // declare that this node has a child for bookkeeping
-    void Expr::Contents::child(const Expr &c) {
+    void Expr::Contents::child(Expr c) {
         set_union(images, c.images());
         set_union(vars, c.vars());
         set_union(rvars, c.rvars());
@@ -232,7 +232,7 @@ namespace Halide {
         }
     }
 
-    void Expr::child(const Expr &c) {
+    void Expr::child(Expr c) {
         contents->child(c);
     }
 
@@ -260,128 +260,128 @@ namespace Halide {
         set_add(contents->funcs, f);
     }
 
-    void Expr::operator+=(const Expr & other) {        
+    void Expr::operator+=(Expr other) {        
         contents->node = makeAdd(node(), other.node());
         child(other);
     }
 
     /*
-    Tuple Expr::operator,(const Expr &other) {
+    Tuple Expr::operator,(Expr other) {
         return Tuple(*this, other);
     }
     */
     
-    void Expr::operator*=(const Expr & other) {
+    void Expr::operator*=(Expr other) {
         contents->node = makeMul(node(), other.node());
         child(other);
     }
 
-    void Expr::operator/=(const Expr & other) {
+    void Expr::operator/=(Expr other) {
         contents->node = makeDiv(node(), other.node());
         child(other);
     }
 
-    void Expr::operator-=(const Expr & other) {
+    void Expr::operator-=(Expr other) {
         contents->node = makeSub(node(), other.node());
         child(other);
     }
 
-    Expr operator+(const Expr & a, const Expr & b) {
+    Expr operator+(Expr a, Expr b) {
         Expr e(makeAdd(a.node(), b.node()), a.type());
         e.child(a); 
         e.child(b); 
         return e;
     }
 
-    Expr operator-(const Expr & a, const Expr & b) {
+    Expr operator-(Expr a, Expr b) {
         Expr e(makeSub(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
 
-    Expr operator-(const Expr &a) {
+    Expr operator-(Expr a) {
         return cast(a.type(), 0) - a;
     }
 
-    Expr operator*(const Expr & a, const Expr & b) {
+    Expr operator*(Expr a, Expr b) {
         Expr e(makeMul(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
 
-    Expr operator/(const Expr & a, const Expr & b) {
+    Expr operator/(Expr a, Expr b) {
         Expr e(makeDiv(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
 
-    Expr operator%(const Expr &a, const Expr &b) {
+    Expr operator%(Expr a, Expr b) {
         Expr e(makeMod(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
 
-    Expr operator>(const Expr & a, const Expr & b) {
+    Expr operator>(Expr a, Expr b) {
         Expr e(makeGT(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
     
-    Expr operator<(const Expr & a, const Expr & b) {
+    Expr operator<(Expr a, Expr b) {
         Expr e(makeLT(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
     
-    Expr operator>=(const Expr & a, const Expr & b) {
+    Expr operator>=(Expr a, Expr b) {
         Expr e(makeGE(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
     
-    Expr operator<=(const Expr & a, const Expr & b) {
+    Expr operator<=(Expr a, Expr b) {
         Expr e(makeLE(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
     
-    Expr operator!=(const Expr & a, const Expr & b) {
+    Expr operator!=(Expr a, Expr b) {
         Expr e(makeNE(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
 
-    Expr operator==(const Expr & a, const Expr & b) {
+    Expr operator==(Expr a, Expr b) {
         Expr e(makeEQ(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
     
-    Expr operator&&(const Expr &a, const Expr &b) {
+    Expr operator&&(Expr a, Expr b) {
         Expr e(makeAnd(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
 
-    Expr operator||(const Expr &a, const Expr &b) {
+    Expr operator||(Expr a, Expr b) {
         Expr e(makeOr(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
         return e;
     }
 
-    Expr operator!(const Expr &a) {
+    Expr operator!(Expr a) {
         Expr e(makeNot(a.node()), Int(1));
         e.child(a);
         return e;
@@ -393,7 +393,7 @@ namespace Halide {
         return e;
     }
 
-    Expr builtin(Type t, const std::string &name, const Expr &a) {
+    Expr builtin(Type t, const std::string &name, Expr a) {
         MLVal args = makeList();
         Expr arg = cast<float>(a);
         args = addToList(args, arg.node());
@@ -402,7 +402,7 @@ namespace Halide {
         return e;
     }
 
-    Expr builtin(Type t, const std::string &name, const Expr &a, const Expr &b) {
+    Expr builtin(Type t, const std::string &name, Expr a, Expr b) {
         MLVal args = makeList();
         Expr arg_a = cast<float>(a);
         Expr arg_b = cast<float>(b);
@@ -414,36 +414,36 @@ namespace Halide {
         return e;
     }
 
-    Expr sqrt(const Expr &a) {
+    Expr sqrt(Expr a) {
         return builtin(Float(32), "sqrt_f32", a);
     }
 
-    Expr sin(const Expr &a) {
+    Expr sin(Expr a) {
         return builtin(Float(32), "sin_f32", a);
     }
     
-    Expr cos(const Expr &a) {
+    Expr cos(Expr a) {
         return builtin(Float(32), "cos_f32", a);
     }
 
-    Expr pow(const Expr &a, const Expr &b) {
+    Expr pow(Expr a, Expr b) {
         return builtin(Float(32), "pow_f32", a, b);
     }
 
-    Expr exp(const Expr &a) {
+    Expr exp(Expr a) {
         return builtin(Float(32), "exp_f32", a);
     }
 
-    Expr log(const Expr &a) {
+    Expr log(Expr a) {
         return builtin(Float(32), "log_f32", a);
     }
 
-    Expr floor(const Expr &a) {
+    Expr floor(Expr a) {
         return builtin(Float(32), "floor_f32", a);
     }
 
 
-    Expr select(const Expr & cond, const Expr & thenCase, const Expr & elseCase) {
+    Expr select(Expr cond, Expr thenCase, Expr elseCase) {
         Expr e(makeSelect(cond.node(), thenCase.node(), elseCase.node()), thenCase.type());
         e.child(cond);
         e.child(thenCase);
@@ -451,21 +451,21 @@ namespace Halide {
         return e;
     }
     
-    Expr max(const Expr &a, const Expr &b) {
+    Expr max(Expr a, Expr b) {
         Expr e(makeMax(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
 
-    Expr min(const Expr &a, const Expr &b) {
+    Expr min(Expr a, Expr b) {
         Expr e(makeMin(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
     
-    Expr clamp(const Expr &a, const Expr &mi, const Expr &ma) {
+    Expr clamp(Expr a, Expr mi, Expr ma) {
         return max(min(a, ma), mi);
     }
 
@@ -580,7 +580,7 @@ namespace Halide {
     }
 
 
-    Expr cast(const Type &t, const Expr &e) {
+    Expr cast(Type t, Expr e) {
         Expr c(makeCast(t.mlval, e.node()), t);
         c.child(e);
         return c;

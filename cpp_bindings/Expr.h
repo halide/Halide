@@ -44,13 +44,13 @@ namespace Halide {
         
         template<typename T> Expr(const Uniform<T> &u) : contents(Expr((DynUniform)u).contents) {}
 
-        void operator+=(const Expr &);
-        void operator-=(const Expr &);
-        void operator*=(const Expr &);
-        void operator/=(const Expr &);
+        void operator+=(Expr);
+        void operator-=(Expr);
+        void operator*=(Expr);
+        void operator/=(Expr);
 
         // declare that this node depends on something
-        void child(const Expr &c);
+        void child(Expr);
 
         // These calls are only used to inject dependence that isn't
         // implied by the way the expression was constructed
@@ -91,39 +91,39 @@ namespace Halide {
     };
 
     // Make a binary op node
-    Expr operator+(const Expr &, const Expr &);
-    Expr operator-(const Expr &);
-    Expr operator-(const Expr &, const Expr &);
-    Expr operator*(const Expr &, const Expr &);
-    Expr operator/(const Expr &, const Expr &);
-    Expr operator%(const Expr &, const Expr &);
+    Expr operator+(Expr, Expr);
+    Expr operator-(Expr);
+    Expr operator-(Expr, Expr);
+    Expr operator*(Expr, Expr);
+    Expr operator/(Expr, Expr);
+    Expr operator%(Expr, Expr);
 
     // Make a comparison node
-    Expr operator>(const Expr &, const Expr &);
-    Expr operator>=(const Expr &, const Expr &);
-    Expr operator<(const Expr &, const Expr &);
-    Expr operator<=(const Expr &, const Expr &);
-    Expr operator!=(const Expr &, const Expr &);
-    Expr operator==(const Expr &, const Expr &);
+    Expr operator>(Expr, Expr);
+    Expr operator>=(Expr, Expr);
+    Expr operator<(Expr, Expr);
+    Expr operator<=(Expr, Expr);
+    Expr operator!=(Expr, Expr);
+    Expr operator==(Expr, Expr);
 
     // Logical operators
-    Expr operator&&(const Expr &, const Expr &);
-    Expr operator||(const Expr &, const Expr &);
-    Expr operator!(const Expr &);
+    Expr operator&&(Expr, Expr);
+    Expr operator||(Expr, Expr);
+    Expr operator!(Expr);
 
     // Calls to builtin functions
     Expr builtin(Type, const std::string &name);
-    Expr builtin(Type, const std::string &name, const Expr &);
-    Expr builtin(Type, const std::string &name, const Expr &, const Expr &);
+    Expr builtin(Type, const std::string &name, Expr);
+    Expr builtin(Type, const std::string &name, Expr, Expr);
 
     // Transcendentals
-    Expr sqrt(const Expr &);
-    Expr sin(const Expr &);
-    Expr cos(const Expr &);
-    Expr pow(const Expr &, const Expr &);
-    Expr exp(const Expr &);
-    Expr log(const Expr &);
-    Expr floor(const Expr &);
+    Expr sqrt(Expr);
+    Expr sin(Expr);
+    Expr cos(Expr);
+    Expr pow(Expr, Expr);
+    Expr exp(Expr);
+    Expr log(Expr);
+    Expr floor(Expr);
 
     // Make a debug node
     Expr debug(Expr, const std::string &prefix, const std::vector<Expr> &args);
@@ -135,17 +135,17 @@ namespace Halide {
     Expr debug(Expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d, Expr e);
 
     // Make a ternary operator
-    Expr select(const Expr &, const Expr &, const Expr &);
+    Expr select(Expr, Expr, Expr);
 
-    Expr max(const Expr &, const Expr &);
-    Expr min(const Expr &, const Expr &);
-    Expr clamp(const Expr &, const Expr &, const Expr &);
+    Expr max(Expr, Expr);
+    Expr min(Expr, Expr);
+    Expr clamp(Expr, Expr, Expr);
 
     // Make a cast node
-    Expr cast(const Type &, const Expr &);
+    Expr cast(Type, Expr);
 
     template<typename T>
-    Expr cast(const Expr &e) {
+    Expr cast(Expr e) {
         return cast(TypeOf<T>(), e);
     }
 
