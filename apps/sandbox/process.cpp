@@ -17,9 +17,14 @@ int main(int argc, char **argv) {
     Image<uint16_t> input = load<uint16_t>(argv[1]);
     Image<uint16_t> output(input.width(), input.height(), 3);
 
-    local_laplacian(input, output);
+    int nSeams = atoi(argv[2]);
+
+    for (int i=0; i < nSeams; i++) {
+      local_laplacian(input, output);
+      input = output;
+    }
     
-    save(output, argv[2]);
+    save(output, argv[3]);
 
     return 0;
 
