@@ -107,8 +107,14 @@ int main(int argc, char **argv) {
   
   Func output;
   output(x, y, c) = clamped(x, y, c);
-  output(x, yr, c) = select(foo(yr)==x, select(c==0, 1.0f, 0.0f),
-			    clamped(x,yr,c));
+  output(x, yr, c) = select(x < foo(yr), clamped(x, yr, c), 
+			    select(x + 1 < input.width(), clamped(x + 1, yr, c), 
+				   select( yr%2==0, 0.0f, 1.0f )));
+
+  Func seams;
+  seams(x, y, c) = clamped(x, y, c);
+  seams(x, yr, c) = select(x==foo(yr), select(c==0, 1.0f, 0.0f),
+			   clamped(x,yr,c));
 
   // Convert back to 16-bit
   Func outputClamped;
