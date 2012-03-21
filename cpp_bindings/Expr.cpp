@@ -387,53 +387,59 @@ namespace Halide {
         return e;
     }
 
-    Expr transcendental(const char *name, const Expr &a) {
+    Expr builtin(Type t, const std::string &name) {
+        MLVal args = makeList();
+        Expr e(makeCall(t.mlval, "." + name, args), t);
+        return e;
+    }
+
+    Expr builtin(Type t, const std::string &name, const Expr &a) {
         MLVal args = makeList();
         Expr arg = cast<float>(a);
         args = addToList(args, arg.node());
-        Expr e(makeCall(Float(32).mlval, name, args), Float(32));
+        Expr e(makeCall(t.mlval, "." + name, args), t);
         e.child(a);
         return e;
     }
 
-    Expr transcendental(const char *name, const Expr &a, const Expr &b) {
+    Expr builtin(Type t, const std::string &name, const Expr &a, const Expr &b) {
         MLVal args = makeList();
         Expr arg_a = cast<float>(a);
         Expr arg_b = cast<float>(b);
         args = addToList(args, arg_b.node());
         args = addToList(args, arg_a.node());
-        Expr e(makeCall(Float(32).mlval, name, args), Float(32));
+        Expr e(makeCall(t.mlval, "." + name, args), t);
         e.child(a);
         e.child(b);
         return e;
     }
 
     Expr sqrt(const Expr &a) {
-        return transcendental(".sqrt_f32", a);
+        return builtin(Float(32), "sqrt_f32", a);
     }
 
     Expr sin(const Expr &a) {
-        return transcendental(".sin_f32", a);
+        return builtin(Float(32), "sin_f32", a);
     }
     
     Expr cos(const Expr &a) {
-        return transcendental(".cos_f32", a);
+        return builtin(Float(32), "cos_f32", a);
     }
 
     Expr pow(const Expr &a, const Expr &b) {
-        return transcendental(".pow_f32", a, b);
+        return builtin(Float(32), "pow_f32", a, b);
     }
 
     Expr exp(const Expr &a) {
-        return transcendental(".exp_f32", a);
+        return builtin(Float(32), "exp_f32", a);
     }
 
     Expr log(const Expr &a) {
-        return transcendental(".log_f32", a);
+        return builtin(Float(32), "log_f32", a);
     }
 
     Expr floor(const Expr &a) {
-        return transcendental(".floor_f32", a);
+        return builtin(Float(32), "floor_f32", a);
     }
 
 

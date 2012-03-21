@@ -4,8 +4,10 @@
 #include <math.h>
 #include <pthread.h>
 #include <assert.h>
+#include <cfloat>
 
 #include "buffer.h"
+
 
 extern "C" {
 
@@ -229,6 +231,27 @@ WEAK float ceil_f32(float x) {
 WEAK float round_f32(float x) {
     return roundf(x);
 }
+
+WEAK float maxval_f32() {return FLT_MAX;}
+WEAK float minval_f32() {return -FLT_MAX;}
+WEAK double maxval_f64() {return DBL_MAX;}
+WEAK double minval_f64() {return -DBL_MAX;}
+WEAK uint8_t maxval_u8() {return 0xff;}
+WEAK uint8_t minval_u8() {return 0;}
+WEAK uint16_t maxval_u16() {return 0xffff;}
+WEAK uint16_t minval_u16() {return 0;}
+WEAK uint32_t maxval_u32() {return 0xffffffff;}
+WEAK uint32_t minval_u32() {return 0;}
+WEAK uint64_t maxval_u64() {return 0xffffffffffffffff;}
+WEAK uint64_t minval_u64() {return 0;}
+WEAK int8_t maxval_s8() {return 0x7f;}
+WEAK int8_t minval_s8() {return 0x80;}
+WEAK int16_t maxval_s16() {return 0x7fff;}
+WEAK int16_t minval_s16() {return 0x8000;}
+WEAK int32_t maxval_s32() {return 0x7fffffff;}
+WEAK int32_t minval_s32() {return 0x80000000;}
+WEAK int64_t maxval_s64() {return 0x7fffffffffffffff;}
+WEAK int64_t minval_s64() {return 0x8000000000000000;}
 
 #include <sys/time.h>
 

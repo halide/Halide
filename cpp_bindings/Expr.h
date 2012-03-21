@@ -111,6 +111,11 @@ namespace Halide {
     Expr operator||(const Expr &, const Expr &);
     Expr operator!(const Expr &);
 
+    // Calls to builtin functions
+    Expr builtin(Type, const std::string &name);
+    Expr builtin(Type, const std::string &name, const Expr &);
+    Expr builtin(Type, const std::string &name, const Expr &, const Expr &);
+
     // Transcendentals
     Expr sqrt(const Expr &);
     Expr sin(const Expr &);
