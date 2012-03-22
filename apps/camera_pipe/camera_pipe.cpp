@@ -318,7 +318,7 @@ int main(int argc, char **argv) {
     // Build the pipeline
     Func processed = process(shifted, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
 
-    processed.compileToFile("curved");
+    processed.compileToFile("curved", {color_temp, gamma, contrast, input, matrix_3200, matrix_7000});
 
     return 0;
 }

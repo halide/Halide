@@ -133,10 +133,24 @@ namespace Halide {
         void compileJIT();
         void compileToFile(const std::string &name);
 
+        struct Arg {
+            template<typename T>
+            Arg(const Uniform<T> &u) : arg(Arg(DynUniform(u)).arg) {}
+            template<typename T>
+            Arg(const Image<T> &u) : arg(Arg(DynImage(u)).arg) {}
+            Arg(const UniformImage &);
+            Arg(const DynUniform &);
+            Arg(const DynImage &);
+            MLVal arg;
+        };
+
+        void compileToFile(const std::string &name, std::vector<Arg> args);
+
     private:
         struct Contents;
 
-        void lower(MLVal &, MLVal &);
+        MLVal lower();
+        MLVal inferArguments();
 
         std::shared_ptr<Contents> contents;
     };
