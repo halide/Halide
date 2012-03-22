@@ -633,7 +633,7 @@ namespace Halide {
     }
 
     // Returns a stmt, args pair
-    void Func::lower(MLVal &stmt, MLVal &fargs) {
+    MLVal Func::lower() {
         // Make a region to evaluate this over
         MLVal sizes = makeList();        
         for (size_t i = args().size(); i > 0; i--) {                
@@ -668,13 +668,13 @@ namespace Halide {
         //printf("Done transforming schedule\n");
         //printSchedule(sched);
         
-        stmt = doLower((name()), 
+        return doLower((name()), 
                        *Func::environment,
-                       sched);
-        
-        // Create a function around it with the appropriate number of args
-        //printf("\nMaking function...\n");           
-        fargs = makeList();
+                       sched);        
+    }
+
+    MLVal Func::inferArguments() {        
+        MLVal fargs = makeList();
         fargs = addToList(fargs, makeBufferArg("result"));
         for (size_t i = rhs().uniformImages().size(); i > 0; i--) {
             MLVal arg = makeBufferArg(rhs().uniformImages()[i-1].name());
@@ -689,12 +689,27 @@ namespace Halide {
             MLVal arg = makeScalarArg(u.name(), u.type().mlval);
             fargs = addToList(fargs, arg);
         }
+        return fargs;
     }
 
-    void Func::compileToFile(const std::string &moduleName) {
- 
-        MLVal stmt, args;
-        lower(stmt, args);
+    Func::Arg::Arg(const UniformImage &u) : arg(makeBufferArg(u.name())) {}
+    Func::Arg::Arg(const DynUniform &u) : arg(makeScalarArg(u.name(), u.type().mlval)) {}
+    Func::Arg::Arg(const DynImage &u) : arg(makeBufferArg(u.name())) {}
+
+    void Func::compileToFile(const std::string &moduleName) { 
+        MLVal stmt = lower();
+        MLVal args = inferArguments();
+        doCompileToFile(moduleName, args, stmt);
+    }
+
+    void Func::compileToFile(const std::string &moduleName, std::vector<Func::Arg> uniforms) { 
+        MLVal stmt = lower();
+
+        MLVal args = makeList();
+        args = addToList(args, makeBufferArg("result"));
+        for (size_t i = uniforms.size(); i > 0; i--) {
+            args = addToList(args, uniforms[i-1].arg);
+        }
 
         doCompileToFile(moduleName, args, stmt);
     }
@@ -730,8 +745,8 @@ namespace Halide {
             llvm::InitializeNativeTarget();
         }
 
-        MLVal stmt, args;
-        lower(stmt, args);
+        MLVal stmt = lower();
+        MLVal args = inferArguments();
 
         printf("compiling IR -> ll\n");
         MLVal tuple;
@@ -808,14 +823,7 @@ namespace Halide {
         if (freeBuffer) {
             ptr = Contents::ee->getPointerToFunction(freeBuffer);
             contents->freeBuffer = (void (*)(buffer_t*))ptr;
-        }
-        
-        /*
-        printf("dumping machine code to file...\n");
-        saveELF("generated.o", ptr, 8192);            
-        printf("Done dumping machine code to file\n");
-        */
-
+        }       
     }
 
     size_t im_size(const DynImage &im, int dim) {
