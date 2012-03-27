@@ -66,7 +66,7 @@ namespace Halide {
             Expr init = builtin(body.type(), "maxval_" + body.type().str());
             init.addImplicitArgs(body.implicitArgs());
             anon(args) = init;
-            anon(args) = select(anon(args)<body, anon(args), body);
+            anon(args) = min(anon(args), body);
             call = anon(args);
         }
         
@@ -88,7 +88,7 @@ namespace Halide {
             Expr init = builtin(body.type(), "minval_" + body.type().str());
             init.addImplicitArgs(body.implicitArgs());
             anon(args) = init;
-            anon(args) = select(anon(args)>body, anon(args), body);
+            anon(args) = max(anon(args), body);
             call = anon(args);
         }
         
