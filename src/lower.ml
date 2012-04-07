@@ -154,7 +154,6 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
         let rec fix_stmt stmt = mutate_children_in_stmt fix_expr fix_stmt stmt in
         fix_stmt stmt
       end
-      | _ -> failwith "I don't know how to schedule this yet"
   in
   (* Printf.printf "\n-------\nResulting statement: %s\n-------\n" (string_of_stmt scheduled_call);   *)
   scheduled_call
@@ -339,13 +338,6 @@ let rec extract_bounds_soup env var_env bounds = function
         in
 
         if region = [] then bounds else begin
-                
-          let string_of_bound = function
-            | Unbounded -> "Unbounded"
-            | Range (min, max) -> "Range (" ^ string_of_expr min ^ ", " ^ string_of_expr max ^ ")"
-          in
-          (* Printf.printf "%s: %s %s\n" func (String.concat ", " args) (String.concat ", " (List.map string_of_bound region)); *)
-        
           (* Add the extent of those vars to the bounds soup *)
           let add_bound bounds arg = function
             | Range (min, max) ->              
@@ -394,24 +386,6 @@ let rec bounds_inference env schedule = function
             in
             let bounds = partial_sort lt bounds in
 
-            let subs_schedule old_expr new_expr schedule =
-              let subs_e e = Constant_fold.constant_fold_expr (subs_expr old_expr new_expr e) in
-              let subs_sched = function
-                | Parallel (n, m, s) -> Parallel (n, subs_e m, subs_e s)
-                | Serial (n, m, s) -> Serial (n, subs_e m, subs_e s)
-                | Vectorized (n, m, s) -> Vectorized (n, subs_e m, s)
-                | Unrolled (n, m, s) -> Unrolled (n, subs_e m, s)
-                | Split (n, no, ni, o) -> Split (n, no, ni, subs_e o)
-              in
-              let keys = list_of_schedule schedule in
-              let update_schedule sched key =
-                let (call_sched, sched_list) = find_schedule sched key in
-                set_schedule sched key call_sched (List.map subs_sched sched_list)
-              in
-
-              List.fold_left update_schedule schedule keys
-            in
-
             let lift_var precomp var value = 
               let value = Constant_fold.constant_fold_expr value in
               (* let value = Break_false_dependence.break_false_dependence_expr value in
@@ -435,12 +409,12 @@ let rec bounds_inference env schedule = function
       end
   | Block l ->
       let rec fix sched = function
-        | Block [] -> (Block [], sched)
-        | Block (first::rest) -> 
-            let (Block fix_rest, fix_sched) = fix sched (Block rest) in
+        | [] -> ([], sched)
+        | (first::rest) -> 
+            let (fix_rest, fix_sched) = fix sched rest in
             let (fix_first, fix_sched) = bounds_inference env fix_sched first in
-            (Block (fix_first::fix_rest), fix_sched)
-      in fix schedule (Block l)
+            ((fix_first::fix_rest), fix_sched)
+      in let (l, schedule) = fix schedule l in (Block l, schedule)
   | Pipeline (name, ty, size, produce, consume) ->
       let (produce, schedule) = bounds_inference env schedule produce in
       let (consume, schedule) = bounds_inference env schedule consume in
@@ -578,7 +552,10 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   (* if 0 < verbosity then print_schedule schedule; *)
 
   dbg 2 "Realizing root statement\n%!";
-  let (Pipeline (_, _, _, core, _)) = realize func (Block []) env schedule in
+  let core = match realize func (Block []) env schedule with 
+    | Pipeline (_, _, _, c, _) -> c
+    | _ -> failwith "Realize didn't return a pipeline"
+  in
 
   dbg 2 "Recursively lowering function calls\n%!";
   let functions = List.filter (fun x -> x <> func) functions in  
@@ -586,8 +563,11 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   dbg 2 "Performing bounds inference\n%!";
   (* Updates stmt and schedule *)
-  let (For (_, _, _, _, stmt), schedule) =
-    bounds_inference env schedule (For ("", IntImm 0, IntImm 0, true, stmt)) in
+  let stmt = bounds_inference env schedule (For ("", IntImm 0, IntImm 0, true, stmt)) in
+  let (stmt, schedule) = match stmt with 
+    | (For (_, _, _, _, stmt), schedule) -> (stmt, schedule)
+    | _ -> failwith "Bounds inference on a for loop returned something other than a for loop"
+  in
 
   (* if 0 < verbosity then print_schedule schedule; *)
 

@@ -95,6 +95,8 @@ namespace Halide {
     DynImage::DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d) : contents(new Contents(t, a, b, c, d)) {}
     DynImage::DynImage(const Type &t, std::vector<uint32_t> sizes) : contents(new Contents(t, sizes)) {}
 
+    DynImage::DynImage(const DynImage &other) : contents(other.contents) {}
+
     const Type &DynImage::type() const {
         return contents->type;
     }
@@ -218,10 +220,20 @@ namespace Halide {
 
     UniformImage::UniformImage(const Type &t, int dims) : 
         contents(new Contents(t, dims)) {
+        for (int i = 0; i < dims; i++) {
+            contents->sizes[i].child(*this);
+        }
     }
 
     UniformImage::UniformImage(const Type &t, int dims, const std::string &name) : 
         contents(new Contents(t, dims, name)) {
+        for (int i = 0; i < dims; i++) {
+            contents->sizes[i].child(*this);
+        }
+    }
+
+    UniformImage::UniformImage(const UniformImage &other) :
+        contents(other.contents) {
     }
 
     void UniformImage::operator=(const DynImage &image) {

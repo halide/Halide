@@ -36,6 +36,7 @@ src/test_*.s
 # app intermediates
 apps/*/out*.png
 apps/*/*.lowered
+apps/*/*.def
 apps/*/*.ptx
 apps/*/passes.txt
 apps/*/*.ll
@@ -50,6 +51,7 @@ test/*/*.s
 test/*/*.png
 test/*/*.time
 test/cpp/*/*.lowered
+test/cpp/*/*.def
 test/cpp/*/*.ptx
 test/cpp/*/passes.txt
 test/cpp/*/*.h
@@ -71,3 +73,8 @@ apps/local_laplacian/local_laplacian.h
 *.pyc
 
 llvm_test/*.ptx
+experiments/CUDABilateralGrid/grid
+experiments/CUDABilateralGrid/bf_*.png
+src/.tags
+apps/blur/halide_blur.s
+cpp_bindings/.tags

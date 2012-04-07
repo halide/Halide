@@ -114,8 +114,8 @@ let rec vectorize_stmt var stmt =
       | Block l -> Block (map vec l)
       | Store (expr, buf, idx) -> Store (vec_expr expr, buf, vec_expr idx)
       | Provide (expr, func, args) -> Provide (vec_expr expr, func, List.map vec_expr args)
-      | Pipeline _ -> failwith "Can't vectorize an inner pipeline (yet?)"
       | Print (prefix, args) -> Print (prefix, List.map vec_expr args)
+      | s -> failwith (Printf.sprintf "Can't vectorize: %s" (Ir_printer.string_of_stmt s))
   in
   match stmt with        
     | For (name, min, n, order, stmt) when name = var ->

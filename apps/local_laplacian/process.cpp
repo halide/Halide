@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     printf("%u\n", bestT);
     */
 
-    local_laplacian(levels, beta, alpha/(levels-1), input, output);
+    local_laplacian(levels, alpha/(levels-1), beta, input, output);
 
     save(output, argv[5]);
 

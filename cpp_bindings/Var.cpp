@@ -37,12 +37,12 @@ namespace Halide {
     }
 
     const Expr &RVar::min() const {
-        assert(contents->min.isDefined());
+        //assert(contents->min.isDefined());
         return contents->min;
     }
     
     const Expr &RVar::size() const {
-        assert(contents->size.isDefined());
+        //assert(contents->size.isDefined());
         return contents->size;
     }
     

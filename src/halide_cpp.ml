@@ -25,6 +25,11 @@ let lower (f:string) (env:environment) (sched: schedule_tree) =
   (* Printexc.record_backtrace true; *)
 
   begin
+    (* dump pre-lowered representation *)
+    let out = open_out (f ^ ".def") in
+    Printf.fprintf out "%s%!" (string_of_environment env);
+    close_out out;
+
     dbg 1 "Lowering function\n";
     let lowered = lower_function f env sched in
     (* Printf.printf "Breaking false dependences\n";
@@ -36,9 +41,12 @@ let lower (f:string) (env:environment) (sched: schedule_tree) =
     dbg 2 "Before constant folding:\n%s\n" (string_of_stmt lowered);
     let lowered = Constant_fold.constant_fold_stmt lowered in 
     dbg 1 "Resulting stmt:\n%s\n" (string_of_stmt lowered);
+
+    (* dump the lowered representation *)
     let out = open_out (f ^ ".lowered") in
     Printf.fprintf out "%s%!" (string_of_stmt lowered);
     close_out out;
+
     lowered
   end
 
@@ -134,12 +142,23 @@ let _ =
   Callback.register "makeDefinition" (fun name argnames body -> (name, List.map (fun x -> (i32, x)) argnames, val_type_of_expr body, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);
   Callback.register "addDefinitionToEnv" (fun env def -> 
-    let (n, _, _, _) = def in 
-    Environment.add n def env
+    add_function def env
   );
   
   Callback.register "addScatterToDefinition" (fun env name update_name update_args update_var reduction_domain ->
-    let (_, args, return_type, Pure init_expr) = Environment.find name env in
+    let (args, return_type, body) = find_function name env in
+    let init_expr = match body with
+      | Pure e -> e
+      | _ -> failwith ("Can't add multiple reduction update steps to " ^ name)
+    in
+
+    let init_dims = List.length args and update_dims = List.length update_args in
+    if List.length args <> List.length update_args then
+      failwith (Printf.sprintf 
+                  "Initial value of %s has %d dimensions, but updated value uses %d dimensions" 
+                  name init_dims update_dims) 
+    else ();
+
     (* The pure args are the naked vars in the update_args list that aren't in the reduction domain *)
     let rec get_pure_args = function
       | [] -> []          
@@ -175,12 +194,9 @@ let _ =
   Callback.register "saveGuruToFile" (fun guru filename -> save_guru_to_file guru filename);
 
   Callback.register "makeSchedule" (fun (f: string) (sizes: expr list) (env: environment) (guru: scheduling_guru) ->
-    let (_, args, _, _) = Environment.find f env in
-    let region = List.map2 (fun (t, v) x -> (v, IntImm 0, x)) args sizes in
     dbg 2 "Guru:\n%s\n%!" (String.concat "\n" guru.serialized);
     dbg 2 "About to make default schedule...\n%!";    
-    generate_schedule f env guru
-      
+    generate_schedule f env guru      
   );
   
   Callback.register "doLower" lower;  

@@ -26,13 +26,13 @@ let rec cg_expr (con : context) (expr : expr) =
 
   let ptr_t = pointer_type (i8_type c) in
   let i32_t = i32_type c in
-  let i8x16_t = vector_type (i8_type c) 16 in
-  let i16x8_t = vector_type (i16_type c) 8 in
+  (* let i8x16_t = vector_type (i8_type c) 16 in *)
+  let i16x8_t = vector_type (i16_type c) 8 in 
   let f32x4_t = vector_type (float_type c) 4 in
   let i16x8x2_t = struct_type c [| i16x8_t; i16x8_t |] in
   let i16x4_t = vector_type (i16_type c) 4 in
   let i32x4_t = vector_type (i32_type c) 4 in
-  let i16x4x2_t = struct_type c [| i16x4_t; i16x4_t |] in
+  (* let i16x4x2_t = struct_type c [| i16x4_t; i16x4_t |] in *)
 
   let cg_expr e = cg_expr con e in
 
@@ -131,7 +131,6 @@ let rec cg_expr (con : context) (expr : expr) =
 
     (* 32 -> 16 *)
     | Cast (IntVector(16, 4), Bop (Div, x, Broadcast(IntImm y, w))) when is_power_of_two y ->
-        let shift = log2 y in
         let intrin = declare_function "llvm.arm.neon.vshiftn.v4i16"
           (function_type (i16x4_t) [|i32x4_t; i32x4_t|]) m in
         let arg1 = cg_expr x in
@@ -260,11 +259,11 @@ exception DeinterleaveFailed
 let rec cg_stmt (con : context) (stmt : stmt) =
   let c = con.c and b = con.b and m = con.m in
   let cg_expr e = cg_expr con e in
-  let cg_stmt s = cg_stmt con s in
+  (* let cg_stmt s = cg_stmt con s in *)
 
   let ptr_t = pointer_type (i8_type c) in
   let i32_t = i32_type c in
-  let i16x8_t = vector_type (i16_type c) 8 in
+  (* let i16x8_t = vector_type (i16_type c) 8 in *)
   let i8x16_t = vector_type (i8_type c) 16 in
   let i16x4_t = vector_type (i16_type c) 4 in
 

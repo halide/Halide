@@ -81,7 +81,7 @@ let rec cg_expr (con:context) (expr:expr) =
 let rec cg_stmt (con:context) (stmt:stmt) =
   let c = con.c and m = con.m and b = con.b in
   let cg_expr = cg_expr con in
-  let cg_stmt = cg_stmt con in
+  (* let cg_stmt = cg_stmt con in *)
   let ptr_t = pointer_type (i8_type c) in
   let i8x16_t = vector_type (i8_type c) 16 in
 
