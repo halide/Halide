@@ -258,27 +258,15 @@ Func process(Func raw, Type result_type,
     if (schedule == 0) {
         // Compute in chunks over tiles, vectorized by 8
         denoised.chunk(tx).vectorize(x, 8);
-
-        // Unroll the tuple part and compute it in the inside loop
-        Var ti, tt = deinterleaved.arg(2);
-        deinterleaved.split(tt, tt, ti, 4).unroll(ti).transpose(y, ti).transpose(x, ti);
         deinterleaved.chunk(tx).vectorize(x, 8);
-
-        Var cc = corrected.arg(2);
-        corrected.chunk(tx).transpose(y, cc).transpose(x, cc).vectorize(x, 4).unroll(cc, 3);
+        corrected.chunk(tx).vectorize(x, 4);
         processed.tile(tx, ty, xi, yi, 32, 32).transpose(ty, ci).transpose(tx, ci);
         processed.parallel(ty);
     } else if (schedule == 1) {
         // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
         denoised.chunk(tx);
-
-        // Unroll the tuple part and compute it in the inside loop
-        Var ti, tt = deinterleaved.arg(2);
-        deinterleaved.split(tt, tt, ti, 4).unroll(ti).transpose(y, ti).transpose(x, ti);
         deinterleaved.chunk(tx);
-
-        Var cc = corrected.arg(2);
-        corrected.chunk(tx).transpose(y, cc).transpose(x, cc).unroll(cc, 3);
+        corrected.chunk(tx);
         processed.tile(tx, ty, xi, yi, 128, 128).transpose(ty, ci).transpose(tx, ci);
         processed.parallel(ty);
     } else {
@@ -318,7 +306,7 @@ int main(int argc, char **argv) {
     // Build the pipeline
     Func processed = process(shifted, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
 
-    processed.compileToFile("curved");
+    processed.compileToFile("curved", {color_temp, gamma, contrast, input, matrix_3200, matrix_7000});
 
     return 0;
 }

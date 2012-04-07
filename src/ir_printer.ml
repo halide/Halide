@@ -121,15 +121,32 @@ and string_of_arg = function
   | Scalar (s, t) -> (string_of_val_type t) ^ " " ^ s
 
 and string_of_definition (name, args, rtype, body) =
-  let s = name ^ "(" ^
-          String.concat ", "
-            (List.map (fun (t,n) -> n ^ ":" ^ (string_of_val_type t)) args) ^
-          ")" ^ " -> " ^ (string_of_val_type rtype)
+  let string_of_arglist f args = "(" ^ String.concat ", " (List.map f args) ^ ")" in
+  let s = name ^
+          (string_of_arglist (fun (_,n) -> n) args) ^
+          " -> " ^ (string_of_val_type rtype)
   in
   match body with
     | Pure(e) -> s ^ " = " ^ (string_of_expr e)
+
+    (* Reduction consists of initializer, update location, update function, and iteration domain for the update *)
+    | Reduce (init, update_idx, update_func, reduction_domain) ->
+        (* First write the init rule *)
+        let init_s = string_of_definition(name, args, rtype, Pure(init)) in
+        (* Then write the update rule *)
+        let update_s = name ^ ".reduce" ^
+                       (string_of_arglist (fun idx -> (string_of_expr idx)) update_idx) ^
+                       " <- " ^
+                       update_func ^ (string_of_arglist (fun (name,_,_) -> name) reduction_domain) ^ "\n" ^
+                       "\tover " ^
+                       (string_of_arglist
+                         (fun (name, min, size) ->
+                           name ^ " : [" ^ (string_of_expr min) ^ ".." ^ (string_of_expr size) ^ "]")
+                         reduction_domain)
+                       in
+        init_s ^ "\n" ^ update_s
+
     | Extern -> s ^ " = {EXTERN}"
-    | _ -> s ^ " = {IMPURE}" (* TODO *)
 
 and string_of_environment env =
   let (_,defs) = List.split (Environment.bindings env) in

@@ -151,10 +151,7 @@ let rec val_type_of_expr = function
   (* Binary operators and selects expect matching types on their
      sub-expressions *)
   | Bop (_, l, r) 
-  | Select (_, l, r) ->
-      let lt = val_type_of_expr l and rt = val_type_of_expr r in
-      (* if (lt <> rt) then raise (ArithmeticTypeMismatch (lt, rt)); *)
-      lt
+  | Select (_, l, r) -> val_type_of_expr l
 
   (* And, Or, and Not all have the same type as their first arg (which
      should be a bool or bool vector) *)
@@ -166,8 +163,7 @@ let rec val_type_of_expr = function
   (* Comparisons on vector types return bool vectors of equal length*)
   (* Comparisons on scalars return scalar bools *)
   | Cmp (_, l, r) -> 
-      let lt = val_type_of_expr l and rt = val_type_of_expr r in
-      (* if (lt <> rt) then raise (ArithmeticTypeMismatch (lt, rt)); *)
+      let lt = val_type_of_expr l in
       begin match lt with
         | IntVector (_, n) 
         | UIntVector (_, n) 
@@ -259,8 +255,17 @@ let parent_name name =
 
 let find_function (name:string) (env:environment) =
   let fname = base_name name in
-  let (_, args, return_type, body) = Environment.find fname env in
+  let (_, args, return_type, body) = 
+    try Environment.find fname env with Not_found -> failwith ("Could not find definition for " ^ name)
+  in
   (args, return_type, body)
+
+let add_function (def:definition) (env:environment) =
+  let (name, _, _, _) = def in
+  if (Environment.mem name env) then
+    failwith ("Multiple definitions of function " ^ name)
+  else
+    Environment.add name def env
 
 type arg =
   | Scalar of string * val_type

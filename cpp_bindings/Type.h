@@ -18,12 +18,12 @@ namespace Halide {
             return !(*this == other);
         }
         std::string str() const {
-            std::string codes[] = {"float", "int", "uint"};
+            std::string codes[] = {"f", "s", "u"};
             std::ostringstream ss;
             ss << ((code < 3 && code >= 0) ? codes[code] : "malformed_type_");
             ss << (int)(bits);
             return ss.str();
-        }
+        }        
     };
 
     Type Float(unsigned char bits);

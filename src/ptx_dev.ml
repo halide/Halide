@@ -82,6 +82,7 @@ let rec cg_stmt con stmt = match stmt with
             let space = match address_space (type_of mr) with
               | 0 -> "global"
               | 4 -> "shared"
+              | x -> failwith (Printf.sprintf "Bad address space: %d" x)
             in
             let op = "add" in
             let opty, mr = match ty with
@@ -93,7 +94,7 @@ let rec cg_stmt con stmt = match stmt with
                   "u32", build_pointercast mr (pointer_type (i32_type con.c)) "" con.b
               | UInt 64 ->
                   "u64", build_pointercast mr (pointer_type (i64_type con.c)) "" con.b
-              | _ -> failwith "PTX atomics not supported for type %s" (string_of_val_type ty)
+              | _ -> failwith (Printf.sprintf "PTX atomics not supported for type %s" (string_of_val_type ty))
             in
             let intr = Printf.sprintf "llvm.ptx.red.%s.%s.%s" space op opty in
             let red = match lookup_function intr con.m with

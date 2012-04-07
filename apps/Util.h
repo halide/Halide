@@ -2,6 +2,19 @@
 #include <memory>
 #include <limits>
 
+#ifndef buffer_t_defined
+#define buffer_t_defined
+#include <stdint.h>
+typedef struct buffer_t {
+  uint8_t* host;
+  uint64_t dev;
+  bool host_dirty;
+  bool dev_dirty;
+  size_t dims[4];
+  size_t elem_size;
+} buffer_t;
+#endif
+
 extern "C" void __copy_to_host(buffer_t* buf);
 
 template<typename T>
@@ -9,7 +22,9 @@ class Image {
     struct Contents {
         buffer_t buf;
         uint8_t *alloc;
-        ~Contents() {delete[] alloc;}        
+        ~Contents() {
+            delete[] alloc;
+        }        
     };
 
     std::shared_ptr<Contents> contents;
@@ -32,10 +47,14 @@ class Image {
     }
 
 public:
+    Image() {
+    }
+    
     Image(int w, int h = 1, int c = 1) {
         initialize(w, h, c);
     }
 
+    T *data() {return (T*)contents->buf.host;}
 
     Image(std::initializer_list<T> l) {
         initialize(l.size(), 1, 1);

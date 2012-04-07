@@ -389,7 +389,7 @@ int main(int argc, char **argv) {
         break;
     }
 
-    output.compileToFile("local_laplacian");
+    output.compileToFile("local_laplacian", {levels, alpha, beta, input});
 
 
     return 0;

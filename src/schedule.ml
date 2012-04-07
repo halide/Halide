@@ -37,10 +37,6 @@ type schedule =
  * should I hoist this out to, and should I fuse with other calls to the same callee *)
 type call_schedule =
   | Chunk of dimension (* of caller *)
-  (* level in callee where dynamic/static transition happens - chunk granularity *)
-  | Dynamic of dimension
-  (* dimension of caller always pairs with outermost dimension of callee *)
-  | Coiterate of dimension * int (* offset *) * int (* modulus *)
   | Inline (* block over nothing - just do in place *)
   | Root (* There is no calling context *)
   | Reuse of string (* Just do what some other function does, using the same data structure *)
@@ -144,9 +140,6 @@ let list_of_schedule (tree:schedule_tree) =
 
 let string_of_call_schedule = function
   | Chunk d -> "Chunk " ^ d 
-  | Dynamic d -> "Dynamic " ^ d
-  | Coiterate (d, offset, modulus) -> 
-      "Coiterate " ^ d ^ " " ^ (string_of_int offset) ^ " " ^ (string_of_int modulus)
   | Inline -> "Inline"
   | Root -> "Root"      
   | Reuse s -> "Reuse " ^ s

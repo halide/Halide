@@ -54,6 +54,51 @@ namespace Halide {
     private:
         Expr call;
     };
+
+    class minimum {
+      public:
+        minimum(const Expr &body) {
+            Func anon;
+            std::vector<Expr> args(body.vars().size());
+            for (size_t i = 0; i < body.vars().size(); i++) {
+                args[i] = body.vars()[i];
+            }
+            Expr init = builtin(body.type(), "maxval_" + body.type().str());
+            init.addImplicitArgs(body.implicitArgs());
+            anon(args) = init;
+            anon(args) = min(anon(args), body);
+            call = anon(args);
+        }
+        
+        operator Expr() {
+            return call;
+        }
+      private:
+        Expr call;
+    };
+    
+    class maximum {
+      public:
+        maximum(const Expr &body) {
+            Func anon;
+            std::vector<Expr> args(body.vars().size());
+            for (size_t i = 0; i < body.vars().size(); i++) {
+                args[i] = body.vars()[i];
+            }
+            Expr init = builtin(body.type(), "minval_" + body.type().str());
+            init.addImplicitArgs(body.implicitArgs());
+            anon(args) = init;
+            anon(args) = max(anon(args), body);
+            call = anon(args);
+        }
+        
+        operator Expr() {
+            return call;
+        }
+      private:
+        Expr call;
+    };
+
 }
 
 #endif

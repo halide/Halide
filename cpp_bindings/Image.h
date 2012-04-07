@@ -19,6 +19,7 @@ namespace Halide {
         DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c);
         DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
         DynImage(const Type &t, std::vector<uint32_t> sizes);
+        DynImage(const DynImage &other);
 
         Expr operator()(const Expr &a) const;
         Expr operator()(const Expr &a, const Expr &b) const;
@@ -181,6 +182,7 @@ namespace Halide {
     public:
         UniformImage(const Type &t, int dims);
         UniformImage(const Type &t, int dims, const std::string &name);
+        UniformImage(const UniformImage &);
 
         void operator=(const DynImage &image);
         unsigned char *data() const;
