@@ -9,8 +9,8 @@ extern "C" {
 int main(int argc, char **argv) {
 
     if (argc < 2) {
-        printf("Usage: ./process input.png output.png"
-               "e.g. ./process input.png output.png");
+        printf("Usage: ./process input.png NSEAMS output.png"
+               "e.g. ./process input.png 5 output.png");
         return 0;
     }
 
