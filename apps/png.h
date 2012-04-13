@@ -138,28 +138,46 @@ void save(Image<T> im, std::string filename) {
 
     png_init_io(png_ptr, f);
 
+	unsigned int bit_depth = 16;
+	if (sizeof(T) == 1) {
+		bit_depth = 8;
+	}
+
     // write header
     _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing header\n");
 
     png_set_IHDR(png_ptr, info_ptr, im.width(), im.height(),
-                 16, color_type, PNG_INTERLACE_NONE,
+                 bit_depth, color_type, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
 
     png_write_info(png_ptr, info_ptr);
 
-    // convert to uint16_t
     row_pointers = new png_bytep[im.height()];
     for (int y = 0; y < im.height(); y++) {
-	row_pointers[y] = new png_byte[png_get_rowbytes(png_ptr, info_ptr)];
+		row_pointers[y] = new png_byte[png_get_rowbytes(png_ptr, info_ptr)];
         uint8_t *dstPtr = (uint8_t *)(row_pointers[y]);
-        for (int x = 0; x < im.width(); x++) {
-            for (int c = 0; c < im.channels(); c++) {
-                uint16_t out;
-                convert(im(x, y, c), out);
-                *dstPtr++ = out >> 8; 
-                *dstPtr++ = out & 0xff;
+		if (bit_depth == 16) {
+    		// convert to uint16_t
+			for (int x = 0; x < im.width(); x++) {
+				for (int c = 0; c < im.channels(); c++) {
+					uint16_t out;
+					convert(im(x, y, c), out);
+					*dstPtr++ = out >> 8; 
+					*dstPtr++ = out & 0xff;
+				}
             }
-        }
+        } else if (bit_depth == 8) {
+    		// convert to uint8_t
+			for (int x = 0; x < im.width(); x++) {
+				for (int c = 0; c < im.channels(); c++) {
+					uint8_t out;
+					convert(im(x, y, c), out);
+					*dstPtr++ = out;
+				}
+            }
+		} else {
+			_assert(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.");
+		}
     }
 
     // write data
