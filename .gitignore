@@ -32,6 +32,7 @@ src/test_*.s
 .clang_complete
 *.guru
 *.dSYM
+.*.swp
 
 # app intermediates
 apps/*/out*.png

@@ -1,5 +1,5 @@
-#include <FImage.h>
-using namespace FImage;
+#include <Halide.h>
+using namespace Halide;
 
 int main(int argc, char **argv) {
 
