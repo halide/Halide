@@ -76,7 +76,7 @@ namespace Halide {
         DynImage realize(int a, int b);
         DynImage realize(int a, int b, int c);
         DynImage realize(int a, int b, int c, int d);
-        DynImage realize(std::vector<uint32_t> sizes);
+        DynImage realize(std::vector<int> sizes);
         void realize(const DynImage &);
 
         /* If this function is a reduction, get a handle to its update
@@ -112,7 +112,7 @@ namespace Halide {
         Func &cudaTile(const Var &, const Var &, int xFactor, int yFactor);
         //Func &cuda(const Var &, const Var &, const Var &, const Var &, const Var &, const Var &);
 
-        int autotune(int argc, char **argv, std::vector<uint32_t> sizes);
+        int autotune(int argc, char **argv, std::vector<int> sizes);
 
         bool operator==(const Func &other) const;
 

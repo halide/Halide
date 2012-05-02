@@ -358,7 +358,7 @@ namespace Halide {
         exit(-1);
     }
 
-    int Func::autotune(int argc, char **argv, std::vector<uint32_t> sizes) {
+    int Func::autotune(int argc, char **argv, std::vector<int> sizes) {
         timeval before, after;
 
         printf("sizes: ");
@@ -578,7 +578,7 @@ namespace Halide {
         return im;
     }
 
-    DynImage Func::realize(std::vector<uint32_t> sizes) {
+    DynImage Func::realize(std::vector<int> sizes) {
         DynImage im(returnType(), sizes);
         realize(im);
         return im;

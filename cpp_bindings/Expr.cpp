@@ -37,6 +37,7 @@ namespace Halide {
     ML_FUNC2(makeAnd);
     ML_FUNC2(makeOr);
     ML_FUNC1(makeNot);
+    ML_FUNC1(inferType);
 
     template<typename T>
     void set_add(std::vector<T> &a, const T &b) {
@@ -54,7 +55,7 @@ namespace Halide {
     }
 
     struct Expr::Contents {
-        Contents(MLVal n, Type t) : node(n), type(t), isVar(false), isRVar(false), implicitArgs(0) {}
+        Contents(MLVal n, Type t) : node(n), type(t), isVar(false), isRVar(false), isImmediate(false), implicitArgs(0) {}
         Contents(const FuncRef &f);
 
         // Declare that this expression is the child of another for bookkeeping
@@ -84,8 +85,8 @@ namespace Halide {
         // The list of uniform images referred to
         std::vector<UniformImage> uniformImages;
         
-        // Sometimes it's useful to be able to tell if an expression is a simple var or not
-        bool isVar, isRVar;
+        // Sometimes it's useful to be able to tell if an expression is a simple var or not, or if it's an immediate.
+        bool isVar, isRVar, isImmediate;
         
         // The number of arguments that remain implicit
         int implicitArgs;
@@ -103,15 +104,19 @@ namespace Halide {
     }
 
     Expr::Expr(int32_t val) : contents(new Contents(makeIntImm(val), Int(32))) {
+        contents->isImmediate = true;
     }
 
     Expr::Expr(uint32_t val) : contents(new Contents(makeUIntImm(val), UInt(32))) {
+        contents->isImmediate = true;
     }
 
     Expr::Expr(float val) : contents(new Contents(makeFloatImm(val), Float(32))) {
+        contents->isImmediate = true;
     }
 
     Expr::Expr(double val) : contents(new Contents(makeCast(Float(64).mlval, makeFloatImm(val)), Float(64))) {
+        contents->isImmediate = true;
     }
 
     Expr::Expr(const Var &v) : contents(new Contents(makeVar((v.name())), Int(32))) {
@@ -160,6 +165,10 @@ namespace Halide {
 
     bool Expr::isRVar() const {
         return contents->isRVar;
+    }
+
+    bool Expr::isImmediate() const {
+        return contents->isImmediate;
     }
 
     int Expr::implicitArgs() const {
@@ -260,7 +269,8 @@ namespace Halide {
         set_add(contents->funcs, f);
     }
 
-    void Expr::operator+=(Expr other) {        
+    void Expr::operator+=(Expr other) {                
+        other = cast(type(), other);
         contents->node = makeAdd(node(), other.node());
         child(other);
     }
@@ -272,21 +282,63 @@ namespace Halide {
     */
     
     void Expr::operator*=(Expr other) {
+        other = cast(type(), other);
         contents->node = makeMul(node(), other.node());
         child(other);
     }
 
     void Expr::operator/=(Expr other) {
+        other = cast(type(), other);
         contents->node = makeDiv(node(), other.node());
         child(other);
     }
 
     void Expr::operator-=(Expr other) {
+        other = cast(type(), other);
         contents->node = makeSub(node(), other.node());
         child(other);
     }
 
+    std::tuple<Expr, Expr> matchTypes(Expr a, Expr b) {
+        Type ta = a.type(), tb = b.type();
+
+        if (ta == tb) return std::make_tuple(a, b);
+        
+        // int(a) * float(b) -> float(b)
+        // uint(a) * float(b) -> float(b)
+        if (!ta.isFloat() && tb.isFloat()) return std::make_tuple(cast(tb, a), b);
+        if (ta.isFloat() && !tb.isFloat()) return std::make_tuple(a, cast(ta, b));
+        
+        // float(a) * float(b) -> float(max(a, b))
+        if (ta.isFloat() && tb.isFloat()) {
+            if (ta.bits > tb.bits) return std::make_tuple(a, cast(ta, b));
+            else return std::make_tuple(cast(tb, a), b);
+        }
+
+        // (u)int(a) * (u)intImm(b) -> int(a)
+        if (!ta.isFloat() && !tb.isFloat() && b.isImmediate()) return std::make_tuple(a, cast(ta, b));
+        if (!tb.isFloat() && !ta.isFloat() && a.isImmediate()) return std::make_tuple(cast(tb, a), b);        
+
+        // uint(a) * uint(b) -> uint(max(a, b))
+        if (ta.isUInt() && tb.isUInt()) {
+            if (ta.bits > tb.bits) return std::make_tuple(a, cast(ta, b));
+            else return std::make_tuple(cast(tb, a), b);
+        }
+
+        // int(a) * (u)int(b) -> int(max(a, b))
+        if (!ta.isFloat() && !tb.isFloat()) {
+            int bits = std::max(ta.bits, tb.bits);
+            return std::make_tuple(cast(Int(bits), a), cast(Int(bits), b));
+        }        
+
+        printf("Could not match types: %s, %s\n", ta.str().c_str(), tb.str().c_str());
+        assert(false && "Failed type coercion");
+        return std::make_tuple(a, b);
+    }
+
     Expr operator+(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to + must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeAdd(a.node(), b.node()), a.type());
         e.child(a); 
         e.child(b); 
@@ -294,6 +346,8 @@ namespace Halide {
     }
 
     Expr operator-(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to - must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeSub(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -305,6 +359,8 @@ namespace Halide {
     }
 
     Expr operator*(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to * must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeMul(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -312,6 +368,8 @@ namespace Halide {
     }
 
     Expr operator/(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to / must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeDiv(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -319,6 +377,8 @@ namespace Halide {
     }
 
     Expr operator%(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to % must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeMod(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -326,6 +386,8 @@ namespace Halide {
     }
 
     Expr operator>(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to > must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeGT(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -333,6 +395,8 @@ namespace Halide {
     }
     
     Expr operator<(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to < must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeLT(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -340,6 +404,8 @@ namespace Halide {
     }
     
     Expr operator>=(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to >= must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeGE(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -347,6 +413,8 @@ namespace Halide {
     }
     
     Expr operator<=(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to <= must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeLE(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -354,6 +422,8 @@ namespace Halide {
     }
     
     Expr operator!=(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to != must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeNE(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -361,6 +431,8 @@ namespace Halide {
     }
 
     Expr operator==(Expr a, Expr b) {
+        //assert(a.type() == b.type() && "Arguments to == must have the same type");
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeEQ(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -368,6 +440,9 @@ namespace Halide {
     }
     
     Expr operator&&(Expr a, Expr b) {
+        //assert(a.type() == Int(1) && b.type() == Int(1) && "Arguments to && must be bool");
+        a = cast(Int(1), a);
+        b = cast(Int(1), b);        
         Expr e(makeAnd(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -375,6 +450,9 @@ namespace Halide {
     }
 
     Expr operator||(Expr a, Expr b) {
+        //assert(a.type() == Int(1) && b.type() == Int(1) && "Arguments to || must be bool");
+        a = cast(Int(1), a);
+        b = cast(Int(1), b);        
         Expr e(makeOr(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -382,6 +460,8 @@ namespace Halide {
     }
 
     Expr operator!(Expr a) {
+        //assert(a.type() == Int(1) && "Argument to ! must be bool");
+        a = cast(Int(1), a);
         Expr e(makeNot(a.node()), Int(1));
         e.child(a);
         return e;
@@ -415,35 +495,55 @@ namespace Halide {
     }
 
     Expr sqrt(Expr a) {
+        //assert(a.type() == Float(32) && "Argument to sqrt must be a float");
+        a = cast(Float(32), a);
         return builtin(Float(32), "sqrt_f32", a);
     }
 
     Expr sin(Expr a) {
+        //assert(a.type() == Float(32) && "Argument to sin must be a float");
+        a = cast(Float(32), a);
         return builtin(Float(32), "sin_f32", a);
     }
     
     Expr cos(Expr a) {
+        //assert(a.type() == Float(32) && "Argument to cos must be a float");
+        a = cast(Float(32), a);
         return builtin(Float(32), "cos_f32", a);
     }
 
     Expr pow(Expr a, Expr b) {
+        //assert(a.type() == Float(32) && "First argument to pow must be a float");
+        //assert(b.type() == Float(32) && "Second argument to pow must be a floats");
+        a = cast(Float(32), a);
+        b = cast(Float(32), b);        
         return builtin(Float(32), "pow_f32", a, b);
     }
 
     Expr exp(Expr a) {
+        //assert(a.type() == Float(32) && "Argument to exp must be a float");
+        a = cast(Float(32), a);
         return builtin(Float(32), "exp_f32", a);
     }
 
     Expr log(Expr a) {
+        //assert(a.type() == Float(32) && "Argument to log must be a float");
+        a = cast(Float(32), a);
         return builtin(Float(32), "log_f32", a);
     }
 
     Expr floor(Expr a) {
+        //assert(a.type() == Float(32) && "Argument to floor must be a float");
+        a = cast(Float(32), a);
         return builtin(Float(32), "floor_f32", a);
     }
 
 
     Expr select(Expr cond, Expr thenCase, Expr elseCase) {
+        //assert(thenCase.type() == elseCase.type() && "then case must have same type as else case in select");
+        //assert(cond.type() == Int(1) && "condition must have type bool in select");
+        std::tie(thenCase, elseCase) = matchTypes(thenCase, elseCase);
+        cond = cast(Int(1), cond);
         Expr e(makeSelect(cond.node(), thenCase.node(), elseCase.node()), thenCase.type());
         e.child(cond);
         e.child(thenCase);
@@ -452,6 +552,7 @@ namespace Halide {
     }
     
     Expr max(Expr a, Expr b) {
+        assert(a.type() == b.type() && "Arguments to max must have the same type");
         Expr e(makeMax(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -459,6 +560,7 @@ namespace Halide {
     }
 
     Expr min(Expr a, Expr b) {
+        assert(a.type() == b.type() && "Arguments to min must have the same type");
         Expr e(makeMin(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -466,6 +568,7 @@ namespace Halide {
     }
     
     Expr clamp(Expr a, Expr mi, Expr ma) {
+        assert(a.type() == mi.type() && a.type() == ma.type() && "Arguments to clamp must have the same type");
         return max(min(a, ma), mi);
     }
 
@@ -581,6 +684,7 @@ namespace Halide {
 
 
     Expr cast(Type t, Expr e) {
+        if (e.type() == t) return e;
         Expr c(makeCast(t.mlval, e.node()), t);
         c.child(e);
         return c;

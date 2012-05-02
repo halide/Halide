@@ -8,17 +8,17 @@
 
 namespace Halide {
     struct DynImage::Contents {
-        Contents(const Type &t, uint32_t a);
-        Contents(const Type &t, uint32_t a, uint32_t b);
-        Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c);
-        Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
-        Contents(const Type &t, std::vector<uint32_t> sizes);
+        Contents(const Type &t, int a);
+        Contents(const Type &t, int a, int b);
+        Contents(const Type &t, int a, int b, int c);
+        Contents(const Type &t, int a, int b, int c, int d);
+        Contents(const Type &t, std::vector<int> sizes);
         ~Contents();
         
         void allocate(size_t bytes);
         
         Type type;
-        std::vector<uint32_t> size, stride;
+        std::vector<int> size, stride;
         const std::string name;
         unsigned char *data;
         std::vector<unsigned char> host_buffer;
@@ -27,27 +27,27 @@ namespace Halide {
         mutable void (*freeBuffer)(buffer_t*);
     };
 
-    DynImage::Contents::Contents(const Type &t, uint32_t a) : 
+    DynImage::Contents::Contents(const Type &t, int a) : 
         type(t), size{a}, stride{1}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         allocate(a * (t.bits/8));
     }
     
-    DynImage::Contents::Contents(const Type &t, uint32_t a, uint32_t b) : 
+    DynImage::Contents::Contents(const Type &t, int a, int b) : 
         type(t), size{a, b}, stride{1, a}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         allocate(a * b * (t.bits/8));
     }
     
-    DynImage::Contents::Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c) : 
+    DynImage::Contents::Contents(const Type &t, int a, int b, int c) : 
         type(t), size{a, b, c}, stride{1, a, a*b}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         allocate(a * b * c * (t.bits/8));
     }
 
-    DynImage::Contents::Contents(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d) : 
+    DynImage::Contents::Contents(const Type &t, int a, int b, int c, int d) : 
         type(t), size{a, b, c, d}, stride{1, a, a*b, a*b*c}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         allocate(a * b * c * d * (t.bits/8));
     }
 
-    DynImage::Contents::Contents(const Type &t, std::vector<uint32_t> sizes) :
+    DynImage::Contents::Contents(const Type &t, std::vector<int> sizes) :
         type(t), size(sizes), stride(sizes.size()), name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         
         size_t total = 1;
@@ -86,14 +86,14 @@ namespace Halide {
         buf.elem_size = type.bits/8;
     }
     
-    DynImage::DynImage(const Type &t, uint32_t a) : contents(new Contents(t, a)) {}
+    DynImage::DynImage(const Type &t, int a) : contents(new Contents(t, a)) {}
 
-    DynImage::DynImage(const Type &t, uint32_t a, uint32_t b) : contents(new Contents(t, a, b)) {}
+    DynImage::DynImage(const Type &t, int a, int b) : contents(new Contents(t, a, b)) {}
 
-    DynImage::DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c) : contents(new Contents(t, a, b, c)) {}
+    DynImage::DynImage(const Type &t, int a, int b, int c) : contents(new Contents(t, a, b, c)) {}
 
-    DynImage::DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d) : contents(new Contents(t, a, b, c, d)) {}
-    DynImage::DynImage(const Type &t, std::vector<uint32_t> sizes) : contents(new Contents(t, sizes)) {}
+    DynImage::DynImage(const Type &t, int a, int b, int c, int d) : contents(new Contents(t, a, b, c, d)) {}
+    DynImage::DynImage(const Type &t, std::vector<int> sizes) : contents(new Contents(t, sizes)) {}
 
     DynImage::DynImage(const DynImage &other) : contents(other.contents) {}
 
@@ -101,11 +101,11 @@ namespace Halide {
         return contents->type;
     }
 
-    uint32_t DynImage::stride(int i) const {
+    int DynImage::stride(int i) const {
         return contents->stride[i];
     }
 
-    uint32_t DynImage::size(int i) const {
+    int DynImage::size(int i) const {
         return contents->size[i];
     }
 
