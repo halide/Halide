@@ -1,3 +1,7 @@
+LLVM_ROOT=../../llvm/Release+Asserts
+LLC=$(LLVM_ROOT)/bin/llc
+OPT=$(LLVM_ROOT)/bin/opt
+
 halide_blur: ../../cpp_bindings/ ../../src/ halide_blur.cpp
 	$(MAKE) -C ../../cpp_bindings FImage.a
 	g++-4.6 halide_blur.cpp -I ../../cpp_bindings/ ../../cpp_bindings/FImage.a  -std=c++0x -o halide_blur -ldl -lpthread
