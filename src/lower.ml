@@ -207,6 +207,12 @@ and realize func consume env schedule =
     | Extern -> failwith ("Can't lower extern function call " ^ func)
     | Pure body ->
         let inner_stmt = Provide (body, func, arg_vars) in
+
+        let inner_stmt = if (trace_verbosity > 1) then
+            Block [Print ("Storing " ^ func ^ " at ", arg_vars @ [body]); inner_stmt]
+          else inner_stmt
+        in
+
         let produce = List.fold_left (wrap sched_list) inner_stmt sched_list in
         let rec flatten = function
           | (x, y)::rest -> x::y::(flatten rest)

@@ -65,7 +65,8 @@ int main(int argc, char **argv) {
     // Make the processed Gaussian pyramid. 
     Func gPyramid[J];
     // Do a lookup into a lut with 256 entires per intensity level
-    Expr idx = clamp(cast<int>(gray(x, y)*(levels-1)*256.0f), 0, (levels-1)*256);
+    Expr idx = gray(x, y)*cast<float>(levels-1)*256.0f;
+    idx = clamp(cast<int>(idx), 0, (levels-1)*256);
     gPyramid[0](x, y, k) = beta*gray(x, y) + remap(idx - 256*k);
     //gPyramid[0](x, y, k) = remap(gray(x, y), cast<float>(k) / (levels-1), alpha, beta, levels-1);
     for (int j = 1; j < J; j++)

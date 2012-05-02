@@ -67,4 +67,5 @@ namespace Halide {
     Type UInt(unsigned char bits) {
         return Type {makeUIntType((bits)), bits, Type::UINT};
     }
+
 }
