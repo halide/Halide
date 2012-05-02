@@ -14,11 +14,11 @@ namespace Halide {
     class DynImage {
     public:
 
-        DynImage(const Type &t, uint32_t a);
-        DynImage(const Type &t, uint32_t a, uint32_t b);
-        DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c);
-        DynImage(const Type &t, uint32_t a, uint32_t b, uint32_t c, uint32_t d);
-        DynImage(const Type &t, std::vector<uint32_t> sizes);
+        DynImage(const Type &t, int a);
+        DynImage(const Type &t, int a, int b);
+        DynImage(const Type &t, int a, int b, int c);
+        DynImage(const Type &t, int a, int b, int c, int d);
+        DynImage(const Type &t, std::vector<int> sizes);
         DynImage(const DynImage &other);
 
         Expr operator()(const Expr &a) const;
@@ -27,8 +27,8 @@ namespace Halide {
         Expr operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) const;
 
         const Type &type() const;
-        uint32_t stride(int i) const;
-        uint32_t size(int i) const;
+        int stride(int i) const;
+        int size(int i) const;
         int dimensions() const;
         unsigned char *data() const;
         const std::string &name() const;
@@ -42,9 +42,9 @@ namespace Halide {
         bool devDirty() const;
         
         // Convenience functions for typical interpretations of dimensions
-        uint32_t width() const {return size(0);}
-        uint32_t height() const {return size(1);}
-        uint32_t channels() const {
+        int width() const {return size(0);}
+        int height() const {return size(1);}
+        int channels() const {
             if (dimensions() > 2)
                 return size(2);
             else
@@ -162,10 +162,10 @@ namespace Halide {
         }
 
         // Convenience functions for typical interpretations of dimensions
-        uint32_t width() const {return im.width();}
-        uint32_t height() const {return im.height();}
-        uint32_t channels() const {return im.channels();}
-        uint32_t size(int i) const {return im.size(i);}
+        int width() const {return im.width();}
+        int height() const {return im.height();}
+        int channels() const {return im.channels();}
+        int size(int i) const {return im.size(i);}
         int dimensions() const {return im.dimensions();}
         unsigned char *data() const {return im.data();}
     };

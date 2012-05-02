@@ -4,6 +4,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <tuple>
+
 #include "MLVal.h"
 #include "Type.h"
 
@@ -75,6 +77,7 @@ namespace Halide {
         bool isVar() const;
         bool isRVar() const;
         bool isDefined() const;
+        bool isImmediate() const;
 
         // For a scalar this is an empty vector
         // For a tuple this gives the shape of the tuple
@@ -89,6 +92,9 @@ namespace Halide {
         struct Contents;
         std::shared_ptr<Contents> contents;
     };
+
+    // Force two exprs to have compatible types
+    std::tuple<Expr, Expr> matchTypes(Expr a, Expr b);
 
     // Make a binary op node
     Expr operator+(Expr, Expr);
