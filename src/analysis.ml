@@ -43,6 +43,7 @@ and compute_remainder_modulus expr =
     else 
       binop_remainder_modulus x y ( * )
   | Bop _ | Load _ | Var _ | ExtractElement _ -> (0, 1)
+  | Debug (e, _, _) -> compute_remainder_modulus e
   | MakeVector _ -> raise ModulusOfMakeVector
   | Broadcast _ -> raise ModulusOfBroadcast
   | Ramp _ -> raise ModulusOfRamp
