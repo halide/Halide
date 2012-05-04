@@ -23,7 +23,8 @@ int main(int argc, char **argv) {
 
     bilateral_grid(atof(argv[3]), input, output);
     
-    /* Timing code 
+#if 1
+    // Timing code 
     timeval t1, t2;
     gettimeofday(&t1, NULL);
     for (int i = 0; i < 20; i++) 
@@ -31,7 +32,7 @@ int main(int argc, char **argv) {
     gettimeofday(&t2, NULL);
     double t = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;
     printf("Time: %fms\n", t/20);
-    */
+#endif
 
     save(output, argv[2]);
 
