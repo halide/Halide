@@ -3,18 +3,15 @@
 
 using namespace Halide;
 
-int call_counter = 0;
-
 // NB: You must compile with -rdynamic for llvm to be able to find the appropriate symbols
 
-extern "C" {
-float my_func(int x, float y) {
+int call_counter = 0;
+extern "C" float my_func(int x, float y) {
     call_counter++;
     printf("Hi: %d %f\n", x, y);
     return x*y;
 }
-}
-
+HalideExtern_2(float, my_func, int, float);
 
 int main(int argc, char **argv) {
     Var x, y;
@@ -22,7 +19,7 @@ int main(int argc, char **argv) {
 
     printf("Defining function...\n");
 
-    f(x, y) = builtin(Float(32), "my_func", x, cast<float>(y));
+    f(x, y) = my_func(x, cast<float>(y));
 
     printf("Realizing function...\n");
 
