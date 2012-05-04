@@ -61,12 +61,14 @@ def test_cpp(name):
             compile_cmd = ["-std=c++0x", 
                            "-I../../../cpp_bindings",
                            "-Wno-format",
+                           "-fPIC",
+                           "-rdynamic",
                            srcfile,                   
                            "../../../cpp_bindings/Halide.a", 
                            "-ldl", "-lpthread"]
 
             if os.path.exists("/usr/local/cuda"):
-                compile_cmd = compile_cmd + ["-L/usr/local/cuda/lib", "-lcuda"]
+                compile_cmd = compile_cmd + ["-L/usr/local/cuda/lib", "-L/usr/lib/nvidia-current", "-lcuda"]
             
             try:
                 # Build the test
