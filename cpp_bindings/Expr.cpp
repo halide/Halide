@@ -475,8 +475,7 @@ namespace Halide {
 
     Expr builtin(Type t, const std::string &name, Expr a) {
         MLVal args = makeList();
-        Expr arg = cast<float>(a);
-        args = addToList(args, arg.node());
+        args = addToList(args, a.node());
         Expr e(makeCall(t.mlval, "." + name, args), t);
         e.child(a);
         return e;
@@ -484,10 +483,8 @@ namespace Halide {
 
     Expr builtin(Type t, const std::string &name, Expr a, Expr b) {
         MLVal args = makeList();
-        Expr arg_a = cast<float>(a);
-        Expr arg_b = cast<float>(b);
-        args = addToList(args, arg_b.node());
-        args = addToList(args, arg_a.node());
+        args = addToList(args, b.node());
+        args = addToList(args, a.node());
         Expr e(makeCall(t.mlval, "." + name, args), t);
         e.child(a);
         e.child(b);
