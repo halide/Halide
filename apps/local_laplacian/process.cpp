@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     float alpha = atof(argv[3]), beta = atof(argv[4]);    
     Image<uint16_t> output(input.width(), input.height(), 3);
 
-    /* Timing code
+    // Timing code
     timeval t1, t2;
     unsigned int bestT = 0xffffffff;
     for (int i = 0; i < 5; i++) {
@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
       if (t < bestT) bestT = t;
     }
     printf("%u\n", bestT);
-    */
+    
 
     local_laplacian(levels, alpha/(levels-1), beta, input, output);
 

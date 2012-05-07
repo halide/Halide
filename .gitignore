@@ -79,3 +79,5 @@ experiments/CUDABilateralGrid/bf_*.png
 src/.tags
 apps/blur/halide_blur.s
 cpp_bindings/.tags
+apps/local_laplacian/ispc/process
+apps/local_laplacian/process
