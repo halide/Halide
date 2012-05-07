@@ -1,3 +1,7 @@
+LLVM_ROOT=../../llvm/Release+Asserts
+LLC=$(LLVM_ROOT)/bin/llc
+OPT=$(LLVM_ROOT)/bin/opt
+
 PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
 ifeq ($(HL_TARGET),ptx)
   SCHEDULE=103
@@ -16,7 +20,7 @@ local_laplacian.bc: local_laplacian
 	./local_laplacian $(SCHEDULE)
 
 local_laplacian.o: local_laplacian.bc
-	cat local_laplacian.bc | opt -O3 | llc -O3 -filetype=obj -o local_laplacian.o
+	cat local_laplacian.bc | $(OPT) -O3 | $(LLC) -O3 -filetype=obj -o local_laplacian.o
 
 process: process.cpp local_laplacian.o ../Util.h ../png.h
 	g++-4.6 -std=c++0x -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
