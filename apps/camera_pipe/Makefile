@@ -8,7 +8,7 @@ endif
 
 camera_pipe: ../../cpp_bindings/ ../../src/ camera_pipe.cpp
 	$(MAKE) -C ../../cpp_bindings Halide.a
-	g++-4.6 camera_pipe.cpp -I ../../cpp_bindings/ ../../cpp_bindings/Halide.a  -std=c++0x -o camera_pipe -ldl -lpthread
+	g++-4.6 -g camera_pipe.cpp -I ../../cpp_bindings/ ../../cpp_bindings/Halide.a  -std=c++0x -o camera_pipe -ldl -lpthread
 
 curved.bc: camera_pipe
 	./camera_pipe 8 0 # 8-bit output, 

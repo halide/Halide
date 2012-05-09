@@ -6,10 +6,10 @@ int main(int argc, char **argv) {
 
     Func fib, g;
     Var x;
-    RVar r(2, 18);
+    RDom r(2, 18);
 
     fib(x) = 1; 
-    fib(r) = fib(r-2) + fib(r-1);
+    fib(r.x) = fib(r.x-2) + fib(r.x-1);
 
     g(x) = fib(x+10);
 

@@ -290,16 +290,16 @@ namespace Halide {
 
         // Are we talking about a scatter or a gather here?
         bool gather = true;
-        //printf("%u args %u rvars\n", (unsigned)args.size(), (unsigned)r.rvars().size());
+        //printf("%u args %u rvars\n", (unsigned)args.size(), (unsigned)r.rdom().dimensions());
         for (size_t i = 0; i < args.size(); i++) {            
             if (!args[i].isVar()) {
                 gather = false;
             }
         }
-        if (r.rvars().size() > 0) gather = false;
+        if (r.rdom().dimensions() > 0) gather = false;
 
         if (gather) {
-            //printf("Gather definition for %s\n", name().c_str());
+	    //printf("Gather definition for %s\n", name().c_str());
             contents->rhs = r;            
             contents->returnType = r.type();
             contents->args = args;
@@ -325,12 +325,12 @@ namespace Halide {
             contents->rhs.child(r);
            
             MLVal reduction_args = makeList();
-            const std::vector<RVar> &rvars = contents->rhs.rvars();
-            for (size_t i = rvars.size(); i > 0; i--) {
+	    const RDom &rdom = contents->rhs.rdom();
+            for (int i = rdom.dimensions(); i > 0; i--) {
                 reduction_args = addToList(reduction_args, 
-                                           makeTriple(rvars[i-1].name(), 
-                                                      rvars[i-1].min().node(), 
-                                                      rvars[i-1].size().node()));
+                                           makeTriple(rdom[i-1].name(), 
+                                                      rdom[i-1].min().node(), 
+                                                      rdom[i-1].size().node()));
             }
 
             // Make an update function as a handle for scheduling

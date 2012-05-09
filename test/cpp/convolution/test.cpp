@@ -24,8 +24,8 @@ int main(int argc, char **argv) {
     input(x, y) = in(clamp(x, 0, W), clamp(y, 0, H));
 
     Func blur("blur");
-    RVar i, j; 
-    blur(x, y) += tent(i, j) * input(x + i - 1, y + j - 1);
+    RDom r(tent);
+    blur(x, y) += tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1);
 
     if (use_gpu() && false) { // TODO: broken
         blur.cudaTile(x, y, 16, 16);
