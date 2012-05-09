@@ -126,7 +126,7 @@ Func blur(Func image, const float sigma) {
 
   // truncate to 3 sigma and normalize
   int radius = int(3*sigma + 1.0f);
-  RVar i(-radius, 2*radius+1);
+  RDom i(-radius, 2*radius+1);
   Func normalized;
   normalized(x) = gaussian(x) / sum(gaussian(i)); // Uses an inline reduction
 

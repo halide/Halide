@@ -11,11 +11,11 @@ int main(int argc, char **argv) {
     }
 
     Func f1, f2, f3, f4, f5;
-    RVar rx;
-    f2(x) = sum(noise(rx));
-    f3(x) = product(noise(rx));
-    f4(x) = minimum(noise(rx));
-    f5(x) = maximum(noise(rx));
+    RDom r(0, 32);
+    f2(x) = sum(noise(r.x));
+    f3(x) = product(noise(r.x));
+    f4(x) = minimum(noise(r.x));
+    f5(x) = maximum(noise(r.x));
 
     double s = 0, p = 1, mi = noise(0), ma = noise(0);
     for (int i = 0; i < 32; i++) {
@@ -28,6 +28,8 @@ int main(int argc, char **argv) {
     Image<double> im_prod = f3.realize(1);
     Image<double> im_min = f4.realize(1);
     Image<double> im_max = f5.realize(1);
+
+    f5.compileToFile("f5");
 
     if (im_sum(0) != s) {
         printf("Sum was %f instead of %f\n", im_sum(0), s);

@@ -93,8 +93,8 @@ int main(int argc, char **argv) {
         life(x, y, z) = input(x, y);
 
         // Update step
-        RVar t(0, 21);
-        Expr lastT = (t+1)%2;
+        RDom t(0, 21);
+        Expr lastT = (t.x+1)%2;
         Expr w = input.width(), h = input.height();
         Expr W = (x+w-1) % w, E = (x+1) % w, N = (y+h-1) % h, S = (y+1) % h;
         Expr alive = life(x, y, lastT) != u8(0);
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
                                 life(E, N, lastT) + life(W, y, lastT) + 
                                 life(E, y, lastT) + life(W, S, lastT) +
                                 life(x, S, lastT) + life(E, S, lastT));            
-        life(x, y, t%2) = select(livingNeighbors == u8(3) || (alive && livingNeighbors == u8(2)), u8(1), u8(0));    
+        life(x, y, t.x%2) = select(livingNeighbors == u8(3) || (alive && livingNeighbors == u8(2)), u8(1), u8(0));    
         
         Func output;
         output(x, y) = life(x, y, 1);        
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         // correct. Schedules can change meaning for reductions!  (but
         // only reductions). This is why we say Halide is really only
         // for feed-forward pipelines.
-        life.update().transpose(t, y);
+        life.update().transpose(t.x, y);
 
         input = board3;
         output.realize(board3);

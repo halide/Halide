@@ -22,8 +22,8 @@ int main(int argc, char **argv) {
 
     Func hist("hist");
 
-    RVar x, y;
-    hist(clamp(cast<int>(in(x, y)), 0, 255))++;
+    RDom r(in);
+    hist(clamp(cast<int>(in(r.x, r.y)), 0, 255))++;
 
     if (use_gpu()) {
         Var tx("threadidx"),
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         //hist.split(hist.arg(0), bx, tx, 64).parallel(bx).parallel(tx);
         
         Func& update = hist.update();
-	update.cudaTile(x, y, 16, 16);
+	update.cudaTile(r.x, r.y, 16, 16);
 //        update.split(x, bx, tx, 10).split(y, by, ty, 10).transpose(bx, ty)
 //            .parallel(bx).parallel(by).parallel(tx).parallel(ty);
     } else {
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
         // Grab a handle to the update step of a reduction for scheduling
         // using the "update()" method.
         Var xi, yi;
-        hist.update().tile(x, y, xi, yi, 32, 32);
+        hist.update().tile(r.x, r.y, xi, yi, 32, 32);
     }
 
     Image<int32_t> h = hist.realize(256);

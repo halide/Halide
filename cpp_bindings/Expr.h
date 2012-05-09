@@ -13,6 +13,7 @@ namespace Halide {
 
     class Var;
     class RVar;
+    class RDom;
     class FuncRef;
     class DynUniform;
     class ImageRef;
@@ -37,6 +38,7 @@ namespace Halide {
         Expr(double);
         Expr(const Var &);
         Expr(const RVar &);
+        Expr(const RDom &);
         Expr(const FuncRef &);
         Expr(const DynUniform &);
         Expr(const ImageRef &);
@@ -60,7 +62,6 @@ namespace Halide {
         void child(const DynUniform &);
         void child(const DynImage &);
         void child(const Var &);
-        void child(const RVar &);
         void child(const Func &);
 
         const MLVal &node() const;
@@ -68,7 +69,8 @@ namespace Halide {
         const std::vector<DynUniform> &uniforms() const;
         const std::vector<DynImage> &images() const;
         const std::vector<Var> &vars() const;
-        const std::vector<RVar> &rvars() const;
+	void setRDom(const RDom &dom);
+	const RDom &rdom() const;
         const std::vector<Func> &funcs() const;
         const std::vector<UniformImage> &uniformImages() const;
         int implicitArgs() const;
