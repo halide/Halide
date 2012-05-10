@@ -107,12 +107,6 @@ int main(int argc, char **argv) {
         Func output;
         output(x, y) = life(x, y, 1);        
 
-        // The update step of life needs to have t outermost to be
-        // correct. Schedules can change meaning for reductions!  (but
-        // only reductions). This is why we say Halide is really only
-        // for feed-forward pipelines.
-        life.update().transpose(t.x, y);
-
         input = board3;
         output.realize(board3);
 
