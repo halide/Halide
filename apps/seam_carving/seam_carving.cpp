@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
   Func g;
   g = gradientMagnitude(clamped, input.width(), input.height());
 
-  RVar yr(0, input.height());
+  RDom yr(0, input.height());
   Func energy("energy");
   energy(x, y, c) = g(x, y, c);
   energy(x, yr, c) = g(x, yr, c) + min(min(energy(x, yr - 1, c), 
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
   // important for correctness that we calculate row by row
   energy.update().transpose(yr, x); 
   
-  RVar xr(1, input.width() - 1);
+  RDom xr(1, input.width() - 1);
   
   Func minEnergy("minEnergy");
   minEnergy(y) = 0;

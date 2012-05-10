@@ -22,7 +22,7 @@ process: process.cpp seam_carving.o ../Util.h ../png.h
 	g++-4.6 -std=c++0x -Wall -O3 process.cpp seam_carving.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
 
 out.png: process
-	./process input.png 8 1 1 out.png
+	./process input.png 8 out.png
 
 clean: 
 	rm process seam_carving.o seam_carving.bc seam_carving

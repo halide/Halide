@@ -24,8 +24,8 @@ int main(int argc, char **argv) {
                           clamp(y, 0, input.height()));
 
     // Construct the bilateral grid 
-    RVar i(0, s_sigma), j(0, s_sigma);
-    Expr val = clamped(x * s_sigma + i - s_sigma/2, y * s_sigma + j - s_sigma/2);
+    RDom r(0, s_sigma, 0, s_sigma);
+    Expr val = clamped(x * s_sigma + r.x - s_sigma/2, y * s_sigma + r.y - s_sigma/2);
     val = clamp(val, 0.0f, 1.0f);
     Expr zi = cast<int>(val * (1.0f/r_sigma) + 0.5f);
     Func grid;
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     // Best schedule for CPU
     printf("Compiling for CPU\n");
     grid.root().parallel(z);
-    grid.update().transpose(y, c).transpose(x, c).transpose(i, c).transpose(j, c).parallel(y);
+    grid.update().transpose(y, c).transpose(x, c).transpose(r.x, c).transpose(r.y, c).parallel(y);
     blurx.root().parallel(z).vectorize(x, 4);
     blury.root().parallel(z).vectorize(x, 4);
     blurz.root().parallel(z).vectorize(x, 4);

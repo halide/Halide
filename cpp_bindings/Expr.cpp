@@ -73,8 +73,8 @@ namespace Halide {
         // The list of free variables found
         std::vector<Var> vars;
 
-        // The list of reduction variables found
-        std::vector<RVar> rvars;
+	// A reduction domain that this depends on
+	RDom rdom;
         
         // The list of functions directly called        
         std::vector<Func> funcs;
@@ -126,9 +126,19 @@ namespace Halide {
 
     Expr::Expr(const RVar &v) : contents(new Contents(makeVar((v.name())), Int(32))) {
         contents->isRVar = true;
-        contents->rvars.push_back(v);
-        if (v.min().isDefined()) child(v.min());
-        if (v.size().isDefined()) child(v.size());
+	assert(v.isDefined());
+	assert(v.domain().isDefined());
+	setRDom(v.domain());
+        child(v.min());
+        child(v.size());
+    }
+
+    Expr::Expr(const RDom &d) : contents(new Contents(makeVar((d[0].name())), Int(32))) {
+	contents->isRVar = true;
+	assert(d.dimensions() == 1 && "Can only use single-dimensional domains directly as expressions\n");
+	setRDom(d);
+        child(d[0].min());
+        child(d[0].size());
     }
 
     Expr::Expr(const DynUniform &u) : 
@@ -167,6 +177,10 @@ namespace Halide {
         return contents->isRVar;
     }
 
+    void Expr::setRDom(const RDom &dom) {
+	contents->rdom = dom;
+    }
+
     bool Expr::isImmediate() const {
         return contents->isImmediate;
     }
@@ -184,10 +198,12 @@ namespace Halide {
     }
 
     void Expr::convertRVarsToVars() {
-        for (size_t i = 0; i < contents->rvars.size(); i++) {
-            contents->vars.push_back(Var(contents->rvars[i].name()));
-        }
-        contents->rvars.clear();
+	if (contents->rdom.isDefined()) {
+	    for (int i = 0; i < contents->rdom.dimensions(); i++) {
+		contents->vars.push_back(Var(contents->rdom[i].name()));
+	    }
+	    contents->rdom = RDom();
+	}
         if (contents->isRVar) {
             contents->isRVar = false;
             contents->isVar = true;
@@ -206,8 +222,8 @@ namespace Halide {
         return contents->vars;
     }
 
-    const std::vector<RVar> &Expr::rvars() const {
-        return contents->rvars;
+    const RDom &Expr::rdom() const {
+	return contents->rdom;
     }
 
     const std::vector<Func> &Expr::funcs() const {
@@ -226,12 +242,17 @@ namespace Halide {
     void Expr::Contents::child(Expr c) {
         set_union(images, c.images());
         set_union(vars, c.vars());
-        set_union(rvars, c.rvars());
         set_union(funcs, c.funcs());
         set_union(uniforms, c.uniforms());
         set_union(uniformImages, c.uniformImages());
         if (c.implicitArgs() > implicitArgs) implicitArgs = c.implicitArgs();
-        
+
+	bool check = !rdom.isDefined() || !c.rdom().isDefined() || rdom == c.rdom();
+	assert(check && "Each expression can only depend on a single reduction domain");
+	if (c.rdom().isDefined()) {
+	    rdom = c.rdom();
+	}        
+
         for (size_t i = 0; i < c.shape().size(); i++) {
             if (i < shape.size()) {
                 assert(shape[i] == c.shape()[i]);                
@@ -259,10 +280,6 @@ namespace Halide {
 
     void Expr::child(const Var &v) {
         set_add(contents->vars, v);
-    }
-
-    void Expr::child(const RVar &v) {
-        set_add(contents->rvars, v);
     }
 
     void Expr::child(const Func &f) {
@@ -475,8 +492,7 @@ namespace Halide {
 
     Expr builtin(Type t, const std::string &name, Expr a) {
         MLVal args = makeList();
-        Expr arg = cast<float>(a);
-        args = addToList(args, arg.node());
+        args = addToList(args, a.node());
         Expr e(makeCall(t.mlval, "." + name, args), t);
         e.child(a);
         return e;
@@ -484,10 +500,8 @@ namespace Halide {
 
     Expr builtin(Type t, const std::string &name, Expr a, Expr b) {
         MLVal args = makeList();
-        Expr arg_a = cast<float>(a);
-        Expr arg_b = cast<float>(b);
-        args = addToList(args, arg_b.node());
-        args = addToList(args, arg_a.node());
+        args = addToList(args, b.node());
+        args = addToList(args, a.node());
         Expr e(makeCall(t.mlval, "." + name, args), t);
         e.child(a);
         e.child(b);

@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
 
     // A pair of reductions
     Func f4("reduction_pair");
-    RVar i(0, 10);
+    RDom i(0, 10);
     f4(x, y) = (sum(x+i), product(x+y+i));
     Image<int> im4 = f4.realize(32, 32, 2);
     for (size_t x = 0; x < 32; x++) {

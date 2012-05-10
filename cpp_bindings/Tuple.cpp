@@ -35,14 +35,14 @@ namespace Halide {
                     callArgNames.push_back(e.vars()[i].name());
                 }
             }
-            for (size_t i = 0; i < e.rvars().size(); i++) {
+            for (int i = 0; i < e.rdom().dimensions(); i++) {
                 bool already_exists = false;
                 for (size_t j = 0; j < callArgNames.size(); j++) {
-                    if (e.rvars()[i].name() == callArgNames[j]) already_exists = true;
+		    if (e.rdom()[i].name() == callArgNames[j]) already_exists = true;
                 }
                 if (!already_exists) {
-                    callArgs.push_back(e.rvars()[i]);
-                    callArgNames.push_back(e.rvars()[i].name());
+                    callArgs.push_back(e.rdom()[i]);
+                    callArgNames.push_back(e.rdom()[i].name());
                 }
             }
             
