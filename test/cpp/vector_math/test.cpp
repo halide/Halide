@@ -152,7 +152,7 @@ bool test(int vec_width) {
 
     // Scatter
     Func f6;
-    RVar i(0, H);
+    RDom i(0, H);
     // Set one entry in each row high
     xCoord = clamp(cast<int>(input(2*i, i)), 0, W-1);
     f6(x, y) = 0;

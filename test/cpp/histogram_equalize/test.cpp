@@ -18,15 +18,15 @@ int main(int argc, char **argv) {
 
     Func hist, cdf, equalized, rescaled;
 
-    RVar rx, ry, ri(0, 255);
+    RDom r(in), ri(0, 255);
     Var x, y, i;
 
     // Compute the histogram
-    hist(in(rx, ry))++;
+    hist(in(r.x, r.y))++;
 
     // Integrate it to produce a cdf
     cdf(i) = 0;
-    cdf(ri) = cdf(ri-1) + hist(ri);
+    cdf(ri.x) = cdf(ri.x-1) + hist(ri.x);
 
     // Remap the input using the cdf
     equalized(x, y) = cdf(in(x, y));

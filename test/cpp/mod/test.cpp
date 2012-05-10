@@ -6,7 +6,7 @@ template<typename T>
 bool test() {
     Var x;
     Func f;
-    f(x) = cast<T>(x) % ((T)2);
+    f(x) = cast<T>(x) % 2;
     
     Image<T> im = f.realize(16);
 
