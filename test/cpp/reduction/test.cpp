@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     }
 
     Func f1, f2, f3, f4, f5;
-    RDom r(0, 32);
+    RDom r(noise);
     f2(x) = sum(noise(r.x));
     f3(x) = product(noise(r.x));
     f4(x) = minimum(noise(r.x));

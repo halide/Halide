@@ -31,7 +31,7 @@ let novice = {
       else ([], false)
     in
 
-    let args = reduction_args @ args in
+    let args = args @ reduction_args in
 
     let prefix = (base_name func) ^ "." in
 
