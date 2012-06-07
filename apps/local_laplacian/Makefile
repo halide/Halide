@@ -1,3 +1,8 @@
+GXX = g++-4.6
+ifneq ($(shell env -i command -v g++-4.7),)
+GXX = g++-4.7
+endif
+
 LLVM_ROOT=../../llvm/Release+Asserts
 LLC=$(LLVM_ROOT)/bin/llc
 OPT=$(LLVM_ROOT)/bin/opt
@@ -14,7 +19,7 @@ all: process
 
 local_laplacian: ../../cpp_bindings/ local_laplacian.cpp
 	$(MAKE) -C ../../cpp_bindings Halide.a
-	g++-4.6 local_laplacian.cpp -I ../../cpp_bindings/ ../../cpp_bindings/Halide.a  -std=c++0x -lpng -o local_laplacian -lpthread -ldl $(PNGFLAGS) -g
+	$(GXX) local_laplacian.cpp -I ../../cpp_bindings/ ../../cpp_bindings/Halide.a  -std=c++0x -lpng -o local_laplacian -lpthread -ldl $(PNGFLAGS) -g
 
 local_laplacian.bc: local_laplacian
 	./local_laplacian $(SCHEDULE)
@@ -23,10 +28,10 @@ local_laplacian.o: local_laplacian.bc
 	cat local_laplacian.bc | $(OPT) -O3 | $(LLC) -O3 -filetype=obj -o local_laplacian.o
 
 process: process.cpp local_laplacian.o ../Util.h ../png.h
-	g++-4.6 -std=c++0x -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
+	$(GXX) -std=c++0x -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
 
 out.png: process
 	./process input.png 8 1 1 out.png
 
-clean: 
+clean:
 	rm process local_laplacian.o local_laplacian.bc local_laplacian

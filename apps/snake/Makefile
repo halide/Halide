@@ -1,3 +1,8 @@
+GXX = g++-4.6
+ifneq ($(shell env -i command -v g++-4.7),)
+GXX = g++-4.7
+endif
+
 PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
 ifeq ($(HL_TARGET),ptx)
   SCHEDULE=100
@@ -10,10 +15,10 @@ all: halide_snake
 
 halide_snake: ../../cpp_bindings/ halide_snake.cpp
 	$(MAKE) -C ../../cpp_bindings Halide.a
-	g++-4.6 halide_snake.cpp -I ../../cpp_bindings/ ../../cpp_bindings/Halide.a  -std=c++0x -lpng -o halide_snake -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
+	$(GXX) halide_snake.cpp -I ../../cpp_bindings/ ../../cpp_bindings/Halide.a  -std=c++0x -lpng -o halide_snake -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
 
 out.png: halide_snake
 	./halide_snake blood_cells.png out.png
 
-clean: 
+clean:
 	rm halide_snake out.png
