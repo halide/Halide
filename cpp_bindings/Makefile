@@ -1,4 +1,8 @@
-CXX=g++-4.6 -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
+GXX = g++-4.6
+ifneq ($(shell env -i command -v g++-4.7),)
+GXX = g++-4.7
+endif
+CXX=$(GXX) -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
 
 all: Halide.a
 
@@ -9,7 +13,7 @@ GPU_CFLAGS = -DUSE_GPU=$(USE_GPU)
 CUDA_LIBS ?= -L/usr/local/cuda/lib -lcuda
 LLVM_DIR ?= ../llvm/Release+Asserts
 LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
-LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cxxflags) -I$(LLVM_DIR)/../include
+LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cflags) -I$(LLVM_DIR)/../include
 LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter bitreader x86 interpreter linker ptx ipo)
 LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_bitreader -lllvm_analysis -lllvm_target
 
@@ -18,7 +22,7 @@ OCAMLC=$(shell which ocamlc)
 OCAML_LIB_DIR=$(OCAMLC:bin/ocamlc=lib/ocaml)
 LLVM_LDFLAGS=$(shell $(LLVM_CONFIG_EXE) --ldflags)
 LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) $(CUDA_LIBS) -ldl -lstdc++
- 
+
 HALIDE_OBJS=$(addprefix _build/,_MLHalide.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o Var.o Tuple.o Reduction.o)
 
 Halide.a: $(HALIDE_OBJS) ../src/_build/libllsupport_impl.a
@@ -27,29 +31,28 @@ Halide.a: $(HALIDE_OBJS) ../src/_build/libllsupport_impl.a
 	ar q Halide.a Halide.o
 	ranlib Halide.a
 
-_build/%.o: %.cpp 
+_build/%.o: %.cpp
 	$(CXX) $(GPU_CFLAGS) $(LLVM_CFLAGS_CXX) -I $(OCAML_LIB_DIR) -c $< -o $@
 
-_build/_MLHalide.o: ../src/_build/halide.cmxa 
+_build/_MLHalide.o: ../src/_build/halide.cmxa
 	mkdir -p _build
-	ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLHalide.o unix.cmxa $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/halide.cmxa 
+	ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLHalide.o unix.cmxa $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/halide.cmxa
 
 ../src/_build/halide.cmxa: ../src/*.ml
 	cd ../src && \
 	ocamlbuild halide.cmxa && \
-	cd $(PWD)	
+	cd $(PWD)
 
 ../src/_build/libllsupport_impl.a: ../src/*.c
 	cd ../src && \
 	ocamlbuild libllsupport_impl.a && \
-	cd $(PWD)	
+	cd $(PWD)
 
 ../src/_build/: ../src/*.c
 	cd ../src && \
 	ocamlbuild libllsupport_impl.a && \
-	cd $(PWD)	
+	cd $(PWD)
 
 clean:
 	rm -f _build/*
-	rm Halide.a Halide.o
-
+	rm -f Halide.a Halide.o

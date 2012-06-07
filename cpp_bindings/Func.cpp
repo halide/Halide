@@ -23,6 +23,7 @@
 #include <sstream>
 
 #include <dlfcn.h>
+#include <unistd.h>
 
 namespace Halide {
     
