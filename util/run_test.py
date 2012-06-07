@@ -26,6 +26,12 @@ clang = Command(os.path.join(llvm_path, 'clang++'))
 imagestack = Command(os.path.join(proj_root, 'ImageStack', 'bin', 'ImageStack'))
 cxx = Command(which('g++-4.6'))
 
+platform = sys.platform.lower()
+if 'linux' in platform:
+    platform = 'linux'
+if 'darwin' in platform:
+    platform = 'darwin'
+
 failures = []
 
 def test_cpp(name):
@@ -62,13 +68,16 @@ def test_cpp(name):
                            "-I../../../cpp_bindings",
                            "-Wno-format",
                            "-fPIC",
-                           "-rdynamic",
                            srcfile,                   
                            "../../../cpp_bindings/Halide.a", 
                            "-ldl", "-lpthread"]
+            if platform is 'linux':
+                compile_cmd.append("-rdynamic")
 
             if os.path.exists("/usr/local/cuda"):
-                compile_cmd = compile_cmd + ["-L/usr/local/cuda/lib", "-L/usr/lib/nvidia-current", "-lcuda"]
+                compile_cmd.extend(["-L/usr/local/cuda/lib", "-lcuda"])
+                if platform is 'linux':
+                    compile_cmd.append("-L/usr/lib/nvidia-current")
             
             try:
                 # Build the test
