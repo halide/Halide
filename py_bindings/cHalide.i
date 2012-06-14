@@ -9,6 +9,7 @@
 //#include "Tuple.h"
 #include "Type.h"
 #include "py_util.h"
+#include "environ_fix.h"
 using namespace Halide;
 %}
 
@@ -29,6 +30,7 @@ using namespace Halide;
 //%include "Tuple.h"
 %include "Type.h"
 %include "py_util.h"
+%include "environ_fix.h"
 
 //%extend Expr {
 //    Expr __add__(Expr *other) {

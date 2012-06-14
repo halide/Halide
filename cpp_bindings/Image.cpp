@@ -86,8 +86,6 @@ namespace Halide {
         buf.elem_size = type.bits/8;
     }
 
-    DynImage::DynImage() :contents(new Contents(UInt(8), 1)) {}
-    
     DynImage::DynImage(const Type &t, int a) : contents(new Contents(t, a)) {}
 
     DynImage::DynImage(const Type &t, int a, int b) : contents(new Contents(t, a, b)) {}
@@ -189,7 +187,7 @@ namespace Halide {
             sizes.resize(dims);
             for (int i = 0; i < dims; i++) {
                 std::ostringstream ss;
-                ss << "." << name << ".dim." << i;
+                ss << "." << name << ".dim." << int_to_str(i);
                 sizes[i] = Var(ss.str());
             }
         }
@@ -199,7 +197,7 @@ namespace Halide {
             sizes.resize(dims);
             for (int i = 0; i < dims; i++) {
                 std::ostringstream ss;
-                ss << "." << name << ".dim." << i;
+                ss << "." << name << ".dim." << int_to_str(i);
                 sizes[i] = Var(ss.str());
             }
         }

@@ -1,5 +1,6 @@
 #include "Util.h"
 #include <sstream>
+#include <stdio.h>
 
 namespace Halide {
     ML_FUNC0(makeList); 
@@ -10,7 +11,13 @@ namespace Halide {
         static int instances[256]; 
         std::ostringstream ss;
         ss << prefix;
-        ss << instances[(unsigned char)prefix]++;
+        ss << int_to_str(instances[(unsigned char)prefix]++);
         return ss.str();
+    }
+
+    std::string int_to_str(int x) {
+        char buf[256];
+        snprintf(buf, 256, "%d", x);
+        return std::string(buf);
     }
 }

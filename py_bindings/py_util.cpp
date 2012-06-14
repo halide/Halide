@@ -42,7 +42,7 @@ Expr call(const UniformImage &a, Expr b, Expr c, Expr d, Expr e) { return a(b, c
 void assign(FuncRef &a, Expr b) { a = b; }
 
 void test_blur() {
-  UniformImage input(UInt(16), 2);
+  UniformImage input(UInt(16), 2, "inputimage");
   Func blur_x("blur_x"), blur_y("blur_y");
   Var x("x"), y("y");
 
@@ -53,9 +53,9 @@ void test_blur() {
   blur_y.compileToFile("halide_blur");
 }
 
-/*
+
 int main() {
     test_blur();
     return 0;
 }
-*/
+
