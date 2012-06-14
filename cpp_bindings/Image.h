@@ -13,6 +13,7 @@ namespace Halide {
     // The base image type with no typed accessors
     class DynImage {
     public:
+        DynImage();          // Connelly: Make Python binding happy
 
         DynImage(const Type &t, int a);
         DynImage(const Type &t, int a, int b);

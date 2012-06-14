@@ -85,6 +85,8 @@ namespace Halide {
         }
         buf.elem_size = type.bits/8;
     }
+
+    DynImage::DynImage() :contents(new Contents(UInt(8), 1)) {}
     
     DynImage::DynImage(const Type &t, int a) : contents(new Contents(t, a)) {}
 
