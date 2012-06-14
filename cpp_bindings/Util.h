@@ -11,6 +11,8 @@ namespace Halide {
     // Make ML lists
     MLVal makeList();
     MLVal addToList(const MLVal &list, const MLVal &item);
+
+    std::string int_to_str(int);          // Connelly: workaround function for ostringstream << int failing in Python binding
 }
 
 #endif

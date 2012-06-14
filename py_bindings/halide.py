@@ -156,7 +156,7 @@ def test():
     
     blur_x[x,y] = (input[x-1,y]+input[x,y]+input[x+1,y])/3
     blur_y[x,y] = (blur_x[x,y-1]+blur_x[x,y]+blur_x[x,y+1])/3
-    #blur_y.compileToFile('halide_blur')
+    blur_y.compileToFile('halide_blur')
     blur_y.compileJIT()
     
     print 'halide: OK'

@@ -55,7 +55,7 @@ namespace Halide {
 	contents(new RDom::Contents) {
 	for (int i = 0; i < im.dimensions(); i++) {
 	    std::ostringstream ss;
-	    ss << im.name() << "_r" << i;
+	    ss << im.name() << "_r" << int_to_str(i);
 	    contents->vars.push_back(RVar(*this, 0, im.size(i), ss.str()));
 	}
 	if (im.dimensions() > 0) x = contents->vars[0];
@@ -69,7 +69,7 @@ namespace Halide {
 	contents(new RDom::Contents) {
 	for (int i = 0; i < im.dimensions(); i++) {
 	    std::ostringstream ss;
-	    ss << im.name() << "_r" << i;
+	    ss << im.name() << "_r" << int_to_str(i);
 	    contents->vars.push_back(RVar(*this, 0, im.size(i), ss.str()));
 	}
 	if (im.dimensions() > 0) x = contents->vars[0];

@@ -283,7 +283,7 @@ namespace Halide {
         for (int i = 0; i < r.implicitArgs(); i++) {
             std::ostringstream ss;
             ss << "iv"; // implicit var
-            ss << i;
+            ss << int_to_str(i);
             args.push_back(Var(ss.str()));
         }
         

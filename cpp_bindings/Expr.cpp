@@ -609,7 +609,7 @@ namespace Halide {
 
         for (int i = iArgs-1; i >= 0; i--) {
             std::ostringstream ss;
-            ss << "iv" << i; // implicit var
+            ss << "iv" << int_to_str(i); // implicit var
             exprlist = addToList(exprlist, makeVar(ss.str()));
         }
 
