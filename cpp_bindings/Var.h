@@ -35,7 +35,7 @@ namespace Halide {
         RVar(const RDom &, const Expr &min, const Expr &size);
         RVar(const RDom &, const Expr &min, const Expr &size, const std::string &name);
        
-        void bound(const Expr &min, const Expr &size);
+        //void bound(const Expr &min, const Expr &size);   // Connelly: bound() is not defined in Var.cpp
 
         const Expr &min() const;
         const Expr &size() const;
