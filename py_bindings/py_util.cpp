@@ -1,5 +1,6 @@
 
 #include "py_util.h"
+#include "png_util.h"
 
 void assign(Func &f, const Expr &e) {
   f = e;
@@ -41,6 +42,35 @@ Expr call(const UniformImage &a, Expr b, Expr c, Expr d, Expr e) { return a(b, c
 
 void assign(FuncRef &a, Expr b) { a = b; }
 
+#define DEFINE_TYPE(T) void assign(UniformImage &a, Image<T> b) { a = b; }
+#include "expand_types.h"
+#undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) void assign(Image<T> &a, DynImage b) { a = b; }
+#include "expand_types.h"
+#undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) Image<T> load_png(Image<T> a, std::string b) { return load<T>(b); }
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+//#include "expand_types.h"
+#undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) void save_png(Image<T> a, std::string b) { save(a, b); }
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+
+//void assign(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
+
+/*
 void test_blur() {
   UniformImage input(UInt(16), 2, "inputimage");
   Func blur_x("blur_x"), blur_y("blur_y");
@@ -58,4 +88,4 @@ int main() {
     test_blur();
     return 0;
 }
-
+*/

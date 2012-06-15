@@ -37,3 +37,13 @@ using namespace Halide;
 //        return $self + *other;
 //    }
 //};
+%template(Image_uint8) Image<uint8_t>;
+%template(Image_uint16) Image<uint16_t>;
+%template(Image_uint32) Image<uint32_t>;
+//%template(Image_uint64) Image<uint64_t>;
+%template(Image_int8) Image<int8_t>;
+%template(Image_int16) Image<int16_t>;
+%template(Image_int32) Image<int32_t>;
+//%template(Image_int64) Image<int64_t>;
+%template(Image_float32) Image<float>;
+%template(Image_float64) Image<double>;
