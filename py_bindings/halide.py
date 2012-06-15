@@ -78,6 +78,45 @@ Func.__getitem__ = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance
 
 #UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
 UniformImage.__getitem__ = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, key)
+UniformImage.assign = lambda x, y: assign(x, y)
+
+# ----------------------------------------------------
+# Image
+# ----------------------------------------------------
+
+for ImageT in [Image_int8, Image_int16, Image_int32, Image_uint8, Image_uint16, Image_uint32, Image_float32, Image_float64]:
+    ImageT.save = lambda x, y: save_png(x, y)
+    ImageT.assign = lambda x, y: assign(x, y)
+
+def Image(typeval, *args):
+    assert isinstance(typeval, Type)
+    sig = (typeval.bits, typeval.isInt(), typeval.isUInt(), typeval.isFloat())
+    if sig == (8, True, False, False):
+        C = Image_int8
+    elif sig == (16, True, False, False):
+        C = Image_int16
+    elif sig == (32, True, False, False):
+        C = Image_int32
+    elif sig == (8, False, True, False):
+        C = Image_uint8
+    elif sig == (16, False, True, False):
+        C = Image_uint16
+    elif sig == (32, False, True, False):
+        C = Image_uint32
+    elif sig == (32, False, False, True):
+        C = Image_float32
+    elif sig == (64, False, False, True):
+        C = Image_float64
+    else:
+        raise ValueError('unimplemented Image type signature %r' % typeval)
+    if len(args) == 0:
+        return C
+    elif len(args) == 1 and isinstance(args[0], str):
+        return load_png(C(1), args[0])
+    elif all(isinstance(x, int) for x in args):
+        return C(*args)
+    else:
+        raise ValueError('unknown Image constructor arguments %r' % args)
 
 # ----------------------------------------------------
 # Test
@@ -85,7 +124,7 @@ UniformImage.__getitem__ = lambda x, key: call(x, *[wrap(y) for y in key]) if is
 
 import time
 
-def test():
+def test_core():
     input = UniformImage(UInt(16),2)
     var_x = Var('x')
     var_y = Var('y')
@@ -154,13 +193,38 @@ def test():
     f = Func()
     f[x,y]=x+1
     
-    blur_x[x,y] = (input[x-1,y]+input[x,y]+input[x+1,y])/3
-    blur_y[x,y] = (blur_x[x,y-1]+blur_x[x,y]+blur_x[x,y+1])/3
+    print 'halide core: OK'
+
+def test_blur():
+    input = UniformImage(UInt(16), 3)
+    x = Var('x')
+    y = Var('y')
+    c = Var('c')
+    blur_x = Func('blur_x')
+    blur_y = Func('blur_y')
+    
+    blur_x[x,y,c] = (input[x-1,y,c]/4+input[x,y,c]/4+input[x+1,y,c]/4)/3
+    blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
+
     blur_y.compileToFile('halide_blur')
     blur_y.compileJIT()
+
+    input_png = Image(UInt(16), 'lena.png')
+    input.assign(input_png)
+    w = input_png.width()
+    h = input_png.height()
+    nchan = input_png.channels()
+    out = Image(UInt(16), w, h, nchan)
+    out.assign(blur_y.realize(w, h, nchan))
+
+    out.save('out.png')
     
-    print 'halide: OK'
+    print 'halide blur: OK'
     
+def test():
+    test_core()
+    test_blur()
+
 if __name__ == '__main__':
     test()
     
