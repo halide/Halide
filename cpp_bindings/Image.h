@@ -13,6 +13,9 @@ namespace Halide {
     // The base image type with no typed accessors
     class DynImage {
     public:
+#if HALIDE_PY_BINDING
+        DynImage();
+#endif
         DynImage(const Type &t, int a);
         DynImage(const Type &t, int a, int b);
         DynImage(const Type &t, int a, int b, int c);
@@ -179,6 +182,9 @@ namespace Halide {
     
     class UniformImage {
     public:
+#if HALIDE_PY_BINDING
+        UniformImage();
+#endif
         UniformImage(const Type &t, int dims);
         UniformImage(const Type &t, int dims, const std::string &name);
         UniformImage(const UniformImage &);
