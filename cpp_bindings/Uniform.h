@@ -11,6 +11,9 @@ namespace Halide {
 
     class DynUniform {
     public:
+#if HALIDE_PY_BINDING
+        DynUniform() :contents(new Contents(UInt(8), uniqueName('u'))) { }
+#endif
         DynUniform(Type t) : contents(new Contents(t, uniqueName('u'))) {}
         DynUniform(Type t, const std::string &name) : contents(new Contents(t, name)) {}
 

@@ -196,7 +196,7 @@ def test_core():
     print 'halide core: OK'
 
 def test_blur():
-    input = UniformImage(UInt(16), 3)
+    input = UniformImage(UInt(16), 3, 'input')
     x = Var('x')
     y = Var('y')
     c = Var('c')
@@ -206,6 +206,21 @@ def test_blur():
     blur_x[x,y,c] = (input[x-1,y,c]/4+input[x,y,c]/4+input[x+1,y,c]/4)/3
     blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
 
+#blur_x[x,y,c] = (input[x-1,y,c]/4+input[x,y,c]/4+input[x+1,y,c]/4)/3
+#blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
+
+    for f in [blur_y, blur_x]:
+        assert f.args()[0].vars()[0].name()=='x'
+        assert f.args()[1].vars()[0].name()=='y'
+        assert f.args()[2].vars()[0].name()=='c'
+        assert len(f.args()) == 3
+    assert blur_y.rhs().funcs()[0].name()=='blur_x'
+    assert len(blur_y.rhs().funcs()) == 1
+    assert blur_x.rhs().uniformImages()[0].name()
+    assert len(blur_x.rhs().uniformImages()) == 1
+
+    #blur_y.parallel(y)
+    blur_y.unroll(y,16).vectorize(x,16)
     blur_y.compileToFile('halide_blur')
     blur_y.compileJIT()
 
@@ -215,8 +230,11 @@ def test_blur():
     h = input_png.height()
     nchan = input_png.channels()
     out = Image(UInt(16), w, h, nchan)
+    T0 = time.time()
     out.assign(blur_y.realize(w, h, nchan))
-
+    T1 = time.time()
+    print T1-T0
+    
     out.save('out.png')
     
     print 'halide blur: OK'

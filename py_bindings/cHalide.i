@@ -15,6 +15,7 @@ using namespace Halide;
 
 %include "std_string.i"
 %include "std_vector.i"
+
 %naturalvar;
 %naturalvar Func;
 %naturalvar Expr;
@@ -47,3 +48,12 @@ using namespace Halide;
 //%template(Image_int64) Image<int64_t>;
 %template(Image_float32) Image<float>;
 %template(Image_float64) Image<double>;
+
+namespace std {
+   %template(ListExpr) vector<Expr>;
+   %template(ListVar) vector<Var>;
+   %template(ListDynUniform) vector<DynUniform>;
+   %template(ListDynImage) vector<DynImage>;
+   %template(ListFunc) vector<Func>;
+   %template(ListUniformImage) vector<UniformImage>;
+};
