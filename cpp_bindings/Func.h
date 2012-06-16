@@ -96,6 +96,7 @@ namespace Halide {
                    const Var &, const Var &, 
                    const Expr &f1, const Expr &f2);
         Func &rename(const Var &, const Var &);
+        Func &reset();
         Func &vectorize(const Var &);
         Func &unroll(const Var &);
         Func &transpose(const Var &, const Var &);

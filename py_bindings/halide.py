@@ -1,4 +1,7 @@
 from cHalide import *
+import numpy
+import Image as PIL
+import os
 
 wrap = Expr
 
@@ -195,19 +198,39 @@ def test_core():
     
     print 'halide core: OK'
 
-def test_blur():
+def all_funcs(f):
+    d = {}
+    def visit(x):
+        name = x.name()
+        if name not in d:
+            d[name] = x
+            for y in f.rhs().funcs():
+                visit(y)
+    visit(f)
+    return d
+
+def func_varlist(f):
+    args = f.args()
+    return [x.vars()[0].name() for x in args]
+
+def get_blur():
     input = UniformImage(UInt(16), 3, 'input')
     x = Var('x')
     y = Var('y')
     c = Var('c')
+    #input_clamped = Func('input_clamped')
     blur_x = Func('blur_x')
     blur_y = Func('blur_y')
     
-    blur_x[x,y,c] = (input[x-1,y,c]/4+input[x,y,c]/4+input[x+1,y,c]/4)/3
+    input_clamped[x,y,c] = input[clamp(Expr(x),Expr(0),Expr(input.width()-1)), clamp(Expr(y),Expr(0),Expr(input.width()-1)), clamp(Expr(c),Expr(0),Expr(input.width()-1))]
+    #input_clamped[x,y,c] = input[x,y,c]
+    blur_x[x,y,c] = (input_clamped[x-1,y,c]/4+input_clamped[x,y,c]/4+input_clamped[x+1,y,c]/4)/3
+#    blur_x[x,y,c] = (input[x-1,y,c]/4+input[x,y,c]/4+input[x+1,y,c]/4)/3
     blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
+    return (input, x, y, c, blur_x, blur_y)
 
-#blur_x[x,y,c] = (input[x-1,y,c]/4+input[x,y,c]/4+input[x+1,y,c]/4)/3
-#blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
+def test_blur():
+    (input, x, y, c, blur_x, blur_y) = get_blur()
 
     for f in [blur_y, blur_x]:
         assert f.args()[0].vars()[0].name()=='x'
@@ -219,10 +242,38 @@ def test_blur():
     assert blur_x.rhs().uniformImages()[0].name()
     assert len(blur_x.rhs().uniformImages()) == 1
 
+    assert set(all_funcs(blur_y).keys()) == set(['blur_x', 'blur_y'])
+    assert func_varlist(blur_y) == ['x', 'y', 'c'], func_varlist(blur_y)
+    assert func_varlist(blur_x) == ['x', 'y', 'c'], func_varlist(blur_x)
+    
     #blur_y.parallel(y)
-    blur_y.unroll(y,16).vectorize(x,16)
-    blur_y.compileToFile('halide_blur')
-    blur_y.compileJIT()
+    for i in range(2):
+        #print 'iter', i
+        blur_y.reset().unroll(y,16).vectorize(x,16)
+        #blur_y.root().serial(x).serial(y).unroll(y,16).vectorize(x,16)
+        blur_y.compileToFile('halide_blur')
+        blur_y.compileJIT()
+
+        input_png = Image(UInt(16), 'lena.png')
+        input.assign(input_png)
+        w = input_png.width()
+        h = input_png.height()
+        nchan = input_png.channels()
+        out = Image(UInt(16), w, h, nchan)
+        T0 = time.time()
+        out.assign(blur_y.realize(w, h, nchan))
+        T1 = time.time()
+        print T1-T0, 'secs'
+    
+        out.save('out2.png' if i==1 else 'out.png')
+    I1 = numpy.asarray(PIL.open('out.png'))
+    I2 = numpy.asarray(PIL.open('out2.png'))
+    os.remove('out2.png')
+    
+    print 'halide blur: OK'
+
+def test_autotune():
+    (input, x, y, c, blur_x, blur_y) = get_blur()
 
     input_png = Image(UInt(16), 'lena.png')
     input.assign(input_png)
@@ -230,19 +281,21 @@ def test_blur():
     h = input_png.height()
     nchan = input_png.channels()
     out = Image(UInt(16), w, h, nchan)
-    T0 = time.time()
-    out.assign(blur_y.realize(w, h, nchan))
-    T1 = time.time()
-    print T1-T0
     
-    out.save('out.png')
+    def test(func):
+        T0 = time.time()
+        out.assign(blur_y.realize(w, h, nchan))
+        T1 = time.time()
+        return T1-T0
     
-    print 'halide blur: OK'
+    import halide_autotune
+    halide_autotune.autotune(blur_y, test, locals())
     
 def test():
-    test_core()
-    test_blur()
-
+    #test_core()
+    #test_blur()
+    test_autotune()
+    
 if __name__ == '__main__':
     test()
     
