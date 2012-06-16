@@ -56,4 +56,7 @@ namespace std {
    %template(ListDynImage) vector<DynImage>;
    %template(ListFunc) vector<Func>;
    %template(ListUniformImage) vector<UniformImage>;
+   %template(ListMLVal) vector<MLVal>;
+   //%template(ListArg) vector<Arg>;
+   %template(ListInt) vector<int>;
 };

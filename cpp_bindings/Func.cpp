@@ -493,6 +493,11 @@ namespace Halide {
         return *this;
     }
 
+    Func &Func::reset() {
+        contents->scheduleTransforms.clear();
+        return *this;
+    }
+
     Func &Func::parallel(const Var &caller_var) {
         MLVal t = makeParallelTransform(name(), caller_var.name());
         contents->scheduleTransforms.push_back(t);
