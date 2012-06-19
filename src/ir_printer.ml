@@ -1,6 +1,9 @@
 open Ir
 open Printf
 
+let verbose = false
+let if_verbose s = if verbose then s else ""
+
 let rec string_of_val_type = function
   | Int(w) -> sprintf "i%d" w
   | UInt(w) -> sprintf "u%d" w
@@ -51,9 +54,9 @@ and string_of_expr = function
   | Cmp(op, l, r) -> "(" ^ string_of_expr l ^ string_of_cmp op ^ string_of_expr r ^ ")"
   | Select(c, t, f) ->
     "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
-  | Var(t, s) -> s ^ "<" ^ string_of_val_type t ^ ">"
+  | Var(t, s) -> s ^ if_verbose ("<" ^ string_of_val_type t ^ ">")
   | Load(t, b, i) -> string_of_buffer b ^ "[" ^ string_of_expr i ^ "]"
-  | Call(t, name, args) -> name ^ "<" ^ string_of_val_type t ^ ">(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ")"
+  | Call(t, name, args) -> name ^ if_verbose ("<" ^ string_of_val_type t ^ ">") ^ "(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ")"
   | MakeVector l -> "vec[" ^ (String.concat ", " (List.map string_of_expr l)) ^ "]"
   | Broadcast(e, n) -> "broadcast[" ^ string_of_expr e ^ ", " ^ string_of_int n ^ "]"
   | Ramp(b, s, n) -> "ramp[" ^ string_of_expr b ^ ", " ^ string_of_expr s ^ ", " ^ string_of_int n ^ "]"
