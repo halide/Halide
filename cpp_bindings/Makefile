@@ -27,7 +27,7 @@ LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) $(CUDA_LIBS
 HALIDE_OBJS=$(addprefix _build/,_MLHalide.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o Var.o Tuple.o Reduction.o)
 
 Halide.a: $(HALIDE_OBJS) ../src/_build/libllsupport_impl.a
-	ld -r -o Halide.o $(HALIDE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L../src/_build -lllsupport_impl -L$(LLVM_DIR)/lib $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -L$(OCAML_LIB_DIR) -lasmrun -lunix
+	ld -r -o Halide.o $(HALIDE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L../src/_build -lllsupport_impl -L$(LLVM_DIR)/lib $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -L$(OCAML_LIB_DIR) -lasmrun -lunix -lcamlstr
 	rm -f Halide.a
 	ar q Halide.a Halide.o
 	ranlib Halide.a
@@ -37,7 +37,7 @@ _build/%.o: %.cpp
 
 _build/_MLHalide.o: ../src/_build/halide.cmxa
 	mkdir -p _build
-	ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLHalide.o unix.cmxa $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/halide.cmxa
+	ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLHalide.o unix.cmxa str.cmxa $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/halide.cmxa
 
 ../src/_build/halide.cmxa: ../src/*.ml
 	cd ../src && \
