@@ -2,6 +2,7 @@ open Llvm
 open Ir
 open Ir_printer
 open Util
+open Cg_util
 open Cg_llvm_util
 open Ptx_dev
 open Analysis

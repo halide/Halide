@@ -3,6 +3,7 @@ open Llvm
 open List
 open Util
 open Ir_printer
+open Cg_util
 open Cg_llvm_util
 open Analysis
 
