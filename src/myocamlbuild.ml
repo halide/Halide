@@ -60,6 +60,7 @@ let arch =
 (* ~dir:... specifies search path for each lib. Need on *.ml as well as *.byte
  * to search for includes, not just libs to link. *)
 ocaml_lib ~extern:true "unix";; (* Unix is (oddly) needed by llvm when building a toplevel. Must be first. *)
+ocaml_lib ~extern:true "str";;
 ocaml_lib ~extern:true ~dir:(llvm_prefix/"lib/ocaml/") "llvm";;
 ocaml_lib ~extern:true ~dir:(llvm_prefix/"lib/ocaml/") "llvm_analysis";;
 ocaml_lib ~extern:true ~dir:(llvm_prefix/"lib/ocaml/") "llvm_bitwriter";;
@@ -82,7 +83,8 @@ dep ["link"; "ocaml"; "use_llsupport"] [libllsupport_impl];
 let llsupport_linkflags = [
   A"-cclib"; A libllsupport_impl;
   A"-cclib"; A ("-L" ^ llvm_prefix ^ "/lib");
-  A"-cclib"; A "-lLLVMLinker"
+  A"-cclib"; A "-lLLVMLinker";
+  A"-cclib"; A "-lLLVMipo"
 ] in
 (* PTX target libraries *)
 let ptx_llsupport_linkflags =
