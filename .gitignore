@@ -34,8 +34,15 @@ src/test_*.s
 *.dSYM
 .*.swp
 
+# jrk editor settings
+.tm_properties
+*.sublime-project
+*.sublime-workspace
+
+apps/patchmatch
+
 # app intermediates
-apps/*/out*.png
+apps/*/*out*.png
 apps/*/*.lowered
 apps/*/*.def
 apps/*/*.ptx
