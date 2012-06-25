@@ -26,6 +26,8 @@ public:
     MLVal operator()(const MLVal &a, const MLVal &b, const MLVal &c, const MLVal &d, const MLVal &e) const;
     MLVal operator()(const MLVal &a, const MLVal &b, const MLVal &c, const MLVal &d, const MLVal &e, const MLVal &f) const;
 
+    operator std::string();
+
     operator bool() const {return contents.get();}
 
     void *asVoidPtr() const;

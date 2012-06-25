@@ -89,6 +89,10 @@ MLVal::MLVal(const std::string &str) {
     contents.reset(new Contents(v));    
 }
 
+MLVal::operator std::string() {
+    return std::string(String_val(contents->val));
+}
+
 MLVal::MLVal(void *ptr) : contents(new Contents((value)ptr)) {
 }
 
