@@ -1,4 +1,6 @@
 open Util
+open Sexplib
+open Sexplib.Std
 
 type val_type = 
   (* bits per element *)    
@@ -9,6 +11,7 @@ type val_type =
   | IntVector of int * int
   | UIntVector of int * int
   | FloatVector of int * int
+with sexp
 
 let bool1 = UInt 1
 let u8    = UInt 8
@@ -54,7 +57,8 @@ let vector_elements = function
   | FloatVector (x, n) -> n
 
 type binop = Add | Sub | Mul | Div | Mod | Min | Max
-type cmpop = EQ | NE | LT | LE | GT | GE
+ and cmpop = EQ | NE | LT | LE | GT | GE
+with sexp
 
 let caml_iop_of_bop = function
   | Add -> ( + ) 
@@ -139,6 +143,7 @@ type expr =
   | Debug of expr * string * (expr list)
 
 and buffer = string (* just a name for now *)
+with sexp
 
 exception ArithmeticTypeMismatch of val_type * val_type
 
@@ -230,6 +235,7 @@ and function_body =
   | Reduce of (expr * (expr list) * string * (string * expr * expr) list)
   (* Passes through to a C function call of the same name *)
   | Extern
+with sexp
 
 (* By convention, extern functions have fully qualified names, beginning with ".",
  * to prevent our namespacing from trying to parse/split llvm.* intrinsic names. *)
@@ -270,8 +276,10 @@ let add_function (def:definition) (env:environment) =
 type arg =
   | Scalar of string * val_type
   | Buffer of string
+with sexp
 
 type entrypoint = string * (arg list) * stmt
+with sexp
 
 exception BadTypeCoercion
 

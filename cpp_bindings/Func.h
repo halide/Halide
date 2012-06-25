@@ -131,6 +131,8 @@ namespace Halide {
         // Get the variable defining argument i
         const Var &arg(int i) const;
 
+        std::string serialize();
+
         void compileJIT();
         void compileToFile(const std::string &name);
 

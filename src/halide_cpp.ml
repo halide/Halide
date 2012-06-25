@@ -215,4 +215,8 @@ let _ =
   Callback.register "makeRootTransform" (fun func -> root_schedule func);
   Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);  
   Callback.register "makeRandomTransform" (fun func seed -> random_schedule func seed);
-  
+
+  Callback.register "serializeExpr" (fun e -> Sexplib.Sexp.to_string (sexp_of_expr e));
+  Callback.register "serializeStmt" (fun s -> Sexplib.Sexp.to_string (sexp_of_stmt s));
+  Callback.register "serializeEntry" (fun name args stmt -> Sexplib.Sexp.to_string
+                                              (sexp_of_entrypoint (name, args, stmt)));

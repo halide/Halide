@@ -68,6 +68,9 @@ namespace Halide {
     ML_FUNC2(makePair);
     ML_FUNC3(makeTriple);
 
+    ML_FUNC1(serializeStmt); // stmt
+    ML_FUNC3(serializeEntry); // name, args, stmt
+
     struct FuncRef::Contents {
         Contents(const Func &f) :
             f(f) {}
@@ -300,7 +303,7 @@ namespace Halide {
         if (r.rdom().dimensions() > 0) gather = false;
 
         if (gather) {
-	    //printf("Gather definition for %s\n", name().c_str());
+        //printf("Gather definition for %s\n", name().c_str());
             contents->rhs = r;            
             contents->returnType = r.type();
             contents->args = args;
@@ -326,7 +329,7 @@ namespace Halide {
             contents->rhs.child(r);
            
             MLVal reduction_args = makeList();
-	    const RDom &rdom = contents->rhs.rdom();
+        const RDom &rdom = contents->rhs.rdom();
             for (int i = rdom.dimensions(); i > 0; i--) {
                 reduction_args = addToList(reduction_args, 
                                            makeTriple(rdom[i-1].name(), 
@@ -702,6 +705,12 @@ namespace Halide {
     Func::Arg::Arg(const DynUniform &u) : arg(makeScalarArg(u.name(), u.type().mlval)) {}
     Func::Arg::Arg(const DynImage &u) : arg(makeBufferArg(u.name())) {}
 
+    std::string Func::serialize() {
+        MLVal stmt = lower();
+        MLVal args = inferArguments();
+        return std::string(serializeEntry(name(), args, stmt));
+    }
+
     void Func::compileToFile(const std::string &moduleName) { 
         MLVal stmt = lower();
         MLVal args = inferArguments();
@@ -736,6 +745,7 @@ namespace Halide {
             snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -relocation-model=pic -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
             snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
             printf("%s\n", cmd1);
+
             assert(0 == system(cmd1));
             printf("%s\n", cmd2);
             assert(0 == system(cmd2));
