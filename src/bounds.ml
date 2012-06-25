@@ -66,7 +66,7 @@ let bounds_of_expr_in_env env expr =
           (* if idx depends on anything in env then Unbounded else return this  *)
           let rec contains_var_in_env = function        
             | Var (t, n) -> StringMap.mem n env
-            | expr -> fold_children_in_expr contains_var_in_env (or) false expr
+            | expr -> fold_children_in_expr contains_var_in_env (fun x y -> x or y) false expr
           in 
           if contains_var_in_env idx then (bounds_of_type t) else make_range (expr, expr) 
       | Broadcast (e, _) -> recurse e

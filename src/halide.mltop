@@ -7,6 +7,7 @@ ptx_dev
 schedule_transforms
 analysis
 hash
+cg_util
 cg_llvm
 cg_llvm_util
 cg_for_target
@@ -20,4 +21,6 @@ constant_fold
 break_false_dependence
 schedule
 lower
+halide_cpp
 stdlib
+llutil

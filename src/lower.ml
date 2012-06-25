@@ -36,7 +36,7 @@ let rec resolve_name (context: string) (var: string) (schedule: schedule_tree) =
       | _ -> false
     in
     
-    let found = List.fold_left (or) false (List.map provides_name sched_list) in
+    let found = List.fold_left (fun x y -> x or y) false (List.map provides_name sched_list) in
     
     if found then
       (context ^ "." ^ var)
