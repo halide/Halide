@@ -175,7 +175,7 @@ let rec make_cg_context c m b sym_table arch_state =
       sym_add name (cg_expr l);
       let result = cg_expr r in
       sym_remove name;
-      result        
+      result
 
     (* Making vectors *)
     | MakeVector (l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
@@ -506,13 +506,13 @@ let rec make_cg_context c m b sym_table arch_state =
   and cg_stmt stmt = Arch.cg_stmt cg_context stmt
   and cg_stmt_inner = function
     (* TODO: unaligned vector store *)
-    | Store(e, buf, idx) -> cg_store e buf idx
-    | For(name, min, n, order, stmt) ->
+    | Store (e, buf, idx) -> cg_store e buf idx
+    | For (name, min, n, order, stmt) ->
         (if order then cg_for else cg_par_for) name (cg_expr min) (cg_expr n) stmt
     | Block (first::second::rest) ->
         ignore(cg_stmt first);
         cg_stmt (Block (second::rest))
-    | Block(first::[]) ->
+    | Block (first::[]) ->
         cg_stmt first
     | Block _ -> failwith "cg_stmt of empty block"
 

@@ -104,10 +104,10 @@ let rec stmt_contains_zero stmt =
 
 let rec expr_contains_expr query expr = 
   if (query = expr) then true else
-    fold_children_in_expr (expr_contains_expr query) (or) false expr
+    fold_children_in_expr (expr_contains_expr query) (fun x y -> x or y) false expr
 
 let rec stmt_contains_expr query stmt =
-  fold_children_in_stmt (expr_contains_expr query) (stmt_contains_expr query) (or) stmt
+  fold_children_in_stmt (expr_contains_expr query) (stmt_contains_expr query) (fun x y -> x or y) stmt
 
 
 let mutate_children_in_expr mutator = function

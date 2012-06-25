@@ -1,3 +1,11 @@
+Changes in process
+--------------------
+I am adding dependencies on OCaml batteries included and sexplib. On Ubuntu or similar, these are available via:
+
+	sudo apt-get install libsexplib-camlp4-dev ocaml-batteries-included
+
+On OS X, I am switching to recommending GODI, and am trying to make a usable Homebrew installer for GODI.
+
 Summary
 -------
 - Install OCaml (3.12.*)  
