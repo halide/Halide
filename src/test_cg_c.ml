@@ -12,4 +12,4 @@ let _ =
 
   Printf.printf "loaded %s:\n%s\n  ==>\n" name (Ir_printer.string_of_stmt body);
 
-  Printf.printf "%s\n" (Cg_c.cg_entry entry)
+  Printf.printf "%s\n" (Pretty.to_string 80 (Ppcee.program (Cg_c.cg_entry entry)))
