@@ -1,3 +1,6 @@
+cee
+ppcee
+pretty
 bounds
 loop_lifting
 x86
@@ -7,6 +10,7 @@ ptx_dev
 schedule_transforms
 analysis
 hash
+cg_c
 cg_util
 cg_llvm
 cg_llvm_util
