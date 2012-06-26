@@ -13,8 +13,10 @@ extern "C" {
 
 void init_ml() {
     static bool initialized = false;
+    // Batteries is unhappy if Sys.argv.(0) is NULL or uninitialized
+    std::string fake_exe_name = "<halide_embedded>";
     if (!initialized) {
-        char *fake_argv[1] = {NULL};
+        char *fake_argv[2] = {&fake_exe_name[0], NULL};
         caml_startup(fake_argv);
         initialized = true;
     }
