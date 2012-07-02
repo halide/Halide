@@ -59,6 +59,7 @@ test/*/*.s
 test/*/*.png
 test/*/*.time
 test/cpp/*/*.lowered
+test/cpp/*/*.sexp
 test/cpp/*/*.def
 test/cpp/*/*.ptx
 test/cpp/*/passes.txt
@@ -89,3 +90,4 @@ cpp_bindings/.tags
 apps/local_laplacian/ispc/process
 apps/local_laplacian/process
 src/.tags_sorted_by_file
+
