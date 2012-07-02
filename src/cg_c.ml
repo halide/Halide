@@ -23,13 +23,21 @@ let ctype_of_val_type = function
   | UInt( 1) -> C.Bool
   | t -> failwith ("Unsupported type " ^ (string_of_val_type t))
 
-(*
-let rec string_of_cstmt = function
-  | Stmt (s) -> s ^ ";\n"
-  | Blk (s) -> "{\n" ^ (String.concat "" (List.map string_of_cstmt s)) ^ "}\n"
-*)
+let ( <*> ) x y = C.Infix (x, C.Mult, y)
+let ( <+> ) x y = C.Infix (x, C.Add, y)
+let ( <-> ) x y = C.Infix (x, C.Sub, y)
+let ( </> ) x y = C.Infix (x, C.Div, y)
+let ( <<> ) x y = C.Infix (x, C.LT, y)
 
-let cname name = Str.global_replace (Str.regexp "\\.") "__" name
+let cname name =
+  let components = split_name name in
+  Str.global_replace (Str.regexp "\\.") "__" name
+
+let malloc_fn = C.ID "malloc"
+let free_fn = C.ID "free"
+
+let cinit e = Some (C.SingleInit (e))
+let csizeof cty = C.Call(C.ID "sizeof", [C.Type cty])
 
 let cg_binop = function
   | Add -> C.Add | Sub -> C.Sub | Mul -> C.Mult | Div -> C.Div
@@ -80,37 +88,47 @@ let rec cg_stmt = function
   | Block(stmts) -> C.Block ([], (List.map cg_stmt stmts))
 
   | LetStmt (name, value, stmt) ->
-      (* Blk [(Stmt (cg_decl name value)); cg_stmt stmt] *)
-      failwith "Unimplemented: LetStmt"
+      C.Block ([C.VarDecl(name,
+                          ctype_of_val_type (val_type_of_expr value),
+                          Some(C.SingleInit(cg_expr value)))],
+                [cg_stmt stmt])
 
   | Pipeline (name, ty, size, produce, consume) ->
-      failwith "Unimplemented: pipeline"
-      (*
       (* allocate buffer *)
-      let scratch = cg_malloc name size (ctype_of_val_type ty) in
+      let scratch_init = cg_malloc name size ty in
 
       (* do produce, consume *)
-      let prod = cg_stmt produce in
-      let cons = cg_stmt consume in
+      let prod = [C.Comment ("produce " ^ name); cg_stmt produce] in
+      let cons = [C.Comment ("consume " ^ name); cg_stmt consume] in
 
       (* free buffer *)
-      let free = cg_free name in
+      let free = [C.Expr(cg_free name)] in
 
-      Blk [(Stmt scratch); prod; cons; (Stmt free)]
-      *)
+      C.Block ([scratch_init], prod @ cons @ free)
 
   | s -> failwith (Printf.sprintf "Can't codegen: %s" (Ir_printer.string_of_stmt s))
 
 and cg_for name min size stmt =
   let iter_t = ctype_of_val_type (Int 32) in
   let iter_var = C.ID (cname name) in
-  C.For (C.VarDecl ((cname name), iter_t, Some (C.SingleInit (cg_expr min))), C.Infix (iter_var, C.LT, cg_expr (min +~ size)), C.Postfix (iter_var, C.PostInc), cg_stmt stmt)
+  C.For (
+    C.VarDecl ((cname name), iter_t, cinit (cg_expr min)),
+    iter_var <<> (cg_expr (min +~ size)),
+    C.Postfix (iter_var, C.PostInc),
+    cg_stmt stmt
+  )
 
-and cg_malloc name size ctype =
-  (* ctype ^ " *" ^ (cname name) ^ " = malloc(" ^ (cg_expr size) ^ " ^ *sizeof(" ^ ctype ^ "))" *)
-  failwith "Unimplemented: cg_malloc"
+and cg_malloc name size ty =
+  let cty = ctype_of_val_type ty in
+  C.VarDecl (
+    cname name,
+    C.Ptr cty,
+    cinit (
+      C.Call(malloc_fn, [(cg_expr size) <*> (csizeof cty)])
+    )
+  )
 
-and cg_free name = "free(" ^ (cname name) ^ ")"
+and cg_free name = C.Call (free_fn, [C.ID (cname name)])
 
 and cg_store e buf idx =
   match (is_vector e, is_vector idx) with
