@@ -55,6 +55,9 @@ let lower (f:string) (env:environment) (sched: schedule_tree) =
     raise x
   end *)
 
+let serializeEntry name args stmt = Sexplib.Sexp.to_string
+                                      (sexp_of_entrypoint (name, args, stmt))
+
 let compile name args stmt =
 
   Printexc.record_backtrace true;
@@ -77,6 +80,12 @@ let compile name args stmt =
       let (c, m, f) = codegen_to_c_callable func in
       (* ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc"); *)
       Hashtbl.add compilation_cache func (m, f);
+
+      (* Log the lowered entrypoint *)
+      let out = open_out (name ^ ".sexp") in
+      Printf.fprintf out "%s%!" (serializeEntry name args stmt);
+      close_out out;
+
       (* TODO: this leaks the llcontext, and will leak the module if the cache
        * doesn't free it eventually. *)
       (m, f)
@@ -218,5 +227,4 @@ let _ =
 
   Callback.register "serializeExpr" (fun e -> Sexplib.Sexp.to_string (sexp_of_expr e));
   Callback.register "serializeStmt" (fun s -> Sexplib.Sexp.to_string (sexp_of_stmt s));
-  Callback.register "serializeEntry" (fun name args stmt -> Sexplib.Sexp.to_string
-                                              (sexp_of_entrypoint (name, args, stmt)));
+  Callback.register "serializeEntry" serializeEntry;
