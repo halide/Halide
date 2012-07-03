@@ -61,6 +61,8 @@ test/*/*.time
 test/cpp/*/*.lowered
 test/cpp/*/*.sexp
 test/cpp/*/*.def
+test/cpp/*/*_pseudojit.so
+test/cpp/*/*_pseudojit.c
 test/cpp/*/*.ptx
 test/cpp/*/passes.txt
 test/cpp/*/*.h
