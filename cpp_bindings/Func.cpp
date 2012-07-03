@@ -734,18 +734,25 @@ namespace Halide {
             // llvm's ARM jit path has many issues currently. Instead
             // we'll do static compilation to a shared object, then
             // dlopen it
-            std::string bc_name = "./" + name + ".bc";
             printf("Pseudo-jitting via static compilation to a shared object\n");
+            
             std::string name = contents->name + "_pseudojit";
             std::string so_name = "./" + name + ".so";
-            std::string obj_name = "./" + name + ".o";
             std::string entrypoint_name = name + "_c_wrapper";
+            
             compileToFile(name.c_str());
             char cmd1[1024], cmd2[1024];
-            snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -relocation-model=pic -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
+
+            std::string obj_name = "./" + name + ".o";
+            if (getenv("HL_BACKEND") && getenv("HL_BACKEND") == std::string("c")) {
+                std::string c_name = "./" + name + ".c";
+                snprintf(cmd1, 1024, "gcc -std=c99 -c -O3 %s -relocation-model=pic -o %s", c_name.c_str(), obj_name.c_str());
+            } else {
+                std::string bc_name = "./" + name + ".bc";
+                snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -relocation-model=pic -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
+            }
             snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
             printf("%s\n", cmd1);
-
             assert(0 == system(cmd1));
             printf("%s\n", cmd2);
             assert(0 == system(cmd2));
