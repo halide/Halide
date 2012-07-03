@@ -191,6 +191,8 @@ let rec expr e =
       | C.Select(e,n)   -> exp inner Left e ^^ text ("." ^ n)
       | C.Arrow(e,n)    -> exp inner Left e ^^ text ("->" ^ n)
       | C.Access(e,i)   -> exp inner Left e ^^ bracket' (expr i) 
+      | C.Deref(e)      -> text "*" ^^ exp inner Right e
+      | C.AddrOf(e)     -> text "&" ^^ exp inner Right e
       | C.Type(t)       -> ty (C.strip t)  
       | _               -> failwith "expr: not implemented" 
     in
