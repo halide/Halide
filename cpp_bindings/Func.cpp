@@ -730,13 +730,13 @@ namespace Halide {
     }
 
     void Func::compileJIT() {
-        if (getenv("HL_PSUEDOJIT") && getenv("HL_PSUEDOJIT") == std::string("1")) {
+        if (getenv("HL_PSEUDOJIT") && getenv("HL_PSEUDOJIT") == std::string("1")) {
             // llvm's ARM jit path has many issues currently. Instead
             // we'll do static compilation to a shared object, then
             // dlopen it
-            printf("Psuedo-jitting via static compilation to a shared object\n");
-            std::string name = contents->name + "_psuedojit";
             std::string bc_name = "./" + name + ".bc";
+            printf("Pseudo-jitting via static compilation to a shared object\n");
+            std::string name = contents->name + "_pseudojit";
             std::string so_name = "./" + name + ".so";
             std::string obj_name = "./" + name + ".o";
             std::string entrypoint_name = name + "_c_wrapper";
