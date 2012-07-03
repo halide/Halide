@@ -4,6 +4,7 @@ open List
 open Util
 open Cg_util
 open Analysis
+open Batteries_uni
 
 module C = Cee
 
@@ -216,3 +217,49 @@ let cg_entry e =
       C.decls = [];
       C.body = body;
     }]
+
+let codegen_c_wrapper (name,args,_) =
+  let cg_load_arg i arg =
+    let offset = C.ID("args") <+> C.IntConst(i) in
+    let ty =
+      match arg with
+        | Scalar (_, vt) -> ctype_of_val_type vt
+        | Buffer _ -> C.Ptr (C.TyName "buffer_t")
+    in
+    C.Deref (C.Cast (C.Ptr ty, offset))
+  in
+  let body = [C.Expr
+               (C.Call
+                 (C.ID name, List.mapi cg_load_arg args))]
+  in
+  [C.Function
+    {
+      C.name = name ^ "_c_wrapper";
+      C.static = false;
+      C.ty = { C.return = C.Void; C.args = [("args", C.Ptr (C.Void))]; C.varargs = [] };
+      C.decls = [];
+      C.body = body;
+    }]
+
+let codegen_to_file (e:entrypoint) =
+  let (object_name, _, _) = e in
+
+  let c_file = object_name ^ ".c" in
+  let header_file = object_name ^ ".h" in
+
+  (* codegen *)
+  let prgm = cg_entry e in
+
+  (* build the convenience wrapper *)
+  let wrapper = codegen_c_wrapper e in
+
+  (* write source *)
+  File.with_file_out c_file
+    (fun o -> Printf.fprintf o "#include \"%s\"\n%s%!"
+      header_file
+      (Pretty.to_string 80 (Ppcee.program (prgm @ wrapper))));
+
+  (* write header *)
+  codegen_c_header e header_file;
+
+  ()
