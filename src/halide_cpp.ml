@@ -99,10 +99,21 @@ let compile name args stmt =
 let compile_to_file name args stmt =
   Printexc.record_backtrace true;
   
-  try begin
-    ignore (initialize_native_target());
-    let module Cg = Cg_for_target in
-    Cg.codegen_to_bitcode_and_header (name, args, stmt)
+  let backend = try
+    Sys.getenv "HL_BACKEND"
+  with Not_found ->
+    Printf.eprintf "HL_BACKEND not set - defaulting to LLVM";
+    "llvm"
+  in
+
+  try begin match backend with
+    | "llvm" ->
+        ignore (initialize_native_target());
+        let module Cg = Cg_for_target in
+        Cg.codegen_to_bitcode_and_header (name, args, stmt)
+    | "c" ->
+        Cg_c.codegen_to_file (name, args, stmt)
+    | _ -> failwith ("Unrecognized HL_BACKEND: " ^ backend)
   end
   with x -> begin
     Printf.printf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
