@@ -167,7 +167,7 @@ let rec make_cg_context c m b sym_table arch_state =
           (function_type (type_of_val_type t) (Array.of_list arg_types)) m in
 
         (* codegen args and call *)
-        let llargs = List.map (fun arg -> cg_expr arg) args in
+        let llargs = List.map cg_expr args in
         build_call llfunc (Array.of_list (llargs)) ("extern_" ^ name) b
 
     (* Let expressions *)
