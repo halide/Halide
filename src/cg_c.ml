@@ -115,6 +115,12 @@ let cg_entry e =
     | Call (t, name, args) -> C.Call (C.ID (base_name name), List.map cg_expr args)
 
     (* TODO: lets are going to require declarations be queued and returned as well as the final expression/statement *)
+    (* For now, just push lets through as their generated value expressions *)
+    | Let (name, v, use) ->
+        sym_add name (cg_expr v);
+        let result = cg_expr use in
+        sym_remove name;
+        result
 
     | e -> failwith ("Unimplemented cg_expr " ^ (Ir_printer.string_of_expr e))
 
