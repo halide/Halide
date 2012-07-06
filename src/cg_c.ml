@@ -113,7 +113,7 @@ let cg_entry e =
 
     (* TODO: lets are going to require declarations be queued and returned as well as the final expression/statement *)
 
-    | _ -> failwith "Unimplemented cg_expr"
+    | e -> failwith ("Unimplemented cg_expr " ^ (Ir_printer.string_of_expr e))
 
   and cg_buf_access ty buf idx =
     let buf_ptr = sym_get buf in
