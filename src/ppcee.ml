@@ -193,8 +193,8 @@ let rec expr e =
       | C.Access(e,i)   -> exp inner Left e ^^ bracket' (expr i) 
       | C.Deref(e)      -> text "*" ^^ exp inner Right e
       | C.AddrOf(e)     -> text "&" ^^ exp inner Right e
+      | C.Prefix(op,e)  -> text (prefix op) ^^ exp inner Right e
       | C.Type(t)       -> ty (C.strip t)  
-      | _               -> failwith "expr: not implemented" 
     in
       if noparens inner outer side 
       then group doc 
