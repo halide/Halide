@@ -76,7 +76,7 @@ let cg_entry e =
   let free_fn = C.ID "free" in
 
   let cinit e = Some (C.SingleInit (e)) in
-  let csizeof cty = C.Call(C.ID "sizeof", [C.Type cty]) in
+  let csizeof cty = ccall "sizeof" [C.Type cty] in
 
   let cg_binop = function
     | Add -> C.Add | Sub -> C.Sub | Mul -> C.Mult | Div -> C.Div | Mod -> C.Mod
@@ -241,8 +241,7 @@ let codegen_c_wrapper (name,args,_) =
     (C.Deref offset)
   in
   let body = [C.Expr
-               (C.Call
-                 (C.ID name, List.mapi cg_load_arg args))]
+               (ccall name (List.mapi cg_load_arg args))]
   in
   [C.Function
     {
