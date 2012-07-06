@@ -28,7 +28,9 @@ let ( <*> ) x y = C.Infix (x, C.Mult, y)
 let ( <+> ) x y = C.Infix (x, C.Add, y)
 let ( <-> ) x y = C.Infix (x, C.Sub, y)
 let ( </> ) x y = C.Infix (x, C.Div, y)
+let ( <%> ) x y = C.Infix (x, C.Mod, y)
 let ( <<> ) x y = C.Infix (x, C.LT, y)
+let ccall f args = C.Call(C.ID f, args)
 
 let cg_entry e =
   let name,args,stmt = e in
@@ -77,7 +79,7 @@ let cg_entry e =
   let csizeof cty = C.Call(C.ID "sizeof", [C.Type cty]) in
 
   let cg_binop = function
-    | Add -> C.Add | Sub -> C.Sub | Mul -> C.Mult | Div -> C.Div
+    | Add -> C.Add | Sub -> C.Sub | Mul -> C.Mult | Div -> C.Div | Mod -> C.Mod
     | op -> failwith ("Cg_c.cg_op of unsupported op " ^ (string_of_op op))
   in
 
@@ -97,6 +99,7 @@ let cg_entry e =
     (* TODO: replace the min/max cases with cg_expr Select(cmp, l, r) *)
     | Bop (Min, l, r) -> cg_expr (Select (Cmp(LE, l, r), l, r))
     | Bop (Max, l, r) -> cg_expr (Select (Cmp(GE, l, r), l, r))
+    | Bop (Mod, l, r) -> cg_mod l r
     | Bop (op, l, r) -> C.Infix ((cg_expr l), (cg_binop op), (cg_expr r))
 
     | Cmp (op, l, r) -> C.Infix ((cg_expr l), (cg_cmpop op), (cg_expr r))
@@ -114,6 +117,15 @@ let cg_entry e =
     (* TODO: lets are going to require declarations be queued and returned as well as the final expression/statement *)
 
     | e -> failwith ("Unimplemented cg_expr " ^ (Ir_printer.string_of_expr e))
+
+  and cg_mod l r =
+    match val_type_of_expr l with
+      | Float _ -> ccall "fmod" [cg_expr l; cg_expr r]
+      | UInt _ -> (cg_expr l) <%> (cg_expr r)
+      | Int _ ->
+          let l = cg_expr l and r = cg_expr r in
+          (((l <%> r) <+> r) <%> r)
+      | t -> failwith ("Unimplemented mod type " ^ (string_of_val_type t))
 
   and cg_buf_access ty buf idx =
     let buf_ptr = sym_get buf in
