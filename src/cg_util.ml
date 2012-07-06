@@ -60,6 +60,8 @@ let codegen_c_header e header_file =
      "#ifndef buffer_t_defined";
      "#define buffer_t_defined";
      "#include <stdint.h>";
+     "#include <stdlib.h>";
+     "#include <stdio.h>";
      "#include <stddef.h>";
      "#include <stdbool.h>";
      "typedef struct buffer_t {";
