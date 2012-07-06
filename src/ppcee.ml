@@ -187,7 +187,7 @@ let rec expr e =
                               ^^^ text (infix op)
                               ^^^ exp inner Right r
       | C.Postfix(e,op) -> exp inner Left e ^^ text (postfix op)
-      | C.Cast(t,e)     -> parent (ty @@ C.strip t) ^^^ expr e
+      | C.Cast(t,e)     -> parent (ty @@ C.strip t) ^^^ exp inner Right e
       | C.Select(e,n)   -> exp inner Left e ^^ text ("." ^ n)
       | C.Arrow(e,n)    -> exp inner Left e ^^ text ("->" ^ n)
       | C.Access(e,i)   -> exp inner Left e ^^ bracket' (expr i) 

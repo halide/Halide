@@ -141,7 +141,7 @@ let cg_entry e =
     | LetStmt (name, value, stmt) ->
         sym_add name (C.ID (cname name));
         let s =
-          C.Block ([C.VarDecl(name,
+          C.Block ([C.VarDecl(cname name,
                               ctype_of_val_type (val_type_of_expr value),
                               Some(C.SingleInit(cg_expr value)))],
                     [cg_stmt stmt]) in
@@ -188,7 +188,7 @@ let cg_entry e =
       cname name,
       C.Ptr cty,
       cinit (
-        C.Call(malloc_fn, [(cg_expr size) <*> (csizeof cty)])
+        C.Cast (C.Ptr(cty), C.Call(malloc_fn, [(cg_expr size) <*> (csizeof cty)]))
       )
     )
 
@@ -220,13 +220,13 @@ let cg_entry e =
 
 let codegen_c_wrapper (name,args,_) =
   let cg_load_arg i arg =
-    let offset = C.ID("args") <+> C.IntConst(i) in
     let ty =
       match arg with
         | Scalar (_, vt) -> ctype_of_val_type vt
         | Buffer _ -> C.Ptr (C.TyName "buffer_t")
     in
-    C.Deref (C.Cast (C.Ptr ty, offset))
+    let offset = (C.Cast (C.Ptr ty, C.ID "args")) <+> C.IntConst(i) in
+    (C.Deref offset)
   in
   let body = [C.Expr
                (C.Call
