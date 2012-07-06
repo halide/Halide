@@ -24,14 +24,19 @@ llvm_path = os.path.join(proj_root, 'llvm', 'Release+Asserts', 'bin')
 llc = Command(os.path.join(llvm_path, 'llc'))
 clang = Command(os.path.join(llvm_path, 'clang++'))
 imagestack = Command(os.path.join(proj_root, 'ImageStack', 'bin', 'ImageStack'))
-try:
-    cxx = Command(which('g++-4.7'))
-except:
+
+cxx = None
+gcc_versions = [which('g++-4.7'),which('g++-4.6')]
+for gcc in gcc_versions:
+    cxx = Command(gcc)
     try:
-        cxx = Command(which('g++-4.6'))
+        cxx('--version')
     except:
-        print 'Halide requires g++-4.6 or g++-4.7 to be in the path.'
-        sys.exit(-1)
+        continue
+    break
+if not cxx:
+    print 'Halide requires g++-4.6 or g++-4.7 to be in the path.'
+    sys.exit(-1)
 
 platform = sys.platform.lower()
 if 'linux' in platform:
