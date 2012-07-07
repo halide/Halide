@@ -748,7 +748,7 @@ namespace Halide {
                 std::string obj_name = "./" + name + ".o";
                 if (getenv("HL_BACKEND") && getenv("HL_BACKEND") == std::string("c")) {
                     std::string c_name = "./" + name + ".c";
-                    snprintf(cmd1, 1024, "gcc -std=c99 -c -O3 %s -relocation-model=pic -o %s", c_name.c_str(), obj_name.c_str());
+                    snprintf(cmd1, 1024, "g++ -c -O3 %s -relocation-model=pic -o %s", c_name.c_str(), obj_name.c_str());
                 } else {
                     std::string bc_name = "./" + name + ".bc";
                     snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -relocation-model=pic -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
