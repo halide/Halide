@@ -240,11 +240,13 @@ let codegen_c_wrapper (name,args,_) =
   let cg_load_arg i arg =
     let ty =
       match arg with
-        | Scalar (_, vt) -> ctype_of_val_type vt
+        | Scalar (_, vt) -> C.Ptr (ctype_of_val_type vt)
         | Buffer _ -> C.Ptr (C.TyName "buffer_t")
     in
     let offset = (C.Cast (C.Ptr ty, C.ID "args")) <+> C.IntConst(i) in
-    (C.Deref offset)
+    match arg with
+      | Scalar _ -> C.Deref (C.Deref offset)
+      | Buffer _ -> C.Deref offset
   in
   let body = [C.Expr
                (ccall name (List.mapi cg_load_arg args))]
