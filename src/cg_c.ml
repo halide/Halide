@@ -271,10 +271,24 @@ let codegen_to_file (e:entrypoint) =
   let wrapper = codegen_c_wrapper e in
 
   (* write source *)
+  let lines = [
+    "#include \"" ^ header_file ^ "\"";
+     "";
+     "#ifdef __cplusplus";
+     "extern \"C\" {";
+     "#endif";
+     "";
+    Architecture_posix_initmod.stdlib;
+    Pretty.to_string 100 (Ppcee.program (prgm @ wrapper));
+     "";
+     "#ifdef __cplusplus";
+     "}";
+     "#endif";
+     "";
+  ] in
   File.with_file_out c_file
-    (fun o -> Printf.fprintf o "#include \"%s\"\n%s%!"
-      header_file
-      (Pretty.to_string 80 (Ppcee.program (prgm @ wrapper))));
+    (fun o -> Printf.fprintf o "%s%!"
+      (String.concat "\n" lines));
 
   (* write header *)
   codegen_c_header e header_file;

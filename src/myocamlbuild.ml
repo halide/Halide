@@ -125,6 +125,18 @@ flag ["c"; "compile"; "llsupport_cflags"]
      A"-ccopt"; A"-D__STDC_LIMIT_MACROS";
      A"-ccopt"; A"-D__STDC_CONSTANT_MACROS"]);;
 
+rule "Generate initial module source strings for ML emission"
+  ~prod: "architecture_posix_initmod.ml"
+  ~deps: ["architecture.posix.stdlib.cpp"; "cpp2ml.py"]
+  begin fun env build ->
+    let c =
+    Cmd(S([
+      A"python"; A"cpp2ml.py"; P(env "architecture.posix.stdlib.cpp");
+      Sh " > "; P(env "architecture_posix_initmod.ml")]))
+    in
+    (* failwith (Command.to_string c); *)
+    c
+  end;;
 rule "Generate initial modules"
   ~prod: "architecture.%(arch).initmod.c"
   ~deps: ["architecture.%(arch).stdlib.cpp";
