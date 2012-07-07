@@ -4,6 +4,7 @@
 using namespace Halide;
 
 // NB: You must compile with -rdynamic for llvm to be able to find the appropriate symbols
+// This is not supported by the C PseudoJIT backend.
 
 int call_counter = 0;
 extern "C" float my_func(int x, float y) {
