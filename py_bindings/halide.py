@@ -122,6 +122,15 @@ def Image(typeval, *args):
         raise ValueError('unknown Image constructor arguments %r' % args)
 
 # ----------------------------------------------------
+# Repr
+# ----------------------------------------------------
+
+Var.__repr__ = lambda self: 'Var(%r)'%self.name()
+Type.__repr__ = lambda self: 'UInt(%d)'%self.bits if self.isUInt() else 'Int(%d)'%self.bits if self.isInt() else 'Float(%d)'%self.bits if self.isFloat() else 'Type(%d)'%self.bits 
+Expr.__repr__ = lambda self: 'Expr(%s)' % ', '.join([repr(self.type())] + [str(_x) for _x in self.vars()])
+Func.__repr__ = lambda self: 'Func(%r)' % self.name()
+
+# ----------------------------------------------------
 # Test
 # ----------------------------------------------------
 
@@ -218,11 +227,15 @@ def get_blur():
     x = Var('x')
     y = Var('y')
     c = Var('c')
-    #input_clamped = Func('input_clamped')
+    input_clamped = Func('input_clamped')
     blur_x = Func('blur_x')
     blur_y = Func('blur_y')
 
-    input_clamped[x,y,c] = input[clamp(Expr(x),Expr(0),Expr(input.width()-1)), clamp(Expr(y),Expr(0),Expr(input.width()-1)), clamp(Expr(c),Expr(0),Expr(input.width()-1))]
+    #print 'before input_clamped'
+    input_clamped[x,y,c] = input[clamp(Expr(x),cast(Int(32),Expr(0)),cast(Int(32),Expr(input.width()-1))),
+                                 clamp(Expr(y),cast(Int(32),Expr(0)),cast(Int(32),Expr(input.width()-1))),
+                                 c] #clamp(Expr(c),Expr(0),Expr(input.width()-1))]
+    #print 'after input_clamped'
     #input_clamped[x,y,c] = input[x,y,c]
     blur_x[x,y,c] = (input_clamped[x-1,y,c]/4+input_clamped[x,y,c]/4+input_clamped[x+1,y,c]/4)/3
 #    blur_x[x,y,c] = (input[x-1,y,c]/4+input[x,y,c]/4+input[x+1,y,c]/4)/3
@@ -238,11 +251,12 @@ def test_blur():
         assert f.args()[2].vars()[0].name()=='c'
         assert len(f.args()) == 3
     assert blur_y.rhs().funcs()[0].name()=='blur_x'
-    assert len(blur_y.rhs().funcs()) == 1
     assert blur_x.rhs().uniformImages()[0].name()
     assert len(blur_x.rhs().uniformImages()) == 1
 
-    assert set(all_funcs(blur_y).keys()) == set(['blur_x', 'blur_y'])
+    #print [str(x) for x in blur_y.rhs().funcs()]
+    assert len(blur_y.rhs().funcs()) == 2
+    assert set(all_funcs(blur_y).keys()) == set(['blur_x', 'blur_y', 'input_clamped']), set(all_funcs(blur_y).keys())
     assert func_varlist(blur_y) == ['x', 'y', 'c'], func_varlist(blur_y)
     assert func_varlist(blur_x) == ['x', 'y', 'c'], func_varlist(blur_x)
     
