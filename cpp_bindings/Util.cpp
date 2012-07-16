@@ -9,10 +9,8 @@ namespace Halide {
     std::string uniqueName(char prefix) {
         // arrays with static storage duration should be initialized to zero automatically
         static int instances[256]; 
-        std::ostringstream ss;
-        ss << prefix;
-        ss << int_to_str(instances[(unsigned char)prefix]++);
-        return ss.str();
+        char prefix_cstr[2] = {prefix, '\0'};
+        return std::string(prefix_cstr) + int_to_str(instances[(unsigned char)prefix]++);
     }
 
     std::string int_to_str(int x) {

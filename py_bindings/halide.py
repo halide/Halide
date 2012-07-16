@@ -221,7 +221,7 @@ def get_blur():
     #input_clamped = Func('input_clamped')
     blur_x = Func('blur_x')
     blur_y = Func('blur_y')
-    
+
     input_clamped[x,y,c] = input[clamp(Expr(x),Expr(0),Expr(input.width()-1)), clamp(Expr(y),Expr(0),Expr(input.width()-1)), clamp(Expr(c),Expr(0),Expr(input.width()-1))]
     #input_clamped[x,y,c] = input[x,y,c]
     blur_x[x,y,c] = (input_clamped[x-1,y,c]/4+input_clamped[x,y,c]/4+input_clamped[x+1,y,c]/4)/3
@@ -292,9 +292,15 @@ def test_autotune():
     halide_autotune.autotune(blur_y, test, locals())
     
 def test():
-    #test_core()
-    #test_blur()
-    test_autotune()
+#    print 'a'
+#    uint16 = UInt(16)
+#    print 'b'
+#    input = UniformImage(uint16, 3, 'input')
+#    print 'c'
+#    pass
+    test_core()
+    test_blur()
+    #test_autotune()
     
 if __name__ == '__main__':
     test()

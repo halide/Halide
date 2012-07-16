@@ -608,9 +608,7 @@ namespace Halide {
         } 
 
         for (int i = iArgs-1; i >= 0; i--) {
-            std::ostringstream ss;
-            ss << "iv" << int_to_str(i); // implicit var
-            exprlist = addToList(exprlist, makeVar(ss.str()));
+            exprlist = addToList(exprlist, makeVar(std::string("iv") + int_to_str(i)));  // implicit var. Connelly: ostringstream broken in Python binding, use string + instead
         }
 
         for (size_t i = f.args().size(); i > 0; i--) {
