@@ -20,34 +20,30 @@ using namespace Halide;
 %naturalvar Func;
 %naturalvar Expr;
 
-//%rename(add_expr) operator+(Expr, Expr);
-
 %include "Func.h"
 %include "Expr.h"
 %include "Var.h"
 %include "Image.h"
 %include "MLVal.h"
 %include "Reduction.h"
-//%include "Tuple.h"
 %include "Type.h"
+%include "Util.h"
 %include "py_util.h"
 %include "environ_fix.h"
 
-//%extend Expr {
-//    Expr __add__(Expr *other) {
-//        return $self + *other;
-//    }
-//};
+//%include "Tuple.h"
+
 %template(Image_uint8) Image<uint8_t>;
 %template(Image_uint16) Image<uint16_t>;
 %template(Image_uint32) Image<uint32_t>;
-//%template(Image_uint64) Image<uint64_t>;
 %template(Image_int8) Image<int8_t>;
 %template(Image_int16) Image<int16_t>;
 %template(Image_int32) Image<int32_t>;
-//%template(Image_int64) Image<int64_t>;
 %template(Image_float32) Image<float>;
 %template(Image_float64) Image<double>;
+
+//%template(Image_uint64) Image<uint64_t>;
+//%template(Image_int64) Image<int64_t>;
 
 namespace std {
    %template(ListExpr) vector<Expr>;
@@ -57,6 +53,7 @@ namespace std {
    %template(ListFunc) vector<Func>;
    %template(ListUniformImage) vector<UniformImage>;
    %template(ListMLVal) vector<MLVal>;
-   //%template(ListArg) vector<Arg>;
    %template(ListInt) vector<int>;
 };
+
+   //%template(ListArg) vector<Arg>;
