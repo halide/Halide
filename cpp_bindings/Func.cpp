@@ -284,10 +284,7 @@ namespace Halide {
         // Add any implicit arguments 
         //printf("Adding %d implicit arguments\n", r.implicitArgs());
         for (int i = 0; i < r.implicitArgs(); i++) {
-            std::ostringstream ss;
-            ss << "iv"; // implicit var
-            ss << int_to_str(i);
-            args.push_back(Var(ss.str()));
+            args.push_back(Var(std::string("iv") + int_to_str(i))); // implicit var. Connelly: ostringstream broken in Python binding, use string + instead
         }
         
         //printf("Defining %s\n", name().c_str());

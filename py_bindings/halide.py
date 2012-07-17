@@ -2,6 +2,8 @@ from cHalide import *
 import numpy
 import Image as PIL
 import os
+import signal
+from ForkedWatchdog import Watchdog
 
 wrap = Expr
 
@@ -122,6 +124,15 @@ def Image(typeval, *args):
         raise ValueError('unknown Image constructor arguments %r' % args)
 
 # ----------------------------------------------------
+# Repr
+# ----------------------------------------------------
+
+Var.__repr__ = lambda self: 'Var(%r)'%self.name()
+Type.__repr__ = lambda self: 'UInt(%d)'%self.bits if self.isUInt() else 'Int(%d)'%self.bits if self.isInt() else 'Float(%d)'%self.bits if self.isFloat() else 'Type(%d)'%self.bits 
+Expr.__repr__ = lambda self: 'Expr(%s)' % ', '.join([repr(self.type())] + [str(_x) for _x in self.vars()])
+Func.__repr__ = lambda self: 'Func(%r)' % self.name()
+
+# ----------------------------------------------------
 # Test
 # ----------------------------------------------------
 
@@ -213,24 +224,41 @@ def func_varlist(f):
     args = f.args()
     return [x.vars()[0].name() for x in args]
 
-def get_blur():
-    input = UniformImage(UInt(16), 3, 'input')
-    x = Var('x')
-    y = Var('y')
-    c = Var('c')
-    #input_clamped = Func('input_clamped')
-    blur_x = Func('blur_x')
-    blur_y = Func('blur_y')
+def get_blur(cache=[]):
+    def gen():
+        input = UniformImage(UInt(16), 3, 'input')
+        x = Var('x')
+        y = Var('y')
+        c = Var('c')
+        input_clamped = Func('input_clamped')
+        blur_x = Func('blur_x')
+        blur_y = Func('blur_y')
+
+        #print 'before input_clamped'
+        input_clamped[x,y,c] = input[clamp(Expr(x),cast(Int(32),Expr(0)),cast(Int(32),Expr(input.width()-1))),
+                                     clamp(Expr(y),cast(Int(32),Expr(0)),cast(Int(32),Expr(input.width()-1))),
+                                     c] #clamp(Expr(c),Expr(0),Expr(input.width()-1))]
+        #print 'after input_clamped'
+        #input_clamped[x,y,c] = input[x,y,c]
+        blur_x[x,y,c] = (input_clamped[x-1,y,c]/4+input_clamped[x,y,c]/4+input_clamped[x+1,y,c]/4)/3
+    #    blur_x[x,y,c] = (input[x-1,y,c]/4+input[x,y,c]/4+input[x+1,y,c]/4)/3
+        blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
+        return (input, x, y, c, blur_x, blur_y, input_clamped)
     
-    input_clamped[x,y,c] = input[clamp(Expr(x),Expr(0),Expr(input.width()-1)), clamp(Expr(y),Expr(0),Expr(input.width()-1)), clamp(Expr(c),Expr(0),Expr(input.width()-1))]
-    #input_clamped[x,y,c] = input[x,y,c]
-    blur_x[x,y,c] = (input_clamped[x-1,y,c]/4+input_clamped[x,y,c]/4+input_clamped[x+1,y,c]/4)/3
-#    blur_x[x,y,c] = (input[x-1,y,c]/4+input[x,y,c]/4+input[x+1,y,c]/4)/3
-    blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
-    return (input, x, y, c, blur_x, blur_y)
+    # Reuse global copy
+    if len(cache) == 0:
+        cache.append(gen())
+    (input, x, y, c, blur_x, blur_y, input_clamped) = cache[0]
+    
+    # Reset schedules
+    input_clamped.reset()
+    blur_x.reset()
+    blur_y.reset()
+    
+    return (input, x, y, c, blur_x, blur_y, input_clamped)
 
 def test_blur():
-    (input, x, y, c, blur_x, blur_y) = get_blur()
+    (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
     for f in [blur_y, blur_x]:
         assert f.args()[0].vars()[0].name()=='x'
@@ -238,11 +266,12 @@ def test_blur():
         assert f.args()[2].vars()[0].name()=='c'
         assert len(f.args()) == 3
     assert blur_y.rhs().funcs()[0].name()=='blur_x'
-    assert len(blur_y.rhs().funcs()) == 1
     assert blur_x.rhs().uniformImages()[0].name()
     assert len(blur_x.rhs().uniformImages()) == 1
 
-    assert set(all_funcs(blur_y).keys()) == set(['blur_x', 'blur_y'])
+    #print [str(x) for x in blur_y.rhs().funcs()]
+    assert len(blur_y.rhs().funcs()) == 2
+    assert set(all_funcs(blur_y).keys()) == set(['blur_x', 'blur_y', 'input_clamped']), set(all_funcs(blur_y).keys())
     assert func_varlist(blur_y) == ['x', 'y', 'c'], func_varlist(blur_y)
     assert func_varlist(blur_x) == ['x', 'y', 'c'], func_varlist(blur_x)
     
@@ -272,8 +301,8 @@ def test_blur():
     
     print 'halide blur: OK'
 
-def test_autotune():
-    (input, x, y, c, blur_x, blur_y) = get_blur()
+def test_func():
+    (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
     input_png = Image(UInt(16), 'lena.png')
     input.assign(input_png)
@@ -288,12 +317,56 @@ def test_autotune():
         T1 = time.time()
         return T1-T0
     
+    return locals()
+
+def test_autotune():
+    locals_d = test_func()
+    
     import halide_autotune
-    halide_autotune.autotune(blur_y, test, locals())
+    halide_autotune.autotune(locals_d['blur_y'], locals_d['test'], locals_d)
+
+def test_segfault():
+    locals_d = test_func()
+    c = locals_d['c']
+    blur_y = locals_d['blur_y']
+    test = locals_d['test']
+    
+    """
+    def signal_handler(signal, frame):
+        #print 'Caught signal, exiting'
+        #sys.stdout.flush()
+        sys.exit(0)
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGSEGV, signal_handler)
+    signal.signal(signal.SIGILL, signal_handler)
+    signal.signal(signal.SIGABRT, signal_handler)
+    signal.signal(signal.SIGFPE, signal_handler)
+    """
+    
+    blur_y.unroll(c, 32)
+    exit_on_signal()
+    print 'Before test'
+    try:
+        with Watchdog(5):
+            test(blur_y)
+            print 'halide segfault: Failed to segfault'
+            sys.exit(0)
+    except Watchdog:
+        pass
+    print 'halide segfault: OK'
     
 def test():
+#    print 'a'
+#    uint16 = UInt(16)
+#    print 'b'
+#    input = UniformImage(uint16, 3, 'input')
+#    print 'c'
+#    pass
+
     #test_core()
     #test_blur()
+    #test_segfault()
     test_autotune()
     
 if __name__ == '__main__':

@@ -195,9 +195,7 @@ namespace Halide {
             t(t), name(uniqueName('m')) {
             sizes.resize(dims);
             for (int i = 0; i < dims; i++) {
-                std::ostringstream ss;
-                ss << "." << name << ".dim." << int_to_str(i);
-                sizes[i] = Var(ss.str());
+                sizes[i] = Var(std::string(".") + name + ".dim." + int_to_str(i));  // Connelly: std::ostringstream broken in Python binding, use string + instead
             }
         }
 
@@ -205,9 +203,7 @@ namespace Halide {
             t(t), name(name) {
             sizes.resize(dims);
             for (int i = 0; i < dims; i++) {
-                std::ostringstream ss;
-                ss << "." << name << ".dim." << int_to_str(i);
-                sizes[i] = Var(ss.str());
+                sizes[i] = Var(std::string(".") + name + ".dim." + int_to_str(i));  // Connelly: std::ostringstream broken in Python binding, use string + instead
             }
         }
 

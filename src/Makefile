@@ -1,4 +1,4 @@
-OCAMLBUILD=ocamlbuild
+OCAMLBUILD=ocamlbuild -use-ocamlfind
 BUILD_CMD=${OCAMLBUILD} ${OCAMLBUILDFLAGS} 
 
 LLVM_PATH=../llvm/Release+Asserts/bin
