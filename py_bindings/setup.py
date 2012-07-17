@@ -6,7 +6,7 @@ import os
 
 ext_modules = [Extension("_cHalide", ["cHalide_wrap.cxx", 'py_util.cpp', 'environ_fix.cpp'],
                          include_dirs=['../cpp_bindings', '/opt/local/include/libpng14'],
-                         extra_compile_args=['-std=c++0x', '-DHALIDE_PY_BINDING'],
+                         extra_compile_args=['-std=c++0x', '-DHALIDE_PY_BINDING'] + '-ffast-math -O3 -msse -Wl,-dead_strip -fno-common'.split(),
                          #libraries=['Halide.a'],
                          library_dirs=['/opt/local/lib'],
                          ##extra_link_args=[], #['../cpp_bindings/Halide.a'],
