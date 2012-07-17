@@ -81,5 +81,7 @@ DEFINE_TYPE(float)
 DEFINE_TYPE(double)
 #undef DEFINE_TYPE
 
+void exit_on_signal();
+
 #endif
 

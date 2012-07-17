@@ -241,6 +241,8 @@ def runCommand(cmd, cfg, hl_cfg, limit, test, func_d, func, scope, cache={}):
         exec line in scope
 
     #"""
+    halide.exit_on_signal()
+    
     try:
         with Watchdog(limit_t):
             func.compileJIT()
