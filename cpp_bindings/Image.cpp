@@ -109,6 +109,12 @@ namespace Halide {
     }
 
     int DynImage::size(int i) const {
+        if (i >= dimensions()) {
+            fprintf(stderr,
+                    "ERROR: accessing size of dim %d of %d-dimensional image %s\n",
+                    i, dimensions(), name().c_str());
+            assert(i < dimensions());
+        }
         return contents->size[i];
     }
 
