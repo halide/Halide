@@ -1,6 +1,9 @@
 
 #include "py_util.h"
 #include "png_util.h"
+#include <signal.h>
+
+void (*signal(int signum, void (*sighandler)(int)))(int);
 
 void assign(Func &f, const Expr &e) {
   f = e;
@@ -67,6 +70,20 @@ DEFINE_TYPE(float)
 DEFINE_TYPE(double)
 #undef DEFINE_TYPE
 
+void signal_handler(int sig_num) {
+    printf("Trapped signal %d in C++ layer, exiting\n", sig_num);
+    exit(0);
+}
+
+void exit_on_signal() {
+    signal(SIGINT , signal_handler);
+    signal(SIGABRT , signal_handler);
+    signal(SIGILL , signal_handler);
+    signal(SIGFPE , signal_handler);
+    signal(SIGSEGV, signal_handler);
+    signal(SIGTERM , signal_handler);
+    signal(SIGBUS, signal_handler);
+}
 
 //void assign(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
 
