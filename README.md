@@ -4,7 +4,7 @@ I am adding dependencies on OCaml batteries included and sexplib. On Ubuntu or s
 
 	sudo apt-get install libsexplib-camlp4-dev ocaml-batteries-included
 
-On OS X, I recommend using [ODB](http://oasis.ocamlcore.org/dev/odb/) to install additional OCaml packages (sexplib, batteries).
+On OS X, I recommend using [ODB](https://github.com/thelema/odb/) to install additional OCaml packages (sexplib, batteries).
 
 Summary
 -------
