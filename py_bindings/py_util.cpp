@@ -2,6 +2,7 @@
 #include "py_util.h"
 #include "png_util.h"
 #include <signal.h>
+#include <string>
 
 void (*signal(int signum, void (*sighandler)(int)))(int);
 
@@ -84,6 +85,33 @@ void exit_on_signal() {
     signal(SIGTERM , signal_handler);
     signal(SIGBUS, signal_handler);
 }
+
+#define DEFINE_TYPE(T) \
+std::string image_to_string(const Image<T> &a) { \
+    int dims = a.dimensions(); \
+    DynImage d(a); \
+    return std::string((char *) a.data(), (d.type().bits/8)*d.stride(dims-1)*a.size(dims-1)); \
+}
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) DynImage to_dynimage(const Image<T> &a) { return DynImage(a); }
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
 
 //void assign(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
 

@@ -5,7 +5,11 @@ import os
 import signal
 from ForkedWatchdog import Watchdog
 
+#exit_on_signal()
+
 wrap = Expr
+
+in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 
 # ----------------------------------------------------
 # Expr
@@ -89,10 +93,58 @@ UniformImage.assign = lambda x, y: assign(x, y)
 # Image
 # ----------------------------------------------------
 
-for ImageT in [Image_int8, Image_int16, Image_int32, Image_uint8, Image_uint16, Image_uint32, Image_float32, Image_float64]:
+def image_getattr(self, name):
+    if name == '__array_interface__':
+       # print 'get_array'
+        #print 'get array'
+        #return {'shape': (1,1), 'typestr': '>i4', 'data': '\x00'*3+'\x02'}
+        D = DynImage(self)
+        t = D.type()
+        if t.isInt():
+            typestr = '|i%d'%(t.bits/8)
+        elif t.isUInt():
+            typestr = '|u%d'%(t.bits/8)
+        elif t.isFloat():
+            typestr = '|f%d'%(t.bits/8)
+        else:
+            raise ValueError('Unknown type %r'%t)
+        shape = tuple([D.size(i) for i in range(D.dimensions())])
+        strides = tuple([D.stride(i)*(t.bits/8) for i in range(D.dimensions())])
+        data = image_to_string(self)
+     #   print 'size', len(data)
+        return {'shape': shape,
+                'typestr': typestr,
+                'data': data,
+                'strides': strides}
+    raise AttributeError(name)
+
+ImageTypes = (Image_int8, Image_int16, Image_int32, Image_uint8, Image_uint16, Image_uint32, Image_float32, Image_float64)
+
+def show_image(I):
+    A = numpy.asarray(I)
+  #  print 'converted to numpy', A.dtype
+    if A.dtype == numpy.uint8:
+        pass
+    elif A.dtype == numpy.uint16: #numpy.issubdtype(A.dtype, 'uint16'):
+        A = numpy.array(A/256, 'uint8')
+    elif A.dtype == numpy.uint32: #numpy.issubdtype(A.dtype, 'uint32'):
+        A = numpy.array(A/256**3, 'uint8')
+    elif A.dtype == numpy.float32 or A.dtype == numpy.float64: #numpy.issubdtype(A.dtype, 'float32') or numpy.issubdtype(A.dtype, 'float64'):
+        A = numpy.array(A*255.0, 'uint8')
+    else:
+        raise ValueError('Unsupported dtype %r' % A.dtype)
+   # print 'showing'
+    A = numpy.transpose(A, [1, 0] if len(A.shape) == 2 else [1, 0, 2])
+    if len(A.shape) == 3 and A.shape[2] == 1:
+        A = A[:,:,0]
+    PIL.fromarray(A).show()
+    
+for ImageT in ImageTypes:
     ImageT.save = lambda x, y: save_png(x, y)
     ImageT.assign = lambda x, y: assign(x, y)
-
+    ImageT.__getattr__ = image_getattr
+    ImageT.show = lambda x: show_image(x)
+    
 def Image(typeval, *args):
     assert isinstance(typeval, Type)
     sig = (typeval.bits, typeval.isInt(), typeval.isUInt(), typeval.isFloat())
@@ -117,12 +169,24 @@ def Image(typeval, *args):
     if len(args) == 0:
         return C
     elif len(args) == 1 and isinstance(args[0], str):
+#        ans_img = C(1)
+#        print 'load_png'
         return load_png(C(1), args[0])
     elif all(isinstance(x, int) for x in args):
         return C(*args)
     else:
         raise ValueError('unknown Image constructor arguments %r' % args)
 
+# ----------------------------------------------------
+# DynImage
+# ----------------------------------------------------
+
+DynImageType = DynImage
+def DynImage(*args):
+    if len(args) == 1 and isinstance(args[0], ImageTypes):
+        return to_dynimage(args[0])
+    return DynImageType(*args)
+    
 # ----------------------------------------------------
 # Repr
 # ----------------------------------------------------
@@ -131,6 +195,19 @@ Var.__repr__ = lambda self: 'Var(%r)'%self.name()
 Type.__repr__ = lambda self: 'UInt(%d)'%self.bits if self.isUInt() else 'Int(%d)'%self.bits if self.isInt() else 'Float(%d)'%self.bits if self.isFloat() else 'Type(%d)'%self.bits 
 Expr.__repr__ = lambda self: 'Expr(%s)' % ', '.join([repr(self.type())] + [str(_x) for _x in self.vars()])
 Func.__repr__ = lambda self: 'Func(%r)' % self.name()
+
+# ----------------------------------------------------
+# Global functions
+# ----------------------------------------------------
+
+_clamp = clamp
+_min = min
+_max = max
+_cast = cast
+clamp = lambda x, y, z: _clamp(wrap(x), wrap(y), wrap(z))
+min   = lambda x, y: _min(wrap(x), wrap(y))
+max   = lambda x, y: _max(wrap(x), wrap(y))
+cast  = lambda x, y: _cast(x, wrap(y))
 
 # ----------------------------------------------------
 # Test
@@ -236,7 +313,7 @@ def get_blur(cache=[]):
 
         #print 'before input_clamped'
         input_clamped[x,y,c] = input[clamp(Expr(x),cast(Int(32),Expr(0)),cast(Int(32),Expr(input.width()-1))),
-                                     clamp(Expr(y),cast(Int(32),Expr(0)),cast(Int(32),Expr(input.width()-1))),
+                                     clamp(Expr(y),cast(Int(32),Expr(0)),cast(Int(32),Expr(input.height()-1))),
                                      c] #clamp(Expr(c),Expr(0),Expr(input.width()-1))]
         #print 'after input_clamped'
         #input_clamped[x,y,c] = input[x,y,c]
@@ -257,9 +334,46 @@ def get_blur(cache=[]):
     
     return (input, x, y, c, blur_x, blur_y, input_clamped)
 
-def test_blur():
+def roundup_multiple(x, y):
+    return (x+y-1)/y*y
+
+def filter_filename(input, out_func, filename, dtype=UInt(16)): #, pad_multiple=1):
+    """
+    Utility function to filter an image file with a Halide Func, returning output Image of the same size.
+    
+    Given input and output Funcs, and filename, returns evaluate. Calling evaluate() returns the output Image.
+    """
+    input_png = Image(dtype, filename)
+    print input_png.dimensions()
+#    print [input_png.size(i) for i in range(input_png.dimensions())]
+    #print 'assign'
+    input.assign(input_png)
+    #print 'get w'
+    w = input_png.width()
+    h = input_png.height()
+    nchan = input_png.channels()
+    #print w, h, nchan
+    #w2 = roundup_multiple(w, pad_multiple)
+    #h2 = roundup_multiple(h, pad_multiple)
+    #print w2, h2, nchan
+    out = Image(dtype, w, h, nchan)
+    
+    def evaluate():
+        out.assign(out_func.realize(w, h, nchan))
+        return out
+    return evaluate
+    
+def example_out():
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
+    blur_y.reset().unroll(y,16).vectorize(x,16)
+    blur_y.compileJIT()
+
+    return filter_filename(input, blur_y, in_filename)()
+    
+def test_blur():
+    (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
+    
     for f in [blur_y, blur_x]:
         assert f.args()[0].vars()[0].name()=='x'
         assert f.args()[1].vars()[0].name()=='y'
@@ -278,23 +392,28 @@ def test_blur():
     #blur_y.parallel(y)
     for i in range(2):
         #print 'iter', i
-        blur_y.reset().unroll(y,16).vectorize(x,16)
+#        blur_y.reset().unroll(y,16).vectorize(x,16)
+        #print 'c'
         #blur_y.root().serial(x).serial(y).unroll(y,16).vectorize(x,16)
         blur_y.compileToFile('halide_blur')
+        #print 'd'
         blur_y.compileJIT()
+        #print 'e'
 
-        input_png = Image(UInt(16), 'lena.png')
-        input.assign(input_png)
-        w = input_png.width()
-        h = input_png.height()
-        nchan = input_png.channels()
-        out = Image(UInt(16), w, h, nchan)
+        outf = filter_filename(input, blur_y, in_filename)
+        #print 'f'
         T0 = time.time()
-        out.assign(blur_y.realize(w, h, nchan))
+        out = outf()
         T1 = time.time()
+        #print 'g'
         print T1-T0, 'secs'
     
         out.save('out2.png' if i==1 else 'out.png')
+        s = image_to_string(out)
+        assert isinstance(s, str)
+        #print numpy.asarray(out)
+        #PIL.fromarray(out).show()
+        out.show()
     I1 = numpy.asarray(PIL.open('out.png'))
     I2 = numpy.asarray(PIL.open('out2.png'))
     os.remove('out2.png')
@@ -304,16 +423,11 @@ def test_blur():
 def test_func():
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
-    input_png = Image(UInt(16), 'lena.png')
-    input.assign(input_png)
-    w = input_png.width()
-    h = input_png.height()
-    nchan = input_png.channels()
-    out = Image(UInt(16), w, h, nchan)
+    outf = filter_filename(input, blur_y, in_filename)
     
     def test(func):
         T0 = time.time()
-        out.assign(blur_y.realize(w, h, nchan))
+        out = outf()
         T1 = time.time()
         return T1-T0
     
@@ -343,9 +457,9 @@ def test_segfault():
     signal.signal(signal.SIGABRT, signal_handler)
     signal.signal(signal.SIGFPE, signal_handler)
     """
+    exit_on_signal()
     
     blur_y.unroll(c, 32)
-    exit_on_signal()
     print 'Before test'
     try:
         with Watchdog(5):
@@ -355,8 +469,29 @@ def test_segfault():
     except Watchdog:
         pass
     print 'halide segfault: OK'
-    
+
+def test_examples():
+    import examples
+    for example in [examples.blur, examples.dilate]:
+        for input_image in ['lena_crop_grayscale.png', 'lena_crop.png']:
+            for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
+        #        (in_func, out_func) = examples.blur_color(dtype)
+    #            (in_func, out_func) = examples.blur(dtype)
+                (in_func, out_func) = example(dtype)
+        #        print 'got func'
+        #        outf = filter_filename(in_func, out_func, in_filename, dtype)
+                outf = filter_filename(in_func, out_func, input_image, dtype)
+        #        print 'got filter'
+                out = outf()
+        #        print 'filtered'
+                out.show()
+        #        print 'shown'
+                A = numpy.asarray(out)
+                print numpy.min(A.flatten()), numpy.max(A.flatten())
+        #        out.save('out.png')
+
 def test():
+    exit_on_signal()
 #    print 'a'
 #    uint16 = UInt(16)
 #    print 'b'
@@ -365,9 +500,10 @@ def test():
 #    pass
 
     #test_core()
-    #test_blur()
     #test_segfault()
-    test_autotune()
+    #test_blur()
+    test_examples()
+    #test_autotune()
     
 if __name__ == '__main__':
     test()
