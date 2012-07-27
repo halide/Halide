@@ -508,8 +508,8 @@ def test_blur():
         assert f.args()[2].vars()[0].name()=='c'
         assert len(f.args()) == 3
     assert blur_y.rhs().funcs()[0].name()=='blur_x'
-    assert blur_x.rhs().uniformImages()[0].name()
-    assert len(blur_x.rhs().uniformImages()) == 1
+#    assert blur_x.rhs().uniformImages()[0].name()
+#    assert len(blur_x.rhs().uniformImages()) == 1
 
     #print [str(x) for x in blur_y.rhs().funcs()]
     assert len(blur_y.rhs().funcs()) == 2
@@ -643,9 +643,9 @@ def test():
     test_segfault()
     test_blur()
     test_examples()
+#    test_autotune()
     print
     print 'All tests passed, done'
-    #test_autotune()
     
 if __name__ == '__main__':
     test()
