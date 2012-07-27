@@ -1,6 +1,9 @@
 
 from halide import *
 
+int_t = Int(32)
+float_t = Float(32)
+
 def blur(dtype=UInt(16), counter=[0]):
     s = '_blur%d'%counter[0]
     input = UniformImage(dtype, 3, 'input'+s)
@@ -44,8 +47,6 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     J = 8
     
     s = '_laplacian%d'%counter[0]
-    float_t = Float(32)
-    int_t = Int(32)
 
     def downsample(f):
         downx, downy = Func(), Func()
@@ -127,4 +128,41 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     #print 'Done with local_laplacian', counter[0]
     counter[0] += 1
     return (input, output)
+
+def box(dtype=UInt(16), counter=[0]):
+    print 'box', counter[0]
+    s = '_box%d'%counter[0]
+    input = UniformImage(dtype, 3, 'input'+s)
+    box_size = Uniform(int_t, 'box_size'+s, 15)
+
+    x = Var('x'+s)
+    y = Var('y'+s)
+    c = Var('c'+s)
+    r = RDom(0,input.width(),0,input.height(),'r'+s)
+    rx = r.x
+    ry = r.y
     
+    sum = Func('sum'+s)                     # Cumulative sum in x and y (summed area table)
+    sum[x,y,c] = cast(float_t if dtype.isFloat() else int_t, input[x,y,c])
+    zero = cast(int_t,0)
+    w1 = cast(int_t,input.width()-1)
+    h1 = cast(int_t,input.height()-1)
+    #sum[rx,ry,c] = sum[rx,ry,c] + sum[max(rx-1,zero),ry,c] + sum[rx,max(ry-1,zero),c] - sum[max(rx-1,zero),max(ry-1,zero),c]
+    sum[rx,ry,c] += sum[max(rx-1,zero),ry,c] + sum[rx,max(ry-1,zero),c] - sum[max(rx-1,zero),max(ry-1,zero),c]
+    
+    sum_clamped = Func('sum_clamped'+s)
+    sum_clamped[x,y,c] = sum[clamp(x,zero,w1),clamp(y,zero,h1),c]
+    
+    weight = Func('weight'+s)
+    weight[x,y] = ((min(x+box_size,w1)-max(x-box_size-1,zero))*
+                   (min(y+box_size,h1)-max(y-box_size-1,zero)))
+    
+    output = Func('output'+s)
+    output[x,y,c] = cast(dtype,
+                    (sum_clamped[x+box_size  ,y+box_size  ,c]-
+                     sum_clamped[x-box_size-1,y+box_size  ,c]-
+                     sum_clamped[x+box_size  ,y-box_size-1,c]+
+                     sum_clamped[x-box_size-1,y-box_size-1,c])/weight[x,y])
+    
+    counter[0] += 1
+    return (input, output)
