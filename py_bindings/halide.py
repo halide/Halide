@@ -26,7 +26,7 @@ in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 
 UniformTypes = (Uniform_int8, Uniform_int16, Uniform_int32, Uniform_uint8, Uniform_uint16, Uniform_uint32, Uniform_float32, Uniform_float64)
 
-for BaseT in (Expr, FuncRef, Var) + UniformTypes:
+for BaseT in (Expr, FuncRef, Var, RDom, RVar) + UniformTypes:
     BaseT.__add__ = lambda x, y: add(wrap(x), wrap(y))
     BaseT.__sub__ = lambda x, y: sub(wrap(x), wrap(y))
     BaseT.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
@@ -61,6 +61,15 @@ for BaseT in (Expr, FuncRef, Var) + UniformTypes:
     BaseT.__idiv__ = lambda x, y: idiv(wrap(x), wrap(y))
 
 # ----------------------------------------------------
+# RDom
+# ----------------------------------------------------
+
+RDomType = RDom
+def RDom(*args):
+    args = [Expr(x) if not isinstance(x,str) else x for x in args]
+    return RDomType(*args)
+
+# ----------------------------------------------------
 # Var, Func
 # ----------------------------------------------------
 
@@ -70,6 +79,7 @@ for C in [Var, FuncRef]:
     C.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
     C.__div__ = lambda x, y: div(wrap(x), wrap(y))
     C.__mod__ = lambda x, y: mod(wrap(x), wrap(y))
+    C.__pow__ = lambda x, y: pow(wrap(x), wrap(y))
     C.__and__  = lambda x, y: and_op(wrap(x), wrap(y))
     C.__or__  = lambda x, y: or_op(wrap(x), wrap(y))
 
@@ -592,12 +602,15 @@ def test_examples():
     import examples
     in_grayscale = 'lena_crop_grayscale.png'
     in_color = 'lena_crop.png'
-    for example in [examples.blur, examples.dilate, examples.local_laplacian]:
+    for example in [examples.blur, examples.dilate, examples.box, examples.local_laplacian]:
 #    for example in [examples.local_laplacian]:
         for input_image in [in_grayscale, in_color]:
             for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
 #            for dtype in [UInt(16)]:
 #            for dtype in [UInt(8), UInt(16)]:
+                if example is examples.box:
+                    if dtype == UInt(32):
+                        continue
                 if example is examples.local_laplacian:
                     if input_image == in_color and (dtype == UInt(8) or dtype == UInt(16)):
                         pass
