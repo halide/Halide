@@ -39,6 +39,8 @@ def dilate(dtype=UInt(16), counter=[0]):
     return (input, dilate)
 
 def local_laplacian(dtype=UInt(16), counter=[0]):
+    print 'local_laplacian', counter[0]
+    import halide
     J = 8
     
     s = '_laplacian%d'%counter[0]
@@ -73,12 +75,6 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     
     fx = cast(float_t, x/256.0)
     remap = Func('remap'+s)
-    -fx
-    -fx*fx
-    -fx*fx/2.0
-    exp(-fx*fx/2.0)
-    fx*exp(-fx*fx/2.0)
-    alpha*fx*exp(-fx*fx/2.0)
     remap[x] = alpha*fx*exp(-fx*fx/2.0)
     
     floating = Func('floating'+s)
@@ -95,11 +91,11 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     idx = clamp(cast(int_t, idx), cast(int_t, 0), cast(int_t, (levels-1)*256))
     gPyramid[0][x,y,k] = beta*gray[x,y] + remap[idx-256*k]
     for j in range(1,J):
-        gPyramid[j][x,y,k] = downsample(gPyramid[k-1])[x,y,k]
-        
+        gPyramid[j][x,y,k] = downsample(gPyramid[j-1])[x,y,k]
+
     lPyramid = [Func('lPyramid%d'%i+s) for i in range(J)]
     lPyramid[J-1] = gPyramid[J-1]
-    for j in range(J-2)[::-1]:
+    for j in range(J-1)[::-1]:
         lPyramid[j][x,y,k] = gPyramid[j][x,y,k] - upsample(gPyramid[j+1])[x,y,k]
     
     inGPyramid = [Func('inGPyramid%d'%i+s) for i in range(J)]
@@ -116,7 +112,7 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     
     outGPyramid = [Func('outGPyramid%d'%i+s) for i in range(J)]
     outGPyramid[J-1] = outLPyramid[J-1]
-    for j in range(J-2)[::-1]:
+    for j in range(J-1)[::-1]:
         outGPyramid[j][x,y] = upsample(outGPyramid[j+1])[x,y] + outLPyramid[j][x,y]
     
     color = Func('color'+s)
@@ -127,6 +123,8 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     
     for f in halide.all_funcs(output).values():
         f.root()
-        
-    return output
+       
+#    print 'Done with local_laplacian', counter[0]
+    counter[0] += 1
+    return (input, output)
     
