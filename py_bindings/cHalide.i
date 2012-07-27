@@ -58,10 +58,10 @@ using namespace Halide;
 namespace std {
    %template(ListExpr) vector<Expr>;
    %template(ListVar) vector<Var>;
-   %template(ListDynUniform) vector<DynUniform>;
-   %template(ListDynImage) vector<DynImage>;
+//   %template(ListDynUniform) const vector<DynUniform>;
+//   %template(ListDynImage) vector<DynImage>;
    %template(ListFunc) vector<Func>;
-   %template(ListUniformImage) vector<UniformImage>;
+//   %template(ListUniformImage) vector<UniformImage>;
    %template(ListMLVal) vector<MLVal>;
    %template(ListInt) vector<int>;
 };

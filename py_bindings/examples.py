@@ -5,6 +5,7 @@ int_t = Int(32)
 float_t = Float(32)
 
 def blur(dtype=UInt(16), counter=[0]):
+    "Simple 3x3 blur."
     s = '_blur%d'%counter[0]
     input = UniformImage(dtype, 3, 'input'+s)
     x = Var('x'+s)
@@ -22,6 +23,7 @@ def blur(dtype=UInt(16), counter=[0]):
     return (input, blur_y)
 
 def dilate(dtype=UInt(16), counter=[0]):
+    "Dilate on 3x3 stencil."
     s = '_dilate%d'%counter[0]
     input = UniformImage(dtype, 3, 'input'+s)
     x = Var('x'+s)
@@ -42,6 +44,7 @@ def dilate(dtype=UInt(16), counter=[0]):
     return (input, dilate)
 
 def local_laplacian(dtype=UInt(16), counter=[0]):
+    "Local Laplacian."
     print 'local_laplacian', counter[0], dtype.maxval()
     import halide
     J = 8
@@ -130,6 +133,7 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     return (input, output)
 
 def box(dtype=UInt(16), counter=[0]):
+    "Box blur (implemented with summed area table)."
     print 'box', counter[0]
     s = '_box%d'%counter[0]
     input = UniformImage(dtype, 3, 'input'+s)
