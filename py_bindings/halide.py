@@ -31,6 +31,7 @@ for BaseT in (Expr, FuncRef, Var) + UniformTypes:
     BaseT.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
     BaseT.__div__ = lambda x, y: div(wrap(x), wrap(y))
     BaseT.__mod__ = lambda x, y: mod(wrap(x), wrap(y))
+    BaseT.__pow__ = lambda x, y: pow(wrap(x), wrap(y))
     BaseT.__and__  = lambda x, y: and_op(wrap(x), wrap(y))
     BaseT.__or__  = lambda x, y: or_op(wrap(x), wrap(y))
 
@@ -39,6 +40,7 @@ for BaseT in (Expr, FuncRef, Var) + UniformTypes:
     BaseT.__rmul__ = lambda y, x: mul(wrap(x), wrap(y))
     BaseT.__rdiv__ = lambda y, x: div(wrap(x), wrap(y))
     BaseT.__rmod__ = lambda y, x: mod(wrap(x), wrap(y))
+    BaseT.__rpow__ = lambda y, x: pow(wrap(x), wrap(y))
     BaseT.__rand__  = lambda y, x: and_op(wrap(x), wrap(y))
     BaseT.__ror__  = lambda y, x: or_op(wrap(x), wrap(y))
 
@@ -284,16 +286,40 @@ Func.__repr__ = lambda self: 'Func(%r)' % self.name()
 # Global functions
 # ----------------------------------------------------
 
-_clamp = clamp
-_min = min
+_sqrt  = sqrt
+_sin   = sin
+_cos   = cos
+_exp   = exp
+_log   = log
+_floor = floor
+
+_debug = debug
+
+_select = select
+
 _max = max
+_min = min
+_clamp = clamp
+
 _cast = cast
-_exp = exp
-clamp = lambda x, y, z: _clamp(wrap(x), wrap(y), wrap(z))
-min   = lambda x, y: _min(wrap(x), wrap(y))
-max   = lambda x, y: _max(wrap(x), wrap(y))
-cast  = lambda x, y: _cast(x, wrap(y))
-exp   = lambda x: _exp(wrap(x))
+
+sqrt   = lambda x: _sqrt(wrap(x))
+sin    = lambda x: _sin(wrap(x))
+cos    = lambda x: _cos(wrap(x))
+exp    = lambda x: _exp(wrap(x))
+log    = lambda x: _log(wrap(x))
+floor  = lambda x: _floor(wrap(x))
+
+debug  = lambda x, y, *a: _debug(wrap(x), y, *a)
+
+select = lambda x, y, z: _select(wrap(x), wrap(y), wrap(z))
+
+max    = lambda x, y: _max(wrap(x), wrap(y))
+min    = lambda x, y: _min(wrap(x), wrap(y))
+clamp  = lambda x, y, z: _clamp(wrap(x), wrap(y), wrap(z))
+
+cast   = lambda x, y: _cast(x, wrap(y))
+
 
 # ----------------------------------------------------
 # Test
@@ -430,7 +456,7 @@ def filter_filename(input, out_func, filename, dtype=UInt(16)): #, pad_multiple=
     Given input and output Funcs, and filename, returns evaluate. Calling evaluate() returns the output Image.
     """
     input_png = Image(dtype, filename)
-    print input_png.dimensions()
+    #print input_png.dimensions()
 #    print [input_png.size(i) for i in range(input_png.dimensions())]
     #print 'assign'
     input.assign(input_png)
@@ -558,11 +584,19 @@ def test_segfault():
 
 def test_examples():
     import examples
-#    for example in [examples.blur, examples.dilate, examples.local_laplacian]:
-    for example in [examples.local_laplacian]:
-        for input_image in ['lena_crop_grayscale.png', 'lena_crop.png']:
+    in_grayscale = 'lena_crop_grayscale.png'
+    in_color = 'lena_crop.png'
+    for example in [examples.blur, examples.dilate, examples.local_laplacian]:
+#    for example in [examples.local_laplacian]:
+        for input_image in [in_grayscale, in_color]:
             for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
-                print 'a'
+#            for dtype in [UInt(16)]:
+#            for dtype in [UInt(8), UInt(16)]:
+                if example is examples.local_laplacian:
+                    if input_image == in_color and (dtype == UInt(8) or dtype == UInt(16)):
+                        pass
+                    else:
+                        continue
         #        (in_func, out_func) = examples.blur_color(dtype)
     #            (in_func, out_func) = examples.blur(dtype)
                 (in_func, out_func) = example(dtype)
@@ -575,7 +609,7 @@ def test_examples():
                 out.show()
         #        print 'shown'
                 A = numpy.asarray(out)
-                print numpy.min(A.flatten()), numpy.max(A.flatten())
+#                print numpy.min(A.flatten()), numpy.max(A.flatten())
         #        out.save('out.png')
 
 def test():

@@ -39,7 +39,7 @@ def dilate(dtype=UInt(16), counter=[0]):
     return (input, dilate)
 
 def local_laplacian(dtype=UInt(16), counter=[0]):
-    print 'local_laplacian', counter[0]
+    print 'local_laplacian', counter[0], dtype.maxval()
     import halide
     J = 8
     
@@ -64,7 +64,7 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
         return upy
         
     levels = Uniform(int_t, 'levels'+s, 8)
-    alpha = Uniform(float_t, 'alpha'+s, 1.0)
+    alpha = Uniform(float_t, 'alpha'+s, 1.0) #1.0)
     beta = Uniform(float_t, 'beta'+s, 1.0)
     input = UniformImage(dtype, 3, 'input'+s)
     
@@ -75,10 +75,10 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     
     fx = cast(float_t, x/256.0)
     remap = Func('remap'+s)
-    remap[x] = alpha*fx*exp(-fx*fx/2.0)
+    remap[x] = (alpha/cast(float_t, levels-1))*fx*exp(-fx*fx/2.0)
     
     floating = Func('floating'+s)
-    floating[x,y,c] = cast(float_t, input[x,y,c]/float(dtype.maxval()))
+    floating[x,y,c] = cast(float_t, input[x,y,c])/float(dtype.maxval())
     
     clamped = Func('clamped'+s)
     clamped[x,y,c] = floating[clamp(x,cast(int_t,0),cast(int_t,input.width()-1)),
@@ -119,12 +119,12 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     color[x,y,c] = outGPyramid[0][x,y] * clamped[x,y,c] / gray[x,y]
     
     output = Func('output'+s)
-    output[x,y,c] = cast(dtype, clamp(color[x,y,c], 0.0, 1.0)*(dtype.maxval()))
+    output[x,y,c] = cast(dtype, clamp(color[x,y,c], cast(float_t,0.0), cast(float_t,1.0))*float(dtype.maxval()))
     
     for f in halide.all_funcs(output).values():
         f.root()
        
-#    print 'Done with local_laplacian', counter[0]
+    #print 'Done with local_laplacian', counter[0]
     counter[0] += 1
     return (input, output)
     
