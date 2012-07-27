@@ -54,6 +54,12 @@ void assign(FuncRef &a, Expr b) { a = b; }
 #include "expand_types.h"
 #undef DEFINE_TYPE
 
+#define DEFINE_TYPE(T) \
+void assign(Uniform<T> &a, int b) { a = b; } \
+void assign(Uniform<T> &a, double b) { a = b; }
+#include "expand_types.h"
+#undef DEFINE_TYPE
+
 #define DEFINE_TYPE(T) Image<T> load_png(Image<T> a, std::string b) { return load<T>(b); }
 DEFINE_TYPE(uint8_t)
 DEFINE_TYPE(uint16_t)

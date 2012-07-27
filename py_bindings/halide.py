@@ -178,6 +178,48 @@ def Image(typeval, *args):
         raise ValueError('unknown Image constructor arguments %r' % args)
 
 # ----------------------------------------------------
+# Uniform
+# ----------------------------------------------------
+
+UniformTypes = (Uniform_int8, Uniform_int16, Uniform_int32, Uniform_uint8, Uniform_uint16, Uniform_uint32, Uniform_float32, Uniform_float64)
+
+def Uniform(typeval, *args):
+    assert isinstance(typeval, Type)
+    sig = (typeval.bits, typeval.isInt(), typeval.isUInt(), typeval.isFloat())
+    if sig == (8, True, False, False):
+        C = Uniform_int8
+    elif sig == (16, True, False, False):
+        C = Uniform_int16
+    elif sig == (32, True, False, False):
+        C = Uniform_int32
+    elif sig == (8, False, True, False):
+        C = Uniform_uint8
+    elif sig == (16, False, True, False):
+        C = Uniform_uint16
+    elif sig == (32, False, True, False):
+        C = Uniform_uint32
+    elif sig == (32, False, False, True):
+        C = Uniform_float32
+    elif sig == (64, False, False, True):
+        C = Uniform_float64
+    else:
+        raise ValueError('unimplemented Uniform type signature %r' % typeval)
+    if len(args) == 1:          # Handle special cases since SWIG apparently cannot convert int32_t to int.
+        if isinstance(args[0], (int, float)):
+            ans = C()
+            assign(ans, args[0])
+            return ans
+    elif len(args) == 2:
+        if isinstance(args[1], (int, float)):
+            ans = C(args[0])
+            assign(ans, args[1])
+            return ans
+    return C(*args)
+
+for UniformT in UniformTypes:
+    UniformT.assign = lambda x, y: assign(x, y)
+
+# ----------------------------------------------------
 # DynImage
 # ----------------------------------------------------
 
@@ -499,10 +541,11 @@ def test():
 #    print 'c'
 #    pass
 
-    #test_core()
-    #test_segfault()
-    #test_blur()
+    test_core()
+    test_segfault()
+    test_blur()
     test_examples()
+    print 'Done testing'
     #test_autotune()
     
 if __name__ == '__main__':

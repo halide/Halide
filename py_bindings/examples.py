@@ -37,3 +37,13 @@ def dilate(dtype=UInt(16), counter=[0]):
     dilate[x,y,c] = subexp #min(min(input_clamped[x-1,y-1,c],input_clamped[x,y-1,c]),input_clamped[x+1,y-1,c])
     counter[0] += 1
     return (input, dilate)
+
+def local_laplacian(dtype=UInt(16), counter=[0]):
+    s = '_laplacian%d'%counter[0]
+    levels = Uniform(Int(32))
+    alpha = Uniform(Float(32))
+    beta = Uniform(Float(32))
+    input = UniformImage(dtype, 3, 'input'+s)
+    
+    # TODO implement local Laplacian
+    
