@@ -228,7 +228,33 @@ def DynImage(*args):
     if len(args) == 1 and isinstance(args[0], ImageTypes):
         return to_dynimage(args[0])
     return DynImageType(*args)
-    
+
+# ----------------------------------------------------
+# DynUniform
+# ----------------------------------------------------
+
+DynUniformType = DynUniform
+def DynUniform(*args):
+    if len(args) == 1 and isinstance(args[0], UniformTypes):
+        return to_dynuniform(args[0])
+    return DynUniformType(*args)
+
+# ----------------------------------------------------
+# Type
+# ----------------------------------------------------
+
+def _type_maxval(typeval):          # The typical maximum value used for image processing (1.0 for float types)
+    if typeval.isUInt():
+        return 2**(typeval.bits)-1
+    elif typeval.isInt():
+        return 2**(typeval.bits-1)-1
+    elif typeval.isFloat():
+        return 1.0
+    else:
+        raise ValueError('unknown typeval %r'%typeval)
+
+Type.maxval = _type_maxval
+
 # ----------------------------------------------------
 # Repr
 # ----------------------------------------------------
@@ -246,10 +272,12 @@ _clamp = clamp
 _min = min
 _max = max
 _cast = cast
+_exp = exp
 clamp = lambda x, y, z: _clamp(wrap(x), wrap(y), wrap(z))
 min   = lambda x, y: _min(wrap(x), wrap(y))
 max   = lambda x, y: _max(wrap(x), wrap(y))
 cast  = lambda x, y: _cast(x, wrap(y))
+exp   = lambda x: _exp(wrap(x))
 
 # ----------------------------------------------------
 # Test
@@ -514,7 +542,8 @@ def test_segfault():
 
 def test_examples():
     import examples
-    for example in [examples.blur, examples.dilate]:
+#    for example in [examples.blur, examples.dilate, examples.local_laplacian]:
+    for example in [examples.local_laplacian]:
         for input_image in ['lena_crop_grayscale.png', 'lena_crop.png']:
             for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
         #        (in_func, out_func) = examples.blur_color(dtype)
@@ -541,9 +570,9 @@ def test():
 #    print 'c'
 #    pass
 
-    test_core()
-    test_segfault()
-    test_blur()
+#    test_core()
+#    test_segfault()
+#    test_blur()
     test_examples()
     print 'Done testing'
     #test_autotune()
