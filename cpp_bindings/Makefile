@@ -6,10 +6,9 @@ CXX=$(GXX) -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_st
 
 all: Halide.a
 
-# Set env USE_GPU=1 to build with the GPU target forced. Set env PY_BINDING=1 to build the library needed for the Python binding.
+# Set env USE_GPU=1 to build with the GPU target forced.
 USE_GPU ?= 0
-PY_BINDING ?= 0
-GPU_CFLAGS = -DUSE_GPU=$(USE_GPU) -DHALIDE_PY_BINDING=$(PY_BINDING)
+GPU_CFLAGS = -DUSE_GPU=$(USE_GPU)
 
 CUDA_LIBS ?= -L/usr/local/cuda/lib -lcuda
 LLVM_DIR ?= ../llvm/Release+Asserts
