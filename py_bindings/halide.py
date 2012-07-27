@@ -2,6 +2,7 @@ from cHalide import *
 import numpy
 import Image as PIL
 import os
+import sys
 import signal
 from ForkedWatchdog import Watchdog
 
@@ -449,7 +450,7 @@ def get_blur(cache=[]):
 def roundup_multiple(x, y):
     return (x+y-1)/y*y
 
-def filter_filename(input, out_func, filename, dtype=UInt(16)): #, pad_multiple=1):
+def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, compile=True): #, pad_multiple=1):
     """
     Utility function to filter an image file with a Halide Func, returning output Image of the same size.
     
@@ -469,9 +470,14 @@ def filter_filename(input, out_func, filename, dtype=UInt(16)): #, pad_multiple=
     #h2 = roundup_multiple(h, pad_multiple)
     #print w2, h2, nchan
     out = Image(dtype, w, h, nchan)
-    
+    if compile:
+        out_func.compileJIT()
+
     def evaluate():
+        T0 = time.time()
         out.assign(out_func.realize(w, h, nchan))
+        if disp_time:
+            print 'Filtered in', time.time()-T0, 'secs'
         return out
     return evaluate
     
@@ -509,7 +515,7 @@ def test_blur():
         #blur_y.root().serial(x).serial(y).unroll(y,16).vectorize(x,16)
         blur_y.compileToFile('halide_blur')
         #print 'd'
-        blur_y.compileJIT()
+        #blur_y.compileJIT()
         #print 'e'
 
         outf = filter_filename(input, blur_y, in_filename)
@@ -532,10 +538,10 @@ def test_blur():
     
     print 'halide blur: OK'
 
-def test_func():
+def test_func(compile=True):
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
-    outf = filter_filename(input, blur_y, in_filename)
+    outf = filter_filename(input, blur_y, in_filename, compile=compile)
     
     def test(func):
         T0 = time.time()
@@ -552,7 +558,7 @@ def test_autotune():
     halide_autotune.autotune(locals_d['blur_y'], locals_d['test'], locals_d)
 
 def test_segfault():
-    locals_d = test_func()
+    locals_d = test_func(compile=False)
     c = locals_d['c']
     blur_y = locals_d['blur_y']
     test = locals_d['test']
@@ -602,10 +608,9 @@ def test_examples():
                 (in_func, out_func) = example(dtype)
         #        print 'got func'
         #        outf = filter_filename(in_func, out_func, in_filename, dtype)
-                outf = filter_filename(in_func, out_func, input_image, dtype)
+                outf = filter_filename(in_func, out_func, input_image, dtype, disp_time=True)
         #        print 'got filter'
                 out = outf()
-        #        print 'filtered'
                 out.show()
         #        print 'shown'
                 A = numpy.asarray(out)
@@ -621,11 +626,12 @@ def test():
 #    print 'c'
 #    pass
 
-#    test_core()
-#    test_segfault()
-#    test_blur()
+    test_core()
+    test_segfault()
+    test_blur()
     test_examples()
-    print 'Done testing'
+    print
+    print 'All tests passed, done'
     #test_autotune()
     
 if __name__ == '__main__':
