@@ -7,7 +7,7 @@ from ForkedWatchdog import Watchdog
 
 #exit_on_signal()
 
-wrap = Expr
+wrap = lambda *a: Expr(*a) if not (len(a) == 1 and isinstance(a[0], UniformTypes)) else Expr(DynUniform(a[0]))
 
 in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 
@@ -15,36 +15,47 @@ in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 # Expr
 # ----------------------------------------------------
 
-Expr.__add__ = lambda x, y: add(x, wrap(y))
-Expr.__sub__ = lambda x, y: sub(x, wrap(y))
-Expr.__mul__ = lambda x, y: mul(x, wrap(y))
-Expr.__div__ = lambda x, y: div(x, wrap(y))
-Expr.__mod__ = lambda x, y: mod(x, wrap(y))
-Expr.__and__  = lambda x, y: and_op(x, wrap(y))
-Expr.__or__  = lambda x, y: or_op(x, wrap(y))
+#_expr_new = Expr.__new__
+#def expr_new(cls, *args):
+#    if isinstance(args[0], UniformTypes):
+#        return _expr_new(cls, DynUniform(args[0]))
+#    return _expr_new(cls, *args)
 
-Expr.__radd__ = lambda y, x: add(wrap(x), y)
-Expr.__rsub__ = lambda y, x: sub(wrap(x), y)
-Expr.__rmul__ = lambda y, x: mul(wrap(x), y)
-Expr.__rdiv__ = lambda y, x: div(wrap(x), y)
-Expr.__rmod__ = lambda y, x: mod(wrap(x), y)
-Expr.__rand__  = lambda y, x: and_op(wrap(x), y)
-Expr.__ror__  = lambda y, x: or_op(wrap(x), y)
+#Expr.__new__ = expr_new
 
-Expr.__neg__ = lambda x: neg(x)
-Expr.__invert__  = lambda x: invert(x)
+UniformTypes = (Uniform_int8, Uniform_int16, Uniform_int32, Uniform_uint8, Uniform_uint16, Uniform_uint32, Uniform_float32, Uniform_float64)
 
-Expr.__lt__  = lambda x, y: lt(x, wrap(y))
-Expr.__le__  = lambda x, y: le(x, wrap(y))
-Expr.__eq__  = lambda x, y: eq(x, wrap(y))
-Expr.__ne__  = lambda x, y: ne(x, wrap(y))
-Expr.__gt__  = lambda x, y: gt(x, wrap(y))
-Expr.__ge__  = lambda x, y: ge(x, wrap(y))
+for BaseT in (Expr, FuncRef, Var) + UniformTypes:
+    BaseT.__add__ = lambda x, y: add(wrap(x), wrap(y))
+    BaseT.__sub__ = lambda x, y: sub(wrap(x), wrap(y))
+    BaseT.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
+    BaseT.__div__ = lambda x, y: div(wrap(x), wrap(y))
+    BaseT.__mod__ = lambda x, y: mod(wrap(x), wrap(y))
+    BaseT.__and__  = lambda x, y: and_op(wrap(x), wrap(y))
+    BaseT.__or__  = lambda x, y: or_op(wrap(x), wrap(y))
 
-Expr.__iadd__ = lambda x, y: iadd(x, wrap(y))
-Expr.__isub__ = lambda x, y: isub(x, wrap(y))
-Expr.__imul__ = lambda x, y: imul(x, wrap(y))
-Expr.__idiv__ = lambda x, y: idiv(x, wrap(y))
+    BaseT.__radd__ = lambda y, x: add(wrap(x), wrap(y))
+    BaseT.__rsub__ = lambda y, x: sub(wrap(x), wrap(y))
+    BaseT.__rmul__ = lambda y, x: mul(wrap(x), wrap(y))
+    BaseT.__rdiv__ = lambda y, x: div(wrap(x), wrap(y))
+    BaseT.__rmod__ = lambda y, x: mod(wrap(x), wrap(y))
+    BaseT.__rand__  = lambda y, x: and_op(wrap(x), wrap(y))
+    BaseT.__ror__  = lambda y, x: or_op(wrap(x), wrap(y))
+
+    BaseT.__neg__ = lambda x: neg(wrap(x))
+    BaseT.__invert__  = lambda x: invert(wrap(x))
+
+    BaseT.__lt__  = lambda x, y: lt(wrap(x), wrap(y))
+    BaseT.__le__  = lambda x, y: le(wrap(x), wrap(y))
+    BaseT.__eq__  = lambda x, y: eq(wrap(x), wrap(y))
+    BaseT.__ne__  = lambda x, y: ne(wrap(x), wrap(y))
+    BaseT.__gt__  = lambda x, y: gt(wrap(x), wrap(y))
+    BaseT.__ge__  = lambda x, y: ge(wrap(x), wrap(y))
+
+    BaseT.__iadd__ = lambda x, y: iadd(wrap(x), wrap(y))
+    BaseT.__isub__ = lambda x, y: isub(wrap(x), wrap(y))
+    BaseT.__imul__ = lambda x, y: imul(wrap(x), wrap(y))
+    BaseT.__idiv__ = lambda x, y: idiv(wrap(x), wrap(y))
 
 # ----------------------------------------------------
 # Var, Func
@@ -77,9 +88,16 @@ def raise_error(e):
     raise e
     
 Func.__call__ = lambda self, *L: raise_error(ValueError('use f[x, y] = expr to initialize a function'))
-Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
+Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, wrap(key)), wrap(value))
 Func.__getitem__ = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, key)
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
+
+# ----------------------------------------------------
+# FuncRef
+# ----------------------------------------------------
+
+#FuncRef.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
+#FuncRef.__rmul__ = lambda x, y: mul(wrap(x), wrap(y))
 
 # ----------------------------------------------------
 # UniformImage
@@ -180,8 +198,6 @@ def Image(typeval, *args):
 # ----------------------------------------------------
 # Uniform
 # ----------------------------------------------------
-
-UniformTypes = (Uniform_int8, Uniform_int16, Uniform_int32, Uniform_uint8, Uniform_uint16, Uniform_uint32, Uniform_float32, Uniform_float64)
 
 def Uniform(typeval, *args):
     assert isinstance(typeval, Type)
@@ -546,6 +562,7 @@ def test_examples():
     for example in [examples.local_laplacian]:
         for input_image in ['lena_crop_grayscale.png', 'lena_crop.png']:
             for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
+                print 'a'
         #        (in_func, out_func) = examples.blur_color(dtype)
     #            (in_func, out_func) = examples.blur(dtype)
                 (in_func, out_func) = example(dtype)
