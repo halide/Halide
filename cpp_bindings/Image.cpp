@@ -86,9 +86,6 @@ namespace Halide {
         buf.elem_size = type.bits/8;
     }
 
-#if HALIDE_PY_BINDING
-    DynImage::DynImage() :contents(new Contents(UInt(8), 1)) { }
-#endif
     DynImage::DynImage(const Type &t, int a) : contents(new Contents(t, a)) {}
 
     DynImage::DynImage(const Type &t, int a, int b) : contents(new Contents(t, a, b)) {}
@@ -213,9 +210,6 @@ namespace Halide {
         const std::string name;
     };
 
-#if HALIDE_PY_BINDING
-    UniformImage::UniformImage() :contents(new Contents(UInt(8), 1)) { }
-#endif
     UniformImage::UniformImage(const Type &t, int dims) : 
         contents(new Contents(t, dims)) {
         for (int i = 0; i < dims; i++) {
