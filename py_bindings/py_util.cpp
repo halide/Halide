@@ -119,6 +119,17 @@ DEFINE_TYPE(float)
 DEFINE_TYPE(double)
 #undef DEFINE_TYPE
 
+#define DEFINE_TYPE(T) DynUniform to_dynuniform(const Uniform<T> &a) { return DynUniform(a); }
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
 //void assign(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
 
 /*
