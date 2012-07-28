@@ -99,10 +99,13 @@ for C in [Var, FuncRef]:
 
 def raise_error(e):
     raise e
-    
+
+_generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
+
 Func.__call__ = lambda self, *L: raise_error(ValueError('use f[x, y] = expr to initialize a function'))
 Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, wrap(key)), wrap(value))
-Func.__getitem__ = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, key)
+Func.__getitem__ = _generic_getitem
+Func.assign = assign
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
 
 # ----------------------------------------------------
@@ -117,7 +120,8 @@ Func.__getitem__ = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance
 # ----------------------------------------------------
 
 #UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
-UniformImage.__getitem__ = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, key)
+
+UniformImage.__getitem__ = _generic_getitem
 UniformImage.assign = lambda x, y: assign(x, y)
 
 # ----------------------------------------------------
@@ -150,6 +154,9 @@ def image_getattr(self, name):
     raise AttributeError(name)
 
 ImageTypes = (Image_int8, Image_int16, Image_int32, Image_uint8, Image_uint16, Image_uint32, Image_float32, Image_float64)
+
+for _ImageT in ImageTypes:
+    _ImageT.__getitem__ = _generic_getitem
 
 def show_image(I):
     A = numpy.asarray(I)
@@ -330,6 +337,11 @@ min    = lambda x, y: _min(wrap(x), wrap(y))
 clamp  = lambda x, y, z: _clamp(wrap(x), wrap(y), wrap(z))
 
 cast   = lambda x, y: _cast(x, wrap(y))
+
+minimum = lambda x: minimum_func(wrap(x))
+maximum = lambda x: maximum_func(wrap(x))
+product = lambda x: product_func(wrap(x))
+sum     = lambda x: sum_func(wrap(x))
 
 
 # ----------------------------------------------------

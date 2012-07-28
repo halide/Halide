@@ -3,6 +3,8 @@
 #include "png_util.h"
 #include <signal.h>
 #include <string>
+#include "Python.h"
+#include "Python/frameobject.h"
 
 void (*signal(int signum, void (*sighandler)(int)))(int);
 
@@ -79,6 +81,21 @@ DEFINE_TYPE(double)
 
 void signal_handler(int sig_num) {
     printf("Trapped signal %d in C++ layer, exiting\n", sig_num);
+ 	//PyErr_SetString(PyExc_ValueError,"Trapped signal in C++ layer, exiting");
+    printf("\n");
+    PyThreadState *tstate = PyThreadState_GET();
+    if (NULL != tstate && NULL != tstate->frame) {
+        PyFrameObject *frame = tstate->frame;
+
+        printf("Python stack trace:\n");
+        while (NULL != frame) {
+            int line = frame->f_lineno;
+            const char *filename = PyString_AsString(frame->f_code->co_filename);
+            const char *funcname = PyString_AsString(frame->f_code->co_name);
+            printf("    %s(%d): %s\n", filename, line, funcname);
+            frame = frame->f_back;
+        }
+    }
     exit(0);
 }
 
@@ -129,6 +146,26 @@ DEFINE_TYPE(int32_t)
 DEFINE_TYPE(float)
 DEFINE_TYPE(double)
 #undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) \
+Expr call(Image<T> &a, Expr b) { return a(b); } \
+Expr call(Image<T> &a, Expr b, Expr c) { return a(b,c); } \
+Expr call(Image<T> &a, Expr b, Expr c, Expr d) { return a(b,c,d); }                     \
+Expr call(Image<T> &a, Expr b, Expr c, Expr d, Expr e) { return a(b,c,d,e); }                   
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+Expr minimum_func(const Expr &a) { return minimum(a); }
+Expr maximum_func(const Expr &a) { return maximum(a); }
+Expr product_func(const Expr &a) { return product(a); }
+Expr sum_func(const Expr &a) { return sum(a); }
 
 //void assign(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
 

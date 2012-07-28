@@ -30,6 +30,11 @@ Expr isub(Expr &a, Expr b);
 Expr imul(Expr &a, Expr b);
 Expr idiv(Expr &a, Expr b);
 
+Expr minimum_func(const Expr &a);
+Expr maximum_func(const Expr &a);
+Expr product_func(const Expr &a);
+Expr sum_func(const Expr &a);
+
 FuncRef call(Func &a, const std::vector<Expr> &args);
 FuncRef call(Func &a, Expr b);
 FuncRef call(Func &a, Expr b, Expr c);
@@ -40,6 +45,21 @@ Expr call(const UniformImage &a, Expr b);
 Expr call(const UniformImage &a, Expr b, Expr c);
 Expr call(const UniformImage &a, Expr b, Expr c, Expr d);
 Expr call(const UniformImage &a, Expr b, Expr c, Expr d, Expr e);
+
+#define DEFINE_TYPE(T) \
+Expr call(Image<T> &a, Expr b);                             \
+Expr call(Image<T> &a, Expr b, Expr c);                     \
+Expr call(Image<T> &a, Expr b, Expr c, Expr d);                     \
+Expr call(Image<T> &a, Expr b, Expr c, Expr d, Expr e);                   
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
 
 void assign(FuncRef &a, Expr b);
 
