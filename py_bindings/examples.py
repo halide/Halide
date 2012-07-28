@@ -132,28 +132,35 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     counter[0] += 1
     return (input, output)
 
-def box(dtype=UInt(16), counter=[0]):
-    "Box blur (implemented with summed area table)."
-    print 'box', counter[0]
-    s = '_box%d'%counter[0]
+def boxblur_mode(dtype, counter, is_sat):
+    print 'box', is_sat, counter[0]
+    s = '_box%d_%d'%(is_sat, counter[0])
     input = UniformImage(dtype, 3, 'input'+s)
     box_size = Uniform(int_t, 'box_size'+s, 15)
 
     x = Var('x'+s)
     y = Var('y'+s)
     c = Var('c'+s)
-    r = RDom(0,input.width(),0,input.height(),'r'+s)
-    rx = r.x
-    ry = r.y
     
-    sum = Func('sum'+s)                     # Cumulative sum in x and y (summed area table)
-    sum[x,y,c] = cast(float_t if dtype.isFloat() else int_t, input[x,y,c])
+    sum = Func('sum'+s)                     # Cumulative sum in x and y or summed area table
     zero = cast(int_t,0)
     w1 = cast(int_t,input.width()-1)
     h1 = cast(int_t,input.height()-1)
-    #sum[rx,ry,c] = sum[rx,ry,c] + sum[max(rx-1,zero),ry,c] + sum[rx,max(ry-1,zero),c] - sum[max(rx-1,zero),max(ry-1,zero),c]
-    sum[rx,ry,c] += sum[max(rx-1,zero),ry,c] + sum[rx,max(ry-1,zero),c] - sum[max(rx-1,zero),max(ry-1,zero),c]
-    
+    if is_sat:
+        r = RDom(0,input.width(),0,input.height(),'r'+s)
+        rx = r.x
+        ry = r.y
+        sum[x,y,c] = cast(float_t if dtype.isFloat() else int_t, input[x,y,c])
+        #sum[rx,ry,c] = sum[rx,ry,c] + sum[max(rx-1,zero),ry,c] + sum[rx,max(ry-1,zero),c] - sum[max(rx-1,zero),max(ry-1,zero),c]
+        sum[rx,ry,c] += sum[max(rx-1,zero),ry,c] + sum[rx,max(ry-1,zero),c] - sum[max(rx-1,zero),max(ry-1,zero),c]
+    else:
+        rx = RDom(0,input.width(),'rx'+s)
+        ry = RDom(0,input.height(),'ry'+s)
+        sumx = Func('sumx'+s)
+        sumx[x,y,c] = cast(float_t if dtype.isFloat() else int_t, input[x,y,c])
+        sumx[rx,y,c] += sumx[max(rx-1,zero),y,c]
+        sum[x,y,c] = sumx[x,y,c]
+        sum[x,ry,c] += sum[x,max(ry-1,zero),c]
     sum_clamped = Func('sum_clamped'+s)
     sum_clamped[x,y,c] = sum[clamp(x,zero,w1),clamp(y,zero,h1),c]
     
@@ -170,3 +177,12 @@ def box(dtype=UInt(16), counter=[0]):
     
     counter[0] += 1
     return (input, output)
+
+def boxblur_sat(dtype=UInt(16), counter=[0]):
+    "Box blur (implemented with summed area table)."
+    return boxblur_mode(dtype, counter, True)
+    
+def boxblur_cumsum(dtype=UInt(16), counter=[0]):
+    "Box blur (implemented with cumsum)."
+    return boxblur_mode(dtype, counter, False)
+

@@ -602,13 +602,13 @@ def test_examples():
     import examples
     in_grayscale = 'lena_crop_grayscale.png'
     in_color = 'lena_crop.png'
-    for example in [examples.blur, examples.dilate, examples.box, examples.local_laplacian]:
-#    for example in [examples.local_laplacian]:
+    for example in [examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+#    for example in [examples.boxblur_cumsum]:
         for input_image in [in_grayscale, in_color]:
             for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
 #            for dtype in [UInt(16)]:
 #            for dtype in [UInt(8), UInt(16)]:
-                if example is examples.box:
+                if example is examples.boxblur_sat or example is examples.boxblur_cumsum:
                     if dtype == UInt(32):
                         continue
                 if example is examples.local_laplacian:
