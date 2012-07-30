@@ -16,6 +16,8 @@ Expr mul(Expr a, Expr b);
 Expr div(Expr a, Expr b);
 Expr mod(Expr a, Expr b);
 
+Expr expr_from_int(int a);
+
 Expr lt(Expr a, Expr b);
 Expr le(Expr a, Expr b);
 Expr eq(Expr a, Expr b);
@@ -48,6 +50,11 @@ Expr call(const UniformImage &a, Expr b, Expr c);
 Expr call(const UniformImage &a, Expr b, Expr c, Expr d);
 Expr call(const UniformImage &a, Expr b, Expr c, Expr d, Expr e);
 
+Expr call(const DynImage &a, Expr b);
+Expr call(const DynImage &a, Expr b, Expr c);
+Expr call(const DynImage &a, Expr b, Expr c, Expr d);
+Expr call(const DynImage &a, Expr b, Expr c, Expr d, Expr e);
+
 #define DEFINE_TYPE(T) \
 Expr call(Image<T> &a, Expr b);                             \
 Expr call(Image<T> &a, Expr b, Expr c);                     \
@@ -64,6 +71,7 @@ DEFINE_TYPE(double)
 #undef DEFINE_TYPE
 
 void assign(FuncRef &a, Expr b);
+void assign(UniformImage &a, const DynImage &b);
 
 #define DEFINE_TYPE(T) void assign(UniformImage &a, Image<T> b);
 DEFINE_TYPE(uint8_t)
