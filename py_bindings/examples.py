@@ -368,5 +368,4 @@ def snake(in_filename='../apps/snake/blood_cells.png', dtype=UInt(8), counter=[0
     c = Var('c'+s)
     masked[x,y,c] = select(phi_buf[x, y] < 0.0, im[x, y, c], im[x, y, c]/4)
     out = masked.realize(im.width(), im.height(), 3)
-    print out
     Image(UInt(8),out).save('snake_out.png')
