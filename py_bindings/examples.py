@@ -192,7 +192,6 @@ def snake(in_filename='../apps/snake/blood_cells.png', dtype=UInt(8), counter=[0
     exit_on_signal()
     s = '_snake%d'%counter[0]
     counter[0] += 1
-    
     x = Var('x'+s)
     y = Var('y'+s)
 
@@ -278,15 +277,19 @@ def snake(in_filename='../apps/snake/blood_cells.png', dtype=UInt(8), counter=[0
         # truncate to 3 sigma and normalize
         radius = int(3*sigma + 1.0)
         i = RDom(-radius, 2*radius+1,'i'+s)
+#        i = i.x
         normalized = Func('normalized'+s)
         normalized[x] = gaussian[x] / sum(gaussian[i]) # Uses an inline reduction
 
         # Convolve the input using two reductions
         blurx, blury = Func('blurx'+s), Func('blury'+s)
-        print image[x+i, y] * normalized[i]
-        print 'a', im.width(), im.height()
+#        print image[x+i, y] * normalized[i]
+#        print 'a', im.width(), im.height()
+#        print blurx[x,y]
+        blurx[x, y] = 0.0
         blurx[x, y] += image[x+i, y] * normalized[i]
-        print 'b'
+#        print 'b'
+        blury[x, y] = 0.0
         blury[x, y] += blurx[x, y+i] * normalized[i]
 
         # Schedule the lot as root 

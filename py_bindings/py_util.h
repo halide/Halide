@@ -7,6 +7,8 @@
 using namespace Halide;
 
 void assign(Func &f, const Expr &e);
+void iadd(FuncRef &f, const Expr &e);
+void imul(FuncRef &f, const Expr &e);
 Expr add(Expr a, Expr b);
 Expr sub(Expr a, Expr b);
 Expr neg(Expr a);
