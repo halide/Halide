@@ -26,7 +26,14 @@ in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 
 UniformTypes = (Uniform_int8, Uniform_int16, Uniform_int32, Uniform_uint8, Uniform_uint16, Uniform_uint32, Uniform_float32, Uniform_float64)
 
-for BaseT in (Expr, FuncRef, Var, RDom, RVar) + UniformTypes:
+#def iadd2(a, b):
+#    print 'iadd2', a, b
+#    try:
+#        iadd(a, b)
+#    except ValueError:
+#        print 'ValueError'
+    
+for BaseT in (Expr, FuncRef, Var, RDom, RVar, Func) + UniformTypes:
     BaseT.__add__ = lambda x, y: add(wrap(x), wrap(y))
     BaseT.__sub__ = lambda x, y: sub(wrap(x), wrap(y))
     BaseT.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
@@ -101,11 +108,12 @@ def raise_error(e):
     raise e
 
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
+_generic_assign = lambda x, y: assign(x, wrap(y))
 
 Func.__call__ = lambda self, *L: raise_error(ValueError('use f[x, y] = expr to initialize a function'))
 Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, wrap(key)), wrap(value))
 Func.__getitem__ = _generic_getitem
-Func.assign = assign
+Func.assign = _generic_assign
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
 
 # ----------------------------------------------------
@@ -122,7 +130,7 @@ Func.assign = assign
 #UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
 
 UniformImage.__getitem__ = _generic_getitem
-UniformImage.assign = lambda x, y: assign(x, y)
+UniformImage.assign = _generic_assign
 
 # ----------------------------------------------------
 # Image
@@ -179,7 +187,7 @@ def show_image(I):
     
 for ImageT in ImageTypes:
     ImageT.save = lambda x, y: save_png(x, y)
-    ImageT.assign = lambda x, y: assign(x, y)
+    ImageT.assign = _generic_assign
     ImageT.__getattr__ = image_getattr
     ImageT.show = lambda x: show_image(x)
     
@@ -253,7 +261,7 @@ def Uniform(typeval, *args):
     return C(*args)
 
 for UniformT in UniformTypes:
-    UniformT.assign = lambda x, y: assign(x, y)
+    UniformT.assign = _generic_assign
 
 # ----------------------------------------------------
 # DynImage

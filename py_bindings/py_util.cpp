@@ -167,6 +167,9 @@ Expr maximum_func(const Expr &a) { return maximum(a); }
 Expr product_func(const Expr &a) { return product(a); }
 Expr sum_func(const Expr &a) { return sum(a); }
 
+void iadd(FuncRef &f, const Expr &e) { f += e; }
+void imul(FuncRef &f, const Expr &e) { f *= e; }
+
 //void assign(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
 
 /*
