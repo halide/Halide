@@ -304,7 +304,7 @@ def snake(in_filename='../apps/snake/blood_cells.png', dtype=UInt(8), counter=[0
     timestep = 5.0
     mu = 0.2 / timestep
     iter_inner = 1
-    iter_outer = 1000
+    iter_outer = 100 #1000
     lambd = 6.0
     alpha = 1.5
     epsilon = 1.5
@@ -368,4 +368,5 @@ def snake(in_filename='../apps/snake/blood_cells.png', dtype=UInt(8), counter=[0
     c = Var('c'+s)
     masked[x,y,c] = select(phi_buf[x, y] < 0.0, im[x, y, c], im[x, y, c]/4)
     out = masked.realize(im.width(), im.height(), 3)
-    out.save('snake_out.png')
+    print out
+    Image(UInt(8),out).save('snake_out.png')

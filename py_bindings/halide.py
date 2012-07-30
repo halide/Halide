@@ -8,8 +8,17 @@ from ForkedWatchdog import Watchdog
 
 #exit_on_signal()
 
-wrap = lambda *a: Expr(*a) if not (len(a) == 1 and isinstance(a[0], UniformTypes)) else Expr(DynUniform(a[0]))
-
+#wrap = lambda *a: Expr(*a) if not (len(a) == 1 and isinstance(a[0], UniformTypes)) else Expr(DynUniform(a[0]))
+def wrap(*a):
+    if len(a) == 1:
+        if isinstance(a[0], UniformTypes):
+            return Expr(DynUniform(a[0]))
+        elif isinstance(a[0], ImageTypes) or isinstance(a[0], DynImageType):
+            return a[0] #Expr(to_dynimage(a[0]))
+        elif isinstance(a[0], (int,long)):
+            return expr_from_int(a[0])
+    return Expr(*a)
+    
 in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 
 # ----------------------------------------------------
@@ -73,7 +82,7 @@ for BaseT in (Expr, FuncRef, Var, RDom, RVar, Func) + UniformTypes:
 
 RDomType = RDom
 def RDom(*args):
-    args = [Expr(x) if not isinstance(x,str) else x for x in args]
+    args = [wrap(x) if not isinstance(x,str) else x for x in args]
     return RDomType(*args)
 
 # ----------------------------------------------------
@@ -109,11 +118,13 @@ def raise_error(e):
 
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_assign = lambda x, y: assign(x, wrap(y))
-
+_realize = Func.realize
 Func.__call__ = lambda self, *L: raise_error(ValueError('use f[x, y] = expr to initialize a function'))
 Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, wrap(key)), wrap(value))
 Func.__getitem__ = _generic_getitem
 Func.assign = _generic_assign
+Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
+
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
 
 # ----------------------------------------------------
@@ -122,15 +133,6 @@ Func.assign = _generic_assign
 
 #FuncRef.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
 #FuncRef.__rmul__ = lambda x, y: mul(wrap(x), wrap(y))
-
-# ----------------------------------------------------
-# UniformImage
-# ----------------------------------------------------
-
-#UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
-
-UniformImage.__getitem__ = _generic_getitem
-UniformImage.assign = _generic_assign
 
 # ----------------------------------------------------
 # Image
@@ -185,15 +187,18 @@ def show_image(I):
         A = A[:,:,0]
     PIL.fromarray(A).show()
     
-for ImageT in ImageTypes:
-    ImageT.save = lambda x, y: save_png(x, y)
-    ImageT.assign = _generic_assign
-    ImageT.__getattr__ = image_getattr
-    ImageT.show = lambda x: show_image(x)
+for _ImageT in ImageTypes:
+    _ImageT.save = lambda x, y: save_png(x, y)
+    _ImageT.assign = _generic_assign
+    _ImageT.__getattr__ = image_getattr
+    _ImageT.show = lambda x: show_image(x)
     
+UniformImageType = UniformImage
+
 def Image(typeval, *args):
     assert isinstance(typeval, Type)
     sig = (typeval.bits, typeval.isInt(), typeval.isUInt(), typeval.isFloat())
+    
     if sig == (8, True, False, False):
         C = Image_int8
     elif sig == (16, True, False, False):
@@ -219,6 +224,8 @@ def Image(typeval, *args):
 #        print 'load_png'
         return load_png(C(1), args[0])
     elif all(isinstance(x, int) for x in args):
+        return C(*args)
+    elif len(args) == 1 and isinstance(args[0], ImageTypes+(DynImageType,UniformImageType)):
         return C(*args)
     else:
         raise ValueError('unknown Image constructor arguments %r' % args)
@@ -282,6 +289,17 @@ def DynUniform(*args):
     if len(args) == 1 and isinstance(args[0], UniformTypes):
         return to_dynuniform(args[0])
     return DynUniformType(*args)
+
+# ----------------------------------------------------
+# Various image types
+# ----------------------------------------------------
+
+#UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
+
+for _ImageT in [DynImageType, UniformImage]:
+    _ImageT.__getitem__ = _generic_getitem
+    _ImageT.assign = _generic_assign
+    #_ImageT.save = lambda x, y: save_png(x, y)
 
 # ----------------------------------------------------
 # Type
