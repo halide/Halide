@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
 	//generate downsample levels:
 	for (unsigned int l = 1; l < levels; ++l) {
 		Func clamped;
-		clamped(x,y,c) = downsampled[l-1](clamp(x,0,level_widths[l-1]-1), clamp(y,0,level_heights[l-1]-1), c);
+		clamped(x,y,c) = downsampled[l-1](clamp(cast<int>(x),cast<int>(0),cast<int>(level_widths[l-1]-1)), clamp(cast<int>(y),cast<int>(0),cast<int>(level_heights[l-1]-1)), c);
 		Func downx;
 		downx(x,y,c) = (clamped(x*2-1,y,c) + 2.0f * clamped(x*2,y,c) + clamped(x*2+1,y,c)) / 4.0f;
 		downsampled[l](x,y,c) = (downx(x,y*2-1,c) + 2.0f * downx(x,y*2,c) + downx(x,y*2+1,c)) / 4.0f;
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
 		Func upsampledx, upsampled;
 		upsampledx(x,y,c) = 0.5f * (interpolated[l+1](x/2 + (x%2),y,c) + interpolated[l+1](x/2,y,c));
 		upsampled(x,y,c) = 0.5f * (upsampledx(x, y/2 + (y%2),c) + upsampledx(x,y/2,c));
-		interpolated[l](x,y,c) = downsampled[l](x,y,c) + (1.0 - downsampled[l](x,y,3)) * upsampled(x,y,c);
+		interpolated[l](x,y,c) = downsampled[l](x,y,c) + (1.0f - downsampled[l](x,y,3)) * upsampled(x,y,c);
 	}
 
 	Func final;
@@ -140,10 +140,9 @@ int main(int argc, char **argv) {
 	const unsigned int Iters = 20;
 	for (unsigned int x = 0; x < Iters; ++x) {
 
-		Image< float > in_png = load< float >(argv[1]);
-		assert(in_png.channels() == 4);
-
-		input = in_png;
+        Image< float > in_png = load< float >(argv[1]);
+        assert(in_png.channels() == 4);
+        input = in_png;
 
 		{ //set up level sizes:
 			unsigned int width = in_png.width();
