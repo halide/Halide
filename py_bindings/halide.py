@@ -498,17 +498,20 @@ def get_blur(cache=[]):
 def roundup_multiple(x, y):
     return (x+y-1)/y*y
 
-def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, compile=True): #, pad_multiple=1):
+def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, compile=True, eval_func=None): #, pad_multiple=1):
     """
     Utility function to filter an image file with a Halide Func, returning output Image of the same size.
     
     Given input and output Funcs, and filename, returns evaluate. Calling evaluate() returns the output Image.
     """
-    input_png = Image(dtype, filename)
+    if isinstance(input, UniformImageType):
+        input_png = Image(dtype, filename)
     #print input_png.dimensions()
 #    print [input_png.size(i) for i in range(input_png.dimensions())]
     #print 'assign'
-    input.assign(input_png)
+        input.assign(input_png)
+    else:
+        input_png = input
     #print 'get w'
     w = input_png.width()
     h = input_png.height()
@@ -523,10 +526,16 @@ def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, 
 
     def evaluate():
         T0 = time.time()
-        out.assign(out_func.realize(w, h, nchan))
-        if disp_time:
-            print 'Filtered in', time.time()-T0, 'secs'
-        return out
+        try:
+            if eval_func is not None:
+                out.assign(eval_func())
+                return out
+            else:
+                out.assign(out_func.realize(w, h, nchan))
+                return out
+        finally:
+            if disp_time:
+                print 'Filtered in', time.time()-T0, 'secs'
     return evaluate
     
 def example_out():
@@ -640,7 +649,7 @@ def test_examples():
     import examples
     in_grayscale = 'lena_crop_grayscale.png'
     in_color = 'lena_crop.png'
-    for example in [examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+    for example in [examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
 #    for example in [examples.boxblur_cumsum]:
         for input_image in [in_grayscale, in_color]:
             for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
@@ -654,12 +663,15 @@ def test_examples():
                         pass
                     else:
                         continue
+                if example is examples.snake:
+                    if dtype != UInt(8):
+                        continue
         #        (in_func, out_func) = examples.blur_color(dtype)
     #            (in_func, out_func) = examples.blur(dtype)
-                (in_func, out_func) = example(dtype)
+                (in_func, out_func, eval_func) = example(dtype)
         #        print 'got func'
         #        outf = filter_filename(in_func, out_func, in_filename, dtype)
-                outf = filter_filename(in_func, out_func, input_image, dtype, disp_time=True)
+                outf = filter_filename(in_func, out_func, input_image, dtype, disp_time=True, eval_func=eval_func)
         #        print 'got filter'
                 out = outf()
                 out.show()
