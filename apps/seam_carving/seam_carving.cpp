@@ -77,8 +77,6 @@ int main(int argc, char **argv) {
   energy(x, yr, c) = g(x, yr, c) + min(min(energy(x, yr - 1, c), 
 					   energy(clampW(x - 1), yr - 1, c)),
 				       energy(clampW(x + 1), yr - 1, c));
-  // important for correctness that we calculate row by row
-  energy.update().transpose(yr, x); 
   
   RDom xr(1, input.width() - 1);
   
