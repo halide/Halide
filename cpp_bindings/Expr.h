@@ -123,6 +123,8 @@ namespace Halide {
     Expr builtin(Type, const std::string &name);
     Expr builtin(Type, const std::string &name, Expr);
     Expr builtin(Type, const std::string &name, Expr, Expr);
+    Expr builtin(Type, const std::string &name, Expr, Expr, Expr);
+    Expr builtin(Type, const std::string &name, Expr, Expr, Expr, Expr);
 
     // Transcendentals
     Expr sqrt(Expr);

@@ -508,6 +508,32 @@ namespace Halide {
         return e;
     }
 
+    Expr builtin(Type t, const std::string &name, Expr a, Expr b, Expr c) {
+        MLVal args = makeList();
+        args = addToList(args, c.node());
+        args = addToList(args, b.node());
+        args = addToList(args, a.node());
+        Expr e(makeCall(t.mlval, "." + name, args), t);
+        e.child(a);
+        e.child(b);
+        e.child(c);
+        return e;
+    }
+
+    Expr builtin(Type t, const std::string &name, Expr a, Expr b, Expr c, Expr d) {
+        MLVal args = makeList();
+        args = addToList(args, d.node());
+        args = addToList(args, c.node());
+        args = addToList(args, b.node());
+        args = addToList(args, a.node());
+        Expr e(makeCall(t.mlval, "." + name, args), t);
+        e.child(a);
+        e.child(b);
+        e.child(c);
+        e.child(d);
+        return e;
+    }
+
     Expr sqrt(Expr a) {
         //assert(a.type() == Float(32) && "Argument to sqrt must be a float");
         a = cast(Float(32), a);
