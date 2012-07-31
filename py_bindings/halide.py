@@ -8,22 +8,37 @@ from ForkedWatchdog import Watchdog
 
 #exit_on_signal()
 
-#wrap = lambda *a: Expr(*a) if not (len(a) == 1 and isinstance(a[0], UniformTypes)) else Expr(DynUniform(a[0]))
-def wrap(*a):
-    if len(a) == 1:
-        if isinstance(a[0], UniformTypes):
-            return Expr(DynUniform(a[0]))
-        elif isinstance(a[0], ImageTypes) or isinstance(a[0], DynImageType):
-            return a[0] #Expr(to_dynimage(a[0]))
-        elif isinstance(a[0], (int,long)):
-            return expr_from_int(a[0])
-    return Expr(*a)
-    
-in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
+# ----------------------------------------------------------------------------------------------------------
+# Types (functions are used to replace the "constructors" due to an issue with SWIG replacing __new__)
+# ----------------------------------------------------------------------------------------------------------
+
+DynUniformType = DynUniform
+ExprType = Expr
+UniformTypes = (Uniform_int8, Uniform_int16, Uniform_int32, Uniform_uint8, Uniform_uint16, Uniform_uint32, Uniform_float32, Uniform_float64)
+RDomType = RDom
+ImageTypes = (Image_int8, Image_int16, Image_int32, Image_uint8, Image_uint16, Image_uint32, Image_float32, Image_float64)
+UniformImageType = UniformImage
+DynImageType = DynImage
 
 # ----------------------------------------------------
 # Expr
 # ----------------------------------------------------
+
+#wrap = lambda *a: Expr(*a) if not (len(a) == 1 and isinstance(a[0], UniformTypes)) else Expr(DynUniform(a[0]))
+def wrap(*a):
+#    print a
+    if len(a) == 1:
+        if isinstance(a[0], UniformTypes):
+            return ExprType(DynUniform(a[0]))
+        elif isinstance(a[0], ImageTypes) or isinstance(a[0], DynImageType):
+            return a[0] #ExprType(to_dynimage(a[0]))
+        elif isinstance(a[0], (int,long)):
+            return expr_from_int(a[0])
+        elif isinstance(a[0], tuple):
+            return expr_from_tuple(*(wrap(x) for x in a[0]))
+    return ExprType(*a)
+    
+in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 
 #_expr_new = Expr.__new__
 #def expr_new(cls, *args):
@@ -32,8 +47,6 @@ in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 #    return _expr_new(cls, *args)
 
 #Expr.__new__ = expr_new
-
-UniformTypes = (Uniform_int8, Uniform_int16, Uniform_int32, Uniform_uint8, Uniform_uint16, Uniform_uint32, Uniform_float32, Uniform_float64)
 
 #def iadd2(a, b):
 #    print 'iadd2', a, b
@@ -80,7 +93,6 @@ for BaseT in (Expr, FuncRef, Var, RDom, RVar, Func) + UniformTypes:
 # RDom
 # ----------------------------------------------------
 
-RDomType = RDom
 def RDom(*args):
     args = [wrap(x) if not isinstance(x,str) else x for x in args]
     return RDomType(*args)
@@ -119,7 +131,7 @@ def raise_error(e):
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_assign = lambda x, y: assign(x, wrap(y))
 _realize = Func.realize
-Func.__call__ = lambda self, *L: raise_error(ValueError('use f[x, y] = expr to initialize a function'))
+Func.__call__ = lambda self, *L: raise_error(ValueError('used f(x, y) to refer to a Func -- proper syntax is f[x, y]'))
 Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, wrap(key)), wrap(value))
 Func.__getitem__ = _generic_getitem
 Func.assign = _generic_assign
@@ -163,8 +175,6 @@ def image_getattr(self, name):
                 'strides': strides}
     raise AttributeError(name)
 
-ImageTypes = (Image_int8, Image_int16, Image_int32, Image_uint8, Image_uint16, Image_uint32, Image_float32, Image_float64)
-
 for _ImageT in ImageTypes:
     _ImageT.__getitem__ = _generic_getitem
 
@@ -193,8 +203,6 @@ for _ImageT in ImageTypes:
     _ImageT.__getattr__ = image_getattr
     _ImageT.show = lambda x: show_image(x)
     
-UniformImageType = UniformImage
-
 def Image(typeval, *args):
     assert isinstance(typeval, Type)
     sig = (typeval.bits, typeval.isInt(), typeval.isUInt(), typeval.isFloat())
@@ -267,14 +275,13 @@ def Uniform(typeval, *args):
             return ans
     return C(*args)
 
-for UniformT in UniformTypes:
-    UniformT.assign = _generic_assign
+for UniformT in UniformTypes + (DynUniform,):
+    UniformT.assign = lambda x, y: assign(x, y) #_generic_assign
 
 # ----------------------------------------------------
 # DynImage
 # ----------------------------------------------------
 
-DynImageType = DynImage
 def DynImage(*args):
     if len(args) == 1 and isinstance(args[0], ImageTypes):
         return to_dynimage(args[0])
@@ -284,7 +291,6 @@ def DynImage(*args):
 # DynUniform
 # ----------------------------------------------------
 
-DynUniformType = DynUniform
 def DynUniform(*args):
     if len(args) == 1 and isinstance(args[0], UniformTypes):
         return to_dynuniform(args[0])
@@ -369,6 +375,11 @@ maximum = lambda x: maximum_func(wrap(x))
 product = lambda x: product_func(wrap(x))
 sum     = lambda x: sum_func(wrap(x))
 
+# ----------------------------------------------------
+# Constructors
+# ----------------------------------------------------
+
+Expr = wrap
 
 # ----------------------------------------------------
 # Test
@@ -392,7 +403,7 @@ def test_core():
 
     def check(L):
         for x in L:
-            assert isinstance(x, Expr), x
+            assert isinstance(x, ExprType), x
 
     for i in range(n):
         for x in [expr_x, var_x, 1, 1.3]:
@@ -414,7 +425,7 @@ def test_core():
                 x & y,
                 x | y] + [-x, ~x] if not isinstance(x, (int, float)) else [])
 
-                if isinstance(x, Expr):
+                if isinstance(x, ExprType):
                     x += y
                     check([x])
                     x -= y
@@ -434,9 +445,9 @@ def test_core():
     z = Var()
     q = Var()
     
-    assert isinstance(x+1, Expr)
-    assert isinstance(x/y, Expr)
-    assert isinstance((x/y)+(x-1), Expr)
+    assert isinstance(x+1, ExprType)
+    assert isinstance(x/y, ExprType)
+    assert isinstance((x/y)+(x-1), ExprType)
     assert isinstance(blur_x[x-1,y], FuncRef)
     assert isinstance(blur_x[x, y], FuncRef)
     assert isinstance(blur_x[x-1], FuncRef)
@@ -495,6 +506,19 @@ def get_blur(cache=[]):
     
     return (input, x, y, c, blur_x, blur_y, input_clamped)
 
+def schedule_all(f, schedule):
+    "Call schedule(f), and recursively call schedule on all functions referenced by f."
+    for g in all_funcs(f).values():
+        schedule(g)
+        
+def root_all(f):
+    "Schedule f and all functions referenced by f as root."
+    schedule_all(f, lambda fn: fn.root())
+
+def inline_all(f):
+    "Schedule f and all functions referenced by f as inline."
+    schedule_all(f, lambda fn: fn.reset())
+
 def roundup_multiple(x, y):
     return (x+y-1)/y*y
 
@@ -528,7 +552,7 @@ def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, 
         T0 = time.time()
         try:
             if eval_func is not None:
-                out.assign(eval_func())
+                out.assign(eval_func(input_png))
                 return out
             else:
                 out.assign(out_func.realize(w, h, nchan))
@@ -649,10 +673,17 @@ def test_examples():
     import examples
     in_grayscale = 'lena_crop_grayscale.png'
     in_color = 'lena_crop.png'
-    for example in [examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+    
+    names = []
+    do_filter = True
+    
+    for example_name in 'interpolate snake blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+        example = getattr(examples, example_name)
+        first = True
 #    for example in [examples.boxblur_cumsum]:
-        for input_image in [in_grayscale, in_color]:
+        for input_image0 in [in_grayscale, in_color]:
             for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
+                input_image = input_image0
 #            for dtype in [UInt(16)]:
 #            for dtype in [UInt(8), UInt(16)]:
                 if example is examples.boxblur_sat or example is examples.boxblur_cumsum:
@@ -666,20 +697,33 @@ def test_examples():
                 if example is examples.snake:
                     if dtype != UInt(8) or input_image != in_color:
                         continue
+                #print dtype.isFloat(), dtype.bits
+                if example is examples.interpolate:
+                    if not dtype.isFloat() or input_image != in_color:
+                        continue
+                    input_image = 'interpolate_in.png'
         #        (in_func, out_func) = examples.blur_color(dtype)
     #            (in_func, out_func) = examples.blur(dtype)
                 (in_func, out_func, eval_func) = example(dtype)
+                if first:
+                    first = False
+                    names.append((example_name, sorted(all_funcs(out_func).keys())))
         #        print 'got func'
         #        outf = filter_filename(in_func, out_func, in_filename, dtype)
-                outf = filter_filename(in_func, out_func, input_image, dtype, disp_time=True, eval_func=eval_func)
         #        print 'got filter'
-                out = outf()
-                out.show()
+                if do_filter:
+                    outf = filter_filename(in_func, out_func, input_image, dtype, disp_time=True, eval_func=eval_func)
+                    out = outf()
+                    out.show()
+                    A = numpy.asarray(out)
         #        print 'shown'
-                A = numpy.asarray(out)
 #                print numpy.min(A.flatten()), numpy.max(A.flatten())
         #        out.save('out.png')
-
+    print
+    print 'Function names:'
+    for (example_name, func_names) in names:
+        print example_name, func_names
+        
 def test():
     exit_on_signal()
 #    print 'a'

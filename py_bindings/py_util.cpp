@@ -12,6 +12,11 @@ void assign(Func &f, const Expr &e) {
   f = e;
 }
 
+Expr expr_from_tuple(Expr a) { return Expr(Tuple(a)); }
+Expr expr_from_tuple(Expr a, Expr b) { return Expr(Tuple(a, b)); }
+Expr expr_from_tuple(Expr a, Expr b, Expr c) { return Expr(Tuple(a, b, c)); }
+Expr expr_from_tuple(Expr a, Expr b, Expr c, Expr d) { return Expr(Tuple(a, b, c, d)); }
+
 Expr expr_from_int(int a) { return Expr(a); }
 
 Expr add(Expr a, Expr b) { return a+b; }
@@ -52,6 +57,9 @@ Expr call(const DynImage &a, Expr b) { return a(b); }
 Expr call(const DynImage &a, Expr b, Expr c) { return a(b, c); }
 Expr call(const DynImage &a, Expr b, Expr c, Expr d) { return a(b, c, d); }
 Expr call(const DynImage &a, Expr b, Expr c, Expr d, Expr e) { return a(b, c, d, e); }
+
+void assign(DynUniform &a, int b) { a.set(b); }
+void assign(DynUniform &a, double b) { a.set(b); }
 
 void assign(FuncRef &a, Expr b) { a = b; }
 void assign(UniformImage &a, const DynImage &b) { a = b; }
