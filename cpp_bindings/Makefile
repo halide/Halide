@@ -4,6 +4,8 @@ GXX = g++-4.7
 endif
 CXX=$(GXX) -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
 
+HEADERS = Expr.h Func.h Halide.h Image.h MLVal.h Reduction.h Tuple.h Type.h Uniform.h Util.h Var.h elf.h
+
 all: Halide.a
 
 # Set env USE_GPU=1 to build with the GPU target forced. Set env PY_BINDING=1 to build the library needed for the Python binding.
@@ -59,6 +61,17 @@ _build/_MLHalide.o: ../src/_build/halide.cmxa
 	ocamlbuild -use-ocamlfind libllsupport_impl.a && \
 	cd $(PWD)
 
+halide: Halide.a $(HEADERS)
+	mkdir -p halide
+	cp $^ $@
+
+halide.tgz: halide
+	tar zcvf $@ $<
+
+deploy: halide.tgz
+	rm -rf halide
+
 clean:
+	rm -rf halide/*
 	rm -f _build/*
 	rm -f Halide.a Halide.o
