@@ -93,6 +93,7 @@ let fold_children_in_stmt expr_mutator stmt_mutator combiner = function
     combiner (combiner (expr_mutator size) (stmt_mutator produce)) (stmt_mutator consume)
   | Print (_, []) -> expr_mutator (IntImm 0)
   | Print (_, l) -> List.fold_left combiner (expr_mutator (List.hd l)) (List.map expr_mutator (List.tl l))
+  | Assert (e, _) -> expr_mutator e
 
 (* E.g:
 let rec stmt_contains_zero stmt =
@@ -141,6 +142,7 @@ let mutate_children_in_stmt expr_mutator stmt_mutator = function
   | Pipeline (name, ty, size, produce, consume) -> 
       Pipeline (name, ty, expr_mutator size, stmt_mutator produce, stmt_mutator consume)
   | Print (p, l) -> Print (p, List.map expr_mutator l)
+  | Assert (e, str) -> Assert (expr_mutator e, str)
 
 (* Statement subsitution *)
 (*
@@ -184,6 +186,7 @@ and subs_name_stmt oldname newname stmt =
         Pipeline ((if name = oldname then newname else name), 
                   ty, subs_expr size, subs produce, subs consume)      
     | Print (p, l) -> Print (p, List.map subs_expr l)
+    | Assert(e, str) -> Assert(subs_expr e, str)
 
 and subs_name_expr oldname newname expr =
   let subs = subs_name_expr oldname newname in
@@ -224,6 +227,8 @@ and prefix_name_stmt prefix stmt =
         Pipeline (prefix ^ name, ty, recurse_expr size, recurse_stmt produce, recurse_stmt consume)      
     | Print (p, l) ->
         Print (p, List.map recurse_expr l)
+    | Assert(e, str) ->
+        Assert (recurse_expr e, str)
 
 (* Find all references in stmt/expr to things outside of it.
  * Return a set of pairs of names and their storage sizes, for e.g. building a closure. *)
@@ -253,6 +258,8 @@ let rec find_names_in_stmt internal ptrsize stmt =
       string_int_set_concat [rece min; rece size; recs body]
   | Print (fmt, args) ->
       string_int_set_concat (List.map rece args)
+  | Assert (e, str) ->
+      rece e
   | Provide (fn, _, _) ->
       failwith "Encountered a provide during cg. These should have been lowered away."
 and find_names_in_expr internal ptrsize expr =

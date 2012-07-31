@@ -23,9 +23,9 @@ Func gameOfLife(UniformImage input, int n) {
                             in(E, N) + in(W, y) + 
                             in(E, y) + in(W, S) +
                             in(x, S) + in(E, S));    
-    Expr alive = in(x, y) != u8(0);
+    Expr alive = in(x, y) != 0;
     Func output;
-    output(x, y) = select(livingNeighbors == u8(3) || (alive && livingNeighbors == u8(2)), u8(1), u8(0));    
+    output(x, y) = select(livingNeighbors == 3 || (alive && livingNeighbors == 2), u8(1), u8(0));    
 
     return output;
 }
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
                                 life(E, N, lastT) + life(W, y, lastT) + 
                                 life(E, y, lastT) + life(W, S, lastT) +
                                 life(x, S, lastT) + life(E, S, lastT));            
-        life(x, y, t.x%2) = select(livingNeighbors == u8(3) || (alive && livingNeighbors == u8(2)), u8(1), u8(0));    
+        life(x, y, t.x%2) = select(livingNeighbors == 3 || (alive && livingNeighbors == 2), u8(1), u8(0));
         
         Func output;
         output(x, y) = life(x, y, 1);        

@@ -29,21 +29,25 @@ namespace Halide {
 
     DynImage::Contents::Contents(const Type &t, int a) : 
         type(t), size{a}, stride{1}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
+        assert(a > 0 && "Images must have positive sizes\n");
         allocate(a * (t.bits/8));
     }
     
     DynImage::Contents::Contents(const Type &t, int a, int b) : 
         type(t), size{a, b}, stride{1, a}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
+        assert(a > 0 && b > 0 && "Images must have positive sizes");
         allocate(a * b * (t.bits/8));
     }
     
     DynImage::Contents::Contents(const Type &t, int a, int b, int c) : 
         type(t), size{a, b, c}, stride{1, a, a*b}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
+        assert(a > 0 && b > 0 && c > 0 && "Images must have positive sizes");
         allocate(a * b * c * (t.bits/8));
     }
 
     DynImage::Contents::Contents(const Type &t, int a, int b, int c, int d) : 
         type(t), size{a, b, c, d}, stride{1, a, a*b, a*b*c}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
+        assert(a > 0 && b > 0 && c > 0 && d > 0 && "Images must have positive sizes");
         allocate(a * b * c * d * (t.bits/8));
     }
 
@@ -52,6 +56,7 @@ namespace Halide {
         
         size_t total = 1;
         for (size_t i = 0; i < sizes.size(); i++) {
+            assert(sizes[i] > 0 && "Images must have positive sizes");
             stride[i] = total;
             total *= sizes[i];
         }
@@ -102,6 +107,12 @@ namespace Halide {
     }
 
     int DynImage::stride(int i) const {
+        if (i >= dimensions()) {
+            fprintf(stderr,
+                    "ERROR: accessing stride of dim %d of %d-dimensional image %s\n",
+                    i, dimensions(), name().c_str());
+            assert(i < dimensions());
+        }
         return contents->stride[i];
     }
 

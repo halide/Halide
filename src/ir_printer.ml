@@ -103,6 +103,7 @@ and string_of_stmt stmt =
              p ^ "}\n" ^
              string_stmt p consume)
       | Print (m, l) -> p ^ "Print(" ^ m ^ (String.concat ", " (List.map string_of_expr l)) ^ ")\n"
+      | Assert (e, str) -> p ^ "Assert(" ^ (string_of_expr e) ^ ", " ^ str ^ ")\n"
           
   in
   string_stmt "" stmt

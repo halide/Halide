@@ -32,12 +32,7 @@ int main(int argc, char **argv) {
             by("blockidy");
         
 	hist.cudaTile(hist.arg(0), 64);
-        //hist.split(hist.arg(0), bx, tx, 64).parallel(bx).parallel(tx);
-        
-        Func& update = hist.update();
-	update.cudaTile(r.x, r.y, 16, 16);
-//        update.split(x, bx, tx, 10).split(y, by, ty, 10).transpose(bx, ty)
-//            .parallel(bx).parallel(by).parallel(tx).parallel(ty);
+	hist.update().cudaTile(r.x, r.y, 16, 16);
     } else {
     
         // Grab a handle to the update step of a reduction for scheduling

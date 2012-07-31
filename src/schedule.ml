@@ -156,6 +156,18 @@ let string_of_schedule = function
   | Vectorized (d, min, n) ->
       "Vectorized " ^ d ^ " " ^ (string_of_expr min) ^ " " ^ (string_of_int n)
 
+let string_of_schedule_tree (tree : schedule_tree) =
+  let rec inner tree prefix = 
+    let Tree map = tree in
+    StringMap.fold (fun k (cs, sl, st) str -> 
+      let call_sched_string = string_of_call_schedule cs in
+      let sched_list_string = "[" ^ (String.concat ", " (List.map string_of_schedule sl)) ^ "]" in
+      let newprefix = prefix ^ "." ^ k in
+      let str = str ^ Printf.sprintf "%s -> %s %s\n" newprefix call_sched_string sched_list_string in
+      str ^ (inner st newprefix)) map ""
+  in inner tree "" 
+
+
 let print_schedule (tree : schedule_tree) = 
   let rec inner tree prefix = 
     let Tree map = tree in

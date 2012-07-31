@@ -220,6 +220,7 @@ type stmt =
 
   (* For debugging *)
   | Print of string * (expr list)
+  | Assert of expr * string
 
 (* A function definition: (name, args, return type, body) *)
 (* TODO: drop redundant name from definition?

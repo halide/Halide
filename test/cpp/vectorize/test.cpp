@@ -98,6 +98,7 @@ int main(int argc, char **argv) {
 
     // Only native vector widths for now
     ok = ok && test<float>(4);
+    ok = ok && test<float>(8);
     ok = ok && test<double>(2);
     ok = ok && test<uint8_t>(16);
     ok = ok && test<int8_t>(16);

@@ -66,16 +66,31 @@ namespace Halide {
     class Image {
     private:
         DynImage im;
+        T *base;
+        int s0, s1, s2, s3;
+
+        void init() {
+            base = (T*)im.data();
+            s0 = im.stride(0);
+            if (im.dimensions() > 1) s1 = im.stride(1);
+            if (im.dimensions() > 2) s2 = im.stride(2);
+            if (im.dimensions() > 3) s3 = im.stride(3);            
+        }
+
     public:
-        Image(int a) : im(TypeOf<T>(), a) {}
-        Image(int a, int b) : im(TypeOf<T>(), a, b) {}
-        Image(int a, int b, int c) : im(TypeOf<T>(), a, b, c) {}
-        Image(int a, int b, int c, int d) : im(TypeOf<T>(), a, b, c, d) {}
+        Image(int a) : im(TypeOf<T>(), a) {init();}
+        Image(int a, int b) : im(TypeOf<T>(), a, b) {init();}
+        Image(int a, int b, int c) : im(TypeOf<T>(), a, b, c) {init();}
+        Image(int a, int b, int c, int d) : im(TypeOf<T>(), a, b, c, d) {init();}
         Image(DynImage im) : im(im) {
             assert(TypeOf<T>() == im.type());
+            im.copyToHost();
+            im.markHostDirty();
+            init();
         }
 
         Image(std::initializer_list<T> l) : im(TypeOf<T>(), l.size()) {
+            init();
             int x = 0;
             for (auto &iter: l) {
                 (*this)(x++) = iter;
@@ -83,6 +98,7 @@ namespace Halide {
         }
 
         Image(std::initializer_list<std::initializer_list<T> > l) : im(TypeOf<T>(), l.begin()->size(), l.size()) {
+            init();
             int y = 0;
             for (auto &row: l) {
                 int x = 0;
@@ -117,47 +133,35 @@ namespace Halide {
         // Actually look something up in the image. Won't return anything
         // interesting if the image hasn't been evaluated yet.
         T &operator()(int a) {
-            im.copyToHost();
-            im.markHostDirty();
-            return ((T*)im.data())[a*im.stride(0)];
+            return base[a*s0];
         }
         
         T &operator()(int a, int b) {
-            im.copyToHost();
-            im.markHostDirty();
-            return ((T*)im.data())[a*im.stride(0) + b*im.stride(1)];
+            return base[a*s0 + b*s1];
         }
         
         T &operator()(int a, int b, int c) {
-            im.copyToHost();
-            im.markHostDirty();
-            return ((T*)im.data())[a*im.stride(0) + b*im.stride(1) + c*im.stride(2)];
+            return base[a*s0 + b*s1 + c*s2];
         }
         
         T &operator()(int a, int b, int c, int d) {
-            im.copyToHost();
-            im.markHostDirty();
-            return ((T*)im.data())[a*im.stride(0) + b*im.stride(1) + c*im.stride(2) + d*im.stride(3)];
+            return base[a*s0 + b*s1 + c*s2 + d*s3];
         }
 
-        const T &operator()(int a) const {
-            im.copyToHost();
-            return ((T*)im.data())[a*im.stride(0)];
+        T operator()(int a) const {
+            return base[a*s0];
         }
         
-        const T &operator()(int a, int b) const {
-            im.copyToHost();
-            return ((T*)im.data())[a*im.stride(0) + b*im.stride(1)];
+        T operator()(int a, int b) const {
+            return base[a*s0 + b*s1];
         }
         
-        const T &operator()(int a, int b, int c) const {
-            im.copyToHost();
-            return ((T*)im.data())[a*im.stride(0) + b*im.stride(1) + c*im.stride(2)];
+        T operator()(int a, int b, int c) const {
+            return base[a*s0 + b*s1 + c*s2];
         }
         
-        const T &operator()(int a, int b, int c, int d) const {
-            im.copyToHost();
-            return ((T*)im.data())[a*im.stride(0) + b*im.stride(1) + c*im.stride(2) + d*im.stride(3)];
+        T operator()(int a, int b, int c, int d) const {
+            return base[a*s0 + b*s1 + c*s2 + d*s3];
         }
 
         // Convenience functions for typical interpretations of dimensions
