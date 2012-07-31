@@ -618,6 +618,9 @@ namespace Halide {
     Expr::Expr(const Func &f) : contents(new Contents(f)) {}
 
     Expr::Contents::Contents(const FuncRef &f) {
+        assert(f.f().rhs().isDefined() && 
+               "Can't use a call to an undefined function as an expression\n");
+
         // make a call node
         MLVal exprlist = makeList();
 
@@ -634,16 +637,13 @@ namespace Halide {
         } 
 
         for (int i = iArgs-1; i >= 0; i--) {
-            exprlist = addToList(exprlist, makeVar(std::string("iv") + int_to_str(i)));  // implicit var. Connelly: ostringstream broken in Python binding, use string + instead
+            exprlist = addToList(exprlist, makeVar(std::string("iv") + int_to_str(i)));  // implicit var. 
+            // Connelly: ostringstream broken in Python binding, use string + instead
         }
 
         for (size_t i = f.args().size(); i > 0; i--) {
             exprlist = addToList(exprlist, f.args()[i-1].node());            
         }
-
-        //if (!f.f().rhs().isDefined()) {
-            //printf("Can't infer the return type when calling a function that hasn't been defined yet\n");
-        //}
 
         node = makeCall(f.f().returnType().mlval, 
                         (f.f().name()),
