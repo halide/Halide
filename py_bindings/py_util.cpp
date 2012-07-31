@@ -12,6 +12,8 @@ void assign(Func &f, const Expr &e) {
   f = e;
 }
 
+Expr expr_from_int(int a) { return Expr(a); }
+
 Expr add(Expr a, Expr b) { return a+b; }
 Expr sub(Expr a, Expr b) { return a-b; }
 Expr neg(Expr a) { return -a; }
@@ -46,7 +48,13 @@ Expr call(const UniformImage &a, Expr b, Expr c) { return a(b, c); }
 Expr call(const UniformImage &a, Expr b, Expr c, Expr d) { return a(b, c, d); }
 Expr call(const UniformImage &a, Expr b, Expr c, Expr d, Expr e) { return a(b, c, d, e); }
 
+Expr call(const DynImage &a, Expr b) { return a(b); }
+Expr call(const DynImage &a, Expr b, Expr c) { return a(b, c); }
+Expr call(const DynImage &a, Expr b, Expr c, Expr d) { return a(b, c, d); }
+Expr call(const DynImage &a, Expr b, Expr c, Expr d, Expr e) { return a(b, c, d, e); }
+
 void assign(FuncRef &a, Expr b) { a = b; }
+void assign(UniformImage &a, const DynImage &b) { a = b; }
 
 #define DEFINE_TYPE(T) void assign(UniformImage &a, Image<T> b) { a = b; }
 #include "expand_types.h"
@@ -166,6 +174,9 @@ Expr minimum_func(const Expr &a) { return minimum(a); }
 Expr maximum_func(const Expr &a) { return maximum(a); }
 Expr product_func(const Expr &a) { return product(a); }
 Expr sum_func(const Expr &a) { return sum(a); }
+
+void iadd(FuncRef &f, const Expr &e) { f += e; }
+void imul(FuncRef &f, const Expr &e) { f *= e; }
 
 //void assign(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
 
