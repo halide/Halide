@@ -2,12 +2,17 @@
 #include "py_util.h"
 #include "png_util.h"
 #include <signal.h>
+#include <string>
+#include "Python.h"
+#include "Python/frameobject.h"
 
 void (*signal(int signum, void (*sighandler)(int)))(int);
 
 void assign(Func &f, const Expr &e) {
   f = e;
 }
+
+Expr expr_from_int(int a) { return Expr(a); }
 
 Expr add(Expr a, Expr b) { return a+b; }
 Expr sub(Expr a, Expr b) { return a-b; }
@@ -43,13 +48,25 @@ Expr call(const UniformImage &a, Expr b, Expr c) { return a(b, c); }
 Expr call(const UniformImage &a, Expr b, Expr c, Expr d) { return a(b, c, d); }
 Expr call(const UniformImage &a, Expr b, Expr c, Expr d, Expr e) { return a(b, c, d, e); }
 
+Expr call(const DynImage &a, Expr b) { return a(b); }
+Expr call(const DynImage &a, Expr b, Expr c) { return a(b, c); }
+Expr call(const DynImage &a, Expr b, Expr c, Expr d) { return a(b, c, d); }
+Expr call(const DynImage &a, Expr b, Expr c, Expr d, Expr e) { return a(b, c, d, e); }
+
 void assign(FuncRef &a, Expr b) { a = b; }
+void assign(UniformImage &a, const DynImage &b) { a = b; }
 
 #define DEFINE_TYPE(T) void assign(UniformImage &a, Image<T> b) { a = b; }
 #include "expand_types.h"
 #undef DEFINE_TYPE
 
 #define DEFINE_TYPE(T) void assign(Image<T> &a, DynImage b) { a = b; }
+#include "expand_types.h"
+#undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) \
+void assign(Uniform<T> &a, int b) { a = b; } \
+void assign(Uniform<T> &a, double b) { a = b; }
 #include "expand_types.h"
 #undef DEFINE_TYPE
 
@@ -72,6 +89,21 @@ DEFINE_TYPE(double)
 
 void signal_handler(int sig_num) {
     printf("Trapped signal %d in C++ layer, exiting\n", sig_num);
+ 	//PyErr_SetString(PyExc_ValueError,"Trapped signal in C++ layer, exiting");
+    printf("\n");
+    PyThreadState *tstate = PyThreadState_GET();
+    if (NULL != tstate && NULL != tstate->frame) {
+        PyFrameObject *frame = tstate->frame;
+
+        printf("Python stack trace:\n");
+        while (NULL != frame) {
+            int line = frame->f_lineno;
+            const char *filename = PyString_AsString(frame->f_code->co_filename);
+            const char *funcname = PyString_AsString(frame->f_code->co_name);
+            printf("    %s(%d): %s\n", filename, line, funcname);
+            frame = frame->f_back;
+        }
+    }
     exit(0);
 }
 
@@ -84,6 +116,67 @@ void exit_on_signal() {
     signal(SIGTERM , signal_handler);
     signal(SIGBUS, signal_handler);
 }
+
+#define DEFINE_TYPE(T) \
+std::string image_to_string(const Image<T> &a) { \
+    int dims = a.dimensions(); \
+    DynImage d(a); \
+    return std::string((char *) a.data(), (d.type().bits/8)*d.stride(dims-1)*a.size(dims-1)); \
+}
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) DynImage to_dynimage(const Image<T> &a) { return DynImage(a); }
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) DynUniform to_dynuniform(const Uniform<T> &a) { return DynUniform(a); }
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) \
+Expr call(Image<T> &a, Expr b) { return a(b); } \
+Expr call(Image<T> &a, Expr b, Expr c) { return a(b,c); } \
+Expr call(Image<T> &a, Expr b, Expr c, Expr d) { return a(b,c,d); }                     \
+Expr call(Image<T> &a, Expr b, Expr c, Expr d, Expr e) { return a(b,c,d,e); }                   
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+Expr minimum_func(const Expr &a) { return minimum(a); }
+Expr maximum_func(const Expr &a) { return maximum(a); }
+Expr product_func(const Expr &a) { return product(a); }
+Expr sum_func(const Expr &a) { return sum(a); }
+
+void iadd(FuncRef &f, const Expr &e) { f += e; }
+void imul(FuncRef &f, const Expr &e) { f *= e; }
 
 //void assign(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
 
