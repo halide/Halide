@@ -542,6 +542,7 @@ let rec make_cg_context c m b sym_table arch_state =
 
         res
     | Print (fmt, args) -> cg_print fmt args
+    | Assert (e, str) -> cg_assert e str
     | s -> failwith (Printf.sprintf "Can't codegen: %s" (Ir_printer.string_of_stmt s))
 
   and cg_store e buf idx =
@@ -691,6 +692,37 @@ let rec make_cg_context c m b sym_table arch_state =
     let ll_printf = declare_function "printf" 
       (var_arg_function_type (i32_type c) [|pointer_type (i8_type c)|]) m in
     build_call ll_printf (Array.of_list (global_fmt::ll_args)) "" b    
+
+  and cg_assert e str =
+    let e = build_intcast (cg_expr e) (i1_type c) "" b in
+
+    (* Make a new basic block *)
+    let the_function = block_parent (insertion_block b) in
+    let assert_body_bb = append_block c "assert" the_function in    
+    let after_bb = append_block c "after_assert" the_function in
+
+    (* If the condition fails, enter the assert body, otherwise, enter the block after *)
+    ignore (build_cond_br e after_bb assert_body_bb b);
+
+    (* Construct the assert body *)
+    position_at_end assert_body_bb b;
+
+    let ll_msg = const_stringz c str in
+    let msg = define_global "assert_message" ll_msg m in
+    set_linkage Llvm.Linkage.Internal msg;
+    let msg = build_pointercast msg (pointer_type (i8_type c)) "" b in
+    let ll_halide_error = declare_function "halide_error" 
+      (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
+    ignore(build_call ll_halide_error [|msg|] "" b);
+
+    (* Right now all asserts are preconditions in the preamble to the
+       function, so there are no allocations to clean up *)
+    ignore (build_ret_void b);
+
+    (* Position the builder at the start of the after assert block *)
+    position_at_end after_bb b;
+
+    const_int int_imm_t 0
 
   and cg_debug e prefix args =
     let ll_e = cg_expr e in

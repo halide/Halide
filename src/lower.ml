@@ -512,6 +512,24 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
   List.fold_left update stmt functions 
 
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
+
+  (* dump pre-lowered form *)
+  if 0 < verbosity then begin
+    let out = open_out (func ^ ".def") in
+    Printf.fprintf out "%s%!" (string_of_environment env);
+    close_out out;
+  end;
+
+  (* dump initial schedule *)
+  if 0 < verbosity then begin
+    let out = open_out (func ^ ".schedule") in
+    Printf.fprintf out "%s%!" (string_of_schedule_tree schedule);
+    close_out out;
+  end;
+
+  (* ----------------------------------------------- *)
+  dbg 2 "Computing the order in which to realize functions\n%!";
+
   let starts_with a b =
     String.length a > String.length b &&
       String.sub a 0 ((String.length b)+1) = b ^ "."
@@ -545,28 +563,65 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
         true
     )
     functions 
-  in
-    
+  in   
 
-  (* Compute the order in which to realize them *)
+  (* Topologically sort them *)
   let functions = partial_sort lt functions in
   dbg 2 "Realization order: %s\n" (String.concat ", " functions);
 
+  (* ----------------------------------------------- *)
   dbg 2 "Fully qualifying symbols in the schedule\n%!";
-  (* if 0 < verbosity then print_schedule schedule; *)
   let schedule = qualify_schedule schedule in
-  (* if 0 < verbosity then print_schedule schedule; *)
 
+  (* ----------------------------------------------- *)
   dbg 2 "Realizing root statement\n%!";
-  let core = match realize func (Block []) env schedule with 
+  let stmt = match realize func (Block []) env schedule with 
     | Pipeline (_, _, _, c, _) -> c
     | _ -> failwith "Realize didn't return a pipeline"
   in
 
+  if 1 < verbosity then begin
+    let out = open_out (func ^ ".lowered_pass_0") in
+    Printf.fprintf out "Realizing root statement:\n";
+    Printf.fprintf out "%s%!" (string_of_stmt stmt);
+    close_out out;
+  end;
+
+  (* ----------------------------------------------- *)
+  dbg 2 "Inserting out-of-bounds checks for the output image\n%!";
+  let region = required_of_stmt func StringMap.empty stmt in
+  let (check, _) = List.fold_left (fun (expr, count) range ->    
+    match range with
+      | Unbounded -> (expr &&~ (IntImm 0), count+1)
+      | Range (min, max) ->
+        (expr &&~
+           (min >=~ (IntImm 0)) &&~
+           (max <~ (Var (i32, ".result.dim." ^ (string_of_int count)))),
+         count+1)
+  ) (Cast (bool1, IntImm 1), 0) region in 
+  let oob_check = Assert (check, "Function may access output image out of bounds") in
+  let stmt = Block [oob_check; stmt] in
+
+  if 1 < verbosity then begin
+    let out = open_out (func ^ ".lowered_pass_1") in
+    Printf.fprintf out "Inserted out of bounds check for the output image:\n";
+    Printf.fprintf out "%s%!" (string_of_stmt stmt);
+    close_out out;
+  end;    
+
+  (* ----------------------------------------------- *)
   dbg 2 "Recursively lowering function calls\n%!";
   let functions = List.filter (fun x -> x <> func) functions in  
-  let stmt = List.fold_left (fun stmt f -> lower_stmt f stmt env schedule) core functions in
+  let stmt = List.fold_left (fun stmt f -> lower_stmt f stmt env schedule) stmt functions in
 
+  if 1 < verbosity then begin
+    let out = open_out (func ^ ".lowered_pass_2") in
+    Printf.fprintf out "Lowered function calls:\n";
+    Printf.fprintf out "%s%!" (string_of_stmt stmt);
+    close_out out;
+  end;
+
+  (* ----------------------------------------------- *)
   dbg 2 "Performing bounds inference\n%!";
   (* Updates stmt and schedule *)
   let stmt = bounds_inference env schedule (For ("", IntImm 0, IntImm 0, true, stmt)) in
@@ -575,12 +630,26 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
     | _ -> failwith "Bounds inference on a for loop returned something other than a for loop"
   in
 
-  (* if 0 < verbosity then print_schedule schedule; *)
+  if 1 < verbosity then begin
+    let out = open_out (func ^ ".lowered_pass_3") in
+    Printf.fprintf out "Performed bounds inference:\n";
+    Printf.fprintf out "%s%!" (string_of_stmt stmt);
+    close_out out;
+  end;
 
+  (* ----------------------------------------------- *)
   dbg 2 "Replacing function references with loads and stores\n%!";
   let stmt = lower_function_calls stmt env schedule in
 
-  dbg 2 "Replacing stores to %s to stores to .result\n%!" func;
+  if 1 < verbosity then begin
+    let out = open_out (func ^ ".lowered_pass_4") in
+    Printf.fprintf out "Replaced function references with loads and stores:\n";
+    Printf.fprintf out "%s%!" (string_of_stmt stmt);
+    close_out out;
+  end;
+
+  (* ----------------------------------------------- *)
+  dbg 2 "Replacing loads and stores to %s to stores to .result\n%!" func;
   let rec rewrite_loads_from_result = function
     | Load (e, f, idx) when f = func ->
         Load (e, ".result", idx)
@@ -593,23 +662,46 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   in
   let stmt = rewrite_references_to_result stmt in
 
+  if 1 < verbosity then begin
+    let out = open_out (func ^ ".lowered_pass_5") in
+    Printf.fprintf out "Replaced loads and stores to output function with stores to .result:\n";
+    Printf.fprintf out "%s%!" (string_of_stmt stmt);
+    close_out out;
+  end;
+
+  (* ----------------------------------------------- *)
+  dbg 2 "Replacing references to bounds of output function with bounds of output buffer\n%!";
   let args,_,_ = find_function func env in
   let (stmt,_) =
     List.fold_left
       (fun (stmt,i) (t,nm) ->
-        let stmt =
-          LetStmt (
-            (func ^ "." ^ nm ^ ".min"),
-            IntImm 0,
-            stmt)
-        in
-        (LetStmt (
-          (func ^ "." ^ nm ^ ".extent"),
-          Var (t, ".result.dim." ^ (string_of_int i)),
-          stmt), i+1))
-      (stmt,0)
+        let stmt = LetStmt (func ^ "." ^ nm ^ ".min", IntImm 0, stmt) in
+        LetStmt (func ^ "." ^ nm ^ ".extent",
+                 Var (t, ".result.dim." ^ (string_of_int i)),
+                 stmt), 
+        i+1)
+      (stmt, 0)
       args
   in
+
+  if 1 < verbosity then begin
+    let out = open_out (func ^ ".lowered_pass_6") in
+    Printf.fprintf out "Replaced references to bounds of output function with bounds of output buffer\n";
+    Printf.fprintf out "%s%!" (string_of_stmt stmt);
+    close_out out;
+  end;
+
+  (* ----------------------------------------------- *)
+  dbg 2 "Constant folding\n%!";
+  let stmt = Constant_fold.constant_fold_stmt stmt in
+
+  if 0 < verbosity then begin
+    let out = open_out (func ^ ".lowered_final") in
+    Printf.fprintf out "Constant folding\n";
+    Printf.fprintf out "%s%!" (string_of_stmt stmt);
+    close_out out;
+  end;
+
   stmt
 
 

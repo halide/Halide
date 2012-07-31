@@ -136,6 +136,8 @@ namespace Halide {
         void compileJIT();
         void compileToFile(const std::string &name);
 
+        void setErrorHandler(void (*)(char *));
+
         struct Arg {
             template<typename T>
             Arg(const Uniform<T> &u) : arg(Arg(DynUniform(u)).arg) {}
