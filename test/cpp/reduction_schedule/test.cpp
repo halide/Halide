@@ -5,9 +5,11 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Var x, y;
 
-    Image<double> noise(32,32);
-    for (int i = 0; i < 32; i++) {
-        for (int j = 0; j < 32; j++) {
+    const int size = 32;
+
+    Image<double> noise(size, size);
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
             noise(j,i) = (double)rand() / RAND_MAX;
         }
     }
@@ -15,17 +17,23 @@ int main(int argc, char **argv) {
     // Define a seam carving-esque energy
     // The meaning of this depends on the interleaving of the x and y 
     // dimensions during the reduction update
+    Func clamped;
+    clamped(x, y) = noise(clamp(x, 0, size-1), clamp(y, 0, size-1));
+    
     Func energy;
-    RDom ry(1, noise.height());
-    energy(x, y)  = noise(clamp(x, 0, noise.width()), clamp(y, 0, noise.height()));
-    energy(x, ry) = noise(clamp(x, 0, noise.width()), clamp(ry, 0, noise.height()))
-                    + min( min( energy(x-1, ry-1), energy(x, ry-1) ), energy(x+1, ry-1));
+    RDom ry(1, noise.height()-1);
+    energy(x, y)  = clamped(x, y);
+    Expr xm = clamp(x-1, 0, size-1);
+    Expr xp = clamp(x+1, 0, size-1);
+    energy(x, ry) = clamped(x, ry) + min(min(energy(xm, ry-1), energy(x, ry-1)), energy(xp, ry-1));
 
-    Image<double> im_energy = energy.realize(32,32);
+    Image<double> im_energy = energy.realize(size,size);
     Image<double> ref_energy(noise);
-    for (int y = 1; y < 32; y++) {
-        for (int x = 0; x < 32; x++) {
-            double incr = std::min(ref_energy(x-1, y-1), std::min(ref_energy(x, y-1), ref_energy(x+1, y-1)));
+    for (int y = 1; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            int xm = std::max(x-1, 0);
+            int xp = std::min(x+1, size-1);
+            double incr = std::min(ref_energy(xm, y-1), std::min(ref_energy(x, y-1), ref_energy(xp, y-1)));
             ref_energy(x, y) += incr;
             if (ref_energy(x,y) != im_energy(x,y)) {
                 printf("energy(%d,%d) was %f instead of %f\n", x, y, im_energy(x,y), ref_energy(x,y));
