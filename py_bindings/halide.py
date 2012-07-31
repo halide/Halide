@@ -2,45 +2,88 @@ from cHalide import *
 import numpy
 import Image as PIL
 import os
+import sys
 import signal
 from ForkedWatchdog import Watchdog
 
-wrap = Expr
+#exit_on_signal()
+
+#wrap = lambda *a: Expr(*a) if not (len(a) == 1 and isinstance(a[0], UniformTypes)) else Expr(DynUniform(a[0]))
+def wrap(*a):
+    if len(a) == 1:
+        if isinstance(a[0], UniformTypes):
+            return Expr(DynUniform(a[0]))
+        elif isinstance(a[0], ImageTypes) or isinstance(a[0], DynImageType):
+            return a[0] #Expr(to_dynimage(a[0]))
+        elif isinstance(a[0], (int,long)):
+            return expr_from_int(a[0])
+    return Expr(*a)
+    
+in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 
 # ----------------------------------------------------
 # Expr
 # ----------------------------------------------------
 
-Expr.__add__ = lambda x, y: add(x, wrap(y))
-Expr.__sub__ = lambda x, y: sub(x, wrap(y))
-Expr.__mul__ = lambda x, y: mul(x, wrap(y))
-Expr.__div__ = lambda x, y: div(x, wrap(y))
-Expr.__mod__ = lambda x, y: mod(x, wrap(y))
-Expr.__and__  = lambda x, y: and_op(x, wrap(y))
-Expr.__or__  = lambda x, y: or_op(x, wrap(y))
+#_expr_new = Expr.__new__
+#def expr_new(cls, *args):
+#    if isinstance(args[0], UniformTypes):
+#        return _expr_new(cls, DynUniform(args[0]))
+#    return _expr_new(cls, *args)
 
-Expr.__radd__ = lambda y, x: add(wrap(x), y)
-Expr.__rsub__ = lambda y, x: sub(wrap(x), y)
-Expr.__rmul__ = lambda y, x: mul(wrap(x), y)
-Expr.__rdiv__ = lambda y, x: div(wrap(x), y)
-Expr.__rmod__ = lambda y, x: mod(wrap(x), y)
-Expr.__rand__  = lambda y, x: and_op(wrap(x), y)
-Expr.__ror__  = lambda y, x: or_op(wrap(x), y)
+#Expr.__new__ = expr_new
 
-Expr.__neg__ = lambda x: neg(x)
-Expr.__invert__  = lambda x: invert(x)
+UniformTypes = (Uniform_int8, Uniform_int16, Uniform_int32, Uniform_uint8, Uniform_uint16, Uniform_uint32, Uniform_float32, Uniform_float64)
 
-Expr.__lt__  = lambda x, y: lt(x, wrap(y))
-Expr.__le__  = lambda x, y: le(x, wrap(y))
-Expr.__eq__  = lambda x, y: eq(x, wrap(y))
-Expr.__ne__  = lambda x, y: ne(x, wrap(y))
-Expr.__gt__  = lambda x, y: gt(x, wrap(y))
-Expr.__ge__  = lambda x, y: ge(x, wrap(y))
+#def iadd2(a, b):
+#    print 'iadd2', a, b
+#    try:
+#        iadd(a, b)
+#    except ValueError:
+#        print 'ValueError'
+    
+for BaseT in (Expr, FuncRef, Var, RDom, RVar, Func) + UniformTypes:
+    BaseT.__add__ = lambda x, y: add(wrap(x), wrap(y))
+    BaseT.__sub__ = lambda x, y: sub(wrap(x), wrap(y))
+    BaseT.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
+    BaseT.__div__ = lambda x, y: div(wrap(x), wrap(y))
+    BaseT.__mod__ = lambda x, y: mod(wrap(x), wrap(y))
+    BaseT.__pow__ = lambda x, y: pow(wrap(x), wrap(y))
+    BaseT.__and__  = lambda x, y: and_op(wrap(x), wrap(y))
+    BaseT.__or__  = lambda x, y: or_op(wrap(x), wrap(y))
 
-Expr.__iadd__ = lambda x, y: iadd(x, wrap(y))
-Expr.__isub__ = lambda x, y: isub(x, wrap(y))
-Expr.__imul__ = lambda x, y: imul(x, wrap(y))
-Expr.__idiv__ = lambda x, y: idiv(x, wrap(y))
+    BaseT.__radd__ = lambda y, x: add(wrap(x), wrap(y))
+    BaseT.__rsub__ = lambda y, x: sub(wrap(x), wrap(y))
+    BaseT.__rmul__ = lambda y, x: mul(wrap(x), wrap(y))
+    BaseT.__rdiv__ = lambda y, x: div(wrap(x), wrap(y))
+    BaseT.__rmod__ = lambda y, x: mod(wrap(x), wrap(y))
+    BaseT.__rpow__ = lambda y, x: pow(wrap(x), wrap(y))
+    BaseT.__rand__  = lambda y, x: and_op(wrap(x), wrap(y))
+    BaseT.__ror__  = lambda y, x: or_op(wrap(x), wrap(y))
+
+    BaseT.__neg__ = lambda x: neg(wrap(x))
+    BaseT.__invert__  = lambda x: invert(wrap(x))
+
+    BaseT.__lt__  = lambda x, y: lt(wrap(x), wrap(y))
+    BaseT.__le__  = lambda x, y: le(wrap(x), wrap(y))
+    BaseT.__eq__  = lambda x, y: eq(wrap(x), wrap(y))
+    BaseT.__ne__  = lambda x, y: ne(wrap(x), wrap(y))
+    BaseT.__gt__  = lambda x, y: gt(wrap(x), wrap(y))
+    BaseT.__ge__  = lambda x, y: ge(wrap(x), wrap(y))
+
+    BaseT.__iadd__ = lambda x, y: iadd(wrap(x), wrap(y))
+    BaseT.__isub__ = lambda x, y: isub(wrap(x), wrap(y))
+    BaseT.__imul__ = lambda x, y: imul(wrap(x), wrap(y))
+    BaseT.__idiv__ = lambda x, y: idiv(wrap(x), wrap(y))
+
+# ----------------------------------------------------
+# RDom
+# ----------------------------------------------------
+
+RDomType = RDom
+def RDom(*args):
+    args = [wrap(x) if not isinstance(x,str) else x for x in args]
+    return RDomType(*args)
 
 # ----------------------------------------------------
 # Var, Func
@@ -52,6 +95,7 @@ for C in [Var, FuncRef]:
     C.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
     C.__div__ = lambda x, y: div(wrap(x), wrap(y))
     C.__mod__ = lambda x, y: mod(wrap(x), wrap(y))
+    C.__pow__ = lambda x, y: pow(wrap(x), wrap(y))
     C.__and__  = lambda x, y: and_op(wrap(x), wrap(y))
     C.__or__  = lambda x, y: or_op(wrap(x), wrap(y))
 
@@ -71,31 +115,90 @@ for C in [Var, FuncRef]:
 
 def raise_error(e):
     raise e
-    
+
+_generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
+_generic_assign = lambda x, y: assign(x, wrap(y))
+_realize = Func.realize
 Func.__call__ = lambda self, *L: raise_error(ValueError('use f[x, y] = expr to initialize a function'))
-Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
-Func.__getitem__ = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, key)
+Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, wrap(key)), wrap(value))
+Func.__getitem__ = _generic_getitem
+Func.assign = _generic_assign
+Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
+
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
 
 # ----------------------------------------------------
-# UniformImage
+# FuncRef
 # ----------------------------------------------------
 
-#UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
-UniformImage.__getitem__ = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, key)
-UniformImage.assign = lambda x, y: assign(x, y)
+#FuncRef.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
+#FuncRef.__rmul__ = lambda x, y: mul(wrap(x), wrap(y))
 
 # ----------------------------------------------------
 # Image
 # ----------------------------------------------------
 
-for ImageT in [Image_int8, Image_int16, Image_int32, Image_uint8, Image_uint16, Image_uint32, Image_float32, Image_float64]:
-    ImageT.save = lambda x, y: save_png(x, y)
-    ImageT.assign = lambda x, y: assign(x, y)
+def image_getattr(self, name):
+    if name == '__array_interface__':
+       # print 'get_array'
+        #print 'get array'
+        #return {'shape': (1,1), 'typestr': '>i4', 'data': '\x00'*3+'\x02'}
+        D = DynImage(self)
+        t = D.type()
+        if t.isInt():
+            typestr = '|i%d'%(t.bits/8)
+        elif t.isUInt():
+            typestr = '|u%d'%(t.bits/8)
+        elif t.isFloat():
+            typestr = '|f%d'%(t.bits/8)
+        else:
+            raise ValueError('Unknown type %r'%t)
+        shape = tuple([D.size(i) for i in range(D.dimensions())])
+        strides = tuple([D.stride(i)*(t.bits/8) for i in range(D.dimensions())])
+        data = image_to_string(self)
+     #   print 'size', len(data)
+        return {'shape': shape,
+                'typestr': typestr,
+                'data': data,
+                'strides': strides}
+    raise AttributeError(name)
+
+ImageTypes = (Image_int8, Image_int16, Image_int32, Image_uint8, Image_uint16, Image_uint32, Image_float32, Image_float64)
+
+for _ImageT in ImageTypes:
+    _ImageT.__getitem__ = _generic_getitem
+
+def show_image(I):
+    A = numpy.asarray(I)
+  #  print 'converted to numpy', A.dtype
+    if A.dtype == numpy.uint8:
+        pass
+    elif A.dtype == numpy.uint16: #numpy.issubdtype(A.dtype, 'uint16'):
+        A = numpy.array(A/256, 'uint8')
+    elif A.dtype == numpy.uint32: #numpy.issubdtype(A.dtype, 'uint32'):
+        A = numpy.array(A/256**3, 'uint8')
+    elif A.dtype == numpy.float32 or A.dtype == numpy.float64: #numpy.issubdtype(A.dtype, 'float32') or numpy.issubdtype(A.dtype, 'float64'):
+        A = numpy.array(A*255.0, 'uint8')
+    else:
+        raise ValueError('Unsupported dtype %r' % A.dtype)
+   # print 'showing'
+    A = numpy.transpose(A, [1, 0] if len(A.shape) == 2 else [1, 0, 2])
+    if len(A.shape) == 3 and A.shape[2] == 1:
+        A = A[:,:,0]
+    PIL.fromarray(A).show()
+    
+for _ImageT in ImageTypes:
+    _ImageT.save = lambda x, y: save_png(x, y)
+    _ImageT.assign = _generic_assign
+    _ImageT.__getattr__ = image_getattr
+    _ImageT.show = lambda x: show_image(x)
+    
+UniformImageType = UniformImage
 
 def Image(typeval, *args):
     assert isinstance(typeval, Type)
     sig = (typeval.bits, typeval.isInt(), typeval.isUInt(), typeval.isFloat())
+    
     if sig == (8, True, False, False):
         C = Image_int8
     elif sig == (16, True, False, False):
@@ -117,11 +220,102 @@ def Image(typeval, *args):
     if len(args) == 0:
         return C
     elif len(args) == 1 and isinstance(args[0], str):
+#        ans_img = C(1)
+#        print 'load_png'
         return load_png(C(1), args[0])
     elif all(isinstance(x, int) for x in args):
         return C(*args)
+    elif len(args) == 1 and isinstance(args[0], ImageTypes+(DynImageType,UniformImageType)):
+        return C(*args)
     else:
         raise ValueError('unknown Image constructor arguments %r' % args)
+
+# ----------------------------------------------------
+# Uniform
+# ----------------------------------------------------
+
+def Uniform(typeval, *args):
+    assert isinstance(typeval, Type)
+    sig = (typeval.bits, typeval.isInt(), typeval.isUInt(), typeval.isFloat())
+    if sig == (8, True, False, False):
+        C = Uniform_int8
+    elif sig == (16, True, False, False):
+        C = Uniform_int16
+    elif sig == (32, True, False, False):
+        C = Uniform_int32
+    elif sig == (8, False, True, False):
+        C = Uniform_uint8
+    elif sig == (16, False, True, False):
+        C = Uniform_uint16
+    elif sig == (32, False, True, False):
+        C = Uniform_uint32
+    elif sig == (32, False, False, True):
+        C = Uniform_float32
+    elif sig == (64, False, False, True):
+        C = Uniform_float64
+    else:
+        raise ValueError('unimplemented Uniform type signature %r' % typeval)
+    if len(args) == 1:          # Handle special cases since SWIG apparently cannot convert int32_t to int.
+        if isinstance(args[0], (int, float)):
+            ans = C()
+            assign(ans, args[0])
+            return ans
+    elif len(args) == 2:
+        if isinstance(args[1], (int, float)):
+            ans = C(args[0])
+            assign(ans, args[1])
+            return ans
+    return C(*args)
+
+for UniformT in UniformTypes:
+    UniformT.assign = _generic_assign
+
+# ----------------------------------------------------
+# DynImage
+# ----------------------------------------------------
+
+DynImageType = DynImage
+def DynImage(*args):
+    if len(args) == 1 and isinstance(args[0], ImageTypes):
+        return to_dynimage(args[0])
+    return DynImageType(*args)
+
+# ----------------------------------------------------
+# DynUniform
+# ----------------------------------------------------
+
+DynUniformType = DynUniform
+def DynUniform(*args):
+    if len(args) == 1 and isinstance(args[0], UniformTypes):
+        return to_dynuniform(args[0])
+    return DynUniformType(*args)
+
+# ----------------------------------------------------
+# Various image types
+# ----------------------------------------------------
+
+#UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
+
+for _ImageT in [DynImageType, UniformImage]:
+    _ImageT.__getitem__ = _generic_getitem
+    _ImageT.assign = _generic_assign
+    #_ImageT.save = lambda x, y: save_png(x, y)
+
+# ----------------------------------------------------
+# Type
+# ----------------------------------------------------
+
+def _type_maxval(typeval):          # The typical maximum value used for image processing (1.0 for float types)
+    if typeval.isUInt():
+        return 2**(typeval.bits)-1
+    elif typeval.isInt():
+        return 2**(typeval.bits-1)-1
+    elif typeval.isFloat():
+        return 1.0
+    else:
+        raise ValueError('unknown typeval %r'%typeval)
+
+Type.maxval = _type_maxval
 
 # ----------------------------------------------------
 # Repr
@@ -131,6 +325,50 @@ Var.__repr__ = lambda self: 'Var(%r)'%self.name()
 Type.__repr__ = lambda self: 'UInt(%d)'%self.bits if self.isUInt() else 'Int(%d)'%self.bits if self.isInt() else 'Float(%d)'%self.bits if self.isFloat() else 'Type(%d)'%self.bits 
 Expr.__repr__ = lambda self: 'Expr(%s)' % ', '.join([repr(self.type())] + [str(_x) for _x in self.vars()])
 Func.__repr__ = lambda self: 'Func(%r)' % self.name()
+
+# ----------------------------------------------------
+# Global functions
+# ----------------------------------------------------
+
+_sqrt  = sqrt
+_sin   = sin
+_cos   = cos
+_exp   = exp
+_log   = log
+_floor = floor
+
+_debug = debug
+
+_select = select
+
+_max = max
+_min = min
+_clamp = clamp
+
+_cast = cast
+
+sqrt   = lambda x: _sqrt(wrap(x))
+sin    = lambda x: _sin(wrap(x))
+cos    = lambda x: _cos(wrap(x))
+exp    = lambda x: _exp(wrap(x))
+log    = lambda x: _log(wrap(x))
+floor  = lambda x: _floor(wrap(x))
+
+debug  = lambda x, y, *a: _debug(wrap(x), y, *a)
+
+select = lambda x, y, z: _select(wrap(x), wrap(y), wrap(z))
+
+max    = lambda x, y: _max(wrap(x), wrap(y))
+min    = lambda x, y: _min(wrap(x), wrap(y))
+clamp  = lambda x, y, z: _clamp(wrap(x), wrap(y), wrap(z))
+
+cast   = lambda x, y: _cast(x, wrap(y))
+
+minimum = lambda x: minimum_func(wrap(x))
+maximum = lambda x: maximum_func(wrap(x))
+product = lambda x: product_func(wrap(x))
+sum     = lambda x: sum_func(wrap(x))
+
 
 # ----------------------------------------------------
 # Test
@@ -236,7 +474,7 @@ def get_blur(cache=[]):
 
         #print 'before input_clamped'
         input_clamped[x,y,c] = input[clamp(Expr(x),cast(Int(32),Expr(0)),cast(Int(32),Expr(input.width()-1))),
-                                     clamp(Expr(y),cast(Int(32),Expr(0)),cast(Int(32),Expr(input.width()-1))),
+                                     clamp(Expr(y),cast(Int(32),Expr(0)),cast(Int(32),Expr(input.height()-1))),
                                      c] #clamp(Expr(c),Expr(0),Expr(input.width()-1))]
         #print 'after input_clamped'
         #input_clamped[x,y,c] = input[x,y,c]
@@ -257,17 +495,68 @@ def get_blur(cache=[]):
     
     return (input, x, y, c, blur_x, blur_y, input_clamped)
 
-def test_blur():
+def roundup_multiple(x, y):
+    return (x+y-1)/y*y
+
+def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, compile=True, eval_func=None): #, pad_multiple=1):
+    """
+    Utility function to filter an image file with a Halide Func, returning output Image of the same size.
+    
+    Given input and output Funcs, and filename, returns evaluate. Calling evaluate() returns the output Image.
+    """
+    if isinstance(input, UniformImageType):
+        input_png = Image(dtype, filename)
+    #print input_png.dimensions()
+#    print [input_png.size(i) for i in range(input_png.dimensions())]
+    #print 'assign'
+        input.assign(input_png)
+    else:
+        input_png = input
+    #print 'get w'
+    w = input_png.width()
+    h = input_png.height()
+    nchan = input_png.channels()
+    #print w, h, nchan
+    #w2 = roundup_multiple(w, pad_multiple)
+    #h2 = roundup_multiple(h, pad_multiple)
+    #print w2, h2, nchan
+    out = Image(dtype, w, h, nchan)
+    if compile:
+        out_func.compileJIT()
+
+    def evaluate():
+        T0 = time.time()
+        try:
+            if eval_func is not None:
+                out.assign(eval_func())
+                return out
+            else:
+                out.assign(out_func.realize(w, h, nchan))
+                return out
+        finally:
+            if disp_time:
+                print 'Filtered in', time.time()-T0, 'secs'
+    return evaluate
+    
+def example_out():
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
+    blur_y.reset().unroll(y,16).vectorize(x,16)
+    blur_y.compileJIT()
+
+    return filter_filename(input, blur_y, in_filename)()
+    
+def test_blur():
+    (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
+    
     for f in [blur_y, blur_x]:
         assert f.args()[0].vars()[0].name()=='x'
         assert f.args()[1].vars()[0].name()=='y'
         assert f.args()[2].vars()[0].name()=='c'
         assert len(f.args()) == 3
     assert blur_y.rhs().funcs()[0].name()=='blur_x'
-    assert blur_x.rhs().uniformImages()[0].name()
-    assert len(blur_x.rhs().uniformImages()) == 1
+#    assert blur_x.rhs().uniformImages()[0].name()
+#    assert len(blur_x.rhs().uniformImages()) == 1
 
     #print [str(x) for x in blur_y.rhs().funcs()]
     assert len(blur_y.rhs().funcs()) == 2
@@ -278,42 +567,42 @@ def test_blur():
     #blur_y.parallel(y)
     for i in range(2):
         #print 'iter', i
-        blur_y.reset().unroll(y,16).vectorize(x,16)
+#        blur_y.reset().unroll(y,16).vectorize(x,16)
+        #print 'c'
         #blur_y.root().serial(x).serial(y).unroll(y,16).vectorize(x,16)
         blur_y.compileToFile('halide_blur')
-        blur_y.compileJIT()
+        #print 'd'
+        #blur_y.compileJIT()
+        #print 'e'
 
-        input_png = Image(UInt(16), 'lena.png')
-        input.assign(input_png)
-        w = input_png.width()
-        h = input_png.height()
-        nchan = input_png.channels()
-        out = Image(UInt(16), w, h, nchan)
+        outf = filter_filename(input, blur_y, in_filename)
+        #print 'f'
         T0 = time.time()
-        out.assign(blur_y.realize(w, h, nchan))
+        out = outf()
         T1 = time.time()
+        #print 'g'
         print T1-T0, 'secs'
     
         out.save('out2.png' if i==1 else 'out.png')
+        s = image_to_string(out)
+        assert isinstance(s, str)
+        #print numpy.asarray(out)
+        #PIL.fromarray(out).show()
+        out.show()
     I1 = numpy.asarray(PIL.open('out.png'))
     I2 = numpy.asarray(PIL.open('out2.png'))
     os.remove('out2.png')
     
     print 'halide blur: OK'
 
-def test_func():
+def test_func(compile=True):
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
-    input_png = Image(UInt(16), 'lena.png')
-    input.assign(input_png)
-    w = input_png.width()
-    h = input_png.height()
-    nchan = input_png.channels()
-    out = Image(UInt(16), w, h, nchan)
+    outf = filter_filename(input, blur_y, in_filename, compile=compile)
     
     def test(func):
         T0 = time.time()
-        out.assign(blur_y.realize(w, h, nchan))
+        out = outf()
         T1 = time.time()
         return T1-T0
     
@@ -326,7 +615,7 @@ def test_autotune():
     halide_autotune.autotune(locals_d['blur_y'], locals_d['test'], locals_d)
 
 def test_segfault():
-    locals_d = test_func()
+    locals_d = test_func(compile=False)
     c = locals_d['c']
     blur_y = locals_d['blur_y']
     test = locals_d['test']
@@ -343,9 +632,9 @@ def test_segfault():
     signal.signal(signal.SIGABRT, signal_handler)
     signal.signal(signal.SIGFPE, signal_handler)
     """
+    exit_on_signal()
     
     blur_y.unroll(c, 32)
-    exit_on_signal()
     print 'Before test'
     try:
         with Watchdog(5):
@@ -355,8 +644,44 @@ def test_segfault():
     except Watchdog:
         pass
     print 'halide segfault: OK'
-    
+
+def test_examples():
+    import examples
+    in_grayscale = 'lena_crop_grayscale.png'
+    in_color = 'lena_crop.png'
+    for example in [examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+#    for example in [examples.boxblur_cumsum]:
+        for input_image in [in_grayscale, in_color]:
+            for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
+#            for dtype in [UInt(16)]:
+#            for dtype in [UInt(8), UInt(16)]:
+                if example is examples.boxblur_sat or example is examples.boxblur_cumsum:
+                    if dtype == UInt(32):
+                        continue
+                if example is examples.local_laplacian:
+                    if input_image == in_color and (dtype == UInt(8) or dtype == UInt(16)):
+                        pass
+                    else:
+                        continue
+                if example is examples.snake:
+                    if dtype != UInt(8) or input_image != in_color:
+                        continue
+        #        (in_func, out_func) = examples.blur_color(dtype)
+    #            (in_func, out_func) = examples.blur(dtype)
+                (in_func, out_func, eval_func) = example(dtype)
+        #        print 'got func'
+        #        outf = filter_filename(in_func, out_func, in_filename, dtype)
+                outf = filter_filename(in_func, out_func, input_image, dtype, disp_time=True, eval_func=eval_func)
+        #        print 'got filter'
+                out = outf()
+                out.show()
+        #        print 'shown'
+                A = numpy.asarray(out)
+#                print numpy.min(A.flatten()), numpy.max(A.flatten())
+        #        out.save('out.png')
+
 def test():
+    exit_on_signal()
 #    print 'a'
 #    uint16 = UInt(16)
 #    print 'b'
@@ -364,10 +689,13 @@ def test():
 #    print 'c'
 #    pass
 
-    #test_core()
-    #test_blur()
-    #test_segfault()
-    test_autotune()
+    test_core()
+    test_segfault()
+    test_blur()
+    test_examples()
+#    test_autotune()
+    print
+    print 'All tests passed, done'
     
 if __name__ == '__main__':
     test()
