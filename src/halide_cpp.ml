@@ -24,31 +24,7 @@ let codegen_to_c_callable e =
 let lower (f:string) (env:environment) (sched: schedule_tree) =
   (* Printexc.record_backtrace true; *)
 
-  begin
-    (* dump pre-lowered representation *)
-    let out = open_out (f ^ ".def") in
-    Printf.fprintf out "%s%!" (string_of_environment env);
-    close_out out;
-
-    dbg 1 "Lowering function\n";
-    let lowered = lower_function f env sched in
-    (* Printf.printf "Breaking false dependences\n";
-     let lowered = Break_false_dependence.break_false_dependence_stmt lowered in 
-     Printf.printf "Constant folding\n";
-     let lowered = Constant_fold.constant_fold_stmt lowered in
-     Printf.printf "Breaking false dependences\n";
-     let lowered = Break_false_dependence.break_false_dependence_stmt lowered in  *)
-    dbg 2 "Before constant folding:\n%s\n" (string_of_stmt lowered);
-    let lowered = Constant_fold.constant_fold_stmt lowered in 
-    dbg 1 "Resulting stmt:\n%s\n" (string_of_stmt lowered);
-
-    (* dump the lowered representation *)
-    let out = open_out (f ^ ".lowered") in
-    Printf.fprintf out "%s%!" (string_of_stmt lowered);
-    close_out out;
-
-    lowered
-  end
+  lower_function f env sched
 
   (* with x -> begin
     Printf.printf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
@@ -220,7 +196,7 @@ let _ =
   );
   
   Callback.register "doLower" lower;  
-  Callback.register "doCompile" (compile);
+  Callback.register "doCompile" compile;
   Callback.register "doCompileToFile" compile_to_file;
   
   (* Guru transformations. These partially apply the various ml

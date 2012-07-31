@@ -143,8 +143,11 @@ namespace Halide {
 
         // The compiled form of this function
         mutable void (*functionPtr)(void *);
+
+        // Functions to assist realizing this function
         mutable void (*copyToHost)(buffer_t *);
         mutable void (*freeBuffer)(buffer_t *);
+        mutable void (*errorHandler)(char *);
     };
 
     llvm::ExecutionEngine *Func::Contents::ee = NULL;
@@ -315,7 +318,7 @@ namespace Halide {
 
         } else {
             //printf("Scatter definition for %s\n", name().c_str());
-            assert(rhs().isDefined());            
+            assert(rhs().isDefined() && "Must provide a base-case definition for function before the reduction case");            
 
             MLVal update_args = makeList();
             for (size_t i = args.size(); i > 0; i--) {
@@ -726,6 +729,10 @@ namespace Halide {
         doCompileToFile(moduleName, args, stmt);
     }
 
+    void Func::setErrorHandler(void (*handler)(char *)) {
+        contents->errorHandler = handler;
+    }
+
     void Func::compileJIT() {
         if (getenv("HL_PSEUDOJIT") && getenv("HL_PSEUDOJIT") == std::string("1")) {
             // llvm's ARM jit path has many issues currently. Instead
@@ -757,10 +764,18 @@ namespace Halide {
                 assert(0 == system(cmd2));
             }
             void *handle = dlopen(so_name.c_str(), RTLD_NOW);
-            assert(handle);
+            assert(handle && "Could not open shared object file when pseudojitting");
             void *ptr = dlsym(handle, entrypoint_name.c_str());
-            assert(ptr);
+            assert(ptr && "Could not find entrypoint in shared object file when pseudojitting");
             contents->functionPtr = (void (*)(void *))ptr;
+
+            if (contents->errorHandler) {
+                ptr = dlsym(handle, "set_error_handler");
+                assert(ptr && "Could not find set_error_handler in shared object file when pseudojitting");
+                void (*setErrorHandlerFn)(void (*)(char *)) = (void (*)(void (*)(char *)))ptr;
+                setErrorHandlerFn(contents->errorHandler);
+            }
+            
             return;
         }
 
@@ -771,11 +786,11 @@ namespace Halide {
         MLVal stmt = lower();
         MLVal args = inferArguments();
 
-        printf("compiling IR -> ll\n");
+        //printf("compiling IR -> ll\n");
         MLVal tuple;
         tuple = doCompile(name(), args, stmt);
 
-        printf("Extracting the resulting module and function\n");
+        //printf("Extracting the resulting module and function\n");
         MLVal first, second;
         MLVal::unpackPair(tuple, first, second);
         LLVMModuleRef module = (LLVMModuleRef)(first.asVoidPtr());
@@ -819,7 +834,7 @@ namespace Halide {
             exit(1);
         }
         
-        printf("optimizing ll...\n");
+        //printf("optimizing ll...\n");
         
         std::string errstr;
         llvm::raw_fd_ostream stdout("passes.txt", errstr);
@@ -832,7 +847,7 @@ namespace Halide {
         
         Contents::fPassMgr->doFinalization();
         
-        printf("compiling ll -> machine code...\n");
+        //printf("compiling ll -> machine code...\n");
         void *ptr = Contents::ee->getPointerToFunction(f);
         contents->functionPtr = (void (*)(void*))ptr;
         
@@ -847,6 +862,12 @@ namespace Halide {
             ptr = Contents::ee->getPointerToFunction(freeBuffer);
             contents->freeBuffer = (void (*)(buffer_t*))ptr;
         }       
+
+        llvm::Function *setErrorHandler = m->getFunction("set_error_handler");
+        assert(setErrorHandler && "Could not find the set_error_handler function in the compiled module\n");
+        ptr = Contents::ee->getPointerToFunction(setErrorHandler);
+        void (*setErrorHandlerFn)(void (*)(char *)) = (void (*)(void (*)(char *)))ptr;
+        if (contents->errorHandler) setErrorHandlerFn(contents->errorHandler);
     }
 
     size_t im_size(const DynImage &im, int dim) {

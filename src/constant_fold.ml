@@ -330,5 +330,7 @@ let constant_fold_stmt stmt =
                   inner env consume)
     | Print (p, l) -> 
         Print (p, List.map constant_fold_expr l)
+    | Assert(e, str) ->
+        Assert (constant_fold_expr e, str)
   in
   inner [] stmt
