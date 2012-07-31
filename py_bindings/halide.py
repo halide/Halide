@@ -664,7 +664,7 @@ def test_examples():
                     else:
                         continue
                 if example is examples.snake:
-                    if dtype != UInt(8):
+                    if dtype != UInt(8) or input_image != in_color:
                         continue
         #        (in_func, out_func) = examples.blur_color(dtype)
     #            (in_func, out_func) = examples.blur(dtype)

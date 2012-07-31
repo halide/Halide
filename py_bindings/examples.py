@@ -187,7 +187,7 @@ def boxblur_cumsum(dtype=UInt(16), counter=[0]):
     "Box blur (implemented with cumsum)."
     return boxblur_mode(dtype, counter, False)
 
-def snake(dtype=UInt(8), counter=[0], in_filename='../apps/snake/blood_cells.png'):
+def snake(dtype=UInt(8), counter=[0], in_filename='blood_cells_small.png'):
     "Snake segmentation."
     exit_on_signal()
     s = '_snake%d'%counter[0]
@@ -304,7 +304,7 @@ def snake(dtype=UInt(8), counter=[0], in_filename='../apps/snake/blood_cells.png
     timestep = 5.0
     mu = 0.2 / timestep
     iter_inner = 1
-    iter_outer = 10 #1000
+    iter_outer = 450 #1000
     lambd = 6.0
     alpha = 1.5
     epsilon = 1.5
