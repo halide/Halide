@@ -4,6 +4,7 @@
 
 using namespace Halide;
 
+// Make some functions for turning types into strings
 template<typename A>
 const char *string_of_type();
 
@@ -250,6 +251,7 @@ int main(int argc, char **argv) {
 
     // Only native vector widths - llvm doesn't handle others well
     ok = ok && test<float>(4);
+    ok = ok && test<float>(8);
     ok = ok && test<double>(2);
     ok = ok && test<uint8_t>(16);
     ok = ok && test<int8_t>(16);
