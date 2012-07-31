@@ -21,7 +21,7 @@ def blur(dtype=UInt(16), counter=[0]):
     blur_x[x,y,c] = (input_clamped[x-1,y,c]/4+input_clamped[x,y,c]/4+input_clamped[x+1,y,c]/4)/3
     blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
     counter[0] += 1
-    return (input, blur_y)
+    return (input, blur_y, None)
 
 def dilate(dtype=UInt(16), counter=[0]):
     "Dilate on 3x3 stencil."
@@ -42,7 +42,7 @@ def dilate(dtype=UInt(16), counter=[0]):
                 subexp = max(subexp, input_clamped[x+dx,y+dy])
     dilate[x,y,c] = subexp #min(min(input_clamped[x-1,y-1,c],input_clamped[x,y-1,c]),input_clamped[x+1,y-1,c])
     counter[0] += 1
-    return (input, dilate)
+    return (input, dilate, None)
 
 def local_laplacian(dtype=UInt(16), counter=[0]):
     "Local Laplacian."
@@ -131,7 +131,7 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
        
     #print 'Done with local_laplacian', counter[0]
     counter[0] += 1
-    return (input, output)
+    return (input, output, None)
 
 def boxblur_mode(dtype, counter, is_sat):
     print 'box', is_sat, counter[0]
@@ -177,7 +177,7 @@ def boxblur_mode(dtype, counter, is_sat):
                      sum_clamped[x-box_size-1,y-box_size-1,c])/weight[x,y])
     
     counter[0] += 1
-    return (input, output)
+    return (input, output, None)
 
 def boxblur_sat(dtype=UInt(16), counter=[0]):
     "Box blur (implemented with summed area table)."
@@ -187,12 +187,11 @@ def boxblur_cumsum(dtype=UInt(16), counter=[0]):
     "Box blur (implemented with cumsum)."
     return boxblur_mode(dtype, counter, False)
 
-def snake(in_filename='../apps/snake/blood_cells.png', dtype=UInt(8), counter=[0]):
+def snake(dtype=UInt(8), counter=[0], in_filename='blood_cells_small.png'):
     "Snake segmentation."
     exit_on_signal()
     s = '_snake%d'%counter[0]
     counter[0] += 1
-    
     x = Var('x'+s)
     y = Var('y'+s)
 
@@ -278,15 +277,19 @@ def snake(in_filename='../apps/snake/blood_cells.png', dtype=UInt(8), counter=[0
         # truncate to 3 sigma and normalize
         radius = int(3*sigma + 1.0)
         i = RDom(-radius, 2*radius+1,'i'+s)
+#        i = i.x
         normalized = Func('normalized'+s)
         normalized[x] = gaussian[x] / sum(gaussian[i]) # Uses an inline reduction
 
         # Convolve the input using two reductions
         blurx, blury = Func('blurx'+s), Func('blury'+s)
-        print image[x+i, y] * normalized[i]
-        print 'a', im.width(), im.height()
+#        print image[x+i, y] * normalized[i]
+#        print 'a', im.width(), im.height()
+#        print blurx[x,y]
+        blurx[x, y] = 0.0
         blurx[x, y] += image[x+i, y] * normalized[i]
-        print 'b'
+#        print 'b'
+        blury[x, y] = 0.0
         blury[x, y] += blurx[x, y+i] * normalized[i]
 
         # Schedule the lot as root 
@@ -301,7 +304,7 @@ def snake(in_filename='../apps/snake/blood_cells.png', dtype=UInt(8), counter=[0
     timestep = 5.0
     mu = 0.2 / timestep
     iter_inner = 1
-    iter_outer = 1000
+    iter_outer = 450 #1000
     lambd = 6.0
     alpha = 1.5
     epsilon = 1.5
@@ -337,14 +340,11 @@ def snake(in_filename='../apps/snake/blood_cells.png', dtype=UInt(8), counter=[0
                             & (y >= selectPadding)
                             & (y < im.height() - selectPadding),
                             -2.0, 2.0)
-    phi_buf = phi_init.realize(im.width(), im.height())
-    phi_buf2 = Image(float_t, im.width(), im.height())
-
     phi_input = UniformImage(Float(32), 2)
 
     phi_clamped = Func('phi_clamped'+s)
-    phi_clamped[x,y] = phi_input[clamp(x,cast(int_t,0),cast(int_t,phi_buf.width()-1)),
-                                 clamp(y,cast(int_t,0),cast(int_t,phi_buf.height()-1))]
+    phi_clamped[x,y] = phi_input[clamp(x,cast(int_t,0),cast(int_t,im.width()-1)),
+                                 clamp(y,cast(int_t,0),cast(int_t,im.height()-1))]
   
     g_clamped = Func('g_clamped'+s)
     g_clamped[x, y] = g_buf[clamp(x, cast(int_t,0), cast(int_t,g_buf.width()-1)),
@@ -353,16 +353,22 @@ def snake(in_filename='../apps/snake/blood_cells.png', dtype=UInt(8), counter=[0
     phi_new = Func('phi_new'+s)
     phi_new.assign(drlse_edge(phi_clamped,g_clamped,lambd,mu,alpha,epsilon,timestep,iter_inner))
 
-    T0 = time.time()
-    for n in range(iter_outer):
-        if n%10 == 9:
-            print 'Iteration %d / %d. Average time per iteration = %f ms'%(n+1, iter_outer, time.time()-T0)
-        phi_input.assign(phi_buf)
-        phi_new.realize(phi_buf2)
-        phi_buf, phi_buf2 = phi_buf2, phi_buf
+    def evaluate():
+        T0 = time.time()
+        phi_buf = phi_init.realize(im.width(), im.height())
+        phi_buf2 = Image(float_t, im.width(), im.height())
+        for n in range(iter_outer):
+            if n%10 == 9:
+                print 'Iteration %d / %d. Average time per iteration = %f ms'%(n+1, iter_outer, time.time()-T0)
+            phi_input.assign(phi_buf)
+            phi_new.realize(phi_buf2)
+            phi_buf, phi_buf2 = phi_buf2, phi_buf
     
-    masked = Func('masked'+s)
-    c = Var('c'+s)
-    masked[x,y,c] = select(phi_buf[x, y] < 0.0, im[x, y, c], im[x, y, c]/4)
-    out = masked.realize(im.width(), im.height(), 3)
-    out.save('snake_out.png')
+        masked = Func('masked'+s)
+        c = Var('c'+s)
+        masked[x,y,c] = select(phi_buf[x, y] < 0.0, im[x, y, c], im[x, y, c]/4)
+        out = masked.realize(im.width(), im.height(), 3)
+        return out
+    #Image(UInt(8),out).save('snake_out.png')
+    return (im, phi_new, evaluate)
+    

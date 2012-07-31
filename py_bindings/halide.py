@@ -8,8 +8,17 @@ from ForkedWatchdog import Watchdog
 
 #exit_on_signal()
 
-wrap = lambda *a: Expr(*a) if not (len(a) == 1 and isinstance(a[0], UniformTypes)) else Expr(DynUniform(a[0]))
-
+#wrap = lambda *a: Expr(*a) if not (len(a) == 1 and isinstance(a[0], UniformTypes)) else Expr(DynUniform(a[0]))
+def wrap(*a):
+    if len(a) == 1:
+        if isinstance(a[0], UniformTypes):
+            return Expr(DynUniform(a[0]))
+        elif isinstance(a[0], ImageTypes) or isinstance(a[0], DynImageType):
+            return a[0] #Expr(to_dynimage(a[0]))
+        elif isinstance(a[0], (int,long)):
+            return expr_from_int(a[0])
+    return Expr(*a)
+    
 in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 
 # ----------------------------------------------------
@@ -26,7 +35,14 @@ in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 
 UniformTypes = (Uniform_int8, Uniform_int16, Uniform_int32, Uniform_uint8, Uniform_uint16, Uniform_uint32, Uniform_float32, Uniform_float64)
 
-for BaseT in (Expr, FuncRef, Var, RDom, RVar) + UniformTypes:
+#def iadd2(a, b):
+#    print 'iadd2', a, b
+#    try:
+#        iadd(a, b)
+#    except ValueError:
+#        print 'ValueError'
+    
+for BaseT in (Expr, FuncRef, Var, RDom, RVar, Func) + UniformTypes:
     BaseT.__add__ = lambda x, y: add(wrap(x), wrap(y))
     BaseT.__sub__ = lambda x, y: sub(wrap(x), wrap(y))
     BaseT.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
@@ -66,7 +82,7 @@ for BaseT in (Expr, FuncRef, Var, RDom, RVar) + UniformTypes:
 
 RDomType = RDom
 def RDom(*args):
-    args = [Expr(x) if not isinstance(x,str) else x for x in args]
+    args = [wrap(x) if not isinstance(x,str) else x for x in args]
     return RDomType(*args)
 
 # ----------------------------------------------------
@@ -101,11 +117,14 @@ def raise_error(e):
     raise e
 
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
-
+_generic_assign = lambda x, y: assign(x, wrap(y))
+_realize = Func.realize
 Func.__call__ = lambda self, *L: raise_error(ValueError('use f[x, y] = expr to initialize a function'))
 Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, wrap(key)), wrap(value))
 Func.__getitem__ = _generic_getitem
-Func.assign = assign
+Func.assign = _generic_assign
+Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
+
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
 
 # ----------------------------------------------------
@@ -114,15 +133,6 @@ Func.assign = assign
 
 #FuncRef.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
 #FuncRef.__rmul__ = lambda x, y: mul(wrap(x), wrap(y))
-
-# ----------------------------------------------------
-# UniformImage
-# ----------------------------------------------------
-
-#UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
-
-UniformImage.__getitem__ = _generic_getitem
-UniformImage.assign = lambda x, y: assign(x, y)
 
 # ----------------------------------------------------
 # Image
@@ -177,15 +187,18 @@ def show_image(I):
         A = A[:,:,0]
     PIL.fromarray(A).show()
     
-for ImageT in ImageTypes:
-    ImageT.save = lambda x, y: save_png(x, y)
-    ImageT.assign = lambda x, y: assign(x, y)
-    ImageT.__getattr__ = image_getattr
-    ImageT.show = lambda x: show_image(x)
+for _ImageT in ImageTypes:
+    _ImageT.save = lambda x, y: save_png(x, y)
+    _ImageT.assign = _generic_assign
+    _ImageT.__getattr__ = image_getattr
+    _ImageT.show = lambda x: show_image(x)
     
+UniformImageType = UniformImage
+
 def Image(typeval, *args):
     assert isinstance(typeval, Type)
     sig = (typeval.bits, typeval.isInt(), typeval.isUInt(), typeval.isFloat())
+    
     if sig == (8, True, False, False):
         C = Image_int8
     elif sig == (16, True, False, False):
@@ -211,6 +224,8 @@ def Image(typeval, *args):
 #        print 'load_png'
         return load_png(C(1), args[0])
     elif all(isinstance(x, int) for x in args):
+        return C(*args)
+    elif len(args) == 1 and isinstance(args[0], ImageTypes+(DynImageType,UniformImageType)):
         return C(*args)
     else:
         raise ValueError('unknown Image constructor arguments %r' % args)
@@ -253,7 +268,7 @@ def Uniform(typeval, *args):
     return C(*args)
 
 for UniformT in UniformTypes:
-    UniformT.assign = lambda x, y: assign(x, y)
+    UniformT.assign = _generic_assign
 
 # ----------------------------------------------------
 # DynImage
@@ -274,6 +289,17 @@ def DynUniform(*args):
     if len(args) == 1 and isinstance(args[0], UniformTypes):
         return to_dynuniform(args[0])
     return DynUniformType(*args)
+
+# ----------------------------------------------------
+# Various image types
+# ----------------------------------------------------
+
+#UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
+
+for _ImageT in [DynImageType, UniformImage]:
+    _ImageT.__getitem__ = _generic_getitem
+    _ImageT.assign = _generic_assign
+    #_ImageT.save = lambda x, y: save_png(x, y)
 
 # ----------------------------------------------------
 # Type
@@ -472,17 +498,20 @@ def get_blur(cache=[]):
 def roundup_multiple(x, y):
     return (x+y-1)/y*y
 
-def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, compile=True): #, pad_multiple=1):
+def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, compile=True, eval_func=None): #, pad_multiple=1):
     """
     Utility function to filter an image file with a Halide Func, returning output Image of the same size.
     
     Given input and output Funcs, and filename, returns evaluate. Calling evaluate() returns the output Image.
     """
-    input_png = Image(dtype, filename)
+    if isinstance(input, UniformImageType):
+        input_png = Image(dtype, filename)
     #print input_png.dimensions()
 #    print [input_png.size(i) for i in range(input_png.dimensions())]
     #print 'assign'
-    input.assign(input_png)
+        input.assign(input_png)
+    else:
+        input_png = input
     #print 'get w'
     w = input_png.width()
     h = input_png.height()
@@ -497,10 +526,16 @@ def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, 
 
     def evaluate():
         T0 = time.time()
-        out.assign(out_func.realize(w, h, nchan))
-        if disp_time:
-            print 'Filtered in', time.time()-T0, 'secs'
-        return out
+        try:
+            if eval_func is not None:
+                out.assign(eval_func())
+                return out
+            else:
+                out.assign(out_func.realize(w, h, nchan))
+                return out
+        finally:
+            if disp_time:
+                print 'Filtered in', time.time()-T0, 'secs'
     return evaluate
     
 def example_out():
@@ -614,7 +649,7 @@ def test_examples():
     import examples
     in_grayscale = 'lena_crop_grayscale.png'
     in_color = 'lena_crop.png'
-    for example in [examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+    for example in [examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
 #    for example in [examples.boxblur_cumsum]:
         for input_image in [in_grayscale, in_color]:
             for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
@@ -628,12 +663,15 @@ def test_examples():
                         pass
                     else:
                         continue
+                if example is examples.snake:
+                    if dtype != UInt(8) or input_image != in_color:
+                        continue
         #        (in_func, out_func) = examples.blur_color(dtype)
     #            (in_func, out_func) = examples.blur(dtype)
-                (in_func, out_func) = example(dtype)
+                (in_func, out_func, eval_func) = example(dtype)
         #        print 'got func'
         #        outf = filter_filename(in_func, out_func, in_filename, dtype)
-                outf = filter_filename(in_func, out_func, input_image, dtype, disp_time=True)
+                outf = filter_filename(in_func, out_func, input_image, dtype, disp_time=True, eval_func=eval_func)
         #        print 'got filter'
                 out = outf()
                 out.show()
