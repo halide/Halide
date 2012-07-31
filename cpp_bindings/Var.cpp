@@ -7,7 +7,11 @@ namespace Halide {
 
     struct RVar::Contents {
         Contents(RDom dom, Expr min, Expr size, const std::string &name) : 
-	    min(min), size(size), name(name), domain(dom) {}
+	    min(min), size(size), name(name), domain(dom) {
+            assert(min.type() == TypeOf<int>() &&
+                   size.type() == TypeOf<int>() &&
+                   "Bounds of reduction domain must be integers");
+        }
         Expr min, size;
         std::string name;
 	RDom domain;

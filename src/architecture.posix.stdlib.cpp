@@ -59,6 +59,20 @@ WEAK void safe_free(void *ptr) {
     free(start);
 }
 
+static void (*halide_error_handler)(char *) = NULL;
+
+WEAK void halide_error(char *msg) {
+    if (halide_error_handler) (*halide_error_handler)(msg);
+    else {
+        fprintf(stderr, "Error: %s\n", msg);
+        exit(1);
+    }
+}
+
+WEAK void set_error_handler(void (*handler)(char *)) {
+    halide_error_handler = handler;
+}
+
 struct work {
     void (*f)(int, uint8_t *);
     int next, max;
