@@ -202,6 +202,8 @@ type stmt =
   (* An in-order sequence of statements *)
   | Block of stmt list
 
+  (* TODO: a task-parallel sequence of statements *)
+
   (* Store an expression to a buffer at a given index *)
   | Store of expr * buffer * expr
 
@@ -220,13 +222,13 @@ type stmt =
 
   (* For debugging *)
   | Print of string * (expr list)
+
+  (* Bail out and print the string if the expression is true. TODO:
+     currently does not cleanup of allocated resources, and isn't exposed
+     to the front-end for this reason *)
   | Assert of expr * string
 
 (* A function definition: (name, args, return type, body) *)
-(* TODO: drop redundant name from definition?
- * Resolved: No! For externs, this name becomes the symbol of the actual call.
- * Separating this from the Halide environment symbols allows trivial remapping
- * from internal to external names (e.g. `cos` to `@llvm.cos.f32`) *)
 and definition = (string * ((val_type * string) list) * val_type * function_body)
 
 and function_body = 

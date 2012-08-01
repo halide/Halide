@@ -19,7 +19,11 @@ type 'a make_cg_context = llcontext -> llmodule -> llbuilder ->
 type cg_expr = expr -> llvalue
 type cg_stmt = stmt -> llvalue
 
-
+(* Codegen relies on an architecture module that tells us how to do
+   architecture specific things. The way we implement this is by
+   constructing a Codegen module parameterized on an architecture, then
+   dispatching to the appropriate codegen module. This happens in
+   cg_for_target.ml *)
 module type Architecture = sig
   type state
   type context = state cg_context
@@ -155,7 +159,7 @@ let rec make_cg_context c m b sym_table arch_state =
 
     | Load (t, buf, idx) -> cg_load t buf idx
 
-    (* Loop variables *)
+    (* Variables *)
     | Var (vt, name) -> sym_get name
 
     (* Extern calls *)
@@ -505,7 +509,6 @@ let rec make_cg_context c m b sym_table arch_state =
 
   and cg_stmt stmt = Arch.cg_stmt cg_context stmt
   and cg_stmt_inner = function
-    (* TODO: unaligned vector store *)
     | Store (e, buf, idx) -> cg_store e buf idx
     | For (name, min, n, order, stmt) ->
         (if order then cg_for else cg_par_for) name (cg_expr min) (cg_expr n) stmt
