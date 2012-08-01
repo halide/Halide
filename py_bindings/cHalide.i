@@ -6,7 +6,7 @@
 #include "Image.h"
 #include "MLVal.h"
 #include "Reduction.h"
-//#include "Tuple.h"
+//#include "Tuple.h"            // SWIG has issues parsing C++0x so work around with expr_from_tuple().
 #include "Type.h"
 #include "py_util.h"
 #include "environ_fix.h"
@@ -31,7 +31,6 @@ using namespace Halide;
 %include "py_util.h"
 %include "environ_fix.h"
 %include "Uniform.h"
-
 //%include "Tuple.h"
 
 %template(Image_uint8) Image<uint8_t>;

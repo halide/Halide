@@ -18,6 +18,11 @@ Expr mod(Expr a, Expr b);
 
 Expr expr_from_int(int a);
 
+Expr expr_from_tuple(Expr a);
+Expr expr_from_tuple(Expr a, Expr b);
+Expr expr_from_tuple(Expr a, Expr b, Expr c);
+Expr expr_from_tuple(Expr a, Expr b, Expr c, Expr d);
+
 Expr lt(Expr a, Expr b);
 Expr le(Expr a, Expr b);
 Expr eq(Expr a, Expr b);
@@ -94,6 +99,9 @@ DEFINE_TYPE(int32_t)
 DEFINE_TYPE(float)
 DEFINE_TYPE(double)
 #undef DEFINE_TYPE
+
+void assign(DynUniform &a, int b);
+void assign(DynUniform &a, double b);
 
 #define DEFINE_TYPE(T) \
 void assign(Uniform<T> &a, int b); \
