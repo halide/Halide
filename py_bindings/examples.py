@@ -51,9 +51,12 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     J = 8
     
     s = '_laplacian%d'%counter[0]
-
+    downsample_counter=[0] 
+    upsample_counter=[0]
+    
     def downsample(f):
-        downx, downy = Func(), Func()
+        downx, downy = Func('downx%d'%downsample_counter[0]+s), Func('downy%d'%downsample_counter[0]+s)
+        downsample_counter[0] += 1
         
         downx[x,y] = (f[2*x-1, y] + 3.0*(f[2*x,y]+f[2*x+1,y]) + f[2*x+2,y])/8.0
         downy[x,y] = (downx[x,2*y-1] + 3.0*(downx[x,2*y]+downx[x,2*y+1]) + downx[x,2*y+2])/8.0
@@ -61,7 +64,8 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
         return downy
     
     def upsample(f):
-        upx, upy = Func(), Func()
+        upx, upy = Func('upx%d'%upsample_counter[0]+s), Func('upy%d'%upsample_counter[0]+s)
+        upsample_counter[0] += 1
         
         upx[x,y] = 0.25 * f[(x/2)-1+2*(x%2),y] + 0.75 * f[x/2,y]
         upy[x,y] = 0.25 * upx[x, (y/2) - 1 + 2*(y%2)] + 0.75 * upx[x,y/2]
@@ -126,9 +130,7 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     output = Func('output'+s)
     output[x,y,c] = cast(dtype, clamp(color[x,y,c], cast(float_t,0.0), cast(float_t,1.0))*float(dtype.maxval()))
     
-    for f in halide.all_funcs(output).values():
-        f.root()
-       
+    halide.root_all(output)
     #print 'Done with local_laplacian', counter[0]
     counter[0] += 1
     return (input, output, None)
@@ -191,22 +193,31 @@ def snake(dtype=UInt(8), counter=[0], in_filename='blood_cells_small.png'):
     "Snake segmentation."
     exit_on_signal()
     s = '_snake%d'%counter[0]
+    s0 = s
     counter[0] += 1
     x = Var('x'+s)
     y = Var('y'+s)
-
+    dx_counter=[0]
+    dy_counter=[0]
+    lap_counter=[0]
+    distReg_counter=[0]
+    Dirac_counter=[0]
+    
     def dx(f):
-        out = Func()
+        out = Func('dx%d'%dx_counter[0]+s)
+        dx_counter[0] += 1
         out[x,y] = 0.5 * (f[x+1,y] - f[x-1,y])
         return out
 
     def dy(f):
-        out = Func()
+        out = Func('dy%d'%dy_counter[0]+s)
+        dy_counter[0] += 1
         out[x,y] = 0.5 * (f[x,y+1] - f[x,y-1])
         return out
 
     def lap(f):
-        out = Func()
+        out = Func('lap%d'%lap_counter[0]+s)
+        lap_counter[0] += 1
         out[x,y] = f[x+1,y] + f[x-1,y] + f[x,y+1] + f[x,y-1] - 4.0 * f[x,y]
         return out
 
@@ -221,26 +232,28 @@ def snake(dtype=UInt(8), counter=[0], in_filename='blood_cells_small.png'):
         n = select(ps == 0.0, 1.0, ps)
         d = select(s == 0.0, 1.0, s)
 
-        proxy_x = Func()
+        proxy_x = Func('proxy_x%d'%distReg_counter[0]+s0)
         proxy_x.assign((n / d) * phi_x - phi_x)
   
-        proxy_y = Func()
+        proxy_y = Func('proxy_y%d'%distReg_counter[0]+s0)
         proxy_y.assign((n / d) * phi_y - phi_y)
 
-        out = Func()
+        out = Func('distReg%d'%distReg_counter[0]+s0)
         out.assign(dx(proxy_x) + dy(proxy_y) + lap(phi))
-
+        distReg_counter[0] += 1
+        
         return out
 
     def Dirac(input, sigma):
-        out = Func()
+        out = Func('Dirac%d'%Dirac_counter[0]+s)
+        Dirac_counter[0] += 1
         out[x,y] = select((input[x,y] <= sigma) & (input[x,y] >= -sigma),
                     1.0 / (2.0 * sigma) * (1.0 + cos(math.pi * input[x,y] / sigma)),
                     0.0)
         return out
 
     def drlse_edge(phi_0, g, lambd, mu, alpha, epsilon, timestep, iter):
-        phi = [Func() for i in range(iter+1)]
+        phi = [Func('phi%d'%i+s0) for i in range(iter+1)]
         phi[0][x,y] = phi_0[x,y]
   
         vx = dx(g)[x,y]
@@ -254,7 +267,7 @@ def snake(dtype=UInt(8), counter=[0], in_filename='blood_cells_small.png'):
     
             smallNumber = 1e-10
 
-            Nx,Ny = Func(), Func()
+            Nx,Ny = Func('Nx%d'%k+s0), Func('Ny%d'%k+s0)
             Nx[x,y] = phi_x / (s + smallNumber)
             Ny[x,y] = phi_y / (s + smallNumber)
        
@@ -353,7 +366,7 @@ def snake(dtype=UInt(8), counter=[0], in_filename='blood_cells_small.png'):
     phi_new = Func('phi_new'+s)
     phi_new.assign(drlse_edge(phi_clamped,g_clamped,lambd,mu,alpha,epsilon,timestep,iter_inner))
 
-    def evaluate():
+    def evaluate(in_png):
         T0 = time.time()
         phi_buf = phi_init.realize(im.width(), im.height())
         phi_buf2 = Image(float_t, im.width(), im.height())
@@ -371,4 +384,68 @@ def snake(dtype=UInt(8), counter=[0], in_filename='blood_cells_small.png'):
         return out
     #Image(UInt(8),out).save('snake_out.png')
     return (im, phi_new, evaluate)
+
+def interpolate(dtype=UInt(16), counter=[0]):
+    "Fast interpolation using a pyramid."
+    import halide
+    s = '_interpolate%d'%counter[0]
+    counter[0] += 1
+
+    input = UniformImage(dtype, 3, 'input'+s)
+    x = Var('x'+s)
+    y = Var('y'+s)
+    c = Var('c'+s)
+    levels = 10
     
+    downsampled = [Func('downsampled%d'%i+s) for i in range(levels)]
+    interpolated = [Func('interpolated%d'%i+s) for i in range(levels)]
+    level_widths = [Uniform(int_t,'level_widths%d'%i+s) for i in range(levels)]
+    level_heights = [Uniform(int_t,'level_heights%d'%i+s) for i in range(levels)]
+
+    downsampled[0][x,y] = (input[x,y,0] * input[x,y,3],
+                           input[x,y,1] * input[x,y,3],
+                           input[x,y,2] * input[x,y,3],
+                           input[x,y,3])
+    
+    for l in range(1, levels):
+        clamped = Func('clamped%d'%l+s)
+        clamped[x,y,c] = downsampled[l-1][clamp(cast(int_t,x),cast(int_t,0),cast(int_t,level_widths[l-1]-1)),
+                                          clamp(cast(int_t,y),cast(int_t,0),cast(int_t,level_heights[l-1]-1)), c]
+        downx = Func('downx%d'%l+s)
+        downx[x,y,c] = (clamped[x*2-1,y,c] + 2.0 * clamped[x*2,y,c] + clamped[x*2+1,y,c]) / 4.0
+        downsampled[l][x,y,c] = (downx[x,y*2-1,c] + 2.0 * downx[x,y*2,c] + downx[x,y*2+1,c]) / 4.0
+        
+    interpolated[levels-1][x,y,c] = downsampled[levels-1][x,y,c]
+    for l in range(levels-1)[::-1]:
+        upsampledx, upsampled = Func('upsampledx%d'%l+s), Func('upsampled%d'%l+s)
+        upsampledx[x,y,c] = 0.5 * (interpolated[l+1][x/2 + (x%2),y,c] + interpolated[l+1][x/2,y,c])
+        upsampled[x,y,c] = 0.5 * (upsampledx[x, y/2 + (y%2),c] + upsampledx[x,y/2,c])
+        interpolated[l][x,y,c] = downsampled[l][x,y,c] + (1.0 - downsampled[l][x,y,3]) * upsampled[x,y,c]
+
+    final = Func('final'+s)
+    final[x,y] = (interpolated[0][x,y,0] / interpolated[0][x,y,3],
+                  interpolated[0][x,y,1] / interpolated[0][x,y,3],
+                  interpolated[0][x,y,2] / interpolated[0][x,y,3],
+                  1.0)
+    halide.root_all(final)
+    
+    print 'interpolate: finished function setup'
+    
+    def evaluate(in_png):
+        print 'interpolate evaluate'
+        width  = in_png.width()
+        height = in_png.height()
+        print width, height
+        for l in range(levels):
+            level_widths[l].assign(width)
+            level_heights[l].assign(height)
+            width = width/2 + 1
+            height = height/2 + 1
+        print in_png.width(), in_png.height(), 'realizing'
+        out = final.realize(in_png.width(), in_png.height(), 4)
+        print 'evaluate realized, returning'
+        return out
+    
+    print 'interpolate: returning'
+    
+    return (input, final, evaluate)
