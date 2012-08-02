@@ -1,7 +1,7 @@
-GXX = g++-4.6
 ifneq ($(shell env -i command -v g++-4.7),)
-GXX = g++-4.7
+GXX ?= g++-4.7
 endif
+GXX ?= g++-4.6
 
 LLVM_ROOT=../../llvm/Release+Asserts
 LLC=$(LLVM_ROOT)/bin/llc
@@ -18,8 +18,8 @@ endif
 all: process
 
 local_laplacian: ../../cpp_bindings/ local_laplacian.cpp
-	$(MAKE) -C ../../cpp_bindings Halide.a
-	$(GXX) local_laplacian.cpp -I ../../cpp_bindings/ ../../cpp_bindings/Halide.a  -std=c++0x -lpng -o local_laplacian -lpthread -ldl $(PNGFLAGS) -g
+	$(MAKE) -C ../../cpp_bindings libHalide.a
+	$(GXX) local_laplacian.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -lpng -o local_laplacian -lpthread -ldl $(PNGFLAGS) -g
 
 local_laplacian.bc: local_laplacian
 	./local_laplacian $(SCHEDULE)
