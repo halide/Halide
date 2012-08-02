@@ -1,7 +1,7 @@
-GXX = g++-4.6
 ifneq ($(shell env -i command -v g++-4.7),)
-GXX = g++-4.7
+GXX ?= g++-4.7
 endif
+GXX ?= g++-4.6
 
 PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
 ifeq ($(HL_TARGET),ptx)
@@ -14,8 +14,8 @@ endif
 all: process
 
 seam_carving: ../../cpp_bindings/ seam_carving.cpp
-	$(MAKE) -C ../../cpp_bindings Halide.a
-	$(GXX) seam_carving.cpp -I ../../cpp_bindings/ ../../cpp_bindings/Halide.a  -std=c++0x -lpng -o seam_carving -lpthread -ldl $(PNGFLAGS)
+	$(MAKE) -C ../../cpp_bindings libHalide.a
+	$(GXX) seam_carving.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -lpng -o seam_carving -lpthread -ldl $(PNGFLAGS)
 
 seam_carving.bc: seam_carving
 	./seam_carving $(SCHEDULE)
