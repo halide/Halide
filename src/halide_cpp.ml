@@ -36,7 +36,7 @@ let serializeEntry name args stmt = Sexplib.Sexp.to_string
 
 let compile name args stmt =
 
-  Printexc.record_backtrace true;
+  (* Printexc.record_backtrace true; *)
 
 
   (* TODO: Canonicalize names. Variables get renamed to v0 v1
@@ -68,12 +68,12 @@ let compile name args stmt =
     end
   end
   with x -> begin
-    Printf.eprintf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
+    Printf.printf "Compilation failed.\n%!" (* "Backtrace:\n%s\n%!" (Printexc.get_backtrace ()) *);
     raise x
   end
 
 let compile_to_file name args stmt =
-  Printexc.record_backtrace true;
+  (* Printexc.record_backtrace true; *)
   
   let backend = try
     Sys.getenv "HL_BACKEND"
@@ -92,7 +92,7 @@ let compile_to_file name args stmt =
     | _ -> failwith ("Unrecognized HL_BACKEND: " ^ backend)
   end
   with x -> begin
-    Printf.printf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
+    Printf.printf "Compilation failed.\n%!" (* "Backtrace:\n%s\n%!" (Printexc.get_backtrace ()) *);
     raise x
   end
 
