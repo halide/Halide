@@ -46,19 +46,10 @@ _build/_MLHalide.o: ../src/_build/halide.cmxa
 	ocamlfind ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLHalide.o -package sexplib.syntax,batteries.syntax,batteries -linkpkg $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/halide.cmxa
 
 ../src/_build/halide.cmxa: ../src/*.ml
-	cd ../src && \
-	ocamlbuild -use-ocamlfind halide.cmxa && \
-	cd $(PWD)
+	make -C ../src lib.native
 
-../src/_build/libllsupport_impl.a: ../src/*.c
-	cd ../src && \
-	ocamlbuild -use-ocamlfind libllsupport_impl.a && \
-	cd $(PWD)
-
-../src/_build/: ../src/*.c
-	cd ../src && \
-	ocamlbuild -use-ocamlfind libllsupport_impl.a && \
-	cd $(PWD)
+../src/_build/libllsupport_impl.a: ../src/*.c ../src/architecture.*.cpp ../src/architecture.*.ll
+	make -C ../src lib.llsupport
 
 halide: Halide.a $(HEADERS)
 	mkdir -p halide
