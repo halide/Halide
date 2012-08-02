@@ -4,7 +4,7 @@ endif
 GXX ?= g++-4.6
 CXX=$(GXX) -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
 
-HEADERS = Expr.h Func.h Halide.h Image.h MLVal.h Reduction.h Tuple.h Type.h Uniform.h Util.h Var.h
+HEADERS = MLVal.h Util.h Var.h Type.h Uniform.h Expr.h Image.h Func.h Reduction.h Uniform.h
 
 all: libHalide.a
 
@@ -53,7 +53,8 @@ _build/_MLHalide.o: ../src/_build/halide.cmxa
 
 halide: libHalide.a $(HEADERS)
 	mkdir -p halide
-	cp $^ $@
+	cat $(HEADERS) | grep -v "include \"" > halide/Halide.h
+	cp libHalide.a $@
 
 halide.tgz: halide
 	tar zcvf $@ $<

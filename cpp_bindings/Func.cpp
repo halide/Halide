@@ -19,7 +19,6 @@
 #include "Var.h"
 #include "Image.h"
 #include "Uniform.h"
-#include "elf.h"
 #include <sstream>
 
 #include <dlfcn.h>
