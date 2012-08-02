@@ -1,6 +1,3 @@
 [submodule "llvm"]
 	path = llvm
 	url = https://github.com/jrk/llvm.git
-[submodule "ImageStack"]
-	path = ImageStack
-	url = https://github.com/mit-gfx/ImageStack.git
