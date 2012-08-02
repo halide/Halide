@@ -107,8 +107,8 @@ let rec cg_stmt con stmt = match stmt with
         | _ -> con.cg_stmt stmt
     end
 
-  | Print _ ->
-      Printf.printf "Dropping Print stmt inside device kernel\n%!";
+  | Assert _ | Print _ ->
+      Printf.printf "Dropping Print/Assert stmt inside device kernel\n%!";
       const_zero con.c (* ignorable return value *)
   | For (name, base, width, ordered, body) when is_simt_var name ->
       (* TODO: loop needs to be turned into If (which we don't have in our IR), not dropped *)
