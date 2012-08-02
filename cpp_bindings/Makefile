@@ -4,7 +4,7 @@ endif
 GXX ?= g++-4.6
 CXX=$(GXX) -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
 
-HEADERS = Expr.h Func.h Halide.h Image.h MLVal.h Reduction.h Tuple.h Type.h Uniform.h Util.h Var.h elf.h
+HEADERS = Expr.h Func.h Halide.h Image.h MLVal.h Reduction.h Tuple.h Type.h Uniform.h Util.h Var.h
 
 all: libHalide.a
 
@@ -30,7 +30,7 @@ endif
 LLVM_LDFLAGS=$(shell $(LLVM_CONFIG_EXE) --ldflags)
 LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) $(CUDA_LIBS) -ldl -lstdc++
 
-HALIDE_OBJS=$(addprefix _build/,_MLHalide.o MLVal.o elf.o Expr.o Type.o Util.o Image.o Func.o Var.o Tuple.o Reduction.o)
+HALIDE_OBJS=$(addprefix _build/,_MLHalide.o MLVal.o Expr.o Type.o Util.o Image.o Func.o Var.o Tuple.o Reduction.o)
 
 libHalide.a: $(HALIDE_OBJS) ../src/_build/libllsupport_impl.a
 	ld -r -o Halide.o $(HALIDE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L../src/_build -lllsupport_impl -L$(LLVM_DIR)/lib $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -L$(OCAML_LIB_DIR) -lasmrun -lunix -lcamlstr -lnums -lbigarray
