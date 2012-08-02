@@ -4,7 +4,6 @@ open List
 open Util
 open Cg_util
 open Analysis
-open Batteries_uni
 
 module C = Cee
 
@@ -249,7 +248,7 @@ let codegen_c_wrapper (name,args,_) =
       | Buffer _ -> C.Deref offset
   in
   let body = [C.Expr
-               (ccall name (List.mapi cg_load_arg args))]
+               (ccall name (List.map2 cg_load_arg (0--(List.length args)) args))] (* TODO: switch back to Batteries List.mapi *)
   in
   [C.Function
     {
@@ -288,7 +287,7 @@ let codegen_to_file (e:entrypoint) =
      "#endif";
      "";
   ] in
-  File.with_file_out c_file
+  with_file_out c_file
     (fun o -> Printf.fprintf o "%s%!"
       (String.concat "\n" lines));
 

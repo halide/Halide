@@ -556,7 +556,7 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   dbg 2 "PTX:\n%s\n%!" ptx_src;
   (* log the PTX module to disk *)
   save_bc_to_file dev_mod "kernels.bc";
-  BatFile.with_file_out "kernels.ptx" (fun o -> BatPrintf.fprintf o "%s%!" ptx_src);
+  with_file_out "kernels.ptx" (fun o -> Printf.fprintf o "%s%!" ptx_src);
 
   (* free memory *)
   dispose_module dev_mod;
