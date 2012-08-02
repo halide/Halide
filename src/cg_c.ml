@@ -35,7 +35,10 @@ let cg_entry e =
   let name,args,stmt = e in
 
   let cname name =
-    Str.global_replace (Str.regexp "\\.") "__" name in
+    (* No batteries, so the below line doesn't work *)
+    (* Str.global_replace (Str.regexp "\\.") "__" name in *)
+    String.map (function | '.' -> '_' | x -> x) name
+  in
 
   let carg_decl = function
     | Scalar(n, t) -> (cname n, ctype_of_val_type t)
