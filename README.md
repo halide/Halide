@@ -1,3 +1,7 @@
+# WARNING: THIS DESCRIPTION IS INCOMPLETE #
+
+More thorough directions for Mac and Linux are coming very shortly. We are also working to automate as much as possible, to keep this simple.
+
 Changes in process
 --------------------
 I am adding dependencies on OCaml batteries included and sexplib. On Ubuntu or similar, these are available via:
@@ -9,9 +13,9 @@ On OS X, I recommend using [ODB](https://github.com/thelema/odb/) to install add
 Summary
 -------
 - Install OCaml (3.12.*)  
-  (On Mac, just use Homebrew: `brew install objective-caml`)
+  (On Mac, just use Homebrew: `brew install objective-caml`, or MacPorts: `sudo port install ocaml`)
 
-- Install GCC 4.6 - `g++-4.6` must be in your `$PATH`  
+- Install GCC 4.6/4.7 - `g++-4.6` or `g++-4.7` must be in your `$PATH`  
   (On Mac, Homebrew is highly recommended: `brew
 install https://raw.github.com/adamv/homebrew-alt/master/duplicates/gcc.rb --enable-cxx`)
 
@@ -38,5 +42,3 @@ Build env notes
 Debugging notes
 ---------------
 To make OCaml print useful stack trace info on uncaught exceptions, build a bytecode target with debugging (<target>.d.byte) and set the OCAMLRUNPARAM environment variable to include the "b" (backtrace) option. (Cf. [the OCaml runtime system docs](http://caml.inria.fr/pub/docs/manual-ocaml/manual024.html#toc96) for more.)
-
-Adobe commit test. v2.
