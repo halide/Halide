@@ -6,7 +6,7 @@ CXX=$(GXX) -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_st
 
 HEADERS = MLVal.h Util.h Var.h Type.h Uniform.h Expr.h Image.h Func.h Reduction.h Uniform.h
 
-all: libHalide.a
+all: libHalide.a Halide.h
 
 # Set env USE_GPU=1 to build with the GPU target forced.
 USE_GPU ?= 0
@@ -51,10 +51,12 @@ _build/_MLHalide.o: ../src/_build/halide.cmxa
 ../src/_build/libllsupport_impl.a: ../src/*.c ../src/architecture.*.cpp ../src/architecture.*.ll
 	make -C ../src lib.llsupport
 
-halide: libHalide.a $(HEADERS)
+Halide.h: $(HEADERS)
+	cat $(HEADERS) | grep -v "include \"" > Halide.h
+
+halide: libHalide.a Halide.h
 	mkdir -p halide
-	cat $(HEADERS) | grep -v "include \"" > halide/Halide.h
-	cp libHalide.a $@
+	cp Halide.h libHalide.a $@
 
 halide.tgz: halide
 	tar zcvf $@ $<
