@@ -1,3 +1,4 @@
+
 from cHalide import *
 import numpy
 import Image as PIL
@@ -635,8 +636,8 @@ def test_func(compile=True):
 def test_autotune():
     locals_d = test_func()
     
-    import halide_autotune
-    halide_autotune.autotune(locals_d['blur_y'], locals_d['test'], locals_d)
+    import petabricks_autotune
+    petabricks_autotune.autotune(locals_d['blur_y'], locals_d['test'], locals_d)
 
 def test_segfault():
     locals_d = test_func(compile=False)
@@ -677,6 +678,7 @@ def test_examples():
     names = []
     do_filter = True
     
+#    for example_name in ['interpolate']: #
     for example_name in 'interpolate snake blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
         example = getattr(examples, example_name)
         first = True
@@ -723,7 +725,7 @@ def test_examples():
     print 'Function names:'
     for (example_name, func_names) in names:
         print example_name, func_names
-        
+
 def test():
     exit_on_signal()
 #    print 'a'
@@ -733,9 +735,12 @@ def test():
 #    print 'c'
 #    pass
 
+    """
     test_core()
     test_segfault()
     test_blur()
+    test_examples()
+    """
     test_examples()
 #    test_autotune()
     print
