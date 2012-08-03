@@ -4,7 +4,7 @@ endif
 GXX ?= g++-4.6
 CXX=$(GXX) -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
 
-HEADERS = MLVal.h Util.h Var.h Type.h Uniform.h Expr.h Image.h Func.h Reduction.h Uniform.h
+HEADERS = MLVal.h Util.h Var.h Type.h Uniform.h Expr.h Image.h Func.h Reduction.h Uniform.h Tuple.h
 
 all: libHalide.a Halide.h
 
@@ -43,7 +43,7 @@ _build/%.o: %.cpp
 
 _build/_MLHalide.o: ../src/_build/halide.cmxa
 	mkdir -p _build
-	ocamlfind ocamlopt -ccopt -O3 -output-obj -linkall -o _build/_MLHalide.o -package sexplib.syntax -linkpkg $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/halide.cmxa
+	ocamlfind ocamlopt -ccopt -O3 -p -output-obj -linkall -o _build/_MLHalide.o -package sexplib.syntax -linkpkg $(OCAML_LLVM_LIB_DIR)/llvm.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_executionengine.cmxa $(OCAML_LLVM_LIB_DIR)/llvm_bitreader.cmxa ../src/_build/halide.cmxa
 
 ../src/_build/halide.cmxa: ../src/*.ml
 	make -C ../src lib.native
