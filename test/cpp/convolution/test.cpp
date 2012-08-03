@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
                             {1, 2, 1}};
     
     Func input("input");
-    input(x, y) = in(clamp(x, 0, W), clamp(y, 0, H));
+    input(x, y) = in(clamp(x, 0, W-1), clamp(y, 0, H-1));
 
     Func blur("blur");
     RDom r(tent);
