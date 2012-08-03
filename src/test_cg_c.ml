@@ -1,6 +1,5 @@
 open Ir
 open Sexplib
-open Batteries_uni
 
 let _ =
   let entry =

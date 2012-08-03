@@ -77,7 +77,7 @@ else:
 # Test building 
 chdir('src')
 status('Test: building halide.cmxa')
-print ocamlbuild('halide.cmxa')
+print ocamlbuild('-use-ocamlfind', 'halide.cmxa')
 chdir('..')
 
 status('Building C++ bindings')

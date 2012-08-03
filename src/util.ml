@@ -12,6 +12,7 @@ let string_set_map (f: string -> string) (s: StringSet.t) =
   StringSet.fold (fun x s -> StringSet.add (f x) s) s StringSet.empty
 
 module StringMap = Map.Make(String)
+(* module StringMap = BatMap.StringMap *) (* TODO: batteries *)
 
 module StringIntSet = Set.Make (
   struct
@@ -90,3 +91,8 @@ let dbg level =
     Printf.printf 
   else 
     Printf.ifprintf stdout 
+
+let with_file_out filename func =
+  let out = open_out filename in
+  func out;
+  close_out out

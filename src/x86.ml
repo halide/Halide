@@ -4,7 +4,7 @@ open Cg_llvm_util
 open Util
 open Analysis
 
-type state = int (* dummy - we don't use anything in this Arch for now *)
+type state = int (* dummy - this Arch carries no extra state around during codegen *)
 type context = state cg_context
 let start_state () = 0
 
@@ -29,6 +29,7 @@ let rec cg_expr (con:context) (expr:expr) =
   let i8x16_t = vector_type (i8_type c) 16 in
   let i32_t = i32_type c in
 
+  (* Peephole optimizations for x86 *)
   match expr with 
     (* x86 doesn't do 16 bit vector division, but for constants you can do multiplication instead. *)
     | Bop (Div, x, Broadcast (Cast (UInt 16, IntImm y), 8)) ->
@@ -51,7 +52,7 @@ let rec cg_expr (con:context) (expr:expr) =
               build_bitcast value (type_of_val_type c t) "" b        
         end
 
-    (* Strided loads should load two vectors and then shuffle *)
+    (* Strided loads with stride 2 should load two vectors and then shuffle *)
     | Load (t, buf, Ramp(base, IntImm 2, n)) when (bit_width t = 128) ->
         let v1 = cg_expr (Load (t, buf, Ramp(base, IntImm 1, n))) in
         let v2 = cg_expr (Load (t, buf, Ramp(base +~ IntImm n, IntImm 1, n))) in
@@ -75,7 +76,7 @@ let rec cg_expr (con:context) (expr:expr) =
         build_shufflevector vec vec (const_vector (Array.of_list mask)) "" b
     *)
 
-    (* We don't have any special tricks up our sleeve for this case *)
+    (* We don't have any special tricks up our sleeve for this case, just use the default cg_expr *)
     | _ -> con.cg_expr expr 
         
 let rec cg_stmt (con:context) (stmt:stmt) =
@@ -85,6 +86,7 @@ let rec cg_stmt (con:context) (stmt:stmt) =
   let ptr_t = pointer_type (i8_type c) in
   let i8x16_t = vector_type (i8_type c) 16 in
 
+  (* Peephole optimizations for x86 *)
   match stmt with
     (* unaligned 128-bit dense stores use movups *)
     | Store (e, buf, Ramp(base, IntImm 1, n)) when (bit_width (val_type_of_expr e)) = 128 ->
@@ -98,17 +100,24 @@ let rec cg_stmt (con:context) (stmt:stmt) =
               let value = build_bitcast (cg_expr e) i8x16_t "" b in
               build_call unaligned_store_128 [|value; addr|] "" b        
         end
+    (* Fall back to the default cg_stmt *)
     | _ -> con.cg_stmt stmt
 
+(* Free some memory. Not called directly, but rather malloc below uses
+   this to build a cleanup closure *)
 let free (con:context) (name:string) (address:llvalue) =
   let c = con.c and m = con.m and b = con.b in
   let free = declare_function "fast_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
   ignore (build_call free [|address|] "" b)
 
+(* Allocate some memory. Returns an llval representing the address,
+   and also a closure that emits the cleanup code when you call it given
+   a context *)
 let malloc (con:context) (name:string) (elems:expr) (elem_size:expr) =
   let c = con.c and b = con.b and m = con.m in
   let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
   match size with
+    (* Constant-sized allocations go on the stack *)
     | IntImm bytes ->
         let chunks = ((bytes + 15)/16) in (* 16-byte aligned stack *)
         (* Get the position at the top of the function *)

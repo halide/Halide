@@ -15,10 +15,14 @@ DEBUG_NATIVE=$(patsubst %.ml,%.d.native,${TARGETS})
 BYTE=$(patsubst %.ml,%.byte,${TARGETS})
 NATIVE=$(patsubst %.ml,%.native,${TARGETS})
 
-all: lib.byte lib.native
+all: lib.byte lib.native libllsupport_impl.a
 
+lib.llsupport: libllsupport_impl.a
 lib.byte: halide.cma
 lib.native: halide.cmxa
+
+lib%.a:
+	${BUILD_CMD} $@
 
 %.cma:
 	${BUILD_CMD} $@
