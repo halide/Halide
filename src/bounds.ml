@@ -8,7 +8,7 @@ type bounds_result = Range of (expr * expr) | Unbounded
 let make_range (min, max) =
   let min = constant_fold_expr min in
   let max = constant_fold_expr max in
-  dbg 2 "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max); 
+  (* dbg 2 "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max);  *)
   assert (is_scalar min);
   assert (is_scalar max);
   Range (min, max)
@@ -52,10 +52,10 @@ let bounds_of_type = function
 
 let bounds_of_expr_in_env env expr =
   let rec bounds_of_expr_in_env_inner env expr = 
-    let recurse expr = 
-      dbg 2 "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr);
-      let result = bounds_of_expr_in_env_inner env expr in
-      check_result expr result;
+    let recurse e = 
+      let result = bounds_of_expr_in_env_inner env e in
+      dbg 2 "Computed bounds of %s...\n%!" (Ir_printer.string_of_expr e);
+      (* check_result e result; *)
       result
     in
 
@@ -311,19 +311,19 @@ let bounds_of_expr_in_env env expr =
       end
           
       (* Unary monotonic built-ins *)
-      | Call (t, f, [arg]) when is_monotonic f ->
+      | Call (Extern, t, f, [arg]) when is_monotonic f ->
           begin match (recurse arg) with 
             | Range (min, max) ->
-                make_range (Call (t, f, [min]),
-                            Call (t, f, [max]))
+                make_range (Call (Extern, t, f, [min]),
+                            Call (Extern, t, f, [max]))
             | _ -> Unbounded
           end
              
       (* Trig built-ins *)
-      | Call (t, f, [arg]) when f = ".sin" || f = ".cos" -> 
+      | Call (Extern, t, f, [arg]) when f = ".sin" || f = ".cos" -> 
           Range ((make_zero t) -~ (make_one t), make_one t)                  
 
-      | Call (t, _, _) -> bounds_of_type t
+      | Call (_, t, _, _) -> bounds_of_type t
       | Debug (e, _, _) -> recurse e
           
       | Var (t, n) -> begin
@@ -335,7 +335,8 @@ let bounds_of_expr_in_env env expr =
       | UIntImm n -> make_range (UIntImm n, UIntImm n)
       | FloatImm n -> make_range (FloatImm n, FloatImm n)
     in
-    
+
+    (*
     let result_string = match result with
       | Unbounded -> "Unbounded"
       | Range (min, max) -> 
@@ -344,7 +345,8 @@ let bounds_of_expr_in_env env expr =
             Ir_printer.string_of_expr (constant_fold_expr max) ^ ")"
     in
     dbg 2 "Bounds of %s = %s\n" (Ir_printer.string_of_expr expr) result_string;
-    
+    *)
+
     result
   in
   let result =
@@ -373,7 +375,7 @@ let region_union a b = match (a, b) with
 
 (* What region of func is used by expr with variable ranges in env *)
 let rec required_of_expr func env = function
-  | Call (_, f, args) when f = func ->       
+  | Call (_, _, f, args) when f = func ->       
       let required_of_args = List.map (required_of_expr func env) args in
       let required_of_call = List.map (fun arg -> bounds_of_expr_in_env env arg) args in
       List.fold_left region_union required_of_call required_of_args
@@ -393,16 +395,16 @@ let rec required_of_stmt func env = function
       (* Brute force. Might get really slow for long chains of letstmts *)
       let subs = subs_expr_in_stmt (Var (val_type_of_expr expr, name)) expr in
       required_of_stmt func env (subs stmt)
-      (* TODO: Why doesn't the below work? Does this mean let above is broken too?
-      let required_of_expr = required_of_expr func env expr in
+      (* TODO: Why doesn't the below work? Does this mean let above is broken too?  
+      let required_of_expr = required_of_expr func env expr in 
       let bounds_of_expr = bounds_of_expr_in_env env expr in
       let required_of_stmt = required_of_stmt func (StringMap.add name bounds_of_expr env) stmt in
-      region_union required_of_a required_of_b *)
+      region_union required_of_expr required_of_stmt  *)
   | Provide (expr, name, args) ->
       (* A provide touches the same things as a similar call *)
       region_union 
         (required_of_expr func env expr) 
-        (required_of_expr func env (Call (val_type_of_expr expr, name, args)))
+        (required_of_expr func env (Call (Func, val_type_of_expr expr, name, args)))
   | stmt -> fold_children_in_stmt (required_of_expr func env) (required_of_stmt func env) region_union stmt
   
 

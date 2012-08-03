@@ -16,7 +16,7 @@ let break_false_dependence_expr expr =
   let rec find_unknowns expr = match expr with
     | Var _ -> ExprSet.add expr ExprSet.empty
     | Load (t, b, idx) -> ExprSet.add expr (find_unknowns idx)
-    | Call (t, f, args) -> 
+    | Call (ct, rt, f, args) -> 
         let unknowns_in_args = List.map find_unknowns args in
         let unknowns_in_args = List.fold_left ExprSet.union ExprSet.empty unknowns_in_args in
         ExprSet.add expr unknowns_in_args

@@ -274,7 +274,7 @@ let rec constant_fold_expr expr =
           end
           | _ -> Let (n, a, b)
         end
-    | Call (t, n, args) -> Call (t, n, List.map recurse args)
+    | Call (ct, rt, n, args) -> Call (ct, rt, n, List.map recurse args)
 
     (* Immediates are unchanged *)
     | x -> x

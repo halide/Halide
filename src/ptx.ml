@@ -579,11 +579,4 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   f
 
 let env =
-  let ntid_decl   = (".llvm.ptx.read.ntid.x", [], i32, Extern) in
-  let nctaid_decl = (".llvm.ptx.read.nctaid.x", [], i32, Extern) in
-  
-  let e = Environment.empty in
-  let e = Environment.add "llvm.ptx.read.nctaid.x" nctaid_decl e in
-  let e = Environment.add "llvm.ptx.read.ntid.x" ntid_decl e in
-  
-  e
+  Environment.empty
