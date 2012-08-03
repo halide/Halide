@@ -19,7 +19,7 @@ all: process
 
 local_laplacian: ../../cpp_bindings/ local_laplacian.cpp
 	$(MAKE) -C ../../cpp_bindings libHalide.a
-	$(GXX) local_laplacian.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -lpng -o local_laplacian -lpthread -ldl $(PNGFLAGS) -g
+	$(GXX) local_laplacian.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -lpng -o local_laplacian -lpthread -ldl $(PNGFLAGS) -O3
 
 local_laplacian.bc: local_laplacian
 	./local_laplacian $(SCHEDULE)
