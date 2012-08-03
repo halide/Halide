@@ -41,7 +41,7 @@ let _ =
                  Unrolled ("fxo", IntImm 0, 2)
                 ] in 
 
-  let g = ("g", [(i32, "x")], f32, Pure ((Call (f32, "f", [x +~ one])) +~ (Call (f32, "f", [x -~ one])))) in
+  let g = ("g", [(i32, "x")], f32, Pure ((Call (Func, f32, "f", [x +~ one])) +~ (Call (Func, f32, "f", [x -~ one])))) in
   
   let g_call_sched = Root in
   let g_sched = [Split ("x", "threadidx", "gxi", IntImm 0); Unrolled ("gxi", IntImm 0, 4); Parallel ("threadidx", IntImm 0, IntImm 25)] in

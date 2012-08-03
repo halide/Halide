@@ -148,7 +148,7 @@ let rec cg_stmt con stmt = match stmt with
 
       (* Drop this explicit loop, and just SIMTfy variable references in its body *)
       (* Add base to all references to name inside loop, since CTA and Thread IDs start from 0 *)
-      let simtvar = (Call (i32, simt_intrinsic name, [])) in
+      let simtvar = (Call (Extern, i32, simt_intrinsic name, [])) in
       let loopvar = simtvar +~ base in
 
       (* create the basic blocks for the (start of the) loop body, and continuing after the loop *)
@@ -206,11 +206,4 @@ let malloc con name count elem_size =
   (addr, fun _ -> ())
     
 let env =
-  let ntid_decl   = (".llvm.ptx.read.ntid.x", [], i32, Extern) in
-  let nctaid_decl = (".llvm.ptx.read.nctaid.x", [], i32, Extern) in
-
-  let e = Environment.empty in
-  let e = Environment.add "llvm.ptx.read.nctaid.x" nctaid_decl e in
-  let e = Environment.add "llvm.ptx.read.ntid.x" ntid_decl e in
-
-  e
+  Environment.empty

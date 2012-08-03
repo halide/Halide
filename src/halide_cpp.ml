@@ -128,12 +128,10 @@ let _ =
   Callback.register "makeFloatType" (fun a -> Float a);
   Callback.register "makeIntType" (fun a -> Int a);
   Callback.register "makeUIntType" (fun a -> UInt a);
-  Callback.register "makeLoad" (fun t buf idx -> Load (t, "." ^ buf, idx));
   Callback.register "makeUniform" (fun t n -> Var (t, "." ^ n));
-  Callback.register "makeStore" (fun a buf idx -> Store (a, "." ^ buf, idx));
-  Callback.register "makeFor" (fun var min n stmt -> For (var, min, n, true, stmt));
-  Callback.register "inferType" (fun expr -> val_type_of_expr expr);
-  Callback.register "makeCall" (fun t name args -> Call (t, name, args));
+  Callback.register "makeFuncCall" (fun t name args -> Call (Func, t, name, args));
+  Callback.register "makeExternCall" (fun t name args -> Call (Extern, t, "." ^ name, args));
+  Callback.register "makeImageCall" (fun t name args -> Call (Image, t, "." ^ name, args));
   Callback.register "makeDebug" (fun e prefix args -> Debug (e, prefix, args));
   Callback.register "makeDefinition" (fun name argnames body -> (name, List.map (fun x -> (i32, x)) argnames, val_type_of_expr body, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);

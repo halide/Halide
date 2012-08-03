@@ -16,7 +16,6 @@ namespace Halide {
     ML_FUNC1(makeUIntImm);
     ML_FUNC1(makeVar);
     ML_FUNC2(makeUniform);
-    ML_FUNC3(makeLoad);
     ML_FUNC2(makeCast);
     ML_FUNC2(makeAdd);
     ML_FUNC2(makeSub);
@@ -33,11 +32,12 @@ namespace Halide {
     ML_FUNC2(makeMin);
     ML_FUNC3(makeSelect);
     ML_FUNC3(makeDebug);
-    ML_FUNC3(makeCall);
+    ML_FUNC3(makeFuncCall);
+    ML_FUNC3(makeExternCall);
+    ML_FUNC3(makeImageCall);
     ML_FUNC2(makeAnd);
     ML_FUNC2(makeOr);
     ML_FUNC1(makeNot);
-    ML_FUNC1(inferType);
 
     template<typename T>
     void set_add(std::vector<T> &a, const T &b) {
@@ -146,16 +146,30 @@ namespace Halide {
         contents->uniforms.push_back(u);
     }
 
-    Expr::Expr(const ImageRef &l) :
-        contents(new Contents(makeLoad(l.image.type().mlval, l.image.name(), l.idx.node()), l.image.type())) {
+    Expr::Expr(const ImageRef &l) {        
+        MLVal args = makeList();
+        for (size_t i = l.idx.size(); i > 0; i--) {
+            args = addToList(args, l.idx[i-1].node());
+        }
+        MLVal node = makeImageCall(l.image.type().mlval, l.image.name(), args);
+        contents.reset(new Contents(node, l.image.type()));
+        for (size_t i = 0; i < l.idx.size(); i++) {
+            child(l.idx[i]);
+        }
         contents->images.push_back(l.image);
-        child(l.idx);
     }
 
-    Expr::Expr(const UniformImageRef &l) : 
-        contents(new Contents(makeLoad(l.image.type().mlval, l.image.name(), l.idx.node()), l.image.type())) {
+    Expr::Expr(const UniformImageRef &l) {
+        MLVal args = makeList();
+        for (size_t i = l.idx.size(); i > 0; i--) {
+            args = addToList(args, l.idx[i-1].node());
+        }
+        MLVal node = makeImageCall(l.image.type().mlval, l.image.name(), args);
+        contents.reset(new Contents(node, l.image.type()));
+        for (size_t i = 0; i < l.idx.size(); i++) {
+            child(l.idx[i]);
+        }
         contents->uniformImages.push_back(l.image);
-        child(l.idx);
     }
 
     Expr::Expr(const Expr &other) : contents(other.contents) {        
@@ -486,14 +500,14 @@ namespace Halide {
 
     Expr builtin(Type t, const std::string &name) {
         MLVal args = makeList();
-        Expr e(makeCall(t.mlval, "." + name, args), t);
+        Expr e(makeExternCall(t.mlval, name, args), t);
         return e;
     }
 
     Expr builtin(Type t, const std::string &name, Expr a) {
         MLVal args = makeList();
         args = addToList(args, a.node());
-        Expr e(makeCall(t.mlval, "." + name, args), t);
+        Expr e(makeExternCall(t.mlval, name, args), t);
         e.child(a);
         return e;
     }
@@ -502,7 +516,7 @@ namespace Halide {
         MLVal args = makeList();
         args = addToList(args, b.node());
         args = addToList(args, a.node());
-        Expr e(makeCall(t.mlval, "." + name, args), t);
+        Expr e(makeExternCall(t.mlval, name, args), t);
         e.child(a);
         e.child(b);
         return e;
@@ -513,7 +527,7 @@ namespace Halide {
         args = addToList(args, c.node());
         args = addToList(args, b.node());
         args = addToList(args, a.node());
-        Expr e(makeCall(t.mlval, "." + name, args), t);
+        Expr e(makeExternCall(t.mlval, name, args), t);
         e.child(a);
         e.child(b);
         e.child(c);
@@ -526,7 +540,7 @@ namespace Halide {
         args = addToList(args, c.node());
         args = addToList(args, b.node());
         args = addToList(args, a.node());
-        Expr e(makeCall(t.mlval, "." + name, args), t);
+        Expr e(makeExternCall(t.mlval, name, args), t);
         e.child(a);
         e.child(b);
         e.child(c);
@@ -645,9 +659,9 @@ namespace Halide {
             exprlist = addToList(exprlist, f.args()[i-1].node());            
         }
 
-        node = makeCall(f.f().returnType().mlval, 
-                        (f.f().name()),
-                        exprlist);
+        node = makeFuncCall(f.f().returnType().mlval, 
+                            (f.f().name()),
+                            exprlist);
         type = f.f().returnType();
 
         for (size_t i = 0; i < f.args().size(); i++) {
