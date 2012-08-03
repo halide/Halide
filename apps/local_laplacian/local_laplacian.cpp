@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
     /* THE ALGORITHM */
 
     // Number of pyramid levels 
-    int J = 8;
+    int J = 4;
 
     // number of intensity levels
     Uniform<int> levels;
