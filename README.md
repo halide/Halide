@@ -1,42 +1,16 @@
-Changes in process
---------------------
-I am adding dependencies on OCaml batteries included and sexplib. On Ubuntu or similar, these are available via:
+Getting Started
+----------------
+What you probably want as a user of Halide is one of our [binary releases](http://github.com/halide/Halide/downloads).
 
-	sudo apt-get install libsexplib-camlp4-dev ocaml-batteries-included
+Once you have that, check out the [Getting Started tutorial](https://github.com/halide/Halide/wiki/Getting-Started).
 
-On OS X, I recommend using [ODB](https://github.com/thelema/odb/) to install additional OCaml packages (sexplib, batteries).
+Using Halide just requires including a single header and linking against a self-contained static library which includes our entire compiler. Given that, you can JIT or statically compile Halide programs without needing anything else.
 
-Summary
--------
-- Install OCaml (3.12.*)  
-  (On Mac, just use Homebrew: `brew install objective-caml`)
+Building the Halide compiler from source currently requires some occasionally hairy external dependencies. We're working on streamlining the process for major platforms (Mac & Ubuntu now, Windows to follow) as we speak. You're still very welcome to spelunk through the code, but again, you can do anything short of modify the compiler with one of the [binary releases](http://github.com/halide/Halide/downloads).
 
-- Install GCC 4.6 - `g++-4.6` must be in your `$PATH`  
-  (On Mac, Homebrew is highly recommended: `brew
-install https://raw.github.com/adamv/homebrew-alt/master/duplicates/gcc.rb --enable-cxx`)
+Be aware that this is very much a research compiler. There are plenty of rough edges, and a simple syntax error in one place might cause a segfault somewhere else. We're working hard to make it more user-friendly, and if you do have trouble please feel free to raise it on our [bug tracker](http://github.com/halide/Halide/issues), or on the [halide-dev list](https://lists.csail.mit.edu/mailman/listinfo/halide-dev).
 
-- `./bootstrap` to build everything (and wait -- this builds all of LLVM, which takes a while)
-
-- `cd test; ./run_test cpp/*`
-
-- Check out `test/cpp/*` and `apps/*` for examples of how to get started.
-
-- _OPTIONAL:_ `source ./bash_profile` to configure llvm paths for current session (if you want llvm tools in your path for manual use, or for use by static build `Makefile`s like those in some of `apps/*`).  
-  **TODO: hard code LLVM paths in Makefiles to make this really optional again.**
-
-
-Build env notes
----------------
-- ensure clang sub-submodule (llvm/tools/clang) is updated and checked out at branch matching llvm (optional: if you want to have a clang for this llvm build)
-- put ignores in [llvm,llvm/tools/clang]/.git/info/exclude to keep built dir clean
-- configure llvm for debug+asserts during development:
-    `./configure --enable-assertions`
-- enable all targets (e.g. for arm):
-    `./configure --enable-targets=all`
-
-
-Debugging notes
----------------
-To make OCaml print useful stack trace info on uncaught exceptions, build a bytecode target with debugging (<target>.d.byte) and set the OCAMLRUNPARAM environment variable to include the "b" (backtrace) option. (Cf. [the OCaml runtime system docs](http://caml.inria.fr/pub/docs/manual-ocaml/manual024.html#toc96) for more.)
-
-Adobe commit test. v2.
+Resources
+----------
+- Check out [our first paper](http://people.csail.mit.edu/jrk/halide12).
+- Subscribe to [halide-announce](https://lists.csail.mit.edu/mailman/listinfo/halide-announce) to hear about releases. - Subscribe to [halide-dev](https://lists.csail.mit.edu/mailman/listinfo/halide-dev) to discuss technical issues.

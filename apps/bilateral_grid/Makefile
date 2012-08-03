@@ -1,7 +1,7 @@
-GXX = g++-4.6
 ifneq ($(shell env -i command -v g++-4.7),)
-GXX = g++-4.7
+GXX ?= g++-4.7
 endif
+GXX ?= g++-4.6
 
 PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
 ifeq ($(HL_TARGET),ptx)
@@ -15,8 +15,8 @@ endif
 all: filter
 
 bilateral_grid: ../../cpp_bindings/ bilateral_grid.cpp
-	$(MAKE) -C ../../cpp_bindings Halide.a
-	$(GXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../cpp_bindings/ ../../cpp_bindings/Halide.a  -std=c++0x -o bilateral_grid  -lpthread -ldl
+	$(MAKE) -C ../../cpp_bindings libHalide.a
+	$(GXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -o bilateral_grid  -lpthread -ldl
 
 bilateral_grid.bc: bilateral_grid bilateral_grid.cpp
 	./bilateral_grid 8

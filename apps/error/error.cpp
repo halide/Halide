@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Var x("x"), y("y");
-    RVar rx(0, 100, "rx");
+    RDom rx(0, 100);
 
     /* Multiple definitions */
     /*
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
     Uniform<float> uf("uf");
     Expr foo = cast<int>(uf*3);
-    RVar rv(-foo, 1+2*foo, "rv");
+    RDom rv(-foo, 1+2*foo);
     Func f6("f6"), f7("f7");
     f6(x) = x*x;
     f7(x) += f6(x + rv);

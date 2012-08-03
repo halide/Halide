@@ -528,7 +528,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   end;
 
   (* ----------------------------------------------- *)
-  dbg 2 "Computing the order in which to realize functions\n%!";
+  dbg 1 "Computing the order in which to realize functions\n%!";
 
   let starts_with a b =
     String.length a > String.length b &&
@@ -542,7 +542,8 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
     else
       let (call_sched_a, _) = (find_schedule schedule a) in
       let (call_sched_b, _) = (find_schedule schedule b) in
-      (* If a reuses the computation of b, a should be 'realized' first (which just rewrites calls to a into calls to b) *)
+      (* If a reuses the computation of b, a should be 'realized'
+         first (which just rewrites calls to a into calls to b) *)
       if (call_sched_a = Reuse b) then (Some true)
       else if (call_sched_b = Reuse a) then (Some false)
       else None
@@ -567,28 +568,40 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* Topologically sort them *)
   let functions = partial_sort lt functions in
-  dbg 2 "Realization order: %s\n" (String.concat ", " functions);
+  dbg 1 "Realization order: %s\n" (String.concat ", " functions);
 
   (* ----------------------------------------------- *)
-  dbg 2 "Fully qualifying symbols in the schedule\n%!";
+  dbg 1 "Fully qualifying symbols in the schedule\n%!";
   let schedule = qualify_schedule schedule in
 
+  let dump_stmt stmt pass pass_desc suffix verb = 
+    if verbosity > verb then begin
+      let out = open_out (func ^ ".lowered_pass_" ^ (string_of_int pass) ^ "_" ^ suffix) in
+      Printf.fprintf out "# %s\n\n" pass_desc;
+      Printf.fprintf out "%s%!" (string_of_stmt stmt);
+      close_out out;
+    end;
+  in
+
+  let pass = 0 in
+
   (* ----------------------------------------------- *)
-  dbg 2 "Realizing root statement\n%!";
+  let pass_desc = "Realizing initial statement" in
+  dbg 1 "%s\n%!" pass_desc;
+
   let stmt = match realize func (Block []) env schedule with 
     | Pipeline (_, _, _, c, _) -> c
     | _ -> failwith "Realize didn't return a pipeline"
   in
 
-  if 1 < verbosity then begin
-    let out = open_out (func ^ ".lowered_pass_0") in
-    Printf.fprintf out "Realizing root statement:\n";
-    Printf.fprintf out "%s%!" (string_of_stmt stmt);
-    close_out out;
-  end;
+  dump_stmt stmt pass pass_desc "initial" 1;
+
+  let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
-  dbg 2 "Inserting out-of-bounds checks for the output image\n%!";
+  let pass_desc = "Inserting out-of-bounds checks for output image" in
+  dbg 1 "%s\n%!" pass_desc;
+
   let region = required_of_stmt func StringMap.empty stmt in
   let (check, _) = List.fold_left (fun (expr, count) range ->    
     match range with
@@ -602,27 +615,31 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let oob_check = Assert (check, "Function may access output image out of bounds") in
   let stmt = Block [oob_check; stmt] in
 
-  if 1 < verbosity then begin
-    let out = open_out (func ^ ".lowered_pass_1") in
-    Printf.fprintf out "Inserted out of bounds check for the output image:\n";
-    Printf.fprintf out "%s%!" (string_of_stmt stmt);
-    close_out out;
-  end;    
+  dump_stmt stmt pass pass_desc "oob_check" 1;
+
+  let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
-  dbg 2 "Recursively lowering function calls\n%!";
+  dbg 1 "Lowering function calls\n%!";
   let functions = List.filter (fun x -> x <> func) functions in  
-  let stmt = List.fold_left (fun stmt f -> lower_stmt f stmt env schedule) stmt functions in
+  let stmt = List.fold_left (fun stmt f ->     
+    let pass_desc = "Lowering " ^ f in
+    dbg 1 "%s\n%!" pass_desc;
 
-  if 1 < verbosity then begin
-    let out = open_out (func ^ ".lowered_pass_2") in
-    Printf.fprintf out "Lowered function calls:\n";
-    Printf.fprintf out "%s%!" (string_of_stmt stmt);
-    close_out out;
-  end;
+    let stmt = lower_stmt f stmt env schedule in
+
+    dump_stmt stmt pass pass_desc f 1;
+
+    stmt) stmt functions 
+  in
+
+  let stmt = Constant_fold.constant_fold_stmt stmt in
+
+  let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
-  dbg 2 "Performing bounds inference\n%!";
+  let pass_desc = "Bounds inference" in
+  dbg 1 "%s\n%!" pass_desc;
   (* Updates stmt and schedule *)
   let stmt = bounds_inference env schedule (For ("", IntImm 0, IntImm 0, true, stmt)) in
   let (stmt, schedule) = match stmt with 
@@ -630,26 +647,23 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
     | _ -> failwith "Bounds inference on a for loop returned something other than a for loop"
   in
 
-  if 1 < verbosity then begin
-    let out = open_out (func ^ ".lowered_pass_3") in
-    Printf.fprintf out "Performed bounds inference:\n";
-    Printf.fprintf out "%s%!" (string_of_stmt stmt);
-    close_out out;
-  end;
+  dump_stmt stmt pass pass_desc "bounds_inference" 1;
+
+  let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
-  dbg 2 "Replacing function references with loads and stores\n%!";
+  let pass_desc = "Replace function references with loads and stores" in 
+  dbg 1 "%s\n%!" pass_desc;
+
   let stmt = lower_function_calls stmt env schedule in
 
-  if 1 < verbosity then begin
-    let out = open_out (func ^ ".lowered_pass_4") in
-    Printf.fprintf out "Replaced function references with loads and stores:\n";
-    Printf.fprintf out "%s%!" (string_of_stmt stmt);
-    close_out out;
-  end;
+  dump_stmt stmt pass pass_desc "loads_and_stores" 1;
+
+  let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
-  dbg 2 "Replacing loads and stores to %s to stores to .result\n%!" func;
+  let pass_desc = "Replacing loads and stores to the output with loads and stores to .result" in
+  dbg 1 "%s\n%!" pass_desc;
   let rec rewrite_loads_from_result = function
     | Load (e, f, idx) when f = func ->
         Load (e, ".result", idx)
@@ -662,15 +676,13 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   in
   let stmt = rewrite_references_to_result stmt in
 
-  if 1 < verbosity then begin
-    let out = open_out (func ^ ".lowered_pass_5") in
-    Printf.fprintf out "Replaced loads and stores to output function with stores to .result:\n";
-    Printf.fprintf out "%s%!" (string_of_stmt stmt);
-    close_out out;
-  end;
+  dump_stmt stmt pass pass_desc "result_stores" 1;
+
+  let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
-  dbg 2 "Replacing references to bounds of output function with bounds of output buffer\n%!";
+  let pass_desc = "Replace references to bounds of output function with bounds of output buffer" in
+  dbg 1 "%s\n%!" pass_desc;
   let args,_,_ = find_function func env in
   let (stmt,_) =
     List.fold_left
@@ -684,23 +696,16 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
       args
   in
 
-  if 1 < verbosity then begin
-    let out = open_out (func ^ ".lowered_pass_6") in
-    Printf.fprintf out "Replaced references to bounds of output function with bounds of output buffer\n";
-    Printf.fprintf out "%s%!" (string_of_stmt stmt);
-    close_out out;
-  end;
+  dump_stmt stmt pass pass_desc "result_bounds" 1;
+
+  let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
-  dbg 2 "Constant folding\n%!";
+  let pass_desc = "Constant folding" in
+  dbg 1 "%s\n%!" pass_desc;
   let stmt = Constant_fold.constant_fold_stmt stmt in
 
-  if 0 < verbosity then begin
-    let out = open_out (func ^ ".lowered_final") in
-    Printf.fprintf out "Constant folding\n";
-    Printf.fprintf out "%s%!" (string_of_stmt stmt);
-    close_out out;
-  end;
+  dump_stmt stmt pass pass_desc "final" 1;
 
   stmt
 

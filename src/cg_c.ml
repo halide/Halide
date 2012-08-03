@@ -4,7 +4,6 @@ open List
 open Util
 open Cg_util
 open Analysis
-open Batteries_uni
 
 module C = Cee
 
@@ -35,8 +34,22 @@ let ccall f args = C.Call(C.ID f, args)
 let cg_entry e =
   let name,args,stmt = e in
 
-  let cname name =
-    Str.global_replace (Str.regexp "\\.") "__" name in
+  let rec cname name =
+    (* No batteries, so the below line doesn't work *)
+    (* Str.global_replace (Str.regexp "\\.") "__" name in *)
+    (* No ocaml 4.0, so the below line doesn't work either. Sigh *)
+    (* String.map (function | '.' -> '_' | x -> x) name *)
+    let len = String.length name in
+    try begin
+      let first_dot = String.index name '.' in
+      let rest = "__" ^ (cname (String.sub name (first_dot+1) (len-first_dot-1))) in      
+      match first_dot with 
+        | 0 -> rest          
+        | _ -> 
+          let first = (String.sub name 0 first_dot) in
+          first ^ rest
+    end with Not_found -> name
+  in
 
   let carg_decl = function
     | Scalar(n, t) -> (cname n, ctype_of_val_type t)
@@ -183,6 +196,10 @@ let cg_entry e =
 
         C.Block ([scratch_init], prod @ cons @ free)
 
+    | Print (_)
+    | Assert (_, _) -> 
+        Printf.printf "TODO: skipping codegen of Print/Assert in C backend\n";
+        C.Block([], [])
     | s -> failwith (Printf.sprintf "Can't codegen: %s" (Ir_printer.string_of_stmt s))
 
   and cg_for name min size stmt =
@@ -249,7 +266,7 @@ let codegen_c_wrapper (name,args,_) =
       | Buffer _ -> C.Deref offset
   in
   let body = [C.Expr
-               (ccall name (List.mapi cg_load_arg args))]
+               (ccall name (List.map2 cg_load_arg (0--(List.length args)) args))] (* TODO: switch back to Batteries List.mapi *)
   in
   [C.Function
     {
@@ -288,7 +305,7 @@ let codegen_to_file (e:entrypoint) =
      "#endif";
      "";
   ] in
-  File.with_file_out c_file
+  with_file_out c_file
     (fun o -> Printf.fprintf o "%s%!"
       (String.concat "\n" lines));
 

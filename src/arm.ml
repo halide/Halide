@@ -64,6 +64,7 @@ let rec cg_expr (con : context) (expr : expr) =
     | x -> 1 + (log2 (x/2))
   in
 
+  (* Peephole optimizations for arm *)
   match expr with 
     | Bop (Min, l, r) when is_vector l -> 
         begin match (val_type_of_expr l) with
@@ -108,7 +109,7 @@ let rec cg_expr (con : context) (expr : expr) =
         let result = build_call ld [|addr; const_int (i32_t) ((bit_width (element_val_type t))/8)|] "" b in
         result
 
-          
+    (* Strided loads can call vld2 *)
     | Load (IntVector (16, 8), buf, Ramp (base, IntImm 2, w)) 
     | Load (UIntVector (16, 8), buf, Ramp (base, IntImm 2, w)) ->
         let ld = declare_function "llvm.arm.neon.vld2.v8i16"
@@ -172,6 +173,7 @@ let rec cg_expr (con : context) (expr : expr) =
     | Select (Cmp (GT, x, y), Bop (Sub, x1, y1), Bop (Sub, y2, x2)) 
     | Select (Cmp (GE, x, y), Bop (Sub, x1, y1), Bop (Sub, y2, x2)) 
         when is_vector x && x = x1 && x = x2 && y = y1 && y = y2 ->
+       TODO
     *)
 
      
@@ -231,8 +233,7 @@ let rec cg_expr (con : context) (expr : expr) =
     
     *)
 
-
-    (* Vector interleave *)
+    (* Vector interleave: TODO: port this to x86 as well *)
     | Select (Cmp (EQ, Bop (Mod, Ramp (x, one, w), two), zero), l, r) 
         when ((Analysis.reduce_expr_modulo x 2 = Some 0) &&
               (duplicated_lanes l) &&
@@ -267,6 +268,8 @@ let rec cg_stmt (con : context) (stmt : stmt) =
   let i8x16_t = vector_type (i8_type c) 16 in
   let i16x4_t = vector_type (i16_type c) 4 in
 
+  (* Arm has an interleaving store, which can be important for
+     performance. It's a pain to detect when we should use this *)
   let rec try_deinterleave expr = 
     let recurse = try_deinterleave in
     Printf.printf "try_deinterleave pondering %s\n%!" (string_of_expr expr);
@@ -367,15 +370,15 @@ let rec cg_stmt (con : context) (stmt : stmt) =
   match stmt with
     | Store (e, buf, Ramp (base, IntImm 1, w)) ->
         if (should_deinterleave e) then begin
-          Printf.printf "Considering deinterleaving %s\n" (string_of_expr e);
+          (* Printf.printf "Considering deinterleaving %s\n" (string_of_expr e); *)
           let result = try (Some (try_deinterleave e)) with DeinterleaveFailed -> None in
           begin match (result, val_type_of_expr e, Analysis.reduce_expr_modulo base 2) with
             | (Some (l, r), UIntVector (16, 8), Some 0) 
             | (Some (l, r), IntVector (16, 8), Some 0)  -> 
                 let l = Constant_fold.constant_fold_expr l in
                 let r = Constant_fold.constant_fold_expr r in          
-                Printf.printf "Let's do it!\n%!";
-                Printf.printf "Resulting children: %s %s\n" (string_of_expr l) (string_of_expr r);
+                (* Printf.printf "Let's do it!\n%!"; *)
+                (* Printf.printf "Resulting children: %s %s\n" (string_of_expr l) (string_of_expr r); *)
                 let l = cg_expr l in
                 let r = cg_expr r in
                 let st = declare_function "llvm.arm.neon.vst2.v4i16"
@@ -384,19 +387,20 @@ let rec cg_stmt (con : context) (stmt : stmt) =
                 let addr = build_pointercast addr ptr_t "" b in
                 build_call st [|addr; l; r; const_int (i32_t) 2|] "" b               
             | (None, _, _) -> 
-                Printf.printf "Not doing it because deinterleave failed\n";
+                (* Printf.printf "Not doing it because deinterleave failed\n"; *)
                 cg_dense_store e buf base w
             | (_, _, Some 0) ->
-                Printf.printf "Not doing it because type didn't match a known vst2\n";
+                (* Printf.printf "Not doing it because type didn't match a known vst2\n"; *)
                 cg_dense_store e buf base w        
             | (_, _, _) ->
-                Printf.printf "Not doing it because base of write not a multiple of two\n";
+                (* Printf.printf "Not doing it because base of write not a multiple of two\n"; *)
                 cg_dense_store e buf base w
           end 
         end else cg_dense_store e buf base w
     | _ -> con.cg_stmt stmt
 
 
+(* Same as X86 code for malloc / free. TODO: make a posix/cpu arch module? *)
 let free (con : context) (name:string) (address:llvalue) =
   let c = con.c and b = con.b and m = con.m in
   let free = declare_function "fast_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in

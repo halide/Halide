@@ -50,9 +50,9 @@ def test_cpp(name):
     
     global failures
     
-    # status(name, "Building Halide.a")
+    # status(name, "Building libHalide.a")
     # Make sure Halide.a is built
-    make('-C', '../cpp_bindings/', 'Halide.a')
+    make('-C', '../cpp_bindings/', 'libHalide.a')
 
     curdir = os.getcwd()
 
@@ -81,7 +81,7 @@ def test_cpp(name):
                            "-Wno-format",
                            "-fPIC",
                            srcfile,                   
-                           "../../../cpp_bindings/Halide.a", 
+                           "../../../cpp_bindings/libHalide.a", 
                            "-ldl", "-lpthread"]
             if platform is 'linux':
                 compile_cmd.append("-rdynamic")
