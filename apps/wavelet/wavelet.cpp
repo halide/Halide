@@ -65,11 +65,11 @@ int main(int argc, char **argv) {
 
     // Add a boundary condition for daubechies
     Func clamped;
-    clamped(x, y) = image(clamp(x, 0, image.width()),
-                          clamp(y, 0, image.height()));
+    clamped(x, y) = image(clamp(x, 0, image.width()-1),
+                          clamp(y, 0, image.height()-1));
     Func wavelet_clamped;
-    wavelet_clamped(x, y, c) = wavelet(clamp(x, 0, wavelet.width()),
-                                       clamp(y, 0, wavelet.height()), c);
+    wavelet_clamped(x, y, c) = wavelet(clamp(x, 0, wavelet.width()-1),
+                                       clamp(y, 0, wavelet.height()-1), c);
     inverse_daubechies_x(wavelet_clamped).compileToFile("inverse_daubechies_x");
 
     Func dx = daubechies_x(clamped);

@@ -183,19 +183,19 @@ namespace Halide {
     }
 
     Expr DynImage::operator()(const Expr &a) const {
-        return ImageRef(*this, a*stride(0));
+        return ImageRef(*this, {a});
     }
 
     Expr DynImage::operator()(const Expr &a, const Expr &b) const {
-        return ImageRef(*this, a*stride(0) + b*stride(1));
+        return ImageRef(*this, {a, b});
     }
     
     Expr DynImage::operator()(const Expr &a, const Expr &b, const Expr &c) const {
-        return ImageRef(*this, a*stride(0) + b*stride(1) + c*stride(2));
+        return ImageRef(*this, {a, b, c});
     }
     
     Expr DynImage::operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) const {
-        return ImageRef(*this, a*stride(0) + b*stride(1) + c*stride(2) + d*stride(3));
+        return ImageRef(*this, {a, b, c, d});
     }
 
     struct UniformImage::Contents {
@@ -260,19 +260,19 @@ namespace Halide {
     }
 
     Expr UniformImage::operator()(const Expr &a) const {
-        return UniformImageRef(*this, a);
+      return UniformImageRef(*this, {a});
     }
 
     Expr UniformImage::operator()(const Expr &a, const Expr &b) const {
-        return UniformImageRef(*this, a + size(0) * b);
+      return UniformImageRef(*this, {a, b});
     }
 
     Expr UniformImage::operator()(const Expr &a, const Expr &b, const Expr &c) const {
-        return UniformImageRef(*this, a + size(0) * (b + size(1) * c));
+        return UniformImageRef(*this, {a, b, c});
     }
 
     Expr UniformImage::operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) const {
-        return UniformImageRef(*this, a + size(0) * (b + size(1) * (c + size(2) * d)));
+        return UniformImageRef(*this, {a, b, c, d});
     }
     
     Type UniformImage::type() const {
