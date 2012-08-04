@@ -5,6 +5,8 @@ GXX ?= g++-4.6
 
 HL_MODULES = daubechies_x.bc inverse_daubechies_x.bc haar_x.bc inverse_haar_x.bc
 
+PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
+
 all: filter
 
 wavelet: ../../cpp_bindings/ wavelet.cpp
@@ -21,7 +23,7 @@ filter.o: filter.cpp $(HL_MODULES:%.bc=%.o)
 	$(GXX) -std=c++0x -O3 -c filter.cpp
 
 filter: filter.o $(HL_MODULES:%.bc=%.o)
-	$(GXX) filter.o $(HL_MODULES:%.bc=%.o) -lpng -o filter -pthread
+	$(GXX) filter.o $(HL_MODULES:%.bc=%.o) $(PNGFLAGS) -o filter -pthread
 
 clean:
 	rm -f wavelet filter filter.o $(HL_MODULES) $(HL_MODULES:%.bc=%.o) $(HL_MODULES:%.bc=%.h) *.lowered*
