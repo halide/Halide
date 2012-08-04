@@ -58,9 +58,11 @@ let compile name args stmt =
       Hashtbl.add compilation_cache func (m, f);
 
       (* Log the lowered entrypoint *)
-      let out = open_out (name ^ ".sexp") in
-      Printf.fprintf out "%s%!" (serializeEntry name args stmt);
-      close_out out;
+      if verbosity > 1 then begin
+        let out = open_out (name ^ ".sexp") in
+        Printf.fprintf out "%s%!" (serializeEntry name args stmt);
+        close_out out
+      end;
 
       (* TODO: this leaks the llcontext, and will leak the module if the cache
        * doesn't free it eventually. *)
