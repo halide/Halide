@@ -7,44 +7,29 @@ using namespace Halide;
 
 Func gradientMagnitude(Func f, Expr width, Expr height) {
 
-  Var x, y, c, a, b;
+  const int margin = 2;
+  Var x("x"), y("y");
+  Expr nearTop = y < margin;
+  Expr nearBottom = y >= height - margin;
+  Expr nearLeft = x < margin;
+  Expr nearRight = x >= width - margin;
+  Expr nearBoundary = nearTop || nearBottom || nearLeft || nearRight;
 
-  Expr isTop = y <= 10;
-  Expr isBottom = y >= height - 10;
-  Expr isLeft = x <= 10;
-  Expr isRight = x >= width - 10;
+  Func dx, dy, mag("mag");
+  dx(x, y) = f(x, y) - f(x-1, y);
+  dy(x, y) = f(x, y) - f(x, y-1);
+  // TODO: implicit args break this line
+  mag(x, y) = select(nearBoundary, 1e10, dx(x, y)*dx(x, y) + dy(x, y)*dy(x, y));
 
-  Func dI2("dI2");
-  dI2(x, y, a, b) = pow(f(x, y, 0) - f(x+a, y+b, 0), 2) +
-    pow(f(x, y, 1) - f(x+a, y+b, 1), 2) +
-    pow(f(x, y, 1) - f(x+a, y+b, 1), 2);
+  return mag;
+}
 
-  Func dI("dI");
-  dI(x, y, a, b) = sqrt(dI2(x, y, a, b));
-
-  Func gradient2D("gradient2D");
-  gradient2D(x, y) =
-    select(isTop, 0.0f, 1.0f)*dI(x, y, 0, -1) +
-    select(isBottom, 0.0f, 1.0f)*dI(x, y, 0, 1) +
-    select(isLeft, 0.0f, 1.0f)*dI(x, y, -1, 0) +
-    select(isRight, 0.0f, 1.0f)*dI(x, y, 1, 0);
-
-  Func norm("norm");
-  norm(x, y) =
-    select(isTop, 0.0f, 1.0f) +
-    select(isBottom, 0.0f, 1.0f) +
-    select(isLeft, 0.0f, 1.0f) +
-    select(isRight, 0.0f, 1.0f);
-
-  Func gradient("gradient");
-  gradient(x, y, c) = gradient2D(x, y)/norm(x, y);
-
-  return gradient;
+Expr argmin3(Expr idx1, Expr val1, Expr idx2, Expr val2, Expr idx3, Expr val3) {
+    return select(val1 < val2 && val1 < val3, idx1, select(val2 < val3, idx2, idx3));
 }
 
 int main(int argc, char **argv) {
 
-  //  Uniform<int> k;
   UniformImage input(UInt(16), 3);
 
   Var x("x"), y("y"), c("c"), xo("blockidx"), yo("blockidy"), 
@@ -53,77 +38,67 @@ int main(int argc, char **argv) {
   // The algorithm
 
 
-  Func clampH("clampH");
-  clampH(y) = clamp(y, 0, input.height() - 1);
-  Func clampW("clampW");
-  clampW(x) = clamp(x, 0, input.width() - 1);
-
-
+  // Add a boundary condition
+  Func clamped;
+  clamped(x, y, c) = input(clamp(x, 0, input.width()-1), 
+                           clamp(y, 0, input.height()-1), c);
 
   // Convert to floating point
   Func floating("floating");
-  floating(x, y, c) = cast<float>(input(x, y, c)) / 65535.0f;
-  // Set a boundary condition
-  Func clamped("clamped");
-  clamped(x, y, c) = floating(clamp(x, 0, input.width()-1), 
-			      clamp(y, 0, input.height()-1), c);
+  floating(x, y, c) = cast<float>(clamped(x, y, c)) / 65535.0f;
+
+  // Convert to grayscale
+  Func gray("gray");
+  gray(x, y) = floating(x, y, 0) + floating(x, y, 1) + floating(x, y, 2);
   
-  Func g;
-  g = gradientMagnitude(clamped, input.width(), input.height());
+  Func gradMag = gradientMagnitude(gray, input.width(), input.height());
 
   RDom yr(0, input.height());
   Func energy("energy");
-  energy(x, y, c) = g(x, y, c);
-  energy(x, yr, c) = g(x, yr, c) + min(min(energy(x, yr - 1, c), 
-					   energy(clampW(x - 1), yr - 1, c)),
-				       energy(clampW(x + 1), yr - 1, c));
+  Expr xp = min(x+1, input.width()-1);
+  Expr xm = max(x-1, 0);
+  energy(x, y) = gradMag(x, y);
+  energy(x, yr) = gradMag(x, yr) + min(min(energy(xp, yr - 1), 
+                                           energy(xm, yr - 1)),
+                                       energy(x, yr - 1));
   
   RDom xr(1, input.width() - 1);
   
+  // Index of minimum energy on a scanline
   Func minEnergy("minEnergy");
   minEnergy(y) = 0;
-  minEnergy(y) = 
-    select(energy(xr, y, 0) < 
-	   energy(clampW(minEnergy(y)), y, 0), 
-	   xr, minEnergy(y));
-  
+  Expr bestSoFar = clamp(minEnergy(y), 0, input.width()-1);
+  minEnergy(y) = select(energy(xr, y) < energy(bestSoFar, y), xr, bestSoFar);
+ 
   // serves as reduction that goes from input.height() - 1 to 0
   Expr flipY = input.height() - yr - 1;
 
   // calculate location of seam
   Func seam("seam");
-  seam(y) = minEnergy(y);
-  seam(flipY - 1) = select(select( energy( clampW(seam(flipY) - 1), flipY - 1, 0) < energy( clampW(seam(flipY) + 1), flipY - 1, 0),
-				  energy( clampW(seam(flipY) - 1), flipY - 1, 0),
-				  energy( clampW(seam(flipY) + 1), flipY - 1, 0)
-				  ) < 
-			  energy( clampW(seam(flipY)), flipY - 1, 0),
-			  select( energy( clampW(seam(flipY) - 1), flipY - 1, 0) < energy( clampW(seam(flipY) + 1), flipY - 1, 0),
-				  clampW(seam(flipY) - 1),
-				  clampW(seam(flipY) + 1)
-				  ),
-			  clampW(seam(flipY))
-			  );
-  
+  seam(y) = minEnergy(input.height()-1);
+
+  xm = clamp(seam(flipY)-1, 0, input.width()-1);
+  xp = clamp(seam(flipY)+1, 0, input.width()-1);
+  Expr xh = clamp(seam(flipY), 0, input.width()-1);
+
+  // Follow the path of least energy upwards
+  seam(flipY - 1) = argmin3(xm, energy(xm, flipY-1),
+                            xh, energy(xh, flipY-1),
+                            xp, energy(xp, flipY-1));
+
   // remove seam
   Func output("output");
-  output(x, y, c) = clamped(x, y, c);
-  output(x, yr, c) = select(x < seam(yr), clamped(x, yr, c), 
-			    select(x + 1 < input.width(), clamped(x + 1, yr, c), 
-				   select( yr%2==0, 0.0f, 1.0f )));
+  output(x, y, c) = select(x < seam(y), clamped(x, y, c), clamped(x+1, y, c));
 
   // draws seam
+  Expr red = select(c==0, 65535, 0.0f);
   Func seams("seams");
-  seams(x, y, c) = clamped(x, y, c);
-  seams(x, yr, c) = select(x==seam(yr), select(c==0, 1.0f, 0.0f),
-			   clamped(x,yr,c));
-
-  // Convert back to 16-bit
-  Func outputClamped("outputClamped");
-  outputClamped(x, y, c) = cast<uint16_t>(output(x, y, c) * 65535.0f);
+  seams(x, y, c) = select(x==seam(y), red, clamped(x,y,c));
 
   // schedule
+  gradMag.root();
+  minEnergy.root();
 
-  outputClamped.compileToFile("seam_carving");
+  output.compileToFile("seam_carving");
   return 0;
 }
