@@ -47,7 +47,10 @@ and compute_remainder_modulus expr =
   | MakeVector _ -> raise ModulusOfMakeVector
   | Broadcast _ -> raise ModulusOfBroadcast
   | Ramp _ -> raise ModulusOfRamp
-  | e -> raise ModulusOfNonInteger
+  | Call (_, _, _, _) -> (0, 1)
+  | e -> 
+      Printf.printf "%s\n%!" (string_of_expr expr);
+      raise ModulusOfNonInteger
   in
   (* Printf.printf "%s -> %d %d\n" (string_of_expr expr) m r; *)
   (m, r)
