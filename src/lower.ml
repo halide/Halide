@@ -510,7 +510,6 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
 
 let lower_image_calls (stmt:stmt) =
 
-  Printf.printf "Phase 1\n%!";
   (* Replace calls to images with loads from image. Accumulate all names of images found as a side-effect *) 
   let images = ref StringSet.empty in
   let rec walk_expr = function
@@ -526,14 +525,11 @@ let lower_image_calls (stmt:stmt) =
   
   let new_stmt = walk_stmt stmt in
 
-  Printf.printf "Phase 2\n%!";
   (* Add an assert at the start to make sure we don't load each image out of bounds *)
+  (* TODO: this is slow because it traverses the entire AST, and subs's in let statements *)
   let asserts = StringSet.fold (fun name asserts -> 
-    Printf.printf "%s\n%!" name;
     let msg = ("Function may load image " ^ name ^ " out of bounds") in
-    Printf.printf "Computing required region\n%!";
     let region = required_of_stmt name StringMap.empty stmt in
-    Printf.printf "Computed required region\n%!";
     let new_asserts = List.fold_right2 (fun range n asserts ->
       match range with
         | Unbounded -> failwith ("Unbounded use of input image " ^ name)
@@ -677,6 +673,17 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
+  let pass_desc = "Replacing input image references with loads" in
+  dbg 1 "%s\n%!" pass_desc;
+
+  (* Add back in the oob_check on the output image too *)
+  let stmt = Block ([oob_check; stmt]) in  
+  let stmt = lower_image_calls stmt in
+
+  dump_stmt stmt pass pass_desc "image_loads" 1;
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
   let pass_desc = "Bounds inference" in
   dbg 1 "%s\n%!" pass_desc;
   (* Updates stmt and schedule *)
@@ -701,17 +708,6 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   dump_stmt stmt pass pass_desc "loads_and_stores" 1;
 
-  let pass = pass + 1 in
-
-  (* ----------------------------------------------- *)
-  let pass_desc = "Replacing input image references with loads" in
-  dbg 1 "%s\n%!" pass_desc;
-
-  (* Add back in the oob_check on the output image too *)
-  let stmt = Block ([oob_check; stmt]) in  
-  let stmt = lower_image_calls stmt in
-
-  dump_stmt stmt pass pass_desc "image_loads" 1;
   let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
