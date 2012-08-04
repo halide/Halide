@@ -840,8 +840,8 @@ namespace Halide {
         
         //printf("optimizing ll...\n");
         
-        std::string errstr;
-        llvm::raw_fd_ostream stdout("passes.txt", errstr);
+        //std::string errstr;
+        //llvm::raw_fd_ostream stdout("passes.txt", errstr);
         
         Contents::mPassMgr->run(*m);
 
