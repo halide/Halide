@@ -9,7 +9,7 @@ all: filter
 
 wavelet: ../../cpp_bindings/ wavelet.cpp
 	$(MAKE) -C ../../cpp_bindings libHalide.a
-	$(GXX) wavelet.cpp -I ../../cpp_bindings/ ../../cpp_bindings/Halide.a  -std=c++0x -o wavelet  -lpthread -ldl
+	$(GXX) wavelet.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -o wavelet  -lpthread -ldl
 
 $(HL_MODULES): wavelet 
 	./wavelet
