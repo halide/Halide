@@ -163,7 +163,7 @@ let rec make_cg_context c m b sym_table arch_state =
     | Var (vt, name) -> sym_get name
 
     (* Extern calls *)
-    | Call (t, name, args) ->
+    | Call (Extern, t, name, args) ->
         (* declare the extern function *)
         let arg_types = List.map (fun arg -> type_of_val_type (val_type_of_expr arg)) args in
         let name = base_name name in
@@ -173,6 +173,8 @@ let rec make_cg_context c m b sym_table arch_state =
         (* codegen args and call *)
         let llargs = List.map cg_expr args in
         build_call llfunc (Array.of_list (llargs)) ("extern_" ^ name) b
+    | Call (_, _, name, _) ->
+        failwith ("Can't lower call to " ^ name ^ ". This should have been replaced with a Load during lowering\n")
 
     (* Let expressions *)
     | Let (name, l, r) -> 

@@ -754,7 +754,7 @@ namespace Halide {
                     snprintf(cmd1, 1024, "g++ -c -O3 %s -fPIC -o %s", c_name.c_str(), obj_name.c_str());
                 } else {
                     std::string bc_name = "./" + name + ".bc";
-                    snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -fPIC -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
+                    snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -relocation-model=pic -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
                 }
                 snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
                 printf("%s\n", cmd1);
@@ -809,10 +809,15 @@ namespace Halide {
             Contents::fPassMgr = new llvm::FunctionPassManager(m);
             Contents::mPassMgr = new llvm::PassManager();
 
+            // Make sure to include the always-inliner pass
+            Contents::mPassMgr->add(llvm::createAlwaysInlinerPass());
+
             llvm::PassManagerBuilder builder;
             builder.OptLevel = 3;
             builder.populateFunctionPassManager(*contents->fPassMgr);
             builder.populateModulePassManager(*contents->mPassMgr);
+
+
 
         } else { 
             Contents::ee->addModule(m);

@@ -58,7 +58,6 @@ let make_function_body (name:string) (env:environment) =
   let pre = prefix_name_expr prefix in
   let renamed_args = List.map (fun (t, n) -> (t, prefix ^ n)) args in
   let renamed_body = match body with
-    | Extern -> failwith ("Can't lookup body of extern function: " ^ name)
     | Pure expr -> Pure (pre expr)
     | Reduce (init_expr, modified_args, update_func, reduction_domain) -> 
         let prefix_update = prefix_name_expr (prefix ^ update_func ^ ".") in
@@ -105,11 +104,10 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
           let (args, _, body) = make_function_body func env in
           (* Just replace all calls to the function with the body of the function *)
           begin match body with 
-            | Extern -> failwith ("Can't inline extern function " ^ func)
             | Reduce _ -> failwith ("Can't inline a reduction " ^ func)
             | Pure expr ->
                 let rec inline_calls_in_expr = function
-                  | Call (t, n, call_args) when n = func -> 
+                  | Call (Func, t, n, call_args) when n = func -> 
                       let call_args = List.map inline_calls_in_expr call_args in
                       
                       (* If the args have vector type, promote
@@ -146,9 +144,9 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
       | Reuse s -> begin
         (* Replace calls to name with calls to s in stmt *)
         let rec fix_expr = function
-          | Call (ty, n, args) when n = func -> 
+          | Call (Func, ty, n, args) when n = func -> 
               let args = List.map (mutate_children_in_expr fix_expr) args in
-              Call (ty, s, args)
+              Call (Func, ty, s, args)
           | expr -> mutate_children_in_expr fix_expr expr
         in
         let rec fix_stmt stmt = mutate_children_in_stmt fix_expr fix_stmt stmt in
@@ -204,7 +202,6 @@ and realize func consume env schedule =
       (IntImm 1) in
 
   match body with
-    | Extern -> failwith ("Can't lower extern function call " ^ func)
     | Pure body ->
         let inner_stmt = Provide (body, func, arg_vars) in
 
@@ -219,7 +216,7 @@ and realize func consume env schedule =
           | [] -> []
         in
         let produce = if (trace_verbosity > 0) then            
-            Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
+            Block [Print ("Time ", [Call (Extern, Int(32), ".currentTime", [])]); 
                    Print ("Realizing " ^ func ^ " over ", flatten strides);
                    produce] 
           else produce in
@@ -283,10 +280,10 @@ and realize func consume env schedule =
 
         let produce = 
           if (trace_verbosity > 0) then 
-            let initialize = Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
+            let initialize = Block [Print ("Time ", [Call (Extern, Int(32), ".currentTime", [])]); 
                                     Print ("Initializing " ^ func ^ " over ", flatten strides);
                                     initialize] in             
-            let update = Block [Print ("Time ", [Call (Int(32), ".currentTime", [])]); 
+            let update = Block [Print ("Time ", [Call (Extern, Int(32), ".currentTime", [])]); 
                                 Print ("Updating " ^ func, []);
                                 update] in 
             Block [initialize; update]
@@ -474,7 +471,7 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
     let recurse = replace_calls_with_loads_in_expr func strides in
     match expr with 
       (* Match calls to f from someone else, or recursive calls from f to itself *)
-      | Call (ty, f, args) when f = func || f = (func ^ "." ^ (base_name func)) ->
+      | Call (Func, ty, f, args) when f = func || f = (func ^ "." ^ (base_name func)) ->
           let args = List.map recurse args in 
           let index = List.fold_right2 
             (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
@@ -510,6 +507,45 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
           replace_calls_with_loads_in_stmt f strides stmt
   in
   List.fold_left update stmt functions 
+
+let lower_image_calls (stmt:stmt) =
+
+  (* Replace calls to images with loads from image. Accumulate all names of images found as a side-effect *) 
+  let images = ref StringSet.empty in
+  let rec walk_expr = function
+    | Call (Image, t, name, args) ->
+      images := StringSet.add name !images; 
+      let idx = List.fold_right2 (fun arg n idx ->
+        (walk_expr arg) +~ idx *~ (Var (i32, name ^ ".dim." ^ (string_of_int n)))
+      ) args (0 -- (List.length args)) (IntImm 0) in
+      Load (t, name, idx)
+    | expr -> mutate_children_in_expr walk_expr expr
+  in
+  let rec walk_stmt stmt = mutate_children_in_stmt walk_expr walk_stmt stmt in
+  
+  let new_stmt = walk_stmt stmt in
+
+  (* Add an assert at the start to make sure we don't load each image out of bounds *)
+  (* TODO: this is slow because it traverses the entire AST, and subs's in let statements *)
+  let asserts = StringSet.fold (fun name asserts -> 
+    let msg = ("Function may load image " ^ name ^ " out of bounds") in
+    let region = required_of_stmt name StringMap.empty stmt in
+    let new_asserts = List.fold_right2 (fun range n asserts ->
+      match range with
+        | Unbounded -> failwith ("Unbounded use of input image " ^ name)
+        | Range (min, max) -> 
+          let check = 
+            (min >=~ (IntImm 0)) &&~
+              (max <~ (Var (i32, name ^ ".dim." ^ (string_of_int n))))
+          in
+          (Assert (check, msg)) :: asserts
+    ) region (0 -- (List.length region)) asserts in
+    new_asserts 
+  ) !images [] in
+
+  match new_stmt with 
+    | Block stmts -> Block (asserts @ stmts)
+    | stmt -> Block (asserts @ [new_stmt])
 
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
@@ -611,11 +647,10 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
            (min >=~ (IntImm 0)) &&~
            (max <~ (Var (i32, ".result.dim." ^ (string_of_int count)))),
          count+1)
-  ) (Cast (bool1, IntImm 1), 0) region in 
+  ) (Cast(UInt(1), UIntImm 1), 0) region in 
   let oob_check = Assert (check, "Function may access output image out of bounds") in
-  let stmt = Block [oob_check; stmt] in
 
-  dump_stmt stmt pass pass_desc "oob_check" 1;
+  dump_stmt (Block [oob_check; stmt]) pass pass_desc "oob_check" 1;
 
   let pass = pass + 1 in
 
@@ -638,6 +673,17 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
+  let pass_desc = "Replacing input image references with loads" in
+  dbg 1 "%s\n%!" pass_desc;
+
+  (* Add back in the oob_check on the output image too *)
+  let stmt = Block ([oob_check; stmt]) in  
+  let stmt = lower_image_calls stmt in
+
+  dump_stmt stmt pass pass_desc "image_loads" 1;
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
   let pass_desc = "Bounds inference" in
   dbg 1 "%s\n%!" pass_desc;
   (* Updates stmt and schedule *)
@@ -646,6 +692,9 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
     | (For (_, _, _, _, stmt), schedule) -> (stmt, schedule)
     | _ -> failwith "Bounds inference on a for loop returned something other than a for loop"
   in
+
+  (* Can't constant fold here! It removes some of the let statements we will refer to later *)
+  (* let stmt = Constant_fold.constant_fold_stmt stmt in *)
 
   dump_stmt stmt pass pass_desc "bounds_inference" 1;
 

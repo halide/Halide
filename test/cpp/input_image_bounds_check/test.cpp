@@ -25,14 +25,22 @@ int main(int argc, char **argv) {
     // One easy way to read out of bounds
     f.realize(23);
 
+    if (!error_occurred) {
+        printf("There should have been an out-of-bounds error\n");
+        return 1;
+    }
+    error_occurred = false;
+
     // Another more subtle way to read out of bounds due to bounds
     // expansion when vectorizing
     Func g, h;
     g(x) = input(x)*2;
     h(x) = g(x);
     g.root().vectorize(x, 4);
-    h.realize(19);
 
+    h.setErrorHandler(&halide_error);
+    h.realize(19);
+    
     if (!error_occurred) {
         printf("There should have been an out-of-bounds error\n");
         return 1;
