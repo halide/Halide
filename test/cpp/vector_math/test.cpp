@@ -48,7 +48,7 @@ A mod(A x, A y) {
 
 template<typename A>
 bool test(int vec_width) {
-    const int W = 6400;
+    const int W = 3200;
     const int H = 16;
     
     Image<A> input(W+16, H+16);
