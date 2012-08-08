@@ -15,5 +15,17 @@ define weak_odr void @unaligned_store_128(<16 x i8> %arg, i8 * nocapture %ptr) n
   ret void
 }
 
+define weak_odr <32 x i8> @unaligned_load_256(i8 * nocapture %ptr) nounwind readonly alwaysinline {
+  %1 = bitcast i8 * %ptr to <32 x i8> *
+  %2 = load <32 x i8>* %1, align 1
+  ret <32 x i8> %2
+}
+
+define weak_odr void @unaligned_store_256(<32 x i8> %arg, i8 * nocapture %ptr) nounwind alwaysinline {
+  %1 = bitcast i8 * %ptr to <32 x i8> *
+  store <32 x i8> %arg, <32 x i8>* %1, align 1
+  ret void
+}
+
 
 
