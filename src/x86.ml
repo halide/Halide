@@ -27,6 +27,7 @@ let rec cg_expr (con:context) (expr:expr) =
   let ptr_t = pointer_type (i8_type c) in
   let i16x8_t = vector_type (i16_type c) 8 in
   let i8x16_t = vector_type (i8_type c) 16 in
+  let i8x32_t = vector_type (i8_type c) 32 in
   let i32_t = i32_type c in
 
   (* Peephole optimizations for x86 *)
@@ -52,8 +53,20 @@ let rec cg_expr (con:context) (expr:expr) =
               build_bitcast value (type_of_val_type c t) "" b        
         end
 
+    (* unaligned dense 256-bit loads use vmovups if available *)
+    | Load (t, buf, Ramp(base, IntImm 1, n)) when (bit_width t = 256) ->
+        begin match (Analysis.reduce_expr_modulo base n) with 
+          | Some _ -> con.cg_expr expr
+          | _ ->              
+              let unaligned_load_256 = declare_function "unaligned_load_256"
+                (function_type (i8x32_t) [|ptr_t|]) m in
+              let addr = build_pointercast (con.cg_memref t buf base) ptr_t "" b in
+              let value = build_call unaligned_load_256 [|addr|] "" b in
+              build_bitcast value (type_of_val_type c t) "" b        
+        end
+
     (* Strided loads with stride 2 should load two vectors and then shuffle *)
-    | Load (t, buf, Ramp(base, IntImm 2, n)) when (bit_width t = 128) ->
+    | Load (t, buf, Ramp(base, IntImm 2, n)) when (bit_width t = 128 or bit_width t = 256) ->
         let v1 = cg_expr (Load (t, buf, Ramp(base, IntImm 1, n))) in
         let v2 = cg_expr (Load (t, buf, Ramp(base +~ IntImm n, IntImm 1, n))) in
         let mask = List.map (fun x -> const_int i32_t (x*2)) (0 -- n) in
@@ -85,6 +98,7 @@ let rec cg_stmt (con:context) (stmt:stmt) =
   (* let cg_stmt = cg_stmt con in *)
   let ptr_t = pointer_type (i8_type c) in
   let i8x16_t = vector_type (i8_type c) 16 in
+  let i8x32_t = vector_type (i8_type c) 32 in
 
   (* Peephole optimizations for x86 *)
   match stmt with
@@ -99,6 +113,18 @@ let rec cg_stmt (con:context) (stmt:stmt) =
               let addr = build_pointercast (con.cg_memref t buf base) ptr_t "" b in
               let value = build_bitcast (cg_expr e) i8x16_t "" b in
               build_call unaligned_store_128 [|value; addr|] "" b        
+        end
+    (* unaligned 256-bit dense stores use vmovups *)
+    | Store (e, buf, Ramp(base, IntImm 1, n)) when (bit_width (val_type_of_expr e)) = 256 ->
+        begin match (Analysis.reduce_expr_modulo base n) with
+          | Some 0 -> con.cg_stmt stmt
+          | _ ->
+              let t = val_type_of_expr e in
+              let unaligned_store_256 = declare_function "unaligned_store_256"
+                (function_type (void_type c) [|i8x32_t; ptr_t|]) m in
+              let addr = build_pointercast (con.cg_memref t buf base) ptr_t "" b in
+              let value = build_bitcast (cg_expr e) i8x32_t "" b in
+              build_call unaligned_store_256 [|value; addr|] "" b        
         end
     (* Fall back to the default cg_stmt *)
     | _ -> con.cg_stmt stmt
