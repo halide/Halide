@@ -799,7 +799,15 @@ namespace Halide {
 
         if (!Contents::ee) {
             std::string errStr;
-            Contents::ee = llvm::EngineBuilder(m).setErrorStr(&errStr).setOptLevel(llvm::CodeGenOpt::Aggressive).create();
+            llvm::EngineBuilder eeBuilder(m);
+            eeBuilder.setErrorStr(&errStr);
+            eeBuilder.setOptLevel(llvm::CodeGenOpt::Aggressive);
+
+            // TODO: runtime-detect avx to only enable it if supported
+            // std::vector<std::string> mattrs = {"avx"};
+            // eeBuilder.setMAttrs(mattrs);
+
+            Contents::ee = eeBuilder.create();
             if (!contents->ee) {
                 printf("Couldn't create execution engine: %s\n", errStr.c_str()); 
                 exit(1);
