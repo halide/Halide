@@ -133,8 +133,8 @@ type expr =
   (* Extract an element: vector, index *)
   | ExtractElement of expr * expr
 
-  (* Function call: return type, function name, args *) 
-  | Call of val_type * string * (expr list)
+  (* Function call: call type, return type, function name, args *) 
+  | Call of call_type * val_type * string * (expr list)
 
   (* Let expressions *)
   | Let of string * expr * expr
@@ -142,6 +142,7 @@ type expr =
   (* An IR node for debugging. Evaluates to the sub-expression, but printf out to stderr when it gets evaluated *)
   | Debug of expr * string * (expr list)
 
+and call_type = Func | Extern | Image
 and buffer = string (* just a name for now *)
 with sexp
 
@@ -192,7 +193,7 @@ let rec val_type_of_expr = function
   | Cast (t, _)
   | Var  (t, _) 
   | Load (t, _, _)
-  | Call (t, _, _) -> t
+  | Call (_, t, _, _) -> t
 
 
 type stmt =
@@ -237,7 +238,7 @@ and function_body =
   (* Reduction consists of initializer, update location, update function, and iteration domain for the update *)
   | Reduce of (expr * (expr list) * string * (string * expr * expr) list)
   (* Passes through to a C function call of the same name *)
-  | Extern
+  (* | Extern *)
 with sexp
 
 (* By convention, extern functions have fully qualified names, beginning with ".",

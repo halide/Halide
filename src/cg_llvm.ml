@@ -139,21 +139,6 @@ let rec make_cg_context c m b sym_table arch_state =
     | Not l -> build_not (cg_expr l) "" b
 
     (* Select *)
-    | Select (cond, thenCase, elseCase) when is_vector cond ->         
-        (* build_select really doesn't work yet for vector conditions *)
-        let elts = vector_elements (val_type_of_expr cond) in
-        let bits = element_width (val_type_of_expr thenCase) in
-        let l = cg_expr thenCase in
-        let r = cg_expr elseCase in
-        let mask = cg_expr cond in
-        let mask = build_sext mask (type_of_val_type (IntVector (bits, elts))) "" b in
-        let ones = const_all_ones (type_of mask) in
-        let inv_mask = build_xor mask ones "" b in
-        let t = type_of l in
-        let l = build_bitcast l (type_of mask) "" b in
-        let r = build_bitcast r (type_of mask) "" b in
-        let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
-        build_bitcast result t "" b
     | Select (c, t, f) ->
         build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b 
 
@@ -163,7 +148,7 @@ let rec make_cg_context c m b sym_table arch_state =
     | Var (vt, name) -> sym_get name
 
     (* Extern calls *)
-    | Call (t, name, args) ->
+    | Call (Extern, t, name, args) ->
         (* declare the extern function *)
         let arg_types = List.map (fun arg -> type_of_val_type (val_type_of_expr arg)) args in
         let name = base_name name in
@@ -173,6 +158,8 @@ let rec make_cg_context c m b sym_table arch_state =
         (* codegen args and call *)
         let llargs = List.map cg_expr args in
         build_call llfunc (Array.of_list (llargs)) ("extern_" ^ name) b
+    | Call (_, _, name, _) ->
+        failwith ("Can't lower call to " ^ name ^ ". This should have been replaced with a Load during lowering\n")
 
     (* Let expressions *)
     | Let (name, l, r) -> 

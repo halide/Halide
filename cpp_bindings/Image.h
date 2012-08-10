@@ -176,9 +176,9 @@ namespace Halide {
     
     class ImageRef {
     public:
-        ImageRef(const DynImage &im, const Expr &idx) : image(im), idx(idx) {}
+        ImageRef(const DynImage &im, const std::vector<Expr> &idx) : image(im), idx(idx) {}
         const DynImage image;
-        const Expr idx;
+        const std::vector<Expr> idx;
     };       
     
     class UniformImage {
@@ -214,10 +214,10 @@ namespace Halide {
     };
 
     class UniformImageRef {
-      public:
-        UniformImageRef(const UniformImage &im, const Expr &idx) : image(im), idx(idx) {}
+    public:
+        UniformImageRef(const UniformImage &im, const std::vector<Expr> &idx) : image(im), idx(idx) {}
         const UniformImage image;
-        const Expr idx;
+        const std::vector<Expr> idx;
     };
 
 }
