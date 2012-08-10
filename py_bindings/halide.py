@@ -459,15 +459,25 @@ def test_core():
     
     print 'halide core: OK'
 
-def all_funcs(f):
+def visit_funcs(root_func, callback):
+    "Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func."
     d = {}
-    def visit(x):
+    def visit(x, parent):
         name = x.name()
         if name not in d:
             d[name] = x
-            for y in f.rhs().funcs():
-                visit(y)
-    visit(f)
+            callback(x, parent)
+            #print x.rhs().funcs()
+            for y in x.rhs().funcs():
+                visit(y, x)
+    visit(root_func, None)
+    return d
+
+def all_funcs(root_func):
+    d = {}
+    def callback(f, parent):
+        d[f.name()] = f
+    visit_funcs(root_func, callback)
     return d
 
 def func_varlist(f):
@@ -680,6 +690,7 @@ def test_examples():
     
 #    for example_name in ['interpolate']: #
     for example_name in 'interpolate snake blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+#    for example_name in 'interpolate snake blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
         example = getattr(examples, example_name)
         first = True
 #    for example in [examples.boxblur_cumsum]:
@@ -726,6 +737,18 @@ def test_examples():
     for (example_name, func_names) in names:
         print example_name, func_names
 
+def test_all_funcs():
+    f = Func('f_all_funcs')
+    g = Func('g_all_funcs')
+    h = Func('h_all_funcs')
+    
+    x,y = Var(),Var()
+    h[x,y] = x**2+y**2
+    g[x,y] = h[x,y]*2
+    f[x,y] = g[x,y]+1
+    assert sorted(all_funcs(f).keys()) == ['f_all_funcs', 'g_all_funcs', 'h_all_funcs']
+    print 'test_all_funcs:   OK'
+    
 def test():
     exit_on_signal()
 #    print 'a'
@@ -735,13 +758,12 @@ def test():
 #    print 'c'
 #    pass
 
-    """
+    test_all_funcs()
     test_core()
     test_segfault()
     test_blur()
-    test_examples()
-    """
-    test_examples()
+    #test_examples()
+#    test_examples()
 #    test_autotune()
     print
     print 'All tests passed, done'
