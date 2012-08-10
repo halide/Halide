@@ -20,8 +20,8 @@ int main(int argc, char **argv) {
 
     // Add a boundary condition 
     Func clamped;
-    clamped(x, y) = input(clamp(x, 0, input.width()),
-                          clamp(y, 0, input.height()));
+    clamped(x, y) = input(clamp(x, 0, input.width()-1),
+                          clamp(y, 0, input.height()-1));
 
     // Construct the bilateral grid 
     RDom r(0, s_sigma, 0, s_sigma);

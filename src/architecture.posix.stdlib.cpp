@@ -14,7 +14,12 @@ extern "C" {
 #define PTR_OFFSET(ptr,offset)	((void*)((char*)(ptr) + (offset)))
 
 // The functions below are all weak so that you can link multiple
-// halide modules without name conflicts
+// halide modules without name conflicts. 
+
+// TODO: get the odr tag to generated. The odr tag promises that any
+// symbol merged will have the same definition, which allows
+// inlining. Regular weak linkage lets you override functions with
+// different alternatives, which disallows inlining.
 #define WEAK __attribute__((weak))
 
 // This only gets defined if it's not already defined by an including module, e.g. PTX.

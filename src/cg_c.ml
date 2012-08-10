@@ -125,7 +125,7 @@ let cg_entry e =
 
     | Load (ty, buf, idx) -> cg_buf_access ty buf idx
 
-    | Call (t, name, args) -> C.Call (C.ID (base_name name), List.map cg_expr args)
+    | Call (Extern, rt, name, args) -> C.Call (C.ID (base_name name), List.map cg_expr args)
 
     (* TODO: lets are going to require declarations be queued and returned as well as the final expression/statement *)
     (* For now, just push lets through as their generated value expressions *)

@@ -754,7 +754,7 @@ namespace Halide {
                     snprintf(cmd1, 1024, "g++ -c -O3 %s -fPIC -o %s", c_name.c_str(), obj_name.c_str());
                 } else {
                     std::string bc_name = "./" + name + ".bc";
-                    snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -fPIC -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
+                    snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -relocation-model=pic -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
                 }
                 snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
                 printf("%s\n", cmd1);
@@ -799,7 +799,15 @@ namespace Halide {
 
         if (!Contents::ee) {
             std::string errStr;
-            Contents::ee = llvm::EngineBuilder(m).setErrorStr(&errStr).setOptLevel(llvm::CodeGenOpt::Aggressive).create();
+            llvm::EngineBuilder eeBuilder(m);
+            eeBuilder.setErrorStr(&errStr);
+            eeBuilder.setOptLevel(llvm::CodeGenOpt::Aggressive);
+
+            // TODO: runtime-detect avx to only enable it if supported
+            // std::vector<std::string> mattrs = {"avx"};
+            // eeBuilder.setMAttrs(mattrs);
+
+            Contents::ee = eeBuilder.create();
             if (!contents->ee) {
                 printf("Couldn't create execution engine: %s\n", errStr.c_str()); 
                 exit(1);
@@ -809,10 +817,15 @@ namespace Halide {
             Contents::fPassMgr = new llvm::FunctionPassManager(m);
             Contents::mPassMgr = new llvm::PassManager();
 
+            // Make sure to include the always-inliner pass
+            Contents::mPassMgr->add(llvm::createAlwaysInlinerPass());
+
             llvm::PassManagerBuilder builder;
             builder.OptLevel = 3;
             builder.populateFunctionPassManager(*contents->fPassMgr);
             builder.populateModulePassManager(*contents->mPassMgr);
+
+
 
         } else { 
             Contents::ee->addModule(m);
@@ -835,8 +848,8 @@ namespace Halide {
         
         //printf("optimizing ll...\n");
         
-        std::string errstr;
-        llvm::raw_fd_ostream stdout("passes.txt", errstr);
+        //std::string errstr;
+        //llvm::raw_fd_ostream stdout("passes.txt", errstr);
         
         Contents::mPassMgr->run(*m);
 

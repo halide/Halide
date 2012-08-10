@@ -83,7 +83,6 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
     *)
     (* analyze the function *)
     let _,_,body = find_function func env in
-    assert (body <> Extern);
 
     let is_reduce fname = match find_function fname env with _,_,Reduce _ -> true | _ -> false in
 
@@ -211,12 +210,10 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
     if should_recurse then begin
       (* Find called functions (that aren't extern) and recurse *)
       let rec find_calls_expr = function
-        (* skip externs *)
-        | Call (_, name, args) when name.[0] = '.' ->
+        | Call (Func, _, name, args) when List.mem name (split_name func) ->
+            (* Call to self *)
             (string_set_concat (List.map find_calls_expr args))
-        | Call (_, name, args) when List.mem name (split_name func) ->
-            (string_set_concat (List.map find_calls_expr args))
-        | Call (_, name, args) -> 
+        | Call (Func, _, name, args) -> 
             let rest = (string_set_concat (List.map find_calls_expr args)) in
             StringSet.add (func ^ "." ^ name) rest
         | x -> fold_children_in_expr find_calls_expr StringSet.union (StringSet.empty) x
@@ -224,7 +221,6 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
     
       let new_found_calls = 
         match body with 
-          | Extern -> failwith "enumerating schedules for extern function"
           | Pure expr -> find_calls_expr expr
           | Reduce (init_expr, update_args, update_func, bounds) ->
               let s = StringSet.add (func ^ "." ^ update_func) (find_calls_expr init_expr) in
@@ -269,11 +265,9 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
     dbg 2 " found_calls -> %s\n%!" (String.concat ", " (StringSet.elements found_calls));
 
     let rec find_calls_expr = function
-      | Call (_, name, args) when name.[0] = '.' ->
+      | Call (Func, _, name, args) when List.mem name (split_name f) ->
           (string_set_concat (List.map find_calls_expr args))
-      | Call (_, name, args) when List.mem name (split_name f) ->
-          (string_set_concat (List.map find_calls_expr args))
-      | Call (_, name, args) -> 
+      | Call (Func, _, name, args) -> 
           let rest = (string_set_concat (List.map find_calls_expr args)) in
           StringSet.add name rest
       | x -> fold_children_in_expr find_calls_expr StringSet.union (StringSet.empty) x
@@ -285,7 +279,6 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
     
     let new_found_calls = 
       match body with 
-        | Extern -> StringSet.empty
         | Pure expr -> find_calls_expr expr
         | Reduce (init_expr, update_args, update_func, bounds) ->
             let s = StringSet.add update_func (find_calls_expr init_expr) in

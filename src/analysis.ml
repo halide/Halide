@@ -47,7 +47,10 @@ and compute_remainder_modulus expr =
   | MakeVector _ -> raise ModulusOfMakeVector
   | Broadcast _ -> raise ModulusOfBroadcast
   | Ramp _ -> raise ModulusOfRamp
-  | e -> raise ModulusOfNonInteger
+  | Call (_, _, _, _) -> (0, 1)
+  | e -> 
+      Printf.printf "%s\n%!" (string_of_expr expr);
+      raise ModulusOfNonInteger
   in
   (* Printf.printf "%s -> %d %d\n" (string_of_expr expr) m r; *)
   (m, r)
@@ -76,7 +79,7 @@ let fold_children_in_expr mutator combiner base_case = function
   | Select (c, a, b)      -> combiner (combiner (mutator c) (mutator a)) (mutator b)
     
   | MakeVector l
-  | Call (_, _, l)        -> List.fold_left combiner base_case (List.map mutator l)
+  | Call (_, _, _, l)     -> List.fold_left combiner base_case (List.map mutator l)
 
   | Debug (e, _, l)       -> List.fold_left combiner (mutator e) (List.map mutator l)
 
@@ -124,7 +127,7 @@ let mutate_children_in_expr mutator = function
   | Broadcast (a, n)      -> Broadcast (mutator a, n)
   | Ramp (b, s, n)        -> Ramp (mutator b, mutator s, n)
   | ExtractElement (a, b) -> ExtractElement (mutator a, mutator b)
-  | Call (t, f, args)     -> Call (t, f, List.map mutator args)
+  | Call (ct, rt, f, args)-> Call (ct, rt, f, List.map mutator args)
   | Let (n, a, b)         -> Let (n, mutator a, mutator b)
   | Debug (e, fmt, args)  -> Debug (mutator e, fmt, List.map mutator args)
   | x -> x
@@ -194,7 +197,7 @@ and subs_name_expr oldname newname expr =
     | Load (t, b, i)    -> Load (t, (if b = oldname then newname else b), subs i)
     | Var (t, n)        -> Var (t, if n = oldname then newname else n)
     | Let (n, a, b)     -> Let ((if n = oldname then newname else n), subs a, subs b)
-    | Call (t, f, args) -> Call (t, (if f = oldname then newname else f), List.map subs args)
+    | Call (ct, rt, f, args) -> Call (ct, rt, (if f = oldname then newname else f), List.map subs args)
     | x                 -> mutate_children_in_expr subs x
 
 and prefix_non_global prefix name =
@@ -207,7 +210,7 @@ and prefix_name_expr prefix expr =
     | Load (t, b, i)    -> Load (t, prefix_non_global prefix b, recurse i)
     | Var (t, n)        -> Var (t, prefix_non_global prefix n)
     | Let (n, a, b)     -> Let (prefix ^ n, recurse a, recurse b)
-    | Call (t, f, args) -> Call (t, prefix_non_global prefix f, List.map recurse args)
+    | Call (ct, rt, f, args) -> Call (ct, rt, prefix_non_global prefix f, List.map recurse args)
     | x                 -> mutate_children_in_expr recurse x  
 
 and prefix_name_stmt prefix stmt =
