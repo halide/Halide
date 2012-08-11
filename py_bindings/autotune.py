@@ -19,6 +19,7 @@ import itertools
 import permutation
 import time
 import copy
+import numpy
 random_module = random
 
 FUNC_ROOT   = 0
@@ -125,9 +126,9 @@ class FragmentVectorize(FragmentBlocksizeMixin,Fragment):
     def __str__(self):
         return '.vectorize(%s,%d)'%(self.var, self.value)
     
-class FragmentParallel(FragmentBlocksizeMixin,Fragment):
+class FragmentParallel(FragmentVarMixin,Fragment):
     def __str__(self):
-        return '.parallel(%s,%d)'%(self.var,self.value)
+        return '.parallel(%s)'%(self.var)
 
 class FragmentUnroll(FragmentBlocksizeMixin,Fragment):
     def __str__(self):
@@ -151,6 +152,12 @@ def create_var(vars): #count=[0]):
         if not s in vars:
             return s
 
+def instantiate_var(name, cache={}):
+    if name in cache:
+        return cache[name]
+    cache[name] = halide.Var(name)
+    return cache[name]
+    
 class FragmentSplit(FragmentBlocksizeMixin,Fragment):
     def __init__(self, var=None, value=None, newvar=None, reuse_outer=False,vars=None):
         FragmentBlocksizeMixin.__init__(self, var, value)
@@ -245,7 +252,7 @@ class FragmentList(list):
         ans = []
         for x in self:
             ans.extend(x.new_vars())
-        return ans
+        return list(sorted(set(ans)))
         
     def __repr__(self):
         return str(self) #return 'FragmentList(%s, %r)' % (self.func, repr([str(x) for x in list(self)]))
@@ -292,13 +299,14 @@ def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_v
                     #print '*', len(L), L
                     yield FragmentList(func, list(L) + [fragment])
 
-def schedules_func(root_func, func, min_depth=0, max_depth=4, random=False, extra_caller_vars=[]):
+def schedules_func(root_func, func, min_depth=0, max_depth=4, random=False, extra_caller_vars=[], vars=None):
     """
     Generator of valid schedules for a function, each of which is a list of schedule fragments (FragmentList).
     
     If random is True then instead generate exactly one schedule randomly chosen.
     """
-    vars = halide.func_varlist(func)    
+    if vars is None:
+        vars = halide.func_varlist(func)    
     #if func.name() == 'f':
     #    yield FragmentList(func, [random_module.choice(FragmentChunk.fragments(root_func, func, FragmentChunk, vars, extra_caller_vars))])
     #    return
@@ -311,29 +319,74 @@ def schedules_func(root_func, func, min_depth=0, max_depth=4, random=False, extr
                 if random:
                     return
 
-def schedule_funcs(root_func, min_depth=0, max_depth=4):
+class Schedule:
+    def __init__(self, root_func, d):
+        self.root_func = root_func
+        self.d = d
+    
+    def __str__(self):
+        d = self.d
+        ans = []
+        for key in sorted(d.keys()):
+            s = str(d[key])
+            if s != '':
+                ans.append(s)
+        return '\n'.join(['-'*40] + ans + ['-'*40])
+
+    def new_vars(self):
+        ans = []
+        for x in self.d.values():
+            ans.extend(x.new_vars())
+        return list(sorted(set(ans)))
+
+    def apply(self):   # Apply schedule
+        #print 'apply schedule:'
+        #print str(self)
+        halide.inline_all(self.root_func)
+        scope = halide.all_vars(self.root_func)
+        #print 'scope', scope.keys()
+        new_vars = self.new_vars()
+        #print 'new_vars', new_vars
+        for varname in new_vars:
+            scope[varname] = instantiate_var(varname)
+        def callback(f, parent):
+            name = f.name()
+            if name in self.d:
+                s = str(self.d[name])
+                s = s.replace(name + '.', '__func.')
+                scope['__func'] = f
+                exec s in scope
+        halide.visit_funcs(self.root_func, callback)
+    
+    def test(self, shape, input, eval_func=None):
+        """
+        Test on zero array of the given shape. Return evaluate() function which when called returns the output Image.
+        """
+        print 'apply'
+        self.apply()
+        print 'in_image'
+        in_image = numpy.zeros(shape, input.type().to_numpy())
+        print 'filter'
+        return halide.filter_image(input, self.root_func, in_image, eval_func=eval_func)
+        
+def random_schedule(root_func, min_depth=0, max_depth=4, vars=None):
     """
-    Generate dict mapping function name to FragmentList. Same arguments as schedules_func().
+    Generate Schedule for all functions called by root_func (recursively). Same arguments as schedules_func().
     """
+    if vars is None:
+        vars = halide.func_varlist(root_func)
     d_new_vars = {}
     schedule = {}
     def callback(f, parent):
         extra_caller_vars = d_new_vars.get(parent.name() if parent is not None else None,[])
 #        print 'schedule', f.name(), extra_caller_vars
+#        ans = schedules_func(root_func, f, min_depth, max_depth, random=True, extra_caller_vars=extra_caller_vars, vars=vars).next()
         ans = schedules_func(root_func, f, min_depth, max_depth, random=True, extra_caller_vars=extra_caller_vars).next()
         d_new_vars[f.name()] = ans.new_vars()
         schedule[f.name()] = ans
         
     halide.visit_funcs(root_func, callback)
-    return schedule
-
-def schedule_str(d):
-    ans = []
-    for key in sorted(d.keys()):
-        s = str(d[key])
-        if s != '':
-            ans.append(s)
-    return '\n'.join(['-'*40] + ans + ['-'*40])
+    return Schedule(root_func, schedule)
 
 def func_lhs_var_names(f):
     ans = []
@@ -352,14 +405,17 @@ def caller_vars(root_func, func):
     return []
     
 def test_schedules(verbose=False):
-    #random.seed(0)
+    random_module.seed(0)
+    halide.exit_on_signal()
     f = halide.Func('f')
     x = halide.Var('x')
     y = halide.Var('y')
     g = halide.Func('g')
     v = halide.Var('v')
-    f[x,y] = 1
+    input = halide.UniformImage(halide.UInt(16), 3)
+    f[x,y] = input[x,y]
     g[v] = f[v,v]
+    assert sorted(halide.all_vars(g).keys()) == sorted(['x', 'y', 'v'])
 
     if verbose:
         print halide.func_varlist(f)
@@ -372,18 +428,30 @@ def test_schedules(verbose=False):
 #    for L in sorted(validL):
 #        print repr(L)
     T0 = time.time()
-#    nvalid = 0
     random = True #False
-    #for L in schedules_func(g, f, 0, 6, random=random): #sorted([repr(_x) for _x in valid_schedules(g, f, 3)]):
-    #    print L#repr(L)
-    #    nvalid += 1
+    nvalid_determ = 0
+    for L in schedules_func(g, f, 0, 3):
+        nvalid_determ += 1
+        if verbose:
+            print L
+    nvalid_random = 0
+    for i in range(100):
+        for L in schedules_func(g, f, 0, 4, random=True): #sorted([repr(_x) for _x in valid_schedules(g, f, 3)]):
+            if verbose:
+                print L#repr(L)
+            nvalid_random += 1
     s = []
     for i in range(400):
-        d = schedule_funcs(g)
-        si = schedule_str(d)
+        d = random_schedule(g, 0, 4)
+        si = str(d)
         s.append(si)
         if verbose:
             print si
+
+        d.apply()
+        evaluate = d.test((30, 30, 3), input)
+        print 'evaluate'
+        evaluate()
     T1 = time.time()
     
     s = '\n'.join(s)
@@ -395,14 +463,14 @@ def test_schedules(verbose=False):
     assert 'f.root().parallel' in s
     assert 'f.root().transpose' in s
 
-#    print 'number valid: ', nvalid
+    assert nvalid_random == 100
     if verbose:
         print 'generated in %.3f secs' % (T1-T0)
-    print 'schedule_funcs: OK'
+    print 'random_schedule: OK'
     
 def test():
-#    test_schedules(True)
-    test_schedules()
+    test_schedules(True)
+#    test_schedules()
     
 if __name__ == '__main__':
     test()
