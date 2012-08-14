@@ -70,6 +70,7 @@ namespace Halide {
         int s0, s1, s2, s3;
 
         void init() {
+            im.markHostDirty();
             base = (T*)im.data();
             s0 = im.stride(0);
             if (im.dimensions() > 1) s1 = im.stride(1);
@@ -85,7 +86,6 @@ namespace Halide {
         Image(DynImage im) : im(im) {
             assert(TypeOf<T>() == im.type());
             im.copyToHost();
-            im.markHostDirty();
             init();
         }
 
