@@ -20,6 +20,8 @@ import permutation
 import time
 import copy
 import numpy
+import sys
+import os
 random_module = random
 
 FUNC_ROOT   = 0
@@ -83,8 +85,10 @@ class FragmentVarMixin:
 #        print 'fragments', cls
         return [cls(x) for x in vars]
 
+use_random_blocksize = True
+
 def blocksize_random():
-    return random.choice([2,4,8,16,32])
+    return random.choice([2,4,8,16,32]) if use_random_blocksize else 2
 
 class FragmentBlocksizeMixin(FragmentVarMixin):
     def __init__(self, var=None, value=None):
@@ -299,7 +303,9 @@ def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_v
                     #print '*', len(L), L
                     yield FragmentList(func, list(L) + [fragment])
 
-def schedules_func(root_func, func, min_depth=0, max_depth=4, random=False, extra_caller_vars=[], vars=None):
+DEFAULT_MAX_DEPTH = 3
+
+def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, random=False, extra_caller_vars=[], vars=None):
     """
     Generator of valid schedules for a function, each of which is a list of schedule fragments (FragmentList).
     
@@ -331,7 +337,7 @@ class Schedule:
             s = str(d[key])
             if s != '':
                 ans.append(s)
-        return '\n'.join(['-'*40] + ans + ['-'*40])
+        return '\n'.join(ans) #join(['-'*40] + ans + ['-'*40])
 
     def new_vars(self):
         ans = []
@@ -349,6 +355,7 @@ class Schedule:
         #print 'new_vars', new_vars
         for varname in new_vars:
             scope[varname] = instantiate_var(varname)
+        print 'scope:', scope
         def callback(f, parent):
             name = f.name()
             if name in self.d:
@@ -369,7 +376,7 @@ class Schedule:
         print 'filter'
         return halide.filter_image(input, self.root_func, in_image, eval_func=eval_func)
         
-def random_schedule(root_func, min_depth=0, max_depth=4, vars=None):
+def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None):
     """
     Generate Schedule for all functions called by root_func (recursively). Same arguments as schedules_func().
     """
@@ -381,7 +388,8 @@ def random_schedule(root_func, min_depth=0, max_depth=4, vars=None):
         extra_caller_vars = d_new_vars.get(parent.name() if parent is not None else None,[])
 #        print 'schedule', f.name(), extra_caller_vars
 #        ans = schedules_func(root_func, f, min_depth, max_depth, random=True, extra_caller_vars=extra_caller_vars, vars=vars).next()
-        ans = schedules_func(root_func, f, min_depth, max_depth, random=True, extra_caller_vars=extra_caller_vars).next()
+        max_depth_sel = max_depth if f.name() != 'f' else 0
+        ans = schedules_func(root_func, f, min_depth, max_depth_sel, random=True, extra_caller_vars=extra_caller_vars).next()
         d_new_vars[f.name()] = ans.new_vars()
         schedule[f.name()] = ans
         
@@ -404,18 +412,23 @@ def caller_vars(root_func, func):
             return func_lhs_var_names(g)
     return []
     
-def test_schedules(verbose=False):
-    random_module.seed(0)
+def test_schedules(verbose=False, test_random=False):
+    #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
     halide.exit_on_signal()
     f = halide.Func('f')
     x = halide.Var('x')
     y = halide.Var('y')
+    c = halide.Var('c')
     g = halide.Func('g')
     v = halide.Var('v')
     input = halide.UniformImage(halide.UInt(16), 3)
-    f[x,y] = input[x,y]
-    g[v] = f[v,v]
-    assert sorted(halide.all_vars(g).keys()) == sorted(['x', 'y', 'v'])
+    int_t = halide.Int(32)
+    f[x,y,c] = input[halide.clamp(x,halide.cast(int_t,0),halide.cast(int_t,input.width()-1)),
+                     halide.clamp(y,halide.cast(int_t,0),halide.cast(int_t,input.height()-1)),
+                     halide.clamp(c,halide.cast(int_t,0),halide.cast(int_t,2))]
+    #g[v] = f[v,v]
+    g[x,y,c] = f[x,y,c]+1
+    assert sorted(halide.all_vars(g).keys()) == sorted(['x', 'y', 'c']) #, 'v'])
 
     if verbose:
         print halide.func_varlist(f)
@@ -428,30 +441,34 @@ def test_schedules(verbose=False):
 #    for L in sorted(validL):
 #        print repr(L)
     T0 = time.time()
-    random = True #False
-    nvalid_determ = 0
-    for L in schedules_func(g, f, 0, 3):
-        nvalid_determ += 1
-        if verbose:
-            print L
-    nvalid_random = 0
-    for i in range(100):
-        for L in schedules_func(g, f, 0, 4, random=True): #sorted([repr(_x) for _x in valid_schedules(g, f, 3)]):
+    if not test_random:
+        random = True #False
+        nvalid_determ = 0
+        for L in schedules_func(g, f, 0, 3):
+            nvalid_determ += 1
             if verbose:
-                print L#repr(L)
-            nvalid_random += 1
+                print L
+        nvalid_random = 0
+        for i in range(100):
+            for L in schedules_func(g, f, 0, DEFAULT_MAX_DEPTH, random=True): #sorted([repr(_x) for _x in valid_schedules(g, f, 3)]):
+                if verbose and 0:
+                    print L#repr(L)
+                nvalid_random += 1
     s = []
     for i in range(400):
-        d = random_schedule(g, 0, 4)
+        d = random_schedule(g, 0, DEFAULT_MAX_DEPTH)
         si = str(d)
         s.append(si)
         if verbose:
-            print si
+            print 'Schedule:', si
 
         d.apply()
         evaluate = d.test((30, 30, 3), input)
         print 'evaluate'
         evaluate()
+        if test_random:
+            print 'Success'
+            sys.exit()
     T1 = time.time()
     
     s = '\n'.join(s)
@@ -468,10 +485,39 @@ def test_schedules(verbose=False):
         print 'generated in %.3f secs' % (T1-T0)
     print 'random_schedule: OK'
     
-def test():
-    test_schedules(True)
+def main():
+    args = sys.argv[1:]
+    if len(args) == 0:
+        print 'autotune test|print'
+        sys.exit(0)
+    if args[0] == 'test':
+        test_schedules(True)
+    if args[0] == 'test_random':
+        global use_random_blocksize
+        use_random_blocksize = False
+        test_schedules(True, test_random=True)
+    elif args[0] == 'print':
+        nprint = 10
+        if len(args) > 1:
+            nprint = int(args[1])
+        cache = set()
+        for i in range(nprint):
+            if os.path.exists('out.txt'):
+                os.remove('out.txt')
+            os.system('python autotune.py test_random > out.txt')
+            s = open('out.txt', 'rt').read()
+            success = 'Success' in s
+            try:
+                j = s.index('Schedule:')
+            except:
+                continue
+            schedule = s[j:s.index('\n',j+1)]
+            if schedule not in cache:
+                print 'Success' if success else 'Failed ', schedule
+                sys.stdout.flush()
+                cache.add(schedule)
 #    test_schedules()
     
 if __name__ == '__main__':
-    test()
+    main()
     

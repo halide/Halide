@@ -645,7 +645,11 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
                 out.assign(eval_func(input_png))
                 return out
             else:
-                out.assign(out_func.realize(w, h, nchan))
+                print 'a'
+                realized = out_func.realize(w, h, nchan)
+                print 'b'
+                out.assign(realized)
+                print 'c'
                 return out
         finally:
             assert out.width() == w and out.height() == h and out.channels() == nchan
@@ -776,7 +780,8 @@ def test_examples():
     do_filter = True
     
 #    for example_name in ['interpolate']: #
-    for example_name in 'interpolate blur dilate boxblur_sat boxblur_cumsum local_laplacian snake'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+    for example_name in 'interpolate blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+#    for example_name in 'interpolate blur dilate boxblur_sat boxblur_cumsum local_laplacian snake'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
 #    for example_name in 'interpolate snake blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
         example = getattr(examples, example_name)
         first = True
