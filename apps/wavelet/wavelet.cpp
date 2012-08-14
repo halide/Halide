@@ -70,14 +70,22 @@ int main(int argc, char **argv) {
     Func wavelet_clamped;
     wavelet_clamped(x, y, c) = wavelet(clamp(x, 0, wavelet.width()-1),
                                        clamp(y, 0, wavelet.height()-1), c);
-    inverse_daubechies_x(wavelet_clamped).compileToFile("inverse_daubechies_x");
 
-    Func dx = daubechies_x(clamped);
-    dx.compileToFile("daubechies_x");
+    Func inv_haar_x = inverse_haar_x(wavelet_clamped);
+    if (use_gpu()) inv_haar_x.cudaTile(x, y, 8, 8);
+    inv_haar_x.compileToFile("inverse_haar_x");
 
-    inverse_haar_x(wavelet_clamped).compileToFile("inverse_haar_x");
-    haar_x(clamped).compileToFile("haar_x");
+    Func for_haar_x = haar_x(clamped);
+    if (use_gpu()) for_haar_x.cudaTile(x, y, 8, 8);
+    for_haar_x.compileToFile("haar_x");
 
+    Func inv_daub_x = inverse_daubechies_x(wavelet_clamped);
+    if (use_gpu()) inv_daub_x.cudaTile(x, y, 8, 8);
+    inv_daub_x.compileToFile("inverse_daubechies_x");
+
+    Func for_daub_x = daubechies_x(clamped);
+    if (use_gpu()) for_daub_x.cudaTile(x, y, 8, 8);
+    for_daub_x.compileToFile("daubechies_x");
 
     return 0;
 }
