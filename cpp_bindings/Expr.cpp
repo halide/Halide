@@ -606,7 +606,8 @@ namespace Halide {
     }
     
     Expr max(Expr a, Expr b) {
-        assert(a.type() == b.type() && "Arguments to max must have the same type");
+        //assert(a.type() == b.type() && "Arguments to max must have the same type");
+	std::tie(a, b) = matchTypes(a, b);
         Expr e(makeMax(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -614,15 +615,18 @@ namespace Halide {
     }
 
     Expr min(Expr a, Expr b) {
-        assert(a.type() == b.type() && "Arguments to min must have the same type");
+        //assert(a.type() == b.type() && "Arguments to min must have the same type");
+	std::tie(a, b) = matchTypes(a, b);
         Expr e(makeMin(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
     
-    Expr clamp(Expr a, Expr mi, Expr ma) {
-        assert(a.type() == mi.type() && a.type() == ma.type() && "Arguments to clamp must have the same type");
+    Expr clamp(Expr a, Expr mi, Expr ma) {	
+	//assert(a.type() == mi.type() && a.type() == ma.type() && "Arguments to clamp must have the same type");
+	mi = cast(a.type(), mi);
+	ma = cast(a.type(), ma);
         return max(min(a, ma), mi);
     }
 
