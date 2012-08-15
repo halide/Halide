@@ -14,7 +14,7 @@
 
 extern "C" {
 
-    #define NDEBUG // disable logging/asserts for performance
+#define NDEBUG // disable logging/asserts for performance
 
 #ifdef NDEBUG
 #define CHECK_CALL(c,str) (c)
