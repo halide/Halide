@@ -429,10 +429,10 @@ def interpolate(dtype=UInt(16), counter=[0]):
                   1.0)
     halide.root_all(final)
     
-    print 'interpolate: finished function setup'
+    #print 'interpolate: finished function setup'
     
     def evaluate(in_png):
-        print 'interpolate evaluate'
+        #print 'interpolate evaluate'
         width  = in_png.width()
         height = in_png.height()
         print width, height
@@ -443,9 +443,9 @@ def interpolate(dtype=UInt(16), counter=[0]):
             height = height/2 + 1
         print in_png.width(), in_png.height(), 'realizing'
         out = final.realize(in_png.width(), in_png.height(), 4)
-        print 'evaluate realized, returning'
+        #print 'evaluate realized, returning'
         return out
     
-    print 'interpolate: returning'
+    #print 'interpolate: returning'
     
     return (input, final, evaluate)
