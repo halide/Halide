@@ -10,6 +10,8 @@
 #include <assert.h>
 #include "buffer.h"
 
+#define WEAK __attribute__((weak))
+
 extern "C" {
 
     #define NDEBUG // disable logging/asserts for performance
@@ -150,7 +152,7 @@ CUresult CUDAAPI cuEventElapsedTime(float *pMilliseconds, CUevent hStart, CUeven
 // static vector<CUfunction> __f;
 }
 extern "C" {
-CUcontext cuda_ctx = 0;
+CUcontext WEAK cuda_ctx = 0;
 
 static CUmodule __mod;
 static CUevent __start, __end;
@@ -160,7 +162,7 @@ extern int currentTime();
 // Used to create buffer_ts to track internal allocations caused by our runtime
 // TODO: look into cuMemAllocHost for page-locked host memory, allowing easy transfer?
 // TODO: make Buffer args typed, so elem_size can be statically inferred?
-buffer_t* __make_buffer(uint8_t* host, size_t elem_size,
+buffer_t* WEAK __make_buffer(uint8_t* host, size_t elem_size,
                         size_t dim0, size_t dim1,
                         size_t dim2, size_t dim3)
 {
@@ -177,16 +179,16 @@ buffer_t* __make_buffer(uint8_t* host, size_t elem_size,
     return buf;
 }
 
-void __release_buffer(buffer_t* buf)
+void WEAK __release_buffer(buffer_t* buf)
 {
     free(buf);
 }
-buffer_t* __malloc_buffer(int32_t size)
+buffer_t* WEAK __malloc_buffer(int32_t size)
 {
     return __make_buffer((uint8_t*)malloc(size), sizeof(uint8_t), size, 1, 1, 1);
 }
 
-void __free_buffer(buffer_t* buf)
+void WEAK __free_buffer(buffer_t* buf)
 {
     #if 0 // temp disable
     #ifndef NDEBUG
@@ -207,7 +209,7 @@ void __free_buffer(buffer_t* buf)
     #endif
 }
 
-void __init(const char* ptx_src)
+void WEAK __init(const char* ptx_src)
 {
     // Initialize one shared context for all Halide compiled instances
     if (!cuda_ctx) {
@@ -252,14 +254,14 @@ void __init(const char* ptx_src)
     }
 }
 
-void __release() {
+void WEAK __release() {
     CUcontext ignore;
     // TODO: this is for timing; bad for release-mode performance
     CHECK_CALL( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
     //CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
 }
 
-CUfunction __get_kernel(const char* entry_name)
+CUfunction WEAK __get_kernel(const char* entry_name)
 {
     CUfunction f;
     #ifdef NDEBUG
@@ -273,7 +275,7 @@ CUfunction __get_kernel(const char* entry_name)
     return f;
 }
 
-CUdeviceptr __dev_malloc(size_t bytes) {
+CUdeviceptr WEAK __dev_malloc(size_t bytes) {
     CUdeviceptr p;
     #ifdef NDEBUG
     char msg[1];
@@ -289,7 +291,7 @@ CUdeviceptr __dev_malloc(size_t bytes) {
     return p;
 }
 
-void __dev_malloc_if_missing(buffer_t* buf) {
+void WEAK __dev_malloc_if_missing(buffer_t* buf) {
     #ifndef NDEBUG
     fprintf(stderr, "dev_malloc_if_missing of %zux%zux%zux%zu (%zu bytes) (buf->dev = %p) buffer\n",
             buf->dims[0], buf->dims[1], buf->dims[2], buf->dims[3], buf->elem_size, (void*)buf->dev);
@@ -300,7 +302,7 @@ void __dev_malloc_if_missing(buffer_t* buf) {
     assert(buf->dev);
 }
 
-void __copy_to_dev(buffer_t* buf) {
+void WEAK __copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         assert(buf->host && buf->dev);
         size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
@@ -315,7 +317,7 @@ void __copy_to_dev(buffer_t* buf) {
     buf->host_dirty = false;
 }
 
-void __copy_to_host(buffer_t* buf) {
+void WEAK __copy_to_host(buffer_t* buf) {
     if (buf->dev_dirty) {
         assert(buf->host && buf->dev);
         size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
@@ -331,7 +333,7 @@ void __copy_to_host(buffer_t* buf) {
 }
 #define _COPY_TO_HOST
 
-void __dev_run(
+void WEAK __dev_run(
     const char* entry_name,
     int blocksX, int blocksY, int blocksZ,
     int threadsX, int threadsY, int threadsZ,
