@@ -119,7 +119,11 @@ namespace Halide {
         static llvm::ExecutionEngine *ee;
         static llvm::FunctionPassManager *fPassMgr;
         static llvm::PassManager *mPassMgr;
-        
+        // A handle to libcuda.so. Necessary if we don't link it in.
+        static void *libCuda;
+        // Was libcuda.so linked in already?
+        static bool libCudaLinked;
+
         // The scalar value returned by the function
         Expr rhs;
         std::vector<Expr> args;
@@ -147,11 +151,14 @@ namespace Halide {
         mutable void (*copyToHost)(buffer_t *);
         mutable void (*freeBuffer)(buffer_t *);
         mutable void (*errorHandler)(char *);
+
     };
 
     llvm::ExecutionEngine *Func::Contents::ee = NULL;
     llvm::FunctionPassManager *Func::Contents::fPassMgr = NULL;
     llvm::PassManager *Func::Contents::mPassMgr = NULL;
+    void *Func::Contents::libCuda = NULL;
+    bool Func::Contents::libCudaLinked = false;
     
     FuncRef::FuncRef(const Func &f) :
         contents(new FuncRef::Contents(f)) {
@@ -733,11 +740,12 @@ namespace Halide {
     }
 
     void Func::compileJIT() {
+
+        // If JITting doesn't work well on this platform (ARM), try
+        // compiling to a shared lib instead and manually linking it
+        // in. Also useful for debugging.
         if (getenv("HL_PSEUDOJIT") && getenv("HL_PSEUDOJIT") == std::string("1")) {
-            // llvm's ARM jit path has many issues currently. Instead
-            // we'll do static compilation to a shared object, then
-            // dlopen it
-            printf("Pseudo-jitting via static compilation to a shared object\n");
+            fprintf(stderr, "Pseudo-jitting via static compilation to a shared object\n");
             
             std::string name = contents->name + "_pseudojit";
             std::string so_name = "./" + name + ".so";
@@ -757,17 +765,20 @@ namespace Halide {
                     snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -relocation-model=pic -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
                 }
                 snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
-                printf("%s\n", cmd1);
+                fprintf(stderr, "%s\n", cmd1);
                 assert(0 == system(cmd1));
-                printf("%s\n", cmd2);
+                fprintf(stderr, "%s\n", cmd2);
                 assert(0 == system(cmd2));
             }
-            void *handle = dlopen(so_name.c_str(), RTLD_NOW);
+            void *handle = dlopen(so_name.c_str(), RTLD_LAZY);
+            fprintf(stderr, "dlopen(%s)\n", so_name.c_str());
+            if (!handle) perror("dlopen");
             assert(handle && "Could not open shared object file when pseudojitting");
             void *ptr = dlsym(handle, entrypoint_name.c_str());
             assert(ptr && "Could not find entrypoint in shared object file when pseudojitting");
             contents->functionPtr = (void (*)(void *))ptr;
 
+            // Hook up any custom error handler
             if (contents->errorHandler) {
                 ptr = dlsym(handle, "set_error_handler");
                 assert(ptr && "Could not find set_error_handler in shared object file when pseudojitting");
@@ -782,14 +793,19 @@ namespace Halide {
             llvm::InitializeNativeTarget();
         }
 
+        // Use the function definitions and the schedule to create the
+        // blob of imperative IR
         MLVal stmt = lower();
+        
+        // Hook up uniforms, images, etc and turn them into the
+        // argument list for the llvm function
         MLVal args = inferArguments();
 
-        //printf("compiling IR -> ll\n");
+        // Create the llvm module and entrypoint from the imperative IR
         MLVal tuple;
         tuple = doCompile(name(), args, stmt);
 
-        //printf("Extracting the resulting module and function\n");
+        // Extract the llvm module and entrypoint function
         MLVal first, second;
         MLVal::unpackPair(tuple, first, second);
         LLVMModuleRef module = (LLVMModuleRef)(first.asVoidPtr());
@@ -797,6 +813,7 @@ namespace Halide {
         llvm::Function *f = llvm::unwrap<llvm::Function>(func);
         llvm::Module *m = llvm::unwrap(module);
 
+        // Create the execution engine if it hasn't already been done
         if (!Contents::ee) {
             std::string errStr;
             llvm::EngineBuilder eeBuilder(m);
@@ -817,52 +834,97 @@ namespace Halide {
             Contents::fPassMgr = new llvm::FunctionPassManager(m);
             Contents::mPassMgr = new llvm::PassManager();
 
-            // Make sure to include the always-inliner pass
+            // Make sure to include the always-inliner pass so that
+            // unaligned_load and other similar one-opcode functions
+            // always get inlined.
             Contents::mPassMgr->add(llvm::createAlwaysInlinerPass());
 
+            // Add every other pass used by -O3
             llvm::PassManagerBuilder builder;
             builder.OptLevel = 3;
             builder.populateFunctionPassManager(*contents->fPassMgr);
             builder.populateModulePassManager(*contents->mPassMgr);
 
-
-
         } else { 
+            // Execution engine is already created. Add this module to it.
             Contents::ee->addModule(m);
         }            
         
         std::string functionName = name() + "_c_wrapper";
         llvm::Function *inner = m->getFunction(functionName.c_str());
         
-        // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
-        // CUDA behaves much better when you don't initialize >2 contexts.
-        llvm::GlobalVariable* ctx = m->getNamedGlobal("cuda_ctx");
-        if (ctx) {
-            Contents::ee->addGlobalMapping(ctx, (void*)&cuda_ctx);
-        }
-        
-        if (!inner) {
-            printf("Could not find function %s", functionName.c_str());
-            exit(1);
-        }
-        
-        //printf("optimizing ll...\n");
-        
-        //std::string errstr;
-        //llvm::raw_fd_ostream stdout("passes.txt", errstr);
-        
-        Contents::mPassMgr->run(*m);
+        if (use_gpu()) {
+            // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
+            // CUDA behaves much better when you don't initialize >2 contexts.
+            llvm::GlobalVariable* ctx = m->getNamedGlobal("cuda_ctx");
+            if (ctx) {
+                Contents::ee->addGlobalMapping(ctx, (void*)&cuda_ctx);
+            }        
 
-        Contents::fPassMgr->doInitialization();
+            // Make sure extern cuda calls inside the module point to
+            // the right things. This is done manually instead of
+            // relying on llvm calling dlsym because that solution
+            // doesn't seem to work on linux with cuda 4.2. It also
+            // means that if the user forgets to link to libcuda at
+            // compile time then this code will go look for it.
+            if (!Contents::libCuda && !Contents::libCudaLinked) {
+                // First check if libCuda has already been linked
+                // in. If so we shouldn't need to set any mappings.
+                if (dlsym(NULL, "cuInit")) {
+                    // TODO: Andrew: This code path not tested yet,
+                    // because I can't get linking to libcuda working
+                    // right on my machine.
+                    fprintf(stderr, "This program was linked to libcuda already\n");
+                    Contents::libCudaLinked = true;
+                } else {
+                    fprintf(stderr, "Looking for libcuda.so...\n");
+                    Contents::libCuda = dlopen("libcuda.so", RTLD_LAZY);
+                    if (!Contents::libCuda) {
+                        // TODO: check this works on OS X
+                        fprintf(stderr, "Looking for libcuda.dylib...\n");
+                        Contents::libCuda = dlopen("libcuda.dylib", RTLD_LAZY);
+                    }
+                    // TODO: look for cuda.dll or some such thing on windows
+                }
+            }
+            
+            if (!Contents::libCuda && !Contents::libCudaLinked) {
+                fprintf(stderr, 
+                        "Error opening libcuda. Attempting to continue anyway."
+                        "Might get missing symbols.\n");
+            } else if (Contents::libCudaLinked) {
+                // Shouldn't need to do anything. llvm will call dlsym
+                // on the current process for us.
+            } else {
+                for (auto f = m->begin(); f != m->end(); f++) {
+                    llvm::StringRef name = f->getName();
+                    if (f->hasExternalLinkage() && name[0] == 'c' && name[1] == 'u') {
+                        // Starts with "cu" and has extern linkage. Might be a cuda function.
+                        fprintf(stderr, "Linking %s\n", name.str().c_str());
+                        void *ptr = dlsym(Contents::libCuda, name.str().c_str());
+                        if (ptr) Contents::ee->updateGlobalMapping(f, ptr);
+                    }
+                }
+            }
+        }
         
-        Contents::fPassMgr->run(*inner);
+        assert(inner && "Could not find c wrapper inside llvm module");
         
+        // Run optimization passes
+
+        // Turning on this code will dump the result of all the optimization passes to a file
+        // std::string errstr;
+        // llvm::raw_fd_ostream stdout("passes.txt", errstr);
+
+        Contents::mPassMgr->run(*m);
+        Contents::fPassMgr->doInitialization();       
+        Contents::fPassMgr->run(*inner);        
         Contents::fPassMgr->doFinalization();
-        
-        //printf("compiling ll -> machine code...\n");
+
         void *ptr = Contents::ee->getPointerToFunction(f);
         contents->functionPtr = (void (*)(void*))ptr;
-        
+
+        // Retrieve some functions inside the module that we'll want to call from C++
         llvm::Function *copyToHost = m->getFunction("__copy_to_host");
         if (copyToHost) {
             ptr = Contents::ee->getPointerToFunction(copyToHost);
@@ -875,11 +937,15 @@ namespace Halide {
             contents->freeBuffer = (void (*)(buffer_t*))ptr;
         }       
 
-        llvm::Function *setErrorHandler = m->getFunction("set_error_handler");
-        assert(setErrorHandler && "Could not find the set_error_handler function in the compiled module\n");
-        ptr = Contents::ee->getPointerToFunction(setErrorHandler);
-        void (*setErrorHandlerFn)(void (*)(char *)) = (void (*)(void (*)(char *)))ptr;
-        if (contents->errorHandler) setErrorHandlerFn(contents->errorHandler);
+        // If we have a custom error handler, hook it up here
+        if (contents->errorHandler) {
+            llvm::Function *setErrorHandler = m->getFunction("set_error_handler");
+            assert(setErrorHandler && 
+                   "Could not find the set_error_handler function in the compiled module\n");
+            ptr = Contents::ee->getPointerToFunction(setErrorHandler);
+            void (*setErrorHandlerFn)(void (*)(char *)) = (void (*)(void (*)(char *)))ptr;
+            setErrorHandlerFn(contents->errorHandler);
+        }
     }
 
     size_t im_size(const DynImage &im, int dim) {
