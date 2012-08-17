@@ -1,5 +1,31 @@
 
+# Jonathan+Andrew discussion:
+# - Tile size or unroll size needs to be divisible into input size
+# - split(x, x, xi, n) is right syntax for now
+# - Only vectorize at native vector widths, 2 4 8 16
+# - tile() should be in the same order as the variables
+# - Should not be 2 vectorize calls
+# - Good to have a clamp at the beginning and a dummy function at the end -- autotuner maybe should inject these (optionally), at least the dummy at the end.
+   # Could tune over parameters have I clamped at the beginning and have I injected dummy at the end.
+   # Smartest thing
+#
+#  x should be outside y, which is f(y,x,c)
+#  transpose(x, y) means push x just far enough to be inside y
+#    If split to introduce new variables one becomes two in the same spot. Same with tile, ends up in the order (a,b,c,d) for tile(a,b,c,d).
+#  
+#  f(y, ..., x)
+#  f.transpose(y,x)
+#  --> f(...,x,y)
+#  foreach y:
+#    foreach x:
+#        foreach ...:
+#permute([defined order list], [desired order list]):
+#
+# ------------------------------------------------------------------
+#
 # Autotuner (not using Petabricks)
+
+# Randomly generate size 3
 
 # Connelly TODO research:
 # - enumerate valid schedules
@@ -88,7 +114,7 @@ class FragmentVarMixin:
 use_random_blocksize = True
 
 def blocksize_random():
-    return random.choice([2,4,8,16,32]) if use_random_blocksize else 2
+    return random.choice([2,4,8,16,32]) if use_random_blocksize else 3
 
 class FragmentBlocksizeMixin(FragmentVarMixin):
     def __init__(self, var=None, value=None):
@@ -128,7 +154,7 @@ class FragmentRoot(Fragment):
 
 class FragmentVectorize(FragmentBlocksizeMixin,Fragment):
     def __str__(self):
-        return '.vectorize(%s,%d)'%(self.var, self.value)
+        return '.vectorize(%s,%d)'%(self.var, 4) #self.value) # FIXMEFIXME Generate random platform valid blocksize
     
 class FragmentParallel(FragmentVarMixin,Fragment):
     def __str__(self):
@@ -161,7 +187,8 @@ def instantiate_var(name, cache={}):
         return cache[name]
     cache[name] = halide.Var(name)
     return cache[name]
-    
+
+# split(x, x, xi, n)
 class FragmentSplit(FragmentBlocksizeMixin,Fragment):
     def __init__(self, var=None, value=None, newvar=None, reuse_outer=False,vars=None):
         FragmentBlocksizeMixin.__init__(self, var, value)
@@ -172,8 +199,9 @@ class FragmentSplit(FragmentBlocksizeMixin,Fragment):
         
     @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
-        return ([cls(x,reuse_outer=False,vars=vars) for x in vars] +
-                [cls(x,reuse_outer=True,vars=vars)  for x in vars])
+        return [cls(x,reuse_outer=True,vars=vars)  for x in vars]
+        #([cls(x,reuse_outer=False,vars=vars) for x in vars] +
+        #        [cls(x,reuse_outer=True,vars=vars)  for x in vars])
 
     def new_vars(self):
         return [self.newvar]
@@ -200,7 +228,12 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
 
     @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
-        return [cls(x,y,vars=vars) for x in vars for y in vars if x != y]
+        ans = []
+        for i in range(len(vars)):
+            for j in range(i+1, len(vars)):
+                ans.append(cls(vars[i],vars[j],vars=vars))
+        return ans
+#        return [cls(x,y,vars=vars) for x in vars for y in vars if x != y]
 
     def new_vars(self):
         return [self.xnewvar, self.ynewvar]
@@ -463,7 +496,7 @@ def test_schedules(verbose=False, test_random=False):
             print 'Schedule:', si
 
         d.apply()
-        evaluate = d.test((30, 30, 3), input)
+        evaluate = d.test((36, 36, 3), input)
         print 'evaluate'
         evaluate()
         if test_random:
