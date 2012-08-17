@@ -16,9 +16,11 @@ f[x,y,c] = input[clamp(x,cast(int_t,0),cast(int_t,input.width()-1)),
 g[x,y,c] = f[x,y,c]+1
 
 # Paste schedule on the next line
-g.root().vectorize(c,2)
+#g.root().vectorize(c,2)
+#g.root().split(x,_c0,x,2)
+g.root().unroll(c,3).vectorize(x,4)
 
-shape = (30, 30, 3)
+shape = (36, 36, 3)
 in_image = Image(numpy.zeros(shape, input.type().to_numpy()))
 input.assign(in_image)
 out = Image(input.type(), in_image.width(), in_image.height(), in_image.channels())
