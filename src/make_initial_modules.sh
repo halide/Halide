@@ -4,17 +4,22 @@ LLVM_PATH=${LLVM_PREFIX}/bin
 CLANG=${LLVM_PATH}/clang
 LLVM_AS=${LLVM_PATH}/llvm-as
 
-for arch in ptx ptx_dev arm x86; do 
+for arch in ptx ptx_dev arm x86 android; do 
 
     C_STUB=architecture.${arch}.stdlib.cpp
     LL_STUB=architecture.${arch}.stdlib.ll
     RESULT=architecture.${arch}.initmod.c
-    
+    CCFLAGS=""
+
     if [[ $arch == "ptx" ]]; then
       LL_STUB="$LL_STUB architecture.x86.stdlib.ll"
     fi
+
+    if [[ $arch == "android" ]]; then
+        CCFLAGS="-m32 -I ~/android-ndk-r8b/platforms/android-14/arch-arm/usr/include/"
+    fi
     
-    $CLANG -emit-llvm -S $C_STUB -o -          \
+    $CLANG -emit-llvm $CCFLAGS -S $C_STUB -o -          \
         | grep -v "^target triple"             \
         | grep -v "^target datalayout"         \
         | grep -v "^; ModuleID"                \

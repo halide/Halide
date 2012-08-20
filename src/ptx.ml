@@ -16,6 +16,9 @@ let dump_mod = dbgprint && true
 let ptx_kernel = 71
 let ptx_device = 72
 
+(* TODO: revisit this *)
+let target_triple = ""
+
 (*
 type alloc = {
   count : expr;

@@ -23,6 +23,7 @@ module type Architecture = sig
   type state
   type context = state cg_context
 
+  val target_triple : string
   val start_state : unit -> state
 
   (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)

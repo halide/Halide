@@ -33,6 +33,9 @@ exception Unknown_intrinsic of string
 
 let pointer_size = 8
 
+(* TODO: revisit this and set it correctly *)
+let target_triple = ""
+
 (* TODO: replace references to loop bounds with blockDim, gridDim? *)
 let simt_intrinsic name =
   (* TODO: pass through dotted extern function names *)

@@ -86,7 +86,7 @@ let compile_to_file name args stmt =
 
   try begin match backend with
     | "llvm" ->
-        ignore (initialize_native_target());
+        (* ignore (initialize_native_target()); *)
         let module Cg = Cg_for_target in
         Cg.codegen_to_bitcode_and_header (name, args, stmt)
     | "c" ->

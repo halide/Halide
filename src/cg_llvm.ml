@@ -28,11 +28,12 @@ module type Architecture = sig
   type state
   type context = state cg_context
 
+  val target_triple : string
+
   val start_state : unit -> state
 
   (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)
-  val codegen_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context ->
-                      entrypoint -> llvalue
+  val codegen_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context -> entrypoint -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
   val malloc  : context -> string -> expr -> expr -> (llvalue * (context -> unit))
@@ -829,6 +830,11 @@ let codegen_entry (e:entrypoint) =
   (* construct basic LLVM state *)
   let c = create_context () in
   let m = create_module c ("<" ^ name ^ "_halide_host>") in
+
+  if Arch.target_triple != "" then 
+    set_target_triple Arch.target_triple m 
+  else 
+    ignore (Llvm_executionengine.initialize_native_target());
 
   (* codegen *)
   let f = Arch.codegen_entry c m cg_entry make_cg_context e in
