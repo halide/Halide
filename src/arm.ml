@@ -11,6 +11,8 @@ let start_state () = 0
 
 let pointer_size = 4
 
+let target_triple = "arm-linux-eabi"
+
 let codegen_entry c m cg_entry _ e =
   (* set up module *)
   Stdlib.init_module_arm m;

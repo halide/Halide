@@ -10,6 +10,9 @@ let start_state () = 0
 
 let pointer_size = 8
 
+(* TODO: os x? *)
+let target_triple = "x86_64-unknown-linux-gnu"
+
 let codegen_entry c m cg_entry _ e =
   (* set up module *)
   Stdlib.init_module_x86 m;
