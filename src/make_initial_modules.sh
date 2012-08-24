@@ -16,7 +16,7 @@ for arch in ptx ptx_dev arm x86 android; do
     fi
 
     if [[ $arch == "android" ]]; then
-        CCFLAGS="-m32 -I ~/android-ndk-r8b/platforms/android-14/arch-arm/usr/include/"
+        CCFLAGS="-m32"
     fi
     
     $CLANG -emit-llvm $CCFLAGS -S $C_STUB -o -          \
