@@ -30,9 +30,9 @@ WEAK void __copy_to_host(buffer_t* buf) { /* NOP */ }
 #endif //_COPY_TO_HOST
 
 WEAK void *fast_malloc(size_t x) {
-    void *orig = malloc(x+16);
-    // Walk either 8 or 16 bytes forward
-    void *ptr = (void *)((((size_t)orig + 16) >> 4) << 4);
+    void *orig = malloc(x+32);
+    // Round up to next multiple of 32. Should add at least 8 bytes so we can fit the original pointer.
+    void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
     ((void **)ptr)[-1] = orig;
     return ptr;
 }
