@@ -10,7 +10,6 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Target/TargetData.h>
 #include <llvm/Assembly/PrintModulePass.h>
-#include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/IPO.h>
 #include <sys/time.h>
 
