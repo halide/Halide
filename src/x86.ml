@@ -10,8 +10,11 @@ let start_state () = 0
 
 let pointer_size = 8
 
-(* TODO: os x? *)
-let target_triple = "x86_64-unknown-linux-gnu"
+(* The target triple is different on os x and linux, so we'd better
+   just let it use the native host. This makes it hard to generate x86
+   code from ARM. What a shame. *)
+(* "x86_64-unknown-linux-gnu" *)
+let target_triple = "" 
 
 let codegen_entry c m cg_entry _ e =
   (* set up module *)
