@@ -57,7 +57,7 @@ namespace Halide {
 
     private:
         struct Contents;
-        std::shared_ptr<Contents> contents;
+        shared_ptr<Contents> contents;
     };
 
 
@@ -89,6 +89,7 @@ namespace Halide {
             init();
         }
 
+        #if defined(__GXX_EXPERIMENTAL_CXX0X__) || __cplusplus >= 201103L
         Image(std::initializer_list<T> l) : im(TypeOf<T>(), l.size()) {
             init();
             int x = 0;
@@ -108,6 +109,7 @@ namespace Halide {
                 y++;
             }
         }
+	#endif
 
         operator DynImage() const {
             return im;
@@ -210,7 +212,7 @@ namespace Halide {
         
     private:
         struct Contents;
-        std::shared_ptr<Contents> contents;
+        shared_ptr<Contents> contents;
     };
 
     class UniformImageRef {

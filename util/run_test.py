@@ -76,8 +76,7 @@ def test_cpp(name):
     with open(logfile, "wt") as log:
         with open(errfile, "wt") as err:
             # status(name, "Compiling %s" % srcfile)
-            compile_cmd = ["-std=c++0x", 
-                           "-I../../../cpp_bindings",
+            compile_cmd = ["-I../../../cpp_bindings",
                            "-Wno-format",
                            "-fPIC",
                            srcfile,                   

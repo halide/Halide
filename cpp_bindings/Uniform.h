@@ -40,7 +40,7 @@ namespace Halide {
             const std::string name;
             Type type;
         };
-        std::shared_ptr<Contents> contents;
+        shared_ptr<Contents> contents;
     };
 
     template<typename T>
