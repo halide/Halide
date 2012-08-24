@@ -47,7 +47,7 @@ namespace Halide {
     private:
         struct Contents;
         
-        std::shared_ptr<Contents> contents;
+        shared_ptr<Contents> contents;
     };
 
     class Func {
@@ -157,7 +157,7 @@ namespace Halide {
         MLVal lower();
         MLVal inferArguments();
 
-        std::shared_ptr<Contents> contents;
+        shared_ptr<Contents> contents;
     };
 
 }

@@ -16,9 +16,16 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    Image<uint16_t> tent = {{1, 2, 1},
-                            {2, 4, 2},
-                            {1, 2, 1}};
+    Image<uint16_t> tent(3, 3);
+    tent(0, 0) = 1;
+    tent(0, 1) = 2;
+    tent(0, 2) = 1;
+    tent(1, 0) = 2;
+    tent(1, 1) = 4;
+    tent(1, 2) = 2;
+    tent(2, 0) = 1;
+    tent(2, 1) = 2;
+    tent(2, 2) = 1;
     
     Func input("input");
     input(x, y) = in(clamp(x, 0, W-1), clamp(y, 0, H-1));

@@ -17,7 +17,7 @@ namespace Halide {
 	RDom domain;
     };
     
-    RVar::RVar() : contents(NULL) {}
+    RVar::RVar() {}
 
     RVar::RVar(const RDom &dom, const Expr &min, const Expr &size) : 
         contents(new Contents(dom, min, size, uniqueName('r'))) {}
@@ -53,7 +53,7 @@ namespace Halide {
 	std::vector<RVar> vars;	
     };
 
-    RDom::RDom() : contents(NULL) {}
+    RDom::RDom() {}
 
     RDom::RDom(const UniformImage &im) : 
 	contents(new RDom::Contents) {

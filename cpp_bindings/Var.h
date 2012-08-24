@@ -49,7 +49,7 @@ namespace Halide {
     private:
 
         struct Contents;
-        std::shared_ptr<Contents> contents;
+        shared_ptr<Contents> contents;
     };
 
     // A reduction domain
@@ -98,7 +98,7 @@ namespace Halide {
 
       private:
 	struct Contents;
-	std::shared_ptr<Contents> contents;
+	shared_ptr<Contents> contents;
     };
 
 }
