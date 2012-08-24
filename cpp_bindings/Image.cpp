@@ -72,11 +72,11 @@ namespace Halide {
     }
 
     void DynImage::Contents::allocate(size_t bytes) {
-        host_buffer.resize(bytes+16);
+        host_buffer.resize(bytes+32);
         data = &(host_buffer[0]);
-        unsigned char offset = ((size_t)data) & 0xf;
+        unsigned char offset = ((size_t)data) & 0x1f;
         if (offset) {
-            data += 16 - offset;
+            data += 32 - offset;
         }
         
         assert(size.size() <= 4);
