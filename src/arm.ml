@@ -74,6 +74,10 @@ let rec cg_expr (con : context) (expr : expr) =
               let op = declare_function "llvm.arm.neon.vmins.v8i16"
                 (function_type (i16x8_t) [|i16x8_t; i16x8_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
+          | IntVector (32, 4) ->
+              let op = declare_function "llvm.arm.neon.vmins.v4i32"
+                (function_type (i32x4_t) [|i32x4_t; i32x4_t|]) m in              
+              build_call op [| cg_expr l; cg_expr r |] "" b
           | FloatVector (32, 4) ->
               let op = declare_function "llvm.arm.neon.vmins.v4f32"
                 (function_type (f32x4_t) [|f32x4_t; f32x4_t|]) m in              
@@ -86,6 +90,10 @@ let rec cg_expr (con : context) (expr : expr) =
           | IntVector (16, 8) ->
               let op = declare_function "llvm.arm.neon.vmaxs.v8i16"
                 (function_type (i16x8_t) [|i16x8_t; i16x8_t|]) m in              
+              build_call op [| cg_expr l; cg_expr r |] "" b
+          | IntVector (32, 4) ->
+              let op = declare_function "llvm.arm.neon.vmaxs.v4i32"
+                (function_type (i32x4_t) [|i32x4_t; i32x4_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
           | FloatVector (32, 4) ->
               let op = declare_function "llvm.arm.neon.vmaxs.v4f32"

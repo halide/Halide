@@ -304,7 +304,7 @@ WEAK int64_t maxval_s64() {return 0x7fffffffffffffff;}
 WEAK int64_t minval_s64() {return 0x8000000000000000;}
 
 struct timeval {
-  uint32_t tv_sec, tv_usec;
+  long tv_sec, tv_usec;
 };
 extern void gettimeofday(timeval *, void *);
 
