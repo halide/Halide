@@ -592,6 +592,18 @@ namespace Halide {
         return builtin(Float(32), "floor_f32", a);
     }
 
+    Expr ceil(Expr a) {
+        //assert(a.type() == Float(32) && "Argument to ceil must be a float");
+        a = cast(Float(32), a);
+        return builtin(Float(32), "ceil_f32", a);
+    }
+
+    Expr round(Expr a) {
+        //assert(a.type() == Float(32) && "Argument to round must be a float");
+        a = cast(Float(32), a);
+        return builtin(Float(32), "round_f32", a);
+    }
+
 
     Expr select(Expr cond, Expr thenCase, Expr elseCase) {
         //assert(thenCase.type() == elseCase.type() && "then case must have same type as else case in select");
