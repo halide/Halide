@@ -89,6 +89,10 @@ Expr f64(Expr e) {
     return cast(Float(64), e);
 }
 
+Expr abs(Expr e) {
+    return select(e > 0, e, -e);
+}
+
 void check_sse() {
     UniformImage in_f32(Float(32), 1);
     UniformImage in_f64(Float(64), 1);
@@ -203,8 +207,47 @@ void check_sse() {
     check_sse_expr("psubq", 4, i64_1 - i64_2);
     check_sse_expr("pmuludq", 4, u64_1 * u64_2);
 
+    // SSE 3
+
+    // We don't do horizontal add/sub ops, so nothing new here
     
+    // SSSE 3
+    check_sse_expr("pabsb", 16, abs(i8_1));
+    check_sse_expr("pabsw", 8, abs(i16_1));
+    check_sse_expr("pabsd", 4, abs(i32_1));
+
+    // SSE 4.1
+
+    check_sse_expr("pmuldq", 2, i64(i32_1) * i64(i32_2));
+    check_sse_expr("pmulld", 4, i32_1 * i32_2);
+
+    // skip dot product and argmin 
+    check_sse_expr("blendvps", 4, select(f32_1 > 0.7f, f32_1, f32_2));
+    check_sse_expr("blendvpd", 2, select(f64_1 > 0.7, f64_1, f64_2));
+    check_sse_expr("pblendvb", 16, select(u8_1 > 7, u8_1, u8_2));
+
+    check_sse_expr("pmaxsb", 16, max(i8_1, i8_2));
+    check_sse_expr("pminsb", 16, min(i8_1, i8_2));
+    check_sse_expr("pmaxuw", 8, max(u16_1, u16_2));
+    check_sse_expr("pminuw", 8, min(u16_1, u16_2));
+    check_sse_expr("pmaxud", 8, max(u32_1, u32_2));
+    check_sse_expr("pminud", 8, min(u32_1, u32_2));
+    check_sse_expr("pmaxsd", 4, max(i32_1, i32_2));
+    check_sse_expr("pminsd", 4, min(i32_1, i32_2));
+
+    check_sse_expr("roundps", 4, round(f32_1));
+    check_sse_expr("roundpd", 2, round(f64_1));
+
+    check_sse_expr("pcmpeqq", 2, select(i64_1 == i64_2, i64(1), i64(2)));
+    check_sse_expr("packusdw", 8, u16(clamp(i32_1, 0, 65535)));
+
+    // SSE 4.2
     
+    check_sse_expr("pcmpgtq", 2, select(i64_1 > i64_2, i64(1), i64(2)));
+
+    // AVX
+
+    // AVX2
 }
 
 void check_neon() {
