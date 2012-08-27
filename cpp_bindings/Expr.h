@@ -129,6 +129,8 @@ namespace Halide {
     Expr exp(Expr);
     Expr log(Expr);
     Expr floor(Expr);
+    Expr ceil(Expr);
+    Expr round(Expr);
 
     // Make a debug node
     Expr debug(Expr, const std::string &prefix, const std::vector<Expr> &args);
