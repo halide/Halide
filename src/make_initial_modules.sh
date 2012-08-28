@@ -19,7 +19,7 @@ for arch in ptx ptx_dev arm x86 android; do
         CCFLAGS="-m32"
     fi
     
-    $CLANG -emit-llvm $CCFLAGS -S $C_STUB -o -          \
+    $CLANG -emit-llvm -O3 $CCFLAGS -S $C_STUB -o -          \
         | grep -v "^target triple"             \
         | grep -v "^target datalayout"         \
         | grep -v "^; ModuleID"                \
