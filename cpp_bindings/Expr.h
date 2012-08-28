@@ -121,7 +121,7 @@ namespace Halide {
     Expr builtin(Type, const std::string &name, Expr, Expr, Expr);
     Expr builtin(Type, const std::string &name, Expr, Expr, Expr, Expr);
 
-    // Transcendentals
+    // Transcendentals and other builtins
     Expr sqrt(Expr);
     Expr sin(Expr);
     Expr cos(Expr);
@@ -131,6 +131,7 @@ namespace Halide {
     Expr floor(Expr);
     Expr ceil(Expr);
     Expr round(Expr);
+    Expr abs(Expr);
 
     // Make a debug node
     Expr debug(Expr, const std::string &prefix, const std::vector<Expr> &args);

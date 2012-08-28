@@ -604,6 +604,21 @@ namespace Halide {
         return builtin(Float(32), "round_f32", a);
     }
 
+    Expr abs(Expr a) {
+	if (a.type() == Int(8))
+	    return builtin(Int(8), "abs_i8", a);
+	if (a.type() == Int(16)) 
+	    return builtin(Int(16), "abs_i16", a);
+	if (a.type() == Int(32)) 
+	    return builtin(Int(32), "abs_i32", a);
+	if (a.type() == Int(64)) 
+	    return builtin(Int(64), "abs_i64", a);
+	if (a.type() == Float(32)) 
+	    return builtin(Float(32), "abs_f32", a);
+	if (a.type() == Float(64)) 
+	    return builtin(Float(64), "abs_f64", a);
+	assert(0 && "Invalid type for abs");
+    }
 
     Expr select(Expr cond, Expr thenCase, Expr elseCase) {
         //assert(thenCase.type() == elseCase.type() && "then case must have same type as else case in select");
