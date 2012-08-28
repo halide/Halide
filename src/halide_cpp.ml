@@ -80,7 +80,7 @@ let compile_to_file name args stmt =
   let backend = try
     Sys.getenv "HL_BACKEND"
   with Not_found ->
-    Printf.eprintf "HL_BACKEND not set - defaulting to LLVM";
+    Printf.eprintf "HL_BACKEND not set - defaulting to LLVM\n";
     "llvm"
   in
 
