@@ -601,15 +601,54 @@ void check_neon_all() {
 
 
     // VCGE	I, F	-	Compare Greater Than or Equal
-    // VCLE	I, F	-	Compare Less Than or Equal
-    
+    check_neon("vcge.s8", 16, select(i8_1 >= i8_2, i8(1), i8(2)));
+    check_neon("vcge.u8", 16, select(u8_1 >= u8_2, u8(1), u8(2)));
+    check_neon("vcge.s16", 8, select(i16_1 >= i16_2, i16(1), i16(2)));
+    check_neon("vcge.u16", 8, select(u16_1 >= u16_2, u16(1), u16(2)));
+    check_neon("vcge.s32", 4, select(i32_1 >= i32_2, i32(1), i32(2)));
+    check_neon("vcge.u32", 4, select(u32_1 >= u32_2, u32(1), u32(2)));
+    check_neon("vcge.f32", 4, select(f32_1 >= f32_2, 1.0f, 2.0f));
+    check_neon("vcge.s8", 8, select(i8_1 >= i8_2, i8(1), i8(2)));
+    check_neon("vcge.u8", 8, select(u8_1 >= u8_2, u8(1), u8(2)));
+    check_neon("vcge.s16", 4, select(i16_1 >= i16_2, i16(1), i16(2)));
+    check_neon("vcge.u16", 4, select(u16_1 >= u16_2, u16(1), u16(2)));
+    check_neon("vcge.s32", 2, select(i32_1 >= i32_2, i32(1), i32(2)));
+    check_neon("vcge.u32", 2, select(u32_1 >= u32_2, u32(1), u32(2)));
+    check_neon("vcge.f32", 2, select(f32_1 >= f32_2, 1.0f, 2.0f));
+
+    // VCGT	I, F	-	Compare Greater Than
+    check_neon("vcgt.s8", 16, select(i8_1 > i8_2, i8(1), i8(2)));
+    check_neon("vcgt.u8", 16, select(u8_1 > u8_2, u8(1), u8(2)));
+    check_neon("vcgt.s16", 8, select(i16_1 > i16_2, i16(1), i16(2)));
+    check_neon("vcgt.u16", 8, select(u16_1 > u16_2, u16(1), u16(2)));
+    check_neon("vcgt.s32", 4, select(i32_1 > i32_2, i32(1), i32(2)));
+    check_neon("vcgt.u32", 4, select(u32_1 > u32_2, u32(1), u32(2)));
+    check_neon("vcgt.f32", 4, select(f32_1 > f32_2, 1.0f, 2.0f));
+    check_neon("vcgt.s8", 8, select(i8_1 > i8_2, i8(1), i8(2)));
+    check_neon("vcgt.u8", 8, select(u8_1 > u8_2, u8(1), u8(2)));
+    check_neon("vcgt.s16", 4, select(i16_1 > i16_2, i16(1), i16(2)));
+    check_neon("vcgt.u16", 4, select(u16_1 > u16_2, u16(1), u16(2)));
+    check_neon("vcgt.s32", 2, select(i32_1 > i32_2, i32(1), i32(2)));
+    check_neon("vcgt.u32", 2, select(u32_1 > u32_2, u32(1), u32(2)));
+    check_neon("vcgt.f32", 2, select(f32_1 > f32_2, 1.0f, 2.0f));   
 
     // VCLS	I	-	Count Leading Sign Bits
-    // VCLT	I, F	-	Compare Less Than
     // VCLZ	I	-	Count Leading Zeros
     // VCMP	-	F, D	Compare Setting Flags
     // VCNT	I	-	Count Number of Set Bits
+    // We skip these ones
+
     // VCVT	I, F, H	I, F, D, H	Convert Between Floating-Point and 32-bit Integer Types
+    check_neon("vcvt.f32.u32", 2, f32(u32_1));
+    check_neon("vcvt.f32.s32", 2, f32(i32_1));
+    check_neon("vcvt.f32.u32", 4, f32(u32_1));
+    check_neon("vcvt.f32.s32", 4, f32(i32_1));
+    check_neon("vcvt.u32.f32", 2, u32(f32_1));
+    check_neon("vcvt.s32.f32", 2, i32(f32_1));
+    check_neon("vcvt.u32.f32", 4, u32(f32_1));
+    check_neon("vcvt.s32.f32", 4, i32(f32_1));
+    // skip the fixed point conversions for now
+
     // VDIV	-	F, D	Divide
     // VDUP	X	-	Duplicate
     // VEOR	X	-	Bitwise Exclusive OR
@@ -631,7 +670,7 @@ void check_neon_all() {
     // VMOV	X	F, D	Move Register or Immediate
     // VMOVL	I	-	Move Long
     // VMOVN	I	-	Move and Narrow
-    // VMRS	X	F, D	Move Advanced SIMD or VFP Register to ARM Compute Engine
+    // VMRS	X	F, D	Move Advanced SIMD or VFP Register to ARM compute Engine
     // VMSR	X	F, D	Move ARM Core Register to Advanced SIMD or VFP
     // VMUL	I, F, P	F, D	Multiply
     // VMULL	I, F, P	-	Multiply Long
