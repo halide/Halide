@@ -9,13 +9,35 @@ using namespace Halide;
 bool failed = false;
 Var x;
 
+struct job {
+    const char *op;
+    const char *args;
+    const char *module;
+    Func f;
+    char *result;
+};
+
+std::vector<job> jobs;
+
 void check(const char *op, int vector_width, Expr e, const char *args) {
     Func f;
     f(x) = e;
     f.vectorize(x, vector_width);
-    char module[1024];
+
+    char *module = new char[1024];
     snprintf(module, 1024, "test_%s_%s", op, f.name().c_str());
     f.compileToFile(module);
+
+    job j = {op, args, module, f, NULL};
+    jobs.push_back(j);
+}
+
+void do_job(job &j) {
+    const char *op = j.op;
+    const char *args = j.args;
+    const char *module = j.module;
+    Func f = j.f;
+    
     const char *llc = "../../../llvm/Release+Asserts/bin/llc";
     char cmd[1024];
     snprintf(cmd, 1024, 
@@ -23,12 +45,13 @@ void check(const char *op, int vector_width, Expr e, const char *args) {
 	     llc, args, module, f.name().c_str(), f.name().c_str(), module, op, module);
 
     if (system(cmd) != 0) {
-	fprintf(stderr, "\n%s did not generate. Instead we got:\n", op);
+	j.result = new char[4096];
+	snprintf(j.result, 1024, "%s did not generate. Instead we got:\n", op);
 	char asmfile[1024];
 	snprintf(asmfile, 1024, "%s.s", module);
 	FILE *f = fopen(asmfile, "r");
 	const int max_size = 1024;
-	char buf[max_size];
+	char *buf = j.result + strlen(j.result);
 	memset(buf, 0, max_size);
 	size_t bytes_in = fread(buf, 1, max_size, f);	
 	if (bytes_in > max_size-1) {
@@ -41,11 +64,42 @@ void check(const char *op, int vector_width, Expr e, const char *args) {
 	} else {
 	    buf[bytes_in] = 0;
 	}
-	fwrite(buf, 1, bytes_in-1, stderr);	
 	fclose(f);
-	fprintf(stderr, "\n");
 	failed = 1;
     } 
+}
+
+const int nThreads = 16;
+
+void *worker(void *arg) {
+    int n = *((int *)arg);
+    printf("Thread %d starting work\n", n);
+    for (size_t i = n; i < jobs.size(); i += nThreads) {
+	printf("Thread %d working on job %d\n", n, i);
+	do_job(jobs[i]);
+    }
+}
+
+void do_all_jobs() {
+    pthread_t threads[nThreads];
+    int indices[nThreads];
+    printf("Creating threads...\n");
+    for (int i = 0; i < nThreads; i++) {
+	printf("%d\n", i);
+	indices[i] = i;
+	pthread_create(threads + i, NULL, worker, indices + i);
+    }
+    printf("Joining threads...\n");
+    for (int i = 0; i < nThreads; i++) {
+	pthread_join(threads[i], NULL);
+    }
+}
+
+void print_results() {
+    for (size_t i = 0; i < jobs.size(); i++) {
+	if (jobs[i].result) 
+	    fprintf(stderr, "%s\n", jobs[i].result);
+    }    
 }
 
 void check_sse(const char *op, int vector_width, Expr e) {
@@ -663,6 +717,10 @@ int main(int argc, char **argv) {
     } else {
 	check_neon_all();
     }
+
+    do_all_jobs();
+
+    print_results();
 
     return failed ? -1 : 0;
 }
