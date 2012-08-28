@@ -9,7 +9,7 @@ using namespace Halide;
 bool failed = false;
 Var x;
 
-void check_sse(const char *op, int vector_width, Expr e) {
+void check(const char *op, int vector_width, Expr e, const char *args) {
     Func f;
     f(x) = e;
     f.vectorize(x, vector_width);
@@ -19,8 +19,8 @@ void check_sse(const char *op, int vector_width, Expr e) {
     const char *llc = "../../../llvm/Release+Asserts/bin/llc";
     char cmd[1024];
     snprintf(cmd, 1024, 
-	     "%s -mattr=+avx2,+avx %s.bc -o - | sed -n '/%s.v0_loop/,/%s.v0_afterloop/p' | grep '\t' > %s.s && grep %s %s.s", 
-	     llc, module, f.name().c_str(), f.name().c_str(), module, op, module);
+	     "%s %s %s.bc -o - | sed -n '/%s.v0_loop/,/%s.v0_afterloop/p' | grep '\t' > %s.s && grep %s %s.s", 
+	     llc, args, module, f.name().c_str(), f.name().c_str(), module, op, module);
 
     if (system(cmd) != 0) {
 	fprintf(stderr, "\n%s did not generate. Instead we got:\n", op);
@@ -46,6 +46,14 @@ void check_sse(const char *op, int vector_width, Expr e) {
 	fprintf(stderr, "\n");
 	failed = 1;
     } 
+}
+
+void check_sse(const char *op, int vector_width, Expr e) {
+    check(op, vector_width, e, "-mattr=+avx,+avx2");
+}
+
+void check_neon(const char *op, int vector_width, Expr e) {
+    check(op, vector_width, e, "-mattr=+neon");
 }
 
 Expr i64(Expr e) {
@@ -89,8 +97,8 @@ Expr f64(Expr e) {
     return cast(Float(64), e);
 }
 
-Expr abs(Expr e) {
-    return select(e > 0, e, -e);
+Expr absd(Expr a, Expr b) {
+    return select(a > b, a-b, b-a);
 }
 
 void check_sse_all() {
@@ -105,18 +113,17 @@ void check_sse_all() {
     UniformImage in_i64(Int(64), 1);
     UniformImage in_u64(UInt(64), 1);
 
-
-    Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16);
-    Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16);
-    Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16);
-    Expr u8_1  = in_u8(x),  u8_2  = in_u8(x+16);
-    Expr i16_1 = in_i16(x), i16_2 = in_i16(x+16);
-    Expr u16_1 = in_u16(x), u16_2 = in_u16(x+16);
-    Expr i32_1 = in_i32(x), i32_2 = in_i32(x+16);
-    Expr u32_1 = in_u32(x), u32_2 = in_u32(x+16);
-    Expr i64_1 = in_i64(x), i64_2 = in_i64(x+16);
-    Expr u64_1 = in_u64(x), u64_2 = in_u64(x+16);
-    Expr bool1 = (f32_1 > 0.3f), bool2 = (f32_1 < -0.3f);
+    Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
+    Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
+    Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
+    Expr u8_1  = in_u8(x),  u8_2  = in_u8(x+16),  u8_3  = in_u8(x+32);
+    Expr i16_1 = in_i16(x), i16_2 = in_i16(x+16), i16_3 = in_i16(x+32);
+    Expr u16_1 = in_u16(x), u16_2 = in_u16(x+16), u16_3 = in_u16(x+32);
+    Expr i32_1 = in_i32(x), i32_2 = in_i32(x+16), i32_3 = in_i32(x+32);
+    Expr u32_1 = in_u32(x), u32_2 = in_u32(x+16), u32_3 = in_u32(x+32);
+    Expr i64_1 = in_i64(x), i64_2 = in_i64(x+16), i64_3 = in_i64(x+32);
+    Expr u64_1 = in_u64(x), u64_2 = in_u64(x+16), u64_3 = in_u64(x+32);
+    Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
 
     // MMX (in 128-bits)
     check_sse("paddb", 16, u8_1 + u8_2);
@@ -362,12 +369,190 @@ void check_sse_all() {
 
 }
 
-void check_neon() {
+void check_neon_all() {
+    UniformImage in_f32(Float(32), 1);
+    UniformImage in_f64(Float(64), 1);
+    UniformImage in_i8(Int(8), 1);
+    UniformImage in_u8(UInt(8), 1);
+    UniformImage in_i16(Int(16), 1);
+    UniformImage in_u16(UInt(16), 1);
+    UniformImage in_i32(Int(32), 1);
+    UniformImage in_u32(UInt(32), 1);
+    UniformImage in_i64(Int(64), 1);
+    UniformImage in_u64(UInt(64), 1);
+
+    Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
+    Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
+    Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
+    Expr u8_1  = in_u8(x),  u8_2  = in_u8(x+16),  u8_3  = in_u8(x+32);
+    Expr i16_1 = in_i16(x), i16_2 = in_i16(x+16), i16_3 = in_i16(x+32);
+    Expr u16_1 = in_u16(x), u16_2 = in_u16(x+16), u16_3 = in_u16(x+32);
+    Expr i32_1 = in_i32(x), i32_2 = in_i32(x+16), i32_3 = in_i32(x+32);
+    Expr u32_1 = in_u32(x), u32_2 = in_u32(x+16), u32_3 = in_u32(x+32);
+    Expr i64_1 = in_i64(x), i64_2 = in_i64(x+16), i64_3 = in_i64(x+32);
+    Expr u64_1 = in_u64(x), u64_2 = in_u64(x+16), u64_3 = in_u64(x+32);
+    Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+
+    // Table copied from the Cortex-A9 TRM.
+
+    // In general neon ops have the 64-bit version, the 128-bit
+    // version (ending in q), and the widening version that takes
+    // 64-bit args and produces a 128-bit result (ending in l).
+
+    // VABA	I	-	Absolute Difference and Accumulate
+    check_neon("vaba.s8", 8, i8_1 + absd(i8_2, i8_3));
+    check_neon("vaba.u8", 8, u8_1 + absd(u8_2, u8_3));
+    check_neon("vaba.s16", 4, i16_1 + absd(i16_2, i16_3));
+    check_neon("vaba.u16", 4, u16_1 + absd(u16_2, u16_3));
+    check_neon("vaba.s32", 2, i32_1 + absd(i32_2, i32_3));
+    check_neon("vaba.u32", 2, u32_1 + absd(u32_2, u32_3));
+    check_neon("vabaq.s8", 16, i8_1 + absd(i8_2, i8_3));
+    check_neon("vabaq.u8", 16, u8_1 + absd(u8_2, u8_3));
+    check_neon("vabaq.s16", 8, i16_1 + absd(i16_2, i16_3));
+    check_neon("vabaq.u16", 8, u16_1 + absd(u16_2, u16_3));
+    check_neon("vabaq.s32", 4, i32_1 + absd(i32_2, i32_3));
+    check_neon("vabaq.u32", 4, u32_1 + absd(u32_2, u32_3));
+
+    // VABAL	I	-	Absolute Difference and Accumulate Long
+    check_neon("vabal.s8", 8, i16_1 + absd(i16(i8_2), i16(i8_3)));
+    check_neon("vabal.u8", 8, u16_1 + absd(u16(u8_2), u16(u8_3)));
+    check_neon("vabal.s16", 4, i32_1 + absd(i32(i16_2), i32(i16_3)));
+    check_neon("vabal.u16", 4, u32_1 + absd(u32(u16_2), u32(u16_3)));
+    check_neon("vabal.s32", 2, i64_1 + absd(i64(i32_2), i64(i32_3)));
+    check_neon("vabal.u32", 2, u64_1 + absd(u64(u32_2), u64(u32_3)));
+
+    // VABD	I, F	-	Absolute Difference
+    // VABDL	I	-	Absolute Difference Long
+    // VABS	I, F	F, D	Absolute
+    // VACGE	F	-	Absolute Compare Greater Than or Equal
+    // VACGT	F	-	Absolute Compare Greater Than
+    // VACLE	F	-	Absolute Compare Less Than or Equal
+    // VACLT	F	-	Absolute Compare Less Than
+    // VADD	I, F	F, D	Add
+    // VADDHN	I	-	Add and Narrow Returning High Half
+    // VADDL	I	-	Add Long
+    // VADDW	I	-	Add Wide
+    // VAND	X	-	Bitwise AND
+    // VBIC	I	-	Bitwise Clear
+    // VBIF	X	-	Bitwise Insert if False
+    // VBIT	X	-	Bitwise Insert if True
+    // VBSL	X	-	Bitwise Select
+    // VCEQ	I, F	-	Compare Equal
+    // VCGE	I, F	-	Compare Greater Than or Equal
+    // VCLE	I, F	-	Compare Less Than or Equal
+    // VCLS	I	-	Count Leading Sign Bits
+    // VCLT	I, F	-	Compare Less Than
+    // VCLZ	I	-	Count Leading Zeros
+    // VCMP	-	F, D	Compare Setting Flags
+    // VCNT	I	-	Count Number of Set Bits
+    // VCVT	I, F, H	I, F, D, H	Convert Between Floating-Point and 32-bit Integer Types
+    // VDIV	-	F, D	Divide
+    // VDUP	X	-	Duplicate
+    // VEOR	X	-	Bitwise Exclusive OR
+    // VEXT	I	-	Extract Elements and Concatenate
+    // VHADD	I	-	Halving Add
+    // VHSUB	I	-	Halving Subtract
+    // VLD1	X	-	Load Single-Element Structures
+    // VLD2	X	-	Load Two-Element Structures
+    // VLD3	X	-	Load Three-Element Structures
+    // VLD4	X	-	Load Four-Element Structures
+    // VLDM	X	F, D	Load Multiple Registers
+    // VLDR	X	F, D	Load Single Register
+    // VMAX	I, F	-	Maximum
+    // VMIN	I, F	-	Minimum
+    // VMLA	I, F	F, D	Multiply Accumulate
+    // VMLS	I, F	F, D	Multiply Subtract
+    // VMLAL	I	-	Multiply Accumulate Long
+    // VMLSL	I	-	Multiply Subtract Long
+    // VMOV	X	F, D	Move Register or Immediate
+    // VMOVL	I	-	Move Long
+    // VMOVN	I	-	Move and Narrow
+    // VMRS	X	F, D	Move Advanced SIMD or VFP Register to ARM Compute Engine
+    // VMSR	X	F, D	Move ARM Core Register to Advanced SIMD or VFP
+    // VMUL	I, F, P	F, D	Multiply
+    // VMULL	I, F, P	-	Multiply Long
+    // VMVN	X	-	Bitwise NOT
+    // VNEG	I, F	F, D	Negate
+    // VNMLA	-	F, D	Negative Multiply Accumulate
+    // VNMLS	-	F, D	Negative Multiply Subtract
+    // VNMUL	-	F, D	Negative Multiply
+    // VORN	X	-	Bitwise OR NOT
+    // VORR	X	-	Bitwise OR
+    // VPADAL	I	-	Pairwise Add and Accumulate Long
+    // VPADD	I, F	-	Pairwise Add
+    // VPADDL	I	-	Pairwise Add Long
+    // VPMAX	I, F	-	Pairwise Maximum
+    // VPMIN	I, F	-	Pairwise Minimum
+    // VPOP	X	F, D	Pop from Stack
+    // VPUSH	X	F, D	Push to Stack
+    // VQABS	I	-	Saturating Absolute
+    // VQADD	I	-	Saturating Add
+    // VQDMLAL	I	-	Saturating Double Multiply Accumulate Long
+    // VQDMLSL	I	-	Saturating Double Multiply Subtract Long
+    // VQDMULH	I	-	Saturating Doubling Multiply Returning High Half
+    // VQDMULL	I	-	Saturating Doubling Multiply Long
+    // VQMOVN	I	-	Saturating Move and Narrow
+    // VQMOVUN	I	-	Saturating Move and Unsigned Narrow
+    // VQNEG	I	-	Saturating Negate
+    // VQRDMULH	I	-	Saturating Rounding Doubling Multiply Returning High Half
+    // VQRSHL	I	-	Saturating Rounding Shift Left
+    // VQRSHRN	I	-	Saturating Rounding Shift Right Narrow
+    // VQRSHRUN	I	-	Saturating Rounding Shift Right Unsigned Narrow
+    // VQSHL	I	-	Saturating Shift Left
+    // VQSHLU	I	-	Saturating Shift Left Unsigned
+    // VQSHRN	I	-	Saturating Shift Right Narrow
+    // VQSHRUN	I	-	Saturating Shift Right Unsigned Narrow
+    // VQSUB	I	-	Saturating Subtract
+    // VRADDHN	I	-	Rounding Add and Narrow Returning High Half
+    // VRECPE	I, F	-	Reciprocal Estimate
+    // VRECPS	F	-	Reciprocal Step
+    // VREV16	X	-	Reverse in Halfwords
+    // VREV32	X	-	Reverse in Words
+    // VREV64	X	-	Reverse in Doublewords
+    // VRHADD	I	-	Rounding Halving Add
+    // VRSHL	I	-	Rounding Shift Left
+    // VRSHR	I	-	Rounding Shift Right
+    // VRSHRN	I	-	Rounding Shift Right Narrow
+    // VRSQRTE	I, F	-	Reciprocal Square Root Estimate
+    // VRSQRTS	F	-	Reciprocal Square Root Step
+    // VRSRA	I	-	Rounding Shift Right and Accumulate
+    // VRSUBHN	I	-	Rounding Subtract and Narrow Returning High Half
+    // VSHL	I	-	Shift Left
+    // VSHLL	I	-	Shift Left Long
+    // VSHR	I	-	Shift Right
+    // VSHRN	I	-	Shift Right Narrow
+    // VSLI	X	-	Shift Left and Insert
+    // VSQRT	-	F, D	Square Root
+    // VSRA	I	-	Shift Right and Accumulate
+    // VSRI	X	-	Shift Right and Insert
+    // VST1	X	-	Store single-element structures
+    // VST2	X	-	Store two-element structures
+    // VST3	X	-	Store three-element structures
+    // VST4	X	-	Store four-element structures
+    // VSTM	X	F, D	Store Multiple Registers
+    // VSTR	X	F, D	Store Register
+    // VSUB	I, F	F, D	Subtract
+    // VSUBHN	I	-	Subtract and Narrow
+    // VSUBL	I	-	Subtract Long
+    // VSUBW	I	-	Subtract Wide
+    // VSWP	I	-	Swap Contents
+    // VTBL	X	-	Table Lookup
+    // VTBX	X	-	Table Extension
+    // VTRN	X	-	Transpose
+    // VTST	I	-	Test Bits
+    // VUZP	X	-	Unzip
+    // VZIP	X	-	Zip
+
 }
 
 int main(int argc, char **argv) {
 
-    check_sse_all();
+    char *target = getenv("HL_TARGET");
+    if (!target || strcasecmp(target, "x86_64") == 0) {
+	check_sse_all();
+    } else {
+	check_neon_all();
+    }
 
     return failed ? -1 : 0;
 }
