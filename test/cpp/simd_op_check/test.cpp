@@ -406,12 +406,12 @@ void check_neon_all() {
     check_neon("vaba.u16", 4, u16_1 + absd(u16_2, u16_3));
     check_neon("vaba.s32", 2, i32_1 + absd(i32_2, i32_3));
     check_neon("vaba.u32", 2, u32_1 + absd(u32_2, u32_3));
-    check_neon("vabaq.s8", 16, i8_1 + absd(i8_2, i8_3));
-    check_neon("vabaq.u8", 16, u8_1 + absd(u8_2, u8_3));
-    check_neon("vabaq.s16", 8, i16_1 + absd(i16_2, i16_3));
-    check_neon("vabaq.u16", 8, u16_1 + absd(u16_2, u16_3));
-    check_neon("vabaq.s32", 4, i32_1 + absd(i32_2, i32_3));
-    check_neon("vabaq.u32", 4, u32_1 + absd(u32_2, u32_3));
+    check_neon("vaba.s8", 16, i8_1 + absd(i8_2, i8_3));
+    check_neon("vaba.u8", 16, u8_1 + absd(u8_2, u8_3));
+    check_neon("vaba.s16", 8, i16_1 + absd(i16_2, i16_3));
+    check_neon("vaba.u16", 8, u16_1 + absd(u16_2, u16_3));
+    check_neon("vaba.s32", 4, i32_1 + absd(i32_2, i32_3));
+    check_neon("vaba.u32", 4, u32_1 + absd(u32_2, u32_3));
 
     // VABAL	I	-	Absolute Difference and Accumulate Long
     check_neon("vabal.s8", 8, i16_1 + absd(i16(i8_2), i16(i8_3)));
@@ -422,24 +422,134 @@ void check_neon_all() {
     check_neon("vabal.u32", 2, u64_1 + absd(u64(u32_2), u64(u32_3)));
 
     // VABD	I, F	-	Absolute Difference
-    // VABDL	I	-	Absolute Difference Long
+    check_neon("vabd.s8", 8, absd(i8_2, i8_3));
+    check_neon("vabd.u8", 8, absd(u8_2, u8_3));
+    check_neon("vabd.s16", 4, absd(i16_2, i16_3));
+    check_neon("vabd.u16", 4, absd(u16_2, u16_3));
+    check_neon("vabd.s32", 2, absd(i32_2, i32_3));
+    check_neon("vabd.u32", 2, absd(u32_2, u32_3));
+    check_neon("vabd.s8", 16, absd(i8_2, i8_3));
+    check_neon("vabd.u8", 16, absd(u8_2, u8_3));
+    check_neon("vabd.s16", 8, absd(i16_2, i16_3));
+    check_neon("vabd.u16", 8, absd(u16_2, u16_3));
+    check_neon("vabd.s32", 4, absd(i32_2, i32_3));
+    check_neon("vabd.u32", 4, absd(u32_2, u32_3));
+
+    // VABDL	I	-	Absolute Difference Long    
+    check_neon("vabdl.s8", 8, absd(i16(i8_2), i16(i8_3)));
+    check_neon("vabdl.u8", 8, absd(u16(u8_2), u16(u8_3)));
+    check_neon("vabdl.s16", 4, absd(i32(i16_2), i32(i16_3)));
+    check_neon("vabdl.u16", 4, absd(u32(u16_2), u32(u16_3)));
+    check_neon("vabdl.s32", 2, absd(i64(i32_2), i64(i32_3)));
+    check_neon("vabdl.u32", 2, absd(u64(u32_2), u64(u32_3)));
+
     // VABS	I, F	F, D	Absolute
+    check_neon("vabs.f32", 2, abs(f32_1));
+    check_neon("vabs.s32", 2, abs(i32_1));
+    check_neon("vabs.s16", 4, abs(i16_1));
+    check_neon("vabs.s8", 8, abs(i8_1));
+    check_neon("vabs.f32", 4, abs(f32_1));
+    check_neon("vabs.s32", 4, abs(i32_1));
+    check_neon("vabs.s16", 8, abs(i16_1));
+    check_neon("vabs.s8", 16, abs(i8_1));    
+
     // VACGE	F	-	Absolute Compare Greater Than or Equal
     // VACGT	F	-	Absolute Compare Greater Than
     // VACLE	F	-	Absolute Compare Less Than or Equal
     // VACLT	F	-	Absolute Compare Less Than
+    check_neon("vacge.f32", 2, select(abs(f32_1) >= abs(f32_2), 1.0f, 2.0f));
+    check_neon("vacge.f32", 4, select(abs(f32_1) >= abs(f32_2), 1.0f, 2.0f));
+    check_neon("vacgt.f32", 2, select(abs(f32_1) > abs(f32_2), 1.0f, 2.0f));
+    check_neon("vacgt.f32", 4, select(abs(f32_1) > abs(f32_2), 1.0f, 2.0f));
+
     // VADD	I, F	F, D	Add
+    check_neon("vadd.i8", 16, i8_1 + i8_2);
+    check_neon("vadd.i8", 16, u8_1 + u8_2);
+    check_neon("vadd.i16", 8, i16_1 + i16_2);
+    check_neon("vadd.i16", 8, u16_1 + u16_2);
+    check_neon("vadd.i32", 4, i32_1 + i32_2);
+    check_neon("vadd.i32", 4, u32_1 + u32_2);
+    check_neon("vadd.i64", 2, i64_1 + i64_2);
+    check_neon("vadd.i64", 2, u64_1 + u64_2);
+    check_neon("vadd.f32", 4, f32_1 + f32_2);
+    check_neon("vadd.i8", 8, i8_1 + i8_2);
+    check_neon("vadd.i8", 8, u8_1 + u8_2);
+    check_neon("vadd.i16", 4, i16_1 + i16_2);
+    check_neon("vadd.i16", 4, u16_1 + u16_2);
+    check_neon("vadd.i32", 2, i32_1 + i32_2);
+    check_neon("vadd.i32", 2, u32_1 + u32_2);
+    check_neon("vadd.f32", 2, f32_1 + f32_2);
+
     // VADDHN	I	-	Add and Narrow Returning High Half
+    check_neon("vaddhn.i16", 8, i8((i16_1 + i16_2)/256));
+    check_neon("vaddhn.i16", 8, u8((u16_1 + u16_2)/256));
+    check_neon("vaddhn.i32", 4, i16((i32_1 + i32_2)/65536));
+    check_neon("vaddhn.i32", 4, u16((u32_1 + u32_2)/65536));
+    check_neon("vaddhn.i16", 4, i8((i16_1 + i16_2)/256));
+    check_neon("vaddhn.i16", 4, u8((u16_1 + u16_2)/256));
+    check_neon("vaddhn.i32", 2, i16((i32_1 + i32_2)/65536));
+    check_neon("vaddhn.i32", 2, u16((u32_1 + u32_2)/65536));
+    // can't do 64-bit version because we don't pass through 64-bit int constants
+
     // VADDL	I	-	Add Long
+    check_neon("vaddl.s8", 8, i16(i8_1) + i16(i8_2));
+    check_neon("vaddl.u8", 8, u16(u8_1) + u16(u8_2));
+    check_neon("vaddl.s16", 4, i32(i16_1) + i32(i16_2));
+    check_neon("vaddl.u16", 4, u32(u16_1) + u32(u16_2));
+    check_neon("vaddl.s32", 2, i64(i32_1) + i64(i32_2));
+    check_neon("vaddl.u32", 2, u64(u32_1) + u64(u32_2));
+    check_neon("vaddl.s8", 4, i16(i8_1) + i16(i8_2));
+    check_neon("vaddl.u8", 4, u16(u8_1) + u16(u8_2));
+    check_neon("vaddl.s16", 2, i32(i16_1) + i32(i16_2));
+    check_neon("vaddl.u16", 2, u32(u16_1) + u32(u16_2));
+
     // VADDW	I	-	Add Wide
+    check_neon("vaddw.s8", 8, i8_1 + i16_1);
+    check_neon("vaddw.u8", 8, u8_1 + u16_1);
+    check_neon("vaddw.s16", 4, i16_1 + i32_1);
+    check_neon("vaddw.u16", 4, u16_1 + u32_1);
+    check_neon("vaddw.s32", 2, i32_1 + i64_1);
+    check_neon("vaddw.u32", 2, u32_1 + u64_1);
+    check_neon("vaddw.s8", 4, i8_1 + i16_1);
+    check_neon("vaddw.u8", 4, u8_1 + u16_1);
+    check_neon("vaddw.s16", 2, i16_1 + i32_1);
+    check_neon("vaddw.u16", 2, u16_1 + u32_1);
+
     // VAND	X	-	Bitwise AND
+    // Not implemented in front-end yet
+    // check_neon("vand", 4, bool1 & bool2);
+    // check_neon("vand", 2, bool1 & bool2);
+
     // VBIC	I	-	Bitwise Clear
     // VBIF	X	-	Bitwise Insert if False
     // VBIT	X	-	Bitwise Insert if True
+    // skip these ones
+
     // VBSL	X	-	Bitwise Select
+    check_neon("vbsl", 4, select(f32_1 > f32_2, 1.0f, 2.0f));
+    check_neon("vbsl", 2, select(f32_1 > f32_2, 1.0f, 2.0f));
+
     // VCEQ	I, F	-	Compare Equal
+    check_neon("vceq.i8", 16, select(i8_1 == i8_2, i8(1), i8(2)));
+    check_neon("vceq.i8", 16, select(u8_1 == u8_2, u8(1), u8(2)));
+    check_neon("vceq.i16", 8, select(i16_1 == i16_2, i16(1), i16(2)));
+    check_neon("vceq.i16", 8, select(u16_1 == u16_2, u16(1), u16(2)));
+    check_neon("vceq.i32", 4, select(i32_1 == i32_2, i32(1), i32(2)));
+    check_neon("vceq.i32", 4, select(u32_1 == u32_2, u32(1), u32(2)));
+    check_neon("vceq.f32", 4, select(f32_1 == f32_2, 1.0f, 2.0f));
+    check_neon("vceq.i8", 8, select(i8_1 == i8_2, i8(1), i8(2)));
+    check_neon("vceq.i8", 8, select(u8_1 == u8_2, u8(1), u8(2)));
+    check_neon("vceq.i16", 4, select(i16_1 == i16_2, i16(1), i16(2)));
+    check_neon("vceq.i16", 4, select(u16_1 == u16_2, u16(1), u16(2)));
+    check_neon("vceq.i32", 2, select(i32_1 == i32_2, i32(1), i32(2)));
+    check_neon("vceq.i32", 2, select(u32_1 == u32_2, u32(1), u32(2)));
+    check_neon("vceq.f32", 2, select(f32_1 == f32_2, 1.0f, 2.0f));
+
+
     // VCGE	I, F	-	Compare Greater Than or Equal
     // VCLE	I, F	-	Compare Less Than or Equal
+    
+
     // VCLS	I	-	Count Leading Sign Bits
     // VCLT	I, F	-	Compare Less Than
     // VCLZ	I	-	Count Leading Zeros
