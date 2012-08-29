@@ -7,7 +7,7 @@ using namespace Halide;
 // This tests that we can correctly generate all the simd ops
 
 bool failed = false;
-Var x;
+Var x, y;
 
 struct job {
     const char *op;
@@ -21,7 +21,7 @@ std::vector<job> jobs;
 
 void check(const char *op, int vector_width, Expr e, const char *args) {
     Func f;
-    f(x) = e;
+    f(x, y) = e;
     f.vectorize(x, vector_width);
 
     char *module = new char[1024];
@@ -41,7 +41,13 @@ void do_job(job &j) {
     const char *llc = "../../../llvm/Release+Asserts/bin/llc";
     char cmd[1024];
     snprintf(cmd, 1024, 
-	     "%s %s %s.bc -o - | sed -n '/%s.v0_loop/,/%s.v0_afterloop/p' | grep '\t' > %s.s && grep %s %s.s", 
+	     "%s %s %s.bc -o - | "
+	     "sed -n '/%s.v1_loop/,/%s.v0_afterloop/p' | "
+	     "grep -v 'v1_loop' | "
+	     "grep -v 'Loop' | "
+	     "grep -v 'v0_afterloop' | "
+	     "sed 's/@.*//' > %s.s && "
+	     "grep %s %s.s > /dev/null", 
 	     llc, args, module, f.name().c_str(), f.name().c_str(), module, op, module);
 
     if (system(cmd) != 0) {
@@ -66,16 +72,15 @@ void do_job(job &j) {
 	}
 	fclose(f);
 	failed = 1;
-    } 
+    } else {
+    }
 }
 
 const int nThreads = 16;
 
 void *worker(void *arg) {
     int n = *((int *)arg);
-    printf("Thread %d starting work\n", n);
     for (size_t i = n; i < jobs.size(); i += nThreads) {
-	printf("Thread %d working on job %d\n", n, i);
 	do_job(jobs[i]);
     }
 }
@@ -83,13 +88,10 @@ void *worker(void *arg) {
 void do_all_jobs() {
     pthread_t threads[nThreads];
     int indices[nThreads];
-    printf("Creating threads...\n");
     for (int i = 0; i < nThreads; i++) {
-	printf("%d\n", i);
 	indices[i] = i;
 	pthread_create(threads + i, NULL, worker, indices + i);
     }
-    printf("Joining threads...\n");
     for (int i = 0; i < nThreads; i++) {
 	pthread_join(threads[i], NULL);
     }
@@ -100,6 +102,12 @@ void print_results() {
 	if (jobs[i].result) 
 	    fprintf(stderr, "%s\n", jobs[i].result);
     }    
+    fprintf(stderr, "Successfully generated: ");
+    for (size_t i = 0; i < jobs.size(); i++) {
+	if (!jobs[i].result) 
+	    fprintf(stderr, "%s ", jobs[i].op);
+    }
+    fprintf(stderr, "\n");
 }
 
 void check_sse(const char *op, int vector_width, Expr e) {
@@ -650,19 +658,190 @@ void check_neon_all() {
     // skip the fixed point conversions for now
 
     // VDIV	-	F, D	Divide
+    // This doesn't actually get vectorized. Not sure cortex processors can do vectorized division.
+    check_neon("vdiv.f32", 4, f32_1/f32_2);
+    check_neon("vdiv.f32", 2, f32_1/f32_2);
+    check_neon("vdiv.f64", 2, f64_1/f64_2);
+
     // VDUP	X	-	Duplicate
+    check_neon("vdup.8", 16, i8(y));
+    check_neon("vdup.8", 16, u8(y));
+    check_neon("vdup.16", 8, i16(y));
+    check_neon("vdup.16", 8, u16(y));
+    check_neon("vdup.32", 8, i32(y));
+    check_neon("vdup.32", 8, u32(y));
+    check_neon("vdup.32", 8, f32(y));
+
     // VEOR	X	-	Bitwise Exclusive OR
+    // check_neon("veor", 4, bool1 ^ bool2);
+
     // VEXT	I	-	Extract Elements and Concatenate
+    // unaligned loads with known offsets should use vext
+    check_neon("vext.8", 16, in_i8(x+1));
+    check_neon("vext.16", 8, in_i16(x+1));
+    check_neon("vext.32", 4, in_i32(x+1));
+
     // VHADD	I	-	Halving Add
+    check_neon("vhadd.s8", 16, i8((i16(i8_1) + i16(i8_2))/i16(2)));
+    check_neon("vhadd.u8", 16, u8((u16(u8_1) + u16(u8_2))/u16(2)));
+    check_neon("vhadd.s16", 8, i16((i32(i16_1) + i32(i16_2))/i32(2)));
+    check_neon("vhadd.u16", 8, u16((u32(u16_1) + u32(u16_2))/u32(2)));
+    check_neon("vhadd.s32", 4, i32((i64(i32_1) + i64(i32_2))/i64(2)));
+    check_neon("vhadd.u32", 4, u32((u64(u32_1) + u64(u32_2))/u64(2)));
+    check_neon("vhadd.s8", 8, i8((i16(i8_1) + i16(i8_2))/i16(2)));
+    check_neon("vhadd.u8", 8, u8((u16(u8_1) + u16(u8_2))/u16(2)));
+    check_neon("vhadd.s16", 4, i16((i32(i16_1) + i32(i16_2))/i32(2)));
+    check_neon("vhadd.u16", 4, u16((u32(u16_1) + u32(u16_2))/u32(2)));
+    check_neon("vhadd.s32", 2, i32((i64(i32_1) + i64(i32_2))/i64(2)));
+    check_neon("vhadd.u32", 2, u32((u64(u32_1) + u64(u32_2))/u64(2)));
+    // This is common enough that we also allow a version that ignores overflow issues
+    check_neon("vhadd.s8", 16, (i8_1 + i8_2)/i8(2));
+    check_neon("vhadd.u8", 16, (u8_1 + u8_2)/u8(2));
+    check_neon("vhadd.s16", 8, (i16_1 + i16_2)/i16(2));
+    check_neon("vhadd.u16", 8, (u16_1 + u16_2)/u16(2));
+    check_neon("vhadd.s32", 4, (i32_1 + i32_2)/i32(2));
+    check_neon("vhadd.u32", 4, (u32_1 + u32_2)/u32(2));
+    check_neon("vhadd.s8", 8, (i8_1 + i8_2)/i8(2));
+    check_neon("vhadd.u8", 8, (u8_1 + u8_2)/u8(2));
+    check_neon("vhadd.s16", 4, (i16_1 + i16_2)/i16(2));
+    check_neon("vhadd.u16", 4, (u16_1 + u16_2)/u16(2));
+    check_neon("vhadd.s32", 2, (i32_1 + i32_2)/i32(2));
+    check_neon("vhadd.u32", 2, (u32_1 + u32_2)/u32(2));
+
     // VHSUB	I	-	Halving Subtract
+    check_neon("vhsub.s8", 16, i8((i16(i8_1) - i16(i8_2))/i16(2)));
+    check_neon("vhsub.u8", 16, u8((u16(u8_1) - u16(u8_2))/u16(2)));
+    check_neon("vhsub.s16", 8, i16((i32(i16_1) - i32(i16_2))/i32(2)));
+    check_neon("vhsub.u16", 8, u16((u32(u16_1) - u32(u16_2))/u32(2)));
+    check_neon("vhsub.s32", 4, i32((i64(i32_1) - i64(i32_2))/i64(2)));
+    check_neon("vhsub.u32", 4, u32((u64(u32_1) - u64(u32_2))/u64(2)));
+    check_neon("vhsub.s8", 8, i8((i16(i8_1) - i16(i8_2))/i16(2)));
+    check_neon("vhsub.u8", 8, u8((u16(u8_1) - u16(u8_2))/u16(2)));
+    check_neon("vhsub.s16", 4, i16((i32(i16_1) - i32(i16_2))/i32(2)));
+    check_neon("vhsub.u16", 4, u16((u32(u16_1) - u32(u16_2))/u32(2)));
+    check_neon("vhsub.s32", 2, i32((i64(i32_1) - i64(i32_2))/i64(2)));
+    check_neon("vhsub.u32", 2, u32((u64(u32_1) - u64(u32_2))/u64(2)));
+    // This is common enough that we also allow a version that ignores overflow issues
+    check_neon("vhsub.s8", 16, (i8_1 - i8_2)/i8(2));
+    check_neon("vhsub.u8", 16, (u8_1 - u8_2)/u8(2));
+    check_neon("vhsub.s16", 8, (i16_1 - i16_2)/i16(2));
+    check_neon("vhsub.u16", 8, (u16_1 - u16_2)/u16(2));
+    check_neon("vhsub.s32", 4, (i32_1 - i32_2)/i32(2));
+    check_neon("vhsub.u32", 4, (u32_1 - u32_2)/u32(2));
+    check_neon("vhsub.s8", 8, (i8_1 - i8_2)/i8(2));
+    check_neon("vhsub.u8", 8, (u8_1 - u8_2)/u8(2));
+    check_neon("vhsub.s16", 4, (i16_1 - i16_2)/i16(2));
+    check_neon("vhsub.u16", 4, (u16_1 - u16_2)/u16(2));
+    check_neon("vhsub.s32", 2, (i32_1 - i32_2)/i32(2));
+    check_neon("vhsub.u32", 2, (u32_1 - u32_2)/u32(2));
+
     // VLD1	X	-	Load Single-Element Structures
+    // dense loads with unknown alignments should use vld1 variants
+    check_neon("vld1.8", 16, in_i8(y));
+    check_neon("vld1.8", 16, in_u8(y));
+    check_neon("vld1.16", 8, in_i16(y));
+    check_neon("vld1.16", 8, in_u16(y));
+    check_neon("vld1.32", 4, in_i32(y));
+    check_neon("vld1.32", 4, in_u32(y));
+    check_neon("vld1.32", 4, in_f32(y));
+    check_neon("vld1.8",  8, in_i8(y));
+    check_neon("vld1.8",  8, in_u8(y));
+    check_neon("vld1.16", 4, in_i16(y));
+    check_neon("vld1.16", 4, in_u16(y));
+    check_neon("vld1.32", 2, in_i32(y));
+    check_neon("vld1.32", 2, in_u32(y));
+    check_neon("vld1.32", 2, in_f32(y));
+
     // VLD2	X	-	Load Two-Element Structures
+    // Strided loads with unknown alignments  (currently crashes ocaml layer)
+    /*
+    check_neon("vld2.8", 16, in_i8(x*2+y));
+    check_neon("vld2.8", 16, in_u8(x*2+y));
+    check_neon("vld2.16", 8, in_i16(x*2+y));
+    check_neon("vld2.16", 8, in_u16(x*2+y));
+    check_neon("vld2.32", 4, in_i32(x*2+y));
+    check_neon("vld2.32", 4, in_u32(x*2+y));
+    check_neon("vld2.32", 4, in_f32(x*2+y));
+    check_neon("vld2.8",  8, in_i8(x*2+y));
+    check_neon("vld2.8",  8, in_u8(x*2+y));
+    check_neon("vld2.16", 4, in_i16(x*2+y));
+    check_neon("vld2.16", 4, in_u16(x*2+y));
+    */
+
     // VLD3	X	-	Load Three-Element Structures
+    check_neon("vld3.8", 16, in_i8(x*3+y));
+    check_neon("vld3.8", 16, in_u8(x*3+y));
+    check_neon("vld3.16", 8, in_i16(x*3+y));
+    check_neon("vld3.16", 8, in_u16(x*3+y));
+    check_neon("vld3.32", 4, in_i32(x*3+y));
+    check_neon("vld3.32", 4, in_u32(x*3+y));
+    check_neon("vld3.32", 4, in_f32(x*3+y));
+    check_neon("vld3.8",  8, in_i8(x*3+y));
+    check_neon("vld3.8",  8, in_u8(x*3+y));
+    check_neon("vld3.16", 4, in_i16(x*3+y));
+    check_neon("vld3.16", 4, in_u16(x*3+y));
+
     // VLD4	X	-	Load Four-Element Structures
+    check_neon("vld4.8", 16, in_i8(x*4+y));
+    check_neon("vld4.8", 16, in_u8(x*4+y));
+    check_neon("vld4.16", 8, in_i16(x*4+y));
+    check_neon("vld4.16", 8, in_u16(x*4+y));
+    check_neon("vld4.32", 4, in_i32(x*4+y));
+    check_neon("vld4.32", 4, in_u32(x*4+y));
+    check_neon("vld4.32", 4, in_f32(x*4+y));
+    check_neon("vld4.8",  8, in_i8(x*4+y));
+    check_neon("vld4.8",  8, in_u8(x*4+y));
+    check_neon("vld4.16", 4, in_i16(x*4+y));
+    check_neon("vld4.16", 4, in_u16(x*4+y));
+
     // VLDM	X	F, D	Load Multiple Registers
+    // dense aligned loads should trigger this
+    check_neon("vldmia", 16, in_i8(x));
+    check_neon("vldmia", 16, in_u8(x));
+    check_neon("vldmia", 8, in_i16(x));
+    check_neon("vldmia", 8, in_u16(x));
+    check_neon("vldmia", 4, in_i32(x));
+    check_neon("vldmia", 4, in_u32(x));
+    check_neon("vldmia", 4, in_f32(x));
+
     // VLDR	X	F, D	Load Single Register
+    check_neon("vldr", 8, in_i8(x));
+    check_neon("vldr", 8, in_u8(x));
+    check_neon("vldr", 4, in_i16(x));
+    check_neon("vldr", 4, in_u16(x));
+
     // VMAX	I, F	-	Maximum
+    check_neon("vmax.s8", 16, max(i8_1, i8_2));
+    check_neon("vmax.u8", 16, max(u8_1, u8_2));
+    check_neon("vmax.s16", 8, max(i16_1, i16_2));
+    check_neon("vmax.u16", 8, max(u16_1, u16_2));
+    check_neon("vmax.s32", 4, max(i32_1, i32_2));
+    check_neon("vmax.u32", 4, max(u32_1, u32_2));
+    check_neon("vmax.f32", 4, max(f32_1, f32_2));
+    check_neon("vmax.s8", 8, max(i8_1, i8_2));
+    check_neon("vmax.u8", 8, max(u8_1, u8_2));
+    check_neon("vmax.s16", 4, max(i16_1, i16_2));
+    check_neon("vmax.u16", 4, max(u16_1, u16_2));
+    check_neon("vmax.s32", 2, max(i32_1, i32_2));
+    check_neon("vmax.u32", 2, max(u32_1, u32_2));
+    check_neon("vmax.f32", 2, max(f32_1, f32_2));
+
     // VMIN	I, F	-	Minimum
+    check_neon("vmin.s8", 16, min(i8_1, i8_2));
+    check_neon("vmin.u8", 16, min(u8_1, u8_2));
+    check_neon("vmin.s16", 8, min(i16_1, i16_2));
+    check_neon("vmin.u16", 8, min(u16_1, u16_2));
+    check_neon("vmin.s32", 4, min(i32_1, i32_2));
+    check_neon("vmin.u32", 4, min(u32_1, u32_2));
+    check_neon("vmin.f32", 4, min(f32_1, f32_2));
+    check_neon("vmin.s8", 8, min(i8_1, i8_2));
+    check_neon("vmin.u8", 8, min(u8_1, u8_2));
+    check_neon("vmin.s16", 4, min(i16_1, i16_2));
+    check_neon("vmin.u16", 4, min(u16_1, u16_2));
+    check_neon("vmin.s32", 2, min(i32_1, i32_2));
+    check_neon("vmin.u32", 2, min(u32_1, u32_2));
+    check_neon("vmin.f32", 2, min(f32_1, f32_2));
+
     // VMLA	I, F	F, D	Multiply Accumulate
     // VMLS	I, F	F, D	Multiply Subtract
     // VMLAL	I	-	Multiply Accumulate Long
@@ -673,6 +852,7 @@ void check_neon_all() {
     // VMRS	X	F, D	Move Advanced SIMD or VFP Register to ARM compute Engine
     // VMSR	X	F, D	Move ARM Core Register to Advanced SIMD or VFP
     // VMUL	I, F, P	F, D	Multiply
+    // integer division should use fixed point multiplication
     // VMULL	I, F, P	-	Multiply Long
     // VMVN	X	-	Bitwise NOT
     // VNEG	I, F	F, D	Negate
