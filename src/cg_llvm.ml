@@ -539,7 +539,7 @@ let rec make_cg_context c m b sym_table arch_state =
   and cg_store e buf idx =
     (* ignore(cg_debug e ("Store to " ^ buf ^ " ") [idx; e]); *)
     match (is_vector e, is_vector idx) with
-      | (_, true) ->
+      | (true, true) ->
         begin match idx with
           (* Aligned dense vector store: ramp stride 1 && idx base % vec width = 0 *)
           | Ramp(b, IntImm(1), n) when Analysis.reduce_expr_modulo b n = Some 0 ->            
@@ -552,14 +552,11 @@ let rec make_cg_context c m b sym_table arch_state =
         end
 
       | (false, false) -> build_store (cg_expr e) (cg_memref (val_type_of_expr e) buf idx) b
-
+      | (false, true)  -> failwith "Can't store a scalar to a vector address"
       | (true, false)  -> failwith "Can't store a vector to a scalar address"
 
   and cg_aligned_store e buf idx =
-    let w = vector_elements (val_type_of_expr idx) in
-    (* Handle aligned dense vector store of scalar by broadcasting first *)
-    let expr = if is_scalar e then Broadcast(e, w) else e in
-    build_store (cg_expr expr) (cg_memref (val_type_of_expr expr) buf idx) b
+    build_store (cg_expr e) (cg_memref (val_type_of_expr e) buf idx) b
 
   and cg_unaligned_store e buf idx =
     (* Architectures that can handle this better should *)
@@ -575,7 +572,7 @@ let rec make_cg_context c m b sym_table arch_state =
     let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
     let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
     let get_elem i    = build_extractelement value (const_int int_imm_t i) "" b in
-    let store_idx i   = build_store (if is_vector e then (get_elem i) else value) (addr_of_idx i) b in
+    let store_idx i   = build_store (get_elem i) (addr_of_idx i) b in
     List.hd (List.map store_idx (0 -- vector_elements (val_type_of_expr e)))
 
   and cg_load t buf idx =
