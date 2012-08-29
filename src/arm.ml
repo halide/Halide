@@ -98,8 +98,11 @@ let rec cg_expr (con : context) (expr : expr) =
           | _ -> con.cg_expr (Select (l >~ r, l, r))
         end
 
-    (* use intrinsics for vector loads/stores *) 
-    | Load (t, buf, Ramp (base, IntImm 1, w)) when (bit_width t = 128 || bit_width t = 64) && (t <> (FloatVector (64, 2))) ->
+    (* use intrinsics for unaligned vector loads/stores *) 
+    | Load (t, buf, Ramp (base, IntImm 1, w)) when 
+	(bit_width t = 128 || bit_width t = 64) && 
+	  (t <> (FloatVector (64, 2))) && 
+	  (Analysis.reduce_expr_modulo base w == None) ->
         let intrin = match t with
           | UIntVector (bits, w) 
           | IntVector (bits, w) -> (string_of_int w) ^ "i" ^ (string_of_int bits)
