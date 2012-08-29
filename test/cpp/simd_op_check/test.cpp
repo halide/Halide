@@ -510,6 +510,7 @@ void check_neon_all() {
     check_neon("vabs.s32", 2, abs(i32_1));
     check_neon("vabs.s16", 4, abs(i16_1));
     check_neon("vabs.s8", 8, abs(i8_1));
+    check_neon("vabs.f64", 2, abs(f32_1));
     check_neon("vabs.f32", 4, abs(f32_1));
     check_neon("vabs.s32", 4, abs(i32_1));
     check_neon("vabs.s16", 8, abs(i16_1));
@@ -843,33 +844,161 @@ void check_neon_all() {
     check_neon("vmin.f32", 2, min(f32_1, f32_2));
 
     // VMLA	I, F	F, D	Multiply Accumulate
+    check_neon("vmla.i8", 16, i8_1 + i8_2*i8_3);
+    check_neon("vmla.i8", 16, u8_1 + u8_2*u8_3);
+    check_neon("vmla.i16", 8, i16_1 + i16_2*i16_3);
+    check_neon("vmla.i16", 8, u16_1 + u16_2*u16_3);
+    check_neon("vmla.i32", 4, i32_1 + i32_2*i32_3);
+    check_neon("vmla.i32", 4, u32_1 + u32_2*u32_3);
+    check_neon("vmla.f32", 4, f32_1 + f32_2*f32_3);
+    check_neon("vmla.f64", 2, f64_1 + f64_2*f64_3);
+    check_neon("vmla.i8",  8, i8_1 + i8_2*i8_3);
+    check_neon("vmla.i8",  8, u8_1 + u8_2*u8_3);
+    check_neon("vmla.i16", 4, i16_1 + i16_2*i16_3);
+    check_neon("vmla.i16", 4, u16_1 + u16_2*u16_3);
+    check_neon("vmla.i32", 2, i32_1 + i32_2*i32_3);
+    check_neon("vmla.i32", 2, u32_1 + u32_2*u32_3);
+    check_neon("vmla.f32", 2, f32_1 + f32_2*f32_3);
+
     // VMLS	I, F	F, D	Multiply Subtract
+    check_neon("vmls.i8", 16, i8_1 - i8_2*i8_3);
+    check_neon("vmls.i8", 16, u8_1 - u8_2*u8_3);
+    check_neon("vmls.i16", 8, i16_1 - i16_2*i16_3);
+    check_neon("vmls.i16", 8, u16_1 - u16_2*u16_3);
+    check_neon("vmls.i32", 4, i32_1 - i32_2*i32_3);
+    check_neon("vmls.i32", 4, u32_1 - u32_2*u32_3);
+    check_neon("vmls.f32", 4, f32_1 - f32_2*f32_3);
+    check_neon("vmls.f64", 2, f64_1 - f64_2*f64_3);
+    check_neon("vmls.i8",  8, i8_1 - i8_2*i8_3);
+    check_neon("vmls.i8",  8, u8_1 - u8_2*u8_3);
+    check_neon("vmls.i16", 4, i16_1 - i16_2*i16_3);
+    check_neon("vmls.i16", 4, u16_1 - u16_2*u16_3);
+    check_neon("vmls.i32", 2, i32_1 - i32_2*i32_3);
+    check_neon("vmls.i32", 2, u32_1 - u32_2*u32_3);
+    check_neon("vmls.f32", 2, f32_1 - f32_2*f32_3);
+
     // VMLAL	I	-	Multiply Accumulate Long
+    check_neon("vmlal.s8",  8, i16_1 + i8_2*i8_3);
+    check_neon("vmlal.u8",  8, u16_1 + u8_2*u8_3);
+    check_neon("vmlal.s16", 4, i32_1 + i16_2*i16_3);
+    check_neon("vmlal.u16", 4, u32_1 + u16_2*u16_3);
+    check_neon("vmlal.s32", 2, i64_1 + i32_2*i32_3);
+    check_neon("vmlal.u32", 2, u64_1 + u32_2*u32_3);
+
     // VMLSL	I	-	Multiply Subtract Long
+    check_neon("vmlsl.s8",  8, i16_1 - i8_2*i8_3);
+    check_neon("vmlsl.u8",  8, u16_1 - u8_2*u8_3);
+    check_neon("vmlsl.s16", 4, i32_1 - i16_2*i16_3);
+    check_neon("vmlsl.u16", 4, u32_1 - u16_2*u16_3);
+    check_neon("vmlsl.s32", 2, i64_1 - i32_2*i32_3);
+    check_neon("vmlsl.u32", 2, u64_1 - u32_2*u32_3);
+
     // VMOV	X	F, D	Move Register or Immediate
+    // This is for loading immediates, which we won't do in the inner loop anyway
+
     // VMOVL	I	-	Move Long
+    check_neon("vmovl.s8", 8, i16(i8_1));
+    check_neon("vmovl.u8", 8, u16(u8_1));
+    check_neon("vmovl.u8", 8, i16(u8_1));
+    check_neon("vmovl.s16", 4, i32(i16_1));
+    check_neon("vmovl.u16", 4, u32(u16_1));
+    check_neon("vmovl.u16", 4, i32(u16_1));
+    check_neon("vmovl.s32", 2, i64(i32_1));
+    check_neon("vmovl.u32", 2, u64(u32_1));
+    check_neon("vmovl.u32", 2, i64(u32_1));   
+
     // VMOVN	I	-	Move and Narrow
+    check_neon("vmovn.i16", 8, i8(i16_1));
+    check_neon("vmovn.i16", 8, u8(u16_1));
+    check_neon("vmovn.i32", 4, i16(i32_1));
+    check_neon("vmovn.i32", 4, u16(u32_1));
+    check_neon("vmovn.i64", 2, i32(i64_1));
+    check_neon("vmovn.i64", 2, u32(u64_1));
+
     // VMRS	X	F, D	Move Advanced SIMD or VFP Register to ARM compute Engine
     // VMSR	X	F, D	Move ARM Core Register to Advanced SIMD or VFP
+    // trust llvm to use this correctly
+
     // VMUL	I, F, P	F, D	Multiply
-    // integer division should use fixed point multiplication
+    check_neon("vmul.i8", 16, i8_2*i8_1);
+    check_neon("vmul.i8", 16, u8_2*u8_1);
+    check_neon("vmul.i16", 8, i16_2*i16_1);
+    check_neon("vmul.i16", 8, u16_2*u16_1);
+    check_neon("vmul.i32", 4, i32_2*i32_1);
+    check_neon("vmul.i32", 4, u32_2*u32_1);
+    check_neon("vmul.f32", 4, f32_2*f32_1);
+    check_neon("vmul.f64", 2, f64_2*f64_1);
+    check_neon("vmul.i8",  8, i8_2*i8_1);
+    check_neon("vmul.i8",  8, u8_2*u8_1);
+    check_neon("vmul.i16", 4, i16_2*i16_1);
+    check_neon("vmul.i16", 4, u16_2*u16_1);
+    check_neon("vmul.i32", 2, i32_2*i32_1);
+    check_neon("vmul.i32", 2, u32_2*u32_1);
+    check_neon("vmul.f32", 2, f32_2*f32_1);
+
     // VMULL	I, F, P	-	Multiply Long
+    check_neon("vmull.s8",  8, i16(i8_1)*i16(i8_2));
+    check_neon("vmull.u8",  8, u16(u8_1)*u16(u8_2));
+    check_neon("vmull.s16", 4, i32(i16_1)*i32(i16_2));
+    check_neon("vmull.u16", 4, u32(u16_1)*u32(u16_2));
+    check_neon("vmull.s32", 2, i64(i32_1)*i64(i32_2));
+    check_neon("vmull.u32", 2, u64(u32_1)*u64(u32_2));
+
+    // integer division should use fixed point multiplication, which
+    // is done by using a widening multiply followed by a narrowing
+    check_neon("vmull.s8",  8, i8_1/i8_2);
+    check_neon("vmull.u8",  8, u8_1/u8_2);
+    check_neon("vmull.s16", 4, i16_1/i16_2);
+    check_neon("vmull.u16", 4, u16_1/u16_2);
+    check_neon("vmull.s32", 2, i32_1/i32_2);
+    check_neon("vmull.u32", 2, u32_1/u32_2);
+
     // VMVN	X	-	Bitwise NOT
+    // check_neon("vmvn", ~bool1);
+
     // VNEG	I, F	F, D	Negate
-    // VNMLA	-	F, D	Negative Multiply Accumulate
+    check_neon("vneg.f32", 4, -f32_1);
+    check_neon("vneg.f64", 2, -f64_1);
+
+    // VNMLA	-	F, D	Negative Multiply Accumulate   
     // VNMLS	-	F, D	Negative Multiply Subtract
     // VNMUL	-	F, D	Negative Multiply
+    // really? These seem awfully special-purpose
+    check_neon("vnmla.f32", 4, -(f32_1 + f32_2*f32_3));
+    check_neon("vnmla.f64", 2, -(f64_1 + f64_2*f64_3));    
+    check_neon("vnmls.f32", 4, -(f32_1 - f32_2*f32_3));
+    check_neon("vnmls.f64", 2, -(f64_1 - f64_2*f64_3));    
+    check_neon("vnmul.f32", 4, -(f32_1*f32_2));
+    check_neon("vnmul.f64", 2, -(f64_1*f64_2));    
+
     // VORN	X	-	Bitwise OR NOT
+    // check_neon("vorn", bool1 | (~bool2));
+
     // VORR	X	-	Bitwise OR
+    // check_neon("vorr", bool1 | bool2);
+
     // VPADAL	I	-	Pairwise Add and Accumulate Long
     // VPADD	I, F	-	Pairwise Add
     // VPADDL	I	-	Pairwise Add Long
     // VPMAX	I, F	-	Pairwise Maximum
     // VPMIN	I, F	-	Pairwise Minimum
+    // We don't do horizontal ops
+
     // VPOP	X	F, D	Pop from Stack
     // VPUSH	X	F, D	Push to Stack
+    // Not used by us
+
     // VQABS	I	-	Saturating Absolute
+    check_neon("vqabs.s8", 16, i8(min(abs(i16(i8_1)), 0x7f)));
+    check_neon("vqabs.s16", 8, i16(min(abs(i32(i16_1)), 0x7fff)));
+    check_neon("vqabs.s32", 4, i32(min(abs(i64(i32_1)), 0x7fffffff)));
+    check_neon("vqabs.s8",  8, i8(min(abs(i16(i8_1)), 0x7f)));
+    check_neon("vqabs.s16", 4, i16(min(abs(i32(i16_1)), 0x7fff)));
+    check_neon("vqabs.s32", 2, i32(min(abs(i64(i32_1)), 0x7fffffff)));
+
     // VQADD	I	-	Saturating Add
+    
+
     // VQDMLAL	I	-	Saturating Double Multiply Accumulate Long
     // VQDMLSL	I	-	Saturating Double Multiply Subtract Long
     // VQDMULH	I	-	Saturating Doubling Multiply Returning High Half
