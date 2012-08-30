@@ -78,7 +78,7 @@ let rec cg_expr (con : context) (expr : expr) =
                 (function_type (f32x4_t) [|f32x4_t; f32x4_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
           (* TODO: other types *)
-          | _ -> con.cg_expr (Select (l <~ r, l, r))
+          | _ -> cg_expr (Select (l <~ r, l, r))
         end
     | Bop (Max, l, r) when is_vector l -> 
         begin match (val_type_of_expr l) with
@@ -95,7 +95,7 @@ let rec cg_expr (con : context) (expr : expr) =
                 (function_type (f32x4_t) [|f32x4_t; f32x4_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
           (* TODO: other types *)
-          | _ -> con.cg_expr (Select (l >~ r, l, r))
+          | _ -> cg_expr (Select (l >~ r, l, r))
         end
 
     (* use intrinsics for unaligned vector loads/stores *) 
