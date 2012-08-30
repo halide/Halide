@@ -78,6 +78,36 @@ let rec cg_expr (con:context) (expr:expr) =
         let mask = List.map (fun x -> const_int i32_t (x*2)) (0 -- n) in
         build_shufflevector v1 v2 (const_vector (Array.of_list mask)) "" b
 
+    (* Mins and maxes *)
+    | Bop (op, l, r) when op = Min or op = Max ->
+        let t = val_type_of_expr l in
+        let intrin = match (op, t) with
+	  | (Min, IntVector   (8, 16)) -> "sse41.pminsb"
+	  | (Min, UIntVector  (8, 16)) -> "sse2.pminub"
+	  | (Min, IntVector   (16, 8)) -> "sse2.pminsw"
+	  | (Min, UIntVector  (16, 8)) -> "sse41.pminuw"
+	  | (Min, IntVector   (32, 4)) -> "sse41.pminsd"
+	  | (Min, UIntVector  (32, 4)) -> "sse41.pminud"
+ 	  | (Min, FloatVector (32, 4)) -> "sse.minps"
+	  | (Min, FloatVector (64, 2)) -> "sse2.minpd"
+	  | (Max, IntVector   (8, 16)) -> "sse41.pmaxsb"
+	  | (Max, UIntVector  (8, 16)) -> "sse2.pmaxub"
+	  | (Max, IntVector   (16, 8)) -> "sse2.pmaxsw"
+	  | (Max, UIntVector  (16, 8)) -> "sse41.pmaxuw"
+	  | (Max, IntVector   (32, 4)) -> "sse41.pmaxsd"
+	  | (Max, UIntVector  (32, 4)) -> "sse41.pmaxud"
+ 	  | (Max, FloatVector (32, 4)) -> "sse.maxps"
+	  | (Max, FloatVector (64, 2)) -> "sse2.maxpd"
+	  | _ -> ""
+	in
+	begin match intrin with
+	  | "" -> con.cg_expr expr (* there's no intrinsic for this *)
+	  | _ ->
+	    let t = type_of_val_type c t in
+	    let intrin = declare_function ("llvm.x86." ^ intrin) (function_type t [|t; t|]) m in
+	    build_call intrin [|cg_expr l; cg_expr r|] "" b
+	end
+
     (* Loads with stride one half should do one load and then shuffle *)
     (* TODO: this is buggy 
     | Load (t, buf, idx) when 
