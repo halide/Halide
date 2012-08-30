@@ -36,22 +36,39 @@ let rec cg_expr (con:context) (expr:expr) =
   let i8x32_t = vector_type (i8_type c) 32 in
   let i32_t = i32_type c in
 
+  let max_i8 = Cast (Int(8), IntImm 127) in
+  let min_i8 = Cast (Int(8), IntImm (-128)) in
+  let max_i16 = Cast (Int(16), IntImm 32767) in
+  let min_i16 = Cast (Int(16), IntImm (-32768)) in
+  let max_i32 = Cast (Int(32), IntImm 2147483647) in
+  let min_i32 = Cast (Int(32), IntImm (-2147483648)) in  
+  let max_u8 = Cast (UInt(8), IntImm 255) in
+  let max_u16 = Cast (UInt(8), IntImm 65535) in
+
+  let rec pow2 = function
+    | 0 -> 1
+    | x -> (pow2 (x-1)) * 2
+  in
+
+  let call_intrin name args = 
+      let t x = type_of_val_type c (val_type_of_expr x) in
+      let intrin = declare_function ("llvm.x86." ^ name) (function_type (t expr) (Array.map t args)) m in
+      build_call intrin (Array.map cg_expr args) "" b
+  in
+
   (* Peephole optimizations for x86 *)
   match expr with 
     (* x86 doesn't do 16 bit vector division, but for constants you can do multiplication instead. *)
     | Bop (Div, x, Broadcast (Cast (UInt 16, IntImm y), 8)) ->
-        let pmulhw = declare_function "llvm.x86.sse2.pmulh.w"
-          (function_type (i16x8_t) [|i16x8_t; i16x8_t|]) m in
         let z = (65536/y + 1) in
-        let lhs = cg_expr x in
-        let rhs = cg_expr (Broadcast (Cast (UInt 16, IntImm z), 8)) in        
-        build_call pmulhw [|lhs; rhs|] "" b
+        let rhs = (Broadcast (Cast (UInt 16, IntImm z), 8)) in        
+	call_intrin "sse2.pmulh.w" [|x; rhs|]
           
     (* unaligned dense 128-bit loads use movups *)
     | Load (t, buf, Ramp(base, IntImm 1, n)) when (bit_width t = 128) ->
         begin match (Analysis.reduce_expr_modulo base n) with 
           | Some _ -> con.cg_expr expr
-          | _ ->              
+          | _ -> 	    
               let unaligned_load_128 = declare_function "unaligned_load_128"
                 (function_type (i8x16_t) [|ptr_t|]) m in
               let addr = build_pointercast (con.cg_memref t buf base) ptr_t "" b in
@@ -83,30 +100,51 @@ let rec cg_expr (con:context) (expr:expr) =
         let t = val_type_of_expr l in
         let intrin = match (op, t) with
 	  | (Min, IntVector   (8, 16)) -> "sse41.pminsb"
-	  | (Min, UIntVector  (8, 16)) -> "sse2.pminub"
-	  | (Min, IntVector   (16, 8)) -> "sse2.pminsw"
+	  | (Min, UIntVector  (8, 16)) -> "sse2.pminu.b"
+	  | (Min, IntVector   (16, 8)) -> "sse2.pmins.w"
 	  | (Min, UIntVector  (16, 8)) -> "sse41.pminuw"
 	  | (Min, IntVector   (32, 4)) -> "sse41.pminsd"
 	  | (Min, UIntVector  (32, 4)) -> "sse41.pminud"
- 	  | (Min, FloatVector (32, 4)) -> "sse.minps"
-	  | (Min, FloatVector (64, 2)) -> "sse2.minpd"
+ 	  | (Min, FloatVector (32, 4)) -> "sse.min.ps"
+	  | (Min, FloatVector (64, 2)) -> "sse2.min.pd"
 	  | (Max, IntVector   (8, 16)) -> "sse41.pmaxsb"
-	  | (Max, UIntVector  (8, 16)) -> "sse2.pmaxub"
-	  | (Max, IntVector   (16, 8)) -> "sse2.pmaxsw"
+	  | (Max, UIntVector  (8, 16)) -> "sse2.pmaxu.b"
+	  | (Max, IntVector   (16, 8)) -> "sse2.pmaxs.w"
 	  | (Max, UIntVector  (16, 8)) -> "sse41.pmaxuw"
 	  | (Max, IntVector   (32, 4)) -> "sse41.pmaxsd"
 	  | (Max, UIntVector  (32, 4)) -> "sse41.pmaxud"
- 	  | (Max, FloatVector (32, 4)) -> "sse.maxps"
-	  | (Max, FloatVector (64, 2)) -> "sse2.maxpd"
+ 	  | (Max, FloatVector (32, 4)) -> "sse.max.ps"
+	  | (Max, FloatVector (64, 2)) -> "sse2.max.pd"
 	  | _ -> ""
 	in
 	begin match intrin with
 	  | "" -> con.cg_expr expr (* there's no intrinsic for this *)
-	  | _ ->
-	    let t = type_of_val_type c t in
-	    let intrin = declare_function ("llvm.x86." ^ intrin) (function_type t [|t; t|]) m in
-	    build_call intrin [|cg_expr l; cg_expr r|] "" b
+	  | _ -> call_intrin intrin [|l; r|]
 	end
+
+    (* Saturating adds and subs for 8 and 16 bit ints *)
+    | Cast(IntVector(8, 16), 
+	   Bop (Max, 
+		Bop (Min, 
+		     Bop (op, Cast(IntVector(wide, _), l), Cast(IntVector(_, _), r)),
+		     Broadcast (Cast (_, IntImm 127), _)),
+		Broadcast (Cast (_, IntImm (-128)), _)))
+	when (wide > 8) && (op = Add or op = Sub) -> 
+      begin match op with
+	| Add -> call_intrin "sse2.padds.b" [|l; r|]
+	| Sub -> call_intrin "sse2.psubs.b" [|l; r|]
+      end
+    | Cast(IntVector(16, 8), 
+	   Bop (Max, 
+		Bop (Min, 
+		     Bop (op, Cast(IntVector(wide, _), l), Cast(IntVector(_, _), r)),
+		     Broadcast (IntImm 32767, _)),
+		Broadcast (IntImm (-32768), _)))
+	when (wide > 16) && (op = Add or op = Sub) -> 
+      begin match op with
+	| Add -> call_intrin "sse2.padds.w" [|l; r|]
+	| Sub -> call_intrin "sse2.psubs.w" [|l; r|]
+      end
 
     (* Loads with stride one half should do one load and then shuffle *)
     (* TODO: this is buggy 
