@@ -41,16 +41,18 @@ void do_job(job &j) {
     const char *llc = "../../../llvm/Release+Asserts/bin/llc";
     char cmd[1024];
     snprintf(cmd, 1024, 
-	     "%s %s %s.bc -o - | "
+	     "%s %s %s.bc -o - 2> %s.llc_stderr | "
 	     "sed -n '/%s.v1_loop/,/%s.v0_afterloop/p' | "
 	     "grep -v 'v1_loop' | "
 	     "grep -v 'Loop' | "
 	     "grep -v 'v0_afterloop' | "
 	     "sed 's/@.*//' > %s.s && "
 	     "grep %s %s.s > /dev/null", 
-	     llc, args, module, f.name().c_str(), f.name().c_str(), module, op, module);
+	     llc, args, module, module, f.name().c_str(), f.name().c_str(), module, op, module);
 
     if (system(cmd) != 0) {
+	snprintf(cmd, 1024, "cat %s.llc_stderr >> %s.s", module, module);
+	system(cmd);
 	j.result = new char[4096];
 	snprintf(j.result, 1024, "%s did not generate. Instead we got:\n", op);
 	char asmfile[1024];
