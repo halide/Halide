@@ -549,57 +549,76 @@ namespace Halide {
     }
 
     Expr sqrt(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to sqrt must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "sqrt_f64", a);
+	}
+	// Otherwise cast to float
         a = cast(Float(32), a);
         return builtin(Float(32), "sqrt_f32", a);
     }
 
     Expr sin(Expr a) {
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "sin_f64", a);
+	}
         //assert(a.type() == Float(32) && "Argument to sin must be a float");
         a = cast(Float(32), a);
         return builtin(Float(32), "sin_f32", a);
     }
     
     Expr cos(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to cos must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "cos_f64", a);
+	}
         a = cast(Float(32), a);
         return builtin(Float(32), "cos_f32", a);
     }
 
     Expr pow(Expr a, Expr b) {
-        //assert(a.type() == Float(32) && "First argument to pow must be a float");
-        //assert(b.type() == Float(32) && "Second argument to pow must be a floats");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "pow_f64", a, cast(Float(64), b));
+	}
         a = cast(Float(32), a);
         b = cast(Float(32), b);        
         return builtin(Float(32), "pow_f32", a, b);
     }
 
     Expr exp(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to exp must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "exp_f64", a);
+	}
         a = cast(Float(32), a);
         return builtin(Float(32), "exp_f32", a);
     }
 
     Expr log(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to log must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "log_f64", a);
+	}
         a = cast(Float(32), a);
         return builtin(Float(32), "log_f32", a);
     }
 
     Expr floor(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to floor must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "floor_f64", a);
+	}
         a = cast(Float(32), a);
         return builtin(Float(32), "floor_f32", a);
     }
 
     Expr ceil(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to ceil must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "ceil_f64", a);
+	}
         a = cast(Float(32), a);
         return builtin(Float(32), "ceil_f32", a);
     }
 
     Expr round(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to round must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "round_f64", a);
+	}
         a = cast(Float(32), a);
         return builtin(Float(32), "round_f32", a);
     }
