@@ -187,19 +187,25 @@ void check_sse_all() {
     Expr u64_1 = in_u64(x), u64_2 = in_u64(x+16), u64_3 = in_u64(x+32);
     Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
 
+    const int min_i8 = -128, max_i8 = 127;
+    const int min_i16 = -32768, max_i16 = 32767;
+    const int min_i32 = 0x80000000, max_i32 = 0x7fffffff;
+    const int max_u8 = 255;
+    const int max_u16 = 65535;
+
     // MMX (in 128-bits)
     check_sse("paddb", 16, u8_1 + u8_2);
     check_sse("psubb", 16, u8_1 - u8_2);
-    check_sse("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), -128, 127)));
-    check_sse("psubsb", 16, i8(clamp(i16(i8_1) - i16(i8_2), -128, 127)));
-    check_sse("paddusb", 16, u8(clamp(u16(u8_1) + u16(u8_2), 0, 255)));
-    check_sse("psubusb", 16, u8(clamp(u16(u8_1) - u16(u8_2), 0, 255)));
+    check_sse("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, max_i8)));
+    check_sse("psubsb", 16, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, max_i8)));
+    check_sse("paddusb", 16, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
+    check_sse("psubusb", 16, u8(min(u16(u8_1) - u16(u8_2), max_u8)));
     check_sse("paddw", 8, u16_1 + u16_2);
     check_sse("psubw", 8, u16_1 - u16_2);
-    check_sse("paddsw", 8, i16(clamp(i32(i16_1) + i32(i16_2), -32768, 32767)));
-    check_sse("psubsw", 8, i16(clamp(i32(i16_1) - i32(i16_2), -32768, 32767)));
-    check_sse("paddusw", 8, u16(clamp(u32(u16_1) + u32(u16_2), 0, 65535)));
-    check_sse("psubusw", 8, u16(clamp(u32(u16_1) - u32(u16_2), 0, 65535)));
+    check_sse("paddsw", 8, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
+    check_sse("psubsw", 8, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
+    check_sse("paddusw", 8, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+    check_sse("psubusw", 8, u16(min(u32(u16_1) - u32(u16_2), max_u16)));
     check_sse("paddd", 4, i32_1 + i32_2);
     check_sse("psubd", 4, i32_1 - i32_2);
     check_sse("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
@@ -276,9 +282,9 @@ void check_sse_all() {
     check_sse("psubq", 4, i64_1 - i64_2);
     check_sse("pmuludq", 4, u64_1 * u64_2);
 
-    check_sse("packssdw", 8, i16(clamp(i32_1, -32768, 32767)));
-    check_sse("packsswb", 16, i8(clamp(i16_1, -128, 127)));
-    check_sse("packuswb", 16, u8(clamp(i16_1, 0, 255)));
+    check_sse("packssdw", 8, i16(clamp(i32_1, min_i16, max_i16)));
+    check_sse("packsswb", 16, i8(clamp(i16_1, min_i8, max_i8)));
+    check_sse("packuswb", 16, u8(clamp(i16_1, 0, max_u8)));
 
     // SSE 3
 
@@ -313,7 +319,7 @@ void check_sse_all() {
     check_sse("roundpd", 2, round(f64_1));
 
     check_sse("pcmpeqq", 2, select(i64_1 == i64_2, i64(1), i64(2)));
-    check_sse("packusdw", 8, u16(clamp(i32_1, 0, 65535)));
+    check_sse("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));
 
     // SSE 4.2
     
@@ -369,16 +375,16 @@ void check_sse_all() {
     // AVX 2
     check_sse("vpaddb", 32, u8_1 + u8_2);
     check_sse("vpsubb", 32, u8_1 - u8_2);
-    check_sse("vpaddsb", 32, i8(clamp(i16(i8_1) + i16(i8_2), -128, 127)));
-    check_sse("vpsubsb", 32, i8(clamp(i16(i8_1) - i16(i8_2), -128, 127)));
-    check_sse("vpaddusb", 32, u8(clamp(u16(u8_1) + u16(u8_2), 0, 255)));
-    check_sse("vpsubusb", 32, u8(clamp(u16(u8_1) - u16(u8_2), 0, 255)));
+    check_sse("vpaddsb", 32, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, max_i8)));
+    check_sse("vpsubsb", 32, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, max_i8)));
+    check_sse("vpaddusb", 32, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
+    check_sse("vpsubusb", 32, u8(min(u16(u8_1) - u16(u8_2), max_u8)));
     check_sse("vpaddw", 16, u16_1 + u16_2);
     check_sse("vpsubw", 16, u16_1 - u16_2);
-    check_sse("vpaddsw", 16, i16(clamp(i32(i16_1) + i32(i16_2), -32768, 32767)));
-    check_sse("vpsubsw", 16, i16(clamp(i32(i16_1) - i32(i16_2), -32768, 32767)));
-    check_sse("vpaddusw", 16, u16(clamp(u32(u16_1) + u32(u16_2), 0, 65535)));
-    check_sse("vpsubusw", 16, u16(clamp(u32(u16_1) - u32(u16_2), 0, 65535)));
+    check_sse("vpaddsw", 16, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
+    check_sse("vpsubsw", 16, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
+    check_sse("vpaddusw", 16, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+    check_sse("vpsubusw", 16, u16(min(u32(u16_1) - u32(u16_2), max_u16)));
     check_sse("vpaddd", 8, i32_1 + i32_2);
     check_sse("vpsubd", 8, i32_1 - i32_2);
     check_sse("vpmulhw", 16, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
@@ -403,9 +409,9 @@ void check_sse_all() {
     check_sse("vpsubq", 8, i64_1 - i64_2);
     check_sse("vpmuludq", 8, u64_1 * u64_2);
 
-    check_sse("vpackssdw", 16, i16(clamp(i32_1, -32768, 32767)));
-    check_sse("vpacksswb", 32, i8(clamp(i16_1, -128, 127)));
-    check_sse("vpackuswb", 32, u8(clamp(i16_1, 0, 255)));
+    check_sse("vpackssdw", 16, i16(clamp(i32_1, min_i16, max_i16)));
+    check_sse("vpacksswb", 32, i8(clamp(i16_1, min_i8, max_i8)));
+    check_sse("vpackuswb", 32, u8(clamp(i16_1, 0, max_u8)));
 
     check_sse("vpabsb", 32, abs(i8_1));
     check_sse("vpabsw", 16, abs(i16_1));
@@ -426,7 +432,7 @@ void check_sse_all() {
     check_sse("vpminsd", 8, min(i32_1, i32_2));
 
     check_sse("vpcmpeqq", 4, select(i64_1 == i64_2, i64(1), i64(2)));
-    check_sse("vpackusdw", 16, u16(clamp(i32_1, 0, 65535)));
+    check_sse("vpackusdw", 16, u16(clamp(i32_1, 0, max_u16)));
     check_sse("vpcmpgtq", 4, select(i64_1 > i64_2, i64(1), i64(2)));
 
 }
@@ -454,6 +460,12 @@ void check_neon_all() {
     Expr i64_1 = in_i64(x), i64_2 = in_i64(x+16), i64_3 = in_i64(x+32);
     Expr u64_1 = in_u64(x), u64_2 = in_u64(x+16), u64_3 = in_u64(x+32);
     Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+
+    const int min_i8 = -128, max_i8 = 127;
+    const int min_i16 = -32768, max_i16 = 32767;
+    const int min_i32 = 0x80000000, max_i32 = 0x7fffffff;
+    const int max_u8 = 255;
+    const int max_u16 = 65535;
 
     // Table copied from the Cortex-A9 TRM.
 
@@ -944,19 +956,26 @@ void check_neon_all() {
     check_neon("vmull.s32", 2, i64(i32_1)*i64(i32_2));
     check_neon("vmull.u32", 2, u64(u32_1)*u64(u32_2));
 
-    // integer division should use fixed point multiplication, which
-    // is done by using a widening multiply followed by a narrowing
-    check_neon("vmull.s8",  8, i8_1/i8_2);
-    check_neon("vmull.u8",  8, u8_1/u8_2);
-    check_neon("vmull.s16", 4, i16_1/i16_2);
-    check_neon("vmull.u16", 4, u16_1/u16_2);
-    check_neon("vmull.s32", 2, i32_1/i32_2);
-    check_neon("vmull.u32", 2, u32_1/u32_2);
+    // integer division by a constant should use fixed point
+    // multiplication, which is done by using a widening multiply
+    // followed by a narrowing
+    check_neon("vmull.s8",  8, i8_1/37);
+    check_neon("vmull.u8",  8, u8_1/201);
+    check_neon("vmull.s16", 4, i16_1/84);
+    check_neon("vmull.u16", 4, u16_1/723);
+    check_neon("vmull.s32", 2, i32_1/3214);
+    check_neon("vmull.u32", 2, u32_1/45623);
 
     // VMVN	X	-	Bitwise NOT
     // check_neon("vmvn", ~bool1);
 
     // VNEG	I, F	F, D	Negate
+    check_neon("vneg.s8", 16, -i8_1);
+    check_neon("vneg.s16", 8, -i16_1);
+    check_neon("vneg.s32", 4, -i32_1);
+    check_neon("vneg.s8", 8, -i8_1);
+    check_neon("vneg.s16", 4, -i16_1);
+    check_neon("vneg.s32", 2, -i32_1);
     check_neon("vneg.f32", 4, -f32_1);
     check_neon("vneg.f64", 2, -f64_1);
 
@@ -989,71 +1008,327 @@ void check_neon_all() {
     // Not used by us
 
     // VQABS	I	-	Saturating Absolute
-    check_neon("vqabs.s8", 16, i8(min(abs(i16(i8_1)), 0x7f)));
-    check_neon("vqabs.s16", 8, i16(min(abs(i32(i16_1)), 0x7fff)));
-    check_neon("vqabs.s32", 4, i32(min(abs(i64(i32_1)), 0x7fffffff)));
-    check_neon("vqabs.s8",  8, i8(min(abs(i16(i8_1)), 0x7f)));
-    check_neon("vqabs.s16", 4, i16(min(abs(i32(i16_1)), 0x7fff)));
-    check_neon("vqabs.s32", 2, i32(min(abs(i64(i32_1)), 0x7fffffff)));
+    check_neon("vqabs.s8", 16, i8(min(abs(i16(i8_1)),   max_i8)));
+    check_neon("vqabs.s16", 8, i16(min(abs(i32(i16_1)), max_i16)));
+    check_neon("vqabs.s32", 4, i32(min(abs(i64(i32_1)), max_i32)));
+    check_neon("vqabs.s8",  8, i8(min(abs(i16(i8_1)),   max_i8)));
+    check_neon("vqabs.s16", 4, i16(min(abs(i32(i16_1)), max_i16)));
+    check_neon("vqabs.s32", 2, i32(min(abs(i64(i32_1)), max_i32)));
 
     // VQADD	I	-	Saturating Add
-    
+    check_neon("vqadd.s8", 16,  i8(clamp(i16(i8_1)  + i16(i8_2),  min_i8,  max_i8)));
+    check_neon("vqadd.s16", 8, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
+    check_neon("vqadd.s32", 8, i32(clamp(i64(i32_1) + i64(i32_2), min_i32, max_i32)));
+    check_neon("vqadd.s8",  8,  i8(clamp(i16(i8_1)  + i16(i8_2),  min_i8,  max_i8)));
+    check_neon("vqadd.s16", 4, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
+    check_neon("vqadd.s32", 4, i32(clamp(i64(i32_1) + i64(i32_2), min_i32, max_i32)));
 
-    // VQDMLAL	I	-	Saturating Double Multiply Accumulate Long
+    check_neon("vqadd.u8", 16,  u8(min(u16(u8_1)  + u16(u8_2),  max_u8)));
+    check_neon("vqadd.u16", 8, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+    check_neon("vqadd.u8",  8,  u8(min(u16(u8_1)  + u16(u8_2),  max_u8)));
+    check_neon("vqadd.u16", 4, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+
+    // Can't do larger ones because we only have i32 constants
+
+    // VQDMLAL	I	-	Saturating Double Multiply Accumulate Long    
     // VQDMLSL	I	-	Saturating Double Multiply Subtract Long
     // VQDMULH	I	-	Saturating Doubling Multiply Returning High Half
     // VQDMULL	I	-	Saturating Doubling Multiply Long
+
+    // These ops are largely useful for fixed-point multiplication,
+    // accumulation, and division. The only one we access through
+    // halide is the one we can directly use for integer division by a
+    // constant.
+    check_neon("vqdmulh.s16", 8, i16_1 / 7);
+    check_neon("vqdmulh.s32", 4, i32_1 / 7);
+    check_neon("vqdmulh.s16", 4, i16_1 / 7);
+    check_neon("vqdmulh.s32", 2, i32_1 / 7);
+
     // VQMOVN	I	-	Saturating Move and Narrow
+    check_neon("vqmovn.s16", 8,  i8(clamp(i16_1, min_i8,  max_i8)));
+    check_neon("vqmovn.s32", 4, i16(clamp(i32_1, min_i16, max_i16)));
+    check_neon("vqmovn.s64", 2, i32(clamp(i64_1, min_i32, max_i32)));
+    check_neon("vqmovn.u16", 8,  u8(min(u16_1, max_u8)));
+    check_neon("vqmovn.u32", 4, u16(min(u32_1, max_u16)));
+    // Can't do the 64-bit one because we only have signed 32-bit consts
+
     // VQMOVUN	I	-	Saturating Move and Unsigned Narrow
+    check_neon("vqmovun.u16", 8, u8(clamp(i16_1, 0, max_u8)));
+    check_neon("vqmovun.u32", 4, u16(clamp(i32_1, 0, max_u16)));
+    // Can't do the 64-bit one
+
     // VQNEG	I	-	Saturating Negate
+    check_neon("vqneg.s8", 16, -max(i8_1,  -max_i8));
+    check_neon("vqneg.s16", 8, -max(i16_1, -max_i16));
+    check_neon("vqneg.s32", 4, -max(i32_1, -max_i32));
+    check_neon("vqneg.s8",  8, -max(i8_1,  -max_i8));
+    check_neon("vqneg.s16", 4, -max(i16_1, -max_i16));
+    check_neon("vqneg.s32", 2, -max(i32_1, -max_i32));
+
     // VQRDMULH	I	-	Saturating Rounding Doubling Multiply Returning High Half
-    // VQRSHL	I	-	Saturating Rounding Shift Left
+    // VQRSHL	I	-	Saturating Rounding Shift Left    
     // VQRSHRN	I	-	Saturating Rounding Shift Right Narrow
     // VQRSHRUN	I	-	Saturating Rounding Shift Right Unsigned Narrow
+    // We use the non-rounding form of these (at worst we do an extra add)
+
     // VQSHL	I	-	Saturating Shift Left
+    check_neon("vqshl.s8", 16,  i8(clamp(i16(i8_1)*16,  min_i8,  max_i8)));
+    check_neon("vqshl.s16", 8, i16(clamp(i32(i16_1)*16, min_i16, max_i16)));
+    check_neon("vqshl.s32", 4, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
+    check_neon("vqshl.s8",  8,  i8(clamp(i16(i8_1)*16,  min_i8,  max_i8)));
+    check_neon("vqshl.s16", 4, i16(clamp(i32(i16_1)*16, min_i16, max_i16)));
+    check_neon("vqshl.s32", 2, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
+    // skip the versions that we don't have constants for
+
     // VQSHLU	I	-	Saturating Shift Left Unsigned
+    check_neon("vqshlu.u8", 16,  u8(min(u16(u8_1 )*16, max_u8)));
+    check_neon("vqshlu.u16", 8, u16(min(u32(u16_1)*16, max_u16)));
+    check_neon("vqshlu.u8",  8,  u8(min(u16(u8_1 )*16, max_u8)));
+    check_neon("vqshlu.u16", 4, u16(min(u32(u16_1)*16, max_u16)));
+
     // VQSHRN	I	-	Saturating Shift Right Narrow
     // VQSHRUN	I	-	Saturating Shift Right Unsigned Narrow
+    check_neon("vqshrn.s16", 8,  i8(clamp(i16_1/16, min_i8,  max_i8)));
+    check_neon("vqshrn.s32", 4, i16(clamp(i32_1/16, min_i16, max_i16)));
+    check_neon("vqshrn.s64", 2, i32(clamp(i64_1/16, min_i32, max_i32)));
+    check_neon("vqshrun.u16", 8,  u8(min(u16_1/16, max_u8)));
+    check_neon("vqshrun.u32", 4, u16(min(u32_1/16, max_u16)));
+
     // VQSUB	I	-	Saturating Subtract
+    check_neon("vqsub.s8", 16,  i8(clamp(i16(i8_1)  - i16(i8_2),  min_i8,  max_i8)));
+    check_neon("vqsub.s16", 8, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
+    check_neon("vqsub.s32", 8, i32(clamp(i64(i32_1) - i64(i32_2), min_i32, max_i32)));
+    check_neon("vqsub.s8",  8,  i8(clamp(i16(i8_1)  - i16(i8_2),  min_i8,  max_i8)));
+    check_neon("vqsub.s16", 4, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
+    check_neon("vqsub.s32", 4, i32(clamp(i64(i32_1) - i64(i32_2), min_i32, max_i32)));
+
+    check_neon("vqsub.u8", 16,  u8(clamp(i16(u8_1)  - i16(u8_2),  0, max_u8)));
+    check_neon("vqsub.u16", 8, u16(clamp(i32(u16_1) - i32(u16_2), 0, max_u16)));
+    check_neon("vqsub.u8",  8,  u8(clamp(i16(u8_1)  - i16(u8_2),  0, max_u8)));
+    check_neon("vqsub.u16", 4, u16(clamp(i32(u16_1) - i32(u16_2), 0, max_u16)));    
+
     // VRADDHN	I	-	Rounding Add and Narrow Returning High Half
+    check_neon("vaddhn.i16", 8, i8((i16_1 + i16_2 + 128)/256));
+    check_neon("vaddhn.i16", 8, u8((u16_1 + u16_2 + 128)/256));
+    check_neon("vaddhn.i32", 4, i16((i32_1 + i32_2 + 32768)/65536));
+    check_neon("vaddhn.i32", 4, u16((u32_1 + u32_2 + 32768)/65536));
+    check_neon("vaddhn.i16", 4, i8((i16_1 + i16_2 + 128)/256));
+    check_neon("vaddhn.i16", 4, u8((u16_1 + u16_2 + 128)/256));
+    check_neon("vaddhn.i32", 2, i16((i32_1 + i32_2 + 32768)/65536));
+    check_neon("vaddhn.i32", 2, u16((u32_1 + u32_2 + 32768)/65536));
+
     // VRECPE	I, F	-	Reciprocal Estimate
+    check_neon("vrecpe.f32", 4, 1.0f/f32_1);
+    check_neon("vrecpe.f32", 2, 1.0f/f32_1);
+
     // VRECPS	F	-	Reciprocal Step
+    // This does one newton-rhapson iteration for finding the reciprocal. Skip it.
+
     // VREV16	X	-	Reverse in Halfwords
     // VREV32	X	-	Reverse in Words
     // VREV64	X	-	Reverse in Doublewords
+
+    // These reverse within each halfword, word, and doubleword
+    // respectively. We don't use them. Instead we use vtbl for vector
+    // shuffles.
+
     // VRHADD	I	-	Rounding Halving Add
+    check_neon("vrhadd.s8", 16,  i8((i16(i8_1 ) + i16(i8_2 ) + i16(1))/i16(2)));
+    check_neon("vrhadd.u8", 16,  u8((u16(u8_1 ) + u16(u8_2 ) + u16(1))/u16(2)));
+    check_neon("vrhadd.s16", 8, i16((i32(i16_1) + i32(i16_2) + i32(1))/i32(2)));
+    check_neon("vrhadd.u16", 8, u16((u32(u16_1) + u32(u16_2) + u32(1))/u32(2)));
+    check_neon("vrhadd.s32", 4, i32((i64(i32_1) + i64(i32_2) + i64(1))/i64(2)));
+    check_neon("vrhadd.u32", 4, u32((u64(u32_1) + u64(u32_2) + u64(1))/u64(2)));
+    check_neon("vrhadd.s8",  8,  i8((i16(i8_1 ) + i16(i8_2 ) + i16(1))/i16(2)));
+    check_neon("vrhadd.u8",  8,  u8((u16(u8_1 ) + u16(u8_2 ) + u16(1))/u16(2)));
+    check_neon("vrhadd.s16", 4, i16((i32(i16_1) + i32(i16_2) + i32(1))/i32(2)));
+    check_neon("vrhadd.u16", 4, u16((u32(u16_1) + u32(u16_2) + u32(1))/u32(2)));
+    check_neon("vrhadd.s32", 2, i32((i64(i32_1) + i64(i32_2) + i64(1))/i64(2)));
+    check_neon("vrhadd.u32", 2, u32((u64(u32_1) + u64(u32_2) + u64(1))/u64(2)));
+
     // VRSHL	I	-	Rounding Shift Left
     // VRSHR	I	-	Rounding Shift Right
     // VRSHRN	I	-	Rounding Shift Right Narrow
+    // We use the non-rounding forms of these
+
     // VRSQRTE	I, F	-	Reciprocal Square Root Estimate
+    check_neon("vrecpe.f32", 4, 1.0f/sqrt(f32_1));
+    check_neon("vrecpe.f32", 2, 1.0f/sqrt(f32_1));    
+    check_neon("vrecpe.f32", 4, f32_2/sqrt(f32_1));
+    check_neon("vrecpe.f32", 2, f32_2/sqrt(f32_1));    
+
     // VRSQRTS	F	-	Reciprocal Square Root Step
-    // VRSRA	I	-	Rounding Shift Right and Accumulate
+    // One newtown rhapson iteration of 1/sqrt(x). Skip it.
+
+    // VRSRA	I	-	Rounding Shift Right and Accumulate    
     // VRSUBHN	I	-	Rounding Subtract and Narrow Returning High Half
+    // Boo rounding ops
+
     // VSHL	I	-	Shift Left
+    check_neon("vshl.s8", 16,  i8_1*16);
+    check_neon("vshl.s16", 8, i16_1*16);
+    check_neon("vshl.s32", 4, i32_1*16);
+    check_neon("vshl.s64", 2, i64_1*16);
+    check_neon("vshl.s8",  8,  i8_1*16);
+    check_neon("vshl.s16", 4, i16_1*16);
+    check_neon("vshl.s32", 2, i32_1*16);
+    check_neon("vshl.u8", 16,  u8_1*16);
+    check_neon("vshl.u16", 8, u16_1*16);
+    check_neon("vshl.u32", 4, u32_1*16);
+    check_neon("vshl.u64", 2, u64_1*16);
+    check_neon("vshl.u8",  8,  u8_1*16);
+    check_neon("vshl.u16", 4, u16_1*16);
+    check_neon("vshl.u32", 2, u32_1*16);
+
+    
     // VSHLL	I	-	Shift Left Long
+    check_neon("vshll.s8",  8, i16(i8_1)*16);
+    check_neon("vshll.s16", 4, i32(i16_1)*16);
+    check_neon("vshll.s32", 2, i64(i32_1)*16);
+    check_neon("vshll.u8",  8, u16(u8_1)*16);
+    check_neon("vshll.u16", 4, u32(u16_1)*16);
+    check_neon("vshll.u32", 2, u64(u32_1)*16);
+
     // VSHR	I	-	Shift Right
+    check_neon("vshr.s8", 16,  i8_1/16);
+    check_neon("vshr.s16", 8, i16_1/16);
+    check_neon("vshr.s32", 4, i32_1/16);
+    check_neon("vshr.s64", 2, i64_1/16);
+    check_neon("vshr.s8",  8,  i8_1/16);
+    check_neon("vshr.s16", 4, i16_1/16);
+    check_neon("vshr.s32", 2, i32_1/16);
+    check_neon("vshr.u8", 16,  u8_1/16);
+    check_neon("vshr.u16", 8, u16_1/16);
+    check_neon("vshr.u32", 4, u32_1/16);
+    check_neon("vshr.u64", 2, u64_1/16);
+    check_neon("vshr.u8",  8,  u8_1/16);
+    check_neon("vshr.u16", 4, u16_1/16);
+    check_neon("vshr.u32", 2, u32_1/16);    
+
     // VSHRN	I	-	Shift Right Narrow
+    check_neon("vshrn.i16", 8,  i8(i16_1/16));
+    check_neon("vshrn.i32", 4, i16(i32_1/16));
+    check_neon("vshrn.i64", 2, i32(i64_1/16));
+    check_neon("vshr.i16",  8,  u8(u16_1/16));
+    check_neon("vshr.i32",  4, u16(u32_1/16));
+    check_neon("vshr.i64",  2, u32(u64_1/16));
+
     // VSLI	X	-	Shift Left and Insert
+    // I guess this could be used for (x*256) | (y & 255)? We don't do bitwise ops on integers, so skip it.
+
     // VSQRT	-	F, D	Square Root
+    check_neon("vsqrt.f32", 4, sqrt(f32_1));
+    check_neon("vsqrt.f64", 2, sqrt(f64_1));
+
     // VSRA	I	-	Shift Right and Accumulate
+    check_neon("vsra.s8", 16,  i8_2 + i8_1/16);
+    check_neon("vsra.s16", 8, i16_2 + i16_1/16);
+    check_neon("vsra.s32", 4, i32_2 + i32_1/16);
+    check_neon("vsra.s64", 2, i64_2 + i64_1/16);
+    check_neon("vsra.s8",  8,  i8_2 + i8_1/16);
+    check_neon("vsra.s16", 4, i16_2 + i16_1/16);
+    check_neon("vsra.s32", 2, i32_2 + i32_1/16);
+    check_neon("vsra.u8", 16,  u8_2 + u8_1/16);
+    check_neon("vsra.u16", 8, u16_2 + u16_1/16);
+    check_neon("vsra.u32", 4, u32_2 + u32_1/16);
+    check_neon("vsra.u64", 2, u64_2 + u64_1/16);
+    check_neon("vsra.u8",  8,  u8_2 + u8_1/16);
+    check_neon("vsra.u16", 4, u16_2 + u16_1/16);
+    check_neon("vsra.u32", 2, u32_2 + u32_1/16);        
+
     // VSRI	X	-	Shift Right and Insert
+    // See VSLI
+
     // VST1	X	-	Store single-element structures
+    check_neon("vst1.8", 16, i8_1);
+
     // VST2	X	-	Store two-element structures
+    check_neon("vst2.8", 32, select(x%2 == 0, in_i8(x/2), in_i8(x/2 + 16)));
+
     // VST3	X	-	Store three-element structures
     // VST4	X	-	Store four-element structures
+    // Not supported for now. We need a better syntax for interleaving to take advantage of these
+
     // VSTM	X	F, D	Store Multiple Registers
     // VSTR	X	F, D	Store Register
+    // we trust llvm to use these
+
     // VSUB	I, F	F, D	Subtract
+    check_neon("vsub.i8", 16,  i8_1 - i8_2);
+    check_neon("vsub.i8", 16,  u8_1 - u8_2);
+    check_neon("vsub.i16", 8, i16_1 - i16_2);
+    check_neon("vsub.i16", 8, u16_1 - u16_2);
+    check_neon("vsub.i32", 4, i32_1 - i32_2);
+    check_neon("vsub.i32", 4, u32_1 - u32_2);
+    check_neon("vsub.i64", 2, i64_1 - i64_2);
+    check_neon("vsub.i64", 2, u64_1 - u64_2);
+    check_neon("vsub.f32", 4, f32_1 - f32_2);
+    check_neon("vsub.i8",  8,  i8_1 - i8_2);
+    check_neon("vsub.i8",  8,  u8_1 - u8_2);
+    check_neon("vsub.i16", 4, i16_1 - i16_2);
+    check_neon("vsub.i16", 4, u16_1 - u16_2);
+    check_neon("vsub.i32", 2, i32_1 - i32_2);
+    check_neon("vsub.i32", 2, u32_1 - u32_2);
+    check_neon("vsub.f32", 2, f32_1 - f32_2);    
+
     // VSUBHN	I	-	Subtract and Narrow
+    check_neon("vsubhn.i16", 8,  i8((i16_1 - i16_2)/256));
+    check_neon("vsubhn.i16", 8,  u8((u16_1 - u16_2)/256));
+    check_neon("vsubhn.i32", 4, i16((i32_1 - i32_2)/65536));
+    check_neon("vsubhn.i32", 4, u16((u32_1 - u32_2)/65536));
+    check_neon("vsubhn.i16", 4,  i8((i16_1 - i16_2)/256));
+    check_neon("vsubhn.i16", 4,  u8((u16_1 - u16_2)/256));
+    check_neon("vsubhn.i32", 2, i16((i32_1 - i32_2)/65536));
+    check_neon("vsubhn.i32", 2, u16((u32_1 - u32_2)/65536));
+
     // VSUBL	I	-	Subtract Long
+    check_neon("vsubl.s8",  8, i16(i8_1)  - i16(i8_2));
+    check_neon("vsubl.u8",  8, u16(u8_1)  - u16(u8_2));
+    check_neon("vsubl.s16", 4, i32(i16_1) - i32(i16_2));
+    check_neon("vsubl.u16", 4, u32(u16_1) - u32(u16_2));
+    check_neon("vsubl.s32", 2, i64(i32_1) - i64(i32_2));
+    check_neon("vsubl.u32", 2, u64(u32_1) - u64(u32_2));
+    check_neon("vsubl.s8",  4, i16(i8_1)  - i16(i8_2));
+    check_neon("vsubl.u8",  4, u16(u8_1)  - u16(u8_2));
+    check_neon("vsubl.s16", 2, i32(i16_1) - i32(i16_2));
+    check_neon("vsubl.u16", 2, u32(u16_1) - u32(u16_2));    
+
     // VSUBW	I	-	Subtract Wide
+    check_neon("vsubw.s8",  8, i16_1 - i8_1);
+    check_neon("vsubw.u8",  8, u16_1 - u8_1);
+    check_neon("vsubw.s16", 4, i32_1 - i16_1);
+    check_neon("vsubw.u16", 4, u32_1 - u16_1);
+    check_neon("vsubw.s32", 2, i64_1 - i32_1);
+    check_neon("vsubw.u32", 2, u64_1 - u32_1);
+    check_neon("vsubw.s8",  4, i16_1 - i8_1);
+    check_neon("vsubw.u8",  4, u16_1 - u8_1);
+    check_neon("vsubw.s16", 2, i32_1 - i16_1);
+    check_neon("vsubw.u16", 2, u32_1 - u16_1);    
+
     // VSWP	I	-	Swap Contents
+    // Swaps the contents of two registers. Not sure why this would be useful.
+
     // VTBL	X	-	Table Lookup
+    // Arm's version of shufps. Allows for arbitrary permutations of a
+    // vector. We can test it with a reverse dense load
+    check_neon("vtbl", 16, in_i8(100-x));
+
     // VTBX	X	-	Table Extension
+    // Like vtbl, but doesn't change any elements where the index was
+    // out of bounds. Not sure how we'd use this.
+
     // VTRN	X	-	Transpose
+    // Swaps the even elements of one vector with the odd elements of
+    // another. Not useful for us.
+
     // VTST	I	-	Test Bits
+    // check_neon("vtst.32", 4, (bool1 & bool2) != 0);
+
     // VUZP	X	-	Unzip
     // VZIP	X	-	Zip
+    // Interleave or deinterleave two vectors. Given that we use
+    // interleaving loads and stores, it's hard to hit this op with
+    // halide.
 
 }
 
