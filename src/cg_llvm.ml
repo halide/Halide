@@ -122,8 +122,9 @@ let rec make_cg_context c m b sym_table arch_state =
     | Bop (Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
     | Bop (Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
     | Bop (Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
-    | Bop (Min, l, r) -> cg_minmax Min l r
-    | Bop (Max, l, r) -> cg_minmax Max l r
+    (* In most cases architecture-specific code should pick up min and max and generate something better *)
+    | Bop (Min, l, r) -> cg_expr (Select (l <~ r, l, r))
+    | Bop (Max, l, r) -> cg_expr (Select (l <~ r, r, l))
     | Bop (Mod, l, r) -> cg_mod l r
 
     (* comparison *)
@@ -236,20 +237,6 @@ let rec make_cg_context c m b sym_table arch_state =
           let made_positive = build_add initial_mod r "" b in
           build_srem made_positive r "" b
 
-  and cg_minmax op l r =
-    let cmp = match (op, element_val_type (val_type_of_expr l)) with 
-      | (Min, Float _) -> build_fcmp Fcmp.Olt
-      | (Max, Float _) -> build_fcmp Fcmp.Ogt
-      | (Min, Int _) -> build_icmp Icmp.Slt
-      | (Max, Int _) -> build_icmp Icmp.Sgt
-      | (Min, UInt _) -> build_icmp Icmp.Ult
-      | (Max, UInt _) -> build_icmp Icmp.Ugt
-      | (_, _) -> failwith "cg_minmax with non-min/max op"
-    in
-    let l = cg_expr l in
-    let r = cg_expr r in
-    build_select (cmp l r "" b) l r "" b
-
   and cg_cmp iop uop fop l r =
     cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
 
@@ -270,6 +257,7 @@ let rec make_cg_context c m b sym_table arch_state =
       | UInt(fb), UInt(tb) when fb < tb ->
           simple_cast build_zext e t
 
+	    (* 
       (* Some common casts can be done more efficiently by bitcasting
          and doing vector shuffles (assuming little-endianness) *)
 
@@ -295,6 +283,7 @@ let rec make_cg_context c m b sym_table arch_state =
             | x -> (const_int int_imm_t (fw-x))::(const_int int_imm_t (2*fw-x))::(indices (x-1)) in                
           let shuffle = build_shufflevector (cg_expr e) zero_vector (const_vector (Array.of_list (indices fw))) "" b in
           build_bitcast shuffle (type_of_val_type t) "" b
+	    *)
 
       (* For signed ints we need to do sign extension 
       | IntVector(fb, fw), UIntVector(tb, tw) 
