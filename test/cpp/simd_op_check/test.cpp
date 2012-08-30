@@ -9,6 +9,8 @@ using namespace Halide;
 bool failed = false;
 Var x, y;
 
+char *filter = NULL;
+
 struct job {
     const char *op;
     const char *args;
@@ -20,6 +22,9 @@ struct job {
 std::vector<job> jobs;
 
 void check(const char *op, int vector_width, Expr e, const char *args) {
+    if (filter) {
+	if (strncmp(op, filter, strlen(filter)) != 0) return;
+    }
     Func f;
     f(x, y) = e;
     f.vectorize(x, vector_width);
@@ -166,16 +171,16 @@ Expr absd(Expr a, Expr b) {
 }
 
 void check_sse_all() {
-    UniformImage in_f32(Float(32), 1);
-    UniformImage in_f64(Float(64), 1);
-    UniformImage in_i8(Int(8), 1);
-    UniformImage in_u8(UInt(8), 1);
-    UniformImage in_i16(Int(16), 1);
-    UniformImage in_u16(UInt(16), 1);
-    UniformImage in_i32(Int(32), 1);
-    UniformImage in_u32(UInt(32), 1);
-    UniformImage in_i64(Int(64), 1);
-    UniformImage in_u64(UInt(64), 1);
+    UniformImage in_f32(Float(32), 1, "in_f32");
+    UniformImage in_f64(Float(64), 1, "in_f64");
+    UniformImage in_i8(Int(8), 1, "in_i8");
+    UniformImage in_u8(UInt(8), 1, "in_u8");
+    UniformImage in_i16(Int(16), 1, "in_i16");
+    UniformImage in_u16(UInt(16), 1, "in_u16");
+    UniformImage in_i32(Int(32), 1, "in_i32");
+    UniformImage in_u32(UInt(32), 1, "in_u32");
+    UniformImage in_i64(Int(64), 1, "in_i64");
+    UniformImage in_u64(UInt(64), 1, "in_u64");
 
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
@@ -440,16 +445,16 @@ void check_sse_all() {
 }
 
 void check_neon_all() {
-    UniformImage in_f32(Float(32), 1);
-    UniformImage in_f64(Float(64), 1);
-    UniformImage in_i8(Int(8), 1);
-    UniformImage in_u8(UInt(8), 1);
-    UniformImage in_i16(Int(16), 1);
-    UniformImage in_u16(UInt(16), 1);
-    UniformImage in_i32(Int(32), 1);
-    UniformImage in_u32(UInt(32), 1);
-    UniformImage in_i64(Int(64), 1);
-    UniformImage in_u64(UInt(64), 1);
+    UniformImage in_f32(Float(32), 1, "in_f32");
+    UniformImage in_f64(Float(64), 1, "in_f64");
+    UniformImage in_i8(Int(8), 1, "in_i8");
+    UniformImage in_u8(UInt(8), 1, "in_u8");
+    UniformImage in_i16(Int(16), 1, "in_i16");
+    UniformImage in_u16(UInt(16), 1, "in_u16");
+    UniformImage in_i32(Int(32), 1, "in_i32");
+    UniformImage in_u32(UInt(32), 1, "in_u32");
+    UniformImage in_i64(Int(64), 1, "in_i64");
+    UniformImage in_u64(UInt(64), 1, "in_u64");
 
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
@@ -1335,6 +1340,9 @@ void check_neon_all() {
 }
 
 int main(int argc, char **argv) {
+
+    if (argc > 1) filter = argv[1];
+    else filter = NULL;
 
     char *target = getenv("HL_TARGET");
     if (!target || strcasecmp(target, "x86_64") == 0) {
