@@ -50,7 +50,7 @@ let rec cg_expr (con : context) (expr : expr) =
 
   (* Peephole optimizations for arm *)
   match expr with 
-    | Select (cond, thenCase, elseCase) -> 
+    | Select (cond, thenCase, elseCase) when is_vector cond -> 
         let elts = vector_elements (val_type_of_expr cond) in
         let bits = element_width (val_type_of_expr thenCase) in
         let l = cg_expr thenCase in
