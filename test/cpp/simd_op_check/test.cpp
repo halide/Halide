@@ -325,6 +325,10 @@ void check_sse_all() {
 
     check_sse("roundps", 4, round(f32_1));
     check_sse("roundpd", 2, round(f64_1));
+    check_sse("roundps", 4, floor(f32_1));
+    check_sse("roundpd", 2, floor(f64_1));
+    check_sse("roundps", 4, ceil(f32_1));
+    check_sse("roundpd", 2, ceil(f64_1));
 
     check_sse("pcmpeqq", 2, select(i64_1 == i64_2, i64(1), i64(2)));
     check_sse("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));

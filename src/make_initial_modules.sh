@@ -18,7 +18,11 @@ for arch in ptx ptx_dev arm x86 android; do
     if [[ $arch == "android" ]]; then
         CCFLAGS="-m32"
     fi
-    
+
+    if [[ $arch = "x86" || $arch = "ptx" ]]; then
+	CCFLAGS="-march=corei7"
+    fi
+
     $CLANG -emit-llvm -O3 $CCFLAGS -S $C_STUB -o -          \
         | grep -v "^target triple"             \
         | grep -v "^target datalayout"         \
