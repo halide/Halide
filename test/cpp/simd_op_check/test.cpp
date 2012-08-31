@@ -44,16 +44,17 @@ void do_job(job &j) {
     Func f = j.f;
     
     const char *llc = "../../../llvm/Release+Asserts/bin/llc";
+    const char *opt = "../../../llvm/Release+Asserts/bin/opt";
     char cmd[1024];
     snprintf(cmd, 1024, 
-	     "%s %s %s.bc -o - 2> %s.llc_stderr | "
+	     "cat %s.bc | %s -O3 -always-inline | %s %s -o - 2> %s.llc_stderr | "
 	     "sed -n '/%s.v1_loop/,/%s.v0_afterloop/p' | "
 	     "grep -v 'v1_loop' | "
 	     "grep -v 'Loop' | "
 	     "grep -v 'v0_afterloop' | "
 	     "sed 's/@.*//' > %s.s && "
 	     "grep \"\tv\\{0,1\\}%s\" %s.s > /dev/null", 
-	     llc, args, module, module, f.name().c_str(), f.name().c_str(), module, op, module);
+	     module, opt, llc, args, module, f.name().c_str(), f.name().c_str(), module, op, module);
 
     if (system(cmd) != 0) {
 	snprintf(cmd, 1024, "cat %s.llc_stderr >> %s.s", module, module);
@@ -118,11 +119,11 @@ void print_results() {
 }
 
 void check_sse(const char *op, int vector_width, Expr e) {
-    check(op, vector_width, e, "-mattr=+avx,+avx2");
+    check(op, vector_width, e, "-O3 -mattr=+avx,+avx2");
 }
 
 void check_neon(const char *op, int vector_width, Expr e) {
-    check(op, vector_width, e, "-mattr=+neon");
+    check(op, vector_width, e, "-O3 -mattr=+neon");
 }
 
 Expr i64(Expr e) {
@@ -317,8 +318,8 @@ void check_sse_all() {
     check_sse("pminsb", 16, min(i8_1, i8_2));
     check_sse("pmaxuw", 8, max(u16_1, u16_2));
     check_sse("pminuw", 8, min(u16_1, u16_2));
-    check_sse("pmaxud", 8, max(u32_1, u32_2));
-    check_sse("pminud", 8, min(u32_1, u32_2));
+    check_sse("pmaxud", 4, max(u32_1, u32_2));
+    check_sse("pminud", 4, min(u32_1, u32_2));
     check_sse("pmaxsd", 4, max(i32_1, i32_2));
     check_sse("pminsd", 4, min(i32_1, i32_2));
 
