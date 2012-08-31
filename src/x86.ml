@@ -51,9 +51,9 @@ let rec cg_expr (con:context) (expr:expr) =
   in
 
   let call_intrin name args = 
-      let t x = type_of_val_type c (val_type_of_expr x) in
-      let intrin = declare_function ("llvm.x86." ^ name) (function_type (t expr) (Array.map t args)) m in
-      build_call intrin (Array.map cg_expr args) "" b
+    let t x = type_of_val_type c (val_type_of_expr x) in
+    let intrin = declare_function ("llvm.x86." ^ name) (function_type (t expr) (Array.map t args)) m in
+    build_call intrin (Array.map cg_expr args) "" b
   in
 
   (* Peephole optimizations for x86 *)
@@ -123,7 +123,7 @@ let rec cg_expr (con:context) (expr:expr) =
 	end
 
     (* Saturating adds and subs for 8 and 16 bit ints *)
-    | Cast(IntVector(8, 16), 
+    | Cast (IntVector(8, 16), 
 	   Bop (Max, 
 		Bop (Min, 
 		     Bop (op, Cast(IntVector(wide, _), l), Cast(IntVector(_, _), r)),
@@ -134,7 +134,7 @@ let rec cg_expr (con:context) (expr:expr) =
 	| Add -> call_intrin "sse2.padds.b" [|l; r|]
 	| Sub -> call_intrin "sse2.psubs.b" [|l; r|]
       end
-    | Cast(IntVector(16, 8), 
+    | Cast (IntVector(16, 8), 
 	   Bop (Max, 
 		Bop (Min, 
 		     Bop (op, Cast(IntVector(wide, _), l), Cast(IntVector(_, _), r)),
@@ -145,6 +145,36 @@ let rec cg_expr (con:context) (expr:expr) =
 	| Add -> call_intrin "sse2.padds.w" [|l; r|]
 	| Sub -> call_intrin "sse2.psubs.w" [|l; r|]
       end
+
+    (* Saturating narrowing casts. We recognize them here, and implement them in architecture.x86.stdlib.ll *)
+    | Cast (IntVector(8, 16),
+	    Bop (Max, 
+		 Bop (Min, arg, 
+		      Broadcast (Cast (_, IntImm 127), _)),
+		 Broadcast (Cast (_, IntImm (-128)), _))) 
+	when val_type_of_expr arg = IntVector(16, 16) ->
+      con.cg_expr (Call (Extern, IntVector(8, 16), "packsswb", [arg]))
+    | Cast (UIntVector(8, 16),
+	    Bop (Max, 
+		 Bop (Min, arg, 
+		      Broadcast (Cast (_, IntImm 255), _)),
+		 Broadcast (Cast (_, IntImm 0), _))) 
+	when val_type_of_expr arg = IntVector(16, 16) ->
+      con.cg_expr (Call (Extern, UIntVector(8, 16), "packuswb", [arg]))
+    | Cast (IntVector(16, 8),
+	    Bop (Max, 
+		 Bop (Min, arg, 
+		      Broadcast (IntImm 32767, _)),
+		 Broadcast (IntImm (-32768), _))) 
+	when val_type_of_expr arg = IntVector(32, 8) ->
+      con.cg_expr (Call (Extern, IntVector(16, 8), "packssdw", [arg]))
+    | Cast (UIntVector(16, 8),
+	    Bop (Max, 
+		 Bop (Min, arg, 
+		      Broadcast (IntImm 65535, _)),
+		 Broadcast (IntImm 0, _))) 
+	when val_type_of_expr arg = IntVector(32, 8) ->
+      con.cg_expr (Call (Extern, UIntVector(16, 8), "packusdw", [arg]))
 
     (* Loads with stride one half should do one load and then shuffle *)
     (* TODO: this is buggy 
