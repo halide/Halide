@@ -151,15 +151,61 @@ let rec make_cg_context c m b sym_table arch_state =
 
     (* Extern calls *)
     | Call (Extern, t, name, args) ->
-        (* declare the extern function *)
-        let arg_types = List.map (fun arg -> type_of_val_type (val_type_of_expr arg)) args in
-        let name = base_name name in
-        let llfunc = declare_function name
-          (function_type (type_of_val_type t) (Array.of_list arg_types)) m in
+	(* If we're making a vectorized call to an extern scalar
+	   function, we need to do some extra work here *)
+        (* First, codegen the args *)
+        let llargs = Array.of_list (List.map cg_expr args) in      
+        let elts = vector_elements t in
+	(* Compure the scalar and vector names for this function *)
+        let scalar_name = base_name name in
+	let vector_name = if elts > 1 then (scalar_name ^ "x" ^ (string_of_int elts)) else scalar_name in
+	(* Look up the scalar and vector forms *)
+	let scalar_fn = lookup_function scalar_name m in
+	let vector_fn = lookup_function vector_name m in
+	(* If the scalar version doesn't exist declare it as extern *)
+	let scalar_fn = 
+	  match scalar_fn with
+	    | None -> 
+	        dbg 2 "Did not find %s in initial module. Assuming it's extern.\n%!" scalar_name;
+                let arg_types = List.map (fun arg -> type_of_val_type (element_val_type (val_type_of_expr arg))) args in
+                declare_function scalar_name (function_type (type_of_val_type (element_val_type t)) (Array.of_list arg_types)) m
+	    | Some fn -> 
+	      dbg 2 "Found %s in initial module\n%!" scalar_name;
+	      fn
+	in
 
-        (* codegen args and call *)
-        let llargs = List.map cg_expr args in
-        build_call llfunc (Array.of_list (llargs)) ("extern_" ^ name) b
+        if elts = 1 then begin
+	  (* Scalar call *)
+          build_call scalar_fn llargs ("extern_" ^ scalar_name) b
+        end else begin
+	  (* Vector call *)
+	  match vector_fn with 
+	    | None ->	      
+                dbg 2 "Did not find %s in initial module. Calling scalar version.\n%!" vector_name;
+	        (* Couldn't find a vector version. Scalarize. *)
+	        let make_call i = 
+		  let extract_elt a =
+		    let idx = const_int int_imm_t i in
+		    build_extractelement a idx "" b
+		  in
+		  let args = Array.map extract_elt llargs in
+		  build_call scalar_fn args ("extern_" ^ scalar_name) b 
+		in
+		let rec assemble_result = function
+		  | ([], _) -> undef (type_of_val_type t)
+		  | (first::rest, n) -> 
+		    build_insertelement 
+		      (assemble_result (rest, n+1)) 
+		      first 
+		      (const_int int32_imm_t n) "" b
+		in
+		let calls = List.map make_call (0 -- elts) in
+		assemble_result (calls, 0)	        
+	    | Some fn ->
+                dbg 2 "Found %s in initial module\n%!" vector_name;
+		(* Found a vector version *)
+                build_call fn llargs ("extern_" ^ vector_name) b	      
+	end
     | Call (_, _, name, _) ->
         failwith ("Can't lower call to " ^ name ^ ". This should have been replaced with a Load during lowering\n")
 
