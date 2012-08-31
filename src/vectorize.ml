@@ -81,18 +81,7 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
             Select (vc, expand va, expand vb)
               
       | Load (t, buf, idx) -> Load (vector_of_val_type t width, buf, vec idx)
-      (* For extern calls, we scalarize *)
-      (* TODO: what if a vector version exists? *)
-      | Call (Extern, t, f, args) -> 
-          let get_args idx = List.map (fun x ->
-            let x = vec x in
-            if (is_scalar x) then 
-              x 
-            else
-              ExtractElement (x, IntImm idx)
-          ) args in
-          let make_call idx = Call (Extern, t, f, get_args idx) in
-          MakeVector (List.map make_call (0 -- width))
+      (* For extern calls, we blindly vectorize, then worry about calling a scalar version later during codegen *)
       | Call (ct, t, f, args) -> 
           Call (ct, vector_of_val_type t width, f, List.map (fun arg -> expand (vec arg)) args)
 
