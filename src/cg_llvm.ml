@@ -530,7 +530,11 @@ let rec make_cg_context c m b sym_table arch_state =
     (* Return an ignorable llvalue *)
     const_int int_imm_t 0
 
-  and cg_stmt stmt = Arch.cg_stmt cg_context stmt
+  and cg_stmt stmt = 
+    dbg 2 "begin cg_stmt %s\n%!" (string_of_stmt stmt);
+    let result = Arch.cg_stmt cg_context stmt in
+    dbg 2 "end cg_stmt %s\n%!" (string_of_stmt stmt);
+    result
   and cg_stmt_inner = function
     | Store (e, buf, idx) -> cg_store e buf idx
     | For (name, min, n, order, stmt) ->
