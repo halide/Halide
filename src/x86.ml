@@ -56,8 +56,30 @@ let rec cg_expr (con:context) (expr:expr) =
     build_call intrin (Array.map cg_expr args) "" b
   in
 
-  (* Peephole optimizations for x86 *)
+  (* Peephole optimizations for x86. 
+
+     We either produce specially-crafted ll that we know will codegen
+     cleanly, call intrinsics directly, or call wrappers around
+     intrinsics that we've put in the stdlib for x86 *)
   match expr with 
+
+    (* Averaging unsigned bytes or words *)
+    | Cast (UIntVector(narrow, elts), 
+	    Bop (Div, 
+		 Bop (Add, 
+		      Bop (Add, 
+			   Cast(UIntVector(wide, _), l), 
+			   Cast(UIntVector(_, _), r)),
+		      one),
+		 two))
+	when (wide > narrow) && 
+	  (narrow = 8 || narrow = 16) &&
+	  (elts * narrow = 128) &&
+	  one = make_const (UIntVector (wide, elts)) 1 && 
+	  two = make_const (UIntVector (wide, elts)) 2 -> 
+      let intrin = if narrow = 8 then "sse2.pavg.b" else "sse2.pavg.w" in
+      call_intrin intrin [|l; r|]
+
     (* x86 doesn't do 16 bit vector division, but for constants you can do multiplication instead. *)
     | Bop (Div, x, Broadcast (Cast (UInt 16, IntImm y), 8)) ->
         let z = (65536/y + 1) in
@@ -134,6 +156,15 @@ let rec cg_expr (con:context) (expr:expr) =
 	| Add -> call_intrin "sse2.padds.b" [|l; r|]
 	| Sub -> call_intrin "sse2.psubs.b" [|l; r|]
       end
+    | Cast (UIntVector(8, 16), 
+	    Bop (Min, 
+		 Bop (op, Cast(UIntVector(wide, _), l), Cast(UIntVector(_, _), r)),
+		 Broadcast (Cast (_, IntImm 255), _)))
+	when (wide > 8) && (op = Add or op = Sub) -> 
+      begin match op with
+	| Add -> call_intrin "sse2.paddus.b" [|l; r|]
+	| Sub -> call_intrin "sse2.psubus.b" [|l; r|]
+      end
     | Cast (IntVector(16, 8), 
 	   Bop (Max, 
 		Bop (Min, 
@@ -144,6 +175,15 @@ let rec cg_expr (con:context) (expr:expr) =
       begin match op with
 	| Add -> call_intrin "sse2.padds.w" [|l; r|]
 	| Sub -> call_intrin "sse2.psubs.w" [|l; r|]
+      end
+    | Cast (UIntVector(16, 8), 
+	    Bop (Min, 
+		 Bop (op, Cast(UIntVector(wide, _), l), Cast(UIntVector(_, _), r)),
+		 Broadcast (Cast (_, IntImm 65535), _)))
+	when (wide > 16) && (op = Add or op = Sub) -> 
+      begin match op with
+	| Add -> call_intrin "sse2.paddus.w" [|l; r|]
+	| Sub -> call_intrin "sse2.psubus.w" [|l; r|]
       end
 
     (* Saturating narrowing casts. We recognize them here, and implement them in architecture.x86.stdlib.ll *)
