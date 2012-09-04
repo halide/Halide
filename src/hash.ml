@@ -57,7 +57,6 @@ let rec hash_expr e =
   match e with
     (* Buffer names, variables, and other strings don't have spaces, so we can pad with spaces to generate different hashes *)
     | IntImm n -> hash_int n
-    | UIntImm n -> hash_int n
     | FloatImm n -> hash_float n
     | Cast (t, e) -> hash_combine3 (hash_str "<Cast>") (hash_type t) (hash_expr e)
     | Var (t, str) -> hash_combine2 (hash_type t) (hash_str ("<Var>" ^ str))

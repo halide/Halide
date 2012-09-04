@@ -13,7 +13,7 @@ type val_type =
   | FloatVector of int * int
 with sexp
 
-let bool1 = UInt 1
+let bool1 = Int 1
 let u8    = UInt 8
 let u16   = UInt 16
 let u32   = UInt 32
@@ -90,7 +90,6 @@ type expr =
   (* constants *)
   (* TODO: add val_type to immediates? *)
   | IntImm of int
-  | UIntImm of int
   | FloatImm of float
       
   (* TODO: separate "cast" from "convert"?  Cast changes operational
@@ -151,7 +150,6 @@ exception ArithmeticTypeMismatch of val_type * val_type
 let rec val_type_of_expr = function
   (* Immediates are currently all 32-bit *)
   | IntImm _   -> i32
-  | UIntImm _  -> u32
   | FloatImm _ -> f32
       
   (* Binary operators and selects expect matching types on their
@@ -340,10 +338,9 @@ let is_floating x = not (is_integral x)
 
 let rec make_const x y = match x with 
   | Int 32   -> IntImm y
-  | UInt 32  -> UIntImm y
   | Float 32 -> FloatImm (float_of_int y)
   | Int b   -> Cast (Int b, IntImm y)
-  | UInt b  -> Cast (UInt b, UIntImm y)
+  | UInt b  -> Cast (UInt b, IntImm y)
   | Float b -> Cast (Float b, FloatImm (float_of_int y))
   | IntVector (b, n)   -> Broadcast (make_const (Int b) y, n)
   | UIntVector (b, n)  -> Broadcast (make_const (UInt b) y, n)
@@ -352,4 +349,4 @@ let rec make_const x y = match x with
 let make_zero x = make_const x 0
 let make_one x = make_const x 1
 
-let bool_imm x = if x then UIntImm 1 else UIntImm 0
+let bool_imm x = if x then (Cast (UInt 1, IntImm 1)) else (Cast (UInt 1, IntImm 0))

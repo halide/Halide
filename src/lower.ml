@@ -639,15 +639,17 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   dbg 1 "%s\n%!" pass_desc;
 
   let region = required_of_stmt func StringMap.empty stmt in
+  let true_val = bool_imm true in
+  let false_val = bool_imm false in
   let (check, _) = List.fold_left (fun (expr, count) range ->    
     match range with
-      | Unbounded -> (expr &&~ (IntImm 0), count+1)
+      | Unbounded -> (expr &&~ false_val, count+1)
       | Range (min, max) ->
         (expr &&~
            (min >=~ (IntImm 0)) &&~
            (max <~ (Var (i32, ".result.dim." ^ (string_of_int count)))),
          count+1)
-  ) (Cast(UInt(1), UIntImm 1), 0) region in 
+  ) (true_val, 0) region in 
   let oob_check = Assert (check, "Function may access output image out of bounds") in
 
   dump_stmt (Block [oob_check; stmt]) pass pass_desc "oob_check" 1;

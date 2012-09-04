@@ -101,8 +101,7 @@ let cg_entry e =
   in
 
   let rec cg_expr = function
-    | IntImm i
-    | UIntImm i -> C.IntConst i
+    | IntImm i -> C.IntConst i
     | FloatImm f -> C.Const (Printf.sprintf "%ff" f)
 
     | Cast (ty, e) -> C.Cast ((ctype_of_val_type ty), (cg_expr e))
