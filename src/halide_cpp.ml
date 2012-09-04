@@ -106,7 +106,6 @@ let cast_to_int x = match val_type_of_expr x with
 let _ = 
   (* Make IR nodes *)
   Callback.register "makeIntImm" (fun a -> IntImm a);
-  Callback.register "makeUIntImm" (fun a -> IntImm a);
   Callback.register "makeFloatImm" (fun a -> FloatImm a);
   Callback.register "makeCast" (fun t x -> Cast(t, x));
   Callback.register "makeAdd" (fun a b -> a +~ b);

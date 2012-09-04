@@ -103,8 +103,7 @@ let rec make_cg_context c m b sym_table arch_state =
     result
   and cg_expr_inner = function
     (* constants *)
-    | IntImm i 
-    | UIntImm i  -> const_int   (int_imm_t)   i
+    | IntImm i   -> const_int   (int_imm_t)   i
     | FloatImm f -> const_float (float_imm_t) f
 
     (* cast *)
@@ -651,8 +650,8 @@ let rec make_cg_context c m b sym_table arch_state =
     let lower_indices = offset -- (vector_elements t) in
     let upper_indices = 0 -- offset in
     
-    let extract_lower = map (fun x -> ExtractElement(lower, (UIntImm(x)))) lower_indices in
-    let extract_upper = map (fun x -> ExtractElement(upper, (UIntImm(x)))) upper_indices in
+    let extract_lower = map (fun x -> ExtractElement(lower, (IntImm(x)))) lower_indices in
+    let extract_upper = map (fun x -> ExtractElement(upper, (IntImm(x)))) upper_indices in
     let vec = MakeVector (extract_lower @ extract_upper) in
     cg_expr vec
 

@@ -140,8 +140,7 @@ let rec vectorize_stmt var stmt =
     | For (name, min, n, order, stmt) when name = var ->
       assert (not order); (* Doesn't make sense to vectorize ordered For *)
       begin match n with
-        | IntImm size
-        | UIntImm size ->
+        | IntImm size ->
           For (name, IntImm 0, IntImm 1, false, vectorize_stmt_inner min size stmt)
         | _ -> failwith "Can't vectorize map with non-constant size"
       end

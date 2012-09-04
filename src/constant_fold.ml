@@ -4,26 +4,20 @@ open Util
 
 let is_const_zero = function
   | IntImm 0 
-  | UIntImm 0
   | FloatImm 0.0
   | Broadcast (IntImm 0, _)
-  | Broadcast (UIntImm 0, _)
   | Broadcast (FloatImm 0.0, _) -> true
   | _ -> false
 and is_const_one = function
   | IntImm 1
-  | UIntImm 1
   | FloatImm 1.0
   | Broadcast (IntImm 1, _)
-  | Broadcast (UIntImm 1, _)
   | Broadcast (FloatImm 1.0, _) -> true
   | _ -> false
 and is_const = function
   | IntImm _ 
-  | UIntImm _ 
   | FloatImm _
   | Broadcast (IntImm _, _)
-  | Broadcast (UIntImm _, _)
   | Broadcast (FloatImm _, _) -> true
   | _ -> false
 
@@ -54,13 +48,8 @@ let rec constant_fold_expr expr =
     | Cast (t, e) -> 
         begin match (t, recurse e) with
           | (Int 32, IntImm x)    -> IntImm x
-          | (Int 32, UIntImm x)   -> IntImm x
           | (Int 32, FloatImm x)  -> IntImm (int_of_float x)
-          | (UInt 32, IntImm x)   -> UIntImm x
-          | (UInt 32, UIntImm x)  -> UIntImm x
-          | (UInt 32, FloatImm x) -> UIntImm (int_of_float x)
           | (Float 32, IntImm x)  -> FloatImm (float_of_int x)
-          | (Float 32, UIntImm x) -> FloatImm (float_of_int x)
           | (Float 32, FloatImm x) -> FloatImm x
           | (t, e)                -> Cast(t, recurse e)
         end
@@ -69,7 +58,6 @@ let rec constant_fold_expr expr =
     | Bop (op, a, b) ->
       begin match (op, recurse a, recurse b) with
         | (_, IntImm   x, IntImm   y) -> IntImm   (caml_iop_of_bop op x y)
-        | (_, UIntImm  x, UIntImm  y) -> UIntImm  (caml_iop_of_bop op x y)
         | (_, FloatImm x, FloatImm y) -> FloatImm (caml_fop_of_bop op x y)
 
         (* Identity operations. These are not strictly constant
@@ -136,7 +124,6 @@ let rec constant_fold_expr expr =
 
         (* Converting subtraction to addition *)
         | (Sub, x, IntImm y) -> recurse (x +~ (IntImm (-y)))
-        | (Sub, x, UIntImm y) -> recurse (x +~ (UIntImm (-y)))
         | (Sub, x, FloatImm y) -> recurse (x +~ (FloatImm (-.y)))
 
         (* Convert const + varying to varying + const (reduces the number of cases to check later) *)
@@ -194,9 +181,8 @@ let rec constant_fold_expr expr =
     | Cmp (op, a, b) ->
       begin match (recurse a, recurse b) with
         | (Broadcast (x, w), Broadcast(y, _)) -> Broadcast (recurse (Cmp (op, x, y)), w)
-        | (IntImm   x, IntImm   y)
-        | (UIntImm  x, UIntImm  y) -> UIntImm (if caml_op_of_cmp op x y then 1 else 0)
-        | (FloatImm x, FloatImm y) -> UIntImm (if caml_op_of_cmp op x y then 1 else 0)
+        | (IntImm  x, IntImm  y)   -> bool_imm (caml_op_of_cmp op x y) 
+        | (FloatImm x, FloatImm y) -> bool_imm (caml_op_of_cmp op x y) 
         | (x, y) -> Cmp (op, x, y)
       end
 
@@ -204,42 +190,41 @@ let rec constant_fold_expr expr =
     | And (a, b) ->
       begin match (recurse a, recurse b) with
         | (Broadcast (x, w), Broadcast(y, _)) -> Broadcast (recurse (And (x, y)), w)
-        | (UIntImm 0, _)
-        | (_, UIntImm 0) -> UIntImm 0
-        | (UIntImm 1, x)
-        | (x, UIntImm 1) -> x
+        | (Cast (UInt 1, IntImm 0), _)
+        | (_, Cast(UInt 1, IntImm 0)) -> Cast(UInt 1, IntImm 0)
+        | (Cast(UInt 1, IntImm 1), x)
+        | (x, Cast(UInt 1, IntImm 1)) -> x
         | (x, y) -> And (x, y)
       end
     | Or (a, b) ->
       begin match (recurse a, recurse b) with
         | (Broadcast (x, w), Broadcast(y, _)) -> Broadcast (recurse (Or (x, y)), w)
-        | (UIntImm 1, _)
-        | (_, UIntImm 1) -> UIntImm 1
-        | (UIntImm 0, x)
-        | (x, UIntImm 0) -> x
+        | (Cast(UInt 1, IntImm 1), _)
+        | (_, Cast(UInt 1, IntImm 1)) -> Cast(UInt 1, IntImm 1)
+        | (Cast(UInt 1, IntImm 0), x)
+        | (x, Cast(UInt 1, IntImm 0)) -> x
         | (x, y) -> Or (x, y)
       end
     | Not a ->
       begin match recurse a with
         | Broadcast (x, w) -> Broadcast (recurse (Not x), w)
-        | UIntImm 0 -> UIntImm 1
-        | UIntImm 1 -> UIntImm 0
+        | Cast(UInt 1, IntImm 0) -> Cast(UInt 1, IntImm 1)
+        | Cast(UInt 1, IntImm 1) -> Cast(UInt 1, IntImm 0)
         | x -> Not x
       end
     | Select (c, a, b) ->
       begin match (recurse c, recurse a, recurse b) with
         | (_, x, y) when x = y -> x
-        | (Broadcast (UIntImm 0, _), _, x) 
-        | (UIntImm 0, _, x) -> x
-        | (Broadcast (UIntImm 1, _), x, _) 
-        | (UIntImm 1, x, _) -> x
+        | (Broadcast (Cast(UInt 1, IntImm 0), _), _, x) 
+        | (Cast(UInt 1, IntImm 0), _, x) -> x
+        | (Broadcast (Cast(UInt 1, IntImm 1), _), x, _) 
+        | (Cast(UInt 1, IntImm 1), x, _) -> x
         | (c, x, y) -> Select (c, x, y)
       end
     | Load (t, buf, idx) -> Load (t, buf, recurse idx)
     | MakeVector l -> MakeVector (List.map recurse l)
     | Broadcast (e, n) -> Broadcast (recurse e, n)
     | Ramp (b, s, n) -> Ramp (recurse b, recurse s, n)
-    | ExtractElement (MakeVector l, UIntImm elem)
     | ExtractElement (MakeVector l, IntImm elem) ->
         recurse (List.nth l elem)
     | ExtractElement (Ramp (base, stride, _), elem) ->
@@ -285,7 +270,7 @@ let constant_fold_stmt stmt =
         (* Remove trivial for loops *)
         let min = constant_fold_expr min in 
         let size = constant_fold_expr size in
-        if size = IntImm 1 or size = UIntImm 1 then
+        if size = IntImm 1 then
           inner env (LetStmt (var, min, stmt))
         else
           (* Consider rewriting the loop from 0 to size - in many cases it will simplify the interior *)

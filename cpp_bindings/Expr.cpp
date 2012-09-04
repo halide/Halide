@@ -13,7 +13,6 @@ namespace Halide {
 
     ML_FUNC1(makeIntImm);
     ML_FUNC1(makeFloatImm);
-    ML_FUNC1(makeUIntImm);
     ML_FUNC1(makeVar);
     ML_FUNC2(makeUniform);
     ML_FUNC2(makeCast);
@@ -107,7 +106,7 @@ namespace Halide {
         contents->isImmediate = true;
     }
 
-    Expr::Expr(uint32_t val) : contents(new Contents(makeUIntImm(val), UInt(32))) {
+    Expr::Expr(uint32_t val) : contents(new Contents(makeCast(UInt(32).mlval, makeIntImm(val)), UInt(32))) {
         contents->isImmediate = true;
     }
 
