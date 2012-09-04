@@ -25,7 +25,7 @@ void check(const char *op, int vector_width, Expr e, const char *args) {
     if (filter) {
 	if (strncmp(op, filter, strlen(filter)) != 0) return;
     }
-    Func f;
+    Func f(std::string("test_") + op + uniqueName('_'));
     f(x, y) = e;
     f.vectorize(x, vector_width);
 
@@ -237,8 +237,8 @@ void check_sse_all() {
     check_sse("rsqrtps", 4, 1.0f / sqrt(f32_2));
     check_sse("maxps", 4, max(f32_1, f32_2));
     check_sse("minps", 4, min(f32_1, f32_2));
-    check_sse("pavgb", 16, (u8_1 + u8_2)/2);
-    check_sse("pavgw", 8, (i16_1 + i16_2)/2);
+    check_sse("pavgb", 16, u8((u16(u8_1) + u16(u8_2) + 1)/2));
+    check_sse("pavgw", 8, u16((u32(u16_1) + u32(u16_2) + 1)/2));
     check_sse("pmaxsw", 8, max(i16_1, i16_2));
     check_sse("pminsw", 8, min(i16_1, i16_2));
     check_sse("pmaxub", 16, max(u8_1, u8_2));
@@ -1147,18 +1147,18 @@ void check_neon_all() {
     // shuffles.
 
     // VRHADD	I	-	Rounding Halving Add
-    check_neon("vrhadd.s8", 16,  i8((i16(i8_1 ) + i16(i8_2 ) + i16(1))/i16(2)));
-    check_neon("vrhadd.u8", 16,  u8((u16(u8_1 ) + u16(u8_2 ) + u16(1))/u16(2)));
-    check_neon("vrhadd.s16", 8, i16((i32(i16_1) + i32(i16_2) + i32(1))/i32(2)));
-    check_neon("vrhadd.u16", 8, u16((u32(u16_1) + u32(u16_2) + u32(1))/u32(2)));
-    check_neon("vrhadd.s32", 4, i32((i64(i32_1) + i64(i32_2) + i64(1))/i64(2)));
-    check_neon("vrhadd.u32", 4, u32((u64(u32_1) + u64(u32_2) + u64(1))/u64(2)));
-    check_neon("vrhadd.s8",  8,  i8((i16(i8_1 ) + i16(i8_2 ) + i16(1))/i16(2)));
-    check_neon("vrhadd.u8",  8,  u8((u16(u8_1 ) + u16(u8_2 ) + u16(1))/u16(2)));
-    check_neon("vrhadd.s16", 4, i16((i32(i16_1) + i32(i16_2) + i32(1))/i32(2)));
-    check_neon("vrhadd.u16", 4, u16((u32(u16_1) + u32(u16_2) + u32(1))/u32(2)));
-    check_neon("vrhadd.s32", 2, i32((i64(i32_1) + i64(i32_2) + i64(1))/i64(2)));
-    check_neon("vrhadd.u32", 2, u32((u64(u32_1) + u64(u32_2) + u64(1))/u64(2)));
+    check_neon("vrhadd.s8", 16,  i8((i16(i8_1 ) + i16(i8_2 ) + 1)/2));
+    check_neon("vrhadd.u8", 16,  u8((u16(u8_1 ) + u16(u8_2 ) + 1)/2));
+    check_neon("vrhadd.s16", 8, i16((i32(i16_1) + i32(i16_2) + 1)/2));
+    check_neon("vrhadd.u16", 8, u16((u32(u16_1) + u32(u16_2) + 1)/2));
+    check_neon("vrhadd.s32", 4, i32((i64(i32_1) + i64(i32_2) + 1)/2));
+    check_neon("vrhadd.u32", 4, u32((u64(u32_1) + u64(u32_2) + 1)/2));
+    check_neon("vrhadd.s8",  8,  i8((i16(i8_1 ) + i16(i8_2 ) + 1)/2));
+    check_neon("vrhadd.u8",  8,  u8((u16(u8_1 ) + u16(u8_2 ) + 1)/2));
+    check_neon("vrhadd.s16", 4, i16((i32(i16_1) + i32(i16_2) + 1)/2));
+    check_neon("vrhadd.u16", 4, u16((u32(u16_1) + u32(u16_2) + 1)/2));
+    check_neon("vrhadd.s32", 2, i32((i64(i32_1) + i64(i32_2) + 1)/2));
+    check_neon("vrhadd.u32", 2, u32((u64(u32_1) + u64(u32_2) + 1)/2));
 
     // VRSHL	I	-	Rounding Shift Left
     // VRSHR	I	-	Rounding Shift Right
