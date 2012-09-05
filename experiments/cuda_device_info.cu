@@ -24,6 +24,20 @@ void printDevProp(cudaDeviceProp devProp)
     printf("Kernel execution timeout:      %s\n",  (devProp.kernelExecTimeoutEnabled ? "Yes" : "No"));
     return;
 }
+
+void printLimits()
+{
+    size_t val;
+    
+    cudaDeviceGetLimit(&val, cudaLimitStackSize);
+    printf("Stack size limit:    %zu\n", val);
+    
+    cudaDeviceGetLimit(&val, cudaLimitPrintfFifoSize);
+    printf("Printf fifo limit:   %zu\n", val);
+    
+    cudaDeviceGetLimit(&val, cudaLimitMallocHeapSize);
+    printf("Heap size limit:     %zu\n", val);
+}
  
 int main()
 {
@@ -41,6 +55,12 @@ int main()
         cudaDeviceProp devProp;
         cudaGetDeviceProperties(&devProp, i);
         printDevProp(devProp);
+        
+        size_t f, t;
+        cudaMemGetInfo(&f, &t);
+        printf("\n%zu free, %zu total memory\n", f, t);
+        
+        printLimits();
     }
  
     printf("\nPress any key to exit...");
