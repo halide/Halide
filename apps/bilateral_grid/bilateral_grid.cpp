@@ -20,8 +20,8 @@ int main(int argc, char **argv) {
 
     // Add a boundary condition 
     Func clamped;
-    clamped(x, y) = input(clamp(x, 0, input.width()),
-                          clamp(y, 0, input.height()));
+    clamped(x, y) = input(clamp(x, 0, input.width()-1),
+                          clamp(y, 0, input.height()-1));
 
     // Construct the bilateral grid 
     RDom r(0, s_sigma, 0, s_sigma);
@@ -70,22 +70,11 @@ int main(int argc, char **argv) {
 
     printf("Compiling for GPU");
     Var gridz = grid.arg(2);
-    grid.transpose(y, gridz).transpose(x, gridz).transpose(y, c).transpose(x, c)
-        .root().cudaTile(x, y, 16, 16);
-    grid.update().transpose(y, c).transpose(x, c).transpose(i, c).transpose(j, c)
-        .root().cudaTile(x, y, 16, 16);
-    c = blurx.arg(3);
-    blurx.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
-        .root().cudaTile(x, y, 8, 8);
-    
-    c = blury.arg(3);
-    blury.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
-        .root().cudaTile(x, y, 8, 8);
-
-    c = blurz.arg(3);
-    blurz.transpose(y, z).transpose(x, z).transpose(y, c).transpose(x, c)
-        .root().cudaTile(x, y, 8, 8);
-    
+    grid.root().cudaTile(x, y, 16, 16);
+    grid.update().root().cudaTile(x, y, 16, 16);
+    blurx.root().cudaTile(x, y, 8, 8);
+    blury.root().cudaTile(x, y, 8, 8);
+    blurz.root().cudaTile(x, y, 8, 8);
     smoothed.root().cudaTile(x, y, s_sigma, s_sigma);
     #endif
 

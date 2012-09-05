@@ -16,6 +16,9 @@ let dump_mod = dbgprint && true
 let ptx_kernel = 71
 let ptx_device = 72
 
+(* TODO: revisit this *)
+let target_triple = ""
+
 (*
 type alloc = {
   count : expr;
@@ -579,11 +582,4 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   f
 
 let env =
-  let ntid_decl   = (".llvm.ptx.read.ntid.x", [], i32, Extern) in
-  let nctaid_decl = (".llvm.ptx.read.nctaid.x", [], i32, Extern) in
-  
-  let e = Environment.empty in
-  let e = Environment.add "llvm.ptx.read.nctaid.x" nctaid_decl e in
-  let e = Environment.add "llvm.ptx.read.ntid.x" ntid_decl e in
-  
-  e
+  Environment.empty

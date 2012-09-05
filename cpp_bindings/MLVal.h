@@ -1,10 +1,12 @@
 #ifndef MLVAL_H
 #define MLVAL_H
 
-#include <memory>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-using std::shared_ptr;
+#include <tr1/memory>
+using std::tr1::shared_ptr;
 
 class MLVal {
 public:

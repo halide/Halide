@@ -167,5 +167,20 @@ DEFINE_TYPE(float)
 DEFINE_TYPE(double)
 #undef DEFINE_TYPE
 
+#define DEFINE_TYPE(T) \
+void assign_array(Image<T> &a, size_t base, size_t xstride); \
+void assign_array(Image<T> &a, size_t base, size_t xstride, size_t ystride); \
+void assign_array(Image<T> &a, size_t base, size_t xstride, size_t ystride, size_t zstride); \
+void assign_array(Image<T> &a, size_t base, size_t xstride, size_t ystride, size_t zstride, size_t wstride);
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
 #endif
 

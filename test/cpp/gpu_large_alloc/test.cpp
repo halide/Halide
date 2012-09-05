@@ -7,8 +7,8 @@ int main(int argc, char **argv) {
     Func f, g;
 
     // Up to about 40MB/image * 2 buffers seems to work on luxosr, when freshly booted
-	// 130MB works on 2GB Quadro 4000
-    int W = 1024*130, H = 1024;
+    // 130MB works on 2GB Quadro 4000
+    int W = 1024*130/4, H = 1024;
     
     printf("Defining function...\n");
 

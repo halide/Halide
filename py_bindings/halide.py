@@ -1,4 +1,8 @@
 
+# TODO:
+# - cpp_bindings/Halide.h seems to be missing in the repo, figure out what is wrong
+# - snake has an error in the test
+
 from cHalide import *
 import numpy
 import Image as PIL
@@ -132,11 +136,15 @@ def raise_error(e):
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_assign = lambda x, y: assign(x, wrap(y))
 _realize = Func.realize
+_split = Func.split
+_tile = Func.tile
 Func.__call__ = lambda self, *L: raise_error(ValueError('used f(x, y) to refer to a Func -- proper syntax is f[x, y]'))
 Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, wrap(key)), wrap(value))
 Func.__getitem__ = _generic_getitem
 Func.assign = _generic_assign
 Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
+Func.split = lambda self, a, b, c, d: _split(self, a, b, c, wrap(d))
+Func.tile = lambda self, *a: _tile(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
 
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
 
@@ -150,6 +158,9 @@ Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0
 # ----------------------------------------------------
 # Image
 # ----------------------------------------------------
+
+# Halide examples use f[x,y] convention -- flip to I[y,x] convention when converting Halide <=> numpy
+flip_xy = True
 
 def image_getattr(self, name):
     if name == '__array_interface__':
@@ -168,6 +179,9 @@ def image_getattr(self, name):
             raise ValueError('Unknown type %r'%t)
         shape = tuple([D.size(i) for i in range(D.dimensions())])
         strides = tuple([D.stride(i)*(t.bits/8) for i in range(D.dimensions())])
+        if flip_xy and len(strides) >= 2:
+            strides = (strides[1], strides[0]) + strides[2:]
+            shape = (shape[1], shape[0]) + shape[2:]
         data = image_to_string(self)
      #   print 'size', len(data)
         return {'shape': shape,
@@ -193,7 +207,7 @@ def show_image(I):
     else:
         raise ValueError('Unsupported dtype %r' % A.dtype)
    # print 'showing'
-    A = numpy.transpose(A, [1, 0] if len(A.shape) == 2 else [1, 0, 2])
+#    A = numpy.transpose(A, [1, 0] if len(A.shape) == 2 else [1, 0, 2])
     if len(A.shape) == 3 and A.shape[2] == 1:
         A = A[:,:,0]
     PIL.fromarray(A).show()
@@ -203,8 +217,49 @@ for _ImageT in ImageTypes:
     _ImageT.assign = _generic_assign
     _ImageT.__getattr__ = image_getattr
     _ImageT.show = lambda x: show_image(x)
+
+def _image_from_numpy(a):
+    a = numpy.asarray(a)
+    shape = a.shape
+    strides = a.strides
+    if flip_xy and len(shape) >= 2:
+        shape = (shape[1], shape[0]) + shape[2:]
+        strides = (strides[1], strides[0]) + strides[2:]
+        
+    d = {numpy.dtype('int8'): Image_int8,
+         numpy.dtype('int16'): Image_int16,
+         numpy.dtype('int32'): Image_int32,
+         numpy.dtype('uint8'): Image_uint8,
+         numpy.dtype('uint16'): Image_uint16,
+         numpy.dtype('uint32'): Image_uint32,
+         numpy.dtype('float32'): Image_float32,
+         numpy.dtype('float64'): Image_float64}
+
+    if a.dtype in d:
+        C = d[a.dtype]
+    else:
+        raise TypeError('No Image constructor for numpy.%r'%a.dtype)
+    
+    ans = C(*shape)
+    assign_array(ans, a.__array_interface__['data'][0], *strides)
+    return ans
     
 def Image(typeval, *args):
+    """
+    Constructors:
+    Image(typeval),    typeval=Int(n), UInt(n), Float(n)
+    Image(typeval, png_filename)
+    Image(typeval, nsize)
+    Image(typeval, w, h)
+    Image(typeval, w, h, nchan)
+    ...
+    Image(typeval, DynImage)
+    Image(typeval, UniformImage)
+    Image(numpy_array)
+    """
+    if len(args) == 0 and hasattr(typeval, '__len__'):
+        return _image_from_numpy(typeval)
+
     assert isinstance(typeval, Type)
     sig = (typeval.bits, typeval.isInt(), typeval.isUInt(), typeval.isFloat())
     
@@ -322,7 +377,18 @@ def _type_maxval(typeval):          # The typical maximum value used for image p
     else:
         raise ValueError('unknown typeval %r'%typeval)
 
+def _type_to_numpy(typeval):
+    if typeval.isInt():
+        return numpy.dtype('int%d'%typeval.bits)
+    elif typeval.isUInt():
+        return numpy.dtype('uint%d'%typeval.bits)
+    elif typeval.isFloat():
+        return numpy.dtype('float%d'%typeval.bits)
+    else:
+        raise ValueError('unknown type %r'%typeval)
+
 Type.maxval = _type_maxval
+Type.to_numpy = _type_to_numpy
 
 # ----------------------------------------------------
 # Repr
@@ -459,17 +525,36 @@ def test_core():
     
     print 'halide core: OK'
 
-def all_funcs(f):
+def visit_funcs(root_func, callback):
+    "Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func."
     d = {}
-    def visit(x):
+    def visit(x, parent):
         name = x.name()
         if name not in d:
             d[name] = x
-            for y in f.rhs().funcs():
-                visit(y)
-    visit(f)
+            callback(x, parent)
+            #print x.rhs().funcs()
+            for y in x.rhs().funcs():
+                visit(y, x)
+    visit(root_func, None)
     return d
 
+def all_funcs(root_func):
+    d = {}
+    def callback(f, parent):
+        d[f.name()] = f
+    visit_funcs(root_func, callback)
+    return d
+
+def all_vars(root_func):
+    d = {}
+    def callback(f, parent):
+        for x in f.args():
+            var = x.vars()[0]
+            d[var.name()] = var
+    visit_funcs(root_func, callback)
+    return d
+    
 def func_varlist(f):
     args = f.args()
     return [x.vars()[0].name() for x in args]
@@ -523,14 +608,18 @@ def inline_all(f):
 def roundup_multiple(x, y):
     return (x+y-1)/y*y
 
-def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, compile=True, eval_func=None): #, pad_multiple=1):
+def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None): #, pad_multiple=1):
     """
-    Utility function to filter an image file with a Halide Func, returning output Image of the same size.
+    Utility function to filter an image filename or numpy array with a Halide Func, returning output Image of the same size.
     
-    Given input and output Funcs, and filename, returns evaluate. Calling evaluate() returns the output Image.
+    Given input and output Funcs, and filename/numpy array (in_image), returns evaluate. Calling evaluate() returns the output Image.
     """
+    dtype = input.type()
     if isinstance(input, UniformImageType):
-        input_png = Image(dtype, filename)
+        if isinstance(in_image, str):
+            input_png = Image(dtype, in_image)
+        else:
+            input_png = Image(in_image)
     #print input_png.dimensions()
 #    print [input_png.size(i) for i in range(input_png.dimensions())]
     #print 'assign'
@@ -556,20 +645,26 @@ def filter_filename(input, out_func, filename, dtype=UInt(16), disp_time=False, 
                 out.assign(eval_func(input_png))
                 return out
             else:
-                out.assign(out_func.realize(w, h, nchan))
+                print 'a'
+                realized = out_func.realize(w, h, nchan)
+                print 'b'
+                out.assign(realized)
+                print 'c'
                 return out
         finally:
+            assert out.width() == w and out.height() == h and out.channels() == nchan
+            #print out.width(), out.height(), out.channels(), w, h, nchan
             if disp_time:
                 print 'Filtered in', time.time()-T0, 'secs'
     return evaluate
-    
+
 def example_out():
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
     blur_y.reset().unroll(y,16).vectorize(x,16)
     blur_y.compileJIT()
 
-    return filter_filename(input, blur_y, in_filename)()
+    return filter_image(input, blur_y, in_filename)()
     
 def test_blur():
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
@@ -600,13 +695,13 @@ def test_blur():
         #blur_y.compileJIT()
         #print 'e'
 
-        outf = filter_filename(input, blur_y, in_filename)
+        outf = filter_image(input, blur_y, in_filename)
         #print 'f'
         T0 = time.time()
         out = outf()
         T1 = time.time()
         #print 'g'
-        print T1-T0, 'secs'
+        #print T1-T0, 'secs'
     
         out.save('out2.png' if i==1 else 'out.png')
         s = image_to_string(out)
@@ -620,14 +715,15 @@ def test_blur():
     
     print 'halide blur: OK'
 
-def test_func(compile=True):
+def test_func(compile=True, in_image=in_filename):
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
-    outf = filter_filename(input, blur_y, in_filename, compile=compile)
+    outf = filter_image(input, blur_y, in_image, compile=compile)
+    out = [None]
     
     def test(func):
         T0 = time.time()
-        out = outf()
+        out[0] = outf()
         T1 = time.time()
         return T1-T0
     
@@ -641,6 +737,8 @@ def test_autotune():
 
 def test_segfault():
     locals_d = test_func(compile=False)
+    x = locals_d['x']
+    y = locals_d['y']
     c = locals_d['c']
     blur_y = locals_d['blur_y']
     test = locals_d['test']
@@ -659,11 +757,14 @@ def test_segfault():
     """
     exit_on_signal()
     
-    blur_y.unroll(c, 32)
+#    blur_y.unroll(c, -320)
+#    blur_y.vectorize(c, -320)
+#    blur_y.transpose(x, y)
     print 'Before test'
     try:
         with Watchdog(5):
             test(blur_y)
+            blur_y.update()
             print 'halide segfault: Failed to segfault'
             sys.exit(0)
     except Watchdog:
@@ -679,7 +780,9 @@ def test_examples():
     do_filter = True
     
 #    for example_name in ['interpolate']: #
-    for example_name in 'interpolate snake blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+    for example_name in 'interpolate blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+#    for example_name in 'interpolate blur dilate boxblur_sat boxblur_cumsum local_laplacian snake'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+#    for example_name in 'interpolate snake blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
         example = getattr(examples, example_name)
         first = True
 #    for example in [examples.boxblur_cumsum]:
@@ -711,10 +814,10 @@ def test_examples():
                     first = False
                     names.append((example_name, sorted(all_funcs(out_func).keys())))
         #        print 'got func'
-        #        outf = filter_filename(in_func, out_func, in_filename, dtype)
+        #        outf = filter_image(in_func, out_func, in_filename, dtype)
         #        print 'got filter'
                 if do_filter:
-                    outf = filter_filename(in_func, out_func, input_image, dtype, disp_time=True, eval_func=eval_func)
+                    outf = filter_image(in_func, out_func, input_image, disp_time=True, eval_func=eval_func)
                     out = outf()
                     out.show()
                     A = numpy.asarray(out)
@@ -726,6 +829,46 @@ def test_examples():
     for (example_name, func_names) in names:
         print example_name, func_names
 
+def test_all_funcs():
+    f = Func('f_all_funcs')
+    g = Func('g_all_funcs')
+    h = Func('h_all_funcs')
+    
+    x,y = Var(),Var()
+    h[x,y] = x**2+y**2
+    g[x,y] = h[x,y]*2
+    f[x,y] = g[x,y]+1
+    assert sorted(all_funcs(f).keys()) == ['f_all_funcs', 'g_all_funcs', 'h_all_funcs']
+    print 'test_all_funcs:   OK'
+
+def test_numpy():
+    def dist(a,b):
+        a = numpy.asarray(a, 'float64') - numpy.asarray(b, 'float64')
+        a = a.flatten()
+        return numpy.mean(numpy.abs(a))
+
+    for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]: #['int8', 'int16', 'int32', 'uint8', 'uint16', 'uint32', 'float32', 'float64']:
+        for mul in [0, 1]:
+#            a = numpy.asarray(PIL.open('lena.png'),dtype)*mul #numpy.array([[1,2],[3,4]],'float32')
+            a = numpy.asarray(Image(dtype, 'lena.png'))*mul #numpy.array([[1,2],[3,4]],'float32')
+            b = Image(a)
+            c = numpy.asarray(b)
+            assert a.dtype == c.dtype
+            assert dist(a,c) < 1e-8
+
+            if dtype == UInt(16):
+                locals_d = test_func(in_image=a)
+                test = locals_d['test']
+                blur_y = locals_d['blur_y']
+                out = locals_d['out']
+                test(blur_y)
+                #out[0].show()
+                c = numpy.asarray(out[0])
+                #print 'anorm:', dist(a,a*0), 'cnorm:', dist(c,c*0), numpy.min(a.flatten()), numpy.max(a.flatten()), numpy.min(c.flatten()), numpy.max(c.flatten()), a.dtype, c.dtype
+                assert dist(a,c)<=1000
+
+    print 'numpy: OK'
+    
 def test():
     exit_on_signal()
 #    print 'a'
@@ -735,16 +878,18 @@ def test():
 #    print 'c'
 #    pass
 
-    """
+    test_numpy()
+    test_blur()
+    test_all_funcs()
     test_core()
     test_segfault()
-    test_blur()
     test_examples()
-    """
-    test_examples()
+#    test_examples()
 #    test_autotune()
     print
     print 'All tests passed, done'
+
+#exit_on_signal()
     
 if __name__ == '__main__':
     test()

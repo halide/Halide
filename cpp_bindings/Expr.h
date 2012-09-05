@@ -1,10 +1,8 @@
 #ifndef HALIDE_EXPR_H
 #define HALIDE_EXPR_H
 
-#include <memory>
 #include <string>
 #include <vector>
-#include <tuple>
 
 #include "MLVal.h"
 #include "Type.h"
@@ -92,11 +90,8 @@ namespace Halide {
         
       private:
         struct Contents;
-        std::shared_ptr<Contents> contents;
+        shared_ptr<Contents> contents;
     };
-
-    // Force two exprs to have compatible types
-    std::tuple<Expr, Expr> matchTypes(Expr a, Expr b);
 
     // Make a binary op node
     Expr operator+(Expr, Expr);
@@ -126,7 +121,7 @@ namespace Halide {
     Expr builtin(Type, const std::string &name, Expr, Expr, Expr);
     Expr builtin(Type, const std::string &name, Expr, Expr, Expr, Expr);
 
-    // Transcendentals
+    // Transcendentals and other builtins
     Expr sqrt(Expr);
     Expr sin(Expr);
     Expr cos(Expr);
@@ -134,6 +129,9 @@ namespace Halide {
     Expr exp(Expr);
     Expr log(Expr);
     Expr floor(Expr);
+    Expr ceil(Expr);
+    Expr round(Expr);
+    Expr abs(Expr);
 
     // Make a debug node
     Expr debug(Expr, const std::string &prefix, const std::vector<Expr> &args);

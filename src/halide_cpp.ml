@@ -58,9 +58,11 @@ let compile name args stmt =
       Hashtbl.add compilation_cache func (m, f);
 
       (* Log the lowered entrypoint *)
-      let out = open_out (name ^ ".sexp") in
-      Printf.fprintf out "%s%!" (serializeEntry name args stmt);
-      close_out out;
+      if verbosity > 1 then begin
+        let out = open_out (name ^ ".sexp") in
+        Printf.fprintf out "%s%!" (serializeEntry name args stmt);
+        close_out out
+      end;
 
       (* TODO: this leaks the llcontext, and will leak the module if the cache
        * doesn't free it eventually. *)
@@ -78,13 +80,13 @@ let compile_to_file name args stmt =
   let backend = try
     Sys.getenv "HL_BACKEND"
   with Not_found ->
-    Printf.eprintf "HL_BACKEND not set - defaulting to LLVM";
+    Printf.eprintf "HL_BACKEND not set - defaulting to LLVM\n";
     "llvm"
   in
 
   try begin match backend with
     | "llvm" ->
-        ignore (initialize_native_target());
+        (* ignore (initialize_native_target()); *)
         let module Cg = Cg_for_target in
         Cg.codegen_to_bitcode_and_header (name, args, stmt)
     | "c" ->
@@ -104,7 +106,6 @@ let cast_to_int x = match val_type_of_expr x with
 let _ = 
   (* Make IR nodes *)
   Callback.register "makeIntImm" (fun a -> IntImm a);
-  Callback.register "makeUIntImm" (fun a -> IntImm a);
   Callback.register "makeFloatImm" (fun a -> FloatImm a);
   Callback.register "makeCast" (fun t x -> Cast(t, x));
   Callback.register "makeAdd" (fun a b -> a +~ b);
@@ -128,12 +129,10 @@ let _ =
   Callback.register "makeFloatType" (fun a -> Float a);
   Callback.register "makeIntType" (fun a -> Int a);
   Callback.register "makeUIntType" (fun a -> UInt a);
-  Callback.register "makeLoad" (fun t buf idx -> Load (t, "." ^ buf, idx));
   Callback.register "makeUniform" (fun t n -> Var (t, "." ^ n));
-  Callback.register "makeStore" (fun a buf idx -> Store (a, "." ^ buf, idx));
-  Callback.register "makeFor" (fun var min n stmt -> For (var, min, n, true, stmt));
-  Callback.register "inferType" (fun expr -> val_type_of_expr expr);
-  Callback.register "makeCall" (fun t name args -> Call (t, name, args));
+  Callback.register "makeFuncCall" (fun t name args -> Call (Func, t, name, args));
+  Callback.register "makeExternCall" (fun t name args -> Call (Extern, t, "." ^ name, args));
+  Callback.register "makeImageCall" (fun t name args -> Call (Image, t, "." ^ name, args));
   Callback.register "makeDebug" (fun e prefix args -> Debug (e, prefix, args));
   Callback.register "makeDefinition" (fun name argnames body -> (name, List.map (fun x -> (i32, x)) argnames, val_type_of_expr body, Pure body));
   Callback.register "makeEnv" (fun _ -> Environment.empty);
