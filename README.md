@@ -15,10 +15,10 @@ Getting Started
 ----------------
 ### Getting Halide
 
-First, you'll need gcc 4.6 or newer, because Halide uses a bunch of C++11 features. Next, grab a binary distribution of the Halide compiler from the downloads page. Right now we support OS X >=10.7 and 64-bit Ubuntu Linux.
+Right now we support OS X >=10.7 and 64-bit Ubuntu Linux. Download the appropriate package below:
 
-For Linux: https://github.com/downloads/halide/Halide/halide-linux64.tgz  
-For Mac: https://github.com/downloads/halide/Halide/halide-osx.tgz
+For Linux: https://github.com/downloads/halide/Halide/halide-20120831-linux.tgz  
+For Mac: https://github.com/downloads/halide/Halide/halide-20120831-osx.tgz
 
 These files contain the halide library (libHalide.a) and a header file (Halide.h). Unpack these in a scratch directory:
 
@@ -26,6 +26,8 @@ These files contain the halide library (libHalide.a) and a header file (Halide.h
     halide/
     halide/libHalide.a
     halide/Halide.h
+
+If you would like to use CUDA (i.e. ptx architecture) on OS X you will need to install at minimum the CUDA toolkit and drivers from http://developer.nvidia.com/cuda/cuda-downloads. On Ubuntu you just need the default ubuntu nvidia drivers. There's no need to install anything from nvidia's site.
 
 ### Using Halide
 
@@ -68,6 +70,8 @@ Save it as `hello_halide.cpp`. This defines a very simple Halide pipeline, JIT c
     $ g++-4.6 -std=c++0x hello_halide.cpp -L halide -lHalide -ldl -lpthread -o hello_halide
 
 Now run `./hello_halide`. If it prints "success", you're up and running!. 
+
+To run this with CUDA, run `HL_TARGET=ptx ./hello_halide`. If halide has trouble finding libcuda, you can manually link it in by adding `-L /usr/local/cuda/lib -lcuda` or similar to the compilation command. If it prints "success" (as well as a bunch of JITed ptx assembly), you're up and running on the GPU!
 
 ### Debugging Halide code
 
