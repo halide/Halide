@@ -1,6 +1,6 @@
 open Cg_llvm
 
-type arch = X86_64 | PTX | ARM
+type arch = X86_64 | PTX | ARM | Android
 
 let target =
   let targetstr = 
@@ -17,8 +17,9 @@ let target =
     | "x86_64" | "amd64" | "i386" -> X86_64
     | "ptx" -> PTX
     | "armv7l" -> ARM
+    | "android" -> Android
     | arch -> Printf.eprintf "`%s` is not a supported arch\n%!" arch; exit (-1) end
-
+    
 let codegen_entry,
     codegen_c_wrapper,
     codegen_to_bitcode_and_header,
@@ -26,6 +27,7 @@ let codegen_entry,
   let module CgX86 = CodegenForArch(X86) in
   let module CgPTX = CodegenForArch(Ptx) in
   let module CgARM = CodegenForArch(Arm) in
+  let module CgAndroid = CodegenForArch(Android) in
   match target with
     | X86_64 -> (CgX86.codegen_entry,
                  CgX86.codegen_c_wrapper,
@@ -39,3 +41,7 @@ let codegen_entry,
                  CgARM.codegen_c_wrapper,
                  CgARM.codegen_to_bitcode_and_header,
                  CgARM.codegen_to_file)
+    | Android -> (CgAndroid.codegen_entry,
+                  CgAndroid.codegen_c_wrapper,
+                  CgAndroid.codegen_to_bitcode_and_header,
+                  CgAndroid.codegen_to_file)

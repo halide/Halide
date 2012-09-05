@@ -42,7 +42,6 @@ and can_skip_parens op1 op2 = match (op1, op2) with
 
 and string_of_expr = function
   | IntImm(i) -> string_of_int i
-  | UIntImm(i) -> string_of_int i ^ "u"
   | FloatImm(f) -> string_of_float f
   | Cast(t, e) -> string_of_val_type t ^ "(" ^ string_of_expr e ^")"
   | Bop(outer_op, Bop(inner_op, ll, lr), r) when can_skip_parens outer_op inner_op ->
@@ -56,7 +55,7 @@ and string_of_expr = function
     "(" ^ string_of_expr c ^ "?" ^ string_of_expr t ^ ":" ^ string_of_expr f ^ ")"
   | Var(t, s) -> s ^ if_verbose ("<" ^ string_of_val_type t ^ ">")
   | Load(t, b, i) -> string_of_buffer b ^ "[" ^ string_of_expr i ^ "]"
-  | Call(t, name, args) -> name ^ if_verbose ("<" ^ string_of_val_type t ^ ">") ^ "(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ")"
+  | Call(ct, rt, name, args) -> name ^ if_verbose ("<" ^ string_of_val_type rt ^ ">") ^ "(" ^ (String.concat ", " (List.map string_of_expr args)) ^ ")"
   | MakeVector l -> "vec[" ^ (String.concat ", " (List.map string_of_expr l)) ^ "]"
   | Broadcast(e, n) -> "broadcast[" ^ string_of_expr e ^ ", " ^ string_of_int n ^ "]"
   | Ramp(b, s, n) -> "ramp[" ^ string_of_expr b ^ ", " ^ string_of_expr s ^ ", " ^ string_of_int n ^ "]"
@@ -149,8 +148,6 @@ and string_of_definition (name, args, rtype, body) =
                          reduction_domain)
                        in
         init_s ^ "\n" ^ update_s
-
-    | Extern -> s ^ " = {EXTERN}"
 
 and string_of_environment env =
   let (_,defs) = List.split (Environment.bindings env) in

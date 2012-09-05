@@ -29,7 +29,7 @@ template<typename A>
 bool test(int vec_width) {
     
     int W = vec_width*1;
-    int H = 400000;
+    int H = 40000;
 
     Image<A> input(W, H+20);
     for (int y = 0; y < H+20; y++) {
@@ -42,11 +42,11 @@ bool test(int vec_width) {
     Func f, g;
 
     Expr e = input(x, y);
-    for (int i = 1; i < 10; i++) {
+    for (int i = 1; i < 5; i++) {
         e = e + input(x, y+i);
     }
 
-    for (int i = 10; i >= 0; i--) {
+    for (int i = 5; i >= 0; i--) {
         e = e + input(x, y+i);
     }
 

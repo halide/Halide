@@ -188,6 +188,49 @@ void imul(FuncRef &f, const Expr &e) { f *= e; }
 
 //void assign(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
 
+#define DEFINE_TYPE(T) \
+void assign_array(Image<T> &a, size_t base, size_t xstride) { \
+    for (int x = 0; x < a.size(0); x++) { \
+        a(x) = *(T*)(((void *) base) + (xstride*x)); \
+    } \
+} \
+void assign_array(Image<T> &a, size_t base, size_t xstride, size_t ystride) { \
+    for (int x = 0; x < a.size(0); x++) { \
+    for (int y = 0; y < a.size(1); y++) { \
+        a(x,y) = *(T*)(((void *) base) + (xstride*x) + (ystride*y)); \
+    } \
+    } \
+} \
+void assign_array(Image<T> &a, size_t base, size_t xstride, size_t ystride, size_t zstride) { \
+    for (int x = 0; x < a.size(0); x++) { \
+    for (int y = 0; y < a.size(1); y++) { \
+    for (int z = 0; z < a.size(2); z++) { \
+        a(x,y,z) = *(T*)(((void *) base) + (xstride*x) + (ystride*y) + (zstride*z)); \
+    } \
+    } \
+    } \
+} \
+void assign_array(Image<T> &a, size_t base, size_t xstride, size_t ystride, size_t zstride, size_t wstride) { \
+    for (int x = 0; x < a.size(0); x++) { \
+    for (int y = 0; y < a.size(1); y++) { \
+    for (int z = 0; z < a.size(2); z++) { \
+    for (int w = 0; w < a.size(3); w++) { \
+        a(x,y,z,w) = *(T*)(((void *) base) + (xstride*x) + (ystride*y) + (zstride*z) + (wstride*w)); \
+    } \
+    } \
+    } \
+    } \
+}
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
 /*
 void test_blur() {
   UniformImage input(UInt(16), 2, "inputimage");
@@ -207,3 +250,4 @@ int main() {
     return 0;
 }
 */
+

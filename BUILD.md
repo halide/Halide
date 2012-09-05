@@ -13,11 +13,12 @@ On OS X, I recommend using [ODB](https://github.com/thelema/odb/) to install add
 Summary
 -------
 - Install OCaml (3.12.*)  
-  (On Mac, just use Homebrew: `brew install objective-caml`, or MacPorts: `sudo port install ocaml`)
+  On Mac, use Homebrew: `brew install objective-caml`, 
+  or MacPorts: `sudo port install ocaml`)
 
 - Install GCC 4.6/4.7 - `g++-4.6` or `g++-4.7` must be in your `$PATH`  
-  (On Mac, Homebrew is highly recommended: `brew
-install https://raw.github.com/adamv/homebrew-alt/master/duplicates/gcc.rb --enable-cxx`)
+  On Mac using Homebrew: `brew install https://raw.github.com/adamv/homebrew-alt/master/duplicates/gcc.rb --enable-cxx`
+  using MacPorts: sudo port install gcc47
 
 - `./bootstrap` to build everything (and wait -- this builds all of LLVM, which takes a while)
 

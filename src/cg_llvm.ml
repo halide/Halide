@@ -28,11 +28,12 @@ module type Architecture = sig
   type state
   type context = state cg_context
 
+  val target_triple : string
+
   val start_state : unit -> state
 
   (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)
-  val codegen_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context ->
-                      entrypoint -> llvalue
+  val codegen_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context -> entrypoint -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
   val malloc  : context -> string -> expr -> expr -> (llvalue * (context -> unit))
@@ -102,8 +103,7 @@ let rec make_cg_context c m b sym_table arch_state =
     result
   and cg_expr_inner = function
     (* constants *)
-    | IntImm i 
-    | UIntImm i  -> const_int   (int_imm_t)   i
+    | IntImm i   -> const_int   (int_imm_t)   i
     | FloatImm f -> const_float (float_imm_t) f
 
     (* cast *)
@@ -121,8 +121,9 @@ let rec make_cg_context c m b sym_table arch_state =
     | Bop (Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
     | Bop (Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
     | Bop (Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
-    | Bop (Min, l, r) -> cg_minmax Min l r
-    | Bop (Max, l, r) -> cg_minmax Max l r
+    (* In most cases architecture-specific code should pick up min and max and generate something better *)
+    | Bop (Min, l, r) -> cg_expr (Select (l <~ r, l, r))
+    | Bop (Max, l, r) -> cg_expr (Select (l <~ r, r, l))
     | Bop (Mod, l, r) -> cg_mod l r
 
     (* comparison *)
@@ -139,21 +140,6 @@ let rec make_cg_context c m b sym_table arch_state =
     | Not l -> build_not (cg_expr l) "" b
 
     (* Select *)
-    | Select (cond, thenCase, elseCase) when is_vector cond ->         
-        (* build_select really doesn't work yet for vector conditions *)
-        let elts = vector_elements (val_type_of_expr cond) in
-        let bits = element_width (val_type_of_expr thenCase) in
-        let l = cg_expr thenCase in
-        let r = cg_expr elseCase in
-        let mask = cg_expr cond in
-        let mask = build_sext mask (type_of_val_type (IntVector (bits, elts))) "" b in
-        let ones = const_all_ones (type_of mask) in
-        let inv_mask = build_xor mask ones "" b in
-        let t = type_of l in
-        let l = build_bitcast l (type_of mask) "" b in
-        let r = build_bitcast r (type_of mask) "" b in
-        let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
-        build_bitcast result t "" b
     | Select (c, t, f) ->
         build_select (cg_expr c) (cg_expr t) (cg_expr f) "" b 
 
@@ -163,16 +149,64 @@ let rec make_cg_context c m b sym_table arch_state =
     | Var (vt, name) -> sym_get name
 
     (* Extern calls *)
-    | Call (t, name, args) ->
-        (* declare the extern function *)
-        let arg_types = List.map (fun arg -> type_of_val_type (val_type_of_expr arg)) args in
-        let name = base_name name in
-        let llfunc = declare_function name
-          (function_type (type_of_val_type t) (Array.of_list arg_types)) m in
+    | Call (Extern, t, name, args) ->
+	(* If we're making a vectorized call to an extern scalar
+	   function, we need to do some extra work here *)
+        (* First, codegen the args *)
+        let llargs = Array.of_list (List.map cg_expr args) in      
+        let elts = vector_elements t in
+	(* Compure the scalar and vector names for this function *)
+        let scalar_name = base_name name in
+	let vector_name = if elts > 1 then (scalar_name ^ "x" ^ (string_of_int elts)) else scalar_name in
+	(* Look up the scalar and vector forms *)
+	let scalar_fn = lookup_function scalar_name m in
+	let vector_fn = lookup_function vector_name m in
+	(* If the scalar version doesn't exist declare it as extern *)
+	let scalar_fn = 
+	  match scalar_fn with
+	    | None -> 
+	        dbg 2 "Did not find %s in initial module. Assuming it's extern.\n%!" scalar_name;
+                let arg_types = List.map (fun arg -> type_of_val_type (element_val_type (val_type_of_expr arg))) args in
+                declare_function scalar_name (function_type (type_of_val_type (element_val_type t)) (Array.of_list arg_types)) m
+	    | Some fn -> 
+	      dbg 2 "Found %s in initial module\n%!" scalar_name;
+	      fn
+	in
 
-        (* codegen args and call *)
-        let llargs = List.map cg_expr args in
-        build_call llfunc (Array.of_list (llargs)) ("extern_" ^ name) b
+        if elts = 1 then begin
+	  (* Scalar call *)
+          build_call scalar_fn llargs ("extern_" ^ scalar_name) b
+        end else begin
+	  (* Vector call *)
+	  match vector_fn with 
+	    | None ->	      
+                dbg 2 "Did not find %s in initial module. Calling scalar version.\n%!" vector_name;
+	        (* Couldn't find a vector version. Scalarize. *)
+	        let make_call i = 
+		  let extract_elt a =
+		    let idx = const_int int_imm_t i in
+		    build_extractelement a idx "" b
+		  in
+		  let args = Array.map extract_elt llargs in
+		  build_call scalar_fn args ("extern_" ^ scalar_name) b 
+		in
+		let rec assemble_result = function
+		  | ([], _) -> undef (type_of_val_type t)
+		  | (first::rest, n) -> 
+		    build_insertelement 
+		      (assemble_result (rest, n+1)) 
+		      first 
+		      (const_int int32_imm_t n) "" b
+		in
+		let calls = List.map make_call (0 -- elts) in
+		assemble_result (calls, 0)	        
+	    | Some fn ->
+                dbg 2 "Found %s in initial module\n%!" vector_name;
+		(* Found a vector version *)
+                build_call fn llargs ("extern_" ^ vector_name) b	      
+	end
+    | Call (_, _, name, _) ->
+        failwith ("Can't lower call to " ^ name ^ ". This should have been replaced with a Load during lowering\n")
 
     (* Let expressions *)
     | Let (name, l, r) -> 
@@ -248,20 +282,6 @@ let rec make_cg_context c m b sym_table arch_state =
           let made_positive = build_add initial_mod r "" b in
           build_srem made_positive r "" b
 
-  and cg_minmax op l r =
-    let cmp = match (op, element_val_type (val_type_of_expr l)) with 
-      | (Min, Float _) -> build_fcmp Fcmp.Olt
-      | (Max, Float _) -> build_fcmp Fcmp.Ogt
-      | (Min, Int _) -> build_icmp Icmp.Slt
-      | (Max, Int _) -> build_icmp Icmp.Sgt
-      | (Min, UInt _) -> build_icmp Icmp.Ult
-      | (Max, UInt _) -> build_icmp Icmp.Ugt
-      | (_, _) -> failwith "cg_minmax with non-min/max op"
-    in
-    let l = cg_expr l in
-    let r = cg_expr r in
-    build_select (cmp l r "" b) l r "" b
-
   and cg_cmp iop uop fop l r =
     cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
 
@@ -282,6 +302,7 @@ let rec make_cg_context c m b sym_table arch_state =
       | UInt(fb), UInt(tb) when fb < tb ->
           simple_cast build_zext e t
 
+	    (* 
       (* Some common casts can be done more efficiently by bitcasting
          and doing vector shuffles (assuming little-endianness) *)
 
@@ -307,6 +328,7 @@ let rec make_cg_context c m b sym_table arch_state =
             | x -> (const_int int_imm_t (fw-x))::(const_int int_imm_t (2*fw-x))::(indices (x-1)) in                
           let shuffle = build_shufflevector (cg_expr e) zero_vector (const_vector (Array.of_list (indices fw))) "" b in
           build_bitcast shuffle (type_of_val_type t) "" b
+	    *)
 
       (* For signed ints we need to do sign extension 
       | IntVector(fb, fw), UIntVector(tb, tw) 
@@ -507,7 +529,11 @@ let rec make_cg_context c m b sym_table arch_state =
     (* Return an ignorable llvalue *)
     const_int int_imm_t 0
 
-  and cg_stmt stmt = Arch.cg_stmt cg_context stmt
+  and cg_stmt stmt = 
+    dbg 2 "begin cg_stmt %s\n%!" (string_of_stmt stmt);
+    let result = Arch.cg_stmt cg_context stmt in
+    dbg 2 "end cg_stmt %s\n%!" (string_of_stmt stmt);
+    result
   and cg_stmt_inner = function
     | Store (e, buf, idx) -> cg_store e buf idx
     | For (name, min, n, order, stmt) ->
@@ -551,7 +577,7 @@ let rec make_cg_context c m b sym_table arch_state =
   and cg_store e buf idx =
     (* ignore(cg_debug e ("Store to " ^ buf ^ " ") [idx; e]); *)
     match (is_vector e, is_vector idx) with
-      | (_, true) ->
+      | (true, true) ->
         begin match idx with
           (* Aligned dense vector store: ramp stride 1 && idx base % vec width = 0 *)
           | Ramp(b, IntImm(1), n) when Analysis.reduce_expr_modulo b n = Some 0 ->            
@@ -564,14 +590,11 @@ let rec make_cg_context c m b sym_table arch_state =
         end
 
       | (false, false) -> build_store (cg_expr e) (cg_memref (val_type_of_expr e) buf idx) b
-
+      | (false, true)  -> failwith "Can't store a scalar to a vector address"
       | (true, false)  -> failwith "Can't store a vector to a scalar address"
 
   and cg_aligned_store e buf idx =
-    let w = vector_elements (val_type_of_expr idx) in
-    (* Handle aligned dense vector store of scalar by broadcasting first *)
-    let expr = if is_scalar e then Broadcast(e, w) else e in
-    build_store (cg_expr expr) (cg_memref (val_type_of_expr expr) buf idx) b
+    build_store (cg_expr e) (cg_memref (val_type_of_expr e) buf idx) b
 
   and cg_unaligned_store e buf idx =
     (* Architectures that can handle this better should *)
@@ -587,7 +610,7 @@ let rec make_cg_context c m b sym_table arch_state =
     let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
     let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
     let get_elem i    = build_extractelement value (const_int int_imm_t i) "" b in
-    let store_idx i   = build_store (if is_vector e then (get_elem i) else value) (addr_of_idx i) b in
+    let store_idx i   = build_store (get_elem i) (addr_of_idx i) b in
     List.hd (List.map store_idx (0 -- vector_elements (val_type_of_expr e)))
 
   and cg_load t buf idx =
@@ -627,8 +650,8 @@ let rec make_cg_context c m b sym_table arch_state =
     let lower_indices = offset -- (vector_elements t) in
     let upper_indices = 0 -- offset in
     
-    let extract_lower = map (fun x -> ExtractElement(lower, (UIntImm(x)))) lower_indices in
-    let extract_upper = map (fun x -> ExtractElement(upper, (UIntImm(x)))) upper_indices in
+    let extract_lower = map (fun x -> ExtractElement(lower, (IntImm(x)))) lower_indices in
+    let extract_upper = map (fun x -> ExtractElement(upper, (IntImm(x)))) upper_indices in
     let vec = MakeVector (extract_lower @ extract_upper) in
     cg_expr vec
 
@@ -842,6 +865,11 @@ let codegen_entry (e:entrypoint) =
   (* construct basic LLVM state *)
   let c = create_context () in
   let m = create_module c ("<" ^ name ^ "_halide_host>") in
+
+  if Arch.target_triple != "" then 
+    set_target_triple Arch.target_triple m 
+  else 
+    ignore (Llvm_executionengine.initialize_native_target());
 
   (* codegen *)
   let f = Arch.codegen_entry c m cg_entry make_cg_context e in

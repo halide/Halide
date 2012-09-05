@@ -13,10 +13,8 @@ namespace Halide {
 
     ML_FUNC1(makeIntImm);
     ML_FUNC1(makeFloatImm);
-    ML_FUNC1(makeUIntImm);
     ML_FUNC1(makeVar);
     ML_FUNC2(makeUniform);
-    ML_FUNC3(makeLoad);
     ML_FUNC2(makeCast);
     ML_FUNC2(makeAdd);
     ML_FUNC2(makeSub);
@@ -33,11 +31,12 @@ namespace Halide {
     ML_FUNC2(makeMin);
     ML_FUNC3(makeSelect);
     ML_FUNC3(makeDebug);
-    ML_FUNC3(makeCall);
+    ML_FUNC3(makeFuncCall);
+    ML_FUNC3(makeExternCall);
+    ML_FUNC3(makeImageCall);
     ML_FUNC2(makeAnd);
     ML_FUNC2(makeOr);
     ML_FUNC1(makeNot);
-    ML_FUNC1(inferType);
 
     template<typename T>
     void set_add(std::vector<T> &a, const T &b) {
@@ -107,7 +106,7 @@ namespace Halide {
         contents->isImmediate = true;
     }
 
-    Expr::Expr(uint32_t val) : contents(new Contents(makeUIntImm(val), UInt(32))) {
+    Expr::Expr(uint32_t val) : contents(new Contents(makeCast(UInt(32).mlval, makeIntImm(val)), UInt(32))) {
         contents->isImmediate = true;
     }
 
@@ -146,16 +145,30 @@ namespace Halide {
         contents->uniforms.push_back(u);
     }
 
-    Expr::Expr(const ImageRef &l) :
-        contents(new Contents(makeLoad(l.image.type().mlval, l.image.name(), l.idx.node()), l.image.type())) {
+    Expr::Expr(const ImageRef &l) {        
+        MLVal args = makeList();
+        for (size_t i = l.idx.size(); i > 0; i--) {
+            args = addToList(args, l.idx[i-1].node());
+        }
+        MLVal node = makeImageCall(l.image.type().mlval, l.image.name(), args);
+        contents.reset(new Contents(node, l.image.type()));
+        for (size_t i = 0; i < l.idx.size(); i++) {
+            child(l.idx[i]);
+        }
         contents->images.push_back(l.image);
-        child(l.idx);
     }
 
-    Expr::Expr(const UniformImageRef &l) : 
-        contents(new Contents(makeLoad(l.image.type().mlval, l.image.name(), l.idx.node()), l.image.type())) {
+    Expr::Expr(const UniformImageRef &l) {
+        MLVal args = makeList();
+        for (size_t i = l.idx.size(); i > 0; i--) {
+            args = addToList(args, l.idx[i-1].node());
+        }
+        MLVal node = makeImageCall(l.image.type().mlval, l.image.name(), args);
+        contents.reset(new Contents(node, l.image.type()));
+        for (size_t i = 0; i < l.idx.size(); i++) {
+            child(l.idx[i]);
+        }
         contents->uniformImages.push_back(l.image);
-        child(l.idx);
     }
 
     Expr::Expr(const Expr &other) : contents(other.contents) {        
@@ -486,14 +499,14 @@ namespace Halide {
 
     Expr builtin(Type t, const std::string &name) {
         MLVal args = makeList();
-        Expr e(makeCall(t.mlval, "." + name, args), t);
+        Expr e(makeExternCall(t.mlval, name, args), t);
         return e;
     }
 
     Expr builtin(Type t, const std::string &name, Expr a) {
         MLVal args = makeList();
         args = addToList(args, a.node());
-        Expr e(makeCall(t.mlval, "." + name, args), t);
+        Expr e(makeExternCall(t.mlval, name, args), t);
         e.child(a);
         return e;
     }
@@ -502,7 +515,7 @@ namespace Halide {
         MLVal args = makeList();
         args = addToList(args, b.node());
         args = addToList(args, a.node());
-        Expr e(makeCall(t.mlval, "." + name, args), t);
+        Expr e(makeExternCall(t.mlval, name, args), t);
         e.child(a);
         e.child(b);
         return e;
@@ -513,7 +526,7 @@ namespace Halide {
         args = addToList(args, c.node());
         args = addToList(args, b.node());
         args = addToList(args, a.node());
-        Expr e(makeCall(t.mlval, "." + name, args), t);
+        Expr e(makeExternCall(t.mlval, name, args), t);
         e.child(a);
         e.child(b);
         e.child(c);
@@ -526,7 +539,7 @@ namespace Halide {
         args = addToList(args, c.node());
         args = addToList(args, b.node());
         args = addToList(args, a.node());
-        Expr e(makeCall(t.mlval, "." + name, args), t);
+        Expr e(makeExternCall(t.mlval, name, args), t);
         e.child(a);
         e.child(b);
         e.child(c);
@@ -535,49 +548,95 @@ namespace Halide {
     }
 
     Expr sqrt(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to sqrt must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "sqrt_f64", a);
+	}
+	// Otherwise cast to float
         a = cast(Float(32), a);
         return builtin(Float(32), "sqrt_f32", a);
     }
 
     Expr sin(Expr a) {
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "sin_f64", a);
+	}
         //assert(a.type() == Float(32) && "Argument to sin must be a float");
         a = cast(Float(32), a);
         return builtin(Float(32), "sin_f32", a);
     }
     
     Expr cos(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to cos must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "cos_f64", a);
+	}
         a = cast(Float(32), a);
         return builtin(Float(32), "cos_f32", a);
     }
 
     Expr pow(Expr a, Expr b) {
-        //assert(a.type() == Float(32) && "First argument to pow must be a float");
-        //assert(b.type() == Float(32) && "Second argument to pow must be a floats");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "pow_f64", a, cast(Float(64), b));
+	}
         a = cast(Float(32), a);
         b = cast(Float(32), b);        
         return builtin(Float(32), "pow_f32", a, b);
     }
 
     Expr exp(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to exp must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "exp_f64", a);
+	}
         a = cast(Float(32), a);
         return builtin(Float(32), "exp_f32", a);
     }
 
     Expr log(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to log must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "log_f64", a);
+	}
         a = cast(Float(32), a);
         return builtin(Float(32), "log_f32", a);
     }
 
     Expr floor(Expr a) {
-        //assert(a.type() == Float(32) && "Argument to floor must be a float");
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "floor_f64", a);
+	}
         a = cast(Float(32), a);
         return builtin(Float(32), "floor_f32", a);
     }
 
+    Expr ceil(Expr a) {
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "ceil_f64", a);
+	}
+        a = cast(Float(32), a);
+        return builtin(Float(32), "ceil_f32", a);
+    }
+
+    Expr round(Expr a) {
+	if (a.type() == Float(64)) {
+	    return builtin(Float(64), "round_f64", a);
+	}
+        a = cast(Float(32), a);
+        return builtin(Float(32), "round_f32", a);
+    }
+
+    Expr abs(Expr a) {
+	if (a.type() == Int(8))
+	    return builtin(Int(8), "abs_i8", a);
+	if (a.type() == Int(16)) 
+	    return builtin(Int(16), "abs_i16", a);
+	if (a.type() == Int(32)) 
+	    return builtin(Int(32), "abs_i32", a);
+	if (a.type() == Int(64)) 
+	    return builtin(Int(64), "abs_i64", a);
+	if (a.type() == Float(32)) 
+	    return builtin(Float(32), "abs_f32", a);
+	if (a.type() == Float(64)) 
+	    return builtin(Float(64), "abs_f64", a);
+	assert(0 && "Invalid type for abs");
+    }
 
     Expr select(Expr cond, Expr thenCase, Expr elseCase) {
         //assert(thenCase.type() == elseCase.type() && "then case must have same type as else case in select");
@@ -592,7 +651,8 @@ namespace Halide {
     }
     
     Expr max(Expr a, Expr b) {
-        assert(a.type() == b.type() && "Arguments to max must have the same type");
+        //assert(a.type() == b.type() && "Arguments to max must have the same type");
+	std::tie(a, b) = matchTypes(a, b);
         Expr e(makeMax(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -600,15 +660,18 @@ namespace Halide {
     }
 
     Expr min(Expr a, Expr b) {
-        assert(a.type() == b.type() && "Arguments to min must have the same type");
+        //assert(a.type() == b.type() && "Arguments to min must have the same type");
+	std::tie(a, b) = matchTypes(a, b);
         Expr e(makeMin(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
     
-    Expr clamp(Expr a, Expr mi, Expr ma) {
-        assert(a.type() == mi.type() && a.type() == ma.type() && "Arguments to clamp must have the same type");
+    Expr clamp(Expr a, Expr mi, Expr ma) {	
+	//assert(a.type() == mi.type() && a.type() == ma.type() && "Arguments to clamp must have the same type");
+	mi = cast(a.type(), mi);
+	ma = cast(a.type(), ma);
         return max(min(a, ma), mi);
     }
 
@@ -645,9 +708,9 @@ namespace Halide {
             exprlist = addToList(exprlist, f.args()[i-1].node());            
         }
 
-        node = makeCall(f.f().returnType().mlval, 
-                        (f.f().name()),
-                        exprlist);
+        node = makeFuncCall(f.f().returnType().mlval, 
+                            (f.f().name()),
+                            exprlist);
         type = f.f().returnType();
 
         for (size_t i = 0; i < f.args().size(); i++) {

@@ -26,11 +26,6 @@ int main(int argc, char **argv) {
     hist(clamp(cast<int>(in(r.x, r.y)), 0, 255))++;
 
     if (use_gpu()) {
-        Var tx("threadidx"),
-            bx("blockidx"),
-            ty("threadidy"),
-            by("blockidy");
-        
 	hist.cudaTile(hist.arg(0), 64);
 	hist.update().cudaTile(r.x, r.y, 16, 16);
     } else {

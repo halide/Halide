@@ -10,7 +10,7 @@ ext_modules = [Extension("_cHalide", ["cHalide_wrap.cxx", 'py_util.cpp', 'enviro
                          #libraries=['Halide.a'],
                          library_dirs=['/opt/local/lib'],
                          ##extra_link_args=[], #['../cpp_bindings/Halide.a'],
-                         extra_link_args=['../cpp_bindings/Halide.a', '-lpthread', '-ldl', '-lpng', '-lpng14', '-lglib-2.0', '-lgio-2.0', '-lt1', '-lstdc++', '-lc'],
+                         extra_link_args=['../cpp_bindings/libHalide.a', '-lpthread', '-ldl', '-lpng', '-lpng14', '-lglib-2.0', '-lgio-2.0', '-lt1', '-lstdc++', '-lc'],
                          language='c++')]
 
 setup(

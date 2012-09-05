@@ -28,6 +28,11 @@ let hash_str str = (Hashtbl.hash str,
                     Hashtbl.hash (str ^ "  "),
                     Hashtbl.hash (str ^ "   "))
 
+let hash_call_type = function
+  | Func -> hash_int 0
+  | Extern -> hash_int 1
+  | Image -> hash_int 2
+
 let hash_combine2 (a, b, c, d) (e, f, g, h) =
   let rand = Random.State.make [|a; b; c; d; e; f; g; h|] in  
   (Random.State.bits rand, Random.State.bits rand, Random.State.bits rand, Random.State.bits rand)
@@ -52,7 +57,6 @@ let rec hash_expr e =
   match e with
     (* Buffer names, variables, and other strings don't have spaces, so we can pad with spaces to generate different hashes *)
     | IntImm n -> hash_int n
-    | UIntImm n -> hash_int n
     | FloatImm n -> hash_float n
     | Cast (t, e) -> hash_combine3 (hash_str "<Cast>") (hash_type t) (hash_expr e)
     | Var (t, str) -> hash_combine2 (hash_type t) (hash_str ("<Var>" ^ str))
@@ -100,9 +104,9 @@ let rec hash_expr e =
       hash_combine4 (hash_str "<Ramp>") (hash_expr b) (hash_expr s) (hash_int n)
     | ExtractElement (a, b) ->
       hash_combine3 (hash_str "<ExtractElement>") (hash_expr a) (hash_expr b)
-    | Call (ty, name, args) ->
+    | Call (ct, ty, name, args) ->
         List.fold_left hash_combine2 
-          (hash_combine3 (hash_str "<Call>") (hash_str name) (hash_type ty))
+          (hash_combine4 (hash_str "<Call>") (hash_call_type ct) (hash_str name) (hash_type ty))
           (List.map hash_expr args)
     | Debug (e, fmt, args) ->
         List.fold_left hash_combine2 
