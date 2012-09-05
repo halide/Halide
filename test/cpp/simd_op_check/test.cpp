@@ -197,7 +197,7 @@ void check_sse_all() {
 
     const int min_i8 = -128, max_i8 = 127;
     const int min_i16 = -32768, max_i16 = 32767;
-    const int min_i32 = 0x80000000, max_i32 = 0x7fffffff;
+    // const int min_i32 = 0x80000000, max_i32 = 0x7fffffff;
     const int max_u8 = 255;
     const int max_u16 = 65535;
 
@@ -217,6 +217,7 @@ void check_sse_all() {
     check_sse("paddd", 4, i32_1 + i32_2);
     check_sse("psubd", 4, i32_1 - i32_2);
     check_sse("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
+    check_sse("pmulhw", 8, i16_1 / 15);
     check_sse("pmullw", 8, i16_1 * i16_2);
 
     check_sse("pcmpeqb", 16, select(u8_1 == u8_2, u8(1), u8(2)));
@@ -243,7 +244,8 @@ void check_sse_all() {
     check_sse("pminsw", 8, min(i16_1, i16_2));
     check_sse("pmaxub", 16, max(u8_1, u8_2));
     check_sse("pminub", 16, min(u8_1, u8_2));
-    check_sse("pmulhuw", 8, i16((i32(i16_1) * i32(i16_2))/(256*256)));
+    check_sse("pmulhuw", 8, u16((u32(u16_1) * u32(u16_2))/(256*256)));
+    check_sse("pmulhuw", 8, u16_1 / 15);
 
     /* Not implemented yet in the front-end
     check_sse("andnps", 4, bool1 & (!bool2));
@@ -411,8 +413,8 @@ void check_sse_all() {
     check_sse("vpcmpeqd", 8, select(u32_1 == u32_2, u32(1), u32(2)));
     check_sse("vpcmpgtd", 8, select(u32_1 > u32_2, u32(1), u32(2)));    
     
-    check_sse("vpavgb", 32, (u8_1 + u8_2)/2);
-    check_sse("vpavgw", 16, (i16_1 + i16_2)/2);
+    check_sse("vpavgb", 32, u8((u16(u8_1) + u16(u8_2) + 1)/2));
+    check_sse("vpavgw", 16, u16((u32(u16_1) + u32(u16_2) + 1)/2));
     check_sse("vpmaxsw", 16, max(i16_1, i16_2));
     check_sse("vpminsw", 16, min(i16_1, i16_2));
     check_sse("vpmaxub", 32, max(u8_1, u8_2));
@@ -477,7 +479,7 @@ void check_neon_all() {
 
     const int min_i8 = -128, max_i8 = 127;
     const int min_i16 = -32768, max_i16 = 32767;
-    const int min_i32 = 0x80000000, max_i32 = 0x7fffffff;
+    //const int min_i32 = 0x80000000, max_i32 = 0x7fffffff;
     const int max_u8 = 255;
     const int max_u16 = 65535;
 
@@ -1024,18 +1026,18 @@ void check_neon_all() {
     // VQABS	I	-	Saturating Absolute
     check_neon("vqabs.s8", 16, i8(min(abs(i16(i8_1)),   max_i8)));
     check_neon("vqabs.s16", 8, i16(min(abs(i32(i16_1)), max_i16)));
-    check_neon("vqabs.s32", 4, i32(min(abs(i64(i32_1)), max_i32)));
+    //check_neon("vqabs.s32", 4, i32(min(abs(i64(i32_1)), max_i32)));
     check_neon("vqabs.s8",  8, i8(min(abs(i16(i8_1)),   max_i8)));
     check_neon("vqabs.s16", 4, i16(min(abs(i32(i16_1)), max_i16)));
-    check_neon("vqabs.s32", 2, i32(min(abs(i64(i32_1)), max_i32)));
+    //check_neon("vqabs.s32", 2, i32(min(abs(i64(i32_1)), max_i32)));
 
     // VQADD	I	-	Saturating Add
     check_neon("vqadd.s8", 16,  i8(clamp(i16(i8_1)  + i16(i8_2),  min_i8,  max_i8)));
     check_neon("vqadd.s16", 8, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
-    check_neon("vqadd.s32", 8, i32(clamp(i64(i32_1) + i64(i32_2), min_i32, max_i32)));
+    //check_neon("vqadd.s32", 8, i32(clamp(i64(i32_1) + i64(i32_2), min_i32, max_i32)));
     check_neon("vqadd.s8",  8,  i8(clamp(i16(i8_1)  + i16(i8_2),  min_i8,  max_i8)));
     check_neon("vqadd.s16", 4, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
-    check_neon("vqadd.s32", 4, i32(clamp(i64(i32_1) + i64(i32_2), min_i32, max_i32)));
+    //check_neon("vqadd.s32", 4, i32(clamp(i64(i32_1) + i64(i32_2), min_i32, max_i32)));
 
     check_neon("vqadd.u8", 16,  u8(min(u16(u8_1)  + u16(u8_2),  max_u8)));
     check_neon("vqadd.u16", 8, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
@@ -1061,7 +1063,7 @@ void check_neon_all() {
     // VQMOVN	I	-	Saturating Move and Narrow
     check_neon("vqmovn.s16", 8,  i8(clamp(i16_1, min_i8,  max_i8)));
     check_neon("vqmovn.s32", 4, i16(clamp(i32_1, min_i16, max_i16)));
-    check_neon("vqmovn.s64", 2, i32(clamp(i64_1, min_i32, max_i32)));
+    //check_neon("vqmovn.s64", 2, i32(clamp(i64_1, min_i32, max_i32)));
     check_neon("vqmovn.u16", 8,  u8(min(u16_1, max_u8)));
     check_neon("vqmovn.u32", 4, u16(min(u32_1, max_u16)));
     // Can't do the 64-bit one because we only have signed 32-bit consts
@@ -1074,10 +1076,10 @@ void check_neon_all() {
     // VQNEG	I	-	Saturating Negate
     check_neon("vqneg.s8", 16, -max(i8_1,  -max_i8));
     check_neon("vqneg.s16", 8, -max(i16_1, -max_i16));
-    check_neon("vqneg.s32", 4, -max(i32_1, -max_i32));
+    //check_neon("vqneg.s32", 4, -max(i32_1, -max_i32));
     check_neon("vqneg.s8",  8, -max(i8_1,  -max_i8));
     check_neon("vqneg.s16", 4, -max(i16_1, -max_i16));
-    check_neon("vqneg.s32", 2, -max(i32_1, -max_i32));
+    //check_neon("vqneg.s32", 2, -max(i32_1, -max_i32));
 
     // VQRDMULH	I	-	Saturating Rounding Doubling Multiply Returning High Half
     // VQRSHL	I	-	Saturating Rounding Shift Left    
@@ -1088,10 +1090,10 @@ void check_neon_all() {
     // VQSHL	I	-	Saturating Shift Left
     check_neon("vqshl.s8", 16,  i8(clamp(i16(i8_1)*16,  min_i8,  max_i8)));
     check_neon("vqshl.s16", 8, i16(clamp(i32(i16_1)*16, min_i16, max_i16)));
-    check_neon("vqshl.s32", 4, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
+    //check_neon("vqshl.s32", 4, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
     check_neon("vqshl.s8",  8,  i8(clamp(i16(i8_1)*16,  min_i8,  max_i8)));
     check_neon("vqshl.s16", 4, i16(clamp(i32(i16_1)*16, min_i16, max_i16)));
-    check_neon("vqshl.s32", 2, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
+    //check_neon("vqshl.s32", 2, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
     // skip the versions that we don't have constants for
 
     // VQSHLU	I	-	Saturating Shift Left Unsigned
@@ -1104,17 +1106,17 @@ void check_neon_all() {
     // VQSHRUN	I	-	Saturating Shift Right Unsigned Narrow
     check_neon("vqshrn.s16", 8,  i8(clamp(i16_1/16, min_i8,  max_i8)));
     check_neon("vqshrn.s32", 4, i16(clamp(i32_1/16, min_i16, max_i16)));
-    check_neon("vqshrn.s64", 2, i32(clamp(i64_1/16, min_i32, max_i32)));
+    //check_neon("vqshrn.s64", 2, i32(clamp(i64_1/16, min_i32, max_i32)));
     check_neon("vqshrun.u16", 8,  u8(min(u16_1/16, max_u8)));
     check_neon("vqshrun.u32", 4, u16(min(u32_1/16, max_u16)));
 
     // VQSUB	I	-	Saturating Subtract
     check_neon("vqsub.s8", 16,  i8(clamp(i16(i8_1)  - i16(i8_2),  min_i8,  max_i8)));
     check_neon("vqsub.s16", 8, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
-    check_neon("vqsub.s32", 8, i32(clamp(i64(i32_1) - i64(i32_2), min_i32, max_i32)));
+    //check_neon("vqsub.s32", 8, i32(clamp(i64(i32_1) - i64(i32_2), min_i32, max_i32)));
     check_neon("vqsub.s8",  8,  i8(clamp(i16(i8_1)  - i16(i8_2),  min_i8,  max_i8)));
     check_neon("vqsub.s16", 4, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
-    check_neon("vqsub.s32", 4, i32(clamp(i64(i32_1) - i64(i32_2), min_i32, max_i32)));
+    //check_neon("vqsub.s32", 4, i32(clamp(i64(i32_1) - i64(i32_2), min_i32, max_i32)));
 
     check_neon("vqsub.u8", 16,  u8(clamp(i16(u8_1)  - i16(u8_2),  0, max_u8)));
     check_neon("vqsub.u16", 8, u16(clamp(i32(u16_1) - i32(u16_2), 0, max_u16)));
