@@ -30,3 +30,4 @@ lower
 halide_cpp
 stdlib
 llutil
+integer_division
