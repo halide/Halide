@@ -184,7 +184,7 @@ let rec val_type_of_expr = function
   | ExtractElement (e, _) -> element_val_type (val_type_of_expr e)
 
   (* A Let expression has the type of its body (rather than the type
-     of the thing its defining) *)
+     of the thing it's defining) *)
   | Let (_, _, b)         -> val_type_of_expr b
 
   (* Some ops explicitly declare their result type *)
