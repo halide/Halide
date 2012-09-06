@@ -147,67 +147,67 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
 
     (* Extern calls *)
     | Call (Extern, t, name, args) ->
-	(* If we're making a vectorized call to an extern scalar
-	   function, we need to do some extra work here *)
+        (* If we're making a vectorized call to an extern scalar
+           function, we need to do some extra work here *)
         (* First, codegen the args *)
         let llargs = Array.of_list (List.map cg_expr args) in      
         let elts = vector_elements t in
-	(* Compure the scalar and vector names for this function *)
+        (* Compure the scalar and vector names for this function *)
         let scalar_name = base_name name in
-	let vector_name = if elts > 1 then (scalar_name ^ "x" ^ (string_of_int elts)) else scalar_name in
-	(* Look up the scalar and vector forms *)
-	let scalar_fn = lookup_function scalar_name m in
-	let vector_fn = lookup_function vector_name m in
-	(* If the scalar version doesn't exist declare it as extern *)
-	let scalar_fn = 
-	  match scalar_fn with
-	    | None -> 
-	        dbg 2 "Did not find %s in initial module. Assuming it's extern.\n%!" scalar_name;
+        let vector_name = if elts > 1 then (scalar_name ^ "x" ^ (string_of_int elts)) else scalar_name in
+        (* Look up the scalar and vector forms *)
+        let scalar_fn = lookup_function scalar_name m in
+        let vector_fn = lookup_function vector_name m in
+        (* If the scalar version doesn't exist declare it as extern *)
+        let scalar_fn = 
+          match scalar_fn with
+            | None -> 
+                dbg 2 "Did not find %s in initial module. Assuming it's extern.\n%!" scalar_name;
                 let arg_types = List.map (fun arg -> type_of_val_type (element_val_type (val_type_of_expr arg))) args in
                 declare_function scalar_name (function_type (type_of_val_type (element_val_type t)) (Array.of_list arg_types)) m
-	    | Some fn -> 
-	      dbg 2 "Found %s in initial module\n%!" scalar_name;
-	      fn
-	in
+            | Some fn -> 
+              dbg 2 "Found %s in initial module\n%!" scalar_name;
+              fn
+        in
 
         if elts = 1 then begin
-	  (* Scalar call *)
+          (* Scalar call *)
           build_call scalar_fn llargs ("extern_" ^ scalar_name) b
         end else begin
-	  (* Vector call *)
-	  match vector_fn with 
-	    | None ->	      
+          (* Vector call *)
+          match vector_fn with 
+            | None ->         
                 dbg 2 "Did not find %s in initial module. Calling scalar version.\n%!" vector_name;
-	        (* Couldn't find a vector version. Scalarize. *)
-	        let make_call i = 
-		  let extract_elt a =
-		    let idx = const_int int_imm_t i in
-		    build_extractelement a idx "" b
-		  in
-		  let args = Array.map extract_elt llargs in
-		  build_call scalar_fn args ("extern_" ^ scalar_name) b 
-		in
-		let rec assemble_result = function
-		  | ([], _) -> undef (type_of_val_type t)
-		  | (first::rest, n) -> 
-		    build_insertelement 
-		      (assemble_result (rest, n+1)) 
-		      first 
-		      (const_int int32_imm_t n) "" b
-		in
-		let calls = List.map make_call (0 -- elts) in
-		assemble_result (calls, 0)	        
-	    | Some fn ->
+                (* Couldn't find a vector version. Scalarize. *)
+                let make_call i = 
+                  let extract_elt a =
+                    let idx = const_int int_imm_t i in
+                    build_extractelement a idx "" b
+                  in
+                  let args = Array.map extract_elt llargs in
+                  build_call scalar_fn args ("extern_" ^ scalar_name) b 
+                in
+                let rec assemble_result = function
+                  | ([], _) -> undef (type_of_val_type t)
+                  | (first::rest, n) -> 
+                    build_insertelement 
+                      (assemble_result (rest, n+1)) 
+                      first 
+                      (const_int int32_imm_t n) "" b
+                in
+                let calls = List.map make_call (0 -- elts) in
+                assemble_result (calls, 0)              
+            | Some fn ->
                 dbg 2 "Found %s in initial module\n%!" vector_name;
-	        dbg 2 "Type is: %s\n%!" (string_of_lltype (type_of fn));
-		let arg_types = Array.map type_of llargs in
-		dbg 2 "Type should be: %s\n%!" (string_of_lltype (function_type (type_of_val_type t) arg_types));
-		dbg 2 "Passing args of type: ";
-		Array.iter (fun a -> dbg 2 "%s " (string_of_lltype (type_of a))) llargs;
-		dbg 2 "\n%!";		
-		(* Found a vector version *)
-                build_call fn llargs ("extern_" ^ vector_name) b	      
-	end
+                dbg 2 "Type is: %s\n%!" (string_of_lltype (type_of fn));
+                let arg_types = Array.map type_of llargs in
+                dbg 2 "Type should be: %s\n%!" (string_of_lltype (function_type (type_of_val_type t) arg_types));
+                dbg 2 "Passing args of type: ";
+                Array.iter (fun a -> dbg 2 "%s " (string_of_lltype (type_of a))) llargs;
+                dbg 2 "\n%!";           
+                (* Found a vector version *)
+                build_call fn llargs ("extern_" ^ vector_name) b              
+        end
     | Call (_, _, name, _) ->
         failwith ("Can't lower call to " ^ name ^ ". This should have been replaced with a Load during lowering\n")
 
@@ -304,38 +304,6 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
       | UInt(fb), Int(tb)
       | UInt(fb), UInt(tb) when fb < tb ->
           simple_cast build_zext e t
-
-	    (* 
-      (* Some common casts can be done more efficiently by bitcasting
-         and doing vector shuffles (assuming little-endianness) *)
-
-      (* Narrowing ints by a factor of 2 *)
-      | UIntVector(fb, fw), UIntVector(tb, tw)
-      | IntVector(fb, fw), IntVector(tb, tw)
-      | UIntVector(fb, fw), IntVector(tb, tw)
-      | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb = tb*2 ->
-          (* Bitcast to split hi and lo halves of each int *)
-          let intermediate_type = type_of_val_type (IntVector (tb, tw*2)) in
-          let split_hi_lo = build_bitcast (cg_expr e) intermediate_type "" b in
-          let indices = const_vector (Array.of_list (List.map (fun x -> const_int int_imm_t (x*2)) (0 -- tw))) in
-          (* Shuffle vector to grab the low halves *)
-          build_shufflevector split_hi_lo (undef intermediate_type) indices "" b
-
-      (* Widening unsigned ints by a factor of 2 *)
-      | UIntVector(fb, fw), UIntVector(tb, tw)
-      | UIntVector(fb, fw), IntVector(tb, tw) when fw = tw && fb*2 = tb ->
-          (* Make a zero vector of the same size *)
-          let zero_vector = const_null (type_of_val_type (IntVector (fb, fw))) in
-          let rec indices = function
-            | 0 -> []
-            | x -> (const_int int_imm_t (fw-x))::(const_int int_imm_t (2*fw-x))::(indices (x-1)) in                
-          let shuffle = build_shufflevector (cg_expr e) zero_vector (const_vector (Array.of_list (indices fw))) "" b in
-          build_bitcast shuffle (type_of_val_type t) "" b
-	    *)
-
-      (* For signed ints we need to do sign extension 
-      | IntVector(fb, fw), UIntVector(tb, tw) 
-      | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb*2 = tb ->             *)          
 
       (* Narrowing integer casts always truncate *)
       | UIntVector(fb, fw), UIntVector(tb, tw)
@@ -631,11 +599,19 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
         begin match idx with 
           (* dense vector load *)
           | Ramp(b, IntImm(1), _) ->
-            begin match Analysis.reduce_expr_modulo b w with
-              | Some 0      -> cg_aligned_load t buf b
-              | Some offset -> cg_unaligned_load t buf b offset
-              | None        -> cg_unknown_alignment_load t buf b
-            end
+              begin match Analysis.reduce_expr_modulo b w with
+                | Some 0      -> cg_aligned_load t buf b
+                | Some offset -> cg_unaligned_load t buf b offset
+                | None        -> cg_unknown_alignment_load t buf b
+              end
+          (* Reverse dense vector load *)             
+          | Ramp (base, IntImm(-1), _) ->
+              (* Load the right elements *)
+              let vec = cg_expr (Load (t, buf, Ramp (base -~ (IntImm (w-1)), IntImm 1, w))) in         
+              (* Reverse them *)
+              let mask = cg_expr (MakeVector (List.map (fun x -> IntImm (w-1-x)) (0--w))) in
+              build_shufflevector vec (undef (type_of vec)) mask "" b
+
           (* TODO: consider strided loads *)
           (* gather *)
           | _ -> cg_gather t buf idx
