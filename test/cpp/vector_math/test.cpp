@@ -239,7 +239,7 @@ bool test(int vec_width) {
 
     // Divide by small constants
     printf("Dividing by small constants\n");
-    for (int c = 2; c < 64; c++) {
+    for (int c = 2; c < 16; c++) {
 	Func f10;
 	f10(x, y) = input(x, y) / c;
 	f10.vectorize(x, vec_width);
@@ -272,6 +272,23 @@ bool test(int vec_width) {
             A correct = ((x%2)==0) ? input(x/2, y) : input(x/2, y+1);
             if (im11(x, y) != correct) {
                 printf("im11(%d, %d) = %f instead of %f\n", x, y, (double)(im11(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    // Reverse
+    printf("Reversing\n");
+    Func f12;
+    f12(x, y) = input(W-1-x, H-1-y);
+    f12.vectorize(x, vec_width);
+    Image<A> im12 = f12.realize(W, H);
+    
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = input(W-1-x, H-1-y);
+            if (im12(x, y) != correct) {
+                printf("im12(%d, %d) = %f instead of %f\n", x, y, (double)(im12(x, y)), (double)(correct));
                 return false;
             }
         }
