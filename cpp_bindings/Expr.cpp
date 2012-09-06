@@ -72,8 +72,8 @@ namespace Halide {
         // The list of free variables found
         std::vector<Var> vars;
 
-	// A reduction domain that this depends on
-	RDom rdom;
+        // A reduction domain that this depends on
+        RDom rdom;
         
         // The list of functions directly called        
         std::vector<Func> funcs;
@@ -125,17 +125,17 @@ namespace Halide {
 
     Expr::Expr(const RVar &v) : contents(new Contents(makeVar((v.name())), Int(32))) {
         contents->isRVar = true;
-	assert(v.isDefined());
-	assert(v.domain().isDefined());
-	setRDom(v.domain());
+        assert(v.isDefined());
+        assert(v.domain().isDefined());
+        setRDom(v.domain());
         child(v.min());
         child(v.size());
     }
 
     Expr::Expr(const RDom &d) : contents(new Contents(makeVar((d[0].name())), Int(32))) {
-	contents->isRVar = true;
-	assert(d.dimensions() == 1 && "Can only use single-dimensional domains directly as expressions\n");
-	setRDom(d);
+        contents->isRVar = true;
+        assert(d.dimensions() == 1 && "Can only use single-dimensional domains directly as expressions\n");
+        setRDom(d);
         child(d[0].min());
         child(d[0].size());
     }
@@ -191,7 +191,7 @@ namespace Halide {
     }
 
     void Expr::setRDom(const RDom &dom) {
-	contents->rdom = dom;
+        contents->rdom = dom;
     }
 
     bool Expr::isImmediate() const {
@@ -211,12 +211,12 @@ namespace Halide {
     }
 
     void Expr::convertRVarsToVars() {
-	if (contents->rdom.isDefined()) {
-	    for (int i = 0; i < contents->rdom.dimensions(); i++) {
-		contents->vars.push_back(Var(contents->rdom[i].name()));
-	    }
-	    contents->rdom = RDom();
-	}
+        if (contents->rdom.isDefined()) {
+            for (int i = 0; i < contents->rdom.dimensions(); i++) {
+                contents->vars.push_back(Var(contents->rdom[i].name()));
+            }
+            contents->rdom = RDom();
+        }
         if (contents->isRVar) {
             contents->isRVar = false;
             contents->isVar = true;
@@ -236,7 +236,7 @@ namespace Halide {
     }
 
     const RDom &Expr::rdom() const {
-	return contents->rdom;
+        return contents->rdom;
     }
 
     const std::vector<Func> &Expr::funcs() const {
@@ -260,11 +260,11 @@ namespace Halide {
         set_union(uniformImages, c.uniformImages());
         if (c.implicitArgs() > implicitArgs) implicitArgs = c.implicitArgs();
 
-	bool check = !rdom.isDefined() || !c.rdom().isDefined() || rdom == c.rdom();
-	assert(check && "Each expression can only depend on a single reduction domain");
-	if (c.rdom().isDefined()) {
-	    rdom = c.rdom();
-	}        
+        bool check = !rdom.isDefined() || !c.rdom().isDefined() || rdom == c.rdom();
+        assert(check && "Each expression can only depend on a single reduction domain");
+        if (c.rdom().isDefined()) {
+            rdom = c.rdom();
+        }        
 
         for (size_t i = 0; i < c.shape().size(); i++) {
             if (i < shape.size()) {
@@ -548,94 +548,94 @@ namespace Halide {
     }
 
     Expr sqrt(Expr a) {
-	if (a.type() == Float(64)) {
-	    return builtin(Float(64), "sqrt_f64", a);
-	}
-	// Otherwise cast to float
+        if (a.type() == Float(64)) {
+            return builtin(Float(64), "sqrt_f64", a);
+        }
+        // Otherwise cast to float
         a = cast(Float(32), a);
         return builtin(Float(32), "sqrt_f32", a);
     }
 
     Expr sin(Expr a) {
-	if (a.type() == Float(64)) {
-	    return builtin(Float(64), "sin_f64", a);
-	}
+        if (a.type() == Float(64)) {
+            return builtin(Float(64), "sin_f64", a);
+        }
         //assert(a.type() == Float(32) && "Argument to sin must be a float");
         a = cast(Float(32), a);
         return builtin(Float(32), "sin_f32", a);
     }
     
     Expr cos(Expr a) {
-	if (a.type() == Float(64)) {
-	    return builtin(Float(64), "cos_f64", a);
-	}
+        if (a.type() == Float(64)) {
+            return builtin(Float(64), "cos_f64", a);
+        }
         a = cast(Float(32), a);
         return builtin(Float(32), "cos_f32", a);
     }
 
     Expr pow(Expr a, Expr b) {
-	if (a.type() == Float(64)) {
-	    return builtin(Float(64), "pow_f64", a, cast(Float(64), b));
-	}
+        if (a.type() == Float(64)) {
+            return builtin(Float(64), "pow_f64", a, cast(Float(64), b));
+        }
         a = cast(Float(32), a);
         b = cast(Float(32), b);        
         return builtin(Float(32), "pow_f32", a, b);
     }
 
     Expr exp(Expr a) {
-	if (a.type() == Float(64)) {
-	    return builtin(Float(64), "exp_f64", a);
-	}
+        if (a.type() == Float(64)) {
+            return builtin(Float(64), "exp_f64", a);
+        }
         a = cast(Float(32), a);
         return builtin(Float(32), "exp_f32", a);
     }
 
     Expr log(Expr a) {
-	if (a.type() == Float(64)) {
-	    return builtin(Float(64), "log_f64", a);
-	}
+        if (a.type() == Float(64)) {
+            return builtin(Float(64), "log_f64", a);
+        }
         a = cast(Float(32), a);
         return builtin(Float(32), "log_f32", a);
     }
 
     Expr floor(Expr a) {
-	if (a.type() == Float(64)) {
-	    return builtin(Float(64), "floor_f64", a);
-	}
+        if (a.type() == Float(64)) {
+            return builtin(Float(64), "floor_f64", a);
+        }
         a = cast(Float(32), a);
         return builtin(Float(32), "floor_f32", a);
     }
 
     Expr ceil(Expr a) {
-	if (a.type() == Float(64)) {
-	    return builtin(Float(64), "ceil_f64", a);
-	}
+        if (a.type() == Float(64)) {
+            return builtin(Float(64), "ceil_f64", a);
+        }
         a = cast(Float(32), a);
         return builtin(Float(32), "ceil_f32", a);
     }
 
     Expr round(Expr a) {
-	if (a.type() == Float(64)) {
-	    return builtin(Float(64), "round_f64", a);
-	}
+        if (a.type() == Float(64)) {
+            return builtin(Float(64), "round_f64", a);
+        }
         a = cast(Float(32), a);
         return builtin(Float(32), "round_f32", a);
     }
 
     Expr abs(Expr a) {
-	if (a.type() == Int(8))
-	    return builtin(Int(8), "abs_i8", a);
-	if (a.type() == Int(16)) 
-	    return builtin(Int(16), "abs_i16", a);
-	if (a.type() == Int(32)) 
-	    return builtin(Int(32), "abs_i32", a);
-	if (a.type() == Int(64)) 
-	    return builtin(Int(64), "abs_i64", a);
-	if (a.type() == Float(32)) 
-	    return builtin(Float(32), "abs_f32", a);
-	if (a.type() == Float(64)) 
-	    return builtin(Float(64), "abs_f64", a);
-	assert(0 && "Invalid type for abs");
+        if (a.type() == Int(8))
+            return builtin(Int(8), "abs_i8", a);
+        if (a.type() == Int(16)) 
+            return builtin(Int(16), "abs_i16", a);
+        if (a.type() == Int(32)) 
+            return builtin(Int(32), "abs_i32", a);
+        if (a.type() == Int(64)) 
+            return builtin(Int(64), "abs_i64", a);
+        if (a.type() == Float(32)) 
+            return builtin(Float(32), "abs_f32", a);
+        if (a.type() == Float(64)) 
+            return builtin(Float(64), "abs_f64", a);
+        assert(0 && "Invalid type for abs");
     }
 
     Expr select(Expr cond, Expr thenCase, Expr elseCase) {
@@ -652,7 +652,7 @@ namespace Halide {
     
     Expr max(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to max must have the same type");
-	std::tie(a, b) = matchTypes(a, b);
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeMax(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -661,17 +661,17 @@ namespace Halide {
 
     Expr min(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to min must have the same type");
-	std::tie(a, b) = matchTypes(a, b);
+        std::tie(a, b) = matchTypes(a, b);
         Expr e(makeMin(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
         return e;
     }
     
-    Expr clamp(Expr a, Expr mi, Expr ma) {	
-	//assert(a.type() == mi.type() && a.type() == ma.type() && "Arguments to clamp must have the same type");
-	mi = cast(a.type(), mi);
-	ma = cast(a.type(), ma);
+    Expr clamp(Expr a, Expr mi, Expr ma) {      
+        //assert(a.type() == mi.type() && a.type() == ma.type() && "Arguments to clamp must have the same type");
+        mi = cast(a.type(), mi);
+        ma = cast(a.type(), ma);
         return max(min(a, ma), mi);
     }
 

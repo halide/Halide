@@ -109,7 +109,7 @@ namespace Halide {
                 y++;
             }
         }
-	#endif
+        #endif
 
         operator DynImage() const {
             return im;

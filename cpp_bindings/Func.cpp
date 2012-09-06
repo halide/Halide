@@ -35,21 +35,21 @@ namespace Halide {
     }
 
     bool use_avx() {
-	char *target = getenv("HL_TARGET");
-	if (target == NULL || strncasecmp(target, "x86_64", 6) == 0) {
+        char *target = getenv("HL_TARGET");
+        if (target == NULL || strncasecmp(target, "x86_64", 6) == 0) {
         #ifdef __x86_64__
-	    int func = 1, ax, bx, cx, dx;
-	    __asm__ __volatile__ ("cpuid":				
-				  "=a" (ax), 
-				  "=b" (bx), 
-				  "=c" (cx), 
-				  "=d" (dx) : 
-				  "a" (func));	    
-	    // bit 28 of ecx indicates avx support
-	    return cx & 0x10000000;
-	    #endif
-	}
-	return false;
+            int func = 1, ax, bx, cx, dx;
+            __asm__ __volatile__ ("cpuid":                              
+                                  "=a" (ax), 
+                                  "=b" (bx), 
+                                  "=c" (cx), 
+                                  "=d" (dx) : 
+                                  "a" (func));      
+            // bit 28 of ecx indicates avx support
+            return cx & 0x10000000;
+            #endif
+        }
+        return false;
     }
     
     ML_FUNC2(makeVectorizeTransform);
@@ -781,8 +781,8 @@ namespace Halide {
                 } else {
                     std::string bc_name = "./" + name + ".bc";
                     snprintf(cmd1, 1024, 
-			     "opt -O3 -always-inline %s | llc -O3 -relocation-model=pic %s -filetype=obj > %s", 
-			     bc_name.c_str(), use_avx() ? "-mcpu=corei7 -mattr=+avx" : "", obj_name.c_str());
+                             "opt -O3 -always-inline %s | llc -O3 -relocation-model=pic %s -filetype=obj > %s", 
+                             bc_name.c_str(), use_avx() ? "-mcpu=corei7 -mattr=+avx" : "", obj_name.c_str());
                 }
                 snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
                 fprintf(stderr, "%s\n", cmd1);
@@ -811,7 +811,7 @@ namespace Halide {
 
         if (!Contents::ee) {
             llvm::InitializeNativeTarget();
-	    llvm::InitializeNativeTargetAsmPrinter();
+            llvm::InitializeNativeTargetAsmPrinter();
         }
 
         // Use the function definitions and the schedule to create the
@@ -839,16 +839,16 @@ namespace Halide {
             std::string errStr;
             llvm::EngineBuilder eeBuilder(m);
             eeBuilder.setErrorStr(&errStr);
-	    eeBuilder.setEngineKind(llvm::EngineKind::JIT);
-	    eeBuilder.setUseMCJIT(false);
+            eeBuilder.setEngineKind(llvm::EngineKind::JIT);
+            eeBuilder.setUseMCJIT(false);
             eeBuilder.setOptLevel(llvm::CodeGenOpt::Aggressive);
 
             // runtime-detect avx to only enable it if supported
-	    // disabled for now until we upgrade llvm
-	    if (use_avx() && 0) {
-		std::vector<std::string> mattrs = {"avx"};
-		eeBuilder.setMAttrs(mattrs);
-	    }
+            // disabled for now until we upgrade llvm
+            if (use_avx() && 0) {
+                std::vector<std::string> mattrs = {"avx"};
+                eeBuilder.setMAttrs(mattrs);
+            }
 
             Contents::ee = eeBuilder.create();
             if (!contents->ee) {
