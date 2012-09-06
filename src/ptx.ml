@@ -111,6 +111,7 @@ let host_context (con:context) = {
   sym_remove = con.sym_remove;
   dump_syms = con.dump_syms;
   arch_state = con.arch_state.host_state;
+  arch_opts = con.arch_opts;
 }
 
 let init con = get_function con.m "__init"
@@ -296,7 +297,7 @@ let cg_dev_kernel con stmt =
   
   (* TODO: just use Ptx_dev's codegen_entry, with Buffer and Scalar args as needed? Makes it harder to patch in arbitrary context/state info *)
   let module DevCg = Cg_llvm.CodegenForArch(Ptx_dev) in
-  let dev_con = DevCg.make_cg_context dev_ctx dev_mod dev_b dev_syms con.arch_state.dev_state in
+  let dev_con = DevCg.make_cg_context dev_ctx dev_mod dev_b dev_syms con.arch_state.dev_state con.arch_opts in
   
   if dbgprint then dev_con.dump_syms ();
   
@@ -485,7 +486,7 @@ let rec cg_stmt (con:context) stmt = match stmt with
 (*
  * Codegen the host calling module
  *)
-let rec codegen_entry c m cg_entry make_cg_context e =
+let rec codegen_entry c m cg_entry make_cg_context e opts =
   (* load the template PTX host module *)
   (* this has inlined most of the X86 module, too, since we need its helpers for the host-side code *)
   Stdlib.init_module_ptx m;
@@ -525,7 +526,7 @@ let rec codegen_entry c m cg_entry make_cg_context e =
   end;
 
   (* set up the cg context *)
-  let con = make_cg_context c m b param_syms state in
+  let con = make_cg_context c m b param_syms state opts in
   
   (* copy_to_host any buffers which are read by host code in the function *)
   let host_reads = find_host_loads body in

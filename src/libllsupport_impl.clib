@@ -5,3 +5,4 @@ architecture.ptx_dev.initmod.o
 architecture.arm.initmod.o
 architecture.android.initmod.o
 architecture.x86.initmod.o
+architecture.x86_avx.initmod.o

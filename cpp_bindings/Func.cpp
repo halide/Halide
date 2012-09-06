@@ -31,12 +31,12 @@ namespace Halide {
     
     bool use_gpu() {
         char* target = getenv("HL_TARGET");
-        return (target != NULL && strcasecmp(target, "ptx") == 0);
+        return (target != NULL && strncasecmp(target, "ptx", 3) == 0);
     }
 
     bool use_avx() {
 	char *target = getenv("HL_TARGET");
-	if (target == NULL || strcasecmp(target, "x86_64") == 0) {
+	if (target == NULL || strncasecmp(target, "x86_64", 6) == 0) {
         #ifdef __x86_64__
 	    int func = 1, ax, bx, cx, dx;
 	    __asm__ __volatile__ ("cpuid":				
@@ -63,7 +63,7 @@ namespace Halide {
     ML_FUNC2(makeRandomTransform);
     
     ML_FUNC1(doConstantFold);
-    
+  
     ML_FUNC3(makeDefinition);
     ML_FUNC6(addScatterToDefinition);
     ML_FUNC0(makeEnv);

@@ -17,7 +17,7 @@ let compilation_cache =
 
 let codegen_to_c_callable e =
   let module Cg = Cg_for_target in
-  let (c,m,f) = Cg.codegen_entry e in
+  let (c,m,f) = Cg.codegen_entry e Cg.target_opts in
   let w = Cg.codegen_c_wrapper c m f in
   (c,m,w)
 
@@ -46,6 +46,7 @@ let compile name args stmt =
 
   try begin
     let func = (name, args, stmt) in
+    (* NOTE: the compilation cache ignores changes in target options *)
     if Hashtbl.mem compilation_cache func then begin
       (* Printf.printf "Found function in cache\n%!";  *)
       Hashtbl.find compilation_cache func
@@ -88,9 +89,9 @@ let compile_to_file name args stmt =
     | "llvm" ->
         (* ignore (initialize_native_target()); *)
         let module Cg = Cg_for_target in
-        Cg.codegen_to_bitcode_and_header (name, args, stmt)
+        Cg.codegen_to_bitcode_and_header (name, args, stmt) Cg.target_opts
     | "c" ->
-        Cg_c.codegen_to_file (name, args, stmt)
+        Cg_c.codegen_to_file (name, args, stmt) (* TODO: take target_opts *)
     | _ -> failwith ("Unrecognized HL_BACKEND: " ^ backend)
   end
   with x -> begin
