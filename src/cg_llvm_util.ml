@@ -23,6 +23,7 @@ type 'a cg_context = {
   sym_remove : string -> unit;
   dump_syms : unit -> unit;
   arch_state : 'a;
+  arch_opts : string list;
 }
 
 let type_of_val_type c t = match t with

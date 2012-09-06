@@ -16,18 +16,22 @@ let pointer_size = 8
 (* "x86_64-unknown-linux-gnu" *)
 let target_triple = "" 
 
-let codegen_entry c m cg_entry _ e =
+let codegen_entry c m cg_entry _ e opts =
   (* set up module *)
-  Stdlib.init_module_x86 m;
+  if List.mem "avx" opts then
+    Stdlib.init_module_x86_avx m
+  else
+    Stdlib.init_module_x86 m;
 
   (* build the inner kernel, which takes raw byte*s *)
-  let inner = cg_entry c m e in
+  let inner = cg_entry c m e opts in
 
   (* return the wrapper which takes buffer_t*s *)
   cg_wrapper c m e inner
 
 let rec cg_expr (con:context) (expr:expr) =
   let c = con.c and m = con.m and b = con.b in
+  let use_avx = List.mem "avx" con.arch_opts in
   let cg_expr = cg_expr con in
 
   let ptr_t = pointer_type (i8_type c) in
@@ -301,10 +305,16 @@ let rec cg_expr (con:context) (expr:expr) =
     | Bop (Div, Broadcast(FloatImm 1.0, 4), Call (Extern, FloatVector(32, 4), ".sqrt_f32", [arg])) ->
       call_intrin "sse.rsqrt.ps" [|arg|]
 
+    | Bop (Div, Broadcast(FloatImm 1.0, 8), Call (Extern, FloatVector(32, 8), ".sqrt_f32", [arg])) when use_avx ->
+      call_intrin "avx.rsqrt.ps.256" [|arg|]
+
     (* Inverse *)
     | Bop (Div, Broadcast(FloatImm 1.0, 4), arg) ->
       call_intrin "sse.rcp.ps" [|arg|]	
 	
+    | Bop (Div, Broadcast(FloatImm 1.0, 8), arg) when use_avx ->
+      call_intrin "avx.rcp.ps.256" [|arg|]
+
     (* Loads with stride one half should do one load and then shuffle *)
     (* TODO: this is buggy 
     | Load (t, buf, idx) when 

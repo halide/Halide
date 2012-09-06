@@ -48,16 +48,6 @@ INLINE __m128d round_f64x2(__m128d x) {
     return _mm_round_pd(x, _MM_FROUND_TO_NEAREST_INT);
 }
 
-/* TODO: figure out how to selectively enable avx
-INLINE __m256 sqrt_f32x8(__m256 x) {
-    return _mm256_sqrt_ps(x);
-}
-
-INLINE __m256 sqrt_f64x4(__m256 x) {
-    return _mm256_sqrt_pd(x);
-}
-*/
-
 }
 
 

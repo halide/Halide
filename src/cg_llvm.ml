@@ -13,9 +13,9 @@ exception UnalignedVectorMemref
 exception ArgExprOfBufferArgument (* The Arg expr can't dereference a Buffer, only Scalars *)
 exception ArgTypeMismatch of val_type * val_type
 
-type cg_entry = llcontext -> llmodule -> entrypoint -> llvalue
+type cg_entry = llcontext -> llmodule -> entrypoint -> string list -> llvalue 
 type 'a make_cg_context = llcontext -> llmodule -> llbuilder ->
-                          (string, llvalue) Hashtbl.t -> 'a -> 'a cg_context
+                          (string, llvalue) Hashtbl.t -> 'a -> string list -> 'a cg_context
 type cg_expr = expr -> llvalue
 type cg_stmt = stmt -> llvalue
 
@@ -33,7 +33,7 @@ module type Architecture = sig
   val start_state : unit -> state
 
   (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)
-  val codegen_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context -> entrypoint -> llvalue
+  val codegen_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context -> entrypoint -> string list -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
   val malloc  : context -> string -> expr -> expr -> (llvalue * (context -> unit))
@@ -41,31 +41,27 @@ module type Architecture = sig
   val pointer_size : int
 end
 
+
 module type Codegen = sig
   type arch_state
   type context = arch_state cg_context
 
   val make_cg_context : arch_state make_cg_context
-  val codegen_entry : entrypoint -> llcontext * llmodule * llvalue
+  val codegen_entry : entrypoint -> string list -> llcontext * llmodule * llvalue
   val codegen_c_wrapper : llcontext -> llmodule -> llvalue -> llvalue
-  val codegen_to_bitcode_and_header : entrypoint -> unit
-  val codegen_to_file : entrypoint -> string -> unit
+  val codegen_to_bitcode_and_header : entrypoint -> string list -> unit
 end
+
 
 module CodegenForArch ( Arch : Architecture ) = struct
 
 type arch_state = Arch.state
 type context = arch_state cg_context
 
-(* Algebraic type wrapper for LLVM comparison ops *)
-type cmp =
-  | CmpInt of Icmp.t
-  | CmpFloat of Fcmp.t
-
 module ArgMap = Map.Make(String)
 type argmap = (arg*int) ArgMap.t (* track args as name -> (Ir.arg,index) *) 
 
-let rec make_cg_context c m b sym_table arch_state =
+let rec make_cg_context c m b sym_table arch_state arch_opts =
 
   let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
@@ -95,6 +91,7 @@ let rec make_cg_context c m b sym_table arch_state =
     sym_remove = sym_remove;
     dump_syms = dump_syms;
     arch_state = arch_state;
+    arch_opts = arch_opts;
   }
   and cg_expr e = 
     dbg 2 "begin cg_expr %s\n%!" (string_of_expr e);
@@ -202,6 +199,12 @@ let rec make_cg_context c m b sym_table arch_state =
 		assemble_result (calls, 0)	        
 	    | Some fn ->
                 dbg 2 "Found %s in initial module\n%!" vector_name;
+	        dbg 2 "Type is: %s\n%!" (string_of_lltype (type_of fn));
+		let arg_types = Array.map type_of llargs in
+		dbg 2 "Type should be: %s\n%!" (string_of_lltype (function_type (type_of_val_type t) arg_types));
+		dbg 2 "Passing args of type: ";
+		Array.iter (fun a -> dbg 2 "%s " (string_of_lltype (type_of a))) llargs;
+		dbg 2 "\n%!";		
 		(* Found a vector version *)
                 build_call fn llargs ("extern_" ^ vector_name) b	      
 	end
@@ -494,7 +497,7 @@ let rec make_cg_context c m b sym_table arch_state =
     (* make a new context *)
     let sub_builder = (builder_at_end c (entry_block body_fn)) in
     let sub_sym_table = Hashtbl.create 10 in
-    let sub_context = make_cg_context c m sub_builder sub_sym_table arch_state in
+    let sub_context = make_cg_context c m sub_builder sub_sym_table arch_state arch_opts in
 
     (* Load everything from the closure into the new symbol table *)
     StringIntSet.iter (fun (name, size) ->      
@@ -758,7 +761,7 @@ let rec make_cg_context c m b sym_table arch_state =
 
   cg_context
 
-let cg_entry c m e =
+let cg_entry c m e arch_opts =
   let _,args,stmt = e in
 
   (* make an entrypoint function *)
@@ -774,7 +777,7 @@ let cg_entry c m e =
   let b = builder_at_end c (entry_block f) in
 
   (* actually generate from the root statement *)
-  let ctx = make_cg_context c m b param_syms (Arch.start_state ()) in
+  let ctx = make_cg_context c m b param_syms (Arch.start_state ()) arch_opts in
   ignore (Arch.cg_stmt ctx stmt);
 
   (* return void from main *)
@@ -859,7 +862,7 @@ let codegen_c_wrapper c m f =
 
 (* codegen constructs a new context and module for code generation, which it
  * returns for the caller to eventually free *)
-let codegen_entry (e:entrypoint) =
+let codegen_entry (e:entrypoint) (opts:string list) =
   let (name, _, _) = e in
 
   (* construct basic LLVM state *)
@@ -872,19 +875,19 @@ let codegen_entry (e:entrypoint) =
     ignore (Llvm_executionengine.initialize_native_target());
 
   (* codegen *)
-  let f = Arch.codegen_entry c m cg_entry make_cg_context e in
+  let f = Arch.codegen_entry c m cg_entry make_cg_context e opts in
 
   (c,m,f)
 
 (* TODO: this is fairly redundant with codegen_to_file *)
-let codegen_to_bitcode_and_header (e:entrypoint) =
+let codegen_to_bitcode_and_header (e:entrypoint) (opts:string list) =
   let (object_name, _, _) = e in
 
   let bitcode_file = object_name ^ ".bc" in
   let header_file = object_name ^ ".h" in
 
   (* codegen *)
-  let (c,m,f) = codegen_entry e in
+  let (c,m,f) = codegen_entry e opts in
 
   (* build the convenience wrapper *)
   ignore (codegen_c_wrapper c m f);
@@ -894,21 +897,6 @@ let codegen_to_bitcode_and_header (e:entrypoint) =
 
   (* write the header *)
   codegen_c_header e header_file;
-
-  (* free memory *)
-  dispose_module m;
-  dispose_context c
-
-(* TODO: drop this - it's redundant with codegen_to_bitcode_and_header, and can
- * be trivially reconstituted from the rest of the interfaces available *)
-let codegen_to_file e filename =
-
-  let (c,m,f) = codegen_entry e in
-
-  (* build the convenience wrapper *)
-  ignore (codegen_c_wrapper c m f);
-
-  save_bc_to_file m filename;
 
   (* free memory *)
   dispose_module m;
