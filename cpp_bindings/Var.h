@@ -43,9 +43,9 @@ namespace Halide {
         bool operator==(const RVar &other) const;
 
         operator Var() {return Var(name());}
-	const RDom &domain() const;
+        const RDom &domain() const;
 
-	bool isDefined() const {return (bool)contents;}
+        bool isDefined() const {return (bool)contents;}
     private:
 
         struct Contents;
@@ -55,50 +55,50 @@ namespace Halide {
     // A reduction domain
     class RDom {
     public:
-	RDom();
+        RDom();
 
-	RVar x, y, z, w;
+        RVar x, y, z, w;
 
-	RDom(const UniformImage &im);
-	RDom(const DynImage &im);
+        RDom(const UniformImage &im);
+        RDom(const DynImage &im);
 
-	RDom(const Expr &min, const Expr &size);
-	RDom(const Expr &min1, const Expr &size1,
-	     const Expr &min2, const Expr &size2);
-	RDom(const Expr &min1, const Expr &size1,
-	     const Expr &min2, const Expr &size2,
-	     const Expr &min3, const Expr &size3);
-	RDom(const Expr &min1, const Expr &size1,
-	     const Expr &min2, const Expr &size2,
-	     const Expr &min3, const Expr &size3,
-	     const Expr &min4, const Expr &size4);
-	RDom(const Expr &min, const Expr &size,
-	     const std::string &name);
-	RDom(const Expr &min1, const Expr &size1,
-	     const Expr &min2, const Expr &size2,
-	     const std::string &name);
-	RDom(const Expr &min1, const Expr &size1,
-	     const Expr &min2, const Expr &size2,
-	     const Expr &min3, const Expr &size3,
-	     const std::string &name);
-	RDom(const Expr &min1, const Expr &size1,
-	     const Expr &min2, const Expr &size2,
-	     const Expr &min3, const Expr &size3,
-	     const Expr &min4, const Expr &size4,
-	     const std::string &name);
+        RDom(const Expr &min, const Expr &size);
+        RDom(const Expr &min1, const Expr &size1,
+             const Expr &min2, const Expr &size2);
+        RDom(const Expr &min1, const Expr &size1,
+             const Expr &min2, const Expr &size2,
+             const Expr &min3, const Expr &size3);
+        RDom(const Expr &min1, const Expr &size1,
+             const Expr &min2, const Expr &size2,
+             const Expr &min3, const Expr &size3,
+             const Expr &min4, const Expr &size4);
+        RDom(const Expr &min, const Expr &size,
+             const std::string &name);
+        RDom(const Expr &min1, const Expr &size1,
+             const Expr &min2, const Expr &size2,
+             const std::string &name);
+        RDom(const Expr &min1, const Expr &size1,
+             const Expr &min2, const Expr &size2,
+             const Expr &min3, const Expr &size3,
+             const std::string &name);
+        RDom(const Expr &min1, const Expr &size1,
+             const Expr &min2, const Expr &size2,
+             const Expr &min3, const Expr &size3,
+             const Expr &min4, const Expr &size4,
+             const std::string &name);
 
         bool operator==(const RDom &other) const;
 
-	const RVar &operator[](int i) const;
-	bool isDefined() const {return (bool)contents;}
+        const RVar &operator[](int i) const;
+        bool isDefined() const {return (bool)contents;}
 
-	int dimensions() const;
+        int dimensions() const;
 
-	operator Var() {assert(dimensions() == 1); return Var(x);}
+        operator Var() {assert(dimensions() == 1); return Var(x);}
 
       private:
-	struct Contents;
-	shared_ptr<Contents> contents;
+        struct Contents;
+        shared_ptr<Contents> contents;
     };
 
 }

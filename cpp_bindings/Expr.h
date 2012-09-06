@@ -67,8 +67,8 @@ namespace Halide {
         const std::vector<DynUniform> &uniforms() const;
         const std::vector<DynImage> &images() const;
         const std::vector<Var> &vars() const;
-	void setRDom(const RDom &dom);
-	const RDom &rdom() const;
+        void setRDom(const RDom &dom);
+        const RDom &rdom() const;
         const std::vector<Func> &funcs() const;
         const std::vector<UniformImage> &uniformImages() const;
         int implicitArgs() const;
@@ -162,39 +162,39 @@ namespace Halide {
     // into functions that take and return exprs, and call the original
     // function at runtime under the hood. See test/cpp/c_function for
     // example usage.
-#define HalideExtern_0(rt, name)			\
-    Halide::Expr name() {				\
-    return Halide::builtin(TypeOf<rt>(), #name);	\
+#define HalideExtern_0(rt, name)                        \
+    Halide::Expr name() {                               \
+    return Halide::builtin(TypeOf<rt>(), #name);        \
   }
 
-#define HalideExtern_1(rt, name, t1) 					\
-    Halide::Expr name(Halide::Expr a1) {				\
+#define HalideExtern_1(rt, name, t1)                                    \
+    Halide::Expr name(Halide::Expr a1) {                                \
     assert(a1.type() == Halide::TypeOf<t1>() && "Type mismatch for argument 1 of " #name); \
-    return Halide::builtin(Halide::TypeOf<rt>(), #name, a1);		\
+    return Halide::builtin(Halide::TypeOf<rt>(), #name, a1);            \
   }
 
-#define HalideExtern_2(rt, name, t1, t2) 				\
-    Halide::Expr name(Halide::Expr a1, Halide::Expr a2) {		\
+#define HalideExtern_2(rt, name, t1, t2)                                \
+    Halide::Expr name(Halide::Expr a1, Halide::Expr a2) {               \
     assert(a1.type() == Halide::TypeOf<t1>() && "Type mismatch for argument 1 of " #name); \
     assert(a2.type() == Halide::TypeOf<t2>() && "Type mismatch for argument 2 of " #name); \
-    return builtin(Halide::TypeOf<rt>(), #name, a1, a2);		\
+    return builtin(Halide::TypeOf<rt>(), #name, a1, a2);                \
   }
 
-#define HalideExtern_3(rt, name, t1, t2, t3) 				\
+#define HalideExtern_3(rt, name, t1, t2, t3)                            \
     Halide::Expr name(Halide::Expr a1, Halide::Expr a2, Halide::Expr a3) { \
     assert(a1.type() == Halide::TypeOf<t1>() && "Type mismatch for argument 1 of " #name); \
     assert(a2.type() == Halide::TypeOf<t2>() && "Type mismatch for argument 2 of " #name); \
     assert(a3.type() == Halide::TypeOf<t3>() && "Type mismatch for argument 3 of " #name); \
-    return builtin(Halide::TypeOf<rt>(), #name, a1, a2, a3);		\
+    return builtin(Halide::TypeOf<rt>(), #name, a1, a2, a3);            \
   }
 
-#define HalideExtern_4(rt, name, t1, t2, t3, t4) 			\
+#define HalideExtern_4(rt, name, t1, t2, t3, t4)                        \
     Halide::Expr name(Halide::Expr a1, Halide::Expr a2, Halide::Expr a3, Halide::Expr a4) { \
     assert(a1.type() == Halide::TypeOf<t1>() && "Type mismatch for argument 1 of " #name); \
     assert(a2.type() == Halide::TypeOf<t2>() && "Type mismatch for argument 2 of " #name); \
     assert(a3.type() == Halide::TypeOf<t3>() && "Type mismatch for argument 3 of " #name); \
     assert(a4.type() == Halide::TypeOf<t4>() && "Type mismatch for argument 4 of " #name); \
-    return builtin(Halide::TypeOf<rt>(), #name, a1, a2, a3, a4);	\
+    return builtin(Halide::TypeOf<rt>(), #name, a1, a2, a3, a4);        \
   }
 
 }

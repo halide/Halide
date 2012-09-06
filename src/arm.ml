@@ -54,15 +54,15 @@ let rec cg_expr (con : context) (expr : expr) =
         let elts = vector_elements (val_type_of_expr cond) in
         let bits = element_width (val_type_of_expr thenCase) in
         let l = cg_expr thenCase in
-	let r = cg_expr elseCase in
-	let mask = cg_expr cond in
-	let mask = build_sext mask (type_of_val_type c (IntVector (bits, elts))) "" b in
-	let inv_mask = build_not mask "" b in
-	let t = type_of l in
-	let l = build_bitcast l (type_of mask) "" b in
-	let r = build_bitcast r (type_of mask) "" b in
-	let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
-	build_bitcast result t "" b             
+        let r = cg_expr elseCase in
+        let mask = cg_expr cond in
+        let mask = build_sext mask (type_of_val_type c (IntVector (bits, elts))) "" b in
+        let inv_mask = build_not mask "" b in
+        let t = type_of l in
+        let l = build_bitcast l (type_of mask) "" b in
+        let r = build_bitcast r (type_of mask) "" b in
+        let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
+        build_bitcast result t "" b             
     | Bop (Min, l, r) when is_vector l -> 
         begin match (val_type_of_expr l) with
           | IntVector (16, 8) ->
@@ -100,9 +100,9 @@ let rec cg_expr (con : context) (expr : expr) =
 
     (* use intrinsics for unaligned vector loads/stores *) 
     | Load (t, buf, Ramp (base, IntImm 1, w)) when 
-	(bit_width t = 128 || bit_width t = 64) && 
-	  (t <> (FloatVector (64, 2))) && 
-	  (Analysis.reduce_expr_modulo base w == None) ->
+        (bit_width t = 128 || bit_width t = 64) && 
+          (t <> (FloatVector (64, 2))) && 
+          (Analysis.reduce_expr_modulo base w == None) ->
         let intrin = match t with
           | UIntVector (bits, w) 
           | IntVector (bits, w) -> (string_of_int w) ^ "i" ^ (string_of_int bits)

@@ -63,58 +63,58 @@ let rec cg_expr (con:context) (expr:expr) =
   let cg_unsigned_integer_division x y intrin table bits elts =
     begin match Array.get table (y-2) with
       | (meth, mul, shift) -> 
-	  (* Codegen the argument *)
+          (* Codegen the argument *)
           let t0 = cg_expr x in 
-	
-	  (* Possibly do a multiply-keep-high-half (methods 1 and 2) *)
-	  let t1 = if meth > 0 then 
-	      let mul = cg_expr (Broadcast (Cast (UInt bits, IntImm mul), elts)) in
-	      build_call intrin [|t0; mul|] "" b
-	    else 
-	      t0
-	  in
-	  
-	  (* Possibly add a correcting factor of (t0-t1)/2 (method 2 only) *)
-	  let t2 = if meth > 1 then 	      
-	      let sh = cg_expr (Broadcast (Cast (Int bits, IntImm 1), elts)) in
-	      let y = build_sub t0 t1 "" b in
-	      let y = build_lshr y sh "" b in
-	      build_add t1 y "" b
-	    else 
-	      t1 
-	  in
+        
+          (* Possibly do a multiply-keep-high-half (methods 1 and 2) *)
+          let t1 = if meth > 0 then 
+              let mul = cg_expr (Broadcast (Cast (UInt bits, IntImm mul), elts)) in
+              build_call intrin [|t0; mul|] "" b
+            else 
+              t0
+          in
+          
+          (* Possibly add a correcting factor of (t0-t1)/2 (method 2 only) *)
+          let t2 = if meth > 1 then           
+              let sh = cg_expr (Broadcast (Cast (Int bits, IntImm 1), elts)) in
+              let y = build_sub t0 t1 "" b in
+              let y = build_lshr y sh "" b in
+              build_add t1 y "" b
+            else 
+              t1 
+          in
 
-	  (* Perform a final shift if necessary (all methods) *)
-	  let sh = cg_expr (Broadcast (Cast (Int bits, IntImm shift), elts)) in
-	  if shift != 0 then build_lshr t2 sh "" b else t2
+          (* Perform a final shift if necessary (all methods) *)
+          let sh = cg_expr (Broadcast (Cast (Int bits, IntImm shift), elts)) in
+          if shift != 0 then build_lshr t2 sh "" b else t2
     end
   in
 
   let cg_signed_integer_division x y intrin table bits elts =
     begin match Array.get table (y-2) with
       | (meth, mul, shift) -> 
-	  (* Codegen the argument *)
+          (* Codegen the argument *)
           let t0 = cg_expr x in 
-	
-	  (* Do a multiply-keep-high-half *)
-	  let mul = cg_expr (Broadcast (Cast (Int bits, IntImm mul), elts)) in
-	  let t1 = build_call intrin [|t0; mul|] "" b in
-	  
-	  (* Possibly add a correcting factor of t0 (method 1 only) *)
-	  let t2 = if meth > 0 then 	      
-	      build_add t0 t1 "" b
-	    else 
-	      t1 
-	  in
+        
+          (* Do a multiply-keep-high-half *)
+          let mul = cg_expr (Broadcast (Cast (Int bits, IntImm mul), elts)) in
+          let t1 = build_call intrin [|t0; mul|] "" b in
+          
+          (* Possibly add a correcting factor of t0 (method 1 only) *)
+          let t2 = if meth > 0 then           
+              build_add t0 t1 "" b
+            else 
+              t1 
+          in
 
-	  (* Perform a shift if necessary (all methods) *)
-	  let sh = cg_expr (Broadcast (Cast (Int bits, IntImm shift), elts)) in
-	  let t3 = if shift != 0 then build_ashr t2 sh "" b else t2 in
+          (* Perform a shift if necessary (all methods) *)
+          let sh = cg_expr (Broadcast (Cast (Int bits, IntImm shift), elts)) in
+          let t3 = if shift != 0 then build_ashr t2 sh "" b else t2 in
 
-	  (* Add one for negative numbers *)
-	  let sh = cg_expr (Broadcast (Cast (Int bits, IntImm (bits-1)), elts)) in
-	  let sign_bit = build_lshr t0 sh "" b in
-	  build_add sign_bit t3 "" b
+          (* Add one for negative numbers *)
+          let sh = cg_expr (Broadcast (Cast (Int bits, IntImm (bits-1)), elts)) in
+          let sign_bit = build_lshr t0 sh "" b in
+          build_add sign_bit t3 "" b
 
     end
   in
@@ -148,7 +148,7 @@ let rec cg_expr (con:context) (expr:expr) =
       let intrin = declare_function "llvm.x86.sse2.pmulh.w" (function_type i16x8_t [|i16x8_t; i16x8_t|]) m in 
       let table = Integer_division.table_s16 in
       cg_signed_integer_division x y intrin table 16 8  
-	
+        
     | Bop (Div, x, Broadcast (Cast (UInt 16, IntImm y), 8)) when y > 1 && y < 64 ->
       let intrin = declare_function "llvm.x86.sse2.pmulhu.w" (function_type i16x8_t [|i16x8_t; i16x8_t|]) m in 
       let table = Integer_division.table_u16 in
@@ -310,8 +310,8 @@ let rec cg_expr (con:context) (expr:expr) =
 
     (* Inverse *)
     | Bop (Div, Broadcast(FloatImm 1.0, 4), arg) ->
-      call_intrin "sse.rcp.ps" [|arg|]	
-	
+      call_intrin "sse.rcp.ps" [|arg|]  
+        
     | Bop (Div, Broadcast(FloatImm 1.0, 8), arg) when use_avx ->
       call_intrin "avx.rcp.ps.256" [|arg|]
 
