@@ -269,19 +269,19 @@ namespace Halide {
     Func::Func() : contents(new Contents()) {
     }
  
-    Func::Func(const std::string &name) : contents(new Contents(name)) {
+    Func::Func(const std::string &name) : contents(new Contents(sanitizeName(name))) {
     }
 
-    Func::Func(const char *name) : contents(new Contents(name)) {
+    Func::Func(const char *name) : contents(new Contents(sanitizeName(name))) {
     }
 
     Func::Func(const Type &t) : contents(new Contents(t)) {
     }
 
-    Func::Func(const std::string &name, Type t) : contents(new Contents(name, t)) {
+    Func::Func(const std::string &name, Type t) : contents(new Contents(sanitizeName(name), t)) {
     }
 
-    Func::Func(const char *name, Type t) : contents(new Contents(name, t)) {
+    Func::Func(const char *name, Type t) : contents(new Contents(sanitizeName(name), t)) {
     }
 
     bool Func::operator==(const Func &other) const {
