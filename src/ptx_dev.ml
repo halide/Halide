@@ -190,7 +190,7 @@ let rec cg_stmt con stmt = match stmt with
 
   | stmt -> con.cg_stmt stmt
 
-let rec codegen_entry dev_ctx dev_mod cg_entry entry opts =
+let rec cg_entry dev_ctx dev_mod codegen_entry entry opts =
   failwith "Direct use of Ptx_dev.codegen_entry is not supported"
 
 let malloc con name count elem_size =

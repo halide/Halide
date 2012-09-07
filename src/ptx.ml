@@ -486,7 +486,7 @@ let rec cg_stmt (con:context) stmt = match stmt with
 (*
  * Codegen the host calling module
  *)
-let rec codegen_entry c m cg_entry make_cg_context e opts =
+let rec cg_entry c m codegen_entry make_cg_context e opts =
   (* load the template PTX host module *)
   (* this has inlined most of the X86 module, too, since we need its helpers for the host-side code *)
   Stdlib.init_module_ptx m;

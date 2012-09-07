@@ -16,7 +16,7 @@ let pointer_size = 8
 (* "x86_64-unknown-linux-gnu" *)
 let target_triple = "" 
 
-let codegen_entry c m cg_entry _ e opts =
+let cg_entry c m codegen_entry _ e opts =
   (* set up module *)
   if List.mem "avx" opts then
     Stdlib.init_module_x86_avx m
@@ -24,7 +24,7 @@ let codegen_entry c m cg_entry _ e opts =
     Stdlib.init_module_x86 m;
 
   (* build the inner kernel, which takes raw byte*s *)
-  let inner = cg_entry c m e opts in
+  let inner = codegen_entry opts c m e in
 
   (* return the wrapper which takes buffer_t*s *)
   cg_wrapper c m e inner
@@ -39,15 +39,6 @@ let rec cg_expr (con:context) (expr:expr) =
   let i8x16_t = vector_type (i8_type c) 16 in
   let i8x32_t = vector_type (i8_type c) 32 in
   let i32_t = i32_type c in
-
-  let max_i8 = Cast (Int(8), IntImm 127) in
-  let min_i8 = Cast (Int(8), IntImm (-128)) in
-  let max_i16 = Cast (Int(16), IntImm 32767) in
-  let min_i16 = Cast (Int(16), IntImm (-32768)) in
-  let max_i32 = Cast (Int(32), IntImm 2147483647) in
-  let min_i32 = Cast (Int(32), IntImm (-2147483648)) in  
-  let max_u8 = Cast (UInt(8), IntImm 255) in
-  let max_u16 = Cast (UInt(8), IntImm 65535) in
 
   let rec pow2 = function
     | 0 -> 1
@@ -145,14 +136,14 @@ let rec cg_expr (con:context) (expr:expr) =
 
     (* x86 doesn't do 16 bit vector division, but for small constants you can do multiplication instead. *)
     | Bop (Div, x, Broadcast (Cast (Int 16, IntImm y), 8)) when y > 1 && y < 64 ->
-      let intrin = declare_function "llvm.x86.sse2.pmulh.w" (function_type i16x8_t [|i16x8_t; i16x8_t|]) m in 
-      let table = Integer_division.table_s16 in
-      cg_signed_integer_division x y intrin table 16 8  
+        let intrin = declare_function "llvm.x86.sse2.pmulh.w" (function_type i16x8_t [|i16x8_t; i16x8_t|]) m in 
+        let table = Integer_division.table_s16 in
+        cg_signed_integer_division x y intrin table 16 8  
         
     | Bop (Div, x, Broadcast (Cast (UInt 16, IntImm y), 8)) when y > 1 && y < 64 ->
-      let intrin = declare_function "llvm.x86.sse2.pmulhu.w" (function_type i16x8_t [|i16x8_t; i16x8_t|]) m in 
-      let table = Integer_division.table_u16 in
-      cg_unsigned_integer_division x y intrin table 16 8
+        let intrin = declare_function "llvm.x86.sse2.pmulhu.w" (function_type i16x8_t [|i16x8_t; i16x8_t|]) m in 
+        let table = Integer_division.table_u16 in
+        cg_unsigned_integer_division x y intrin table 16 8
         
     (* Also use mulh.w and mulhu.w when explicity requested using a widening mul followed by a shift *)
     | Cast (IntVector (16, 8), 
@@ -176,11 +167,11 @@ let rec cg_expr (con:context) (expr:expr) =
         begin match (Analysis.reduce_expr_modulo base n) with 
           | Some _ -> con.cg_expr expr
           | _ ->            
-              let unaligned_load_128 = declare_function "unaligned_load_128"
-                (function_type (i8x16_t) [|ptr_t|]) m in
-              let addr = build_pointercast (con.cg_memref t buf base) ptr_t "" b in
-              let value = build_call unaligned_load_128 [|addr|] "" b in
-              build_bitcast value (type_of_val_type c t) "" b        
+            let unaligned_load_128 = declare_function "unaligned_load_128"
+              (function_type (i8x16_t) [|ptr_t|]) m in
+            let addr = build_pointercast (con.cg_memref t buf base) ptr_t "" b in
+            let value = build_call unaligned_load_128 [|addr|] "" b in
+            build_bitcast value (type_of_val_type c t) "" b        
         end
 
     (* unaligned dense 256-bit loads use vmovups if available *)
@@ -240,6 +231,7 @@ let rec cg_expr (con:context) (expr:expr) =
       begin match op with
         | Add -> call_intrin "sse2.padds.b" [|l; r|]
         | Sub -> call_intrin "sse2.psubs.b" [|l; r|]
+        | _ -> failwith "How did I get here?"
       end
     | Cast (UIntVector(8, 16), 
             Bop (Min, 
@@ -249,6 +241,7 @@ let rec cg_expr (con:context) (expr:expr) =
       begin match op with
         | Add -> call_intrin "sse2.paddus.b" [|l; r|]
         | Sub -> call_intrin "sse2.psubus.b" [|l; r|]
+        | _ -> failwith "How did I get here?"
       end
     | Cast (IntVector(16, 8), 
            Bop (Max, 
@@ -260,6 +253,7 @@ let rec cg_expr (con:context) (expr:expr) =
       begin match op with
         | Add -> call_intrin "sse2.padds.w" [|l; r|]
         | Sub -> call_intrin "sse2.psubs.w" [|l; r|]
+        | _ -> failwith "How did I get here?"
       end
     | Cast (UIntVector(16, 8), 
             Bop (Min, 
@@ -269,6 +263,7 @@ let rec cg_expr (con:context) (expr:expr) =
       begin match op with
         | Add -> call_intrin "sse2.paddus.w" [|l; r|]
         | Sub -> call_intrin "sse2.psubus.w" [|l; r|]
+        | _ -> failwith "How did I get here?"
       end
 
     (* Saturating narrowing casts. We recognize them here, and implement them in architecture.x86.stdlib.ll *)

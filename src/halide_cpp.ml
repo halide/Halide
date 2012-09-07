@@ -12,89 +12,73 @@ open Lower
 open Schedule_transforms
 open Util
 
-let compilation_cache = 
-  Hashtbl.create 16
-
-let codegen_to_c_callable e =
-  let module Cg = Cg_for_target in
-  let (c,m,f) = Cg.codegen_entry e Cg.target_opts in
-  let w = Cg.codegen_c_wrapper c m f in
-  (c,m,w)
-
 let lower (f:string) (env:environment) (sched: schedule_tree) =
   (* Printexc.record_backtrace true; *)
-
   lower_function f env sched
 
-  (* with x -> begin
-    Printf.printf "Compilation failed. Backtrace:\n%s\n%!" (Printexc.get_backtrace ());
-    raise x
-  end *)
+let serializeEntry name args stmt = 
+  Sexplib.Sexp.to_string (sexp_of_entrypoint (name, args, stmt))
+                                      
+let compile target name args stmt =
 
-let serializeEntry name args stmt = Sexplib.Sexp.to_string
-                                      (sexp_of_entrypoint (name, args, stmt))
+  let (target, target_opts) = match split_name target with
+    | (first::rest) -> first, rest
+    | _ -> failwith "Target was empty"
+  in
 
-let compile name args stmt =
+  let func = (name, args, stmt) in 
 
   (* Printexc.record_backtrace true; *)
 
-
-  (* TODO: Canonicalize names. Variables get renamed to v0 v1
-     v2... depending on the order in which they're found, arguments to
-     a0, a1, a2, depending on the order that they occur in the
-     arguments list. This is done to assist hashing. *)
+  dbg 2 "Initializing native target\n%!"; 
+  ignore (initialize_native_target());
+  dbg 2 "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
 
   try begin
-    let func = (name, args, stmt) in
-    (* NOTE: the compilation cache ignores changes in target options *)
-    if Hashtbl.mem compilation_cache func then begin
-      (* Printf.printf "Found function in cache\n%!";  *)
-      Hashtbl.find compilation_cache func
-    end else begin 
-      dbg 2 "Initializing native target\n%!"; 
-      ignore (initialize_native_target());
-      dbg 2 "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
-      let (c, m, f) = codegen_to_c_callable func in
-      (* ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc"); *)
-      Hashtbl.add compilation_cache func (m, f);
+    let (c, m, f) = Cg_for_target.codegen_entry target target_opts func in
+    (* Wrap the function *)
+    let f = Cg_for_target.codegen_c_wrapper target target_opts c m f in
 
-      (* Log the lowered entrypoint *)
-      if verbosity > 1 then begin
-        let out = open_out (name ^ ".sexp") in
-        Printf.fprintf out "%s%!" (serializeEntry name args stmt);
-        close_out out
-      end;
-
-      (* TODO: this leaks the llcontext, and will leak the module if the cache
-       * doesn't free it eventually. *)
-      (m, f)
-    end
-  end
-  with x -> begin
+    (* ignore(Llvm_bitwriter.write_bitcode_file m "generated.bc"); *)
+    
+    (* Log the lowered entrypoint *)
+    if verbosity > 1 then begin
+      let out = open_out (name ^ ".sexp") in
+      Printf.fprintf out "%s%!" (serializeEntry name args stmt);
+      close_out out
+    end;
+    
+    (* TODO: this leaks the llcontext, and will leak the module if the cache
+     * doesn't free it eventually. *)
+    (m, f)
+  end with x -> begin
     Printf.printf "Compilation failed.\n%!" (* "Backtrace:\n%s\n%!" (Printexc.get_backtrace ()) *);
     raise x
-  end
+  end    
 
-let compile_to_file name args stmt =
+let compile_to_file target name args stmt =
   (* Printexc.record_backtrace true; *)
   
+  let (target, target_opts) = match split_name target with
+    | (first::rest) -> first, rest
+    | _ -> failwith "Target was empty"
+  in
+
   let backend = try
     Sys.getenv "HL_BACKEND"
   with Not_found ->
-    Printf.eprintf "HL_BACKEND not set - defaulting to LLVM\n";
+    dbg 0 "HL_BACKEND not set - defaulting to LLVM\n";
     "llvm"
   in
 
-  try begin match backend with
-    | "llvm" ->
-        (* ignore (initialize_native_target()); *)
-        let module Cg = Cg_for_target in
-        Cg.codegen_to_bitcode_and_header (name, args, stmt) Cg.target_opts
-    | "c" ->
-        Cg_c.codegen_to_file (name, args, stmt) (* TODO: take target_opts *)
-    | _ -> failwith ("Unrecognized HL_BACKEND: " ^ backend)
-  end
-  with x -> begin
+  try begin 
+    match backend with
+      | "llvm" ->
+          Cg_for_target.codegen_to_bitcode_and_header target target_opts (name, args, stmt) 
+      | "c" ->
+          Cg_c.codegen_to_file (name, args, stmt) (* TODO: take target and target_opts *)
+      | _ -> failwith ("Unrecognized HL_BACKEND: " ^ backend)
+  end with x -> begin
     Printf.printf "Compilation failed.\n%!" (* "Backtrace:\n%s\n%!" (Printexc.get_backtrace ()) *);
     raise x
   end
