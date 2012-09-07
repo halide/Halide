@@ -23,7 +23,7 @@ namespace Halide {
         contents(new Contents(dom, min, size, uniqueName('r'))) {}
     
     RVar::RVar(const RDom &dom, const Expr &min, const Expr &size, const std::string &name) :
-        contents(new Contents(dom, min, size, name)) {}
+        contents(new Contents(dom, min, size, sanitizeName(name))) {}
     
     const Expr &RVar::min() const {
         assert(isDefined() && "RVar is not defined");
