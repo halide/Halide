@@ -134,7 +134,7 @@ namespace Halide {
         std::string serialize();
 
         void compileJIT();
-        void compileToFile(const std::string &name);
+        void compileToFile(const std::string &name, std::string target = "");
 
         void setErrorHandler(void (*)(char *));
 
@@ -149,7 +149,7 @@ namespace Halide {
             MLVal arg;
         };
 
-        void compileToFile(const std::string &name, std::vector<Arg> args);
+        void compileToFile(const std::string &name, std::vector<Arg> args, std::string target = "");
 
     private:
         struct Contents;
