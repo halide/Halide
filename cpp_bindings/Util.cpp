@@ -18,4 +18,12 @@ namespace Halide {
         snprintf(buf, 256, "%d", x);
         return std::string(buf);
     }
+
+    std::string sanitizeName(const std::string &name) {
+        std::string result = name;
+        for (size_t i = 1; i < name.size(); i++) {
+            if (result[i] == '.') result[i] = '_';
+        }
+        return result;
+    }
 }

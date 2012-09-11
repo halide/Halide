@@ -25,7 +25,11 @@ void check(const char *op, int vector_width, Expr e, const char *args) {
     if (filter) {
 	if (strncmp(op, filter, strlen(filter)) != 0) return;
     }
-    Func f(std::string("test_") + op + uniqueName('_'));
+    std::string name = std::string("test_") + op + uniqueName('_');
+    for (int i = 0; i < name.size(); i++) {
+        if (name[i] == '.') name[i] = '_';
+    }
+    Func f(name);
     f(x, y) = e;
     f.vectorize(x, vector_width);
 
@@ -309,7 +313,9 @@ void check_sse_all(bool use_avx, bool use_avx2) {
 
     // skip dot product and argmin 
 
-    check_sse("pmuldq", 2, i64(i32_1) * i64(i32_2));
+    // llvm doesn't distinguish between signed and unsigned multiplies
+    //check_sse("pmuldq", 4, i64(i32_1) * i64(i32_2));
+    check_sse("pmuludq", 4, u64(u32_1) * u64(u32_2));
     check_sse("pmulld", 4, i32_1 * i32_2);
 
     check_sse("blendvps", 4, select(f32_1 > 0.7f, f32_1, f32_2));
@@ -435,7 +441,9 @@ void check_sse_all(bool use_avx, bool use_avx2) {
 	check_sse("vpabsw", 16, abs(i16_1));
 	check_sse("vpabsd", 8, abs(i32_1));
 	
-	check_sse("vpmuldq", 4, i64(i32_1) * i64(i32_2));
+        // llvm doesn't distinguish between signed and unsigned multiplies
+        // check_sse("vpmuldq", 8, i64(i32_1) * i64(i32_2));
+        check_sse("vpmuludq", 8, u64(u32_1) * u64(u32_2));
 	check_sse("vpmulld", 8, i32_1 * i32_2);
 	
 	check_sse("vpblendvb", 32, select(u8_1 > 7, u8_1, u8_2));

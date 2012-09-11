@@ -15,7 +15,7 @@ namespace Halide {
     class Var {
     public:
         Var() : _name(uniqueName('v')) { }
-        Var(const std::string &name) : _name(name) { }
+        Var(const std::string &name, bool sanitize = true) : _name(sanitize ? sanitizeName(name) : name) { }
 
         const std::string &name() const {return _name;}
 
