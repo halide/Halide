@@ -1,7 +1,8 @@
 LLVM_ROOT=`pwd`/../llvm
 LLVM_PREFIX=${LLVM_ROOT}/Release+Asserts
 LLVM_PATH=${LLVM_PREFIX}/bin
-CLANG=${LLVM_PATH}/clang
+#CLANG=${LLVM_PATH}/clang
+CLANG=clang
 LLVM_AS=${LLVM_PATH}/llvm-as
 
 for arch in ptx ptx_dev x86 x86_avx arm arm_android; do 

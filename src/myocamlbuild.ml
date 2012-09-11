@@ -84,7 +84,36 @@ let llsupport_linkflags = [
   A"-cclib"; A libllsupport_impl;
   A"-cclib"; A ("-L" ^ llvm_prefix ^ "/lib");
   A"-cclib"; A "-lLLVMLinker";
-  A"-cclib"; A "-lLLVMipo"
+  A"-cclib"; A "-lLLVMipo";
+  A"-cclib"; A "-lLLVMVectorize";
+  A"-cclib"; A "-lLLVMArchive";
+  A"-cclib"; A "-lLLVMInterpreter";
+  A"-cclib"; A "-lLLVMX86AsmParser";
+  A"-cclib"; A "-lLLVMX86CodeGen";
+  A"-cclib"; A "-lLLVMSelectionDAG";
+  A"-cclib"; A "-lLLVMAsmPrinter";
+  A"-cclib"; A "-lLLVMMCParser";
+  A"-cclib"; A "-lLLVMX86Disassembler";
+  A"-cclib"; A "-lLLVMX86Desc";
+  A"-cclib"; A "-lLLVMX86AsmPrinter";
+  A"-cclib"; A "-lLLVMX86Utils";
+  A"-cclib"; A "-lLLVMX86Info";
+  A"-cclib"; A "-lLLVMBitReader";
+  A"-cclib"; A "-lLLVMBitWriter";
+  A"-cclib"; A "-lLLVMJIT";
+  A"-cclib"; A "-lLLVMRuntimeDyld";
+  A"-cclib"; A "-lLLVMExecutionEngine";
+  A"-cclib"; A "-lLLVMCodeGen";
+  A"-cclib"; A "-lLLVMScalarOpts";
+  A"-cclib"; A "-lLLVMInstCombine";
+  A"-cclib"; A "-lLLVMTransformUtils";
+  A"-cclib"; A "-lLLVMipa";
+  A"-cclib"; A "-lLLVMAnalysis";
+  A"-cclib"; A "-lLLVMTarget";
+  A"-cclib"; A "-lLLVMMC";
+  A"-cclib"; A "-lLLVMObject";
+  A"-cclib"; A "-lLLVMCore";
+  A"-cclib"; A "-lLLVMSupport"
 ] in
 (* PTX target libraries *)
 let ptx_llsupport_linkflags =
@@ -97,11 +126,11 @@ let ptx_llsupport_linkflags =
 List.flatten (
 List.map
 (fun fl -> [A"-cclib"; A fl])
-["-lLLVMPTXCodeGen"; "-lLLVMSelectionDAG"; "-lLLVMAsmPrinter";
+["-lLLVMNVPTXCodeGen"; "-lLLVMSelectionDAG"; "-lLLVMAsmPrinter";
  "-lLLVMMCParser"; "-lLLVMCodeGen"; "-lLLVMScalarOpts";
  "-lLLVMInstCombine"; "-lLLVMTransformUtils"; "-lLLVMipa"; 
- "-lLLVMAnalysis"; "-lLLVMPTXDesc"; "-lLLVMPTXInfo"; "-lLLVMTarget";
- "-lLLVMPTXAsmPrinter"; "-lLLVMMC"; "-lLLVMObject"; "-lLLVMBitReader"; 
+ "-lLLVMAnalysis"; "-lLLVMNVPTXDesc"; "-lLLVMNVPTXInfo"; "-lLLVMTarget";
+ "-lLLVMNVPTXAsmPrinter"; "-lLLVMMC"; "-lLLVMObject"; "-lLLVMBitReader"; 
  "-lLLVMCore"; "-lLLVMSupport"]
 ) in
  let 
