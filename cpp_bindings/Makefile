@@ -16,7 +16,7 @@ CUDA_LIBS ?= -L/usr/local/cuda/lib -lcuda
 LLVM_DIR ?= ../llvm/Release+Asserts
 LLVM_CONFIG_EXE=$(LLVM_DIR)/bin/llvm-config
 LLVM_CFLAGS_CXX=$(shell $(LLVM_CONFIG_EXE) --cflags) -I$(LLVM_DIR)/../include
-LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter bitreader x86 interpreter linker ptx ipo)
+LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter bitreader x86 interpreter linker nvptx ipo)
 LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_bitreader -lllvm_analysis -lllvm_target
 
 OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml

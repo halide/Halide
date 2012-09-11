@@ -46,10 +46,10 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
     LLVMContext &ctx = mod.getContext();
     
     // TODO: streamline this - don't initialize anything but PTX
-    LLVMInitializePTXTargetInfo();
-    LLVMInitializePTXTarget();
-    LLVMInitializePTXTargetMC();
-    LLVMInitializePTXAsmPrinter();
+    LLVMInitializeNVPTXTargetInfo();
+    LLVMInitializeNVPTXTarget();
+    LLVMInitializeNVPTXTargetMC();
+    LLVMInitializeNVPTXAsmPrinter();
 
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/
@@ -57,11 +57,11 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
     // Set up TargetTriple
-    mod.setTargetTriple(Triple::normalize("ptx64--"));
+    mod.setTargetTriple(Triple::normalize("nvptx64--"));
     Triple TheTriple(mod.getTargetTriple());
     
     // Allocate target machine
-    const std::string MArch = "ptx64";
+    const std::string MArch = "nvptx64";
     const std::string MCPU = "sm_20";
     const Target* TheTarget = 0;
     
@@ -74,7 +74,8 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
     Options.PrintMachineCode = false;
     Options.NoFramePointerElim = false;
     Options.NoFramePointerElimNonLeaf = false;
-    Options.NoExcessFPPrecision = false;
+    //Options.NoExcessFPPrecision = false;
+    Options.AllowFPOpFusion = FPOpFusion::Fast;
     Options.UnsafeFPMath = true;
     Options.NoInfsFPMath = false;
     Options.NoNaNsFPMath = false;
@@ -89,7 +90,7 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
     Options.GuaranteedTailCallOpt = false;
     Options.StackAlignmentOverride = 0;
     Options.RealignStack = true;
-    Options.DisableJumpTables = false;
+    // Options.DisableJumpTables = false;
     Options.TrapFuncName = "";
     Options.EnableSegmentedStacks = false;
 
@@ -133,7 +134,7 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
     std::string& out = outs.str();
     return copy_string(out.c_str());
 #else
-    return caml_copy_string("NOT IMPLEMENTED ON ARM");
+    return caml_copy_string("NOT IMPLEMENTED ON ARM: compile_module_to_string");
 #endif //disable on ARM
 }
 
