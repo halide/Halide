@@ -7,6 +7,9 @@
 namespace Halide {
     // Generate a unique name
     std::string uniqueName(char prefix);
+
+    // Make sure a name has no invalid characters
+    std::string sanitizeName(const std::string &name);
     
     // Make ML lists
     MLVal makeList();

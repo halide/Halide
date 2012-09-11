@@ -13,7 +13,7 @@ exception UnalignedVectorMemref
 exception ArgExprOfBufferArgument (* The Arg expr can't dereference a Buffer, only Scalars *)
 exception ArgTypeMismatch of val_type * val_type
 
-type cg_entry = llcontext -> llmodule -> entrypoint -> string list -> llvalue 
+type cg_entry = string list -> llcontext -> llmodule -> entrypoint -> llvalue 
 type 'a make_cg_context = llcontext -> llmodule -> llbuilder ->
                           (string, llvalue) Hashtbl.t -> 'a -> string list -> 'a cg_context
 type cg_expr = expr -> llvalue
@@ -32,8 +32,7 @@ module type Architecture = sig
 
   val start_state : unit -> state
 
-  (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)
-  val codegen_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context -> entrypoint -> string list -> llvalue
+  val cg_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context -> entrypoint -> string list -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
   val malloc  : context -> string -> expr -> expr -> (llvalue * (context -> unit))
@@ -47,9 +46,9 @@ module type Codegen = sig
   type context = arch_state cg_context
 
   val make_cg_context : arch_state make_cg_context
-  val codegen_entry : entrypoint -> string list -> llcontext * llmodule * llvalue
-  val codegen_c_wrapper : llcontext -> llmodule -> llvalue -> llvalue
-  val codegen_to_bitcode_and_header : entrypoint -> string list -> unit
+  val codegen_entry : string list -> entrypoint -> llcontext * llmodule * llvalue
+  val codegen_c_wrapper : string list -> llcontext -> llmodule -> llvalue -> llvalue
+  val codegen_to_bitcode_and_header : string list -> entrypoint -> unit
 end
 
 
@@ -737,8 +736,8 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
 
   cg_context
 
-let cg_entry c m e arch_opts =
-  let _,args,stmt = e in
+let cg_entry arch_opts c m e =
+  let (_, args, stmt) = e in
 
   (* make an entrypoint function *)
   let f = define_entry c m e in
@@ -772,7 +771,7 @@ let cg_entry c m e arch_opts =
  *)
 
 (* C runner wrapper *)
-let codegen_c_wrapper c m f =
+let codegen_c_wrapper arch_opts c m f =
 
   let raw_buffer_t = raw_buffer_t c in
   let i32_t = i32_type c in
@@ -838,7 +837,7 @@ let codegen_c_wrapper c m f =
 
 (* codegen constructs a new context and module for code generation, which it
  * returns for the caller to eventually free *)
-let codegen_entry (e:entrypoint) (opts:string list) =
+let codegen_entry (opts:string list) (e:entrypoint) =
   let (name, _, _) = e in
 
   (* construct basic LLVM state *)
@@ -851,22 +850,21 @@ let codegen_entry (e:entrypoint) (opts:string list) =
     ignore (Llvm_executionengine.initialize_native_target());
 
   (* codegen *)
-  let f = Arch.codegen_entry c m cg_entry make_cg_context e opts in
+  let f = Arch.cg_entry c m cg_entry make_cg_context e opts in
 
   (c,m,f)
 
-(* TODO: this is fairly redundant with codegen_to_file *)
-let codegen_to_bitcode_and_header (e:entrypoint) (opts:string list) =
+let codegen_to_bitcode_and_header (opts:string list) (e:entrypoint) =
   let (object_name, _, _) = e in
 
   let bitcode_file = object_name ^ ".bc" in
   let header_file = object_name ^ ".h" in
 
   (* codegen *)
-  let (c,m,f) = codegen_entry e opts in
+  let (c,m,f) = codegen_entry opts e in
 
   (* build the convenience wrapper *)
-  ignore (codegen_c_wrapper c m f);
+  ignore (codegen_c_wrapper opts c m f);
 
   (* write to bitcode file *)
   save_bc_to_file m bitcode_file;

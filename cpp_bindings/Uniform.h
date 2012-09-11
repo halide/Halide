@@ -12,7 +12,7 @@ namespace Halide {
     class DynUniform {
     public:
         DynUniform(Type t) : contents(new Contents(t, uniqueName('u'))) {}
-        DynUniform(Type t, const std::string &name) : contents(new Contents(t, name)) {}
+        DynUniform(Type t, const std::string &name) : contents(new Contents(t, sanitizeName(name))) {}
 
         Type type() const {return contents->type;}
         const std::string &name() const {return contents->name;}

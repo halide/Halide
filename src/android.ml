@@ -13,12 +13,12 @@ let pointer_size = 4
 
 let target_triple = "arm-linux-android-eabi"
 
-let codegen_entry c m cg_entry _ e opts =
+let cg_entry c m codegen_entry _ e opts =
   (* set up module *)
   Stdlib.init_module_android m;
 
   (* build the inner kernel, which takes raw byte*s *)
-  let inner = cg_entry c m e opts in
+  let inner = codegen_entry opts c m e in
 
   (* return the wrapper which takes buffer_t*s *)
   cg_wrapper c m e inner

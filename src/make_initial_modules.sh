@@ -4,7 +4,7 @@ LLVM_PATH=${LLVM_PREFIX}/bin
 CLANG=${LLVM_PATH}/clang
 LLVM_AS=${LLVM_PATH}/llvm-as
 
-for arch in ptx ptx_dev x86 x86_avx arm android; do 
+for arch in ptx ptx_dev x86 x86_avx arm arm_android; do 
 
     C_STUB=architecture.${arch}.stdlib.cpp
     LL_STUB=architecture.${arch}.stdlib.ll
@@ -15,7 +15,7 @@ for arch in ptx ptx_dev x86 x86_avx arm android; do
       LL_STUB="$LL_STUB architecture.x86.stdlib.ll"
     fi
 
-    if [[ $arch == "android" ]]; then
+    if [[ $arch == "arm_android" ]]; then
         CCFLAGS="-m32"
     fi
 

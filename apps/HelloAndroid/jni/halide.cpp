@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     clamped.root().parallel(y);
     result.vectorize(x, 8).parallel(y);
 
-    result.compileToFile("halide");    
+    result.compileToFile("halide", "arm.android");    
 
     return 0;
 }
