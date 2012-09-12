@@ -38,7 +38,7 @@ namespace Halide {
             for (int i = 0; i < e.rdom().dimensions(); i++) {
                 bool already_exists = false;
                 for (size_t j = 0; j < callArgNames.size(); j++) {
-		    if (e.rdom()[i].name() == callArgNames[j]) already_exists = true;
+                    if (e.rdom()[i].name() == callArgNames[j]) already_exists = true;
                 }
                 if (!already_exists) {
                     callArgs.push_back(e.rdom()[i]);

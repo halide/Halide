@@ -51,6 +51,8 @@ bool test(int vec_width) {
     const int W = 3200;
     const int H = 16;
     
+    printf("Testing %s\n", string_of_type<A>());
+
     Image<A> input(W+16, H+16);
     for (int y = 0; y < H+16; y++) {
         for (int x = 0; x < W+16; x++) {
@@ -60,6 +62,7 @@ bool test(int vec_width) {
     Var x, y;
 
     // Add
+    printf("Add\n");
     Func f1;
     f1(x, y) = input(x, y) + input(x+1, y);
     f1.vectorize(x, vec_width);
@@ -76,6 +79,7 @@ bool test(int vec_width) {
     }
     
     // Sub
+    printf("Subtract\n");
     Func f2;
     f2(x, y) = input(x, y) - input(x+1, y);
     f2.vectorize(x, vec_width);
@@ -92,6 +96,7 @@ bool test(int vec_width) {
     }
 
     // Mul
+    printf("Multiply\n");
     Func f3;
     f3(x, y) = input(x, y) * input(x+1, y);
     f3.vectorize(x, vec_width);
@@ -108,6 +113,7 @@ bool test(int vec_width) {
     }
 
     // select
+    printf("Select\n");
     Func f4;
     f4(x, y) = select(input(x, y) > input(x+1, y), input(x+2, y), input(x+3, y));
     f4.vectorize(x, vec_width);
@@ -125,6 +131,7 @@ bool test(int vec_width) {
 
 
     // Gather
+    printf("Gather\n");
     Func f5;
     Expr xCoord = clamp(cast<int>(input(x, y)), 0, W-1);
     Expr yCoord = clamp(cast<int>(input(x+1, y)), 0, H-1);
@@ -152,6 +159,7 @@ bool test(int vec_width) {
     }
 
     // Scatter
+    printf("Scatter\n");
     Func f6;
     RDom i(0, H);
     // Set one entry in each row high
@@ -177,6 +185,7 @@ bool test(int vec_width) {
     }
     
     // Min/max
+    printf("Min/max\n");
     Func f7;
     f7(x, y) = clamp(input(x, y), cast<A>(10), cast<A>(20));
     f7.vectorize(x, vec_width);
@@ -192,14 +201,15 @@ bool test(int vec_width) {
     }
 
     // Extern function call
+    printf("External call to pow\n");
     Func f8;
-    f8(x, y) = pow(2.0f, cast<float>(input(x, y)));
+    f8(x, y) = pow(1.1f, cast<float>(input(x, y)));
     f8.vectorize(x, vec_width);
     Image<float> im8 = f8.realize(W, H);
     
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            float correct = powf(2.0f, (float)input(x, y));
+            float correct = powf(1.1f, (float)input(x, y));
             if (im8(x, y) != correct) {
                 printf("im8(%d, %d) = %f instead of %f\n", x, y, im8(x, y));
                 return false;
@@ -208,6 +218,7 @@ bool test(int vec_width) {
     }
     
     // Div
+    printf("Division\n");
     Func f9;
     f9(x, y) = input(x, y) / clamp(input(x+1, y), cast<A>(1), cast<A>(3));
     f9.vectorize(x, vec_width);
@@ -226,7 +237,31 @@ bool test(int vec_width) {
         }
     }
 
+    // Divide by small constants
+    printf("Dividing by small constants\n");
+    for (int c = 2; c < 16; c++) {
+	Func f10;
+	f10(x, y) = input(x, y) / c;
+	f10.vectorize(x, vec_width);
+	Image<A> im10 = f10.realize(W, H);
+	
+	for (int y = 0; y < H; y++) {
+	    for (int x = 0; x < W; x++) {	  
+		A correct = input(x, y) / c;
+		if (im10(x, y) != correct) {
+		    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y, 
+			   (double)(input(x, y)), c,
+			   (double)(im10(x, y)), 
+			   (double)(correct));
+		    printf("Error when dividing by %d\n", c);
+		    return false;
+		}
+	    }
+	}    
+    }
+
     // Interleave
+    printf("Interleaving store\n");
     Func f11;
     f11(x, y) = select((x%2)==0, input(x/2, y), input(x/2, y+1));
     f11.vectorize(x, vec_width);
@@ -238,6 +273,39 @@ bool test(int vec_width) {
             if (im11(x, y) != correct) {
                 printf("im11(%d, %d) = %f instead of %f\n", x, y, (double)(im11(x, y)), (double)(correct));
                 return false;
+            }
+        }
+    }
+
+    // Reverse
+    printf("Reversing\n");
+    Func f12;
+    f12(x, y) = input(W-1-x, H-1-y);
+    f12.vectorize(x, vec_width);
+    Image<A> im12 = f12.realize(W, H);
+    
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = input(W-1-x, H-1-y);
+            if (im12(x, y) != correct) {
+                printf("im12(%d, %d) = %f instead of %f\n", x, y, (double)(im12(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    // Unaligned load with known shift
+    printf("Unaligned load\n");
+    Func f13;
+    f13(x, y) = input(x+3, y);
+    f13.vectorize(x, vec_width);
+    Image<A> im13 = f13.realize(W, H);
+    
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = input(x+3, y);
+            if (im13(x, y) != correct) {
+                printf("im13(%d, %d) = %f instead of %d\n", x, y, (double)(im13(x, y)), (double)(correct));
             }
         }
     }

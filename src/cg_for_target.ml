@@ -1,47 +1,29 @@
 open Cg_llvm
 
-type arch = X86_64 | PTX | ARM | Android
-
-let target =
-  let targetstr = 
-    try
-      Sys.getenv "HL_TARGET"
-    with Not_found ->
-      Printf.eprintf "HL_TARGET not set - inferring from host architecture...";
-      let out = Unix.open_process_in "uname -m" in
-      let str = input_line out in
-      Printf.eprintf "got %s\n%!" str;
-      str
-  in
-  begin match targetstr with
-    | "x86_64" | "amd64" | "i386" -> X86_64
-    | "ptx" -> PTX
-    | "armv7l" -> ARM
-    | "android" -> Android
-    | arch -> Printf.eprintf "`%s` is not a supported arch\n%!" arch; exit (-1) end
-    
-let codegen_entry,
-    codegen_c_wrapper,
-    codegen_to_bitcode_and_header,
-    codegen_to_file =
+let codegen_entry, codegen_c_wrapper, codegen_to_bitcode_and_header = 
   let module CgX86 = CodegenForArch(X86) in
   let module CgPTX = CodegenForArch(Ptx) in
   let module CgARM = CodegenForArch(Arm) in
-  let module CgAndroid = CodegenForArch(Android) in
-  match target with
-    | X86_64 -> (CgX86.codegen_entry,
-                 CgX86.codegen_c_wrapper,
-                 CgX86.codegen_to_bitcode_and_header,
-                 CgX86.codegen_to_file)
-    | PTX ->    (CgPTX.codegen_entry,
-                 CgPTX.codegen_c_wrapper,
-                 CgPTX.codegen_to_bitcode_and_header,
-                 CgPTX.codegen_to_file)
-    | ARM ->    (CgARM.codegen_entry,
-                 CgARM.codegen_c_wrapper,
-                 CgARM.codegen_to_bitcode_and_header,
-                 CgARM.codegen_to_file)
-    | Android -> (CgAndroid.codegen_entry,
-                  CgAndroid.codegen_c_wrapper,
-                  CgAndroid.codegen_to_bitcode_and_header,
-                  CgAndroid.codegen_to_file)
+  
+  let cg_entry = function 
+    | "x86_64"  -> CgX86.codegen_entry
+    | "arm"     -> CgARM.codegen_entry
+    | "ptx"     -> CgPTX.codegen_entry
+    | target    -> failwith (Printf.sprintf "Unknown target: %s" target)
+  in
+
+  let cg_c_wrapper = function 
+    | "x86_64"  -> CgX86.codegen_c_wrapper
+    | "arm"     -> CgARM.codegen_c_wrapper
+    | "ptx"     -> CgPTX.codegen_c_wrapper
+    | target    -> failwith (Printf.sprintf "Unknown target: %s" target)
+  in
+
+  let cg_to_bitcode_and_header = function 
+    | "x86_64"  -> CgX86.codegen_to_bitcode_and_header
+    | "arm"     -> CgARM.codegen_to_bitcode_and_header
+    | "ptx"     -> CgPTX.codegen_to_bitcode_and_header 
+    | target    -> failwith (Printf.sprintf "Unknown target: %s" target)
+  in
+
+  (cg_entry, cg_c_wrapper, cg_to_bitcode_and_header)

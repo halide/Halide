@@ -129,6 +129,14 @@ extern "C" {
         return Val_unit;        
     }
 
+    CAMLprim value init_module_x86_avx(LLVMModuleRef mod) {
+        LLVMContextRef ctx = LLVMGetModuleContext(mod);
+        extern unsigned char builtins_bitcode_x86_avx[];
+        extern int builtins_bitcode_x86_avx_length;
+        AddBitcodeToModule(builtins_bitcode_x86_avx, builtins_bitcode_x86_avx_length, llvm::unwrap(ctx), llvm::unwrap(mod));
+        return Val_unit;        
+    }
+
     CAMLprim value init_module_arm(LLVMModuleRef mod) {
         LLVMContextRef ctx = LLVMGetModuleContext(mod);
         extern unsigned char builtins_bitcode_arm[];
@@ -137,11 +145,11 @@ extern "C" {
         return Val_unit;        
     }
 
-    CAMLprim value init_module_android(LLVMModuleRef mod) {
+    CAMLprim value init_module_arm_android(LLVMModuleRef mod) {
         LLVMContextRef ctx = LLVMGetModuleContext(mod);
-        extern unsigned char builtins_bitcode_android[];
-        extern int builtins_bitcode_android_length;
-        AddBitcodeToModule(builtins_bitcode_android, builtins_bitcode_android_length, llvm::unwrap(ctx), llvm::unwrap(mod));
+        extern unsigned char builtins_bitcode_arm_android[];
+        extern int builtins_bitcode_arm_android_length;
+        AddBitcodeToModule(builtins_bitcode_arm_android, builtins_bitcode_arm_android_length, llvm::unwrap(ctx), llvm::unwrap(mod));
         return Val_unit;                
     }
     

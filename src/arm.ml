@@ -13,12 +13,15 @@ let pointer_size = 4
 
 let target_triple = "arm-linux-eabi"
 
-let codegen_entry c m cg_entry _ e =
+let cg_entry c m codegen_entry _ e opts =
   (* set up module *)
-  Stdlib.init_module_arm m;
+  if List.mem "android" opts then
+    Stdlib.init_module_arm_android m
+  else 
+    Stdlib.init_module_arm m;
 
   (* build the inner kernel, which takes raw byte*s *)
-  let inner = cg_entry c m e in
+  let inner = codegen_entry opts c m e in
 
   (* return the wrapper which takes buffer_t*s *)
   cg_wrapper c m e inner
@@ -38,24 +41,6 @@ let rec cg_expr (con : context) (expr : expr) =
 
   let cg_expr e = cg_expr con e in
 
-  (* 
-  let cg_select cond thenCase elseCase =
-    let elts = vector_elements (val_type_of_expr cond) in
-    let bits = element_width (val_type_of_expr thenCase) in
-    let l = cg_expr thenCase in
-    let r = cg_expr elseCase in
-    let mask = cg_expr cond in
-    let mask = build_sext mask (type_of_val_type c (IntVector (bits, elts))) "" b in
-    let ones = const_all_ones (type_of mask) in
-    let inv_mask = build_xor mask ones "" b in
-    let t = type_of l in
-    let l = build_bitcast l (type_of mask) "" b in
-    let r = build_bitcast r (type_of mask) "" b in
-    let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
-    build_bitcast result t "" b       
-  in    
-  *)
-  
   let rec is_power_of_two = function
     | 1 -> true
     | x -> let y = x/2 in (is_power_of_two y) && (x = y*2)
@@ -68,18 +53,35 @@ let rec cg_expr (con : context) (expr : expr) =
 
   (* Peephole optimizations for arm *)
   match expr with 
+    | Select (cond, thenCase, elseCase) when is_vector cond -> 
+        let elts = vector_elements (val_type_of_expr cond) in
+        let bits = element_width (val_type_of_expr thenCase) in
+        let l = cg_expr thenCase in
+        let r = cg_expr elseCase in
+        let mask = cg_expr cond in
+        let mask = build_sext mask (type_of_val_type c (IntVector (bits, elts))) "" b in
+        let inv_mask = build_not mask "" b in
+        let t = type_of l in
+        let l = build_bitcast l (type_of mask) "" b in
+        let r = build_bitcast r (type_of mask) "" b in
+        let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
+        build_bitcast result t "" b;
     | Bop (Min, l, r) when is_vector l -> 
         begin match (val_type_of_expr l) with
           | IntVector (16, 8) ->
               let op = declare_function "llvm.arm.neon.vmins.v8i16"
                 (function_type (i16x8_t) [|i16x8_t; i16x8_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
+          | IntVector (32, 4) ->
+              let op = declare_function "llvm.arm.neon.vmins.v4i32"
+                (function_type (i32x4_t) [|i32x4_t; i32x4_t|]) m in              
+              build_call op [| cg_expr l; cg_expr r |] "" b
           | FloatVector (32, 4) ->
               let op = declare_function "llvm.arm.neon.vmins.v4f32"
                 (function_type (f32x4_t) [|f32x4_t; f32x4_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
           (* TODO: other types *)
-          | _ -> con.cg_expr (Select (l <~ r, l, r))
+          | _ -> cg_expr (Select (l <~ r, l, r))
         end
     | Bop (Max, l, r) when is_vector l -> 
         begin match (val_type_of_expr l) with
@@ -87,20 +89,27 @@ let rec cg_expr (con : context) (expr : expr) =
               let op = declare_function "llvm.arm.neon.vmaxs.v8i16"
                 (function_type (i16x8_t) [|i16x8_t; i16x8_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
+          | IntVector (32, 4) ->
+              let op = declare_function "llvm.arm.neon.vmaxs.v4i32"
+                (function_type (i32x4_t) [|i32x4_t; i32x4_t|]) m in              
+              build_call op [| cg_expr l; cg_expr r |] "" b
           | FloatVector (32, 4) ->
               let op = declare_function "llvm.arm.neon.vmaxs.v4f32"
                 (function_type (f32x4_t) [|f32x4_t; f32x4_t|]) m in              
               build_call op [| cg_expr l; cg_expr r |] "" b
           (* TODO: other types *)
-          | _ -> con.cg_expr (Select (l >~ r, l, r))
+          | _ -> cg_expr (Select (l >~ r, l, r))
         end
 
-    (* use intrinsics for vector loads/stores *) 
-    | Load (t, buf, Ramp (base, IntImm 1, w)) when (bit_width t = 128 || bit_width t = 64) && (t <> (FloatVector (64, 2))) ->
+    (* use intrinsics for unaligned vector loads/stores *) 
+    | Load (t, buf, Ramp (base, IntImm 1, w)) when 
+        (bit_width t = 128 || bit_width t = 64) && 
+          (t <> (FloatVector (64, 2))) && 
+          (Analysis.reduce_expr_modulo base w == None) ->
         let intrin = match t with
-          | FloatVector (_, _) -> "4f32" (* there isn't a v2f64 vld *)
           | UIntVector (bits, w) 
           | IntVector (bits, w) -> (string_of_int w) ^ "i" ^ (string_of_int bits)
+          | FloatVector (bits, w) -> (string_of_int w) ^ "f" ^ (string_of_int bits)
           | failwith -> ("ARM vector load of non-vector type " ^ (string_of_val_type t))
         in
         let llt = type_of_val_type c t in
@@ -399,6 +408,42 @@ let rec cg_stmt (con : context) (stmt : stmt) =
                 cg_dense_store e buf base w
           end 
         end else cg_dense_store e buf base w
+
+    (* Android has to deal with print differently *)
+    | Print (prefix, args) when List.mem "android" con.arch_opts ->
+        (* Generate a format string and values to print for a printf *)
+        let rec fmt_string x = match val_type_of_expr x with
+          | Int _ -> ("%d", [Cast (i32, x)])
+          | Float _ -> ("%3.3f", [Cast (f64, x)])
+          | UInt _ -> ("%u", [Cast (u32, x)])
+          | IntVector (_, n) | UIntVector (_, n) | FloatVector (_, n) -> 
+              let elements = List.map (fun idx -> ExtractElement (x, IntImm idx)) (0 -- n) in
+              let subformats = List.map fmt_string elements in
+              ("[" ^ (String.concat ", " (List.map fst subformats)) ^ "]",
+               List.concat (List.map snd subformats))
+        in
+        
+        let fmts = List.map fmt_string args in
+        let fmt = String.concat " " (List.map fst fmts) in
+        let args = List.concat (List.map snd fmts) in
+
+        let ll_fmt = const_stringz c (prefix ^ fmt ^ "\n") in    
+        let ll_args = List.map cg_expr args in
+        
+        let global_fmt = define_global "debug_fmt" ll_fmt m in
+        set_linkage Llvm.Linkage.Internal global_fmt;
+        let global_fmt = build_pointercast global_fmt (pointer_type (i8_type c)) "" b in
+
+        let halide_tag = const_stringz c "halide" in
+        let halide_tag = define_global "halide_tag" halide_tag m in
+        set_linkage Llvm.Linkage.Internal halide_tag;
+        let halide_tag = build_pointercast halide_tag (pointer_type (i8_type c)) "" b in
+
+        let ll_printf = declare_function "__android_log_print" 
+          (var_arg_function_type (i32_type c) [|i32_type c; pointer_type (i8_type c); pointer_type (i8_type c)|]) m in
+        let level = const_int (i32_type c) 3 in (* 3 == debug in android *)
+        build_call ll_printf (Array.of_list (level::halide_tag::global_fmt::ll_args)) "" b 
+
     | _ -> con.cg_stmt stmt
 
 

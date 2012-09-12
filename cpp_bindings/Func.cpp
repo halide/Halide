@@ -1,5 +1,6 @@
-#include <llvm-c/ExecutionEngine.h>
+#include <llvm-c/Core.h> // for LLVMModuleRef and LLVMValueRef
 #include <llvm/ExecutionEngine/GenericValue.h>
+//#include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/TargetSelect.h>
@@ -9,7 +10,6 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Target/TargetData.h>
 #include <llvm/Assembly/PrintModulePass.h>
-#include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/IPO.h>
 #include <sys/time.h>
 
@@ -31,7 +31,43 @@ namespace Halide {
     
     bool use_gpu() {
         char* target = getenv("HL_TARGET");
-        return (target != NULL && strcasecmp(target, "ptx") == 0);
+        return (target != NULL && strncasecmp(target, "ptx", 3) == 0);
+    }
+
+    bool use_avx() {
+        char *target = getenv("HL_TARGET");
+        if (target == NULL || strncasecmp(target, "x86_64", 6) == 0) {
+        #ifdef __x86_64__
+            int func = 1, ax, bx, cx, dx;
+            __asm__ __volatile__ ("cpuid":                              
+                                  "=a" (ax), 
+                                  "=b" (bx), 
+                                  "=c" (cx), 
+                                  "=d" (dx) : 
+                                  "a" (func));      
+            // bit 28 of ecx indicates avx support
+            return cx & 0x10000000;
+            #endif
+        }
+        return false;
+    }
+
+    std::string getTarget() {
+        // First check an environment variable
+        char *target = getenv("HL_TARGET");
+        if (target) return std::string(target);
+
+        // Failing that, assume it's whatever this library was built for, with no options
+        #ifdef __arm__
+        return "armv7l";
+        #endif
+
+        #ifdef __x86_64__
+        return "x86_64";
+        #endif
+
+        assert(0 && "Could not detect target. Try setting HL_TARGET\n");
+        return "";
     }
     
     ML_FUNC2(makeVectorizeTransform);
@@ -45,7 +81,7 @@ namespace Halide {
     ML_FUNC2(makeRandomTransform);
     
     ML_FUNC1(doConstantFold);
-    
+  
     ML_FUNC3(makeDefinition);
     ML_FUNC6(addScatterToDefinition);
     ML_FUNC0(makeEnv);
@@ -62,8 +98,8 @@ namespace Halide {
     ML_FUNC1(printSchedule);
     ML_FUNC1(makeBufferArg); // name
     ML_FUNC2(makeScalarArg); // name, type
-    ML_FUNC3(doCompile); // name, args, stmt
-    ML_FUNC3(doCompileToFile); // name, args, stmt
+    ML_FUNC4(doCompile); // target with opts, name, args, stmt
+    ML_FUNC4(doCompileToFile); // target with opts, name, args, stmt
     ML_FUNC2(makePair);
     ML_FUNC3(makeTriple);
 
@@ -233,19 +269,19 @@ namespace Halide {
     Func::Func() : contents(new Contents()) {
     }
  
-    Func::Func(const std::string &name) : contents(new Contents(name)) {
+    Func::Func(const std::string &name) : contents(new Contents(sanitizeName(name))) {
     }
 
-    Func::Func(const char *name) : contents(new Contents(name)) {
+    Func::Func(const char *name) : contents(new Contents(sanitizeName(name))) {
     }
 
     Func::Func(const Type &t) : contents(new Contents(t)) {
     }
 
-    Func::Func(const std::string &name, Type t) : contents(new Contents(name, t)) {
+    Func::Func(const std::string &name, Type t) : contents(new Contents(sanitizeName(name), t)) {
     }
 
-    Func::Func(const char *name, Type t) : contents(new Contents(name, t)) {
+    Func::Func(const char *name, Type t) : contents(new Contents(sanitizeName(name), t)) {
     }
 
     bool Func::operator==(const Func &other) const {
@@ -717,13 +753,14 @@ namespace Halide {
         return std::string(serializeEntry(name(), args, stmt));
     }
 
-    void Func::compileToFile(const std::string &moduleName) { 
+    void Func::compileToFile(const std::string &moduleName, std::string target) { 
         MLVal stmt = lower();
         MLVal args = inferArguments();
-        doCompileToFile(moduleName, args, stmt);
+        if (target.empty()) target = getTarget();
+        doCompileToFile(target, moduleName, args, stmt);
     }
 
-    void Func::compileToFile(const std::string &moduleName, std::vector<Func::Arg> uniforms) { 
+    void Func::compileToFile(const std::string &moduleName, std::vector<Func::Arg> uniforms, std::string target) { 
         MLVal stmt = lower();
 
         MLVal args = makeList();
@@ -732,7 +769,8 @@ namespace Halide {
             args = addToList(args, uniforms[i-1].arg);
         }
 
-        doCompileToFile(moduleName, args, stmt);
+        if (target.empty()) target = getTarget();
+        doCompileToFile(target, moduleName, args, stmt);
     }
 
     void Func::setErrorHandler(void (*handler)(char *)) {
@@ -753,7 +791,7 @@ namespace Halide {
             
             // Compile the object, unless HL_PSEUDOJIT_LOAD_PRECOMPILED is set
             if (!getenv("HL_PSEUDOJIT_LOAD_PRECOMPILED")) {
-                compileToFile(name.c_str());
+                compileToFile(name.c_str(), getTarget());
                 char cmd1[1024], cmd2[1024];
 
                 std::string obj_name = "./" + name + ".o";
@@ -762,7 +800,9 @@ namespace Halide {
                     snprintf(cmd1, 1024, "g++ -c -O3 %s -fPIC -o %s", c_name.c_str(), obj_name.c_str());
                 } else {
                     std::string bc_name = "./" + name + ".bc";
-                    snprintf(cmd1, 1024, "opt -O3 %s | llc -O3 -relocation-model=pic -filetype=obj > %s", bc_name.c_str(), obj_name.c_str());
+                    snprintf(cmd1, 1024, 
+                             "opt -O3 -always-inline %s | llc -O3 -relocation-model=pic %s -filetype=obj > %s", 
+                             bc_name.c_str(), use_avx() ? "-mcpu=corei7 -mattr=+avx" : "", obj_name.c_str());
                 }
                 snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
                 fprintf(stderr, "%s\n", cmd1);
@@ -791,6 +831,7 @@ namespace Halide {
 
         if (!Contents::ee) {
             llvm::InitializeNativeTarget();
+            llvm::InitializeNativeTargetAsmPrinter();
         }
 
         // Use the function definitions and the schedule to create the
@@ -803,7 +844,7 @@ namespace Halide {
 
         // Create the llvm module and entrypoint from the imperative IR
         MLVal tuple;
-        tuple = doCompile(name(), args, stmt);
+        tuple = doCompile(getTarget(), name(), args, stmt);
 
         // Extract the llvm module and entrypoint function
         MLVal first, second;
@@ -818,11 +859,16 @@ namespace Halide {
             std::string errStr;
             llvm::EngineBuilder eeBuilder(m);
             eeBuilder.setErrorStr(&errStr);
+            eeBuilder.setEngineKind(llvm::EngineKind::JIT);
+            eeBuilder.setUseMCJIT(false);
             eeBuilder.setOptLevel(llvm::CodeGenOpt::Aggressive);
 
-            // TODO: runtime-detect avx to only enable it if supported
-            // std::vector<std::string> mattrs = {"avx"};
-            // eeBuilder.setMAttrs(mattrs);
+            // runtime-detect avx to only enable it if supported
+            // disabled for now until we upgrade llvm
+            if (use_avx() && 0) {
+                std::vector<std::string> mattrs = {"avx"};
+                eeBuilder.setMAttrs(mattrs);
+            }
 
             Contents::ee = eeBuilder.create();
             if (!contents->ee) {
@@ -1004,3 +1050,4 @@ namespace Halide {
     MLVal *Func::environment = NULL;
 
 }
+
