@@ -1,4 +1,13 @@
 
+# - Run my recursive scheduler against PetaBricks
+# - Dump top speed and schedule vs generation number out to some number of generations
+
+# Determining schedules
+# 1. Autotuning
+# 2. Heuristics
+#   - Parallelize outer dimension or two, vectorize inner. Instead of doing random splits focus on tiling splits
+# 3. Machine learning
+
 # Jonathan+Andrew discussion:
 # - Tile size or unroll size needs to be divisible into input size
 # - split(x, x, xi, n) is right syntax for now
