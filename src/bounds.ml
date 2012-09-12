@@ -280,7 +280,7 @@ let bounds_of_expr_in_env env expr =
       | Not _
       | And (_, _)
       | Or (_, _)
-      | Cmp (_, _, _) -> make_range (UIntImm 0, UIntImm 1)
+      | Cmp (_, _, _) -> make_range (IntImm 0, IntImm 1)
           
       | Let (n, a, b) -> 
           (* Printf.printf "Computing bounds of %s...\n%!" (Ir_printer.string_of_expr expr); *)
@@ -332,7 +332,6 @@ let bounds_of_expr_in_env env expr =
       end
           
       | IntImm n -> make_range (IntImm n, IntImm n)
-      | UIntImm n -> make_range (UIntImm n, UIntImm n)
       | FloatImm n -> make_range (FloatImm n, FloatImm n)
     in
 

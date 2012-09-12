@@ -42,7 +42,6 @@ and can_skip_parens op1 op2 = match (op1, op2) with
 
 and string_of_expr = function
   | IntImm(i) -> string_of_int i
-  | UIntImm(i) -> string_of_int i ^ "u"
   | FloatImm(f) -> string_of_float f
   | Cast(t, e) -> string_of_val_type t ^ "(" ^ string_of_expr e ^")"
   | Bop(outer_op, Bop(inner_op, ll, lr), r) when can_skip_parens outer_op inner_op ->

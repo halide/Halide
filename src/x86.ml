@@ -10,21 +10,28 @@ let start_state () = 0
 
 let pointer_size = 8
 
-(* TODO: os x? *)
-let target_triple = "x86_64-unknown-linux-gnu"
+(* The target triple is different on os x and linux, so we'd better
+   just let it use the native host. This makes it hard to generate x86
+   code from ARM. What a shame. *)
+(* "x86_64-unknown-linux-gnu" *)
+let target_triple = "" 
 
-let codegen_entry c m cg_entry _ e =
+let cg_entry c m codegen_entry _ e opts =
   (* set up module *)
-  Stdlib.init_module_x86 m;
+  if List.mem "avx" opts then
+    Stdlib.init_module_x86_avx m
+  else
+    Stdlib.init_module_x86 m;
 
   (* build the inner kernel, which takes raw byte*s *)
-  let inner = cg_entry c m e in
+  let inner = codegen_entry opts c m e in
 
   (* return the wrapper which takes buffer_t*s *)
   cg_wrapper c m e inner
 
 let rec cg_expr (con:context) (expr:expr) =
   let c = con.c and m = con.m and b = con.b in
+  let use_avx = List.mem "avx" con.arch_opts in
   let cg_expr = cg_expr con in
 
   let ptr_t = pointer_type (i8_type c) in
@@ -33,27 +40,138 @@ let rec cg_expr (con:context) (expr:expr) =
   let i8x32_t = vector_type (i8_type c) 32 in
   let i32_t = i32_type c in
 
-  (* Peephole optimizations for x86 *)
-  match expr with 
-    (* x86 doesn't do 16 bit vector division, but for constants you can do multiplication instead. *)
-    | Bop (Div, x, Broadcast (Cast (UInt 16, IntImm y), 8)) ->
-        let pmulhw = declare_function "llvm.x86.sse2.pmulh.w"
-          (function_type (i16x8_t) [|i16x8_t; i16x8_t|]) m in
-        let z = (65536/y + 1) in
-        let lhs = cg_expr x in
-        let rhs = cg_expr (Broadcast (Cast (UInt 16, IntImm z), 8)) in        
-        build_call pmulhw [|lhs; rhs|] "" b
+  let rec pow2 = function
+    | 0 -> 1
+    | x -> (pow2 (x-1)) * 2
+  in
+
+  let call_intrin name args = 
+    let t x = type_of_val_type c (val_type_of_expr x) in
+    let intrin = declare_function ("llvm.x86." ^ name) (function_type (t expr) (Array.map t args)) m in
+    build_call intrin (Array.map cg_expr args) "" b
+  in
+
+  let cg_unsigned_integer_division x y intrin table bits elts =
+    begin match Array.get table (y-2) with
+      | (meth, mul, shift) -> 
+          (* Codegen the argument *)
+          let t0 = cg_expr x in 
+        
+          (* Possibly do a multiply-keep-high-half (methods 1 and 2) *)
+          let t1 = if meth > 0 then 
+              let mul = cg_expr (Broadcast (Cast (UInt bits, IntImm mul), elts)) in
+              build_call intrin [|t0; mul|] "" b
+            else 
+              t0
+          in
           
+          (* Possibly add a correcting factor of (t0-t1)/2 (method 2 only) *)
+          let t2 = if meth > 1 then           
+              let sh = cg_expr (Broadcast (Cast (Int bits, IntImm 1), elts)) in
+              let y = build_sub t0 t1 "" b in
+              let y = build_lshr y sh "" b in
+              build_add t1 y "" b
+            else 
+              t1 
+          in
+
+          (* Perform a final shift if necessary (all methods) *)
+          let sh = cg_expr (Broadcast (Cast (Int bits, IntImm shift), elts)) in
+          if shift != 0 then build_lshr t2 sh "" b else t2
+    end
+  in
+
+  let cg_signed_integer_division x y intrin table bits elts =
+    begin match Array.get table (y-2) with
+      | (meth, mul, shift) -> 
+          (* Codegen the argument *)
+          let t0 = cg_expr x in 
+        
+          (* Do a multiply-keep-high-half *)
+          let mul = cg_expr (Broadcast (Cast (Int bits, IntImm mul), elts)) in
+          let t1 = build_call intrin [|t0; mul|] "" b in
+          
+          (* Possibly add a correcting factor of t0 (method 1 only) *)
+          let t2 = if meth > 0 then           
+              build_add t0 t1 "" b
+            else 
+              t1 
+          in
+
+          (* Perform a shift if necessary (all methods) *)
+          let sh = cg_expr (Broadcast (Cast (Int bits, IntImm shift), elts)) in
+          let t3 = if shift != 0 then build_ashr t2 sh "" b else t2 in
+
+          (* Add one for negative numbers *)
+          let sh = cg_expr (Broadcast (Cast (Int bits, IntImm (bits-1)), elts)) in
+          let sign_bit = build_lshr t0 sh "" b in
+          build_add sign_bit t3 "" b
+
+    end
+  in
+
+  (* Peephole optimizations for x86. 
+
+     We either produce specially-crafted ll that we know will codegen
+     cleanly, call intrinsics directly, or call wrappers around
+     intrinsics that we've put in the stdlib for x86 *)
+  match expr with 
+
+    (* Averaging unsigned bytes or words *)
+    | Cast (UIntVector(narrow, elts), 
+            Bop (Div, 
+                 Bop (Add, 
+                      Bop (Add, 
+                           Cast(UIntVector(wide, _), l), 
+                           Cast(UIntVector(_, _), r)),
+                      one),
+                 two))
+        when (wide > narrow) && 
+          (narrow = 8 || narrow = 16) &&
+          (elts * narrow = 128) &&
+          one = make_const (UIntVector (wide, elts)) 1 && 
+          two = make_const (UIntVector (wide, elts)) 2 -> 
+      let intrin = if narrow = 8 then "sse2.pavg.b" else "sse2.pavg.w" in
+      call_intrin intrin [|l; r|]
+
+    (* x86 doesn't do 16 bit vector division, but for small constants you can do multiplication instead. *)
+    | Bop (Div, x, Broadcast (Cast (Int 16, IntImm y), 8)) when y > 1 && y < 64 ->
+        let intrin = declare_function "llvm.x86.sse2.pmulh.w" (function_type i16x8_t [|i16x8_t; i16x8_t|]) m in 
+        let table = Integer_division.table_s16 in
+        cg_signed_integer_division x y intrin table 16 8  
+        
+    | Bop (Div, x, Broadcast (Cast (UInt 16, IntImm y), 8)) when y > 1 && y < 64 ->
+        let intrin = declare_function "llvm.x86.sse2.pmulhu.w" (function_type i16x8_t [|i16x8_t; i16x8_t|]) m in 
+        let table = Integer_division.table_u16 in
+        cg_unsigned_integer_division x y intrin table 16 8
+        
+    (* Also use mulh.w and mulhu.w when explicity requested using a widening mul followed by a shift *)
+    | Cast (IntVector (16, 8), 
+            Bop (Div, 
+                 Bop (Mul, 
+                      Cast (IntVector (32, 8), l),
+                      Cast (IntVector (32, 8), r)), 
+                 Broadcast (IntImm 65536, 8))) ->
+      call_intrin "sse2.pmulh.w" [|l; r|]
+
+    | Cast (UIntVector (16, 8), 
+            Bop (Div, 
+                 Bop (Mul, 
+                      Cast (UIntVector (32, 8), l),
+                      Cast (UIntVector (32, 8), r)), 
+                 Broadcast (Cast (UInt 32, IntImm 65536), 8))) ->
+      call_intrin "sse2.pmulhu.w" [|l; r|]
+
     (* unaligned dense 128-bit loads use movups *)
     | Load (t, buf, Ramp(base, IntImm 1, n)) when (bit_width t = 128) ->
         begin match (Analysis.reduce_expr_modulo base n) with 
           | Some _ -> con.cg_expr expr
-          | _ ->              
-              let unaligned_load_128 = declare_function "unaligned_load_128"
-                (function_type (i8x16_t) [|ptr_t|]) m in
-              let addr = build_pointercast (con.cg_memref t buf base) ptr_t "" b in
-              let value = build_call unaligned_load_128 [|addr|] "" b in
-              build_bitcast value (type_of_val_type c t) "" b        
+          | _ ->            
+            let unaligned_load_128 = declare_function "unaligned_load_128"
+              (function_type (i8x16_t) [|ptr_t|]) m in
+            let addr = build_pointercast (con.cg_memref t buf base) ptr_t "" b in
+            let value = build_call unaligned_load_128 [|addr|] "" b in
+            build_bitcast value (type_of_val_type c t) "" b        
         end
 
     (* unaligned dense 256-bit loads use vmovups if available *)
@@ -74,6 +192,123 @@ let rec cg_expr (con:context) (expr:expr) =
         let v2 = cg_expr (Load (t, buf, Ramp(base +~ IntImm n, IntImm 1, n))) in
         let mask = List.map (fun x -> const_int i32_t (x*2)) (0 -- n) in
         build_shufflevector v1 v2 (const_vector (Array.of_list mask)) "" b
+
+    (* Mins and maxes *)
+    | Bop (op, l, r) when op = Min or op = Max ->
+        let t = val_type_of_expr l in
+        let intrin = match (op, t) with
+          | (Min, IntVector   (8, 16)) -> "sse41.pminsb"
+          | (Min, UIntVector  (8, 16)) -> "sse2.pminu.b"
+          | (Min, IntVector   (16, 8)) -> "sse2.pmins.w"
+          | (Min, UIntVector  (16, 8)) -> "sse41.pminuw"
+          | (Min, IntVector   (32, 4)) -> "sse41.pminsd"
+          | (Min, UIntVector  (32, 4)) -> "sse41.pminud"
+          | (Min, FloatVector (32, 4)) -> "sse.min.ps"
+          | (Min, FloatVector (64, 2)) -> "sse2.min.pd"
+          | (Max, IntVector   (8, 16)) -> "sse41.pmaxsb"
+          | (Max, UIntVector  (8, 16)) -> "sse2.pmaxu.b"
+          | (Max, IntVector   (16, 8)) -> "sse2.pmaxs.w"
+          | (Max, UIntVector  (16, 8)) -> "sse41.pmaxuw"
+          | (Max, IntVector   (32, 4)) -> "sse41.pmaxsd"
+          | (Max, UIntVector  (32, 4)) -> "sse41.pmaxud"
+          | (Max, FloatVector (32, 4)) -> "sse.max.ps"
+          | (Max, FloatVector (64, 2)) -> "sse2.max.pd"
+          | _ -> ""
+        in
+        begin match intrin with
+          | "" -> con.cg_expr expr (* there's no intrinsic for this *)
+          | _ -> call_intrin intrin [|l; r|]
+        end
+
+    (* Saturating adds and subs for 8 and 16 bit ints *)
+    | Cast (IntVector(8, 16), 
+           Bop (Max, 
+                Bop (Min, 
+                     Bop (op, Cast(IntVector(wide, _), l), Cast(IntVector(_, _), r)),
+                     Broadcast (Cast (_, IntImm 127), _)),
+                Broadcast (Cast (_, IntImm (-128)), _)))
+        when (wide > 8) && (op = Add or op = Sub) -> 
+      begin match op with
+        | Add -> call_intrin "sse2.padds.b" [|l; r|]
+        | Sub -> call_intrin "sse2.psubs.b" [|l; r|]
+        | _ -> failwith "How did I get here?"
+      end
+    | Cast (UIntVector(8, 16), 
+            Bop (Min, 
+                 Bop (op, Cast(UIntVector(wide, _), l), Cast(UIntVector(_, _), r)),
+                 Broadcast (Cast (_, IntImm 255), _)))
+        when (wide > 8) && (op = Add or op = Sub) -> 
+      begin match op with
+        | Add -> call_intrin "sse2.paddus.b" [|l; r|]
+        | Sub -> call_intrin "sse2.psubus.b" [|l; r|]
+        | _ -> failwith "How did I get here?"
+      end
+    | Cast (IntVector(16, 8), 
+           Bop (Max, 
+                Bop (Min, 
+                     Bop (op, Cast(IntVector(wide, _), l), Cast(IntVector(_, _), r)),
+                     Broadcast (IntImm 32767, _)),
+                Broadcast (IntImm (-32768), _)))
+        when (wide > 16) && (op = Add or op = Sub) -> 
+      begin match op with
+        | Add -> call_intrin "sse2.padds.w" [|l; r|]
+        | Sub -> call_intrin "sse2.psubs.w" [|l; r|]
+        | _ -> failwith "How did I get here?"
+      end
+    | Cast (UIntVector(16, 8), 
+            Bop (Min, 
+                 Bop (op, Cast(UIntVector(wide, _), l), Cast(UIntVector(_, _), r)),
+                 Broadcast (Cast (_, IntImm 65535), _)))
+        when (wide > 16) && (op = Add or op = Sub) -> 
+      begin match op with
+        | Add -> call_intrin "sse2.paddus.w" [|l; r|]
+        | Sub -> call_intrin "sse2.psubus.w" [|l; r|]
+        | _ -> failwith "How did I get here?"
+      end
+
+    (* Saturating narrowing casts. We recognize them here, and implement them in architecture.x86.stdlib.ll *)
+    | Cast (IntVector(8, 16),
+            Bop (Max, 
+                 Bop (Min, arg, 
+                      Broadcast (Cast (_, IntImm 127), _)),
+                 Broadcast (Cast (_, IntImm (-128)), _))) 
+        when val_type_of_expr arg = IntVector(16, 16) ->
+      con.cg_expr (Call (Extern, IntVector(8, 16), "packsswb", [arg]))
+    | Cast (UIntVector(8, 16),
+            Bop (Max, 
+                 Bop (Min, arg, 
+                      Broadcast (Cast (_, IntImm 255), _)),
+                 Broadcast (Cast (_, IntImm 0), _))) 
+        when val_type_of_expr arg = IntVector(16, 16) ->
+      con.cg_expr (Call (Extern, UIntVector(8, 16), "packuswb", [arg]))
+    | Cast (IntVector(16, 8),
+            Bop (Max, 
+                 Bop (Min, arg, 
+                      Broadcast (IntImm 32767, _)),
+                 Broadcast (IntImm (-32768), _))) 
+        when val_type_of_expr arg = IntVector(32, 8) ->
+      con.cg_expr (Call (Extern, IntVector(16, 8), "packssdw", [arg]))
+    | Cast (UIntVector(16, 8),
+            Bop (Max, 
+                 Bop (Min, arg, 
+                      Broadcast (IntImm 65535, _)),
+                 Broadcast (IntImm 0, _))) 
+        when val_type_of_expr arg = IntVector(32, 8) ->
+      con.cg_expr (Call (Extern, UIntVector(16, 8), "packusdw", [arg]))
+
+    (* Inverse square root *)
+    | Bop (Div, Broadcast(FloatImm 1.0, 4), Call (Extern, FloatVector(32, 4), ".sqrt_f32", [arg])) ->
+      call_intrin "sse.rsqrt.ps" [|arg|]
+
+    | Bop (Div, Broadcast(FloatImm 1.0, 8), Call (Extern, FloatVector(32, 8), ".sqrt_f32", [arg])) when use_avx ->
+      call_intrin "avx.rsqrt.ps.256" [|arg|]
+
+    (* Inverse *)
+    | Bop (Div, Broadcast(FloatImm 1.0, 4), arg) ->
+      call_intrin "sse.rcp.ps" [|arg|]  
+        
+    | Bop (Div, Broadcast(FloatImm 1.0, 8), arg) when use_avx ->
+      call_intrin "avx.rcp.ps.256" [|arg|]
 
     (* Loads with stride one half should do one load and then shuffle *)
     (* TODO: this is buggy 

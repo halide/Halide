@@ -6,6 +6,7 @@ bounds
 loop_lifting
 x86
 arm
+android
 ptx
 ptx_dev
 schedule_transforms
@@ -29,3 +30,4 @@ lower
 halide_cpp
 stdlib
 llutil
+integer_division

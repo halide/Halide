@@ -13,9 +13,9 @@ exception UnalignedVectorMemref
 exception ArgExprOfBufferArgument (* The Arg expr can't dereference a Buffer, only Scalars *)
 exception ArgTypeMismatch of val_type * val_type
 
-type cg_entry = llcontext -> llmodule -> entrypoint -> llvalue
+type cg_entry = string list -> llcontext -> llmodule -> entrypoint -> llvalue 
 type 'a make_cg_context = llcontext -> llmodule -> llbuilder ->
-                          (string, llvalue) Hashtbl.t -> 'a -> 'a cg_context
+                          (string, llvalue) Hashtbl.t -> 'a -> string list -> 'a cg_context
 type cg_expr = expr -> llvalue
 type cg_stmt = stmt -> llvalue
 
@@ -32,8 +32,7 @@ module type Architecture = sig
 
   val start_state : unit -> state
 
-  (* TODO: rename codegen_entry to cg_entry -- internal codegen becomes codegen_entry *)
-  val codegen_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context -> entrypoint -> llvalue
+  val cg_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context -> entrypoint -> string list -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
   val malloc  : context -> string -> expr -> expr -> (llvalue * (context -> unit))
@@ -41,31 +40,27 @@ module type Architecture = sig
   val pointer_size : int
 end
 
+
 module type Codegen = sig
   type arch_state
   type context = arch_state cg_context
 
   val make_cg_context : arch_state make_cg_context
-  val codegen_entry : entrypoint -> llcontext * llmodule * llvalue
-  val codegen_c_wrapper : llcontext -> llmodule -> llvalue -> llvalue
-  val codegen_to_bitcode_and_header : entrypoint -> unit
-  val codegen_to_file : entrypoint -> string -> unit
+  val codegen_entry : string list -> entrypoint -> llcontext * llmodule * llvalue
+  val codegen_c_wrapper : string list -> llcontext -> llmodule -> llvalue -> llvalue
+  val codegen_to_bitcode_and_header : string list -> entrypoint -> unit
 end
+
 
 module CodegenForArch ( Arch : Architecture ) = struct
 
 type arch_state = Arch.state
 type context = arch_state cg_context
 
-(* Algebraic type wrapper for LLVM comparison ops *)
-type cmp =
-  | CmpInt of Icmp.t
-  | CmpFloat of Fcmp.t
-
 module ArgMap = Map.Make(String)
 type argmap = (arg*int) ArgMap.t (* track args as name -> (Ir.arg,index) *) 
 
-let rec make_cg_context c m b sym_table arch_state =
+let rec make_cg_context c m b sym_table arch_state arch_opts =
 
   let int_imm_t = i32_type c in
   let int32_imm_t = i32_type c in
@@ -95,6 +90,7 @@ let rec make_cg_context c m b sym_table arch_state =
     sym_remove = sym_remove;
     dump_syms = dump_syms;
     arch_state = arch_state;
+    arch_opts = arch_opts;
   }
   and cg_expr e = 
     dbg 2 "begin cg_expr %s\n%!" (string_of_expr e);
@@ -103,8 +99,7 @@ let rec make_cg_context c m b sym_table arch_state =
     result
   and cg_expr_inner = function
     (* constants *)
-    | IntImm i 
-    | UIntImm i  -> const_int   (int_imm_t)   i
+    | IntImm i   -> const_int   (int_imm_t)   i
     | FloatImm f -> const_float (float_imm_t) f
 
     (* cast *)
@@ -122,8 +117,9 @@ let rec make_cg_context c m b sym_table arch_state =
     | Bop (Sub, l, r) -> cg_binop build_sub  build_sub  build_fsub l r
     | Bop (Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
     | Bop (Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
-    | Bop (Min, l, r) -> cg_minmax Min l r
-    | Bop (Max, l, r) -> cg_minmax Max l r
+    (* In most cases architecture-specific code should pick up min and max and generate something better *)
+    | Bop (Min, l, r) -> cg_expr (Select (l <~ r, l, r))
+    | Bop (Max, l, r) -> cg_expr (Select (l <~ r, r, l))
     | Bop (Mod, l, r) -> cg_mod l r
 
     (* comparison *)
@@ -150,15 +146,67 @@ let rec make_cg_context c m b sym_table arch_state =
 
     (* Extern calls *)
     | Call (Extern, t, name, args) ->
-        (* declare the extern function *)
-        let arg_types = List.map (fun arg -> type_of_val_type (val_type_of_expr arg)) args in
-        let name = base_name name in
-        let llfunc = declare_function name
-          (function_type (type_of_val_type t) (Array.of_list arg_types)) m in
+        (* If we're making a vectorized call to an extern scalar
+           function, we need to do some extra work here *)
+        (* First, codegen the args *)
+        let llargs = Array.of_list (List.map cg_expr args) in      
+        let elts = vector_elements t in
+        (* Compure the scalar and vector names for this function *)
+        let scalar_name = base_name name in
+        let vector_name = if elts > 1 then (scalar_name ^ "x" ^ (string_of_int elts)) else scalar_name in
+        (* Look up the scalar and vector forms *)
+        let scalar_fn = lookup_function scalar_name m in
+        let vector_fn = lookup_function vector_name m in
+        (* If the scalar version doesn't exist declare it as extern *)
+        let scalar_fn = 
+          match scalar_fn with
+            | None -> 
+                dbg 2 "Did not find %s in initial module. Assuming it's extern.\n%!" scalar_name;
+                let arg_types = List.map (fun arg -> type_of_val_type (element_val_type (val_type_of_expr arg))) args in
+                declare_function scalar_name (function_type (type_of_val_type (element_val_type t)) (Array.of_list arg_types)) m
+            | Some fn -> 
+              dbg 2 "Found %s in initial module\n%!" scalar_name;
+              fn
+        in
 
-        (* codegen args and call *)
-        let llargs = List.map cg_expr args in
-        build_call llfunc (Array.of_list (llargs)) ("extern_" ^ name) b
+        if elts = 1 then begin
+          (* Scalar call *)
+          build_call scalar_fn llargs ("extern_" ^ scalar_name) b
+        end else begin
+          (* Vector call *)
+          match vector_fn with 
+            | None ->         
+                dbg 2 "Did not find %s in initial module. Calling scalar version.\n%!" vector_name;
+                (* Couldn't find a vector version. Scalarize. *)
+                let make_call i = 
+                  let extract_elt a =
+                    let idx = const_int int_imm_t i in
+                    build_extractelement a idx "" b
+                  in
+                  let args = Array.map extract_elt llargs in
+                  build_call scalar_fn args ("extern_" ^ scalar_name) b 
+                in
+                let rec assemble_result = function
+                  | ([], _) -> undef (type_of_val_type t)
+                  | (first::rest, n) -> 
+                    build_insertelement 
+                      (assemble_result (rest, n+1)) 
+                      first 
+                      (const_int int32_imm_t n) "" b
+                in
+                let calls = List.map make_call (0 -- elts) in
+                assemble_result (calls, 0)              
+            | Some fn ->
+                dbg 2 "Found %s in initial module\n%!" vector_name;
+                dbg 2 "Type is: %s\n%!" (string_of_lltype (type_of fn));
+                let arg_types = Array.map type_of llargs in
+                dbg 2 "Type should be: %s\n%!" (string_of_lltype (function_type (type_of_val_type t) arg_types));
+                dbg 2 "Passing args of type: ";
+                Array.iter (fun a -> dbg 2 "%s " (string_of_lltype (type_of a))) llargs;
+                dbg 2 "\n%!";           
+                (* Found a vector version *)
+                build_call fn llargs ("extern_" ^ vector_name) b              
+        end
     | Call (_, _, name, _) ->
         failwith ("Can't lower call to " ^ name ^ ". This should have been replaced with a Load during lowering\n")
 
@@ -236,20 +284,6 @@ let rec make_cg_context c m b sym_table arch_state =
           let made_positive = build_add initial_mod r "" b in
           build_srem made_positive r "" b
 
-  and cg_minmax op l r =
-    let cmp = match (op, element_val_type (val_type_of_expr l)) with 
-      | (Min, Float _) -> build_fcmp Fcmp.Olt
-      | (Max, Float _) -> build_fcmp Fcmp.Ogt
-      | (Min, Int _) -> build_icmp Icmp.Slt
-      | (Max, Int _) -> build_icmp Icmp.Sgt
-      | (Min, UInt _) -> build_icmp Icmp.Ult
-      | (Max, UInt _) -> build_icmp Icmp.Ugt
-      | (_, _) -> failwith "cg_minmax with non-min/max op"
-    in
-    let l = cg_expr l in
-    let r = cg_expr r in
-    build_select (cmp l r "" b) l r "" b
-
   and cg_cmp iop uop fop l r =
     cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
 
@@ -269,36 +303,6 @@ let rec make_cg_context c m b sym_table arch_state =
       | UInt(fb), Int(tb)
       | UInt(fb), UInt(tb) when fb < tb ->
           simple_cast build_zext e t
-
-      (* Some common casts can be done more efficiently by bitcasting
-         and doing vector shuffles (assuming little-endianness) *)
-
-      (* Narrowing ints by a factor of 2 *)
-      | UIntVector(fb, fw), UIntVector(tb, tw)
-      | IntVector(fb, fw), IntVector(tb, tw)
-      | UIntVector(fb, fw), IntVector(tb, tw)
-      | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb = tb*2 ->
-          (* Bitcast to split hi and lo halves of each int *)
-          let intermediate_type = type_of_val_type (IntVector (tb, tw*2)) in
-          let split_hi_lo = build_bitcast (cg_expr e) intermediate_type "" b in
-          let indices = const_vector (Array.of_list (List.map (fun x -> const_int int_imm_t (x*2)) (0 -- tw))) in
-          (* Shuffle vector to grab the low halves *)
-          build_shufflevector split_hi_lo (undef intermediate_type) indices "" b
-
-      (* Widening unsigned ints by a factor of 2 *)
-      | UIntVector(fb, fw), UIntVector(tb, tw)
-      | UIntVector(fb, fw), IntVector(tb, tw) when fw = tw && fb*2 = tb ->
-          (* Make a zero vector of the same size *)
-          let zero_vector = const_null (type_of_val_type (IntVector (fb, fw))) in
-          let rec indices = function
-            | 0 -> []
-            | x -> (const_int int_imm_t (fw-x))::(const_int int_imm_t (2*fw-x))::(indices (x-1)) in                
-          let shuffle = build_shufflevector (cg_expr e) zero_vector (const_vector (Array.of_list (indices fw))) "" b in
-          build_bitcast shuffle (type_of_val_type t) "" b
-
-      (* For signed ints we need to do sign extension 
-      | IntVector(fb, fw), UIntVector(tb, tw) 
-      | IntVector(fb, fw), UIntVector(tb, tw) when fw = tw && fb*2 = tb ->             *)          
 
       (* Narrowing integer casts always truncate *)
       | UIntVector(fb, fw), UIntVector(tb, tw)
@@ -460,7 +464,7 @@ let rec make_cg_context c m b sym_table arch_state =
     (* make a new context *)
     let sub_builder = (builder_at_end c (entry_block body_fn)) in
     let sub_sym_table = Hashtbl.create 10 in
-    let sub_context = make_cg_context c m sub_builder sub_sym_table arch_state in
+    let sub_context = make_cg_context c m sub_builder sub_sym_table arch_state arch_opts in
 
     (* Load everything from the closure into the new symbol table *)
     StringIntSet.iter (fun (name, size) ->      
@@ -495,7 +499,11 @@ let rec make_cg_context c m b sym_table arch_state =
     (* Return an ignorable llvalue *)
     const_int int_imm_t 0
 
-  and cg_stmt stmt = Arch.cg_stmt cg_context stmt
+  and cg_stmt stmt = 
+    dbg 2 "begin cg_stmt %s\n%!" (string_of_stmt stmt);
+    let result = Arch.cg_stmt cg_context stmt in
+    dbg 2 "end cg_stmt %s\n%!" (string_of_stmt stmt);
+    result
   and cg_stmt_inner = function
     | Store (e, buf, idx) -> cg_store e buf idx
     | For (name, min, n, order, stmt) ->
@@ -539,7 +547,7 @@ let rec make_cg_context c m b sym_table arch_state =
   and cg_store e buf idx =
     (* ignore(cg_debug e ("Store to " ^ buf ^ " ") [idx; e]); *)
     match (is_vector e, is_vector idx) with
-      | (_, true) ->
+      | (true, true) ->
         begin match idx with
           (* Aligned dense vector store: ramp stride 1 && idx base % vec width = 0 *)
           | Ramp(b, IntImm(1), n) when Analysis.reduce_expr_modulo b n = Some 0 ->            
@@ -552,14 +560,11 @@ let rec make_cg_context c m b sym_table arch_state =
         end
 
       | (false, false) -> build_store (cg_expr e) (cg_memref (val_type_of_expr e) buf idx) b
-
+      | (false, true)  -> failwith "Can't store a scalar to a vector address"
       | (true, false)  -> failwith "Can't store a vector to a scalar address"
 
   and cg_aligned_store e buf idx =
-    let w = vector_elements (val_type_of_expr idx) in
-    (* Handle aligned dense vector store of scalar by broadcasting first *)
-    let expr = if is_scalar e then Broadcast(e, w) else e in
-    build_store (cg_expr expr) (cg_memref (val_type_of_expr expr) buf idx) b
+    build_store (cg_expr e) (cg_memref (val_type_of_expr e) buf idx) b
 
   and cg_unaligned_store e buf idx =
     (* Architectures that can handle this better should *)
@@ -575,7 +580,7 @@ let rec make_cg_context c m b sym_table arch_state =
     let get_idx i     = build_extractelement addr_vec (const_int int_imm_t i) "" b in
     let addr_of_idx i = build_gep base_ptr [| get_idx i |] "" b in
     let get_elem i    = build_extractelement value (const_int int_imm_t i) "" b in
-    let store_idx i   = build_store (if is_vector e then (get_elem i) else value) (addr_of_idx i) b in
+    let store_idx i   = build_store (get_elem i) (addr_of_idx i) b in
     List.hd (List.map store_idx (0 -- vector_elements (val_type_of_expr e)))
 
   and cg_load t buf idx =
@@ -593,12 +598,23 @@ let rec make_cg_context c m b sym_table arch_state =
         begin match idx with 
           (* dense vector load *)
           | Ramp(b, IntImm(1), _) ->
-            begin match Analysis.reduce_expr_modulo b w with
-              | Some 0      -> cg_aligned_load t buf b
-              | Some offset -> cg_unaligned_load t buf b offset
-              | None        -> cg_unknown_alignment_load t buf b
-            end
-          (* TODO: consider strided loads *)
+              begin match Analysis.reduce_expr_modulo b w with
+                | Some 0      -> cg_aligned_load t buf b
+                | Some offset -> cg_unaligned_load t buf b offset
+                | None        -> cg_unknown_alignment_load t buf b
+              end
+          (* Reverse dense vector load *)             
+          | Ramp (base, IntImm(-1), _) ->
+              (* Load the right elements *)
+              let vec = cg_expr (Load (t, buf, Ramp (base -~ (IntImm (w-1)), IntImm 1, w))) in         
+              (* Reverse them *)
+              let mask = cg_expr (MakeVector (List.map (fun x -> IntImm (w-1-x)) (0--w))) in
+              build_shufflevector vec (undef (type_of vec)) mask "" b
+
+          (* Match against clamped load pattern and generate an
+             if-then-else that does the dense load when within
+             bounds *)
+
           (* gather *)
           | _ -> cg_gather t buf idx
         end          
@@ -615,8 +631,8 @@ let rec make_cg_context c m b sym_table arch_state =
     let lower_indices = offset -- (vector_elements t) in
     let upper_indices = 0 -- offset in
     
-    let extract_lower = map (fun x -> ExtractElement(lower, (UIntImm(x)))) lower_indices in
-    let extract_upper = map (fun x -> ExtractElement(upper, (UIntImm(x)))) upper_indices in
+    let extract_lower = map (fun x -> ExtractElement(lower, (IntImm(x)))) lower_indices in
+    let extract_upper = map (fun x -> ExtractElement(upper, (IntImm(x)))) upper_indices in
     let vec = MakeVector (extract_lower @ extract_upper) in
     cg_expr vec
 
@@ -723,8 +739,8 @@ let rec make_cg_context c m b sym_table arch_state =
 
   cg_context
 
-let cg_entry c m e =
-  let _,args,stmt = e in
+let cg_entry arch_opts c m e =
+  let (_, args, stmt) = e in
 
   (* make an entrypoint function *)
   let f = define_entry c m e in
@@ -739,7 +755,7 @@ let cg_entry c m e =
   let b = builder_at_end c (entry_block f) in
 
   (* actually generate from the root statement *)
-  let ctx = make_cg_context c m b param_syms (Arch.start_state ()) in
+  let ctx = make_cg_context c m b param_syms (Arch.start_state ()) arch_opts in
   ignore (Arch.cg_stmt ctx stmt);
 
   (* return void from main *)
@@ -758,7 +774,7 @@ let cg_entry c m e =
  *)
 
 (* C runner wrapper *)
-let codegen_c_wrapper c m f =
+let codegen_c_wrapper arch_opts c m f =
 
   let raw_buffer_t = raw_buffer_t c in
   let i32_t = i32_type c in
@@ -824,7 +840,7 @@ let codegen_c_wrapper c m f =
 
 (* codegen constructs a new context and module for code generation, which it
  * returns for the caller to eventually free *)
-let codegen_entry (e:entrypoint) =
+let codegen_entry (opts:string list) (e:entrypoint) =
   let (name, _, _) = e in
 
   (* construct basic LLVM state *)
@@ -837,43 +853,27 @@ let codegen_entry (e:entrypoint) =
     ignore (Llvm_executionengine.initialize_native_target());
 
   (* codegen *)
-  let f = Arch.codegen_entry c m cg_entry make_cg_context e in
+  let f = Arch.cg_entry c m cg_entry make_cg_context e opts in
 
   (c,m,f)
 
-(* TODO: this is fairly redundant with codegen_to_file *)
-let codegen_to_bitcode_and_header (e:entrypoint) =
+let codegen_to_bitcode_and_header (opts:string list) (e:entrypoint) =
   let (object_name, _, _) = e in
 
   let bitcode_file = object_name ^ ".bc" in
   let header_file = object_name ^ ".h" in
 
   (* codegen *)
-  let (c,m,f) = codegen_entry e in
+  let (c,m,f) = codegen_entry opts e in
 
   (* build the convenience wrapper *)
-  ignore (codegen_c_wrapper c m f);
+  ignore (codegen_c_wrapper opts c m f);
 
   (* write to bitcode file *)
   save_bc_to_file m bitcode_file;
 
   (* write the header *)
   codegen_c_header e header_file;
-
-  (* free memory *)
-  dispose_module m;
-  dispose_context c
-
-(* TODO: drop this - it's redundant with codegen_to_bitcode_and_header, and can
- * be trivially reconstituted from the rest of the interfaces available *)
-let codegen_to_file e filename =
-
-  let (c,m,f) = codegen_entry e in
-
-  (* build the convenience wrapper *)
-  ignore (codegen_c_wrapper c m f);
-
-  save_bc_to_file m filename;
 
   (* free memory *)
   dispose_module m;

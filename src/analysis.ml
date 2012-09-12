@@ -19,7 +19,7 @@ let rec binop_remainder_modulus x y op =
 
 and compute_remainder_modulus expr =   
   let (m, r) = match expr with
-  | IntImm(x) | UIntImm(x) -> (x, 0)
+  | IntImm(x) -> (x, 0)
   | Cast(t, x) ->  (* TODO: this is dubious *)
     begin match val_type_of_expr x with
       | Int _ | UInt _ -> compute_remainder_modulus x 

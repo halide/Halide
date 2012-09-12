@@ -81,18 +81,7 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
             Select (vc, expand va, expand vb)
               
       | Load (t, buf, idx) -> Load (vector_of_val_type t width, buf, vec idx)
-      (* For extern calls, we scalarize *)
-      (* TODO: what if a vector version exists? *)
-      | Call (Extern, t, f, args) -> 
-          let get_args idx = List.map (fun x ->
-            let x = vec x in
-            if (is_scalar x) then 
-              x 
-            else
-              ExtractElement (x, IntImm idx)
-          ) args in
-          let make_call idx = Call (Extern, t, f, get_args idx) in
-          MakeVector (List.map make_call (0 -- width))
+      (* For extern calls, we blindly vectorize, then worry about calling a scalar version later during codegen *)
       | Call (ct, t, f, args) -> 
           Call (ct, vector_of_val_type t width, f, List.map (fun arg -> expand (vec arg)) args)
 
@@ -113,8 +102,37 @@ let rec vectorize_stmt var stmt =
     match stmt with
       | For (v, min, n, order, stmt) -> For (v, min, n, order, vec stmt)
       | Block l -> Block (map vec l)
-      | Store (expr, buf, idx) -> Store (vec_expr expr, buf, vec_expr idx)
-      | Provide (expr, func, args) -> Provide (vec_expr expr, func, List.map vec_expr args)
+      | Store (expr, buf, idx) -> 
+          let vec_e = vec_expr expr in
+          let vec_i = vec_expr idx in
+          begin match (is_vector vec_e, is_vector vec_i) with
+            (* If idx is a vector but expr is a scalar, insert a broadcast around expr *)
+            | (false, true) -> 
+                let vec_e = Broadcast (vec_e, vector_elements (val_type_of_expr vec_i)) in
+                Store (vec_e, buf, vec_i)          
+            (* If idx is a scalar but expr is a vector, uh... *)
+            | (true, false) -> failwith (Printf.sprintf "Can't store a vector to a scalar address of %s" buf);
+            (* If both are vectors or both are scalars, we're good *)
+            | (_, _) -> Store (vec_e, buf, vec_i)
+          end
+      | Provide (expr, func, args) -> (* Provide (vec_expr expr, func, List.map vec_expr args) *)
+          let vec_a = List.map vec_expr args in
+          let vec_e = vec_expr expr in
+          (* At most one of the args should be a vector *)
+          let vector_args = List.filter is_vector vec_a in
+          let num_vector_args = List.length vector_args in
+          begin match (is_vector vec_e, num_vector_args) with
+            (* If multiple args are vectors, we're in trouble *)
+            | (_, n) when n > 1 -> failwith (Printf.sprintf "Can't vectorize across multiple axes of %s" func);
+            (* If idx is a vector but expr is a scalar, insert a broadcast around expr *)
+            | (false, 1) -> 
+                let vec_e = Broadcast (vec_e, vector_elements (val_type_of_expr (List.hd vector_args))) in
+                Provide (vec_e, func, vec_a)       
+            (* If idx is a scalar but expr is a vector, we're in trouble *)
+            | (true, 0) -> failwith (Printf.sprintf "Can't store a vector to a scalar index of %s\n" func);
+            (* If both are vectors or both are scalars, we're good *)
+            | (_, _) -> Provide (vec_e, func, vec_a)        
+          end
       | Print (prefix, args) -> Print (prefix, List.map vec_expr args)
       | s -> failwith (Printf.sprintf "Can't vectorize: %s" (Ir_printer.string_of_stmt s))
   in
@@ -122,8 +140,7 @@ let rec vectorize_stmt var stmt =
     | For (name, min, n, order, stmt) when name = var ->
       assert (not order); (* Doesn't make sense to vectorize ordered For *)
       begin match n with
-        | IntImm size
-        | UIntImm size ->
+        | IntImm size ->
           For (name, IntImm 0, IntImm 1, false, vectorize_stmt_inner min size stmt)
         | _ -> failwith "Can't vectorize map with non-constant size"
       end

@@ -72,11 +72,11 @@ namespace Halide {
     }
 
     void DynImage::Contents::allocate(size_t bytes) {
-        host_buffer.resize(bytes+16);
+        host_buffer.resize(bytes+32);
         data = &(host_buffer[0]);
-        unsigned char offset = ((size_t)data) & 0xf;
+        unsigned char offset = ((size_t)data) & 0x1f;
         if (offset) {
-            data += 16 - offset;
+            data += 32 - offset;
         }
         
         assert(size.size() <= 4);
@@ -203,15 +203,15 @@ namespace Halide {
             t(t), name(uniqueName('m')) {
             sizes.resize(dims);
             for (int i = 0; i < dims; i++) {
-                sizes[i] = Var(std::string(".") + name + ".dim." + int_to_str(i));  // Connelly: std::ostringstream broken in Python binding, use string + instead
+                sizes[i] = Var(std::string(".") + name + ".dim." + int_to_str(i), false);
             }
         }
 
-        Contents(const Type &t, int dims, const std::string &name) :
-            t(t), name(name) {
+        Contents(const Type &t, int dims, const std::string &name_) :
+            t(t), name(sanitizeName(name_)) {
             sizes.resize(dims);
             for (int i = 0; i < dims; i++) {
-                sizes[i] = Var(std::string(".") + name + ".dim." + int_to_str(i));  // Connelly: std::ostringstream broken in Python binding, use string + instead
+                sizes[i] = Var(std::string(".") + name + ".dim." + int_to_str(i), false);
             }
         }
 
@@ -229,7 +229,7 @@ namespace Halide {
     }
 
     UniformImage::UniformImage(const Type &t, int dims, const std::string &name) : 
-        contents(new Contents(t, dims, name)) {
+        contents(new Contents(t, dims, sanitizeName(name))) {
         for (int i = 0; i < dims; i++) {
             contents->sizes[i].child(*this);
         }
