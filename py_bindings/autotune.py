@@ -57,6 +57,8 @@ import copy
 import numpy
 import sys
 import os
+from ForkedWatchdog import Watchdog
+import examples
 random_module = random
 
 # --------------------------------------------------------------------------------------------------------------
@@ -439,6 +441,7 @@ class Schedule:
                 s = str(self.d[name])
                 s = s.replace(name + '.', '__func.')
                 scope['__func'] = f
+                #print 'apply', s
                 exec s in scope
         halide.visit_funcs(self.root_func, callback)
     
@@ -509,6 +512,12 @@ class AutotuneParams:
     
     min_depth = 0
     max_depth = DEFAULT_MAX_DEPTH
+    
+    trials = 1                  # Timing runs per schedule
+    generations = 10
+    
+    compile_timeout = 8.0
+    run_timeout = 5.0
     
 def crossover(a, b):
     "Cross over two schedules, using 2 point crossover."
@@ -590,7 +599,84 @@ def next_generation(prevL, p, root_func):
     for i in range(len(ans), p.population_size):
         ans.append(random_schedule(root_func, p.min_depth, p.max_depth))
     return ans
+
+def time_generation(L, p, test_func):
+    def time_schedule(current):
+        out = test_func(current)
+        #current.apply()
+        T = []
+        for i in range(p.trials):
+            dout = out()
+            T.append(dout['time'])
+        return sum(T)/len(T)
     
+    ans = []
+    for i in range(len(L)):
+        print 'Timing %d/%d'%(i, len(L)),
+        ans.append(time_schedule(L[i]))
+        print '%.5f secs'%ans[-1]
+    return ans
+
+COMPILE_TIMEOUT = 1001.0
+RUN_TIMEOUT     = 1002.0
+
+def default_tester(input, out_func, p, in_image):
+    def test_func(schedule):
+        try:
+            with Watchdog(p.compile_timeout):
+                T0 = time.time()
+                schedule.apply()
+                evaluate = halide.filter_image(input, out_func, in_image)
+                print 'compiled in', time.time()-T0, repr(str(schedule))
+                def out():
+                    try:
+                        with Watchdog(p.run_timeout):
+                            T0 = time.time()
+                            Iout = evaluate()
+                            T1 = time.time()
+                            return {'time': T1-T0, 'out': Iout}
+                    except Watchdog:
+                        print 'run failed', repr(str(schedule))
+                        return {'time': RUN_TIMEOUT}
+                return out
+        except Watchdog:
+            print 'compile failed', repr(str(schedule))
+            return lambda: {'time': COMPILE_TIMEOUT}
+    return test_func
+"""
+
+def default_tester(input, out_func, p, in_image, counter=[0]):
+    evaluate = halide.filter_image(input, out_func, in_image)
+    def test_func():
+        out = evaluate()
+        #out_np = numpy.asarray(out)
+        #out.show()
+        #out.save('out%d.png'%counter[0])
+        counter[0] += 1
+    return test_func
+"""
+
+DEFAULT_TESTER_KW = {'in_image': 'apollo.png'}
+
+#def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
+def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW):
+    test_func = tester(input, out_func, p, **tester_kw)
+    
+    currentL = []
+    for gen in range(p.generations):
+        currentL = next_generation(currentL, p, out_func)
+        timeL = time_generation(currentL, p, test_func)
+        
+        bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
+        print '-'*40
+        print 'Generation %d'%gen
+        print '-'*40
+        for (timev, current) in bothL:
+            print '%.4f %s' % (timev, repr(str(current)))
+        print
+        
+        currentL = [x[1] for x in bothL]
+
 # --------------------------------------------------------------------------------------------------------------
 # Unit Tests
 # --------------------------------------------------------------------------------------------------------------
@@ -668,6 +754,11 @@ def test_crossover():
         prev_gen = []
         for gen in range(8):
             L = next_generation(prev_gen, p, g)
+            if j == 0:
+                for i in range(len(L)):
+                    print 'gen=%d, i=%d'%(gen,i)
+                    print L[i]
+                    print '-'*20
             test_generation(L, prev_gen)
             prev_gen = L
     
@@ -792,7 +883,7 @@ def test():
 def main():
     args = sys.argv[1:]
     if len(args) == 0:
-        print 'autotune test|print|autotune'
+        print 'autotune test|print|autotune|test_sched1|test_sched2'
         sys.exit(0)
     if args[0] == 'test':
         test()
@@ -829,7 +920,12 @@ def main():
         print
         print 'Number successful schedules: %d/%d (%d failed)' % (nsuccess, nprint, nfail)
     elif args[0] == 'autotune':
-        print 'autotune not implemented'
+        (input, out_func, test_func) = examples.blur()
+        p = AutotuneParams()
+        autotune(input, out_func, p)
+    elif args[0] in ['test_sched1', 'test_sched2']:
+        (input, out_func, test_func) = examples.blur()
+        
     else:
         raise NotImplementedError('%s not implemented'%args[0])
 #    test_schedules()

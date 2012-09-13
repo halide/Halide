@@ -648,11 +648,11 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
                 out.assign(eval_func(input_png))
                 return out
             else:
-                print 'a'
+                #print 'a'
                 realized = out_func.realize(w, h, nchan)
-                print 'b'
+                #print 'b'
                 out.assign(realized)
-                print 'c'
+                #print 'c'
                 return out
         finally:
             assert out.width() == w and out.height() == h and out.channels() == nchan
