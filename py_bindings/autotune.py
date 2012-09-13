@@ -89,7 +89,7 @@ def default_check(cls, L):
     return False
             
 class Fragment:
-    "Base class for schedule fragment e.g. .vectorize(x), .parallel(y), .root(), etc."
+    "Base class for a single schedule macro applied to a Func, e.g. .vectorize(x), .parallel(y), .root(), etc."
     def __init__(self, var=None, value=None):
         self.var = var
         self.value = value
@@ -107,8 +107,8 @@ class Fragment:
         "List of new variable names, e.g. ['v'] or []."
         return []
         
-    def randomize(self):
-        "Randomize values e.g. change vectorize(x, 8) => vectorize(x, (random value))."
+    def randomize_const(self):
+        "Randomize constants e.g. change vectorize(x, 8) => vectorize(x, (random value))."
     
     def check(self, L):
         "Given list of Schedule fragments (applied to a function) returns True if valid else False."
@@ -122,8 +122,10 @@ class FragmentVarMixin:
 
 use_random_blocksize = True
 
-def blocksize_random():
-    return random.choice([2,4,8,16,32]) if use_random_blocksize else 3
+def blocksize_random(L=None, force_random=False):
+    if L is None:
+        L = [2,4,8,16,32,64]
+    return random.choice(L) #if (use_random_blocksize and not force_random) else 3
 
 class FragmentBlocksizeMixin(FragmentVarMixin):
     def __init__(self, var=None, value=None):
@@ -133,8 +135,9 @@ class FragmentBlocksizeMixin(FragmentVarMixin):
         if self.value is None:
             self.value = 0
 
-    def randomize(self):
+    def randomize_const(self):
         self.value = blocksize_random()
+        #print 'randomize_const, value=%d'% self.value
 
     def check(self, L):
         return check_duplicates(self.__class__, L)
@@ -162,8 +165,11 @@ class FragmentRoot(Fragment):
         return '.root()'
 
 class FragmentVectorize(FragmentBlocksizeMixin,Fragment):
+    def randomize_const(self):
+        self.value = blocksize_random([2,4,8,16])
+
     def __str__(self):
-        return '.vectorize(%s,%d)'%(self.var, 4) #self.value) # FIXMEFIXME Generate random platform valid blocksize
+        return '.vectorize(%s,%d)'%(self.var, self.value) #self.value) # FIXMEFIXME Generate random platform valid blocksize
     
 class FragmentParallel(FragmentVarMixin,Fragment):
     def __str__(self):
@@ -228,9 +234,10 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         self.xnewvar = create_var(vars)
         self.ynewvar = create_var(vars+[self.xnewvar])
 
-    def randomize(self):
+    def randomize_const(self):
         self.xsize = blocksize_random()
         self.ysize = blocksize_random()
+        #print 'randomize_const, tile, size=%d,%d' % (self.xsize, self.ysize)
 
     def check(self, L):
         return check_duplicates(self.__class__, L)
@@ -277,6 +284,7 @@ class FragmentTranspose(Fragment):
 fragment_classes = [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentTranspose]
 
 class FragmentList(list):
+    "A list of schedule macros applied to a Func, e.g. f.root().vectorize(x).parallel(y)."
     def __init__(self, func, L):
         self.func = func
         list.__init__(self, L)
@@ -301,12 +309,15 @@ class FragmentList(list):
         return list(sorted(set(ans)))
         
     def __repr__(self):
-        return str(self) #return 'FragmentList(%s, %r)' % (self.func, repr([str(x) for x in list(self)]))
+        return "'" + str(self) + "'" #return 'FragmentList(%s, %r)' % (self.func, repr([str(x) for x in list(self)]))
         
-    def randomized(self):
+    def randomized_const(self):
         ans = FragmentList(self.func, [copy.copy(x) for x in self])
         for x in ans:
-            x.randomize()
+            x.randomize_const()
+        #    print '->', x
+        #print 'FragmentList, after randomization:'
+        #print ans
         return ans
     
     def check(self):
@@ -316,7 +327,7 @@ class FragmentList(list):
         return True
 
 def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_vars=[]):
-    "Un-checked schedules of exactly the specified depth for the given function."
+    "Un-checked schedules (FragmentList instances) of exactly the specified depth for the given Func."
 #    print func
 #    print vars
     if not random:
@@ -349,7 +360,7 @@ DEFAULT_MAX_DEPTH = 3
 
 def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, random=False, extra_caller_vars=[], vars=None):
     """
-    Generator of valid schedules for a function, each of which is a list of schedule fragments (FragmentList).
+    Generator of valid schedules for a Func, each of which is a FragmentList (e.g. f.root().vectorize(x).parallel(y)).
     
     If random is True then instead generate exactly one schedule randomly chosen.
     """
@@ -363,11 +374,18 @@ def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, ra
             depth = random_module.randrange(min_depth, max_depth+1)
         for L in schedules_depth(root_func, func, vars, depth, random, extra_caller_vars):
             if L.check():
-                yield L.randomized()
+                yield L.randomized_const()
                 if random:
                     return
 
 class Schedule:
+    """
+    Schedule applying (recursively) to all Funcs called by root_func.
+    
+    For example:
+        f.vectorize(x).parallel(y)
+        g.parallel(y)
+    """
     def __init__(self, root_func, d):
         self.root_func = root_func
         self.d = d
@@ -381,13 +399,19 @@ class Schedule:
                 ans.append(s)
         return '\n'.join(ans) #join(['-'*40] + ans + ['-'*40])
 
+    def randomized_const(self):
+        dnew = {}
+        for name in self.d:
+            dnew[name] = self.d[name].randomized_const()
+        return Schedule(self.root_func, dnew)
+
     def new_vars(self):
         ans = []
         for x in self.d.values():
             ans.extend(x.new_vars())
         return list(sorted(set(ans)))
 
-    def apply(self):   # Apply schedule
+    def apply(self, verbose=False):   # Apply schedule
         #print 'apply schedule:'
         #print str(self)
         halide.inline_all(self.root_func)
@@ -397,7 +421,8 @@ class Schedule:
         #print 'new_vars', new_vars
         for varname in new_vars:
             scope[varname] = instantiate_var(varname)
-        print 'scope:', scope
+        if verbose:
+            print 'scope:', scope
         def callback(f, parent):
             name = f.name()
             if name in self.d:
@@ -430,12 +455,13 @@ def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=No
         extra_caller_vars = d_new_vars.get(parent.name() if parent is not None else None,[])
 #        print 'schedule', f.name(), extra_caller_vars
 #        ans = schedules_func(root_func, f, min_depth, max_depth, random=True, extra_caller_vars=extra_caller_vars, vars=vars).next()
-        max_depth_sel = max_depth if f.name() != 'f' else 0
+        max_depth_sel = max_depth # if f.name() != 'f' else 0
         ans = schedules_func(root_func, f, min_depth, max_depth_sel, random=True, extra_caller_vars=extra_caller_vars).next()
         d_new_vars[f.name()] = ans.new_vars()
         schedule[f.name()] = ans
         
     halide.visit_funcs(root_func, callback)
+    #print 'random_schedule', schedule
     return Schedule(root_func, schedule)
 
 def func_lhs_var_names(f):
@@ -497,20 +523,25 @@ def test_schedules(verbose=False, test_random=False):
                     print L#repr(L)
                 nvalid_random += 1
     s = []
-    for i in range(400):
-        d = random_schedule(g, 0, DEFAULT_MAX_DEPTH)
+    for i in range(2000):
+        d = random_schedule(g, 1, DEFAULT_MAX_DEPTH)
         si = str(d)
         s.append(si)
         if verbose:
-            print 'Schedule:', si
-
+            print 'Schedule:'
+            print '-'*20
+            print si
+            print '-'*20
+            print
+        sys.stdout.flush()
         d.apply()
-        evaluate = d.test((36, 36, 3), input)
-        print 'evaluate'
-        evaluate()
         if test_random:
-            print 'Success'
-            sys.exit()
+            evaluate = d.test((36, 36, 3), input)
+            print 'evaluate'
+            evaluate()
+            if test_random:
+                print 'Success'
+                sys.exit()
     T1 = time.time()
     
     s = '\n'.join(s)
@@ -525,39 +556,71 @@ def test_schedules(verbose=False, test_random=False):
     assert nvalid_random == 100
     if verbose:
         print 'generated in %.3f secs' % (T1-T0)
+    
+    while True:
+        r = random_schedule(g, 0, DEFAULT_MAX_DEPTH)
+        s = str(r)
+        if len(s) > 30:
+            contains_num = False
+            for i in range(65):
+                if str(i) in s:
+                    contains_num = True
+                    break
+            if contains_num:
+                break
+    print 'Randomizing the constants in a chosen schedule:'
+    for i in range(3):
+        print r.randomized_const()
+        print
+        
     print 'random_schedule: OK'
+
+def autotune():
+    pass
     
 def main():
     args = sys.argv[1:]
     if len(args) == 0:
-        print 'autotune test|print'
+        print 'autotune test|print|autotune'
         sys.exit(0)
     if args[0] == 'test':
         test_schedules(True)
-    if args[0] == 'test_random':
+    elif args[0] == 'test_random':
         global use_random_blocksize
         use_random_blocksize = False
         test_schedules(True, test_random=True)
     elif args[0] == 'print':
-        nprint = 10
+        nprint = 100
         if len(args) > 1:
             nprint = int(args[1])
         cache = set()
+        nsuccess = 0
+        nfail = 0
         for i in range(nprint):
-            if os.path.exists('out.txt'):
-                os.remove('out.txt')
-            os.system('python autotune.py test_random > out.txt')
-            s = open('out.txt', 'rt').read()
+            if os.path.exists('_out.txt'):
+                os.remove('_out.txt')
+            os.system('python autotune.py test_random > _out.txt 2> /dev/null')
+            s = open('_out.txt', 'rt').read()
             success = 'Success' in s
+            search = 'Schedule:\n' + '-'*20
             try:
-                j = s.index('Schedule:')
+                j = s.index(search)
             except:
-                continue
-            schedule = s[j:s.index('\n',j+1)]
+                raise ValueError('Did not find schedule in output')
+            schedule = s[j:s.index('-'*20,j+len(search))]
+            #print 'Found schedule', schedule
+            nsuccess += success
+            nfail += not success
             if schedule not in cache:
                 print 'Success' if success else 'Failed ', schedule
                 sys.stdout.flush()
                 cache.add(schedule)
+        print
+        print 'Number successful schedules: %d/%d (%d failed)' % (nsuccess, nprint, nfail)
+    elif args[0] == 'autotune':
+        print 'autotune not implemented'
+    else:
+        raise NotImplementedError('%s not implemented'%args[0])
 #    test_schedules()
     
 if __name__ == '__main__':
