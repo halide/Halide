@@ -539,10 +539,13 @@ def visit_funcs(root_func, callback):
     visit(root_func, None)
     return d
 
-def all_funcs(root_func):
-    d = {}
+def all_funcs(root_func, return_list=False):
+    d = {} if not return_list else []
     def callback(f, parent):
-        d[f.name()] = f
+        if not return_list:
+            d[f.name()] = f
+        else:
+            d.append((f.name(), f))
     visit_funcs(root_func, callback)
     return d
 
