@@ -59,6 +59,10 @@ import sys
 import os
 random_module = random
 
+# --------------------------------------------------------------------------------------------------------------
+# Valid Schedule Enumeration
+# --------------------------------------------------------------------------------------------------------------
+
 FUNC_ROOT   = 0
 FUNC_INLINE = 1
 FUNC_CHUNK  = 2         # Needs a variable in the caller
@@ -390,13 +394,19 @@ class Schedule:
         self.root_func = root_func
         self.d = d
     
+    def __copy__(self):
+        d = {}
+        for name in self.d:
+            d[name] = copy.copy(self.d[name])
+        return Schedule(self.root_func, d)
+    
     def __str__(self):
         d = self.d
         ans = []
         for key in sorted(d.keys()):
             s = str(d[key])
-            if s != '':
-                ans.append(s)
+            #if s != '':
+            ans.append(s)
         return '\n'.join(ans) #join(['-'*40] + ans + ['-'*40])
 
     def randomized_const(self):
@@ -443,7 +453,7 @@ class Schedule:
         print 'filter'
         return halide.filter_image(input, self.root_func, in_image, eval_func=eval_func)
         
-def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None):
+def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}):
     """
     Generate Schedule for all functions called by root_func (recursively). Same arguments as schedules_func().
     """
@@ -455,10 +465,14 @@ def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=No
         extra_caller_vars = d_new_vars.get(parent.name() if parent is not None else None,[])
 #        print 'schedule', f.name(), extra_caller_vars
 #        ans = schedules_func(root_func, f, min_depth, max_depth, random=True, extra_caller_vars=extra_caller_vars, vars=vars).next()
-        max_depth_sel = max_depth # if f.name() != 'f' else 0
-        ans = schedules_func(root_func, f, min_depth, max_depth_sel, random=True, extra_caller_vars=extra_caller_vars).next()
-        d_new_vars[f.name()] = ans.new_vars()
-        schedule[f.name()] = ans
+        name = f.name()
+        if name in constraints:
+            schedule[name] = constraints[name]
+        else:
+            max_depth_sel = max_depth # if f.name() != 'f' else 0
+            ans = schedules_func(root_func, f, min_depth, max_depth_sel, random=True, extra_caller_vars=extra_caller_vars).next()
+            schedule[name] = ans
+        d_new_vars[name] = schedule[name].new_vars()
         
     halide.visit_funcs(root_func, callback)
     #print 'random_schedule', schedule
@@ -479,10 +493,191 @@ def caller_vars(root_func, func):
         if func_name in rhs_names:
             return func_lhs_var_names(g)
     return []
+
+# --------------------------------------------------------------------------------------------------------------
+# Autotuning via Genetic Algorithm (closely follows PetaBricks)
+# --------------------------------------------------------------------------------------------------------------
+
+class AutotuneParams:
+    pop_elitism_pct = 0.2
+    pop_crossover_pct = 0.3
+    pop_mutated_pct = 0.3
+    tournament_size = 3
+    mutation_rate = 0.15
+    population_size = 64
+    prob_mutate_consts = 0.5    # Probability to just modify constants when mutating
     
-def test_schedules(verbose=False, test_random=False):
-    #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
-    halide.exit_on_signal()
+    min_depth = 0
+    max_depth = DEFAULT_MAX_DEPTH
+    
+def crossover(a, b):
+    "Cross over two schedules, using 2 point crossover."
+    funcL = halide.all_funcs(a.root_func, True)
+    names = [x[0] for x in funcL]
+    assert a.root_func is b.root_func
+    assert set(a.d.keys()) == set(b.d.keys()) == set(names)
+    
+    if random.randrange(2) == 0:
+        (a, b) = (b, a)
+
+    d = {}
+    i1 = random.randrange(len(names))
+    i2 = random.randrange(len(names))
+    (i1, i2) = (min(i1, i2), max(i1, i2))
+    if i1 == 0 and i2 == len(names)-1:
+        i2 -= 1
+    for i in range(len(names)):
+        if i1 <= i <= i2:
+            d[names[i]] = copy.copy(a.d[names[i]])
+        else:
+            d[names[i]] = copy.copy(b.d[names[i]])
+    
+    return Schedule(a.root_func, d)
+
+def mutate(a, p):
+    "Mutate existing schedule using AutotuneParams p."
+    a0 = a
+    a = copy.copy(a0)
+    
+    while True:
+        for name in a.d.keys():
+            if random.random() < p.mutation_rate:
+                if random.random() < p.prob_mutate_consts:
+                    a.d[name] = a.d[name].randomized_const()
+                else:
+                    constraints = a.d
+                    del constraints[name]
+                    all_d = random_schedule(a.root_func, p.min_depth, p.max_depth, None, constraints)
+                    a.d[name] = all_d.d[name]
+        try:
+            a.apply()       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
+        except NameError:
+            continue
+        return a
+
+def select_and_crossover(prevL, p, root_func):
+    a = tournament_select(prevL, p, root_func)
+    b = tournament_select(prevL, p, root_func)
+    c = crossover(a, b)
+    c = mutate(c, p)
+    return c
+
+def select_and_mutate(prevL, p, root_func):
+    a = tournament_select(prevL, p, root_func)
+    return mutate(a, p)
+
+def tournament_select(prevL, p, root_func):
+    i = random.randrange(p.tournament_size)
+    if i >= len(prevL):
+        return random_schedule(root_func, p.min_depth, p.max_depth)
+    else:
+        return copy.copy(prevL[i])
+
+def next_generation(prevL, p, root_func):
+    """"
+    Get next generation using elitism/mutate/crossover/random.
+    
+    Here prevL is list of Schedule instances sorted by decreasing fitness, and p is AutotuneParams.
+    """
+    ans = []
+    for i in range(int(p.population_size*p.pop_elitism_pct)):
+        if i < len(prevL):
+            ans.append(prevL[i])
+    for i in range(int(p.population_size*p.pop_crossover_pct)):
+        ans.append(select_and_crossover(prevL, p, root_func))
+    for i in range(int(p.population_size*p.pop_mutated_pct)):
+        ans.append(select_and_mutate(prevL, p, root_func))
+    for i in range(len(ans), p.population_size):
+        ans.append(random_schedule(root_func, p.min_depth, p.max_depth))
+    return ans
+    
+# --------------------------------------------------------------------------------------------------------------
+# Unit Tests
+# --------------------------------------------------------------------------------------------------------------
+
+def test_crossover():
+    (f, g) = test_funcs()
+    
+    for j in range(8):
+        random.seed(j)
+
+#        for i in range(1000):
+#            a = nontrivial_schedule(g)
+#            a.apply()
+#        print 'random_schedule:  OK'
+        
+        a = nontrivial_schedule(g)
+        aL = str(a).split('\n')
+        while True:
+            b = nontrivial_schedule(g)
+            bL = str(b).split('\n')
+            all_different = True
+            assert len(aL) == len(bL), (a, b, aL, bL)
+            for i in range(len(aL)):
+                if aL[i] == bL[i]:
+                    all_different = False
+                    break
+            if all_different:
+                break
+        #print 'test_crossover'
+        #print '----- Schedule A -----'
+        #print a
+        #print 
+        #print '----- Schedule B -----'
+        #print b
+        #T0 = time.time()
+        #print 'a'
+        for i in range(80):
+            c = crossover(a, b)
+            c.apply()
+            cL = str(c).split('\n')
+            assert aL != bL and aL != cL and bL != cL
+            #print '---- Crossover ----'
+            #print c
+        #T1 = time.time()
+        
+        p = AutotuneParams()
+        #print 'b'
+        for i in range(80):
+            #print 'a', repr(str(a)), a.new_vars()
+            #print 'b', repr(str(b)), b.new_vars()
+            c = crossover(a, b)
+            #print 'c', repr(str(c)), c.new_vars()
+            c.apply()
+            c = mutate(c, p)
+            #print 'cmutate', repr(str(c)), c.new_vars()
+            c.apply()
+    #        cL = str(c).split('\n')
+    #        assert aL != bL and aL != cL and bL != cL
+
+        #T2 = time.time()
+        #print T1-T0, T2-T1
+        
+        def test_generation(L, prevL):
+            assert len(L) == p.population_size
+            for x in L:
+                x.apply()
+            current_set = set(str(x) for x in L)
+            prev_set = set(str(x) for x in prevL)
+            assert len(current_set) > 2
+            if len(prev_set):
+                assert len(current_set & prev_set) >= 1
+        
+        #random.seed(2)
+        #print 'c'
+        prev_gen = []
+        for gen in range(8):
+            L = next_generation(prev_gen, p, g)
+            test_generation(L, prev_gen)
+            prev_gen = L
+    
+    print 'crossover:         OK'
+    print 'mutate:            OK'
+    print 'next_generation:   OK'
+
+def test_funcs(cache=[]):
+    if len(cache):
+        return cache[0]
     f = halide.Func('f')
     x = halide.Var('x')
     y = halide.Var('y')
@@ -496,6 +691,26 @@ def test_schedules(verbose=False, test_random=False):
                      halide.clamp(c,halide.cast(int_t,0),halide.cast(int_t,2))]
     #g[v] = f[v,v]
     g[x,y,c] = f[x,y,c]+1
+    cache.append((f, g))
+    return (f, g)
+
+def nontrivial_schedule(g):
+    while True:
+        r = random_schedule(g, 0, DEFAULT_MAX_DEPTH)
+        s = str(r)
+        if len(s) > 30:
+            contains_num = False
+            for i in range(65):
+                if str(i) in s:
+                    contains_num = True
+                    break
+            if contains_num:
+                return r
+
+def test_schedules(verbose=False, test_random=False):
+    #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
+    halide.exit_on_signal()
+    (f, g) = test_funcs()
     assert sorted(halide.all_vars(g).keys()) == sorted(['x', 'y', 'c']) #, 'v'])
 
     if verbose:
@@ -556,27 +771,23 @@ def test_schedules(verbose=False, test_random=False):
     assert nvalid_random == 100
     if verbose:
         print 'generated in %.3f secs' % (T1-T0)
-    
-    while True:
-        r = random_schedule(g, 0, DEFAULT_MAX_DEPTH)
-        s = str(r)
-        if len(s) > 30:
-            contains_num = False
-            for i in range(65):
-                if str(i) in s:
-                    contains_num = True
-                    break
-            if contains_num:
-                break
-    print 'Randomizing the constants in a chosen schedule:'
-    for i in range(3):
-        print r.randomized_const()
-        print
-        
-    print 'random_schedule: OK'
 
-def autotune():
-    pass
+    print 'random_schedule:   OK'
+    
+    r = nontrivial_schedule(g)
+    constantL = [str(r)]
+#    print 'Randomizing the constants in a chosen schedule:'
+    for i in range(100):
+        #print r.randomized_const()
+        #print
+        constantL.append(str(r.randomized_const()))
+    assert len(set(constantL)) > 1
+    print 'randomized_const:  OK'
+            
+def test():
+#    test_schedules(True)
+    test_schedules()
+    test_crossover()
     
 def main():
     args = sys.argv[1:]
@@ -584,7 +795,7 @@ def main():
         print 'autotune test|print|autotune'
         sys.exit(0)
     if args[0] == 'test':
-        test_schedules(True)
+        test()
     elif args[0] == 'test_random':
         global use_random_blocksize
         use_random_blocksize = False
