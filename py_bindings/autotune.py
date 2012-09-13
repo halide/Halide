@@ -61,6 +61,10 @@ from ForkedWatchdog import Watchdog
 import examples
 random_module = random
 
+AUTOTUNE_VERBOSE = False
+DEFAULT_MAX_DEPTH = 3
+DEFAULT_TESTER_KW = {'in_image': 'apollo2.png'}
+
 # --------------------------------------------------------------------------------------------------------------
 # Valid Schedule Enumeration
 # --------------------------------------------------------------------------------------------------------------
@@ -362,8 +366,6 @@ def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_v
                     #print '*', len(L), L
                     yield FragmentList(func, list(L) + [fragment])
 
-DEFAULT_MAX_DEPTH = 3
-
 def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, random=False, extra_caller_vars=[], vars=None):
     """
     Generator of valid schedules for a Func, each of which is a FragmentList (e.g. f.root().vectorize(x).parallel(y)).
@@ -498,7 +500,7 @@ def caller_vars(root_func, func):
     return []
 
 # --------------------------------------------------------------------------------------------------------------
-# Autotuning via Genetic Algorithm (closely follows PetaBricks)
+# Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
 # --------------------------------------------------------------------------------------------------------------
 
 class AutotuneParams:
@@ -513,11 +515,14 @@ class AutotuneParams:
     min_depth = 0
     max_depth = DEFAULT_MAX_DEPTH
     
-    trials = 1                  # Timing runs per schedule
-    generations = 10
+    trials = 5                  # Timing runs per schedule
+    generations = 30
     
-    compile_timeout = 8.0
-    run_timeout = 5.0
+    compile_timeout = 5.0
+    run_timeout_mul = 3.0           # Fastest run time multiplied by this factor is cutoff
+    run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
+    
+    num_print = 10
     
 def crossover(a, b):
     "Cross over two schedules, using 2 point crossover."
@@ -589,59 +594,97 @@ def next_generation(prevL, p, root_func):
     Here prevL is list of Schedule instances sorted by decreasing fitness, and p is AutotuneParams.
     """
     ans = []
+    schedule_strs = set()
+    def append_unique(schedule):
+        s = str(schedule)
+        if s not in schedule_strs:
+            schedule_strs.add(s)
+            ans.append(schedule)
+
     for i in range(int(p.population_size*p.pop_elitism_pct)):
         if i < len(prevL):
-            ans.append(prevL[i])
+            append_unique(prevL[i])
     for i in range(int(p.population_size*p.pop_crossover_pct)):
-        ans.append(select_and_crossover(prevL, p, root_func))
+        append_unique(select_and_crossover(prevL, p, root_func))
     for i in range(int(p.population_size*p.pop_mutated_pct)):
-        ans.append(select_and_mutate(prevL, p, root_func))
-    for i in range(len(ans), p.population_size):
-        ans.append(random_schedule(root_func, p.min_depth, p.max_depth))
+        append_unique(select_and_mutate(prevL, p, root_func))
+    while len(ans) < p.population_size:
+        append_unique(random_schedule(root_func, p.min_depth, p.max_depth))
     return ans
 
-def time_generation(L, p, test_func):
+def time_generation(L, p, test_func, display_text=''):
     def time_schedule(current):
-        out = test_func(current)
+        return test_func(current)()['time']
+        #out = test_func(current)
         #current.apply()
-        T = []
-        for i in range(p.trials):
-            dout = out()
-            T.append(dout['time'])
-        return sum(T)/len(T)
+        #T = []
+        #for i in range(p.trials):
+        #    dout = out()
+        #    T.append(dout['time'])
+        #return min(T) #sum(T)/len(T)
     
     ans = []
+    success = 0
     for i in range(len(L)):
-        print 'Timing %d/%d'%(i, len(L)),
+        if AUTOTUNE_VERBOSE:
+            print 'Timing %d/%d'%(i, len(L)),
         ans.append(time_schedule(L[i]))
-        print '%.5f secs'%ans[-1]
+        success += ans[-1] < COMPILE_TIMEOUT
+        if AUTOTUNE_VERBOSE:
+            print '%.5f secs'%ans[-1]
+        else:
+            sys.stderr.write('\n'*100 + 'Testing %d/%d (%.0f%% succeed)\n%s\n'%(i+1,len(L),success*100.0/(i+1),display_text))
+            sys.stderr.flush()
     return ans
 
-COMPILE_TIMEOUT = 1001.0
-RUN_TIMEOUT     = 1002.0
+COMPILE_TIMEOUT = 10001.0
+RUN_TIMEOUT     = 10002.0
 
-def default_tester(input, out_func, p, in_image):
+def default_tester(input, out_func, p, in_image, allow_cache=True):
+    cache = {}
+    best_run_time = [p.run_timeout_default]
+    
     def test_func(schedule):
+        schedule_str = str(schedule)
+        if schedule_str in cache and allow_cache:
+            return lambda: cache[schedule_str]
         try:
             with Watchdog(p.compile_timeout):
                 T0 = time.time()
                 schedule.apply()
                 evaluate = halide.filter_image(input, out_func, in_image)
-                print 'compiled in', time.time()-T0, repr(str(schedule))
+                if AUTOTUNE_VERBOSE:
+                    print 'compiled in', time.time()-T0, repr(str(schedule))
                 def out():
-                    try:
-                        with Watchdog(p.run_timeout):
-                            T0 = time.time()
-                            Iout = evaluate()
-                            T1 = time.time()
-                            return {'time': T1-T0, 'out': Iout}
-                    except Watchdog:
-                        print 'run failed', repr(str(schedule))
-                        return {'time': RUN_TIMEOUT}
+                    T = []
+                    for i in range(p.trials):
+                        T0 = time.time()
+
+                        try:
+                            with Watchdog(best_run_time[0]*p.run_timeout_mul):
+                                Iout = evaluate()
+                        except Watchdog:
+                            if AUTOTUNE_VERBOSE:
+                                print 'run failed', repr(str(schedule))
+                            ans = {'time': RUN_TIMEOUT}
+                            cache[schedule_str] = ans
+                            return ans
+
+                        T1 = time.time()
+                        T.append(T1-T0)
+                    T = min(T)
+                    if T < best_run_time[0]:
+                        best_run_time[0] = T
+                    ans = {'time': T}
+                    cache[schedule_str] = ans
+                    return ans
                 return out
         except Watchdog:
-            print 'compile failed', repr(str(schedule))
-            return lambda: {'time': COMPILE_TIMEOUT}
+            if AUTOTUNE_VERBOSE:
+                print 'compile failed', repr(str(schedule))
+            ans = {'time': COMPILE_TIMEOUT}
+            cache[schedule_str] = ans
+            return lambda: ans
     return test_func
 """
 
@@ -656,24 +699,24 @@ def default_tester(input, out_func, p, in_image, counter=[0]):
     return test_func
 """
 
-DEFAULT_TESTER_KW = {'in_image': 'apollo.png'}
-
 #def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
 def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW):
     test_func = tester(input, out_func, p, **tester_kw)
     
     currentL = []
+    display_text = ''
     for gen in range(p.generations):
         currentL = next_generation(currentL, p, out_func)
-        timeL = time_generation(currentL, p, test_func)
+        timeL = time_generation(currentL, p, test_func, display_text)
         
         bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
-        print '-'*40
-        print 'Generation %d'%gen
-        print '-'*40
-        for (timev, current) in bothL:
-            print '%.4f %s' % (timev, repr(str(current)))
-        print
+        display_text = '-'*40 + '\n'
+        display_text += 'Generation %d'%(gen+1) + '\n'
+        display_text += '-'*40 + '\n'
+        for (j, (timev, current)) in list(enumerate(bothL))[:p.num_print]:
+            display_text += '%.4f %s' % (timev, repr(str(current))) + '\n'
+        display_text += '\n'
+        print display_text
         
         currentL = [x[1] for x in bothL]
 
@@ -883,7 +926,7 @@ def test():
 def main():
     args = sys.argv[1:]
     if len(args) == 0:
-        print 'autotune test|print|autotune|test_sched1|test_sched2'
+        print 'autotune test|print|autotune|test_sched'
         sys.exit(0)
     if args[0] == 'test':
         test()
@@ -923,9 +966,9 @@ def main():
         (input, out_func, test_func) = examples.blur()
         p = AutotuneParams()
         autotune(input, out_func, p)
-    elif args[0] in ['test_sched1', 'test_sched2']:
-        (input, out_func, test_func) = examples.blur()
-        
+    elif args[0] in ['test_sched']:
+        #(input, out_func, test_func) = examples.blur()
+        pass
     else:
         raise NotImplementedError('%s not implemented'%args[0])
 #    test_schedules()
