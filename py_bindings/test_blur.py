@@ -22,9 +22,9 @@ blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
 
 out_func = blur_y
 
-if False:
+if True: #False:
     blur_x.root().parallel(y)
-    blur_y.root().parallel(c)
+    blur_y.root().parallel(y)
 else:    # Uncomment all lines for fastest schedule
     blur_y.tile(x, y, xi, yi, 8, 8)
     #blur_y.vectorize(xi, 8)

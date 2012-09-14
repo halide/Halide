@@ -1,4 +1,8 @@
 
+# - Include history with each individual
+# - Fix problem with extra_caller_vars not being set.
+# - Seed according to percents rather than random.
+
 # - Run my recursive scheduler against PetaBricks
 # - Dump top speed and schedule vs generation number out to some number of generations
 
@@ -61,7 +65,7 @@ from ForkedWatchdog import Watchdog
 import examples
 random_module = random
 
-AUTOTUNE_VERBOSE = False #True
+AUTOTUNE_VERBOSE = False #True #False #True
 DEFAULT_MAX_DEPTH = 4
 DEFAULT_TESTER_KW = {'in_image': 'apollo2.png'}
 FORCE_TILE = False
@@ -581,7 +585,7 @@ class AutotuneParams:
     max_depth = DEFAULT_MAX_DEPTH
     
     trials = 5                  # Timing runs per schedule
-    generations = 30
+    generations = 500
     
     compile_timeout = 5.0
     run_timeout_mul = 3.0           # Fastest run time multiplied by this factor is cutoff
@@ -727,16 +731,39 @@ def next_generation(prevL, p, root_func, constraints):
         if s not in schedule_strs:
             schedule_strs.add(s)
             ans.append(schedule)
+            
+    def do_crossover():
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func)))
+    def do_mutated():
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func)))
+    def do_random():
+        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)))
+        
+    random_pct = 1-p.pop_mutated_pct-p.pop_crossover_pct-p.pop_elitism_pct
 
     for i in range(int(p.population_size*p.pop_elitism_pct)):
         if i < len(prevL):
             append_unique(prevL[i])
     for i in range(int(p.population_size*p.pop_crossover_pct)):
-        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func)))
+        do_crossover()
     for i in range(int(p.population_size*p.pop_mutated_pct)):
-        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func)))
+        do_mutated()
+    for i in range(int(p.population_size*random_pct)):
+        do_random()
+        
+    Pd = {'crossover': p.pop_crossover_pct, 'mutated': p.pop_mutated_pct, 'random': random_pct}
+
     while len(ans) < p.population_size:
-        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)))
+        mode = sample_prob(Pd)
+        if mode == 'crossover':
+            do_crossover()
+        elif mode == 'mutated':
+            do_mutated()
+        elif mode == 'random':
+            do_random()
+        else:
+            raise ValueError('Unknown mode %s'%mode)
+
     return ans
 
 class AutotuneTimer:
@@ -772,11 +799,13 @@ def time_generation(L, p, test_func, timer, display_text=''):
         ans.append(time_schedule(L[i]))
         success += ans[-1] < COMPILE_TIMEOUT
         timer.total_time = time.time()-timer.start_time
+        stats_str = '%.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
         if AUTOTUNE_VERBOSE:
             print '%.5f secs'%ans[-1]
         else:
-            sys.stderr.write('\n'*100 + 'Testing %d/%d (%.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs)\n%s\n'%(i+1,len(L),success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time,display_text))
+            sys.stderr.write('\n'*100 + 'Testing %d/%d (%s)\n%s\n'%(i+1,len(L),stats_str,display_text))
             sys.stderr.flush()
+    print 'Statistics: %s'%stats_str
     return ans
 
 COMPILE_TIMEOUT = 10001.0
