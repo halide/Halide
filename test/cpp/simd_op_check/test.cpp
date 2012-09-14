@@ -287,7 +287,7 @@ void check_sse_all(bool use_avx, bool use_avx2) {
 
     check_sse("cvttps2dq", 4, i32(f32_1));
     check_sse("cvtdq2ps", 4, f32(i32_1));    
-    check_sse("cvtpd2dq", 4, i32(f64_1));
+    check_sse("cvttpd2dq", 4, i32(f64_1));
     check_sse("cvtdq2pd", 4, f64(i32_1));
     check_sse("cvtps2pd", 4, f64(f32_1));
     check_sse("cvtpd2ps", 4, f32(f64_1));
