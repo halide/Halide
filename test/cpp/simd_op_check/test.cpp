@@ -51,7 +51,7 @@ void do_job(job &j) {
     const char *opt = "../../../llvm/Release+Asserts/bin/opt";
     char cmd[1024];
     snprintf(cmd, 1024, 
-	     "cat %s.bc | %s -O3 -always-inline | %s %s -o - 2> %s.llc_stderr | "
+	     "cat %s.bc | %s -always-inline | %s %s -o - 2> %s.llc_stderr | "
 	     "sed -n '/%s.v1_loop/,/%s.v0_afterloop/p' | "
 	     "grep -v 'v1_loop' | "
 	     "grep -v 'Loop' | "
@@ -1152,7 +1152,10 @@ void check_neon_all() {
 
     // VREV16	X	-	Reverse in Halfwords
     // VREV32	X	-	Reverse in Words
-    // VREV64	X	-	Reverse in Doublewords
+    // VREV64	X	-	Reverse in Doublewords    
+    // A reverse dense load should trigger vrev
+    check_neon("vrev64.16", 4, in_i16(100-x));
+    //check_neon("vrev64.16", 8, in_i16(100-x)); This doesn't work :(
 
     // These reverse within each halfword, word, and doubleword
     // respectively. We don't use them. Instead we use vtbl for vector
@@ -1336,8 +1339,7 @@ void check_neon_all() {
 
     // VTBL	X	-	Table Lookup
     // Arm's version of shufps. Allows for arbitrary permutations of a
-    // vector. We can test it with a reverse dense load
-    check_neon("vtbl", 16, in_i8(100-x));
+    // 64-bit vector. We typically use vrev variants instead. 
 
     // VTBX	X	-	Table Extension
     // Like vtbl, but doesn't change any elements where the index was

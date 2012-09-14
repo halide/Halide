@@ -1,4 +1,17 @@
 
+# - Include history with each individual
+# - Fix problem with extra_caller_vars not being set.
+# - Seed according to percents rather than random.
+
+# - Run my recursive scheduler against PetaBricks
+# - Dump top speed and schedule vs generation number out to some number of generations
+
+# Determining schedules
+# 1. Autotuning
+# 2. Heuristics
+#   - Parallelize outer dimension or two, vectorize inner. Instead of doing random splits focus on tiling splits
+# 3. Machine learning
+
 # Jonathan+Andrew discussion:
 # - Tile size or unroll size needs to be divisible into input size
 # - split(x, x, xi, n) is right syntax for now
@@ -48,7 +61,19 @@ import copy
 import numpy
 import sys
 import os
+from ForkedWatchdog import Watchdog
+import examples
 random_module = random
+
+AUTOTUNE_VERBOSE = False #True #False #True
+DEFAULT_MAX_DEPTH = 4
+DEFAULT_TESTER_KW = {'in_image': 'apollo2.png'}
+FORCE_TILE = False
+MUTATE_TRIES = 10
+
+# --------------------------------------------------------------------------------------------------------------
+# Valid Schedule Enumeration
+# --------------------------------------------------------------------------------------------------------------
 
 FUNC_ROOT   = 0
 FUNC_INLINE = 1
@@ -73,6 +98,8 @@ def default_check(cls, L):
         return True
     else:
         # Handle singleton fragments
+        if FORCE_TILE and (len(L) >= 2 and count(FragmentTile) < 1):
+            return False
         if isinstance(L[0], FragmentRoot) and count(FragmentRoot) == 1 and count(FragmentChunk) == 0:
             return True
         elif isinstance(L[0], FragmentChunk) and len(L) == 1:
@@ -80,7 +107,7 @@ def default_check(cls, L):
     return False
             
 class Fragment:
-    "Base class for schedule fragment e.g. .vectorize(x), .parallel(y), .root(), etc."
+    "Base class for a single schedule macro applied to a Func, e.g. .vectorize(x), .parallel(y), .root(), etc."
     def __init__(self, var=None, value=None):
         self.var = var
         self.value = value
@@ -98,8 +125,8 @@ class Fragment:
         "List of new variable names, e.g. ['v'] or []."
         return []
         
-    def randomize(self):
-        "Randomize values e.g. change vectorize(x, 8) => vectorize(x, (random value))."
+    def randomize_const(self):
+        "Randomize constants e.g. change vectorize(x, 8) => vectorize(x, (random value))."
     
     def check(self, L):
         "Given list of Schedule fragments (applied to a function) returns True if valid else False."
@@ -113,8 +140,10 @@ class FragmentVarMixin:
 
 use_random_blocksize = True
 
-def blocksize_random():
-    return random.choice([2,4,8,16,32]) if use_random_blocksize else 3
+def blocksize_random(L=None, force_random=False):
+    if L is None:
+        L = [2,4,8,16,32,64]
+    return random.choice(L) #if (use_random_blocksize and not force_random) else 3
 
 class FragmentBlocksizeMixin(FragmentVarMixin):
     def __init__(self, var=None, value=None):
@@ -124,8 +153,9 @@ class FragmentBlocksizeMixin(FragmentVarMixin):
         if self.value is None:
             self.value = 0
 
-    def randomize(self):
+    def randomize_const(self):
         self.value = blocksize_random()
+        #print 'randomize_const, value=%d'% self.value
 
     def check(self, L):
         return check_duplicates(self.__class__, L)
@@ -153,8 +183,11 @@ class FragmentRoot(Fragment):
         return '.root()'
 
 class FragmentVectorize(FragmentBlocksizeMixin,Fragment):
+    def randomize_const(self):
+        self.value = blocksize_random([2,4,8,16])
+
     def __str__(self):
-        return '.vectorize(%s,%d)'%(self.var, 4) #self.value) # FIXMEFIXME Generate random platform valid blocksize
+        return '.vectorize(%s,%d)'%(self.var, self.value) #self.value) # FIXMEFIXME Generate random platform valid blocksize
     
 class FragmentParallel(FragmentVarMixin,Fragment):
     def __str__(self):
@@ -219,9 +252,10 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         self.xnewvar = create_var(vars)
         self.ynewvar = create_var(vars+[self.xnewvar])
 
-    def randomize(self):
+    def randomize_const(self):
         self.xsize = blocksize_random()
         self.ysize = blocksize_random()
+        #print 'randomize_const, tile, size=%d,%d' % (self.xsize, self.ysize)
 
     def check(self, L):
         return check_duplicates(self.__class__, L)
@@ -267,7 +301,11 @@ class FragmentTranspose(Fragment):
 
 fragment_classes = [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentTranspose]
 
+class MutateFailed(Exception):
+    "Mutation can fail due to e.g. trying to add a fragment to f.chunk(c), which is a singleton schedule macro."
+    
 class FragmentList(list):
+    "A list of schedule macros applied to a Func, e.g. f.root().vectorize(x).parallel(y)."
     def __init__(self, func, L):
         self.func = func
         list.__init__(self, L)
@@ -292,12 +330,15 @@ class FragmentList(list):
         return list(sorted(set(ans)))
         
     def __repr__(self):
-        return str(self) #return 'FragmentList(%s, %r)' % (self.func, repr([str(x) for x in list(self)]))
+        return "'" + str(self) + "'" #return 'FragmentList(%s, %r)' % (self.func, repr([str(x) for x in list(self)]))
         
-    def randomized(self):
+    def randomized_const(self):
         ans = FragmentList(self.func, [copy.copy(x) for x in self])
         for x in ans:
-            x.randomize()
+            x.randomize_const()
+        #    print '->', x
+        #print 'FragmentList, after randomization:'
+        #print ans
         return ans
     
     def check(self):
@@ -306,8 +347,59 @@ class FragmentList(list):
                 return False
         return True
 
+    def added_or_edited(self, root_func, extra_caller_vars, vars=None, delta=0):
+        if vars is None:
+            vars = halide.func_varlist(self.func)
+        for j in range(MUTATE_TRIES):
+            L = copy.copy(list(self))
+            i = random.randrange(len(L)+1-delta)
+            all_vars = list(vars)
+            for fragment in L[:i]:
+                all_vars.extend(fragment.new_vars())
+            L[i:i+delta] = [random_fragment(root_func, self.func, all_vars, extra_caller_vars)]
+            ans = FragmentList(self.func, L)
+#            print ans, ans.check()
+            if ans.check():
+#                print '-'*40
+                return ans
+        raise MutateFailed
+
+    def added(self, root_func, extra_caller_vars, vars=None):
+        "Copy of current FragmentList that checks and has a single fragment added."
+        ans = self.added_or_edited(root_func, extra_caller_vars, vars, delta=0)
+        assert len(ans) == len(self)+1
+        return ans
+        
+    def removed(self):
+        "Copy of current FragmentList that checks and has a single fragment removed."
+        for j in range(MUTATE_TRIES):
+            L = copy.copy(list(self))
+            i = random.randrange(len(L))
+            del L[i:i+1]
+            ans = FragmentList(self.func, L)
+            if ans.check():
+                return ans
+        raise MutateFailed
+
+    def edited(self, root_func, extra_caller_vars, vars=None):
+        "Copy of current FragmentList that checks and has a single fragment edited."
+        ans = self.added_or_edited(root_func, extra_caller_vars, vars, delta=1)
+        assert len(ans) == len(self)
+        return ans
+
+def random_fragment(root_func, func, all_vars, extra_caller_vars):
+    while True:
+        cls = random.choice(fragment_classes)
+        fragments = cls.fragments(root_func, func, cls, all_vars, extra_caller_vars)
+        if len(fragments):
+            break
+#    if len(fragments) == 0:    # empty fragments can happen legitimately for e.g. chunk of the root func
+#        raise ValueError(('fragments is empty', cls, all_vars, func.name()))
+    fragment = random.choice(fragments)
+    return fragment
+
 def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_vars=[]):
-    "Un-checked schedules of exactly the specified depth for the given function."
+    "Un-checked schedules (FragmentList instances) of exactly the specified depth for the given Func."
 #    print func
 #    print vars
     if not random:
@@ -336,11 +428,9 @@ def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_v
                     #print '*', len(L), L
                     yield FragmentList(func, list(L) + [fragment])
 
-DEFAULT_MAX_DEPTH = 3
-
 def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, random=False, extra_caller_vars=[], vars=None):
     """
-    Generator of valid schedules for a function, each of which is a list of schedule fragments (FragmentList).
+    Generator of valid schedules for a Func, each of which is a FragmentList (e.g. f.root().vectorize(x).parallel(y)).
     
     If random is True then instead generate exactly one schedule randomly chosen.
     """
@@ -354,23 +444,42 @@ def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, ra
             depth = random_module.randrange(min_depth, max_depth+1)
         for L in schedules_depth(root_func, func, vars, depth, random, extra_caller_vars):
             if L.check():
-                yield L.randomized()
+                yield L.randomized_const()
                 if random:
                     return
 
 class Schedule:
+    """
+    Schedule applying (recursively) to all Funcs called by root_func.
+    
+    For example:
+        f.vectorize(x).parallel(y)
+        g.parallel(y)
+    """
     def __init__(self, root_func, d):
         self.root_func = root_func
         self.d = d
+    
+    def __copy__(self):
+        d = {}
+        for name in self.d:
+            d[name] = copy.copy(self.d[name])
+        return Schedule(self.root_func, d)
     
     def __str__(self):
         d = self.d
         ans = []
         for key in sorted(d.keys()):
             s = str(d[key])
-            if s != '':
-                ans.append(s)
+            #if s != '':
+            ans.append(s)
         return '\n'.join(ans) #join(['-'*40] + ans + ['-'*40])
+
+    def randomized_const(self):
+        dnew = {}
+        for name in self.d:
+            dnew[name] = self.d[name].randomized_const()
+        return Schedule(self.root_func, dnew)
 
     def new_vars(self):
         ans = []
@@ -378,23 +487,25 @@ class Schedule:
             ans.extend(x.new_vars())
         return list(sorted(set(ans)))
 
-    def apply(self):   # Apply schedule
+    def apply(self, verbose=False):   # Apply schedule
         #print 'apply schedule:'
         #print str(self)
-        halide.inline_all(self.root_func)
+        #halide.inline_all(self.root_func)
         scope = halide.all_vars(self.root_func)
         #print 'scope', scope.keys()
         new_vars = self.new_vars()
         #print 'new_vars', new_vars
         for varname in new_vars:
             scope[varname] = instantiate_var(varname)
-        print 'scope:', scope
+        if verbose:
+            print 'scope:', scope
         def callback(f, parent):
             name = f.name()
             if name in self.d:
                 s = str(self.d[name])
-                s = s.replace(name + '.', '__func.')
+                s = s.replace(name + '.', '__func.reset().')
                 scope['__func'] = f
+                #print 'apply', s
                 exec s in scope
         halide.visit_funcs(self.root_func, callback)
     
@@ -409,7 +520,7 @@ class Schedule:
         print 'filter'
         return halide.filter_image(input, self.root_func, in_image, eval_func=eval_func)
         
-def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None):
+def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}):
     """
     Generate Schedule for all functions called by root_func (recursively). Same arguments as schedules_func().
     """
@@ -421,12 +532,17 @@ def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=No
         extra_caller_vars = d_new_vars.get(parent.name() if parent is not None else None,[])
 #        print 'schedule', f.name(), extra_caller_vars
 #        ans = schedules_func(root_func, f, min_depth, max_depth, random=True, extra_caller_vars=extra_caller_vars, vars=vars).next()
-        max_depth_sel = max_depth if f.name() != 'f' else 0
-        ans = schedules_func(root_func, f, min_depth, max_depth_sel, random=True, extra_caller_vars=extra_caller_vars).next()
-        d_new_vars[f.name()] = ans.new_vars()
-        schedule[f.name()] = ans
+        name = f.name()
+        if name in constraints:
+            schedule[name] = constraints[name]
+        else:
+            max_depth_sel = max_depth # if f.name() != 'f' else 0
+            ans = schedules_func(root_func, f, min_depth, max_depth_sel, random=True, extra_caller_vars=extra_caller_vars).next()
+            schedule[name] = ans
+        d_new_vars[name] = schedule[name].new_vars()
         
     halide.visit_funcs(root_func, callback)
+    #print 'random_schedule', schedule
     return Schedule(root_func, schedule)
 
 def func_lhs_var_names(f):
@@ -444,10 +560,438 @@ def caller_vars(root_func, func):
         if func_name in rhs_names:
             return func_lhs_var_names(g)
     return []
+
+# --------------------------------------------------------------------------------------------------------------
+# Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
+# --------------------------------------------------------------------------------------------------------------
+
+class AutotuneParams:
+    pop_elitism_pct = 0.2
+    pop_crossover_pct = 0.3
+    pop_mutated_pct = 0.3
+    tournament_size = 5 #3
+    mutation_rate = 0.15
+    population_size = 128 #64
     
-def test_schedules(verbose=False, test_random=False):
-    #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
-    halide.exit_on_signal()
+    # Different mutation modes (mutation is applied to each Func independently)
+    prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2}
+    # 'replace' - Replace Func's schedule with a new random schedule
+    # 'consts'  - Just modify constants when mutating
+    # 'add'     - Add a single schedule macro to existing schedule
+    # 'remove'  - Removing a single schedule macro from existing schedule
+    # 'edit'    - Edit (replace) a single schedule macro within Func's schedule
+    
+    min_depth = 0
+    max_depth = DEFAULT_MAX_DEPTH
+    
+    trials = 5                  # Timing runs per schedule
+    generations = 500
+    
+    compile_timeout = 5.0
+    run_timeout_mul = 3.0           # Fastest run time multiplied by this factor is cutoff
+    run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
+    
+    num_print = 10
+
+def sample_prob(d):
+    "Randomly sample key from dictionary with probabilities given in values."
+    items = d.items()
+    Ptotal = sum(x[1] for x in items)
+    cutoff = random.random()*Ptotal
+    current = 0.0
+    for (key, value) in items:
+        current += value
+        if current > cutoff:
+            return key
+    return key
+    
+def crossover(a, b):
+    "Cross over two schedules, using 2 point crossover."
+    funcL = halide.all_funcs(a.root_func, True)
+    names = [x[0] for x in funcL]
+    assert a.root_func is b.root_func
+    aset = set(a.d.keys())
+    assert aset == set(b.d.keys()) #== set(names)
+    names = [x for x in names if x in aset]
+    
+    if random.randrange(2) == 0:
+        (a, b) = (b, a)
+
+    d = {}
+    i1 = random.randrange(len(names))
+    i2 = random.randrange(len(names))
+    (i1, i2) = (min(i1, i2), max(i1, i2))
+    if i1 == 0 and i2 == len(names)-1:
+        i2 -= 1
+    for i in range(len(names)):
+        if i1 <= i <= i2:
+            d[names[i]] = copy.copy(a.d[names[i]])
+        else:
+            d[names[i]] = copy.copy(b.d[names[i]])
+    
+    return Schedule(a.root_func, d)
+
+def mutate(a, p):
+    "Mutate existing schedule using AutotuneParams p."
+    a0 = a
+    a = copy.copy(a0)
+    extra_caller_vars = []      # FIXME: Implement extra_caller_vars, important for chunk().
+    
+    while True:
+        for name in a.d.keys():
+            if random.random() < p.mutation_rate:
+                dmutate = dict(p.prob_mutate)
+                if len(a.d[name]) <= p.min_depth:
+                    del dmutate['remove']
+                if len(a.d[name]) >= p.max_depth:
+                    del dmutate['add']
+                if len(a.d[name]) == 0:
+                    del dmutate['edit']
+#                if 'remove' in dmutate:
+#                    del dmutate['remove']
+#                if 'edit' in dmutate:
+#                    del dmutate['edit']
+                
+                mode = sample_prob(dmutate)
+                try:
+                    if mode == 'consts':
+                        a.d[name] = a.d[name].randomized_const()
+                    elif mode == 'replace':
+                        constraints = a.d
+                        del constraints[name]
+                        all_d = random_schedule(a.root_func, p.min_depth, p.max_depth, None, constraints)
+                        a.d[name] = all_d.d[name]
+                    elif mode == 'add':
+                        assert len(a.d[name]) < p.max_depth
+                        #raise NotImplementedError
+                        a.d[name] = a.d[name].added(a.root_func, extra_caller_vars)
+                    elif mode == 'remove':
+                        assert len(a.d[name]) > p.min_depth
+                        #raise NotImplementedError
+                        a.d[name] = a.d[name].removed()
+                    elif mode == 'edit':
+#                        raise NotImplementedError
+                        a.d[name] = a.d[name].edited(a.root_func, extra_caller_vars)
+                    else:
+                        raise ValueError('Unknown mutation mode %s'%mode)
+                except MutateFailed:
+                    pass
+        try:
+            a.apply()       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
+        except NameError:
+            continue
+        return a
+
+def select_and_crossover(prevL, p, root_func):
+    a = tournament_select(prevL, p, root_func)
+    b = tournament_select(prevL, p, root_func)
+    c = crossover(a, b)
+    c = mutate(c, p)
+    return c
+
+def select_and_mutate(prevL, p, root_func):
+    a = tournament_select(prevL, p, root_func)
+    return mutate(a, p)
+
+def tournament_select(prevL, p, root_func):
+    i = random.randrange(p.tournament_size)
+    if i >= len(prevL):
+        return random_schedule(root_func, p.min_depth, p.max_depth)
+    else:
+        return copy.copy(prevL[i])
+
+class Constraints:
+    "Constraints([f, g]) excludes f, g from autotuning."
+    def __init__(self, exclude=[]):
+        self.exclude = exclude
+    
+    def constrain(self, schedule):
+        "Return new Schedule instance with constraints applied."
+#        if not 'tile' in str(schedule):
+#            return random_schedule(schedule.root_func, 0, 0)
+        d = {}
+        exclude_names = set()
+        for f in self.exclude:
+            exclude_names.add(f.name())
+        for name in schedule.d:
+            if name not in exclude_names:
+                d[name] = schedule.d[name]
+        return Schedule(schedule.root_func, d)
+
+def next_generation(prevL, p, root_func, constraints):
+    """"
+    Get next generation using elitism/mutate/crossover/random.
+    
+    Here prevL is list of Schedule instances sorted by decreasing fitness, and p is AutotuneParams.
+    """
+    ans = []
+    schedule_strs = set()
+    def append_unique(schedule):
+        s = str(schedule)
+        if s not in schedule_strs:
+            schedule_strs.add(s)
+            ans.append(schedule)
+            
+    def do_crossover():
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func)))
+    def do_mutated():
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func)))
+    def do_random():
+        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)))
+        
+    random_pct = 1-p.pop_mutated_pct-p.pop_crossover_pct-p.pop_elitism_pct
+
+    for i in range(int(p.population_size*p.pop_elitism_pct)):
+        if i < len(prevL):
+            append_unique(prevL[i])
+    for i in range(int(p.population_size*p.pop_crossover_pct)):
+        do_crossover()
+    for i in range(int(p.population_size*p.pop_mutated_pct)):
+        do_mutated()
+    for i in range(int(p.population_size*random_pct)):
+        do_random()
+        
+    Pd = {'crossover': p.pop_crossover_pct, 'mutated': p.pop_mutated_pct, 'random': random_pct}
+
+    while len(ans) < p.population_size:
+        mode = sample_prob(Pd)
+        if mode == 'crossover':
+            do_crossover()
+        elif mode == 'mutated':
+            do_mutated()
+        elif mode == 'random':
+            do_random()
+        else:
+            raise ValueError('Unknown mode %s'%mode)
+
+    return ans
+
+class AutotuneTimer:
+    compile_time = 0.0
+    run_time = 0.0
+    total_time = 0.0
+    def __init__(self):
+        self.start_time = time.time()
+    
+def time_generation(L, p, test_func, timer, display_text=''):
+    #T0 = time.time()
+    #Tcompile = [0.0]
+    #Trun = [0.0]
+    def time_schedule(current):
+        info = test_func(current)()
+        timer.compile_time += info['compile']
+        timer.run_time += info['run']
+        return info['time']
+        #out = test_func(current)
+        #current.apply()
+        #T = []
+        #for i in range(p.trials):
+        #    dout = out()
+        #    T.append(dout['time'])
+        #return min(T) #sum(T)/len(T)
+    
+    ans = []
+    success = 0
+    for i in range(len(L)):
+        Tstart = time.time()
+        if AUTOTUNE_VERBOSE:
+            print 'Timing %d/%d'%(i, len(L)),
+        ans.append(time_schedule(L[i]))
+        success += ans[-1] < COMPILE_TIMEOUT
+        timer.total_time = time.time()-timer.start_time
+        stats_str = '%.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
+        if AUTOTUNE_VERBOSE:
+            print '%.5f secs'%ans[-1]
+        else:
+            sys.stderr.write('\n'*100 + 'Testing %d/%d (%s)\n%s\n'%(i+1,len(L),stats_str,display_text))
+            sys.stderr.flush()
+    print 'Statistics: %s'%stats_str
+    return ans
+
+COMPILE_TIMEOUT = 10001.0
+RUN_TIMEOUT     = 10002.0
+
+def default_tester(input, out_func, p, in_image, allow_cache=True):
+    cache = {}
+    best_run_time = [p.run_timeout_default]
+    
+    def test_func(schedule):
+        schedule_str = str(schedule)
+        if schedule_str in cache and allow_cache:
+            return lambda: cache[schedule_str]
+        try:
+            T0 = time.time()
+            with Watchdog(p.compile_timeout):
+                schedule.apply()
+                evaluate = halide.filter_image(input, out_func, in_image)
+                Tend_compile = time.time()
+                Tcompile = Tend_compile-T0
+                if AUTOTUNE_VERBOSE:
+                    print 'compiled in', Tcompile, repr(str(schedule))
+                def out():
+                    T = []
+                    for i in range(p.trials):
+                        T0 = time.time()
+
+                        try:
+                            with Watchdog(best_run_time[0]*p.run_timeout_mul):
+                                Iout = evaluate()
+                        except Watchdog:
+                            if AUTOTUNE_VERBOSE:
+                                print 'run failed', repr(str(schedule))
+                            ans = {'time': RUN_TIMEOUT, 'compile': Tcompile, 'run': time.time()-Tend_compile}
+                            cache[schedule_str] = ans
+                            return ans
+
+                        T1 = time.time()
+                        T.append(T1-T0)
+                    T = min(T)
+                    if T < best_run_time[0]:
+                        best_run_time[0] = T
+                    ans = {'time': T, 'compile': Tcompile, 'run': time.time()-Tend_compile}
+                    cache[schedule_str] = ans
+                    return ans
+                return out
+        except Watchdog:
+            if AUTOTUNE_VERBOSE:
+                print 'compile failed', repr(str(schedule))
+            ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-T0, 'run': 0.0}
+            cache[schedule_str] = ans
+            return lambda: ans
+    return test_func
+"""
+
+def default_tester(input, out_func, p, in_image, counter=[0]):
+    evaluate = halide.filter_image(input, out_func, in_image)
+    def test_func():
+        out = evaluate()
+        #out_np = numpy.asarray(out)
+        #out.show()
+        #out.save('out%d.png'%counter[0])
+        counter[0] += 1
+    return test_func
+"""
+
+#def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
+def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints()):
+    timer = AutotuneTimer()
+    test_func = tester(input, out_func, p, **tester_kw)
+    
+    currentL = []
+    display_text = ''
+    for gen in range(p.generations):
+        currentL = next_generation(currentL, p, out_func, constraints)
+        timeL = time_generation(currentL, p, test_func, timer, display_text)
+        
+        bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
+        display_text = '-'*40 + '\n'
+        display_text += 'Generation %d'%(gen+1) + '\n'
+        display_text += '-'*40 + '\n'
+        for (j, (timev, current)) in list(enumerate(bothL))[:p.num_print]:
+            display_text += '%.4f %s' % (timev, repr(str(current))) + '\n'
+        display_text += '\n'
+        print display_text
+        
+        currentL = [x[1] for x in bothL]
+
+# --------------------------------------------------------------------------------------------------------------
+# Unit Tests
+# --------------------------------------------------------------------------------------------------------------
+
+def test_crossover(verbose=False):
+    (f, g) = test_funcs()
+    constraints = Constraints()
+    
+    for j in range(8):
+        random.seed(j)
+
+#        for i in range(1000):
+#            a = nontrivial_schedule(g)
+#            a.apply()
+#        print 'random_schedule:  OK'
+        
+        a = nontrivial_schedule(g)
+        aL = str(a).split('\n')
+        while True:
+            b = nontrivial_schedule(g)
+            bL = str(b).split('\n')
+            all_different = True
+            assert len(aL) == len(bL), (a, b, aL, bL)
+            for i in range(len(aL)):
+                if aL[i] == bL[i]:
+                    all_different = False
+                    break
+            if all_different:
+                break
+        #print 'test_crossover'
+        #print '----- Schedule A -----'
+        #print a
+        #print 
+        #print '----- Schedule B -----'
+        #print b
+        #T0 = time.time()
+        #print 'a'
+        for i in range(80):
+            c = crossover(a, b)
+            c.apply()
+            cL = str(c).split('\n')
+            assert aL != bL and aL != cL and bL != cL
+            if verbose:
+                print '---- Crossover %d,%d ----'%(j,i)
+                print c
+        #T1 = time.time()
+        
+        p = AutotuneParams()
+        #print 'b'
+        for i in range(80):
+            if verbose:
+                print '---- Mutate after crossover %d,%d ----'%(j,i)
+                print 'a', repr(str(a)), a.new_vars()
+                print 'b', repr(str(b)), b.new_vars()
+            c = crossover(a, b)
+            if verbose:
+                print 'c', repr(str(c)), c.new_vars()
+            c.apply()
+            c = mutate(c, p)
+            if verbose:
+                print 'cmutate', repr(str(c)), c.new_vars()
+            c.apply()
+    #        cL = str(c).split('\n')
+    #        assert aL != bL and aL != cL and bL != cL
+
+        #T2 = time.time()
+        #print T1-T0, T2-T1
+        
+        def test_generation(L, prevL):
+            assert len(L) == p.population_size
+            for x in L:
+                x.apply()
+            current_set = set(str(x) for x in L)
+            prev_set = set(str(x) for x in prevL)
+            assert len(current_set) > 2
+            if len(prev_set):
+                assert len(current_set & prev_set) >= 1
+        
+        #random.seed(2)
+        #print 'c'
+        prev_gen = []
+        for gen in range(2):
+            L = next_generation(prev_gen, p, g, constraints)
+            if j == 0 and verbose:
+                for i in range(len(L)):
+                    print 'gen=%d, i=%d'%(gen,i)
+                    print L[i]
+                    print '-'*20
+            test_generation(L, prev_gen)
+            prev_gen = L
+    
+    print 'crossover:         OK'
+    print 'mutate:            OK'
+    print 'next_generation:   OK'
+
+def test_funcs(cache=[]):
+    if len(cache):
+        return cache[0]
     f = halide.Func('f')
     x = halide.Var('x')
     y = halide.Var('y')
@@ -461,6 +1005,39 @@ def test_schedules(verbose=False, test_random=False):
                      halide.clamp(c,halide.cast(int_t,0),halide.cast(int_t,2))]
     #g[v] = f[v,v]
     g[x,y,c] = f[x,y,c]+1
+    cache.append((f, g))
+    return (f, g)
+
+def nontrivial_schedule(g):
+    while True:
+        r = random_schedule(g, 0, DEFAULT_MAX_DEPTH)
+        s = str(r)
+        if len(s) > 30:
+            contains_num = False
+            for i in range(65):
+                if str(i) in s:
+                    contains_num = True
+                    break
+            if contains_num:
+                return r
+
+def test_sample_prob():
+    d = {'a': 0.3, 'b': 0.5, 'c': 0.2, 'd': 0.0}
+    count = 10000
+    dc = {'a': 0, 'b': 0, 'c': 0, 'd': 0}
+    for i in range(count):
+        key = sample_prob(d)
+        dc[key] += 1
+    eps = 0.05
+    for key in d.keys():
+        assert abs(dc[key]*1.0/count-d[key])<eps, (key, d[key], dc[key]*1.0/count)
+    assert dc['d'] == 0
+    print 'sample_prob:       OK'
+
+def test_schedules(verbose=False, test_random=False):
+    #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
+    halide.exit_on_signal()
+    (f, g) = test_funcs()
     assert sorted(halide.all_vars(g).keys()) == sorted(['x', 'y', 'c']) #, 'v'])
 
     if verbose:
@@ -488,20 +1065,25 @@ def test_schedules(verbose=False, test_random=False):
                     print L#repr(L)
                 nvalid_random += 1
     s = []
-    for i in range(400):
-        d = random_schedule(g, 0, DEFAULT_MAX_DEPTH)
+    for i in range(1000):
+        d = random_schedule(g, 1, DEFAULT_MAX_DEPTH)
         si = str(d)
         s.append(si)
         if verbose:
-            print 'Schedule:', si
-
+            print 'Schedule:'
+            print '-'*20
+            print si
+            print '-'*20
+            print
+        sys.stdout.flush()
         d.apply()
-        evaluate = d.test((36, 36, 3), input)
-        print 'evaluate'
-        evaluate()
         if test_random:
-            print 'Success'
-            sys.exit()
+            evaluate = d.test((36, 36, 3), input)
+            print 'evaluate'
+            evaluate()
+            if test_random:
+                print 'Success'
+                sys.exit()
     T1 = time.time()
     
     s = '\n'.join(s)
@@ -516,39 +1098,73 @@ def test_schedules(verbose=False, test_random=False):
     assert nvalid_random == 100
     if verbose:
         print 'generated in %.3f secs' % (T1-T0)
-    print 'random_schedule: OK'
+
+    print 'random_schedule:   OK'
+    
+    r = nontrivial_schedule(g)
+    constantL = [str(r)]
+#    print 'Randomizing the constants in a chosen schedule:'
+    for i in range(100):
+        #print r.randomized_const()
+        #print
+        constantL.append(str(r.randomized_const()))
+    assert len(set(constantL)) > 1
+    print 'randomized_const:  OK'
+            
+def test():
+#    test_schedules(True)
+    test_sample_prob()
+    test_schedules()
+    test_crossover()
     
 def main():
     args = sys.argv[1:]
     if len(args) == 0:
-        print 'autotune test|print'
+        print 'autotune test|print|autotune|test_sched'
         sys.exit(0)
     if args[0] == 'test':
-        test_schedules(True)
-    if args[0] == 'test_random':
+        test()
+    elif args[0] == 'test_random':
         global use_random_blocksize
         use_random_blocksize = False
         test_schedules(True, test_random=True)
     elif args[0] == 'print':
-        nprint = 10
+        nprint = 100
         if len(args) > 1:
             nprint = int(args[1])
         cache = set()
+        nsuccess = 0
+        nfail = 0
         for i in range(nprint):
-            if os.path.exists('out.txt'):
-                os.remove('out.txt')
-            os.system('python autotune.py test_random > out.txt')
-            s = open('out.txt', 'rt').read()
+            if os.path.exists('_out.txt'):
+                os.remove('_out.txt')
+            os.system('python autotune.py test_random > _out.txt 2> /dev/null')
+            s = open('_out.txt', 'rt').read()
             success = 'Success' in s
+            search = 'Schedule:\n' + '-'*20
             try:
-                j = s.index('Schedule:')
+                j = s.index(search)
             except:
-                continue
-            schedule = s[j:s.index('\n',j+1)]
+                raise ValueError('Did not find schedule in output')
+            schedule = s[j:s.index('-'*20,j+len(search))]
+            #print 'Found schedule', schedule
+            nsuccess += success
+            nfail += not success
             if schedule not in cache:
                 print 'Success' if success else 'Failed ', schedule
                 sys.stdout.flush()
                 cache.add(schedule)
+        print
+        print 'Number successful schedules: %d/%d (%d failed)' % (nsuccess, nprint, nfail)
+    elif args[0] == 'autotune':
+        (input, out_func, test_func, scope) = examples.blur()
+        p = AutotuneParams()
+        autotune(input, out_func, p, constraints=Constraints([scope['input_clamped']]))
+    elif args[0] in ['test_sched']:
+        #(input, out_func, test_func) = examples.blur()
+        pass
+    else:
+        raise NotImplementedError('%s not implemented'%args[0])
 #    test_schedules()
     
 if __name__ == '__main__':
