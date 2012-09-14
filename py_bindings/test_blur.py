@@ -25,12 +25,12 @@ out_func = blur_y
 if False:
     blur_x.root().parallel(y)
     blur_y.root().parallel(c)
-else:
+else:    # Uncomment all lines for fastest schedule
     blur_y.tile(x, y, xi, yi, 8, 8)
-    blur_y.vectorize(xi, 8)
+    #blur_y.vectorize(xi, 8)
     blur_y.parallel(y)
     blur_x.chunk(x)
-    blur_x.vectorize(x, 8)
+    #blur_x.vectorize(x, 8)
 
 evaluate = filter_image(input, out_func, 'apollo2.png')
 evaluate()

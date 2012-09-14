@@ -61,9 +61,10 @@ from ForkedWatchdog import Watchdog
 import examples
 random_module = random
 
-AUTOTUNE_VERBOSE = False
+AUTOTUNE_VERBOSE = False #True
 DEFAULT_MAX_DEPTH = 4
 DEFAULT_TESTER_KW = {'in_image': 'apollo2.png'}
+FORCE_TILE = True
 
 # --------------------------------------------------------------------------------------------------------------
 # Valid Schedule Enumeration
@@ -92,6 +93,8 @@ def default_check(cls, L):
         return True
     else:
         # Handle singleton fragments
+        if FORCE_TILE and (len(L) >= 2 and count(FragmentTile) < 1):
+            return False
         if isinstance(L[0], FragmentRoot) and count(FragmentRoot) == 1 and count(FragmentChunk) == 0:
             return True
         elif isinstance(L[0], FragmentChunk) and len(L) == 1:
@@ -529,7 +532,9 @@ def crossover(a, b):
     funcL = halide.all_funcs(a.root_func, True)
     names = [x[0] for x in funcL]
     assert a.root_func is b.root_func
-    assert set(a.d.keys()) == set(b.d.keys()) == set(names)
+    aset = set(a.d.keys())
+    assert aset == set(b.d.keys()) #== set(names)
+    names = [x for x in names if x in aset]
     
     if random.randrange(2) == 0:
         (a, b) = (b, a)
@@ -594,6 +599,8 @@ class Constraints:
     
     def constrain(self, schedule):
         "Return new Schedule instance with constraints applied."
+#        if not 'tile' in str(schedule):
+#            return random_schedule(schedule.root_func, 0, 0)
         d = {}
         exclude_names = set()
         for f in self.exclude:
@@ -628,9 +635,22 @@ def next_generation(prevL, p, root_func, constraints):
         append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)))
     return ans
 
-def time_generation(L, p, test_func, display_text=''):
+class AutotuneTimer:
+    compile_time = 0.0
+    run_time = 0.0
+    total_time = 0.0
+    def __init__(self):
+        self.start_time = time.time()
+    
+def time_generation(L, p, test_func, timer, display_text=''):
+    #T0 = time.time()
+    #Tcompile = [0.0]
+    #Trun = [0.0]
     def time_schedule(current):
-        return test_func(current)()['time']
+        info = test_func(current)()
+        timer.compile_time += info['compile']
+        timer.run_time += info['run']
+        return info['time']
         #out = test_func(current)
         #current.apply()
         #T = []
@@ -642,14 +662,16 @@ def time_generation(L, p, test_func, display_text=''):
     ans = []
     success = 0
     for i in range(len(L)):
+        Tstart = time.time()
         if AUTOTUNE_VERBOSE:
             print 'Timing %d/%d'%(i, len(L)),
         ans.append(time_schedule(L[i]))
         success += ans[-1] < COMPILE_TIMEOUT
+        timer.total_time = time.time()-timer.start_time
         if AUTOTUNE_VERBOSE:
             print '%.5f secs'%ans[-1]
         else:
-            sys.stderr.write('\n'*100 + 'Testing %d/%d (%.0f%% succeed)\n%s\n'%(i+1,len(L),success*100.0/(i+1),display_text))
+            sys.stderr.write('\n'*100 + 'Testing %d/%d (%.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs)\n%s\n'%(i+1,len(L),success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time,display_text))
             sys.stderr.flush()
     return ans
 
@@ -665,12 +687,14 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
         if schedule_str in cache and allow_cache:
             return lambda: cache[schedule_str]
         try:
+            T0 = time.time()
             with Watchdog(p.compile_timeout):
-                T0 = time.time()
                 schedule.apply()
                 evaluate = halide.filter_image(input, out_func, in_image)
+                Tend_compile = time.time()
+                Tcompile = Tend_compile-T0
                 if AUTOTUNE_VERBOSE:
-                    print 'compiled in', time.time()-T0, repr(str(schedule))
+                    print 'compiled in', Tcompile, repr(str(schedule))
                 def out():
                     T = []
                     for i in range(p.trials):
@@ -682,7 +706,7 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
                         except Watchdog:
                             if AUTOTUNE_VERBOSE:
                                 print 'run failed', repr(str(schedule))
-                            ans = {'time': RUN_TIMEOUT}
+                            ans = {'time': RUN_TIMEOUT, 'compile': Tcompile, 'run': time.time()-Tend_compile}
                             cache[schedule_str] = ans
                             return ans
 
@@ -691,14 +715,14 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
                     T = min(T)
                     if T < best_run_time[0]:
                         best_run_time[0] = T
-                    ans = {'time': T}
+                    ans = {'time': T, 'compile': Tcompile, 'run': time.time()-Tend_compile}
                     cache[schedule_str] = ans
                     return ans
                 return out
         except Watchdog:
             if AUTOTUNE_VERBOSE:
                 print 'compile failed', repr(str(schedule))
-            ans = {'time': COMPILE_TIMEOUT}
+            ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-T0, 'run': 0.0}
             cache[schedule_str] = ans
             return lambda: ans
     return test_func
@@ -717,13 +741,14 @@ def default_tester(input, out_func, p, in_image, counter=[0]):
 
 #def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
 def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints()):
+    timer = AutotuneTimer()
     test_func = tester(input, out_func, p, **tester_kw)
     
     currentL = []
     display_text = ''
     for gen in range(p.generations):
         currentL = next_generation(currentL, p, out_func, constraints)
-        timeL = time_generation(currentL, p, test_func, display_text)
+        timeL = time_generation(currentL, p, test_func, timer, display_text)
         
         bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
         display_text = '-'*40 + '\n'
