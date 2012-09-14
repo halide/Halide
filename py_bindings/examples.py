@@ -42,7 +42,7 @@ def dilate(dtype=UInt(16), counter=[0]):
                 subexp = max(subexp, input_clamped[x+dx,y+dy])
     dilate[x,y,c] = subexp #min(min(input_clamped[x-1,y-1,c],input_clamped[x,y-1,c]),input_clamped[x+1,y-1,c])
     counter[0] += 1
-    return (input, dilate, None)
+    return (input, dilate, None, locals())
 
 def local_laplacian(dtype=UInt(16), counter=[0]):
     "Local Laplacian."
@@ -133,7 +133,7 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     halide.root_all(output)
     #print 'Done with local_laplacian', counter[0]
     counter[0] += 1
-    return (input, output, None)
+    return (input, output, None, locals())
 
 def boxblur_mode(dtype, counter, is_sat):
     print 'box', is_sat, counter[0]
@@ -179,7 +179,7 @@ def boxblur_mode(dtype, counter, is_sat):
                      sum_clamped[x-box_size-1,y-box_size-1,c])/weight[x,y])
     
     counter[0] += 1
-    return (input, output, None)
+    return (input, output, None, locals())
 
 def boxblur_sat(dtype=UInt(16), counter=[0]):
     "Box blur (implemented with summed area table)."
@@ -383,7 +383,7 @@ def snake(dtype=UInt(8), counter=[0], in_filename='blood_cells_small.png'):
         out = masked.realize(im.width(), im.height(), 3)
         return out
     #Image(UInt(8),out).save('snake_out.png')
-    return (im, phi_new, evaluate)
+    return (im, phi_new, evaluate, locals())
 
 def interpolate(dtype=UInt(16), counter=[0]):
     "Fast interpolation using a pyramid."
@@ -448,4 +448,4 @@ def interpolate(dtype=UInt(16), counter=[0]):
     
     #print 'interpolate: returning'
     
-    return (input, final, evaluate)
+    return (input, final, evaluate, locals())
