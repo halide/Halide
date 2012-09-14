@@ -611,7 +611,10 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
               let mask = cg_expr (MakeVector (List.map (fun x -> IntImm (w-1-x)) (0--w))) in
               build_shufflevector vec (undef (type_of vec)) mask "" b
 
-          (* TODO: consider strided loads *)
+          (* Match against clamped load pattern and generate an
+             if-then-else that does the dense load when within
+             bounds *)
+
           (* gather *)
           | _ -> cg_gather t buf idx
         end          

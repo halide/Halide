@@ -539,10 +539,13 @@ def visit_funcs(root_func, callback):
     visit(root_func, None)
     return d
 
-def all_funcs(root_func):
-    d = {}
+def all_funcs(root_func, return_list=False):
+    d = {} if not return_list else []
     def callback(f, parent):
-        d[f.name()] = f
+        if not return_list:
+            d[f.name()] = f
+        else:
+            d.append((f.name(), f))
     visit_funcs(root_func, callback)
     return d
 
@@ -645,11 +648,11 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
                 out.assign(eval_func(input_png))
                 return out
             else:
-                print 'a'
+                #print 'a'
                 realized = out_func.realize(w, h, nchan)
-                print 'b'
+                #print 'b'
                 out.assign(realized)
-                print 'c'
+                #print 'c'
                 return out
         finally:
             assert out.width() == w and out.height() == h and out.channels() == nchan
@@ -809,7 +812,7 @@ def test_examples():
                     input_image = 'interpolate_in.png'
         #        (in_func, out_func) = examples.blur_color(dtype)
     #            (in_func, out_func) = examples.blur(dtype)
-                (in_func, out_func, eval_func) = example(dtype)
+                (in_func, out_func, eval_func, scope) = example(dtype)
                 if first:
                     first = False
                     names.append((example_name, sorted(all_funcs(out_func).keys())))
