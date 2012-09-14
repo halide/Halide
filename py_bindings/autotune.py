@@ -799,12 +799,13 @@ def time_generation(L, p, test_func, timer, display_text=''):
         ans.append(time_schedule(L[i]))
         success += ans[-1] < COMPILE_TIMEOUT
         timer.total_time = time.time()-timer.start_time
-        stats_str = '%.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
+        stats_str = 'pid=%d, %.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (os.getpid(), success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
         if AUTOTUNE_VERBOSE:
             print '%.5f secs'%ans[-1]
         else:
             sys.stderr.write('\n'*100 + 'Testing %d/%d (%s)\n%s\n'%(i+1,len(L),stats_str,display_text))
             sys.stderr.flush()
+            pass
     print 'Statistics: %s'%stats_str
     return ans
 
@@ -821,7 +822,7 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
             return lambda: cache[schedule_str]
         try:
             T0 = time.time()
-            with Watchdog(p.compile_timeout):
+            with Watchdog(p.compile_timeout):           # FIXME: Make these serial
                 schedule.apply()
                 evaluate = halide.filter_image(input, out_func, in_image)
                 Tend_compile = time.time()
@@ -1120,7 +1121,7 @@ def test():
 def main():
     args = sys.argv[1:]
     if len(args) == 0:
-        print 'autotune test|print|autotune|test_sched'
+        print 'autotune test|print|autotune examplename|test_sched'
         sys.exit(0)
     if args[0] == 'test':
         test()
@@ -1157,9 +1158,16 @@ def main():
         print
         print 'Number successful schedules: %d/%d (%d failed)' % (nsuccess, nprint, nfail)
     elif args[0] == 'autotune':
-        (input, out_func, test_func, scope) = examples.blur()
+        if len(args) < 2:
+            print >> sys.stderr, 'expected 2 arguments to autotune'
+            sys.exit(1)
+        examplename = args[1]
+        (input, out_func, test_func, scope) = getattr(examples, examplename)()
         p = AutotuneParams()
-        autotune(input, out_func, p, constraints=Constraints([scope['input_clamped']]))
+        constraints = Constraints()
+        if 'input_clamped' in scope:
+            constraints = Constraints([scope['input_clamped']])
+        autotune(input, out_func, p, constraints=constraints)
     elif args[0] in ['test_sched']:
         #(input, out_func, test_func) = examples.blur()
         pass
