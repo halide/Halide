@@ -64,7 +64,8 @@ random_module = random
 AUTOTUNE_VERBOSE = False #True
 DEFAULT_MAX_DEPTH = 4
 DEFAULT_TESTER_KW = {'in_image': 'apollo2.png'}
-FORCE_TILE = True
+FORCE_TILE = False
+MUTATE_TRIES = 10
 
 # --------------------------------------------------------------------------------------------------------------
 # Valid Schedule Enumeration
@@ -296,6 +297,9 @@ class FragmentTranspose(Fragment):
 
 fragment_classes = [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentTranspose]
 
+class MutateFailed(Exception):
+    "Mutation can fail due to e.g. trying to add a fragment to f.chunk(c), which is a singleton schedule macro."
+    
 class FragmentList(list):
     "A list of schedule macros applied to a Func, e.g. f.root().vectorize(x).parallel(y)."
     def __init__(self, func, L):
@@ -338,6 +342,57 @@ class FragmentList(list):
             if not x.check(self):
                 return False
         return True
+
+    def added_or_edited(self, root_func, extra_caller_vars, vars=None, delta=0):
+        if vars is None:
+            vars = halide.func_varlist(self.func)
+        for j in range(MUTATE_TRIES):
+            L = copy.copy(list(self))
+            i = random.randrange(len(L)+1-delta)
+            all_vars = list(vars)
+            for fragment in L[:i]:
+                all_vars.extend(fragment.new_vars())
+            L[i:i+delta] = [random_fragment(root_func, self.func, all_vars, extra_caller_vars)]
+            ans = FragmentList(self.func, L)
+#            print ans, ans.check()
+            if ans.check():
+#                print '-'*40
+                return ans
+        raise MutateFailed
+
+    def added(self, root_func, extra_caller_vars, vars=None):
+        "Copy of current FragmentList that checks and has a single fragment added."
+        ans = self.added_or_edited(root_func, extra_caller_vars, vars, delta=0)
+        assert len(ans) == len(self)+1
+        return ans
+        
+    def removed(self):
+        "Copy of current FragmentList that checks and has a single fragment removed."
+        for j in range(MUTATE_TRIES):
+            L = copy.copy(list(self))
+            i = random.randrange(len(L))
+            del L[i:i+1]
+            ans = FragmentList(self.func, L)
+            if ans.check():
+                return ans
+        raise MutateFailed
+
+    def edited(self, root_func, extra_caller_vars, vars=None):
+        "Copy of current FragmentList that checks and has a single fragment edited."
+        ans = self.added_or_edited(root_func, extra_caller_vars, vars, delta=1)
+        assert len(ans) == len(self)
+        return ans
+
+def random_fragment(root_func, func, all_vars, extra_caller_vars):
+    while True:
+        cls = random.choice(fragment_classes)
+        fragments = cls.fragments(root_func, func, cls, all_vars, extra_caller_vars)
+        if len(fragments):
+            break
+#    if len(fragments) == 0:    # empty fragments can happen legitimately for e.g. chunk of the root func
+#        raise ValueError(('fragments is empty', cls, all_vars, func.name()))
+    fragment = random.choice(fragments)
+    return fragment
 
 def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_vars=[]):
     "Un-checked schedules (FragmentList instances) of exactly the specified depth for the given Func."
@@ -513,7 +568,14 @@ class AutotuneParams:
     tournament_size = 5 #3
     mutation_rate = 0.15
     population_size = 128 #64
-    prob_mutate_consts = 0.5    # Probability to just modify constants when mutating
+    
+    # Different mutation modes (mutation is applied to each Func independently)
+    prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2}
+    # 'replace' - Replace Func's schedule with a new random schedule
+    # 'consts'  - Just modify constants when mutating
+    # 'add'     - Add a single schedule macro to existing schedule
+    # 'remove'  - Removing a single schedule macro from existing schedule
+    # 'edit'    - Edit (replace) a single schedule macro within Func's schedule
     
     min_depth = 0
     max_depth = DEFAULT_MAX_DEPTH
@@ -526,6 +588,18 @@ class AutotuneParams:
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
     
     num_print = 10
+
+def sample_prob(d):
+    "Randomly sample key from dictionary with probabilities given in values."
+    items = d.items()
+    Ptotal = sum(x[1] for x in items)
+    cutoff = random.random()*Ptotal
+    current = 0.0
+    for (key, value) in items:
+        current += value
+        if current > cutoff:
+            return key
+    return key
     
 def crossover(a, b):
     "Cross over two schedules, using 2 point crossover."
@@ -557,17 +631,47 @@ def mutate(a, p):
     "Mutate existing schedule using AutotuneParams p."
     a0 = a
     a = copy.copy(a0)
+    extra_caller_vars = []      # FIXME: Implement extra_caller_vars, important for chunk().
     
     while True:
         for name in a.d.keys():
             if random.random() < p.mutation_rate:
-                if random.random() < p.prob_mutate_consts:
-                    a.d[name] = a.d[name].randomized_const()
-                else:
-                    constraints = a.d
-                    del constraints[name]
-                    all_d = random_schedule(a.root_func, p.min_depth, p.max_depth, None, constraints)
-                    a.d[name] = all_d.d[name]
+                dmutate = dict(p.prob_mutate)
+                if len(a.d[name]) <= p.min_depth:
+                    del dmutate['remove']
+                if len(a.d[name]) >= p.max_depth:
+                    del dmutate['add']
+                if len(a.d[name]) == 0:
+                    del dmutate['edit']
+#                if 'remove' in dmutate:
+#                    del dmutate['remove']
+#                if 'edit' in dmutate:
+#                    del dmutate['edit']
+                
+                mode = sample_prob(dmutate)
+                try:
+                    if mode == 'consts':
+                        a.d[name] = a.d[name].randomized_const()
+                    elif mode == 'replace':
+                        constraints = a.d
+                        del constraints[name]
+                        all_d = random_schedule(a.root_func, p.min_depth, p.max_depth, None, constraints)
+                        a.d[name] = all_d.d[name]
+                    elif mode == 'add':
+                        assert len(a.d[name]) < p.max_depth
+                        #raise NotImplementedError
+                        a.d[name] = a.d[name].added(a.root_func, extra_caller_vars)
+                    elif mode == 'remove':
+                        assert len(a.d[name]) > p.min_depth
+                        #raise NotImplementedError
+                        a.d[name] = a.d[name].removed()
+                    elif mode == 'edit':
+#                        raise NotImplementedError
+                        a.d[name] = a.d[name].edited(a.root_func, extra_caller_vars)
+                    else:
+                        raise ValueError('Unknown mutation mode %s'%mode)
+                except MutateFailed:
+                    pass
         try:
             a.apply()       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
         except NameError:
@@ -765,8 +869,9 @@ def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER
 # Unit Tests
 # --------------------------------------------------------------------------------------------------------------
 
-def test_crossover():
+def test_crossover(verbose=False):
     (f, g) = test_funcs()
+    constraints = Constraints()
     
     for j in range(8):
         random.seed(j)
@@ -802,20 +907,25 @@ def test_crossover():
             c.apply()
             cL = str(c).split('\n')
             assert aL != bL and aL != cL and bL != cL
-            #print '---- Crossover ----'
-            #print c
+            if verbose:
+                print '---- Crossover %d,%d ----'%(j,i)
+                print c
         #T1 = time.time()
         
         p = AutotuneParams()
         #print 'b'
         for i in range(80):
-            #print 'a', repr(str(a)), a.new_vars()
-            #print 'b', repr(str(b)), b.new_vars()
+            if verbose:
+                print '---- Mutate after crossover %d,%d ----'%(j,i)
+                print 'a', repr(str(a)), a.new_vars()
+                print 'b', repr(str(b)), b.new_vars()
             c = crossover(a, b)
-            #print 'c', repr(str(c)), c.new_vars()
+            if verbose:
+                print 'c', repr(str(c)), c.new_vars()
             c.apply()
             c = mutate(c, p)
-            #print 'cmutate', repr(str(c)), c.new_vars()
+            if verbose:
+                print 'cmutate', repr(str(c)), c.new_vars()
             c.apply()
     #        cL = str(c).split('\n')
     #        assert aL != bL and aL != cL and bL != cL
@@ -836,9 +946,9 @@ def test_crossover():
         #random.seed(2)
         #print 'c'
         prev_gen = []
-        for gen in range(8):
-            L = next_generation(prev_gen, p, g)
-            if j == 0:
+        for gen in range(2):
+            L = next_generation(prev_gen, p, g, constraints)
+            if j == 0 and verbose:
                 for i in range(len(L)):
                     print 'gen=%d, i=%d'%(gen,i)
                     print L[i]
@@ -882,6 +992,19 @@ def nontrivial_schedule(g):
             if contains_num:
                 return r
 
+def test_sample_prob():
+    d = {'a': 0.3, 'b': 0.5, 'c': 0.2, 'd': 0.0}
+    count = 10000
+    dc = {'a': 0, 'b': 0, 'c': 0, 'd': 0}
+    for i in range(count):
+        key = sample_prob(d)
+        dc[key] += 1
+    eps = 0.05
+    for key in d.keys():
+        assert abs(dc[key]*1.0/count-d[key])<eps, (key, d[key], dc[key]*1.0/count)
+    assert dc['d'] == 0
+    print 'sample_prob:       OK'
+
 def test_schedules(verbose=False, test_random=False):
     #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
     halide.exit_on_signal()
@@ -913,7 +1036,7 @@ def test_schedules(verbose=False, test_random=False):
                     print L#repr(L)
                 nvalid_random += 1
     s = []
-    for i in range(2000):
+    for i in range(1000):
         d = random_schedule(g, 1, DEFAULT_MAX_DEPTH)
         si = str(d)
         s.append(si)
@@ -961,6 +1084,7 @@ def test_schedules(verbose=False, test_random=False):
             
 def test():
 #    test_schedules(True)
+    test_sample_prob()
     test_schedules()
     test_crossover()
     
