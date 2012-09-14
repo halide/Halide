@@ -62,7 +62,7 @@ import examples
 random_module = random
 
 AUTOTUNE_VERBOSE = False
-DEFAULT_MAX_DEPTH = 3
+DEFAULT_MAX_DEPTH = 4
 DEFAULT_TESTER_KW = {'in_image': 'apollo2.png'}
 
 # --------------------------------------------------------------------------------------------------------------
@@ -428,7 +428,7 @@ class Schedule:
     def apply(self, verbose=False):   # Apply schedule
         #print 'apply schedule:'
         #print str(self)
-        halide.inline_all(self.root_func)
+        #halide.inline_all(self.root_func)
         scope = halide.all_vars(self.root_func)
         #print 'scope', scope.keys()
         new_vars = self.new_vars()
@@ -441,7 +441,7 @@ class Schedule:
             name = f.name()
             if name in self.d:
                 s = str(self.d[name])
-                s = s.replace(name + '.', '__func.')
+                s = s.replace(name + '.', '__func.reset().')
                 scope['__func'] = f
                 #print 'apply', s
                 exec s in scope
@@ -507,9 +507,9 @@ class AutotuneParams:
     pop_elitism_pct = 0.2
     pop_crossover_pct = 0.3
     pop_mutated_pct = 0.3
-    tournament_size = 3
+    tournament_size = 5 #3
     mutation_rate = 0.15
-    population_size = 64
+    population_size = 128 #64
     prob_mutate_consts = 0.5    # Probability to just modify constants when mutating
     
     min_depth = 0
@@ -587,7 +587,23 @@ def tournament_select(prevL, p, root_func):
     else:
         return copy.copy(prevL[i])
 
-def next_generation(prevL, p, root_func):
+class Constraints:
+    "Constraints([f, g]) excludes f, g from autotuning."
+    def __init__(self, exclude=[]):
+        self.exclude = exclude
+    
+    def constrain(self, schedule):
+        "Return new Schedule instance with constraints applied."
+        d = {}
+        exclude_names = set()
+        for f in self.exclude:
+            exclude_names.add(f.name())
+        for name in schedule.d:
+            if name not in exclude_names:
+                d[name] = schedule.d[name]
+        return Schedule(schedule.root_func, d)
+
+def next_generation(prevL, p, root_func, constraints):
     """"
     Get next generation using elitism/mutate/crossover/random.
     
@@ -605,11 +621,11 @@ def next_generation(prevL, p, root_func):
         if i < len(prevL):
             append_unique(prevL[i])
     for i in range(int(p.population_size*p.pop_crossover_pct)):
-        append_unique(select_and_crossover(prevL, p, root_func))
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func)))
     for i in range(int(p.population_size*p.pop_mutated_pct)):
-        append_unique(select_and_mutate(prevL, p, root_func))
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func)))
     while len(ans) < p.population_size:
-        append_unique(random_schedule(root_func, p.min_depth, p.max_depth))
+        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)))
     return ans
 
 def time_generation(L, p, test_func, display_text=''):
@@ -700,13 +716,13 @@ def default_tester(input, out_func, p, in_image, counter=[0]):
 """
 
 #def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
-def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW):
+def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints()):
     test_func = tester(input, out_func, p, **tester_kw)
     
     currentL = []
     display_text = ''
     for gen in range(p.generations):
-        currentL = next_generation(currentL, p, out_func)
+        currentL = next_generation(currentL, p, out_func, constraints)
         timeL = time_generation(currentL, p, test_func, display_text)
         
         bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
@@ -963,9 +979,9 @@ def main():
         print
         print 'Number successful schedules: %d/%d (%d failed)' % (nsuccess, nprint, nfail)
     elif args[0] == 'autotune':
-        (input, out_func, test_func) = examples.blur()
+        (input, out_func, test_func, scope) = examples.blur()
         p = AutotuneParams()
-        autotune(input, out_func, p)
+        autotune(input, out_func, p, constraints=Constraints([scope['input_clamped']]))
     elif args[0] in ['test_sched']:
         #(input, out_func, test_func) = examples.blur()
         pass

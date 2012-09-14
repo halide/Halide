@@ -812,7 +812,7 @@ def test_examples():
                     input_image = 'interpolate_in.png'
         #        (in_func, out_func) = examples.blur_color(dtype)
     #            (in_func, out_func) = examples.blur(dtype)
-                (in_func, out_func, eval_func) = example(dtype)
+                (in_func, out_func, eval_func, scope) = example(dtype)
                 if first:
                     first = False
                     names.append((example_name, sorted(all_funcs(out_func).keys())))
