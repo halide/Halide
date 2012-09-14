@@ -21,7 +21,7 @@ def blur(dtype=UInt(16), counter=[0]):
     blur_x[x,y,c] = (input_clamped[x-1,y,c]/4+input_clamped[x,y,c]/4+input_clamped[x+1,y,c]/4)/3
     blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
     counter[0] += 1
-    return (input, blur_y, None)
+    return (input, blur_y, None, locals())
 
 def dilate(dtype=UInt(16), counter=[0]):
     "Dilate on 3x3 stencil."
