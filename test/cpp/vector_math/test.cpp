@@ -294,6 +294,22 @@ bool test(int vec_width) {
         }
     }
 
+    // Unaligned load with known shift
+    printf("Unaligned load\n");
+    Func f13;
+    f13(x, y) = input(x+3, y);
+    f13.vectorize(x, vec_width);
+    Image<A> im13 = f13.realize(W, H);
+    
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = input(x+3, y);
+            if (im13(x, y) != correct) {
+                printf("im13(%d, %d) = %f instead of %d\n", x, y, (double)(im13(x, y)), (double)(correct));
+            }
+        }
+    }
+
     return true;
 }
 
