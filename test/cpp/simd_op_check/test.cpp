@@ -9,6 +9,8 @@ using namespace Halide;
 bool failed = false;
 Var x, y;
 
+bool use_avx, use_avx2;
+
 char *filter = NULL;
 
 struct job {
@@ -51,7 +53,7 @@ void do_job(job &j) {
     const char *opt = "../../../llvm/Release+Asserts/bin/opt";
     char cmd[1024];
     snprintf(cmd, 1024, 
-	     "cat %s.bc | %s -O3 -always-inline | %s %s -o - 2> %s.llc_stderr | "
+	     "cat %s.bc | %s -always-inline | %s %s -o - 2> %s.llc_stderr | "
 	     "sed -n '/%s.v1_loop/,/%s.v0_afterloop/p' | "
 	     "grep -v 'v1_loop' | "
 	     "grep -v 'Loop' | "
@@ -123,7 +125,13 @@ void print_results() {
 }
 
 void check_sse(const char *op, int vector_width, Expr e) {
-    check(op, vector_width, e, "-O3 -mattr=+avx,+avx2");
+    if (use_avx2) {
+        check(op, vector_width, e, "-O3 -mattr=+avx,+avx2");
+    } else if (use_avx) {
+        check(op, vector_width, e, "-O3 -mattr=+avx");
+    } else {
+        check(op, vector_width, e, "-O3 -mattr=-avx");
+    }
 }
 
 void check_neon(const char *op, int vector_width, Expr e) {
@@ -175,7 +183,7 @@ Expr absd(Expr a, Expr b) {
     return select(a > b, a-b, b-a);
 }
 
-void check_sse_all(bool use_avx, bool use_avx2) {
+void check_sse_all() {
     UniformImage in_f32(Float(32), 1, "in_f32");
     UniformImage in_f64(Float(64), 1, "in_f64");
     UniformImage in_i8(Int(8), 1, "in_i8");
@@ -267,8 +275,8 @@ void check_sse_all(bool use_avx, bool use_avx2) {
     //check_sse("cmpnleps", 4, select(f32_1 > f32_2, 1.0f, 2.0f));
     //check_sse("cmpnltps", 4, select(f32_1 >= f32_2, 1.0f, 2.0f));
 
-    check_sse("shufps", 4, in_f32(100-x));
     check_sse("shufps", 4, in_f32(2*x));
+    if (!use_avx) check_sse("pshufd", 4, in_f32(100-x));
 
     // SSE 2
 
@@ -285,12 +293,13 @@ void check_sse_all(bool use_avx, bool use_avx2) {
     check_sse("cmplepd", 2, select(f64_1 <= f64_2, 1.0f, 2.0f));
     check_sse("cmpltpd", 2, select(f64_1 < f64_2, 1.0f, 2.0f));
 
-    check_sse("cvttps2dq", 4, i32(f32_1));
-    check_sse("cvtdq2ps", 4, f32(i32_1));    
-    check_sse("cvtpd2dq", 4, i32(f64_1));
-    check_sse("cvtdq2pd", 4, f64(i32_1));
-    check_sse("cvtps2pd", 4, f64(f32_1));
-    check_sse("cvtpd2ps", 4, f32(f64_1));
+    // llvm is pretty flaky about which ops get generated for casts. We don't intend to catch these for now, so skip them.
+    //check_sse("cvttpd2dq", 4, i32(f64_1));
+    //check_sse("cvtdq2pd", 4, f64(i32_1));
+    //check_sse("cvttps2dq", 4, i32(f32_1));
+    //check_sse("cvtdq2ps", 4, f32(i32_1));    
+    //check_sse("cvtps2pd", 4, f64(f32_1));
+    //check_sse("cvtpd2ps", 4, f32(f64_1));
 
     check_sse("paddq", 4, i64_1 + i64_2);
     check_sse("psubq", 4, i64_1 - i64_2);
@@ -385,13 +394,15 @@ void check_sse_all(bool use_avx, bool use_avx2) {
 	
 	check_sse("vblendvps", 8, select(f32_1 > 0.7f, f32_1, f32_2));
 	check_sse("vblendvpd", 4, select(f64_1 > 0.7, f64_1, f64_2));
-	
+	        
 	check_sse("vcvttps2dq", 8, i32(f32_1));
 	check_sse("vcvtdq2ps", 8, f32(i32_1));    
-	check_sse("vcvtpd2dq", 8, i32(f64_1));
+	check_sse("vcvttpd2dq", 8, i32(f64_1));
 	check_sse("vcvtdq2pd", 8, f64(i32_1));
 	check_sse("vcvtps2pd", 8, f64(f32_1));
 	check_sse("vcvtpd2ps", 8, f32(f64_1));
+
+        check_sse("vperm", 4, in_f32(100-x));
     }
 
     // AVX 2
@@ -1152,7 +1163,10 @@ void check_neon_all() {
 
     // VREV16	X	-	Reverse in Halfwords
     // VREV32	X	-	Reverse in Words
-    // VREV64	X	-	Reverse in Doublewords
+    // VREV64	X	-	Reverse in Doublewords    
+    // A reverse dense load should trigger vrev
+    check_neon("vrev64.16", 4, in_i16(100-x));
+    //check_neon("vrev64.16", 8, in_i16(100-x)); This doesn't work :(
 
     // These reverse within each halfword, word, and doubleword
     // respectively. We don't use them. Instead we use vtbl for vector
@@ -1336,8 +1350,7 @@ void check_neon_all() {
 
     // VTBL	X	-	Table Lookup
     // Arm's version of shufps. Allows for arbitrary permutations of a
-    // vector. We can test it with a reverse dense load
-    check_neon("vtbl", 16, in_i8(100-x));
+    // 64-bit vector. We typically use vrev variants instead. 
 
     // VTBX	X	-	Table Extension
     // Like vtbl, but doesn't change any elements where the index was
@@ -1364,10 +1377,10 @@ int main(int argc, char **argv) {
     else filter = NULL;
 
     char *target = getenv("HL_TARGET");
+    use_avx = target && strstr(target, "avx");
+    use_avx2 = target && strstr(target, "avx2");
     if (!target || strncasecmp(target, "x86_64", 6) == 0) {
-	bool use_avx = target && strstr(target, "avx");
-	bool use_avx2 = target && strstr(target, "avx2");
-	check_sse_all(use_avx, use_avx2);
+	check_sse_all();
     } else {
 	check_neon_all();
     }
