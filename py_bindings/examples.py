@@ -5,6 +5,8 @@ import math
 int_t = Int(32)
 float_t = Float(32)
 
+ROOT_ALL = True
+
 def blur(dtype=UInt(16), counter=[0]):
     "Simple 3x3 blur."
     s = '_blur%d'%counter[0]
@@ -21,6 +23,9 @@ def blur(dtype=UInt(16), counter=[0]):
     blur_x[x,y,c] = (input_clamped[x-1,y,c]/4+input_clamped[x,y,c]/4+input_clamped[x+1,y,c]/4)/3
     blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
     counter[0] += 1
+    if ROOT_ALL:
+        root_all(blur_y)
+        input_clamped.reset()
     return (input, blur_y, None, locals())
 
 def dilate(dtype=UInt(16), counter=[0]):
@@ -35,13 +40,16 @@ def dilate(dtype=UInt(16), counter=[0]):
 
     input_clamped[x,y,c] = input[clamp(x,cast(Int(32),0),cast(Int(32),input.width()-1)),
                                  clamp(y,cast(Int(32),0),cast(Int(32),input.height()-1)), c]
-    subexp = input_clamped[x,y]
+    subexp = input_clamped[x,y,c]  # TODO Debug buggy
     for dy in range(-1, 2):
         for dx in range(-1, 2):
             if dx != 0 or dy != 0:
-                subexp = max(subexp, input_clamped[x+dx,y+dy])
+                subexp = max(subexp, input_clamped[x+dx,y+dy,c])
     dilate[x,y,c] = subexp #min(min(input_clamped[x-1,y-1,c],input_clamped[x,y-1,c]),input_clamped[x+1,y-1,c])
     counter[0] += 1
+    if ROOT_ALL:
+        root_all(dilate)
+        input_clamped.reset()
     return (input, dilate, None, locals())
 
 def local_laplacian(dtype=UInt(16), counter=[0]):
@@ -130,9 +138,13 @@ def local_laplacian(dtype=UInt(16), counter=[0]):
     output = Func('output'+s)
     output[x,y,c] = cast(dtype, clamp(color[x,y,c], cast(float_t,0.0), cast(float_t,1.0))*float(dtype.maxval()))
     
-    halide.root_all(output)
+    root_all(output)
     #print 'Done with local_laplacian', counter[0]
     counter[0] += 1
+
+    if ROOT_ALL:
+        root_all(output)
+
     return (input, output, None, locals())
 
 def boxblur_mode(dtype, counter, is_sat):
@@ -178,6 +190,9 @@ def boxblur_mode(dtype, counter, is_sat):
                      sum_clamped[x+box_size  ,y-box_size-1,c]+
                      sum_clamped[x-box_size-1,y-box_size-1,c])/weight[x,y])
     
+    if ROOT_ALL:
+        root_all(output)
+
     counter[0] += 1
     return (input, output, None, locals())
 
@@ -383,6 +398,10 @@ def snake(dtype=UInt(8), counter=[0], in_filename='blood_cells_small.png'):
         out = masked.realize(im.width(), im.height(), 3)
         return out
     #Image(UInt(8),out).save('snake_out.png')
+
+    if ROOT_ALL:
+        root_all(phi_new)
+
     return (im, phi_new, evaluate, locals())
 
 def interpolate(dtype=UInt(16), counter=[0]):
@@ -427,7 +446,7 @@ def interpolate(dtype=UInt(16), counter=[0]):
                   interpolated[0][x,y,1] / interpolated[0][x,y,3],
                   interpolated[0][x,y,2] / interpolated[0][x,y,3],
                   1.0)
-    halide.root_all(final)
+    root_all(final)
     
     #print 'interpolate: finished function setup'
     
@@ -447,5 +466,8 @@ def interpolate(dtype=UInt(16), counter=[0]):
         return out
     
     #print 'interpolate: returning'
-    
+
+    if ROOT_ALL:
+        root_all(final)
+
     return (input, final, evaluate, locals())
