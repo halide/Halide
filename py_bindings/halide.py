@@ -133,6 +133,12 @@ for C in [Var, FuncRef]:
 def raise_error(e):
     raise e
 
+def _transpose_order(f, *L):
+    """
+    Calls transpose() to visit vars in specified order. L should have same number of vars as f's Func definition.
+    """
+    #raise NotImplementedError
+    
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_assign = lambda x, y: assign(x, wrap(y))
 _realize = Func.realize
@@ -145,6 +151,7 @@ Func.assign = _generic_assign
 Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
 Func.split = lambda self, a, b, c, d: _split(self, a, b, c, wrap(d))
 Func.tile = lambda self, *a: _tile(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
+Func.transpose_order = _transpose_order
 
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
 
