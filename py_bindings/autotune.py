@@ -2,6 +2,9 @@
 # - Include history with each individual
 # - Fix problem with extra_caller_vars not being set.
 # - Seed according to percents rather than random.
+# - Cross over between schedule fragments
+# - Put in logic to tell if schedule is not valid in advance to gain some time
+# - Can parallelize compile and also improve % valid schedules (for speed)
 
 # - Run my recursive scheduler against PetaBricks
 # - Dump top speed and schedule vs generation number out to some number of generations
@@ -67,7 +70,8 @@ random_module = random
 
 AUTOTUNE_VERBOSE = False #True #False #True
 DEFAULT_MAX_DEPTH = 4
-DEFAULT_TESTER_KW = {'in_image': 'apollo2.png'}
+DEFAULT_IMAGE = 'apollo2.png'
+DEFAULT_TESTER_KW = {'in_image': DEFAULT_IMAGE}
 FORCE_TILE = False
 MUTATE_TRIES = 10
 
@@ -892,6 +896,7 @@ def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER
             display_text += '%.4f %s' % (timev, repr(str(current))) + '\n'
         display_text += '\n'
         print display_text
+        sys.stdout.flush()
         
         currentL = [x[1] for x in bothL]
 
@@ -1163,6 +1168,14 @@ def main():
             sys.exit(1)
         examplename = args[1]
         (input, out_func, test_func, scope) = getattr(examples, examplename)()
+        
+        evaluate = halide.filter_image(input, out_func, DEFAULT_IMAGE)
+        evaluate()
+        T0 = time.time()
+        evaluate()
+        T1 = time.time()
+        print 'Root all time: %.4f'%(T1-T0)
+        
         p = AutotuneParams()
         constraints = Constraints()
         if 'input_clamped' in scope:
