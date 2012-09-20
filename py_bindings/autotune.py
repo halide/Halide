@@ -68,6 +68,8 @@ from ForkedWatchdog import Watchdog
 import examples
 random_module = random
 
+LOG_SCHEDULES = True      # Log all tried schedules (Fail or Success) to a text file
+LOG_SCHEDULE_FILENAME = 'log_schedule.txt'
 AUTOTUNE_VERBOSE = False #True #False #True
 DEFAULT_MAX_DEPTH = 4
 DEFAULT_IMAGE = 'apollo2.png'
@@ -110,6 +112,12 @@ def default_check(cls, L):
             return True
     return False
             
+def make_fromstring(cls):
+    @staticmethod
+    def fromstring(var=None, value=None):
+        return cls(var, int(value) if value is not None else value)
+    return fromstring
+
 class Fragment:
     "Base class for a single schedule macro applied to a Func, e.g. .vectorize(x), .parallel(y), .root(), etc."
     def __init__(self, var=None, value=None):
@@ -185,14 +193,14 @@ def check_duplicates(cls, L):
 class FragmentRoot(Fragment):
     def __str__(self):
         return '.root()'
-
+    
 class FragmentVectorize(FragmentBlocksizeMixin,Fragment):
     def randomize_const(self):
         self.value = blocksize_random([2,4,8,16])
 
     def __str__(self):
         return '.vectorize(%s,%d)'%(self.var, self.value) #self.value) # FIXMEFIXME Generate random platform valid blocksize
-    
+
 class FragmentParallel(FragmentVarMixin,Fragment):
     def __str__(self):
         return '.parallel(%s)'%(self.var)
@@ -212,6 +220,9 @@ class FragmentChunk(Fragment):
     def __str__(self):
         return '.chunk(%s)'%self.var
 
+for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk]:
+    _cls.fromstring = make_fromstring(_cls)
+
 def create_var(vars): #count=[0]):
     #count[0] += 1
     for i in itertools.count(0):
@@ -227,13 +238,18 @@ def instantiate_var(name, cache={}):
 
 # split(x, x, xi, n)
 class FragmentSplit(FragmentBlocksizeMixin,Fragment):
-    def __init__(self, var=None, value=None, newvar=None, reuse_outer=False,vars=None):
+    def __init__(self, var=None, value=None, newvar=None, reuse_outer=True,vars=None):
         FragmentBlocksizeMixin.__init__(self, var, value)
         self.newvar = newvar
         if self.newvar is None:
             self.newvar = create_var(vars)
         self.reuse_outer = reuse_outer
-        
+        assert self.reuse_outer
+
+    @staticmethod
+    def fromstring(var=None, var_repeat=None, newvar=None, value=None):
+        return FragmentSplit(var, int(value) if value is not None else value, newvar)
+
     @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
         return [cls(x,reuse_outer=True,vars=vars)  for x in vars]
@@ -248,13 +264,13 @@ class FragmentSplit(FragmentBlocksizeMixin,Fragment):
                                                self.var if not self.reuse_outer else self.newvar, self.value)
 
 class FragmentTile(FragmentBlocksizeMixin,Fragment):
-    def __init__(self, xvar=None, yvar=None, newvar=None, vars=None):
+    def __init__(self, xvar=None, yvar=None, newvar=None, vars=None, xnewvar=None, ynewvar=None, xsize=None, ysize=None):
         self.xvar=xvar
         self.yvar=yvar
-        self.xsize = 0
-        self.ysize = 0
-        self.xnewvar = create_var(vars)
-        self.ynewvar = create_var(vars+[self.xnewvar])
+        self.xsize = 0 if xsize is None else xsize
+        self.ysize = 0 if ysize is None else ysize
+        self.xnewvar = create_var(vars)                if xnewvar is None else xnewvar
+        self.ynewvar = create_var(vars+[self.xnewvar]) if ynewvar is None else ynewvar
 
     def randomize_const(self):
         self.xsize = blocksize_random()
@@ -263,6 +279,10 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
 
     def check(self, L):
         return check_duplicates(self.__class__, L)
+
+    @staticmethod
+    def fromstring(xvar, yvar, xnewvar, ynewvar, xsize, ysize):
+        return FragmentTile(xvar=xvar, yvar=yvar, xsize=int(xsize), ysize=int(ysize), xnewvar=xnewvar, ynewvar=ynewvar)
 
     @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
@@ -281,12 +301,20 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
 
 class FragmentTranspose(Fragment):
     # Actually makes potentially many calls to transpose, but is considered as one fragment
-    def __init__(self, vars, idx):
+    def __init__(self, vars=None, idx=None, perm=None):
         self.vars = vars
         self.idx = idx
-        self.permutation = permutation.permutation(vars, idx)
-        self.pairwise_swaps = permutation.pairwise_swaps(vars, self.permutation)
-    
+        if perm is None:
+            self.permutation = permutation.permutation(vars, idx)
+        else:
+            self.permutation = perm
+        #self.pairwise_swaps = permutation.pairwise_swaps(vars, self.permutation)
+
+    @staticmethod
+    def fromstring(*L):
+        return FragmentTranspose(perm=L)
+        #return FragmentTranspose(xvar=xvar, yvar=yvar, xsize=int(xsize), ysize=int(ysize), xnewvar=xnewvar, ynewvar=ynewvar)
+
     @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
         return [cls(vars=vars, idx=i) for i in range(1,permutation.factorial(len(vars)))]     # TODO: Allow random generation so as to not loop over n!
@@ -297,14 +325,35 @@ class FragmentTranspose(Fragment):
         return [isinstance(x, FragmentTranspose) for x in L] == [0]*(len(L)-1)+[1]
     
     def __str__(self):
-        ans = ''
-        assert len(self.pairwise_swaps) >= 1
-        for (a, b) in self.pairwise_swaps:
-            ans += '.transpose(%s,%s)'%(a,b)
-        return ans
+        #ans = ''
+        #assert len(self.pairwise_swaps) >= 1
+        #for (a, b) in self.pairwise_swaps:
+        #    ans += '.transpose(%s,%s)'%(a,b)
+        #return ans
+        return '.transpose_order(' + ','.join(v for v in self.permutation) + ')'
 
 fragment_classes = [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentTranspose]
+fragment_map = {'root': FragmentRoot,
+                'vectorize': FragmentVectorize,
+                'parallel': FragmentParallel,
+                'unroll': FragmentUnroll,
+                'chunk': FragmentChunk,
+                'split': FragmentSplit,
+                'tile': FragmentTile,
+                'transpose_order': FragmentTranspose}
 
+def fragment_fromstring(s):
+    if '(' not in s:
+        raise ValueError(s)
+    paren1 = s.index('(')
+    paren2 = s.index(')')
+    name = s[:paren1]
+    cls = fragment_map[name]
+    rest = s[paren1+1:paren2].split(',')
+    #print cls, rest
+    #print 'fragment_fromstring |%s|' % s, cls, rest
+    return cls.fromstring(*rest)
+    
 class MutateFailed(Exception):
     "Mutation can fail due to e.g. trying to add a fragment to f.chunk(c), which is a singleton schedule macro."
     
@@ -326,6 +375,23 @@ class FragmentList(list):
             return self.func.name() + ''.join(ans)
         #print 'returning empty'
         return ''
+
+    @staticmethod
+    def fromstring(func, s):
+        """
+        Constructor from a string s such as 'f.root().parallel(y)' (same format as returned by str() method).
+        """
+        if len(s.strip()) == '':
+            return FragmentList(func, [])
+        if not '.' in s:
+            raise ValueError(s)
+        dot = s.index('.')
+        s = s[dot+1:]
+        ans = []
+        for part in s.split('.'):
+            ans.append(fragment_fromstring(part))
+        return FragmentList(func, ans)
+        
 
     def new_vars(self):
         ans = []
@@ -523,7 +589,35 @@ class Schedule:
         in_image = numpy.zeros(shape, input.type().to_numpy())
         print 'filter'
         return halide.filter_image(input, self.root_func, in_image, eval_func=eval_func)
+    
+    @staticmethod
+    def fromstring(root_func, s):
+        """
+        Constructor from a string s such as 'f.root().parallel(y)\ng.chunk(y)' (same format as returned by str() method).
+        """
+        all_funcs = halide.all_funcs(root_func)
+        root_func = root_func
+        d = {}
+        for line in s.strip().split('\n'):
+            line = line.strip()
+            if len(line) == 0:
+                continue
+            if not '.' in line:
+                raise ValueError(s)
+            dot = line.index('.')
+            name = line[:dot]
+            d[name] = FragmentList.fromstring(all_funcs[name], line)
         
+        ans = {}
+        def callback(f, parent):
+            name = f.name()
+            if name not in d:
+                ans[name] = FragmentList.fromstring(f, '')
+            else:
+                ans[name] = d[name]
+        halide.visit_funcs(root_func, callback)
+        return Schedule(root_func, ans)
+
 def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}):
     """
     Generate Schedule for all functions called by root_func (recursively). Same arguments as schedules_func().
@@ -813,6 +907,13 @@ def time_generation(L, p, test_func, timer, display_text=''):
     print 'Statistics: %s'%stats_str
     return ans
 
+def log_sched(schedule_str, s, f=[]):
+    if LOG_SCHEDULES:
+        if len(f) == 0:
+            f.append(open(LOG_SCHEDULE_FILENAME,'wt'))
+        f[0].write('-'*40 + '\n' + schedule_str + '\n' + s + '\n')
+        f[0].flush()
+
 COMPILE_TIMEOUT = 10001.0
 RUN_TIMEOUT     = 10002.0
 
@@ -846,6 +947,7 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
                                 print 'run failed', repr(str(schedule))
                             ans = {'time': RUN_TIMEOUT, 'compile': Tcompile, 'run': time.time()-Tend_compile}
                             cache[schedule_str] = ans
+                            log_sched(schedule_str, 'Success, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
                             return ans
 
                         T1 = time.time()
@@ -855,6 +957,7 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
                         best_run_time[0] = T
                     ans = {'time': T, 'compile': Tcompile, 'run': time.time()-Tend_compile}
                     cache[schedule_str] = ans
+                    log_sched(schedule_str, 'Fail, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
                     return ans
                 return out
         except Watchdog:
@@ -862,6 +965,7 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
                 print 'compile failed', repr(str(schedule))
             ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-T0, 'run': 0.0}
             cache[schedule_str] = ans
+            log_sched(schedule_str, 'Fail, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
             return lambda: ans
     return test_func
 """
@@ -1074,6 +1178,19 @@ def test_schedules(verbose=False, test_random=False):
     for i in range(1000):
         d = random_schedule(g, 1, DEFAULT_MAX_DEPTH)
         si = str(d)
+        si2 = str(Schedule.fromstring(g, si))
+        if si != si2:
+            print '-'*40
+            print 'd'
+            print d
+            print '-'*40
+            print 'si'
+            print si
+            print '-'*40
+            print 'si2'
+            print si2
+            raise ValueError
+        
         s.append(si)
         if verbose:
             print 'Schedule:'
@@ -1099,7 +1216,7 @@ def test_schedules(verbose=False, test_random=False):
     assert 'f.root().split' in s
     assert 'f.root().tile' in s
     assert 'f.root().parallel' in s
-    assert 'f.root().transpose' in s
+    assert 'f.root().transpose_order' in s
 
     assert nvalid_random == 100
     if verbose:
@@ -1118,6 +1235,7 @@ def test_schedules(verbose=False, test_random=False):
     print 'randomized_const:  OK'
             
 def test():
+    random.seed(0)
 #    test_schedules(True)
     test_sample_prob()
     test_schedules()
@@ -1126,7 +1244,7 @@ def test():
 def main():
     args = sys.argv[1:]
     if len(args) == 0:
-        print 'autotune test|print|autotune examplename|test_sched'
+        print 'autotune test|print|autotune examplename|test_sched|test_fromstring'
         sys.exit(0)
     if args[0] == 'test':
         test()
@@ -1184,6 +1302,10 @@ def main():
     elif args[0] in ['test_sched']:
         #(input, out_func, test_func) = examples.blur()
         pass
+    elif args[0] == 'test_fromstring':
+        examplename = 'blur'
+        (input, out_func, test_func, scope) = getattr(examples, examplename)()
+        s = Schedule.fromstring(out_func, 'blur_x_blur0.root().parallel(y)\nblur_y_blur0.root().parallel(y).vectorize(x,8)')
     else:
         raise NotImplementedError('%s not implemented'%args[0])
 #    test_schedules()
