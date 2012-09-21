@@ -133,12 +133,14 @@ for C in [Var, FuncRef]:
 def raise_error(e):
     raise e
 
+def _removed(aL, b):
+    return [q for q in aL if q != b]
+
 def _reorder(f, *L):
     """
     Calls transpose() to visit vars in specified order. L should have same number of vars as f's Func definition.
     """
-    def removed(aL, b):
-        return [q for q in aL if q != b]
+    print '_reorder'
     #"transpose(x, y) means push x just far enough to be outside y"
     #
     # z y x
@@ -154,7 +156,7 @@ def _reorder(f, *L):
     #f.transpose(y,z).transpose(x,z) (outer) y, x, z (inner).
     #L0 = list(reversed([x.vars()[0].name() for x in f.args()]))         # Current loop order
     #_reset_var_order(f)
-    L0var = _get_var_order(f)
+    L0var = list(reversed(_get_var_order(f)))
     var = dict((x.name(), x) for x in L0var)            # Maps str -> Var instance
     L0 = [x.name() for x in L0var]
     
@@ -164,12 +166,22 @@ def _reorder(f, *L):
     for i in range(len(L)):
         if L[i] != L0[i]:                       # If desired variable (L[i]) differs from current variable (L0[i])
             #print 'transpose', L[i], L0[i]
-            f.transpose(var[L[i]], var[L0[i]])            # Push desired variable (L[i]) in front of current variable
-            L0 = removed(L0[:i], L[i]) + [L[i]] + removed(L0[i:], L[i])       # Update current list
+            _transpose0(f, var[L[i]], var[L0[i]])            # Push desired variable (L[i]) in front of current variable
+            L0 = _removed(L0[:i], L[i]) + [L[i]] + _removed(L0[i:], L[i])       # Update current list
             #print 'L0', L0
+
+# ----------------------------------------------------------------------------------------------------------
+# Reorder (also keep track of variable order during split/tile to allow reorder() to work properly)
+# ----------------------------------------------------------------------------------------------------------
+
+# Testing of reorder can be done manually at the shell:
+# % HL_PSEUDOJIT="1", HL_BACKEND="c" python -c "from halide import *; f=Func(); x=Var('x'); y=Var('y'); z=Var('z'); f[x,y,z]=x+y+z; c0=Var('c0'); c1=Var('c1'); f.reorder(y,z,x); f.compileToFile('out')"
+# % cat out.c (Should show same order as was passed to reorder()).
 
 _reset0 = Func.reset
 _split0 = Func.split
+_tile0 = Func.tile
+_transpose0 = Func.transpose
 #_split0 = lambda self, a, b, c, d: _split(self, a, b, c, wrap(d))
 
 global_env = {}
@@ -185,6 +197,7 @@ def _get_var_order(f):
 
 def _reset_var_order(f):
     global_env['var_order_' + f.name()] = [x.vars()[0] for x in f.args()]
+    print 'reset_var_order:', f.name(), global_env['var_order_' + f.name()]
     
 def _reset(f):
     _reset_var_order(f)
@@ -193,6 +206,7 @@ def _reset(f):
     return ans
 
 def _split(f, a, b, c, d):
+    print '_split', f.name(), a, b, c, d
     var_order = _get_var_order(f)
     i = [x.name() for x in var_order].index(a.name())
     var_order[i:i+1] = [b, c]
@@ -202,20 +216,58 @@ def _split(f, a, b, c, d):
     ans = _split0(f, a, b, c, wrap(d))
     #print 'split =>', ans.name(), _get_var_order(ans), global_env
     return ans
+
+def _transpose(f, x, y):        # Push x just far enough to be outside y
+    print '_transpose', f, x, y
+    var_order = _get_var_order(f)
+    ans = _transpose0(f, x, y)
+
+    L0 = list(reversed(var_order))
+
+    i = [q.name() for q in var_order].index(y.name())
+    L0 = _removed(L0[:i], x) + [x] + _removed(L0[i:], x)
+
+    _set_var_order(f, list(reversed(L0)))
+    return ans
+    
+def _tile(f, *L):
+    print '_tile'
+    if len(L) == 6:
+        (x, y, xi, yi, f1, f2) = L
+    #raise NotImplementedError
+        f1 = wrap(f1)
+        f2 = wrap(f2)
+        return f.split(x, x, xi, f1).split(y, y, yi, f2).transpose(x, yi)
+    elif len(L) == 8:
+        (x, y, xo, yo, xi, yi, f1, f2) = L
+        f1 = wrap(f1)
+        f2 = wrap(f2)
+        return f.split(x, xo, xi, f1).split(y, yo, yi, f2).transpose(xo, yi)
+    else:
+        raise ValueError('unknown number of args to tile: %d (6, 8 supported)' % len(L))
+    #var_order = _get_var_order(f)
+    #ix = [q.name() for q in var_order].index(x.name())
+    #iy = [q.name() for q in var_order].index(y.name())
+    #if ix > iy:
+    #    raise ValueError('tile x variable (%s) should be before y variable (%s)' % (x.name(), y.name()))
+    
+    #assert 
+    #lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
     
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_assign = lambda x, y: assign(x, wrap(y))
 _realize = Func.realize
-_tile = Func.tile
+#_tile = Func.tile
 Func.__call__ = lambda self, *L: raise_error(ValueError('used f(x, y) to refer to a Func -- proper syntax is f[x, y]'))
 Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, wrap(key)), wrap(value))
 Func.__getitem__ = _generic_getitem
 Func.assign = _generic_assign
 Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
 Func.split = _split
-Func.tile = lambda self, *a: _tile(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
+Func.tile = _tile #lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
 Func.reset = _reset
 Func.reorder = _reorder
+Func.transpose = _transpose
 
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
 
