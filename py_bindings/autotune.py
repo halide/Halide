@@ -293,9 +293,10 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
     @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
         ans = []
-        for i in range(len(vars)):
-            for j in range(i+1, len(vars)):
-                ans.append(cls(vars[i],vars[j],vars=vars))
+        for i in range(len(vars)-1):
+            j = i+1
+            #for j in range(i+1, len(vars)):
+            ans.append(cls(vars[i],vars[j],vars=vars))
         return ans
 #        return [cls(x,y,vars=vars) for x in vars for y in vars if x != y]
 
