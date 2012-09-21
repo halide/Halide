@@ -136,11 +136,14 @@ def raise_error(e):
 def _removed(aL, b):
     return [q for q in aL if q != b]
 
+class ScheduleError(Exception):
+    pass
+    
 def _reorder(f, *L):
     """
     Calls transpose() to visit vars in specified order. L should have same number of vars as f's Func definition.
     """
-    print '_reorder'
+    #print '_reorder'
     #"transpose(x, y) means push x just far enough to be outside y"
     #
     # z y x
@@ -162,7 +165,7 @@ def _reorder(f, *L):
     
     L = [x if isinstance(x, str) else x.name() for x in L]
     if set(L0) != set(L):
-        raise ValueError('reorder desired loop order variable set (%r) differs from func args set (%r)' % (L, L0)) 
+        raise ScheduleError('reorder desired loop order variable set (%r) differs from func args set (%r)' % (L, L0)) 
     for i in range(len(L)):
         if L[i] != L0[i]:                       # If desired variable (L[i]) differs from current variable (L0[i])
             #print 'transpose', L[i], L0[i]
@@ -191,13 +194,13 @@ def _set_var_order(f, val):
 
 def _get_var_order(f):
     if not 'var_order_' + f.name() in global_env:
-        print 'resetting var order', f.name()
+        #print 'resetting var order', f.name()
         _reset_var_order(f)
     return global_env['var_order_' + f.name()]
 
 def _reset_var_order(f):
     global_env['var_order_' + f.name()] = [x.vars()[0] for x in f.args()]
-    print 'reset_var_order:', f.name(), global_env['var_order_' + f.name()]
+    #print 'reset_var_order:', f.name(), global_env['var_order_' + f.name()]
     
 def _reset(f):
     _reset_var_order(f)
@@ -205,10 +208,19 @@ def _reset(f):
     #_get_var_order(f)
     return ans
 
+def _varindex(var_order, a):
+    L = [x.name() for x in var_order]
+    a = a.name()
+    try:
+        return L.index(a)
+    except ValueError:
+        raise ScheduleError('missing variable %s'%a)
+        
 def _split(f, a, b, c, d):
-    print '_split', f.name(), a, b, c, d
+    #print '_split', f.name(), a, b, c, d
     var_order = _get_var_order(f)
-    i = [x.name() for x in var_order].index(a.name())
+    i = _varindex(var_order, a)
+    #i = [x.name() for x in var_order].index(a.name())
     var_order[i:i+1] = [b, c]
     _set_var_order(f, var_order)
     #print 'begin split'
@@ -218,20 +230,21 @@ def _split(f, a, b, c, d):
     return ans
 
 def _transpose(f, x, y):        # Push x just far enough to be outside y
-    print '_transpose', f, x, y
+    #print '_transpose', f, x, y
     var_order = _get_var_order(f)
     ans = _transpose0(f, x, y)
 
     L0 = list(reversed(var_order))
 
-    i = [q.name() for q in var_order].index(y.name())
+    #i = [q.name() for q in var_order].index(y.name())
+    i = _varindex(var_order, y)
     L0 = _removed(L0[:i], x) + [x] + _removed(L0[i:], x)
 
     _set_var_order(f, list(reversed(L0)))
     return ans
     
 def _tile(f, *L):
-    print '_tile'
+    #print '_tile'
     if len(L) == 6:
         (x, y, xi, yi, f1, f2) = L
     #raise NotImplementedError

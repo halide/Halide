@@ -783,8 +783,9 @@ def mutate(a, p):
                 except MutateFailed:
                     pass
         try:
+            #print 'Mutated schedule:' + '\n' + '-'*40 + '\n' + str(a) + '\n' + '-' * 40 + '\n'
             a.apply()       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
-        except NameError:
+        except (NameError, halide.ScheduleError):
             continue
         return a
 
@@ -1245,8 +1246,8 @@ def test_schedules(verbose=False, test_random=False):
 def test():
     random.seed(0)
     test_sample_prob()
-    test_schedules(True)
-#    test_schedules()
+#    test_schedules(True)
+    test_schedules()
     test_crossover()
     
 def main():
