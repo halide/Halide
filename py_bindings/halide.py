@@ -152,14 +152,15 @@ def _reorder(f, *L):
     #f.transpose(y,z) loop order is  (outer) y, z, x (inner).
     #f.transpose(x,z).transpose(y,z) (outer) x, y, z (inner).
     #f.transpose(y,z).transpose(x,z) (outer) y, x, z (inner).
-    L0 = list(reversed([x.vars()[0].name() for x in f.args()]))         # Current loop order
+    #L0 = list(reversed([x.vars()[0].name() for x in f.args()]))         # Current loop order
+    #_reset_var_order(f)
+    L0var = _get_var_order(f)
+    var = dict((x.name(), x) for x in L0var)            # Maps str -> Var instance
+    L0 = [x.name() for x in L0var]
+    
     L = [x if isinstance(x, str) else x.name() for x in L]
     if set(L0) != set(L):
         raise ValueError('reorder desired loop order variable set (%r) differs from func args set (%r)' % (L, L0)) 
-    var = {}            # Maps str -> Var instance
-    for x in f.args():
-        x = x.vars()[0]
-        var[x.name()] = x
     for i in range(len(L)):
         if L[i] != L0[i]:                       # If desired variable (L[i]) differs from current variable (L0[i])
             #print 'transpose', L[i], L0[i]
@@ -167,18 +168,53 @@ def _reorder(f, *L):
             L0 = removed(L0[:i], L[i]) + [L[i]] + removed(L0[i:], L[i])       # Update current list
             #print 'L0', L0
 
+_reset0 = Func.reset
+_split0 = Func.split
+#_split0 = lambda self, a, b, c, d: _split(self, a, b, c, wrap(d))
+
+global_env = {}
+
+def _set_var_order(f, val):
+    global_env['var_order_' + f.name()] = val
+
+def _get_var_order(f):
+    if not 'var_order_' + f.name() in global_env:
+        print 'resetting var order', f.name()
+        _reset_var_order(f)
+    return global_env['var_order_' + f.name()]
+
+def _reset_var_order(f):
+    global_env['var_order_' + f.name()] = [x.vars()[0] for x in f.args()]
+    
+def _reset(f):
+    _reset_var_order(f)
+    ans = _reset0(f)
+    #_get_var_order(f)
+    return ans
+
+def _split(f, a, b, c, d):
+    var_order = _get_var_order(f)
+    i = [x.name() for x in var_order].index(a.name())
+    var_order[i:i+1] = [b, c]
+    _set_var_order(f, var_order)
+    #print 'begin split'
+    #print f.name(), var_order, global_env
+    ans = _split0(f, a, b, c, wrap(d))
+    #print 'split =>', ans.name(), _get_var_order(ans), global_env
+    return ans
+    
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_assign = lambda x, y: assign(x, wrap(y))
 _realize = Func.realize
-_split = Func.split
 _tile = Func.tile
 Func.__call__ = lambda self, *L: raise_error(ValueError('used f(x, y) to refer to a Func -- proper syntax is f[x, y]'))
 Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, wrap(key)), wrap(value))
 Func.__getitem__ = _generic_getitem
 Func.assign = _generic_assign
 Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
-Func.split = lambda self, a, b, c, d: _split(self, a, b, c, wrap(d))
+Func.split = _split
 Func.tile = lambda self, *a: _tile(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
+Func.reset = _reset
 Func.reorder = _reorder
 
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])

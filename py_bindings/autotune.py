@@ -1,4 +1,6 @@
 
+# - tile() should be in the same order as the variables
+
 # - Do not nest ForkedWatchdog
 # - Ideally do not use forking at all
 
@@ -22,7 +24,6 @@
 # - Tile size or unroll size needs to be divisible into input size
 # - split(x, x, xi, n) is right syntax for now
 # - Only vectorize at native vector widths, 2 4 8 16
-# - tile() should be in the same order as the variables
 # - Should not be 2 vectorize calls
 # - Good to have a clamp at the beginning and a dummy function at the end -- autotuner maybe should inject these (optionally), at least the dummy at the end.
    # Could tune over parameters have I clamped at the beginning and have I injected dummy at the end.
@@ -305,7 +306,7 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         return '.tile(%s,%s,%s,%s,%d,%d)'%(self.xvar,self.yvar,self.xnewvar,self.ynewvar,self.xsize,self.ysize)
 
 class FragmentTranspose(Fragment):
-    # Actually makes potentially many calls to transpose, but is considered as one fragment
+    # Actually calls Func.reorder()
     def __init__(self, vars=None, idx=None, perm=None):
         self.vars = vars
         self.idx = idx
@@ -581,6 +582,7 @@ class Schedule:
                 s = s.replace(name + '.', '__func.reset().')
                 scope['__func'] = f
                 #print 'apply', s
+                #print scope, s
                 exec s in scope
         halide.visit_funcs(self.root_func, callback)
     
@@ -1241,9 +1243,9 @@ def test_schedules(verbose=False, test_random=False):
             
 def test():
     random.seed(0)
-#    test_schedules(True)
     test_sample_prob()
-    test_schedules()
+    test_schedules(True)
+#    test_schedules()
     test_crossover()
     
 def main():
