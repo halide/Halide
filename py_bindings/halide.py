@@ -133,12 +133,40 @@ for C in [Var, FuncRef]:
 def raise_error(e):
     raise e
 
-def _transpose_order(f, *L):
+def _reorder(f, *L):
     """
     Calls transpose() to visit vars in specified order. L should have same number of vars as f's Func definition.
     """
-    #raise NotImplementedError
+    def removed(aL, b):
+        return [q for q in aL if q != b]
+    #"transpose(x, y) means push x just far enough to be outside y"
+    #
+    # z y x
     
+    #f[x,y,z]         loop order is  (outer) z, y, x (inner).
+    #f.transpose(x,y) loop order is  (outer) z, x, y (inner).
+    #f.transpose(x,z) loop order is  (outer) x, z, y (inner).
+    #f.transpose(z,x) -- Fatal error: exception Failure("z is already outside x")
+    #f.transpose(z,y) -- Fatal error: exception Failure("z is already outside y")
+    #f.transpose(y,x) -- Fatal error: exception Failure("y is already outside x")
+    #f.transpose(y,z) loop order is  (outer) y, z, x (inner).
+    #f.transpose(x,z).transpose(y,z) (outer) x, y, z (inner).
+    #f.transpose(y,z).transpose(x,z) (outer) y, x, z (inner).
+    L0 = list(reversed([x.vars()[0].name() for x in f.args()]))         # Current loop order
+    L = [x if isinstance(x, str) else x.name() for x in L]
+    if set(L0) != set(L):
+        raise ValueError('reorder desired loop order variable set (%r) differs from func args set (%r)' % (L, L0)) 
+    var = {}            # Maps str -> Var instance
+    for x in f.args():
+        x = x.vars()[0]
+        var[x.name()] = x
+    for i in range(len(L)):
+        if L[i] != L0[i]:                       # If desired variable (L[i]) differs from current variable (L0[i])
+            #print 'transpose', L[i], L0[i]
+            f.transpose(var[L[i]], var[L0[i]])            # Push desired variable (L[i]) in front of current variable
+            L0 = removed(L0[:i], L[i]) + [L[i]] + removed(L0[i:], L[i])       # Update current list
+            #print 'L0', L0
+
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_assign = lambda x, y: assign(x, wrap(y))
 _realize = Func.realize
@@ -151,7 +179,7 @@ Func.assign = _generic_assign
 Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
 Func.split = lambda self, a, b, c, d: _split(self, a, b, c, wrap(d))
 Func.tile = lambda self, *a: _tile(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
-Func.transpose_order = _transpose_order
+Func.reorder = _reorder
 
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
 

@@ -1,4 +1,7 @@
 
+# - Do not nest ForkedWatchdog
+# - Ideally do not use forking at all
+
 # - Include history with each individual
 # - Fix problem with extra_caller_vars not being set.
 # - Seed according to percents rather than random.
@@ -104,6 +107,8 @@ def default_check(cls, L):
         return True
     else:
         # Handle singleton fragments
+        if count(FragmentVectorize) > 1:        # Allow at most one vectorize per Func schedule (FragmentList)
+            return False
         if FORCE_TILE and (len(L) >= 2 and count(FragmentTile) < 1):
             return False
         if isinstance(L[0], FragmentRoot) and count(FragmentRoot) == 1 and count(FragmentChunk) == 0:
@@ -330,7 +335,7 @@ class FragmentTranspose(Fragment):
         #for (a, b) in self.pairwise_swaps:
         #    ans += '.transpose(%s,%s)'%(a,b)
         #return ans
-        return '.transpose_order(' + ','.join(v for v in self.permutation) + ')'
+        return '.reorder(' + ','.join(v for v in self.permutation) + ')'
 
 fragment_classes = [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentTranspose]
 fragment_map = {'root': FragmentRoot,
@@ -340,7 +345,7 @@ fragment_map = {'root': FragmentRoot,
                 'chunk': FragmentChunk,
                 'split': FragmentSplit,
                 'tile': FragmentTile,
-                'transpose_order': FragmentTranspose}
+                'reorder': FragmentTranspose}
 
 def fragment_fromstring(s):
     if '(' not in s:
@@ -1216,7 +1221,7 @@ def test_schedules(verbose=False, test_random=False):
     assert 'f.root().split' in s
     assert 'f.root().tile' in s
     assert 'f.root().parallel' in s
-    assert 'f.root().transpose_order' in s
+    assert 'f.root().reorder' in s
 
     assert nvalid_random == 100
     if verbose:
