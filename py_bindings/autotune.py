@@ -839,7 +839,7 @@ def next_generation(prevL, p, root_func, constraints):
     ans = []
     schedule_strs = set()
     def append_unique(schedule):
-        s = str(schedule)
+        s = str(schedule).strip()
         if s not in schedule_strs:
             schedule_strs.add(s)
             ans.append(schedule)
@@ -936,7 +936,7 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
     best_run_time = [p.run_timeout_default]
     
     def test_func(schedule):
-        schedule_str = str(schedule)
+        schedule_str = str(schedule).strip()
         if schedule_str in cache and allow_cache:
             return lambda: cache[schedule_str]
         try:
@@ -961,7 +961,7 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
                                 print 'run failed', repr(str(schedule))
                             ans = {'time': RUN_TIMEOUT, 'compile': Tcompile, 'run': time.time()-Tend_compile}
                             cache[schedule_str] = ans
-                            log_sched(schedule_str, 'Success, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
+                            log_sched(schedule_str, 'Fail run %d, compile=%.4f, run=%.4f'%(i, ans['compile'], ans['run']))
                             return ans
 
                         T1 = time.time()
@@ -971,7 +971,7 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
                         best_run_time[0] = T
                     ans = {'time': T, 'compile': Tcompile, 'run': time.time()-Tend_compile}
                     cache[schedule_str] = ans
-                    log_sched(schedule_str, 'Fail, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
+                    log_sched(schedule_str, 'Success, compile=%.4f, run=%.4f, time_best=%.4f'%(ans['compile'], ans['run'], ans['time']))
                     return ans
                 return out
         except Watchdog:
@@ -979,7 +979,7 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
                 print 'compile failed', repr(str(schedule))
             ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-T0, 'run': 0.0}
             cache[schedule_str] = ans
-            log_sched(schedule_str, 'Fail, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
+            log_sched(schedule_str, 'Fail compile, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
             return lambda: ans
     return test_func
 """
@@ -1008,9 +1008,9 @@ def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER
     
     display_text = ''
 
-    #timeL = time_generation(currentL, p, test_func, timer, display_text)
-    #print timeL
-    #sys.exit(1)
+#    timeL = time_generation(currentL, p, test_func, timer, display_text)
+#    print timeL
+#    sys.exit(1)
     
     for gen in range(p.generations):
         currentL = next_generation(currentL, p, out_func, constraints)
