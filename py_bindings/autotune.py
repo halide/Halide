@@ -567,7 +567,8 @@ class Schedule:
             ans.extend(x.new_vars())
         return list(sorted(set(ans)))
 
-    def apply(self, verbose=False):   # Apply schedule
+    def apply(self, constraints, verbose=False):   # Apply schedule
+        #verbose = True
         #print 'apply schedule:'
         #print str(self)
         #halide.inline_all(self.root_func)
@@ -582,21 +583,34 @@ class Schedule:
             print 'apply, scope:', scope
         def callback(f, parent):
             name = f.name()
+            if verbose:
+                print 'apply, name', name, constraints
+            if name in constraints.exclude_names:
+                if verbose:
+                    print '  constrained, skipping'
+                return
             if name in self.d:
                 s = str(self.d[name])
-                s = s.replace(name + '.', '__func.reset().')
+                f.reset()
+                s = s.replace(name + '.', '__func.')
                 scope['__func'] = f
                 #print 'apply', s
                 #print scope, s
+                if verbose:
+                    print '  exec', s
                 exec s in scope
+            else:
+                if verbose:
+                    print '  not in d, reset'
+                f.reset()
         halide.visit_funcs(self.root_func, callback)
-    
-    def test(self, shape, input, eval_func=None):
+        
+    def test(self, shape, input, constraints, eval_func=None):
         """
         Test on zero array of the given shape. Return evaluate() function which when called returns the output Image.
         """
         print 'apply'
-        self.apply()
+        self.apply(constraints)
         print 'in_image'
         in_image = numpy.zeros(shape, input.type().to_numpy())
         print 'filter'
@@ -699,7 +713,7 @@ class AutotuneParams:
     generations = 500
     
     compile_timeout = 5.0
-    run_timeout_mul = 3.0           # Fastest run time multiplied by this factor is cutoff
+    run_timeout_mul = 3.0 #3.0           # Fastest run time multiplied by this factor is cutoff
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
     
     num_print = 10
@@ -742,7 +756,7 @@ def crossover(a, b):
     
     return Schedule(a.root_func, d)
 
-def mutate(a, p):
+def mutate(a, p, constraints):
     "Mutate existing schedule using AutotuneParams p."
     a0 = a
     a = copy.copy(a0)
@@ -768,9 +782,9 @@ def mutate(a, p):
                     if mode == 'consts':
                         a.d[name] = a.d[name].randomized_const()
                     elif mode == 'replace':
-                        constraints = a.d
-                        del constraints[name]
-                        all_d = random_schedule(a.root_func, p.min_depth, p.max_depth, None, constraints)
+                        constraints_d = a.d
+                        del constraints_d[name]
+                        all_d = random_schedule(a.root_func, p.min_depth, p.max_depth, None, constraints_d)
                         a.d[name] = all_d.d[name]
                     elif mode == 'add':
                         assert len(a.d[name]) < p.max_depth
@@ -789,21 +803,21 @@ def mutate(a, p):
                     pass
         try:
             #print 'Mutated schedule:' + '\n' + '-'*40 + '\n' + str(a) + '\n' + '-' * 40 + '\n'
-            a.apply()       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
+            a.apply(constraints)       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
         except (NameError, halide.ScheduleError):
             continue
         return a
 
-def select_and_crossover(prevL, p, root_func):
+def select_and_crossover(prevL, p, root_func, constraints):
     a = tournament_select(prevL, p, root_func)
     b = tournament_select(prevL, p, root_func)
     c = crossover(a, b)
-    c = mutate(c, p)
+    c = mutate(c, p, constraints)
     return c
 
-def select_and_mutate(prevL, p, root_func):
+def select_and_mutate(prevL, p, root_func, constraints):
     a = tournament_select(prevL, p, root_func)
-    return mutate(a, p)
+    return mutate(a, p, constraints)
 
 def tournament_select(prevL, p, root_func):
     i = random.randrange(p.tournament_size)
@@ -816,17 +830,20 @@ class Constraints:
     "Constraints([f, g]) excludes f, g from autotuning."
     def __init__(self, exclude=[]):
         self.exclude = exclude
-    
+        self.exclude_names = set()
+        for f in self.exclude:
+            self.exclude_names.add(f.name())
+        
+    def __str__(self):
+        return 'Constraints(%r)'%[x.name() for x in self.exclude]
+        
     def constrain(self, schedule):
         "Return new Schedule instance with constraints applied."
 #        if not 'tile' in str(schedule):
 #            return random_schedule(schedule.root_func, 0, 0)
         d = {}
-        exclude_names = set()
-        for f in self.exclude:
-            exclude_names.add(f.name())
         for name in schedule.d:
-            if name not in exclude_names:
+            if name not in self.exclude_names:
                 d[name] = schedule.d[name]
         return Schedule(schedule.root_func, d)
 
@@ -845,9 +862,9 @@ def next_generation(prevL, p, root_func, constraints):
             ans.append(schedule)
             
     def do_crossover():
-        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func)))
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints)))
     def do_mutated():
-        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func)))
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints)))
     def do_random():
         append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)))
         
@@ -885,12 +902,12 @@ class AutotuneTimer:
     def __init__(self):
         self.start_time = time.time()
     
-def time_generation(L, p, test_func, timer, display_text=''):
+def time_generation(L, p, test_func, timer, constraints, display_text=''):
     #T0 = time.time()
     #Tcompile = [0.0]
     #Trun = [0.0]
     def time_schedule(current):
-        info = test_func(current)()
+        info = test_func(current, constraints)()
         timer.compile_time += info['compile']
         timer.run_time += info['run']
         return info['time']
@@ -935,45 +952,19 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
     cache = {}
     best_run_time = [p.run_timeout_default]
     
-    def test_func(schedule):
+    def test_func(schedule, constraints):
         schedule_str = str(schedule).strip()
         if schedule_str in cache and allow_cache:
             return lambda: cache[schedule_str]
         try:
             T0 = time.time()
-            with Watchdog(p.compile_timeout):           # FIXME: Make these serial
-                schedule.apply()
+            with Watchdog(p.compile_timeout):
+                schedule.apply(constraints)
                 evaluate = halide.filter_image(input, out_func, in_image)
                 Tend_compile = time.time()
                 Tcompile = Tend_compile-T0
                 if AUTOTUNE_VERBOSE:
                     print 'compiled in', Tcompile, repr(str(schedule))
-                def out():
-                    T = []
-                    for i in range(p.trials):
-                        T0 = time.time()
-
-                        try:
-                            with Watchdog(best_run_time[0]*p.run_timeout_mul):
-                                Iout = evaluate()
-                        except Watchdog:
-                            if AUTOTUNE_VERBOSE:
-                                print 'run failed', repr(str(schedule))
-                            ans = {'time': RUN_TIMEOUT, 'compile': Tcompile, 'run': time.time()-Tend_compile}
-                            cache[schedule_str] = ans
-                            log_sched(schedule_str, 'Fail run %d, compile=%.4f, run=%.4f'%(i, ans['compile'], ans['run']))
-                            return ans
-
-                        T1 = time.time()
-                        T.append(T1-T0)
-                    T = min(T)
-                    if T < best_run_time[0]:
-                        best_run_time[0] = T
-                    ans = {'time': T, 'compile': Tcompile, 'run': time.time()-Tend_compile}
-                    cache[schedule_str] = ans
-                    log_sched(schedule_str, 'Success, compile=%.4f, run=%.4f, time_best=%.4f'%(ans['compile'], ans['run'], ans['time']))
-                    return ans
-                return out
         except Watchdog:
             if AUTOTUNE_VERBOSE:
                 print 'compile failed', repr(str(schedule))
@@ -981,6 +972,34 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
             cache[schedule_str] = ans
             log_sched(schedule_str, 'Fail compile, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
             return lambda: ans
+        
+        def out():
+            T = []
+            for i in range(p.trials):
+                T0 = time.time()
+
+                try:
+                    with Watchdog(best_run_time[0]*p.run_timeout_mul):
+                        Iout = evaluate()
+                except Watchdog:
+                    if AUTOTUNE_VERBOSE:
+                        print 'run failed', repr(str(schedule))
+                    ans = {'time': RUN_TIMEOUT, 'compile': Tcompile, 'run': time.time()-Tend_compile}
+                    cache[schedule_str] = ans
+                    log_sched(schedule_str, 'Fail run %d, compile=%.4f, run=%.4f'%(i, ans['compile'], ans['run']))
+                    return ans
+
+                T1 = time.time()
+                T.append(T1-T0)
+            T = min(T)
+            if T < best_run_time[0]:
+                best_run_time[0] = T
+            ans = {'time': T, 'compile': Tcompile, 'run': time.time()-Tend_compile}
+            cache[schedule_str] = ans
+            log_sched(schedule_str, 'Success, compile=%.4f, run=%.4f, time_best=%.4f'%(ans['compile'], ans['run'], ans['time']))
+            return ans
+        return out
+
     return test_func
 """
 
@@ -996,25 +1015,26 @@ def default_tester(input, out_func, p, in_image, counter=[0]):
 """
 
 #def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
-def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints(), seed_schedule=None):
+def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints(), seed_scheduleL=[]):
     timer = AutotuneTimer()
     test_func = tester(input, out_func, p, **tester_kw)
     
     currentL = []
-    if seed_schedule is not None:
-        seed_schedule = Schedule.fromstring(out_func, seed_schedule)
+    for seed in seed_scheduleL:
+        currentL.append(Schedule.fromstring(out_func, seed))
         #print 'seed_schedule new_vars', seed_schedule.new_vars()
-        currentL.append(seed_schedule)
-    
+#        currentL.append(seed_schedule)
+#        currentL.append(Schedule.fromstring(out_func, ''))
+#        currentL.
     display_text = ''
 
-#    timeL = time_generation(currentL, p, test_func, timer, display_text)
+#    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
 #    print timeL
 #    sys.exit(1)
     
     for gen in range(p.generations):
         currentL = next_generation(currentL, p, out_func, constraints)
-        timeL = time_generation(currentL, p, test_func, timer, display_text)
+        timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
         
         bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
         display_text = '-'*40 + '\n'
@@ -1067,7 +1087,7 @@ def test_crossover(verbose=False):
         #print 'a'
         for i in range(80):
             c = crossover(a, b)
-            c.apply()
+            c.apply(constraints)
             cL = str(c).split('\n')
             assert aL != bL and aL != cL and bL != cL
             if verbose:
@@ -1085,11 +1105,11 @@ def test_crossover(verbose=False):
             c = crossover(a, b)
             if verbose:
                 print 'c', repr(str(c)), c.new_vars()
-            c.apply()
-            c = mutate(c, p)
+            c.apply(constraints)
+            c = mutate(c, p, constraints)
             if verbose:
                 print 'cmutate', repr(str(c)), c.new_vars()
-            c.apply()
+            c.apply(constraints)
     #        cL = str(c).split('\n')
     #        assert aL != bL and aL != cL and bL != cL
 
@@ -1099,7 +1119,7 @@ def test_crossover(verbose=False):
         def test_generation(L, prevL):
             assert len(L) == p.population_size
             for x in L:
-                x.apply()
+                x.apply(constraints)
             current_set = set(str(x) for x in L)
             prev_set = set(str(x) for x in prevL)
             assert len(current_set) > 2
@@ -1170,6 +1190,7 @@ def test_sample_prob():
 
 def test_schedules(verbose=False, test_random=False):
     #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
+    constraints = Constraints()
     halide.exit_on_signal()
     (f, g) = test_funcs()
     assert sorted(halide.all_vars(g).keys()) == sorted(['x', 'y', 'c']) #, 'v'])
@@ -1223,9 +1244,9 @@ def test_schedules(verbose=False, test_random=False):
             print '-'*20
             print
         sys.stdout.flush()
-        d.apply()
+        d.apply(constraints)
         if test_random:
-            evaluate = d.test((36, 36, 3), input)
+            evaluate = d.test((36, 36, 3), input, Constraints())
             print 'evaluate'
             evaluate()
             if test_random:
@@ -1311,9 +1332,11 @@ def main():
         examplename = args[1]
         (input, out_func, test_func, scope) = getattr(examples, examplename)()
         
-        seed_schedule = None
-        seed_schedule = ('blur_y_blur0.root().tile(x_blur0, y_blur0, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blur0)\n' +
-                         'blur_x_blur0.chunk(x_blur0).vectorize(x_blur0, 8)')
+        seed_scheduleL = []
+        seed_scheduleL.append('blur_y_blur0.root().tile(x_blur0, y_blur0, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blur0)\n' +
+                              'blur_x_blur0.chunk(x_blur0).vectorize(x_blur0, 8)')
+        seed_scheduleL.append('')
+        seed_scheduleL.append('blur_y_blur0.root()\nblur_x_blur0.root()')
         evaluate = halide.filter_image(input, out_func, DEFAULT_IMAGE)
         evaluate()
         T0 = time.time()
@@ -1322,10 +1345,13 @@ def main():
         print 'Root all time: %.4f'%(T1-T0)
         
         p = AutotuneParams()
-        constraints = Constraints()
-        if 'input_clamped' in scope:
-            constraints = Constraints([scope['input_clamped']])
-        autotune(input, out_func, p, constraints=constraints, seed_schedule=seed_schedule)
+        exclude = []
+        for key in scope:
+            if key.startswith('input_clamped'):
+                exclude.append(scope[key])
+        constraints = Constraints(exclude)
+        
+        autotune(input, out_func, p, constraints=constraints, seed_scheduleL=seed_scheduleL)
     elif args[0] in ['test_sched']:
         #(input, out_func, test_func) = examples.blur()
         pass
