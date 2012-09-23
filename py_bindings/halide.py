@@ -133,6 +133,14 @@ for C in [Var, FuncRef]:
 def raise_error(e):
     raise e
 
+# ----------------------------------------------------------------------------------------------------------
+# Reorder (also keep track of variable order during split/tile to allow reorder() to work properly)
+# ----------------------------------------------------------------------------------------------------------
+
+# Testing of reorder can be done manually at the shell:
+# % HL_PSEUDOJIT="1", HL_BACKEND="c" python -c "from halide import *; f=Func(); x=Var('x'); y=Var('y'); z=Var('z'); f[x,y,z]=x+y+z; c0=Var('c0'); c1=Var('c1'); f.reorder(y,z,x); f.compileToFile('out')"
+# % cat out.c (Should show same order as was passed to reorder()).
+
 def _removed(aL, b):
     return [q for q in aL if q != b]
 
@@ -172,14 +180,6 @@ def _reorder(f, *L):
             _transpose0(f, var[L[i]], var[L0[i]])            # Push desired variable (L[i]) in front of current variable
             L0 = _removed(L0[:i], L[i]) + [L[i]] + _removed(L0[i:], L[i])       # Update current list
             #print 'L0', L0
-
-# ----------------------------------------------------------------------------------------------------------
-# Reorder (also keep track of variable order during split/tile to allow reorder() to work properly)
-# ----------------------------------------------------------------------------------------------------------
-
-# Testing of reorder can be done manually at the shell:
-# % HL_PSEUDOJIT="1", HL_BACKEND="c" python -c "from halide import *; f=Func(); x=Var('x'); y=Var('y'); z=Var('z'); f[x,y,z]=x+y+z; c0=Var('c0'); c1=Var('c1'); f.reorder(y,z,x); f.compileToFile('out')"
-# % cat out.c (Should show same order as was passed to reorder()).
 
 _reset0 = Func.reset
 _split0 = Func.split
