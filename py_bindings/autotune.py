@@ -108,16 +108,18 @@ def default_check(cls, L):
     def count(C):
         return sum([isinstance(x, C) for x in L])
     if len(L) == 0:
-        return True
+        return True         # Inline
     else:
         # Handle singleton fragments
         if count(FragmentVectorize) > 1:        # Allow at most one vectorize per Func schedule (FragmentList)
             return False
         if FORCE_TILE and (len(L) >= 2 and count(FragmentTile) < 1):
             return False
-        if isinstance(L[0], FragmentRoot) and count(FragmentRoot) == 1 and count(FragmentChunk) == 0:
+        root_count = count(FragmentRoot)
+        chunk_count = count(FragmentChunk)
+        if isinstance(L[0], FragmentRoot) and root_count == 1 and chunk_count == 0:
             return True
-        elif isinstance(L[0], FragmentChunk) and len(L) == 1:
+        elif isinstance(L[0], FragmentChunk) and chunk_count == 1 and root_count == 0:
             return True
     return False
             
@@ -539,7 +541,13 @@ class Schedule:
     def __init__(self, root_func, d):
         self.root_func = root_func
         self.d = d
-    
+
+    def check(self):
+        for x in self.d.values():
+            if not x.check():
+                return False
+        return True
+
     def __copy__(self):
         d = {}
         for name in self.d:
@@ -713,7 +721,7 @@ class AutotuneParams:
     generations = 500
     
     compile_timeout = 5.0
-    run_timeout_mul = 3.0 #3.0           # Fastest run time multiplied by this factor is cutoff
+    run_timeout_mul = 5.0 #3.0           # Fastest run time multiplied by this factor is cutoff
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
     
     num_print = 10
@@ -730,13 +738,16 @@ def sample_prob(d):
             return key
     return key
     
-def crossover(a, b):
+def crossover(a, b, constraints):
     "Cross over two schedules, using 2 point crossover."
+    a = constraints.constrain(a)
+    b = constraints.constrain(b)
     funcL = halide.all_funcs(a.root_func, True)
     names = [x[0] for x in funcL]
     assert a.root_func is b.root_func
     aset = set(a.d.keys())
-    assert aset == set(b.d.keys()) #== set(names)
+    bset = set(b.d.keys())
+    assert aset == bset, (aset, bset) #== set(names)
     names = [x for x in names if x in aset]
     
     if random.randrange(2) == 0:
@@ -811,7 +822,7 @@ def mutate(a, p, constraints):
 def select_and_crossover(prevL, p, root_func, constraints):
     a = tournament_select(prevL, p, root_func)
     b = tournament_select(prevL, p, root_func)
-    c = crossover(a, b)
+    c = crossover(a, b, constraints)
     c = mutate(c, p, constraints)
     return c
 
@@ -1014,26 +1025,36 @@ def default_tester(input, out_func, p, in_image, counter=[0]):
     return test_func
 """
 
+def check_schedules(currentL):
+    "Verify that all schedules are valid (according to .check() rules at least)."
+    for schedule in currentL:
+        if not schedule.check():
+            raise ValueError('schedule fails check: %s'%str(schedule))
+
 #def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
 def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints(), seed_scheduleL=[]):
+    random.seed(0)
     timer = AutotuneTimer()
     test_func = tester(input, out_func, p, **tester_kw)
     
     currentL = []
     for seed in seed_scheduleL:
-        currentL.append(Schedule.fromstring(out_func, seed))
+        currentL.append(constraints.constrain(Schedule.fromstring(out_func, seed)))
         #print 'seed_schedule new_vars', seed_schedule.new_vars()
 #        currentL.append(seed_schedule)
 #        currentL.append(Schedule.fromstring(out_func, ''))
 #        currentL.
     display_text = ''
-
+    check_schedules(currentL)
+    
 #    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
 #    print timeL
 #    sys.exit(1)
     
     for gen in range(p.generations):
         currentL = next_generation(currentL, p, out_func, constraints)
+        check_schedules(currentL)
+        
         timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
         
         bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
@@ -1333,10 +1354,10 @@ def main():
         (input, out_func, test_func, scope) = getattr(examples, examplename)()
         
         seed_scheduleL = []
-        seed_scheduleL.append('blur_y_blur0.root().tile(x_blur0, y_blur0, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blur0)\n' +
-                              'blur_x_blur0.chunk(x_blur0).vectorize(x_blur0, 8)')
-        seed_scheduleL.append('')
-        seed_scheduleL.append('blur_y_blur0.root()\nblur_x_blur0.root()')
+        #seed_scheduleL.append('blur_y_blur0.root().tile(x_blur0, y_blur0, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blur0)\n' +
+        #                      'blur_x_blur0.chunk(x_blur0).vectorize(x_blur0, 8)')
+        #seed_scheduleL.append('')
+        #seed_scheduleL.append('blur_y_blur0.root()\nblur_x_blur0.root()')
         evaluate = halide.filter_image(input, out_func, DEFAULT_IMAGE)
         evaluate()
         T0 = time.time()
