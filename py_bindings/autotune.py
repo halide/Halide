@@ -1,5 +1,8 @@
 
+# - Add mutate swap() (swap order within FragmentList)
+# - Make sure mutation is happening often enough (?), actually that each operation is happening in about fixed proportion.
 # - tile() should be in the same order as the variables
+# - Perhaps use maximum schedule fragment size of 5.
 
 # - Do not nest ForkedWatchdog
 # - Ideally do not use forking at all
@@ -356,7 +359,7 @@ def fragment_fromstring(s):
     paren2 = s.index(')')
     name = s[:paren1]
     cls = fragment_map[name]
-    rest = s[paren1+1:paren2].split(',')
+    rest = [x.strip() for x in s[paren1+1:paren2].split(',')]
     #print cls, rest
     #print 'fragment_fromstring |%s|' % s, cls, rest
     return cls.fromstring(*rest)
@@ -388,10 +391,10 @@ class FragmentList(list):
         """
         Constructor from a string s such as 'f.root().parallel(y)' (same format as returned by str() method).
         """
-        if len(s.strip()) == '':
+        if len(s.strip()) == 0:
             return FragmentList(func, [])
         if not '.' in s:
-            raise ValueError(s)
+            raise ValueError('FragmentList is missing .: %r'%s)
         dot = s.index('.')
         s = s[dot+1:]
         ans = []
@@ -571,11 +574,12 @@ class Schedule:
         scope = halide.all_vars(self.root_func)
         #print 'scope', scope.keys()
         new_vars = self.new_vars()
-        #print 'new_vars', new_vars
+        if verbose:
+            print 'apply, new_vars', new_vars
         for varname in new_vars:
             scope[varname] = instantiate_var(varname)
         if verbose:
-            print 'scope:', scope
+            print 'apply, scope:', scope
         def callback(f, parent):
             name = f.name()
             if name in self.d:
@@ -603,6 +607,7 @@ class Schedule:
         """
         Constructor from a string s such as 'f.root().parallel(y)\ng.chunk(y)' (same format as returned by str() method).
         """
+        #print 'Schedule.fromstring', root_func, s
         all_funcs = halide.all_funcs(root_func)
         root_func = root_func
         d = {}
@@ -991,12 +996,22 @@ def default_tester(input, out_func, p, in_image, counter=[0]):
 """
 
 #def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
-def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints()):
+def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints(), seed_schedule=None):
     timer = AutotuneTimer()
     test_func = tester(input, out_func, p, **tester_kw)
     
     currentL = []
+    if seed_schedule is not None:
+        seed_schedule = Schedule.fromstring(out_func, seed_schedule)
+        #print 'seed_schedule new_vars', seed_schedule.new_vars()
+        currentL.append(seed_schedule)
+    
     display_text = ''
+
+    #timeL = time_generation(currentL, p, test_func, timer, display_text)
+    #print timeL
+    #sys.exit(1)
+    
     for gen in range(p.generations):
         currentL = next_generation(currentL, p, out_func, constraints)
         timeL = time_generation(currentL, p, test_func, timer, display_text)
@@ -1296,6 +1311,9 @@ def main():
         examplename = args[1]
         (input, out_func, test_func, scope) = getattr(examples, examplename)()
         
+        seed_schedule = None
+        seed_schedule = ('blur_y_blur0.root().tile(x_blur0, y_blur0, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blur0)\n' +
+                         'blur_x_blur0.chunk(x_blur0).vectorize(x_blur0, 8)')
         evaluate = halide.filter_image(input, out_func, DEFAULT_IMAGE)
         evaluate()
         T0 = time.time()
@@ -1307,7 +1325,7 @@ def main():
         constraints = Constraints()
         if 'input_clamped' in scope:
             constraints = Constraints([scope['input_clamped']])
-        autotune(input, out_func, p, constraints=constraints)
+        autotune(input, out_func, p, constraints=constraints, seed_schedule=seed_schedule)
     elif args[0] in ['test_sched']:
         #(input, out_func, test_func) = examples.blur()
         pass
