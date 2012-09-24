@@ -22,17 +22,25 @@ blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
 
 out_func = blur_y
 
-if True: #False:
+schedule = 2
+
+if schedule == 0: #False:
     blur_x.root().parallel(y)
     blur_y.root().parallel(y)
-else:    # Uncomment all lines for fastest schedule
+elif schedule == 1:    # Uncomment all lines for fastest schedule
     blur_y.tile(x, y, xi, yi, 8, 8)
-    #blur_y.vectorize(xi, 8)
+    blur_y.vectorize(xi, 8)
     blur_y.parallel(y)
     blur_x.chunk(x)
-    #blur_x.vectorize(x, 8)
+    blur_x.vectorize(x, 8)
+elif schedule == 2:
+#    _c0 = Var('_c0')
+#    _c1 = Var('_c1')
+    blur_x.root().unroll(c,32) #.tile(y,c,_c0,_c1,64,64)
+#    blur_y.root().split(x,x,_c0,64).unroll(x,8)
 
-evaluate = filter_image(input, out_func, 'apollo2.png')
+evaluate = filter_image(input, out_func, 'lena_crop.png')
+print 'Compiled'
 evaluate()
 T0 = time.time()
 evaluate()

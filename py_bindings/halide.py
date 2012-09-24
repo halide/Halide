@@ -747,6 +747,10 @@ def inline_all(f):
 def roundup_multiple(x, y):
     return (x+y-1)/y*y
 
+def inputs_dir():
+    "Get directory of example inputs."
+    return os.path.dirname(__file__)
+    
 def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None): #, pad_multiple=1):
     """
     Utility function to filter an image filename or numpy array with a Halide Func, returning output Image of the same size.
