@@ -16,7 +16,8 @@ xi = Var('xi')
 yi = Var('yi')
 
 input_clamped[x,y,c] = input[clamp(x,cast(Int(32),0),cast(Int(32),input.width()-1)),
-     clamp(y,cast(Int(32),0),cast(Int(32),input.height()-1)), c]
+     clamp(y,cast(Int(32),0),cast(Int(32),input.height()-1)),
+     clamp(c,cast(Int(32),0),cast(Int(32),2))]
 blur_x[x,y,c] = (input_clamped[x-1,y,c]/4+input_clamped[x,y,c]/4+input_clamped[x+1,y,c]/4)/3
 blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
 
@@ -34,10 +35,11 @@ elif schedule == 1:    # Uncomment all lines for fastest schedule
     blur_x.chunk(x)
     blur_x.vectorize(x, 8)
 elif schedule == 2:
-#    _c0 = Var('_c0')
-#    _c1 = Var('_c1')
-    blur_x.root().unroll(c,32) #.tile(y,c,_c0,_c1,64,64)
+    _c0 = Var('_c0')
+    _c1 = Var('_c1')
+#    blur_x.root().unroll(c,32) #.tile(y,c,_c0,_c1,64,64)
 #    blur_y.root().split(x,x,_c0,64).unroll(x,8)
+    blur_y.root().tile(y,c,_c0,_c1,64,8).parallel(c)
 
 evaluate = filter_image(input, out_func, 'lena_crop.png')
 print 'Compiled'
