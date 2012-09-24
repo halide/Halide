@@ -39,7 +39,7 @@ elif schedule == 2:
     _c1 = Var('_c1')
 #    blur_x.root().unroll(c,32) #.tile(y,c,_c0,_c1,64,64)
 #    blur_y.root().split(x,x,_c0,64).unroll(x,8)
-    blur_y.root().tile(y,c,_c0,_c1,64,8).parallel(c)
+    blur_y.root().tile(y,c,_c0,_c1,64,8) #.parallel(c)
 
 evaluate = filter_image(input, out_func, 'lena_crop.png')
 print 'Compiled'
