@@ -72,6 +72,8 @@ import numpy
 import sys
 import os
 from ForkedWatchdog import Watchdog
+import tempfile
+import subprocess
 import examples
 random_module = random
 
@@ -959,10 +961,82 @@ def log_sched(schedule_str, s, f=[]):
 COMPILE_TIMEOUT = 10001.0
 RUN_TIMEOUT     = 10002.0
 
-def default_tester(input, out_func, p, in_image, allow_cache=True):
+def autotune_child_process(filter_func_name, schedule_str, in_image, trials):
+    (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
+    schedule = Schedule.fromstring(out_func, schedule_str)
+    constraints = Constraints()         # FIXMEFIXME: Deal with Constraints() mess
+    schedule.apply(constraints)
+    
+    Tbegin_compile = time.time()
+    evaluate = halide.filter_image(input, out_func, in_image)
+    Tend_compile = time.time()
+    Tcompile = Tend_compile - Tbegin_compile
+    if AUTOTUNE_VERBOSE:
+        print 'compiled in', Tcompile, repr(str(schedule))
+    
+    T = []
+    for i in range(trials):
+        T0 = time.time()
+        Iout = evaluate()
+        T1 = time.time()
+        T.append(T1-T0)
+
+    T = min(T)
+    Trun = time.time()-Tend_compile
+    
+    print 'Success', T, Tcompile, Trun
+
+def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=True):
     cache = {}
     best_run_time = [p.run_timeout_default]
     
+    def test_func(schedule, constraints):       # FIXME: Handle constraints
+        def out():
+            schedule_str = str(schedule).strip()
+            if schedule_str in cache and allow_cache:
+                return lambda: cache[schedule_str]
+            
+            Tstart_subproc = time.time()
+            fout = tempfile.TemporaryFile()
+            proc = subprocess.Popen(['python', 'autotune.py', 'autotune_child_process', filter_func_name, schedule_str, in_image, '%d'%p.trials], stdout=fout)
+            timeout = p.compile_timeout + p.run_timeout_mul*best_run_time[0]
+            
+            # Wait for subprocess to terminate (up to timeout)
+            SLEEP_TIME = 0.03
+            T0 = time.time()
+            success = False
+            while time.time() < T0+timeout:
+                if proc.poll() is not None:
+                    success = True
+                    break
+                time.sleep(SLEEP_TIME)
+            if not success:
+                ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-Tstart_subproc, 'run': 0.0}
+                cache[schedule_str] = ans
+                log_sched(schedule_str, 'Fail compile #1, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
+                return ans
+                
+            fout.seek(0)
+            s = fout.read()
+            if len(s) > 0:
+                line = s.strip().split('\n')[-1].strip()
+            else:
+                line = ''
+            if not line.startswith('Success') or len(line.split()) != 4:
+                ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-Tstart_subproc, 'run': 0.0}
+                cache[schedule_str] = ans
+                log_sched(schedule_str, 'Fail compile #2, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
+                return ans
+                
+            (flag, T, Tcompile, Trun) = line.split()
+            ans = {'time': float(T), 'compile': float(Tcompile), 'run': float(Trun)}
+            cache[schedule_str] = ans
+            log_sched(schedule_str, 'Success, compile=%.4f, run=%.4f, time_best=%.4f'%(ans['compile'], ans['run'], ans['time']))
+            return ans
+        return out
+    return test_func
+    
+    """
     def test_func(schedule, constraints):
         schedule_str = str(schedule).strip()
         if schedule_str in cache and allow_cache:
@@ -1012,6 +1086,7 @@ def default_tester(input, out_func, p, in_image, allow_cache=True):
         return out
 
     return test_func
+    """
 """
 
 def default_tester(input, out_func, p, in_image, counter=[0]):
@@ -1032,10 +1107,17 @@ def check_schedules(currentL):
             raise ValueError('schedule fails check: %s'%str(schedule))
 
 #def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
-def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints(), seed_scheduleL=[]):
-    random.seed(0)
+def resolve_filter_func(filter_func_name):
+    if '.' in filter_func_name:
+        exec "import " + filter_func_name[:filter_func_name.rindex('.')]
+    return eval(filter_func_name)
+
+def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints(), seed_scheduleL=[]):
     timer = AutotuneTimer()
-    test_func = tester(input, out_func, p, **tester_kw)
+
+    random.seed(0)
+    (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
+    test_func = tester(input, out_func, p, filter_func_name, **tester_kw)
     
     currentL = []
     for seed in seed_scheduleL:
@@ -1107,7 +1189,7 @@ def test_crossover(verbose=False):
         #T0 = time.time()
         #print 'a'
         for i in range(80):
-            c = crossover(a, b)
+            c = crossover(a, b, constraints)
             c.apply(constraints)
             cL = str(c).split('\n')
             assert aL != bL and aL != cL and bL != cL
@@ -1123,7 +1205,7 @@ def test_crossover(verbose=False):
                 print '---- Mutate after crossover %d,%d ----'%(j,i)
                 print 'a', repr(str(a)), a.new_vars()
                 print 'b', repr(str(b)), b.new_vars()
-            c = crossover(a, b)
+            c = crossover(a, b, constraints)
             if verbose:
                 print 'c', repr(str(c)), c.new_vars()
             c.apply(constraints)
@@ -1350,20 +1432,21 @@ def main():
         if len(args) < 2:
             print >> sys.stderr, 'expected 2 arguments to autotune'
             sys.exit(1)
-        examplename = args[1]
-        (input, out_func, test_func, scope) = getattr(examples, examplename)()
+        filter_func_name = args[1]
+        #(input, out_func, test_func, scope) = getattr(examples, examplename)()
+        (input, out_func, test_func, scope) = resolve_filter_func(filter_func_name)()
         
         seed_scheduleL = []
-        #seed_scheduleL.append('blur_y_blur0.root().tile(x_blur0, y_blur0, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blur0)\n' +
-        #                      'blur_x_blur0.chunk(x_blur0).vectorize(x_blur0, 8)')
-        #seed_scheduleL.append('')
-        #seed_scheduleL.append('blur_y_blur0.root()\nblur_x_blur0.root()')
+        seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blurUInt16)\n' +
+                              'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
+        seed_scheduleL.append('')
+        seed_scheduleL.append('blur_y_blurUInt16.root()\nblur_x_blurUInt16.root()')
         evaluate = halide.filter_image(input, out_func, DEFAULT_IMAGE)
         evaluate()
         T0 = time.time()
         evaluate()
         T1 = time.time()
-        print 'Root all time: %.4f'%(T1-T0)
+        print 'Time for default schedule: %.4f'%(T1-T0)
         
         p = AutotuneParams()
         exclude = []
@@ -1372,7 +1455,7 @@ def main():
                 exclude.append(scope[key])
         constraints = Constraints(exclude)
         
-        autotune(input, out_func, p, constraints=constraints, seed_scheduleL=seed_scheduleL)
+        autotune(filter_func_name, p, constraints=constraints, seed_scheduleL=seed_scheduleL)
     elif args[0] in ['test_sched']:
         #(input, out_func, test_func) = examples.blur()
         pass
@@ -1380,6 +1463,13 @@ def main():
         examplename = 'blur'
         (input, out_func, test_func, scope) = getattr(examples, examplename)()
         s = Schedule.fromstring(out_func, 'blur_x_blur0.root().parallel(y)\nblur_y_blur0.root().parallel(y).vectorize(x,8)')
+    elif args[0] == 'autotune_child_process':           # Child process for autotuner
+        rest = args[1:]
+        if len(rest) != 4:
+            raise ValueError('expected 4 args after autotune_child_process')
+        (filter_func_name, schedule_str, in_image, trials) = rest
+        trials = int(trials)
+        autotune_child_process(filter_func_name, schedule_str, in_image, trials)
     else:
         raise NotImplementedError('%s not implemented'%args[0])
 #    test_schedules()
