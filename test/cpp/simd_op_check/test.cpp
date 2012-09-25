@@ -1192,10 +1192,10 @@ void check_neon_all() {
     // We use the non-rounding forms of these
 
     // VRSQRTE	I, F	-	Reciprocal Square Root Estimate
-    check_neon("vrecpe.f32", 4, 1.0f/sqrt(f32_1));
-    check_neon("vrecpe.f32", 2, 1.0f/sqrt(f32_1));    
-    check_neon("vrecpe.f32", 4, f32_2/sqrt(f32_1));
-    check_neon("vrecpe.f32", 2, f32_2/sqrt(f32_1));    
+    check_neon("vrsqrte.f32", 4, 1.0f/sqrt(f32_1));
+    check_neon("vrsqrte.f32", 2, 1.0f/sqrt(f32_1));    
+    check_neon("vrsqrte.f32", 4, f32_2/sqrt(f32_1));
+    check_neon("vrsqrte.f32", 2, f32_2/sqrt(f32_1));    
 
     // VRSQRTS	F	-	Reciprocal Square Root Step
     // One newtown rhapson iteration of 1/sqrt(x). Skip it.
