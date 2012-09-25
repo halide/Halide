@@ -110,15 +110,15 @@ namespace Halide {
         Contents(const Func &f) :
             f(f) {}
         Contents(const Func &f, const Expr &a) :
-            f(f), args {a} {fixArgs();}
+            f(f), args(vec(a)) {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b) :
-            f(f), args {a, b} {fixArgs();}
+            f(f), args(vec(a, b)) {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c) :
-            f(f), args {a, b, c} {fixArgs();}
+            f(f), args(vec(a, b, c)) {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d) :
-            f(f), args {a, b, c, d} {fixArgs();}
+            f(f), args(vec(a, b, c, d)) {fixArgs();}
         Contents(const Func &f, const Expr &a, const Expr &b, const Expr &c, const Expr &d, const Expr &e) :
-            f(f), args {a, b, c, d, e} {fixArgs();}
+            f(f), args(vec(a, b, c, d, e)) {fixArgs();}
         Contents(const Func &f, const std::vector<Expr> &args) : f(f), args(args) {fixArgs();}
 
         void fixArgs() {
@@ -167,7 +167,7 @@ namespace Halide {
         Type returnType;
 
         // A handle to an update function
-        std::unique_ptr<Func> update;
+        shared_ptr<Func> update;
         
         /* The ML definition object (name, return type, argnames, body)
            The body here evaluates the function over an entire range,
@@ -428,8 +428,8 @@ namespace Halide {
         for (int i = 2; i < argc; i++) {
             // One random transform per function per arg
             srand(atoi(argv[i]));            
-            for (const Func &_f : rhs().funcs()) {
-                Func f = _f;
+            for (size_t i = 0; i < rhs().funcs().size(); i++) {
+                Func f = rhs().funcs()[i];
                 f.random(rand());
             }
             random(rand());
@@ -866,7 +866,7 @@ namespace Halide {
             // runtime-detect avx to only enable it if supported
             // disabled for now until we upgrade llvm
             if (use_avx() && 0) {
-                std::vector<std::string> mattrs = {"avx"};
+                std::vector<std::string> mattrs = vec(std::string("avx"));
                 eeBuilder.setMAttrs(mattrs);
             }
 
@@ -942,7 +942,7 @@ namespace Halide {
                 // Shouldn't need to do anything. llvm will call dlsym
                 // on the current process for us.
             } else {
-                for (auto f = m->begin(); f != m->end(); f++) {
+                for (llvm::Module::iterator f = m->begin(); f != m->end(); f++) {
                     llvm::StringRef name = f->getName();
                     if (f->hasExternalLinkage() && name[0] == 'c' && name[1] == 'u') {
                         // Starts with "cu" and has extern linkage. Might be a cuda function.

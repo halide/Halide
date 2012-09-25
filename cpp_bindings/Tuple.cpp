@@ -23,8 +23,8 @@ namespace Halide {
         std::vector<std::string> callArgNames, defArgNames;
 
         // Grab the vars and reduction vars in the tuple args as arguments to the anonymous function
-        for (const Expr &expr : contents) {
-            Expr e = expr;
+        for (size_t i = 0; i < contents.size(); i++) {
+            Expr e = contents[i];
             for (size_t i = 0; i < e.vars().size(); i++) {
                 bool already_exists = false;
                 for (size_t j = 0; j < callArgNames.size(); j++) {

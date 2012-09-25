@@ -11,15 +11,19 @@ namespace Halide {
         MLVal mlval;
         unsigned char bits;
         enum {FLOAT = 0, INT = 1, UINT = 2} code;
+
         bool isInt() {return code == INT;}
         bool isUInt() {return code == UINT;}
         bool isFloat() {return code == FLOAT;}
+
         bool operator==(const Type &other) const {
             return bits == other.bits && code == other.code;
         }
+
         bool operator!=(const Type &other) const {
             return !(*this == other);
         }
+
         std::string str() const {
             std::string codes[] = {"f", "s", "u"};
             std::ostringstream ss;

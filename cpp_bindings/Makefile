@@ -2,7 +2,7 @@ ifneq ($(shell env -i command -v g++-4.7),)
 GXX ?= g++-4.7
 endif
 GXX ?= g++-4.6
-CXX=$(GXX) -std=c++0x -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
+CXX=$(GXX) -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
 
 HEADERS = MLVal.h Util.h Var.h Type.h Uniform.h Expr.h Image.h Func.h Reduction.h Uniform.h Tuple.h
 

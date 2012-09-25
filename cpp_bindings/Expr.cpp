@@ -7,6 +7,7 @@
 #include "Uniform.h"
 #include "Image.h"
 #include "Tuple.h"
+#include "Util.h"
 #include <sstream>
 
 namespace Halide {
@@ -329,46 +330,51 @@ namespace Halide {
         child(other);
     }
 
-    std::tuple<Expr, Expr> matchTypes(Expr a, Expr b) {
+    void matchTypes(Expr *pa, Expr *pb) {
+        Expr a = *pa, b = *pb;
+
         Type ta = a.type(), tb = b.type();
 
-        if (ta == tb) return std::make_tuple(a, b);
+        if (ta == tb) return;
         
         // int(a) * float(b) -> float(b)
         // uint(a) * float(b) -> float(b)
-        if (!ta.isFloat() && tb.isFloat()) return std::make_tuple(cast(tb, a), b);
-        if (ta.isFloat() && !tb.isFloat()) return std::make_tuple(a, cast(ta, b));
+        if (!ta.isFloat() && tb.isFloat()) {*pa = cast(tb, a); return;}
+        if (ta.isFloat() && !tb.isFloat()) {*pb = cast(ta, b); return;}
         
         // float(a) * float(b) -> float(max(a, b))
         if (ta.isFloat() && tb.isFloat()) {
-            if (ta.bits > tb.bits) return std::make_tuple(a, cast(ta, b));
-            else return std::make_tuple(cast(tb, a), b);
+            if (ta.bits > tb.bits) *pb = cast(ta, b);
+            else *pa = cast(tb, a); 
+            return;
         }
 
         // (u)int(a) * (u)intImm(b) -> int(a)
-        if (!ta.isFloat() && !tb.isFloat() && b.isImmediate()) return std::make_tuple(a, cast(ta, b));
-        if (!tb.isFloat() && !ta.isFloat() && a.isImmediate()) return std::make_tuple(cast(tb, a), b);        
+        if (!ta.isFloat() && !tb.isFloat() && b.isImmediate()) {*pb = cast(ta, b); return;}
+        if (!tb.isFloat() && !ta.isFloat() && a.isImmediate()) {*pa = cast(tb, a); return;}
 
         // uint(a) * uint(b) -> uint(max(a, b))
         if (ta.isUInt() && tb.isUInt()) {
-            if (ta.bits > tb.bits) return std::make_tuple(a, cast(ta, b));
-            else return std::make_tuple(cast(tb, a), b);
+            if (ta.bits > tb.bits) *pb = cast(ta, b);
+            else *pa = cast(tb, a);
+            return;
         }
 
         // int(a) * (u)int(b) -> int(max(a, b))
         if (!ta.isFloat() && !tb.isFloat()) {
             int bits = std::max(ta.bits, tb.bits);
-            return std::make_tuple(cast(Int(bits), a), cast(Int(bits), b));
+            *pa = cast(Int(bits), a);
+            *pb = cast(Int(bits), b);
+            return;
         }        
 
         printf("Could not match types: %s, %s\n", ta.str().c_str(), tb.str().c_str());
         assert(false && "Failed type coercion");
-        return std::make_tuple(a, b);
     }
 
     Expr operator+(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to + must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeAdd(a.node(), b.node()), a.type());
         e.child(a); 
         e.child(b); 
@@ -377,7 +383,7 @@ namespace Halide {
 
     Expr operator-(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to - must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeSub(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -390,7 +396,7 @@ namespace Halide {
 
     Expr operator*(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to * must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeMul(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -399,7 +405,7 @@ namespace Halide {
 
     Expr operator/(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to / must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeDiv(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -408,7 +414,7 @@ namespace Halide {
 
     Expr operator%(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to % must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeMod(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -417,7 +423,7 @@ namespace Halide {
 
     Expr operator>(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to > must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeGT(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -426,7 +432,7 @@ namespace Halide {
     
     Expr operator<(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to < must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeLT(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -435,7 +441,7 @@ namespace Halide {
     
     Expr operator>=(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to >= must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeGE(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -444,7 +450,7 @@ namespace Halide {
     
     Expr operator<=(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to <= must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeLE(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -453,7 +459,7 @@ namespace Halide {
     
     Expr operator!=(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to != must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeNE(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -462,7 +468,7 @@ namespace Halide {
 
     Expr operator==(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to == must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeEQ(a.node(), b.node()), Int(1));
         e.child(a);
         e.child(b);
@@ -641,7 +647,7 @@ namespace Halide {
     Expr select(Expr cond, Expr thenCase, Expr elseCase) {
         //assert(thenCase.type() == elseCase.type() && "then case must have same type as else case in select");
         //assert(cond.type() == Int(1) && "condition must have type bool in select");
-        std::tie(thenCase, elseCase) = matchTypes(thenCase, elseCase);
+        matchTypes(&thenCase, &elseCase);
         cond = cast(Int(1), cond);
         Expr e(makeSelect(cond.node(), thenCase.node(), elseCase.node()), thenCase.type());
         e.child(cond);
@@ -652,7 +658,7 @@ namespace Halide {
     
     Expr max(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to max must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeMax(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -661,7 +667,7 @@ namespace Halide {
 
     Expr min(Expr a, Expr b) {
         //assert(a.type() == b.type() && "Arguments to min must have the same type");
-        std::tie(a, b) = matchTypes(a, b);
+        matchTypes(&a, &b);
         Expr e(makeMin(a.node(), b.node()), a.type());
         e.child(a);
         e.child(b);
@@ -744,28 +750,28 @@ namespace Halide {
     }
 
     Expr debug(Expr expr, const std::string &prefix, Expr a) {
-        std::vector<Expr> args {a};
+        std::vector<Expr> args = vec(a);
         return debug(expr, prefix, args);
     }
 
     Expr debug(Expr expr, const std::string &prefix, Expr a, Expr b) {
-        std::vector<Expr> args {a, b};
+        std::vector<Expr> args = vec(a, b);
         return debug(expr, prefix, args);
     }
 
     Expr debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c) {
-        std::vector<Expr> args {a, b, c};
+        std::vector<Expr> args = vec(a, b, c);
         return debug(expr, prefix, args);
     }
 
 
     Expr debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d) {
-        std::vector<Expr> args {a, b, c, d};
+        std::vector<Expr> args = vec(a, b, c, d);
         return debug(expr, prefix, args);
     }
 
     Expr debug(Expr expr, const std::string &prefix, Expr a, Expr b, Expr c, Expr d, Expr e) {
-        std::vector<Expr> args {a, b, c, d, e};
+        std::vector<Expr> args = vec(a, b, c, d, e);
         return debug(expr, prefix, args);
     }
 

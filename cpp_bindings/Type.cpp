@@ -57,15 +57,27 @@ namespace Halide {
     }
 
     Type Float(unsigned char bits) {
-        return Type {makeFloatType((bits)), bits, Type::FLOAT};
+        Type t;
+        t.mlval = makeFloatType(bits);
+        t.bits = bits;
+        t.code = Type::FLOAT;
+        return t;
     }
 
     Type Int(unsigned char bits) {
-        return Type {makeIntType((bits)), bits, Type::INT};
+        Type t;
+        t.mlval = makeIntType(bits);
+        t.bits = bits;
+        t.code = Type::INT;
+        return t;
     }
 
     Type UInt(unsigned char bits) {
-        return Type {makeUIntType((bits)), bits, Type::UINT};
+        Type t;
+        t.mlval = makeUIntType(bits);
+        t.bits = bits;
+        t.code = Type::UINT;
+        return t;
     }
 
 }
