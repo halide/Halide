@@ -1,7 +1,8 @@
+android update project -p .
 cd jni && \
-c++ halide.cpp -L ../../../cpp_bindings/ -lHalide -I ../../../cpp_bindings/ &&  \
+c++ halide.cpp -L ../../../cpp_bindings/ -lHalide -I ../../../cpp_bindings/ -ldl -lpthread &&  \
 ./a.out &&  \
-llc halide.bc -O3 -mattr=+neon -o halide.s && 
+cat halide.bc | opt -O3 -always-inline | llc -O3 -mattr=+neon -o halide.s && 
 cd .. &&  \
 ~/android-ndk-r8b/ndk-build && \
 ant debug &&  \
