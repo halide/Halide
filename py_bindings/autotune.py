@@ -1,7 +1,18 @@
 
+# - Add mutate swap() (swap order within FragmentList)
+# - Make sure mutation is happening often enough (?), actually that each operation is happening in about fixed proportion.
+# - tile() should be in the same order as the variables
+# - Perhaps use maximum schedule fragment size of 5.
+
+# - Do not nest ForkedWatchdog
+# - Ideally do not use forking at all
+
 # - Include history with each individual
 # - Fix problem with extra_caller_vars not being set.
 # - Seed according to percents rather than random.
+# - Cross over between schedule fragments
+# - Put in logic to tell if schedule is not valid in advance to gain some time
+# - Can parallelize compile and also improve % valid schedules (for speed)
 
 # - Run my recursive scheduler against PetaBricks
 # - Dump top speed and schedule vs generation number out to some number of generations
@@ -16,7 +27,6 @@
 # - Tile size or unroll size needs to be divisible into input size
 # - split(x, x, xi, n) is right syntax for now
 # - Only vectorize at native vector widths, 2 4 8 16
-# - tile() should be in the same order as the variables
 # - Should not be 2 vectorize calls
 # - Good to have a clamp at the beginning and a dummy function at the end -- autotuner maybe should inject these (optionally), at least the dummy at the end.
    # Could tune over parameters have I clamped at the beginning and have I injected dummy at the end.
@@ -62,12 +72,17 @@ import numpy
 import sys
 import os
 from ForkedWatchdog import Watchdog
+import tempfile
+import subprocess
 import examples
 random_module = random
 
+LOG_SCHEDULES = True      # Log all tried schedules (Fail or Success) to a text file
+LOG_SCHEDULE_FILENAME = 'log_schedule.txt'
 AUTOTUNE_VERBOSE = False #True #False #True
 DEFAULT_MAX_DEPTH = 4
-DEFAULT_TESTER_KW = {'in_image': 'apollo2.png'}
+DEFAULT_IMAGE = 'apollo2.png'
+DEFAULT_TESTER_KW = {'in_image': DEFAULT_IMAGE}
 FORCE_TILE = False
 MUTATE_TRIES = 10
 
@@ -95,17 +110,27 @@ def default_check(cls, L):
     def count(C):
         return sum([isinstance(x, C) for x in L])
     if len(L) == 0:
-        return True
+        return True         # Inline
     else:
         # Handle singleton fragments
+        if count(FragmentVectorize) > 1:        # Allow at most one vectorize per Func schedule (FragmentList)
+            return False
         if FORCE_TILE and (len(L) >= 2 and count(FragmentTile) < 1):
             return False
-        if isinstance(L[0], FragmentRoot) and count(FragmentRoot) == 1 and count(FragmentChunk) == 0:
+        root_count = count(FragmentRoot)
+        chunk_count = count(FragmentChunk)
+        if isinstance(L[0], FragmentRoot) and root_count == 1 and chunk_count == 0:
             return True
-        elif isinstance(L[0], FragmentChunk) and len(L) == 1:
+        elif isinstance(L[0], FragmentChunk) and chunk_count == 1 and root_count == 0:
             return True
     return False
             
+def make_fromstring(cls):
+    @staticmethod
+    def fromstring(var=None, value=None):
+        return cls(var, int(value) if value is not None else value)
+    return fromstring
+
 class Fragment:
     "Base class for a single schedule macro applied to a Func, e.g. .vectorize(x), .parallel(y), .root(), etc."
     def __init__(self, var=None, value=None):
@@ -181,14 +206,14 @@ def check_duplicates(cls, L):
 class FragmentRoot(Fragment):
     def __str__(self):
         return '.root()'
-
+    
 class FragmentVectorize(FragmentBlocksizeMixin,Fragment):
     def randomize_const(self):
         self.value = blocksize_random([2,4,8,16])
 
     def __str__(self):
         return '.vectorize(%s,%d)'%(self.var, self.value) #self.value) # FIXMEFIXME Generate random platform valid blocksize
-    
+
 class FragmentParallel(FragmentVarMixin,Fragment):
     def __str__(self):
         return '.parallel(%s)'%(self.var)
@@ -208,6 +233,9 @@ class FragmentChunk(Fragment):
     def __str__(self):
         return '.chunk(%s)'%self.var
 
+for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk]:
+    _cls.fromstring = make_fromstring(_cls)
+
 def create_var(vars): #count=[0]):
     #count[0] += 1
     for i in itertools.count(0):
@@ -223,13 +251,18 @@ def instantiate_var(name, cache={}):
 
 # split(x, x, xi, n)
 class FragmentSplit(FragmentBlocksizeMixin,Fragment):
-    def __init__(self, var=None, value=None, newvar=None, reuse_outer=False,vars=None):
+    def __init__(self, var=None, value=None, newvar=None, reuse_outer=True,vars=None):
         FragmentBlocksizeMixin.__init__(self, var, value)
         self.newvar = newvar
         if self.newvar is None:
             self.newvar = create_var(vars)
         self.reuse_outer = reuse_outer
-        
+        assert self.reuse_outer
+
+    @staticmethod
+    def fromstring(var=None, var_repeat=None, newvar=None, value=None):
+        return FragmentSplit(var, int(value) if value is not None else value, newvar)
+
     @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
         return [cls(x,reuse_outer=True,vars=vars)  for x in vars]
@@ -244,13 +277,13 @@ class FragmentSplit(FragmentBlocksizeMixin,Fragment):
                                                self.var if not self.reuse_outer else self.newvar, self.value)
 
 class FragmentTile(FragmentBlocksizeMixin,Fragment):
-    def __init__(self, xvar=None, yvar=None, newvar=None, vars=None):
+    def __init__(self, xvar=None, yvar=None, newvar=None, vars=None, xnewvar=None, ynewvar=None, xsize=None, ysize=None):
         self.xvar=xvar
         self.yvar=yvar
-        self.xsize = 0
-        self.ysize = 0
-        self.xnewvar = create_var(vars)
-        self.ynewvar = create_var(vars+[self.xnewvar])
+        self.xsize = 0 if xsize is None else xsize
+        self.ysize = 0 if ysize is None else ysize
+        self.xnewvar = create_var(vars)                if xnewvar is None else xnewvar
+        self.ynewvar = create_var(vars+[self.xnewvar]) if ynewvar is None else ynewvar
 
     def randomize_const(self):
         self.xsize = blocksize_random()
@@ -261,11 +294,16 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         return check_duplicates(self.__class__, L)
 
     @staticmethod
+    def fromstring(xvar, yvar, xnewvar, ynewvar, xsize, ysize):
+        return FragmentTile(xvar=xvar, yvar=yvar, xsize=int(xsize), ysize=int(ysize), xnewvar=xnewvar, ynewvar=ynewvar)
+
+    @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
         ans = []
-        for i in range(len(vars)):
-            for j in range(i+1, len(vars)):
-                ans.append(cls(vars[i],vars[j],vars=vars))
+        for i in range(len(vars)-1):
+            j = i+1
+            #for j in range(i+1, len(vars)):
+            ans.append(cls(vars[i],vars[j],vars=vars))
         return ans
 #        return [cls(x,y,vars=vars) for x in vars for y in vars if x != y]
 
@@ -276,13 +314,21 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         return '.tile(%s,%s,%s,%s,%d,%d)'%(self.xvar,self.yvar,self.xnewvar,self.ynewvar,self.xsize,self.ysize)
 
 class FragmentTranspose(Fragment):
-    # Actually makes potentially many calls to transpose, but is considered as one fragment
-    def __init__(self, vars, idx):
+    # Actually calls Func.reorder()
+    def __init__(self, vars=None, idx=None, perm=None):
         self.vars = vars
         self.idx = idx
-        self.permutation = permutation.permutation(vars, idx)
-        self.pairwise_swaps = permutation.pairwise_swaps(vars, self.permutation)
-    
+        if perm is None:
+            self.permutation = permutation.permutation(vars, idx)
+        else:
+            self.permutation = perm
+        #self.pairwise_swaps = permutation.pairwise_swaps(vars, self.permutation)
+
+    @staticmethod
+    def fromstring(*L):
+        return FragmentTranspose(perm=L)
+        #return FragmentTranspose(xvar=xvar, yvar=yvar, xsize=int(xsize), ysize=int(ysize), xnewvar=xnewvar, ynewvar=ynewvar)
+
     @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
         return [cls(vars=vars, idx=i) for i in range(1,permutation.factorial(len(vars)))]     # TODO: Allow random generation so as to not loop over n!
@@ -293,14 +339,35 @@ class FragmentTranspose(Fragment):
         return [isinstance(x, FragmentTranspose) for x in L] == [0]*(len(L)-1)+[1]
     
     def __str__(self):
-        ans = ''
-        assert len(self.pairwise_swaps) >= 1
-        for (a, b) in self.pairwise_swaps:
-            ans += '.transpose(%s,%s)'%(a,b)
-        return ans
+        #ans = ''
+        #assert len(self.pairwise_swaps) >= 1
+        #for (a, b) in self.pairwise_swaps:
+        #    ans += '.transpose(%s,%s)'%(a,b)
+        #return ans
+        return '.reorder(' + ','.join(v for v in self.permutation) + ')'
 
 fragment_classes = [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentTranspose]
+fragment_map = {'root': FragmentRoot,
+                'vectorize': FragmentVectorize,
+                'parallel': FragmentParallel,
+                'unroll': FragmentUnroll,
+                'chunk': FragmentChunk,
+                'split': FragmentSplit,
+                'tile': FragmentTile,
+                'reorder': FragmentTranspose}
 
+def fragment_fromstring(s):
+    if '(' not in s:
+        raise ValueError(s)
+    paren1 = s.index('(')
+    paren2 = s.index(')')
+    name = s[:paren1]
+    cls = fragment_map[name]
+    rest = [x.strip() for x in s[paren1+1:paren2].split(',')]
+    #print cls, rest
+    #print 'fragment_fromstring |%s|' % s, cls, rest
+    return cls.fromstring(*rest)
+    
 class MutateFailed(Exception):
     "Mutation can fail due to e.g. trying to add a fragment to f.chunk(c), which is a singleton schedule macro."
     
@@ -322,6 +389,23 @@ class FragmentList(list):
             return self.func.name() + ''.join(ans)
         #print 'returning empty'
         return ''
+
+    @staticmethod
+    def fromstring(func, s):
+        """
+        Constructor from a string s such as 'f.root().parallel(y)' (same format as returned by str() method).
+        """
+        if len(s.strip()) == 0:
+            return FragmentList(func, [])
+        if not '.' in s:
+            raise ValueError('FragmentList is missing .: %r'%s)
+        dot = s.index('.')
+        s = s[dot+1:]
+        ans = []
+        for part in s.split('.'):
+            ans.append(fragment_fromstring(part))
+        return FragmentList(func, ans)
+        
 
     def new_vars(self):
         ans = []
@@ -459,7 +543,13 @@ class Schedule:
     def __init__(self, root_func, d):
         self.root_func = root_func
         self.d = d
-    
+
+    def check(self):
+        for x in self.d.values():
+            if not x.check():
+                return False
+        return True
+
     def __copy__(self):
         d = {}
         for name in self.d:
@@ -487,39 +577,84 @@ class Schedule:
             ans.extend(x.new_vars())
         return list(sorted(set(ans)))
 
-    def apply(self, verbose=False):   # Apply schedule
+    def apply(self, constraints, verbose=False):   # Apply schedule
+        #verbose = True
         #print 'apply schedule:'
         #print str(self)
         #halide.inline_all(self.root_func)
         scope = halide.all_vars(self.root_func)
         #print 'scope', scope.keys()
         new_vars = self.new_vars()
-        #print 'new_vars', new_vars
+        if verbose:
+            print 'apply, new_vars', new_vars
         for varname in new_vars:
             scope[varname] = instantiate_var(varname)
         if verbose:
-            print 'scope:', scope
+            print 'apply, scope:', scope
         def callback(f, parent):
             name = f.name()
+            if verbose:
+                print 'apply, name', name, constraints
+            if name in constraints.exclude_names:
+                if verbose:
+                    print '  constrained, skipping'
+                return
             if name in self.d:
                 s = str(self.d[name])
-                s = s.replace(name + '.', '__func.reset().')
+                f.reset()
+                s = s.replace(name + '.', '__func.')
                 scope['__func'] = f
                 #print 'apply', s
+                #print scope, s
+                if verbose:
+                    print '  exec', s
                 exec s in scope
+            else:
+                if verbose:
+                    print '  not in d, reset'
+                f.reset()
         halide.visit_funcs(self.root_func, callback)
-    
-    def test(self, shape, input, eval_func=None):
+        
+    def test(self, shape, input, constraints, eval_func=None):
         """
         Test on zero array of the given shape. Return evaluate() function which when called returns the output Image.
         """
         print 'apply'
-        self.apply()
+        self.apply(constraints)
         print 'in_image'
         in_image = numpy.zeros(shape, input.type().to_numpy())
         print 'filter'
         return halide.filter_image(input, self.root_func, in_image, eval_func=eval_func)
+    
+    @staticmethod
+    def fromstring(root_func, s):
+        """
+        Constructor from a string s such as 'f.root().parallel(y)\ng.chunk(y)' (same format as returned by str() method).
+        """
+        #print 'Schedule.fromstring', root_func, s
+        all_funcs = halide.all_funcs(root_func)
+        root_func = root_func
+        d = {}
+        for line in s.strip().split('\n'):
+            line = line.strip()
+            if len(line) == 0:
+                continue
+            if not '.' in line:
+                raise ValueError(s)
+            dot = line.index('.')
+            name = line[:dot]
+            d[name] = FragmentList.fromstring(all_funcs[name], line)
         
+        ans = {}
+        def callback(f, parent):
+            name = f.name()
+            if name not in d:
+                ans[name] = FragmentList.fromstring(f, '')
+            else:
+                ans[name] = d[name]
+        halide.visit_funcs(root_func, callback)
+        return Schedule(root_func, ans)
+
 def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}):
     """
     Generate Schedule for all functions called by root_func (recursively). Same arguments as schedules_func().
@@ -588,7 +723,7 @@ class AutotuneParams:
     generations = 500
     
     compile_timeout = 5.0
-    run_timeout_mul = 3.0           # Fastest run time multiplied by this factor is cutoff
+    run_timeout_mul = 5.0 #3.0           # Fastest run time multiplied by this factor is cutoff
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
     
     num_print = 10
@@ -605,13 +740,16 @@ def sample_prob(d):
             return key
     return key
     
-def crossover(a, b):
+def crossover(a, b, constraints):
     "Cross over two schedules, using 2 point crossover."
+    a = constraints.constrain(a)
+    b = constraints.constrain(b)
     funcL = halide.all_funcs(a.root_func, True)
     names = [x[0] for x in funcL]
     assert a.root_func is b.root_func
     aset = set(a.d.keys())
-    assert aset == set(b.d.keys()) #== set(names)
+    bset = set(b.d.keys())
+    assert aset == bset, (aset, bset) #== set(names)
     names = [x for x in names if x in aset]
     
     if random.randrange(2) == 0:
@@ -631,7 +769,7 @@ def crossover(a, b):
     
     return Schedule(a.root_func, d)
 
-def mutate(a, p):
+def mutate(a, p, constraints):
     "Mutate existing schedule using AutotuneParams p."
     a0 = a
     a = copy.copy(a0)
@@ -657,9 +795,9 @@ def mutate(a, p):
                     if mode == 'consts':
                         a.d[name] = a.d[name].randomized_const()
                     elif mode == 'replace':
-                        constraints = a.d
-                        del constraints[name]
-                        all_d = random_schedule(a.root_func, p.min_depth, p.max_depth, None, constraints)
+                        constraints_d = a.d
+                        del constraints_d[name]
+                        all_d = random_schedule(a.root_func, p.min_depth, p.max_depth, None, constraints_d)
                         a.d[name] = all_d.d[name]
                     elif mode == 'add':
                         assert len(a.d[name]) < p.max_depth
@@ -677,21 +815,22 @@ def mutate(a, p):
                 except MutateFailed:
                     pass
         try:
-            a.apply()       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
-        except NameError:
+            #print 'Mutated schedule:' + '\n' + '-'*40 + '\n' + str(a) + '\n' + '-' * 40 + '\n'
+            a.apply(constraints)       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
+        except (NameError, halide.ScheduleError):
             continue
         return a
 
-def select_and_crossover(prevL, p, root_func):
+def select_and_crossover(prevL, p, root_func, constraints):
     a = tournament_select(prevL, p, root_func)
     b = tournament_select(prevL, p, root_func)
-    c = crossover(a, b)
-    c = mutate(c, p)
+    c = crossover(a, b, constraints)
+    c = mutate(c, p, constraints)
     return c
 
-def select_and_mutate(prevL, p, root_func):
+def select_and_mutate(prevL, p, root_func, constraints):
     a = tournament_select(prevL, p, root_func)
-    return mutate(a, p)
+    return mutate(a, p, constraints)
 
 def tournament_select(prevL, p, root_func):
     i = random.randrange(p.tournament_size)
@@ -704,17 +843,20 @@ class Constraints:
     "Constraints([f, g]) excludes f, g from autotuning."
     def __init__(self, exclude=[]):
         self.exclude = exclude
-    
+        self.exclude_names = set()
+        for f in self.exclude:
+            self.exclude_names.add(f.name())
+        
+    def __str__(self):
+        return 'Constraints(%r)'%[x.name() for x in self.exclude]
+        
     def constrain(self, schedule):
         "Return new Schedule instance with constraints applied."
 #        if not 'tile' in str(schedule):
 #            return random_schedule(schedule.root_func, 0, 0)
         d = {}
-        exclude_names = set()
-        for f in self.exclude:
-            exclude_names.add(f.name())
         for name in schedule.d:
-            if name not in exclude_names:
+            if name not in self.exclude_names:
                 d[name] = schedule.d[name]
         return Schedule(schedule.root_func, d)
 
@@ -727,15 +869,15 @@ def next_generation(prevL, p, root_func, constraints):
     ans = []
     schedule_strs = set()
     def append_unique(schedule):
-        s = str(schedule)
+        s = str(schedule).strip()
         if s not in schedule_strs:
             schedule_strs.add(s)
             ans.append(schedule)
             
     def do_crossover():
-        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func)))
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints)))
     def do_mutated():
-        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func)))
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints)))
     def do_random():
         append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)))
         
@@ -773,12 +915,12 @@ class AutotuneTimer:
     def __init__(self):
         self.start_time = time.time()
     
-def time_generation(L, p, test_func, timer, display_text=''):
+def time_generation(L, p, test_func, timer, constraints, display_text=''):
     #T0 = time.time()
     #Tcompile = [0.0]
     #Trun = [0.0]
     def time_schedule(current):
-        info = test_func(current)()
+        info = test_func(current, constraints)()
         timer.compile_time += info['compile']
         timer.run_time += info['run']
         return info['time']
@@ -799,66 +941,152 @@ def time_generation(L, p, test_func, timer, display_text=''):
         ans.append(time_schedule(L[i]))
         success += ans[-1] < COMPILE_TIMEOUT
         timer.total_time = time.time()-timer.start_time
-        stats_str = '%.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
+        stats_str = 'pid=%d, %.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (os.getpid(), success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
         if AUTOTUNE_VERBOSE:
             print '%.5f secs'%ans[-1]
         else:
             sys.stderr.write('\n'*100 + 'Testing %d/%d (%s)\n%s\n'%(i+1,len(L),stats_str,display_text))
             sys.stderr.flush()
+            pass
     print 'Statistics: %s'%stats_str
     return ans
+
+def log_sched(schedule_str, s, f=[]):
+    if LOG_SCHEDULES:
+        if len(f) == 0:
+            f.append(open(LOG_SCHEDULE_FILENAME,'wt'))
+        f[0].write('-'*40 + '\n' + schedule_str + '\n' + s + '\n')
+        f[0].flush()
 
 COMPILE_TIMEOUT = 10001.0
 RUN_TIMEOUT     = 10002.0
 
-def default_tester(input, out_func, p, in_image, allow_cache=True):
+def autotune_child_process(filter_func_name, schedule_str, in_image, trials):
+    (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
+    schedule = Schedule.fromstring(out_func, schedule_str)
+    constraints = Constraints()         # FIXMEFIXME: Deal with Constraints() mess
+    schedule.apply(constraints)
+    
+    Tbegin_compile = time.time()
+    evaluate = halide.filter_image(input, out_func, in_image)
+    Tend_compile = time.time()
+    Tcompile = Tend_compile - Tbegin_compile
+    if AUTOTUNE_VERBOSE:
+        print 'compiled in', Tcompile, repr(str(schedule))
+    
+    T = []
+    for i in range(trials):
+        T0 = time.time()
+        Iout = evaluate()
+        T1 = time.time()
+        T.append(T1-T0)
+
+    T = min(T)
+    Trun = time.time()-Tend_compile
+    
+    print 'Success', T, Tcompile, Trun
+
+def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=True):
     cache = {}
     best_run_time = [p.run_timeout_default]
     
-    def test_func(schedule):
-        schedule_str = str(schedule)
+    def test_func(schedule, constraints):       # FIXME: Handle constraints
+        def out():
+            schedule_str = str(schedule).strip()
+            if schedule_str in cache and allow_cache:
+                return lambda: cache[schedule_str]
+            
+            Tstart_subproc = time.time()
+            fout = tempfile.TemporaryFile()
+            proc = subprocess.Popen(['python', 'autotune.py', 'autotune_child_process', filter_func_name, schedule_str, in_image, '%d'%p.trials], stdout=fout)
+            timeout = p.compile_timeout + p.run_timeout_mul*best_run_time[0]
+            
+            # Wait for subprocess to terminate (up to timeout)
+            SLEEP_TIME = 0.03
+            T0 = time.time()
+            success = False
+            while time.time() < T0+timeout:
+                if proc.poll() is not None:
+                    success = True
+                    break
+                time.sleep(SLEEP_TIME)
+            if not success:
+                ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-Tstart_subproc, 'run': 0.0}
+                cache[schedule_str] = ans
+                log_sched(schedule_str, 'Fail compile #1, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
+                return ans
+                
+            fout.seek(0)
+            s = fout.read()
+            if len(s) > 0:
+                line = s.strip().split('\n')[-1].strip()
+            else:
+                line = ''
+            if not line.startswith('Success') or len(line.split()) != 4:
+                ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-Tstart_subproc, 'run': 0.0}
+                cache[schedule_str] = ans
+                log_sched(schedule_str, 'Fail compile #2, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
+                return ans
+                
+            (flag, T, Tcompile, Trun) = line.split()
+            ans = {'time': float(T), 'compile': float(Tcompile), 'run': float(Trun)}
+            cache[schedule_str] = ans
+            log_sched(schedule_str, 'Success, compile=%.4f, run=%.4f, time_best=%.4f'%(ans['compile'], ans['run'], ans['time']))
+            return ans
+        return out
+    return test_func
+    
+    """
+    def test_func(schedule, constraints):
+        schedule_str = str(schedule).strip()
         if schedule_str in cache and allow_cache:
             return lambda: cache[schedule_str]
         try:
             T0 = time.time()
             with Watchdog(p.compile_timeout):
-                schedule.apply()
+                schedule.apply(constraints)
                 evaluate = halide.filter_image(input, out_func, in_image)
                 Tend_compile = time.time()
                 Tcompile = Tend_compile-T0
                 if AUTOTUNE_VERBOSE:
                     print 'compiled in', Tcompile, repr(str(schedule))
-                def out():
-                    T = []
-                    for i in range(p.trials):
-                        T0 = time.time()
-
-                        try:
-                            with Watchdog(best_run_time[0]*p.run_timeout_mul):
-                                Iout = evaluate()
-                        except Watchdog:
-                            if AUTOTUNE_VERBOSE:
-                                print 'run failed', repr(str(schedule))
-                            ans = {'time': RUN_TIMEOUT, 'compile': Tcompile, 'run': time.time()-Tend_compile}
-                            cache[schedule_str] = ans
-                            return ans
-
-                        T1 = time.time()
-                        T.append(T1-T0)
-                    T = min(T)
-                    if T < best_run_time[0]:
-                        best_run_time[0] = T
-                    ans = {'time': T, 'compile': Tcompile, 'run': time.time()-Tend_compile}
-                    cache[schedule_str] = ans
-                    return ans
-                return out
         except Watchdog:
             if AUTOTUNE_VERBOSE:
                 print 'compile failed', repr(str(schedule))
             ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-T0, 'run': 0.0}
             cache[schedule_str] = ans
+            log_sched(schedule_str, 'Fail compile, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
             return lambda: ans
+        
+        def out():
+            T = []
+            for i in range(p.trials):
+                T0 = time.time()
+
+                try:
+                    with Watchdog(best_run_time[0]*p.run_timeout_mul):
+                        Iout = evaluate()
+                except Watchdog:
+                    if AUTOTUNE_VERBOSE:
+                        print 'run failed', repr(str(schedule))
+                    ans = {'time': RUN_TIMEOUT, 'compile': Tcompile, 'run': time.time()-Tend_compile}
+                    cache[schedule_str] = ans
+                    log_sched(schedule_str, 'Fail run %d, compile=%.4f, run=%.4f'%(i, ans['compile'], ans['run']))
+                    return ans
+
+                T1 = time.time()
+                T.append(T1-T0)
+            T = min(T)
+            if T < best_run_time[0]:
+                best_run_time[0] = T
+            ans = {'time': T, 'compile': Tcompile, 'run': time.time()-Tend_compile}
+            cache[schedule_str] = ans
+            log_sched(schedule_str, 'Success, compile=%.4f, run=%.4f, time_best=%.4f'%(ans['compile'], ans['run'], ans['time']))
+            return ans
+        return out
+
     return test_func
+    """
 """
 
 def default_tester(input, out_func, p, in_image, counter=[0]):
@@ -872,16 +1100,44 @@ def default_tester(input, out_func, p, in_image, counter=[0]):
     return test_func
 """
 
+def check_schedules(currentL):
+    "Verify that all schedules are valid (according to .check() rules at least)."
+    for schedule in currentL:
+        if not schedule.check():
+            raise ValueError('schedule fails check: %s'%str(schedule))
+
 #def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
-def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints()):
+def resolve_filter_func(filter_func_name):
+    if '.' in filter_func_name:
+        exec "import " + filter_func_name[:filter_func_name.rindex('.')]
+    return eval(filter_func_name)
+
+def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints(), seed_scheduleL=[]):
     timer = AutotuneTimer()
-    test_func = tester(input, out_func, p, **tester_kw)
+
+    random.seed(0)
+    (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
+    test_func = tester(input, out_func, p, filter_func_name, **tester_kw)
     
     currentL = []
+    for seed in seed_scheduleL:
+        currentL.append(constraints.constrain(Schedule.fromstring(out_func, seed)))
+        #print 'seed_schedule new_vars', seed_schedule.new_vars()
+#        currentL.append(seed_schedule)
+#        currentL.append(Schedule.fromstring(out_func, ''))
+#        currentL.
     display_text = ''
+    check_schedules(currentL)
+    
+#    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
+#    print timeL
+#    sys.exit(1)
+    
     for gen in range(p.generations):
         currentL = next_generation(currentL, p, out_func, constraints)
-        timeL = time_generation(currentL, p, test_func, timer, display_text)
+        check_schedules(currentL)
+        
+        timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
         
         bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
         display_text = '-'*40 + '\n'
@@ -891,6 +1147,7 @@ def autotune(input, out_func, p, tester=default_tester, tester_kw=DEFAULT_TESTER
             display_text += '%.4f %s' % (timev, repr(str(current))) + '\n'
         display_text += '\n'
         print display_text
+        sys.stdout.flush()
         
         currentL = [x[1] for x in bothL]
 
@@ -932,8 +1189,8 @@ def test_crossover(verbose=False):
         #T0 = time.time()
         #print 'a'
         for i in range(80):
-            c = crossover(a, b)
-            c.apply()
+            c = crossover(a, b, constraints)
+            c.apply(constraints)
             cL = str(c).split('\n')
             assert aL != bL and aL != cL and bL != cL
             if verbose:
@@ -948,14 +1205,14 @@ def test_crossover(verbose=False):
                 print '---- Mutate after crossover %d,%d ----'%(j,i)
                 print 'a', repr(str(a)), a.new_vars()
                 print 'b', repr(str(b)), b.new_vars()
-            c = crossover(a, b)
+            c = crossover(a, b, constraints)
             if verbose:
                 print 'c', repr(str(c)), c.new_vars()
-            c.apply()
-            c = mutate(c, p)
+            c.apply(constraints)
+            c = mutate(c, p, constraints)
             if verbose:
                 print 'cmutate', repr(str(c)), c.new_vars()
-            c.apply()
+            c.apply(constraints)
     #        cL = str(c).split('\n')
     #        assert aL != bL and aL != cL and bL != cL
 
@@ -965,7 +1222,7 @@ def test_crossover(verbose=False):
         def test_generation(L, prevL):
             assert len(L) == p.population_size
             for x in L:
-                x.apply()
+                x.apply(constraints)
             current_set = set(str(x) for x in L)
             prev_set = set(str(x) for x in prevL)
             assert len(current_set) > 2
@@ -1036,6 +1293,7 @@ def test_sample_prob():
 
 def test_schedules(verbose=False, test_random=False):
     #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
+    constraints = Constraints()
     halide.exit_on_signal()
     (f, g) = test_funcs()
     assert sorted(halide.all_vars(g).keys()) == sorted(['x', 'y', 'c']) #, 'v'])
@@ -1068,6 +1326,19 @@ def test_schedules(verbose=False, test_random=False):
     for i in range(1000):
         d = random_schedule(g, 1, DEFAULT_MAX_DEPTH)
         si = str(d)
+        si2 = str(Schedule.fromstring(g, si))
+        if si != si2:
+            print '-'*40
+            print 'd'
+            print d
+            print '-'*40
+            print 'si'
+            print si
+            print '-'*40
+            print 'si2'
+            print si2
+            raise ValueError
+        
         s.append(si)
         if verbose:
             print 'Schedule:'
@@ -1076,9 +1347,9 @@ def test_schedules(verbose=False, test_random=False):
             print '-'*20
             print
         sys.stdout.flush()
-        d.apply()
+        d.apply(constraints)
         if test_random:
-            evaluate = d.test((36, 36, 3), input)
+            evaluate = d.test((36, 36, 3), input, Constraints())
             print 'evaluate'
             evaluate()
             if test_random:
@@ -1093,7 +1364,7 @@ def test_schedules(verbose=False, test_random=False):
     assert 'f.root().split' in s
     assert 'f.root().tile' in s
     assert 'f.root().parallel' in s
-    assert 'f.root().transpose' in s
+    assert 'f.root().reorder' in s
 
     assert nvalid_random == 100
     if verbose:
@@ -1112,15 +1383,16 @@ def test_schedules(verbose=False, test_random=False):
     print 'randomized_const:  OK'
             
 def test():
-#    test_schedules(True)
+    random.seed(0)
     test_sample_prob()
+#    test_schedules(True)
     test_schedules()
     test_crossover()
     
 def main():
     args = sys.argv[1:]
     if len(args) == 0:
-        print 'autotune test|print|autotune|test_sched'
+        print 'autotune test|print|autotune examplename|test_sched|test_fromstring'
         sys.exit(0)
     if args[0] == 'test':
         test()
@@ -1157,12 +1429,47 @@ def main():
         print
         print 'Number successful schedules: %d/%d (%d failed)' % (nsuccess, nprint, nfail)
     elif args[0] == 'autotune':
-        (input, out_func, test_func, scope) = examples.blur()
+        if len(args) < 2:
+            print >> sys.stderr, 'expected 2 arguments to autotune'
+            sys.exit(1)
+        filter_func_name = args[1]
+        #(input, out_func, test_func, scope) = getattr(examples, examplename)()
+        (input, out_func, test_func, scope) = resolve_filter_func(filter_func_name)()
+        
+        seed_scheduleL = []
+        seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blurUInt16)\n' +
+                              'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
+        seed_scheduleL.append('')
+        seed_scheduleL.append('blur_y_blurUInt16.root()\nblur_x_blurUInt16.root()')
+        evaluate = halide.filter_image(input, out_func, DEFAULT_IMAGE)
+        evaluate()
+        T0 = time.time()
+        evaluate()
+        T1 = time.time()
+        print 'Time for default schedule: %.4f'%(T1-T0)
+        
         p = AutotuneParams()
-        autotune(input, out_func, p, constraints=Constraints([scope['input_clamped']]))
+        exclude = []
+        for key in scope:
+            if key.startswith('input_clamped'):
+                exclude.append(scope[key])
+        constraints = Constraints(exclude)
+        
+        autotune(filter_func_name, p, constraints=constraints, seed_scheduleL=seed_scheduleL)
     elif args[0] in ['test_sched']:
         #(input, out_func, test_func) = examples.blur()
         pass
+    elif args[0] == 'test_fromstring':
+        examplename = 'blur'
+        (input, out_func, test_func, scope) = getattr(examples, examplename)()
+        s = Schedule.fromstring(out_func, 'blur_x_blur0.root().parallel(y)\nblur_y_blur0.root().parallel(y).vectorize(x,8)')
+    elif args[0] == 'autotune_child_process':           # Child process for autotuner
+        rest = args[1:]
+        if len(rest) != 4:
+            raise ValueError('expected 4 args after autotune_child_process')
+        (filter_func_name, schedule_str, in_image, trials) = rest
+        trials = int(trials)
+        autotune_child_process(filter_func_name, schedule_str, in_image, trials)
     else:
         raise NotImplementedError('%s not implemented'%args[0])
 #    test_schedules()
