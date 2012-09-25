@@ -181,7 +181,7 @@ rule "Generate initial modules"
         ["-march=corei7"]
       else if arch = "x86_avx" then
         ["-march=corei7-avx"]
-      else if arch = "arm_android" then
+      else if arch = "arm_android" || arch = "arm" then
         ["-m32"]
       else
         []

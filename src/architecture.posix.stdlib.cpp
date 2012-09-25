@@ -44,7 +44,7 @@ WEAK void *safe_malloc(size_t x) {
     void *mem;
     x = ((x + 4095)/4096) * 4096;
     posix_memalign(&mem, 4096, x + 4096 * 3);
-    printf("Allocated %lu bytes at %p with an electric fence\n", x, mem);
+    printf("Allocated %u bytes at %p with an electric fence\n", (uint32_t)x, mem);
 
     // write the end address to unprotect in the initial fence
     ((void **)mem)[0] = PTR_OFFSET(mem, x + 4096);
