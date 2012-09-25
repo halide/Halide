@@ -28,25 +28,25 @@ namespace Halide {
     };
 
     DynImage::Contents::Contents(const Type &t, int a) : 
-        type(t), size{a}, stride{1}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
+        type(t), size(vec(a)), stride(vec(1)), name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         assert(a > 0 && "Images must have positive sizes\n");
         allocate(a * (t.bits/8));
     }
     
     DynImage::Contents::Contents(const Type &t, int a, int b) : 
-        type(t), size{a, b}, stride{1, a}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
+        type(t), size(vec(a, b)), stride(vec(1, a)), name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         assert(a > 0 && b > 0 && "Images must have positive sizes");
         allocate(a * b * (t.bits/8));
     }
     
     DynImage::Contents::Contents(const Type &t, int a, int b, int c) : 
-        type(t), size{a, b, c}, stride{1, a, a*b}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
+        type(t), size(vec(a, b, c)), stride(vec(1, a, a*b)), name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         assert(a > 0 && b > 0 && c > 0 && "Images must have positive sizes");
         allocate(a * b * c * (t.bits/8));
     }
 
     DynImage::Contents::Contents(const Type &t, int a, int b, int c, int d) : 
-        type(t), size{a, b, c, d}, stride{1, a, a*b, a*b*c}, name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
+        type(t), size(vec(a, b, c, d)), stride(vec(1, a, a*b, a*b*c)), name(uniqueName('i')), copyToHost(NULL), freeBuffer(NULL) {
         assert(a > 0 && b > 0 && c > 0 && d > 0 && "Images must have positive sizes");
         allocate(a * b * c * d * (t.bits/8));
     }
@@ -183,19 +183,19 @@ namespace Halide {
     }
 
     Expr DynImage::operator()(const Expr &a) const {
-        return ImageRef(*this, {a});
+        return ImageRef(*this, vec(a));
     }
 
     Expr DynImage::operator()(const Expr &a, const Expr &b) const {
-        return ImageRef(*this, {a, b});
+        return ImageRef(*this, vec(a, b));
     }
     
     Expr DynImage::operator()(const Expr &a, const Expr &b, const Expr &c) const {
-        return ImageRef(*this, {a, b, c});
+        return ImageRef(*this, vec(a, b, c));
     }
     
     Expr DynImage::operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) const {
-        return ImageRef(*this, {a, b, c, d});
+        return ImageRef(*this, vec(a, b, c, d));
     }
 
     struct UniformImage::Contents {
@@ -216,7 +216,7 @@ namespace Halide {
         }
 
         Type t;
-        std::unique_ptr<DynImage> image;
+        shared_ptr<DynImage> image;
         std::vector<Expr> sizes;
         const std::string name;
     };
@@ -260,19 +260,19 @@ namespace Halide {
     }
 
     Expr UniformImage::operator()(const Expr &a) const {
-      return UniformImageRef(*this, {a});
+        return UniformImageRef(*this, vec(a));
     }
 
     Expr UniformImage::operator()(const Expr &a, const Expr &b) const {
-      return UniformImageRef(*this, {a, b});
+        return UniformImageRef(*this, vec(a, b));
     }
 
     Expr UniformImage::operator()(const Expr &a, const Expr &b, const Expr &c) const {
-        return UniformImageRef(*this, {a, b, c});
+        return UniformImageRef(*this, vec(a, b, c));
     }
 
     Expr UniformImage::operator()(const Expr &a, const Expr &b, const Expr &c, const Expr &d) const {
-        return UniformImageRef(*this, {a, b, c, d});
+        return UniformImageRef(*this, vec(a, b, c, d));
     }
     
     Type UniformImage::type() const {

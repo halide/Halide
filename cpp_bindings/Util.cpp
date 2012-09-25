@@ -26,4 +26,5 @@ namespace Halide {
         }
         return result;
     }
+
 }
