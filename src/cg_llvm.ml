@@ -222,16 +222,11 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
 
     | Broadcast (e, n) -> 
         let elem_type = val_type_of_expr e in
-        let vec_type  = vector_of_val_type elem_type n in
         let expr      = cg_expr e in
-        let blank = undef (type_of_val_type vec_type) in
-        let result = build_insertelement blank expr (const_int int_imm_t 0) "" b in
-        let rec indices = function
-          | 0 -> []
-          | n -> (const_int int_imm_t 0)::(indices (n-1)) 
-        in
-        let indices = const_vector (Array.of_list (indices n)) in
-        let result = build_shufflevector result blank indices "" b in          
+        let blank     = const_null (vector_type (type_of expr) n) in
+        let result    = build_insertelement blank expr (const_int int_imm_t 0) "" b in
+        let indices = const_null (vector_type int_imm_t n) in 
+        let result  = build_shufflevector result blank indices "" b in 
         result
 
     | Ramp (base_expr, stride_expr, n) ->

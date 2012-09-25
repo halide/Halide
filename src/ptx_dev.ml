@@ -6,7 +6,7 @@ open Cg_llvm_util
 open Analysis
 open Constant_fold
 
-let shared_addrspace = 4
+let shared_addrspace = 3
 
 type state = {
   shared_mem_bytes : int ref;
@@ -99,12 +99,15 @@ let rec cg_stmt con stmt = match stmt with
                   "u64", build_pointercast mr (pointer_type (i64_type con.c)) "" con.b
               | _ -> failwith (Printf.sprintf "PTX atomics not supported for type %s" (string_of_val_type ty))
             in
+            failwith "PTX atomics temporarily disabled with new NVPTX backend";
+            (* TODO: replace old custom atomics with atomicrmw
             let intr = Printf.sprintf "llvm.ptx.red.%s.%s.%s" space op opty in
             let red = match lookup_function intr con.m with
               | Some f -> f
               | None -> failwith (Printf.sprintf "failed to find %s intrinsic" intr)
             in
             build_call red [| mr; (cg_expr con x) |] "" con.b
+            *)
             (* build_store (cg_expr con x) red con.b *)
             (* mr *)
         | _ -> con.cg_stmt stmt
