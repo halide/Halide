@@ -175,18 +175,35 @@ rule "Generate initial modules"
           "buffer.h";
           "bitcode2cpp.py"]
   begin fun env build ->
+    let arch = env "%(arch)" in
+    let ccflags =
+      if arch = "x86" or arch = "ptx" then
+        ["-march=corei7"]
+      else if arch = "x86_avx" then
+        ["-march=corei7-avx"]
+      else if arch = "arm_android" then
+        ["-m32"]
+      else
+        []
+    in
     let llstub = env "architecture.%(arch).stdlib.ll" in
     let llstubs =
-      if (env "%(arch)") = "ptx" then
+      if arch = "ptx" then
         let x86_ll = "architecture.x86.stdlib.ll" in
         let x86_cpp = "architecture.x86.stdlib.cpp" in
         ignore (build [[x86_ll; x86_cpp]]);
         [llstub; x86_ll]
+      else if arch = "x86_avx" then
+        let x86_ll = "architecture.x86.stdlib.ll" in
+        let x86_cpp = "architecture.x86.stdlib.cpp" in
+        ignore (build [[x86_ll; x86_cpp]]);
+        [x86_ll; llstub]
       else [llstub]
     in
     let c =
     Cmd(S([
-      llvm_tool "clang"; A"-emit-llvm"; A"-S"; P(env "architecture.%(arch).stdlib.cpp"); A"-o"; A"-";
+      A"clang"; A"-emit-llvm"; A"-O3"] @ (List.map (fun flag -> (A flag)) ccflags)
+      @ [A"-S"; P(env "architecture.%(arch).stdlib.cpp"); A"-o"; A"-";
       Sh " | ";
       A"grep"; A"-v"; A"^target triple";
       Sh " | ";
@@ -202,6 +219,5 @@ rule "Generate initial modules"
       Sh " > "; P(env "architecture.%(arch).initmod.c")
     ]))
     in
-    (* failwith (Command.to_string c); *)
     c
   end;;
