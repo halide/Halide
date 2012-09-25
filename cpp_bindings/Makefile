@@ -1,8 +1,4 @@
-ifneq ($(shell env -i command -v g++-4.7),)
-GXX ?= g++-4.7
-endif
-GXX ?= g++-4.6
-CXX=$(GXX) -Wall -Werror -ffast-math -fno-rtti -O3 -msse -Wl,-dead_strip
+CXX_FLAGS=-Wall -Werror -ffast-math -O3 -msse
 
 HEADERS = MLVal.h Util.h Var.h Type.h Uniform.h Expr.h Image.h Func.h Reduction.h Uniform.h Tuple.h
 
@@ -39,7 +35,7 @@ libHalide.a: $(HALIDE_OBJS) ../src/_build/libllsupport_impl.a
 	ranlib libHalide.a
 
 _build/%.o: %.cpp
-	$(CXX) $(GPU_CFLAGS) $(LLVM_CFLAGS_CXX) -I $(OCAML_LIB_DIR) -c $< -o $@
+	$(CXX) $(CXX_FLAGS) $(GPU_CFLAGS) $(LLVM_CFLAGS_CXX) -I $(OCAML_LIB_DIR) -c $< -o $@
 
 _build/_MLHalide.o: ../src/_build/halide.cmxa
 	mkdir -p _build
