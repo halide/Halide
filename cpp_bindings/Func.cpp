@@ -822,7 +822,8 @@ namespace Halide {
             if (contents->errorHandler) {
                 ptr = dlsym(handle, "set_error_handler");
                 assert(ptr && "Could not find set_error_handler in shared object file when pseudojitting");
-                void (*setErrorHandlerFn)(void (*)(char *)) = (void (*)(void (*)(char *)))ptr;
+                typedef void (*handler_t)(char *);
+                void (*setErrorHandlerFn)(handler_t) = (void (*)(void (*)(char *)))ptr;
                 setErrorHandlerFn(contents->errorHandler);
             }
             
@@ -989,7 +990,8 @@ namespace Halide {
             assert(setErrorHandler && 
                    "Could not find the set_error_handler function in the compiled module\n");
             ptr = Contents::ee->getPointerToFunction(setErrorHandler);
-            void (*setErrorHandlerFn)(void (*)(char *)) = (void (*)(void (*)(char *)))ptr;
+            typedef void (*handler_t)(char *);
+            void (*setErrorHandlerFn)(handler_t) = (void (*)(void (*)(char *)))ptr;
             setErrorHandlerFn(contents->errorHandler);
         }
     }

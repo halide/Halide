@@ -6,6 +6,7 @@
 
 #include "MLVal.h"
 #include "Type.h"
+#include "Uniform.h"
 
 namespace Halide {
 
@@ -13,16 +14,12 @@ namespace Halide {
     class RVar;
     class RDom;
     class FuncRef;
-    class DynUniform;
     class ImageRef;
     class Type;
     class DynImage;
     class Func;
     class UniformImage;
     class UniformImageRef;
-    
-    template<typename T>
-    class Uniform;
     
     // A node in an expression tree.
     class Expr {
