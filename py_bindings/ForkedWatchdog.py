@@ -45,7 +45,7 @@ class Watchdog(Exception):
             except OSError:
                 pass
 
-        if self.pid is 0: #not 0:           # In the parent
+        if self.pid is 0: #not 0:           # In the child
             #time.sleep(self.timeout)
             #print 'sleep while alive', self.parent_pid
             sleep_while_alive(self.timeout, self.parent_pid)
