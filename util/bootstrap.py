@@ -3,7 +3,7 @@
 
 import subprocess
 from os import chdir
-from os.path import isfile
+from os.path import isfile, isdir
 import sys
 
 from util import status
@@ -26,7 +26,7 @@ def check_llvm():
         llvm_config = Command(llvm_path+'/bin/llvm-config')
         ver = llvm_config('--version') # try calling llvm-config
         print ver
-        assert '3.1' in ver
+        assert '3.2' in ver 
         return True
     except:
         return False
@@ -39,6 +39,21 @@ ver = ocaml('-version')
 print ver
 assert '3.12' in ver
 print '...OK!'
+
+status('Testing for g++')
+from pbs import which
+assert which('g++')
+print '...OK!'
+
+platform = sys.platform.lower()
+if 'linux' in platform:
+    status('Testing for package libc6-dev-i386')
+    assert isfile('/usr/include/x86_64-linux-gnu/gnu/stubs-32.h')
+    print '...OK!'
+    
+    status('Testing for package libsexplib-camlp4-dev')
+    assert isdir('/usr/lib/ocaml/sexplib')
+    print '...OK!'
 
 # Submodule update/init
 # TODO: make --recursive optional
