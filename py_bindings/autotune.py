@@ -558,6 +558,8 @@ class Schedule:
         self.d = d
         self.genomelog = genomelog
         self.generation = generation
+        assert isinstance(index, int)
+        assert isinstance(generation, int)
         self.index = index
         self.identity_str = identity_str
 
@@ -586,6 +588,8 @@ class Schedule:
         return '\n'.join(ans) #join(['-'*40] + ans + ['-'*40])
 
     def identity(self):
+        #print self.generation
+        #print self.index
         return '%d_%d'%(self.generation,self.index) if self.identity_str is None else self.identity_str
     #def hash(self):
     #    return md5.md5(str(self)).hexdigest()[:10]
@@ -726,12 +730,15 @@ def caller_vars(root_func, func):
 # --------------------------------------------------------------------------------------------------------------
 
 class AutotuneParams:
-    pop_elitism_pct = 0.2
-    pop_crossover_pct = 0.3
-    pop_mutated_pct = 0.3
+    #pop_elitism_pct = 0.2
+    #pop_crossover_pct = 0.3
+    #pop_mutated_pct = 0.3
+    # Population sampling frequencies
+    prob_pop = {'elitism': 0.2, 'crossover': 0.3, 'mutated': 0.3, 'random': 0.2}
+    
     tournament_size = 5 #3
     mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
-    population_size = 128 #64
+    population_size = 5 #32 #128 #64
     
     # Different mutation modes (mutation is applied to each Func independently)
     prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2}
@@ -751,7 +758,8 @@ class AutotuneParams:
     run_timeout_mul = 5.0 #3.0           # Fastest run time multiplied by this factor is cutoff
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
     
-    crossover_mutate_prob = 0.3     # Probability that mutate() is called after crossover
+    crossover_mutate_prob = 0.15     # Probability that mutate() is called after crossover
+    crossover_random_prob = 0.1      # Probability that crossover is run with a randomly generated parent
     
     num_print = 10
 
@@ -858,12 +866,17 @@ def mutate(a, p, constraints):
 def select_and_crossover(prevL, p, root_func, constraints):
     a = tournament_select(prevL, p, root_func)
     b = tournament_select(prevL, p, root_func)
+    if random.random() < p.crossover_random_prob:
+        b = random_schedule(root_func, p.min_depth, p.max_depth)
     c = crossover(a, b, constraints)
     is_mutated = False
     if random.random() < p.crossover_mutate_prob:
         c = mutate(c, p, constraints)
         is_mutated = True
     c.genomelog = 'crossover(%s, %s)'%(a.identity(), b.identity()) + ('' if not is_mutated else '+'+c.genomelog.replace('(-1_-1)', '()'))
+#    if is_mutated:
+#        c.genomelog = 'XXXX'
+#        c.identity_str = 'XXXXX'
     return c
 
 def select_and_mutate(prevL, p, root_func, constraints):
@@ -898,8 +911,11 @@ class Constraints:
         for name in schedule.d:
             if name not in self.exclude_names:
                 d[name] = schedule.d[name]
-        return Schedule(schedule.root_func, d, schedule.genomelog, schedule.identity)
+        return Schedule(schedule.root_func, d, schedule.genomelog, schedule.generation, schedule.index, schedule.identity_str)
 
+class Duplicate(Exception):
+    pass
+    
 def next_generation(prevL, p, root_func, constraints, generation_idx):
     """"
     Get next generation using elitism/mutate/crossover/random.
@@ -914,7 +930,10 @@ def next_generation(prevL, p, root_func, constraints, generation_idx):
             schedule_strs.add(s)
             schedule.generation = generation_idx
             schedule.index = len(ans)
+            schedule.identity_str = None
             ans.append(schedule)
+        else:
+            raise Duplicate
             
     def do_crossover():
         append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints)))
@@ -922,19 +941,42 @@ def next_generation(prevL, p, root_func, constraints, generation_idx):
         append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints)))
     def do_random():
         append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)))
-        
-    random_pct = 1-p.pop_mutated_pct-p.pop_crossover_pct-p.pop_elitism_pct
+    def do_until_success(func):
+        while True:
+            try:
+                func()
+                return
+            except Duplicate:
+                continue
 
-    for i in range(int(p.population_size*p.pop_elitism_pct)):
+#    random_pct = 1-p.pop_mutated_pct-p.pop_crossover_pct-p.pop_elitism_pct
+
+    for i in range(int(p.population_size*p.prob_pop['elitism'])):
         if i < len(prevL):
-            append_unique(prevL[i])
-    for i in range(int(p.population_size*p.pop_crossover_pct)):
-        do_crossover()
-    for i in range(int(p.population_size*p.pop_mutated_pct)):
-        do_mutated()
-    for i in range(int(p.population_size*random_pct)):
-        do_random()
-        
+            append_unique(copy.copy(prevL[i]))
+    
+    # Normalize probabilities after removing elitism
+    P_total = p.prob_pop['crossover'] + p.prob_pop['mutated'] + p.prob_pop['random']
+    P_crossover = p.prob_pop['crossover']*1.0 / P_total
+    P_mutated   = p.prob_pop['mutated']*1.0 / P_total
+    P_random    = p.prob_pop['random']*1.0 / P_total
+    
+    nrest = p.population_size - len(ans)
+    ncrossover = int(P_crossover*nrest)
+    nmutated = int(P_mutated*nrest)
+    nrandom = nrest-ncrossover-nmutated
+    for i in range(ncrossover):
+#        print 'crossover %d/%d'%(i, ncrossover)
+        do_until_success(do_crossover)
+    for i in range(nmutated):
+#        print 'mutated %d/%d'%(i,nmutated)
+        do_until_success(do_mutated)
+    for i in range(nrandom):
+#        print 'random %d/%d'%(i,nrandom)
+        do_until_success(do_random)
+       
+    assert len(ans) == p.population_size, (len(ans), p.population_size)
+    """
     Pd = {'crossover': p.pop_crossover_pct, 'mutated': p.pop_mutated_pct, 'random': random_pct}
 
     while len(ans) < p.population_size:
@@ -947,7 +989,8 @@ def next_generation(prevL, p, root_func, constraints, generation_idx):
             do_random()
         else:
             raise ValueError('Unknown mode %s'%mode)
-
+    """
+    
     return ans
 
 class AutotuneTimer:
@@ -963,6 +1006,7 @@ def time_generation(L, p, test_func, timer, constraints, display_text=''):
     #Trun = [0.0]
     def time_schedule(current):
         info = test_func(current, constraints)()
+        print 'time_schedule', current, info
         timer.compile_time += info['compile']
         timer.run_time += info['run']
         return info['time']
@@ -1038,7 +1082,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
         def out():
             schedule_str = str(schedule).strip()
             if schedule_str in cache and allow_cache:
-                return lambda: cache[schedule_str]
+                return cache[schedule_str]
             
             Tstart_subproc = time.time()
             fout = tempfile.TemporaryFile()
@@ -1187,10 +1231,10 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
         
         bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
         display_text = '-'*40 + '\n'
-        display_text += 'Generation %d'%(gen+1) + '\n'
+        display_text += 'Generation %d'%(gen) + '\n'
         display_text += '-'*40 + '\n'
         for (j, (timev, current)) in list(enumerate(bothL))[:p.num_print]:
-            display_text += '%.4f %s' % (timev, repr(str(current))) + '\n'
+            display_text += '%10.4f %-4s %s' % (timev, current.identity(), repr(str(current))) + '\n'
         display_text += '\n'
         print display_text
         sys.stdout.flush()
@@ -1487,7 +1531,8 @@ def main():
             if key.startswith('input_clamped'):
                 exclude.append(scope[key])
         constraints = Constraints(exclude)
-        p.population_size = 1000
+        p.population_size = 300 #1000
+        p.tournament_size = 1
         
         currentL = []
         for seed in seed_scheduleL:
