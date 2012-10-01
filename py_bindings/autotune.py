@@ -656,7 +656,7 @@ class Schedule:
         return halide.filter_image(input, self.root_func, in_image, eval_func=eval_func)
     
     @staticmethod
-    def fromstring(root_func, s, genomelog=''):
+    def fromstring(root_func, s, genomelog='', generation=-1, index=-1):
         """
         Constructor from a string s such as 'f.root().parallel(y)\ng.chunk(y)' (same format as returned by str() method).
         """
@@ -682,7 +682,7 @@ class Schedule:
             else:
                 ans[name] = d[name]
         halide.visit_funcs(root_func, callback)
-        return Schedule(root_func, ans, genomelog)
+        return Schedule(root_func, ans, genomelog, generation, index)
 
 def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}):
     """
@@ -738,7 +738,7 @@ class AutotuneParams:
     
     tournament_size = 5 #3
     mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
-    population_size = 5 #32 #128 #64
+    population_size = 128 #5 #32 #128 #64
     
     # Different mutation modes (mutation is applied to each Func independently)
     prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2}
@@ -1211,7 +1211,7 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
     
     currentL = []
     for (iseed, seed) in enumerate(seed_scheduleL):
-        currentL.append(constraints.constrain(Schedule.fromstring(out_func, seed, 'seed(%d)'%iseed)))
+        currentL.append(constraints.constrain(Schedule.fromstring(out_func, seed, 'seed(%d)'%iseed, 0, iseed)))
         #print 'seed_schedule new_vars', seed_schedule.new_vars()
 #        currentL.append(seed_schedule)
 #        currentL.append(Schedule.fromstring(out_func, ''))
