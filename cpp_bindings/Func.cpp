@@ -398,7 +398,7 @@ namespace Halide {
 
     void *watchdog(void *arg) {
         useconds_t t = ((useconds_t *)arg)[0];
-        printf("Watchdog sleeping for %d microseconds\n", t);
+        printf("Watchdog sleeping for %d microseconds\n", static_cast<int>(t));
         usleep(t);
         printf("Took too long, bailing out\n");
         exit(-1);
@@ -420,7 +420,7 @@ namespace Halide {
             for (int i = 0; i < 5; i++) realize(im);
             gettimeofday(&after, NULL);            
             useconds_t t = (after.tv_sec - before.tv_sec) * 1000000 + (after.tv_usec - before.tv_usec);
-            printf("%d\n", t);
+            printf("%d\n", static_cast<int>(t));
             return 0;
         }        
 
@@ -449,7 +449,7 @@ namespace Halide {
         for (int i = 0; i < 5; i++) realize(im);
         gettimeofday(&after, NULL);            
         useconds_t t = (after.tv_sec - before.tv_sec) * 1000000 + (after.tv_usec - before.tv_usec);
-        printf("%d\n", t);        
+        printf("%d\n", static_cast<int>(t));        
         return 0;
     }
 
