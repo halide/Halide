@@ -1,6 +1,6 @@
 from distutils.core import setup
 from distutils.extension import Extension
-from Cython.Distutils import build_ext
+#from Cython.Distutils import build_ext
 
 import os
 
@@ -15,6 +15,6 @@ ext_modules = [Extension("_cHalide", ["cHalide_wrap.cxx", 'py_util.cpp', 'enviro
 
 setup(
   name = 'Halide binding',
-  cmdclass = {'build_ext': build_ext},
+#  cmdclass = {'build_ext': build_ext},
   ext_modules = ext_modules
 )
