@@ -1,4 +1,5 @@
 import sys; sys.path += ['..', '.']
+import math
 from halide import *
 
 int_t = Int(32)
@@ -20,7 +21,6 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
     lap_counter=[0]
     distReg_counter=[0]
     Dirac_counter=[0]
-    print 'a'
     
     def dx(f):
         out = Func('dx%d'%dx_counter[0]+s)
@@ -115,12 +115,8 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
 
         # Convolve the input using two reductions
         blurx, blury = Func('blurx'+s), Func('blury'+s)
-#        print image[x+i, y] * normalized[i]
-#        print 'a', im.width(), im.height()
-#        print blurx[x,y]
         blurx[x, y] = 0.0
         blurx[x, y] += image[x+i, y] * normalized[i]
-#        print 'b'
         blury[x, y] = 0.0
         blury[x, y] += blurx[x, y+i] * normalized[i]
 
@@ -144,19 +140,15 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
     padding = 5
     background = 255.0 * 0.98
     selectPadding = 10
-    print 'b'
 
     im = Image(UInt(8), in_filename)
-    print 'c'
 
     gray = Func('gray'+s)
     gray[x, y] = max(cast(float_t, im[x, y, 0]), max(cast(float_t, im[x, y, 1]), cast(float_t, im[x, y, 2])))
-    print 'd'
 
     clamped = Func('clamped'+s)
-    clamped[x, y] = gray[clamp(x, cast(int_t, 0), cast(int_t, im.width())),
-                         clamp(y, cast(int_t, 0), cast(int_t, im.height()))]
-    print 'e'
+    clamped[x, y] = gray[clamp(x, cast(int_t, 0), cast(int_t, im.width()-1)),
+                         clamp(y, cast(int_t, 0), cast(int_t, im.height()-1))]
     
     blurred_input = Func('blurred_input'+s)
     blurred_input.assign(blur(clamped,sigma))
@@ -167,22 +159,17 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
 
     g_proxy = Func('g_proxy'+s)
     g_proxy.assign(1.0 / (1.0 + input_dx * input_dx + input_dy * input_dy))
-    print 'f'
-    print im.width(), im.height()
     
     g_buf = g_proxy.realize(im.width(), im.height())
-    print 'f2'
 
     phi_init = Func('phi_init'+s)
-    print 'f3'
     phi_init[x,y] = select((x >= selectPadding)
                             & (x < im.width() - selectPadding)
                             & (y >= selectPadding)
                             & (y < im.height() - selectPadding),
                             -2.0, 2.0)
-    print 'f4'
+
     phi_input = UniformImage(Float(32), 2)
-    print 'g'
 
     phi_clamped = Func('phi_clamped'+s)
     phi_clamped[x,y] = phi_input[clamp(x,cast(int_t,0),cast(int_t,im.width()-1)),
@@ -191,22 +178,17 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
     g_clamped = Func('g_clamped'+s)
     g_clamped[x, y] = g_buf[clamp(x, cast(int_t,0), cast(int_t,g_buf.width()-1)),
                             clamp(y, cast(int_t,0), cast(int_t,g_buf.height()-1))]
-    print 'h'
 
     phi_new = Func('phi_new'+s)
     phi_new.assign(drlse_edge(phi_clamped,g_clamped,lambd,mu,alpha,epsilon,timestep,iter_inner))
-    print 'i'
 
     def evaluate(in_png):
-        print 'Snake evaluate'
         T0 = time.time()
-        print 'realize phi_buf'
         phi_buf = phi_init.realize(im.width(), im.height())
-        print 'realize phi_buf2'
         phi_buf2 = Image(float_t, im.width(), im.height())
         for n in range(iter_outer):
-#            if n%10 == 9:
-            print 'Iteration %d / %d. Average time per iteration = %f ms'%(n+1, iter_outer, time.time()-T0)
+            if n%10 == 9:
+                print 'Iteration %d / %d. Average time per iteration = %f ms'%(n+1, iter_outer, time.time()-T0)
             phi_input.assign(phi_buf)
             phi_new.realize(phi_buf2)
             phi_buf, phi_buf2 = phi_buf2, phi_buf
@@ -219,7 +201,6 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
     #Image(UInt(8),out).save('snake_out.png')
 
     root_all(phi_new)
-    print 'j'
 
     ans = (im, phi_new, evaluate, locals())
     cache[dtype_s] = ans
@@ -228,7 +209,6 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
-    print 'got filter func'
     filter_image(input, out_func, os.path.join(inputs_dir(), 'blood_cells_small.png'), eval_func=evaluate)().show()
 
 if __name__ == '__main__':
