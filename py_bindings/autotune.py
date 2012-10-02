@@ -88,6 +88,7 @@ import tempfile
 import subprocess
 import examples
 import md5
+import signal
 random_module = random
 
 LOG_SCHEDULES = True      # Log all tried schedules (Fail or Success) to a text file
@@ -763,6 +764,8 @@ class AutotuneParams:
     
     num_print = 10
 
+    parallel_compile_nproc = None   # Number of processes to use for parallel compile (None defaults to number of virtual cores)
+
 def sample_prob(d):
     "Randomly sample key from dictionary with probabilities given in values."
     items = d.items()
@@ -1000,13 +1003,14 @@ class AutotuneTimer:
     def __init__(self):
         self.start_time = time.time()
     
-def time_generation(L, p, test_func, timer, constraints, display_text=''):
+def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
     #T0 = time.time()
     #Tcompile = [0.0]
     #Trun = [0.0]
-    def time_schedule(current):
-        info = test_func(current, constraints)()
-        print 'time_schedule', current, info
+    test_gen_iter = test_gen_func(L, constraints)
+    def time_schedule():
+        info = test_gen_iter.next() #test_func(current, constraints)()
+        #print 'time_schedule', current, info
         timer.compile_time += info['compile']
         timer.run_time += info['run']
         return info['time']
@@ -1024,7 +1028,8 @@ def time_generation(L, p, test_func, timer, constraints, display_text=''):
         Tstart = time.time()
         if AUTOTUNE_VERBOSE:
             print 'Timing %d/%d'%(i, len(L)),
-        ans.append(time_schedule(L[i]))
+        ans.append(time_schedule())
+        #ans.append(time_schedule(L[i]))
         success += ans[-1] < COMPILE_TIMEOUT
         timer.total_time = time.time()-timer.start_time
         stats_str = 'pid=%d, %.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (os.getpid(), success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
@@ -1077,16 +1082,26 @@ def autotune_child_process(filter_func_name, schedule_str, in_image, trials):
 def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=True):
     cache = {}
     best_run_time = [p.run_timeout_default]
+
+    #def signal_handler(signum, stack_frame):            # SIGCHLD is sent by default when child process terminates
+    #    f = open('parent_%d.txt'%random.randrange(1000**2),'wt')
+    #    f.write('')
+    #    f.close()
+    #signal.signal(signal.SIGCONT, signal_handler)
     
-    def test_func(schedule, constraints):       # FIXME: Handle constraints
-        def out():
+    def test_func(scheduleL, constraints):       # FIXME: Handle constraints
+        for schedule in scheduleL:
             schedule_str = str(schedule).strip()
             if schedule_str in cache and allow_cache:
-                return cache[schedule_str]
-            
+                yield cache[schedule_str]
+                continue
+                
             Tstart_subproc = time.time()
             fout = tempfile.TemporaryFile()
-            proc = subprocess.Popen(['python', 'autotune.py', 'autotune_child_process', filter_func_name, schedule_str, in_image, '%d'%p.trials], stdout=fout)
+            proc = subprocess.Popen(['python', 'autotune.py', 'autotune_child_process', filter_func_name, schedule_str, in_image, '%d'%p.trials, str(os.getpid())], stdout=fout)
+            #time.sleep(1.0)
+            #proc.send_signal(signal.SIGCHLD)
+
             timeout = p.compile_timeout + p.run_timeout_mul*best_run_time[0]
             
             # Wait for subprocess to terminate (up to timeout)
@@ -1103,7 +1118,8 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-Tstart_subproc, 'run': 0.0}
                 cache[schedule_str] = ans
                 log_sched(schedule, 'Fail compile #1, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
-                return ans
+                yield ans
+                continue
                 
             fout.seek(0)
             s = fout.read()
@@ -1115,14 +1131,15 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-Tstart_subproc, 'run': 0.0}
                 cache[schedule_str] = ans
                 log_sched(schedule, 'Fail compile #2, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
-                return ans
+                yield ans
+                continue
                 
             (flag, T, Tcompile, Trun) = line.split()
             ans = {'time': float(T), 'compile': float(Tcompile), 'run': float(Trun)}
             cache[schedule_str] = ans
             log_sched(schedule, 'Success, compile=%.4f, run=%.4f, time_best=%.4f'%(ans['compile'], ans['run'], ans['time']))
-            return ans
-        return out
+            yield ans
+        #return out
     return test_func
     
     """
@@ -1582,11 +1599,19 @@ def main():
         (input, out_func, test_func, scope) = getattr(examples, examplename)()
         s = Schedule.fromstring(out_func, 'blur_x_blur0.root().parallel(y)\nblur_y_blur0.root().parallel(y).vectorize(x,8)')
     elif args[0] == 'autotune_child_process':           # Child process for autotuner
+        #def child_handler(signum, stack_frame):
+        #    f = open('child_%d.txt'%random.randrange(1000**2),'wt')
+        #    f.write('')
+        #    f.close()
+        #signal.signal(signal.SIGCHLD, child_handler)
+        #time.sleep(1.0)
         rest = args[1:]
-        if len(rest) != 4:
-            raise ValueError('expected 4 args after autotune_child_process')
-        (filter_func_name, schedule_str, in_image, trials) = rest
+        if len(rest) != 5:
+            raise ValueError('expected 5 args after autotune_child_process')
+        (filter_func_name, schedule_str, in_image, trials, parent_pid) = rest
         trials = int(trials)
+        parent_pid = int(parent_pid)
+        #os.kill(parent_pid, signal.SIGCONT)
         autotune_child_process(filter_func_name, schedule_str, in_image, trials)
     else:
         raise NotImplementedError('%s not implemented'%args[0])
