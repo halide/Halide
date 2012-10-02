@@ -328,6 +328,7 @@ def image_getattr(self, name):
 
 for _ImageT in ImageTypes:
     _ImageT.__getitem__ = _generic_getitem
+    _ImageT.type = lambda x: DynImage(x).type()
 
 def show_image(I):
     A = numpy.asarray(I)
