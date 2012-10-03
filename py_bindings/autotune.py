@@ -89,6 +89,7 @@ import subprocess
 import examples
 import md5
 import signal
+import multiprocessing
 random_module = random
 
 LOG_SCHEDULES = True      # Log all tried schedules (Fail or Success) to a text file
@@ -756,7 +757,7 @@ class AutotuneParams:
     generations = 500
     
     compile_timeout = 5.0
-    run_timeout_mul = 5.0 #3.0           # Fastest run time multiplied by this factor is cutoff
+    run_timeout_mul = 2.0 #3.0           # Fastest run time multiplied by this factor is cutoff
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
     
     crossover_mutate_prob = 0.15     # Probability that mutate() is called after crossover
@@ -764,7 +765,7 @@ class AutotuneParams:
     
     num_print = 10
 
-    parallel_compile_nproc = None   # Number of processes to use for parallel compile (None defaults to number of virtual cores)
+    parallel_compile_nproc = None   # Number of processes to use simultaneously for parallel compile (None defaults to number of virtual cores)
 
 def sample_prob(d):
     "Randomly sample key from dictionary with probabilities given in values."
@@ -1051,8 +1052,11 @@ def log_sched(schedule, s, no_output=False, f=[]):
         f[0].write('-'*40 + '\n' + schedule.title() + '\n' + str(schedule) + '\n' + s + '\n')
         f[0].flush()
 
+FAILURE_BASE    = 10000.0
 COMPILE_TIMEOUT = 10001.0
-RUN_TIMEOUT     = 10002.0
+COMPILE_FAIL    = 10002.0
+RUN_TIMEOUT     = 10003.0
+RUN_FAIL        = 10004.0
 
 def autotune_child_process(filter_func_name, schedule_str, in_image, trials):
     (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
@@ -1079,10 +1083,45 @@ def autotune_child_process(filter_func_name, schedule_str, in_image, trials):
     
     print 'Success', T, Tcompile, Trun
 
+def wait_timeout(subproc, timeout):
+    "Wait for subprocess to end (returns return code) or timeout (returns None)."
+    SLEEP_TIME = 0.03
+    T0 = time.time()
+    while True:
+        p = proc.poll()
+        if p is not None:
+            return p
+        if time.time() > T0+timeout:
+            return None
+        time.sleep(SLEEP_TIME)
+
+def run_timeout(L, timeout, last_line=False):
+    """
+    Run shell command in list form, e.g. L=['python', 'autotune.py'], using subprocess.
+    
+    Returns None on timeout otherwise str output of subprocess (if last_line just return the last line).
+    """
+    fout = tempfile.TemporaryFile()
+    proc = subprocess.Popen(L, stdout=fout)
+    
+    status = wait_timeout(proc, p.compile_timeout)
+    if status is None:
+        return None
+
+    fout.seek(0)
+    ans = fout.read()
+    if last_line:
+        ans = ans.strip().split('\n')[-1].strip()
+    return ans
+
 def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=True):
     cache = {}
     best_run_time = [p.run_timeout_default]
 
+    nproc = p.parallel_compile_nproc
+    if nproc is None:
+        nproc = multiprocessing.cpu_count()
+    
     #def signal_handler(signum, stack_frame):            # SIGCHLD is sent by default when child process terminates
     #    f = open('parent_%d.txt'%random.randrange(1000**2),'wt')
     #    f.write('')
@@ -1090,56 +1129,56 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
     #signal.signal(signal.SIGCONT, signal_handler)
     
     def test_func(scheduleL, constraints):       # FIXME: Handle constraints
-        for schedule in scheduleL:
-            schedule_str = str(schedule).strip()
-            if schedule_str in cache and allow_cache:
-                yield cache[schedule_str]
-                continue
-                
-            Tstart_subproc = time.time()
-            fout = tempfile.TemporaryFile()
-            proc = subprocess.Popen(['python', 'autotune.py', 'autotune_child_process', filter_func_name, schedule_str, in_image, '%d'%p.trials, str(os.getpid())], stdout=fout)
-            #time.sleep(1.0)
-            #proc.send_signal(signal.SIGCHLD)
-
-            timeout = p.compile_timeout + p.run_timeout_mul*best_run_time[0]
+        # Compile all schedules in parallel
+        def compile_schedule(schedule):
+            schedule_str = str(schedule)
+            if schedule_str in cache:
+                return cache[schedule_str]
             
-            # Wait for subprocess to terminate (up to timeout)
-            SLEEP_TIME = 0.03
             T0 = time.time()
-            success = False
-            while time.time() < T0+timeout:
-                if proc.poll() is not None:
-                    success = True
-                    break
-                time.sleep(SLEEP_TIME)
-            if not success:
+            out = run_timeout(['python', 'autotune.py', 'autotune_compile_child', filter_func_name, schedule_str, in_image, '%d'%p.trials, str(os.getpid())], p.compile_timeout, last_line=True)
+            Tcompile = time.time()-T0
+            
+            if out is None:
                 proc.kill()
-                ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-Tstart_subproc, 'run': 0.0}
-                cache[schedule_str] = ans
-                log_sched(schedule, 'Fail compile #1, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
-                yield ans
-                continue
+                return {'time': COMPILE_TIMEOUT, 'compile': Tcompile, 'run': 0.0}
+            if not out.startswith('Success'):
+                proc.kill()
+                return {'time': COMPILE_FAIL, 'compile': Tcompile, 'run': 0.0}
+            return {'time': 0.0, 'compile': Tcompile, 'run': 0.0}
+        
+        compiledL = threadmap.map(compile_schedule, scheduleL)
+        
+        assert len(compiledL) == len(scheduleL)
+        
+        # Run schedules in serial
+        def run_schedule(i):
+            schedule = scheduleL[i]
+            compiled_ans = compiledL[i]
+            if compiled_ans['time'] >= FAILURE_BASE:
+                return compiled_ans
                 
-            fout.seek(0)
-            s = fout.read()
-            if len(s) > 0:
-                line = s.strip().split('\n')[-1].strip()
-            else:
-                line = ''
-            if not line.startswith('Success') or len(line.split()) != 4:
-                ans = {'time': COMPILE_TIMEOUT, 'compile': time.time()-Tstart_subproc, 'run': 0.0}
-                cache[schedule_str] = ans
-                log_sched(schedule, 'Fail compile #2, compile=%.4f, run=%.4f'%(ans['compile'], ans['run']))
-                yield ans
-                continue
-                
-            (flag, T, Tcompile, Trun) = line.split()
-            ans = {'time': float(T), 'compile': float(Tcompile), 'run': float(Trun)}
-            cache[schedule_str] = ans
-            log_sched(schedule, 'Success, compile=%.4f, run=%.4f, time_best=%.4f'%(ans['compile'], ans['run'], ans['time']))
-            yield ans
-        #return out
+            schedule_str = str(schedule)
+            if schedule_str in cache:
+                return cache[schedule_str]
+
+            T0 = time.time()
+            out = run_timeout(['python', 'autotune.py', 'autotune_run_child', filter_func_name, schedule_str, in_image, '%d'%p.trials, str(os.getpid())], p.compile_timeout, last_line=True)
+            Trun = time.time()-T0
+            
+            if out is None:
+                proc.kill()
+                return {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': Trun}
+            if not out.startswith('Success') or len(out.split()) != 2:
+                proc.kill()
+                return {'time': RUN_FAIL, 'compile': compiled_ans['compile'], 'run': Trun}
+            
+            return {'time': float(out.split()[1]), 'compile': compiled_ans['compile'], 'run': Trun}
+            
+        runL = map(run_schedule, range(len(scheduleL)))
+        
+        return runL
+        
     return test_func
     
     """
@@ -1598,7 +1637,7 @@ def main():
         examplename = 'blur'
         (input, out_func, test_func, scope) = getattr(examples, examplename)()
         s = Schedule.fromstring(out_func, 'blur_x_blur0.root().parallel(y)\nblur_y_blur0.root().parallel(y).vectorize(x,8)')
-    elif args[0] == 'autotune_child_process':           # Child process for autotuner
+    elif args[0] in ['autotune_compile_child', 'autotune_run_child']:           # Child process for autotuner
         #def child_handler(signum, stack_frame):
         #    f = open('child_%d.txt'%random.randrange(1000**2),'wt')
         #    f.write('')
@@ -1612,6 +1651,12 @@ def main():
         trials = int(trials)
         parent_pid = int(parent_pid)
         #os.kill(parent_pid, signal.SIGCONT)
+        if random.random() < 0.5:
+            print 'Success %.4f'%random.random()
+        else:
+            print 'Failure'
+        sys.exit(0)
+        
         autotune_child_process(filter_func_name, schedule_str, in_image, trials)
     else:
         raise NotImplementedError('%s not implemented'%args[0])
