@@ -1,6 +1,6 @@
 all: cHalide.i #halide.pyx #environ_fix
 	swig -c++ -python -I../cpp_bindings cHalide.i
-	CXX="g++-4.6" CC="g++-4.6" python setup.py build_ext --inplace
+	CXX=g++ CC=g++ python setup.py build_ext --inplace
 #	python setup.py build_ext --inplace
 
 #environ_fix: environ_fix.cpp
