@@ -11,7 +11,7 @@ import time, thread, traceback, Queue, random, time
 
 builtin_map = map
 
-__version__ = '1.0.1'
+__version__ = '1.0.2'
 
 # Change in 1.01: Includes map(..., dynamic=True) option for dynamic load balancing.
 
@@ -74,7 +74,7 @@ def map(f, *a, **kw):
         else:
           ans[start:end] = [f(*x) for x in L[start:end]]
       except Exception, e:
-        q.put(e)
+        q.put(sys.exc_info())
       else:
         q.put(None)
 
@@ -87,7 +87,6 @@ def map(f, *a, **kw):
         while 1:
           try:
             (idx, item) = qdyn.pop()
-            print 'handle_dynamic', (idx, item), 'in', thread.get_ident()
           except IndexError:
             break
           if len(a) == 1:
@@ -95,7 +94,7 @@ def map(f, *a, **kw):
           else:
             ans[idx] = f(*item)
       except Exception, e:
-        q.put(e)
+        q.put(sys.exc_info())
       else:
         q.put(None)
 
@@ -104,7 +103,7 @@ def map(f, *a, **kw):
   for i in range(n):
     x = q.get()
     if x is not None:
-      raise x
+      raise x[1], None, x[2]
   return ans
 
 def bench():
