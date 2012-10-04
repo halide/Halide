@@ -784,32 +784,42 @@ def sample_prob(d):
     
 def crossover(a, b, constraints):
     "Cross over two schedules, using 2 point crossover."
-    a = constraints.constrain(a)
-    b = constraints.constrain(b)
-    funcL = halide.all_funcs(a.root_func, True)
-    names = [x[0] for x in funcL]
-    assert a.root_func is b.root_func
-    aset = set(a.d.keys())
-    bset = set(b.d.keys())
-    assert aset == bset, (aset, bset) #== set(names)
-    names = [x for x in names if x in aset]
-    
-    if random.randrange(2) == 0:
-        (a, b) = (b, a)
+    a0 = a
+    b0 = b
+    while True:
+        a = constraints.constrain(copy.copy(a0))
+        b = constraints.constrain(copy.copy(b0))
+        funcL = halide.all_funcs(a.root_func, True)
+        names = [x[0] for x in funcL]
+        assert a.root_func is b.root_func
+        aset = set(a.d.keys())
+        bset = set(b.d.keys())
+        assert aset == bset, (aset, bset) #== set(names)
+        names = [x for x in names if x in aset]
+        
+        if random.randrange(2) == 0:
+            (a, b) = (b, a)
 
-    d = {}
-    i1 = random.randrange(len(names))
-    i2 = random.randrange(len(names))
-    (i1, i2) = (min(i1, i2), max(i1, i2))
-    if i1 == 0 and i2 == len(names)-1:
-        i2 -= 1
-    for i in range(len(names)):
-        if i1 <= i <= i2:
-            d[names[i]] = copy.copy(a.d[names[i]])
-        else:
-            d[names[i]] = copy.copy(b.d[names[i]])
-    
-    return Schedule(a.root_func, d)
+        d = {}
+        i1 = random.randrange(len(names))
+        i2 = random.randrange(len(names))
+        (i1, i2) = (min(i1, i2), max(i1, i2))
+        if i1 == 0 and i2 == len(names)-1:
+            i2 -= 1
+        for i in range(len(names)):
+            if i1 <= i <= i2:
+                d[names[i]] = copy.copy(a.d[names[i]])
+            else:
+                d[names[i]] = copy.copy(b.d[names[i]])
+        
+        ans = Schedule(a.root_func, d)
+        
+        try:
+            ans.apply(constraints)       # Apply schedule to determine if crossover invalidated new variables that were referenced
+        except (NameError, halide.ScheduleError):
+            continue
+
+        return ans
 
 def mutate(a, p, constraints):
     "Mutate existing schedule using AutotuneParams p."
@@ -1404,6 +1414,9 @@ def test_crossover(verbose=False):
         def test_generation(L, prevL):
             assert len(L) == p.population_size
             for x in L:
+                #print '-'*40
+                #print x.title()
+                #print x
                 x.apply(constraints)
             current_set = set(str(x) for x in L)
             prev_set = set(str(x) for x in prevL)
