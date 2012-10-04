@@ -1,6 +1,7 @@
 from distutils.core import setup
 from distutils.extension import Extension
 #from Cython.Distutils import build_ext
+import os, os.path
 
 import subprocess
 
@@ -15,6 +16,17 @@ ext_modules = [Extension("_cHalide", ["cHalide_wrap.cxx", 'py_util.cpp', 'enviro
                          ##extra_link_args=[], #['../cpp_bindings/Halide.a'],
                          extra_link_args=['../cpp_bindings/libHalide.a', '-lpthread', '-ldl', '-lstdc++', '-lc']+png_ldflags.split(),
                          language='c++')]
+
+for (infile, outfile) in [('apollo2.jpg', 'apollo2.png')]:
+  if not os.path.exists(outfile):
+    os.system('convert %s %s' % (infile, outfile))
+    if not os.path.exists(outfile):
+      try:
+        import Image
+        Image.open(infile).save(outfile)
+        assert os.path.exists(outfile)
+      except:
+        raise ValueError('Could not convert (via ImageMagick or Python Image library) %s => %s' % (infile, outfile))
 
 setup(
   name = 'Halide binding',
