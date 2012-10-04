@@ -2,6 +2,9 @@
 #include <memory>
 #include <limits>
 
+#include <tr1/memory>
+using std::tr1::shared_ptr;
+
 #ifndef buffer_t_defined
 #define buffer_t_defined
 #include <stdint.h>
@@ -20,6 +23,7 @@ extern "C" void __copy_to_host(buffer_t* buf);
 template<typename T>
 class Image {
     struct Contents {
+        Contents(buffer_t b, uint8_t* a) {buf = b; alloc = a;}
         buffer_t buf;
         uint8_t *alloc;
         ~Contents() {
@@ -27,7 +31,7 @@ class Image {
         }        
     };
 
-    std::shared_ptr<Contents> contents;
+    shared_ptr<Contents> contents;
 
     void initialize(int w, int h, int c) {
         buffer_t buf;
@@ -43,7 +47,7 @@ class Image {
         buf.dev_dirty = false;
         buf.dev = 0;
         while ((size_t)buf.host & 0xf) buf.host++; 
-        contents.reset(new Contents {buf, ptr});
+        contents.reset(new Contents(buf, ptr));
     }
 
 public:
@@ -56,6 +60,7 @@ public:
 
     T *data() {return (T*)contents->buf.host;}
 
+#if 0 // disabled for pre-C++-11 compatibility
     Image(std::initializer_list<T> l) {
         initialize(l.size(), 1, 1);
         int x = 0;
@@ -75,7 +80,20 @@ public:
             y++;
         }
     }
+#endif
+    Image(T vals[]) {
+        initialize(sizeof(vals)/sizeof(T), 1, 1);
+        for (int i = 0; i < sizeof(vals); i++) (*this)(i, 0, 0) = vals[i];
+    }
 
+    void copy(T* vals, int width, int height) {
+        // initialize(width, height, 1);
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < height; x++) {
+                (*this)(x, y, 0) = vals[y * width + x];
+            }
+        }
+    }
 
     T &operator()(int x, int y = 0, int c = 0) {
         // copy back if needed
