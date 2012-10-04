@@ -19,7 +19,7 @@ curved.o: curved.bc
 	cat curved.bc | opt -O3 | llc -O3 -filetype=obj > curved.o
 
 process: process.cpp curved.o
-	$(CXX) -Wall -O3 process.cpp curved.o -o process -lpthread -ldl $(CUDA_LFLAGS) $(PNGFLAGS)
+	$(CXX) -I../../support -Wall -O3 process.cpp curved.o -o process -lpthread -ldl $(CUDA_LFLAGS) $(PNGFLAGS)
 
 out.png: process raw.png
 	./process raw.png 3700 2.0 50 out.png

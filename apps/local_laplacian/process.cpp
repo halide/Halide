@@ -2,8 +2,8 @@
 extern "C" {
 #include "local_laplacian.h"
 }
-#include "../Util.h"
-#include "../png.h"
+#include <static_image.h>
+#include <image_io.h>
 #include <sys/time.h>
 
 int main(int argc, char **argv) {

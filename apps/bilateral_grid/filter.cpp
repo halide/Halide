@@ -7,8 +7,8 @@ extern "C" {
   #include "bilateral_grid.h"
 }
 
-#include "../Util.h"
-#include "../png.h"
+#include <static_image.h>
+#include <image_io.h>
 
 int main(int argc, char **argv) {
 

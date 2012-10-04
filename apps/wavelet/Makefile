@@ -24,7 +24,7 @@ $(HL_MODULES): wavelet
 	cat $< | opt -O3 | llc -O3 -filetype=obj -o=$@
 
 filter.o: filter.cpp $(HL_MODULES:%.bc=%.o)
-	$(GXX) -std=c++0x -O3 -c filter.cpp
+	$(GXX) $(PNGFLAGS) -I../../support -std=c++0x -O3 -c filter.cpp
 
 filter: filter.o $(HL_MODULES:%.bc=%.o)
 	$(GXX) filter.o $(HL_MODULES:%.bc=%.o) $(PNGFLAGS) $(CUDA_LFLAGS) -o filter -pthread

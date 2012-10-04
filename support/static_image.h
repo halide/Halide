@@ -1,3 +1,11 @@
+// This header defines a simple Image class which wraps a buffer_t. This is
+// useful when interacting with a statically-compiled Halide pipeline emitted by
+// Func::compileToFile, when you do not want to link your processing program
+// against Halide.h/libHalide.a.
+
+#ifndef _STATIC_IMAGE_H
+#define _STATIC_IMAGE_H
+
 #include <stdint.h>
 #include <memory>
 #include <limits>
@@ -137,3 +145,4 @@ public:
 
 };
 
+#endif //_STATIC_IMAGE_H

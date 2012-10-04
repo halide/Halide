@@ -13,6 +13,6 @@ endif
 
 all: interpolate
 
-interpolate: ../../cpp_bindings/ ../png.h interpolate.cpp
+interpolate: ../../cpp_bindings/ interpolate.cpp
 	$(MAKE) -C ../../cpp_bindings libHalide.a
-	$(GXX) -g interpolate.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -lpng -o interpolate -lpthread -ldl $(PNGFLAGS)
+	$(GXX) -g interpolate.cpp -I../../support -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -lpng -o interpolate -lpthread -ldl $(PNGFLAGS)

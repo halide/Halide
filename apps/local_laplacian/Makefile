@@ -27,8 +27,8 @@ local_laplacian.bc: local_laplacian
 local_laplacian.o: local_laplacian.bc
 	cat local_laplacian.bc | $(OPT) -O3 | $(LLC) -O3 -filetype=obj -o local_laplacian.o
 
-process: process.cpp local_laplacian.o ../Util.h ../png.h
-	$(GXX) -std=c++0x -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
+process: process.cpp local_laplacian.o
+	$(GXX) -std=c++0x -I../../support -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
 
 out.png: process
 	./process input.png 8 1 1 out.png

@@ -6,7 +6,7 @@ using namespace Halide;
 #include <iostream>
 #include <sstream>
 #include <sys/time.h>
-#include "../png.h"
+#include <image_io.h>
 
 using namespace std;
 

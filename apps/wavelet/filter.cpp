@@ -10,8 +10,8 @@ extern "C" {
   #include "inverse_daubechies_x.h"
 }
 
-#include "../Util.h"
-#include "../png.h"
+#include <static_image.h>
+#include <image_io.h>
 
 float clamp(float x, float min, float max) {
     if (x < min) return min;
