@@ -90,6 +90,7 @@ import examples
 import md5
 import signal
 import multiprocessing
+import threadmap
 random_module = random
 
 LOG_SCHEDULES = True      # Log all tried schedules (Fail or Success) to a text file
@@ -740,7 +741,7 @@ class AutotuneParams:
     
     tournament_size = 5 #3
     mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
-    population_size = 128 #5 #32 #128 #64
+    population_size = 10 #128 #5 #32 #128 #64
     
     # Different mutation modes (mutation is applied to each Func independently)
     prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2}
@@ -1008,7 +1009,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
     #T0 = time.time()
     #Tcompile = [0.0]
     #Trun = [0.0]
-    test_gen_iter = test_gen_func(L, constraints)
+    test_gen_iter = iter(test_gen_func(L, constraints))
     def time_schedule():
         info = test_gen_iter.next() #test_func(current, constraints)()
         #print 'time_schedule', current, info
@@ -1083,9 +1084,9 @@ def autotune_child_process(filter_func_name, schedule_str, in_image, trials):
     
     print 'Success', T, Tcompile, Trun
 
-def wait_timeout(subproc, timeout):
+def wait_timeout(proc, timeout):
     "Wait for subprocess to end (returns return code) or timeout (returns None)."
-    SLEEP_TIME = 0.03
+    SLEEP_TIME = 0.01
     T0 = time.time()
     while True:
         p = proc.poll()
@@ -1104,8 +1105,12 @@ def run_timeout(L, timeout, last_line=False):
     fout = tempfile.TemporaryFile()
     proc = subprocess.Popen(L, stdout=fout)
     
-    status = wait_timeout(proc, p.compile_timeout)
+    status = wait_timeout(proc, timeout)
     if status is None:
+        try:
+            proc.kill()
+        except OSError:
+            pass
         return None
 
     fout.seek(0)
@@ -1140,10 +1145,8 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
             Tcompile = time.time()-T0
             
             if out is None:
-                proc.kill()
                 return {'time': COMPILE_TIMEOUT, 'compile': Tcompile, 'run': 0.0}
             if not out.startswith('Success'):
-                proc.kill()
                 return {'time': COMPILE_FAIL, 'compile': Tcompile, 'run': 0.0}
             return {'time': 0.0, 'compile': Tcompile, 'run': 0.0}
         
@@ -1163,17 +1166,17 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 return cache[schedule_str]
 
             T0 = time.time()
-            out = run_timeout(['python', 'autotune.py', 'autotune_run_child', filter_func_name, schedule_str, in_image, '%d'%p.trials, str(os.getpid())], p.compile_timeout, last_line=True)
+            out = run_timeout(['python', 'autotune.py', 'autotune_run_child', filter_func_name, schedule_str, in_image, '%d'%p.trials, str(os.getpid())], best_run_time[0]*p.run_timeout_mul, last_line=True)
             Trun = time.time()-T0
             
             if out is None:
-                proc.kill()
                 return {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': Trun}
             if not out.startswith('Success') or len(out.split()) != 2:
-                proc.kill()
                 return {'time': RUN_FAIL, 'compile': compiled_ans['compile'], 'run': Trun}
+            T = float(out.split()[1])
+            best_run_time[0] = min(best_run_time[0], T)
             
-            return {'time': float(out.split()[1]), 'compile': compiled_ans['compile'], 'run': Trun}
+            return {'time': T, 'compile': compiled_ans['compile'], 'run': Trun}
             
         runL = map(run_schedule, range(len(scheduleL)))
         
