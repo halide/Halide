@@ -1,8 +1,6 @@
 #include <Halide.h>
 using namespace Halide;
 
-#include "../png.h"
-
 int main(int argc, char **argv) {
     Var x("x"), y("y");
     RDom rx(0, 100);

@@ -1,5 +1,11 @@
-#ifndef FIMAGE_PNG_H
-#define FIMAGE_PNG_H
+// This simple PNG IO library works with *both* the Halide::Image<T> type *and*
+// the simple static_image.h version.
+// If you want the static_image.h version, to use in a program statically
+// linking against a Halide pipeline pre-compiled with Func::compileToFile, you
+// need to explicitly #include static_image.h first.
+
+#ifndef STATIC_IMAGE_LOADER_H
+#define STATIC_IMAGE_LOADER_H
 
 #include <png.h>
 #include <string>

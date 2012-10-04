@@ -14,6 +14,6 @@ endif
 
 all: lighten
 
-lighten: ../../cpp_bindings/ ../png.h lighten.cpp
+lighten: ../../cpp_bindings/ lighten.cpp
 	$(MAKE) -C ../../cpp_bindings libHalide.a
-	$(GXX) lighten.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -lpng -o lighten -lpthread -ldl $(PNGFLAGS)
+	$(GXX) lighten.cpp -I../../support -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -lpng -o lighten -lpthread -ldl $(PNGFLAGS)

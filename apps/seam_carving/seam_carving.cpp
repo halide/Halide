@@ -1,8 +1,6 @@
 #include <Halide.h>
 using namespace Halide;
 
-#include "../png.h"
-
 #define PI 3.14159
 
 Func gradientMagnitude(Func f, Expr width, Expr height) {

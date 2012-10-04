@@ -114,3 +114,15 @@ Resources
 - Check out [our first paper](http://people.csail.mit.edu/jrk/halide12).
 - Subscribe to [halide-announce](https://lists.csail.mit.edu/mailman/listinfo/halide-announce) to hear about releases.
 - Subscribe to [halide-dev](https://lists.csail.mit.edu/mailman/listinfo/halide-dev) to discuss technical issues.
+
+Repository Structure
+====================
+- `apps` - demonstration applications using Halide.
+- `cpp_bindings` - the C++ embedding
+- `experiments` - miscellaneous experiments useful for future reference
+- `llvm` - our local build of LLVM
+- `py_bindings` - an EXPERIMENTAL Python embedding. Currently just wraps the C++ embedding.
+- `src` - the compiler core
+- `support` - ancillary headers, etc., potentially useful to users of Halide.
+- `test` - tests, primarily under `test/cpp`. Runnable with `./run_test cpp/<test_name>`.
+- `util` - utility scripts

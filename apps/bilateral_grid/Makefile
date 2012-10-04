@@ -25,7 +25,7 @@ bilateral_grid.o: bilateral_grid.bc
 	opt -O3 bilateral_grid.bc | llc -O3 -filetype=obj -o bilateral_grid.o
 
 filter: bilateral_grid.o filter.cpp
-	$(GXX) -O3 -ffast-math -Wall -Werror -std=c++0x filter.cpp bilateral_grid.o -lpng -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LFLAGS)
+	$(GXX) -I../../support -O3 -ffast-math -Wall -Werror -std=c++0x filter.cpp bilateral_grid.o -lpng -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LFLAGS)
 
 out.png: filter
 	./filter input.png out.png 0.1

@@ -10,8 +10,8 @@ all: process
 local_laplacian.o: local_laplacian.ispc
 	ispc $< -o $@
 
-process: process.cpp local_laplacian.o ../../Util.h ../../png.h
-	$(GXX) -fopenmp -std=c++0x -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS)
+process: process.cpp local_laplacian.o
+	$(GXX) -fopenmp -I../../../support -std=c++0x -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS)
 
 out.png: process
 	./process input.png 8 1 1 out.png

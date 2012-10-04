@@ -2,7 +2,7 @@
 
 using namespace Halide;
 
-#include "../png.h"
+#include <image_io.h>
 
 #include <iostream>
 
