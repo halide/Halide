@@ -1570,7 +1570,39 @@ def test():
 #    test_schedules(True)
     test_schedules()
     test_crossover()
+
+def autotune_child(args):
+    rest = args[1:]
+    if len(rest) != 6:
+        raise ValueError('expected 6 args after autotune_*_child')
+    (filter_func_name, schedule_str, in_image, trials, parent_pid, binary_file) = rest
+    trials = int(trials)
+    parent_pid = int(parent_pid)
+    #os.kill(parent_pid, signal.SIGCONT)
     
+    (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
+    schedule = Schedule.fromstring(out_func, schedule_str)
+    constraints = Constraints()         # FIXME: Deal with Constraints() mess
+    schedule.apply(constraints)
+
+    if args[0] == 'autotune_compile_child':
+        T0 = time.time()
+        #out = open('out.sh','wt')
+        #out.write(' '.join(rest))
+        #out.close()
+        #out_func.compileJIT()
+        out_func.compileToFile(binary_file)
+        print 'Success %.4f' % (time.time()-T0)
+        return
+    elif args[0] == 'autotune_run_child':
+        if random.random() < 0.9:
+            print 'Success %.4f'%(1.0+random.random()*1e-4)
+        else:
+            print 'Failure'
+        sys.exit(0)
+    else:
+        raise ValueError(args[0])
+            
 def main():
     args = sys.argv[1:]
     if len(args) == 0:
@@ -1675,6 +1707,7 @@ def main():
         (input, out_func, test_func, scope) = getattr(examples, examplename)()
         s = Schedule.fromstring(out_func, 'blur_x_blur0.root().parallel(y)\nblur_y_blur0.root().parallel(y).vectorize(x,8)')
     elif args[0] in ['autotune_compile_child', 'autotune_run_child']:           # Child process for autotuner
+        autotune_child(args)
         #def child_handler(signum, stack_frame):
         #    f = open('child_%d.txt'%random.randrange(1000**2),'wt')
         #    f.write('')
@@ -1682,35 +1715,7 @@ def main():
         #signal.signal(signal.SIGCHLD, child_handler)
         #time.sleep(1.0)
 #        print time.time()
-        rest = args[1:]
-        if len(rest) != 6:
-            raise ValueError('expected 6 args after autotune_child_process')
-        (filter_func_name, schedule_str, in_image, trials, parent_pid, binary_file) = rest
-        trials = int(trials)
-        parent_pid = int(parent_pid)
-        #os.kill(parent_pid, signal.SIGCONT)
         
-        (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
-        schedule = Schedule.fromstring(out_func, schedule_str)
-        constraints = Constraints()         # FIXME: Deal with Constraints() mess
-        schedule.apply(constraints)
-
-        if args[0] == 'autotune_compile_child':
-            T0 = time.time()
-            #out = open('out.sh','wt')
-            #out.write(' '.join(rest))
-            #out.close()
-            out_func.compileToFile(binary_file)
-            print 'Success %.4f' % (time.time()-T0)
-            return
-        elif args[0] == 'autotune_run_child':
-            if random.random() < 0.9:
-                print 'Success %.4f'%(1.0+random.random()*1e-4)
-            else:
-                print 'Failure'
-            sys.exit(0)
-        else:
-            raise ValueError(args[0])
         
         #Tbegin_compile = time.time()
         #evaluate = halide.filter_image(input, out_func, in_image)
