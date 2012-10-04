@@ -741,7 +741,7 @@ class AutotuneParams:
     
     tournament_size = 5 #3
     mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
-    population_size = 10 #128 #5 #32 #128 #64
+    population_size = 128 #5 #32 #128 #64
     
     # Different mutation modes (mutation is applied to each Func independently)
     prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2}
@@ -757,7 +757,7 @@ class AutotuneParams:
     trials = 5                  # Timing runs per schedule
     generations = 500
     
-    compile_timeout = 5.0
+    compile_timeout = 20.0 #15.0
     run_timeout_mul = 2.0 #3.0           # Fastest run time multiplied by this factor is cutoff
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
     
@@ -768,6 +768,8 @@ class AutotuneParams:
 
     parallel_compile_nproc = None   # Number of processes to use simultaneously for parallel compile (None defaults to number of virtual cores)
 
+    tune_dir = None                 # Autotuning output directory or None to use a default directory
+    
 def sample_prob(d):
     "Randomly sample key from dictionary with probabilities given in values."
     items = d.items()
@@ -958,7 +960,10 @@ def next_generation(prevL, p, root_func, constraints, generation_idx):
 
     for i in range(int(p.population_size*p.prob_pop['elitism'])):
         if i < len(prevL):
-            append_unique(copy.copy(prevL[i]))
+            current = copy.copy(prevL[i])
+            if not '(elite copy of' in current.genomelog:
+                current.genomelog += ' (elite copy of %s)' % current.identity() # FIXMEFIXME
+            append_unique(current)
     
     # Normalize probabilities after removing elitism
     P_total = p.prob_pop['crossover'] + p.prob_pop['mutated'] + p.prob_pop['random']
@@ -1013,7 +1018,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
     def time_schedule():
         info = test_gen_iter.next() #test_func(current, constraints)()
         #print 'time_schedule', current, info
-        timer.compile_time += info['compile']
+        timer.compile_time += info['compile_avg']
         timer.run_time += info['run']
         return info['time']
         #out = test_func(current)
@@ -1032,7 +1037,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
             print 'Timing %d/%d'%(i, len(L)),
         ans.append(time_schedule())
         #ans.append(time_schedule(L[i]))
-        success += ans[-1] < COMPILE_TIMEOUT
+        success += get_error_str(ans[-1]) is None #< COMPILE_TIMEOUT
         timer.total_time = time.time()-timer.start_time
         stats_str = 'pid=%d, %.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (os.getpid(), success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
         if AUTOTUNE_VERBOSE:
@@ -1053,41 +1058,27 @@ def log_sched(schedule, s, no_output=False, f=[]):
         f[0].write('-'*40 + '\n' + schedule.title() + '\n' + str(schedule) + '\n' + s + '\n')
         f[0].flush()
 
-FAILURE_BASE    = 10000.0
 COMPILE_TIMEOUT = 10001.0
 COMPILE_FAIL    = 10002.0
 RUN_TIMEOUT     = 10003.0
 RUN_FAIL        = 10004.0
 
-def autotune_child_process(filter_func_name, schedule_str, in_image, trials):
-    (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
-    schedule = Schedule.fromstring(out_func, schedule_str)
-    constraints = Constraints()         # FIXMEFIXME: Deal with Constraints() mess
-    schedule.apply(constraints)
-    
-    Tbegin_compile = time.time()
-    evaluate = halide.filter_image(input, out_func, in_image)
-    Tend_compile = time.time()
-    Tcompile = Tend_compile - Tbegin_compile
-    if AUTOTUNE_VERBOSE:
-        print 'compiled in', Tcompile, repr(str(schedule))
-    
-    T = []
-    for i in range(trials):
-        T0 = time.time()
-        Iout = evaluate()
-        T1 = time.time()
-        T.append(T1-T0)
+def get_error_str(timeval):
+    "Get error string from special (high-valued) timing value (one of the above constants)."
+    d = {COMPILE_TIMEOUT: 'COMPILE_TIMEOUT',
+         COMPILE_FAIL:    'COMPILE_FAIL',
+         RUN_TIMEOUT:     'RUN_TIMEOUT',
+         RUN_FAIL:        'RUN_FAIL'}
+    if timeval in d:
+        return d[timeval]
+    return None
 
-    T = min(T)
-    Trun = time.time()-Tend_compile
-    
-    print 'Success', T, Tcompile, Trun
+SLEEP_TIME = 0.01
 
-def wait_timeout(proc, timeout):
+def wait_timeout(proc, timeout, T0=None):
     "Wait for subprocess to end (returns return code) or timeout (returns None)."
-    SLEEP_TIME = 0.01
-    T0 = time.time()
+    if T0 is None:
+        T0 = time.time()
     while True:
         p = proc.poll()
         if p is not None:
@@ -1096,16 +1087,30 @@ def wait_timeout(proc, timeout):
             return None
         time.sleep(SLEEP_TIME)
 
-def run_timeout(L, timeout, last_line=False):
+def run_timeout(L, timeout, last_line=False, time_from_subproc=False):
     """
     Run shell command in list form, e.g. L=['python', 'autotune.py'], using subprocess.
     
     Returns None on timeout otherwise str output of subprocess (if last_line just return the last line).
+    
+    If time_from_subproc is True then the starting time will be read from the first stdout line of the subprocess (seems to have a bug).
     """
     fout = tempfile.TemporaryFile()
-    proc = subprocess.Popen(L, stdout=fout)
-    
-    status = wait_timeout(proc, timeout)
+    proc = subprocess.Popen(L, stdout=fout, stderr=fout)
+    T0 = None
+    if time_from_subproc:
+        while True:
+            fout.seek(0)
+            fout_s = fout.readline()
+            try:
+                T0 = float(fout_s)
+                break
+            except ValueError:
+                pass
+            time.sleep(SLEEP_TIME)
+        print 'Read T0: %f'% T0
+        #sys.exit(1)
+    status = wait_timeout(proc, timeout, T0)
     if status is None:
         try:
             proc.kill()
@@ -1134,14 +1139,19 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
     #signal.signal(signal.SIGCONT, signal_handler)
     
     def test_func(scheduleL, constraints):       # FIXME: Handle constraints
+        def subprocess_args(schedule, schedule_str, compile=True):
+            binary_file = os.path.join(p.tune_dir, schedule.identity())
+            mode_str = 'compile' if compile else 'run'
+            return ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, in_image, '%d'%p.trials, str(os.getpid()), binary_file]
         # Compile all schedules in parallel
-        def compile_schedule(schedule):
+        def compile_schedule(i):
+            schedule = scheduleL[i]
             schedule_str = str(schedule)
             if schedule_str in cache:
                 return cache[schedule_str]
             
             T0 = time.time()
-            out = run_timeout(['python', 'autotune.py', 'autotune_compile_child', filter_func_name, schedule_str, in_image, '%d'%p.trials, str(os.getpid())], p.compile_timeout, last_line=True)
+            out = run_timeout(subprocess_args(schedule, schedule_str, True), p.compile_timeout, last_line=True)
             Tcompile = time.time()-T0
             
             if out is None:
@@ -1150,7 +1160,11 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 return {'time': COMPILE_FAIL, 'compile': Tcompile, 'run': 0.0}
             return {'time': 0.0, 'compile': Tcompile, 'run': 0.0}
         
-        compiledL = threadmap.map(compile_schedule, scheduleL)
+        Tbegin_compile = time.time()
+        shuffled_idx = range(len(scheduleL))
+        random.shuffle(shuffled_idx)
+        compiledL = threadmap.map(compile_schedule, shuffled_idx, n=nproc)
+        Ttotal_compile = time.time()-Tbegin_compile
         
         assert len(compiledL) == len(scheduleL)
         
@@ -1158,7 +1172,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
         def run_schedule(i):
             schedule = scheduleL[i]
             compiled_ans = compiledL[i]
-            if compiled_ans['time'] >= FAILURE_BASE:
+            if get_error_str(compiled_ans['time']) is not None:
                 return compiled_ans
                 
             schedule_str = str(schedule)
@@ -1166,7 +1180,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 return cache[schedule_str]
 
             T0 = time.time()
-            out = run_timeout(['python', 'autotune.py', 'autotune_run_child', filter_func_name, schedule_str, in_image, '%d'%p.trials, str(os.getpid())], best_run_time[0]*p.run_timeout_mul, last_line=True)
+            out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul, last_line=True)
             Trun = time.time()-T0
             
             if out is None:
@@ -1180,6 +1194,14 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
             
         runL = map(run_schedule, range(len(scheduleL)))
         
+        for i in range(len(scheduleL)):
+            schedule = scheduleL[i]
+            runL[i]['compile_avg'] = Ttotal_compile/len(scheduleL)
+            current = cache[str(scheduleL[i])] = runL[i]
+            
+            e = get_error_str(current['time'])
+            first_part = 'Error %s'%e if e is not None else 'Best time %.4f'%current['time']
+            log_sched(schedule, '%s, compile=%.4f, run=%.4f'%(first_part, current['compile'], current['run']))
         return runL
         
     return test_func
@@ -1262,6 +1284,13 @@ def resolve_filter_func(filter_func_name):
 
 def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints(), seed_scheduleL=[]):
     timer = AutotuneTimer()
+
+    p = copy.deepcopy(p)
+    if p.tune_dir is None:
+        p.tune_dir = os.path.join(os.path.abspath('.'), 'tune')
+    if not os.path.exists(p.tune_dir):
+        os.makedirs(p.tune_dir)
+        
     log_sched(None, None, no_output=True)    # Clear log file
 
     random.seed(0)
@@ -1293,7 +1322,11 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
         display_text += 'Generation %d'%(gen) + '\n'
         display_text += '-'*40 + '\n'
         for (j, (timev, current)) in list(enumerate(bothL))[:p.num_print]:
-            display_text += '%10.4f %-4s %s' % (timev, current.identity(), repr(str(current))) + '\n'
+            current_s = '%15.4f'%timev
+            e = get_error_str(timev)
+            if e is not None:
+                current_s = '%15s'%e
+            display_text += '%s %-4s %s' % (current_s, current.identity(), repr(str(current))) + '\n'
         display_text += '\n'
         print display_text
         sys.stdout.flush()
@@ -1626,6 +1659,7 @@ def main():
         print 'Time for default schedule: %.4f'%(T1-T0)
         
         p = AutotuneParams()
+        #p.parallel_compile_nproc = 4
         exclude = []
         for key in scope:
             if key.startswith('input_clamped'):
@@ -1647,20 +1681,58 @@ def main():
         #    f.close()
         #signal.signal(signal.SIGCHLD, child_handler)
         #time.sleep(1.0)
+#        print time.time()
         rest = args[1:]
-        if len(rest) != 5:
-            raise ValueError('expected 5 args after autotune_child_process')
-        (filter_func_name, schedule_str, in_image, trials, parent_pid) = rest
+        if len(rest) != 6:
+            raise ValueError('expected 6 args after autotune_child_process')
+        (filter_func_name, schedule_str, in_image, trials, parent_pid, binary_file) = rest
         trials = int(trials)
         parent_pid = int(parent_pid)
         #os.kill(parent_pid, signal.SIGCONT)
-        if random.random() < 0.5:
-            print 'Success %.4f'%random.random()
-        else:
-            print 'Failure'
-        sys.exit(0)
         
-        autotune_child_process(filter_func_name, schedule_str, in_image, trials)
+        (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
+        schedule = Schedule.fromstring(out_func, schedule_str)
+        constraints = Constraints()         # FIXME: Deal with Constraints() mess
+        schedule.apply(constraints)
+
+        if args[0] == 'autotune_compile_child':
+            T0 = time.time()
+            #out = open('out.sh','wt')
+            #out.write(' '.join(rest))
+            #out.close()
+            out_func.compileToFile(binary_file)
+            print 'Success %.4f' % (time.time()-T0)
+            return
+        elif args[0] == 'autotune_run_child':
+            if random.random() < 0.9:
+                print 'Success %.4f'%(1.0+random.random()*1e-4)
+            else:
+                print 'Failure'
+            sys.exit(0)
+        else:
+            raise ValueError(args[0])
+        
+        #Tbegin_compile = time.time()
+        #evaluate = halide.filter_image(input, out_func, in_image)
+        #Tend_compile = time.time()
+        #Tcompile = Tend_compile - Tbegin_compile
+        #if AUTOTUNE_VERBOSE:
+        #    print 'compiled in', Tcompile, repr(str(schedule))
+        
+        #T = []
+        #for i in range(trials):
+        #    T0 = time.time()
+        #    Iout = evaluate()
+        #    T1 = time.time()
+        #    T.append(T1-T0)
+
+        #T = min(T)
+        #Trun = time.time()-Tend_compile
+        
+        #print 'Success', T, Tcompile, Trun
+
+
+        
     else:
         raise NotImplementedError('%s not implemented'%args[0])
 #    test_schedules()
