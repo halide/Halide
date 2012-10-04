@@ -23,13 +23,15 @@ int main(int argc, char **argv) {
     
     // These color matrices are for the sensor in the Nokia N900 and are
     // taken from the FCam source.
-    Image<float> matrix_3200 = {{ 1.6697f, -0.2693f, -0.4004f, -42.4346f},
+    float _matrix_3200[][4] = {{ 1.6697f, -0.2693f, -0.4004f, -42.4346f},
                                 {-0.3576f,  1.0615f,  1.5949f, -37.1158f},
                                 {-0.2175f, -1.8751f,  6.9640f, -26.6970f}};
     
-    Image<float> matrix_7000 = {{ 2.2997f, -0.4478f,  0.1706f, -39.0923f},
+    float _matrix_7000[][4] = {{ 2.2997f, -0.4478f,  0.1706f, -39.0923f},
                                 {-0.3826f,  1.5906f, -0.2080f, -25.4311f},
-                                {-0.0888f, -0.7344f,  2.2832f, -20.0826f}};    
+                                {-0.0888f, -0.7344f,  2.2832f, -20.0826f}};
+    Image<float> matrix_3200(4, 3, 1); matrix_3200.copy(_matrix_3200[0], 4, 3);
+    Image<float> matrix_7000(4, 3, 1); matrix_7000.copy(_matrix_7000[0], 4, 3);
 
     timeval t1, t2;
     gettimeofday(&t1, NULL);

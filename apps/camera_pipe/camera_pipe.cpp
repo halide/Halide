@@ -19,10 +19,6 @@ Func hot_pixel_suppression(Func input) {
     return denoised;
 }
 
-Expr abs(Expr e) {
-    return select(e < cast(e.type(), 0), -e, e);
-}
-
 Func interleave_x(Func a, Func b) {
     Func out;
     out(x, y) = select((x%2)==0, a(x/2, y), b(x/2, y));
@@ -306,7 +302,9 @@ int main(int argc, char **argv) {
     // Build the pipeline
     Func processed = process(shifted, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
 
-    processed.compileToFile("curved", {color_temp, gamma, contrast, input, matrix_3200, matrix_7000});
+    // In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
+    Func::Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
+    processed.compileToFile("curved", std::vector<Func::Arg>(args, args+6));
 
     return 0;
 }
