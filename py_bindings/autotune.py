@@ -129,7 +129,8 @@ class AutotuneParams:
     generations = 500
     
     compile_timeout = 20.0 #15.0
-    run_timeout_mul = 2.0 #3.0           # Fastest run time multiplied by this factor is cutoff
+    run_timeout_mul = 2.0 #3.0           # Fastest run time multiplied by this factor plus bias is cutoff
+    run_timeout_bias = 1.0               # Run subprocess additional bias to allow tester process to start up and shut down
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
     
     crossover_mutate_prob = 0.15     # Probability that mutate() is called after crossover
@@ -547,7 +548,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 return cache[schedule_str]
 
             T0 = time.time()
-            out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul, last_line=True)
+            out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul+p.run_timeout_bias, last_line=True)
             Trun = time.time()-T0
             
             if out is None:
