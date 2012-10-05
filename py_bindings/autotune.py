@@ -93,6 +93,8 @@ import multiprocessing
 import threadmap
 from valid_schedules import *
 
+sys.path += ['../util']
+
 LOG_SCHEDULES = True      # Log all tried schedules (Fail or Success) to a text file
 LOG_SCHEDULE_FILENAME = 'log_schedule.txt'
 AUTOTUNE_VERBOSE = False #True #False #True
@@ -112,7 +114,7 @@ class AutotuneParams:
     
     tournament_size = 5 #3
     mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
-    population_size = 128 #5 #32 #128 #64
+    population_size = 64 #5 #32 #128
     
     # Different mutation modes (mutation is applied to each Func independently)
     prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2}
@@ -484,13 +486,13 @@ def run_timeout(L, timeout, last_line=False, time_from_subproc=False):
             proc.kill()
         except OSError:
             pass
-        return None
+        return -1, None
 
     fout.seek(0)
     ans = fout.read()
     if last_line:
         ans = ans.strip().split('\n')[-1].strip()
-    return ans
+    return proc.returncode, ans
 
 def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=True):
     cache = {}
@@ -508,9 +510,9 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
     
     def test_func(scheduleL, constraints):       # FIXME: Handle constraints
         def subprocess_args(schedule, schedule_str, compile=True):
-            binary_file = os.path.join(p.tune_dir, schedule.identity())
+            binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
             mode_str = 'compile' if compile else 'run'
-            return ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, in_image, '%d'%p.trials, str(os.getpid()), binary_file]
+            return ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, str(os.getpid()), binary_file]
         # Compile all schedules in parallel
         def compile_schedule(i):
             schedule = scheduleL[i]
@@ -519,7 +521,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 return cache[schedule_str]
             
             T0 = time.time()
-            out = run_timeout(subprocess_args(schedule, schedule_str, True), p.compile_timeout, last_line=True)
+            res,out = run_timeout(subprocess_args(schedule, schedule_str, True), p.compile_timeout, last_line=True)
             Tcompile = time.time()-T0
             
             if out is None:
@@ -548,7 +550,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 return cache[schedule_str]
 
             T0 = time.time()
-            out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul+p.run_timeout_bias, last_line=True)
+            res,out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias, last_line=True)
             Trun = time.time()-T0
             
             if out is None:
@@ -638,6 +640,27 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
         
         currentL = [x[1] for x in bothL]
 
+import inspect
+_scriptfile = inspect.getfile(inspect.currentframe()) # script filename (usually with path)
+_scriptpath = os.path.dirname(os.path.abspath(_scriptfile)) # script directory
+
+def _ctype_of_type(t):
+    if t.isFloat():
+        assert t.bits in (32, 64)
+        if t.bits == 32:
+            return 'float'
+        else:
+            return 'double'
+    else:
+        width = str(t.bits)
+        ty = ''
+        if t.isInt():
+            ty = 'int'
+        else:
+            assert(t.isUInt())
+            ty = 'uint'
+        return ty + width + '_t'
+
 def autotune_child(args):
     rest = args[1:]
     if len(rest) != 6:
@@ -652,21 +675,55 @@ def autotune_child(args):
     constraints = Constraints()         # FIXME: Deal with Constraints() mess
     schedule.apply(constraints)
 
+    # binary_file: full path
+    func_name = os.path.basename(binary_file)
+    working = os.path.dirname(binary_file)
+    os.chdir(working)
     if args[0] == 'autotune_compile_child':
         T0 = time.time()
-        #out = open('out.sh','wt')
-        #out.write(' '.join(rest))
-        #out.close()
-        #out_func.compileJIT()
-        out_func.compileToFile(binary_file)
+        print "In %s, compiling %s" % (working, func_name)
+
+        # emit object file
+        out_func.compileToFile(func_name)
+
+        # copy default_runner locally
+        default_runner = os.path.join(_scriptpath, 'default_runner', 'default_runner.cpp')
+        support_include = os.path.join(_scriptpath, '../support')
+
+        in_t  = _ctype_of_type(input.type())
+        out_t = _ctype_of_type(out_func.returnType())
+
+        # get PNG flags
+        png_flags = subprocess.check_output('libpng-config --cflags --ldflags', shell=True).replace('\n', ' ')
+
+        # assemble bitcode
+        subprocess.check_output(
+            'cat %(func_name)s.bc | opt -O3 | llc -O3 -filetype=obj -o %(func_name)s.o' % locals(),
+            shell=True
+        )
+
+        #shutil.copyfile(default_runner, working)
+        compile_command = 'g++ %(png_flags)s -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe'
+        compile_command = compile_command % locals()
+        print compile_command
+        try:
+            out = subprocess.check_output(compile_command, shell=True)
+        except:
+            raise ValueError('Compile failed:\n%s' % out)
+
         print 'Success %.4f' % (time.time()-T0)
+
         return
+
     elif args[0] == 'autotune_run_child':
-        if random.random() < 0.9:
-            print 'Success %.4f'%(1.0+random.random()*1e-4)
-        else:
-            print 'Failure'
-        sys.exit(0)
+        run_command = './%(func_name)s.exe %(trials)d %(in_image)s'
+        run_command = run_command % locals()
+        print 'Testing: %s' % run_command
+        # Don't bother running with timeout, parent process will manage that for us
+        out = subprocess.check_output(run_command, shell=True)
+        print out.strip()
+        return
+
     else:
         raise ValueError(args[0])
             

@@ -56,9 +56,13 @@ int main(int argc, char const *argv[])
         unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
         if (t < bestT) bestT = t;
     }
-    printf("%f\n", bestT/1000000.0);
+    printf("Success %f\n", bestT/1000000.0);
 
-    save(output, "out.png");
+    #ifdef SAVE_OUTPUT
+    // Saving large PNGs is expensive. Only do it if enabled.
+    // TODO: validate output by loading reference and comparing in memory, rather than saving anything
+    save(output, str(TEST_FUNC) ".png");
+    #endif
 
 	return 0;
 }
