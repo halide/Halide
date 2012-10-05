@@ -12,19 +12,22 @@ On OS X, I recommend using [ODB](https://github.com/thelema/odb/) to install add
 
 Summary
 -------
-- Install OCaml (3.12.*)  
+- Install OCaml (3.12.* or 4.00.*)  
   On Mac, use Homebrew: `brew install objective-caml`, 
   or MacPorts: `sudo port install ocaml`)
 
-- Install GCC 4.6/4.7 - `g++-4.6` or `g++-4.7` must be in your `$PATH`  
-  On Mac using Homebrew: `brew install https://raw.github.com/adamv/homebrew-alt/master/duplicates/gcc.rb --enable-cxx`
-  using MacPorts: sudo port install gcc47
+- Install ocamlfind (aka `ocaml-findlib` in Ubuntu and other package sources). If it's not in your package manager's database, it's easy to just download/configure/install by hand: http://projects.camlcity.org/projects/findlib.html.
+
+- Install sexplib and batteries, as mentioned above. (The build will soon be updated to fetch and build these in a project-local directory and reference them internally, so you will no longer have to install them yourself. For now, though, it's still necessary.)
+
+- Make sure you have some `clang` >= 3.0 in your path. (This is required by one build step under `Halide/src`.) We no longer build our own under Halide/llvm, so it's easiest to just have Xcode 4.x or `apt-get install clang`.
 
 - `./bootstrap` to build everything (and wait -- this builds all of LLVM, which takes a while)
 
 - `cd test; ./run_test cpp/*`
 
-- Check out `test/cpp/*` and `apps/*` for examples of how to get started.
+- Check out `test/cpp/*` and `apps/*` for examples of how to get started.  
+  **NOTE**: some of the apps have out of date build rules expecting g++-4.6/4.7 (not standard on OS X), or semantics which tickle new error detection passes in the Halide compiler. Don't worry if some of them don't work out of the box. This should return to normal soon.
 
 - _OPTIONAL:_ `source ./bash_profile` to configure llvm paths for current session (if you want llvm tools in your path for manual use, or for use by static build `Makefile`s like those in some of `apps/*`).  
   **TODO: hard code LLVM paths in Makefiles to make this really optional again.**
