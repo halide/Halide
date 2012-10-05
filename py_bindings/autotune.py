@@ -675,6 +675,10 @@ def autotune_child(args):
     constraints = Constraints()         # FIXME: Deal with Constraints() mess
     schedule.apply(constraints)
 
+    llvm_path = os.path.abspath('../llvm/Release+Asserts/bin/')
+    if not llvm_path.endswith('/'):
+        llvm_path += '/'
+
     # binary_file: full path
     func_name = os.path.basename(binary_file)
     working = os.path.dirname(binary_file)
@@ -695,10 +699,10 @@ def autotune_child(args):
 
         # get PNG flags
         png_flags = subprocess.check_output('libpng-config --cflags --ldflags', shell=True).replace('\n', ' ')
-
+        
         # assemble bitcode
         subprocess.check_output(
-            'cat %(func_name)s.bc | opt -O3 | llc -O3 -filetype=obj -o %(func_name)s.o' % locals(),
+            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 | %(llvm_path)sllc -O3 -filetype=obj -o %(func_name)s.o' % locals(),
             shell=True
         )
 
