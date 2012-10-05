@@ -25,20 +25,24 @@ let trim str =   if str = "" then "" else   let search_pos init p next =
 (* Host OS detection, from:
  * https://github.com/avsm/mirage/blob/master/scripts/myocamlbuild.ml *)
 
-type unix = Linux | Darwin
+type unix = Linux | Darwin | Cygwin
 type arch = X86_32 | X86_64 | Arm
+
+let is_str_prefix s p =
+	String.sub s 0 (String.length p) = p;;
 
 let host =
   match trim (String.lowercase (run_and_read "uname -s")) with
     | "linux"  -> eprintf "host = linux\n"; Linux
     | "darwin" -> eprintf "host = darwin\n"; Darwin
+	| os when is_str_prefix os "cygwin_" -> eprintf "host = cygwin\n"; Cygwin
     | os -> eprintf "`%s` is not a supported host OS\n" os; exit (-1);;
 
 let arch =
   let a =
     begin match trim (String.lowercase (run_and_read "uname -m")) with
       | "x86_32" | "i686"  -> X86_32
-      | "i386" -> (match host with Linux -> X86_32 | Darwin -> X86_64) 
+      | "i386" -> (match host with (Linux | Cygwin) -> X86_32 | Darwin -> X86_64) 
       | "x86_64" | "amd64" -> X86_64
       | "armv7l" -> Arm
       | arch -> eprintf "`%s` is not a supported arch\n" arch; exit (-1) end
@@ -75,6 +79,7 @@ ocaml_lib ~extern:true ~dir:(llvm_prefix/"lib/ocaml/") "llvm_executionengine";;
 tons of deprecation warning noise with g++ 4.4, just linking stdc++ below works
 better *)
 flag ["link"; "ocaml"; "g++"] (S[A"-cclib"; A"-lstdc++"]);;
+flag ["ocamlmklib"; "c"] (S[A"-lstdc++"]);;
 
 (* Compiler support C++ lib *)
 (* ocaml_lib "llsupport"; *)
