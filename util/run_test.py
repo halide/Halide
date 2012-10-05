@@ -41,8 +41,13 @@ if not cxx:
 platform = sys.platform.lower()
 if 'linux' in platform:
     platform = 'linux'
-if 'darwin' in platform:
+elif 'darwin' in platform:
     platform = 'darwin'
+elif 'cygwin' in platform:
+    platform = 'cygwin'
+else:
+    print 'System platform not recognized: ' + platform
+    sys.exit(-1)
 
 failures = []
 
@@ -79,9 +84,10 @@ def test_cpp(name):
             compile_cmd = ["-I../../../cpp_bindings",
                            "-Wno-format",
                            "-fPIC",
-                           srcfile,                   
-                           "../../../cpp_bindings/libHalide.a", 
-                           "-ldl", "-lpthread"]
+                           srcfile]
+            if platform in ['linux', 'darwin']:
+                compile_cmd.append("../../../cpp_bindings/libHalide.a")
+            compile_cmd.extend(["-ldl", "-lpthread"])
             if platform is 'linux':
                 compile_cmd.append("-rdynamic")
 
@@ -93,7 +99,23 @@ def test_cpp(name):
             try:
                 # Build the test
                 # status(name, " ".join(compile_cmd))
-                cxx(compile_cmd, _out=log, _err=err)
+                if platform is 'cygwin':
+                    objfile = srcfile[:-srcfile[::-1].find('.')] + "o"
+                    compile_cmd.append("-c")
+                    compile_cmd.append("-o "+objfile)
+                    cxx(compile_cmd, _out=log, _err=err)
+                    flexlink = Command("flexlink")
+                    link_cmd = ["../../../cpp_bindings/libHalide.a",
+                                objfile,
+                                "-chain cygwin",
+                                "-exe",
+                                "-lstdc++",
+                                "-o a.out",
+								"--",
+								"-export-all-symbols"] 
+                    flexlink(link_cmd, _out=log, _err=err)
+                else:
+				    cxx(compile_cmd, _out=log, _err=err)
                 # Run the test
                 # status(name, "Running test")
                 tester = Command("./a.out")
