@@ -114,7 +114,7 @@ class AutotuneParams:
     
     tournament_size = 5 #3
     mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
-    population_size = 64 #5 #32 #128
+    population_size = 128 #64 #5 #32 #128
     
     # Different mutation modes (mutation is applied to each Func independently)
     prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2}
@@ -140,10 +140,16 @@ class AutotuneParams:
     
     num_print = 10
 
-    parallel_compile_nproc = None   # Number of processes to use simultaneously for parallel compile (None defaults to number of virtual cores)
+    cores = None   # Number of processes to use simultaneously for parallel compile (None defaults to number of virtual cores)
 
     tune_dir = None                 # Autotuning output directory or None to use a default directory
     
+    def __init__(self, argd={}):
+        for (key, value) in argd.items():
+            setattr(self, key, float(argd[key]) if '.' in value else int(argd[key]))
+#        print argd
+#        raise ValueError(self.cores)
+        
 def sample_prob(d):
     "Randomly sample key from dictionary with probabilities given in values."
     items = d.items()
@@ -376,7 +382,6 @@ def next_generation(prevL, p, root_func, constraints, generation_idx):
 class AutotuneTimer:
     compile_time = 0.0
     run_time = 0.0
-    total_time = 0.0
     def __init__(self):
         self.start_time = time.time()
     
@@ -384,12 +389,17 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
     #T0 = time.time()
     #Tcompile = [0.0]
     #Trun = [0.0]
-    test_gen_iter = iter(test_gen_func(L, constraints))
+    def status_callback(msg):
+        stats_str = 'compile time=%d secs, run time=%d secs, total=%d secs'%(timer.compile_time, timer.run_time, time.time()-timer.start_time)
+        sys.stderr.write('\n'*100 + '%s (%s)\n%s\n'%(msg,stats_str,display_text))
+        sys.stderr.flush()
+
+    test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer))
     def time_schedule():
         info = test_gen_iter.next() #test_func(current, constraints)()
         #print 'time_schedule', current, info
-        timer.compile_time += info['compile_avg']
-        timer.run_time += info['run']
+        #timer.compile_time += info['compile_avg']
+        #timer.run_time += info['run']
         return info['time']
         #out = test_func(current)
         #current.apply()
@@ -409,13 +419,9 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
         #ans.append(time_schedule(L[i]))
         success += get_error_str(ans[-1]) is None #< COMPILE_TIMEOUT
         timer.total_time = time.time()-timer.start_time
-        stats_str = 'pid=%d, %.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (os.getpid(), success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
+        #stats_str = '%.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
         if AUTOTUNE_VERBOSE:
             print '%.5f secs'%ans[-1]
-        else:
-            sys.stderr.write('\n'*100 + 'Testing %d/%d (%s)\n%s\n'%(i+1,len(L),stats_str,display_text))
-            sys.stderr.flush()
-            pass
     print 'Statistics: %s'%stats_str
     return ans
 
@@ -498,7 +504,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
     cache = {}
     best_run_time = [p.run_timeout_default]
 
-    nproc = p.parallel_compile_nproc
+    nproc = p.cores
     if nproc is None:
         nproc = multiprocessing.cpu_count()
     
@@ -508,13 +514,17 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
     #    f.close()
     #signal.signal(signal.SIGCONT, signal_handler)
     
-    def test_func(scheduleL, constraints):       # FIXME: Handle constraints
+    def test_func(scheduleL, constraints, status_callback, timer):       # FIXME: Handle constraints
         def subprocess_args(schedule, schedule_str, compile=True):
             binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
             mode_str = 'compile' if compile else 'run'
             return ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, str(os.getpid()), binary_file]
         # Compile all schedules in parallel
+        compile_count = [0]
         def compile_schedule(i):
+            status_callback('Compile %d/%d'%(compile_count[0]+1,len(scheduleL)))
+            compile_count[0] += 1
+            
             schedule = scheduleL[i]
             schedule_str = str(schedule)
             if schedule_str in cache:
@@ -524,22 +534,27 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
             res,out = run_timeout(subprocess_args(schedule, schedule_str, True), p.compile_timeout, last_line=True)
             Tcompile = time.time()-T0
             
+            timer.compile_time = timer_compile + time.time() - Tbegin_compile
+
             if out is None:
                 return {'time': COMPILE_TIMEOUT, 'compile': Tcompile, 'run': 0.0}
             if not out.startswith('Success'):
                 return {'time': COMPILE_FAIL, 'compile': Tcompile, 'run': 0.0}
             return {'time': 0.0, 'compile': Tcompile, 'run': 0.0}
         
+        timer_compile = timer.compile_time
         Tbegin_compile = time.time()
         shuffled_idx = range(len(scheduleL))
         random.shuffle(shuffled_idx)
         compiledL = threadmap.map(compile_schedule, shuffled_idx, n=nproc)
-        Ttotal_compile = time.time()-Tbegin_compile
+
+        #Ttotal_compile = time.time()-Tbegin_compile
         
         assert len(compiledL) == len(scheduleL)
         
         # Run schedules in serial
         def run_schedule(i):
+            status_callback('Run %d/%d'%(i+1,len(scheduleL)))
             schedule = scheduleL[i]
             compiled_ans = compiledL[i]
             if get_error_str(compiled_ans['time']) is not None:
@@ -560,18 +575,23 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
             T = float(out.split()[1])
             best_run_time[0] = min(best_run_time[0], T)
             
+            timer.run_time = timer_run + time.time() - Tbegin_run
+            
             return {'time': T, 'compile': compiled_ans['compile'], 'run': Trun}
             
+        Tbegin_run = time.time()
+        timer_run = timer.run_time
         runL = map(run_schedule, range(len(scheduleL)))
         
         for i in range(len(scheduleL)):
             schedule = scheduleL[i]
-            runL[i]['compile_avg'] = Ttotal_compile/len(scheduleL)
+            #runL[i]['compile_avg'] = Ttotal_compile/len(scheduleL)
             current = cache[str(scheduleL[i])] = runL[i]
             
             e = get_error_str(current['time'])
             first_part = 'Error %s'%e if e is not None else 'Best time %.4f'%current['time']
             log_sched(schedule, '%s, compile=%.4f, run=%.4f'%(first_part, current['compile'], current['run']))
+        
         return runL
         
     return test_func
@@ -730,9 +750,27 @@ def autotune_child(args):
 
     else:
         raise ValueError(args[0])
-            
+
+def parse_args():
+    args = []
+    d = {}
+    argv = sys.argv[1:]
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg.startswith('-'):
+            if i == len(argv)-1:
+                raise ValueError('dashed argument at end of arg list: %s'%arg)
+            d[arg[1:]] = argv[i+1]
+            i += 2
+            continue
+        else:
+            args.append(arg)
+        i += 1
+    return (args, d)
+
 def main():
-    args = sys.argv[1:]
+    (args, argd) = parse_args()
     if len(args) == 0:
         print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
         sys.exit(0)
@@ -820,7 +858,7 @@ def main():
         T1 = time.time()
         print 'Time for default schedule: %.4f'%(T1-T0)
         
-        p = AutotuneParams()
+        p = AutotuneParams(argd)
         #p.parallel_compile_nproc = 4
         exclude = []
         for key in scope:
