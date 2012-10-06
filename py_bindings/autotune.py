@@ -389,7 +389,7 @@ class AutotuneTimer:
     def __init__(self):
         self.start_time = time.time()
     
-def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
+def time_generation(L, p, test_gen_func, timer, constraints, display_text='', save_output=False, ref_output=''):
     #T0 = time.time()
     #Tcompile = [0.0]
     #Trun = [0.0]
@@ -398,13 +398,13 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
         sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link + ' => %s'%p.tune_dir if p.tune_link else p.tune_dir, display_text))
         sys.stderr.flush()
 
-    test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer))
+    test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer, save_output, ref_output))
     def time_schedule():
         info = test_gen_iter.next() #test_func(current, constraints)()
         #print 'time_schedule', current, info
         #timer.compile_time += info['compile_avg']
         #timer.run_time += info['run']
-        return info['time']
+        return info #['time']
         #out = test_func(current)
         #current.apply()
         #T = []
@@ -421,11 +421,11 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
             print 'Timing %d/%d'%(i, len(L)),
         ans.append(time_schedule())
         #ans.append(time_schedule(L[i]))
-        success += get_error_str(ans[-1]) is None #< COMPILE_TIMEOUT
+        success += get_error_str(ans[-1]['time']) is None #< COMPILE_TIMEOUT
         timer.total_time = time.time()-timer.start_time
         #stats_str = '%.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
         if AUTOTUNE_VERBOSE:
-            print '%.5f secs'%ans[-1]
+            print '%.5f secs'%ans[-1]['time']
     #print 'Statistics: %s'%stats_str
     return ans
 
@@ -445,13 +445,15 @@ COMPILE_TIMEOUT = 10001.0
 COMPILE_FAIL    = 10002.0
 RUN_TIMEOUT     = 10003.0
 RUN_FAIL        = 10004.0
+RUN_CHECK_FAIL  = 10005.0
 
 def get_error_str(timeval):
     "Get error string from special (high-valued) timing value (one of the above constants)."
     d = {COMPILE_TIMEOUT: 'COMPILE_TIMEOUT',
          COMPILE_FAIL:    'COMPILE_FAIL',
          RUN_TIMEOUT:     'RUN_TIMEOUT',
-         RUN_FAIL:        'RUN_FAIL'}
+         RUN_FAIL:        'RUN_FAIL',
+         RUN_CHECK_FAIL:  'RUN_CHECK_FAIL'}
     if timeval in d:
         return d[timeval]
     return None
@@ -521,17 +523,18 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
     #    f.close()
     #signal.signal(signal.SIGCONT, signal_handler)
     
-    def test_func(scheduleL, constraints, status_callback, timer):       # FIXME: Handle constraints
+    def test_func(scheduleL, constraints, status_callback, timer, save_output=False, ref_output=''):       # FIXME: Handle constraints
         def subprocess_args(schedule, schedule_str, compile=True):
             binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
             mode_str = 'compile' if compile else 'run'
             
-            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, str(os.getpid()), binary_file]
+            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, binary_file, str(int(save_output)), ref_output]
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
                 sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:]) + '\n')
-            return sh_args
+            return (sh_args, binary_file + '.png')
+            
         # Compile all schedules in parallel
         compile_count = [0]
         lock = threading.Lock()
@@ -544,7 +547,8 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 return cache[schedule_str]
             
             T0 = time.time()
-            res,out = run_timeout(subprocess_args(schedule, schedule_str, True), p.compile_timeout, last_line=True)
+            (argL, output) = subprocess_args(schedule, schedule_str, True)
+            res,out = run_timeout(argL, p.compile_timeout, last_line=True)
             Tcompile = time.time()-T0
             
             timer.compile_time = timer_compile + time.time() - Tbegin_compile
@@ -552,10 +556,10 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 compile_count[0] += 1
 
             if out is None:
-                return {'time': COMPILE_TIMEOUT, 'compile': Tcompile, 'run': 0.0}
+                return {'time': COMPILE_TIMEOUT, 'compile': Tcompile, 'run': 0.0, 'output': output}
             if not out.startswith('Success'):
-                return {'time': COMPILE_FAIL, 'compile': Tcompile, 'run': 0.0}
-            return {'time': 0.0, 'compile': Tcompile, 'run': 0.0}
+                return {'time': COMPILE_FAIL, 'compile': Tcompile, 'run': 0.0, 'output': output}
+            return {'time': 0.0, 'compile': Tcompile, 'run': 0.0, 'output': output}
         
         timer_compile = timer.compile_time
         Tbegin_compile = time.time()
@@ -582,17 +586,21 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 
             T0 = time.time()
             #res,out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias, last_line=True)
-            res,out = autotune_child(subprocess_args(schedule, schedule_str, False)[2:], best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias)
+            (argL, output) = subprocess_args(schedule, schedule_str, False)
+            res,out = autotune_child(argL[2:], best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias+(20.0 if save_output else 0.0))
             Trun = time.time()-T0
             
             if out is None:
-                ans = {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': Trun}
+                ans = {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output}
             elif not out.startswith('Success') or len(out.split()) != 2:
-                ans = {'time': RUN_FAIL, 'compile': compiled_ans['compile'], 'run': Trun}
+                code = RUN_FAIL
+                if out.startswith('RUN_CHECK_FAIL'):
+                    code = RUN_CHECK_FAIL
+                ans = {'time': code, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output}
             else:
                 T = float(out.split()[1])
                 best_run_time[0] = min(best_run_time[0], T)
-                ans = {'time': T, 'compile': compiled_ans['compile'], 'run': Trun}
+                ans = {'time': T, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output}
                         
             timer.run_time = timer_run + time.time() - Tbegin_run
             
@@ -667,20 +675,40 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
 #        currentL.append(seed_schedule)
 #        currentL.append(Schedule.fromstring(out_func, ''))
 #        currentL.
-    display_text = ''
+    if len(seed_scheduleL) == 0:
+        currentL.append(constraints.constrain(Schedule.fromstring(out_func, '', 'seed(0)', 0, 0)))
+    display_text = '\nTiming default schedules and obtaining reference output image\n'
     check_schedules(currentL)
     
+    # Time default schedules and obtain reference output image
+    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, True)
+    ref_output = ''
+    for j in range(len(timeL)):
+        timev = timeL[j]['time']
+        current = currentL[j]
+        current_output = timeL[j]['output']
+        if os.path.exists(current_output):
+            ref_output = current_output
+        print '%15.4f'%timev, repr(str(current))
+    print
+    if ref_output == '':
+        raise ValueError('No reference output')
 #    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
 #    print timeL
 #    sys.exit(1)
     
-    for gen in range(p.generations):
+    for gen in range(1,p.generations+1):
+        if gen == 1:
+            display_text = '\nTiming generation %d'%gen
+
         currentL = next_generation(currentL, p, out_func, constraints, gen)
+        # The (commented out) following line tests injecting a bad schedule for blur example (should fail with RUN_CHECK_FAIL).
+        #currentL.append(constraints.constrain(Schedule.fromstring(out_func, 'blur_x_blurUInt16.chunk(x_blurUInt16)\nblur_y_blurUInt16.root().vectorize(x_blurUInt16,16)', 'bad_schedule', gen, len(currentL))))
         check_schedules(currentL)
         
-        timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
+        timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, ref_output=ref_output)
         
-        bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
+        bothL = sorted([(timeL[i]['time'], currentL[i]) for i in range(len(timeL))])
         display_text = '\n' + '-'*40 + '\n'
         display_text += 'Generation %d'%(gen) + '\n'
         display_text += '-'*40 + '\n'
@@ -694,7 +722,7 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
 
         success_count = 0
         for timev in timeL:
-            e = get_error_str(timev)
+            e = get_error_str(timev['time'])
             if e is not None:
                 success_count += 1
                 
@@ -728,11 +756,11 @@ def _ctype_of_type(t):
 
 def autotune_child(args, timeout=None):
     rest = args[1:]
-    if len(rest) != 6:
-        raise ValueError('expected 6 args after autotune_*_child')
-    (filter_func_name, schedule_str, in_image, trials, parent_pid, binary_file) = rest
+    if len(rest) != 7:
+        raise ValueError('expected 7 args after autotune_*_child')
+    (filter_func_name, schedule_str, in_image, trials, binary_file, save_output, ref_output) = rest
     trials = int(trials)
-    parent_pid = int(parent_pid)
+    save_output = int(save_output)
     #os.kill(parent_pid, signal.SIGCONT)
     
     (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
@@ -772,7 +800,6 @@ def autotune_child(args, timeout=None):
             shell=True
         )
 
-        save_output = False
         save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
         #shutil.copyfile(default_runner, working)
         compile_command = 'g++ %(png_flags)s -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s %(save_output_str)s-DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe'
@@ -790,6 +817,8 @@ def autotune_child(args, timeout=None):
     elif args[0] == 'autotune_run_child':
         run_command = './%(func_name)s.exe %(trials)d %(in_image)s'
         run_command = run_command % locals()
+        if ref_output != '':
+            run_command += ' ' + ref_output
         print 'Testing: %s' % run_command
 
         # Don't bother running with timeout, parent process will manage that for us
@@ -905,12 +934,12 @@ def main():
         #seed_scheduleL.append('blur_y_blurUInt16.root()\nblur_x_blurUInt16.root()')
         #seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8)\n' +
         #                      'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
-        evaluate = halide.filter_image(input, out_func, DEFAULT_IMAGE)
-        evaluate()
-        T0 = time.time()
-        evaluate()
-        T1 = time.time()
-        print 'Time for default schedule: %.4f'%(T1-T0)
+        #evaluate = halide.filter_image(input, out_func, DEFAULT_IMAGE)
+        #evaluate()
+        #T0 = time.time()
+        #evaluate()
+        #T1 = time.time()
+        #print 'Time for default schedule: %.4f'%(T1-T0)
         
         p = AutotuneParams(argd)
         #p.parallel_compile_nproc = 4
