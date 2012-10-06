@@ -423,7 +423,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
         #stats_str = '%.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
         if AUTOTUNE_VERBOSE:
             print '%.5f secs'%ans[-1]
-    print 'Statistics: %s'%stats_str
+    #print 'Statistics: %s'%stats_str
     return ans
 
 def log_sched(schedule, s, no_output=False, f=[]):
@@ -464,7 +464,7 @@ def wait_timeout(proc, timeout, T0=None):
             return None
         time.sleep(SLEEP_TIME)
 
-def run_timeout(L, timeout, last_line=False, time_from_subproc=False):
+def run_timeout(L, timeout, last_line=False, time_from_subproc=False, shell=False):
     """
     Run shell command in list form, e.g. L=['python', 'autotune.py'], using subprocess.
     
@@ -473,7 +473,7 @@ def run_timeout(L, timeout, last_line=False, time_from_subproc=False):
     If time_from_subproc is True then the starting time will be read from the first stdout line of the subprocess (seems to have a bug).
     """
     fout = tempfile.TemporaryFile()
-    proc = subprocess.Popen(L, stdout=fout, stderr=fout)
+    proc = subprocess.Popen(L, stdout=fout, stderr=fout, shell=shell)
     T0 = None
     if time_from_subproc:
         while True:
@@ -519,7 +519,13 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
         def subprocess_args(schedule, schedule_str, compile=True):
             binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
             mode_str = 'compile' if compile else 'run'
-            return ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, str(os.getpid()), binary_file]
+            
+            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, str(os.getpid()), binary_file]
+            sh_name = binary_file + '_' + mode_str + '.sh'
+            with open(sh_name, 'wt') as sh_f:
+                os.chmod(sh_name, 0755)
+                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:]))
+            return sh_args
         # Compile all schedules in parallel
         compile_count = [0]
         lock = threading.Lock()
@@ -568,7 +574,8 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 return cache[schedule_str]
 
             T0 = time.time()
-            res,out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias, last_line=True)
+            #res,out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias, last_line=True)
+            res,out = autotune_child(subprocess_args(schedule, schedule_str, False)[2:], best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias)
             Trun = time.time()-T0
             
             if out is None:
@@ -684,7 +691,7 @@ def _ctype_of_type(t):
             ty = 'uint'
         return ty + width + '_t'
 
-def autotune_child(args):
+def autotune_child(args, timeout=None):
     rest = args[1:]
     if len(rest) != 6:
         raise ValueError('expected 6 args after autotune_*_child')
@@ -703,6 +710,7 @@ def autotune_child(args):
         llvm_path += '/'
 
     # binary_file: full path
+    orig = os.getcwd()
     func_name = os.path.basename(binary_file)
     working = os.path.dirname(binary_file)
     os.chdir(working)
@@ -746,11 +754,17 @@ def autotune_child(args):
         run_command = './%(func_name)s.exe %(trials)d %(in_image)s'
         run_command = run_command % locals()
         print 'Testing: %s' % run_command
-        # Don't bother running with timeout, parent process will manage that for us
-        out = subprocess.check_output(run_command, shell=True)
-        print out.strip()
-        return
 
+        # Don't bother running with timeout, parent process will manage that for us
+        try:
+            if timeout is None:
+                out = subprocess.check_output(run_command, shell=True)
+                print out.strip()
+                return
+            else:
+                return run_timeout(run_command, timeout, last_line=True, shell=True)
+        finally:
+            os.chdir(orig)
     else:
         raise ValueError(args[0])
 

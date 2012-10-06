@@ -486,7 +486,7 @@ class Schedule:
     def identity(self):
         #print self.generation
         #print self.index
-        return '%d_%d'%(self.generation,self.index) if self.identity_str is None else self.identity_str
+        return '%02d_%03d'%(self.generation,self.index) if self.identity_str is None else self.identity_str
     #def hash(self):
     #    return md5.md5(str(self)).hexdigest()[:10]
         
