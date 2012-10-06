@@ -100,7 +100,6 @@ LOG_SCHEDULES = True      # Log all tried schedules (Fail or Success) to a text 
 LOG_SCHEDULE_FILENAME = 'log_schedule.txt'
 AUTOTUNE_VERBOSE = False #True #False #True
 DEFAULT_IMAGE = 'apollo2.png'
-DEFAULT_TESTER_KW = {'in_image': DEFAULT_IMAGE}
 
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
@@ -135,6 +134,7 @@ class AutotuneParams:
     run_timeout_mul = 2.0 #3.0           # Fastest run time multiplied by this factor plus bias is cutoff
     run_timeout_bias = 5.0               # Run subprocess additional bias to allow tester process to start up and shut down
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
+    run_save_timeout = 20.0             # Additional timeout if saving output png
     
     crossover_mutate_prob = 0.15     # Probability that mutate() is called after crossover
     crossover_random_prob = 0.1      # Probability that crossover is run with a randomly generated parent
@@ -146,11 +146,16 @@ class AutotuneParams:
     tune_dir = None                 # Autotuning output directory or None to use a default directory
     tune_link = None                # Symlink (string) pointing to tune_dir (if available)
     
+    in_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_IMAGE)      # Input image to test
+    
     def __init__(self, argd={}):
         for (key, value) in argd.items():
             if not hasattr(self, key):
                 raise ValueError('unknown command-line switch %s'%key)
-            setattr(self, key, float(argd[key]) if '.' in value else int(argd[key]))
+            if isinstance(getattr(self, key), str):
+                setattr(self, key, argd[key])
+            else:
+                setattr(self, key, float(argd[key]) if '.' in value else int(argd[key]))
 #        print argd
 #        raise ValueError(self.cores)
         
@@ -509,7 +514,7 @@ def run_timeout(L, timeout, last_line=False, time_from_subproc=False, shell=Fals
         ans = ans.strip().split('\n')[-1].strip()
     return proc.returncode, ans
 
-def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=True):
+def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     cache = {}
     best_run_time = [p.run_timeout_default]
 
@@ -524,6 +529,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
     #signal.signal(signal.SIGCONT, signal_handler)
     
     def test_func(scheduleL, constraints, status_callback, timer, save_output=False, ref_output=''):       # FIXME: Handle constraints
+        in_image = p.in_image
         def subprocess_args(schedule, schedule_str, compile=True):
             binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
             mode_str = 'compile' if compile else 'run'
@@ -587,7 +593,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
             T0 = time.time()
             #res,out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias, last_line=True)
             (argL, output) = subprocess_args(schedule, schedule_str, False)
-            res,out = autotune_child(argL[2:], best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias+(20.0 if save_output else 0.0))
+            res,out = autotune_child(argL[2:], best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias+(p.run_save_timeout if save_output else 0.0))
             Trun = time.time()-T0
             
             if out is None:
@@ -643,7 +649,7 @@ def resolve_filter_func(filter_func_name):
         exec "import " + filter_func_name[:filter_func_name.rindex('.')]
     return eval(filter_func_name)
 
-def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTER_KW, constraints=Constraints(), seed_scheduleL=[]):
+def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints(), seed_scheduleL=[]):
     timer = AutotuneTimer()
 
     p = copy.deepcopy(p)
@@ -666,7 +672,7 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
 
     random.seed(0)
     (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
-    test_func = tester(input, out_func, p, filter_func_name, **tester_kw)
+    test_func = tester(input, out_func, p, filter_func_name)
     
     currentL = []
     for (iseed, seed) in enumerate(seed_scheduleL):
