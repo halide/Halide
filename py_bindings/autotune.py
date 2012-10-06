@@ -133,7 +133,7 @@ class AutotuneParams:
     
     compile_timeout = 20.0 #15.0
     run_timeout_mul = 2.0 #3.0           # Fastest run time multiplied by this factor plus bias is cutoff
-    run_timeout_bias = 1.0               # Run subprocess additional bias to allow tester process to start up and shut down
+    run_timeout_bias = 5.0               # Run subprocess additional bias to allow tester process to start up and shut down
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
     
     crossover_mutate_prob = 0.15     # Probability that mutate() is called after crossover
@@ -148,6 +148,8 @@ class AutotuneParams:
     
     def __init__(self, argd={}):
         for (key, value) in argd.items():
+            if not hasattr(self, key):
+                raise ValueError('unknown command-line switch %s'%key)
             setattr(self, key, float(argd[key]) if '.' in value else int(argd[key]))
 #        print argd
 #        raise ValueError(self.cores)
@@ -393,7 +395,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
     #Trun = [0.0]
     def status_callback(msg):
         stats_str = 'compile time=%d secs, run time=%d secs, total=%d secs'%(timer.compile_time, timer.run_time, time.time()-timer.start_time)
-        sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link if p.tune_link else p.tune_dir, display_text))
+        sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link + ' => %s'%p.tune_dir if p.tune_link else p.tune_dir, display_text))
         sys.stderr.flush()
 
     test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer))
@@ -427,14 +429,17 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
     #print 'Statistics: %s'%stats_str
     return ans
 
-def log_sched(p, schedule, s, no_output=False, f=[]):
+def log_sched(p, schedule, s, no_output=False, filename=LOG_SCHEDULE_FILENAME, f={}):
     if LOG_SCHEDULES:
-        if len(f) == 0:
-            f.append(open(os.path.join(p.tune_dir, LOG_SCHEDULE_FILENAME),'wt'))
+        if filename not in f:
+            f[filename] = open(os.path.join(p.tune_dir, filename),'wt')
         if no_output:
             return
-        f[0].write('-'*40 + '\n' + schedule.title() + '\n' + str(schedule) + '\n' + s + '\n')
-        f[0].flush()
+        if schedule is not None:
+            f[filename].write('-'*40 + '\n' + schedule.title() + '\n' + str(schedule) + '\n' + s + '\n')
+        else:
+            f[filename].write(s + '\n')
+        f[filename].flush()
 
 COMPILE_TIMEOUT = 10001.0
 COMPILE_FAIL    = 10002.0
@@ -573,6 +578,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
 
             compiled_ans = compiledL[i]
             if get_error_str(compiled_ans['time']) is not None:
+                cache[schedule_str] = compiled_ans
                 return compiled_ans
                 
             T0 = time.time()
@@ -581,28 +587,32 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
             Trun = time.time()-T0
             
             if out is None:
-                return {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': Trun}
-            if not out.startswith('Success') or len(out.split()) != 2:
-                return {'time': RUN_FAIL, 'compile': compiled_ans['compile'], 'run': Trun}
-            T = float(out.split()[1])
-            best_run_time[0] = min(best_run_time[0], T)
+                ans = {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': Trun}
+            elif not out.startswith('Success') or len(out.split()) != 2:
+                ans = {'time': RUN_FAIL, 'compile': compiled_ans['compile'], 'run': Trun}
+            else:
+                T = float(out.split()[1])
+                best_run_time[0] = min(best_run_time[0], T)
+                ans = {'time': T, 'compile': compiled_ans['compile'], 'run': Trun}
+
+            cache[schedule_str] = ans
+            
+            e = get_error_str(ans['time'])
+            first_part = 'Error %s'%e if e is not None else 'Best time %.4f'%ans['time']
+            log_sched(p, schedule, '%s, compile=%.4f, run=%.4f'%(first_part, ans['compile'], ans['run']))
             
             timer.run_time = timer_run + time.time() - Tbegin_run
             
-            return {'time': T, 'compile': compiled_ans['compile'], 'run': Trun}
+            return ans
+            
             
         Tbegin_run = time.time()
         timer_run = timer.run_time
         runL = map(run_schedule, range(len(scheduleL)))
         
-        for i in range(len(scheduleL)):
-            schedule = scheduleL[i]
+#        for i in range(len(scheduleL)):
+#            schedule = scheduleL[i]
             #runL[i]['compile_avg'] = Ttotal_compile/len(scheduleL)
-            current = cache[str(scheduleL[i])] = runL[i]
-            
-            e = get_error_str(current['time'])
-            first_part = 'Error %s'%e if e is not None else 'Best time %.4f'%current['time']
-            log_sched(p, schedule, '%s, compile=%.4f, run=%.4f'%(first_part, current['compile'], current['run']))
         
         return runL
         
@@ -626,7 +636,7 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
 
     p = copy.deepcopy(p)
     if p.tune_dir is None:
-        p.tune_dir = tempfile.mkdtemp('', 'tune')
+        p.tune_dir = tempfile.mkdtemp('', 'tune_')
         try:
             tune_link0 = '~/.tune'
             tune_link = os.path.expanduser(tune_link0)
@@ -667,7 +677,7 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
         timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
         
         bothL = sorted([(timeL[i], currentL[i]) for i in range(len(timeL))])
-        display_text = '-'*40 + '\n'
+        display_text = '\n' + '-'*40 + '\n'
         display_text += 'Generation %d'%(gen) + '\n'
         display_text += '-'*40 + '\n'
         for (j, (timev, current)) in list(enumerate(bothL))[:p.num_print]:
@@ -677,7 +687,16 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
                 current_s = '%15s'%e
             display_text += '%s %-4s %s' % (current_s, current.identity(), repr(str(current))) + '\n'
         display_text += '\n'
+
+        success_count = 0
+        for timev in timeL:
+            e = get_error_str(timev)
+            if e is not None:
+                success_count += 1
+                
+        display_text += ' '*16 + '%d/%d succeed (%.0f%%)\n' % (success_count, len(timeL), success_count*100.0/len(timeL))
         print display_text
+        log_sched(p, None, display_text, filename='summary.txt')
         sys.stdout.flush()
         
         currentL = [x[1] for x in bothL]
@@ -713,7 +732,7 @@ def autotune_child(args, timeout=None):
     #os.kill(parent_pid, signal.SIGCONT)
     
     (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
-    schedule = Schedule.fromstring(out_func, schedule_str)
+    schedule = Schedule.fromstring(out_func, schedule_str.replace('\\n', '\n'))
     constraints = Constraints()         # FIXME: Deal with Constraints() mess
     schedule.apply(constraints)
 

@@ -5,6 +5,7 @@ import copy
 import permutation
 import numpy
 import itertools
+import sys
 random_module = random
 
 DEFAULT_MAX_DEPTH = 4
@@ -556,9 +557,14 @@ class Schedule:
         """
         Constructor from a string s such as 'f.root().parallel(y)\ng.chunk(y)' (same format as returned by str() method).
         """
+        if '\\n' in s:
+            raise ValueError('Bad newline character in %r'%s)
         #print 'Schedule.fromstring', root_func, s
         all_funcs = halide.all_funcs(root_func)
         root_func = root_func
+        #print 'Schedule.fromstring', repr(s)
+        #print s.strip().split('\n')
+        #sys.exit(1)
         d = {}
         for line in s.strip().split('\n'):
             line = line.strip()
