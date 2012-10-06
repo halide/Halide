@@ -530,7 +530,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
-                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:]))
+                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:]) + '\n')
             return sh_args
         # Compile all schedules in parallel
         compile_count = [0]
@@ -578,7 +578,6 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
 
             compiled_ans = compiledL[i]
             if get_error_str(compiled_ans['time']) is not None:
-                cache[schedule_str] = compiled_ans
                 return compiled_ans
                 
             T0 = time.time()
@@ -594,21 +593,26 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
                 T = float(out.split()[1])
                 best_run_time[0] = min(best_run_time[0], T)
                 ans = {'time': T, 'compile': compiled_ans['compile'], 'run': Trun}
-
-            cache[schedule_str] = ans
-            
-            e = get_error_str(ans['time'])
-            first_part = 'Error %s'%e if e is not None else 'Best time %.4f'%ans['time']
-            log_sched(p, schedule, '%s, compile=%.4f, run=%.4f'%(first_part, ans['compile'], ans['run']))
-            
+                        
             timer.run_time = timer_run + time.time() - Tbegin_run
             
             return ans
+        
+        # Run, cache and display schedule in serial
+        def run_full(i):
+            ans = run_schedule(i)
             
+            schedule = scheduleL[i]
+            cache.setdefault(str(schedule), ans)
+
+            e = get_error_str(ans['time'])
+            first_part = 'Error %s'%e if e is not None else 'Best time %.4f'%ans['time']
+            log_sched(p, schedule, '%s, compile=%.4f, run=%.4f'%(first_part, ans['compile'], ans['run']))
+            return ans
             
         Tbegin_run = time.time()
         timer_run = timer.run_time
-        runL = map(run_schedule, range(len(scheduleL)))
+        runL = map(run_full, range(len(scheduleL)))
         
 #        for i in range(len(scheduleL)):
 #            schedule = scheduleL[i]
@@ -768,8 +772,10 @@ def autotune_child(args, timeout=None):
             shell=True
         )
 
+        save_output = False
+        save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
         #shutil.copyfile(default_runner, working)
-        compile_command = 'g++ %(png_flags)s -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe'
+        compile_command = 'g++ %(png_flags)s -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s %(save_output_str)s-DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe'
         compile_command = compile_command % locals()
         print compile_command
         try:
