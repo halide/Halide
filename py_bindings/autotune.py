@@ -91,6 +91,7 @@ import md5
 import signal
 import multiprocessing
 import threadmap
+import threading
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -521,9 +522,9 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
             return ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, str(os.getpid()), binary_file]
         # Compile all schedules in parallel
         compile_count = [0]
+        lock = threading.Lock()
         def compile_schedule(i):
             status_callback('Compile %d/%d'%(compile_count[0]+1,len(scheduleL)))
-            compile_count[0] += 1
             
             schedule = scheduleL[i]
             schedule_str = str(schedule)
@@ -535,6 +536,8 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
             Tcompile = time.time()-T0
             
             timer.compile_time = timer_compile + time.time() - Tbegin_compile
+            with lock:
+                compile_count[0] += 1
 
             if out is None:
                 return {'time': COMPILE_TIMEOUT, 'compile': Tcompile, 'run': 0.0}
