@@ -11,3 +11,4 @@ clean:
 	rm -rf build
 	rm halide.so
 	rm _cHalide.so
+	rm apollo*.jpg
