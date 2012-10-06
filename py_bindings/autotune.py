@@ -144,6 +144,7 @@ class AutotuneParams:
     cores = None   # Number of processes to use simultaneously for parallel compile (None defaults to number of virtual cores)
 
     tune_dir = None                 # Autotuning output directory or None to use a default directory
+    tune_link = None                # Symlink (string) pointing to tune_dir (if available)
     
     def __init__(self, argd={}):
         for (key, value) in argd.items():
@@ -392,7 +393,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
     #Trun = [0.0]
     def status_callback(msg):
         stats_str = 'compile time=%d secs, run time=%d secs, total=%d secs'%(timer.compile_time, timer.run_time, time.time()-timer.start_time)
-        sys.stderr.write('\n'*100 + '%s (%s)\n%s\n'%(msg,stats_str,display_text))
+        sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link if p.tune_link else p.tune_dir, display_text))
         sys.stderr.flush()
 
     test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer))
@@ -426,10 +427,10 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text=''):
     #print 'Statistics: %s'%stats_str
     return ans
 
-def log_sched(schedule, s, no_output=False, f=[]):
+def log_sched(p, schedule, s, no_output=False, f=[]):
     if LOG_SCHEDULES:
         if len(f) == 0:
-            f.append(open(LOG_SCHEDULE_FILENAME,'wt'))
+            f.append(open(os.path.join(p.tune_dir, LOG_SCHEDULE_FILENAME),'wt'))
         if no_output:
             return
         f[0].write('-'*40 + '\n' + schedule.title() + '\n' + str(schedule) + '\n' + s + '\n')
@@ -600,7 +601,7 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
             
             e = get_error_str(current['time'])
             first_part = 'Error %s'%e if e is not None else 'Best time %.4f'%current['time']
-            log_sched(schedule, '%s, compile=%.4f, run=%.4f'%(first_part, current['compile'], current['run']))
+            log_sched(p, schedule, '%s, compile=%.4f, run=%.4f'%(first_part, current['compile'], current['run']))
         
         return runL
         
@@ -624,11 +625,21 @@ def autotune(filter_func_name, p, tester=default_tester, tester_kw=DEFAULT_TESTE
 
     p = copy.deepcopy(p)
     if p.tune_dir is None:
-        p.tune_dir = os.path.join(os.path.abspath('.'), 'tune')
+        p.tune_dir = tempfile.mkdtemp('', 'tune')
+        try:
+            tune_link0 = '~/.tune'
+            tune_link = os.path.expanduser(tune_link0)
+            if os.path.exists(tune_link):
+                os.remove(tune_link)
+            os.symlink(p.tune_dir, tune_link)
+            p.tune_link = tune_link0
+        except:
+            pass
+        #p.tune_dir = os.path.join(os.path.abspath('.'), 'tune')
     if not os.path.exists(p.tune_dir):
         os.makedirs(p.tune_dir)
         
-    log_sched(None, None, no_output=True)    # Clear log file
+    log_sched(p, None, None, no_output=True)    # Clear log file
 
     random.seed(0)
     (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
