@@ -566,14 +566,15 @@ def default_tester(input, out_func, p, filter_func_name, in_image, allow_cache=T
         def run_schedule(i):
             status_callback('Run %d/%d'%(i+1,len(scheduleL)))
             schedule = scheduleL[i]
-            compiled_ans = compiledL[i]
-            if get_error_str(compiled_ans['time']) is not None:
-                return compiled_ans
-                
+
             schedule_str = str(schedule)
             if schedule_str in cache:
                 return cache[schedule_str]
 
+            compiled_ans = compiledL[i]
+            if get_error_str(compiled_ans['time']) is not None:
+                return compiled_ans
+                
             T0 = time.time()
             #res,out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias, last_line=True)
             res,out = autotune_child(subprocess_args(schedule, schedule_str, False)[2:], best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias)
