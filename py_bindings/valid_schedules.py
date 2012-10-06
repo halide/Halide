@@ -11,6 +11,7 @@ random_module = random
 DEFAULT_MAX_DEPTH = 4
 FORCE_TILE = False
 MUTATE_TRIES = 10
+TILE_PROB_SQUARE = 0.5              # Probability of selecting square tile size (e.g. 8x8).
 
 # --------------------------------------------------------------------------------------------------------------
 # Valid Schedule Enumeration
@@ -196,8 +197,11 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         self.ynewvar = create_var(vars+[self.xnewvar]) if ynewvar is None else ynewvar
 
     def randomize_const(self):
-        self.xsize = blocksize_random()
-        self.ysize = blocksize_random()
+        if random.random() < TILE_PROB_SQUARE:
+            self.xsize = self.ysize = blocksize_random()
+        else:
+            self.xsize = blocksize_random()
+            self.ysize = blocksize_random()
         #print 'randomize_const, tile, size=%d,%d' % (self.xsize, self.ysize)
 
     def check(self, L):
