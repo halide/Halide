@@ -1,4 +1,5 @@
 import sys; sys.path += ['..', '.']
+import time
 from halide import *
 
 int_t = Int(32)
@@ -49,16 +50,18 @@ def filter_func(dtype=Float(32)):
     
     def evaluate(in_png):
         #print 'interpolate evaluate'
+        T0 = time.time()
         width  = in_png.width()
         height = in_png.height()
-        print width, height
+        #print width, height
         for l in range(levels):
             level_widths[l].assign(width)
             level_heights[l].assign(height)
             width = width/2 + 1
             height = height/2 + 1
-        print in_png.width(), in_png.height(), 'realizing'
+        #print in_png.width(), in_png.height(), 'realizing'
         out = final.realize(in_png.width(), in_png.height(), 4)
+        print 'Interpolated in %.4f secs' % (time.time()-T0)
         #print 'evaluate realized, returning'
         return out
     
