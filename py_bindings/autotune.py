@@ -92,6 +92,7 @@ import signal
 import multiprocessing
 import threadmap
 import threading
+import shutil
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -646,10 +647,14 @@ def check_schedules(currentL):
             raise ValueError('schedule fails check: %s'%str(schedule))
 
 #def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
-def resolve_filter_func(filter_func_name):
+def call_filter_func(filter_func_name, cache={}):
+    if filter_func_name in cache:
+        return cache[filter_func_name]
     if '.' in filter_func_name:
         exec "import " + filter_func_name[:filter_func_name.rindex('.')]
-    return eval(filter_func_name)
+    ans = eval(filter_func_name)()
+    cache[filter_func_name] = ans
+    return ans
 
 def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints(), seed_scheduleL=[]):
     timer = AutotuneTimer()
@@ -675,7 +680,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
     log_sched(p, None, None, no_output=True)    # Clear log file
 
     random.seed(0)
-    (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
+    (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     test_func = tester(input, out_func, p, filter_func_name)
     
     currentL = []
@@ -781,7 +786,7 @@ def autotune_child(args, timeout=None):
     save_output = int(save_output)
     #os.kill(parent_pid, signal.SIGCONT)
     
-    (input, out_func, evaluate_func, scope) = resolve_filter_func(filter_func_name)()
+    (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     schedule = Schedule.fromstring(out_func, schedule_str.replace('\\n', '\n'))
     constraints = Constraints()         # FIXME: Deal with Constraints() mess
     schedule.apply(constraints)
@@ -879,7 +884,7 @@ def main():
     all_examples = 'blur dilate boxblur_cumsum boxblur_sat'.split() # local_laplacian'.split()
     if len(args) == 0:
         print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
-        print 'autotune example [examplename=%s|all]'%('|'.join(all_examples))
+        print 'autotune example [%s|all]'%('|'.join(all_examples))
         sys.exit(0)
     if args[0] == 'test':
         import autotune_test
@@ -892,7 +897,10 @@ def main():
         exampleL = all_examples if examplename == 'all' else [examplename]
         cores = multiprocessing.cpu_count()
         for examplename in exampleL:
-            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -cores %d -tune_dir "tune_%s" -generations 10' % (cores, examplename, cores if examplename != 'local_laplacian' else 2, examplename))
+            tune_dir = 'tune_%s'%examplename
+            if os.path.exists(tune_dir):
+                shutil.rmtree(tune_dir)
+            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -cores %d -tune_dir "%s" -generations 10' % (cores, examplename, cores if examplename != 'local_laplacian' else 2, tune_dir))
     elif args[0] == 'test_random':
         import autotune_test
         global use_random_blocksize
@@ -928,7 +936,7 @@ def main():
         print 'Number successful schedules: %d/%d (%d failed)' % (nsuccess, nprint, nfail)
     elif args[0] == 'test_variations':
         filter_func_name = 'examples.blur.filter_func'
-        (input, out_func, test_func, scope) = resolve_filter_func(filter_func_name)()
+        (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
 
         seed_scheduleL = []
         seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8)\n' +
@@ -958,7 +966,7 @@ def main():
             sys.exit(1)
         filter_func_name = args[1]
         #(input, out_func, test_func, scope) = getattr(examples, examplename)()
-        (input, out_func, test_func, scope) = resolve_filter_func(filter_func_name)()
+        (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
         
         seed_scheduleL = []
 #        seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blurUInt16)\n' +
@@ -981,7 +989,7 @@ def main():
             if key.startswith('input_clamped'):
                 exclude.append(scope[key])
         constraints = Constraints(exclude)
-        
+
         autotune(filter_func_name, p, constraints=constraints, seed_scheduleL=seed_scheduleL)
     elif args[0] in ['test_sched']:
         #(input, out_func, test_func) = examples.blur()
