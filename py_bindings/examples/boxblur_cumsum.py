@@ -60,7 +60,7 @@ def filter_func(dtype=UInt(16)):
     
 def main(is_sat=False):
     (input, out_func, evaluate, local_d) = boxblur_mode(is_sat=is_sat)
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'lena_crop.png'))().show()
+    filter_image(input, out_func, os.path.join(inputs_dir(), 'lena_crop.png'), disp_time=True)().show()
 
 if __name__ == '__main__':
     main()
