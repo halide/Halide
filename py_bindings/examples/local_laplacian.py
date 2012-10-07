@@ -101,7 +101,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'lena_crop.png'))().show()
+    filter_image(input, out_func, os.path.join(inputs_dir(), 'lena_crop.png'), disp_time=True)().show()
 
 if __name__ == '__main__':
     main()

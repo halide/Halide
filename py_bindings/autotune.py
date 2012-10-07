@@ -119,12 +119,19 @@ class AutotuneParams:
     population_size = 128 #64 #5 #32 #128
     
     # Different mutation modes (mutation is applied to each Func independently)
-    prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2, 'replace_template': 1.0}
-    # 'replace' - Replace Func's schedule with a new random schedule
-    # 'consts'  - Just modify constants when mutating
-    # 'add'     - Add a single schedule macro to existing schedule
-    # 'remove'  - Removing a single schedule macro from existing schedule
-    # 'edit'    - Edit (replace) a single schedule macro within Func's schedule
+    prob_mutate_replace  = 0.2
+    prob_mutate_consts   = 0.2
+    prob_mutate_add      = 0.2
+    prob_mutate_remove   = 0.2
+    prob_mutate_edit     = 0.2
+    prob_mutate_template = 1.0
+    
+    # 'replace'  - Replace Func's schedule with a new random schedule
+    # 'consts'   - Just modify constants when mutating
+    # 'add'      - Add a single schedule macro to existing schedule
+    # 'remove'   - Removing a single schedule macro from existing schedule
+    # 'edit'     - Edit (replace) a single schedule macro within Func's schedule
+    # 'template' - Replace Func's schedule with one sampled by autotune_template
     
     min_depth = 0
     max_depth = DEFAULT_MAX_DEPTH
@@ -159,10 +166,13 @@ class AutotuneParams:
             if isinstance(getattr(self, key), str) or key in ['tune_dir', 'tune_link']:
                 setattr(self, key, argd[key])
             else:
-                setattr(self, key, float(argd[key]) if '.' in value else int(argd[key]))
+                setattr(self, key, float(argd[key]) if ('.' in value or isinstance(getattr(self, key), float)) else int(argd[key]))
 #        print argd
 #        raise ValueError(self.cores)
-        
+    
+    def dict_prob_mutate(self):
+        return dict([(key, getattr(self, key)) for key in dir(self) if key.startswith('prob_mutate_')])
+
 def sample_prob(d):
     "Randomly sample key from dictionary with probabilities given in values."
     items = d.items()
@@ -219,12 +229,13 @@ def mutate(a, p, constraints):
     a0 = a
     a = copy.copy(a0)
     extra_caller_vars = []      # FIXME: Implement extra_caller_vars, important for chunk().
+    dmutate0 = p.dict_prob_mutate()
     
     while True:
 #        for name in a.d.keys():
 #            if random.random() < p.mutation_rate:
         name = random.choice(a.d.keys())
-        dmutate = dict(p.prob_mutate)
+        dmutate = dict(dmutate0)
         if len(a.d[name]) <= p.min_depth:
             del dmutate['remove']
         if len(a.d[name]) >= p.max_depth:
@@ -261,7 +272,7 @@ def mutate(a, p, constraints):
 #                        raise NotImplementedError
                 a.d[name] = a.d[name].edited(a.root_func, extra_caller_vars)
                 a.genomelog = 'mutate_edit(%s)'%a0.identity()
-            elif mode == 'replace_template':
+            elif mode == 'template':
                 s = autotune_template.sample(halide.func_varlist(a.d[name].func)) # TODO: Use parent variables if chunk...
                 a.d[name] = FragmentList.fromstring(a.d[name].func, s)
                 a.genomelog = 'replace_template(%s)'%a0.identity()
@@ -898,7 +909,7 @@ def main():
         if len(args) < 2:
             print >> sys.stderr, 'Expected 2 arguments'
             sys.exit(1)
-        rest = args[2:]
+        rest = sys.argv[3:]
         examplename = args[1]
         exampleL = all_examples if examplename == 'all' else [examplename]
         cores = multiprocessing.cpu_count()
