@@ -93,6 +93,7 @@ import multiprocessing
 import threadmap
 import threading
 import shutil
+import autotune_template
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -118,7 +119,7 @@ class AutotuneParams:
     population_size = 128 #64 #5 #32 #128
     
     # Different mutation modes (mutation is applied to each Func independently)
-    prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2}
+    prob_mutate = {'replace': 0.2, 'consts': 0.2, 'add': 0.2, 'remove': 0.2, 'edit': 0.2, 'replace_template': 1.0}
     # 'replace' - Replace Func's schedule with a new random schedule
     # 'consts'  - Just modify constants when mutating
     # 'add'     - Add a single schedule macro to existing schedule
@@ -260,6 +261,10 @@ def mutate(a, p, constraints):
 #                        raise NotImplementedError
                 a.d[name] = a.d[name].edited(a.root_func, extra_caller_vars)
                 a.genomelog = 'mutate_edit(%s)'%a0.identity()
+            elif mode == 'replace_template':
+                s = autotune_template.sample(halide.func_varlist(a.d[name].func)) # TODO: Use parent variables if chunk...
+                a.d[name] = FragmentList.fromstring(a.d[name].func, s)
+                a.genomelog = 'replace_template(%s)'%a0.identity()
             else:
                 raise ValueError('Unknown mutation mode %s'%mode)
         except MutateFailed:
@@ -881,7 +886,7 @@ def system(s):
     
 def main():
     (args, argd) = parse_args()
-    all_examples = 'blur dilate boxblur_cumsum boxblur_sat'.split() # local_laplacian'.split()
+    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode'.split() # local_laplacian'.split()
     if len(args) == 0:
         print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
         print 'autotune example [%s|all]'%('|'.join(all_examples))
@@ -890,9 +895,10 @@ def main():
         import autotune_test
         autotune_test.test()
     elif args[0] == 'example':
-        if len(args) != 2:
+        if len(args) < 2:
             print >> sys.stderr, 'Expected 2 arguments'
             sys.exit(1)
+        rest = args[2:]
         examplename = args[1]
         exampleL = all_examples if examplename == 'all' else [examplename]
         cores = multiprocessing.cpu_count()
@@ -900,7 +906,7 @@ def main():
             tune_dir = 'tune_%s'%examplename
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
-            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -cores %d -tune_dir "%s" -generations 10' % (cores, examplename, cores if examplename != 'local_laplacian' else 2, tune_dir))
+            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -cores %d -tune_dir "%s" -generations 10 %s' % (cores, examplename, cores if examplename != 'local_laplacian' else 2, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
         import autotune_test
         global use_random_blocksize
