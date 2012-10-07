@@ -99,7 +99,7 @@ sys.path += ['../util']
 LOG_SCHEDULES = True      # Log all tried schedules (Fail or Success) to a text file
 LOG_SCHEDULE_FILENAME = 'log_schedule.txt'
 AUTOTUNE_VERBOSE = False #True #False #True
-DEFAULT_IMAGE = 'apollo2.png'
+DEFAULT_IMAGE = 'apollo3.png'
 
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
@@ -148,11 +148,13 @@ class AutotuneParams:
     
     in_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_IMAGE)      # Input image to test
     
+    summary_file = 'summary.txt'
+    
     def __init__(self, argd={}):
         for (key, value) in argd.items():
             if not hasattr(self, key):
                 raise ValueError('unknown command-line switch %s'%key)
-            if isinstance(getattr(self, key), str):
+            if isinstance(getattr(self, key), str) or key in ['tune_dir', 'tune_link']:
                 setattr(self, key, argd[key])
             else:
                 setattr(self, key, float(argd[key]) if '.' in value else int(argd[key]))
@@ -538,7 +540,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
-                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:]) + '\n')
+                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:-1]) + ' ' + '"' + sh_args[-1] + '"' + '\n')
             return (sh_args, binary_file + '.png')
             
         # Compile all schedules in parallel
@@ -655,18 +657,20 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
     p = copy.deepcopy(p)
     if p.tune_dir is None:
         p.tune_dir = tempfile.mkdtemp('', 'tune_')
-        try:
-            tune_link0 = '~/.tune'
-            tune_link = os.path.expanduser(tune_link0)
-            if os.path.exists(tune_link):
-                os.remove(tune_link)
-            os.symlink(p.tune_dir, tune_link)
-            p.tune_link = tune_link0
-        except:
-            pass
         #p.tune_dir = os.path.join(os.path.abspath('.'), 'tune')
+    p.tune_dir = os.path.abspath(p.tune_dir)
     if not os.path.exists(p.tune_dir):
         os.makedirs(p.tune_dir)
+        
+    try:
+        tune_link0 = '~/.tune'
+        tune_link = os.path.expanduser(tune_link0)
+        if os.path.exists(tune_link):
+            os.remove(tune_link)
+        os.symlink(p.tune_dir, tune_link)
+        p.tune_link = tune_link0
+    except:
+        pass
         
     log_sched(p, None, None, no_output=True)    # Clear log file
 
@@ -686,17 +690,29 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
     display_text = '\nTiming default schedules and obtaining reference output image\n'
     check_schedules(currentL)
     
+    def format_time(timev):
+        current_s = '%15.4f'%timev
+        e = get_error_str(timev)
+        if e is not None:
+            current_s = '%15s'%e
+        return current_s
+        
     # Time default schedules and obtain reference output image
     timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, True)
     ref_output = ''
+    ref_log = '-'*40 + '\nDefault Schedules\n' + '-'*40 + '\n'
     for j in range(len(timeL)):
         timev = timeL[j]['time']
         current = currentL[j]
         current_output = timeL[j]['output']
         if os.path.exists(current_output):
             ref_output = current_output
-        print '%15.4f'%timev, repr(str(current))
+        line_out = '%s %s'%(format_time(timev), repr(str(current)))
+        print line_out
+        ref_log += line_out + '\n'
     print
+    log_sched(p, None, ref_log, filename=p.summary_file)
+    
     if ref_output == '':
         raise ValueError('No reference output')
 #    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
@@ -719,11 +735,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         display_text += 'Generation %d'%(gen) + '\n'
         display_text += '-'*40 + '\n'
         for (j, (timev, current)) in list(enumerate(bothL))[:p.num_print]:
-            current_s = '%15.4f'%timev
-            e = get_error_str(timev)
-            if e is not None:
-                current_s = '%15s'%e
-            display_text += '%s %-4s %s' % (current_s, current.identity(), repr(str(current))) + '\n'
+            display_text += '%s %-4s %s' % (format_time(timev), current.identity(), repr(str(current))) + '\n'
         display_text += '\n'
 
         success_count = 0
@@ -734,7 +746,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
                 
         display_text += ' '*16 + '%d/%d succeed (%.0f%%)\n' % (success_count, len(timeL), success_count*100.0/len(timeL))
         print display_text
-        log_sched(p, None, display_text, filename='summary.txt')
+        log_sched(p, None, display_text, filename=p.summary_file)
         sys.stdout.flush()
         
         currentL = [x[1] for x in bothL]
@@ -858,14 +870,29 @@ def parse_args():
         i += 1
     return (args, d)
 
+def system(s):
+    print s
+    os.system(s)
+    
 def main():
     (args, argd) = parse_args()
+    all_examples = 'blur dilate boxblur_cumsum boxblur_sat'.split() # local_laplacian'.split()
     if len(args) == 0:
         print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
+        print 'autotune example [examplename=%s|all]'%('|'.join(all_examples))
         sys.exit(0)
     if args[0] == 'test':
         import autotune_test
         autotune_test.test()
+    elif args[0] == 'example':
+        if len(args) != 2:
+            print >> sys.stderr, 'Expected 2 arguments'
+            sys.exit(1)
+        examplename = args[1]
+        exampleL = all_examples if examplename == 'all' else [examplename]
+        cores = multiprocessing.cpu_count()
+        for examplename in exampleL:
+            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -cores %d -tune_dir "tune_%s" -generations 10' % (cores, examplename, cores if examplename != 'local_laplacian' else 2, examplename))
     elif args[0] == 'test_random':
         import autotune_test
         global use_random_blocksize

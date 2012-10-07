@@ -4,7 +4,7 @@ from halide import *
 int_t = Int(32)
 float_t = Float(32)
 
-def filter_func(dtype=UInt(16), cache={}):
+def filter_func(dtype=UInt(16), use_uniforms=False, cache={}):
     "Local Laplacian."
     dtype_s = str(dtype).replace('(','').replace(')','')
     if dtype_s in cache:
@@ -33,10 +33,15 @@ def filter_func(dtype=UInt(16), cache={}):
         upy[x,y] = 0.25 * upx[x, (y/2) - 1 + 2*(y%2)] + 0.75 * upx[x,y/2]
         
         return upy
-        
-    levels = Uniform(int_t, 'levels'+s, 8)
-    alpha = Uniform(float_t, 'alpha'+s, 1.0) #1.0)
-    beta = Uniform(float_t, 'beta'+s, 1.0)
+    
+    if use_uniforms:
+        levels = Uniform(int_t, 'levels'+s, 8)
+        alpha = Uniform(float_t, 'alpha'+s, 1.0) #1.0)
+        beta = Uniform(float_t, 'beta'+s, 1.0)
+    else:
+        levels = 8
+        alpha = 1.0
+        beta = 1.0
     input = UniformImage(dtype, 3, 'input'+s)
     
     x = Var('x'+s)
