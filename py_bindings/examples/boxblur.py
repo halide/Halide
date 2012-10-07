@@ -4,7 +4,7 @@ from halide import *
 int_t = Int(32)
 float_t = Float(32)
 
-def boxblur_mode(dtype=UInt(16), is_sat=True, cache={}):
+def boxblur_mode(dtype=UInt(16), is_sat=True, use_uniforms=False, cache={}):
     "Box blur, either with summed-area table (default) or cumsum"
     dtype_s = str(int(is_sat)) + str(dtype).replace('(','').replace(')','')
     if dtype_s in cache:
@@ -12,7 +12,10 @@ def boxblur_mode(dtype=UInt(16), is_sat=True, cache={}):
 
     s = '_box%s'%dtype_s
     input = UniformImage(dtype, 3, 'input'+s)
-    box_size = Uniform(int_t, 'box_size'+s, 15)
+    if use_uniforms:
+        box_size = Uniform(int_t, 'box_size'+s, 15)
+    else:
+        box_size = 15                                   # Avoid uniform to make default_runner happy
 
     x = Var('x'+s)
     y = Var('y'+s)
