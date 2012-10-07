@@ -5,17 +5,12 @@ from halide import *
 int_t = Int(32)
 float_t = Float(32)
 
-def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 'blood_cells_small.png')):
+def filter_func(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cells_small.png')):
     "Snake segmentation."
     exit_on_signal()
-    dtype_s = str(dtype).replace('(','').replace(')','')
-    if dtype_s in cache:
-        return cache[dtype_s]
 
-    s = '_snake%s'%dtype_s
-    s0 = s
-    x = Var('x'+s)
-    y = Var('y'+s)
+    x = Var('x')
+    y = Var('y')
     dx_counter=[0]
     dy_counter=[0]
     lap_counter=[0]
@@ -23,19 +18,19 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
     Dirac_counter=[0]
     
     def dx(f):
-        out = Func('dx%d'%dx_counter[0]+s)
+        out = Func('dx%d'%dx_counter[0])
         dx_counter[0] += 1
         out[x,y] = 0.5 * (f[x+1,y] - f[x-1,y])
         return out
 
     def dy(f):
-        out = Func('dy%d'%dy_counter[0]+s)
+        out = Func('dy%d'%dy_counter[0])
         dy_counter[0] += 1
         out[x,y] = 0.5 * (f[x,y+1] - f[x,y-1])
         return out
 
     def lap(f):
-        out = Func('lap%d'%lap_counter[0]+s)
+        out = Func('lap%d'%lap_counter[0])
         lap_counter[0] += 1
         out[x,y] = f[x+1,y] + f[x-1,y] + f[x,y+1] + f[x,y-1] - 4.0 * f[x,y]
         return out
@@ -51,20 +46,20 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
         n = select(ps == 0.0, 1.0, ps)
         d = select(s == 0.0, 1.0, s)
 
-        proxy_x = Func('proxy_x%d'%distReg_counter[0]+s0)
+        proxy_x = Func('proxy_x%d'%distReg_counter[0])
         proxy_x.assign((n / d) * phi_x - phi_x)
   
-        proxy_y = Func('proxy_y%d'%distReg_counter[0]+s0)
+        proxy_y = Func('proxy_y%d'%distReg_counter[0])
         proxy_y.assign((n / d) * phi_y - phi_y)
 
-        out = Func('distReg%d'%distReg_counter[0]+s0)
+        out = Func('distReg%d'%distReg_counter[0])
         out.assign(dx(proxy_x) + dy(proxy_y) + lap(phi))
         distReg_counter[0] += 1
         
         return out
 
     def Dirac(input, sigma):
-        out = Func('Dirac%d'%Dirac_counter[0]+s)
+        out = Func('Dirac%d'%Dirac_counter[0])
         Dirac_counter[0] += 1
         out[x,y] = select((input[x,y] <= sigma) & (input[x,y] >= -sigma),
                     1.0 / (2.0 * sigma) * (1.0 + cos(math.pi * input[x,y] / sigma)),
@@ -72,7 +67,7 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
         return out
 
     def drlse_edge(phi_0, g, lambd, mu, alpha, epsilon, timestep, iter):
-        phi = [Func('phi%d'%i+s0) for i in range(iter+1)]
+        phi = [Func('phi%d'%i) for i in range(iter+1)]
         phi[0][x,y] = phi_0[x,y]
   
         vx = dx(g)[x,y]
@@ -86,7 +81,7 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
     
             smallNumber = 1e-10
 
-            Nx,Ny = Func('Nx%d'%k+s0), Func('Ny%d'%k+s0)
+            Nx,Ny = Func('Nx%d'%k), Func('Ny%d'%k)
             Nx[x,y] = phi_x / (s + smallNumber)
             Ny[x,y] = phi_y / (s + smallNumber)
        
@@ -103,18 +98,18 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
         return phi[-1]
 
     def blur(image, sigma):
-        gaussian = Func('gaussian'+s)
+        gaussian = Func('gaussian')
         gaussian[x] = exp(-(x/sigma)*(x/sigma)*0.5)
         
         # truncate to 3 sigma and normalize
         radius = int(3*sigma + 1.0)
-        i = RDom(-radius, 2*radius+1,'i'+s)
+        i = RDom(-radius, 2*radius+1,'i')
 #        i = i.x
-        normalized = Func('normalized'+s)
+        normalized = Func('normalized')
         normalized[x] = gaussian[x] / sum(gaussian[i]) # Uses an inline reduction
 
         # Convolve the input using two reductions
-        blurx, blury = Func('blurx'+s), Func('blury'+s)
+        blurx, blury = Func('blurx'), Func('blury')
         blurx[x, y] = 0.0
         blurx[x, y] += image[x+i, y] * normalized[i]
         blury[x, y] = 0.0
@@ -143,26 +138,26 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
 
     im = Image(UInt(8), in_filename)
 
-    gray = Func('gray'+s)
+    gray = Func('gray')
     gray[x, y] = max(cast(float_t, im[x, y, 0]), max(cast(float_t, im[x, y, 1]), cast(float_t, im[x, y, 2])))
 
-    clamped = Func('clamped'+s)
+    clamped = Func('clamped')
     clamped[x, y] = gray[clamp(x, cast(int_t, 0), cast(int_t, im.width()-1)),
                          clamp(y, cast(int_t, 0), cast(int_t, im.height()-1))]
     
-    blurred_input = Func('blurred_input'+s)
+    blurred_input = Func('blurred_input')
     blurred_input.assign(blur(clamped,sigma))
 
-    input_dx, input_dy = Func('input_dx'+s), Func('input_dy'+s)
+    input_dx, input_dy = Func('input_dx'), Func('input_dy')
     input_dx.assign(dx(blurred_input))
     input_dy.assign(dy(blurred_input))
 
-    g_proxy = Func('g_proxy'+s)
+    g_proxy = Func('g_proxy')
     g_proxy.assign(1.0 / (1.0 + input_dx * input_dx + input_dy * input_dy))
     
     g_buf = g_proxy.realize(im.width(), im.height())
 
-    phi_init = Func('phi_init'+s)
+    phi_init = Func('phi_init')
     phi_init[x,y] = select((x >= selectPadding)
                             & (x < im.width() - selectPadding)
                             & (y >= selectPadding)
@@ -171,15 +166,15 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
 
     phi_input = UniformImage(Float(32), 2)
 
-    phi_clamped = Func('phi_clamped'+s)
+    phi_clamped = Func('phi_clamped')
     phi_clamped[x,y] = phi_input[clamp(x,cast(int_t,0),cast(int_t,im.width()-1)),
                                  clamp(y,cast(int_t,0),cast(int_t,im.height()-1))]
   
-    g_clamped = Func('g_clamped'+s)
+    g_clamped = Func('g_clamped')
     g_clamped[x, y] = g_buf[clamp(x, cast(int_t,0), cast(int_t,g_buf.width()-1)),
                             clamp(y, cast(int_t,0), cast(int_t,g_buf.height()-1))]
 
-    phi_new = Func('phi_new'+s)
+    phi_new = Func('phi_new')
     phi_new.assign(drlse_edge(phi_clamped,g_clamped,lambd,mu,alpha,epsilon,timestep,iter_inner))
 
     def evaluate(in_png):
@@ -193,8 +188,8 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
             phi_new.realize(phi_buf2)
             phi_buf, phi_buf2 = phi_buf2, phi_buf
     
-        masked = Func('masked'+s)
-        c = Var('c'+s)
+        masked = Func('masked')
+        c = Var('c')
         masked[x,y,c] = select(phi_buf[x, y] < 0.0, im[x, y, c], im[x, y, c]/4)
         out = masked.realize(im.width(), im.height(), 3)
         return out
@@ -202,10 +197,7 @@ def filter_func(dtype=UInt(8), cache={}, in_filename=os.path.join(inputs_dir(), 
 
     root_all(phi_new)
 
-    ans = (im, phi_new, evaluate, locals())
-    cache[dtype_s] = ans
-
-    return ans
+    return (im, phi_new, evaluate, locals())
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
