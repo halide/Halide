@@ -1,10 +1,9 @@
-import boxblur
+import boxblur_cumsum as boxblur
 import sys
 
 def filter_func(*args):
-  return boxblur.boxblur_sat(*args)
+  return boxblur.boxblur_mode(*args, is_sat=True)
 
 if __name__ == '__main__':
-  sys.argv = ['boxblur_sat.py', 'sat']
-  boxblur.main()
+  boxblur.main(is_sat=True)
 
