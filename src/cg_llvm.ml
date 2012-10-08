@@ -684,7 +684,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     let ll_args = List.map cg_expr args in
 
     let global_fmt = define_global "debug_fmt" ll_fmt m in
-    set_linkage Llvm.Linkage.Internal global_fmt;
+    set_linkage Llvm.Linkage.Private global_fmt;
     let global_fmt = build_pointercast global_fmt (pointer_type (i8_type c)) "" b in
 
     (*Printf.printf "cg_debug: %s %s %s\n" (string_of_expr e) (prefix^fmt) (String.concat ", " (List.map string_of_expr args));
@@ -711,7 +711,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
 
     let ll_msg = const_stringz c str in
     let msg = define_global "assert_message" ll_msg m in
-    set_linkage Llvm.Linkage.Internal msg;
+    set_linkage Llvm.Linkage.Private msg;
     let msg = build_pointercast msg (pointer_type (i8_type c)) "" b in
     let ll_halide_error = declare_function "halide_error" 
       (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
