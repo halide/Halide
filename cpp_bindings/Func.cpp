@@ -1,16 +1,8 @@
 #include <llvm-c/Core.h> // for LLVMModuleRef and LLVMValueRef
-#include <llvm/ExecutionEngine/GenericValue.h>
-//#include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/Support/ErrorHandling.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/PassManager.h>
-#include <llvm/Analysis/Passes.h>
-#include <llvm/Transforms/Scalar.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
-#include <llvm/Target/TargetData.h>
-#include <llvm/Assembly/PrintModulePass.h>
-#include <llvm/Transforms/IPO.h>
+#include <llvm-c/ExecutionEngine.h>
+#include <llvm-c/Target.h>
+#include <llvm-c/Transforms/IPO.h>
+#include <llvm-c/Transforms/PassManagerBuilder.h>
 #include <sys/time.h>
 
 #include "../src/buffer.h"
@@ -152,9 +144,9 @@ namespace Halide {
         
         const std::string name;
         
-        static llvm::ExecutionEngine *ee;
-        static llvm::FunctionPassManager *fPassMgr;
-        static llvm::PassManager *mPassMgr;
+        static LLVMExecutionEngineRef ee;
+        static LLVMPassManagerRef fPassMgr;
+        static LLVMPassManagerRef mPassMgr;
         // A handle to libcuda.so. Necessary if we don't link it in.
         static void *libCuda;
         // Was libcuda.so linked in already?
@@ -190,9 +182,9 @@ namespace Halide {
 
     };
 
-    llvm::ExecutionEngine *Func::Contents::ee = NULL;
-    llvm::FunctionPassManager *Func::Contents::fPassMgr = NULL;
-    llvm::PassManager *Func::Contents::mPassMgr = NULL;
+    LLVMExecutionEngineRef Func::Contents::ee = NULL;
+    LLVMPassManagerRef Func::Contents::fPassMgr = NULL;
+    LLVMPassManagerRef Func::Contents::mPassMgr = NULL;
     void *Func::Contents::libCuda = NULL;
     bool Func::Contents::libCudaLinked = false;
     
@@ -831,8 +823,9 @@ namespace Halide {
         }
 
         if (!Contents::ee) {
-            llvm::InitializeNativeTarget();
-            llvm::InitializeNativeTargetAsmPrinter();
+            LLVMInitializeNativeTarget();
+            LLVMInitializeX86AsmPrinter();
+            LLVMInitializeARMAsmPrinter();
         }
 
         // Use the function definitions and the schedule to create the
@@ -852,61 +845,45 @@ namespace Halide {
         MLVal::unpackPair(tuple, first, second);
         LLVMModuleRef module = (LLVMModuleRef)(first.asVoidPtr());
         LLVMValueRef func = (LLVMValueRef)(second.asVoidPtr());
-        llvm::Function *f = llvm::unwrap<llvm::Function>(func);
-        llvm::Module *m = llvm::unwrap(module);
 
         // Create the execution engine if it hasn't already been done
         if (!Contents::ee) {
-            std::string errStr;
-            llvm::EngineBuilder eeBuilder(m);
-            eeBuilder.setErrorStr(&errStr);
-            eeBuilder.setEngineKind(llvm::EngineKind::JIT);
-            eeBuilder.setUseMCJIT(false);
-            eeBuilder.setOptLevel(llvm::CodeGenOpt::Aggressive);
-
-            // runtime-detect avx to only enable it if supported
-            // disabled for now until we upgrade llvm
-            if (use_avx() && 0) {
-                std::vector<std::string> mattrs = vec(std::string("avx"));
-                eeBuilder.setMAttrs(mattrs);
+            
+            char *errStr = NULL;
+            bool error = LLVMCreateJITCompilerForModule(&Contents::ee, module, 3, &errStr);
+            if (error) {
+                printf("Couldn't create execution engine: %s\n", errStr);
             }
 
-            Contents::ee = eeBuilder.create();
-            if (!contents->ee) {
-                printf("Couldn't create execution engine: %s\n", errStr.c_str()); 
-                exit(1);
-            }
-
-            // Set up the pass manager
-            Contents::fPassMgr = new llvm::FunctionPassManager(m);
-            Contents::mPassMgr = new llvm::PassManager();
+            Contents::fPassMgr = LLVMCreateFunctionPassManagerForModule(module);
+            Contents::mPassMgr = LLVMCreatePassManager();
 
             // Make sure to include the always-inliner pass so that
             // unaligned_load and other similar one-opcode functions
             // always get inlined.
-            Contents::mPassMgr->add(llvm::createAlwaysInlinerPass());
+            LLVMAddAlwaysInlinerPass(contents->mPassMgr);
 
-            // Add every other pass used by -O3
-            llvm::PassManagerBuilder builder;
-            builder.OptLevel = 3;
-            builder.populateFunctionPassManager(*contents->fPassMgr);
-            builder.populateModulePassManager(*contents->mPassMgr);
+            LLVMPassManagerBuilderRef builder = LLVMPassManagerBuilderCreate();  
+            LLVMPassManagerBuilderSetOptLevel(builder, 3);
+            LLVMPassManagerBuilderPopulateFunctionPassManager(builder, contents->fPassMgr);
+            LLVMPassManagerBuilderPopulateModulePassManager(builder, contents->mPassMgr);
 
         } else { 
             // Execution engine is already created. Add this module to it.
-            Contents::ee->addModule(m);
+            LLVMAddModule(Contents::ee, module);
         }            
         
         std::string functionName = name() + "_c_wrapper";
-        llvm::Function *inner = m->getFunction(functionName.c_str());
+        LLVMValueRef inner = LLVMGetNamedFunction(module, functionName.c_str());
         
         if (use_gpu()) {
             // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
             // CUDA behaves much better when you don't initialize >2 contexts.
-            llvm::GlobalVariable* ctx = m->getNamedGlobal("cuda_ctx");
+
+            LLVMValueRef ctx = LLVMGetNamedGlobal(module, "cuda_ctx");
             if (ctx) {
-                Contents::ee->addGlobalMapping(ctx, (void*)&cuda_ctx);
-            }        
+                LLVMAddGlobalMapping(Contents::ee, ctx, (void *)&cuda_ctx);
+            }
 
             // Make sure extern cuda calls inside the module point to
             // the right things. This is done manually instead of
@@ -943,13 +920,17 @@ namespace Halide {
                 // Shouldn't need to do anything. llvm will call dlsym
                 // on the current process for us.
             } else {
-                for (llvm::Module::iterator f = m->begin(); f != m->end(); f++) {
-                    llvm::StringRef name = f->getName();
-                    if (f->hasExternalLinkage() && name[0] == 'c' && name[1] == 'u') {
+                for (LLVMValueRef f = LLVMGetFirstFunction(module); f;
+                     f = LLVMGetNextFunction(f)) {
+                    const char *name = LLVMGetValueName(f);
+                    if (LLVMGetLinkage(f) == LLVMExternalLinkage &&
+                        name[0] == 'c' && name[1] == 'u') {
                         // Starts with "cu" and has extern linkage. Might be a cuda function.
-                        fprintf(stderr, "Linking %s\n", name.str().c_str());
-                        void *ptr = dlsym(Contents::libCuda, name.str().c_str());
-                        if (ptr) Contents::ee->updateGlobalMapping(f, ptr);
+                        fprintf(stderr, "Linking %s\n", name);
+                        void *ptr = dlsym(Contents::libCuda, name);
+                        if (ptr) {
+                            LLVMAddGlobalMapping(Contents::ee, f, ptr);
+                        }
                     }
                 }
             }
@@ -961,35 +942,34 @@ namespace Halide {
 
         // Turning on this code will dump the result of all the optimization passes to a file
         // std::string errstr;
-        // llvm::raw_fd_ostream stdout("passes.txt", errstr);
 
-        Contents::mPassMgr->run(*m);
-        Contents::fPassMgr->doInitialization();       
-        Contents::fPassMgr->run(*inner);        
-        Contents::fPassMgr->doFinalization();
+        LLVMRunPassManager(Contents::mPassMgr, module);
+        LLVMInitializeFunctionPassManager(Contents::fPassMgr);
+        LLVMRunFunctionPassManager(Contents::fPassMgr, inner);
+        LLVMFinalizeFunctionPassManager(Contents::fPassMgr);
 
-        void *ptr = Contents::ee->getPointerToFunction(f);
+        void *ptr = LLVMGetPointerToGlobal(Contents::ee, func);
         contents->functionPtr = (void (*)(void*))ptr;
 
         // Retrieve some functions inside the module that we'll want to call from C++
-        llvm::Function *copyToHost = m->getFunction("__copy_to_host");
+        LLVMValueRef copyToHost = LLVMGetNamedFunction(module, "__copy_to_host");
         if (copyToHost) {
-            ptr = Contents::ee->getPointerToFunction(copyToHost);
+            ptr = LLVMGetPointerToGlobal(Contents::ee, copyToHost);
             contents->copyToHost = (void (*)(buffer_t*))ptr;
         }
-        
-        llvm::Function *freeBuffer = m->getFunction("__free_buffer");
+
+        LLVMValueRef freeBuffer = LLVMGetNamedFunction(module, "__free_buffer");
         if (freeBuffer) {
-            ptr = Contents::ee->getPointerToFunction(freeBuffer);
+            ptr = LLVMGetPointerToGlobal(Contents::ee, freeBuffer);
             contents->freeBuffer = (void (*)(buffer_t*))ptr;
-        }       
+        }
 
         // If we have a custom error handler, hook it up here
         if (contents->errorHandler) {
-            llvm::Function *setErrorHandler = m->getFunction("set_error_handler");
+            LLVMValueRef setErrorHandler = LLVMGetNamedFunction(module, "set_error_handler");
             assert(setErrorHandler && 
                    "Could not find the set_error_handler function in the compiled module\n");
-            ptr = Contents::ee->getPointerToFunction(setErrorHandler);
+            ptr = LLVMGetPointerToGlobal(Contents::ee, setErrorHandler);
             typedef void (*handler_t)(char *);
             void (*setErrorHandlerFn)(handler_t) = (void (*)(void (*)(char *)))ptr;
             setErrorHandlerFn(contents->errorHandler);
