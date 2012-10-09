@@ -23,7 +23,19 @@ def filter_func(dtype=UInt(16)):
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'lena_crop.png'), disp_time=True)().show()
+    
+    x, y, c = local_d['x'], local_d['y'], local_d['c']
+    dilate = local_d['dilate']
+
+    xi, yi = Var('xi'), Var('yi')
+
+    if 1:
+        dilate.root().split(y, y, yi, 8).parallel(y).vectorize(x, 8)
+    
+    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo2.png'), disp_time=True)
+    for i in range(5):
+        test()
+    test().show()
 
 if __name__ == '__main__':
     main()
