@@ -13,7 +13,7 @@ type val_type =
   | FloatVector of int * int
 with sexp
 
-let bool1 = Int 1
+let bool1 = UInt 1
 let u8    = UInt 8
 let u16   = UInt 16
 let u32   = UInt 32
