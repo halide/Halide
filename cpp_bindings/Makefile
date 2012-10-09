@@ -16,13 +16,7 @@ LLVM_LIBS_CXX=$(shell $(LLVM_CONFIG_EXE) --libs jit bitwriter bitreader x86 arm 
 LLVM_LIBS_C=-lllvm -lllvm_executionengine -lllvm_bitwriter -lllvm_bitreader -lllvm_analysis -lllvm_target
 
 OCAML_LLVM_LIB_DIR=$(LLVM_DIR)/lib/ocaml
-OCAMLC=$(shell which ocamlc)
-# TODO: conditionally test for lib/ocaml or lib/ocaml/std-lib for GODI
-GODI_LIB_DIR=$(OCAMLC:bin/ocamlc=lib/ocaml/std-lib)
-OCAML_LIB_DIR=$(shell test -d $(GODI_LIB_DIR) && echo $(GODI_LIB_DIR))
-ifeq ($(OCAML_LIB_DIR),)
-OCAML_LIB_DIR=$(OCAMLC:bin/ocamlc=lib/ocaml)
-endif
+OCAML_LIB_DIR=$(shell ocamlc -where)
 LLVM_LDFLAGS=$(shell $(LLVM_CONFIG_EXE) --ldflags)
 LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) $(CUDA_LIBS) -ldl -lstdc++
 
