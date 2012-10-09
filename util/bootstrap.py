@@ -31,15 +31,57 @@ def check_llvm():
     except:
         return False
 
+class OCamlVersionError(Exception):
+    url = 'http://caml.inria.fr/'
+    def __str__(self):
+        return 'OCaml >= 3.12 is required'
 
-# Test for ocaml 3.12.*
-status('Testing for OCaml 3.12.* or greater')
-from pbs import ocaml, ocamlbuild
-ver = ocaml('-version')
-print ver
-assert '3.12' in ver or '4.' in ver
-print '...OK!'
+class OCamlFindlibError(Exception):
+    url = 'http://projects.camlcity.org/projects/findlib.html'
+    def __str__(self):
+        return 'OCaml findlib is required'
 
+class OCamlLibMissingError(Exception):
+    def __init__(self, name):
+        self.name = name
+    def __str__(self):
+        return 'Missing required OCaml library: %s' % self.name
+
+def check_ocaml():
+    try:
+        # Test for ocaml 3.12.*
+        status('Testing for OCaml 3.12.* or greater')
+        from pbs import ocaml, ocamlbuild
+        ver = ocaml('-version')
+        print ver
+        assert '3.12' in ver or '4.' in ver
+    except:
+        raise OCamlVersionError()
+    
+    try:
+        status('Testing for ocamlfind')
+        from pbs import ocamlfind
+        print '..OK!'
+    except:
+        raise OCamlFindlibError()
+    
+    def assert_lib_version(lib, ver_req):
+        def lib_version(lib):
+            status('Testing for %s' % lib)
+            info = ocamlfind('query', '-l', lib)
+            return [l.split()[-1] for l in info.splitlines() if l.startswith('version')][0]
+        try:
+            ver = lib_version(lib)
+            ver = float( '.'.join( ver.split('.')[0:2] ) )
+            assert ver >= ver_req
+        except:
+            raise OCamlLibMissingError('%s >= %.1f' % (lib, ver_req))
+    
+    assert_lib_version('sexplib', 108)
+    assert_lib_version('batteries', 1.5)
+    return ocamlbuild
+
+ocamlbuild = None
 platform = sys.platform.lower()
 if 'linux' in platform:
     try:
@@ -51,6 +93,12 @@ if 'linux' in platform:
         status('Testing for package libc6-dev-i386')
         assert isfile('/usr/include/x86_64-linux-gnu/gnu/stubs-32.h')
         print '...OK!'
+        
+        try:
+            ocamlbuild = check_ocaml()
+            print '...OK!'
+        except OCamlVersionError as e:
+            print 'e'
     
         status('Testing for package libsexplib-camlp4-dev')
         assert isdir('/usr/lib/ocaml/sexplib')
@@ -72,6 +120,18 @@ if 'darwin' in platform:
         print 'Trying installing the command line tools from xcode.'
         print 'They can be found in preferences -> downloads -> command line tools.'
         print 'If that doesn\'t work, update xcode and try again.'
+        sys.exit(1)
+    try:
+        ocamlbuild = check_ocaml()
+        print '...OK!'
+    except OCamlVersionError as e:
+        print e
+        sys.exit(1)
+    except OCamlFindlibError as e:
+        print e
+        sys.exit(1)
+    except OCamlLibMissingError as e:
+        print e
         sys.exit(1)
 
 # Submodule update/init
