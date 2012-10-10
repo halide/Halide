@@ -171,7 +171,8 @@ class AutotuneParams:
 #        raise ValueError(self.cores)
     
     def dict_prob_mutate(self):
-        return dict([(key, getattr(self, key)) for key in dir(self) if key.startswith('prob_mutate_')])
+        start = 'prob_mutate_'
+        return dict([(key[len(start):], getattr(self, key)) for key in dir(self) if key.startswith(start)])
 
 def sample_prob(d):
     "Randomly sample key from dictionary with probabilities given in values."
