@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     // Best schedule for CPU
     printf("Compiling for CPU\n");
     grid.root().parallel(z);
-    grid.update().transpose(y, c).transpose(x, c).parallel(y);
+    grid.update().reorder(c, x, y).parallel(y);
     blurx.root().parallel(z).vectorize(x, 4);
     blury.root().parallel(z).vectorize(x, 4);
     blurz.root().parallel(z).vectorize(x, 4);

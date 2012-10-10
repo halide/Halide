@@ -35,9 +35,10 @@ Func deinterleave(Func raw) {
     // Deinterleave the color channels
     Func deinterleaved;
 
-    deinterleaved(x, y) = (raw(2*x, 2*y),   raw(2*x+1, 2*y), 
-                           raw(2*x, 2*y+1), raw(2*x+1, 2*y+1));
-
+    deinterleaved(x, y, c) = select(c == 0, raw(2*x, 2*y), 
+                                    select(c == 1, raw(2*x+1, 2*y),
+                                           select(c == 2, raw(2*x, 2*y+1), 
+                                                  raw(2*x+1, 2*y+1))));
     return deinterleaved;
 }
 
@@ -135,7 +136,8 @@ Func demosaic(Func deinterleaved) {
 
 
     Func output;
-    output(x, y) = (r(x, y), g(x, y), b(x, y));
+    output(x, y, c) = select(c == 0, r(x, y), 
+                             select(c == 1, g(x, y), b(x, y)));
 
 
     /* THE SCHEDULE */    
@@ -206,7 +208,11 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
     Expr g = matrix(3, 1) + matrix(0, 1) * ir + matrix(1, 1) * ig + matrix(2, 1) * ib;
     Expr b = matrix(3, 2) + matrix(0, 2) * ir + matrix(1, 2) * ig + matrix(2, 2) * ib;
 
-    corrected(x, y) = cast<int16_t>((r, g, b)/256);
+    r = cast<int16_t>(r/256);
+    g = cast<int16_t>(g/256);
+    b = cast<int16_t>(b/256);
+    corrected(x, y, c) = select(c == 0, r,
+                                select(c == 1, g, b));
 
     return corrected;
 }
@@ -256,14 +262,14 @@ Func process(Func raw, Type result_type,
         denoised.chunk(tx).vectorize(x, 8);
         deinterleaved.chunk(tx).vectorize(x, 8);
         corrected.chunk(tx).vectorize(x, 4);
-        processed.tile(tx, ty, xi, yi, 32, 32).transpose(ty, ci).transpose(tx, ci);
+        processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, ci, tx, ty);
         processed.parallel(ty);
     } else if (schedule == 1) {
         // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
         denoised.chunk(tx);
         deinterleaved.chunk(tx);
         corrected.chunk(tx);
-        processed.tile(tx, ty, xi, yi, 128, 128).transpose(ty, ci).transpose(tx, ci);
+        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, ci, tx, ty);
         processed.parallel(ty);
     } else {
         denoised.root();

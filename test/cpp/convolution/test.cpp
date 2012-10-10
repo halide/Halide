@@ -38,7 +38,8 @@ int main(int argc, char **argv) {
         blur.cudaTile(x, y, 16, 16);
     } else {
         // Take this opportunity to test tiling reductions
-        Var xi, yi;
+        Var xi("xi"), yi("yi");
+        //Var xi, yi;
         blur.tile(x, y, xi, yi, 6, 6);
         blur.update().tile(x, y, xi, yi, 4, 4);
     }

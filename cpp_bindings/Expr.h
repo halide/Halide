@@ -76,10 +76,6 @@ namespace Halide {
         bool isDefined() const;
         bool isImmediate() const;
 
-        // For a scalar this is an empty vector
-        // For a tuple this gives the shape of the tuple
-        std::vector<int> &shape() const;
-
         // When an expression is captured and placed inside an
         // anonymous function body, any reduction vars become regular
         // vars to the anonymous function

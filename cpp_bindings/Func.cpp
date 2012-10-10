@@ -66,11 +66,10 @@ namespace Halide {
     ML_FUNC2(makeUnrollTransform);
     ML_FUNC4(makeBoundTransform);
     ML_FUNC5(makeSplitTransform);
-    ML_FUNC3(makeTransposeTransform);
+    ML_FUNC2(makeReorderTransform);
     ML_FUNC2(makeChunkTransform);
     ML_FUNC1(makeRootTransform);
     ML_FUNC2(makeParallelTransform);
-    ML_FUNC2(makeRandomTransform);
     
     ML_FUNC1(doConstantFold);
   
@@ -83,8 +82,6 @@ namespace Halide {
     ML_FUNC3(doLower);
 
     ML_FUNC0(makeNoviceGuru);
-    ML_FUNC1(loadGuruFromFile);
-    ML_FUNC2(saveGuruToFile);
 
     ML_FUNC1(printStmt);
     ML_FUNC1(printSchedule);
@@ -363,7 +360,7 @@ namespace Halide {
             contents->rhs.child(r);
            
             MLVal reduction_args = makeList();
-        const RDom &rdom = contents->rhs.rdom();
+            const RDom &rdom = contents->rhs.rdom();
             for (int i = rdom.dimensions(); i > 0; i--) {
                 reduction_args = addToList(reduction_args, 
                                            makeTriple(rdom[i-1].name(), 
@@ -388,69 +385,12 @@ namespace Halide {
         return *contents->update;
     }
 
-    void *watchdog(void *arg) {
-        useconds_t t = ((useconds_t *)arg)[0];
-        printf("Watchdog sleeping for %d microseconds\n", static_cast<int>(t));
-        usleep(t);
-        printf("Took too long, bailing out\n");
-        exit(-1);
-    }
-
-    int Func::autotune(int argc, char **argv, std::vector<int> sizes) {
-        timeval before, after;
-
-        printf("sizes: ");
-        for (size_t i = 0; i < sizes.size(); i++) {
-            printf("%u ", sizes[i]);
-        }
-        printf("\n");
-
-        if (argc == 1) {
-            // Run with default schedule to establish baseline timing (including basic compilation time)
-            gettimeofday(&before, NULL);
-            DynImage im = realize(sizes);
-            for (int i = 0; i < 5; i++) realize(im);
-            gettimeofday(&after, NULL);            
-            useconds_t t = (after.tv_sec - before.tv_sec) * 1000000 + (after.tv_usec - before.tv_usec);
-            printf("%d\n", static_cast<int>(t));
-            return 0;
-        }        
-
-        // How to schedule it
-        for (int i = 2; i < argc; i++) {
-            // One random transform per function per arg
-            srand(atoi(argv[i]));            
-            for (size_t i = 0; i < rhs().funcs().size(); i++) {
-                Func f = rhs().funcs()[i];
-                f.random(rand());
-            }
-            random(rand());
-        }        
-
-        // Set up a watchdog to kill us if we take too long 
-        printf("Setting up watchdog timer\n");
-        useconds_t time_limit = atoi(argv[1]) + 1000000;
-        pthread_t watchdog_thread;
-        pthread_create(&watchdog_thread, NULL, watchdog, &time_limit);
-
-        // Trigger compilation and one round of evaluation
-        DynImage im = realize(sizes);
-
-        // Start the clock
-        gettimeofday(&before, NULL);
-        for (int i = 0; i < 5; i++) realize(im);
-        gettimeofday(&after, NULL);            
-        useconds_t t = (after.tv_sec - before.tv_sec) * 1000000 + (after.tv_usec - before.tv_usec);
-        printf("%d\n", static_cast<int>(t));        
-        return 0;
-    }
-
     Func &Func::tile(const Var &x, const Var &y, 
                      const Var &xi, const Var &yi, 
                      const Expr &f1, const Expr &f2) {
         split(x, x, xi, f1);
         split(y, y, yi, f2);
-        transpose(x, yi);
+        reorder(xi, yi, x, y);
         return *this;
     }
 
@@ -460,7 +400,7 @@ namespace Halide {
                      const Expr &f1, const Expr &f2) {
         split(x, xo, xi, f1);
         split(y, yo, yi, f2);
-        transpose(xo, yi);
+        reorder(xi, yi, xo, yo);
         return *this;
     }
 
@@ -504,12 +444,30 @@ namespace Halide {
         return *this;
     }
 
-    Func &Func::transpose(const Var &outer, const Var &inner) {
-        MLVal t = makeTransposeTransform((name()),
-                                         (outer.name()),
-                                         (inner.name()));
+    Func &Func::reorder(const std::vector<Var> &vars) {
+        MLVal list = makeList();
+        for (size_t i = vars.size(); i > 0; i--) {
+            list = addToList(list, vars[i-1].name());
+        }
+        MLVal t = makeReorderTransform(name(), list);
         contents->scheduleTransforms.push_back(t);
         return *this;
+    }
+
+    Func &Func::reorder(const Var &v1, const Var &v2) {
+        return reorder(vec(v1, v2));
+    }
+
+    Func &Func::reorder(const Var &v1, const Var &v2, const Var &v3) {
+        return reorder(vec(v1, v2, v3));
+    }
+
+    Func &Func::reorder(const Var &v1, const Var &v2, const Var &v3, const Var &v4) {
+        return reorder(vec(v1, v2, v3, v4));
+    }
+
+    Func &Func::reorder(const Var &v1, const Var &v2, const Var &v3, const Var &v4, const Var &v5) {
+        return reorder(vec(v1, v2, v3, v4, v5));
     }
 
     Func &Func::chunk(const Var &caller_var) {
@@ -520,12 +478,6 @@ namespace Halide {
 
     Func &Func::root() {
         MLVal t = makeRootTransform(name());
-        contents->scheduleTransforms.push_back(t);
-        return *this;
-    }
-
-    Func &Func::random(int seed) {
-        MLVal t = makeRandomTransform(name(), seed);
         contents->scheduleTransforms.push_back(t);
         return *this;
     }
@@ -629,43 +581,6 @@ namespace Halide {
 
 
     MLVal Func::Contents::applyScheduleTransforms(MLVal guru) {
-        // If we're not inline, obey any tuple shape scheduling hints
-        if (scheduleTransforms.size() && rhs.isDefined() && rhs.shape().size()) {
-            /*
-            printf("%s has tuple shape: ", name.c_str());
-            for (size_t i = 0; i < rhs.shape().size(); i++) {
-                printf("%d ", rhs.shape()[i]);
-            }
-            printf("\n");
-            */
-
-            for (size_t i = 0; i < rhs.shape().size(); i++) {
-                assert(args[args.size()-1-i].isVar());
-                // The tuple var is the first implicit var (TODO: this is very very ugly)
-                Var t("iv0");
-                // Pull all the vars inside the tuple var outside
-                bool inside = false;
-                for (size_t j = args.size(); j > 0; j--) {
-                    assert(args[j-1].isVar());
-                    Var x = args[j-1].vars()[0];
-                    if (x.name() == t.name()) {
-                        inside = true;
-                        continue;
-                    }
-                    if (inside) {
-                        //printf("Pulling %s outside of %s\n", x.name().c_str(), t.name().c_str());
-                        MLVal trans = makeTransposeTransform(name, x.name(), t.name());
-                        guru = trans(guru);
-                    }
-                }
-                assert(inside);
-
-                MLVal trans = makeBoundTransform(name, t.name(), Expr(0).node(), Expr(rhs.shape()[i]).node());
-                guru = trans(guru);
-                trans = makeUnrollTransform(name, t.name());
-                guru = trans(guru);
-            }
-        }
         for (size_t i = 0; i < scheduleTransforms.size(); i++) {
             guru = scheduleTransforms[i](guru);
         }
@@ -701,8 +616,6 @@ namespace Halide {
             guru = f.contents->applyScheduleTransforms(guru);
         }
 
-        //saveGuruToFile(guru, name() + ".guru");
-        
         MLVal sched = makeSchedule((name()),
                                    sizes,
                                    *Func::environment,

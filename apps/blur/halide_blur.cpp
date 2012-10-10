@@ -19,9 +19,7 @@ int main(int argc, char **argv) {
   blur_x.chunk(x);
   blur_x.vectorize(x, 8);
   #else // GPU
-  blur_y.split(x, xo, xi, 32).split(y, yo, yi, 16).transpose(xo, yi);
-  //blur_y.tile()
-  blur_y.parallel(yo).parallel(yi).parallel(xo).parallel(xi);
+  blur_y.cudaTile(x, y, 32, 16);
   
   #if 0
   // chunking

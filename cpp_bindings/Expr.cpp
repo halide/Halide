@@ -6,7 +6,6 @@
 #include "Func.h"
 #include "Uniform.h"
 #include "Image.h"
-#include "Tuple.h"
 #include "Util.h"
 #include <sstream>
 
@@ -90,9 +89,6 @@ namespace Halide {
         
         // The number of arguments that remain implicit
         int implicitArgs;
-
-        // tuple shape
-        std::vector<int> shape;
     }; 
     
 
@@ -203,10 +199,6 @@ namespace Halide {
         return contents->implicitArgs;
     }
 
-    std::vector<int> &Expr::shape() const {
-        return contents->shape;
-    }
-    
     void Expr::addImplicitArgs(int a) {
         contents->implicitArgs += a;
     }
@@ -266,14 +258,6 @@ namespace Halide {
         if (c.rdom().isDefined()) {
             rdom = c.rdom();
         }        
-
-        for (size_t i = 0; i < c.shape().size(); i++) {
-            if (i < shape.size()) {
-                assert(shape[i] == c.shape()[i]);                
-            } else {
-                shape.push_back(c.shape()[i]);
-            }
-        }
     }
 
     void Expr::child(Expr c) {
@@ -306,11 +290,6 @@ namespace Halide {
         child(other);
     }
 
-    /*
-    Tuple Expr::operator,(Expr other) {
-        return Tuple(*this, other);
-    }
-    */
     
     void Expr::operator*=(Expr other) {
         other = cast(type(), other);

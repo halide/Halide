@@ -55,27 +55,30 @@ let rec list_drop_while pred = function
   | first::rest when pred first -> list_drop_while pred rest
   | l -> l
 
-(* Sort a list using a partial order *)
-let rec partial_sort (lt: 'a -> 'a -> bool option) (l : 'a list) =
-  let rec select_smallest before elem after =
-    let lt_or_none b = match lt elem b with
-      | None -> true
-      | Some true -> true
-      | _ -> false
+(* Sort according to a partial ordering. This sort is stable (in that
+   it doesn't rearrange non-participating elements), and users of it
+   assume this, so don't swap this for a non-stable sort *)
+let rec partial_sort (lt: 'a -> 'a -> bool option) = function
+  | [] -> []
+  | first::rest ->
+    (* Partition rest into (elems not lt first) @ (elem lt first :: unsorted elems) *)
+    let rec partition = function
+      | [] -> ([], [])
+      | (x::xs) -> 
+        match lt first x with
+          | Some false -> ([], x::xs)
+          | _ ->
+            let (a, b) = partition xs in
+            (x::a, b)
     in
-    if ((List.fold_left (&&) true (List.map lt_or_none before)) &&
-           (List.fold_left (&&) true (List.map lt_or_none after))) then begin
-      elem::(partial_sort lt (before @ after))
-    end else begin
-      match after with
-        | [] -> failwith "Invalid partial ordering"
-        | first::rest -> select_smallest (elem::before) first rest
-    end
-  in
-  match l with
-    | [] -> []
-    | (first::rest) -> select_smallest [] first rest
- 
+    let (a, b) = partition rest in
+    match partition rest with
+      | (a, []) -> 
+        (* first is in the right place *)
+        first :: (partial_sort lt rest)
+      | (a, (b::bs)) ->
+        (* first should be swapped with b and the sort restarted from here *)
+        partial_sort lt ((b::a) @ (first::bs))                       
 
 (* TODO: set local debug options and flags per-module *)
 let verbosity = 
