@@ -128,9 +128,6 @@ int main(int argc, char **argv) {
 
     Var yi;
 
-    // Variables to control mapping to GPU
-    Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
-
     // Times are for a quad-core core2, a 32-core nehalem, and a 2-core omap4 cortex-a9
     switch (atoi(argv[1])) {
     case 0:
@@ -302,8 +299,7 @@ int main(int argc, char **argv) {
 
     case 100:
         // output stage only on GPU
-        output.root().split(y, by, ty, 32).split(x, bx, tx, 32)
-            .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        output.root().cudaTile(x, y, 32, 32);
         for (int j = 0; j < J; j++) {
             inGPyramid[j].root();
             gPyramid[j].root();
@@ -315,75 +311,45 @@ int main(int argc, char **argv) {
         break;
     case 101:
         // all root on GPU, tiny blocks to prevent accidental bounds explosion
-        output.root().split(y, by, ty, 2).split(x, bx, tx, 2)
-            .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        output.root().cudaTile(x, y, 2, 2);
         for (int j = 0; j < J; j++) {
-            inGPyramid[j].root()
-                .split(y, by, ty, 2).split(x, bx, tx, 2)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
-            gPyramid[j].root()
-                .split(y, by, ty, 2).split(x, bx, tx, 2)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
-            outGPyramid[j].root()
-                .split(y, by, ty, 2).split(x, bx, tx, 2)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            inGPyramid[j].root().cudaTile(x, y, 2, 2);
+            gPyramid[j].root().cudaTile(x, y, 2, 2);
+            outGPyramid[j].root().cudaTile(x, y, 2, 2);
             if (j == J-1) break;
-            lPyramid[j].root()
-                .split(y, by, ty, 2).split(x, bx, tx, 2)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
-            outLPyramid[j].root()
-                .split(y, by, ty, 2).split(x, bx, tx, 2)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            lPyramid[j].root().cudaTile(x, y, 2, 2);
+            outLPyramid[j].root().cudaTile(x, y, 2, 2);
         }
         break;
     case 102:
         // all root on GPU
-        output.root().split(y, by, ty, 32).split(x, bx, tx, 32)
-            .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        output.root().cudaTile(x, y, 32, 32); 
         for (int j = 0; j < J; j++) {
             int blockw = 32, blockh = 32;
             if (j > 3) {
                 blockw = 2;
                 blockh = 2;
             }
-            inGPyramid[j].root()
-                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
-            gPyramid[j].root()
-                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
-            outGPyramid[j].root()
-                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            inGPyramid[j].root().cudaTile(x, y, blockw, blockh);
+            gPyramid[j].root().cudaTile(x, y, blockw, blockh);
+            outGPyramid[j].root().cudaTile(x, y, blockw, blockh);
             if (j == J-1) break;
-            lPyramid[j].root()
-                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
-            outLPyramid[j].root()
-                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            lPyramid[j].root().cudaTile(x, y, blockw, blockh);
+            outLPyramid[j].root().cudaTile(x, y, blockw, blockh);
         }
         break;
     case 103:
-
         // most root, but inline laplacian pyramid levels - 49ms on Tesla
-        output.root().split(y, by, ty, 32).split(x, bx, tx, 32)
-            .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+        output.root().cudaTile(x, y, 32, 32);
         for (int j = 0; j < J; j++) {
             int blockw = 32, blockh = 32;
             if (j > 3) {
                 blockw = 2;
                 blockh = 2;
             }
-            inGPyramid[j].root()
-                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
-            gPyramid[j].root()
-                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
-            outGPyramid[j].root()
-                .split(y, by, ty, blockh).split(x, bx, tx, blockw)
-                .transpose(bx, ty).parallel(by).parallel(ty).parallel(bx).parallel(tx);
+            inGPyramid[j].root().cudaTile(x, y, blockw, blockh);
+            gPyramid[j].root().cudaTile(x, y, blockw, blockh);
+            outGPyramid[j].root().cudaTile(x, y, blockw, blockh);
         }
         break;
     default: 

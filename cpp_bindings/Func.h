@@ -99,7 +99,11 @@ namespace Halide {
         Func &reset();
         Func &vectorize(const Var &);
         Func &unroll(const Var &);
-        Func &transpose(const Var &, const Var &);
+        Func &reorder(const std::vector<Var> &);
+        Func &reorder(const Var &, const Var &);
+        Func &reorder(const Var &, const Var &, const Var &);
+        Func &reorder(const Var &, const Var &, const Var &, const Var &);
+        Func &reorder(const Var &, const Var &, const Var &, const Var &, const Var &);
         Func &chunk(const Var &);
         Func &root();
         Func &parallel(const Var &);
@@ -111,7 +115,6 @@ namespace Halide {
         Func &cuda(const Var &, const Var &, const Var &, const Var &);
         Func &cudaTile(const Var &, int xFactor);
         Func &cudaTile(const Var &, const Var &, int xFactor, int yFactor);
-        //Func &cuda(const Var &, const Var &, const Var &, const Var &, const Var &, const Var &);
 
         int autotune(int argc, char **argv, std::vector<int> sizes);
 
