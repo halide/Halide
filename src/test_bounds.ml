@@ -20,7 +20,7 @@ let _ =
   let x = Var (i32, "x") in
   let y = Var (i32, "y") in
   let z = Var (i32, "z") in
-  let f x y = Call (Int 32, "f", [x; y]) in
+  let f x y = Call (Func, Int 32, "f", [x; y]) in
 
   let env = StringMap.empty in
   let env = StringMap.add "x" (Range (IntImm 0, IntImm 100)) env in
