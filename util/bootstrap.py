@@ -1,7 +1,5 @@
 #!/usr/bin/env python
-# Requires Python 2.6 for the subprocess module
 
-import subprocess
 from os import chdir
 from os.path import isfile, isdir
 import sys
@@ -137,6 +135,7 @@ if 'darwin' in platform:
 # Submodule update/init
 # TODO: make --recursive optional
 status('Checking out submodules')
+git('submodule', 'sync')
 git('submodule', 'update', '--init', '--recursive')
 
 # TODO: always run make -C llvm, just to make sure it's up to date. Does configure cache its settings when a reconfigure is forced?
