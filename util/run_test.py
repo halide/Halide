@@ -4,7 +4,7 @@ from __future__ import with_statement
 import os
 import os.path
 import json
-from pbs import Command, make, which, ocamlbuild
+from sh import Command, make, which, ocamlbuild
 import sys
 
 # TODO: make pch: `g++ -x c++-header -I ../ImageStack/src test_plugin.h`
@@ -76,7 +76,7 @@ def test_cpp(name):
     remove(logfile)
     remove(errfile)
     
-    # Threading these through as file handles shared by all PBS tasks makes
+    # Threading these through as file handles shared by all sh tasks makes
     # sure each task appends to the main logs, and flushes on exception.
     with open(logfile, "wt") as log:
         with open(errfile, "wt") as err:
