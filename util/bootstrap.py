@@ -8,7 +8,7 @@ import sys
 
 from util import status
 
-from pbs import Command, make, git
+from sh import Command, make, git
 
 import os
 
@@ -51,7 +51,7 @@ def check_ocaml():
     try:
         # Test for ocaml 3.12.*
         status('Testing for OCaml 3.12.* or greater')
-        from pbs import ocaml, ocamlbuild
+        from sh import ocaml, ocamlbuild
         ver = ocaml('-version')
         print ver
         assert '3.12' in ver or '4.' in ver
@@ -60,7 +60,7 @@ def check_ocaml():
     
     try:
         status('Testing for ocamlfind')
-        from pbs import ocamlfind
+        from sh import ocamlfind
         print '..OK!'
     except:
         raise OCamlFindlibError()
@@ -86,7 +86,7 @@ platform = sys.platform.lower()
 if 'linux' in platform:
     try:
         status('Testing for g++')
-        from pbs import which
+        from sh import which
         assert which('g++')
         print '...OK!'
 
