@@ -156,6 +156,8 @@ namespace Halide {
     private:
         friend struct FuncContents;
 
+        MLVal buildEnv();
+        MLVal buildGuru();
         MLVal lower();
         MLVal inferArguments();
 
