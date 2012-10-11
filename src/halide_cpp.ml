@@ -190,6 +190,8 @@ let _ =
   Callback.register "makeChunkTransform" (fun func var -> chunk_schedule func var);
   Callback.register "makeRootTransform" (fun func -> root_schedule func);
   Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);  
+  Callback.register "composeFunction" (fun f1 f2 x -> f1 (f2 x));
+  Callback.register "makeIdentity" (fun _ x -> x);
 
   Callback.register "serializeExpr" (fun e -> Sexplib.Sexp.to_string (sexp_of_expr e));
   Callback.register "serializeStmt" (fun s -> Sexplib.Sexp.to_string (sexp_of_stmt s));

@@ -81,13 +81,11 @@ namespace Halide {
 
         /* If this function is a reduction, get a handle to its update
            step for scheduling */
-        Func &update();
+        bool isReduction() const;
+        Func &update() const;
 
-        /* These methods generate a partially applied function that
-         * takes a schedule and modifies it. These functions get pushed
-         * onto the scheduleTransforms vector, which is traversed in
-         * order starting from an initial default schedule to create a
-         * mutated schedule */
+        /* These methods generate scheduling gurus used for picking a
+           valid schedule for this function */
         Func &tile(const Var &, const Var &,
                    const Var &, const Var &,
                    const Expr &f1, const Expr &f2);
@@ -120,17 +118,17 @@ namespace Halide {
 
         bool operator==(const Func &other) const;
 
-        /* The space of all living functions (TODO: remove a function
-           from the environment when it goes out of scope) */
-        static MLVal *environment;
-        
         // Various properties of the function
         const Expr &rhs() const;
         const Type &returnType() const;
         const std::vector<Expr> &args() const;
         const std::string &name() const;
-        const std::vector<MLVal> &scheduleTransforms() const;
-        
+
+        std::vector<DynUniform> uniforms() const;
+        std::vector<DynImage> images() const;
+        std::vector<Func> funcs() const;
+        std::vector<UniformImage> uniformImages() const;
+
         // Get the variable defining argument i
         const Var &arg(int i) const;
 
