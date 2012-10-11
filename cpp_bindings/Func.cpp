@@ -478,6 +478,34 @@ namespace Halide {
         return im;
     }
 
+    MLVal Func::buildEnv() {
+        MLVal env = makeEnv();
+        env = contents->addDefinition(env);
+
+        for (size_t i = 0; i < funcs().size(); i++) {
+            Func f = funcs()[i];
+            // Don't consider recursive dependencies.
+            if (f == *this) continue;
+            env = f.contents->addDefinition(env);
+        }
+
+        return env;
+    }
+
+    MLVal Func::buildGuru() {
+        MLVal guru = makeNoviceGuru();
+        guru = contents->applyGuru(guru);
+
+        for (size_t i = 0; i < funcs().size(); i++) {
+            Func f = funcs()[i];
+            // Don't consider recursive dependencies.
+            if (f == *this) continue;
+            guru = f.contents->applyGuru(guru);
+        }
+
+        return guru;
+    }
+
     // Returns a stmt, args pair
     MLVal Func::lower() {
         // Make a region to evaluate this over
@@ -490,27 +518,14 @@ namespace Halide {
 
         //printf("Building environment and guru...\n");
 
-        // Build the guru and the environment
-        MLVal env = makeEnv();
-        MLVal guru = makeNoviceGuru();
-
-        //printf("Scheduling output function %s\n", name().c_str());
         // Output is always scheduled root
         root();
-        guru = contents->applyGuru(guru);
-        env = contents->addDefinition(env);
 
-        //printf("Walking function list\n");
-        for (size_t i = 0; i < funcs().size(); i++) {
-            Func f = funcs()[i];
-            // Don't consider recursive dependencies.
-            if (f == *this) continue;
-            //printf("Including %s\n", f.name().c_str());
-            guru = f.contents->applyGuru(guru);
-            env = f.contents->addDefinition(env);
-        }
+        // Build the guru and the environment
+        MLVal env = buildEnv();
+        MLVal guru = buildGuru();
 
-        MLVal sched = makeSchedule(name(), sizes, env, guru);        
+        MLVal sched = makeSchedule(name(), sizes, env, guru);
 
         //printf("Done transforming schedule\n");
         //printSchedule(sched);        
