@@ -38,21 +38,6 @@ namespace Halide {
     ML_FUNC2(makeOr);
     ML_FUNC1(makeNot);
 
-    template<typename T>
-    void set_add(std::vector<T> &a, const T &b) {
-        for (size_t i = 0; i < a.size(); i++) {
-            if (a[i] == b) return;
-        }
-        a.push_back(b);
-    }
-
-    template<typename T>
-    void set_union(std::vector<T> &a, const std::vector<T> &b) {
-        for (size_t i = 0; i < b.size(); i++) {
-            set_add(a, b[i]);
-        }
-    }
-
     struct Expr::Contents {
         Contents(MLVal n, Type t) : node(n), type(t), isVar(false), isRVar(false), isImmediate(false), implicitArgs(0) {}
         Contents(const FuncRef &f);
@@ -686,7 +671,6 @@ namespace Halide {
 
         for (int i = iArgs-1; i >= 0; i--) {
             exprlist = addToList(exprlist, makeVar(std::string("iv") + int_to_str(i)));  // implicit var. 
-            // Connelly: ostringstream broken in Python binding, use string + instead
         }
 
         for (size_t i = f.args().size(); i > 0; i--) {
@@ -712,13 +696,12 @@ namespace Halide {
         funcs.push_back(f.f());  
 
         // Reach through the call to extract buffer dependencies and
-        // function dependencies (but not free vars, tuple shape,
-        // implicit args)
+        // function dependencies (but not free vars, or implicit args)
         if (f.f().rhs().isDefined()) {
-            set_union(images, f.f().rhs().images());
-            set_union(funcs, f.f().rhs().funcs());
-            set_union(uniforms, f.f().rhs().uniforms());
-            set_union(uniformImages, f.f().rhs().uniformImages());
+            set_union(images, f.f().images());
+            set_union(funcs, f.f().funcs());
+            set_union(uniforms, f.f().uniforms());
+            set_union(uniformImages, f.f().uniformImages());
         }
 
     }

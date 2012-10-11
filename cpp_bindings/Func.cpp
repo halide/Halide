@@ -82,6 +82,8 @@ namespace Halide {
     ML_FUNC3(doLower);
 
     ML_FUNC0(makeNoviceGuru);
+    ML_FUNC2(composeFunction);
+    ML_FUNC0(makeIdentity);
 
     ML_FUNC1(printStmt);
     ML_FUNC1(printSchedule);
@@ -125,19 +127,19 @@ namespace Halide {
 
     struct Func::Contents {
         Contents() :
-            name(uniqueName('f')), functionPtr(NULL) {}
+            name(uniqueName('f')), guru(makeIdentity()), functionPtr(NULL) {}
         Contents(Type returnType) : 
-            name(uniqueName('f')), returnType(returnType), functionPtr(NULL) {}
+            name(uniqueName('f')), returnType(returnType), guru(makeIdentity()), functionPtr(NULL) {}
       
         Contents(std::string name) : 
-            name(name), functionPtr(NULL) {}
+            name(name), guru(makeIdentity()), functionPtr(NULL) {}
         Contents(std::string name, Type returnType) : 
-            name(name), returnType(returnType), functionPtr(NULL) {}
+            name(name), returnType(returnType), guru(makeIdentity()), functionPtr(NULL) {}
       
         Contents(const char * name) : 
-            name(name), functionPtr(NULL) {}
+            name(name), guru(makeIdentity()), functionPtr(NULL) {}
         Contents(const char * name, Type returnType) : 
-            name(name), returnType(returnType), functionPtr(NULL) {}
+            name(name), returnType(returnType), guru(makeIdentity()), functionPtr(NULL) {}
         
         const std::string name;
         
@@ -152,22 +154,15 @@ namespace Halide {
         // The scalar value returned by the function
         Expr rhs;
         std::vector<Expr> args;
-        MLVal arglist;
         Type returnType;
 
         // A handle to an update function
         shared_ptr<Func> update;
         
-        /* The ML definition object (name, return type, argnames, body)
-           The body here evaluates the function over an entire range,
-           and the arg list will include a min and max value for every
-           free variable. */
-        MLVal definition;
-        
-        /* A list of schedule transforms to apply when realizing. These should be
-           partially applied ML functions that map a schedule to a schedule. */
-        std::vector<MLVal> scheduleTransforms;        
-        MLVal applyScheduleTransforms(MLVal);
+        /* A scheduling guru for this function. Actually a
+         * partially-applied function that wraps a guru in the gurus
+         * necessary to scheduling this function. */
+        MLVal guru;
 
         // The compiled form of this function
         mutable void (*functionPtr)(void *);
@@ -176,6 +171,9 @@ namespace Halide {
         mutable void (*copyToHost)(buffer_t *);
         mutable void (*freeBuffer)(buffer_t *);
         mutable void (*errorHandler)(char *);
+
+        MLVal applyGuru(MLVal);
+        MLVal addDefinition(MLVal);
 
     };
 
@@ -299,18 +297,8 @@ namespace Halide {
         return contents->name;
     }
 
-    const std::vector<MLVal> &Func::scheduleTransforms() const {
-        return contents->scheduleTransforms;
-    }
-
     void Func::define(const std::vector<Expr> &_args, const Expr &r) {
         //printf("Defining %s\n", name().c_str());
-
-        // Make sure the environment exists
-        if (!environment) {
-            //printf("Creating environment\n");
-            environment = new MLVal(makeEnv());
-        }
 
         // Make a local copy of the argument list
         std::vector<Expr> args = _args;
@@ -318,7 +306,7 @@ namespace Halide {
         // Add any implicit arguments 
         //printf("Adding %d implicit arguments\n", r.implicitArgs());
         for (int i = 0; i < r.implicitArgs(); i++) {
-            args.push_back(Var(std::string("iv") + int_to_str(i))); // implicit var. Connelly: ostringstream broken in Python binding, use string + instead
+            args.push_back(Var(std::string("iv") + int_to_str(i))); 
         }
         
         //printf("Defining %s\n", name().c_str());
@@ -334,54 +322,28 @@ namespace Halide {
         if (r.rdom().dimensions() > 0) gather = false;
 
         if (gather) {
-        //printf("Gather definition for %s\n", name().c_str());
+            //printf("Gather definition for %s\n", name().c_str());
+            contents->args = args;
             contents->rhs = r;            
             contents->returnType = r.type();
-            contents->args = args;
-            contents->arglist = makeList();
-            for (size_t i = args.size(); i > 0; i--) {
-                contents->arglist = addToList(contents->arglist, (contents->args[i-1].vars()[0].name()));
-            }
-             
-            contents->definition = makeDefinition((name()), contents->arglist, rhs().node());
-            
-            *environment = addDefinitionToEnv(*environment, contents->definition);
-
         } else {
             //printf("Scatter definition for %s\n", name().c_str());
-            assert(rhs().isDefined() && "Must provide a base-case definition for function before the reduction case");            
-
-            MLVal update_args = makeList();
-            for (size_t i = args.size(); i > 0; i--) {
-                update_args = addToList(update_args, args[i-1].node());
-                contents->rhs.child(args[i-1]);
-            }                                                            
-
-            contents->rhs.child(r);
-           
-            MLVal reduction_args = makeList();
-            const RDom &rdom = contents->rhs.rdom();
-            for (int i = rdom.dimensions(); i > 0; i--) {
-                reduction_args = addToList(reduction_args, 
-                                           makeTriple(rdom[i-1].name(), 
-                                                      rdom[i-1].min().node(), 
-                                                      rdom[i-1].size().node()));
-            }
-
+            assert(rhs().isDefined() && "Must provide a base-case definition for function before the reduction case");
+                       
             // Make an update function as a handle for scheduling
             contents->update.reset(new Func(uniqueName('p')));
-            
-            //printf("Adding scatter definition for %s\n", name().c_str());
-            // There should already be a gathering definition of this function. Add the scattering term.
-            *environment = addScatterToDefinition(*environment, name(), contents->update->name(), 
-                                                  update_args, r.node(), reduction_args);
-
-
+            contents->update->contents->args = args;
+            contents->update->contents->rhs = cast(contents->returnType, r);
+            contents->update->contents->returnType = contents->returnType;
         }
     }
 
-    Func &Func::update() {
-        assert(contents->update);
+    bool Func::isReduction() const {
+        return contents->update;
+    }
+
+    Func &Func::update() const {
+        assert(isReduction());
         return *contents->update;
     }
 
@@ -407,7 +369,7 @@ namespace Halide {
     Func &Func::vectorize(const Var &v) {
         MLVal t = makeVectorizeTransform((name()),
                                          (v.name()));
-        contents->scheduleTransforms.push_back(t);
+        contents->guru = composeFunction(t, contents->guru);
         return *this;
     }
 
@@ -422,7 +384,7 @@ namespace Halide {
     Func &Func::unroll(const Var &v) {
         MLVal t = makeUnrollTransform((name()),
                                       (v.name()));        
-        contents->scheduleTransforms.push_back(t);
+        contents->guru = composeFunction(t, contents->guru);
         return *this;
     }
 
@@ -440,7 +402,7 @@ namespace Halide {
                                      newout.name(),
                                      newin.name(),
                                      factor.node());
-        contents->scheduleTransforms.push_back(t);
+        contents->guru = composeFunction(t, contents->guru);
         return *this;
     }
 
@@ -450,7 +412,7 @@ namespace Halide {
             list = addToList(list, vars[i-1].name());
         }
         MLVal t = makeReorderTransform(name(), list);
-        contents->scheduleTransforms.push_back(t);
+        contents->guru = composeFunction(t, contents->guru);
         return *this;
     }
 
@@ -472,24 +434,24 @@ namespace Halide {
 
     Func &Func::chunk(const Var &caller_var) {
         MLVal t = makeChunkTransform(name(), caller_var.name());
-        contents->scheduleTransforms.push_back(t);
+        contents->guru = composeFunction(t, contents->guru);
         return *this;
     }
 
     Func &Func::root() {
         MLVal t = makeRootTransform(name());
-        contents->scheduleTransforms.push_back(t);
+        contents->guru = composeFunction(t, contents->guru);
         return *this;
     }
 
     Func &Func::reset() {
-        contents->scheduleTransforms.clear();
+        contents->guru = makeIdentity();
         return *this;
     }
 
     Func &Func::parallel(const Var &caller_var) {
         MLVal t = makeParallelTransform(name(), caller_var.name());
-        contents->scheduleTransforms.push_back(t);
+        contents->guru = composeFunction(t, contents->guru);
         return *this;
     }
 
@@ -579,15 +541,48 @@ namespace Halide {
         return im;
     }
 
+    MLVal Func::Contents::applyGuru(MLVal g) {
+        g = guru(g);
+        if (update) g = update->contents->guru(g);
+        return g;
+    }
 
-    MLVal Func::Contents::applyScheduleTransforms(MLVal guru) {
-        for (size_t i = 0; i < scheduleTransforms.size(); i++) {
-            guru = scheduleTransforms[i](guru);
-        }
+    MLVal Func::Contents::addDefinition(MLVal env) {
+
+        MLVal arglist = makeList();
+        for (size_t i = args.size(); i > 0; i--) {
+            arglist = addToList(arglist, args[i-1].vars()[0].name());
+        }        
+        MLVal definition = makeDefinition(name, arglist, rhs.node());           
+        env = addDefinitionToEnv(env, definition);
+        
         if (update) {
-            guru = update->contents->applyScheduleTransforms(guru);
+            MLVal update_args = makeList();
+            RDom rdom;
+            for (size_t i = update->contents->args.size(); i > 0; i--) {
+                const Expr &arg = update->contents->args[i-1];
+                update_args = addToList(update_args, arg.node());
+                if (arg.rdom().dimensions()) rdom = arg.rdom();
+            }                                                            
+            
+            MLVal reduction_domain = makeList();
+            
+            const Expr &rhs = update->contents->rhs;
+            if (rhs.rdom().dimensions()) rdom = rhs.rdom();
+            
+            assert(rdom.dimensions() && "Couldn't find reduction domain in reduction definition");
+            
+            for (int i = rdom.dimensions(); i > 0; i--) {
+                reduction_domain = addToList(reduction_domain, 
+                                             makeTriple(rdom[i-1].name(), 
+                                                        rdom[i-1].min().node(), 
+                                                        rdom[i-1].size().node()));
+            }
+            
+            env = addScatterToDefinition(env, name, update->name(), 
+                                         update_args, rhs.node(), reduction_domain);            
         }
-        return guru;
+        return env;
     }
 
     // Returns a stmt, args pair
@@ -600,48 +595,97 @@ namespace Halide {
             sizes = addToList(sizes, Expr(Var(buf)).node());
         }
 
+        //printf("Building environment and guru...\n");
+
+        // Build the guru and the environment
+        MLVal env = makeEnv();
         MLVal guru = makeNoviceGuru();
 
+        //printf("Scheduling output function %s\n", name().c_str());
         // Output is always scheduled root
         root();
+        guru = contents->applyGuru(guru);
+        env = contents->addDefinition(env);
 
-        guru = contents->applyScheduleTransforms(guru);
-
-        for (size_t i = 0; i < rhs().funcs().size(); i++) {
-            Func f = rhs().funcs()[i];
-            // Don't consider recursive dependencies for the
-            // purpose of applying schedule transformations. We
-            // already did that above.
+        //printf("Walking function list\n");
+        for (size_t i = 0; i < funcs().size(); i++) {
+            Func f = funcs()[i];
+            // Don't consider recursive dependencies.
             if (f == *this) continue;
-            guru = f.contents->applyScheduleTransforms(guru);
+            //printf("Including %s\n", f.name().c_str());
+            guru = f.contents->applyGuru(guru);
+            env = f.contents->addDefinition(env);
         }
 
-        MLVal sched = makeSchedule((name()),
-                                   sizes,
-                                   *Func::environment,
-                                   guru);
-        
+        MLVal sched = makeSchedule(name(), sizes, env, guru);        
+
         //printf("Done transforming schedule\n");
-        //printSchedule(sched);
-        
-        return doLower((name()), 
-                       *Func::environment,
-                       sched);        
+        //printSchedule(sched);        
+
+        return doLower(name(), env, sched);        
+    }
+
+    std::vector<DynUniform> Func::uniforms() const {
+        std::vector<DynUniform> v = rhs().uniforms();
+        if (isReduction()) {
+            set_union(v, update().rhs().uniforms());
+            for (size_t i = 0; i < update().args().size(); i++) {
+                set_union(v, update().args()[i].uniforms());
+            }
+        }
+        return v;
+    }
+
+    std::vector<DynImage> Func::images() const {
+        std::vector<DynImage> v = rhs().images();
+        if (isReduction()) {
+            set_union(v, update().rhs().images());
+            for (size_t i = 0; i < update().args().size(); i++) {
+                set_union(v, update().args()[i].images());
+            }
+        }
+        return v;
+    }
+
+    std::vector<Func> Func::funcs() const {
+        std::vector<Func> v = rhs().funcs();
+        if (isReduction()) {
+            set_union(v, update().rhs().funcs());
+            for (size_t i = 0; i < update().args().size(); i++) {
+                set_union(v, update().args()[i].funcs());
+            }
+        }
+        return v;
+    }
+
+    std::vector<UniformImage> Func::uniformImages() const {
+        std::vector<UniformImage> v = rhs().uniformImages();
+        if (isReduction()) {
+            set_union(v, update().rhs().uniformImages());
+            for (size_t i = 0; i < update().args().size(); i++) {
+                set_union(v, update().args()[i].uniformImages());
+            }
+        }
+        return v;
     }
 
     MLVal Func::inferArguments() {        
+        std::vector<DynUniform> uns = uniforms();
+        std::vector<DynImage> ims = images();
+        std::vector<UniformImage> unims = uniformImages();
+
         MLVal fargs = makeList();
         fargs = addToList(fargs, makeBufferArg("result"));
-        for (size_t i = rhs().uniformImages().size(); i > 0; i--) {
-            MLVal arg = makeBufferArg(rhs().uniformImages()[i-1].name());
+        for (size_t i = unims.size(); i > 0; i--) {
+            MLVal arg = makeBufferArg(unims[i-1].name());
             fargs = addToList(fargs, arg);
         }
-        for (size_t i = rhs().images().size(); i > 0; i--) {
-            MLVal arg = makeBufferArg(rhs().images()[i-1].name());
+        for (size_t i = ims.size(); i > 0; i--) {
+            MLVal arg = makeBufferArg(ims[i-1].name());
             fargs = addToList(fargs, arg);
         }
-        for (size_t i = rhs().uniforms().size(); i > 0; i--) {
-            const DynUniform &u = rhs().uniforms()[i-1];
+        for (size_t i = uns.size(); i > 0; i--) {
+            const DynUniform &u = uns[i-1];
             MLVal arg = makeScalarArg(u.name(), u.type().mlval);
             fargs = addToList(fargs, arg);
         }
@@ -905,16 +949,20 @@ namespace Halide {
         buffer_t *buffers[256];
         size_t j = 0;
         size_t k = 0;
+        
+        std::vector<DynUniform> uns = uniforms();
+        std::vector<DynImage> ims = images();
+        std::vector<UniformImage> unims = uniformImages();
 
-        for (size_t i = 0; i < rhs().uniforms().size(); i++) {
-            arguments[j++] = rhs().uniforms()[i].data();
+        for (size_t i = 0; i < uns.size(); i++) {
+            arguments[j++] = uns[i].data();
         }
-        for (size_t i = 0; i < rhs().images().size(); i++) {
-            buffers[k++] = rhs().images()[i].buffer();
+        for (size_t i = 0; i < ims.size(); i++) {
+            buffers[k++] = ims[i].buffer();
             arguments[j++] = buffers[k-1];
         }               
-        for (size_t i = 0; i < rhs().uniformImages().size(); i++) {
-            buffers[k++] = rhs().uniformImages()[i].boundImage().buffer();
+        for (size_t i = 0; i < unims.size(); i++) {
+            buffers[k++] = unims[i].boundImage().buffer();
             arguments[j++] = buffers[k-1];
         }
         buffers[k] = im.buffer();
@@ -941,8 +989,6 @@ namespace Halide {
             im.markHostDirty();
         }
     }
-
-    MLVal *Func::environment = NULL;
 
 }
 

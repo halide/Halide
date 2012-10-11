@@ -76,6 +76,21 @@ namespace Halide {
         return v;
     }
 
+
+    template<typename T>
+    void set_add(std::vector<T> &a, const T &b) {
+        for (size_t i = 0; i < a.size(); i++) {
+            if (a[i] == b) return;
+        }
+        a.push_back(b);
+    }
+
+    template<typename T>
+    void set_union(std::vector<T> &a, const std::vector<T> &b) {
+        for (size_t i = 0; i < b.size(); i++) {
+            set_add(a, b[i]);
+        }
+    }
     
 }
 
