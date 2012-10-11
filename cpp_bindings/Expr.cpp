@@ -1,6 +1,7 @@
 #include <vector>
 
 #include "Expr.h"
+#include "ExprContents.h"
 #include "Type.h"
 #include "Var.h"
 #include "Func.h"
@@ -13,7 +14,6 @@ namespace Halide {
 
     ML_FUNC1(makeIntImm);
     ML_FUNC1(makeFloatImm);
-    ML_FUNC1(makeVar);
     ML_FUNC2(makeUniform);
     ML_FUNC2(makeCast);
     ML_FUNC2(makeAdd);
@@ -31,81 +31,40 @@ namespace Halide {
     ML_FUNC2(makeMin);
     ML_FUNC3(makeSelect);
     ML_FUNC3(makeDebug);
-    ML_FUNC3(makeFuncCall);
     ML_FUNC3(makeExternCall);
     ML_FUNC3(makeImageCall);
     ML_FUNC2(makeAnd);
     ML_FUNC2(makeOr);
     ML_FUNC1(makeNot);
 
-    struct Expr::Contents {
-        Contents(MLVal n, Type t) : node(n), type(t), isVar(false), isRVar(false), isImmediate(false), implicitArgs(0) {}
-        Contents(const FuncRef &f);
-
-        // Declare that this expression is the child of another for bookkeeping
-        void child(Expr );
-
-        // The ML-value of the expression
-        MLVal node;
-        
-        // The (dynamic) type of the expression
-        Type type;
-        
-        // The list of argument buffers contained within subexpressions            
-        std::vector<DynImage> images;
-        
-        // The list of free variables found
-        std::vector<Var> vars;
-
-        // A reduction domain that this depends on
-        RDom rdom;
-        
-        // The list of functions directly called        
-        std::vector<Func> funcs;
-        
-        // The list of uniforms referred to
-        std::vector<DynUniform> uniforms;
-
-        // The list of uniform images referred to
-        std::vector<UniformImage> uniformImages;
-        
-        // Sometimes it's useful to be able to tell if an expression is a simple var or not, or if it's an immediate.
-        bool isVar, isRVar, isImmediate;
-        
-        // The number of arguments that remain implicit
-        int implicitArgs;
-    }; 
-    
-
-
     Expr::Expr() {
     }
 
-    Expr::Expr(MLVal n, Type t) : contents(new Contents(n, t)) {
+    Expr::Expr(MLVal n, Type t) : contents(new ExprContents(n, t)) {
     }
 
-    Expr::Expr(int32_t val) : contents(new Contents(makeIntImm(val), Int(32))) {
+    Expr::Expr(int32_t val) : contents(new ExprContents(makeIntImm(val), Int(32))) {
         contents->isImmediate = true;
     }
 
-    Expr::Expr(uint32_t val) : contents(new Contents(makeCast(UInt(32).mlval, makeIntImm(val)), UInt(32))) {
+    Expr::Expr(uint32_t val) : contents(new ExprContents(makeCast(UInt(32).mlval, makeIntImm(val)), UInt(32))) {
         contents->isImmediate = true;
     }
 
-    Expr::Expr(float val) : contents(new Contents(makeFloatImm(val), Float(32))) {
+    Expr::Expr(float val) : contents(new ExprContents(makeFloatImm(val), Float(32))) {
         contents->isImmediate = true;
     }
 
-    Expr::Expr(double val) : contents(new Contents(makeCast(Float(64).mlval, makeFloatImm(val)), Float(64))) {
+    Expr::Expr(double val) : contents(new ExprContents(makeCast(Float(64).mlval, makeFloatImm(val)), Float(64))) {
         contents->isImmediate = true;
     }
 
-    Expr::Expr(const Var &v) : contents(new Contents(makeVar((v.name())), Int(32))) {
+    Expr::Expr(const Var &v) : contents(new ExprContents(makeVar((v.name())), Int(32))) {
         contents->isVar = true;
         contents->vars.push_back(v);
     }
 
-    Expr::Expr(const RVar &v) : contents(new Contents(makeVar((v.name())), Int(32))) {
+    Expr::Expr(const RVar &v) : contents(new ExprContents(makeVar((v.name())), Int(32))) {
         contents->isRVar = true;
         assert(v.isDefined());
         assert(v.domain().isDefined());
@@ -114,7 +73,7 @@ namespace Halide {
         child(v.size());
     }
 
-    Expr::Expr(const RDom &d) : contents(new Contents(makeVar((d[0].name())), Int(32))) {
+    Expr::Expr(const RDom &d) : contents(new ExprContents(makeVar((d[0].name())), Int(32))) {
         contents->isRVar = true;
         assert(d.dimensions() == 1 && "Can only use single-dimensional domains directly as expressions\n");
         setRDom(d);
@@ -123,7 +82,7 @@ namespace Halide {
     }
 
     Expr::Expr(const DynUniform &u) : 
-        contents(new Contents(makeUniform(u.type().mlval, u.name()), u.type())) {
+        contents(new ExprContents(makeUniform(u.type().mlval, u.name()), u.type())) {
         contents->uniforms.push_back(u);
     }
 
@@ -133,7 +92,7 @@ namespace Halide {
             args = addToList(args, l.idx[i-1].node());
         }
         MLVal node = makeImageCall(l.image.type().mlval, l.image.name(), args);
-        contents.reset(new Contents(node, l.image.type()));
+        contents.reset(new ExprContents(node, l.image.type()));
         for (size_t i = 0; i < l.idx.size(); i++) {
             child(l.idx[i]);
         }
@@ -146,7 +105,7 @@ namespace Halide {
             args = addToList(args, l.idx[i-1].node());
         }
         MLVal node = makeImageCall(l.image.type().mlval, l.image.name(), args);
-        contents.reset(new Contents(node, l.image.type()));
+        contents.reset(new ExprContents(node, l.image.type()));
         for (size_t i = 0; i < l.idx.size(); i++) {
             child(l.idx[i]);
         }
@@ -227,22 +186,6 @@ namespace Halide {
 
     bool Expr::isDefined() const {
         return (bool)(contents);
-    }
-
-    // declare that this node has a child for bookkeeping
-    void Expr::Contents::child(Expr c) {
-        set_union(images, c.images());
-        set_union(vars, c.vars());
-        set_union(funcs, c.funcs());
-        set_union(uniforms, c.uniforms());
-        set_union(uniformImages, c.uniformImages());
-        if (c.implicitArgs() > implicitArgs) implicitArgs = c.implicitArgs();
-
-        bool check = !rdom.isDefined() || !c.rdom().isDefined() || rdom == c.rdom();
-        assert(check && "Each expression can only depend on a single reduction domain");
-        if (c.rdom().isDefined()) {
-            rdom = c.rdom();
-        }        
     }
 
     void Expr::child(Expr c) {
@@ -646,65 +589,9 @@ namespace Halide {
     }
 
 
-    Expr::Expr(const FuncRef &f) : contents(new Contents(f)) {}
+    Expr::Expr(const FuncRef &f) : contents(new ExprContents(f)) {}
 
-    Expr::Expr(const Func &f) : contents(new Contents(f)) {}
-
-    Expr::Contents::Contents(const FuncRef &f) {
-        assert(f.f().rhs().isDefined() && 
-               "Can't use a call to an undefined function as an expression\n");
-
-        // make a call node
-        MLVal exprlist = makeList();
-
-        // Start with the implicit arguments
-        /*printf("This call to %s has %d arguments when %s takes %d args\n", 
-               f.f().name().c_str(),
-               (int)f.args().size(),
-               f.f().name().c_str(),
-               (int)f.f().args().size()); */
-        int iArgs = (int)f.f().args().size() - (int)f.args().size();
-        if (iArgs < 0 && f.f().args().size() > 0) {
-            printf("Too many arguments in call!\n");
-            exit(-1);
-        } 
-
-        for (int i = iArgs-1; i >= 0; i--) {
-            exprlist = addToList(exprlist, makeVar(std::string("iv") + int_to_str(i)));  // implicit var. 
-        }
-
-        for (size_t i = f.args().size(); i > 0; i--) {
-            exprlist = addToList(exprlist, f.args()[i-1].node());            
-        }
-
-        node = makeFuncCall(f.f().returnType().mlval, 
-                            (f.f().name()),
-                            exprlist);
-        type = f.f().returnType();
-
-        for (size_t i = 0; i < f.args().size(); i++) {
-            if (f.args()[i].implicitArgs() != 0) {
-                printf("Can't use a partially applied function as an argument. We don't support higher-order functions.\n");
-                exit(-1);
-            }
-            child(f.args()[i]);
-        }
-
-        implicitArgs = iArgs;
-        
-        // Add this function call to the calls list
-        funcs.push_back(f.f());  
-
-        // Reach through the call to extract buffer dependencies and
-        // function dependencies (but not free vars, or implicit args)
-        if (f.f().rhs().isDefined()) {
-            set_union(images, f.f().images());
-            set_union(funcs, f.f().funcs());
-            set_union(uniforms, f.f().uniforms());
-            set_union(uniformImages, f.f().uniformImages());
-        }
-
-    }
+    Expr::Expr(const Func &f) : contents(new ExprContents(f)) {}
 
     Expr debug(Expr expr, const std::string &prefix) {
         std::vector<Expr> args;

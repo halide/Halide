@@ -13,6 +13,7 @@ namespace Halide {
     bool use_gpu();
 
     class Func;
+    struct FuncContents;
     class Var;
 
     // A function call (if you cast it to an expr), or a function definition lhs (if you assign an expr to it).
@@ -153,12 +154,12 @@ namespace Halide {
         void compileToFile(const std::string &name, std::vector<Arg> args, std::string target = "");
 
     private:
-        struct Contents;
+        friend struct FuncContents;
 
         MLVal lower();
         MLVal inferArguments();
 
-        shared_ptr<Contents> contents;
+        shared_ptr<FuncContents> contents;
     };
 
 }
