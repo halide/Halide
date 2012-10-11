@@ -20,6 +20,7 @@ namespace Halide {
     class Func;
     class UniformImage;
     class UniformImageRef;
+    struct ExprContents;
     
     // A node in an expression tree.
     class Expr {
@@ -82,8 +83,8 @@ namespace Halide {
         void convertRVarsToVars();
         
       private:
-        struct Contents;
-        shared_ptr<Contents> contents;
+        friend struct ExprContents;
+        shared_ptr<ExprContents> contents;
     };
 
     // Make a binary op node

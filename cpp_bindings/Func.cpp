@@ -7,6 +7,7 @@
 
 #include "../src/buffer.h"
 #include "Func.h"
+#include "FuncContents.h"
 #include "Util.h"
 #include "Var.h"
 #include "Image.h"
@@ -73,17 +74,13 @@ namespace Halide {
     
     ML_FUNC1(doConstantFold);
   
-    ML_FUNC3(makeDefinition);
-    ML_FUNC6(addScatterToDefinition);
     ML_FUNC0(makeEnv);
-    ML_FUNC2(addDefinitionToEnv);
     
     ML_FUNC4(makeSchedule);
     ML_FUNC3(doLower);
 
     ML_FUNC0(makeNoviceGuru);
     ML_FUNC2(composeFunction);
-    ML_FUNC0(makeIdentity);
 
     ML_FUNC1(printStmt);
     ML_FUNC1(printSchedule);
@@ -91,8 +88,6 @@ namespace Halide {
     ML_FUNC2(makeScalarArg); // name, type
     ML_FUNC4(doCompile); // target with opts, name, args, stmt
     ML_FUNC4(doCompileToFile); // target with opts, name, args, stmt
-    ML_FUNC2(makePair);
-    ML_FUNC3(makeTriple);
 
     ML_FUNC1(serializeStmt); // stmt
     ML_FUNC3(serializeEntry); // name, args, stmt
@@ -124,64 +119,6 @@ namespace Halide {
         Func f;
         std::vector<Expr> args;
     };
-
-    struct Func::Contents {
-        Contents() :
-            name(uniqueName('f')), guru(makeIdentity()), functionPtr(NULL) {}
-        Contents(Type returnType) : 
-            name(uniqueName('f')), returnType(returnType), guru(makeIdentity()), functionPtr(NULL) {}
-      
-        Contents(std::string name) : 
-            name(name), guru(makeIdentity()), functionPtr(NULL) {}
-        Contents(std::string name, Type returnType) : 
-            name(name), returnType(returnType), guru(makeIdentity()), functionPtr(NULL) {}
-      
-        Contents(const char * name) : 
-            name(name), guru(makeIdentity()), functionPtr(NULL) {}
-        Contents(const char * name, Type returnType) : 
-            name(name), returnType(returnType), guru(makeIdentity()), functionPtr(NULL) {}
-        
-        const std::string name;
-        
-        static LLVMExecutionEngineRef ee;
-        static LLVMPassManagerRef fPassMgr;
-        static LLVMPassManagerRef mPassMgr;
-        // A handle to libcuda.so. Necessary if we don't link it in.
-        static void *libCuda;
-        // Was libcuda.so linked in already?
-        static bool libCudaLinked;
-
-        // The scalar value returned by the function
-        Expr rhs;
-        std::vector<Expr> args;
-        Type returnType;
-
-        // A handle to an update function
-        shared_ptr<Func> update;
-        
-        /* A scheduling guru for this function. Actually a
-         * partially-applied function that wraps a guru in the gurus
-         * necessary to scheduling this function. */
-        MLVal guru;
-
-        // The compiled form of this function
-        mutable void (*functionPtr)(void *);
-
-        // Functions to assist realizing this function
-        mutable void (*copyToHost)(buffer_t *);
-        mutable void (*freeBuffer)(buffer_t *);
-        mutable void (*errorHandler)(char *);
-
-        MLVal applyGuru(MLVal);
-        MLVal addDefinition(MLVal);
-
-    };
-
-    LLVMExecutionEngineRef Func::Contents::ee = NULL;
-    LLVMPassManagerRef Func::Contents::fPassMgr = NULL;
-    LLVMPassManagerRef Func::Contents::mPassMgr = NULL;
-    void *Func::Contents::libCuda = NULL;
-    bool Func::Contents::libCudaLinked = false;
     
     FuncRef::FuncRef(const Func &f) :
         contents(new FuncRef::Contents(f)) {
@@ -253,22 +190,22 @@ namespace Halide {
         return contents->args;
     }
 
-    Func::Func() : contents(new Contents()) {
+    Func::Func() : contents(new FuncContents()) {
     }
  
-    Func::Func(const std::string &name) : contents(new Contents(sanitizeName(name))) {
+    Func::Func(const std::string &name) : contents(new FuncContents(sanitizeName(name))) {
     }
 
-    Func::Func(const char *name) : contents(new Contents(sanitizeName(name))) {
+    Func::Func(const char *name) : contents(new FuncContents(sanitizeName(name))) {
     }
 
-    Func::Func(const Type &t) : contents(new Contents(t)) {
+    Func::Func(const Type &t) : contents(new FuncContents(t)) {
     }
 
-    Func::Func(const std::string &name, Type t) : contents(new Contents(sanitizeName(name), t)) {
+    Func::Func(const std::string &name, Type t) : contents(new FuncContents(sanitizeName(name), t)) {
     }
 
-    Func::Func(const char *name, Type t) : contents(new Contents(sanitizeName(name), t)) {
+    Func::Func(const char *name, Type t) : contents(new FuncContents(sanitizeName(name), t)) {
     }
 
     bool Func::operator==(const Func &other) const {
@@ -541,50 +478,6 @@ namespace Halide {
         return im;
     }
 
-    MLVal Func::Contents::applyGuru(MLVal g) {
-        g = guru(g);
-        if (update) g = update->contents->guru(g);
-        return g;
-    }
-
-    MLVal Func::Contents::addDefinition(MLVal env) {
-
-        MLVal arglist = makeList();
-        for (size_t i = args.size(); i > 0; i--) {
-            arglist = addToList(arglist, args[i-1].vars()[0].name());
-        }        
-        MLVal definition = makeDefinition(name, arglist, rhs.node());           
-        env = addDefinitionToEnv(env, definition);
-        
-        if (update) {
-            MLVal update_args = makeList();
-            RDom rdom;
-            for (size_t i = update->contents->args.size(); i > 0; i--) {
-                const Expr &arg = update->contents->args[i-1];
-                update_args = addToList(update_args, arg.node());
-                if (arg.rdom().dimensions()) rdom = arg.rdom();
-            }                                                            
-            
-            MLVal reduction_domain = makeList();
-            
-            const Expr &rhs = update->contents->rhs;
-            if (rhs.rdom().dimensions()) rdom = rhs.rdom();
-            
-            assert(rdom.dimensions() && "Couldn't find reduction domain in reduction definition");
-            
-            for (int i = rdom.dimensions(); i > 0; i--) {
-                reduction_domain = addToList(reduction_domain, 
-                                             makeTriple(rdom[i-1].name(), 
-                                                        rdom[i-1].min().node(), 
-                                                        rdom[i-1].size().node()));
-            }
-            
-            env = addScatterToDefinition(env, name, update->name(), 
-                                         update_args, rhs.node(), reduction_domain);            
-        }
-        return env;
-    }
-
     // Returns a stmt, args pair
     MLVal Func::lower() {
         // Make a region to evaluate this over
@@ -779,7 +672,7 @@ namespace Halide {
             return;
         }
 
-        if (!Contents::ee) {
+        if (!FuncContents::ee) {
             LLVMInitializeNativeTarget();
             LLVMInitializeX86AsmPrinter();
             LLVMInitializeARMAsmPrinter();
@@ -804,16 +697,16 @@ namespace Halide {
         LLVMValueRef func = (LLVMValueRef)(second.asVoidPtr());
 
         // Create the execution engine if it hasn't already been done
-        if (!Contents::ee) {
+        if (!FuncContents::ee) {
             
             char *errStr = NULL;
-            bool error = LLVMCreateJITCompilerForModule(&Contents::ee, module, 3, &errStr);
+            bool error = LLVMCreateJITCompilerForModule(&FuncContents::ee, module, 3, &errStr);
             if (error) {
                 printf("Couldn't create execution engine: %s\n", errStr);
             }
 
-            Contents::fPassMgr = LLVMCreateFunctionPassManagerForModule(module);
-            Contents::mPassMgr = LLVMCreatePassManager();
+            FuncContents::fPassMgr = LLVMCreateFunctionPassManagerForModule(module);
+            FuncContents::mPassMgr = LLVMCreatePassManager();
 
             // Make sure to include the always-inliner pass so that
             // unaligned_load and other similar one-opcode functions
@@ -827,7 +720,7 @@ namespace Halide {
 
         } else { 
             // Execution engine is already created. Add this module to it.
-            LLVMAddModule(Contents::ee, module);
+            LLVMAddModule(FuncContents::ee, module);
         }            
         
         std::string functionName = name() + "_c_wrapper";
@@ -839,7 +732,7 @@ namespace Halide {
 
             LLVMValueRef ctx = LLVMGetNamedGlobal(module, "cuda_ctx");
             if (ctx) {
-                LLVMAddGlobalMapping(Contents::ee, ctx, (void *)&cuda_ctx);
+                LLVMAddGlobalMapping(FuncContents::ee, ctx, (void *)&cuda_ctx);
             }
 
             // Make sure extern cuda calls inside the module point to
@@ -848,7 +741,7 @@ namespace Halide {
             // doesn't seem to work on linux with cuda 4.2. It also
             // means that if the user forgets to link to libcuda at
             // compile time then this code will go look for it.
-            if (!Contents::libCuda && !Contents::libCudaLinked) {
+            if (!FuncContents::libCuda && !FuncContents::libCudaLinked) {
                 // First check if libCuda has already been linked
                 // in. If so we shouldn't need to set any mappings.
                 if (dlsym(NULL, "cuInit")) {
@@ -856,24 +749,24 @@ namespace Halide {
                     // because I can't get linking to libcuda working
                     // right on my machine.
                     fprintf(stderr, "This program was linked to libcuda already\n");
-                    Contents::libCudaLinked = true;
+                    FuncContents::libCudaLinked = true;
                 } else {
                     fprintf(stderr, "Looking for libcuda.so...\n");
-                    Contents::libCuda = dlopen("libcuda.so", RTLD_LAZY);
-                    if (!Contents::libCuda) {
+                    FuncContents::libCuda = dlopen("libcuda.so", RTLD_LAZY);
+                    if (!FuncContents::libCuda) {
                         // TODO: check this works on OS X
                         fprintf(stderr, "Looking for libcuda.dylib...\n");
-                        Contents::libCuda = dlopen("libcuda.dylib", RTLD_LAZY);
+                        FuncContents::libCuda = dlopen("libcuda.dylib", RTLD_LAZY);
                     }
                     // TODO: look for cuda.dll or some such thing on windows
                 }
             }
             
-            if (!Contents::libCuda && !Contents::libCudaLinked) {
+            if (!FuncContents::libCuda && !FuncContents::libCudaLinked) {
                 fprintf(stderr, 
                         "Error opening libcuda. Attempting to continue anyway."
                         "Might get missing symbols.\n");
-            } else if (Contents::libCudaLinked) {
+            } else if (FuncContents::libCudaLinked) {
                 // Shouldn't need to do anything. llvm will call dlsym
                 // on the current process for us.
             } else {
@@ -884,9 +777,9 @@ namespace Halide {
                         name[0] == 'c' && name[1] == 'u') {
                         // Starts with "cu" and has extern linkage. Might be a cuda function.
                         fprintf(stderr, "Linking %s\n", name);
-                        void *ptr = dlsym(Contents::libCuda, name);
+                        void *ptr = dlsym(FuncContents::libCuda, name);
                         if (ptr) {
-                            LLVMAddGlobalMapping(Contents::ee, f, ptr);
+                            LLVMAddGlobalMapping(FuncContents::ee, f, ptr);
                         }
                     }
                 }
@@ -900,24 +793,24 @@ namespace Halide {
         // Turning on this code will dump the result of all the optimization passes to a file
         // std::string errstr;
 
-        LLVMRunPassManager(Contents::mPassMgr, module);
-        LLVMInitializeFunctionPassManager(Contents::fPassMgr);
-        LLVMRunFunctionPassManager(Contents::fPassMgr, inner);
-        LLVMFinalizeFunctionPassManager(Contents::fPassMgr);
+        LLVMRunPassManager(FuncContents::mPassMgr, module);
+        LLVMInitializeFunctionPassManager(FuncContents::fPassMgr);
+        LLVMRunFunctionPassManager(FuncContents::fPassMgr, inner);
+        LLVMFinalizeFunctionPassManager(FuncContents::fPassMgr);
 
-        void *ptr = LLVMGetPointerToGlobal(Contents::ee, func);
+        void *ptr = LLVMGetPointerToGlobal(FuncContents::ee, func);
         contents->functionPtr = (void (*)(void*))ptr;
 
         // Retrieve some functions inside the module that we'll want to call from C++
         LLVMValueRef copyToHost = LLVMGetNamedFunction(module, "__copy_to_host");
         if (copyToHost) {
-            ptr = LLVMGetPointerToGlobal(Contents::ee, copyToHost);
+            ptr = LLVMGetPointerToGlobal(FuncContents::ee, copyToHost);
             contents->copyToHost = (void (*)(buffer_t*))ptr;
         }
 
         LLVMValueRef freeBuffer = LLVMGetNamedFunction(module, "__free_buffer");
         if (freeBuffer) {
-            ptr = LLVMGetPointerToGlobal(Contents::ee, freeBuffer);
+            ptr = LLVMGetPointerToGlobal(FuncContents::ee, freeBuffer);
             contents->freeBuffer = (void (*)(buffer_t*))ptr;
         }
 
@@ -926,7 +819,7 @@ namespace Halide {
             LLVMValueRef setErrorHandler = LLVMGetNamedFunction(module, "set_error_handler");
             assert(setErrorHandler && 
                    "Could not find the set_error_handler function in the compiled module\n");
-            ptr = LLVMGetPointerToGlobal(Contents::ee, setErrorHandler);
+            ptr = LLVMGetPointerToGlobal(FuncContents::ee, setErrorHandler);
             typedef void (*handler_t)(char *);
             void (*setErrorHandlerFn)(handler_t) = (void (*)(void (*)(char *)))ptr;
             setErrorHandlerFn(contents->errorHandler);
