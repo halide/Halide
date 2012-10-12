@@ -85,6 +85,7 @@ namespace Halide {
         bool isReduction() const;
         Func &update() const;
 
+        // TODO: this comment is a poor description for users:
         /* These methods generate scheduling gurus used for picking a
            valid schedule for this function */
         Func &tile(const Var &, const Var &,
@@ -131,7 +132,12 @@ namespace Halide {
         // Get the variable defining argument i
         const Var &arg(int i) const;
 
+        // Serialize this function's required environment as an s-expression
+        // TODO: this does not yet serialize the gurus (schedule settings)
         std::string serialize();
+
+        // Serialize the lowered entrypoint as an s-expression
+        std::string serializeLowered();
 
         void compileJIT();
         void compileToFile(const std::string &name, std::string target = "");
@@ -151,10 +157,14 @@ namespace Halide {
 
         void compileToFile(const std::string &name, std::vector<Arg> args, std::string target = "");
 
+        // TODO: make private again
+        MLVal buildEnv();
+
     private:
         friend struct FuncContents;
 
-        MLVal buildEnv();
+        Func(FuncContents*);
+
         MLVal buildGuru();
         MLVal lower();
         MLVal inferArguments();

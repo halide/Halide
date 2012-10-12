@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <vector>
+using std::vector;
 #include <tr1/memory>
 using std::tr1::shared_ptr;
 
@@ -32,9 +34,16 @@ public:
 
     operator bool() const {return contents.get();}
 
+    operator int() const;
+
     void *asVoidPtr() const;
 
     static void unpackPair(const MLVal &input, MLVal &first, MLVal &second);
+    static void unpackTriple(const MLVal &input, MLVal &first, MLVal &second, MLVal &third);
+    static vector<MLVal> unpackTuple(const MLVal &tuple, int len);
+
+    MLVal operator[](int field);
+
  private:
     struct Contents;
     shared_ptr<Contents> contents;

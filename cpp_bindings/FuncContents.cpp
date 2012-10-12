@@ -8,6 +8,12 @@ namespace Halide {
     ML_FUNC6(addScatterToDefinition);
     ML_FUNC2(addDefinitionToEnv);
 
+    ML_FUNC1(functionIsPure);
+    ML_FUNC1(functionIsReduce);
+
+    ML_FUNC1(getPureBody);
+    ML_FUNC1(getReduceBody);
+
     LLVMExecutionEngineRef FuncContents::ee = NULL;
     LLVMPassManagerRef FuncContents::fPassMgr = NULL;
     LLVMPassManagerRef FuncContents::mPassMgr = NULL;
