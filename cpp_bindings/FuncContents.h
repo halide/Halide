@@ -9,6 +9,12 @@
 namespace Halide {
     MLVal makeIdentity();
 
+    MLVal functionIsPure(const MLVal& body);
+    MLVal functionIsReduce(const MLVal& body);
+
+    MLVal getPureBody(const MLVal& body);
+    MLVal getReduceBody(const MLVal& body);
+
     struct FuncContents {
         FuncContents() :
             name(uniqueName('f')), guru(makeIdentity()), functionPtr(NULL) {}
@@ -25,6 +31,8 @@ namespace Halide {
         FuncContents(const char * name, Type returnType) : 
             name(name), returnType(returnType), guru(makeIdentity()), functionPtr(NULL) {}
         
+        Func toFunc() { return Func(this); }
+
         const std::string name;
         
         static LLVMExecutionEngineRef ee;

@@ -91,6 +91,7 @@ namespace Halide {
 
     ML_FUNC1(serializeStmt); // stmt
     ML_FUNC3(serializeEntry); // name, args, stmt
+    ML_FUNC1(serializeEnv);
 
     struct FuncRef::Contents {
         Contents(const Func &f) :
@@ -207,6 +208,8 @@ namespace Halide {
 
     Func::Func(const char *name, Type t) : contents(new FuncContents(sanitizeName(name), t)) {
     }
+
+    Func::Func(FuncContents* c) : contents(c) {}
 
     bool Func::operator==(const Func &other) const {
         return other.contents == contents;
@@ -481,11 +484,13 @@ namespace Halide {
     MLVal Func::buildEnv() {
         MLVal env = makeEnv();
         env = contents->addDefinition(env);
+        fprintf(stderr, "Adding %s to env\n", name().c_str());
 
         for (size_t i = 0; i < funcs().size(); i++) {
             Func f = funcs()[i];
             // Don't consider recursive dependencies.
             if (f == *this) continue;
+            fprintf(stderr, "Adding %s to env\n", f.name().c_str());
             env = f.contents->addDefinition(env);
         }
 
@@ -605,6 +610,10 @@ namespace Halide {
     Func::Arg::Arg(const DynImage &u) : arg(makeBufferArg(u.name())) {}
 
     std::string Func::serialize() {
+        return std::string(serializeEnv(buildEnv()));
+    }
+
+    std::string Func::serializeLowered() {
         MLVal stmt = lower();
         MLVal args = inferArguments();
         return std::string(serializeEntry(name(), args, stmt));

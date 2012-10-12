@@ -18,7 +18,7 @@ let lower (f:string) (env:environment) (sched: schedule_tree) =
 
 let serializeEntry name args stmt = 
   Sexplib.Sexp.to_string (sexp_of_entrypoint (name, args, stmt))
-                                      
+
 let compile target name args stmt =
 
   let (target, target_opts) = match split_name target with
@@ -167,7 +167,10 @@ let _ =
   Callback.register "printStmt" (fun a -> Printf.printf "%s\n%!" (string_of_stmt a));
   
   Callback.register "printSchedule" (fun s -> print_schedule s; Printf.printf "%!");
-  
+
+  Callback.register "stringOfExpr" string_of_expr;
+  Callback.register "stringOfStmt" string_of_stmt;
+
   Callback.register "makeNoviceGuru" (fun _ -> novice);
 
   Callback.register "makeSchedule" (fun (f: string) (sizes: expr list) (env: environment) (guru: scheduling_guru) ->
@@ -196,3 +199,32 @@ let _ =
   Callback.register "serializeExpr" (fun e -> Sexplib.Sexp.to_string (sexp_of_expr e));
   Callback.register "serializeStmt" (fun s -> Sexplib.Sexp.to_string (sexp_of_stmt s));
   Callback.register "serializeEntry" serializeEntry;
+
+  Callback.register "serializeEnv" (fun env ->
+    Sexplib.Sexp.to_string (sexp_of_environment env));
+  Callback.register "deserializeEnv" (fun sexp ->
+    environment_of_sexp (Sexplib.Sexp.of_string sexp));
+
+  Callback.register "getEnvDefinitions" (fun env -> Array.of_list (List.map snd (list_of_environment env)));
+
+  Callback.register "arrayOfList" Array.of_list;
+
+  Callback.register "functionIsPure" (function Pure _ -> true | _ -> false);
+  Callback.register "functionIsReduce" (function Reduce _ -> true | _ -> false);
+
+  Callback.register "getPureBody" (function Pure b -> b | _ -> failwith "Tried to getPureBody on impure function");
+  Callback.register "getReduceBody" (function Reduce b -> b | _ -> failwith "Tried to getReduceBody on non-reduce function");
+
+  Callback.register "typeBits" (fun t -> assert ((vector_elements t) = 1); element_width t);
+  Callback.register "typeIsInt" (function Int _ -> true | _ -> false);
+  Callback.register "typeIsUInt" (function UInt _ -> true | _ -> false);
+  Callback.register "typeIsFloat" (function Float _ -> true | _ -> false);
+
+  Callback.register "typeOfExpr" val_type_of_expr;
+
+  Callback.register "varsInExpr" Analysis.find_vars_in_expr;
+  Callback.register "callsInExpr" (fun e -> StringMap.bindings (Analysis.find_calls_in_expr e));
+
+  Callback.register "callIsFunc" (function Func -> true | _ -> false);
+  Callback.register "callIsExtern" (function Extern -> true | _ -> false);
+  Callback.register "callIsImage" (function Image -> true | _ -> false);
