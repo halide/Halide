@@ -156,8 +156,12 @@ let _ =
     Environment.add name reduce_func env (* this clobbers the old, pure definition in the env *)
   );
 
+  (* General ML utility functions for manipulating lists and tuples *)
   Callback.register "makeList" (fun _ -> []);
   Callback.register "addToList" (fun l x -> x::l);  
+  Callback.register "listHead" (List.hd);
+  Callback.register "listTail" (List.tl);
+  Callback.register "listEmpty" (fun x -> x != []);
   Callback.register "makePair" (fun x y -> (x, y));
   Callback.register "makeTriple" (fun x y z -> (x, y, z));
   
@@ -206,9 +210,7 @@ let _ =
   Callback.register "deserializeEnv" (fun sexp ->
     environment_of_sexp (Sexplib.Sexp.of_string sexp));
 
-  Callback.register "getEnvDefinitions" (fun env -> Array.of_list (List.map snd (list_of_environment env)));
-
-  Callback.register "arrayOfList" Array.of_list;
+  Callback.register "getEnvDefinitions" (fun env -> List.map snd (list_of_environment env));
 
   Callback.register "functionIsPure" (function Pure _ -> true | _ -> false);
   Callback.register "functionIsReduce" (function Reduce _ -> true | _ -> false);

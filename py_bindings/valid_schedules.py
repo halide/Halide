@@ -245,6 +245,7 @@ class FragmentTranspose(Fragment):
 
     @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
+        #print 'fragments', root_func, func, cls, vars, extra_caller_vars
         return [cls(vars=vars, idx=i) for i in range(1,permutation.factorial(len(vars)))]     # TODO: Allow random generation so as to not loop over n!
     
     def check(self, L):
@@ -607,7 +608,12 @@ def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=No
             schedule[name] = constraints[name]
         else:
             max_depth_sel = max_depth # if f.name() != 'f' else 0
-            ans = schedules_func(root_func, f, min_depth, max_depth_sel, random=True, extra_caller_vars=extra_caller_vars).next()
+            while 1:
+                try:
+                    ans = schedules_func(root_func, f, min_depth, max_depth_sel, random=True, extra_caller_vars=extra_caller_vars).next()
+                    break
+                except StopIteration:
+                    continue
             schedule[name] = ans
         d_new_vars[name] = schedule[name].new_vars()
         

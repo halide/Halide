@@ -5,7 +5,10 @@ from halide import *
 int_t = Int(32)
 float_t = Float(32)
 
-def filter_func(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cells_small.png')):
+def filter_func(*args):
+    return filter_full(*args, one_iter=True)
+    
+def filter_full(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cells_small.png'), one_iter=False):
     "Snake segmentation."
     exit_on_signal()
 
@@ -114,7 +117,7 @@ def filter_func(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cel
         blurx[x, y] += image[x+i, y] * normalized[i]
         blury[x, y] = 0.0
         blury[x, y] += blurx[x, y+i] * normalized[i]
-
+        
         # Schedule the lot as root 
         image.root()
         gaussian.root()
@@ -136,7 +139,10 @@ def filter_func(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cel
     background = 255.0 * 0.98
     selectPadding = 10
 
-    im = Image(UInt(8), in_filename)
+    if one_iter:
+        im = UniformImage(Float(32), 3, 'im')
+    else:
+        im = Image(UInt(8), in_filename)
 
     gray = Func('gray')
     gray[x, y] = max(cast(float_t, im[x, y, 0]), max(cast(float_t, im[x, y, 1]), cast(float_t, im[x, y, 2])))
@@ -155,7 +161,10 @@ def filter_func(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cel
     g_proxy = Func('g_proxy')
     g_proxy.assign(1.0 / (1.0 + input_dx * input_dx + input_dy * input_dy))
     
-    g_buf = g_proxy.realize(im.width(), im.height())
+    if one_iter:
+        g_buf = g_proxy
+    else:
+        g_buf = g_proxy.realize(im.width(), im.height())
 
     phi_init = Func('phi_init')
     phi_init[x,y] = select((x >= selectPadding)
@@ -164,15 +173,18 @@ def filter_func(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cel
                             & (y < im.height() - selectPadding),
                             -2.0, 2.0)
 
-    phi_input = UniformImage(Float(32), 2)
+    if one_iter:
+        phi_input = phi_init
+    else:
+        phi_input = UniformImage(Float(32), 2)
 
     phi_clamped = Func('phi_clamped')
     phi_clamped[x,y] = phi_input[clamp(x,cast(int_t,0),cast(int_t,im.width()-1)),
                                  clamp(y,cast(int_t,0),cast(int_t,im.height()-1))]
   
     g_clamped = Func('g_clamped')
-    g_clamped[x, y] = g_buf[clamp(x, cast(int_t,0), cast(int_t,g_buf.width()-1)),
-                            clamp(y, cast(int_t,0), cast(int_t,g_buf.height()-1))]
+    g_clamped[x, y] = g_buf[clamp(x, cast(int_t,0), cast(int_t,im.width()-1)),
+                            clamp(y, cast(int_t,0), cast(int_t,im.height()-1))]
 
     phi_new = Func('phi_new')
     phi_new.assign(drlse_edge(phi_clamped,g_clamped,lambd,mu,alpha,epsilon,timestep,iter_inner))
@@ -196,11 +208,22 @@ def filter_func(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cel
     #Image(UInt(8),out).save('snake_out.png')
 
     root_all(phi_new)
-
-    return (im, phi_new, evaluate, locals())
+    
+    if one_iter:
+        return (im, phi_new, None, locals())
+        #return (im, phi_new, None, locals())
+    else:
+        return (im, phi_new, evaluate, locals())
 
 def main():
-    (input, out_func, evaluate, local_d) = filter_func()
+    (input, out_func, evaluate, local_d) = filter_full()
+#    (input, out_func, evaluate, local_d) = filter_func()
+    #for (funcname, f) in sorted(all_funcs(out_func).items()):
+    #    print funcname, ' '.join(func_varlist(f))
+    #print '\n'.join(sorted(all_funcs(out_func).keys()))
+    #for funcname in sorted(all_funcs(out_func).keys()):
+    #    sys.stdout.write(funcname + '.root()\\n')
+    #print
     filter_image(input, out_func, os.path.join(inputs_dir(), 'blood_cells_small.png'), eval_func=evaluate)().show()
 
 if __name__ == '__main__':

@@ -16,7 +16,6 @@ namespace Halide {
     // Make ML lists
     MLVal makeList();
     MLVal addToList(const MLVal &list, const MLVal &item);
-    MLVal arrayOfList(const MLVal &list);
 
     MLVal makePair(const MLVal &a, const MLVal &b);
     MLVal makeTriple(const MLVal &a, const MLVal &b, const MLVal &c);

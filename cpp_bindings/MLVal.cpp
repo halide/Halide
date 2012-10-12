@@ -128,10 +128,6 @@ MLVal MLVal::operator[](int field) {
     return MLValFromValue(Field(contents->val, field));
 }
 
-int MLVal::array_length() const {
-    return caml_array_length(contents->val);
-}
-
 MLVal MLVal::operator()() const {
     return MLValFromValue(caml_callback(contents->val, Val_unit));
 }
