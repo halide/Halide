@@ -1,3 +1,9 @@
+(* An or operator for options *)
+let option_either x y =
+  match (x, y) with
+    | (Some a, _) -> Some a
+    | (_, b) -> b
+
 module StringSet = Set.Make (
   struct
     let compare = Pervasives.compare
@@ -14,6 +20,8 @@ let string_set_map (f: string -> string) (s: StringSet.t) =
 module StringMap = Map.Make(String)
 (* module StringMap = BatMap.StringMap *) (* TODO: batteries *)
 
+let string_map_merge ma mb = StringMap.merge (fun name a b -> option_either a b) ma mb
+
 module StringIntSet = Set.Make (
   struct
     let compare = Pervasives.compare
@@ -23,12 +31,6 @@ module StringIntSet = Set.Make (
 
 let string_int_set_concat (s: StringIntSet.t list) =
   List.fold_left StringIntSet.union StringIntSet.empty s
-
-(* An or operator for options *)
-let option_either x y =
-  match (x, y) with
-    | (Some a, _) -> Some a
-    | (_, b) -> b
 
 (* A range operator - TODO: exclusive, while Batteries equivalent is inclusive *)
 let (--) i j = 

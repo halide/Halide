@@ -5,9 +5,11 @@
 
 #include <map>
 #include <vector>
+#include <set>
 using std::map;
 using std::vector;
 using std::pair;
+using std::set;
 
 #include <iostream>
 using std::cerr;
@@ -83,10 +85,15 @@ namespace Halide {
         rehydrate(sexp, f.name());
     }
 
-    Expr rehydrateExpr(map<string, Definition>& defs, map<string, Func>& env, MLVal expr);
-    Func rehydrateFunc(map<string, Definition>& defs, map<string, Func>& env, const string func);
+    Func rehydrateFunc(map<string, Definition>& defs,
+                       map<string, Func>& env,
+                       const string func);
 
-    Expr rehydrateExpr(map<string, Definition>& defs, map<string, Func>& env, MLVal expr) {
+    Expr rehydrateExpr(map<string, Definition>& defs,
+                       map<string, Func>& env,
+                       set<string> curArgs,
+                       MLVal expr)
+    {
         Expr e(expr, typeOfExpr(expr));
 
         cerr << "rehydrateExpr: " << e.pretty() << endl;
@@ -94,9 +101,18 @@ namespace Halide {
         // Track dependences
         MLVal vars = arrayOfList(varsInExpr(expr));
         for (int i = 0; i < vars.array_length(); i++) {
-            e.child(Var(vars[i]));
-            // TODO: handle uniforms!
-            cerr << "  var: " << string(vars[i]) << endl;
+            string name = vars[i][0];
+            Type t = vars[i][1];
+            if (curArgs.count(name)) {
+                // This is a simple free variable
+                e.child(Var(name));
+                cerr << "  var: " << name << endl;
+            } else {
+                // This is a uniform
+                // TODO: handle uniforms!
+                cerr << "  uniform: " << name << endl;
+                e.child(DynUniform(t, name));
+            }
         }
 
         MLVal calls = arrayOfList(callsInExpr(expr));
@@ -114,7 +130,12 @@ namespace Halide {
         return e;
     }
 
-    Func rehydrateFunc(map<string, Definition>& defs, map<string, Func>& env, const string func) {
+    Func rehydrateFunc(map<string,
+                       Definition>& defs,
+                       map<string,
+                       Func>& env,
+                       const string func)
+    {
         // If we've already rehydrated this, return it
         if (env.count(func)) return env[func];
 
@@ -125,12 +146,15 @@ namespace Halide {
         FuncContents *c = new FuncContents(def.name, def.ret_t);
         assert(!def.isReduce()); // TODO: this isn't handled yet
         
+        set<string> args;
         for (int i = 0; i < def.args.size(); i++) {
-            c->args.push_back(Var(def.args[i].first));
+            string arg = def.args[i].first;
+            c->args.push_back(Var(arg));
+            args.insert(arg);
         }
 
         // Rehydrate the rhs Expr
-        c->rhs = rehydrateExpr(defs, env, def.body.rhs);
+        c->rhs = rehydrateExpr(defs, env, args, def.body.rhs);
 
         // Add it to the environment
         env[func] = c->toFunc();

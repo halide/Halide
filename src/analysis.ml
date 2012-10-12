@@ -282,12 +282,16 @@ and find_names_in_expr ?(exclude_bufs=false) ?(exclude_vars=false) internal ptrs
   | x -> fold_children_in_expr rece StringIntSet.union StringIntSet.empty x
 
 let find_vars_in_expr e =
-  List.map fst
-    (StringIntSet.elements
-      (find_names_in_expr ~exclude_bufs:true StringSet.empty 0 e))
+  let rec rece internal = function
+  | Var (t, n) -> StringMap.singleton n t
+  | Let (n, a, b) ->
+      let internal = StringSet.add n internal in
+      string_map_merge (rece internal a) (rece internal b)
+  | x -> fold_children_in_expr (rece internal) string_map_merge StringMap.empty x
+  in rece StringSet.empty e
 
 let rec find_calls_in_expr e =
-  let merge = StringMap.merge (fun name a b -> option_either a b) in
+  let merge = string_map_merge in
   match e with
   | Call (cty, rty, nm, args) ->
       let arg_calls =

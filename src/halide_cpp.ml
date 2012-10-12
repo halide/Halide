@@ -125,6 +125,7 @@ let _ =
     add_function def env
   );
   
+  (* TODO: this should be refactored as a constructor, not an add-to-env step *)
   Callback.register "addScatterToDefinition" (fun env name update_name update_args update_var reduction_domain ->
     let (args, return_type, body) = find_function name env in
     let init_expr = match body with
@@ -152,7 +153,7 @@ let _ =
     let env = Environment.add update_name update_func env in
     let reduce_body =  Reduce (init_expr, update_args, update_name, reduction_domain) in
     let reduce_func =  (name, args, return_type, reduce_body) in
-    Environment.add name reduce_func env
+    Environment.add name reduce_func env (* this clobbers the old, pure definition in the env *)
   );
 
   Callback.register "makeList" (fun _ -> []);
@@ -222,7 +223,7 @@ let _ =
 
   Callback.register "typeOfExpr" val_type_of_expr;
 
-  Callback.register "varsInExpr" Analysis.find_vars_in_expr;
+  Callback.register "varsInExpr" (fun e -> StringMap.bindings (Analysis.find_vars_in_expr e));
   Callback.register "callsInExpr" (fun e -> StringMap.bindings (Analysis.find_calls_in_expr e));
 
   Callback.register "callIsFunc" (function Func -> true | _ -> false);
