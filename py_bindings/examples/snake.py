@@ -221,9 +221,9 @@ def main():
     #for (funcname, f) in sorted(all_funcs(out_func).items()):
     #    print funcname, ' '.join(func_varlist(f))
     #print '\n'.join(sorted(all_funcs(out_func).keys()))
-    for funcname in sorted(all_funcs(out_func).keys()):
-        sys.stdout.write(funcname + '.root()\\n')
-    print
+    #for funcname in sorted(all_funcs(out_func).keys()):
+    #    sys.stdout.write(funcname + '.root()\\n')
+    #print
     filter_image(input, out_func, os.path.join(inputs_dir(), 'blood_cells_small.png'), eval_func=evaluate)().show()
 
 if __name__ == '__main__':
