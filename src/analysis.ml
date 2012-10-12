@@ -233,6 +233,7 @@ and prefix_name_stmt prefix stmt =
     | Assert(e, str) ->
         Assert (recurse_expr e, str)
 
+(* TODO: this should be refactorable into something that folds over these expr/stmt types generically, rather than returning storage size specifically *)
 (* Find all references in stmt/expr to things outside of it.
  * Return a set of pairs of names and their storage sizes, for e.g. building a closure. *)
 let rec find_names_in_stmt internal ptrsize stmt =
@@ -265,20 +266,38 @@ let rec find_names_in_stmt internal ptrsize stmt =
       rece e
   | Provide (fn, _, _) ->
       failwith "Encountered a provide during cg. These should have been lowered away."
-and find_names_in_expr internal ptrsize expr =
-  let rece = find_names_in_expr internal ptrsize in
+and find_names_in_expr ?(exclude_bufs=false) ?(exclude_vars=false) internal ptrsize expr =
+  let rece = find_names_in_expr ~exclude_bufs:exclude_bufs ~exclude_vars:exclude_vars internal ptrsize in
   match expr with 
   | Load (_, buf, idx) ->
       let inner = rece idx in
-      if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, ptrsize) inner)
+      if (StringSet.mem buf internal) or exclude_bufs then inner else (StringIntSet.add (buf, ptrsize) inner)
   | Var (t, n) ->
       let size = (bit_width t)/8 in
-      if (StringSet.mem n internal) then StringIntSet.empty else (StringIntSet.add (n, size) StringIntSet.empty)
+      if (StringSet.mem n internal) or exclude_vars then StringIntSet.empty else (StringIntSet.add (n, size) StringIntSet.empty)
   | Let (n, a, b) ->
       let internal = StringSet.add n internal in
       let rece = find_names_in_expr internal ptrsize in
       StringIntSet.union (rece a) (rece b)
   | x -> fold_children_in_expr rece StringIntSet.union StringIntSet.empty x
+
+let find_vars_in_expr e =
+  List.map fst
+    (StringIntSet.elements
+      (find_names_in_expr ~exclude_bufs:true StringSet.empty 0 e))
+
+let rec find_calls_in_expr e =
+  let merge = StringMap.merge (fun name a b -> option_either a b) in
+  match e with
+  | Call (cty, rty, nm, args) ->
+      let arg_calls =
+        List.fold_left
+          (fun calls e -> merge calls (find_calls_in_expr e))
+          StringMap.empty
+          args
+      in
+      StringMap.add nm (cty, rty) arg_calls
+  | x -> fold_children_in_expr find_calls_in_expr merge StringMap.empty x
 
 let rec find_loads_in_expr = function
   | Load (_, buf, idx) ->

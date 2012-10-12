@@ -16,6 +16,9 @@ namespace Halide {
     MLVal makeList();
     MLVal addToList(const MLVal &list, const MLVal &item);
 
+    MLVal stringOfExpr(const MLVal &expr);
+    MLVal stringOfStmt(const MLVal &stmt);
+
     MLVal makePair(const MLVal &a, const MLVal &b);
     MLVal makeTriple(const MLVal &a, const MLVal &b, const MLVal &c);
 

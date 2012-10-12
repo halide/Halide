@@ -84,6 +84,7 @@ namespace Halide {
         
       private:
         friend struct ExprContents;
+        Expr(ExprContents*);
         shared_ptr<ExprContents> contents;
     };
 

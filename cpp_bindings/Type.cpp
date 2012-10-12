@@ -1,10 +1,23 @@
 #include "Type.h"
+#include <assert.h>
 
 namespace Halide {
 
     ML_FUNC1(makeFloatType);
     ML_FUNC1(makeIntType);
     ML_FUNC1(makeUIntType);
+
+    ML_FUNC1(typeBits);
+    ML_FUNC1(typeIsInt);
+    ML_FUNC1(typeIsUInt);
+    ML_FUNC1(typeIsFloat);
+
+    Type::Type(MLVal v) : mlval(v), bits(int(typeBits(v))) {
+        if (typeIsInt(v)) code = Type::INT;
+        else if (typeIsUInt(v)) code = Type::UINT;
+        else if (typeIsFloat(v)) code = Type::FLOAT;
+        else assert(false);
+    }
 
     template<>
     Type TypeOf<float>() {

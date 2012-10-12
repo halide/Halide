@@ -1,6 +1,7 @@
 open Util
 open Sexplib
 open Sexplib.Std
+open Sexplib.Conv
 
 type val_type = 
   (* bits per element *)    
@@ -241,8 +242,19 @@ with sexp
 
 (* By convention, extern functions have fully qualified names, beginning with ".",
  * to prevent our namespacing from trying to parse/split llvm.* intrinsic names. *)
-module Environment = Map.Make(String)
+module Environment = StringMap
 type environment = definition Environment.t
+
+let list_of_environment = Environment.bindings
+(*   let inner k v l = l @ [(k,v)] in
+  Environment.fold inner e []
+ *)
+let environment_of_list l =
+  let inner m (k,v) = Environment.add k v m in
+  List.fold_left inner Environment.empty l
+
+let sexp_of_environment e = sexp_of_list (sexp_of_pair sexp_of_string sexp_of_definition) (list_of_environment e)
+let environment_of_sexp s = environment_of_list (list_of_sexp (pair_of_sexp string_of_sexp definition_of_sexp) s)
 
 let base_name name =
   (* Fully qualified names start with ".", and should be left alone, but have

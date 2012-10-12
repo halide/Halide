@@ -23,7 +23,10 @@ val subs_name_expr : Ir.buffer -> Ir.buffer -> Ir.expr -> Ir.expr
 val prefix_name_expr : string -> Ir.expr -> Ir.expr
 val prefix_name_stmt : string -> Ir.stmt -> Ir.stmt
 val find_names_in_stmt : Util.StringSet.t -> int -> Ir.stmt -> Util.StringIntSet.t
-val find_names_in_expr : Util.StringSet.t -> int -> Ir.expr -> Util.StringIntSet.t
+val find_names_in_expr : ?exclude_bufs:bool -> ?exclude_vars:bool -> Util.StringSet.t -> int -> Ir.expr -> Util.StringIntSet.t
+
+val find_vars_in_expr : Ir.expr -> string list
+val find_calls_in_expr : Ir.expr -> (Ir.call_type * Ir.val_type) Util.StringMap.t
 
 val find_loads_in_expr : Ir.expr -> Util.StringSet.t
 val find_loads_in_stmt : Ir.stmt -> Util.StringSet.t

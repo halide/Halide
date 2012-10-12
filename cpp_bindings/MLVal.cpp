@@ -95,6 +95,10 @@ MLVal::operator std::string() {
     return std::string(String_val(contents->val));
 }
 
+MLVal::operator int() const {
+    return Int_val(contents->val);
+}
+
 MLVal::MLVal(void *ptr) : contents(new Contents((value)ptr)) {
 }
 
@@ -104,6 +108,24 @@ MLVal::MLVal(const MLVal &other) : contents(other.contents) {
 void MLVal::unpackPair(const MLVal &tuple, MLVal &first, MLVal &second) {
     first = MLValFromValue(Field(tuple.contents->val, 0));
     second = MLValFromValue(Field(tuple.contents->val, 1));
+}
+
+void MLVal::unpackTriple(const MLVal &tuple, MLVal &first, MLVal &second, MLVal &third) {
+    first = MLValFromValue(Field(tuple.contents->val, 0));
+    second = MLValFromValue(Field(tuple.contents->val, 1));
+    third = MLValFromValue(Field(tuple.contents->val, 2));
+}
+
+vector<MLVal> MLVal::unpackTuple(const MLVal &tuple, int len) {
+    vector<MLVal> list;
+    for (int i = 0; i < len; i++) {
+        list.push_back(MLValFromValue(Field(tuple.contents->val, i)));
+    }
+    return list;
+}
+
+MLVal MLVal::operator[](int field) {
+    return MLValFromValue(Field(contents->val, field));
 }
 
 MLVal MLVal::operator()() const {
