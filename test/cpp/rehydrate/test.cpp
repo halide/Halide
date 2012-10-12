@@ -1,6 +1,8 @@
 #include <Halide.h>
 using namespace Halide;
 
+#include <iostream>
+
 namespace Halide
 {
 	extern void testArray(Func f);
@@ -14,6 +16,8 @@ int main(int argc, char **argv) {
     g(x) = h(x-1) + h(x+1);
     f(x, y) = (g(x-1) + g(x+1)) + y;
 
+    std::cerr << f.rhs().pretty() << std::endl;
+    
     Func ff = rehydrate(f.serialize(), f.name());
 #if 0
 	testArray(f);

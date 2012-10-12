@@ -89,7 +89,7 @@ namespace Halide {
     Expr rehydrateExpr(map<string, Definition>& defs, map<string, Func>& env, MLVal expr) {
         Expr e(expr, typeOfExpr(expr));
 
-        cerr << "rehydrateExpr: " << string(stringOfExpr(expr)) << endl;
+        cerr << "rehydrateExpr: " << e.pretty() << endl;
 
         // Track dependences
         MLVal vars = arrayOfList(varsInExpr(expr));
