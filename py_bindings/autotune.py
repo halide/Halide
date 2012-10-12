@@ -220,7 +220,7 @@ def crossover(a, b, constraints):
         
         try:
             ans.apply(constraints)       # Apply schedule to determine if crossover invalidated new variables that were referenced
-        except (NameError, halide.ScheduleError):
+        except NameError: #, halide.ScheduleError):
             continue
 
         return ans
@@ -285,7 +285,7 @@ def mutate(a, p, constraints):
         try:
             #print 'Mutated schedule:' + '\n' + '-'*40 + '\n' + str(a) + '\n' + '-' * 40 + '\n'
             a.apply(constraints)       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
-        except (NameError, halide.ScheduleError):
+        except NameError:#, halide.ScheduleError):
             continue
         return a
 

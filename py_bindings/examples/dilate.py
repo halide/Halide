@@ -29,10 +29,15 @@ def main():
 
     xi, yi = Var('xi'), Var('yi')
 
-    if 1:
-        dilate.root().split(y, y, yi, 8).parallel(y).vectorize(x, 8)
+    schedule = 0
     
-    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo2.png'), disp_time=True)
+    if schedule == 0:           # Autotuned schedule
+        dilate.root().split(y, y, yi, 8).parallel(y).vectorize(x, 8)
+    elif schedule == 1:         # Hand-tuned schedule (Jonathan)
+        dilate.root().tile(x,y,xi,yi,8,8).vectorize(xi,8).parallel(y)
+    else:
+        raise ValueError
+    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3.png'), disp_time=True)
     for i in range(5):
         test()
     test().show()

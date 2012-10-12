@@ -106,7 +106,6 @@ namespace Halide {
         Func &chunk(const Var &);
         Func &root();
         Func &parallel(const Var &);
-        Func &random(int seed);
         Func &vectorize(const Var &, int factor);
         Func &unroll(const Var &, int factor);
         Func &split(const Var &, const Var &, const Var &, const Expr &factor);
@@ -115,7 +114,6 @@ namespace Halide {
         Func &cudaTile(const Var &, int xFactor);
         Func &cudaTile(const Var &, const Var &, int xFactor, int yFactor);
 
-        int autotune(int argc, char **argv, std::vector<int> sizes);
 
         bool operator==(const Func &other) const;
 
