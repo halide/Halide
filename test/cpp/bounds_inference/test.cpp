@@ -1,13 +1,5 @@
 #include <Halide.h>
-#include <sys/time.h>
-
 using namespace Halide;
-
-double currentTime() {
-    timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
-}
 
 int main(int argc, char **argv) {
 
