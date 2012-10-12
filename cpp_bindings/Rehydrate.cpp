@@ -25,6 +25,10 @@ namespace Halide {
     ML_FUNC1(callIsExtern)
     ML_FUNC1(callIsImage)
 
+    ML_FUNC1(listHead)
+    ML_FUNC1(listTail)
+    ML_FUNC1(listEmpty)
+
     // Mirror helpers for unpacking `definitions` from the deserialized environment.
     // Yes, this is ugly at this point. Better ideas (short of adding dozens of
     // accessor callback helpers to halide_cpp.ml) are welcome.
@@ -32,9 +36,9 @@ namespace Halide {
         Definition() {}
 
         Definition(MLVal d) : name(string(d[0])), ret_t(d[2]), body(d[3]) {
-            MLVal _args = arrayOfList(d[1]);
-            for (int i = 0; i < _args.array_length(); i++) {
-                args.push_back(make_pair(string(_args[i][1]), _args[i][0]));
+            for (MLVal list = d[1]; !listEmpty(list); list = listTail(list)) {
+                MLVal arg = listHead(list);
+                args.push_back(make_pair(string(arg[1]), arg[0]));
             }
         }
 
@@ -50,9 +54,9 @@ namespace Halide {
                     ty = Reduce;
                     MLVal red = getReduceBody(b);
                     rhs = red[0];
-                    updateLoc = arrayOfList(red[1]);
+                    updateLoc = red[1];
                     updateFunc = string(red[2]);
-                    dom = arrayOfList(red[3]);
+                    dom = red[3];
                 }
             }
 
@@ -92,21 +96,23 @@ namespace Halide {
         cerr << "rehydrateExpr: " << string(stringOfExpr(expr)) << endl;
 
         // Track dependences
-        MLVal vars = arrayOfList(varsInExpr(expr));
-        for (int i = 0; i < vars.array_length(); i++) {
-            e.child(Var(vars[i]));
+
+        
+        for (MLVal list = varsInExpr(expr); !listEmpty(list); list = listTail(list)) {
+            MLVal var = listHead(list);
+            e.child(Var(var));
             // TODO: handle uniforms!
-            cerr << "  var: " << string(vars[i]) << endl;
+            cerr << "  var: " << string(var) << endl;
         }
 
-        MLVal calls = arrayOfList(callsInExpr(expr));
-        for (int i = 0; i < calls.array_length(); i++) {
-            string name = calls[i][0];
-            Type ret = calls[i][1][1];
-            if (callIsFunc(calls[i][1][0])) {
+        for (MLVal list = callsInExpr(expr); !listEmpty(list); list = listTail(list)) {
+            MLVal call = listHead(list);
+            string name = call[0];
+            Type ret = call[1][1];
+            if (callIsFunc(call[1][0])) {
                 Func f = rehydrateFunc(defs, env, name);
                 e.child(FuncRef(f));
-            } else if (callIsImage(calls[i][1][0])) {
+            } else if (callIsImage(call[1][0])) {
                 // TODO: figure out dimensionality of call
             }
         }
@@ -125,7 +131,7 @@ namespace Halide {
         FuncContents *c = new FuncContents(def.name, def.ret_t);
         assert(!def.isReduce()); // TODO: this isn't handled yet
         
-        for (int i = 0; i < def.args.size(); i++) {
+        for (size_t i = 0; i < def.args.size(); i++) {
             c->args.push_back(Var(def.args[i].first));
         }
 
@@ -141,10 +147,10 @@ namespace Halide {
     Func rehydrate(const string sexp, const string rootFunc) {
         map<string, Func> env;
 
-        MLVal d = getEnvDefinitions(deserializeEnv(sexp));
         map<string, Definition> defs;
-        for (int i = 0; i < d.array_length(); i++) {
-            Definition def(d[i]);
+        for (MLVal list = getEnvDefinitions(deserializeEnv(sexp));
+             !listEmpty(list); list = listTail(list)) {
+            Definition def(listHead(list));
             defs[def.name] = def;
             cerr << def.name << " is " << (def.isReduce() ? "" : "not ") << "reduce" << endl;
         }

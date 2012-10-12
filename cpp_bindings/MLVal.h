@@ -43,7 +43,6 @@ public:
     static vector<MLVal> unpackTuple(const MLVal &tuple, int len);
 
     MLVal operator[](int field);
-    int array_length() const;
 
  private:
     struct Contents;
