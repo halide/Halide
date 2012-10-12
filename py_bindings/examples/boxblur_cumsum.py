@@ -54,7 +54,7 @@ def boxblur_mode(dtype=UInt(16), is_sat=False, use_uniforms=False):
                      sum_clamped[x+box_size  ,y-box_size-1,c]+
                      sum_clamped[x-box_size-1,y-box_size-1,c])/weight[x,y])
 
-    schedule = 0
+    schedule = 1
     
     xi,yi = Var('xi'), Var('yi')
     
@@ -62,15 +62,19 @@ def boxblur_mode(dtype=UInt(16), is_sat=False, use_uniforms=False):
         pass
     elif schedule == 1:
         if not is_sat:
-            #sum.update().root().tile(x,y,xi,yi,8,8).parallel(y) #.vectorize(x)
-            #sum.update().parallel(y)#.vectorize(x)
-            #sumx.root().parallel(y) #.vectorize(x)
-            #sum_clamped.root().parallel(y).vectorize(x)
-            #weight.root()
-            output.root().vectorize(x)
-            pass
+            #sum.tile(x,y,xi,yi,16,16).parallel(y).vectorize(x,8)
+            #sumx.tile(x,y,xi,yi,16,16).parallel(y).vectorize(x,8)
+            #sum_clamped.tile(x,y,xi,yi,8,16).parallel(y).vectorize(x,8)
+            #weight.chunk(x).vectorize(x,8)
+            sum.parallel(c).vectorize(x,8)
+            sumx.parallel(c).vectorize(x,8)
+            output.parallel(y).unroll(y,4).vectorize(x,8)
         else:
-            pass
+            #sum.tile(x,y,xi,yi,8,8).parallel(y).vectorize(x,8)
+            #sum_clamped.parallel(c)
+            #weight.chunk(x).vectorize(x,8)
+            sum.parallel(c).unroll(y,4)
+            output.tile(x,y,xi,yi,8,8).parallel(y).vectorize(x,8)
     else:
         raise ValueError
         
