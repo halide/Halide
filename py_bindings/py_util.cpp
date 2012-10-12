@@ -12,13 +12,6 @@ void assign(Func &f, const Expr &e) {
   f = e;
 }
 
-/*
-Expr expr_from_tuple(Expr a) { return Expr(Tuple(a)); }
-Expr expr_from_tuple(Expr a, Expr b) { return Expr(Tuple(a, b)); }
-Expr expr_from_tuple(Expr a, Expr b, Expr c) { return Expr(Tuple(a, b, c)); }
-Expr expr_from_tuple(Expr a, Expr b, Expr c, Expr d) { return Expr(Tuple(a, b, c, d)); }
-*/
-
 Expr expr_from_int(int a) { return Expr(a); }
 
 Expr add(Expr a, Expr b) { return a+b; }

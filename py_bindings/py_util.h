@@ -18,13 +18,6 @@ Expr mod(Expr a, Expr b);
 
 Expr expr_from_int(int a);
 
-/*
-Expr expr_from_tuple(Expr a);
-Expr expr_from_tuple(Expr a, Expr b);
-Expr expr_from_tuple(Expr a, Expr b, Expr c);
-Expr expr_from_tuple(Expr a, Expr b, Expr c, Expr d);
-*/
-
 Expr lt(Expr a, Expr b);
 Expr le(Expr a, Expr b);
 Expr eq(Expr a, Expr b);
