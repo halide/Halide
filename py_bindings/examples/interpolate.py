@@ -19,10 +19,7 @@ def filter_func(dtype=Float(32)):
     level_widths = [Uniform(int_t,'level_widths%d'%i) for i in range(levels)]
     level_heights = [Uniform(int_t,'level_heights%d'%i) for i in range(levels)]
 
-    downsampled[0][x,y] = (input[x,y,0] * input[x,y,3],
-                           input[x,y,1] * input[x,y,3],
-                           input[x,y,2] * input[x,y,3],
-                           input[x,y,3])
+    downsampled[0][x,y,c] = select(c<3, input[x,y,c] * input[x,y,3], input[x,y,3])
     
     for l in range(1, levels):
         clamped = Func('clamped%d'%l)
@@ -40,10 +37,7 @@ def filter_func(dtype=Float(32)):
         interpolated[l][x,y,c] = downsampled[l][x,y,c] + (1.0 - downsampled[l][x,y,3]) * upsampled[x,y,c]
 
     final = Func('final')
-    final[x,y] = (interpolated[0][x,y,0] / interpolated[0][x,y,3],
-                  interpolated[0][x,y,1] / interpolated[0][x,y,3],
-                  interpolated[0][x,y,2] / interpolated[0][x,y,3],
-                  1.0)
+    final[x,y,c] = select(c<3, interpolated[0][x,y,c] / interpolated[0][x,y,3], 1.0)
     root_all(final)
     
     #print 'interpolate: finished function setup'

@@ -40,7 +40,8 @@ def wrap(*a):
         elif isinstance(a[0], (int,long)):
             return expr_from_int(a[0])
         elif isinstance(a[0], tuple):
-            return expr_from_tuple(*(wrap(x) for x in a[0]))
+            raise NotImplementedError
+            #return expr_from_tuple(*(wrap(x) for x in a[0]))
     return ExprType(*a)
     
 in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
@@ -133,6 +134,7 @@ for C in [Var, FuncRef]:
 def raise_error(e):
     raise e
 
+'''
 # ----------------------------------------------------------------------------------------------------------
 # Reorder (also keep track of variable order during split/tile to allow reorder() to work properly)
 # ----------------------------------------------------------------------------------------------------------
@@ -266,7 +268,14 @@ def _tile(f, *L):
     
     #assert 
     #lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
-    
+'''
+
+_reset0 = Func.reset
+_split0 = Func.split
+_tile0 = Func.tile
+_reorder0 = Func.reorder
+#_transpose0 = Func.transpose
+
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_assign = lambda x, y: assign(x, wrap(y))
 _realize = Func.realize
@@ -276,11 +285,11 @@ Func.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key])
 Func.__getitem__ = _generic_getitem
 Func.assign = _generic_assign
 Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
-Func.split = _split
-Func.tile = _tile #lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
-Func.reset = _reset
-Func.reorder = _reorder
-Func.transpose = _transpose
+Func.split = lambda self, a, b, c, d: _split0(self, a, b, c, wrap(d))
+Func.tile = lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
+#Func.reset = _reset
+Func.reorder = lambda self, *a: _reorder0(self, ListVar(a))
+#Func.transpose = _transpose
 
 #Func.__call__ = lambda self, *args: call(self, [wrap(x) for x in args])
 

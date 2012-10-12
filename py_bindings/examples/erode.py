@@ -24,11 +24,15 @@ def main():
     erode_x, erode_y = local_d['erode_x'], local_d['erode_y']
 
     xi, yi = Var('xi'), Var('yi')
-
-    if 0:
+    _c0 = Var('_c0')
+    _c1 = Var('_c1')
+    
+    schedule = 0
+    
+    if schedule == 0:                       # Experimentation
         erode_x.root().vectorize(x, 8)
         erode_y.vectorize(x, 8)
-    else:
+    elif schedule == 1:                     # Reasonably fast schedule found by Jonathan
         erode_x.root()
         erode_x.split(y, y, yi, 8)
         erode_x.parallel(y)
@@ -36,8 +40,13 @@ def main():
         erode_y.root()
         erode_y.split(y, y, yi, 8)
         erode_y.parallel(y)
-
-    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo2.png'), disp_time=True)
+    elif schedule == 2:                     # Autotuned schedule
+        erode_x.chunk(y).vectorize(y,8)
+        erode_y.root().tile(x,y,_c0,_c1,64,64).vectorize(_c0,16).parallel(y)
+    else:
+        raise ValueError
+        
+    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3.png'), disp_time=True)
     for i in range(5):
         test()
     test().show()

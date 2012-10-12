@@ -2,6 +2,7 @@
 "Box blur in cumulative sum mode."
 
 import sys; sys.path += ['..', '.']
+builtin_min = min
 from halide import *
 
 int_t = Int(32)
@@ -15,7 +16,7 @@ def boxblur_mode(dtype=UInt(16), is_sat=False, use_uniforms=False):
         box_size = Uniform(int_t, 'box_size', 15)
     else:
         box_size = 15                                   # Avoid uniform to make default_runner happy
-
+    
     x = Var('x')
     y = Var('y')
     c = Var('c')
@@ -53,6 +54,26 @@ def boxblur_mode(dtype=UInt(16), is_sat=False, use_uniforms=False):
                      sum_clamped[x+box_size  ,y-box_size-1,c]+
                      sum_clamped[x-box_size-1,y-box_size-1,c])/weight[x,y])
 
+    schedule = 0
+    
+    xi,yi = Var('xi'), Var('yi')
+    
+    if schedule == 0:
+        pass
+    elif schedule == 1:
+        if not is_sat:
+            #sum.update().root().tile(x,y,xi,yi,8,8).parallel(y) #.vectorize(x)
+            #sum.update().parallel(y)#.vectorize(x)
+            #sumx.root().parallel(y) #.vectorize(x)
+            #sum_clamped.root().parallel(y).vectorize(x)
+            #weight.root()
+            output.root().vectorize(x)
+            pass
+        else:
+            pass
+    else:
+        raise ValueError
+        
     return (input, output, None, locals())
 
 def filter_func(dtype=UInt(16)):
@@ -60,8 +81,15 @@ def filter_func(dtype=UInt(16)):
     
 def main(is_sat=False):
     (input, out_func, evaluate, local_d) = boxblur_mode(is_sat=is_sat)
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'lena_crop.png'), disp_time=True)().show()
-
+    evaluate = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3.png'))#.show()
+    T = 1e100
+    for i in range(5):
+        T0 = time.time()
+        I = evaluate()
+        T = builtin_min(T, time.time()-T0)
+    print 'Best time: %.4f'%T
+    I.show()
+    
 if __name__ == '__main__':
     main()
 
