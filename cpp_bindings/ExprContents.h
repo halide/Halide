@@ -13,8 +13,10 @@ namespace Halide {
         ExprContents(MLVal n, Type t) : node(n), type(t), isVar(false), isRVar(false), isImmediate(false), implicitArgs(0) {}
         ExprContents(const FuncRef &f);
 
+        Expr toExpr() { return Expr(this); }
+
         // Declare that this expression is the child of another for bookkeeping
-        void child(Expr );
+        void child(Expr);
 
         // The ML-value of the expression
         MLVal node;

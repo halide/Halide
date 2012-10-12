@@ -115,6 +115,8 @@ namespace Halide {
     Expr::Expr(const Expr &other) : contents(other.contents) {        
     }
 
+    Expr::Expr(ExprContents *c) : contents(c) {}
+
     const MLVal &Expr::node() const {
         return contents->node;
     }
