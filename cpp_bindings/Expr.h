@@ -77,6 +77,8 @@ namespace Halide {
         bool isDefined() const;
         bool isImmediate() const;
 
+        const std::string pretty() const;
+
         // When an expression is captured and placed inside an
         // anonymous function body, any reduction vars become regular
         // vars to the anonymous function

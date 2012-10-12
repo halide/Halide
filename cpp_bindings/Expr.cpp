@@ -37,6 +37,8 @@ namespace Halide {
     ML_FUNC2(makeOr);
     ML_FUNC1(makeNot);
 
+    ML_FUNC1(stringOfExpr);
+
     Expr::Expr() {
     }
 
@@ -189,6 +191,11 @@ namespace Halide {
     bool Expr::isDefined() const {
         return (bool)(contents);
     }
+
+    const std::string Expr::pretty() const {
+        return stringOfExpr(contents->node);
+    }
+
 
     void Expr::child(Expr c) {
         contents->child(c);

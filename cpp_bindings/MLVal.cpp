@@ -91,7 +91,7 @@ MLVal::MLVal(const std::string &str) {
     contents.reset(new Contents(v));    
 }
 
-MLVal::operator std::string() {
+MLVal::operator const std::string() const {
     return std::string(String_val(contents->val));
 }
 
