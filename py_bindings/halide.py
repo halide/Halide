@@ -535,7 +535,7 @@ def visit_funcs(root_func, callback):
     d = {}
     def visit(x, parent):
         name = x.name()
-        if name not in d:
+        if name not in d:# and len(x.args()) > 0:       # FIXME: Where is the Func('f0') with no args coming from in snake? Seems odd...
             d[name] = x
             callback(x, parent)
             #print x.rhs().funcs()

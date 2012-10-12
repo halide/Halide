@@ -137,7 +137,7 @@ class AutotuneParams:
     max_depth = DEFAULT_MAX_DEPTH
     
     trials = 5                  # Timing runs per schedule
-    generations = 500
+    generations = 10
     
     compile_timeout = 20.0 #15.0
     run_timeout_mul = 2.0 #3.0           # Fastest run time multiplied by this factor plus bias is cutoff
@@ -150,6 +150,8 @@ class AutotuneParams:
     
     num_print = 10
 
+    check_output = True
+    
     cores = None   # Number of processes to use simultaneously for parallel compile (None defaults to number of virtual cores)
 
     tune_dir = None                 # Autotuning output directory or None to use a default directory
@@ -342,12 +344,14 @@ class Constraints:
 class Duplicate(Exception):
     pass
     
-def next_generation(prevL, p, root_func, constraints, generation_idx):
+def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     """"
     Get next generation using elitism/mutate/crossover/random.
     
     Here prevL is list of Schedule instances sorted by decreasing fitness, and p is AutotuneParams.
     """
+    prevL = [prevL[i] for i in range(len(prevL)) if get_error_str(timeL[i]['time']) is None]
+    
     ans = []
     schedule_strs = set()
     def append_unique(schedule):
@@ -554,11 +558,11 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
             mode_str = 'compile' if compile else 'run'
             
-            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, binary_file, str(int(save_output)), ref_output]
+            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, binary_file, str(int(save_output)), (ref_output if p.check_output else '')]
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
-                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:-1]) + ' ' + '"' + sh_args[-1] + '"' + '\n')
+                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:-1]) + ' '  + ('"' + sh_args[-1] + '"' if p.check_output else '""') + '\n')
             return (sh_args, binary_file + '.png')
             
         # Compile all schedules in parallel
@@ -665,11 +669,15 @@ def check_schedules(currentL):
 
 #def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
 def call_filter_func(filter_func_name, cache={}):
+    if not '(' in filter_func_name:         # Call the function if no parentheses (args) given
+        filter_func_name += '()'
+
     if filter_func_name in cache:
         return cache[filter_func_name]
     if '.' in filter_func_name:
-        exec "import " + filter_func_name[:filter_func_name.rindex('.')]
-    ans = eval(filter_func_name)()
+        before_paren = filter_func_name[:filter_func_name.index('(')]
+        exec "import " + before_paren[:before_paren.rindex('.')]
+    ans = eval(filter_func_name)
     cache[filter_func_name] = ans
     return ans
 
@@ -745,7 +753,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         if gen == 1:
             display_text = '\nTiming generation %d'%gen
 
-        currentL = next_generation(currentL, p, out_func, constraints, gen)
+        currentL = next_generation(currentL, p, out_func, constraints, gen, timeL)
         # The (commented out) following line tests injecting a bad schedule for blur example (should fail with RUN_CHECK_FAIL).
         #currentL.append(constraints.constrain(Schedule.fromstring(out_func, 'blur_x_blurUInt16.chunk(x_blurUInt16)\nblur_y_blurUInt16.root().vectorize(x_blurUInt16,16)', 'bad_schedule', gen, len(currentL))))
         check_schedules(currentL)
@@ -763,7 +771,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         success_count = 0
         for timev in timeL:
             e = get_error_str(timev['time'])
-            if e is not None:
+            if e is None:
                 success_count += 1
                 
         display_text += ' '*16 + '%d/%d succeed (%.0f%%)\n' % (success_count, len(timeL), success_count*100.0/len(timeL))
@@ -898,7 +906,7 @@ def system(s):
     
 def main():
     (args, argd) = parse_args()
-    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode'.split() # local_laplacian'.split()
+    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake'.split() # local_laplacian'.split()
     if len(args) == 0:
         print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
         print 'autotune example [%s|all]'%('|'.join(all_examples))
@@ -912,13 +920,15 @@ def main():
             sys.exit(1)
         rest = sys.argv[3:]
         examplename = args[1]
+        if examplename == 'snake':
+            rest.extend(['-check_output', '0'])
         exampleL = all_examples if examplename == 'all' else [examplename]
         cores = multiprocessing.cpu_count()
         for examplename in exampleL:
             tune_dir = 'tune_%s'%examplename
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
-            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -cores %d -tune_dir "%s" -generations 10 %s' % (cores, examplename, cores if examplename != 'local_laplacian' else 2, tune_dir, ' '.join(rest)))
+            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -cores %d -tune_dir "%s" %s' % (cores, examplename, cores if examplename != 'local_laplacian' else 2, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
         import autotune_test
         global use_random_blocksize
@@ -990,6 +1000,11 @@ def main():
 #        seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blurUInt16)\n' +
 #                              'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
         seed_scheduleL.append('')
+        if filter_func_name == 'examples.snake.filter_func':        # Temporary workaround to test snake by injecting more valid schedules
+            seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
+            seed_scheduleL.append('Dirac0.root()\nNx0.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
+            seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
+            seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()')
         #seed_scheduleL.append('blur_y_blurUInt16.root()\nblur_x_blurUInt16.root()')
         #seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8)\n' +
         #                      'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
