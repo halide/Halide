@@ -8,6 +8,9 @@ namespace Halide {
     // Possible types for image data
     class Type {
       public:
+        Type() {}
+        Type(MLVal v);
+        
         MLVal mlval;
         unsigned char bits;
         enum {FLOAT = 0, INT = 1, UINT = 2} code;
