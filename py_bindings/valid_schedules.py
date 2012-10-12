@@ -245,6 +245,7 @@ class FragmentTranspose(Fragment):
 
     @staticmethod
     def fragments(root_func, func, cls, vars, extra_caller_vars):
+        #print 'fragments', root_func, func, cls, vars, extra_caller_vars
         return [cls(vars=vars, idx=i) for i in range(1,permutation.factorial(len(vars)))]     # TODO: Allow random generation so as to not loop over n!
     
     def check(self, L):
