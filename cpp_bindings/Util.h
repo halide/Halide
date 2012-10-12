@@ -15,7 +15,6 @@ namespace Halide {
     // Make ML lists
     MLVal makeList();
     MLVal addToList(const MLVal &list, const MLVal &item);
-    MLVal arrayOfList(const MLVal &list);
 
     MLVal stringOfExpr(const MLVal &expr);
     MLVal stringOfStmt(const MLVal &stmt);
