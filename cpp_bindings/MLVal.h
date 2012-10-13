@@ -32,7 +32,9 @@ public:
 
     operator const std::string() const;
 
-    operator bool() const {return contents.get();}
+    operator bool() const;
+
+    bool initialized() const {return contents.get();}
 
     operator int() const;
 
@@ -53,28 +55,28 @@ public:
 #define ML_FUNC0(n)                                            \
     MLVal n() {                                                \
         static MLVal callback;                                 \
-        if (!callback) callback = MLVal::find(#n);             \
+        if (!callback.initialized()) callback = MLVal::find(#n);             \
         return callback();                                     \
     }
 
 #define ML_FUNC1(n)                                            \
     MLVal n(const MLVal &x) {                                         \
         static MLVal callback;                                 \
-        if (!callback) callback = MLVal::find(#n);             \
+        if (!callback.initialized()) callback = MLVal::find(#n);             \
         return callback(x);                                    \
     }
 
 #define ML_FUNC2(n)                                                    \
     MLVal n(const MLVal &x, const MLVal &y) {                                        \
         static MLVal callback;                                         \
-        if (!callback) callback = MLVal::find(#n);                     \
+        if (!callback.initialized()) callback = MLVal::find(#n);                     \
         return callback(x, y);                                         \
     }
 
 #define ML_FUNC3(n)                                                    \
     MLVal n(const MLVal &x, const MLVal &y, const MLVal &z) {                               \
         static MLVal callback;                                         \
-        if (!callback) callback = MLVal::find(#n);                     \
+        if (!callback.initialized()) callback = MLVal::find(#n);                     \
         return callback(x, y, z);                                      \
     }
 
@@ -82,7 +84,7 @@ public:
 #define ML_FUNC4(n)                                                    \
     MLVal n(const MLVal &x, const MLVal &y, const MLVal &z, const MLVal &w) {                      \
         static MLVal callback;                                         \
-        if (!callback) callback = MLVal::find(#n);                     \
+        if (!callback.initialized()) callback = MLVal::find(#n);                     \
         return callback(x, y, z, w);                                   \
     }
 
@@ -90,14 +92,14 @@ public:
 #define ML_FUNC5(n)                                                    \
     MLVal n(const MLVal &a, const MLVal &b, const MLVal &c, const MLVal &d, const MLVal &e) {             \
         static MLVal callback;                                         \
-        if (!callback) callback = MLVal::find(#n);                     \
+        if (!callback.initialized()) callback = MLVal::find(#n);                     \
         return callback(a, b, c, d, e);                                \
     }
 
 #define ML_FUNC6(n)                                                    \
     MLVal n(const MLVal &a, const MLVal &b, const MLVal &c, const MLVal &d, const MLVal &e, const MLVal &f) {    \
         static MLVal callback;                                         \
-        if (!callback) callback = MLVal::find(#n);                     \
+        if (!callback.initialized()) callback = MLVal::find(#n);                     \
         return callback(a, b, c, d, e, f);                             \
     }
  
