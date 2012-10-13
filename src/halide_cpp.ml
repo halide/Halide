@@ -161,7 +161,7 @@ let _ =
   Callback.register "addToList" (fun l x -> x::l);  
   Callback.register "listHead" (List.hd);
   Callback.register "listTail" (List.tl);
-  Callback.register "listEmpty" (fun x -> x != []);
+  Callback.register "listEmpty" (fun x -> x == []);
   Callback.register "makePair" (fun x y -> (x, y));
   Callback.register "makeTriple" (fun x y z -> (x, y, z));
   
