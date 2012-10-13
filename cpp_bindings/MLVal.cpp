@@ -99,6 +99,10 @@ MLVal::operator int() const {
     return Int_val(contents->val);
 }
 
+MLVal::operator bool() const {
+    return Bool_val(contents->val);
+}
+
 MLVal::MLVal(void *ptr) : contents(new Contents((value)ptr)) {
 }
 
