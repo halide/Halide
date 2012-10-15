@@ -119,7 +119,12 @@ def test_cpp(name):
                 # Run the test
                 # status(name, "Running test")
                 tester = Command("./a.out")
-                tester(_out=log, _err=err)
+                e = tester(_out=log, _err=err)
+                if e.exit_code:
+                    # Sometimes nonzero exit codes get to here, because SH
+                    # silently accepts death due to signals like SEGFAULT.
+                    # We re-raise to be sure these report as failure.
+                    raise sh.ErrorReturnCode(tester.command, None, None)
                 sys.stdout.write(".")
                 sys.stdout.flush()
             except:
