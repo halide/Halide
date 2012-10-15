@@ -22,7 +22,7 @@ LIBS=$(OCAML_LIBS_C) $(LLVM_LDFLAGS) $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) $(CUDA_LIBS
 
 HALIDE_OBJS=$(addprefix _build/,_MLHalide.o MLVal.o Expr.o ExprContents.o Type.o Util.o Image.o Func.o FuncContents.o Var.o Rehydrate.o Reduction.o)
 
-libHalide.a: $(HALIDE_OBJS) ../src/_build/libllsupport_impl.a
+libHalide.a: $(HALIDE_OBJS) ../src/_build/libllsupport_impl.a Halide.h
 	ld -r -o Halide.o $(HALIDE_OBJS) -L$(OCAML_LLVM_LIB_DIR) -L../src/_build -lllsupport_impl -L$(LLVM_DIR)/lib $(LLVM_LIBS_C) $(LLVM_LIBS_CXX) -L$(OCAML_LIB_DIR) -lasmrun -lunix -lcamlstr -lnums -lbigarray
 	rm -f libHalide.a
 	ar q libHalide.a Halide.o
