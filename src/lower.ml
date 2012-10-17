@@ -110,7 +110,7 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
           | For (for_dim, min, size, order, stmt) when for_dim = store_dim ->
             let dim_names = List.map snd args in
             let strides = List.map (fun dim -> Var (i32, dim ^ ".stride")) dim_names in
-            let extents = List.map (fun dim -> Var (i32, dim ^ ".extent")) dim_names in
+            let (min_computed, extent_computed) = List.split (extent_computed_list sched_list dim_names) in
             let alloc_size = Var (i32, func ^ ".alloc_size") in
 
             let stmt = if for_dim = compute_dim then
@@ -132,11 +132,11 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
                 let lhs = 
                   (List.map (fun dim -> (dim ^ ".stride")) dim_names) @ 
                     [func ^ ".alloc_size"] in
-                let rhs = (IntImm 1) :: (List.map2 ( *~ ) strides extents) in
+                let rhs = (IntImm 1) :: (List.map2 ( *~ ) strides extent_computed) in
                 (* lets for mins 
                    Currently uses compute mins at this loop level *)                
                 let lhs = lhs @ (List.map (fun dim -> (dim ^ ".buf_min")) dim_names) in
-                let rhs = rhs @ (List.map (fun dim -> Var (i32, dim ^ ".min")) dim_names) in
+                let rhs = rhs @ min_computed in
                 let make_let_stmt l r stmt = LetStmt (l, r, stmt) in
                 List.fold_right2 make_let_stmt lhs rhs stmt
             in For (for_dim, min, size, order, stmt)
@@ -217,7 +217,7 @@ and realize func consume env schedule =
     | Vectorized (name, min, size) -> 
         Vectorize.vectorize_stmt name (For (name, min, IntImm size, false, stmt))
     | Split (old_dim, new_dim_outer, new_dim_inner, offset) -> 
-        let (_, size_new_dim_inner) = stride_for_dim new_dim_inner sched_list in
+        let (_, size_new_dim_inner) = extent_computed_for_dim new_dim_inner sched_list in
         let rec expand_old_dim_expr = function
           | Var (i32, dim) when dim = old_dim -> 
               ((Var (i32, new_dim_outer)) *~ size_new_dim_inner) +~ 
@@ -232,17 +232,8 @@ and realize func consume env schedule =
   let arg_vars = List.map (fun (t, n) -> Var (t, n)) args in
   let arg_names = List.map snd args in
 
-  let strides = stride_list sched_list arg_names in
-  let buffer_size =
-    List.fold_right2
-      (fun (min, size) nm old_size ->
-         (* these debug prints are useful, but break constant folding, particularly
-            essential for CUDA shmem *)
-         (* Debug(size, Printf.sprintf "  dim %s = " nm, [size]) *~ old_size) *)
-         size *~ old_size)
-      strides
-      arg_names
-      (IntImm 1) in
+  (* Only used for tracing printfs *)
+  let extent_computed = extent_computed_list sched_list arg_names in
 
   match body with
     | Pure body ->
@@ -260,7 +251,7 @@ and realize func consume env schedule =
         in
         let produce = if (trace_verbosity > 0) then            
             Block [Print ("Time ", [Call (Extern, Int(32), ".currentTime", [])]); 
-                   Print ("Realizing " ^ func ^ " over ", flatten strides);
+                   Print ("Realizing " ^ func ^ " over ", flatten extent_computed);
                    produce] 
           else produce in
         Pipeline (func, produce, consume)
@@ -324,7 +315,7 @@ and realize func consume env schedule =
         let produce = 
           if (trace_verbosity > 0) then 
             let initialize = Block [Print ("Time ", [Call (Extern, Int(32), ".currentTime", [])]); 
-                                    Print ("Initializing " ^ func ^ " over ", flatten strides);
+                                    Print ("Initializing " ^ func ^ " over ", flatten extent_computed);
                                     initialize] in             
             let update = Block [Print ("Time ", [Call (Extern, Int(32), ".currentTime", [])]); 
                                 Print ("Updating " ^ func, []);

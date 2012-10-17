@@ -46,7 +46,7 @@ type schedule_tree =
   | Tree of ((call_schedule * (schedule list) * schedule_tree) StringMap.t) 
 
 (* What is the extent of a schedule over a given dimension *)
-let rec stride_for_dim dim = function
+let rec extent_computed_for_dim dim = function
   | [] -> failwith ("failed to find schedule for dimension " ^ dim)
   | hd::rest ->
       begin match hd with
@@ -57,17 +57,17 @@ let rec stride_for_dim dim = function
         | Split (d, outer, inner, offset) when d = dim ->
             (* search for new dimensions on rest of the sched list -
              they are only allowed after defined by the split *)
-            let (min_outer, size_outer) = stride_for_dim outer rest in
-            let (_,         size_inner) = stride_for_dim inner rest in
+            let (min_outer, size_outer) = extent_computed_for_dim outer rest in
+            let (_,         size_inner) = extent_computed_for_dim inner rest in
             ((min_outer *~ size_inner) +~ offset, size_outer *~ size_inner)
         (* recurse if not found *)
-        | _ -> stride_for_dim dim rest
+        | _ -> extent_computed_for_dim dim rest
       end
 
-(* Return a list of expressions for computing the stride of each dimension of a function given the
+(* Return a list of expressions for computing the extent computed of each dimension of a function given the
  * schedule*)
-let stride_list (sched:schedule list) (args:string list) =
-  List.map (fun arg -> stride_for_dim arg sched) args
+let extent_computed_list (sched:schedule list) (args:string list) =
+  List.map (fun arg -> extent_computed_for_dim arg sched) args
 
 let find_schedule (tree:schedule_tree) (name:string) =
   let rec find (tree:schedule_tree) = function
