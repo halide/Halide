@@ -92,8 +92,8 @@ let fold_children_in_stmt expr_mutator stmt_mutator combiner = function
   | Store (expr, buf, idx) -> combiner (expr_mutator expr) (expr_mutator idx)
   | Provide (expr, func, args) -> List.fold_left combiner (expr_mutator expr) (List.map expr_mutator args)
   | LetStmt (name, value, stmt) -> combiner (expr_mutator value) (stmt_mutator stmt)
-  | Pipeline (name, ty, size, produce, consume) -> 
-    combiner (combiner (expr_mutator size) (stmt_mutator produce)) (stmt_mutator consume)
+  | Allocate (name, ty, size, body) -> combiner (expr_mutator size) (stmt_mutator body)
+  | Pipeline (name, produce, consume) -> combiner (stmt_mutator produce) (stmt_mutator consume)
   | Print (_, []) -> expr_mutator (IntImm 0)
   | Print (_, l) -> List.fold_left combiner (expr_mutator (List.hd l)) (List.map expr_mutator (List.tl l))
   | Assert (e, _) -> expr_mutator e
@@ -142,8 +142,10 @@ let mutate_children_in_stmt expr_mutator stmt_mutator = function
       Provide (expr_mutator expr, func, List.map expr_mutator args)
   | LetStmt (name, value, stmt) ->
       LetStmt (name, expr_mutator value, stmt_mutator stmt)
-  | Pipeline (name, ty, size, produce, consume) -> 
-      Pipeline (name, ty, expr_mutator size, stmt_mutator produce, stmt_mutator consume)
+  | Allocate (name, ty, size, body) ->
+      Allocate (name, ty, expr_mutator size, stmt_mutator body)
+  | Pipeline (name, produce, consume) -> 
+      Pipeline (name, stmt_mutator produce, stmt_mutator consume)
   | Print (p, l) -> Print (p, List.map expr_mutator l)
   | Assert (e, str) -> Assert (expr_mutator e, str)
 
@@ -184,10 +186,13 @@ and subs_name_stmt oldname newname stmt =
                  List.map subs_expr args)
     | LetStmt (name, value, stmt) ->
         LetStmt ((if name = oldname then newname else name), 
-                 subs_expr value, subs stmt)
-    | Pipeline (name, ty, size, produce, consume) -> 
+                 subs_expr value, subs stmt)          
+    | Allocate (name, ty, size, body) -> 
+        Allocate ((if name = oldname then newname else name), 
+                  ty, subs_expr size, subs body)                
+    | Pipeline (name, produce, consume) -> 
         Pipeline ((if name = oldname then newname else name), 
-                  ty, subs_expr size, subs produce, subs consume)      
+                  subs produce, subs consume)      
     | Print (p, l) -> Print (p, List.map subs_expr l)
     | Assert(e, str) -> Assert(subs_expr e, str)
 
@@ -226,8 +231,10 @@ and prefix_name_stmt prefix stmt =
         Provide (recurse_expr expr, prefix_non_global prefix func, List.map recurse_expr args)
     | LetStmt (name, value, stmt) ->
         LetStmt (prefix ^ name, recurse_expr value, recurse_stmt stmt)
-    | Pipeline (name, ty, size, produce, consume) -> 
-        Pipeline (prefix ^ name, ty, recurse_expr size, recurse_stmt produce, recurse_stmt consume)      
+    | Allocate (name, ty, size, body) -> 
+        Allocate (prefix ^ name, ty, recurse_expr size, recurse_stmt body)      
+    | Pipeline (name, produce, consume) -> 
+        Pipeline (prefix ^ name, recurse_stmt produce, recurse_stmt consume)      
     | Print (p, l) ->
         Print (p, List.map recurse_expr l)
     | Assert(e, str) ->
@@ -243,13 +250,18 @@ let rec find_names_in_stmt internal ptrsize stmt =
   | Store (e, buf, idx) ->
       let inner = StringIntSet.union (rece e) (rece idx) in
       if (StringSet.mem buf internal) then inner else (StringIntSet.add (buf, ptrsize) inner)
-  | Pipeline (name, ty, size, produce, consume) ->
+  | Allocate (name, ty, size, body) ->
       let internal = StringSet.add name internal in
       let recs = find_names_in_stmt internal ptrsize in
       let rece = find_names_in_expr internal ptrsize in
-      string_int_set_concat [rece size; recs produce; recs consume]
+      string_int_set_concat [rece size; recs body]
+  | Pipeline (name, produce, consume) ->
+      (* The name in a pipeline is just a helpful annotation. It doesn't change what's in scope *)
+      (* let internal = StringSet.add name internal in *)
+      let recs = find_names_in_stmt internal ptrsize in
+      string_int_set_concat [recs produce; recs consume]
   | LetStmt (name, value, stmt) ->
-      let internal = StringSet.add name internal in
+      let internal = StringSet.add name internal in 
       let recs = find_names_in_stmt internal ptrsize in
       let rece = find_names_in_expr internal ptrsize in
       StringIntSet.union (rece value) (recs stmt)

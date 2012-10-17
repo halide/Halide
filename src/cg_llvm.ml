@@ -118,7 +118,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     | Bop (Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
     | Bop (Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
     (* In most cases architecture-specific code should pick up min and max and generate something better *)
-    | Bop (Min, l, r) -> cg_expr (Select (l <~ r, l, r))
+    | Bop (Ir.Min, l, r) -> cg_expr (Select (l <~ r, l, r))
     | Bop (Max, l, r) -> cg_expr (Select (l <~ r, r, l))
     | Bop (Mod, l, r) -> cg_mod l r
 
@@ -516,7 +516,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
         sym_remove name;
         result
 
-    | Pipeline (name, ty, size, produce, consume) ->
+    | Allocate (name, ty, size, body) ->
 
         (* allocate buffer *)
         let elem_size = (IntImm ((bit_width ty)/8)) in 
@@ -525,8 +525,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
         (* push the symbol environment *)
         sym_add name scratch;
 
-        ignore (cg_stmt produce);
-        let res = cg_stmt consume in
+        let res = cg_stmt body in
 
         (* pop the symbol environment *)
         sym_remove name;
@@ -535,6 +534,11 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
         cleanup_scratch cg_context;
 
         res
+
+    | Pipeline (name, produce, consume) ->
+        ignore (cg_stmt produce);
+        cg_stmt consume
+
     | Print (fmt, args) -> cg_print fmt args
     | Assert (e, str) -> cg_assert e str
     | s -> failwith (Printf.sprintf "Can't codegen: %s" (Ir_printer.string_of_stmt s))

@@ -36,7 +36,7 @@ type schedule =
  * representation is (with reference to the schedule of the caller), to what caller dimension
  * should I hoist this out to, and should I fuse with other calls to the same callee *)
 type call_schedule =
-  | Chunk of dimension (* of caller *)
+  | Chunk of dimension * dimension (* dimension of caller to store at, and compute at *)
   | Inline (* block over nothing - just do in place *)
   | Root (* There is no calling context *)
   | Reuse of string (* Just do what some other function does, using the same data structure *)
@@ -139,7 +139,7 @@ let list_of_schedule (tree:schedule_tree) =
   find "" (tree)  
 
 let string_of_call_schedule = function
-  | Chunk d -> "Chunk " ^ d 
+  | Chunk (sv, cv) -> "Chunk " ^ sv ^ " " ^ cv
   | Inline -> "Inline"
   | Root -> "Root"      
   | Reuse s -> "Reuse " ^ s

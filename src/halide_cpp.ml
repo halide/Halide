@@ -195,7 +195,7 @@ let _ =
   Callback.register "makeBoundTransform" (fun func var min size -> bound_schedule func var min size);
   Callback.register "makeSplitTransform" (fun func var outer inner n -> split_schedule func var outer inner n);
   Callback.register "makeReorderTransform" (fun func vars -> reorder_schedule func vars);
-  Callback.register "makeChunkTransform" (fun func var -> chunk_schedule func var);
+  Callback.register "makeChunkTransform" (fun func store_var compute_var -> chunk_schedule func store_var compute_var);
   Callback.register "makeRootTransform" (fun func -> root_schedule func);
   Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);  
   Callback.register "composeFunction" (fun f1 f2 x -> f1 (f2 x));

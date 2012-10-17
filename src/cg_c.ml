@@ -108,8 +108,7 @@ let cg_entry e =
 
     | Var (_, n) -> sym_get n
 
-    (* TODO: replace the min/max cases with cg_expr Select(cmp, l, r) *)
-    | Bop (Min, l, r) -> cg_expr (Select (Cmp(LE, l, r), l, r))
+    | Bop (Ir.Min, l, r) -> cg_expr (Select (Cmp(LE, l, r), l, r))
     | Bop (Max, l, r) -> cg_expr (Select (Cmp(GE, l, r), l, r))
     | Bop (Mod, l, r) -> cg_mod l r
     | Bop (op, l, r) -> C.Infix ((cg_expr l), (cg_binop op), (cg_expr r))
@@ -178,7 +177,7 @@ let cg_entry e =
         sym_remove name;
         s
 
-    | Pipeline (name, ty, size, produce, consume) ->
+    | Allocate (name, ty, size, Pipeline (_, produce, consume)) ->
         (* allocate buffer *)
         let scratch_init = cg_malloc name size ty in
 

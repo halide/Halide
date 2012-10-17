@@ -146,8 +146,10 @@ let rec vectorize_stmt var stmt =
       end
     | For (name, min, n, order, stmt) -> For (name, min, n, order, vectorize_stmt var stmt)
     | Block l -> Block (map (vectorize_stmt var) l)
-    | Pipeline (name, ty, size, produce, consume) -> 
-      Pipeline (name, ty, size,
+    | Allocate (name, ty, size, body) -> 
+      Allocate (name, ty, size, vectorize_stmt var body)
+    | Pipeline (name, produce, consume) -> 
+      Pipeline (name, 
                 vectorize_stmt var produce,
                 vectorize_stmt var consume)
     (* Anything that doesn't contain a sub-statement is unchanged *)

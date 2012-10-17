@@ -105,6 +105,7 @@ namespace Halide {
         Func &reorder(const Var &, const Var &, const Var &, const Var &);
         Func &reorder(const Var &, const Var &, const Var &, const Var &, const Var &);
         Func &chunk(const Var &);
+        Func &chunk(const Var &, const Var &);
         Func &root();
         Func &parallel(const Var &);
         Func &vectorize(const Var &, int factor);

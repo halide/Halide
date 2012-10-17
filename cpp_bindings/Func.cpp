@@ -68,7 +68,7 @@ namespace Halide {
     ML_FUNC4(makeBoundTransform);
     ML_FUNC5(makeSplitTransform);
     ML_FUNC2(makeReorderTransform);
-    ML_FUNC2(makeChunkTransform);
+    ML_FUNC3(makeChunkTransform);
     ML_FUNC1(makeRootTransform);
     ML_FUNC2(makeParallelTransform);
     
@@ -373,7 +373,11 @@ namespace Halide {
     }
 
     Func &Func::chunk(const Var &caller_var) {
-        MLVal t = makeChunkTransform(name(), caller_var.name());
+        return chunk(caller_var, caller_var);
+    }
+    
+    Func &Func::chunk(const Var &caller_store_var, const Var &caller_compute_var) {
+        MLVal t = makeChunkTransform(name(), caller_store_var.name(), caller_compute_var.name());
         contents->guru = composeFunction(t, contents->guru);
         return *this;
     }
