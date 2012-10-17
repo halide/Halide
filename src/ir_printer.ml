@@ -96,8 +96,12 @@ and string_of_stmt stmt =
       | LetStmt (name, value, stmt) ->
           (p ^ "let " ^ name ^ " = " ^ string_of_expr value ^ "\n" ^ 
              string_stmt p stmt)            
-      | Pipeline(name, ty, size, produce, consume) -> 
-          (p ^ "produce " ^ name ^ "[" ^ string_of_expr size ^ "] {\n" ^ 
+      | Allocate (name, ty, size, body) ->
+        (p ^ "allocate " ^ name ^ "[" ^ string_of_expr size ^ "] {\n" ^
+           string_stmt sp body ^ 
+           p ^ "}\n")
+      | Pipeline (name, produce, consume) -> 
+          (p ^ "produce " ^ name ^ " {\n" ^ 
              string_stmt sp produce ^ 
              p ^ "}\n" ^
              string_stmt p consume)

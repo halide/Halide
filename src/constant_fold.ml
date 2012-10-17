@@ -309,10 +309,10 @@ let constant_fold_stmt stmt =
             LetStmt (name, value, inner env stmt)
           end
         end
-    | Pipeline (n, ty, size, produce, consume) -> 
-        Pipeline (n, ty, constant_fold_expr size,
-                  inner env produce,
-                  inner env consume)
+    | Allocate (n, ty, size, body) -> 
+        Allocate (n, ty, constant_fold_expr size, inner env body)
+    | Pipeline (n, produce, consume) -> 
+        Pipeline (n, inner env produce, inner env consume)
     | Print (p, l) -> 
         Print (p, List.map constant_fold_expr l)
     | Assert(e, str) ->

@@ -169,10 +169,10 @@ buffer_t* WEAK __make_buffer(uint8_t* host, size_t elem_size,
     buffer_t* buf = (buffer_t*)malloc(sizeof(buffer_t));
     buf->host = host;
     buf->dev = 0;
-    buf->dims[0] = dim0;
-    buf->dims[1] = dim1;
-    buf->dims[2] = dim2;
-    buf->dims[3] = dim3;
+    buf->extent[0] = dim0;
+    buf->extent[1] = dim1;
+    buf->extent[2] = dim2;
+    buf->extent[3] = dim3;
     buf->elem_size = elem_size;
     buf->host_dirty = false;
     buf->dev_dirty = false;
@@ -294,10 +294,10 @@ CUdeviceptr WEAK __dev_malloc(size_t bytes) {
 void WEAK __dev_malloc_if_missing(buffer_t* buf) {
     #ifndef NDEBUG
     fprintf(stderr, "dev_malloc_if_missing of %zux%zux%zux%zu (%zu bytes) (buf->dev = %p) buffer\n",
-            buf->dims[0], buf->dims[1], buf->dims[2], buf->dims[3], buf->elem_size, (void*)buf->dev);
+            buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
     #endif
     if (buf->dev) return;
-    size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
+    size_t size = buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->extent[3] * buf->elem_size;
     buf->dev = __dev_malloc(size);
     assert(buf->dev);
 }
@@ -305,7 +305,7 @@ void WEAK __dev_malloc_if_missing(buffer_t* buf) {
 void WEAK __copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         assert(buf->host && buf->dev);
-        size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
+        size_t size = buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->extent[3] * buf->elem_size;
         #ifdef NDEBUG
         char msg[1];
         #else
@@ -320,7 +320,7 @@ void WEAK __copy_to_dev(buffer_t* buf) {
 void WEAK __copy_to_host(buffer_t* buf) {
     if (buf->dev_dirty) {
         assert(buf->host && buf->dev);
-        size_t size = buf->dims[0] * buf->dims[1] * buf->dims[2] * buf->dims[3] * buf->elem_size;
+        size_t size = buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->extent[3] * buf->elem_size;
         #ifdef NDEBUG
         char msg[1];
         #else

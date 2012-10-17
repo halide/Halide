@@ -419,14 +419,22 @@ let malloc con name count elem_size =
   let zero = const_zero con.c
   and one = ci con.c 1 in
   
-  set_field HostPtr   hostptr;
-  set_field DevPtr    zero;
-  set_field HostDirty zero;
-  set_field DevDirty  zero;
-  set_field (Dim 0)   (cg_expr con count);
-  set_field (Dim 1)   one;
-  set_field (Dim 2)   one;
-  set_field (Dim 3)   one;
+  set_field HostPtr    hostptr;
+  set_field DevPtr     zero;
+  set_field HostDirty  zero;
+  set_field DevDirty   zero;
+  set_field (Extent 0) (cg_expr con count);
+  set_field (Extent 1) one;
+  set_field (Extent 2) one;
+  set_field (Extent 3) one;
+  set_field (Stride 0) one; 
+  set_field (Stride 1) one;
+  set_field (Stride 2) one;
+  set_field (Stride 3) one;
+  set_field (Min 0)    zero; 
+  set_field (Min 1)    zero;
+  set_field (Min 2)    zero;
+  set_field (Min 3)    zero;
   set_field ElemSize  (cg_expr con elem_size);
 
   con.arch_state.buf_add name buf;
@@ -439,7 +447,7 @@ let rec cg_stmt (con:context) stmt = match stmt with
       cg_dev_kernel con stmt
 
   (* track dirty data in a pipeline *)
-  | Pipeline (name, ty, size, produce, consume) ->
+  | Allocate (name, ty, size, Pipeline (_, produce, consume)) ->
 
       (* allocate buffer *)
       let elem_size = (IntImm ((bit_width ty)/8)) in 

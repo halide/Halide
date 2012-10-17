@@ -16,7 +16,8 @@ let rec unroll_stmt var stmt =
       end
     | For (name, min, n, order, stmt) -> For (name, min, n, order, unroll stmt)
     | Block l -> Block (List.map unroll l)
-    | Pipeline (name, ty, size, produce, consume) -> Pipeline (name, ty, size, unroll produce, unroll consume)
+    | Allocate (name, ty, size, body) -> Allocate (name, ty, size, unroll body)
+    | Pipeline (name, produce, consume) -> Pipeline (name, unroll produce, unroll consume)
     (* Anything that does not contain a sub-statement is unchanged *)
     | x -> x
       

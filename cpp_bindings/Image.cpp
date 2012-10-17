@@ -84,10 +84,13 @@ namespace Halide {
         buf.dev = 0;
         buf.host_dirty = false;
         buf.dev_dirty = false;
-        buf.dims[0] = buf.dims[1] = buf.dims[2] = buf.dims[3] = 1;
+        buf.extent[0] = buf.extent[1] = buf.extent[2] = buf.extent[3] = 1;
         for (size_t i = 0; i < size.size(); i++) {
-            buf.dims[i] = size[i];
+            buf.extent[i] = size[i];
+            if (i > 0) buf.stride[i] = buf.extent[i-1] * buf.stride[i-1];
+            else buf.stride[i] = 1;
         }
+        buf.min[0] = buf.min[1] = buf.min[2] = buf.min[3] = 0;
         buf.elem_size = type.bits/8;
     }
 
@@ -203,7 +206,7 @@ namespace Halide {
             t(t), name(uniqueName('m')) {
             sizes.resize(dims);
             for (int i = 0; i < dims; i++) {
-                sizes[i] = Var(std::string(".") + name + ".dim." + int_to_str(i), false);
+                sizes[i] = Var(std::string(".") + name + ".extent." + int_to_str(i), false);
             }
         }
 
@@ -211,7 +214,7 @@ namespace Halide {
             t(t), name(sanitizeName(name_)) {
             sizes.resize(dims);
             for (int i = 0; i < dims; i++) {
-                sizes[i] = Var(std::string(".") + name + ".dim." + int_to_str(i), false);
+                sizes[i] = Var(std::string(".") + name + ".extent." + int_to_str(i), false);
             }
         }
 

@@ -210,12 +210,13 @@ type stmt =
   (* Provide the value of a function at a given set of args. This is the pre-storage version of Store *)
   | Provide of expr * string * (expr list)
 
-  (* Allocate temporary storage of a given size, produce into it with
-     the first statement, consume from it with the second statement.
-     For the first statement only the temporary storage is writeable.
-     For the second statement the temporary storage is read-only.
-  *)
-  | Pipeline of buffer * val_type * expr * stmt * stmt
+  (* Allocate temporary storage of a given size and type that lives for the duration of the inner statement *)
+  | Allocate of buffer * val_type * expr * stmt
+
+  (* A producer-consumer pair of statements via the named buffer
+     (which must have been allocated with an allocate node outside of
+     this) *)
+  | Pipeline of buffer * stmt * stmt
 
   (* Assign a scalar value to a variable within the sub-statement *)
   | LetStmt of string * expr * stmt

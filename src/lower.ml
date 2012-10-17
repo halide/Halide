@@ -87,21 +87,64 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
   dbg 2 "Lowering function %s with schedule %s [%s]\n%!" func 
     (string_of_call_schedule call_sched)
     (String.concat ", " (List.map string_of_schedule sched_list));
+
+  (* grab the body of the function *)
+  let (args, return_type, body) = make_function_body func env in
   
+  (* TODO: This will be removed once we remove Root *)
+  let call_sched = if call_sched = Root then Chunk ("<root>", "<root>") else call_sched in
+
+  dbg 2 "Lowering function %s with schedule %s [%s]\n%!" func 
+    (string_of_call_schedule call_sched)
+    (String.concat ", " (List.map string_of_schedule sched_list));
+
   let scheduled_call = 
     match call_sched with
-      | Chunk chunk_dim -> begin
+      | Chunk (store_dim, compute_dim) -> begin        
         (* Recursively descend the statement until we get to the loop in question *)
-        let rec inner = function
-          | For (for_dim, min, size, order, for_body) when for_dim = chunk_dim -> 
+        let rec inject_compute = function
+          | For (for_dim, min, size, order, for_body) when for_dim = compute_dim -> 
               For (for_dim, min, size, order, realize func for_body env schedule)
-          | stmt -> mutate_children_in_stmt (fun x -> x) inner stmt
-        in inner stmt
+          | stmt -> mutate_children_in_stmt (fun x -> x) inject_compute stmt
+        and inject_storage = function
+          | For (for_dim, min, size, order, stmt) when for_dim = store_dim ->
+            let dim_names = List.map snd args in
+            let strides = List.map (fun dim -> Var (i32, dim ^ ".stride")) dim_names in
+            let extents = List.map (fun dim -> Var (i32, dim ^ ".extent")) dim_names in
+            let alloc_size = Var (i32, func ^ ".alloc_size") in
+
+            let stmt = if for_dim = compute_dim then
+                (* If we're already at the right loop level for the
+                   compute as well, inject the realization here *)
+                realize func stmt env schedule
+              else
+                (* Otherwise we have to inject it somewhere deeper *)
+                inject_compute stmt
+            in
+            let stmt = Allocate (func, return_type, alloc_size, stmt) in 
+
+            let stmt = 
+              if strides = [] then 
+                (* skip for zero-dimensional funcs *)
+                LetStmt (func ^ ".alloc_size", IntImm 1, stmt) 
+              else                
+                (* lets for strides *)
+                let lhs = 
+                  (List.map (fun dim -> (dim ^ ".stride")) dim_names) @ 
+                    [func ^ ".alloc_size"] in
+                let rhs = (IntImm 1) :: (List.map2 ( *~ ) strides extents) in
+                (* lets for mins 
+                   Currently uses compute mins at this loop level *)                
+                let lhs = lhs @ (List.map (fun dim -> (dim ^ ".buf_min")) dim_names) in
+                let rhs = rhs @ (List.map (fun dim -> Var (i32, dim ^ ".min")) dim_names) in
+                let make_let_stmt l r stmt = LetStmt (l, r, stmt) in
+                List.fold_right2 make_let_stmt lhs rhs stmt
+            in For (for_dim, min, size, order, stmt)
+          | stmt -> mutate_children_in_stmt (fun x -> x) inject_storage stmt
+        in inject_storage stmt
       end
-      | Root -> realize func stmt env schedule
+      | Root -> failwith "How did I get here?"
       | Inline ->
-          (* grab the body of the function *)
-          let (args, _, body) = make_function_body func env in
           (* Just replace all calls to the function with the body of the function *)
           begin match body with 
             | Reduce _ -> failwith ("Can't inline a reduction " ^ func)
@@ -220,7 +263,7 @@ and realize func consume env schedule =
                    Print ("Realizing " ^ func ^ " over ", flatten strides);
                    produce] 
           else produce in
-        Pipeline (func, return_type, buffer_size, produce, consume)
+        Pipeline (func, produce, consume)
     | Reduce (init_expr, update_args, update_func, reduction_domain) ->
 
         let init_stmt = Provide (init_expr, func, arg_vars) in
@@ -293,21 +336,20 @@ and realize func consume env schedule =
 
         (* Put the whole thing in a pipeline that exposes the updated
            result to the consumer *)
-        Pipeline (func, return_type, buffer_size, produce, consume)
+        Pipeline (func, produce, consume)
 
 
 (* Figure out interdependent expressions that give the bounds required
    by all the functions defined in some block. *)
 (* bounds is a list of (func, var, min, max) *)
 let rec extract_bounds_soup env var_env bounds = function
-  | Pipeline (func, ty, size, produce, consume) -> 
+  | Pipeline (func, produce, consume) -> 
       (* What function am I producing? *)
       let bounds = try          
         (* Get the args list of the function *)
         let (args, _, body) = find_function func env in
         let args = List.map snd args in
        
-
         (* Compute the extent of that function used in the consume side *)
         let region = required_of_stmt func var_env consume in
 
@@ -355,19 +397,28 @@ let rec extract_bounds_soup env var_env bounds = function
       (* recurse into both sides *)
       let bounds = extract_bounds_soup env var_env bounds produce in
       extract_bounds_soup env var_env bounds consume
+  | Allocate (name, ty, size, body) ->     
+      extract_bounds_soup env var_env bounds body
   | Block l -> List.fold_left (extract_bounds_soup env var_env) bounds l
-  | For (n, min, size, order, body) -> 
-      let var_env = StringMap.add n (Range (min, size +~ min -~ IntImm 1)) var_env in
-      extract_bounds_soup env var_env bounds body   
+  | For (name, min, size, order, body) -> 
+      let var_env = StringMap.add name (Range (min, size +~ min -~ IntImm 1)) var_env in
+      extract_bounds_soup env var_env bounds body           
+  | LetStmt (name, value, body) ->
+      dbg 2 "Entering %s\n" name;
+      let var_env = StringMap.add name (bounds_of_expr_in_env var_env value) var_env in
+      dbg 2 "Entering %s (2)\n" name;
+      extract_bounds_soup env var_env bounds body
   | x -> bounds
  
 
 
 let rec bounds_inference env schedule = function
   | For (var, min, size, order, body) ->
+      dbg 2 "Performing bounds inference inside loop over %s\n" var;
       (* Pull out the bounds of all function realizations within this body *)
       begin match extract_bounds_soup env StringMap.empty [] body with
         | [] -> 
+            dbg 2 "Got an empty list from bounds soup\n";
             let (body, schedule) = bounds_inference env schedule body in 
             (For (var, min, size, order, body), schedule)              
         | bounds ->
@@ -407,6 +458,8 @@ let rec bounds_inference env schedule = function
             let precomp = List.fold_left rewrite_bound (fun x -> x) bounds in
 
             let (body, schedule) = bounds_inference env schedule body in               
+            
+            dbg 2 "Wrapping for loop body in %d let statements\n" (List.length bounds);
 
             (For (var, min, size, order, precomp body), schedule)
       end
@@ -418,10 +471,16 @@ let rec bounds_inference env schedule = function
             let (fix_first, fix_sched) = bounds_inference env fix_sched first in
             ((fix_first::fix_rest), fix_sched)
       in let (l, schedule) = fix schedule l in (Block l, schedule)
-  | Pipeline (name, ty, size, produce, consume) ->
+  | Allocate (name, ty, size, body) -> 
+      let (body, schedule) = bounds_inference env schedule body in
+      (Allocate (name, ty, size, body), schedule)
+  | Pipeline (name, produce, consume) ->
       let (produce, schedule) = bounds_inference env schedule produce in
       let (consume, schedule) = bounds_inference env schedule consume in
-      (Pipeline (name, ty, size, produce, consume), schedule)
+      (Pipeline (name, produce, consume), schedule)
+  | LetStmt (name, value, stmt) ->
+      let (stmt, schedule) = bounds_inference env schedule stmt in
+      (LetStmt (name, value, stmt), schedule)
   | x -> (x, schedule)
 
 
@@ -467,15 +526,23 @@ let qualify_schedule (sched:schedule_tree) =
   List.fold_left update sched keys    
 
 let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) =
-  let rec replace_calls_with_loads_in_expr func strides expr = 
-    let recurse = replace_calls_with_loads_in_expr func strides in
+  let rec flatten_args func args arg_names =
+    match (args, arg_names) with 
+      | [], [] -> 
+          (IntImm 0) (* -~ (Var (i32, func ^ ".buf_offset")) *)
+      | (arg::args, name::names) -> 
+          (* stride * (idx - min) *)
+          ((Var (i32, func ^ "." ^ name ^ ".stride")) *~ (arg -~ Var (i32, func ^ "." ^ name ^ ".buf_min"))) +~ 
+            (flatten_args func args names)
+      | _ -> failwith ("Wrong number of args in call to " ^ func)
+  in
+  let rec replace_calls_with_loads_in_expr func arg_names expr = 
+    let recurse = replace_calls_with_loads_in_expr func arg_names in
     match expr with 
       (* Match calls to f from someone else, or recursive calls from f to itself *)
       | Call (Func, ty, f, args) when f = func || f = (func ^ "." ^ (base_name func)) ->
           let args = List.map recurse args in 
-          let index = List.fold_right2 
-            (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
-            args strides (IntImm 0) in
+          let index = flatten_args func args arg_names in
           let load = Load (ty, func, index) in
           if (trace_verbosity > 1) then
             Debug (load, "Loading " ^ func ^ " at ", args)
@@ -483,15 +550,13 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
             load
       | x -> mutate_children_in_expr recurse x
   in
-  let rec replace_calls_with_loads_in_stmt func strides stmt = 
-    let recurse_stmt = replace_calls_with_loads_in_stmt func strides in
-    let recurse_expr = replace_calls_with_loads_in_expr func strides in
+  let rec replace_calls_with_loads_in_stmt func arg_names stmt = 
+    let recurse_stmt = replace_calls_with_loads_in_stmt func arg_names in
+    let recurse_expr = replace_calls_with_loads_in_expr func arg_names in
     match stmt with
       | Provide (e, f, args) when f = func ->
           let args = List.map recurse_expr args in
-          let index = List.fold_right2 
-            (fun arg (min,size) subindex -> size *~ subindex +~ arg -~ min) 
-            args strides (IntImm 0) in          
+          let index = flatten_args func args arg_names in
           Store (recurse_expr e, f, index)
       | _ -> mutate_children_in_stmt recurse_expr recurse_stmt stmt
   in
@@ -501,10 +566,11 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
     let (args, _, _) = find_function f env in
     let (call_sched, sched_list) = find_schedule schedule f in
     match call_sched with
-      | Inline | Reuse _ -> stmt
+      | Inline          (* Inline calls have already been folded away *)
+      | Reuse _ -> stmt (* Reuse calls have been rewritten to call another buffer *)
       | _ ->
-          let strides = stride_list sched_list (List.map (fun (_, n) -> f ^ "." ^ n) args) in
-          replace_calls_with_loads_in_stmt f strides stmt
+          let arg_names = List.map snd args in
+          replace_calls_with_loads_in_stmt f arg_names stmt
   in
   List.fold_left update stmt functions 
 
@@ -516,7 +582,9 @@ let lower_image_calls (stmt:stmt) =
     | Call (Image, t, name, args) ->
       images := StringSet.add name !images; 
       let idx = List.fold_right2 (fun arg n idx ->
-        (walk_expr arg) +~ idx *~ (Var (i32, name ^ ".dim." ^ (string_of_int n)))
+        let img_min = Var (i32, name ^ ".min." ^ (string_of_int n)) in
+        let img_stride = Var (i32, name ^ ".stride." ^ (string_of_int n)) in
+        idx +~ (((walk_expr arg) -~ img_min) *~ img_stride) 
       ) args (0 -- (List.length args)) (IntImm 0) in
       Load (t, name, idx)
     | expr -> mutate_children_in_expr walk_expr expr
@@ -534,10 +602,9 @@ let lower_image_calls (stmt:stmt) =
       match range with
         | Unbounded -> failwith ("Unbounded use of input image " ^ name)
         | Range (min, max) -> 
-          let check = 
-            (min >=~ (IntImm 0)) &&~
-              (max <~ (Var (i32, name ^ ".dim." ^ (string_of_int n))))
-          in
+          let img_min = Var (i32, name ^ ".min." ^ (string_of_int n)) in
+          let img_extent = Var (i32, name ^ ".extent." ^ (string_of_int n)) in
+          let check = (min >=~ img_min) &&~ ((max -~ min) <~ img_extent) in
           (Assert (check, msg)) :: asserts
     ) region (0 -- (List.length region)) asserts in
     new_asserts 
@@ -626,7 +693,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   dbg 1 "%s\n%!" pass_desc;
 
   let stmt = match realize func (Block []) env schedule with 
-    | Pipeline (_, _, _, c, _) -> c
+    | Pipeline (_, p, _) -> p
     | _ -> failwith "Realize didn't return a pipeline"
   in
 
@@ -645,11 +712,13 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
     match range with
       | Unbounded -> (expr &&~ false_val, count+1)
       | Range (min, max) ->
+        let out_extent = (Var (i32, ".result.extent." ^ (string_of_int count))) in
+        let out_min = (Var (i32, ".result.min." ^ (string_of_int count))) in
         (expr &&~
-           (min >=~ (IntImm 0)) &&~
-           (max <~ (Var (i32, ".result.dim." ^ (string_of_int count)))),
-         count+1)
-  ) (true_val, 0) region in 
+           (min >=~ out_min) &&~
+           ((max -~ min) <=~ out_extent), 
+         count+1))
+    (true_val, 0) region in 
   let oob_check = Assert (check, "Function may access output image out of bounds") in
 
   dump_stmt (Block [oob_check; stmt]) pass pass_desc "oob_check" 1;
@@ -659,18 +728,28 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   (* ----------------------------------------------- *)
   dbg 1 "Lowering function calls\n%!";
   let functions = List.filter (fun x -> x <> func) functions in  
+
+  (* Inject a loop over root to help us realize functions scheduled as
+     root. This will get constant-folded away later *)
+  let stmt = For ("<root>", IntImm 0, IntImm 1, true, stmt) in
   let stmt = List.fold_left (fun stmt f ->     
     let pass_desc = "Lowering " ^ f in
     dbg 1 "%s\n%!" pass_desc;
-
+    
     let stmt = lower_stmt f stmt env schedule in
-
+    
     dump_stmt stmt pass pass_desc f 1;
-
+    
     stmt) stmt functions 
+    
+  in
+  
+  let stmt = match stmt with 
+    | For ("<root>", _, _, _, stmt) -> stmt
+    | _ -> failwith "Lowering function calls didn't return a for loop over root\n";        
   in
 
-  let stmt = Constant_fold.constant_fold_stmt stmt in
+  (* let stmt = Constant_fold.constant_fold_stmt stmt in *)
 
   let pass = pass + 1 in
 
@@ -689,11 +768,8 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let pass_desc = "Bounds inference" in
   dbg 1 "%s\n%!" pass_desc;
   (* Updates stmt and schedule *)
-  let stmt = bounds_inference env schedule (For ("", IntImm 0, IntImm 0, true, stmt)) in
-  let (stmt, schedule) = match stmt with 
-    | (For (_, _, _, _, stmt), schedule) -> (stmt, schedule)
-    | _ -> failwith "Bounds inference on a for loop returned something other than a for loop"
-  in
+  let stmt = For ("<root>", IntImm 0, IntImm 1, true, stmt) in
+  let (stmt,schedule) = bounds_inference env schedule stmt in
 
   (* Can't constant fold here! It removes some of the let statements we will refer to later *)
   (* let stmt = Constant_fold.constant_fold_stmt stmt in *)
@@ -735,17 +811,22 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let pass_desc = "Replace references to bounds of output function with bounds of output buffer" in
   dbg 1 "%s\n%!" pass_desc;
   let args,_,_ = find_function func env in
-  let (stmt,_) =
-    List.fold_left
-      (fun (stmt,i) (t,nm) ->
-        let stmt = LetStmt (func ^ "." ^ nm ^ ".min", IntImm 0, stmt) in
-        LetStmt (func ^ "." ^ nm ^ ".extent",
-                 Var (t, ".result.dim." ^ (string_of_int i)),
-                 stmt), 
-        i+1)
-      (stmt, 0)
-      args
-  in
+  let dim_names = List.map snd args in
+  let dimensions = List.length args in
+
+  let lhs = [] in
+  let rhs = [] in
+  let lhs = lhs @ (List.map (fun dim -> (func ^ "." ^ dim ^ ".buf_min")) dim_names) in
+  let rhs = rhs @ (List.map (fun i -> Var (i32, ".result.min." ^ (string_of_int i))) (0 -- dimensions)) in
+  let lhs = lhs @ (List.map (fun dim -> (func ^ "." ^ dim ^ ".min")) dim_names) in
+  let rhs = rhs @ (List.map (fun i -> Var (i32, ".result.min." ^ (string_of_int i))) (0 -- dimensions)) in
+  let lhs = lhs @ (List.map (fun dim -> (func ^ "." ^ dim ^ ".stride")) dim_names) in
+  let rhs = rhs @ (List.map (fun i -> Var (i32, ".result.stride." ^ (string_of_int i))) (0 -- dimensions)) in
+  let lhs = lhs @ (List.map (fun dim -> (func ^ "." ^ dim ^ ".extent")) dim_names) in
+  let rhs = rhs @ (List.map (fun i -> Var (i32, ".result.extent." ^ (string_of_int i))) (0 -- dimensions)) in
+
+  let make_let_stmt name value stmt = LetStmt (name, value, stmt) in
+  let stmt = List.fold_right2 make_let_stmt lhs rhs stmt in
 
   dump_stmt stmt pass pass_desc "result_bounds" 1;
 
