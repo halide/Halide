@@ -300,7 +300,7 @@ let rec find_calls_in_expr e =
           StringMap.empty
           args
       in
-      StringMap.add nm (cty, rty) arg_calls
+      StringMap.add nm (cty, rty, args) arg_calls
   | x -> fold_children_in_expr find_calls_in_expr merge StringMap.empty x
 
 let rec find_loads_in_expr = function
