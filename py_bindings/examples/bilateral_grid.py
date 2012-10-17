@@ -3,6 +3,7 @@
 
 import sys; sys.path += ['..', '.']
 from halide import *
+import autotune
 
 int_t = Int(32)
 float_t = Float(32)
@@ -82,7 +83,8 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
         smoothed.root().cudaTile(x, y, s_sigma, s_sigma)
     else:
         raise ValueError
-
+    autotune.print_tunables(smoothed)
+    
 #    std::vector<Func::Arg> args;
 #    args.push_back(r_sigma);
 #    args.push_back(input);

@@ -904,9 +904,15 @@ def system(s):
     print s
     os.system(s)
     
+def print_tunables(f):
+    print 'Tunables:'
+    for (fname, f) in sorted(halide.all_funcs(f).items()):
+        print fname, ' '.join(x for x in halide.func_varlist(f))
+    print
+    
 def main():
     (args, argd) = parse_args()
-    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake'.split() # local_laplacian'.split()
+    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake bilateral_grid'.split() # local_laplacian'.split()
     if len(args) == 0:
         print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
         print 'autotune example [%s|all]'%('|'.join(all_examples))
@@ -920,7 +926,7 @@ def main():
             sys.exit(1)
         rest = sys.argv[3:]
         examplename = args[1]
-        if examplename == 'snake':
+        if examplename in ['snake', 'bilateral_grid']:
             rest.extend(['-check_output', '0'])
         exampleL = all_examples if examplename == 'all' else [examplename]
         cores = multiprocessing.cpu_count()
