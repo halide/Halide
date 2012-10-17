@@ -634,7 +634,6 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
             input_png = Image(in_image)
     #print input_png.dimensions()
 #    print [input_png.size(i) for i in range(input_png.dimensions())]
-    #print 'assign'
         input.assign(input_png)
     else:
         input_png = input
