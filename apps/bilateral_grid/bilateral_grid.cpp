@@ -78,7 +78,10 @@ int main(int argc, char **argv) {
     smoothed.root().cudaTile(x, y, s_sigma, s_sigma);
     #endif
 
-    smoothed.compileToFile("bilateral_grid", {r_sigma, input});
+    std::vector<Func::Arg> args;
+    args.push_back(r_sigma);
+    args.push_back(input);
+    smoothed.compileToFile("bilateral_grid", args);
 
     // Compared to Sylvain Paris' implementation from his webpage (on
     // which this is based), for filter params s_sigma 0.1, on a 4 megapixel
