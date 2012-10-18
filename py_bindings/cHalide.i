@@ -1,13 +1,15 @@
 %module(naturalvar=1) cHalide
 %{
+/*
 #include "Func.h"
 #include "Expr.h"
 #include "Var.h"
 #include "Image.h"
 #include "MLVal.h"
 #include "Reduction.h"
-//#include "Tuple.h"            // SWIG has issues parsing C++0x so work around with expr_from_tuple().
 #include "Type.h"
+*/
+#include "Halide.h"
 #include "py_util.h"
 #include "environ_fix.h"
 using namespace Halide;
