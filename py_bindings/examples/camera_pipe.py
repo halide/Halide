@@ -71,7 +71,7 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         gvd_r = abs(g_gb[x, y-1] - g_gb[x, y])
         gh_r  =    (g_gr[x+1, y] + g_gr[x, y])/2
         ghd_r = abs(g_gr[x+1, y] - g_gr[x, y])
-
+        
         g_r[x, y]  = select(ghd_r < gvd_r, gh_r, gv_r)
 
         gv_b  =    (g_gr[x, y+1] + g_gr[x, y])/2
@@ -278,7 +278,7 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     # The camera pipe is specialized on the 2592x1968 images that
     # come in, so we'll just use an image instead of a uniform image.
     #Image<int16_t> input(2592, 1968);
-    input = UniformImage(Int(16), 2, 'input')
+    input = UniformImage(UInt(16), 2, 'input')
     matrix_3200 = UniformImage(float_t, 2, 'm3200')
     matrix_7000 = UniformImage(float_t, 2, 'm7000')
     
@@ -287,28 +287,43 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         gamma = Uniform(float_t, "gamma", 1.8)
         contrast = Uniform(float_t, "contrast", 10.0)
     else:
-        color_temp = 3200.0
-        gamma = 1.8
-        contrast = 10.0
+        color_temp = 3700.0 #3200.0
+        gamma = 2.0 #1.8
+        contrast = 50.0 #10.0
         
     # shift things inwards to give us enough padding on the
     # boundaries so that we don't need to check bounds. We're going
     # to make a 2560x1920 output image, just like the FCam pipe, so
     # shift by 16, 12
     shifted = Func('shifted')
-    shifted[x, y] = input[x+16, y+12]
-        
+    shifted[x, y] = cast(Int(16), input[clamp(x+16, 0, input.width()-1), clamp(y+12, 0, input.height()-1)])
+
+    matrix_3200_npy = numpy.array([[ 1.6697, -0.2693, -0.4004, -42.4346],
+                                   [-0.3576,  1.0615,  1.5949, -37.1158],
+                                   [-0.2175, -1.8751,  6.9640, -26.6970]],'float32')
+    matrix_7000_npy = numpy.array([[ 2.2997, -0.4478,  0.1706, -39.0923],
+                                   [-0.3826,  1.5906, -0.2080, -25.4311],
+                                   [-0.0888, -0.7344,  2.2832, -20.0826]],'float32')
+    matrix_3200.assign(matrix_3200_npy)
+    matrix_7000.assign(matrix_7000_npy)
+
     processed = process(shifted, matrix_3200, matrix_7000, color_temp, gamma, contrast)
 
+    #def evaluate(in_png):
+    #    output = Image(UInt(8), 2560, 1920, 3); # image size is hard-coded for the N900 raw pipeline
+    
     # In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
     #Func::Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
     #processed.compileToFile("curved", std::vector<Func::Arg>(args, args+6));
-
     return (input, processed, None, locals())
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png'), disp_time=True)().show()
+    filter_image(input, out_func, os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png'), disp_time=True, out_dims=(2560, 1920, 3))().show()
+    #input.assign(Image(UInt(16), '../../apps/camera_pipe/raw.png'))
+    #output = Image(UInt(8), 2560, 1920, 3)
+    #out_func.realize(output)
+    #output.save('out.png')
     
 if __name__ == '__main__':
     main()

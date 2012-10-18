@@ -15,13 +15,29 @@
 
 void convert(uint8_t in, uint8_t &out) {out = in;}
 void convert(uint8_t in, uint16_t &out) {out = in << 8;}
+void convert(uint8_t in, uint32_t &out) {out = in << 24;}
 void convert(uint8_t in, float &out) {out = in/255.0f;}
+void convert(uint8_t in, double &out) {out = in/255.0f;}
 void convert(uint16_t in, uint8_t &out) {out = in >> 8;}
 void convert(uint16_t in, uint16_t &out) {out = in;}
+void convert(uint16_t in, uint32_t &out) {out = in << 16;}
 void convert(uint16_t in, float &out) {out = in/65535.0f;}
+void convert(uint16_t in, double &out) {out = in/65535.0f;}
+void convert(uint32_t in, uint8_t &out) {out = in >> 24;}
+void convert(uint32_t in, uint16_t &out) {out = in >> 16;}
+void convert(uint32_t in, uint32_t &out) {out = in;}
+void convert(uint32_t in, float &out) {out = in/4294967295.0f;}
+void convert(uint32_t in, double &out) {out = in/4294967295.0f;}
 void convert(float in, uint8_t &out) {out = (uint8_t)(in*255.0f);}
 void convert(float in, uint16_t &out) {out = (uint16_t)(in*65535.0f);}
+void convert(float in, uint32_t &out) {out = (uint16_t)(in*4294967295.0f);}
 void convert(float in, float &out) {out = in;}
+void convert(float in, double &out) {out = in;}
+void convert(double in, uint8_t &out) {out = (uint8_t)(in*255.0f);}
+void convert(double in, uint16_t &out) {out = (uint16_t)(in*65535.0f);}
+void convert(double in, uint32_t &out) {out = (uint16_t)(in*4294967295.0f);}
+void convert(double in, float &out) {out = in;}
+void convert(double in, double &out) {out = in;}
 
 template<typename T>
 Image<T> load(std::string filename) {
@@ -61,8 +77,13 @@ Image<T> load(std::string filename) {
         png_set_packing(png_ptr);
     }
 
-    Image<T> im(width, height, channels);
-
+    Image<T> im(1);
+    if (channels != 1) {
+        im = Image<T>(width, height, channels);
+    } else {
+        im = Image<T>(width, height);
+    }
+    
     png_set_interlace_handling(png_ptr);
     png_read_update_info(png_ptr, info_ptr);
 
