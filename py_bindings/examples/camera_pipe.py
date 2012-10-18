@@ -279,8 +279,6 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     # come in, so we'll just use an image instead of a uniform image.
     #Image<int16_t> input(2592, 1968);
     input = UniformImage(UInt(16), 2, 'input')
-    matrix_3200 = UniformImage(float_t, 2, 'm3200')
-    matrix_7000 = UniformImage(float_t, 2, 'm7000')
     
     if use_uniforms:
         color_temp = Uniform(float_t, "color_temp", 3200.0)
@@ -298,14 +296,28 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     shifted = Func('shifted')
     shifted[x, y] = cast(Int(16), input[clamp(x+16, 0, input.width()-1), clamp(y+12, 0, input.height()-1)])
 
-    matrix_3200_npy = numpy.array([[ 1.6697, -0.2693, -0.4004, -42.4346],
-                                   [-0.3576,  1.0615,  1.5949, -37.1158],
-                                   [-0.2175, -1.8751,  6.9640, -26.6970]],'float32')
-    matrix_7000_npy = numpy.array([[ 2.2997, -0.4478,  0.1706, -39.0923],
-                                   [-0.3826,  1.5906, -0.2080, -25.4311],
-                                   [-0.0888, -0.7344,  2.2832, -20.0826]],'float32')
-    matrix_3200.assign(matrix_3200_npy)
-    matrix_7000.assign(matrix_7000_npy)
+    if use_uniforms:
+        matrix_3200 = UniformImage(float_t, 2, 'm3200')
+        matrix_7000 = UniformImage(float_t, 2, 'm7000')
+        matrix_3200_npy = numpy.array([[ 1.6697, -0.2693, -0.4004, -42.4346],
+                                       [-0.3576,  1.0615,  1.5949, -37.1158],
+                                       [-0.2175, -1.8751,  6.9640, -26.6970]],'float32')
+        matrix_7000_npy = numpy.array([[ 2.2997, -0.4478,  0.1706, -39.0923],
+                                       [-0.3826,  1.5906, -0.2080, -25.4311],
+                                       [-0.0888, -0.7344,  2.2832, -20.0826]],'float32')
+        matrix_3200.assign(matrix_3200_npy)
+        matrix_7000.assign(matrix_7000_npy)
+    else:
+        matrix_3200 = Func('matrix_3200')
+        matrix_7000 = Func('matrix_7200')
+        matrix_3200[x,y] = select(y==0, select(x==0,  1.6697, select(x==1, -0.2693, select(x==2, -0.4004, -42.4346))),
+                           select(y==1, select(x==0, -0.3576, select(x==1,  1.0615, select(x==2,  1.5949, -37.1158))),
+                                        select(x==0, -0.2175, select(x==1, -1.8751, select(x==2,  6.9640, -26.6970)))))
+        matrix_7000[x,y] = select(y==0, select(x==0,  2.2997, select(x==1, -0.4478, select(x==2,  0.1706, -39.0923))),
+                           select(y==1, select(x==0, -0.3826, select(x==1,  1.5906, select(x==2, -0.2080, -25.4311))),
+                                        select(x==0, -0.0888, select(x==1, -0.7344, select(x==2,  2.2832, -20.0826)))))
+        matrix_3200.root()
+        matrix_7000.root()
 
     processed = process(shifted, matrix_3200, matrix_7000, color_temp, gamma, contrast)
 
