@@ -4,6 +4,8 @@
 import sys; sys.path += ['..', '.']
 from halide import *
 import autotune
+import valid_schedules
+import random
 
 int_t = Int(32)
 float_t = Float(32)
@@ -83,7 +85,13 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
         smoothed.root().cudaTile(x, y, s_sigma, s_sigma)
     else:
         raise ValueError
-    autotune.print_tunables(smoothed)
+    #autotune.print_tunables(smoothed)
+    #for i in range(123,10000):
+    #    random.seed(i)
+    #    print '-'*40
+    #    print 'Schedule %d'%i
+    #    p = autotune.AutotuneParams()
+    #    print valid_schedules.random_schedule(smoothed, p.min_depth, p.max_depth)
     
 #    std::vector<Func::Arg> args;
 #    args.push_back(r_sigma);
@@ -93,7 +101,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
     
 def main(is_sat=False):
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3_gray.png'))().show()
+    filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3_gray.png'), disp_time=True)().show()
     
 if __name__ == '__main__':
     main()
