@@ -451,6 +451,21 @@ let rec cg_stmt (con:context) stmt = match stmt with
       (* build the produce *)
       ignore (cg_stmt con produce);
 
+      (* TODO: this doesn't capture the flow for reductions, where the
+         initialize and update are both in the Produce but may be scheduled
+         different places.
+
+         It needs to be revised to:
+          - start from any buffer writes
+          - walk outward to the nearest containing _sequence_ node (block, pipeline, loop?),
+            where a successor reads or writes the same buffer on the 
+          - place a mark dirty in between
+
+         That should probably actually work by:
+          - any time you cg a statement which introduces sequence (block, pipeline - not for),
+          - inject any flag setting/copying on the boundary in between before/after, depending on before/after contents
+       *)
+
       (* mark host_dirty if writes by host in produce *)
       let host_writes = find_host_stores produce in
       if StringSet.mem name host_writes then begin
