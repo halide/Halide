@@ -20,6 +20,7 @@ using namespace Halide;
 %naturalvar Func;
 %naturalvar Expr;
 
+/*
 %include "Func.h"
 %include "Expr.h"
 %include "Var.h"
@@ -28,9 +29,11 @@ using namespace Halide;
 %include "Reduction.h"
 %include "Type.h"
 %include "Util.h"
+%include "Uniform.h"
+*/
+%include "Halide.h"
 %include "py_util.h"
 %include "environ_fix.h"
-%include "Uniform.h"
 //%include "Tuple.h"
 
 %template(Image_uint8) Image<uint8_t>;
