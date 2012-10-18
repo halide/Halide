@@ -110,10 +110,13 @@ namespace Halide {
             Type t = var[1];
             if (curArgs.count(name)) {
                 // This is a simple free variable
+                assert (name[0] != '.');
                 e.child(Var(name));
                 cerr << "  var: " << name << endl;
             } else {
                 // This is a uniform
+                assert (name[0] == '.'); // should be an absolute name
+                name = name.substr(1);   // chop off the leading '.'
                 cerr << "  uniform: " << name << endl;
                 e.child(DynUniform(t, name));
             }
@@ -127,6 +130,8 @@ namespace Halide {
                 Func f = rehydrateFunc(defs, env, name);
                 e.child(FuncRef(f));
             } else if (callTypeIsImage(call[1][0])) {
+                assert (name[0] == '.'); // should be an absolute name
+                name = name.substr(1);   // chop off the leading '.'
                 int dims = listLength(call[1][2]); // count number of args
                 e.child(UniformImage(ret, dims, name));
             }
