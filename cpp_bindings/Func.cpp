@@ -484,13 +484,11 @@ namespace Halide {
     MLVal Func::buildEnv() {
         MLVal env = makeEnv();
         env = contents->addDefinition(env);
-        fprintf(stderr, "Adding %s to env\n", name().c_str());
 
         for (size_t i = 0; i < funcs().size(); i++) {
             Func f = funcs()[i];
             // Don't consider recursive dependencies.
             if (f == *this) continue;
-            fprintf(stderr, "Adding %s to env\n", f.name().c_str());
             env = f.contents->addDefinition(env);
         }
 

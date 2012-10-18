@@ -23,13 +23,14 @@ namespace Halide {
     ML_FUNC1(varsInExpr)
     ML_FUNC1(callsInExpr)
 
-    ML_FUNC1(callIsFunc)
-    ML_FUNC1(callIsExtern)
-    ML_FUNC1(callIsImage)
+    ML_FUNC1(callTypeIsFunc)
+    ML_FUNC1(callTypeIsExtern)
+    ML_FUNC1(callTypeIsImage)
 
     ML_FUNC1(listHead)
     ML_FUNC1(listTail)
     ML_FUNC1(listEmpty)
+    ML_FUNC1(listLength)
 
     // Mirror helpers for unpacking `definitions` from the deserialized environment.
     // Yes, this is ugly at this point. Better ideas (short of adding dozens of
@@ -113,7 +114,6 @@ namespace Halide {
                 cerr << "  var: " << name << endl;
             } else {
                 // This is a uniform
-                // TODO: handle uniforms!
                 cerr << "  uniform: " << name << endl;
                 e.child(DynUniform(t, name));
             }
@@ -123,11 +123,12 @@ namespace Halide {
             MLVal call = listHead(list);
             string name = call[0];
             Type ret = call[1][1];
-            if (callIsFunc(call[1][0])) {
+            if (callTypeIsFunc(call[1][0])) {
                 Func f = rehydrateFunc(defs, env, name);
                 e.child(FuncRef(f));
-            } else if (callIsImage(call[1][0])) {
-                // TODO: figure out dimensionality of call
+            } else if (callTypeIsImage(call[1][0])) {
+                int dims = listLength(call[1][2]); // count number of args
+                e.child(UniformImage(ret, dims, name));
             }
         }
 
