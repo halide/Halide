@@ -295,7 +295,7 @@ int main(int argc, char **argv) {
     // to make a 2560x1920 output image, just like the FCam pipe, so
     // shift by 16, 12
     Func shifted;
-    shifted(x, y) = input(x+16, y+12); 
+    shifted(x, y) = input(clamp(x+16, 0, input.width()-1), clamp(y+12, 0, input.height()-1)); 
     
     // Parameterized output type, because LLVM PTX (GPU) backend does not
     // currently allow 8-bit computations
