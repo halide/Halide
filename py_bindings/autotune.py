@@ -552,17 +552,20 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     #    f.close()
     #signal.signal(signal.SIGCONT, signal_handler)
     
+    (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
+    (out_w, out_h, out_channels) = scope.get('out_dims', (-1, -1, -1))
+    
     def test_func(scheduleL, constraints, status_callback, timer, save_output=False, ref_output=''):       # FIXME: Handle constraints
         in_image = p.in_image
         def subprocess_args(schedule, schedule_str, compile=True):
             binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
             mode_str = 'compile' if compile else 'run'
             
-            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, binary_file, str(int(save_output)), (ref_output if p.check_output else '')]
+            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, binary_file, str(int(save_output)), (ref_output if p.check_output else ''), str(out_w), str(out_h), str(out_channels)]
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
-                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:-1]) + ' '  + ('"' + sh_args[-1] + '"' if p.check_output else '""') + '\n')
+                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:9]) + ' '  + ('"' + sh_args[9] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[10:]) + '\n')
             return (sh_args, binary_file + '.png')
             
         # Compile all schedules in parallel
@@ -706,6 +709,8 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
 
     random.seed(0)
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
+    if 'in_image' in scope:
+        p.in_image = scope['in_image']
     test_func = tester(input, out_func, p, filter_func_name)
     
     currentL = []
@@ -804,11 +809,14 @@ def _ctype_of_type(t):
 
 def autotune_child(args, timeout=None):
     rest = args[1:]
-    if len(rest) != 7:
-        raise ValueError('expected 7 args after autotune_*_child')
-    (filter_func_name, schedule_str, in_image, trials, binary_file, save_output, ref_output) = rest
+    if len(rest) != 10:
+        raise ValueError('expected 10 args after autotune_*_child')
+    (filter_func_name, schedule_str, in_image, trials, binary_file, save_output, ref_output, out_w, out_h, out_channels) = rest
     trials = int(trials)
     save_output = int(save_output)
+    out_w = int(out_w)
+    out_h = int(out_h)
+    out_channels = int(out_channels)
     #os.kill(parent_pid, signal.SIGCONT)
     
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
@@ -825,7 +833,7 @@ def autotune_child(args, timeout=None):
     func_name = os.path.basename(binary_file)
     working = os.path.dirname(binary_file)
     os.chdir(working)
-    if args[0] == 'autotune_compile_child':
+    if args[0] in ['autotune_compile_child', 'autotune_compile_run_child']:
         T0 = time.time()
         print "In %s, compiling %s" % (working, func_name)
 
@@ -844,7 +852,7 @@ def autotune_child(args, timeout=None):
         
         # assemble bitcode
         subprocess.check_output(
-            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 | %(llvm_path)sllc -O3 -filetype=obj -o %(func_name)s.o' % locals(),
+            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 -filetype=obj -o %(func_name)s.o' % locals(),
             shell=True
         )
 
@@ -860,13 +868,11 @@ def autotune_child(args, timeout=None):
 
         print 'Success %.4f' % (time.time()-T0)
 
-        return
+        #return
 
-    elif args[0] == 'autotune_run_child':
-        run_command = './%(func_name)s.exe %(trials)d %(in_image)s'
+    if args[0] in ['autotune_run_child', 'autotune_compile_run_child']:
+        run_command = './%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d'
         run_command = run_command % locals()
-        if ref_output != '':
-            run_command += ' ' + ref_output
         print 'Testing: %s' % run_command
 
         # Don't bother running with timeout, parent process will manage that for us
@@ -879,8 +885,8 @@ def autotune_child(args, timeout=None):
                 return run_timeout(run_command, timeout, last_line=True, shell=True)
         finally:
             os.chdir(orig)
-    else:
-        raise ValueError(args[0])
+    #else:
+    #    raise ValueError(args[0])
 
 def parse_args():
     args = []
@@ -908,11 +914,12 @@ def print_tunables(f):
     print 'Tunables:'
     for (fname, f) in sorted(halide.all_funcs(f).items()):
         print fname, ' '.join(x for x in halide.func_varlist(f))
+#        sys.stdout.write(fname + '.root()\\n')
     print
     
 def main():
     (args, argd) = parse_args()
-    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake bilateral_grid'.split() # local_laplacian'.split()
+    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake bilateral_grid camera_pipe'.split() # local_laplacian'.split()
     if len(args) == 0:
         print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
         print 'autotune example [%s|all]'%('|'.join(all_examples))
@@ -926,7 +933,7 @@ def main():
             sys.exit(1)
         rest = sys.argv[3:]
         examplename = args[1]
-        if examplename in ['snake', 'bilateral_grid']:
+        if examplename in ['snake', 'bilateral_grid', 'camera_pipe']:
             rest.extend(['-check_output', '0'])
         exampleL = all_examples if examplename == 'all' else [examplename]
         cores = multiprocessing.cpu_count()
@@ -1011,6 +1018,15 @@ def main():
             seed_scheduleL.append('Dirac0.root()\nNx0.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
             seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
             seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()')
+        elif filter_func_name == 'examples.camera_pipe.filter_func':    # Workaround for camera_pipe
+            seed_scheduleL = []
+            seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nmatrix.root()\nmatrix_3200.root()\nmatrix_7200.root()\nprocessed.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
+            """
+            #seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nmatrix.root()\nmatrix_3200.root()\nmatrix_7200.root()\nprocessed.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
+            seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
+            seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
+            seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nshifted.root()')
+            """
         #seed_scheduleL.append('blur_y_blurUInt16.root()\nblur_x_blurUInt16.root()')
         #seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8)\n' +
         #                      'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
@@ -1037,7 +1053,7 @@ def main():
         examplename = 'blur'
         (input, out_func, test_func, scope) = getattr(examples, examplename)()
         s = Schedule.fromstring(out_func, 'blur_x_blur0.root().parallel(y)\nblur_y_blur0.root().parallel(y).vectorize(x,8)')
-    elif args[0] in ['autotune_compile_child', 'autotune_run_child']:           # Child process for autotuner
+    elif args[0] in ['autotune_compile_child', 'autotune_run_child', 'autotune_compile_run_child']:           # Child process for autotuner
         autotune_child(args)
     else:
         raise NotImplementedError('%s not implemented'%args[0])

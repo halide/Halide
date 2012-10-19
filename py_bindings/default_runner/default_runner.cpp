@@ -32,7 +32,7 @@ extern "C" {
 using std::string;
 
 static const string usage = "Usage:\n\
-\trunner <test iterations> <input_image.png> [reference_output.png]";
+\trunner <test iterations> <input_image.png> [reference_output.png] [w|-1] [h|-1] [channels|-1]";
 
 template<class T>
 bool images_equal(Image<T> &a, Image<T> &b, T eps) {
@@ -54,18 +54,22 @@ bool images_equal(Image<T> &a, Image<T> &b, T eps) {
 
 int main(int argc, char const *argv[])
 {
-    if (argc != 3 && argc != 4) {
+    if (argc < 3) {
         fprintf(stderr, "%s\n", usage.c_str());
         return -1;
     }
 
     int test_iterations = atoi(argv[1]);
-
+    
     Image<TEST_IN_T> input = load<TEST_IN_T>(argv[2]);
-    Image<TEST_OUT_T> output(input.width(), input.height(), input.channels());
+    int w        = argc > 4 ? atoi(argv[4]): input.width();
+    int h        = argc > 5 ? atoi(argv[5]): input.height();
+    int channels = argc > 6 ? atoi(argv[6]): input.channels();
+
+    Image<TEST_OUT_T> output(w, h, channels);
     Image<TEST_OUT_T> ref_output(1,1,1);
     bool has_ref = false;
-    if (argc == 4) {
+    if (argc > 3 && strcmp(argv[3], "") != 0) {
         ref_output = load<TEST_OUT_T>(argv[3]);
         has_ref = true;
     }

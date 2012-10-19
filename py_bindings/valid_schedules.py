@@ -531,6 +531,7 @@ class Schedule:
         return list(sorted(set(ans)))
 
     def apply(self, constraints, verbose=False):   # Apply schedule
+        #return
         #verbose = True
         #print 'apply schedule:'
         #print str(self)
