@@ -25,7 +25,7 @@ namespace Halide {
             *ptr = v;
         }
 
-        bool operator==(const DynUniform &other) {
+        bool operator==(const DynUniform &other) const {
             return contents == other.contents;
         }
 

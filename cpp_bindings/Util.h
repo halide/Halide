@@ -82,10 +82,25 @@ namespace Halide {
 
 
     template<typename T>
-    void set_add(std::vector<T> &a, const T &b) {
+    bool set_contains(const std::vector<T> &a, const T &b) {
         for (size_t i = 0; i < a.size(); i++) {
-            if (a[i] == b) return;
+            if (a[i] == b) return true;
         }
+        return false;
+    }
+
+    // is b a subset of a? n^2 FTW!
+    template<typename T>
+    bool set_subset(const std::vector<T> &a, const std::vector<T> &b) {
+        for (size_t i = 0; i < b.size(); i++) {
+            if (!set_contains(a, b[i])) return false;
+        }
+        return true;
+    }
+
+    template<typename T>
+    void set_add(std::vector<T> &a, const T &b) {
+        if (set_contains(a, b)) return;
         a.push_back(b);
     }
 
@@ -95,7 +110,6 @@ namespace Halide {
             set_add(a, b[i]);
         }
     }
-    
 }
 
 #endif
