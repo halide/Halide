@@ -851,9 +851,12 @@ def autotune_child(args, timeout=None):
         png_flags = subprocess.check_output('libpng-config --cflags --ldflags', shell=True).replace('\n', ' ')
         
         # assemble bitcode
-        subprocess.check_output(
-            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 -filetype=obj -o %(func_name)s.o' % locals(),
-            shell=True
+        def check_output(s):
+            print s
+            subprocess.check_output(s,shell=True)
+            
+        check_output(
+            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 -mattr=-avx -filetype=obj -o %(func_name)s.o' % locals()
         )
 
         save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
