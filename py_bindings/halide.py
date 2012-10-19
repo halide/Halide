@@ -605,12 +605,14 @@ def get_blur(cache=[]):
 
 def schedule_all(f, schedule):
     "Call schedule(f), and recursively call schedule on all functions referenced by f."
+    #for (gname, g) in sorted(all_funcs(f).items()):
+        #print gname
     for g in all_funcs(f).values():
         schedule(g)
         
 def root_all(f):
     "Schedule f and all functions referenced by f as root."
-    schedule_all(f, lambda fn: fn.root())
+    schedule_all(f, lambda fn: fn.reset().root())
 
 def inline_all(f):
     "Schedule f and all functions referenced by f as inline."

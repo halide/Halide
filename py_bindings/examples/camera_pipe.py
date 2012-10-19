@@ -8,7 +8,9 @@ from halide import *
 int_t = Int(32)
 float_t = Float(32)
 
-def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
+OUT_DIMS = (2560, 1920, 3)
+
+def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
     x, y, tx, ty, c = Var('x'), Var('y'), Var('tx'), Var('ty'), Var('c')
     counter_interleave_x = [0]
     counter_interleave_y = [0]
@@ -197,7 +199,7 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         matrix = Func('matrix')
         alpha = (1.0/kelvin - 1.0/3200) / (1.0/7000 - 1.0/3200)
         val =  (matrix_3200[x, y] * alpha + matrix_7000[x, y] * (1 - alpha))
-        matrix[x, y] = cast(int_t, val * 256.0); # Q8.8 fixed point
+        matrix[x, y] = cast(int_t, val * 256.0) # Q8.8 fixed point
         matrix.root()
 
         corrected = Func('corrected')
@@ -250,22 +252,22 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         curved = apply_curve(corrected, gamma, contrast)
 
         # Schedule
-        co, ci = Var('co'), Var('ci')
-        processed[tx, ty, c] = curved[tx, ty, ci]
-        processed.split(c, co, ci, 3) # bound color loop to 0-3
+        #co, ci = Var('co'), Var('ci')
+        processed[tx, ty, c] = curved[tx, ty, c]
+        #processed.split(c, co, ci, 3) # bound color loop to 0-3
         if schedule == 0:
             # Compute in chunks over tiles, vectorized by 8
             denoised.chunk(tx).vectorize(x, 8)
             deinterleaved.chunk(tx).vectorize(x, 8)
             corrected.chunk(tx).vectorize(x, 4)
-            processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, ci, tx, ty)
+            processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty)
             processed.parallel(ty)
         elif schedule == 1:
             # Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
             denoised.chunk(tx)
             deinterleaved.chunk(tx)
             corrected.chunk(tx)
-            processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, ci, tx, ty)
+            processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty)
             processed.parallel(ty)
         else:
             denoised.root()
@@ -321,8 +323,13 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
 
     processed = process(shifted, matrix_3200, matrix_7000, color_temp, gamma, contrast)
 
+    out_dims = OUT_DIMS
+    in_image = os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png')
     #def evaluate(in_png):
     #    output = Image(UInt(8), 2560, 1920, 3); # image size is hard-coded for the N900 raw pipeline
+    import autotune
+    autotune.print_tunables(processed)
+    #root_all(processed)
     
     # In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
     #Func::Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
@@ -331,7 +338,7 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png'), disp_time=True, out_dims=(2560, 1920, 3))().show()
+    filter_image(input, out_func, local_d['in_image'], disp_time=True, out_dims=OUT_DIMS)().show()
     #input.assign(Image(UInt(16), '../../apps/camera_pipe/raw.png'))
     #output = Image(UInt(8), 2560, 1920, 3)
     #out_func.realize(output)
