@@ -198,12 +198,17 @@ namespace Halide {
         return ImageRef(*this, vec(a, b, c, d));
     }
 
+    extern MLVal makeVar(const MLVal& name);
+    static Expr makeRawVar(std::string name) {
+        return Expr(makeVar(name), Int(32));
+    }
+
     struct UniformImage::Contents {
         Contents(const Type &t, int dims) :
             t(t), name(uniqueName('m')) {
             sizes.resize(dims);
             for (int i = 0; i < dims; i++) {
-                sizes[i] = Var(std::string(".") + name + ".dim." + int_to_str(i), false);
+                sizes[i] = makeRawVar(std::string(".") + name + ".dim." + int_to_str(i));
             }
         }
 
@@ -211,7 +216,7 @@ namespace Halide {
             t(t), name(sanitizeName(name_)) {
             sizes.resize(dims);
             for (int i = 0; i < dims; i++) {
-                sizes[i] = Var(std::string(".") + name + ".dim." + int_to_str(i), false);
+                sizes[i] = makeRawVar(std::string(".") + name + ".dim." + int_to_str(i));
             }
         }
 
