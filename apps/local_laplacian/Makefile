@@ -28,7 +28,7 @@ process: process.cpp local_laplacian.o
 	$(GXX) -I../../support -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
 
 out.png: process
-	./process ../../py_bindings/apollo3.png 8 1 1 out.png
+	./process input.png 8 1 1 out.png
 
 clean:
 	rm process local_laplacian.o local_laplacian.bc local_laplacian
