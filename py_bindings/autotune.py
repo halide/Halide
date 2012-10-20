@@ -856,7 +856,7 @@ def autotune_child(args, timeout=None):
             subprocess.check_output(s,shell=True)
             
         check_output(
-            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 -mattr=-avx -filetype=obj -o %(func_name)s.o' % locals()
+            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 -filetype=obj -o %(func_name)s.o' % locals()
         )
 
         save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
@@ -891,6 +891,13 @@ def autotune_child(args, timeout=None):
     #else:
     #    raise ValueError(args[0])
 
+def is_number(s):
+    try:
+        float(s)
+        return True
+    except:
+        return False
+        
 def parse_args():
     args = []
     d = {}
@@ -898,7 +905,7 @@ def parse_args():
     i = 0
     while i < len(argv):
         arg = argv[i]
-        if arg.startswith('-'):
+        if arg.startswith('-') and not is_number(arg):
             if i == len(argv)-1:
                 raise ValueError('dashed argument at end of arg list: %s'%arg)
             d[arg[1:]] = argv[i+1]
@@ -919,6 +926,13 @@ def print_tunables(f):
         print fname, ' '.join(x for x in halide.func_varlist(f))
 #        sys.stdout.write(fname + '.root()\\n')
     print
+
+def print_root_all(f):
+    print 'Root all schedule:'
+    for (fname, f) in sorted(halide.all_funcs(f).items()):
+#        print fname, ' '.join(x for x in halide.func_varlist(f))
+        sys.stdout.write(fname + '.root()\\n')
+    print
     
 def main():
     (args, argd) = parse_args()
@@ -936,15 +950,17 @@ def main():
             sys.exit(1)
         rest = sys.argv[3:]
         examplename = args[1]
-        if examplename in ['snake', 'bilateral_grid', 'camera_pipe']:
-            rest.extend(['-check_output', '0'])
+        #if examplename in ['snake', 'bilateral_grid', 'camera_pipe']:
+        #    rest.extend(['-check_output', '0'])
         exampleL = all_examples if examplename == 'all' else [examplename]
         cores = multiprocessing.cpu_count()
         for examplename in exampleL:
             tune_dir = 'tune_%s'%examplename
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
-            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -cores %d -tune_dir "%s" %s' % (cores, examplename, cores if examplename != 'local_laplacian' else 2, tune_dir, ' '.join(rest)))
+            if examplename == 'local_laplacian':
+                rest.extend('-cores 1 -compile_timeout 40.0'.split()) #['-cores', '1', '-compile_timeout', '40.0'])
+            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (cores, examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
         import autotune_test
         global use_random_blocksize
@@ -1023,13 +1039,17 @@ def main():
             seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()')
         elif filter_func_name == 'examples.camera_pipe.filter_func':    # Workaround for camera_pipe
             seed_scheduleL = []
+            """
+            # Below schedule is totally reasonable but fails (compiler bug)
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nmatrix.root()\nmatrix_3200.root()\nmatrix_7200.root()\nprocessed.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
             """
             #seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nmatrix.root()\nmatrix_3200.root()\nmatrix_7200.root()\nprocessed.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nshifted.root()')
-            """
+        elif filter_func_name == 'examples.local_laplacian.filter_func':
+            seed_scheduleL = []
+            seed_scheduleL.append('clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndownx10.root()\ndownx11.root()\ndownx12.root()\ndownx13.root()\ndownx2.root()\ndownx3.root()\ndownx4.root()\ndownx5.root()\ndownx6.root()\ndownx7.root()\ndownx8.root()\ndownx9.root()\ndowny0.root()\ndowny1.root()\ndowny10.root()\ndowny11.root()\ndowny12.root()\ndowny13.root()\ndowny2.root()\ndowny3.root()\ndowny4.root()\ndowny5.root()\ndowny6.root()\ndowny7.root()\ndowny8.root()\ndowny9.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngPyramid2.root()\ngPyramid3.root()\ngPyramid4.root()\ngPyramid5.root()\ngPyramid6.root()\ngPyramid7.root()\ngray.root()\ninGPyramid1.root()\ninGPyramid2.root()\ninGPyramid3.root()\ninGPyramid4.root()\ninGPyramid5.root()\ninGPyramid6.root()\ninGPyramid7.root()\nlPyramid0.root()\nlPyramid1.root()\nlPyramid2.root()\nlPyramid3.root()\nlPyramid4.root()\nlPyramid5.root()\nlPyramid6.root()\noutGPyramid0.root()\noutGPyramid1.root()\noutGPyramid2.root()\noutGPyramid3.root()\noutGPyramid4.root()\noutGPyramid5.root()\noutGPyramid6.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutLPyramid2.root()\noutLPyramid3.root()\noutLPyramid4.root()\noutLPyramid5.root()\noutLPyramid6.root()\noutLPyramid7.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupx10.root()\nupx11.root()\nupx12.root()\nupx13.root()\nupx2.root()\nupx3.root()\nupx4.root()\nupx5.root()\nupx6.root()\nupx7.root()\nupx8.root()\nupx9.root()\nupy0.root()\nupy1.root()\nupy10.root()\nupy11.root()\nupy12.root()\nupy13.root()\nupy2.root()\nupy3.root()\nupy4.root()\nupy5.root()\nupy6.root()\nupy7.root()\nupy8.root()\nupy9.root()') #FIXMEFIXME
         #seed_scheduleL.append('blur_y_blurUInt16.root()\nblur_x_blurUInt16.root()')
         #seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8)\n' +
         #                      'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')

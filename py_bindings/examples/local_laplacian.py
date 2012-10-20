@@ -95,8 +95,8 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
     output[x,y,c] = cast(dtype, clamp(color[x,y,c], cast(float_t,0.0), cast(float_t,1.0))*float(dtype.maxval()))
     
     root_all(output)
-    #import autotune
-    #autotune.print_root_all(output)
+    import autotune
+    autotune.print_root_all(output)
     #print 'Done with local_laplacian', counter[0]
     #counter[0] += 1
 
@@ -104,7 +104,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3.png'), disp_time=True)().save('local_laplacian_fixed.png') #show()
+    filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3.png'), disp_time=True)().show()
 #    filter_image(input, out_func, os.path.join(inputs_dir(), 'lena_crop.png'), disp_time=True)().show()
 
 if __name__ == '__main__':
