@@ -90,7 +90,7 @@ int main(int argc, char const *argv[])
     save(output, str(TEST_FUNC) ".png");
     #endif
     if (has_ref) {
-        if (!images_equal<TEST_OUT_T>(ref_output, output, 0)) {     // TODO: Use epsilon for float/double images
+        if (!images_equal<TEST_OUT_T>(ref_output, output, 0.01)) {
             printf("RUN_CHECK_FAIL\n");
             exit(1);
         }
