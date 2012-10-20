@@ -101,9 +101,10 @@ int main(int argc, char **argv) {
     for (int j = J-2; j >= 0; j--) 
         outGPyramid[j](x, y) = upsample(outGPyramid[j+1])(x, y) + outLPyramid[j](x, y);
     
-    // Reintroduce color
+    // Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
     Func color;
-    color(x, y, c) = outGPyramid[0](x, y) * clamped(x, y, c) / gray(x, y);
+    float eps = 0.01f;
+    color(x, y, c) = outGPyramid[0](x, y) * (clamped(x, y, c)+eps) / (gray(x, y)+eps);
         
     Func output;
     // Convert back to 16-bit
@@ -356,7 +357,12 @@ int main(int argc, char **argv) {
         break;
     }
 
-    output.compileToFile("local_laplacian", {levels, alpha, beta, input});
+    std::vector<Func::Arg> args;
+    args.push_back(levels);
+    args.push_back(alpha);
+    args.push_back(beta);
+    args.push_back(input);
+    output.compileToFile("local_laplacian", args);
 
 
     return 0;
