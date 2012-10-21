@@ -33,8 +33,11 @@ namespace Halide {
         // A reduction domain that this depends on
         RDom rdom;
         
-        // The list of functions directly called        
+        // The list of functions directly called
         std::vector<Func> funcs;
+        
+        // The list of functions transitively called
+        std::vector<Func> transitiveFuncs;
         
         // The list of uniforms referred to
         std::vector<DynUniform> uniforms;
