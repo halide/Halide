@@ -125,6 +125,7 @@ class AutotuneParams:
     prob_mutate_remove   = 0.2
     prob_mutate_edit     = 0.2
     prob_mutate_template = 1.0
+    prob_mutate_copy     = 0.2
     
     # 'replace'  - Replace Func's schedule with a new random schedule
     # 'consts'   - Just modify constants when mutating
@@ -132,6 +133,7 @@ class AutotuneParams:
     # 'remove'   - Removing a single schedule macro from existing schedule
     # 'edit'     - Edit (replace) a single schedule macro within Func's schedule
     # 'template' - Replace Func's schedule with one sampled by autotune_template
+    # 'copy'     - Replace Func's schedule with one randomly sampled from another Func
     
     min_depth = 0
     max_depth = DEFAULT_MAX_DEPTH
@@ -279,6 +281,10 @@ def mutate(a, p, constraints):
                 s = autotune_template.sample(halide.func_varlist(a.d[name].func)) # TODO: Use parent variables if chunk...
                 a.d[name] = FragmentList.fromstring(a.d[name].func, s)
                 a.genomelog = 'replace_template(%s)'%a0.identity()
+            elif mode == 'copy':
+                chosen = random.choice(a.d.keys())
+                a.d[name] = FragmentList(a.d[name].func, a.d[chosen])
+                a.genomelog = 'replace_copy(%s)'%a0.identity()
             else:
                 raise ValueError('Unknown mutation mode %s'%mode)
         except MutateFailed:
@@ -589,15 +595,15 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
                 compile_count[0] += 1
 
             if out is None:
-                return {'time': COMPILE_TIMEOUT, 'compile': Tcompile, 'run': 0.0, 'output': output}
+                return {'time': COMPILE_TIMEOUT, 'compile': Tcompile, 'run': 0.0, 'output': output, 'compile_out': 'None'}
             if not out.startswith('Success'):
-                return {'time': COMPILE_FAIL, 'compile': Tcompile, 'run': 0.0, 'output': output}
-            return {'time': 0.0, 'compile': Tcompile, 'run': 0.0, 'output': output}
+                return {'time': COMPILE_FAIL, 'compile': Tcompile, 'run': 0.0, 'output': output, 'compile_out': out}
+            return {'time': 0.0, 'compile': Tcompile, 'run': 0.0, 'output': output, 'compile_out': out}
         
         timer_compile = timer.compile_time
         Tbegin_compile = time.time()
         shuffled_idx = range(len(scheduleL))
-        random.shuffle(shuffled_idx)
+        #random.shuffle(shuffled_idx)       # Causes mismatches during run
         compiledL = threadmap.map(compile_schedule, shuffled_idx, n=nproc)
 
         #Ttotal_compile = time.time()-Tbegin_compile
@@ -624,16 +630,16 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             Trun = time.time()-T0
             
             if out is None:
-                ans = {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output}
+                ans = {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output, 'compile_out': compiled_ans['compile_out']}
             elif not out.startswith('Success') or len(out.split()) != 2:
                 code = RUN_FAIL
                 if out.startswith('RUN_CHECK_FAIL'):
                     code = RUN_CHECK_FAIL
-                ans = {'time': code, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output}
+                ans = {'time': code, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output, 'compile_out': compiled_ans['compile_out']}
             else:
                 T = float(out.split()[1])
                 best_run_time[0] = min(best_run_time[0], T)
-                ans = {'time': T, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output}
+                ans = {'time': T, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output, 'compile_out': compiled_ans['compile_out']}
                         
             timer.run_time = timer_run + time.time() - Tbegin_run
             
@@ -648,7 +654,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
 
             e = get_error_str(ans['time'])
             first_part = 'Error %s'%e if e is not None else 'Best time %.4f'%ans['time']
-            log_sched(p, schedule, '%s, compile=%.4f, run=%.4f'%(first_part, ans['compile'], ans['run']))
+            log_sched(p, schedule, '%s, compile=%.4f, run=%.4f, compile_out=%s'%(first_part, ans['compile'], ans['run'], ans['compile_out']))
             return ans
             
         Tbegin_run = time.time()
