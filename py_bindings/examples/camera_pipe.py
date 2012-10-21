@@ -10,7 +10,7 @@ float_t = Float(32)
 
 OUT_DIMS = (2560, 1920, 3)
 
-def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
+def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
     x, y, tx, ty, c = Var('x'), Var('y'), Var('tx'), Var('ty'), Var('c')
     counter_interleave_x = [0]
     counter_interleave_y = [0]
@@ -176,7 +176,7 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
             r.chunk(tx).unroll(x, 2).unroll(y, 2)
             g.chunk(tx).unroll(x, 2).unroll(y, 2)
             b.chunk(tx).unroll(x, 2).unroll(y, 2)
-        else:
+        elif schedule == -1:
             # Basic naive schedule
             g_r.root()
             g_b.root()
@@ -269,7 +269,8 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
             corrected.chunk(tx)
             processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty)
             processed.parallel(ty)
-        else:
+        elif schedule == -1:
+            # Naive schedule
             denoised.root()
             deinterleaved.root()
             corrected.root()
@@ -311,7 +312,7 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         matrix_7000.assign(matrix_7000_npy)
     else:
         matrix_3200 = Func('matrix_3200')
-        matrix_7000 = Func('matrix_7200')
+        matrix_7000 = Func('matrix_7000')
         matrix_3200[x,y] = select(y==0, select(x==0,  1.6697, select(x==1, -0.2693, select(x==2, -0.4004, -42.4346))),
                            select(y==1, select(x==0, -0.3576, select(x==1,  1.0615, select(x==2,  1.5949, -37.1158))),
                                         select(x==0, -0.2175, select(x==1, -1.8751, select(x==2,  6.9640, -26.6970)))))
@@ -323,8 +324,16 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
 
     processed = process(shifted, matrix_3200, matrix_7000, color_temp, gamma, contrast)
 
+    # "Magic variables" that are interpreted by the runner
     out_dims = OUT_DIMS
     in_image = os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png')
+
+    if schedule == 2:
+        # Autotuned schedule
+        import autotune
+        asched = autotune.Schedule.fromstring(processed, 'b_b.chunk(x).vectorize(x,2)\nb_gb.chunk(x).vectorize(x,8)\nb_gr.chunk(y).tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\nb_r.chunk(y).tile(x,y,_c0,_c1,8,8).vectorize(_c0,8)\ncorrected.chunk(x).vectorize(x,8)\ncurve.root().vectorize(x,4).split(x,x,_c0,16)\ncurved.root().tile(x,y,_c0,_c1,32,32).parallel(y)\n\n\ndenoised.root().tile(x,y,_c0,_c1,64,64).vectorize(_c0,8).parallel(y)\ng_b.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ng_gb.chunk(x).vectorize(x,4)\ng_gr.chunk(y)\ng_r.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\n\n\ninterleave_x3.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x4.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x5.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x6.root().tile(x,y,_c0,_c1,16,16).vectorize(_c0,16).parallel(y)\ninterleave_y1.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_y2.chunk(x).vectorize(x,8)\ninterleave_y3.chunk(x).vectorize(x,8)\nmatrix.root().tile(x,y,_c0,_c1,4,4).vectorize(_c0,4).parallel(y)\nmatrix_3200.root().tile(x,y,_c0,_c1,4,4).parallel(y)\n\nprocessed.root().vectorize(tx,8)\nr_b.chunk(y).vectorize(x,8)\nr_gb.chunk(y).vectorize(x,8)\nr_gr.chunk(x)\nr_r.chunk(y)\nshifted.chunk(x).vectorize(x,4)')
+        print asched
+        asched.apply()
     #def evaluate(in_png):
     #    output = Image(UInt(8), 2560, 1920, 3); # image size is hard-coded for the N900 raw pipeline
     #autotune.print_tunables(processed)

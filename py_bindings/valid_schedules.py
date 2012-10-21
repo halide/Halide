@@ -530,7 +530,7 @@ class Schedule:
             ans.extend(x.new_vars())
         return list(sorted(set(ans)))
 
-    def apply(self, constraints, verbose=False):   # Apply schedule
+    def apply(self, constraints=None, verbose=False):   # Apply schedule
         #return
         #verbose = True
         #print 'apply schedule:'
@@ -549,7 +549,7 @@ class Schedule:
             name = f.name()
             if verbose:
                 print 'apply, name', name, constraints
-            if name in constraints.exclude_names:
+            if constraints is not None and name in constraints.exclude_names:
                 if verbose:
                     print '  constrained, skipping'
                 return
@@ -602,6 +602,8 @@ class Schedule:
                 raise ValueError(s)
             dot = line.index('.')
             name = line[:dot]
+            if name in d:
+                raise KeyError('duplicate func %r in schedule' % name)
             d[name] = FragmentList.fromstring(all_funcs[name], line)
         
         ans = {}
