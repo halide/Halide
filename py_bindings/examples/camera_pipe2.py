@@ -198,9 +198,11 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
 
         matrix = Func('matrix')
         alpha = (1.0/kelvin - 1.0/3200) / (1.0/7000 - 1.0/3200)
-        val =  (matrix_3200[x, y] * alpha + matrix_7000[x, y] * (1 - alpha))
+        #val =  (matrix_3200[x, y] * alpha + matrix_7000[x, y] * (1 - alpha))
+        #matrix[x, y] = cast(int_t, val * 256.0) # Q8.8 fixed point
+        #matrix.root()
+        val =  matrix_3200[x, y]*kelvin + matrix_7000[x, y]*(1-kelvin)
         matrix[x, y] = cast(int_t, val * 256.0) # Q8.8 fixed point
-        matrix.root()
 
         corrected = Func('corrected')
         ir = cast(int_t, input[x, y, 0])
@@ -211,9 +213,12 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
         g = matrix[3, 1] + matrix[0, 1] * ir + matrix[1, 1] * ig + matrix[2, 1] * ib
         b = matrix[3, 2] + matrix[0, 2] * ir + matrix[1, 2] * ig + matrix[2, 2] * ib
 
-        r = cast(Int(16), r/256)
-        g = cast(Int(16), g/256)
-        b = cast(Int(16), b/256)
+        # r = cast(Int(16), r/256)
+        # g = cast(Int(16), g/256)
+        # b = cast(Int(16), b/256)
+        r = cast(Int(16), r)
+        g = cast(Int(16), g)
+        b = cast(Int(16), b)
         corrected[x, y, c] = select(c == 0, r,
                              select(c == 1, g, b))
 
@@ -231,12 +236,15 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
                    1.0 - (a*(1.0-g)*(1.0-g) + b*(1.0-g)),
                    a*g*g + b*g)
 
-        val = cast(result_type, clamp(z*256.0, 0.0, 255.0))
+        #val = cast(result_type, clamp(z*256.0, 0.0, 255.0))
+        val = pow(1.0, 1.0)
         curve[x] = val
         curve.root() # It's a LUT, compute it once ahead of time.
 
         curved = Func('curved')
-        curved[x, y, c] = curve[input[x, y, c]]
+        curved[x, y, c] = cast(result_type, input[x,y,c] + pow(1.0, 1.0))
+        #curve[clamp(input[x, y, c], 0, 0)]
+        #curved[x, y, c] = cast(result_type, clamp(input[x, y, c]*256.0, 0.0, 255.0))
 
         return curved
 
@@ -333,6 +341,10 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
     in_image = os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png')
     #def evaluate(in_png):
     #    output = Image(UInt(8), 2560, 1920, 3); # image size is hard-coded for the N900 raw pipeline
+    
+    with open('tune_camera_pipe/camera_pipe2.sexp', 'w') as of:
+        of.write(processed.serialize())
+    
     import autotune
     autotune.print_tunables(processed)
     #root_all(processed)
