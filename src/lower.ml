@@ -101,10 +101,10 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
   let scheduled_call = 
     match call_sched with
       | Chunk (store_dim, compute_dim) -> begin        
-        (* Recursively descend the statement until we get to the loop in question *)
         let rec inject_compute = function
           | For (for_dim, min, size, order, for_body) when for_dim = compute_dim -> 
-              For (for_dim, min, size, order, realize func for_body env schedule)
+            let for_body = realize func for_body env schedule in
+            For (for_dim, min, size, order, for_body)
           | stmt -> mutate_children_in_stmt (fun x -> x) inject_compute stmt
         and inject_storage = function
           | For (for_dim, min, size, order, stmt) when for_dim = store_dim ->
@@ -118,7 +118,6 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
                    compute as well, inject the realization here *)
                 realize func stmt env schedule
               else
-                (* Otherwise we have to inject it somewhere deeper *)
                 inject_compute stmt
             in
             let stmt = Allocate (func, return_type, alloc_size, stmt) in 
@@ -474,10 +473,82 @@ let rec bounds_inference env schedule = function
       (LetStmt (name, value, stmt), schedule)
   | x -> (x, schedule)
 
+let rec sliding_window (stmt:stmt) (function_env:environment) =
+  let rec process_dim name dims env serial_dim serial_dim_min stmt =
+    match stmt with
+      (* We're within an allocate over name, and a serial for loop over
+         dim. Find bounds of realizations of name and rewrite them to take
+         into account stuff computed so far *)
+      | Pipeline (n, produce, consume) when n = name ->
+        dbg 2 "process_dim %s %s\n" name serial_dim;
+        (* Compute new bounds for the realization of n which are the
+           exclusion of the bounds for this iteration and the bounds for
+           the previous iteration. (This is only weakly inductive, we
+           could also consider *all* previous iterations) *)
+        
+        let serial_dim_expr = Var (i32, serial_dim) in
+        
+        (* Find which dims depend on the serial_dim *)
+        let rec find_matching_dim = function
+          | [] -> []
+          | (dim::dims) -> 
+            let min = StringMap.find (name ^ "." ^ dim ^ ".min") env in
+            let extent = StringMap.find (name ^ "." ^ dim ^ ".extent") env in
+            let list = find_matching_dim dims in
+            if expr_contains_expr serial_dim_expr (min +~ extent) then
+              (dim, min, extent)::list
+            else 
+              list
+        in
+        
+        (* Hopefully just one does, and hopefully just in the min, not
+         in the extent. If none do then this is a silly schedule. If
+         multiple do then we don't handle that. *)
+        let new_produce = begin match find_matching_dim dims with
+          | ((dim, min, extent)::[]) when not (expr_contains_expr serial_dim_expr extent) ->          
+            dbg 2 "Doing sliding window of %s over %s against %s\n" name serial_dim dim;
+            let stride = min -~ (subs_expr serial_dim_expr (serial_dim_expr -~ (IntImm 1)) min) in
+            let new_min = min +~ extent -~ stride in
+            let new_extent = stride in
+            let steady_state = (serial_dim_expr >~ serial_dim_min) in
+            let new_min = Select (steady_state, new_min, min) in
+            let new_extent = Select (steady_state, new_extent, extent) in
+            
+            let stmt = produce in
+            let stmt = LetStmt (name ^ "." ^ dim ^ ".min", new_min, stmt) in
+            let stmt = LetStmt (name ^ "." ^ dim ^ ".extent", new_extent, stmt) in
+            stmt
+          | _ -> 
+            produce
+        end in
+        Pipeline (n, new_produce, consume)
+      | LetStmt (n, expr, stmt) -> 
+        let new_env = StringMap.add n expr env in
+        LetStmt (n, expr, process_dim name dims new_env serial_dim serial_dim_min stmt)
+      | stmt -> mutate_children_in_stmt (fun x -> x) (process_dim name dims env serial_dim serial_dim_min) stmt
+  in
+  
+  let rec process name dims = function
+    | For (dim, min, extent, true, body) ->
+      dbg 2 "Performing sliding window optimization for %s over %s\n" name dim;
+      let new_body = process name dims body in
+      let new_body = process_dim name dims StringMap.empty dim min new_body in
+      For (dim, min, extent, true, new_body)
+    | stmt -> mutate_children_in_stmt (fun x -> x) (process name dims) stmt
+  in
 
+  match stmt with
+    | Allocate (name, ty, size, body) ->
+      let (args, _, _) = find_function name function_env in
+      let dims = List.map snd args in
+      let new_body = process name dims body in
+      let new_body = sliding_window new_body function_env in
+      Allocate (name, ty, size, new_body) 
+    | stmt -> mutate_children_in_stmt (fun x -> x) (fun s -> sliding_window s function_env) stmt
+      
 let qualify_schedule (sched:schedule_tree) =
   let make_schedule (name:string) (schedule:schedule_tree) =
-    (* Printf.printf "Looking up %s in the schedule\n" name; *)
+  (* Printf.printf "Looking up %s in the schedule\n" name; *)
     let (call_sched, sched_list) = find_schedule schedule name in
 
     (* The prefix for this function *)
@@ -766,6 +837,17 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   (* let stmt = Constant_fold.constant_fold_stmt stmt in *)
 
   dump_stmt stmt pass pass_desc "bounds_inference" 1;
+
+  let pass = pass + 1 in
+
+
+  (* ----------------------------------------------- *)
+  let pass_desc = "Sliding window optimization" in
+  dbg 1 "%s\n%!" pass_desc;
+  (* Updates stmt and schedule *)
+  let stmt = sliding_window stmt env in
+
+  dump_stmt stmt pass pass_desc "sliding_window" 1;
 
   let pass = pass + 1 in
 
