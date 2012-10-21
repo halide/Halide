@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include <assert.h>
 #include <cfloat>
+#include <stdarg.h>
 
 #include "buffer.h"
 
@@ -62,6 +63,14 @@ WEAK void safe_free(void *ptr) {
     void *end = ((void **)start)[0];
     mprotect(end, 4096, PROT_READ | PROT_WRITE | PROT_EXEC);
     free(start);
+}
+
+WEAK int hlprintf(const char * fmt, ...) {
+    va_list args;
+    va_start(args,fmt);
+    int ret = vfprintf(stderr, fmt, args);
+    va_end(args);
+    return ret;
 }
 
 static void (*halide_error_handler)(char *) = NULL;

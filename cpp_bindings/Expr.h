@@ -68,6 +68,7 @@ namespace Halide {
         void setRDom(const RDom &dom);
         const RDom &rdom() const;
         const std::vector<Func> &funcs() const;
+        const std::vector<Func> &transitiveFuncs() const;
         const std::vector<UniformImage> &uniformImages() const;
         int implicitArgs() const;
         void addImplicitArgs(int);

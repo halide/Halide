@@ -248,6 +248,24 @@ namespace Halide {
         for (int i = 0; i < r.implicitArgs(); i++) {
             args.push_back(Var(std::string("iv") + int_to_str(i))); 
         }
+
+        // Check that all free variables in the rhs appear in the lhs
+        std::vector<Var> argVars;
+        for (int i = 0; i < args.size(); i++) {
+            const std::vector<Var> &vars = args[i].vars();
+            for (int j = 0; j < vars.size(); j++) {
+                set_add(argVars, vars[j]);
+            }
+        }
+        std::vector<Var> rhsVars = r.vars();
+        for (int i = 0; i < rhsVars.size(); i++) {
+            if (rhsVars[i].name().at(0) == '.') continue; // skip uniforms injected as vars
+            if (!set_contains(argVars, rhsVars[i])) {
+                printf("argVars does not contain %s\n", rhsVars[i].name().c_str());
+            }
+            assert(set_contains(argVars, rhsVars[i]) &&
+                   "All free variables in right side of function definition must be bound on left");
+        }
         
         //printf("Defining %s\n", name().c_str());
 
@@ -488,13 +506,13 @@ namespace Halide {
     MLVal Func::buildEnv() {
         MLVal env = makeEnv();
         env = contents->addDefinition(env);
-        fprintf(stderr, "Adding %s to env\n", name().c_str());
 
-        for (size_t i = 0; i < funcs().size(); i++) {
-            Func f = funcs()[i];
+        vector<Func> fs = funcs();
+        set_union(fs, transitiveFuncs());
+        for (size_t i = 0; i < fs.size(); i++) {
+            Func f = fs[i];
             // Don't consider recursive dependencies.
             if (f == *this) continue;
-            fprintf(stderr, "Adding %s to env\n", f.name().c_str());
             env = f.contents->addDefinition(env);
         }
 
@@ -505,8 +523,10 @@ namespace Halide {
         MLVal guru = makeNoviceGuru();
         guru = contents->applyGuru(guru);
 
-        for (size_t i = 0; i < funcs().size(); i++) {
-            Func f = funcs()[i];
+        vector<Func> fs = funcs();
+        set_union(fs, transitiveFuncs());
+        for (size_t i = 0; i < fs.size(); i++) {
+            Func f = fs[i];
             // Don't consider recursive dependencies.
             if (f == *this) continue;
             guru = f.contents->applyGuru(guru);
@@ -570,6 +590,17 @@ namespace Halide {
             set_union(v, update().rhs().funcs());
             for (size_t i = 0; i < update().args().size(); i++) {
                 set_union(v, update().args()[i].funcs());
+            }
+        }
+        return v;
+    }
+
+    std::vector<Func> Func::transitiveFuncs() const {
+        std::vector<Func> v = rhs().transitiveFuncs();
+        if (isReduction()) {
+            set_union(v, update().rhs().transitiveFuncs());
+            for (size_t i = 0; i < update().args().size(); i++) {
+                set_union(v, update().args()[i].transitiveFuncs());
             }
         }
         return v;

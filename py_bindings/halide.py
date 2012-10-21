@@ -61,13 +61,15 @@ in_filename = 'lena_crop.png' #'lena.png' #'lena_crop.png'
 #    except ValueError:
 #        print 'ValueError'
     
+pow0 = pow
+
 for BaseT in (Expr, FuncRef, Var, RDom, RVar, Func) + UniformTypes:
     BaseT.__add__ = lambda x, y: add(wrap(x), wrap(y))
     BaseT.__sub__ = lambda x, y: sub(wrap(x), wrap(y))
     BaseT.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
     BaseT.__div__ = lambda x, y: div(wrap(x), wrap(y))
     BaseT.__mod__ = lambda x, y: mod(wrap(x), wrap(y))
-    BaseT.__pow__ = lambda x, y: pow(wrap(x), wrap(y))
+    BaseT.__pow__ = lambda x, y: pow0(wrap(x), wrap(y))
     BaseT.__and__  = lambda x, y: and_op(wrap(x), wrap(y))
     BaseT.__or__  = lambda x, y: or_op(wrap(x), wrap(y))
 
@@ -365,7 +367,7 @@ def DynUniform(*args):
 
 for _ImageT in [DynImageType, UniformImage]:
     _ImageT.__getitem__ = _generic_getitem
-    _ImageT.assign = _generic_assign
+    _ImageT.assign = lambda x, y: assign(x, Image(y) if isinstance(y,numpy.ndarray) else y)
     #_ImageT.save = lambda x, y: save_png(x, y)
 
 # ----------------------------------------------------
@@ -430,6 +432,7 @@ sin    = lambda x: _sin(wrap(x))
 cos    = lambda x: _cos(wrap(x))
 exp    = lambda x: _exp(wrap(x))
 log    = lambda x: _log(wrap(x))
+pow    = lambda x, y: wrap(x)**wrap(y)
 floor  = lambda x: _floor(wrap(x))
 
 debug  = lambda x, y, *a: _debug(wrap(x), y, *a)
@@ -602,12 +605,14 @@ def get_blur(cache=[]):
 
 def schedule_all(f, schedule):
     "Call schedule(f), and recursively call schedule on all functions referenced by f."
+    #for (gname, g) in sorted(all_funcs(f).items()):
+        #print gname
     for g in all_funcs(f).values():
         schedule(g)
         
 def root_all(f):
     "Schedule f and all functions referenced by f as root."
-    schedule_all(f, lambda fn: fn.root())
+    schedule_all(f, lambda fn: fn.reset().root())
 
 def inline_all(f):
     "Schedule f and all functions referenced by f as inline."
@@ -620,7 +625,7 @@ def inputs_dir():
     "Get directory of example inputs."
     return os.path.dirname(__file__)
     
-def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None): #, pad_multiple=1):
+def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None, out_dims=None): #, pad_multiple=1):
     """
     Utility function to filter an image filename or numpy array with a Halide Func, returning output Image of the same size.
     
@@ -632,21 +637,20 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
             input_png = Image(dtype, in_image)
         else:
             input_png = Image(in_image)
-    #print input_png.dimensions()
-#    print [input_png.size(i) for i in range(input_png.dimensions())]
-    #print 'assign'
+        #print [input_png.size(i) for i in range(input_png.dimensions())]
+        #print input.dimensions()
         input.assign(input_png)
     else:
         input_png = input
     #print 'get w'
-    w = input_png.width()
-    h = input_png.height()
-    nchan = input_png.channels()
+    w = input_png.width() if out_dims is None else out_dims[0]
+    h = input_png.height() if out_dims is None else out_dims[1]
+    nchan = input_png.channels() if out_dims is None else (out_dims[2] if len(out_dims) >= 3 else 1)
     #print w, h, nchan
     #w2 = roundup_multiple(w, pad_multiple)
     #h2 = roundup_multiple(h, pad_multiple)
     #print w2, h2, nchan
-    out = Image(dtype, w, h, nchan)
+    out = Image(out_func.rhs().type(), w, h, nchan)
     if compile:
         out_func.compileJIT()
 
@@ -657,7 +661,7 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
                 out.assign(eval_func(input_png))
                 return out
             else:
-                #print 'a'
+                #print 'a', w, h, nchan, out.type()
                 realized = out_func.realize(w, h, nchan)
                 #print 'b'
                 out.assign(realized)

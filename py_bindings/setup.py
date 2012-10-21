@@ -1,14 +1,14 @@
 from distutils.core import setup
 from distutils.extension import Extension
 #from Cython.Distutils import build_ext
-import os, os.path
+import os, os.path, sys
 
 import subprocess
 
 png_cflags  = subprocess.check_output('libpng-config --cflags',  shell=True).strip()
 png_ldflags = subprocess.check_output('libpng-config --ldflags', shell=True).strip()
 
-ext_modules = [Extension("_cHalide", ["cHalide_wrap.cxx", 'py_util.cpp', 'environ_fix.cpp'],
+ext_modules = [Extension("_cHalide", ["cHalide_wrap.cxx", 'py_util.cpp'] + (['environ_fix.cpp'] if sys.platform == 'darwin' else []),
                          include_dirs=['../cpp_bindings', '/opt/local/include/libpng14'],
                          extra_compile_args=('-ffast-math -O3 -msse -Wl,-dead_strip -fno-common' + ' ' + png_cflags).split(),
                          #libraries=['Halide.a'],
@@ -17,7 +17,7 @@ ext_modules = [Extension("_cHalide", ["cHalide_wrap.cxx", 'py_util.cpp', 'enviro
                          extra_link_args=['../cpp_bindings/libHalide.a', '-lpthread', '-ldl', '-lstdc++', '-lc']+png_ldflags.split(),
                          language='c++')]
 
-for (infile, outfile) in [('apollo2.jpg', 'apollo2.png'), ('apollo3.jpg', 'apollo3.png')]:
+for (infile, outfile) in [('apollo2.jpg', 'apollo2.png'), ('apollo3.jpg', 'apollo3.png'), ('apollo3_gray.jpg', 'apollo3_gray.png')]:
   if not os.path.exists(outfile):
     os.system('convert %s %s' % (infile, outfile))
     if not os.path.exists(outfile):

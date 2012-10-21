@@ -128,6 +128,7 @@ namespace Halide {
         std::vector<DynUniform> uniforms() const;
         std::vector<DynImage> images() const;
         std::vector<Func> funcs() const;
+        std::vector<Func> transitiveFuncs() const;
         std::vector<UniformImage> uniformImages() const;
 
         // Get the variable defining argument i

@@ -1,6 +1,6 @@
 
 #include "py_util.h"
-#include "png_util.h"
+#include "../support/image_io.h"
 #include <signal.h>
 #include <string>
 #include "Python.h"

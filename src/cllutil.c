@@ -23,8 +23,9 @@ extern "C" {
 #include <llvm/Intrinsics.h>
 #include <llvm/Linker.h>
 #include <llvm/Target/TargetMachine.h>
-#include <llvm/Target/TargetData.h>
 #include <llvm/Support/TargetRegistry.h>
+#include <llvm/Target/TargetLibraryInfo.h>
+#include <llvm/DataLayout.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/ADT/Triple.h>
@@ -108,8 +109,20 @@ CAMLprim value compile_module_to_string(LLVMModuleRef modref) {
 
     // Set up passes
     PassManager PM;
-    // Add the target data from the target machine
-    PM.add(new TargetData(*Target.getTargetData()));
+
+    TargetLibraryInfo *TLI = new TargetLibraryInfo(TheTriple);
+    PM.add(TLI);
+
+    if (target.get()) {
+    PM.add(new TargetTransformInfo(target->getScalarTargetTransformInfo(),
+                                   target->getVectorTargetTransformInfo()));
+    }
+
+    // Add the target data from the target machine, if it exists, or the module.
+    if (const DataLayout *TD = Target.getDataLayout())
+        PM.add(new DataLayout(*TD));
+    else
+        PM.add(new DataLayout(&mod));
 
     // Inlining functions is essential to PTX
     PM.add(createAlwaysInlinerPass());

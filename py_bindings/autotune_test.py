@@ -6,7 +6,7 @@ from autotune import *
 # --------------------------------------------------------------------------------------------------------------
 
 def test_crossover(verbose=False):
-    (f, g) = test_funcs()
+    (f, g, locals_d) = test_funcs()
     constraints = Constraints()
     
     for j in range(8):
@@ -86,7 +86,7 @@ def test_crossover(verbose=False):
         #print 'c'
         prev_gen = []
         for gen in range(2):
-            L = next_generation(prev_gen, p, g, constraints, 0)
+            L = next_generation(prev_gen, p, g, constraints, 0, [{'time': 0.1} for i in range(len(prev_gen))])
             if j == 0 and verbose:
                 for i in range(len(L)):
                     print 'gen=%d, i=%d'%(gen,i)
@@ -115,8 +115,8 @@ def test_funcs(cache=[]):
                      halide.clamp(c,halide.cast(int_t,0),halide.cast(int_t,2))]
     #g[v] = f[v,v]
     g[x,y,c] = f[x,y,c]+1
-    cache.append((f, g))
-    return (f, g)
+    cache.append((f, g, locals()))
+    return (f, g, locals())
 
 def nontrivial_schedule(g):
     while True:
@@ -148,7 +148,7 @@ def test_schedules(verbose=False, test_random=False):
     #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
     constraints = Constraints()
     halide.exit_on_signal()
-    (f, g) = test_funcs()
+    (f, g, locals_d) = test_funcs()
     assert sorted(halide.all_vars(g).keys()) == sorted(['x', 'y', 'c']) #, 'v'])
 
     if verbose:
@@ -169,12 +169,14 @@ def test_schedules(verbose=False, test_random=False):
             nvalid_determ += 1
             if verbose:
                 print L
-        nvalid_random = 0
-        for i in range(100):
-            for L in schedules_func(g, f, 0, DEFAULT_MAX_DEPTH, random=True): #sorted([repr(_x) for _x in valid_schedules(g, f, 3)]):
-                if verbose and 0:
-                    print L#repr(L)
-                nvalid_random += 1
+
+    nvalid_random = 0
+    for i in range(100):
+        for L in schedules_func(g, f, 0, DEFAULT_MAX_DEPTH, random=True): #sorted([repr(_x) for _x in valid_schedules(g, f, 3)]):
+            if verbose and 0:
+                print L#repr(L)
+            nvalid_random += 1
+
     s = []
     for i in range(1000):
         d = random_schedule(g, 1, DEFAULT_MAX_DEPTH)
@@ -201,13 +203,13 @@ def test_schedules(verbose=False, test_random=False):
             print
         sys.stdout.flush()
         d.apply(constraints)
-        if test_random:
-            evaluate = d.test((36, 36, 3), input, Constraints())
-            print 'evaluate'
-            evaluate()
-            if test_random:
-                print 'Success'
-                sys.exit()
+        #if test_random:
+        #    evaluate = d.test((36, 36, 3), locals_d['input'], Constraints())
+        #    print 'evaluate'
+        #    evaluate()
+        #    if test_random:
+        #        print 'Success'
+        #        sys.exit()
     T1 = time.time()
     
     s = '\n'.join(s)
@@ -239,5 +241,5 @@ def test():
     random.seed(0)
     test_sample_prob()
 #    test_schedules(True)
-    test_schedules()
+    test_schedules(test_random=True)
     test_crossover()

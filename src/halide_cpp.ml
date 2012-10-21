@@ -162,6 +162,8 @@ let _ =
   Callback.register "listHead" (List.hd);
   Callback.register "listTail" (List.tl);
   Callback.register "listEmpty" (fun x -> x == []);
+  Callback.register "listLength" (List.length);
+  
   Callback.register "makePair" (fun x y -> (x, y));
   Callback.register "makeTriple" (fun x y z -> (x, y, z));
   
@@ -228,6 +230,6 @@ let _ =
   Callback.register "varsInExpr" (fun e -> StringMap.bindings (Analysis.find_vars_in_expr e));
   Callback.register "callsInExpr" (fun e -> StringMap.bindings (Analysis.find_calls_in_expr e));
 
-  Callback.register "callIsFunc" (function Func -> true | _ -> false);
-  Callback.register "callIsExtern" (function Extern -> true | _ -> false);
-  Callback.register "callIsImage" (function Image -> true | _ -> false);
+  Callback.register "callTypeIsFunc" (function Func -> true | _ -> false);
+  Callback.register "callTypeIsExtern" (function Extern -> true | _ -> false);
+  Callback.register "callTypeIsImage" (function Image -> true | _ -> false);

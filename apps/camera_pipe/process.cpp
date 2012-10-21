@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 extern "C" {
   #include "curved.h"
@@ -34,11 +35,17 @@ int main(int argc, char **argv) {
     Image<float> matrix_7000(4, 3, 1); matrix_7000.copy(_matrix_7000[0], 4, 3);
 
     timeval t1, t2;
-    gettimeofday(&t1, NULL);
-    curved(atof(argv[2]), atof(argv[3]), atof(argv[4]),
-           input, matrix_3200, matrix_7000, output);
-    gettimeofday(&t2, NULL);
-    printf("%3.3f ms\n", (t2.tv_sec - t1.tv_sec)*1000.0f + (t2.tv_usec - t1.tv_usec)/1000.0f);
+    unsigned int bestT = 0xffffffff;
+    for (int i = 0; i < 25; i++) {
+        gettimeofday(&t1, NULL);
+        curved(atof(argv[2]), atof(argv[3]), atof(argv[4]),
+               input, matrix_3200, matrix_7000, output);
+        gettimeofday(&t2, NULL);
+        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
+        if (t < bestT) bestT = t;
+        if (i % 5 == 0) sleep(1);
+    }
+    printf("%u\n", bestT);
 
     // Current timings on N900 are (best of 10)
     // Halide: 722ms, FCam: 741ms
