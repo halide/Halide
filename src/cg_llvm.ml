@@ -695,9 +695,9 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
 
     Printf.printf "%s\n%!" (string_of_lltype (type_of global_fmt)); *)
 
-    let ll_printf = declare_function "printf" 
+    let ll_printf = declare_function "hlprintf" 
       (var_arg_function_type (i32_type c) [|pointer_type (i8_type c)|]) m in
-    build_call ll_printf (Array.of_list (global_fmt::ll_args)) "" b    
+    build_call ll_printf (Array.of_list (global_fmt::ll_args)) "" b
 
   and cg_assert e str =
     let e = build_intcast (cg_expr e) (i1_type c) "" b in
