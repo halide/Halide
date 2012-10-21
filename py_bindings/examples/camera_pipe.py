@@ -10,7 +10,7 @@ float_t = Float(32)
 
 OUT_DIMS = (2560, 1920, 3)
 
-def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
+def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     x, y, tx, ty, c = Var('x'), Var('y'), Var('tx'), Var('ty'), Var('c')
     counter_interleave_x = [0]
     counter_interleave_y = [0]
@@ -327,8 +327,8 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
     in_image = os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png')
     #def evaluate(in_png):
     #    output = Image(UInt(8), 2560, 1920, 3); # image size is hard-coded for the N900 raw pipeline
-    #import autotune
     #autotune.print_tunables(processed)
+    #import autotune
     #g_r = all_funcs(processed)['g_r']
     #print 'caller_vars for g_r:', autotune.caller_vars(processed, g_r)
     #root_all(processed)
