@@ -103,7 +103,30 @@ namespace Halide {
 
         cerr << "rehydrateExpr: " << e.pretty() << endl;
 
+        //
         // Track dependences
+        //
+
+        // Unpack calls first. With the UniformImages, we can (mostly) disambiguate
+        // buffer dims from standalone uniforms
+        for (MLVal list = callsInExpr(expr); !listEmpty(list); list = listTail(list)) {
+            MLVal call = listHead(list);
+            string name = call[0];
+            Type ret = call[1][1];
+            if (callTypeIsFunc(call[1][0])) {
+                Func f = rehydrateFunc(defs, env, name);
+                e.child(FuncRef(f));
+            } else if (callTypeIsImage(call[1][0])) {
+                assert (name[0] == '.'); // should be an absolute name
+                name = name.substr(1);   // chop off the leading '.'
+                int dims = listLength(call[1][2]); // count number of args
+                e.child(UniformImage(ret, dims, name));
+            }
+        }
+
+        // TODO: we need some more distinctive marker for image dimension references
+        // e.g. we could use a dedicated character, which, if present, implies that a 
+        // uniform refers to a buffer_t field, and otherwise it is a scalar uniform.
         for (MLVal list = varsInExpr(expr); !listEmpty(list); list = listTail(list)) {
             MLVal var = listHead(list);
             string name = var[0];
@@ -117,23 +140,23 @@ namespace Halide {
                 // This is a uniform
                 assert (name[0] == '.'); // should be an absolute name
                 name = name.substr(1);   // chop off the leading '.'
-                cerr << "  uniform: " << name << endl;
-                e.child(DynUniform(t, name));
-            }
-        }
 
-        for (MLVal list = callsInExpr(expr); !listEmpty(list); list = listTail(list)) {
-            MLVal call = listHead(list);
-            string name = call[0];
-            Type ret = call[1][1];
-            if (callTypeIsFunc(call[1][0])) {
-                Func f = rehydrateFunc(defs, env, name);
-                e.child(FuncRef(f));
-            } else if (callTypeIsImage(call[1][0])) {
-                assert (name[0] == '.'); // should be an absolute name
-                name = name.substr(1);   // chop off the leading '.'
-                int dims = listLength(call[1][2]); // count number of args
-                e.child(UniformImage(ret, dims, name));
+                string root_name = name.substr(0, name.find('.'));
+                cerr << " -Uniform root_name: " << root_name << endl;
+                bool is_image = false;
+                for (int i = 0; i < e.uniformImages().size(); i++) {
+                    cerr << "    -check uniformImage " << e.uniformImages()[i].name() << endl;
+                    if (e.uniformImages()[i].name() == root_name) {
+                        is_image = true;
+                        break;
+                    }
+                }
+                if (is_image) {
+
+                } else {
+                    cerr << "  uniform: " << name << endl;
+                    e.child(DynUniform(t, name));
+                }
             }
         }
 
