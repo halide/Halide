@@ -327,8 +327,10 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
     in_image = os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png')
     #def evaluate(in_png):
     #    output = Image(UInt(8), 2560, 1920, 3); # image size is hard-coded for the N900 raw pipeline
-    import autotune
-    autotune.print_tunables(processed)
+    #import autotune
+    #autotune.print_tunables(processed)
+    #g_r = all_funcs(processed)['g_r']
+    #print 'caller_vars for g_r:', autotune.caller_vars(processed, g_r)
     #root_all(processed)
     
     # In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.

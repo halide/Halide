@@ -650,12 +650,15 @@ def func_lhs_var_names(f):
         for x in y.vars():
             ans.append(x.name())
     return ans
-    
+
 def caller_vars(root_func, func):
     "Given a root Func and current function return list of variables of the caller."
     func_name = func.name()
+    ans = []
     for (name, g) in halide.all_funcs(root_func).items():
         rhs_names = [x.name() for x in g.rhs().funcs()]
         if func_name in rhs_names:
-            return func_lhs_var_names(g)
-    return []
+            ans = func_lhs_var_names(g)
+            return ans
+            #print 'inside caller_vars', g.name(), func_name, ans, rhs_names
+    return ans
