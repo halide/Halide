@@ -373,7 +373,11 @@ let rec cg_stmt (con:context) (stmt:stmt) =
    this to build a cleanup closure *)
 let free (con:context) (name:string) (address:llvalue) =
   let c = con.c and m = con.m and b = con.b in
-  let free = declare_function "fast_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
+  let safe_malloc = try
+    Sys.getenv "HL_SAFE_MALLOC"
+  with Not_found -> "0" in
+  let free_fn = if safe_malloc = "1" then "safe_free" else "fast_free" in
+  let free = declare_function free_fn (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
   ignore (build_call free [|address|] "" b)
 
 (* Allocate some memory. Returns an llval representing the address,
@@ -395,8 +399,12 @@ let malloc (con:context) (name:string) (elems:expr) (elem_size:expr) =
         let ptr = build_array_alloca (vector_type (i32_type c) 4) (const_int (i32_type c) chunks) "" b in
         let ptr = build_pointercast ptr (pointer_type (i8_type c)) "" b in
         (ptr, fun _ -> ())
-    | _ -> 
-        let malloc = declare_function "fast_malloc" (function_type (pointer_type (i8_type c)) [|i32_type c|]) m in  
+    | _ ->
+        let safe_malloc = try
+          Sys.getenv "HL_SAFE_MALLOC"
+        with Not_found -> "0" in
+        let malloc_fn = if safe_malloc = "1" then "safe_malloc" else "fast_malloc" in
+        let malloc = declare_function malloc_fn (function_type (pointer_type (i8_type c)) [|i32_type c|]) m in  
         let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
         let addr = build_call malloc [|con.cg_expr size|] name b in
         (addr, fun con -> free con name addr)
