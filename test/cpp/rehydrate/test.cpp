@@ -32,10 +32,16 @@ int main(int argc, char **argv) {
     ff.uniforms()[0].set(*(int*)offset.data());
     ff.uniformImages()[0] = in;
 
-    f.funcs()[0].root();
-    f.funcs()[1].root();
-    ff.funcs()[0].root();
-    ff.funcs()[1].root();
+    vector<Func> funcs = f.funcs();
+    set_union(funcs, f.transitiveFuncs());
+    for (int i = 0; i < funcs.size(); i++) {
+        funcs[i].root();
+    }
+    funcs = ff.funcs();
+    set_union(funcs, ff.transitiveFuncs());
+    for (int i = 0; i < funcs.size(); i++) {
+        funcs[i].root();
+    }
 
     if (use_gpu()) {
         f.cudaTile(x, y, 16, 16);

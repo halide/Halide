@@ -503,8 +503,10 @@ namespace Halide {
         MLVal env = makeEnv();
         env = contents->addDefinition(env);
 
-        for (size_t i = 0; i < funcs().size(); i++) {
-            Func f = funcs()[i];
+        vector<Func> fs = funcs();
+        set_union(fs, transitiveFuncs());
+        for (size_t i = 0; i < fs.size(); i++) {
+            Func f = fs[i];
             // Don't consider recursive dependencies.
             if (f == *this) continue;
             env = f.contents->addDefinition(env);
@@ -517,8 +519,10 @@ namespace Halide {
         MLVal guru = makeNoviceGuru();
         guru = contents->applyGuru(guru);
 
-        for (size_t i = 0; i < funcs().size(); i++) {
-            Func f = funcs()[i];
+        vector<Func> fs = funcs();
+        set_union(fs, transitiveFuncs());
+        for (size_t i = 0; i < fs.size(); i++) {
+            Func f = fs[i];
             // Don't consider recursive dependencies.
             if (f == *this) continue;
             guru = f.contents->applyGuru(guru);
@@ -582,6 +586,17 @@ namespace Halide {
             set_union(v, update().rhs().funcs());
             for (size_t i = 0; i < update().args().size(); i++) {
                 set_union(v, update().args()[i].funcs());
+            }
+        }
+        return v;
+    }
+
+    std::vector<Func> Func::transitiveFuncs() const {
+        std::vector<Func> v = rhs().transitiveFuncs();
+        if (isReduction()) {
+            set_union(v, update().rhs().transitiveFuncs());
+            for (size_t i = 0; i < update().args().size(); i++) {
+                set_union(v, update().args()[i].transitiveFuncs());
             }
         }
         return v;

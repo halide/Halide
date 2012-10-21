@@ -10,6 +10,7 @@ namespace Halide {
         set_union(images, c.images());
         set_union(vars, c.vars());
         set_union(funcs, c.funcs());
+        set_union(transitiveFuncs, c.transitiveFuncs());
         set_union(uniforms, c.uniforms());
         set_union(uniformImages, c.uniformImages());
         if (c.implicitArgs() > implicitArgs) implicitArgs = c.implicitArgs();
@@ -70,7 +71,9 @@ namespace Halide {
         // function dependencies (but not free vars, or implicit args)
         if (f.f().rhs().isDefined()) {
             set_union(images, f.f().images());
-            set_union(funcs, f.f().funcs());
+            // only track the callee's func list as transitive funcs
+            set_union(transitiveFuncs, f.f().funcs());
+            set_union(transitiveFuncs, f.f().transitiveFuncs());
             set_union(uniforms, f.f().uniforms());
             set_union(uniformImages, f.f().uniformImages());
         }
