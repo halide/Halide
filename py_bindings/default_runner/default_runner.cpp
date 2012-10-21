@@ -62,10 +62,13 @@ int main(int argc, char const *argv[])
     int test_iterations = atoi(argv[1]);
     
     Image<TEST_IN_T> input = load<TEST_IN_T>(argv[2]);
-    int w        = argc > 4 ? atoi(argv[4]): input.width();
-    int h        = argc > 5 ? atoi(argv[5]): input.height();
-    int channels = argc > 6 ? atoi(argv[6]): input.channels();
-
+    int w        = argc > 4 ? atoi(argv[4]): -1;
+    int h        = argc > 5 ? atoi(argv[5]): -1;
+    int channels = argc > 6 ? atoi(argv[6]): -1;
+    if (w < 0) { w = input.width(); }
+    if (h < 0) { h = input.height(); }
+    if (channels < 0) { channels = input.channels(); }
+    
     Image<TEST_OUT_T> output(w, h, channels);
     Image<TEST_OUT_T> ref_output(1,1,1);
     bool has_ref = false;
