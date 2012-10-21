@@ -63,7 +63,7 @@ and string_of_expr = function
   | Let(n, a, b) -> "(let " ^ n ^ " = " ^ string_of_expr a ^ " in " ^ string_of_expr b ^ ")"
   (* | Debug(e, prefix, args) -> "Debug(" ^ string_of_expr e ^ ", " ^ prefix ^ " " ^  
       (String.concat ", " (List.map string_of_expr args)) ^ ")" *)
-  | Debug (e, _, _) -> string_of_expr e
+  | Debug (e, msg, args) -> "Debug(" ^ msg ^ (String.concat ", " (List.map string_of_expr args)) ^ ")[" ^ string_of_expr e ^ "]"
   | Or (a, b) -> "(" ^ string_of_expr a ^ " or " ^ string_of_expr b ^ ")"
   | And (a, b) -> "(" ^ string_of_expr a ^ " and " ^ string_of_expr b ^ ")"
   | Not (a) -> "(not " ^ string_of_expr a ^ ")"

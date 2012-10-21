@@ -23,13 +23,14 @@ namespace Halide {
     ML_FUNC1(varsInExpr)
     ML_FUNC1(callsInExpr)
 
-    ML_FUNC1(callIsFunc)
-    ML_FUNC1(callIsExtern)
-    ML_FUNC1(callIsImage)
+    ML_FUNC1(callTypeIsFunc)
+    ML_FUNC1(callTypeIsExtern)
+    ML_FUNC1(callTypeIsImage)
 
     ML_FUNC1(listHead)
     ML_FUNC1(listTail)
     ML_FUNC1(listEmpty)
+    ML_FUNC1(listLength)
 
     // Mirror helpers for unpacking `definitions` from the deserialized environment.
     // Yes, this is ugly at this point. Better ideas (short of adding dozens of
@@ -102,32 +103,60 @@ namespace Halide {
 
         cerr << "rehydrateExpr: " << e.pretty() << endl;
 
+        //
         // Track dependences
+        //
+
+        // Unpack calls first. With the UniformImages, we can (mostly) disambiguate
+        // buffer dims from standalone uniforms
+        for (MLVal list = callsInExpr(expr); !listEmpty(list); list = listTail(list)) {
+            MLVal call = listHead(list);
+            string name = call[0];
+            Type ret = call[1][1];
+            if (callTypeIsFunc(call[1][0])) {
+                Func f = rehydrateFunc(defs, env, name);
+                e.child(FuncRef(f));
+            } else if (callTypeIsImage(call[1][0])) {
+                assert (name[0] == '.'); // should be an absolute name
+                name = name.substr(1);   // chop off the leading '.'
+                int dims = listLength(call[1][2]); // count number of args
+                e.child(UniformImage(ret, dims, name));
+            }
+        }
+
+        // TODO: we need some more distinctive marker for image dimension references
+        // e.g. we could use a dedicated character, which, if present, implies that a 
+        // uniform refers to a buffer_t field, and otherwise it is a scalar uniform.
         for (MLVal list = varsInExpr(expr); !listEmpty(list); list = listTail(list)) {
             MLVal var = listHead(list);
             string name = var[0];
             Type t = var[1];
             if (curArgs.count(name)) {
                 // This is a simple free variable
+                assert (name[0] != '.');
                 e.child(Var(name));
                 cerr << "  var: " << name << endl;
             } else {
                 // This is a uniform
-                // TODO: handle uniforms!
-                cerr << "  uniform: " << name << endl;
-                e.child(DynUniform(t, name));
-            }
-        }
+                assert (name[0] == '.'); // should be an absolute name
+                name = name.substr(1);   // chop off the leading '.'
 
-        for (MLVal list = callsInExpr(expr); !listEmpty(list); list = listTail(list)) {
-            MLVal call = listHead(list);
-            string name = call[0];
-            Type ret = call[1][1];
-            if (callIsFunc(call[1][0])) {
-                Func f = rehydrateFunc(defs, env, name);
-                e.child(FuncRef(f));
-            } else if (callIsImage(call[1][0])) {
-                // TODO: figure out dimensionality of call
+                string root_name = name.substr(0, name.find('.'));
+                cerr << " -Uniform root_name: " << root_name << endl;
+                bool is_image = false;
+                for (int i = 0; i < e.uniformImages().size(); i++) {
+                    cerr << "    -check uniformImage " << e.uniformImages()[i].name() << endl;
+                    if (e.uniformImages()[i].name() == root_name) {
+                        is_image = true;
+                        break;
+                    }
+                }
+                if (is_image) {
+
+                } else {
+                    cerr << "  uniform: " << name << endl;
+                    e.child(DynUniform(t, name));
+                }
             }
         }
 

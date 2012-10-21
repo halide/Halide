@@ -684,9 +684,13 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     let fmt = String.concat " " (List.map fst fmts) in
     let args = List.concat (List.map snd fmts) in
 
-    let ll_fmt = const_stringz c (prefix ^ fmt ^ "\n") in    
+    let fmt = (prefix ^ fmt ^ "\n") in
     let ll_args = List.map cg_expr args in
 
+    cg_ll_print fmt ll_args
+
+  and cg_ll_print fmt ll_args =
+    let ll_fmt = const_stringz c fmt in    
     let global_fmt = define_global "debug_fmt" ll_fmt m in
     set_linkage Llvm.Linkage.Private global_fmt;
     let global_fmt = build_pointercast global_fmt (pointer_type (i8_type c)) "" b in
@@ -695,9 +699,9 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
 
     Printf.printf "%s\n%!" (string_of_lltype (type_of global_fmt)); *)
 
-    let ll_printf = declare_function "printf" 
+    let ll_printf = declare_function "hlprintf" 
       (var_arg_function_type (i32_type c) [|pointer_type (i8_type c)|]) m in
-    build_call ll_printf (Array.of_list (global_fmt::ll_args)) "" b    
+    build_call ll_printf (Array.of_list (global_fmt::ll_args)) "" b
 
   and cg_assert e str =
     let e = build_intcast (cg_expr e) (i1_type c) "" b in

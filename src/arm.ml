@@ -10,6 +10,8 @@ type context = state cg_context
 let start_state () = 0
 
 let pointer_size = 4
+(* limit static mallocs to 32k before pushing them into the heap *)
+let stack_alloc_max = 1024*32
 
 let target_triple = "arm-linux-eabi"
 
@@ -457,7 +459,8 @@ let malloc (con : context) (name : string) (elems : expr) (elem_size : expr) =
   let c = con.c and b = con.b and m = con.m in
   let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
   match size with
-    | IntImm bytes ->
+    | IntImm bytes when bytes < stack_alloc_max ->
+        dbg 1 "Stack allocating %s (%d bytes)!\n%!" name bytes;
         let chunks = ((bytes + 15)/16) in (* 16-byte aligned stack *)
         (* Get the position at the top of the function *)
         let pos = instr_begin (entry_block (block_parent (insertion_block b))) in

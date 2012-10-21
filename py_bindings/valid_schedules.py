@@ -25,8 +25,10 @@ def default_check(cls, L):
     else:
         # Handle singleton fragments
         if count(FragmentVectorize) > 1:        # Allow at most one vectorize per Func schedule (FragmentList)
+            #print '  * check ', cls, 'vectorize fail'
             return False
         if FORCE_TILE and (len(L) >= 2 and count(FragmentTile) < 1):
+            #print '  * check ', cls, 'tile fail'
             return False
         root_count = count(FragmentRoot)
         chunk_count = count(FragmentChunk)
@@ -34,6 +36,7 @@ def default_check(cls, L):
             return True
         elif isinstance(L[0], FragmentChunk) and chunk_count == 1 and root_count == 0:
             return True
+    #print '  * check ', cls, 'generic fail'
     return False
             
 def make_fromstring(cls):
@@ -49,10 +52,10 @@ class Fragment:
         self.value = value
         
     @staticmethod
-    def fragments(root_func, func, cls, vars, extra_caller_vars):
-        "Given class and variable list (of strings) returns fragments possible at this point."
+    def random_fragment(root_func, func, cls, vars, extra_caller_vars):
+        "Given class and variable list (of strings) returns a random fragment possible at this point or None if none is possible."
 #        print 'fragments base', cls
-        return [cls()]
+        return cls()
         
     def ___str__(self):
         "Returns schedule_str, e.g. '.parallel(y)'."
@@ -70,9 +73,9 @@ class Fragment:
 
 class FragmentVarMixin:
     @staticmethod
-    def fragments(root_func, func, cls, vars, extra_caller_vars):
+    def random_fragment(root_func, func, cls, vars, extra_caller_vars):
 #        print 'fragments', cls
-        return [cls(x) for x in vars]
+        return cls(random.choice(vars)) if len(vars) else None #[cls(x) for x in vars]
 
 use_random_blocksize = True
 
@@ -109,6 +112,7 @@ def check_duplicates(cls, L):
     for x in L:
         s = str(x)
         if s in d:
+            #print '* check_duplicates', cls, 'fail'
             return False
         d.add(s)
         
@@ -135,8 +139,10 @@ class FragmentUnroll(FragmentBlocksizeMixin,Fragment):
 
 class FragmentChunk(Fragment):
     @staticmethod
-    def fragments(root_func, func, cls, vars, extra_caller_vars):
-        return [cls(x) for x in caller_vars(root_func, func)+extra_caller_vars]
+    def random_fragment(root_func, func, cls, vars, extra_caller_vars):
+        allV = caller_vars(root_func, func)+extra_caller_vars
+        return cls(random.choice(allV)) if len(allV) else None
+        #return [cls(x) for x in ]
         
     def check(self, L):
         return check_duplicates(self.__class__, L)
@@ -175,8 +181,9 @@ class FragmentSplit(FragmentBlocksizeMixin,Fragment):
         return FragmentSplit(var, int(value) if value is not None else value, newvar)
 
     @staticmethod
-    def fragments(root_func, func, cls, vars, extra_caller_vars):
-        return [cls(x,reuse_outer=True,vars=vars)  for x in vars]
+    def random_fragment(root_func, func, cls, vars, extra_caller_vars):
+        #return [cls(x,reuse_outer=True,vars=vars)  for x in vars]
+        return cls(random.choice(vars),reuse_outer=True,vars=vars) if len(vars) else None
         #([cls(x,reuse_outer=False,vars=vars) for x in vars] +
         #        [cls(x,reuse_outer=True,vars=vars)  for x in vars])
 
@@ -212,13 +219,17 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         return FragmentTile(xvar=xvar, yvar=yvar, xsize=int(xsize), ysize=int(ysize), xnewvar=xnewvar, ynewvar=ynewvar)
 
     @staticmethod
-    def fragments(root_func, func, cls, vars, extra_caller_vars):
-        ans = []
-        for i in range(len(vars)-1):
-            j = i+1
-            #for j in range(i+1, len(vars)):
-            ans.append(cls(vars[i],vars[j],vars=vars))
-        return ans
+    def random_fragment(root_func, func, cls, vars, extra_caller_vars):
+        if len(vars)-1 <= 0:
+            return None
+        i = random.randrange(len(vars)-1)
+        return cls(vars[i],vars[i+1],vars=vars)
+        #ans = []
+        #for i in range(len(vars)-1):
+        #    j = i+1
+        #    #for j in range(i+1, len(vars)):
+        #    ans.append(cls(vars[i],vars[j],vars=vars))
+        #return ans
 #        return [cls(x,y,vars=vars) for x in vars for y in vars if x != y]
 
     def new_vars(self):
@@ -244,9 +255,14 @@ class FragmentTranspose(Fragment):
         #return FragmentTranspose(xvar=xvar, yvar=yvar, xsize=int(xsize), ysize=int(ysize), xnewvar=xnewvar, ynewvar=ynewvar)
 
     @staticmethod
-    def fragments(root_func, func, cls, vars, extra_caller_vars):
+    def random_fragment(root_func, func, cls, vars, extra_caller_vars):
         #print 'fragments', root_func, func, cls, vars, extra_caller_vars
-        return [cls(vars=vars, idx=i) for i in range(1,permutation.factorial(len(vars)))]     # TODO: Allow random generation so as to not loop over n!
+        n = permutation.factorial(len(vars))
+        if n <= 1:
+            return None
+        i = random.randrange(1,n)
+        return cls(vars=vars, idx=i)
+        #return [cls(vars=vars, idx=i) for i in range(1,permutation.factorial(len(vars)))]     # TODO: Allow random generation so as to not loop over n!
     
     def check(self, L):
         if not default_check(self.__class__, L):
@@ -389,19 +405,20 @@ class FragmentList(list):
 def random_fragment(root_func, func, all_vars, extra_caller_vars):
     while True:
         cls = random.choice(fragment_classes)
-        fragments = cls.fragments(root_func, func, cls, all_vars, extra_caller_vars)
-        if len(fragments):
-            break
+        fragment = cls.random_fragment(root_func, func, cls, all_vars, extra_caller_vars)
+        if fragment is not None: #len(fragments):
+            return fragment
 #    if len(fragments) == 0:    # empty fragments can happen legitimately for e.g. chunk of the root func
 #        raise ValueError(('fragments is empty', cls, all_vars, func.name()))
-    fragment = random.choice(fragments)
-    return fragment
+#    fragment = random.choice(fragments)
+#    return fragment
 
 def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_vars=[]):
     "Un-checked schedules (FragmentList instances) of exactly the specified depth for the given Func."
 #    print func
 #    print vars
     if not random:
+        raise NotImplementedError('schedules must be sampled randomly')
         randomized = lambda x: x
     else:
         def randomized(La):
@@ -414,6 +431,7 @@ def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_v
         yield FragmentList(func, [])
     else:
         for L in schedules_depth(root_func, func, vars, depth-1, random):
+            #print 'schedules_depth recurses', L
             if not L.check():
                 continue
             all_vars = list(vars)
@@ -421,10 +439,12 @@ def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_v
                 all_vars.extend(fragment.new_vars())
             for cls in randomized(fragment_classes):
                 #print 'all_vars', all_vars
-                for fragment in randomized(cls.fragments(root_func, func, cls, all_vars, extra_caller_vars)):
+                fragment = cls.random_fragment(root_func, func, cls, all_vars, extra_caller_vars)
+                #for fragment in randomized(cls.fragments(root_func, func, cls, all_vars, extra_caller_vars)):
                     #print 'fragment', fragment
                 #print '=>', fragment
                     #print '*', len(L), L
+                if fragment is not None:
                     yield FragmentList(func, list(L) + [fragment])
 
 def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, random=False, extra_caller_vars=[], vars=None):
@@ -442,7 +462,9 @@ def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, ra
         if random:
             depth = random_module.randrange(min_depth, max_depth+1)
         for L in schedules_depth(root_func, func, vars, depth, random, extra_caller_vars):
+            #print 'schedules_depth returns', L
             if L.check():
+                #print '  check'
                 yield L.randomized_const()
                 if random:
                     return
@@ -509,6 +531,7 @@ class Schedule:
         return list(sorted(set(ans)))
 
     def apply(self, constraints, verbose=False):   # Apply schedule
+        #return
         #verbose = True
         #print 'apply schedule:'
         #print str(self)
@@ -627,12 +650,16 @@ def func_lhs_var_names(f):
         for x in y.vars():
             ans.append(x.name())
     return ans
-    
+
 def caller_vars(root_func, func):
     "Given a root Func and current function return list of variables of the caller."
     func_name = func.name()
+    ans = set()
     for (name, g) in halide.all_funcs(root_func).items():
-        rhs_names = [x.name() for x in g.rhs().funcs()]
+#        rhs_names = [x.name() for x in g.rhs().funcs()]
+        rhs_names = [x.name() for x in g.rhs().transitiveFuncs()]
         if func_name in rhs_names:
-            return func_lhs_var_names(g)
-    return []
+            ans |= set(func_lhs_var_names(g))
+            #return ans
+            #print 'inside caller_vars', g.name(), func_name, ans, rhs_names
+    return sorted(ans)

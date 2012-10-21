@@ -8,36 +8,57 @@ namespace Halide
 	extern void testArray(Func f);
 }
 
+using namespace std;
 int main(int argc, char **argv) {
 
-    Func f, g, h; Var x, y;
+    int width = 32;
+
+    Func f("f"), g("g"), h("h"); Var x("x"), y("y");
+
+    Uniform<int> offset("offset");
+    offset = 666;
+
+    Image<int> in(width+4);
+    for (int i=0; i < in.width(); i++) in(i) = rand() / 2;
     
-    h(x) = x;
-    g(x) = h(x-1) + h(x+1);
+    h(x) = in(clamp(x, 0, in.width()));
+    g(x) = h(x-1 + offset - *(int*)offset.data()) + h(x+1 + offset - *(int*)offset.data());
     f(x, y) = (g(x-1) + g(x+1)) + y;
 
-    std::cerr << f.rhs().pretty() << std::endl;
-    
+    // Rehydrate ff by serializing then deserializing the pipeline out through f
     Func ff = rehydrate(f.serialize(), f.name());
-#if 0
-	testArray(f);
 
-    h.root();
-    g.root();
+    // reassign the uniform/image inputs
+    ff.uniforms()[0].set(*(int*)offset.data());
+    ff.uniformImages()[0] = in;
+
+    vector<Func> funcs = f.funcs();
+    set_union(funcs, f.transitiveFuncs());
+    for (int i = 0; i < funcs.size(); i++) {
+        funcs[i].root();
+    }
+    funcs = ff.funcs();
+    set_union(funcs, ff.transitiveFuncs());
+    for (int i = 0; i < funcs.size(); i++) {
+        funcs[i].root();
+    }
 
     if (use_gpu()) {
         f.cudaTile(x, y, 16, 16);
-        g.cudaTile(x, 128);
-        h.cudaTile(x, 128);
+        ff.cudaTile(x, y, 16, 16);
+    } else {
+        Var xi("xi"), yi("yi");
+        f.tile(x, y, xi, yi, 16, 16);
+        ff.tile(x, y, xi, yi, 16, 16);
     }
-#endif
     
-    Image<int> out = ff.realize(32, 32);
+    Image<int> out = ff.realize(width, width);
+    Image<int> ref = f.realize(width, width);
 
-    for (int y = 0; y < 32; y++) {
-        for (int x = 0; x < 32; x++) {
-            if (out(x, y) != x*4 + y) {
-                printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x*4+y);
+    for (int y = 0; y < width; y++) {
+        for (int x = 0; x < width; x++) {
+            if (out(x, y) != ref(x, y)) {
+                printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), ref(x, y));
                 return -1;
             }
         }

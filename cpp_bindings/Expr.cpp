@@ -184,6 +184,10 @@ namespace Halide {
         return contents->funcs;
     }
 
+    const std::vector<Func> &Expr::transitiveFuncs() const {
+        return contents->transitiveFuncs;
+    }
+
     const std::vector<UniformImage> &Expr::uniformImages() const {
         return contents->uniformImages;
     }

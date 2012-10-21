@@ -1,7 +1,4 @@
-ifneq ($(shell env -i command -v g++-4.7),)
-GXX ?= g++-4.7
-endif
-GXX ?= g++-4.6
+GXX ?= g++
 
 PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
 ifeq ($(HL_TARGET),ptx)
@@ -16,16 +13,16 @@ all: filter
 
 bilateral_grid: ../../cpp_bindings/ bilateral_grid.cpp
 	$(MAKE) -C ../../cpp_bindings libHalide.a
-	$(GXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -o bilateral_grid  -lpthread -ldl
+	$(GXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -o bilateral_grid  -lpthread -ldl
 
 bilateral_grid.bc: bilateral_grid bilateral_grid.cpp
 	./bilateral_grid 8
 
 bilateral_grid.o: bilateral_grid.bc
-	opt -O3 bilateral_grid.bc | llc -O3 -filetype=obj -o bilateral_grid.o
+	../../llvm/Release+Asserts/bin/opt -O3 bilateral_grid.bc | ../../llvm/Release+Asserts/bin/llc -O3 -filetype=obj -o bilateral_grid.o
 
 filter: bilateral_grid.o filter.cpp
-	$(GXX) -I../../support -O3 -ffast-math -Wall -Werror -std=c++0x filter.cpp bilateral_grid.o -lpng -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LFLAGS)
+	$(GXX) -I../../support -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -lpng -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LFLAGS)
 
 out.png: filter
 	./filter input.png out.png 0.1
