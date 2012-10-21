@@ -9,7 +9,8 @@ type context = state cg_context
 let start_state () = 0
 
 let pointer_size = 8
-let stack_alloc_max = 1024*32 (* limit static mallocs to 32k before pushing them into the heap *)
+(* limit static mallocs to 32k before pushing them into the heap *)
+let stack_alloc_max = 1024*32
 
 (* The target triple is different on os x and linux, so we'd better
    just let it use the native host. This makes it hard to generate x86
@@ -384,6 +385,7 @@ let malloc (con:context) (name:string) (elems:expr) (elem_size:expr) =
   match size with
     (* Constant-sized allocations go on the stack *)
     | IntImm bytes when bytes < stack_alloc_max ->
+        dbg 1 "Stack allocating %s (%d bytes)!\n%!" name bytes;
         let chunks = ((bytes + 15)/16) in (* 16-byte aligned stack *)
         (* Get the position at the top of the function *)
         let pos = instr_begin (entry_block (block_parent (insertion_block b))) in
