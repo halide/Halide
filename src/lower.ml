@@ -488,7 +488,7 @@ let rec sliding_window (stmt:stmt) (function_env:environment) =
         
         let serial_dim_expr = Var (i32, serial_dim) in
         
-        (* Find which dims depend on the serial_dim *)
+        (* Find which dims depend on the serial_dim ... *)
         let rec find_matching_dim = function
           | [] -> []
           | (dim::dims) -> 
@@ -501,10 +501,10 @@ let rec sliding_window (stmt:stmt) (function_env:environment) =
               list
         in
         
-        (* Hopefully just one does, and hopefully just in the min, not
+        (* ... hopefully just one does, and hopefully just in the min, not
          in the extent. If none do then this is a silly schedule. If
          multiple do then we don't handle that. *)
-        let new_produce = begin match find_matching_dim dims with
+        begin match find_matching_dim dims with
           | ((dim, min, extent)::[]) when not (expr_contains_expr serial_dim_expr extent) ->          
             dbg 2 "Doing sliding window of %s over %s against %s\n" name serial_dim dim;
             let stride = min -~ (subs_expr serial_dim_expr (serial_dim_expr -~ (IntImm 1)) min) in
@@ -517,11 +517,11 @@ let rec sliding_window (stmt:stmt) (function_env:environment) =
             let stmt = produce in
             let stmt = LetStmt (name ^ "." ^ dim ^ ".min", new_min, stmt) in
             let stmt = LetStmt (name ^ "." ^ dim ^ ".extent", new_extent, stmt) in
+            let stmt = Pipeline (n, stmt, consume) in 
             stmt
           | _ -> 
-            produce
-        end in
-        Pipeline (n, new_produce, consume)
+            stmt 
+        end
       | LetStmt (n, expr, stmt) -> 
         let new_env = StringMap.add n expr env in
         LetStmt (n, expr, process_dim name dims new_env serial_dim serial_dim_min stmt)
@@ -591,11 +591,14 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
   let rec flatten_args func args arg_names =
     match (args, arg_names) with 
       | [], [] -> 
-          (IntImm 0) (* -~ (Var (i32, func ^ ".buf_offset")) *)
+          IntImm 0
       | (arg::args, name::names) -> 
           (* stride * (idx - min) *)
-          ((Var (i32, func ^ "." ^ name ^ ".stride")) *~ (arg -~ Var (i32, func ^ "." ^ name ^ ".buf_min"))) +~ 
-            (flatten_args func args names)
+          let rest = flatten_args func args names in
+          let buf_min = Var (i32, func ^ "." ^ name ^ ".buf_min") in
+          let offset = arg -~ buf_min in
+          let stride = Var (i32, func ^ "." ^ name ^ ".stride") in
+          (stride *~ offset) +~ rest
       | _ -> failwith ("Wrong number of args in call to " ^ func)
   in
   let rec replace_calls_with_loads_in_expr func arg_names expr = 
@@ -603,6 +606,7 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
     match expr with 
       (* Match calls to f from someone else, or recursive calls from f to itself *)
       | Call (Func, ty, f, args) when f = func || f = (func ^ "." ^ (base_name func)) ->
+          dbg 2 "Flattening a call to %s\n" func;
           let args = List.map recurse args in 
           let index = flatten_args func args arg_names in
           let load = Load (ty, func, index) in
@@ -617,6 +621,7 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
     let recurse_expr = replace_calls_with_loads_in_expr func arg_names in
     match stmt with
       | Provide (e, f, args) when f = func ->
+          dbg 2 "Flattening a provide to %s\n" func;
           let args = List.map recurse_expr args in
           let index = flatten_args func args arg_names in
           Store (recurse_expr e, f, index)
@@ -695,15 +700,11 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   (* ----------------------------------------------- *)
   dbg 1 "Computing the order in which to realize functions\n%!";
 
-  let starts_with a b =
-    String.length a > String.length b &&
-      String.sub a 0 ((String.length b)+1) = b ^ "."
-  in
   (* A partial order on realization order of functions *)        
   let lt a b =
     (* If a requires b directly, a should be realized first *)
-    if (starts_with b a) then (Some true)
-    else if (starts_with a b) then (Some false)
+    if (string_starts_with b (a ^ ".")) then (Some true)
+    else if (string_starts_with a (b ^ ".")) then (Some false)
     else
       let (call_sched_a, _) = (find_schedule schedule a) in
       let (call_sched_b, _) = (find_schedule schedule b) in
@@ -833,7 +834,6 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let stmt = For ("<root>", IntImm 0, IntImm 1, true, stmt) in
   let (stmt,schedule) = bounds_inference env schedule stmt in
 
-  (* Can't constant fold here! It removes some of the let statements we will refer to later *)
   (* let stmt = Constant_fold.constant_fold_stmt stmt in *)
 
   dump_stmt stmt pass pass_desc "bounds_inference" 1;
@@ -909,6 +909,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let pass_desc = "Constant folding" in
   dbg 1 "%s\n%!" pass_desc;
   let stmt = Constant_fold.constant_fold_stmt stmt in
+  let stmt = Constant_fold.remove_dead_lets_in_stmt stmt  in
 
   dump_stmt stmt pass pass_desc "final" 1;
 
