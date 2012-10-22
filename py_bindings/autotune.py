@@ -653,8 +653,8 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             cache.setdefault(str(schedule), ans)
 
             e = get_error_str(ans['time'])
-            first_part = 'Error %s'%e if e is not None else 'Best time %.4f'%ans['time']
-            log_sched(p, schedule, '%s, compile=%.4f, run=%.4f, compile_out=%s'%(first_part, ans['compile'], ans['run'], ans['compile_out']))
+            first_part = 'Error %s'%e if e is not None else 'Best time %.6f'%ans['time']
+            log_sched(p, schedule, '%s, compile=%.6f, run=%.6f, compile_out=%s'%(first_part, ans['compile'], ans['run'], ans['compile_out']))
             return ans
             
         Tbegin_run = time.time()
@@ -732,10 +732,10 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
     check_schedules(currentL)
     
     def format_time(timev):
-        current_s = '%15.4f'%timev
+        current_s = '%17.6f'%timev
         e = get_error_str(timev)
         if e is not None:
-            current_s = '%15s'%e
+            current_s = '%17s'%e
         return current_s
         
     # Time default schedules and obtain reference output image
@@ -875,7 +875,7 @@ def autotune_child(args, timeout=None):
         except:
             raise ValueError('Compile failed:\n%s' % out)
 
-        print 'Success %.4f' % (time.time()-T0)
+        print 'Success %.6f' % (time.time()-T0)
 
         #return
 

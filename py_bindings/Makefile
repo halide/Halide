@@ -1,4 +1,7 @@
-all: cHalide.i #halide.pyx #environ_fix
+all: cHalide_wrap.cxx #halide.pyx #environ_fix
+
+cHalide_wrap.cxx: cHalide.i ../cpp_bindings/*.cpp ../cpp_bindings/*.h ../src/*.ml
+	cd ../cpp_bindings; make
 	swig -c++ -python -I../cpp_bindings cHalide.i
 	CXX=g++ CC=g++ python setup.py build_ext --inplace
 #	python setup.py build_ext --inplace
