@@ -94,6 +94,7 @@ import threadmap
 import threading
 import shutil
 import autotune_template
+import psutil
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -141,7 +142,9 @@ class AutotuneParams:
     trials = 5                  # Timing runs per schedule
     generations = 10
     
-    compile_timeout = 20.0 #15.0
+    compile_timeout = 20.0 #15.0        # Compile timeout in sec
+    compile_memory_limit = 2500         # Compile memory limit in MB or None for no limit
+    
     run_timeout_mul = 2.0 #3.0           # Fastest run time multiplied by this factor plus bias is cutoff
     run_timeout_bias = 5.0               # Run subprocess additional bias to allow tester process to start up and shut down
     run_timeout_default = 5.0       # Assumed 'fastest run time' before best run time is established
@@ -495,7 +498,7 @@ def get_error_str(timeval):
 
 SLEEP_TIME = 0.01
 
-def wait_timeout(proc, timeout, T0=None):
+def wait_timeout(proc, timeout, T0=None, memory_limit=None):
     "Wait for subprocess to end (returns return code) or timeout (returns None)."
     if T0 is None:
         T0 = time.time()
@@ -504,21 +507,49 @@ def wait_timeout(proc, timeout, T0=None):
         if p is not None:
             return p
         if time.time() > T0+timeout:
-            return None
+            return RUN_LIMIT_TIMEOUT
+        if memory_limit is not None and get_mem_recurse(proc.pid) > memory_limit:
+            return RUN_LIMIT_MEMLIMIT
         time.sleep(SLEEP_TIME)
 
-def run_timeout(L, timeout, last_line=False, time_from_subproc=False, shell=False):
+RUN_LIMIT_TIMEOUT = -2000
+RUN_LIMIT_MEMLIMIT = -2001
+RUN_LIMIT_ERRCODES = [RUN_LIMIT_TIMEOUT, RUN_LIMIT_MEMLIMIT]
+
+def get_mem_recurse(pid):
+    "Get memory in bytes used by pid."
+    proc = psutil.Process(pid)
+    #ans = proc.get_memory_info()[0]
+    #print 'Memory used:', ans
+    #return ans
+    ans = 0
+    for x in [proc] + proc.get_children(True):
+        try:
+            ans += x.get_memory_info()[0]
+        except psutil.error.Error:
+            pass
+    #f = open('memused.txt','at')
+    #f.write(str(ans) + '\n')
+    #f.close()
+    return ans
+    #return sum(x.get_memory_info()[0] for x in L)
+
+def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False, memory_limit=None):
     """
     Run shell command in list form, e.g. L=['python', 'autotune.py'], using subprocess.
     
-    Returns None on timeout otherwise str output of subprocess (if last_line just return the last line).
+    Returns (status_code, str output of subprocess). If last_line just returns the last line.
     
-    If time_from_subproc is True then the starting time will be read from the first stdout line of the subprocess (seems to have a bug).
+    If timed out then status code is set to RUN_LIMIT_TIMEOUT.
+    
+    If memory_limit is not None then it should be a max RSS of the process and children in bytes. If the process exceeds this amount
+    it will be killed and the status code set ot RUN_LIMIT_MEMLIMIT.
     """
     fout = tempfile.TemporaryFile()
     proc = subprocess.Popen(L, stdout=fout, stderr=fout, shell=shell)
     T0 = None
     if time_from_subproc:
+        raise NotImplementedError
         while True:
             fout.seek(0)
             fout_s = fout.readline()
@@ -530,13 +561,13 @@ def run_timeout(L, timeout, last_line=False, time_from_subproc=False, shell=Fals
             time.sleep(SLEEP_TIME)
         print 'Read T0: %f'% T0
         #sys.exit(1)
-    status = wait_timeout(proc, timeout, T0)
-    if status is None:
+    status = wait_timeout(proc, timeout, T0, memory_limit)
+    if status in RUN_LIMIT_ERRCODES:
         try:
             proc.kill()
         except OSError:
             pass
-        return -1, None
+        return status, None
 
     fout.seek(0)
     ans = fout.read()
@@ -582,20 +613,24 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             
             schedule = scheduleL[i]
             schedule_str = str(schedule)
+
+            (argL, output) = subprocess_args(schedule, schedule_str, True)
+
             if schedule_str in cache:
                 return cache[schedule_str]
             
             T0 = time.time()
-            (argL, output) = subprocess_args(schedule, schedule_str, True)
-            res,out = run_timeout(argL, p.compile_timeout, last_line=True)
+            res,out = run_limit(argL, p.compile_timeout, last_line=True, memory_limit=p.compile_memory_limit*(1000**2))
             Tcompile = time.time()-T0
             
             timer.compile_time = timer_compile + time.time() - Tbegin_compile
             with lock:
                 compile_count[0] += 1
 
-            if out is None:
+            if res == RUN_LIMIT_TIMEOUT:
                 return {'time': COMPILE_TIMEOUT, 'compile': Tcompile, 'run': 0.0, 'output': output, 'compile_out': 'None'}
+            if res == RUN_LIMIT_MEMLIMIT:
+                return {'time': COMPILE_MEMLIMIT, 'compile': Tcompile, 'run': 0.0, 'output': output, 'compile_out': 'None'}
             if not out.startswith('Success'):
                 return {'time': COMPILE_FAIL, 'compile': Tcompile, 'run': 0.0, 'output': output, 'compile_out': out}
             return {'time': 0.0, 'compile': Tcompile, 'run': 0.0, 'output': output, 'compile_out': out}
@@ -614,8 +649,10 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
         def run_schedule(i):
             status_callback('Run %d/%d'%(i+1,len(scheduleL)))
             schedule = scheduleL[i]
-
             schedule_str = str(schedule)
+            
+            (argL, output) = subprocess_args(schedule, schedule_str, False)
+
             if schedule_str in cache:
                 return cache[schedule_str]
 
@@ -625,11 +662,10 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
                 
             T0 = time.time()
             #res,out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias, last_line=True)
-            (argL, output) = subprocess_args(schedule, schedule_str, False)
             res,out = autotune_child(argL[2:], best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias+(p.run_save_timeout if save_output else 0.0))
             Trun = time.time()-T0
             
-            if out is None:
+            if res == RUN_LIMIT_TIMEOUT:
                 ans = {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output, 'compile_out': compiled_ans['compile_out']}
             elif not out.startswith('Success') or len(out.split()) != 2:
                 code = RUN_FAIL
@@ -748,7 +784,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         current_output = timeL[j]['output']
         if os.path.exists(current_output):
             ref_output = current_output
-        line_out = '%s %s'%(format_time(timev), repr(str(current)))
+        line_out = '%s %s'%(format_time(timev), current.oneline())
         print line_out
         ref_log += line_out + '\n'
     print
@@ -776,7 +812,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         display_text += 'Generation %d'%(gen) + '\n'
         display_text += '-'*40 + '\n'
         for (j, (timev, current)) in list(enumerate(bothL))[:p.num_print]:
-            display_text += '%s %-4s %s' % (format_time(timev), current.identity(), repr(str(current))) + '\n'
+            display_text += '%s %-4s %s' % (format_time(timev), current.identity(), current.oneline()) + '\n'
         display_text += '\n'
 
         success_count = 0
@@ -891,7 +927,7 @@ def autotune_child(args, timeout=None):
                 print out.strip()
                 return
             else:
-                return run_timeout(run_command, timeout, last_line=True, shell=True)
+                return run_limit(run_command, timeout, last_line=True, shell=True)
         finally:
             os.chdir(orig)
     #else:
@@ -933,12 +969,13 @@ def print_tunables(f):
 #        sys.stdout.write(fname + '.root()\\n')
     print
 
-def print_root_all(f):
-    print 'Root all schedule:'
+def root_all_str(f):
+    "String for root all schedule."
+    ans = []
     for (fname, f) in sorted(halide.all_funcs(f).items()):
 #        print fname, ' '.join(x for x in halide.func_varlist(f))
-        sys.stdout.write(fname + '.root()\\n')
-    print
+        ans.append(fname + '.root()\n')
+    return ''.join(ans)
     
 def main():
     (args, argd) = parse_args()
@@ -965,7 +1002,7 @@ def main():
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
             if examplename == 'local_laplacian':
-                rest.extend('-cores 1 -compile_timeout 40.0'.split()) #['-cores', '1', '-compile_timeout', '40.0'])
+                rest.extend('-cores 1 -compile_timeout 120.0 -generations 200'.split()) #['-cores', '1', '-compile_timeout', '40.0'])
             system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (cores, examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
         import autotune_test
@@ -1055,7 +1092,8 @@ def main():
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nshifted.root()')
         elif filter_func_name == 'examples.local_laplacian.filter_func':
             seed_scheduleL = []
-            seed_scheduleL.append('clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndowny0.root()\ndowny1.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngray.root()\ninGPyramid1.root()\nlPyramid0.root()\noutGPyramid0.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupy0.root()\nupy1.root()')
+            seed_scheduleL.append(root_all_str(out_func)) #'clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndownx2.root()\ndownx3.root()\ndownx4.root()\ndownx5.root()\ndowny0.root()\ndowny1.root()\ndowny2.root()\ndowny3.root()\ndowny4.root()\ndowny5.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngPyramid2.root()\ngPyramid3.root()\ngray.root()\ninGPyramid1.root()\ninGPyramid2.root()\ninGPyramid3.root()\nlPyramid0.root()\nlPyramid1.root()\nlPyramid2.root()\noutGPyramid0.root()\noutGPyramid1.root()\noutGPyramid2.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutLPyramid2.root()\noutLPyramid3.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupx2.root()\nupx3.root()\nupx4.root()\nupx5.root()\nupy0.root()\nupy1.root()\nupy2.root()\nupy3.root()\nupy4.root()\nupy5.root()')
+            #seed_scheduleL.append('clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndowny0.root()\ndowny1.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngray.root()\ninGPyramid1.root()\nlPyramid0.root()\noutGPyramid0.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupy0.root()\nupy1.root()')
             #seed_scheduleL = []
             #seed_scheduleL.append('clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndownx10.root()\ndownx11.root()\ndownx12.root()\ndownx13.root()\ndownx2.root()\ndownx3.root()\ndownx4.root()\ndownx5.root()\ndownx6.root()\ndownx7.root()\ndownx8.root()\ndownx9.root()\ndowny0.root()\ndowny1.root()\ndowny10.root()\ndowny11.root()\ndowny12.root()\ndowny13.root()\ndowny2.root()\ndowny3.root()\ndowny4.root()\ndowny5.root()\ndowny6.root()\ndowny7.root()\ndowny8.root()\ndowny9.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngPyramid2.root()\ngPyramid3.root()\ngPyramid4.root()\ngPyramid5.root()\ngPyramid6.root()\ngPyramid7.root()\ngray.root()\ninGPyramid1.root()\ninGPyramid2.root()\ninGPyramid3.root()\ninGPyramid4.root()\ninGPyramid5.root()\ninGPyramid6.root()\ninGPyramid7.root()\nlPyramid0.root()\nlPyramid1.root()\nlPyramid2.root()\nlPyramid3.root()\nlPyramid4.root()\nlPyramid5.root()\nlPyramid6.root()\noutGPyramid0.root()\noutGPyramid1.root()\noutGPyramid2.root()\noutGPyramid3.root()\noutGPyramid4.root()\noutGPyramid5.root()\noutGPyramid6.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutLPyramid2.root()\noutLPyramid3.root()\noutLPyramid4.root()\noutLPyramid5.root()\noutLPyramid6.root()\noutLPyramid7.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupx10.root()\nupx11.root()\nupx12.root()\nupx13.root()\nupx2.root()\nupx3.root()\nupx4.root()\nupx5.root()\nupx6.root()\nupx7.root()\nupx8.root()\nupx9.root()\nupy0.root()\nupy1.root()\nupy10.root()\nupy11.root()\nupy12.root()\nupy13.root()\nupy2.root()\nupy3.root()\nupy4.root()\nupy5.root()\nupy6.root()\nupy7.root()\nupy8.root()\nupy9.root()') #FIXMEFIXME
         #seed_scheduleL.append('blur_y_blurUInt16.root()\nblur_x_blurUInt16.root()')

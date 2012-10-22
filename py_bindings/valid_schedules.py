@@ -487,6 +487,14 @@ class Schedule:
         self.index = index
         self.identity_str = identity_str
 
+    def oneline(self):
+        "One line description for display."
+        ans = str(self).replace('\n','\\n')
+        maxlen = 100
+        if len(ans) > maxlen:
+            ans = ans[:maxlen-3] + '...'
+        return "'" + ans + "'"
+
     def check(self):
         for x in self.d.values():
             if not x.check():
