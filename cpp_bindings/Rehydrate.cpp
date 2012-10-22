@@ -139,7 +139,7 @@ namespace Halide {
                 string root_name = name.substr(0, name.find('.'));
                 cerr << " -Uniform root_name: " << root_name << endl;
                 bool is_image = false;
-                for (int i = 0; i < e.uniformImages().size(); i++) {
+                for (size_t i = 0; i < e.uniformImages().size(); i++) {
                     cerr << "    -check uniformImage " << e.uniformImages()[i].name() << endl;
                     if (e.uniformImages()[i].name() == root_name) {
                         is_image = true;
