@@ -73,6 +73,8 @@ namespace Halide {
         int implicitArgs() const;
         void addImplicitArgs(int);
 
+        int footprint(const Func& f) const;
+
         bool isVar() const;
         bool isRVar() const;
         bool isDefined() const;

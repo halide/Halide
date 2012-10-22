@@ -233,3 +233,5 @@ let _ =
   Callback.register "callTypeIsFunc" (function Func -> true | _ -> false);
   Callback.register "callTypeIsExtern" (function Extern -> true | _ -> false);
   Callback.register "callTypeIsImage" (function Image -> true | _ -> false);
+
+  Callback.register "footprintOfFuncInExpr" (Bounds.footprint_of_func_in_expr);
