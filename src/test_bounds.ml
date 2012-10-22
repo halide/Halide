@@ -39,7 +39,7 @@ let _ =
   in
 
   let test_roe e = 
-    let region = required_of_expr "f" env e in    
+    let region = required_of_expr_in_env "f" env e in    
     let str = string_of_region region in
     Printf.printf "%s uses f over %s\n" (string_of_expr e) str
   in
