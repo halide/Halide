@@ -251,14 +251,14 @@ namespace Halide {
 
         // Check that all free variables in the rhs appear in the lhs
         std::vector<Var> argVars;
-        for (int i = 0; i < args.size(); i++) {
+        for (size_t i = 0; i < args.size(); i++) {
             const std::vector<Var> &vars = args[i].vars();
-            for (int j = 0; j < vars.size(); j++) {
+            for (size_t j = 0; j < vars.size(); j++) {
                 set_add(argVars, vars[j]);
             }
         }
         std::vector<Var> rhsVars = r.vars();
-        for (int i = 0; i < rhsVars.size(); i++) {
+        for (size_t i = 0; i < rhsVars.size(); i++) {
             if (rhsVars[i].name().at(0) == '.') continue; // skip uniforms injected as vars
             if (!set_contains(argVars, rhsVars[i])) {
                 printf("argVars does not contain %s\n", rhsVars[i].name().c_str());
