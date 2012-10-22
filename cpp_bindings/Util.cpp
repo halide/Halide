@@ -10,6 +10,11 @@ namespace Halide {
     ML_FUNC2(makePair);
     ML_FUNC3(makeTriple);
 
+    ML_FUNC1(listHead);
+    ML_FUNC1(listTail);
+    ML_FUNC1(listEmpty);
+    ML_FUNC1(listLength);
+
     std::string uniqueName(char prefix) {
         // arrays with static storage duration should be initialized to zero automatically
         static int instances[256]; 
