@@ -976,6 +976,10 @@ def root_all_str(f):
 #        print fname, ' '.join(x for x in halide.func_varlist(f))
         ans.append(fname + '.root()\n')
     return ''.join(ans)
+
+def test():
+    import autotune_test
+    autotune_test.test()
     
 def main():
     (args, argd) = parse_args()
@@ -985,8 +989,7 @@ def main():
         print 'autotune example [%s|all]'%('|'.join(all_examples))
         sys.exit(0)
     if args[0] == 'test':
-        import autotune_test
-        autotune_test.test()
+        test()
     elif args[0] == 'example':
         if len(args) < 2:
             print >> sys.stderr, 'Expected 2 arguments'

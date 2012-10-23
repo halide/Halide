@@ -15,3 +15,7 @@ clean:
 	rm halide.so
 	rm _cHalide.so
 	rm apollo*.jpg
+
+test:
+	python -c "import halide, autotune; halide.test(); autotune.test()"
+
