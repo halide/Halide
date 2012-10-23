@@ -903,7 +903,7 @@ def autotune_child(args, timeout=None):
 
         save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
         #shutil.copyfile(default_runner, working)
-        compile_command = 'g++ %(png_flags)s -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s %(save_output_str)s-DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe'
+        compile_command = 'g++ %(png_flags)s -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s %(save_output_str)s-DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread'
         compile_command = compile_command % locals()
         print compile_command
         try:
