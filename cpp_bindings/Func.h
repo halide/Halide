@@ -130,7 +130,7 @@ namespace Halide {
         std::vector<Func> transitiveFuncs() const;
         std::vector<UniformImage> uniformImages() const;
 
-        int footprint(const Func& f) const;
+        std::vector<int> footprint(const Func& f) const;
 
         // Get the variable defining argument i
         const Var &arg(int i) const;
