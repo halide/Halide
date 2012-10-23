@@ -140,7 +140,7 @@ class AutotuneParams:
     max_depth = DEFAULT_MAX_DEPTH
     
     trials = 5                  # Timing runs per schedule
-    generations = 10
+    generations = 50
     
     compile_timeout = 20.0 #15.0        # Compile timeout in sec
     compile_memory_limit = 2500         # Compile memory limit in MB or None for no limit
@@ -162,7 +162,8 @@ class AutotuneParams:
     tune_dir = None                 # Autotuning output directory or None to use a default directory
     tune_link = None                # Symlink (string) pointing to tune_dir (if available)
     
-    in_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_IMAGE)      # Input image to test
+    in_image = []                   # List of input images to test (can pass multiple images using -in_image a.png -in_image b.png)
+                                    # First image is run many times to yield a best timing
     
     summary_file = 'summary.txt'
     
@@ -170,13 +171,18 @@ class AutotuneParams:
         for (key, value) in argd.items():
             if not hasattr(self, key):
                 raise ValueError('unknown command-line switch %s'%key)
-            if isinstance(getattr(self, key), str) or key in ['tune_dir', 'tune_link']:
+            if key == 'in_image':
+                self.in_image.append(value)
+            elif isinstance(getattr(self, key), str) or key in ['tune_dir', 'tune_link']:
                 setattr(self, key, argd[key])
             else:
                 setattr(self, key, float(argd[key]) if ('.' in value or isinstance(getattr(self, key), float)) else int(argd[key]))
 #        print argd
 #        raise ValueError(self.cores)
-    
+        if len(self.in_image) == 0:
+            self.in_image = [os.path.join(os.path.dirname(os.path.abspath(__file__)), x) for x in
+                             [DEFAULT_IMAGE, 'coyote2.png', 'bird.png']]
+            
     def dict_prob_mutate(self):
         start = 'prob_mutate_'
         return dict([(key[len(start):], getattr(self, key)) for key in dir(self) if key.startswith(start)])
@@ -427,7 +433,7 @@ class AutotuneTimer:
     def __init__(self):
         self.start_time = time.time()
     
-def time_generation(L, p, test_gen_func, timer, constraints, display_text='', save_output=False, ref_output=''):
+def time_generation(L, p, test_gen_func, timer, constraints, display_text='', save_output=False, compare_schedule=None):
     #T0 = time.time()
     #Tcompile = [0.0]
     #Trun = [0.0]
@@ -436,7 +442,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text='', sa
         sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link + ' => %s'%p.tune_dir if p.tune_link else p.tune_dir, display_text))
         sys.stderr.flush()
 
-    test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer, save_output, ref_output))
+    test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer, save_output, compare_schedule))
     def time_schedule():
         info = test_gen_iter.next() #test_func(current, constraints)()
         #print 'time_schedule', current, info
@@ -575,6 +581,9 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
         ans = ans.strip().split('\n')[-1].strip()
     return proc.returncode, ans
 
+def schedule_ref_output(p, schedule, j):
+    return os.path.join(p.tune_dir, 'f' + schedule.identity() + '_%d'%j + '.png')
+    
 def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     cache = {}
     best_run_time = [p.run_timeout_default]
@@ -592,17 +601,35 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     (out_w, out_h, out_channels) = scope.get('out_dims', (-1, -1, -1))
     
-    def test_func(scheduleL, constraints, status_callback, timer, save_output=False, ref_output=''):       # FIXME: Handle constraints
+    def test_func(scheduleL, constraints, status_callback, timer, save_output=False, compare_schedule=None):       # FIXME: Handle constraints
         in_image = p.in_image
-        def subprocess_args(schedule, schedule_str, compile=True):
+        assert len(in_image) > 0, 'No input image'
+        do_check = False
+        if p.check_output and compare_schedule is not None:
+            do_check = True
+            ref_output = [schedule_ref_output(p, compare_schedule, j) for j in range(len(in_image))]
+            #assert len(ref_output) == len(in_image), (len(ref_output), len(in_image))
+        
+        def do_save_output(i):
+            return save_output and i == 0
+            
+        def subprocess_args(i, schedule, schedule_str, compile=True, j=0, trials=None):
+            if trials is None:
+                trials = p.trials
             binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
             mode_str = 'compile' if compile else 'run'
             
-            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image), '%d'%p.trials, binary_file, str(int(save_output)), (ref_output if p.check_output else ''), str(out_w), str(out_h), str(out_channels)]
+            save_filename = ''
+            if do_save_output(i):
+                save_filename = schedule_ref_output(p, schedule, j)
+                
+            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels)]
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
-                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:9]) + ' '  + ('"' + sh_args[9] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[10:]) + '\n')
+                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:8]) + ' '  +
+                           ('"' + sh_args[8] + '"') + ' ' +
+                           ('"' + sh_args[9] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[10:]) + '\n')
             return (sh_args, binary_file + '.png')
             
         # Compile all schedules in parallel
@@ -614,7 +641,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             schedule = scheduleL[i]
             schedule_str = str(schedule)
 
-            (argL, output) = subprocess_args(schedule, schedule_str, True)
+            (argL, output) = subprocess_args(i, schedule, schedule_str, True)
 
             if schedule_str in cache:
                 return cache[schedule_str]
@@ -645,13 +672,29 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
         
         assert len(compiledL) == len(scheduleL)
         
+        def max_run_time(trials):
+            return best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias+(p.run_save_timeout if save_output else 0.0)
+            
         # Run schedules in serial
         def run_schedule(i):
             status_callback('Run %d/%d'%(i+1,len(scheduleL)))
             schedule = scheduleL[i]
             schedule_str = str(schedule)
             
-            (argL, output) = subprocess_args(schedule, schedule_str, False)
+            T0 = time.time()
+
+            def parse_out_error(out):
+                if res == RUN_LIMIT_TIMEOUT:
+                    return {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': time.time()-T0, 'output': output, 'compile_out': compiled_ans['compile_out']}
+                elif not out.startswith('Success') or len(out.split()) != 2:
+                    code = RUN_FAIL
+                    if out.startswith('RUN_CHECK_FAIL'):
+                        code = RUN_CHECK_FAIL
+                    return {'time': code, 'compile': compiled_ans['compile'], 'run': time.time()-T0, 'output': output, 'compile_out': compiled_ans['compile_out']}
+                return None
+                
+            # Write (as a side-effect) the run script
+            (argL, output) = subprocess_args(i, schedule, schedule_str, False)
 
             if schedule_str in cache:
                 return cache[schedule_str]
@@ -659,23 +702,25 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             compiled_ans = compiledL[i]
             if get_error_str(compiled_ans['time']) is not None:
                 return compiled_ans
+
+            # Check the list of input images against their reference outputs (if provided)
+            if do_check or do_save_output(i):
+                for j in range(1, len(in_image)):
+                    (argL, output) = subprocess_args(i, schedule, schedule_str, False, j, 1)
+                    res,out = autotune_child(argL[2:], max_run_time(1))
+                    ans = parse_out_error(out)
+                    if ans is not None:
+                        return ans
                 
-            T0 = time.time()
             #res,out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias, last_line=True)
-            res,out = autotune_child(argL[2:], best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias+(p.run_save_timeout if save_output else 0.0))
-            Trun = time.time()-T0
+            (argL, output) = subprocess_args(i, schedule, schedule_str, False)
+            res,out = autotune_child(argL[2:], max_run_time(p.trials))
             
-            if res == RUN_LIMIT_TIMEOUT:
-                ans = {'time': RUN_TIMEOUT, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output, 'compile_out': compiled_ans['compile_out']}
-            elif not out.startswith('Success') or len(out.split()) != 2:
-                code = RUN_FAIL
-                if out.startswith('RUN_CHECK_FAIL'):
-                    code = RUN_CHECK_FAIL
-                ans = {'time': code, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output, 'compile_out': compiled_ans['compile_out']}
-            else:
+            ans = parse_out_error(out)
+            if ans is None:
                 T = float(out.split()[1])
                 best_run_time[0] = min(best_run_time[0], T)
-                ans = {'time': T, 'compile': compiled_ans['compile'], 'run': Trun, 'output': output, 'compile_out': compiled_ans['compile_out']}
+                ans = {'time': T, 'compile': compiled_ans['compile'], 'run': time.time()-T0, 'output': output, 'compile_out': compiled_ans['compile_out']}
                         
             timer.run_time = timer_run + time.time() - Tbegin_run
             
@@ -776,22 +821,23 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         
     # Time default schedules and obtain reference output image
     timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, True)
-    ref_output = ''
+    #ref_output = ''
     ref_log = '-'*40 + '\nDefault Schedules\n' + '-'*40 + '\n'
+    compare_schedule = currentL[0]
     for j in range(len(timeL)):
         timev = timeL[j]['time']
         current = currentL[j]
         current_output = timeL[j]['output']
-        if os.path.exists(current_output):
-            ref_output = current_output
+        #if os.path.exists(current_output):
+        #    ref_output = current_output
         line_out = '%s %s'%(format_time(timev), current.oneline())
         print line_out
         ref_log += line_out + '\n'
     print
     log_sched(p, None, ref_log, filename=p.summary_file)
     
-    if ref_output == '':
-        raise ValueError('No reference output')
+    #if ref_output == '':
+    #    raise ValueError('No reference output')
 #    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
 #    print timeL
 #    sys.exit(1)
@@ -805,7 +851,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         #currentL.append(constraints.constrain(Schedule.fromstring(out_func, 'blur_x_blurUInt16.chunk(x_blurUInt16)\nblur_y_blurUInt16.root().vectorize(x_blurUInt16,16)', 'bad_schedule', gen, len(currentL))))
         check_schedules(currentL)
         
-        timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, ref_output=ref_output)
+        timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, compare_schedule=compare_schedule)
         
         bothL = sorted([(timeL[i]['time'], currentL[i]) for i in range(len(timeL))])
         display_text = '\n' + '-'*40 + '\n'
@@ -853,9 +899,10 @@ def autotune_child(args, timeout=None):
     rest = args[1:]
     if len(rest) != 10:
         raise ValueError('expected 10 args after autotune_*_child')
-    (filter_func_name, schedule_str, in_image, trials, binary_file, save_output, ref_output, out_w, out_h, out_channels) = rest
+    (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels) = rest
+
     trials = int(trials)
-    save_output = int(save_output)
+    #save_output = int(save_output)
     out_w = int(out_w)
     out_h = int(out_h)
     out_channels = int(out_channels)
@@ -901,9 +948,9 @@ def autotune_child(args, timeout=None):
             'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 -filetype=obj -o %(func_name)s.o' % locals()
         )
 
-        save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
+        #save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
         #shutil.copyfile(default_runner, working)
-        compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s %(save_output_str)s-DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread %(png_flags)s'
+        compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread %(png_flags)s'
         compile_command = compile_command % locals()
         print compile_command
         try:
@@ -916,7 +963,7 @@ def autotune_child(args, timeout=None):
         #return
 
     if args[0] in ['autotune_run_child', 'autotune_compile_run_child']:
-        run_command = './%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d'
+        run_command = './%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d "%(save_filename)s"'
         run_command = run_command % locals()
         print 'Testing: %s' % run_command
 

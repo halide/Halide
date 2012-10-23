@@ -17,7 +17,7 @@ ext_modules = [Extension("_cHalide", ["cHalide_wrap.cxx", 'py_util.cpp', 'enviro
                          extra_link_args=['../cpp_bindings/libHalide.a', '-lpthread', '-ldl', '-lstdc++', '-lc']+png_ldflags.split(),
                          language='c++')]
 
-for (infile, outfile) in [('apollo2.jpg', 'apollo2.png'), ('apollo3.jpg', 'apollo3.png'), ('apollo3_gray.jpg', 'apollo3_gray.png')]:
+for (infile, outfile) in [('apollo2.jpg', 'apollo2.png'), ('apollo3.jpg', 'apollo3.png'), ('apollo3_gray.jpg', 'apollo3_gray.png'), ('coyote2.jpg', 'coyote2.png'), ('bird.jpg', 'bird.png')]:
   if not os.path.exists(outfile):
     os.system('convert %s %s' % (infile, outfile))
     if not os.path.exists(outfile):

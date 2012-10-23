@@ -32,7 +32,7 @@ extern "C" {
 using std::string;
 
 static const string usage = "Usage:\n\
-\trunner <test iterations> <input_image.png> [reference_output.png] [w|-1] [h|-1] [channels|-1]";
+\trunner <test iterations> <input_image.png> [reference_output.png] [w|-1] [h|-1] [channels|-1] [save_output.png]";
 
 template<class T>
 bool images_equal(Image<T> &a, Image<T> &b, T eps) {
@@ -65,6 +65,8 @@ int main(int argc, char const *argv[])
     int w        = argc > 4 ? atoi(argv[4]): -1;
     int h        = argc > 5 ? atoi(argv[5]): -1;
     int channels = argc > 6 ? atoi(argv[6]): -1;
+    char const *save_output = argc > 7 ? argv[7]: NULL;
+    
     if (w < 0) { w = input.width(); }
     if (h < 0) { h = input.height(); }
     if (channels < 0) { channels = input.channels(); }
@@ -88,10 +90,11 @@ int main(int argc, char const *argv[])
         if (t < bestT) bestT = t;
     }
 
-    #ifdef SAVE_OUTPUT
     // Saving large PNGs is expensive. Only do it if enabled.
-    save(output, str(TEST_FUNC) ".png");
-    #endif
+    if (save_output != NULL && strcmp(save_output, "") != 0) {
+        save(output, save_output);
+    }
+
     if (has_ref) {
         if (!images_equal<TEST_OUT_T>(ref_output, output, 0.01)) {
             printf("RUN_CHECK_FAIL\n");
