@@ -895,7 +895,8 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         print display_text
         log_sched(p, None, display_text, filename=p.summary_file)
         sys.stdout.flush()
-        autotune_plot.main((p.summary_file, os.path.join(p.tune_dir, p.plot_file)))
+        #autotune_plot.main((os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
+        os.system('python autotune_plot.py "%s" "%s"' % (os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
         currentL = [x[1] for x in bothL]
 
 import inspect
