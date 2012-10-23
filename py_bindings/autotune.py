@@ -1053,13 +1053,14 @@ def main():
         #    rest.extend(['-check_output', '0'])
         exampleL = all_examples if examplename == 'all' else [examplename]
         cores = multiprocessing.cpu_count()
+        hl_numthreads = cores/2
         for examplename in exampleL:
             tune_dir = 'tune_%s'%examplename
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
             if examplename == 'local_laplacian':
                 rest.extend('-cores 1 -compile_timeout 120.0 -generations 200'.split()) #['-cores', '1', '-compile_timeout', '40.0'])
-            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (cores, examplename, tune_dir, ' '.join(rest)))
+            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (hl_numthreads, examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
         import autotune_test
         global use_random_blocksize
