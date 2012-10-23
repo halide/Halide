@@ -75,8 +75,8 @@ def check_ocaml():
         except:
             raise OCamlLibMissingError('%s >= %.1f' % (lib, ver_req))
     
-    assert_lib_version('sexplib', 108)
-    assert_lib_version('batteries', 1.5)
+    assert_lib_version('sexplib', 7.0)
+    assert_lib_version('batteries', 1.4)
     return ocamlbuild
 
 ocamlbuild = None
