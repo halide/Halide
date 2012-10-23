@@ -613,7 +613,7 @@ namespace Halide {
         return v;
     }
 
-    int Func::footprint(const Func& f) const {
+    std::vector<int> Func::footprint(const Func& f) const {
         assert(set_contains(funcs(), f));
         return rhs().footprint(f);
     }

@@ -407,24 +407,15 @@ let footprint_of_func_in_expr fname expr =
     failwith ("Cannot comput footprint of func "
               ^ fname ^ " not directly called in expr "
               ^ (Ir_printer.string_of_expr expr));
-  if List.exists (function Unbounded -> true | _ -> false) region then
-    max_int
-  else
-    let one = IntImm 1 in
-    let region = List.map
-                  (function Range (min,max) -> (min,max)
-                          | Unbounded -> failwith "Computing footprint on unbounded region")
-                  region
-                in
-    let footprint =
-      (List.fold_left
-        (fun cur (min,max) -> cur *~ (constant_fold_expr (max -~ min +~ one)))
-        one
-        region)
-    in
-    match constant_fold_expr footprint with
-    | IntImm x -> x
-    | _ -> max_int
+
+  let footprint = function
+    | Unbounded -> max_int
+    | Range (min, max) ->
+        match constant_fold_expr (max -~ min +~ (IntImm 1)) with
+          | IntImm x -> x
+          | _ -> max_int
+  in
+  List.map footprint region
 
 (* What region of the func is used by the statement *)
 let rec required_of_stmt func env = function
