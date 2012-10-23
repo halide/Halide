@@ -33,7 +33,7 @@ def main():
     y = []
     for (xv, yv) in time_d.items():
         x.append(xv)
-        y.append(yv)
+        y.append(yv*1000)
 
     if out_filename is not None:
         matplotlib.use('Agg')     # headless
@@ -42,7 +42,7 @@ def main():
 
     pylab.plot(x, y)
     pylab.title('Best time vs Generation\n(%s)'%tunedir)
-    pylab.ylabel('Best time [sec]')
+    pylab.ylabel('Best time [ms]')
     pylab.xlabel('Generation')
     if out_filename is not None:
         pylab.savefig(out_filename, dpi=300)
