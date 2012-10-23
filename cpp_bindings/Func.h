@@ -105,6 +105,7 @@ namespace Halide {
         Func &reorder(const Var &, const Var &, const Var &, const Var &);
         Func &reorder(const Var &, const Var &, const Var &, const Var &, const Var &);
         Func &chunk(const Var &);
+        Func &bound(const Var &v, const Expr &min, const Expr &size);
         Func &root();
         Func &parallel(const Var &);
         Func &vectorize(const Var &, int factor);
@@ -130,7 +131,7 @@ namespace Halide {
         std::vector<Func> transitiveFuncs() const;
         std::vector<UniformImage> uniformImages() const;
 
-        int footprint(const Func& f) const;
+        std::vector<int> footprint(const Func& f) const;
 
         // Get the variable defining argument i
         const Var &arg(int i) const;
