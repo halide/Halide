@@ -168,7 +168,8 @@ class AutotuneParams:
                                     # First image is run many times to yield a best timing
     
     summary_file = 'summary.txt'
-    
+    plot_file = 'plot.png'
+
     def __init__(self, argd={}):
         for (key, value) in argd.items():
             if not hasattr(self, key):
@@ -894,7 +895,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         print display_text
         log_sched(p, None, display_text, filename=p.summary_file)
         sys.stdout.flush()
-        
+        autotune_plot.main((p.summary_file, os.path.join(p.tune_dir, p.plot_file)))
         currentL = [x[1] for x in bothL]
 
 import inspect
