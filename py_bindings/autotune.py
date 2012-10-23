@@ -163,7 +163,7 @@ class AutotuneParams:
     tune_dir = None                 # Autotuning output directory or None to use a default directory
     tune_link = None                # Symlink (string) pointing to tune_dir (if available)
     
-    in_image = []                   # List of input images to test (can pass multiple images using -in_image a.png -in_image b.png)
+    in_images = []                  # List of input images to test (can pass multiple images using -in_images a.png:b.png)
                                     # First image is run many times to yield a best timing
     
     summary_file = 'summary.txt'
@@ -172,17 +172,17 @@ class AutotuneParams:
         for (key, value) in argd.items():
             if not hasattr(self, key):
                 raise ValueError('unknown command-line switch %s'%key)
-            if key == 'in_image':
-                self.in_image.append(value)
+            if key == 'in_images':
+                self.in_images = value.split(':')
             elif isinstance(getattr(self, key), str) or key in ['tune_dir', 'tune_link']:
                 setattr(self, key, argd[key])
             else:
                 setattr(self, key, float(argd[key]) if ('.' in value or isinstance(getattr(self, key), float)) else int(argd[key]))
 #        print argd
 #        raise ValueError(self.cores)
-        if len(self.in_image) == 0:
-            self.in_image = [os.path.join(os.path.dirname(os.path.abspath(__file__)), x) for x in
-                             [DEFAULT_IMAGE, 'coyote2' + IMAGE_EXT, 'bird' + IMAGE_EXT]]
+        if len(self.in_images) == 0:
+            self.in_images = [os.path.join(os.path.dirname(os.path.abspath(__file__)), x) for x in
+                              [DEFAULT_IMAGE, 'coyote2' + IMAGE_EXT, 'bird' + IMAGE_EXT]]
             
     def dict_prob_mutate(self):
         start = 'prob_mutate_'
@@ -554,6 +554,7 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
     """
     fout = tempfile.TemporaryFile()
     proc = subprocess.Popen(L, stdout=fout, stderr=fout, shell=shell)
+    pid = proc.pid
     T0 = None
     if time_from_subproc:
         raise NotImplementedError
@@ -571,8 +572,12 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
     status = wait_timeout(proc, timeout, T0, memory_limit)
     if status in RUN_LIMIT_ERRCODES:
         try:
-            proc.kill()
-        except OSError:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+            psutil.Process(pid).kill()
+        except psutil.error.Error:
             pass
         return status, None
 
@@ -600,16 +605,16 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     #signal.signal(signal.SIGCONT, signal_handler)
     
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
-    (out_w, out_h, out_channels) = scope.get('out_dims', (-1, -1, -1))
+    (out_w, out_h, out_channels) = scope.get('tune_out_dims', (-1, -1, -1))
     
     def test_func(scheduleL, constraints, status_callback, timer, save_output=False, compare_schedule=None):       # FIXME: Handle constraints
-        in_image = p.in_image
-        assert len(in_image) > 0, 'No input image'
+        in_images = p.in_images
+        assert len(in_images) > 0, 'No input images'
         do_check = False
         if p.check_output and compare_schedule is not None:
             do_check = True
-            ref_output = [schedule_ref_output(p, compare_schedule, j) for j in range(len(in_image))]
-            #assert len(ref_output) == len(in_image), (len(ref_output), len(in_image))
+            ref_output = [schedule_ref_output(p, compare_schedule, j) for j in range(len(in_images))]
+            #assert len(ref_output) == len(in_images), (len(ref_output), len(in_images))
         
         def do_save_output(i):
             return save_output and i == 0
@@ -624,7 +629,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             if do_save_output(i):
                 save_filename = schedule_ref_output(p, schedule, j)
                 
-            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_image[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels)]
+            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_images[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels)]
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
@@ -706,7 +711,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
 
             # Check the list of input images against their reference outputs (if provided)
             if do_check or do_save_output(i):
-                for j in range(1, len(in_image)):
+                for j in range(1, len(in_images)):
                     (argL, output) = subprocess_args(i, schedule, schedule_str, False, j, 1)
                     res,out = autotune_child(argL[2:], max_run_time(1))
                     ans = parse_out_error(out)
@@ -758,7 +763,7 @@ def check_schedules(currentL):
         if not schedule.check():
             raise ValueError('schedule fails check: %s'%str(schedule))
 
-#def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_image': 'lena_crop2.png'}):
+#def autotune(input, out_func, p, tester=default_tester, tester_kw={'in_images': 'lena_crop2.png'}):
 def call_filter_func(filter_func_name, cache={}):
     if not '(' in filter_func_name:         # Call the function if no parentheses (args) given
         filter_func_name += '()'
@@ -797,8 +802,8 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
 
     random.seed(0)
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
-    if 'in_image' in scope:
-        p.in_image = scope['in_image']
+    if 'in_images' in scope:
+        p.in_images = scope['tune_in_images']
     test_func = tester(input, out_func, p, filter_func_name)
     
     currentL = []
