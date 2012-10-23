@@ -254,9 +254,17 @@ Func process(Func raw, Type result_type,
     Func curved = apply_curve(corrected, result_type, gamma, contrast);
 
     // Schedule
-    Var co, ci; 
-    processed(tx, ty, c) = curved(tx, ty, c);
-    //processed.split(c, co, ci, 3); // bound color loop to 0-3
+    Var co, ci;
+    //#define USE_CI_HACK
+    #ifndef USE_CI_HACK
+    ci = c;
+    #endif
+    processed(tx, ty, c) = curved(tx, ty, ci);
+    #ifdef USE_CI_HACK
+    processed.split(c, co, ci, 3); // bound color loop to 0-3
+    #else
+    processed.bound(c, 0, 3); // bound color loop 0-3, properly
+    #endif
     if (schedule == 0) {
         // Compute in chunks over tiles, vectorized by 8
         denoised.chunk(tx).vectorize(x, 8);
@@ -308,8 +316,8 @@ int main(int argc, char **argv) {
     // Build the pipeline
     Func processed = process(shifted, result_type, matrix_3200, matrix_7000, color_temp, gamma, contrast);
 
-    string s = processed.serialize();
-    printf("%s\n", s.c_str());
+    //string s = processed.serialize();
+    //printf("%s\n", s.c_str());
 
     // In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
     Func::Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
