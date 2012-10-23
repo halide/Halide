@@ -396,6 +396,12 @@ namespace Halide {
         return *this;
     }
 
+    Func &Func::bound(const Var &v, const Expr &min, const Expr &size) {
+        MLVal t = makeBoundTransform(name(), v.name(), min.node(), size.node());
+        contents->guru = composeFunction(t, contents->guru);
+        return *this;
+    }
+
     Func &Func::root() {
         MLVal t = makeRootTransform(name());
         contents->guru = composeFunction(t, contents->guru);
