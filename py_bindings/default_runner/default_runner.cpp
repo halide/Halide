@@ -63,11 +63,9 @@ int main(int argc, char const *argv[])
     
     timeval t1, t2;
     unsigned int t;
-    gettimeofday(&t1, NULL);
+    
     Image<TEST_IN_T> input = load<TEST_IN_T>(argv[2]);
-    gettimeofday(&t2, NULL);
-    t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-    printf("load time input: %.4f secs\n", t/(1000.0*1000.0));
+        
     int w        = argc > 4 ? atoi(argv[4]): -1;
     int h        = argc > 5 ? atoi(argv[5]): -1;
     int channels = argc > 6 ? atoi(argv[6]): -1;
@@ -81,11 +79,7 @@ int main(int argc, char const *argv[])
     Image<TEST_OUT_T> ref_output(1,1,1);
     bool has_ref = false;
     if (argc > 3 && strcmp(argv[3], "") != 0) {
-        gettimeofday(&t1, NULL);
         ref_output = load<TEST_OUT_T>(argv[3]);
-        gettimeofday(&t2, NULL);
-        t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-        printf("load time output: %.4f secs\n", t/(1000.0*1000.0));
         has_ref = true;
     }
 

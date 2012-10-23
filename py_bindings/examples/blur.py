@@ -34,7 +34,7 @@ def main():
         blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
         blur_x.chunk(x).vectorize(x, 8)
 
-    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo2.png'), disp_time=True)
+    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo2.ppm'), disp_time=True)
     for i in range(5):
         test()
     test().show()
