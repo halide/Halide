@@ -102,7 +102,8 @@ sys.path += ['../util']
 LOG_SCHEDULES = True      # Log all tried schedules (Fail or Success) to a text file
 LOG_SCHEDULE_FILENAME = 'log_schedule.txt'
 AUTOTUNE_VERBOSE = False #True #False #True
-DEFAULT_IMAGE = 'apollo3.png'
+IMAGE_EXT = '.ppm'
+DEFAULT_IMAGE = 'apollo3' + IMAGE_EXT
 
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
@@ -181,7 +182,7 @@ class AutotuneParams:
 #        raise ValueError(self.cores)
         if len(self.in_image) == 0:
             self.in_image = [os.path.join(os.path.dirname(os.path.abspath(__file__)), x) for x in
-                             [DEFAULT_IMAGE, 'coyote2.png', 'bird.png']]
+                             [DEFAULT_IMAGE, 'coyote2' + IMAGE_EXT, 'bird' + IMAGE_EXT]]
             
     def dict_prob_mutate(self):
         start = 'prob_mutate_'
@@ -582,7 +583,7 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
     return proc.returncode, ans
 
 def schedule_ref_output(p, schedule, j):
-    return os.path.join(p.tune_dir, 'f' + schedule.identity() + '_%d'%j + '.png')
+    return os.path.join(p.tune_dir, 'f' + schedule.identity() + '_%d'%j + IMAGE_EXT)
     
 def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     cache = {}
@@ -630,7 +631,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
                 sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:8]) + ' '  +
                            ('"' + sh_args[8] + '"') + ' ' +
                            ('"' + sh_args[9] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[10:]) + '\n')
-            return (sh_args, binary_file + '.png')
+            return (sh_args, binary_file + IMAGE_EXT)
             
         # Compile all schedules in parallel
         compile_count = [0]
