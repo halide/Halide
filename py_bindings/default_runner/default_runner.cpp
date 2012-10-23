@@ -32,7 +32,7 @@ extern "C" {
 using std::string;
 
 static const string usage = "Usage:\n\
-\trunner <test iterations> <input_image.png> [reference_output.png] [w|-1] [h|-1] [channels|-1]";
+\trunner <test iterations> <input_image.png> [reference_output.png] [w|-1] [h|-1] [channels|-1] [save_output.png]";
 
 template<class T>
 bool images_equal(Image<T> &a, Image<T> &b, T eps) {
@@ -61,34 +61,49 @@ int main(int argc, char const *argv[])
 
     int test_iterations = atoi(argv[1]);
     
+    timeval t1, t2;
+    unsigned int t;
+    gettimeofday(&t1, NULL);
     Image<TEST_IN_T> input = load<TEST_IN_T>(argv[2]);
-    int w        = argc > 4 ? atoi(argv[4]): input.width();
-    int h        = argc > 5 ? atoi(argv[5]): input.height();
-    int channels = argc > 6 ? atoi(argv[6]): input.channels();
-
+    gettimeofday(&t2, NULL);
+    t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
+    printf("load time input: %.4f secs\n", t/(1000.0*1000.0));
+    int w        = argc > 4 ? atoi(argv[4]): -1;
+    int h        = argc > 5 ? atoi(argv[5]): -1;
+    int channels = argc > 6 ? atoi(argv[6]): -1;
+    char const *save_output = argc > 7 ? argv[7]: NULL;
+    
+    if (w < 0) { w = input.width(); }
+    if (h < 0) { h = input.height(); }
+    if (channels < 0) { channels = input.channels(); }
+    
     Image<TEST_OUT_T> output(w, h, channels);
     Image<TEST_OUT_T> ref_output(1,1,1);
     bool has_ref = false;
     if (argc > 3 && strcmp(argv[3], "") != 0) {
+        gettimeofday(&t1, NULL);
         ref_output = load<TEST_OUT_T>(argv[3]);
+        gettimeofday(&t2, NULL);
+        t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
+        printf("load time output: %.4f secs\n", t/(1000.0*1000.0));
         has_ref = true;
     }
 
     // Timing code
-    timeval t1, t2;
     unsigned int bestT = 0xffffffff;
     for (int i = 0; i < test_iterations; i++) {
         gettimeofday(&t1, NULL);
         TEST_FUNC(input, output);
         gettimeofday(&t2, NULL);
-        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
+        t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
         if (t < bestT) bestT = t;
     }
 
-    #ifdef SAVE_OUTPUT
     // Saving large PNGs is expensive. Only do it if enabled.
-    save(output, str(TEST_FUNC) ".png");
-    #endif
+    if (save_output != NULL && strcmp(save_output, "") != 0) {
+        save(output, save_output);
+    }
+
     if (has_ref) {
         if (!images_equal<TEST_OUT_T>(ref_output, output, 0.01)) {
             printf("RUN_CHECK_FAIL\n");

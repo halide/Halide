@@ -39,6 +39,8 @@ namespace Halide {
 
     ML_FUNC1(stringOfExpr);
 
+    ML_FUNC2(footprintOfFuncInExpr);
+
     Expr::Expr() {
     }
 
@@ -190,6 +192,18 @@ namespace Halide {
 
     const std::vector<UniformImage> &Expr::uniformImages() const {
         return contents->uniformImages;
+    }
+
+    std::vector<int> Expr::footprint(const Func& f) const {
+        MLVal fp = footprintOfFuncInExpr(f.name(), contents->node);
+        assert(!listEmpty(fp));
+
+        std::vector<int> footprint;
+        for (MLVal f = listHead(fp); !listEmpty(fp); fp = listTail(fp)) {
+            footprint.push_back(int(f));
+        }
+
+        return footprint;
     }
 
     bool Expr::isDefined() const {

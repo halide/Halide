@@ -20,6 +20,11 @@ namespace Halide {
     MLVal makePair(const MLVal &a, const MLVal &b);
     MLVal makeTriple(const MLVal &a, const MLVal &b, const MLVal &c);
 
+    MLVal listHead(const MLVal &l);
+    MLVal listTail(const MLVal &l);
+    MLVal listEmpty(const MLVal &l);
+    MLVal listLength(const MLVal &l);
+
     std::string int_to_str(int);          // Connelly: workaround function for ostringstream << int failing in Python binding
 
     // Make small vectors

@@ -27,11 +27,6 @@ namespace Halide {
     ML_FUNC1(callTypeIsExtern)
     ML_FUNC1(callTypeIsImage)
 
-    ML_FUNC1(listHead)
-    ML_FUNC1(listTail)
-    ML_FUNC1(listEmpty)
-    ML_FUNC1(listLength)
-
     // Mirror helpers for unpacking `definitions` from the deserialized environment.
     // Yes, this is ugly at this point. Better ideas (short of adding dozens of
     // accessor callback helpers to halide_cpp.ml) are welcome.

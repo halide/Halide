@@ -487,6 +487,14 @@ class Schedule:
         self.index = index
         self.identity_str = identity_str
 
+    def oneline(self):
+        "One line description for display."
+        ans = str(self).replace('\n','\\n')
+        maxlen = 100
+        if len(ans) > maxlen:
+            ans = ans[:maxlen-3] + '...'
+        return "'" + ans + "'"
+
     def check(self):
         for x in self.d.values():
             if not x.check():
@@ -514,7 +522,7 @@ class Schedule:
     def identity(self):
         #print self.generation
         #print self.index
-        return '%02d_%03d'%(self.generation,self.index) if self.identity_str is None else self.identity_str
+        return '%03d_%03d'%(self.generation,self.index) if self.identity_str is None else self.identity_str
     #def hash(self):
     #    return md5.md5(str(self)).hexdigest()[:10]
         
@@ -530,7 +538,7 @@ class Schedule:
             ans.extend(x.new_vars())
         return list(sorted(set(ans)))
 
-    def apply(self, constraints, verbose=False):   # Apply schedule
+    def apply(self, constraints=None, verbose=False):   # Apply schedule
         #return
         #verbose = True
         #print 'apply schedule:'
@@ -549,7 +557,7 @@ class Schedule:
             name = f.name()
             if verbose:
                 print 'apply, name', name, constraints
-            if name in constraints.exclude_names:
+            if constraints is not None and name in constraints.exclude_names:
                 if verbose:
                     print '  constrained, skipping'
                 return
@@ -602,6 +610,8 @@ class Schedule:
                 raise ValueError(s)
             dot = line.index('.')
             name = line[:dot]
+            if name in d:
+                raise KeyError('duplicate func %r in schedule' % name)
             d[name] = FragmentList.fromstring(all_funcs[name], line)
         
         ans = {}

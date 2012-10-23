@@ -1,4 +1,7 @@
-all: cHalide.i #halide.pyx #environ_fix
+all: cHalide_wrap.cxx #halide.pyx #environ_fix
+
+cHalide_wrap.cxx: cHalide.i ../cpp_bindings/*.cpp ../cpp_bindings/*.h ../src/*.ml py_util.cpp environ_fix.cpp py_util.h environ_fix.h expand_types.h
+	cd ../cpp_bindings; make
 	swig -c++ -python -I../cpp_bindings cHalide.i
 	CXX=g++ CC=g++ python setup.py build_ext --inplace
 #	python setup.py build_ext --inplace
@@ -12,3 +15,7 @@ clean:
 	rm halide.so
 	rm _cHalide.so
 	rm apollo*.jpg
+
+test:
+	python -c "import halide, autotune; halide.test(); autotune.test()"
+
