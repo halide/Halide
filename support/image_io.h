@@ -10,6 +10,7 @@
 #include <png.h>
 #include <string>
 #include <stdio.h>
+#include <algorithm>
 
 //#include <sys/time.h>
 
