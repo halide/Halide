@@ -194,9 +194,16 @@ namespace Halide {
         return contents->uniformImages;
     }
 
-    int Expr::footprint(const Func& f) const {
-        MLVal footprint = footprintOfFuncInExpr(f.name(), contents->node);
-        return int(footprint);
+    std::vector<int> Expr::footprint(const Func& f) const {
+        MLVal fp = footprintOfFuncInExpr(f.name(), contents->node);
+        assert(!listEmpty(fp));
+
+        std::vector<int> footprint;
+        for (MLVal f = listHead(fp); !listEmpty(fp); fp = listTail(fp)) {
+            footprint.push_back(int(f));
+        }
+
+        return footprint;
     }
 
     bool Expr::isDefined() const {
