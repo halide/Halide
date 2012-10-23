@@ -324,9 +324,9 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
 
     processed = process(shifted, matrix_3200, matrix_7000, color_temp, gamma, contrast)
 
-    # "Magic variables" that are interpreted by the runner
-    out_dims = OUT_DIMS
-    in_image = [os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png')]
+    # Special tuning variables interpreted by the autotuner
+    tune_out_dims = OUT_DIMS
+    tune_in_image = [os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png')]
 
     if schedule == 2:
         # Autotuned schedule
