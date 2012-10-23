@@ -158,7 +158,8 @@ class AutotuneParams:
 
     check_output = True
     
-    cores = None   # Number of processes to use simultaneously for parallel compile (None defaults to number of virtual cores)
+    compile_threads = None          # Number of processes to use simultaneously for parallel compile (None defaults to number of virtual/hyperthreaded cores)
+    hl_threads = None               # Passed in as HL_NUMTHREADS (None defaults to HL_NUMTHREADS if set or else number of virtual/hyperthreaded cores divided by 2)
 
     tune_dir = None                 # Autotuning output directory or None to use a default directory
     tune_link = None                # Symlink (string) pointing to tune_dir (if available)
@@ -183,7 +184,13 @@ class AutotuneParams:
         if len(self.in_images) == 0:
             self.in_images = [os.path.join(os.path.dirname(os.path.abspath(__file__)), x) for x in
                               [DEFAULT_IMAGE, 'coyote2' + IMAGE_EXT, 'bird' + IMAGE_EXT]]
-            
+        if self.compile_threads is None:
+            self.compile_threads = multiprocessing.cpu_count()
+        if self.hl_threads is None:
+            if 'HL_NUMTHREADS' in os.environ:
+                self.hl_threads = int(os.environ['HL_NUMTHREADS'])
+            self.hl_threads = multiprocessing.cpu_count() / 2
+
     def dict_prob_mutate(self):
         start = 'prob_mutate_'
         return dict([(key[len(start):], getattr(self, key)) for key in dir(self) if key.startswith(start)])
@@ -439,7 +446,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text='', sa
     #Tcompile = [0.0]
     #Trun = [0.0]
     def status_callback(msg):
-        stats_str = 'compile time=%d secs, run time=%d secs, total=%d secs'%(timer.compile_time, timer.run_time, time.time()-timer.start_time)
+        stats_str = 'compile time=%d secs, run time=%d secs, total=%d secs, compile_threads=%d, hl_threads=%d'%(timer.compile_time, timer.run_time, time.time()-timer.start_time, p.compile_threads, p.hl_threads)
         sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link + ' => %s'%p.tune_dir if p.tune_link else p.tune_dir, display_text))
         sys.stderr.flush()
 
@@ -541,6 +548,24 @@ def get_mem_recurse(pid):
     return ans
     #return sum(x.get_memory_info()[0] for x in L)
 
+def kill_recursive(pid, timeout=1.0):
+    proc = psutil.Process(pid)
+    T0 = time.time()
+    L = [proc] + proc.get_children(True)
+    while len(L):
+        Lnew = []
+        for x in L:
+            try:
+                x.kill()
+            except psutil.error.NoSuchProcess:
+                pass
+            except psutil.error.Error:
+                Lnew.append(x)
+        L = Lnew
+        if time.time() > T0 + timeout:
+            print 'Could not kill pid %d and children' % pid
+            break
+    
 def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False, memory_limit=None):
     """
     Run shell command in list form, e.g. L=['python', 'autotune.py'], using subprocess.
@@ -571,15 +596,7 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
         #sys.exit(1)
     status = wait_timeout(proc, timeout, T0, memory_limit)
     if status in RUN_LIMIT_ERRCODES:
-        try:
-            try:
-                proc.kill()
-            except OSError:
-                pass
-            psutil.Process(pid).kill()
-        except psutil.error.Error:
-            pass
-        return status, None
+        kill_recursive(proc.pid)
 
     fout.seek(0)
     ans = fout.read()
@@ -594,10 +611,9 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     cache = {}
     best_run_time = [p.run_timeout_default]
 
-    nproc = p.cores
-    if nproc is None:
-        nproc = multiprocessing.cpu_count()
-    
+    nproc = p.compile_threads
+    hl_threads = p.hl_threads
+        
     #def signal_handler(signum, stack_frame):            # SIGCHLD is sent by default when child process terminates
     #    f = open('parent_%d.txt'%random.randrange(1000**2),'wt')
     #    f.write('')
@@ -629,14 +645,15 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             if do_save_output(i):
                 save_filename = schedule_ref_output(p, schedule, j)
                 
-            sh_args = ['python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_images[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels)]
+            sh_args = ['HL_NUMTHREADS=%d'%hl_threads, 'python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_images[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels), str(hl_threads)]
+            sh_line = (' '.join(sh_args[:5]) + ' "' + repr(sh_args[5])[1:-1] + '" ' + ' '.join(sh_args[6:9]) + ' '  +
+                           ('"' + sh_args[9] + '"') + ' ' +
+                           ('"' + sh_args[10] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[11:]) + '\n')
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
-                sh_f.write(' '.join(sh_args[:4]) + ' "' + repr(sh_args[4])[1:-1] + '" ' + ' '.join(sh_args[5:8]) + ' '  +
-                           ('"' + sh_args[8] + '"') + ' ' +
-                           ('"' + sh_args[9] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[10:]) + '\n')
-            return (sh_args, binary_file + IMAGE_EXT)
+                sh_f.write(sh_line)
+            return (sh_args, sh_line, binary_file + IMAGE_EXT)
             
         # Compile all schedules in parallel
         compile_count = [0]
@@ -647,13 +664,13 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             schedule = scheduleL[i]
             schedule_str = str(schedule)
 
-            (argL, output) = subprocess_args(i, schedule, schedule_str, True)
+            (argL, arg_line, output) = subprocess_args(i, schedule, schedule_str, True)
 
             if schedule_str in cache:
                 return cache[schedule_str]
             
             T0 = time.time()
-            res,out = run_limit(argL, p.compile_timeout, last_line=True, memory_limit=p.compile_memory_limit*(1000**2))
+            res,out = run_limit(arg_line, p.compile_timeout, last_line=True, memory_limit=p.compile_memory_limit*(1000**2), shell=True)
             Tcompile = time.time()-T0
             
             timer.compile_time = timer_compile + time.time() - Tbegin_compile
@@ -700,7 +717,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
                 return None
                 
             # Write (as a side-effect) the run script
-            (argL, output) = subprocess_args(i, schedule, schedule_str, False)
+            (argL, arg_line, output) = subprocess_args(i, schedule, schedule_str, False)
 
             if schedule_str in cache:
                 return cache[schedule_str]
@@ -712,15 +729,15 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             # Check the list of input images against their reference outputs (if provided)
             if do_check or do_save_output(i):
                 for j in range(1, len(in_images)):
-                    (argL, output) = subprocess_args(i, schedule, schedule_str, False, j, 1)
-                    res,out = autotune_child(argL[2:], max_run_time(1))
+                    (argL, arg_line, output) = subprocess_args(i, schedule, schedule_str, False, j, 1)
+                    res,out = autotune_child(argL[3:], max_run_time(1))
                     ans = parse_out_error(out)
                     if ans is not None:
                         return ans
                 
             #res,out = run_timeout(subprocess_args(schedule, schedule_str, False), best_run_time[0]*p.run_timeout_mul*p.trials+p.run_timeout_bias, last_line=True)
-            (argL, output) = subprocess_args(i, schedule, schedule_str, False)
-            res,out = autotune_child(argL[2:], max_run_time(p.trials))
+            (argL, arg_line, output) = subprocess_args(i, schedule, schedule_str, False)
+            res,out = autotune_child(argL[3:], max_run_time(p.trials))
             
             ans = parse_out_error(out)
             if ans is None:
@@ -903,15 +920,16 @@ def _ctype_of_type(t):
 
 def autotune_child(args, timeout=None):
     rest = args[1:]
-    if len(rest) != 10:
-        raise ValueError('expected 10 args after autotune_*_child')
-    (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels) = rest
+    if len(rest) != 11:
+        raise ValueError('expected 11 args after autotune_*_child')
+    (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads) = rest
 
     trials = int(trials)
     #save_output = int(save_output)
     out_w = int(out_w)
     out_h = int(out_h)
     out_channels = int(out_channels)
+    hl_threads = int(hl_threads)
     #os.kill(parent_pid, signal.SIGCONT)
     
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
@@ -969,7 +987,7 @@ def autotune_child(args, timeout=None):
         #return
 
     if args[0] in ['autotune_run_child', 'autotune_compile_run_child']:
-        run_command = './%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d "%(save_filename)s"'
+        run_command = 'HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d "%(save_filename)s"'
         run_command = run_command % locals()
         print 'Testing: %s' % run_command
 
@@ -1052,15 +1070,13 @@ def main():
         #if examplename in ['snake', 'bilateral_grid', 'camera_pipe']:
         #    rest.extend(['-check_output', '0'])
         exampleL = all_examples if examplename == 'all' else [examplename]
-        cores = multiprocessing.cpu_count()
-        hl_numthreads = cores/2
         for examplename in exampleL:
             tune_dir = 'tune_%s'%examplename
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
             if examplename == 'local_laplacian':
-                rest.extend('-cores 1 -compile_timeout 120.0 -generations 200'.split()) #['-cores', '1', '-compile_timeout', '40.0'])
-            system('HL_NUMTHREADS=%d python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (hl_numthreads, examplename, tune_dir, ' '.join(rest)))
+                rest.extend('-compile_threads 1 -compile_timeout 120.0 -generations 200'.split()) #['-cores', '1', '-compile_timeout', '40.0'])
+            system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
         import autotune_test
         global use_random_blocksize
