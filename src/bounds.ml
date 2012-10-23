@@ -373,18 +373,50 @@ let region_union a b = match (a, b) with
   | _ -> List.map2 range_union a b
 
 (* What region of func is used by expr with variable ranges in env *)
-let rec required_of_expr func env = function
+let rec required_of_expr_in_env func env = function
   | Call (_, _, f, args) when f = func ->       
-      let required_of_args = List.map (required_of_expr func env) args in
+      let required_of_args = List.map (required_of_expr_in_env func env) args in
       let required_of_call = List.map (fun arg -> bounds_of_expr_in_env env arg) args in
       List.fold_left region_union required_of_call required_of_args
   | Let (n, a, b) ->
-      let required_of_a = required_of_expr func env a in
+      let required_of_a = required_of_expr_in_env func env a in
       let bounds_of_a = bounds_of_expr_in_env env a in
-      let required_of_b = required_of_expr func (StringMap.add n bounds_of_a env) b in
+      let required_of_b = required_of_expr_in_env func (StringMap.add n bounds_of_a env) b in
       region_union required_of_a required_of_b
-  | expr -> fold_children_in_expr (required_of_expr func env) region_union [] expr  
-  
+  | expr -> fold_children_in_expr (required_of_expr_in_env func env) region_union [] expr  
+
+let required_of_expr func expr =
+  required_of_expr_in_env func StringMap.empty expr
+
+(*
+  At this point, we only directly compute a single integer footprint area (in
+  pixels) for the func directly called in the expr. Higher-order values are
+  not computed. This is limited: footprints obviously do not multiply back
+  through a call chain; rather, their regions mostly overlap. Analyzing this
+  properly will probably require:
+
+  - a full function env to trace the call tree
+  - iteratively building up new exprs for the next search with Lets binding
+    the bounds of the variable range from the previous call site
+  - potentially disambiguating shared call variable names for the different
+    functions through the chain?
+*)
+let footprint_of_func_in_expr fname expr =
+  let region = required_of_expr fname expr in
+  if region = [] then
+    failwith ("Cannot comput footprint of func "
+              ^ fname ^ " not directly called in expr "
+              ^ (Ir_printer.string_of_expr expr));
+
+  let footprint = function
+    | Unbounded -> max_int
+    | Range (min, max) ->
+        match constant_fold_expr (max -~ min +~ (IntImm 1)) with
+          | IntImm x -> x
+          | _ -> max_int
+  in
+  List.map footprint region
+
 (* What region of the func is used by the statement *)
 let rec required_of_stmt func env = function
   | For (var, min, size, order, body) ->
@@ -395,16 +427,16 @@ let rec required_of_stmt func env = function
       let subs = subs_expr_in_stmt (Var (val_type_of_expr expr, name)) expr in
       required_of_stmt func env (subs stmt)
       (* TODO: Why doesn't the below work? Does this mean let above is broken too?  
-      let required_of_expr = required_of_expr func env expr in 
+      let required_of_expr_in_env = required_of_expr_in_env func env expr in 
       let bounds_of_expr = bounds_of_expr_in_env env expr in
       let required_of_stmt = required_of_stmt func (StringMap.add name bounds_of_expr env) stmt in
-      region_union required_of_expr required_of_stmt  *)
+      region_union required_of_expr_in_env required_of_stmt  *)
   | Provide (expr, name, args) ->
       (* A provide touches the same things as a similar call *)
       region_union 
-        (required_of_expr func env expr) 
-        (required_of_expr func env (Call (Func, val_type_of_expr expr, name, args)))
-  | stmt -> fold_children_in_stmt (required_of_expr func env) (required_of_stmt func env) region_union stmt
+        (required_of_expr_in_env func env expr) 
+        (required_of_expr_in_env func env (Call (Func, val_type_of_expr expr, name, args)))
+  | stmt -> fold_children_in_stmt (required_of_expr_in_env func env) (required_of_stmt func env) region_union stmt
   
 
         
