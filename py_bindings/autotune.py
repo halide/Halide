@@ -1077,7 +1077,7 @@ def main():
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
             if examplename == 'local_laplacian':
-                rest.extend('-compile_threads 1 -compile_timeout 120.0 -generations 200'.split()) #['-cores', '1', '-compile_timeout', '40.0'])
+                rest = '-compile_threads 4 -compile_timeout 120.0 -generations 200'.split() + rest #['-cores', '1', '-compile_timeout', '40.0'])
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
         import autotune_test
