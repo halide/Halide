@@ -241,8 +241,8 @@ def crossover(a, b, constraints):
         ans = Schedule(a.root_func, d)
         
         try:
-            ans.apply(constraints)       # Apply schedule to determine if crossover invalidated new variables that were referenced
-        except NameError: #, halide.ScheduleError):
+            ans.apply(constraints, check=True)       # Apply schedule to determine if crossover invalidated new variables that were referenced
+        except BadScheduleError: #, halide.ScheduleError):
             continue
 
         return ans
@@ -250,11 +250,11 @@ def crossover(a, b, constraints):
 def mutate(a, p, constraints):
     "Mutate existing schedule using AutotuneParams p."
     a0 = a
-    a = copy.copy(a0)
     extra_caller_vars = []      # FIXME: Implement extra_caller_vars, important for chunk().
     dmutate0 = p.dict_prob_mutate()
     
     while True:
+        a = copy.copy(a0)
 #        for name in a.d.keys():
 #            if random.random() < p.mutation_rate:
         name = random.choice(a.d.keys())
@@ -284,7 +284,7 @@ def mutate(a, p, constraints):
             elif mode == 'add':
                 assert len(a.d[name]) < p.max_depth
                 #raise NotImplementedError
-                a.d[name] = a.d[name].added(a.root_func, extra_caller_vars)
+                a.d[name] = a.d[name].added(a.root_func, extra_caller_vars, a)
                 a.genomelog = 'mutate_add(%s)'%a0.identity()
             elif mode == 'remove':
                 assert len(a.d[name]) > p.min_depth
@@ -293,7 +293,7 @@ def mutate(a, p, constraints):
                 a.genomelog = 'mutate_remove(%s)'%a0.identity()
             elif mode == 'edit':
 #                        raise NotImplementedError
-                a.d[name] = a.d[name].edited(a.root_func, extra_caller_vars)
+                a.d[name] = a.d[name].edited(a.root_func, extra_caller_vars, a)
                 a.genomelog = 'mutate_edit(%s)'%a0.identity()
             elif mode == 'template':
                 s = autotune_template.sample(halide.func_varlist(a.d[name].func)) # TODO: Use parent variables if chunk...
@@ -310,8 +310,8 @@ def mutate(a, p, constraints):
             
         try:
             #print 'Mutated schedule:' + '\n' + '-'*40 + '\n' + str(a) + '\n' + '-' * 40 + '\n'
-            a.apply(constraints)       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
-        except NameError:#, halide.ScheduleError):
+            a.apply(constraints, check=True)       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
+        except BadScheduleError:#, halide.ScheduleError):
             continue
         return a
 
@@ -598,7 +598,8 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
     status = wait_timeout(proc, timeout, T0, memory_limit)
     if status in RUN_LIMIT_ERRCODES:
         kill_recursive(proc.pid)
-
+        return status, ''
+        
     fout.seek(0)
     ans = fout.read()
     if last_line:
@@ -1053,6 +1054,7 @@ def root_all_str(f):
 def test():
     import autotune_test
     autotune_test.test()
+    test_valid_schedules()
     
 def main():
     (args, argd) = parse_args()

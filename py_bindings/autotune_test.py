@@ -161,18 +161,19 @@ def test_schedules(verbose=False, test_random=False):
 #    
 #    for L in sorted(validL):
 #        print repr(L)
+    partial_schedule = Schedule.fromstring(g, '')
     T0 = time.time()
     if not test_random:
         random = True #False
         nvalid_determ = 0
-        for L in schedules_func(g, f, 0, 3):
+        for L in schedules_func(g, f, 0, 3, partial_schedule=partial_schedule):
             nvalid_determ += 1
             if verbose:
                 print L
 
     nvalid_random = 0
     for i in range(100):
-        for L in schedules_func(g, f, 0, DEFAULT_MAX_DEPTH, random=True): #sorted([repr(_x) for _x in valid_schedules(g, f, 3)]):
+        for L in schedules_func(g, f, 0, DEFAULT_MAX_DEPTH, random=True, partial_schedule=partial_schedule): #sorted([repr(_x) for _x in valid_schedules(g, f, 3)]):
             if verbose and 0:
                 print L#repr(L)
             nvalid_random += 1
