@@ -828,13 +828,20 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
     currentL = []
     for (iseed, seed) in enumerate(seed_scheduleL):
         currentL.append(constraints.constrain(Schedule.fromstring(out_func, seed, 'seed(%d)'%iseed, 0, iseed)))
+
+    if len(seed_scheduleL) == 0:
+        currentL.append(constraints.constrain(Schedule.fromstring(out_func, '', 'seed(0)', 0, 0)))
+
+    nref = 0
+    for (ref_name, ref_schedule_str) in scope.get('tune_ref_schedules', {}).items():
+        currentL.append(constraints.constrain(Schedule.fromstring(out_func, ref_schedule_str, ref_name, 0, len(currentL))))
+        nref += 1
+
         #print 'seed_schedule new_vars', seed_schedule.new_vars()
 #        currentL.append(seed_schedule)
 #        currentL.append(Schedule.fromstring(out_func, ''))
 #        currentL.
-    if len(seed_scheduleL) == 0:
-        currentL.append(constraints.constrain(Schedule.fromstring(out_func, '', 'seed(0)', 0, 0)))
-    display_text = '\nTiming default schedules and obtaining reference output image\n'
+    display_text = '\nTiming reference schedules and obtaining reference output image\n'
     check_schedules(currentL)
     
     def format_time(timev):
@@ -844,10 +851,10 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
             current_s = '%17s'%e
         return current_s
         
-    # Time default schedules and obtain reference output image
+    # Time reference schedules and obtain reference output image for the first schedule
     timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, True)
     #ref_output = ''
-    ref_log = '-'*40 + '\nDefault Schedules\n' + '-'*40 + '\n'
+    ref_log = '-'*40 + '\nReference Schedules\n' + '-'*40 + '\n'
     compare_schedule = currentL[0]
     for j in range(len(timeL)):
         timev = timeL[j]['time']
@@ -855,12 +862,17 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         current_output = timeL[j]['output']
         #if os.path.exists(current_output):
         #    ref_output = current_output
-        line_out = '%s %s'%(format_time(timev), current.oneline())
+        line_out = '%s %12s %s'%(format_time(timev), current.genomelog, current.oneline())
         print line_out
         ref_log += line_out + '\n'
     print
     log_sched(p, None, ref_log, filename=p.summary_file)
     
+    # Keep only the seed schedules for the genetic algorithm
+    assert len(currentL) == len(timeL)
+    nseed = len(currentL)-nref
+    currentL = currentL[:nseed]
+    timeL = timeL[:nseed]
     #if ref_output == '':
     #    raise ValueError('No reference output')
 #    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
@@ -1079,7 +1091,7 @@ def main():
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
             if examplename == 'local_laplacian':
-                rest = '-compile_threads 4 -compile_timeout 120.0 -generations 200'.split() + rest #['-cores', '1', '-compile_timeout', '40.0'])
+                rest = '-compile_threads 1 -compile_timeout 120.0 -generations 200'.split() + rest #['-cores', '1', '-compile_timeout', '40.0'])
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
         import autotune_test
