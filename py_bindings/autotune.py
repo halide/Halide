@@ -842,7 +842,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
 #        currentL.append(Schedule.fromstring(out_func, ''))
 #        currentL.
     display_text = '\nTiming reference schedules and obtaining reference output image\n'
-    check_schedules(currentL)
+    check_schedules(currentL[:len(currentL)-nref])
     
     def format_time(timev):
         current_s = '%17.6f'%timev
