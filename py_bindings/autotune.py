@@ -104,6 +104,7 @@ LOG_SCHEDULE_FILENAME = 'log_schedule.txt'
 AUTOTUNE_VERBOSE = False #True #False #True
 IMAGE_EXT = '.ppm'
 DEFAULT_IMAGE = 'apollo3' + IMAGE_EXT
+DEBUG_CHECKS = True
 
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
@@ -196,6 +197,24 @@ class AutotuneParams:
         start = 'prob_mutate_'
         return dict([(key[len(start):], getattr(self, key)) for key in dir(self) if key.startswith(start)])
 
+def debug_check(f, info=None):
+    if DEBUG_CHECKS:
+        if not f.check(f):
+            print str(f)
+            print info
+            raise ValueError
+        g = Schedule.fromstring(f.root_func, str(f))
+        if not g.check(g):
+            print '-'*40
+            print 'f:'
+            print str(f)
+            print '-'*40
+            print 'g:'
+            print str(g)
+            print '-'*40
+            print info
+            raise ValueError
+
 def sample_prob(d):
     "Randomly sample key from dictionary with probabilities given in values."
     items = d.items()
@@ -245,6 +264,8 @@ def crossover(a, b, constraints):
         except BadScheduleError: #, halide.ScheduleError):
             continue
 
+        debug_check(ans)
+            
         return ans
 
 def mutate(a, p, constraints):
@@ -313,6 +334,9 @@ def mutate(a, p, constraints):
             a.apply(constraints, check=True)       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
         except BadScheduleError:#, halide.ScheduleError):
             continue
+            
+        debug_check(a)
+            
         return a
 
 def select_and_crossover(prevL, p, root_func, constraints):
@@ -326,6 +350,7 @@ def select_and_crossover(prevL, p, root_func, constraints):
         c = mutate(c, p, constraints)
         is_mutated = True
     c.genomelog = 'crossover(%s, %s)'%(a.identity(), b.identity()) + ('' if not is_mutated else '+'+c.genomelog.replace('(-1_-1)', '()'))
+    debug_check(c)
 #    if is_mutated:
 #        c.genomelog = 'XXXX'
 #        c.identity_str = 'XXXXX'
@@ -335,15 +360,18 @@ def select_and_mutate(prevL, p, root_func, constraints):
     a = tournament_select(prevL, p, root_func)
     c = mutate(a, p, constraints)
     #c.genomelog = 'mutate(%s)'%a.identity()
+    debug_check(c)
     return c
 
 def tournament_select(prevL, p, root_func):
     i = random.randrange(p.tournament_size)
     if i >= len(prevL):
-        return random_schedule(root_func, p.min_depth, p.max_depth)
+        ans = random_schedule(root_func, p.min_depth, p.max_depth)
     else:
-        return copy.copy(prevL[i])
-
+        ans = copy.copy(prevL[i])
+    debug_check(ans)
+    return ans
+    
 class Constraints:
     "Constraints([f, g]) excludes f, g from autotuning."
     def __init__(self, exclude=[]):
@@ -378,23 +406,24 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     
     ans = []
     schedule_strs = set()
-    def append_unique(schedule):
+    def append_unique(schedule, mode):
         s = str(schedule).strip()
         if s not in schedule_strs:
             schedule_strs.add(s)
             schedule.generation = generation_idx
             schedule.index = len(ans)
             schedule.identity_str = None
+            debug_check(schedule)
             ans.append(schedule)
         else:
             raise Duplicate
             
     def do_crossover():
-        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints)))
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints)), 'crossover')
     def do_mutated():
-        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints)))
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints)), 'mutated')
     def do_random():
-        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)))
+        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)), 'random')
     def do_until_success(func):
         while True:
             try:
@@ -410,7 +439,7 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
             current = copy.copy(prevL[i])
             if not '(elite copy of' in current.genomelog:
                 current.genomelog += ' (elite copy of %s)' % current.identity() # FIXMEFIXME
-            append_unique(current)
+            append_unique(current, 'elite')
     
     # Normalize probabilities after removing elitism
     P_total = p.prob_pop['crossover'] + p.prob_pop['mutated'] + p.prob_pop['random']
@@ -1182,7 +1211,7 @@ def main():
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nshifted.root()')
-        elif filter_func_name == 'examples.local_laplacian.filter_func':
+        elif filter_func_name in ['examples.local_laplacian.filter_func', 'examples.bilateral_grid.filter_func']:
             seed_scheduleL = []
             seed_scheduleL.append(root_all_str(out_func)) #'clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndownx2.root()\ndownx3.root()\ndownx4.root()\ndownx5.root()\ndowny0.root()\ndowny1.root()\ndowny2.root()\ndowny3.root()\ndowny4.root()\ndowny5.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngPyramid2.root()\ngPyramid3.root()\ngray.root()\ninGPyramid1.root()\ninGPyramid2.root()\ninGPyramid3.root()\nlPyramid0.root()\nlPyramid1.root()\nlPyramid2.root()\noutGPyramid0.root()\noutGPyramid1.root()\noutGPyramid2.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutLPyramid2.root()\noutLPyramid3.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupx2.root()\nupx3.root()\nupx4.root()\nupx5.root()\nupy0.root()\nupy1.root()\nupy2.root()\nupy3.root()\nupy4.root()\nupy5.root()')
             #seed_scheduleL.append('clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndowny0.root()\ndowny1.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngray.root()\ninGPyramid1.root()\nlPyramid0.root()\noutGPyramid0.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupy0.root()\nupy1.root()')
