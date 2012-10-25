@@ -1,4 +1,6 @@
 
+# TODO: Include new added split() or tile() vars in reorder() list
+
 import halide
 import random
 import copy
@@ -71,6 +73,10 @@ class Fragment:
         "Given list of Schedule fragments (applied to a function) returns True if valid else False."
         return default_check(self.__class__, L)
 
+    def var_order(self, prev_order):
+        "Given var (loop) order (list of variable string names) from previous Fragment (or initial var order), get order after this Fragment."
+        return prev_order
+        
 class FragmentVarMixin:
     @staticmethod
     def random_fragment(root_func, func, cls, vars, extra_caller_vars, partial_schedule):
@@ -122,6 +128,9 @@ class FragmentRoot(Fragment):
     def __str__(self):
         return '.root()'
     
+    def var_order(self, prev_order):
+        raise ValueError('var_order called on FragmentRoot()')
+        
 class FragmentVectorize(FragmentBlocksizeMixin,Fragment):
     def randomize_const(self):
         self.value = blocksize_random([2,4,8,16])
@@ -153,6 +162,9 @@ class FragmentChunk(Fragment):
 
     def __str__(self):
         return '.chunk(%s)'%self.var
+
+    def var_order(self, prev_order):
+        raise ValueError('var_order called on FragmentChunk()')
 
 for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk]:
     _cls.fromstring = make_fromstring(_cls)
@@ -198,6 +210,13 @@ class FragmentSplit(FragmentBlocksizeMixin,Fragment):
         return '.split(%s,%s,%s,%d)'%(self.var,self.var if     self.reuse_outer else self.newvar,
                                                self.var if not self.reuse_outer else self.newvar, self.value)
 
+    def var_order(self, prev_order):
+        try:
+            i = prev_order.index(self.var)
+        except ValueError:
+            raise BadScheduleError
+        return prev_order[:i] + [self.var, self.newvar] + prev_order[i+1:]
+        
 class FragmentTile(FragmentBlocksizeMixin,Fragment):
     def __init__(self, xvar=None, yvar=None, newvar=None, vars=None, xnewvar=None, ynewvar=None, xsize=None, ysize=None):
         self.xvar=xvar
@@ -244,6 +263,14 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
     def __str__(self):
         return '.tile(%s,%s,%s,%s,%d,%d)'%(self.xvar,self.yvar,self.xnewvar,self.ynewvar,self.xsize,self.ysize)
 
+    def var_order(self, prev_order):
+        try:
+            i = prev_order.index(self.xvar)
+        except ValueError:
+            raise BadScheduleError
+        assert i+1 < len(prev_order), (i, self.xvar, prev_order)
+        return prev_order[:i] + [self.xnewvar, self.ynewvar, self.xvar, self.yvar] + prev_order[i+2:]
+
 class FragmentReorder(Fragment):
     # Actually calls Func.reorder()
     def __init__(self, vars=None, idx=None, perm=None):
@@ -283,6 +310,16 @@ class FragmentReorder(Fragment):
         #return ans
         return '.reorder(' + ','.join(v for v in self.permutation) + ')'
 
+    def var_order(self, prev_order):
+        order = list(prev_order)
+        try:
+            indices = sorted([order.index(self.permutation[j]) for j in range(len(self.permutation))])
+        except ValueError:
+            raise BadScheduleError
+        for (iperm, i) in enumerate(indices):
+            order[i] = self.permutation[iperm]
+        return order
+
 fragment_classes = [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentReorder]
 fragment_map = {'root': FragmentRoot,
                 'vectorize': FragmentVectorize,
@@ -313,6 +350,16 @@ class FragmentList(list):
     def __init__(self, func, L):
         self.func = func
         list.__init__(self, L)
+    
+    def var_order(self):
+        "Variable order assuming we are root."
+        ans = halide.func_varlist(self.func)
+        #print 'FragmentList', self
+        #print 'var_order(FragmentList)', ans
+        for item in self[1:]:
+            ans = item.var_order(ans)
+            #print 'var_order(update)', ans
+        return ans
         
     def __str__(self):
         #print '__str__', list(self)
@@ -378,9 +425,10 @@ class FragmentList(list):
         for j in range(MUTATE_TRIES):
             L = copy.copy(list(self))
             i = random.randrange(len(L)+1-delta)
-            all_vars = list(vars)
-            for fragment in L[:i]:
-                all_vars.extend(fragment.new_vars())
+            #all_vars = list(vars)
+            #for fragment in L[:i]:
+            #    all_vars.extend(fragment.new_vars())
+            all_vars = FragmentList(self.func, L[:i]).var_order()
             L[i:i+delta] = [valid_random_fragment(root_func, self.func, all_vars, extra_caller_vars, partial_schedule)]
             ans = FragmentList(self.func, L)
 #            print ans, ans.check()
@@ -445,9 +493,10 @@ def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_v
             #print 'schedules_depth recurses', L
             if not L.check():
                 continue
-            all_vars = list(vars)
-            for fragment in L:
-                all_vars.extend(fragment.new_vars())
+            #all_vars = list(vars)
+            #for fragment in L:
+            #    all_vars.extend(fragment.new_vars())
+            all_vars = FragmentList(func, L).var_order()
             for cls in randomized(fragment_classes):
                 #print 'all_vars', all_vars
                 fragment = cls.random_fragment(root_func, func, cls, all_vars, extra_caller_vars, partial_schedule)
@@ -511,6 +560,7 @@ class Schedule:
         return "'" + ans + "'"
 
     def check(self, partial_schedule=None):
+        #print 'check', self
         for x in self.d.values():
             if not x.check(partial_schedule):
                 return False
@@ -724,8 +774,114 @@ def test_dfs():
     assert dfs([(1,2),(2,3),(4,5),(1,5),(5,6),(4,5)],1) == set([1, 2, 3, 5, 6])
     assert dfs([(1,2),(2,3),(4,5),(5,6),(3,4)],1) == set([1, 2, 3, 4, 5, 6])
     print 'valid_schedules.dfs:        OK'
+
+def callers(root_func):
+    "Returns dict mapping func name f => list of all func names calling f."
+    d = {}
+    def callback(f, fparent):
+        d.setdefault(f.name(), [])
+        if fparent is not None:
+            d[f.name()].append(fparent.name())
+    halide.visit_funcs(root_func, callback, all_calls=True)
+    return d
+
+def toposort(data):
+    data = dict((a, set(b)) for (a, b) in data.items())
     
+    for k, v in data.items():
+        v.discard(k)
+        
+    extras = reduce(set.union, data.values(), set()) - set(data.keys())
+    data.update({x:set() for x in extras})
+    
+    ans = []
+    while True:
+        ordered = set(x for (x,dep) in data.items() if not dep)
+        if len(ordered) == 0:
+            break
+        ans.extend(sorted(ordered))
+        data = {x: (dep - ordered) for (x,dep) in data.items() if x not in ordered}
+    return ans
+    
+def test_toposort():
+    h2 = simple_program()
+    d = callers(h2)
+
+    #chunk_vars(Schedule.fromstring(h2,''), h2)
+
+    assert toposort(d) == ['c_valid_h2', 'c_valid_h', 'c_valid_g', 'c_valid_f']
+    
+    f = halide.Func('c_valid2_f')
+    g = halide.Func('c_valid2_g')
+    root = halide.Func('c_valid2_root')
+    h1 = halide.Func('c_valid2_h1')
+    h2 = halide.Func('c_valid2_h2')
+    h3 = halide.Func('c_valid2_h3')
+    x, y = halide.Var('c_valid2_x'), halide.Var('c_valid2_y')
+
+    f[x,y]=x+y
+    g[x,y]=f[x,y]
+    h1[x,y]=f[x,y]+f[x,y]
+    h2[x,y]=h1[x,y]
+    h3[x,y]=h2[x,y]
+    root[x,y]=g[x,y]+h3[x,y]+g[x,y]
+
+    #chunk_vars(Schedule.fromstring(root,''), root)
+    
+    assert toposort(callers(root)) == ['c_valid2_root', 'c_valid2_g', 'c_valid2_h3', 'c_valid2_h2', 'c_valid2_h1', 'c_valid2_f']
+    assert toposort(callers(f)) == ['c_valid2_f']
+    assert toposort(callers(g)) == ['c_valid2_g', 'c_valid2_f']
+    
+    print 'valid_schedules.toposort:   OK'
+
 def chunk_vars(schedule, func, remove_inline=False):
+    d_stack = {}      # Map f name to stack (loop ordering) of variable names
+    d_callers = callers(schedule.root_func)
+    d_func = halide.all_funcs(schedule.root_func)
+    
+    for fname in toposort(d_callers):
+        if len(d_callers[fname]) == 0:                      # Root function (no callers) is implicitly root()
+            fragment = schedule.d[fname] if fname in schedule.d else FragmentList(d_func[fname], [])
+            d_stack[fname] = fragment.var_order()
+        else:
+            stackL = []                         # Allowed chunk variables of each caller-callee pair (intersect these)
+            for fparent in d_callers[fname]:
+                assert fparent in d_stack
+                stack = list(d_stack[fparent])
+                L = schedule.d[fparent]
+                if len(L) == 0:
+                    pass        # No stack changes
+                elif isinstance(L[0], FragmentRoot):
+                    stack = L.var_order()
+                elif isinstance(L[0], FragmentChunk):
+                    #print 'schedule', schedule
+                    #print 'f', fname, 'fparent', fparent
+                    #print 'L', L
+                    order = halide.func_varlist(L.func)         # FIXME: reorder() should really be able to reorder the caller variables if chunked...
+                    #print 'initial order', order
+                    for fragment in L[1:]:
+                        order = fragment.var_order(order)
+                        #print 'update order', order
+                    try:
+                        i = len(stack)-1 - stack[::-1].index(L[0].var)
+                    except ValueError:
+                        raise BadScheduleError
+                    stack = stack[:i+1]
+                    stack.extend(order)
+                else:
+                    raise ValueError((fname, fparent))
+                stackL.append(set(stack))
+            d_stack[fname] = sorted(reduce(set.intersection, stackL))
+        if fname == func.name():
+            return d_stack[fname]
+    raise ValueError
+        #stack[fname] = 1
+        #print 'callers', fname, d_callers[fname]
+        # Need to implement: reorder(), split(), tile(), stack popping
+        
+    
+# Bad algorithm for determining chunk vars
+def chunk_vars_removed(schedule, func, remove_inline=False):
     "Given partially completed schedule and func, return list of var names that func can chunk over."
     if remove_inline:
         schedule.d = dict(x for x in schedule.d.items() if len(x[0]))
@@ -765,6 +921,38 @@ def chunk_vars(schedule, func, remove_inline=False):
     
     return list(sorted(ans))
 
+def simple_program(cache=[]):
+    if len(cache):
+        return cache[0]
+    f = halide.Func('c_valid_f')
+    g = halide.Func('c_valid_g')
+    h = halide.Func('c_valid_h')
+    h2 = halide.Func('c_valid_h2')
+    x, y = halide.Var('c_valid_x'), halide.Var('c_valid_y')
+
+    # f callers: g, h2
+    # g callers: h, h2
+    # h callers: h2
+    # h2 callers: []
+    f[x,y]=x+y
+    g[x,y]=f[x,y]+f[x,y]
+    h[x,y]=g[x,y]
+    h2[x,y]=g[x,y]+f[x,y]+h[x,y]+g[x,y]
+    
+    cache.append(h2)
+    return h2
+    
+def test_callers():
+    h2 = simple_program()
+    
+    def filtname(s):
+        return s[len('c_valid_'):]
+        
+    d = dict((filtname(x), sorted([filtname(z) for z in y])) for (x, y) in callers(h2).items())
+    assert d == {'h': ['h2'], 'g': ['h', 'h2'], 'f': ['g', 'h2'], 'h2': []}
+
+    print 'valid_schedules.callers:    OK'
+    
 def test_chunk_vars():
     f = halide.Func('valid_f')
     g = halide.Func('valid_g')
@@ -775,18 +963,23 @@ def test_chunk_vars():
     g[x,y]=f[x,y]
     h[x,y]=g[x,y]
     for remove_inline in [False, True]:
+        #print chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().tile(valid_x,valid_y,_c2,_c3,8,8)'), f, remove_inline)
+        #sys.exit(1)
+        
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root()'), f, remove_inline) == ['valid_x', 'valid_y']
-        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(x,y,_c0,_c1,8,8)'), f, remove_inline) == ['_c0', '_c1', 'valid_x', 'valid_y']
-        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(x,x,_c0,8)'), f, remove_inline) == ['_c0', 'valid_x', 'valid_y']
-        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(x,x,_c0,8)\nvalid_g.chunk(y)'), f, remove_inline) == ['_c0', 'valid_x', 'valid_y']
-        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(x,y,_c0,_c1,8,8)\nvalid_g.root()'), f, remove_inline) == ['valid_x', 'valid_y']
-        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(x,y,_c0,_c1,8,8)\nvalid_g.root().tile(x,y,_c2,_c3,8,8)'), f, remove_inline) == ['_c2', '_c3', 'valid_x', 'valid_y']
-        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(x,y,_c0,_c1,8,8)\nvalid_g.root().parallel(valid_y)'), f, remove_inline) == ['valid_x', 'valid_y']
+        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)'), f, remove_inline) == ['_c0', '_c1', 'valid_x', 'valid_y']
+        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)'), f, remove_inline) == ['_c0', 'valid_x', 'valid_y']
+        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)\nvalid_g.chunk(valid_y)'), f, remove_inline) == ['_c0', 'valid_x', 'valid_y']
+        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root()'), f, remove_inline) == ['valid_x', 'valid_y']
+        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().tile(valid_x,valid_y,_c2,_c3,8,8)'), f, remove_inline) == ['_c2', '_c3', 'valid_x', 'valid_y']
+        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().parallel(valid_y)'), f, remove_inline) == ['valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, ''), f, remove_inline) == ['valid_x', 'valid_y']
     print 'valid_schedules.chunk_vars: OK'
 
 def test_valid_schedules():
     test_dfs()
+    test_callers()
+    test_toposort()
     test_chunk_vars()
     
 if __name__ == '__main__':
