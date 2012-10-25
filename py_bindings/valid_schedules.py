@@ -931,34 +931,43 @@ def chunk_vars(schedule, func, remove_inline=False):
         else:
             stackL = []                         # Allowed chunk variables of each caller-callee pair (intersect these)
             for fparent in d_callers[fname]:
+                #print fname, fparent
                 assert fparent in d_stack
                 stack = list(d_stack[fparent])
-                L = schedule.d[fparent] if fparent in schedule.d else FragmentList(d_func[fparent], [])
+                #print '  parent stack:', stack
+                #L = schedule.d[fparent] if fparent in schedule.d else FragmentList(d_func[fparent], [])
+                L = schedule.d[fname] if fname in schedule.d else FragmentList(d_func[fname], [])
                 if len(L) == 0:
+                    #print '  inline, no stack changes'
                     pass        # No stack changes
                 elif isinstance(L[0], FragmentRoot):
                     stack = L.var_order()
+                    #print '  root, stack order=', stack
                 elif isinstance(L[0], FragmentChunk):
-                    #print 'schedule', schedule
-                    #print 'f', fname, 'fparent', fparent
-                    #print 'L', L
-                    order = list(reversed(halide.func_varlist(L.func)))         # FIXME: reorder() should really be able to reorder the caller variables if chunked...
-                    #print 'initial order', order
+                    #print '  chunk'
+                    #print '  schedule', repr(schedule)
+                    #print '  L', L
+                    order = list(reversed(halide.func_varlist(L.func)))         # FIXME: can reorder() reorder the caller variables?
+                    #print '  initial order', order
                     for fragment in L[1:]:
                         order = fragment.var_order(order)
-                        #print 'update order', order
+                        #print '  update order', order
                     try:
                         i = len(stack)-1 - stack[::-1].index(L[0].var)
                     except ValueError:
                         raise BadScheduleError
                     stack = stack[:i+1]
                     stack.extend(order)
+                    #print '  result stack', stack
                 else:
                     raise ValueError((fname, fparent, L[0]))
                 stackL.append(set(stack))
-            d_stack[fname] = sorted(reduce(set.intersection, stackL))
+            d_stack[fname] = list(stackL[0]) #sorted(reduce(set.intersection, stackL))        # FIXME: Not clear how to intersect two stacks...
+            #print 'final stack:', d_stack[fname]
+            #print '-'*20
+            #print
         if fname == func.name():
-            return d_stack[fname]
+            return sorted(set(d_stack[fname]))
     raise ValueError
         #stack[fname] = 1
         #print 'callers', fname, d_callers[fname]
@@ -1054,9 +1063,11 @@ def test_chunk_vars():
         assert Schedule.fromstring(h, '').check()
         assert Schedule.fromstring(h, 'valid_g.root()').check()
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root()'), f, remove_inline) == ['valid_x', 'valid_y']
+        #cv = chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)'), f, remove_inline)
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)'), f, remove_inline) == ['_c0', '_c1', 'valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)'), f, remove_inline) == ['_c0', 'valid_x', 'valid_y']
-        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)\nvalid_g.chunk(valid_y)'), f, remove_inline) == ['_c0', 'valid_x', 'valid_y']
+#        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)\nvalid_g.chunk(valid_y)'), f, remove_inline) == ['_c0', 'valid_x', 'valid_y']
+        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)\nvalid_g.chunk(valid_y)'), f, remove_inline) == ['valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root()'), f, remove_inline) == ['valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().tile(valid_x,valid_y,_c2,_c3,8,8)'), f, remove_inline) == ['_c2', '_c3', 'valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().parallel(valid_y)'), f, remove_inline) == ['valid_x', 'valid_y']
@@ -1080,6 +1091,21 @@ def test_chunk_vars():
     for (i, x) in enumerate(L):
         if x.check(x):
             errL.append(repr((i, x)))
+
+    """
+    schedule = L[5]
+    print '='*80
+    print 'sumx chunk vars:'
+    print chunk_vars(schedule, halide.all_funcs(schedule.root_func)['sumx'])
+    print
+    print '='*80
+    """
+#    print
+#    cv = chunk_vars(schedule, halide.all_funcs(schedule.root_func)['sum'])
+#    print 'sum chunk vars:', cv
+#    print
+#    print '='*80
+
     if len(errL):
         print len(errL), 'errors'
         print '\n\n'.join(errL)
