@@ -86,8 +86,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
     else:
         raise ValueError
     
-    tune_ref_schedules = {'human': 'grid.root().parallel(z)\n' + 
-                                   'grid.update().reorder(c, x, y).parallel(y)\n' +
+    tune_ref_schedules = {'human': 'grid.root().parallel(z).update().reorder(c, x, y).parallel(y)\n' +
                                    'blurx.root().parallel(z).vectorize(x, 4)\n' +
                                    'blury.root().parallel(z).vectorize(x, 4)\n' +
                                    'blurz.root().parallel(z).vectorize(x, 4)\n' +

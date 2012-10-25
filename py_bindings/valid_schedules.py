@@ -180,7 +180,15 @@ class FragmentChunk(Fragment):
     def var_order(self, prev_order):
         raise ValueError('var_order called on FragmentChunk()')
 
-for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk]:
+# FragmentUpdate is just a stub class for now -- not used in tuning, just for comparing with human reference schedules
+class FragmentUpdate(Fragment):
+    def __str__(self):
+        return '.update()'
+
+    def var_order(self, prev_order):
+        raise ValueError('var_order called on FragmentUpdate()')
+
+for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentUpdate]:
     _cls.fromstring = make_fromstring(_cls)
 
 def create_var(vars): #count=[0]):
@@ -358,6 +366,8 @@ class FragmentReorder(Fragment):
 
         return order
 
+
+
 fragment_classes = [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentReorder]
 fragment_map = {'root': FragmentRoot,
                 'vectorize': FragmentVectorize,
@@ -366,7 +376,8 @@ fragment_map = {'root': FragmentRoot,
                 'chunk': FragmentChunk,
                 'split': FragmentSplit,
                 'tile': FragmentTile,
-                'reorder': FragmentReorder}
+                'reorder': FragmentReorder,
+                'update': FragmentUpdate}
 
 def fragment_fromstring(s):
     if '(' not in s:
