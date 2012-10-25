@@ -24,8 +24,8 @@ def default_check(cls, L, func):
     def count(C):
         return sum([isinstance(x, C) for x in L])
     if len(L) == 0:
-        if func.isReduction():
-            return False
+        #if func.isReduction():
+        #    return False
         return True         # Inline
     else:
         # Handle singleton fragments
@@ -463,6 +463,9 @@ class FragmentList(list):
     
     def check(self, partial_schedule=None):
         vars = halide.func_varlist(self.func)
+        #if len(self) == 0:
+        #    if self.func.isReduction():
+        #        return False
         try:
             for x in self:
                 if not x.check(self, partial_schedule, self.func, vars):
@@ -579,7 +582,8 @@ def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, ra
     for depth in range(min_depth, max_depth+1):
         if random:
             depth = random_module.randrange(min_depth, max_depth+1)
-        if func.name() == root_func.name() and depth == 0:
+        # TODO: This cannot be in check() because then we fail when trying to generate empty FragmentList [], but maybe should be pulled into a function
+        if (func.name() == root_func.name() or func.isReduction()) and depth == 0:
             depth += 1
         for L in schedules_depth(root_func, func, vars, depth, random, extra_caller_vars, partial_schedule=partial_schedule):
             #print 'schedules_depth returns', L
@@ -619,6 +623,10 @@ class Schedule:
         return "'" + ans + "'"
 
     def check(self, partial_schedule=None):
+        #if set(self.d.keys()) != set(halide.all_funcs(self.root_func)):
+        #    print sorted(self.d.keys())
+        #    print sorted(halide.all_funcs(self.root_func))
+        #    raise ValueError
         root_func_name = self.root_func.name()
         if root_func_name in self.d:
             L = self.d[root_func_name]
@@ -1094,7 +1102,10 @@ def test_chunk_vars():
          'output.root().tile(x,y,_c0,_c1,64,64).tile(x,y,_c2,_c3,2,2).unroll(y,64)\n\nsum_clamped.chunk(_c2).split(c,c,_c0,16).vectorize(_c0,4).reorder(_c0,c,y,x)\nsumx.chunk(_c0)\n',
          'output.root().parallel(y).vectorize(x,16)\nsum.chunk(x).vectorize(c,16)\nsum_clamped.chunk(x).tile(x,y,_c0,_c1,8,2).parallel(x)\nsumx.chunk(_c0).vectorize(c,8).unroll(y,2).unroll(x,32)\nweight.root().parallel(y).vectorize(y,2).parallel(x)',
          'output.root()\n\nsum_clamped.root().split(x,x,_c0,32)\nsumx.chunk(_c0).tile(x,y,_c0,_c1,64,64)\nweight.root().tile(x,y,_c0,_c1,8,8).parallel(x)',
-         'output.root()\n\nsum_clamped.root().split(x,x,_c0,4).tile(_c0,y,_c1,_c2,64,32)\nsumx.chunk(_c2).tile(x,y,_c0,_c1,4,4)\nweight.chunk(x).unroll(x,2)']
+         'output.root()\n\nsum_clamped.root().split(x,x,_c0,4).tile(_c0,y,_c1,_c2,64,32)\nsumx.chunk(_c2).tile(x,y,_c0,_c1,4,4)\nweight.chunk(x).unroll(x,2)',
+         'output.root().parallel(y).split(x,x,_c0,8).tile(y,c,_c1,_c2,2,2)\n\nsum_clamped.chunk(_c2).unroll(c,8).vectorize(c,4).unroll(y,2)\nsumx.chunk(_c2)\nweight.chunk(_c2).tile(x,y,_c0,_c1,64,64).split(x,x,_c2,16).reorder(_c1,x,y,_c0)',
+         'output.root().tile(x,y,_c0,_c1,4,4).split(_c0,_c0,_c2,8).split(x,x,_c3,8)\n\nsum_clamped.chunk(_c0)\nsumx.chunk(_c3).unroll(x,64).split(x,x,_c0,8).tile(y,c,_c1,_c2,16,2)\nweight.chunk(x).vectorize(x,2)',
+         'output.root().split(y,y,_c0,2)\n\nsum_clamped.chunk(y).split(c,c,_c0,2).vectorize(_c0,16).parallel(y)\nsumx.chunk(_c0).split(c,c,_c0,16).unroll(x,64)\nweight.chunk(x).vectorize(x,8)']
     L = [Schedule.fromstring(out_func, x) for x in L]
 #    n = sum([x.check(x) for x in L])
 #    assert n == 0, n
@@ -1118,7 +1129,7 @@ def test_chunk_vars():
 #    print '='*80
 
     if len(errL):
-        print len(errL), 'errors'
+        print len(errL), 'errors out of', len(L)
         print '\n\n'.join(errL)
         raise ValueError
 #    schedule = Schedule.fromstring(out_func, )
