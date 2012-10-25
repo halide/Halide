@@ -264,7 +264,7 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         if len(vars)-1 <= 0:
             return None
         i = random.randrange(len(vars)-1)
-        return cls(vars[i],vars[i+1],vars=vars)
+        return cls(vars[i+1],vars[i],vars=vars)
         #ans = []
         #for i in range(len(vars)-1):
         #    j = i+1
@@ -280,13 +280,18 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         return '.tile(%s,%s,%s,%s,%d,%d)'%(self.xvar,self.yvar,self.xnewvar,self.ynewvar,self.xsize,self.ysize)
 
     def var_order(self, prev_order):      # if f(x y c) after tile(x,y,xi,yi) the loop ordering is for c: for y: for x: for yi: for xi   [c y x yi xi]
+                                          # previously the loop ordering was  for c: for y: for x     [c y x]
+        #print 'prev_order', prev_order
+        #print self.xvar, self.yvar
         try:
-            i = prev_order.index(self.xvar)
+            i = prev_order.index(self.yvar)
         except ValueError:
             raise BadScheduleError
-        assert i-1 >= 0, (i, self.xvar, prev_order)
-        assert self.yvar == prev_order[i-1]
-        ans = prev_order[:i-1] + [self.yvar, self.xvar, self.ynewvar, self.xnewvar] + prev_order[i+1:]
+        if i+1 >= len(prev_order):
+            raise BadScheduleError((i, self.xvar, prev_order))
+        if self.xvar != prev_order[i+1]:
+            raise BadScheduleError()
+        ans = prev_order[:i] + [self.yvar, self.xvar, self.ynewvar, self.xnewvar] + prev_order[i+2:]
         assert len(ans) == len(prev_order) + 2
         return ans
 
@@ -343,8 +348,13 @@ class FragmentReorder(Fragment):
         for (iperm, i) in enumerate(indices):
             order[i] = self.permutation[iperm]
 
-        sub = [orig_order[indices[j]] for j in range(len(indices))]
-        assert sub == self.permutation
+        sub = [order[indices[j]] for j in range(len(indices))]
+        if sub != list(self.permutation):
+            print 'sub', sub
+            print 'permutation', self.permutation
+            print 'orig_order', orig_order
+            print 'order', order
+            raise ValueError
 
         return order
 
@@ -442,10 +452,13 @@ class FragmentList(list):
     
     def check(self, partial_schedule=None):
         vars = halide.func_varlist(self.func)
-        for x in self:
-            if not x.check(self, partial_schedule, self.func, vars):
-                return False
-            vars = sorted(set(vars + x.new_vars()))
+        try:
+            for x in self:
+                if not x.check(self, partial_schedule, self.func, vars):
+                    return False
+                vars = sorted(set(vars + x.new_vars()))
+        except BadScheduleError:
+            return False
         return True
 
     def added_or_edited(self, root_func, extra_caller_vars, partial_schedule, vars=None, delta=0):
@@ -626,6 +639,9 @@ class Schedule:
             ans.append(s)
         return '\n'.join(ans) #join(['-'*40] + ans + ['-'*40])
 
+    def __repr__(self):
+        return 'Schedule(%s, %r)' % (self.root_func.name(), str(self))
+        
     def identity(self):
         #print self.generation
         #print self.index
@@ -1060,9 +1076,14 @@ def test_chunk_vars():
     L = [Schedule.fromstring(out_func, x) for x in L]
 #    n = sum([x.check(x) for x in L])
 #    assert n == 0, n
+    errL = []
     for (i, x) in enumerate(L):
         if x.check(x):
-            raise ValueError((i, x))
+            errL.append(repr((i, x)))
+    if len(errL):
+        print len(errL), 'errors'
+        print '\n\n'.join(errL)
+        raise ValueError
 #    schedule = Schedule.fromstring(out_func, )
 #    schedule = Schedule.fromstring(out_func, 'output.root().parallel(x)\n\nsum_clamped.chunk(c).split(y,y,_c0,16).parallel(c)\nsumx.chunk(_c0).tile(y,c,_c0,_c1,8,8).split(x,x,_c2,32)\nweight.root()')
     #schedule = Schedule.fromstring(out_func, 'output.root()\n\nsum_clamped.root().vectorize(y,8).tile(x,y,_c0,_c1,4,4).tile(_c0,_c1,_c2,_c3,32,32)\nsumx.chunk(_c2).vectorize(x,4).tile(x,y,_c0,_c1,16,16).unroll(y,4)\nweight.chunk(x).tile(x,y,_c0,_c1,64,64).tile(x,y,_c2,_c3,4,4)')
