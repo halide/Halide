@@ -63,7 +63,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
     smoothed = Func('smoothed')
     smoothed[x, y] = interpolated[x, y, 0]/interpolated[x, y, 1]
 
-    schedule = 1
+    schedule = 0
     if schedule == 0:
         pass
     elif schedule == 1:
@@ -85,6 +85,14 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
         smoothed.root().cudaTile(x, y, s_sigma, s_sigma)
     else:
         raise ValueError
+    
+    tune_ref_schedules = {'human': 'grid.root().parallel(z)\n' + 
+                                   'grid.update().reorder(c, x, y).parallel(y)\n' +
+                                   'blurx.root().parallel(z).vectorize(x, 4)\n' +
+                                   'blury.root().parallel(z).vectorize(x, 4)\n' +
+                                   'blurz.root().parallel(z).vectorize(x, 4)\n' +
+                                   'smoothed.root().parallel(y).vectorize(x, 4)\n'}
+
     #autotune.print_tunables(smoothed)
     #for i in range(123,10000):
     #    random.seed(i)
