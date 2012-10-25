@@ -493,6 +493,9 @@ def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_v
             #print 'schedules_depth recurses', L
             if not L.check():
                 continue
+            if func.name() == root_func.name():
+                if len(L) >= 1 and not isinstance(L[0], FragmentRoot):
+                    continue
             #all_vars = list(vars)
             #for fragment in L:
             #    all_vars.extend(fragment.new_vars())
@@ -522,6 +525,8 @@ def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, ra
     for depth in range(min_depth, max_depth+1):
         if random:
             depth = random_module.randrange(min_depth, max_depth+1)
+        if func.name() == root_func.name() and depth == 0:
+            depth += 1
         for L in schedules_depth(root_func, func, vars, depth, random, extra_caller_vars, partial_schedule=partial_schedule):
             #print 'schedules_depth returns', L
             if L.check():
@@ -560,6 +565,13 @@ class Schedule:
         return "'" + ans + "'"
 
     def check(self, partial_schedule=None):
+        root_func_name = self.root_func.name()
+        if root_func_name in self.d:
+            L = self.d[root_func_name]
+            if len(L) < 1 or not isinstance(L[0], FragmentRoot):
+                return False
+        else:
+            return False
         #print 'check', self
         for x in self.d.values():
             if not x.check(partial_schedule):
@@ -660,7 +672,7 @@ class Schedule:
         return halide.filter_image(input, self.root_func, in_image, eval_func=eval_func)
     
     @staticmethod
-    def fromstring(root_func, s, genomelog='', generation=-1, index=-1):
+    def fromstring(root_func, s, genomelog='', generation=-1, index=-1, fix_output_inline=True):
         """
         Constructor from a string s such as 'f.root().parallel(y)\ng.chunk(y)' (same format as returned by str() method).
         """
@@ -693,7 +705,13 @@ class Schedule:
             else:
                 ans[name] = d[name]
         halide.visit_funcs(root_func, callback)
+        
+        if fix_output_inline:
+            root_func_name = root_func.name()
+            if not root_func_name in ans or len(ans[root_func_name]) == 0:
+                ans[root_func_name] = FragmentList(root_func, [FragmentRoot()])
         return Schedule(root_func, ans, genomelog, generation, index)
+        
 
 def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}):
     """
@@ -701,6 +719,7 @@ def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=No
     """
     if vars is None:
         vars = halide.func_varlist(root_func)
+    
     while 1:
         d_new_vars = {}
         schedule = {}
@@ -848,7 +867,7 @@ def chunk_vars(schedule, func, remove_inline=False):
             for fparent in d_callers[fname]:
                 assert fparent in d_stack
                 stack = list(d_stack[fparent])
-                L = schedule.d[fparent]
+                L = schedule.d[fparent] if fparent in schedule.d else FragmentList(d_func[fparent], [])
                 if len(L) == 0:
                     pass        # No stack changes
                 elif isinstance(L[0], FragmentRoot):
@@ -966,6 +985,8 @@ def test_chunk_vars():
         #print chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().tile(valid_x,valid_y,_c2,_c3,8,8)'), f, remove_inline)
         #sys.exit(1)
         
+        assert Schedule.fromstring(h, '').check()
+        assert Schedule.fromstring(h, 'valid_g.root()').check()
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root()'), f, remove_inline) == ['valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)'), f, remove_inline) == ['_c0', '_c1', 'valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)'), f, remove_inline) == ['_c0', 'valid_x', 'valid_y']
