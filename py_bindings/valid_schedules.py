@@ -19,10 +19,13 @@ TILE_PROB_SQUARE = 0.5              # Probability of selecting square tile size 
 # Valid Schedule Enumeration
 # --------------------------------------------------------------------------------------------------------------
 
-def default_check(cls, L):
+def default_check(cls, L, func):
+    assert func is not None
     def count(C):
         return sum([isinstance(x, C) for x in L])
     if len(L) == 0:
+        if func.isReduction():
+            return False
         return True         # Inline
     else:
         # Handle singleton fragments
@@ -69,12 +72,16 @@ class Fragment:
     def randomize_const(self):
         "Randomize constants e.g. change vectorize(x, 8) => vectorize(x, (random value))."
     
-    def check(self, L, partial_schedule=None, func=None):
+    def check(self, L, partial_schedule=None, func=None, vars=None):
         "Given list of Schedule fragments (applied to a function) returns True if valid else False."
-        return default_check(self.__class__, L)
+        return default_check(self.__class__, L, func)
 
     def var_order(self, prev_order):
-        "Given var (loop) order (list of variable string names) from previous Fragment (or initial var order), get order after this Fragment."
+        """
+        Given var (loop) order (list of variable string names) from previous Fragment (or initial var order), get order after this Fragment.
+        
+        If f(x,y,c) then the loop ordering is [c y x] -- the reverse of argument ordering.
+        """
         return prev_order
         
 class FragmentVarMixin:
@@ -82,6 +89,11 @@ class FragmentVarMixin:
     def random_fragment(root_func, func, cls, vars, extra_caller_vars, partial_schedule):
 #        print 'fragments', cls
         return cls(random.choice(vars)) if len(vars) else None #[cls(x) for x in vars]
+
+    def check(self, L, partial_schedule=None, func=None, vars=None):
+        if vars is not None and self.var not in vars:
+            return False
+        return default_check(self.__class__, L, func)
 
 use_random_blocksize = True
 
@@ -102,11 +114,13 @@ class FragmentBlocksizeMixin(FragmentVarMixin):
         self.value = blocksize_random()
         #print 'randomize_const, value=%d'% self.value
 
-    def check(self, L, partial_schedule=None, func=None):
-        return check_duplicates(self.__class__, L)
+    def check(self, L, partial_schedule=None, func=None, vars=None):
+        if vars is not None and self.var not in vars:
+            return False
+        return check_duplicates(self.__class__, L, func)
 
-def check_duplicates(cls, L):
-    if not default_check(cls, L):
+def check_duplicates(cls, L, func):
+    if not default_check(cls, L, func):
         return False
     #count = collections.defaultdict(lambda: 0)
     #for x in L:
@@ -154,11 +168,11 @@ class FragmentChunk(Fragment):
         return cls(random.choice(allV)) if len(allV) else None
         #return [cls(x) for x in ]
         
-    def check(self, L, partial_schedule=None, func=None):
+    def check(self, L, partial_schedule=None, func=None, vars=None):
         if partial_schedule is not None:
             if self.var not in chunk_vars(partial_schedule, func):
                 return False
-        return check_duplicates(self.__class__, L)
+        return check_duplicates(self.__class__, L, func)
 
     def __str__(self):
         return '.chunk(%s)'%self.var
@@ -210,7 +224,7 @@ class FragmentSplit(FragmentBlocksizeMixin,Fragment):
         return '.split(%s,%s,%s,%d)'%(self.var,self.var if     self.reuse_outer else self.newvar,
                                                self.var if not self.reuse_outer else self.newvar, self.value)
 
-    def var_order(self, prev_order):
+    def var_order(self, prev_order):            # if f(x,y,c)   after split(x,x,xi)     the loop order is   for c: for y: for x: for xi:
         try:
             i = prev_order.index(self.var)
         except ValueError:
@@ -236,8 +250,10 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
             self.ysize = blocksize_random()
         #print 'randomize_const, tile, size=%d,%d' % (self.xsize, self.ysize)
 
-    def check(self, L, partial_schedule=None, func=None):
-        return check_duplicates(self.__class__, L)
+    def check(self, L, partial_schedule=None, func=None, vars=None):
+        if vars is not None and (self.xvar not in vars or self.yvar not in vars):
+            return False
+        return check_duplicates(self.__class__, L, func)
 
     @staticmethod
     def fromstring(xvar, yvar, xnewvar, ynewvar, xsize, ysize):
@@ -263,13 +279,16 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
     def __str__(self):
         return '.tile(%s,%s,%s,%s,%d,%d)'%(self.xvar,self.yvar,self.xnewvar,self.ynewvar,self.xsize,self.ysize)
 
-    def var_order(self, prev_order):
+    def var_order(self, prev_order):      # if f(x y c) after tile(x,y,xi,yi) the loop ordering is for c: for y: for x: for yi: for xi   [c y x yi xi]
         try:
             i = prev_order.index(self.xvar)
         except ValueError:
             raise BadScheduleError
-        assert i+1 < len(prev_order), (i, self.xvar, prev_order)
-        return prev_order[:i] + [self.xnewvar, self.ynewvar, self.xvar, self.yvar] + prev_order[i+2:]
+        assert i-1 >= 0, (i, self.xvar, prev_order)
+        assert self.yvar == prev_order[i-1]
+        ans = prev_order[:i-1] + [self.yvar, self.xvar, self.ynewvar, self.xnewvar] + prev_order[i+1:]
+        assert len(ans) == len(prev_order) + 2
+        return ans
 
 class FragmentReorder(Fragment):
     # Actually calls Func.reorder()
@@ -297,8 +316,12 @@ class FragmentReorder(Fragment):
         return cls(vars=vars, idx=i)
         #return [cls(vars=vars, idx=i) for i in range(1,permutation.factorial(len(vars)))]     # TODO: Allow random generation so as to not loop over n!
     
-    def check(self, L, partial_schedule=None, func=None):
-        if not default_check(self.__class__, L):
+    def check(self, L, partial_schedule=None, func=None, vars=None):
+        if vars is not None:
+            for var in self.permutation:
+                if var not in vars:
+                    return False
+        if not default_check(self.__class__, L, func):
             return False
         return [isinstance(x, FragmentReorder) for x in L] == [0]*(len(L)-1)+[1]
     
@@ -311,13 +334,18 @@ class FragmentReorder(Fragment):
         return '.reorder(' + ','.join(v for v in self.permutation) + ')'
 
     def var_order(self, prev_order):
-        order = list(prev_order)
+        orig_order = list(reversed(prev_order))      # Argument order (reversed)
+        order = list(orig_order)
         try:
             indices = sorted([order.index(self.permutation[j]) for j in range(len(self.permutation))])
         except ValueError:
             raise BadScheduleError
         for (iperm, i) in enumerate(indices):
             order[i] = self.permutation[iperm]
+
+        sub = [orig_order[indices[j]] for j in range(len(indices))]
+        assert sub == self.permutation
+
         return order
 
 fragment_classes = [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentReorder]
@@ -353,7 +381,7 @@ class FragmentList(list):
     
     def var_order(self):
         "Variable order assuming we are root."
-        ans = halide.func_varlist(self.func)
+        ans = list(reversed(halide.func_varlist(self.func)))
         #print 'FragmentList', self
         #print 'var_order(FragmentList)', ans
         for item in self[1:]:
@@ -413,9 +441,11 @@ class FragmentList(list):
         return ans
     
     def check(self, partial_schedule=None):
+        vars = halide.func_varlist(self.func)
         for x in self:
-            if not x.check(self, partial_schedule, self.func):
+            if not x.check(self, partial_schedule, self.func, vars):
                 return False
+            vars = sorted(set(vars + x.new_vars()))
         return True
 
     def added_or_edited(self, root_func, extra_caller_vars, partial_schedule, vars=None, delta=0):
@@ -493,7 +523,7 @@ def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_v
             #print 'schedules_depth recurses', L
             if not L.check():
                 continue
-            if func.name() == root_func.name():
+            if func.name() == root_func.name():                         # TODO: Checking that the output is root should really be in check()
                 if len(L) >= 1 and not isinstance(L[0], FragmentRoot):
                     continue
             #all_vars = list(vars)
@@ -672,9 +702,14 @@ class Schedule:
         return halide.filter_image(input, self.root_func, in_image, eval_func=eval_func)
     
     @staticmethod
-    def fromstring(root_func, s, genomelog='', generation=-1, index=-1, fix_output_inline=True):
+    def fromstring(root_func, s, genomelog='', generation=-1, index=-1, fix=True):
         """
         Constructor from a string s such as 'f.root().parallel(y)\ng.chunk(y)' (same format as returned by str() method).
+        
+        If fix is True then tries to auto-fix human schedules into the strict internal schedule format, which requires:
+         - Every func begins with its caller schedule e.g. f.root().parallel(y) is valid but f.parallel(y) is invalid
+         - Reduction functions rf to be scheduled explicitly as either rf.root()|rf.chunk().
+         - Output func g to be scheduled for its call schedule explicitly as g.root()...
         """
         if '\\n' in s:
             raise ValueError('Bad newline character in %r'%s)
@@ -706,10 +741,25 @@ class Schedule:
                 ans[name] = d[name]
         halide.visit_funcs(root_func, callback)
         
-        if fix_output_inline:
+        if fix:
+            # Make output be root()
             root_func_name = root_func.name()
             if not root_func_name in ans or len(ans[root_func_name]) == 0:
                 ans[root_func_name] = FragmentList(root_func, [FragmentRoot()])
+                
+            # Inject root() as caller schedule if missing
+            for (fname, f) in halide.all_funcs(root_func).items():
+                if fname in ans:
+                    L = ans[fname]
+                    if len(L) > 0 and not (isinstance(L[0], FragmentChunk) or isinstance(L[0], FragmentRoot)):
+                        ans[fname] = FragmentList(L.func, [FragmentRoot()] + list(L))
+            
+            # Inject root() for reductions (the default for reductions is root()).
+            for (fname, f) in halide.all_funcs(root_func).items():
+                if f.isReduction():
+                    if not fname in ans or len(ans[fname]) == 0:
+                        ans[fname] = FragmentList(f, [FragmentRoot()])
+
         return Schedule(root_func, ans, genomelog, generation, index)
         
 
@@ -876,7 +926,7 @@ def chunk_vars(schedule, func, remove_inline=False):
                     #print 'schedule', schedule
                     #print 'f', fname, 'fparent', fparent
                     #print 'L', L
-                    order = halide.func_varlist(L.func)         # FIXME: reorder() should really be able to reorder the caller variables if chunked...
+                    order = list(reversed(halide.func_varlist(L.func)))         # FIXME: reorder() should really be able to reorder the caller variables if chunked...
                     #print 'initial order', order
                     for fragment in L[1:]:
                         order = fragment.var_order(order)
@@ -888,7 +938,7 @@ def chunk_vars(schedule, func, remove_inline=False):
                     stack = stack[:i+1]
                     stack.extend(order)
                 else:
-                    raise ValueError((fname, fparent))
+                    raise ValueError((fname, fparent, L[0]))
                 stackL.append(set(stack))
             d_stack[fname] = sorted(reduce(set.intersection, stackL))
         if fname == func.name():
@@ -995,6 +1045,29 @@ def test_chunk_vars():
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().tile(valid_x,valid_y,_c2,_c3,8,8)'), f, remove_inline) == ['_c2', '_c3', 'valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().parallel(valid_y)'), f, remove_inline) == ['valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, ''), f, remove_inline) == ['valid_x', 'valid_y']
+
+    # None of these schedules should pass
+    from examples.boxblur_cumsum import filter_func
+    (input, out_func, evaluate, scope) = filter_func()
+    L = ['output.root()\n\nsum_clamped.root().unroll(x,4).tile(x,y,_c0,_c1,64,16).split(_c1,_c1,_c2,4)\nsumx.chunk(_c1).reorder(c,x,y)\nweight.root()',
+         'output.root().parallel(x)\n\nsum_clamped.chunk(c).split(y,y,_c0,16).parallel(c)\nsumx.chunk(_c0).tile(y,c,_c0,_c1,8,8).split(x,x,_c2,32)\nweight.root()',
+         'output.root()\n\nsum_clamped.root().vectorize(y,8).tile(x,y,_c0,_c1,4,4).tile(_c0,_c1,_c2,_c3,32,32)\nsumx.chunk(_c2).vectorize(x,4).tile(x,y,_c0,_c1,16,16).unroll(y,4)\nweight.chunk(x).tile(x,y,_c0,_c1,64,64).tile(x,y,_c2,_c3,4,4)',
+         'output.root().tile(x,y,_c0,_c1,16,2).split(_c1,_c1,_c2,4).parallel(c)\nsum.chunk(_c2).unroll(x,8).parallel(x)\nsum_clamped.chunk(y)\nsumx.chunk(y)\nweight.root().vectorize(y,2)',
+         'output.root().tile(x,y,_c0,_c1,64,64).tile(x,y,_c2,_c3,2,2).unroll(y,64)\n\nsum_clamped.chunk(_c2).split(c,c,_c0,16).vectorize(_c0,4).reorder(_c0,c,y,x)\nsumx.chunk(_c0)\n',
+         'output.root().parallel(y).vectorize(x,16)\nsum.chunk(x).vectorize(c,16)\nsum_clamped.chunk(x).tile(x,y,_c0,_c1,8,2).parallel(x)\nsumx.chunk(_c0).vectorize(c,8).unroll(y,2).unroll(x,32)\nweight.root().parallel(y).vectorize(y,2).parallel(x)',
+         'output.root()\n\nsum_clamped.root().split(x,x,_c0,32)\nsumx.chunk(_c0).tile(x,y,_c0,_c1,64,64)\nweight.root().tile(x,y,_c0,_c1,8,8).parallel(x)',
+         'output.root()\n\nsum_clamped.root().split(x,x,_c0,4).tile(_c0,y,_c1,_c2,64,32)\nsumx.chunk(_c2).tile(x,y,_c0,_c1,4,4)\nweight.chunk(x).unroll(x,2)']
+    L = [Schedule.fromstring(out_func, x) for x in L]
+#    n = sum([x.check(x) for x in L])
+#    assert n == 0, n
+    for (i, x) in enumerate(L):
+        if x.check(x):
+            raise ValueError((i, x))
+#    schedule = Schedule.fromstring(out_func, )
+#    schedule = Schedule.fromstring(out_func, 'output.root().parallel(x)\n\nsum_clamped.chunk(c).split(y,y,_c0,16).parallel(c)\nsumx.chunk(_c0).tile(y,c,_c0,_c1,8,8).split(x,x,_c2,32)\nweight.root()')
+    #schedule = Schedule.fromstring(out_func, 'output.root()\n\nsum_clamped.root().vectorize(y,8).tile(x,y,_c0,_c1,4,4).tile(_c0,_c1,_c2,_c3,32,32)\nsumx.chunk(_c2).vectorize(x,4).tile(x,y,_c0,_c1,16,16).unroll(y,4)\nweight.chunk(x).tile(x,y,_c0,_c1,64,64).tile(x,y,_c2,_c3,4,4)')
+    #assert not schedule.check(schedule)
+
     print 'valid_schedules.chunk_vars: OK'
 
 def test_valid_schedules():
