@@ -533,15 +533,22 @@ def test_core():
     
     print 'halide.test_core:           OK'
 
-def visit_funcs(root_func, callback):
-    "Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func."
+def visit_funcs(root_func, callback, all_calls=False):
+    """
+    Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func.
+    
+    By default calls at most once per f (by marking a function as visited and not calling again).
+    Use all_calls=True to make callback() be called for every caller-callee pair.
+    """
     d = {}
     def visit(x, parent):
         name = x.name()
-        if name not in d:# and len(x.args()) > 0:       # FIXME: Where is the Func('f0') with no args coming from in snake? Seems odd...
+        unvisited = name not in d
+        if all_calls or unvisited:# and len(x.args()) > 0:       # FIXME: Where is the Func('f0') with no args coming from in snake? Seems odd...
             d[name] = x
             callback(x, parent)
             #print x.rhs().funcs()
+        if unvisited:
             for y in x.rhs().funcs():
                 visit(y, x)
     visit(root_func, None)
