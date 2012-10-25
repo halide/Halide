@@ -103,7 +103,7 @@ if 'linux' in platform:
         print '...OK!'
     except:
         print 'You appear to be missing some required packages. Try:'
-        print 'sudo apt-get install g++ libc6-i386-dev ocaml libsexplib-camlp4-dev'
+        print 'sudo apt-get install g++ libc6-dev-i386 ocaml libsexplib-camlp4-dev'
         sys.exit(1)
 
 if 'darwin' in platform:
