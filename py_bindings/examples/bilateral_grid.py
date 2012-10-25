@@ -61,9 +61,9 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
 
     # Normalize
     smoothed = Func('smoothed')
-    smoothed[x, y] = interpolated[x, y, 0]/interpolated[x, y, 1]
+    smoothed[x, y, c] = interpolated[x, y, 0]/interpolated[x, y, 1]
 
-    schedule = 0
+    schedule = 1
     if schedule == 0:
         pass
     elif schedule == 1:
@@ -109,7 +109,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
     
 def main(is_sat=False):
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3_gray.png'), disp_time=True)().show()
+    filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3.png'), disp_time=True)().show()
     
 if __name__ == '__main__':
     main()
