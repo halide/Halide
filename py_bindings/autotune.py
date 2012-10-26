@@ -144,6 +144,8 @@ class AutotuneParams:
     trials = 5                  # Timing runs per schedule
     generations = 50
     
+    group_generations = 20            # Iters to run with grouping constraints enabled (0 to not use grouping)
+    
     compile_timeout = 20.0 #15.0        # Compile timeout in sec
     compile_memory_limit = 2500         # Compile memory limit in MB or None for no limit
     
@@ -341,11 +343,11 @@ def mutate(a, p, constraints):
             
         return a
 
-def select_and_crossover(prevL, p, root_func, constraints):
-    a = tournament_select(prevL, p, root_func)
-    b = tournament_select(prevL, p, root_func)
+def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial):
+    a = tournament_select(prevL, p, root_func, max_nontrivial)
+    b = tournament_select(prevL, p, root_func, max_nontrivial)
     if random.random() < p.crossover_random_prob:
-        b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=p.max_nontrivial)
+        b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial)
     c = crossover(a, b, constraints)
     is_mutated = False
     if random.random() < p.crossover_mutate_prob:
@@ -358,17 +360,17 @@ def select_and_crossover(prevL, p, root_func, constraints):
 #        c.identity_str = 'XXXXX'
     return c
 
-def select_and_mutate(prevL, p, root_func, constraints):
-    a = tournament_select(prevL, p, root_func)
+def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial):
+    a = tournament_select(prevL, p, root_func, max_nontrivial)
     c = mutate(a, p, constraints)
     #c.genomelog = 'mutate(%s)'%a.identity()
     debug_check(c)
     return c
 
-def tournament_select(prevL, p, root_func):
+def tournament_select(prevL, p, root_func, max_nontrivial):
     i = random.randrange(p.tournament_size)
     if i >= len(prevL):
-        ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=p.max_nontrivial)
+        ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial)
     else:
         ans = copy.copy(prevL[i])
     debug_check(ans)
@@ -398,6 +400,28 @@ class Constraints:
 class Duplicate(Exception):
     pass
     
+def default_grouping(root_func):
+    def strip(name):
+        return name.rstrip('0123456789')
+        
+    nameL = sorted(list(halide.all_funcs(root_func)))
+    group = {}
+    for name in sorted(nameL):
+        group.setdefault(strip(name), []).append(name)
+    return [x[1] for x in sorted(group.items())]
+    
+def is_grouping(p, generation_idx):
+    return p.group_generations > 0 and generation_idx < p.group_generations
+    
+def apply_grouping(schedule, generation_idx, p):
+    if is_grouping(p, generation_idx):
+        ans = {}
+        for group in default_grouping(schedule.root_func):
+            for indiv in group:
+                ans[indiv] = copy.copy(schedule.d[group[0]])
+        return Schedule(schedule.root_func, ans)
+    return schedule
+    
 def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     """"
     Get next generation using elitism/mutate/crossover/random.
@@ -409,6 +433,7 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     ans = []
     schedule_strs = set()
     def append_unique(schedule, mode):
+        schedule = apply_grouping(schedule, generation_idx, p)
         s = str(schedule).strip()
         if s not in schedule_strs:
             schedule_strs.add(s)
@@ -419,13 +444,17 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
             ans.append(schedule)
         else:
             raise Duplicate
-            
+    
+    max_nontrivial = p.max_nontrivial
+    if is_grouping(p, generation_idx):
+        max_nontrivial = 1000**2
+    
     def do_crossover():
-        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints)), 'crossover')
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints, max_nontrivial)), 'crossover')
     def do_mutated():
-        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints)), 'mutated')
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints, max_nontrivial)), 'mutated')
     def do_random():
-        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=p.max_nontrivial)), 'random')
+        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial)), 'random')
     def do_until_success(func):
         while True:
             try:
