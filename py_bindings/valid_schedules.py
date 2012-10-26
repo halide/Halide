@@ -633,7 +633,7 @@ class Schedule:
             if f.isReduction():
                 L = self.d[fname]
                 if len(L) == 0:
-                    raise ValueError(self)
+                    return False #raise ValueError(self)
         root_func_name = self.root_func.name()
         if root_func_name in self.d:
             L = self.d[root_func_name]
