@@ -113,6 +113,11 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
     #print 'Done with local_laplacian', counter[0]
     #counter[0] += 1
 
+    print 'Grouping'
+    import autotune
+    for sub in autotune.default_grouping(output):
+        print sub
+    
     return (input, output, None, locals())
 
 def main():
