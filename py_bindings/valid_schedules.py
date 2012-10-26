@@ -808,7 +808,7 @@ class Schedule:
 def trivial_func_schedule(f):
     return FragmentList(f, [FragmentRoot()])
     
-def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}, max_nontrivial=None):
+def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}, max_nontrivial=None, grouping=None):
     """
     Generate Schedule for all functions called by root_func (recursively). Same arguments as schedules_func().
     """
@@ -825,7 +825,9 @@ def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=No
         schedule_obj = Schedule(root_func, schedule, 'random', -2, -2, 'random')
         
         if max_nontrivial is not None and max_nontrivial < len(funcs):
-            chosen = random.sample(funcs, max_nontrivial)
+            chosen = set(random.sample(list(funcs), max_nontrivial))
+        if grouping is not None:
+            chosen = [group[0] for group in grouping]
             
         def callback(f, parent):
             extra_caller_vars = d_new_vars.get(parent.name() if parent is not None else None,[])

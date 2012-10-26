@@ -272,17 +272,21 @@ def crossover(a, b, constraints):
             
         return ans
 
-def mutate(a, p, constraints):
+def mutate(a, p, constraints, grouping):
     "Mutate existing schedule using AutotuneParams p."
     a0 = a
     extra_caller_vars = []      # FIXME: Implement extra_caller_vars, important for chunk().
     dmutate0 = p.dict_prob_mutate()
     
+    keys = a0.d.keys()
+    if grouping is not None:
+        keys = [group[0] for group in grouping]
+    
     while True:
         a = copy.copy(a0)
 #        for name in a.d.keys():
 #            if random.random() < p.mutation_rate:
-        name = random.choice(a.d.keys())
+        name = random.choice(keys)
         dmutate = dict(dmutate0)
         if len(a.d[name]) <= p.min_depth:
             del dmutate['remove']
@@ -343,15 +347,15 @@ def mutate(a, p, constraints):
             
         return a
 
-def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial):
+def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping):
     a = tournament_select(prevL, p, root_func, max_nontrivial)
     b = tournament_select(prevL, p, root_func, max_nontrivial)
     if random.random() < p.crossover_random_prob:
-        b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial)
+        b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
     c = crossover(a, b, constraints)
     is_mutated = False
     if random.random() < p.crossover_mutate_prob:
-        c = mutate(c, p, constraints)
+        c = mutate(c, p, constraints, grouping)
         is_mutated = True
     c.genomelog = 'crossover(%s, %s)'%(a.identity(), b.identity()) + ('' if not is_mutated else '+'+c.genomelog.replace('(-1_-1)', '()'))
     debug_check(c)
@@ -360,17 +364,17 @@ def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial):
 #        c.identity_str = 'XXXXX'
     return c
 
-def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial):
-    a = tournament_select(prevL, p, root_func, max_nontrivial)
-    c = mutate(a, p, constraints)
+def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping):
+    a = tournament_select(prevL, p, root_func, max_nontrivial=max_nontrivial, grouping=grouping)
+    c = mutate(a, p, constraints, grouping)
     #c.genomelog = 'mutate(%s)'%a.identity()
     debug_check(c)
     return c
 
-def tournament_select(prevL, p, root_func, max_nontrivial):
+def tournament_select(prevL, p, root_func, max_nontrivial, grouping):
     i = random.randrange(p.tournament_size)
     if i >= len(prevL):
-        ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial)
+        ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial, grouping=grouping)
     else:
         ans = copy.copy(prevL[i])
     debug_check(ans)
@@ -413,11 +417,11 @@ def default_grouping(root_func):
 def is_grouping(p, generation_idx):
     return p.group_generations > 0 and generation_idx < p.group_generations
     
-def apply_grouping(schedule, generation_idx, p):
-    if is_grouping(p, generation_idx):
+def apply_grouping(schedule, grouping):
+    if grouping is not None:
         d_func = halide.all_funcs(schedule.root_func)
         ans = {}
-        for group in default_grouping(schedule.root_func):
+        for group in grouping:
             for indiv in group:
                 ans[indiv] = FragmentList(d_func[indiv], list(schedule.d[group[0]]))
         return Schedule(schedule.root_func, ans)
@@ -431,10 +435,14 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     """
     prevL = [prevL[i] for i in range(len(prevL)) if get_error_str(timeL[i]['time']) is None]
     
+    grouping = None
+    if is_grouping(p, generation_idx):
+        grouping = default_grouping(schedule.root_func)
+
     ans = []
     schedule_strs = set()
     def append_unique(schedule, mode):
-        schedule = apply_grouping(schedule, generation_idx, p)
+        schedule = apply_grouping(schedule, grouping)
         if not schedule.check(schedule):
             raise Duplicate
         s = str(schedule).strip()
@@ -453,11 +461,11 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
         max_nontrivial = 1000**2
     
     def do_crossover():
-        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints, max_nontrivial)), 'crossover')
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping)), 'crossover')
     def do_mutated():
-        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints, max_nontrivial)), 'mutated')
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping)), 'mutated')
     def do_random():
-        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial)), 'random')
+        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)), 'random')
     def do_until_success(func):
         while True:
             try:
@@ -557,19 +565,21 @@ def log_sched(p, schedule, s, no_output=False, filename=LOG_SCHEDULE_FILENAME, f
             f[filename].write(s + '\n')
         f[filename].flush()
 
-COMPILE_TIMEOUT = 10001.0
-COMPILE_FAIL    = 10002.0
-RUN_TIMEOUT     = 10003.0
-RUN_FAIL        = 10004.0
-RUN_CHECK_FAIL  = 10005.0
+COMPILE_TIMEOUT  = 10001.0
+COMPILE_FAIL     = 10002.0
+COMPILE_MEMLIMIT = 10003.0
+RUN_TIMEOUT      = 10004.0
+RUN_FAIL         = 10005.0
+RUN_CHECK_FAIL   = 10006.0
 
 def get_error_str(timeval):
     "Get error string from special (high-valued) timing value (one of the above constants)."
-    d = {COMPILE_TIMEOUT: 'COMPILE_TIMEOUT',
-         COMPILE_FAIL:    'COMPILE_FAIL',
-         RUN_TIMEOUT:     'RUN_TIMEOUT',
-         RUN_FAIL:        'RUN_FAIL',
-         RUN_CHECK_FAIL:  'RUN_CHECK_FAIL'}
+    d = {COMPILE_TIMEOUT:  'COMPILE_TIMEOUT',
+         COMPILE_FAIL:     'COMPILE_FAIL',
+         COMPILE_MEMLIMIT: 'COMPILE_MEMLIMIT',
+         RUN_TIMEOUT:      'RUN_TIMEOUT',
+         RUN_FAIL:         'RUN_FAIL',
+         RUN_CHECK_FAIL:   'RUN_CHECK_FAIL'}
     if timeval in d:
         return d[timeval]
     return None
