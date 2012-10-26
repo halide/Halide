@@ -879,7 +879,10 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         if e is not None:
             current_s = '%17s'%e
         return current_s
-        
+    
+    orig_trials = p.trials      # Obtain more accurate times for reference schedules
+    p.trials *= 2
+    
     # Time reference schedules and obtain reference output image for the first schedule
     timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, True)
     #ref_output = ''
@@ -896,6 +899,8 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         ref_log += line_out + '\n'
     print
     log_sched(p, None, ref_log, filename=p.summary_file)
+    
+    p.trials = orig_trials
     
     # Keep only the seed schedules for the genetic algorithm
     assert len(currentL) == len(timeL)
