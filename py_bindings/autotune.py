@@ -425,7 +425,7 @@ def apply_grouping(schedule, grouping):
             for indiv in group:
                 ans[indiv] = FragmentList(d_func[indiv], list(schedule.d[group[0]]))
         #return Schedule(schedule.root_func, ans)
-        return Schedule(schedule.root_func, d, schedule.genomelog, schedule.generation, schedule.index, schedule.identity_str)
+        return Schedule(schedule.root_func, ans, schedule.genomelog, schedule.generation, schedule.index, schedule.identity_str)
     return schedule
     
 def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
