@@ -348,8 +348,8 @@ def mutate(a, p, constraints, grouping):
         return a
 
 def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping):
-    a = tournament_select(prevL, p, root_func, max_nontrivial)
-    b = tournament_select(prevL, p, root_func, max_nontrivial)
+    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
+    b = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
     if random.random() < p.crossover_random_prob:
         b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
     c = crossover(a, b, constraints)
@@ -365,7 +365,7 @@ def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, group
     return c
 
 def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping):
-    a = tournament_select(prevL, p, root_func, max_nontrivial=max_nontrivial, grouping=grouping)
+    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
     c = mutate(a, p, constraints, grouping)
     #c.genomelog = 'mutate(%s)'%a.identity()
     debug_check(c)
@@ -374,7 +374,7 @@ def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping
 def tournament_select(prevL, p, root_func, max_nontrivial, grouping):
     i = random.randrange(p.tournament_size)
     if i >= len(prevL):
-        ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial, grouping=grouping)
+        ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
     else:
         ans = copy.copy(prevL[i])
     debug_check(ans)
@@ -437,7 +437,7 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     
     grouping = None
     if is_grouping(p, generation_idx):
-        grouping = default_grouping(schedule.root_func)
+        grouping = default_grouping(root_func)
 
     ans = []
     schedule_strs = set()
