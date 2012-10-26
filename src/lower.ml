@@ -91,9 +91,6 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
   (* grab the body of the function *)
   let (args, return_type, body) = make_function_body func env in
   
-  (* TODO: This will be removed once we remove Root *)
-  let call_sched = if call_sched = Root then Chunk ("<root>", "<root>") else call_sched in
-
   dbg 2 "Lowering function %s with schedule %s [%s]\n%!" func 
     (string_of_call_schedule call_sched)
     (String.concat ", " (List.map string_of_schedule sched_list));
@@ -149,7 +146,6 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
           | stmt -> mutate_children_in_stmt (fun x -> x) inject_storage stmt
         in inject_storage stmt
       end
-      | Root -> failwith "How did I get here?"
       | Inline ->
           (* Just replace all calls to the function with the body of the function *)
           begin match body with 

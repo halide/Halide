@@ -3,18 +3,18 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Var x("x"), y("y"), z("z");
+    Var x("x"), y("y");
     Func f("f"), g("g"), h("h");
 
     printf("Defining function...\n");
 
-    f(x, y, z) = max(x, y);
-    g(x, y, z) = 17 * f(x, y, z);        
-    h(x, y, z) = (g(x, y-1, 0) + g(x-1, y, 0) + g(x, y, 0) + g(x+1, y, 0) + g(x, y+1, 0));
+    f(x, y) = max(x, y);
+    g(x, y) = 17 * f(x, y);        
+    h(x, y) = (g(x, y-1) + g(x-1, y) + g(x, y) + g(x+1, y) + g(x, y+1));
         
 
-    h.root();
-    g.chunk(z, y); // chunk it at z, but compute it at x
+    h.chunk(root);
+    g.chunk(root, y); // chunk it at z, but compute it at x
     f.root();
     
     Image<int> imh = h.realize(32, 32, 1);

@@ -36,9 +36,8 @@ type schedule =
  * representation is (with reference to the schedule of the caller), to what caller dimension
  * should I hoist this out to, and should I fuse with other calls to the same callee *)
 type call_schedule =
-  | Chunk of dimension * dimension (* dimension of caller to store at, and compute at *)
+  | Chunk of dimension * dimension (* dimension of caller to store at, and compute at. dimension may be <root> for outermost *)
   | Inline (* block over nothing - just do in place *)
-  | Root (* There is no calling context *)
   | Reuse of string (* Just do what some other function does, using the same data structure *)
 
 (* Schedule for this function, schedule for sub-functions *)
@@ -95,7 +94,7 @@ let rec set_schedule
           if StringMap.mem first map then
             StringMap.find first map 
           else
-            (Root, [], empty_schedule) 
+            (Chunk ("<root>", "<root>"), [], empty_schedule) 
         in
         if (rest = []) then
           begin match call_sched with
@@ -141,7 +140,6 @@ let list_of_schedule (tree:schedule_tree) =
 let string_of_call_schedule = function
   | Chunk (sv, cv) -> "Chunk " ^ sv ^ " " ^ cv
   | Inline -> "Inline"
-  | Root -> "Root"      
   | Reuse s -> "Reuse " ^ s
 
 let string_of_schedule = function

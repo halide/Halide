@@ -27,6 +27,8 @@ namespace Halide {
         std::string _name;
     };
 
+    static Var root = Var("<root>", false);
+
     // A reduction variable
     class RVar {
     public:

@@ -69,7 +69,6 @@ namespace Halide {
     ML_FUNC5(makeSplitTransform);
     ML_FUNC2(makeReorderTransform);
     ML_FUNC3(makeChunkTransform);
-    ML_FUNC1(makeRootTransform);
     ML_FUNC2(makeParallelTransform);
     
     ML_FUNC1(doConstantFold);
@@ -407,9 +406,7 @@ namespace Halide {
     }
 
     Func &Func::root() {
-        MLVal t = makeRootTransform(name());
-        contents->guru = composeFunction(t, contents->guru);
-        return *this;
+        return chunk(Halide::root, Halide::root);
     }
 
     Func &Func::reset() {
