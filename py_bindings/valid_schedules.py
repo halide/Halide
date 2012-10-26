@@ -8,6 +8,7 @@ import permutation
 import numpy
 import itertools
 import sys
+import os
 random_module = random
 
 DEFAULT_MAX_DEPTH = 4
@@ -623,10 +624,16 @@ class Schedule:
         return "'" + ans + "'"
 
     def check(self, partial_schedule=None):
-        #if set(self.d.keys()) != set(halide.all_funcs(self.root_func)):
-        #    print sorted(self.d.keys())
-        #    print sorted(halide.all_funcs(self.root_func))
-        #    raise ValueError
+        all_funcs = halide.all_funcs(self.root_func)
+        if set(self.d.keys()) != set(all_funcs):
+            print sorted(self.d.keys())
+            print sorted(halide.all_funcs(self.root_func))
+            raise ValueError(self)
+        for (fname, f) in all_funcs.items():
+            if f.isReduction():
+                L = self.d[fname]
+                if len(L) == 0:
+                    raise ValueError(self)
         root_func_name = self.root_func.name()
         if root_func_name in self.d:
             L = self.d[root_func_name]
@@ -877,7 +884,7 @@ def test_dfs():
     assert dfs([(1,2),(2,3),(4,5),(1,5),(5,6)],1) == set([1, 2, 3, 5, 6])
     assert dfs([(1,2),(2,3),(4,5),(1,5),(5,6),(4,5)],1) == set([1, 2, 3, 5, 6])
     assert dfs([(1,2),(2,3),(4,5),(5,6),(3,4)],1) == set([1, 2, 3, 4, 5, 6])
-    print 'valid_schedules.dfs:        OK'
+    print 'valid_schedules.dfs:          OK'
 
 def callers(root_func):
     "Returns dict mapping func name f => list of all func names calling f."
@@ -936,7 +943,7 @@ def test_toposort():
     assert toposort(callers(f)) == ['c_valid2_f']
     assert toposort(callers(g)) == ['c_valid2_g', 'c_valid2_f']
     
-    print 'valid_schedules.toposort:   OK'
+    print 'valid_schedules.toposort:     OK'
 
 def chunk_vars(schedule, func, remove_inline=False, verbose=False):
     d_stack = {}      # Map f name to stack (loop ordering) of variable names
@@ -957,6 +964,11 @@ def chunk_vars(schedule, func, remove_inline=False, verbose=False):
                 if verbose:
                     print '  parent stack:', stack
                 #L = schedule.d[fparent] if fparent in schedule.d else FragmentList(d_func[fparent], [])
+                if fname in schedule.d:
+                    L = schedule.d[fname]
+                else:
+                    L = FragmentList(d_func[fname], [FragmentRoot()] if d_func[fname].isReduction() else [])
+                    
                 L = schedule.d[fname] if fname in schedule.d else FragmentList(d_func[fname], [])
                 if len(L) == 0:
                     if verbose:
@@ -1074,9 +1086,9 @@ def test_callers():
     d = dict((filtname(x), sorted([filtname(z) for z in y])) for (x, y) in callers(h2).items())
     assert d == {'h': ['h2'], 'g': ['h', 'h2'], 'f': ['g', 'h2'], 'h2': []}
 
-    print 'valid_schedules.callers:    OK'
+    print 'valid_schedules.callers:      OK'
     
-def test_chunk_vars():
+def test_chunk_vars_subproc(test_bilateral=True):
     f = halide.Func('valid_f')
     g = halide.Func('valid_g')
     h = halide.Func('valid_h')
@@ -1102,10 +1114,8 @@ def test_chunk_vars():
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().parallel(valid_y)'), f, remove_inline) == ['valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, ''), f, remove_inline) == ['valid_x', 'valid_y']
 
-    test_boxblur = False
-    
     # None of these schedules should pass
-    if test_boxblur:
+    if not test_bilateral:
         from examples.boxblur_cumsum import filter_func
     
         L = ['output.root()\n\nsum_clamped.root().unroll(x,4).tile(x,y,_c0,_c1,64,16).split(_c1,_c1,_c2,4)\nsum.root()\nsumx.chunk(_c1).reorder(c,x,y)\nweight.root()',
@@ -1115,11 +1125,12 @@ def test_chunk_vars():
              'output.root().tile(x,y,_c0,_c1,64,64).tile(x,y,_c2,_c3,2,2).unroll(y,64)\nsum.root()\nsum_clamped.chunk(_c2).split(c,c,_c0,16).vectorize(_c0,4).reorder(_c0,c,y,x)\nsumx.chunk(_c0)\n',
              'output.root().parallel(y).vectorize(x,16)\nsum.chunk(x).vectorize(c,16)\nsum_clamped.chunk(x).tile(x,y,_c0,_c1,8,2).parallel(x)\nsumx.chunk(_c0).vectorize(c,8).unroll(y,2).unroll(x,32)\nweight.root().parallel(y).vectorize(y,2).parallel(x)',
              'output.root()\nsum.root()\nsum_clamped.root().split(x,x,_c0,32)\nsumx.chunk(_c0).tile(x,y,_c0,_c1,64,64)\nweight.root().tile(x,y,_c0,_c1,8,8).parallel(x)',
-             'output.root()\n\nsum_clamped.root().split(x,x,_c0,4).tile(_c0,y,_c1,_c2,64,32)\nsumx.chunk(_c2).tile(x,y,_c0,_c1,4,4)\nweight.chunk(x).unroll(x,2)',
+             'output.root()\n\nsum_clamped.root().split(x,x,_c0,4).tile(_c0,y,_c1,_c2,64,32)\nsum.root()\nsumx.chunk(_c2).tile(x,y,_c0,_c1,4,4)\nweight.chunk(x).unroll(x,2)',
              'output.root().parallel(y).split(x,x,_c0,8).tile(y,c,_c1,_c2,2,2)\nsum.root()\nsum_clamped.chunk(_c2).unroll(c,8).vectorize(c,4).unroll(y,2)\nsumx.chunk(_c2)\nweight.chunk(_c2).tile(x,y,_c0,_c1,64,64).split(x,x,_c2,16).reorder(_c1,x,y,_c0)',
              'output.root().tile(x,y,_c0,_c1,4,4).split(_c0,_c0,_c2,8).split(x,x,_c3,8)\nsum.root()\nsum_clamped.chunk(_c0)\nsumx.chunk(_c3).unroll(x,64).split(x,x,_c0,8).tile(y,c,_c1,_c2,16,2)\nweight.chunk(x).vectorize(x,2)',
              'output.root().split(y,y,_c0,2)\nsum.root()\nsum_clamped.chunk(y).split(c,c,_c0,2).vectorize(_c0,16).parallel(y)\nsumx.chunk(_c0).split(c,c,_c0,16).unroll(x,64)\nweight.chunk(x).vectorize(x,8)',
-             'output.root().tile(y,c,_c0,_c1,4,4).unroll(c,4)\nsum.chunk(c)\n\nsumx.chunk(_c1)\nweight.chunk(c).parallel(y).tile(x,y,_c0,_c1,32,4).unroll(_c0,16)']
+             'output.root().tile(y,c,_c0,_c1,4,4).unroll(c,4)\nsum.chunk(c)\n\nsumx.chunk(_c1)\nweight.chunk(c).parallel(y).tile(x,y,_c0,_c1,32,4).unroll(_c0,16)',
+             'output.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\nsum.root()\nsumx.chunk(_c1)']
     else:
         from examples.bilateral_grid import filter_func
         L = ['blurx.chunk(iv0)\n\nblurz.chunk(y).unroll(y,8).parallel(x).unroll(iv0,8)\nclamped.chunk(_c1)\ngrid.root().vectorize(x,8).unroll(c,16)\n\nsmoothed.root().tile(y,c,_c0,_c1,64,32).tile(_c1,y,_c2,_c3,64,64)',
@@ -1135,14 +1146,15 @@ def test_chunk_vars():
         if x.check(x):
             errL.append(repr((i, x)))
 
-    """
-    schedule = L[-1]
-    print '='*80
-    print 'sumx chunk vars:'
-    print chunk_vars(schedule, halide.all_funcs(schedule.root_func)['sumx'], verbose=True)
-    print
-    print '='*80
-    """
+    trace_schedule = False
+    if trace_schedule:
+        schedule = L[0]
+        print '='*80
+        print 'clamped chunk vars:'
+        print chunk_vars(schedule, halide.all_funcs(schedule.root_func)['clamped'], verbose=True)
+        print
+        print '='*80
+    
 #    print
 #    cv = chunk_vars(schedule, halide.all_funcs(schedule.root_func)['sum'])
 #    print 'sum chunk vars:', cv
@@ -1158,13 +1170,20 @@ def test_chunk_vars():
     #schedule = Schedule.fromstring(out_func, 'output.root()\n\nsum_clamped.root().vectorize(y,8).tile(x,y,_c0,_c1,4,4).tile(_c0,_c1,_c2,_c3,32,32)\nsumx.chunk(_c2).vectorize(x,4).tile(x,y,_c0,_c1,16,16).unroll(y,4)\nweight.chunk(x).tile(x,y,_c0,_c1,64,64).tile(x,y,_c2,_c3,4,4)')
     #assert not schedule.check(schedule)
 
-    print 'valid_schedules.chunk_vars: OK'
+    print 'valid_schedules.chunk_vars.%d: OK'%test_bilateral
 
 def test_valid_schedules():
-    test_dfs()
-    test_callers()
-    test_toposort()
-    test_chunk_vars()
-    
+    args = sys.argv[1:]
+    if len(args) == 0:
+        test_dfs()
+        test_callers()
+        test_toposort()
+        os.system('python ' + os.path.abspath(__file__) + ' test_chunk_vars 0')
+        os.system('python ' + os.path.abspath(__file__) + ' test_chunk_vars 1')
+    elif args[0] == 'test_chunk_vars' and len(args) == 2:
+        test_chunk_vars_subproc(int(args[1]))
+    else:
+        raise ValueError('bad command line parameters')
+        
 if __name__ == '__main__':
     test_valid_schedules()
