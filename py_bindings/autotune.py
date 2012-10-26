@@ -415,10 +415,11 @@ def is_grouping(p, generation_idx):
     
 def apply_grouping(schedule, generation_idx, p):
     if is_grouping(p, generation_idx):
+        d_func = halide.all_funcs(schedule.root_func)
         ans = {}
         for group in default_grouping(schedule.root_func):
             for indiv in group:
-                ans[indiv] = copy.copy(schedule.d[group[0]])
+                ans[indiv] = FragmentList(d_func[indiv], list(schedule.d[group[0]]))
         return Schedule(schedule.root_func, ans)
     return schedule
     
@@ -434,6 +435,8 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     schedule_strs = set()
     def append_unique(schedule, mode):
         schedule = apply_grouping(schedule, generation_idx, p)
+        if not schedule.check(schedule):
+            raise Duplicate
         s = str(schedule).strip()
         if s not in schedule_strs:
             schedule_strs.add(s)
