@@ -549,8 +549,9 @@ def visit_funcs(root_func, callback, all_calls=False):
             callback(x, parent)
             #print x.rhs().funcs()
         if unvisited:
-            for y in x.rhs().funcs():
-                visit(y, x)
+            for y in x.funcs(): #x.rhs().funcs():
+                if y.name() != name:
+                    visit(y, x)
     visit(root_func, None)
     return d
 

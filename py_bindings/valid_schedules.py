@@ -946,69 +946,88 @@ def test_toposort():
     print 'valid_schedules.toposort:     OK'
 
 def chunk_vars(schedule, func, remove_inline=False, verbose=False):
-    d_stack = {}      # Map f name to stack (loop ordering) of variable names
+    d_stackL = {}      # Map f name to list of stacks (loop ordering) of variable names
     d_callers = callers(schedule.root_func)
     d_func = halide.all_funcs(schedule.root_func)
+    if verbose:
+        print 'd_callers:', d_callers
     
     for fname in toposort(d_callers):
         if len(d_callers[fname]) == 0:                      # Root function (no callers) is implicitly root()
             fragment = schedule.d[fname] if fname in schedule.d else FragmentList(d_func[fname], [])
-            d_stack[fname] = fragment.var_order()
+            d_stackL[fname] = [fragment.var_order()]
         else:
-            stackL = []                         # Allowed chunk variables of each caller-callee pair (intersect these)
-            for fparent in d_callers[fname]:
+            if fname in schedule.d:
+                L = schedule.d[fname]
+            else:
+                L = FragmentList(d_func[fname], [FragmentRoot()] if d_func[fname].isReduction() else [])
+
+            if len(L) >= 1 and isinstance(L[0], FragmentRoot):
+                stackL = [L.var_order()]
                 if verbose:
-                    print fname, fparent
-                assert fparent in d_stack
-                stack = list(d_stack[fparent])
-                if verbose:
-                    print '  parent stack:', stack
-                #L = schedule.d[fparent] if fparent in schedule.d else FragmentList(d_func[fparent], [])
-                if fname in schedule.d:
-                    L = schedule.d[fname]
-                else:
-                    L = FragmentList(d_func[fname], [FragmentRoot()] if d_func[fname].isReduction() else [])
-                    
-                L = schedule.d[fname] if fname in schedule.d else FragmentList(d_func[fname], [])
-                if len(L) == 0:
+                    print '  root, stack order=', stackL
+            else:
+                # For each stack in each caller add to the new stack list
+                stackL = []                         
+
+                for fparent in d_callers[fname]:
                     if verbose:
-                        print '  inline, no stack changes'
-                    pass        # No stack changes
-                elif isinstance(L[0], FragmentRoot):
-                    stack = L.var_order()
-                    if verbose:
-                        print '  root, stack order=', stack
-                elif isinstance(L[0], FragmentChunk):
-                    if verbose:
-                        print '  chunk'
-                        print '  schedule', repr(schedule)
-                        print '  L', L
-                    order = list(reversed(halide.func_varlist(L.func)))         # FIXME: can reorder() reorder the caller variables?
-                    if verbose:
-                        print '  initial order', order
-                    for fragment in L[1:]:
-                        order = fragment.var_order(order)
+                        print fname, fparent, '(', '_'.join(d_callers[fname]), ')'
+                    if fparent not in d_stackL:
+                        print 'fparent', fparent
+                        print 'f', fname
+                        print 'd_callers', d_callers
+                        print 'd_stackL', d_stackL
+                        print 'toposort', toposort(d_callers)
+                        raise ValueError
+                    for stack in d_stackL[fparent]:
                         if verbose:
-                            print '  update order', order
-                    try:
-                        i = len(stack)-1 - stack[::-1].index(L[0].var)
-                    except ValueError:
-                        raise BadScheduleError
-                    stack = stack[:i+1]
-                    stack.extend(order)
-                    if verbose:
-                        print '  result stack', stack
-                else:
-                    raise ValueError((fname, fparent, L[0]))
-                stackL.append(stack)
-            d_stack[fname] = list(stackL[0]) #sorted(reduce(set.intersection, stackL))        # FIXME: Not clear how to intersect two stacks...
+                            print '  parent stack:', stack
+                        #L = schedule.d[fparent] if fparent in schedule.d else FragmentList(d_func[fparent], [])
+                            
+                        #L = schedule.d[fname] if fname in schedule.d else FragmentList(d_func[fname], [])
+                        if len(L) == 0:
+                            if verbose:
+                                print '  inline, no stack changes'
+                            pass        # No stack changes
+                        elif isinstance(L[0], FragmentChunk):
+                            if verbose:
+                                print '  chunk'
+                                print '  schedule', repr(schedule)
+                                print '  L', L
+                            order = list(reversed(halide.func_varlist(L.func)))         # FIXME: can reorder() reorder the caller variables?
+                            if verbose:
+                                print '  initial order', order
+                            for fragment in L[1:]:
+                                order = fragment.var_order(order)
+                                if verbose:
+                                    print '  update order', order
+                            try:
+                                i = len(stack)-1 - stack[::-1].index(L[0].var)
+                            except ValueError:
+                                raise BadScheduleError
+                            stack = stack[:i+1]
+                            stack.extend(order)
+                            if verbose:
+                                print '  result stack', stack
+                        else:
+                            raise ValueError((fname, fparent, L[0]))
+                        stackL.append(stack)
+                        
+            d_stackL[fname] = stackL #list(stackL[0]) #sorted(reduce(set.intersection, stackL))        # FIXME: Not clear how to intersect two stacks...
             if verbose:
                 print 'stackL', stackL
-                print 'final stack:', d_stack[fname]
+                print 'final stack:', d_stackL[fname]
                 print '-'*20
                 print
         if fname == func.name():
-            return sorted(set(d_stack[fname]))
+            stackL = [set(x) for x in d_stackL[fname]]
+            ans = sorted(reduce(set.intersection, stackL))
+            if verbose:
+                print 'return d_stackL', d_stackL[fname]
+                print 'return stackL', stackL
+                print 'return ans', ans
+            return ans
     raise ValueError
         #stack[fname] = 1
         #print 'callers', fname, d_callers[fname]
@@ -1131,13 +1150,14 @@ def test_chunk_vars_subproc(test_bilateral=True):
              'output.root().split(y,y,_c0,2)\nsum.root()\nsum_clamped.chunk(y).split(c,c,_c0,2).vectorize(_c0,16).parallel(y)\nsumx.chunk(_c0).split(c,c,_c0,16).unroll(x,64)\nweight.chunk(x).vectorize(x,8)',
              'output.root().tile(y,c,_c0,_c1,4,4).unroll(c,4)\nsum.chunk(c)\n\nsumx.chunk(_c1)\nweight.chunk(c).parallel(y).tile(x,y,_c0,_c1,32,4).unroll(_c0,16)',
              'output.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\nsum.root()\nsumx.chunk(_c1)']
+        (input, out_func, evaluate, scope) = filter_func()
     else:
         from examples.bilateral_grid import filter_func
         L = ['blurx.chunk(iv0)\n\nblurz.chunk(y).unroll(y,8).parallel(x).unroll(iv0,8)\nclamped.chunk(_c1)\ngrid.root().vectorize(x,8).unroll(c,16)\n\nsmoothed.root().tile(y,c,_c0,_c1,64,32).tile(_c1,y,_c2,_c3,64,64)',
             'blurx.chunk(z)\nblury.chunk(z).vectorize(x,4).unroll(iv0,16).reorder(iv0,z,x,y)\nblurz.root().tile(z,iv0,_c0,_c1,4,4)\nclamped.chunk(y).vectorize(y,16)\ngrid.chunk(_c0)\ninterpolated.root().vectorize(x,2).reorder(y,x,iv0)\nsmoothed.root()']
-            
-    (input, out_func, evaluate, scope) = filter_func()
-    
+        (input, out_func, evaluate, scope) = filter_func()
+        assert sorted(callers(scope['smoothed'])['clamped']) == ['grid', 'interpolated']
+        
     L = [Schedule.fromstring(out_func, x, fix=False) for x in L]
 #    n = sum([x.check(x) for x in L])
 #    assert n == 0, n
@@ -1146,7 +1166,7 @@ def test_chunk_vars_subproc(test_bilateral=True):
         if x.check(x):
             errL.append(repr((i, x)))
 
-    trace_schedule = False
+    trace_schedule = False #True if test_bilateral else False
     if trace_schedule:
         schedule = L[0]
         print '='*80
