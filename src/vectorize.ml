@@ -148,6 +148,8 @@ let rec vectorize_stmt var stmt =
     | Block l -> Block (map (vectorize_stmt var) l)
     | Allocate (name, ty, size, body) -> 
       Allocate (name, ty, size, vectorize_stmt var body)
+    | Realize (name, ty, region, body) -> 
+      Realize (name, ty, region, vectorize_stmt var body)
     | Pipeline (name, produce, consume) -> 
       Pipeline (name, 
                 vectorize_stmt var produce,

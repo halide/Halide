@@ -208,10 +208,14 @@ type stmt =
   | Store of expr * buffer * expr
 
   (* Provide the value of a function at a given set of args. This is the pre-storage version of Store *)
-  | Provide of expr * string * (expr list)
+  | Provide of expr * string * (expr list)      
 
   (* Allocate temporary storage of a given size and type that lives for the duration of the inner statement *)
   | Allocate of buffer * val_type * expr * stmt
+
+  (* Declare that we will be realizing a region of a function within a given statement. Gets lowered into an allocate.
+      The expr * expr list is min, extent in each dimensions *)
+  | Realize of buffer * val_type * ((expr*expr) list) * stmt
 
   (* A producer-consumer pair of statements via the named buffer
      (which must have been allocated with an allocate node outside of

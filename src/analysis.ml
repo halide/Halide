@@ -93,6 +93,9 @@ let fold_children_in_stmt expr_mutator stmt_mutator combiner = function
   | Provide (expr, func, args) -> List.fold_left combiner (expr_mutator expr) (List.map expr_mutator args)
   | LetStmt (name, value, stmt) -> combiner (expr_mutator value) (stmt_mutator stmt)
   | Allocate (name, ty, size, body) -> combiner (expr_mutator size) (stmt_mutator body)
+  | Realize (name, ty, region, body) -> 
+    List.fold_left (fun result (x, y) -> combiner result (combiner (expr_mutator x) (expr_mutator y))) 
+      (stmt_mutator body) region
   | Pipeline (name, produce, consume) -> combiner (stmt_mutator produce) (stmt_mutator consume)
   | Print (_, []) -> expr_mutator (IntImm 0)
   | Print (_, l) -> List.fold_left combiner (expr_mutator (List.hd l)) (List.map expr_mutator (List.tl l))
@@ -144,6 +147,8 @@ let mutate_children_in_stmt expr_mutator stmt_mutator = function
       LetStmt (name, expr_mutator value, stmt_mutator stmt)
   | Allocate (name, ty, size, body) ->
       Allocate (name, ty, expr_mutator size, stmt_mutator body)
+  | Realize (name, ty, region, body) ->
+      Realize (name, ty, List.map (fun (x, y) -> (expr_mutator x, expr_mutator y)) region, stmt_mutator body)
   | Pipeline (name, produce, consume) -> 
       Pipeline (name, stmt_mutator produce, stmt_mutator consume)
   | Print (p, l) -> Print (p, List.map expr_mutator l)
@@ -190,6 +195,9 @@ and subs_name_stmt oldname newname stmt =
     | Allocate (name, ty, size, body) -> 
         Allocate ((if name = oldname then newname else name), 
                   ty, subs_expr size, subs body)                
+    | Realize (name, ty, region, body) -> 
+        Realize ((if name = oldname then newname else name), 
+                 ty, List.map (fun (x, y) -> (subs_expr x, subs_expr y)) region, subs body)                
     | Pipeline (name, produce, consume) -> 
         Pipeline ((if name = oldname then newname else name), 
                   subs produce, subs consume)      
@@ -233,6 +241,8 @@ and prefix_name_stmt prefix stmt =
         LetStmt (prefix ^ name, recurse_expr value, recurse_stmt stmt)
     | Allocate (name, ty, size, body) -> 
         Allocate (prefix ^ name, ty, recurse_expr size, recurse_stmt body)      
+    | Realize (name, ty, region, body) ->
+        Realize (prefix ^ name, ty, List.map (fun (x, y) -> (recurse_expr x, recurse_expr y)) region, recurse_stmt body)
     | Pipeline (name, produce, consume) -> 
         Pipeline (prefix ^ name, recurse_stmt produce, recurse_stmt consume)      
     | Print (p, l) ->
@@ -276,7 +286,9 @@ let rec find_names_in_stmt internal ptrsize stmt =
       string_int_set_concat (List.map rece args)
   | Assert (e, str) ->
       rece e
-  | Provide (fn, _, _) ->
+  | Realize (_, _, _, _) ->
+      failwith "Encountered a realize during cg. These should have been lowered away."
+  | Provide (_, _, _) ->
       failwith "Encountered a provide during cg. These should have been lowered away."
 and find_names_in_expr ?(exclude_bufs=false) ?(exclude_vars=false) internal ptrsize expr =
   let rece = find_names_in_expr ~exclude_bufs:exclude_bufs ~exclude_vars:exclude_vars internal ptrsize in
