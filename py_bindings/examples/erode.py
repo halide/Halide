@@ -15,6 +15,12 @@ def filter_func(dtype=UInt(16)):
                                  clamp(y,cast(Int(32),0),cast(Int(32),input.height()-1)), c]
     erode_x[x,y,c] = min(min(min(min(input_clamped[x-2,y,c],input_clamped[x-1,y,c]),input_clamped[x,y,c]),input_clamped[x+1,y,c]),input_clamped[x+2,y,c])
     erode_y[x,y,c] = min(min(min(min(erode_x[x,y-2,c],erode_x[x,y-1,c]),erode_x[x,y,c]),erode_x[x,y+1,c]),erode_x[x,y+2,c])
+    
+    tune_ref_schedules = {'human': """
+        erode_x.root().split(y, y, _c0, 8).parallel(y)
+        erode_y.root().split(y, y, _c0, 8).parallel(y)
+        """}
+        
     return (input, erode_y, None, locals())
 
 def main():
