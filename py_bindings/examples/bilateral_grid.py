@@ -99,7 +99,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
     #    print 'Schedule %d'%i
     #    p = autotune.AutotuneParams()
     #    print valid_schedules.random_schedule(smoothed, p.min_depth, p.max_depth)
-    
+
 #    std::vector<Func::Arg> args;
 #    args.push_back(r_sigma);
 #    args.push_back(input);
