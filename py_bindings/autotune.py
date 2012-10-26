@@ -852,7 +852,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
 
     random.seed(0)
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
-    if 'in_images' in scope:
+    if 'tune_in_images' in scope:
         p.in_images = scope['tune_in_images']
     test_func = tester(input, out_func, p, filter_func_name)
     
@@ -1122,6 +1122,8 @@ def main():
         #if examplename in ['snake', 'bilateral_grid', 'camera_pipe']:
         #    rest.extend(['-check_output', '0'])
         exampleL = all_examples if examplename == 'all' else [examplename]
+        if examplename.lower().endswith('.txt'):
+            exampleL = open(examplename,'rt').read().strip().split()
         for examplename in exampleL:
             tune_dir = 'tune_%s'%examplename
             if os.path.exists(tune_dir):
@@ -1129,8 +1131,10 @@ def main():
             if examplename == 'local_laplacian':
                 compile_threads = 1
                 if multiprocessing.cpu_count() >= 32:
-                    compile_threads = 4
+                    compile_threads = 8
                 rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest #['-cores', '1', '-compile_timeout', '40.0'])
+            if examplename in ['camera_pipe', 'bilateral_grid']:
+                rest = '-generations 150'.split() + rest
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
         import autotune_test

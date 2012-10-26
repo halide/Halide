@@ -10,7 +10,7 @@ float_t = Float(32)
 
 OUT_DIMS = (2560, 1920, 3)
 
-def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
+def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     x, y, tx, ty, c = Var('x'), Var('y'), Var('tx'), Var('ty'), Var('c')
     counter_interleave_x = [0]
     counter_interleave_y = [0]
@@ -335,6 +335,7 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
         print asched
         asched.apply()
     
+    # FIXME: This gives in inaccurate timing in the tuner, not sure why
     tune_ref_schedules = {'human': """
             g_r.chunk(tx).vectorize(x, 8)
             g_b.chunk(tx).vectorize(x, 8)
@@ -344,16 +345,16 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
             b_gb.chunk(tx).vectorize(x, 8)
             r_b.chunk(tx).vectorize(x, 8)
             b_r.chunk(tx).vectorize(x, 8)
-            r.chunk(tx).vectorize(x, 8).unroll(y, 2)
-            g.chunk(tx).vectorize(x, 8).unroll(y, 2)
-            b.chunk(tx).vectorize(x, 8).unroll(y, 2)
+            interleave_y1.chunk(tx).vectorize(x, 8).unroll(y, 2)
+            interleave_y2.chunk(tx).vectorize(x, 8).unroll(y, 2)
+            interleave_y3.chunk(tx).vectorize(x, 8).unroll(y, 2)
+            matrix.root()
             matrix_3200.root()
             matrix_7000.root()
             denoised.chunk(tx).vectorize(x, 8)
             deinterleaved.chunk(tx).vectorize(x, 8)
             corrected.chunk(tx).vectorize(x, 4)
-            processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty)
-            processed.parallel(ty)
+            processed.root().tile(tx, ty, _c0, _c1, 32, 32).parallel(ty).reorder(_c0, _c1, c, tx, ty)
             """}
     
     #def evaluate(in_png):
@@ -371,7 +372,7 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, local_d['in_image'], disp_time=True, out_dims=OUT_DIMS)().show()
+    filter_image(input, out_func, local_d['tune_in_images'][0], disp_time=True, out_dims=OUT_DIMS)().show()
     #input.assign(Image(UInt(16), '../../apps/camera_pipe/raw.png'))
     #output = Image(UInt(8), 2560, 1920, 3)
     #out_func.realize(output)
