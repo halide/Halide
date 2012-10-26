@@ -109,9 +109,7 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
         and inject_storage = function
           | For (for_dim, min, size, order, stmt) when for_dim = store_dim ->
             let dim_names = List.map snd args in
-            let strides = List.map (fun dim -> Var (i32, dim ^ ".stride")) dim_names in
-            let (min_computed, extent_computed) = List.split (extent_computed_list sched_list dim_names) in
-            let alloc_size = Var (i32, func ^ ".alloc_size") in
+            let region = extent_computed_list sched_list dim_names in
 
             let stmt = if for_dim = compute_dim then
                 (* If we're already at the right loop level for the
@@ -120,7 +118,15 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
               else
                 inject_compute stmt
             in
+            let stmt = Realize (func, return_type, region, stmt) in
+            For (for_dim, min, size, order, stmt)
+
+          (* 
             let stmt = Allocate (func, return_type, alloc_size, stmt) in 
+
+            let strides = List.map (fun dim -> Var (i32, dim ^ ".stride")) dim_names in
+            let (min_computed, extent_computed) = List.split (extent_computed_list sched_list dim_names) in
+            let alloc_size = Var (i32, func ^ ".alloc_size") in
 
             let stmt = 
               if strides = [] then 
@@ -139,6 +145,7 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
                 let make_let_stmt l r stmt = LetStmt (l, r, stmt) in
                 List.fold_right2 make_let_stmt lhs rhs stmt
             in For (for_dim, min, size, order, stmt)
+          *)
           | stmt -> mutate_children_in_stmt (fun x -> x) inject_storage stmt
         in inject_storage stmt
       end
@@ -387,7 +394,8 @@ let rec extract_bounds_soup env var_env bounds = function
       (* recurse into both sides *)
       let bounds = extract_bounds_soup env var_env bounds produce in
       extract_bounds_soup env var_env bounds consume
-  | Allocate (name, ty, size, body) ->     
+  | Realize (_, _, _, body) 
+  | Allocate (_, _, _, body) ->     
       extract_bounds_soup env var_env bounds body
   | Block l -> List.fold_left (extract_bounds_soup env var_env) bounds l
   | For (name, min, size, order, body) -> 
@@ -461,6 +469,9 @@ let rec bounds_inference env schedule = function
             let (fix_first, fix_sched) = bounds_inference env fix_sched first in
             ((fix_first::fix_rest), fix_sched)
       in let (l, schedule) = fix schedule l in (Block l, schedule)
+  | Realize (name, ty, region, body) -> 
+      let (body, schedule) = bounds_inference env schedule body in
+      (Realize (name, ty, region, body), schedule)                                            
   | Allocate (name, ty, size, body) -> 
       let (body, schedule) = bounds_inference env schedule body in
       (Allocate (name, ty, size, body), schedule)
@@ -538,13 +549,148 @@ let rec sliding_window (stmt:stmt) (function_env:environment) =
   in
 
   match stmt with
-    | Allocate (name, ty, size, body) ->
+    | Realize (name, ty, region, body) ->
       let (args, _, _) = find_function name function_env in
       let dims = List.map snd args in
       let new_body = process name dims body in
       let new_body = sliding_window new_body function_env in
-      Allocate (name, ty, size, new_body) 
+      Realize (name, ty, region, new_body) 
     | stmt -> mutate_children_in_stmt (fun x -> x) (fun s -> sliding_window s function_env) stmt
+      
+let rec storage_folding defs stmt = 
+
+  (* Returns an expression that gives the permissible folding factor *)
+  let rec process func env = function
+    (* We're inside an allocate over func *)
+    | For (for_dim, for_min, for_size, true, body) ->
+      dbg 2 "Storage folding inside loop over %s\n" for_dim;
+      (* Compute the region of func touched within this body *)
+      let region = required_of_stmt func env body in
+
+      (* Attempt to fold along each dimension of the region in turn *)
+      let rec try_fold = function
+        | ([], _) -> None
+        | ((Unbounded::rest), i) -> try_fold (rest, (i+1))
+        | ((Range (min, max))::rest, i) ->
+          let extent = Constant_fold.constant_fold_expr ((max +~ (IntImm 1)) -~ min) in
+          (* Find the maximum value of extent over the loop *)
+          let env = StringMap.add for_dim (Range (for_min, for_min +~ for_size -~ (IntImm 1))) env in
+          let max_extent = begin match bounds_of_expr_in_env env extent with
+            | Unbounded -> begin
+              dbg 2 "Not folding %s over dimension %d because unbounded extent: %s\n" func i (string_of_expr extent);
+              try_fold (rest, (i+1))
+            end
+            | Range (_, IntImm k) -> begin
+              (* Round up to the nearest power of two, so that we can just use masking *)
+              let rec pow2 x = if (x < k) then pow2 (x*2) else x in
+              let k = pow2 1 in
+              let result = (i, IntImm k) in
+              dbg 2 "Folding %s over dimension %d by %d\n" func i k;
+              Some result
+            end              
+            | Range (_, max) -> begin
+              dbg 2 "Folding factor for %s over dimension %d: %s\n" func i (string_of_expr max);              
+              (* Some max *)
+              (* For now we rule out dynamic folding factors, because we can't tell whether they're a good idea *)
+              try_fold (rest, (i+1))
+            end
+          end in
+          (* Now check that min is monotonic in for_dim *)
+          let next_min = subs_expr (Var (i32, for_dim)) ((Var (i32, for_dim)) +~ (IntImm 1)) min in
+          let check = Constant_fold.constant_fold_expr ((next_min -~ min) >~ (IntImm 0)) in
+          if (check = bool_imm true || check = bool_imm false) then
+            max_extent
+          else begin
+            dbg 2 "Not folding %s because min didn't simplify: %s\n" func (string_of_expr check);
+            try_fold (rest, (i+1))
+          end          
+      in try_fold (region, 0)
+    | LetStmt (n, e, stmt) -> 
+      let env = StringMap.add n (bounds_of_expr_in_env env e) env in
+      begin match process func env stmt with
+        | None -> None
+        | Some ((dim, factor)) ->
+          Some ((dim, subs_expr (Var (val_type_of_expr e, n)) e factor))
+      end
+    | Realize (_, _, _, stmt) 
+    | (Block [stmt]) -> process func env stmt
+    | (Block ((Assert (_, _))::rest))
+    | (Block ((Print (_, _))::rest)) -> process func env (Block rest)      
+    | stmt -> begin
+      dbg 2 "Not folding %s due to hitting an unsupported statement\n" func;
+      None
+    end
+  in      
+
+  let rec rewrite_args args factor = function
+    | 0 -> ((List.hd args) %~ factor)::(List.tl args)
+    | n -> (List.hd args)::(rewrite_args (List.tl args) factor (n-1))
+  in
+
+  let rec fold_loads func dim factor = function
+    | Call (Func, ty, f, args) when f = func ->
+      let args = List.map (fold_loads func dim factor) args in
+      let args = rewrite_args args factor dim in
+      Call (Func, ty, f, args)
+    | expr -> mutate_children_in_expr (fold_loads func dim factor) expr
+  in
+
+  let rec fold_loads_and_stores func dim factor = function
+    | Provide (e, f, args) when f = func -> 
+      let e = fold_loads func dim factor e in
+      let args = List.map (fold_loads func dim factor) args in
+      let args = rewrite_args args factor dim in
+      Provide (e, f, args)
+    | stmt -> mutate_children_in_stmt
+      (fold_loads func dim factor)
+      (fold_loads_and_stores func dim factor) 
+      stmt
+  in
+      
+  match stmt with
+    | Realize (func, ty, region, stmt) ->
+      begin match process func StringMap.empty stmt with
+        | None ->
+          dbg 2 "No useful folds found for %s\n" func;
+          Realize (func, ty, region, storage_folding defs stmt)
+        | Some ((dim, factor)) -> 
+          dbg 2 "Folding %s over dimension %d by %s\n" func dim (string_of_expr factor);
+          let new_stmt = storage_folding defs stmt in 
+          let new_stmt = fold_loads_and_stores func dim factor new_stmt in
+          let rec fix_region idx = function
+            | [] -> failwith "Reached end of list when modifying region during storage folding\n"
+            | ((min, extent)::rest) ->
+              if idx > 0 then 
+                ((min, extent)::(fix_region (idx-1) rest)) 
+              else
+                (IntImm 0, factor)::rest  
+          in
+          let new_region = fix_region dim region in
+
+          dbg 2 "After folding: %s\n" (string_of_stmt new_stmt);
+          Realize (func, ty, new_region, new_stmt)
+      end
+      
+    | Allocate (func, ty, size, stmt) -> 
+      let (args, _, _) = find_function func defs in
+      let args = List.map snd args in
+
+      begin match process func StringMap.empty stmt with
+        | None ->
+          dbg 2 "No useful folds found for %s\n" func;
+          Allocate (func, ty, size, storage_folding defs stmt)
+        | Some ((dim, factor)) -> 
+          dbg 2 "Folding %s over dimension %d by %s\n" func dim (string_of_expr factor);
+          let new_stmt = storage_folding defs stmt in 
+          let new_stmt = fold_loads_and_stores func dim factor new_stmt in
+          
+          dbg 2 "After folding: %s\n" (string_of_stmt new_stmt);
+
+          let dim_name = List.nth args dim in
+          let new_size = (size /~ (Var (i32, func ^ "." ^ dim_name ^ ".extent"))) *~ factor in
+          Allocate (func, ty, new_size, new_stmt)
+      end
+    | _ -> mutate_children_in_stmt (fun x -> x) (storage_folding defs) stmt 
       
 let qualify_schedule (sched:schedule_tree) =
   let make_schedule (name:string) (schedule:schedule_tree) =
@@ -619,12 +765,39 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
   let rec replace_calls_with_loads_in_stmt func arg_names stmt = 
     let recurse_stmt = replace_calls_with_loads_in_stmt func arg_names in
     let recurse_expr = replace_calls_with_loads_in_expr func arg_names in
+    let (dim_names, _, _) = find_function func env in
+    let dim_names = List.map (fun (x, y) -> func ^ "." ^ y) dim_names in
     match stmt with
       | Provide (e, f, args) when f = func ->
           dbg 2 "Flattening a provide to %s\n" func;
           let args = List.map recurse_expr args in
           let index = flatten_args func args arg_names in
           Store (recurse_expr e, f, index)
+      | Realize (f, ty, region, stmt) when f = func ->
+          dbg 2 "Flattening a realize to an allocate %s\n" func;
+          let region = List.map (fun (x, y) -> (recurse_expr x, recurse_expr y)) region in
+          (* Inject a bunch of lets for the strides and buf_mins *)
+          let strides = List.map (fun dim -> Var (i32, dim ^ ".stride")) dim_names in
+          let (min_computed, extent_computed) = List.split region in
+          let alloc_size = Var (i32, func ^ ".alloc_size") in
+
+          let stmt = Allocate (f, ty, alloc_size, recurse_stmt stmt) in
+
+          if strides = [] then 
+            (* skip for zero-dimensional funcs *)
+            LetStmt (func ^ ".alloc_size", IntImm 1, stmt) 
+          else                
+            (* lets for strides *)
+            let lhs = 
+              (List.map (fun dim -> (dim ^ ".stride")) dim_names) @ 
+                    [func ^ ".alloc_size"] in
+            let rhs = (IntImm 1) :: (List.map2 ( *~ ) strides extent_computed) in
+            (* lets for mins 
+               Currently uses compute mins at this loop level *)                
+            let lhs = lhs @ (List.map (fun dim -> (dim ^ ".buf_min")) dim_names) in
+            let rhs = rhs @ min_computed in
+            let make_let_stmt l r stmt = LetStmt (l, r, stmt) in
+            List.fold_right2 make_let_stmt lhs rhs stmt
       | _ -> mutate_children_in_stmt recurse_expr recurse_stmt stmt
   in
 
@@ -696,6 +869,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
     Printf.fprintf out "%s%!" (string_of_schedule_tree schedule);
     close_out out;
   end;
+
 
   (* ----------------------------------------------- *)
   dbg 1 "Computing the order in which to realize functions\n%!";
@@ -820,6 +994,17 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let pass_desc = "Replacing input image references with loads" in
   dbg 1 "%s\n%!" pass_desc;
 
+  (* For a later pass we'll need a list of all external images referenced *)
+  let rec find_input_images = function
+    | Call (Image, ty, f, args) -> StringSet.add f (string_set_concat (List.map find_input_images args))
+    | expr -> fold_children_in_expr find_input_images StringSet.union StringSet.empty expr
+  in
+  let rec find_input_images_in_stmt = function
+    | stmt -> 
+      fold_children_in_stmt find_input_images find_input_images_in_stmt StringSet.union stmt
+  in
+  let input_images = StringSet.elements (find_input_images_in_stmt stmt) in
+
   (* Add back in the oob_check on the output image too *)
   let stmt = Block ([oob_check; stmt]) in  
   let stmt = lower_image_calls stmt in
@@ -848,6 +1033,16 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let stmt = sliding_window stmt env in
 
   dump_stmt stmt pass pass_desc "sliding_window" 1;
+
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
+  let pass_desc = "Storage folding optimization" in
+  dbg 1 "%s\n%!" pass_desc;
+  
+  let stmt = storage_folding env stmt in
+
+  dump_stmt stmt pass pass_desc "storage_folding" 1;
 
   let pass = pass + 1 in
 
@@ -902,6 +1097,55 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let stmt = List.fold_right2 make_let_stmt lhs rhs stmt in
 
   dump_stmt stmt pass pass_desc "result_bounds" 1;
+
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
+  let pass_desc = "Forcing innermost stride to 1 and mins to 0 on input and output buffers" in
+  dbg 1 "%s\n%!" pass_desc;
+
+  let input_images = ".result"::input_images in
+
+  let stride_checks = 
+    List.map 
+      (fun name -> Assert (Var (i32, name ^ ".stride.0") =~ IntImm 1, 
+                           Printf.sprintf "Stride on innermost dimension of %s must be 1" name))
+      input_images
+  in
+  let stmt = List.fold_left
+    (fun stmt name ->
+      LetStmt (name ^ ".stride.0", IntImm 1, stmt))
+    stmt input_images
+  in
+
+  let min_checks = 
+    List.map 
+      (fun name -> [
+        Assert (Var (i32, name ^ ".min.0") =~ IntImm 0, 
+                Printf.sprintf "Min on dimension 0 of %s must be 0" name);
+        Assert (Var (i32, name ^ ".min.1") =~ IntImm 0,
+                Printf.sprintf "Min on dimension 1 of %s must be 0" name);
+        Assert (Var (i32, name ^ ".min.2") =~ IntImm 0, 
+                Printf.sprintf "Min on dimension 2 of %s must be 0" name);
+        Assert (Var (i32, name ^ ".min.3") =~ IntImm 0, 
+                Printf.sprintf "Min on dimension 3 of %s must be 0" name)])
+      input_images
+  in
+  let min_checks = List.concat min_checks in
+
+  let stmt = List.fold_left
+    (fun stmt name ->
+      LetStmt (name ^ ".min.0", IntImm 0, 
+      LetStmt (name ^ ".min.1", IntImm 0, 
+      LetStmt (name ^ ".min.2", IntImm 0, 
+      LetStmt (name ^ ".min.3", IntImm 0, stmt)))))
+    stmt input_images
+  in
+
+  let stmts = stride_checks @ min_checks @ [stmt] in
+  let stmt = Block stmts in
+    
+  dump_stmt stmt pass pass_desc "innermost_strides" 1;
 
   let pass = pass + 1 in
 
