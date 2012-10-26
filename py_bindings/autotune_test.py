@@ -95,9 +95,9 @@ def test_crossover(verbose=False):
             test_generation(L, prev_gen)
             prev_gen = L
     
-    print 'autotune.crossover:         OK'
-    print 'autotune.mutate:            OK'
-    print 'autotune.next_generation:   OK'
+    print 'autotune.crossover:           OK'
+    print 'autotune.mutate:              OK'
+    print 'autotune.next_generation:     OK'
 
 def test_funcs(cache=[]):
     if len(cache):
@@ -142,7 +142,7 @@ def test_sample_prob():
     for key in d.keys():
         assert abs(dc[key]*1.0/count-d[key])<eps, (key, d[key], dc[key]*1.0/count)
     assert dc['d'] == 0
-    print 'autotune.sample_prob:       OK'
+    print 'autotune.sample_prob:         OK'
 
 def test_schedules(verbose=False, test_random=False):
     #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
@@ -161,18 +161,19 @@ def test_schedules(verbose=False, test_random=False):
 #    
 #    for L in sorted(validL):
 #        print repr(L)
+    partial_schedule = Schedule.fromstring(g, '')
     T0 = time.time()
     if not test_random:
         random = True #False
         nvalid_determ = 0
-        for L in schedules_func(g, f, 0, 3):
+        for L in schedules_func(g, f, 0, 3, partial_schedule=partial_schedule):
             nvalid_determ += 1
             if verbose:
                 print L
 
     nvalid_random = 0
     for i in range(100):
-        for L in schedules_func(g, f, 0, DEFAULT_MAX_DEPTH, random=True): #sorted([repr(_x) for _x in valid_schedules(g, f, 3)]):
+        for L in schedules_func(g, f, 0, DEFAULT_MAX_DEPTH, random=True, partial_schedule=partial_schedule): #sorted([repr(_x) for _x in valid_schedules(g, f, 3)]):
             if verbose and 0:
                 print L#repr(L)
             nvalid_random += 1
@@ -225,7 +226,7 @@ def test_schedules(verbose=False, test_random=False):
     if verbose:
         print 'generated in %.3f secs' % (T1-T0)
 
-    print 'autotune.random_schedule:   OK'
+    print 'autotune.random_schedule:     OK'
     
     r = nontrivial_schedule(g)
     constantL = [str(r)]
@@ -235,7 +236,7 @@ def test_schedules(verbose=False, test_random=False):
         #print
         constantL.append(str(r.randomized_const()))
     assert len(set(constantL)) > 1
-    print 'autotune.randomized_const:  OK'
+    print 'autotune.randomized_const:    OK'
             
 def test():
     random.seed(0)

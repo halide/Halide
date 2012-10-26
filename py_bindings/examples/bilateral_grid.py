@@ -61,7 +61,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
 
     # Normalize
     smoothed = Func('smoothed')
-    smoothed[x, y] = interpolated[x, y, 0]/interpolated[x, y, 1]
+    smoothed[x, y, c] = interpolated[x, y, 0]/interpolated[x, y, 1]
 
     schedule = 1
     if schedule == 0:
@@ -85,6 +85,13 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
         smoothed.root().cudaTile(x, y, s_sigma, s_sigma)
     else:
         raise ValueError
+    
+    tune_ref_schedules = {'human': 'grid.root().parallel(z).update().reorder(c, x, y).parallel(y)\n' +
+                                   'blurx.root().parallel(z).vectorize(x, 4)\n' +
+                                   'blury.root().parallel(z).vectorize(x, 4)\n' +
+                                   'blurz.root().parallel(z).vectorize(x, 4)\n' +
+                                   'smoothed.root().parallel(y).vectorize(x, 4)\n'}
+
     #autotune.print_tunables(smoothed)
     #for i in range(123,10000):
     #    random.seed(i)
@@ -101,7 +108,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
     
 def main(is_sat=False):
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3_gray.png'), disp_time=True)().show()
+    filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo3.png'), disp_time=True)().show()
     
 if __name__ == '__main__':
     main()

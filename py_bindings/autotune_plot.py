@@ -6,8 +6,9 @@ import sys
 import matplotlib
 import os
 
-def main():
-    args = sys.argv[1:]
+def main(args=None):
+    if args is None:
+        args = sys.argv[1:]
     if len(args) == 0:
         print 'autotune_plot tune_X/summary.txt [out.png]'
     
@@ -44,6 +45,7 @@ def main():
     pylab.title('Best time vs Generation\n(%s)'%tunedir)
     pylab.ylabel('Best time [ms]')
     pylab.xlabel('Generation')
+    pylab.ylim(0, max(y))
     if out_filename is not None:
         pylab.savefig(out_filename, dpi=300)
     else:

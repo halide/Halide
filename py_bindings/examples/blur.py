@@ -17,6 +17,9 @@ def filter_func(dtype=UInt(16)):
     blur_x[x,y,c] = (input_clamped[x-1,y,c]/4+input_clamped[x,y,c]/4+input_clamped[x+1,y,c]/4)/3
     blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
     
+    tune_ref_schedules = {'human': 'blur_y.root().tile(x, y, _c0, _c1, 8, 4).parallel(y).vectorize(_c0, 8)\n' +
+                                   'blur_x.chunk(x).vectorize(x, 8)'}
+
     return (input, blur_y, None, locals())
 
 def main():
@@ -27,14 +30,16 @@ def main():
 
     xi, yi = Var('xi'), Var('yi')
 
+    """"
     if 0:
         blur_x.root().vectorize(x, 8)
         blur_y.vectorize(x, 8)
     else:
         blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
         blur_x.chunk(x).vectorize(x, 8)
-
-    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo2.png'), disp_time=True)
+    """
+    
+    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo2.ppm'), disp_time=True)
     for i in range(5):
         test()
     test().show()

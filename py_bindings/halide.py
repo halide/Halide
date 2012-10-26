@@ -531,19 +531,27 @@ def test_core():
     f = Func()
     f[x,y]=x+1
     
-    print 'halide.test_core:           OK'
+    print 'halide.test_core:             OK'
 
-def visit_funcs(root_func, callback):
-    "Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func."
+def visit_funcs(root_func, callback, all_calls=False):
+    """
+    Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func.
+    
+    By default calls at most once per f (by marking a function as visited and not calling again).
+    Use all_calls=True to make callback() be called for every caller-callee pair.
+    """
     d = {}
     def visit(x, parent):
         name = x.name()
-        if name not in d:# and len(x.args()) > 0:       # FIXME: Where is the Func('f0') with no args coming from in snake? Seems odd...
+        unvisited = name not in d
+        if all_calls or unvisited:# and len(x.args()) > 0:       # FIXME: Where is the Func('f0') with no args coming from in snake? Seems odd...
             d[name] = x
             callback(x, parent)
             #print x.rhs().funcs()
-            for y in x.rhs().funcs():
-                visit(y, x)
+        if unvisited:
+            for y in x.funcs(): #x.rhs().funcs():
+                if y.name() != name:
+                    visit(y, x)
     visit(root_func, None)
     return d
 
@@ -729,7 +737,7 @@ def test_blur():
         I1 = numpy.asarray(PIL.open(out_filename))
         os.remove(out_filename)
     
-    print 'halide.filter_image:        OK'
+    print 'halide.filter_image:          OK'
 
 def test_func(compile=True, in_image=in_filename):
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
@@ -855,7 +863,7 @@ def test_all_funcs():
     g[x,y] = h[x,y]*2
     f[x,y] = g[x,y]+1
     assert sorted(all_funcs(f).keys()) == ['f_all_funcs', 'g_all_funcs', 'h_all_funcs']
-    print 'halide.all_funcs:           OK'
+    print 'halide.all_funcs:             OK'
 
 def test_numpy():
     def dist(a,b):
@@ -883,7 +891,7 @@ def test_numpy():
                 #print 'anorm:', dist(a,a*0), 'cnorm:', dist(c,c*0), numpy.min(a.flatten()), numpy.max(a.flatten()), numpy.min(c.flatten()), numpy.max(c.flatten()), a.dtype, c.dtype
                 assert dist(a,c)<=1500, dist(a,c)
 
-    print 'halide.numpy:               OK'
+    print 'halide.numpy:                 OK'
     
 def test():
     exit_on_signal()
