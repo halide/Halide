@@ -326,7 +326,7 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
 
     # Special tuning variables interpreted by the autotuner
     tune_out_dims = OUT_DIMS
-    tune_in_image = [os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png')]
+    tune_in_images = [os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png')]
 
     if schedule == 2:
         # Autotuned schedule
@@ -334,6 +334,28 @@ def filter_func(result_type=UInt(8), schedule=-1, use_uniforms=False):
         asched = autotune.Schedule.fromstring(processed, 'b_b.chunk(x).vectorize(x,2)\nb_gb.chunk(x).vectorize(x,8)\nb_gr.chunk(y).tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\nb_r.chunk(y).tile(x,y,_c0,_c1,8,8).vectorize(_c0,8)\ncorrected.chunk(x).vectorize(x,8)\ncurve.root().vectorize(x,4).split(x,x,_c0,16)\ncurved.root().tile(x,y,_c0,_c1,32,32).parallel(y)\n\n\ndenoised.root().tile(x,y,_c0,_c1,64,64).vectorize(_c0,8).parallel(y)\ng_b.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ng_gb.chunk(x).vectorize(x,4)\ng_gr.chunk(y)\ng_r.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\n\n\ninterleave_x3.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x4.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x5.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x6.root().tile(x,y,_c0,_c1,16,16).vectorize(_c0,16).parallel(y)\ninterleave_y1.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_y2.chunk(x).vectorize(x,8)\ninterleave_y3.chunk(x).vectorize(x,8)\nmatrix.root().tile(x,y,_c0,_c1,4,4).vectorize(_c0,4).parallel(y)\nmatrix_3200.root().tile(x,y,_c0,_c1,4,4).parallel(y)\n\nprocessed.root().vectorize(tx,8)\nr_b.chunk(y).vectorize(x,8)\nr_gb.chunk(y).vectorize(x,8)\nr_gr.chunk(x)\nr_r.chunk(y)\nshifted.chunk(x).vectorize(x,4)')
         print asched
         asched.apply()
+    
+    tune_ref_schedules = {'human': """
+            g_r.chunk(tx).vectorize(x, 8)
+            g_b.chunk(tx).vectorize(x, 8)
+            r_gr.chunk(tx).vectorize(x, 8)
+            b_gr.chunk(tx).vectorize(x, 8)
+            r_gb.chunk(tx).vectorize(x, 8)
+            b_gb.chunk(tx).vectorize(x, 8)
+            r_b.chunk(tx).vectorize(x, 8)
+            b_r.chunk(tx).vectorize(x, 8)
+            r.chunk(tx).vectorize(x, 8).unroll(y, 2)
+            g.chunk(tx).vectorize(x, 8).unroll(y, 2)
+            b.chunk(tx).vectorize(x, 8).unroll(y, 2)
+            matrix_3200.root()
+            matrix_7000.root()
+            denoised.chunk(tx).vectorize(x, 8)
+            deinterleaved.chunk(tx).vectorize(x, 8)
+            corrected.chunk(tx).vectorize(x, 4)
+            processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty)
+            processed.parallel(ty)
+            """}
+    
     #def evaluate(in_png):
     #    output = Image(UInt(8), 2560, 1920, 3); # image size is hard-coded for the N900 raw pipeline
     #autotune.print_tunables(processed)

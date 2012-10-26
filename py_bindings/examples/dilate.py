@@ -19,6 +19,8 @@ def filter_func(dtype=UInt(16)):
                 subexp = max(subexp, input_clamped[x+dx,y+dy,c])
     dilate[x,y,c] = subexp #min(min(input_clamped[x-1,y-1,c],input_clamped[x,y-1,c]),input_clamped[x+1,y-1,c])
 
+    tune_ref_schedules = {'human': 'dilate.root().tile(x,y,xi,yi,8,8).vectorize(xi,8).parallel(y)'}
+    
     return (input, dilate, None, locals())
 
 def main():
