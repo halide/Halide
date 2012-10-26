@@ -157,6 +157,8 @@ class AutotuneParams:
     
     num_print = 10
 
+    max_nontrivial = 7              # When generating random schedules, max number of nontrivial (non-root/inline) funcs
+    
     check_output = True
     
     compile_threads = None          # Number of processes to use simultaneously for parallel compile (None defaults to number of virtual/hyperthreaded cores)
@@ -343,7 +345,7 @@ def select_and_crossover(prevL, p, root_func, constraints):
     a = tournament_select(prevL, p, root_func)
     b = tournament_select(prevL, p, root_func)
     if random.random() < p.crossover_random_prob:
-        b = random_schedule(root_func, p.min_depth, p.max_depth)
+        b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=p.max_nontrivial)
     c = crossover(a, b, constraints)
     is_mutated = False
     if random.random() < p.crossover_mutate_prob:
@@ -366,7 +368,7 @@ def select_and_mutate(prevL, p, root_func, constraints):
 def tournament_select(prevL, p, root_func):
     i = random.randrange(p.tournament_size)
     if i >= len(prevL):
-        ans = random_schedule(root_func, p.min_depth, p.max_depth)
+        ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=p.max_nontrivial)
     else:
         ans = copy.copy(prevL[i])
     debug_check(ans)
@@ -423,7 +425,7 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     def do_mutated():
         append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints)), 'mutated')
     def do_random():
-        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth)), 'random')
+        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=p.max_nontrivial)), 'random')
     def do_until_success(func):
         while True:
             try:

@@ -805,18 +805,28 @@ class Schedule:
         return Schedule(root_func, ans, genomelog, generation, index)
         
 
-def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}):
+def trivial_func_schedule(f):
+    return FragmentList(f, [FragmentRoot()])
+    
+def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}, max_nontrivial=None):
     """
     Generate Schedule for all functions called by root_func (recursively). Same arguments as schedules_func().
     """
     if vars is None:
         vars = halide.func_varlist(root_func)
     
+    funcs = halide.all_funcs(root_func)
+    
     while 1:
+        chosen = set(funcs)
+        
         d_new_vars = {}
         schedule = {}
         schedule_obj = Schedule(root_func, schedule, 'random', -2, -2, 'random')
         
+        if max_nontrivial is not None and max_nontrivial < len(funcs):
+            chosen = random.sample(funcs, max_nontrivial)
+            
         def callback(f, parent):
             extra_caller_vars = d_new_vars.get(parent.name() if parent is not None else None,[])
     #        print 'schedule', f.name(), extra_caller_vars
@@ -825,14 +835,18 @@ def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=No
             if name in constraints:
                 schedule[name] = constraints[name]
             else:
-                max_depth_sel = max_depth # if f.name() != 'f' else 0
-                while 1:
-                    try:
-                        ans = schedules_func(root_func, f, min_depth, max_depth_sel, random=True, extra_caller_vars=extra_caller_vars, partial_schedule=schedule_obj).next()
-                        break
-                    except StopIteration:
-                        continue
-                schedule[name] = ans
+                if name in chosen:
+                    max_depth_sel = max_depth # if f.name() != 'f' else 0
+                    while 1:
+                        try:
+                            ans = schedules_func(root_func, f, min_depth, max_depth_sel, random=True, extra_caller_vars=extra_caller_vars, partial_schedule=schedule_obj).next()
+                            break
+                        except StopIteration:
+                            continue
+                    schedule[name] = ans
+                else:
+                    # Trivial schedule for func
+                    schedule[name] = trivial_func_schedule(f)
             d_new_vars[name] = schedule[name].new_vars()
             
         halide.visit_funcs(root_func, callback)
