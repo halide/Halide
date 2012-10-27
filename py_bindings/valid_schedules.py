@@ -625,10 +625,10 @@ class Schedule:
 
     def check(self, partial_schedule=None):
         all_funcs = halide.all_funcs(self.root_func)
-        if set(self.d.keys()) != set(all_funcs):
+        if set(self.d.keys()) != set(all_funcs): # and set(self.d.keys())|set(['input_clamped']) != set(all_funcs):
             print sorted(self.d.keys())
             print sorted(halide.all_funcs(self.root_func))
-            raise ValueError(self)
+            raise ValueError(self, self.d.keys(), all_funcs.keys())
         for (fname, f) in all_funcs.items():
             if f.isReduction():
                 L = self.d[fname]
