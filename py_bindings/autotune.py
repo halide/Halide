@@ -973,7 +973,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         display_text = '\n' + '-'*40 + '\n'
         display_text += 'Generation %d'%(gen) + '\n'
         display_text += '-'*40 + '\n'
-        for (j, (timev, current)) in list(enumerate(bothL))[:p.num_print]:
+        for (j, (timev, current, time_dict)) in list(enumerate(bothL))[:p.num_print]:
             display_text += '%s %-4s %s' % (format_time(timev), current.identity(), current.oneline()) + '\n'
         display_text += '\n'
 
