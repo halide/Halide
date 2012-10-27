@@ -990,6 +990,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         #autotune_plot.main((os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
         os.system('python autotune_plot.py "%s" "%s"' % (os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
         currentL = [x[1] for x in bothL]
+        timeL = [x[0] for x in bothL]
 
 import inspect
 _scriptfile = inspect.getfile(inspect.currentframe()) # script filename (usually with path)
