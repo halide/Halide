@@ -1222,9 +1222,9 @@ def main():
                               'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
         p = AutotuneParams()
         exclude = []
-        for key in scope:
-            if key.startswith('input_clamped'):
-                exclude.append(scope[key])
+        #for key in scope:
+        #    if key.startswith('input_clamped'):
+        #        exclude.append(scope[key])
         constraints = Constraints(exclude)
         p.population_size = 300 #1000
         p.tournament_size = 1
@@ -1285,9 +1285,9 @@ def main():
         p = AutotuneParams(argd)
         #p.parallel_compile_nproc = 4
         exclude = []
-        for key in scope:
-            if key.startswith('input_clamped'):
-                exclude.append(scope[key])
+        #for key in scope:
+        #    if key.startswith('input_clamped'):
+        #        exclude.append(scope[key])
         constraints = Constraints(exclude)
 
         autotune(filter_func_name, p, constraints=constraints, seed_scheduleL=seed_scheduleL)
