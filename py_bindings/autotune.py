@@ -969,7 +969,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         
         timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, compare_schedule=compare_schedule)
         
-        bothL = sorted([(timeL[i]['time'], currentL[i]) for i in range(len(timeL))])
+        bothL = sorted([(timeL[i]['time'], currentL[i], timeL[i]) for i in range(len(timeL))])
         display_text = '\n' + '-'*40 + '\n'
         display_text += 'Generation %d'%(gen) + '\n'
         display_text += '-'*40 + '\n'
@@ -990,7 +990,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         #autotune_plot.main((os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
         os.system('python autotune_plot.py "%s" "%s"' % (os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
         currentL = [x[1] for x in bothL]
-        timeL = [x[0] for x in bothL]
+        timeL = [x[2] for x in bothL]
 
 import inspect
 _scriptfile = inspect.getfile(inspect.currentframe()) # script filename (usually with path)
