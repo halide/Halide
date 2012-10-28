@@ -144,7 +144,7 @@ class AutotuneParams:
     trials = 5                  # Timing runs per schedule
     generations = 50
     
-    group_generations = 20            # Iters to run with grouping constraints enabled (0 to not use grouping)
+    group_generations = 0            # Iters to run with grouping constraints enabled (0 to not use grouping)
     
     compile_timeout = 20.0 #15.0        # Compile timeout in sec
     compile_memory_limit = 2500         # Compile memory limit in MB or None for no limit
@@ -1150,7 +1150,7 @@ def test():
     
 def main():
     (args, argd) = parse_args()
-    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake bilateral_grid camera_pipe'.split() # local_laplacian'.split()
+    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake bilateral_grid camera_pipe local_laplacian'.split() # local_laplacian'.split()
     if len(args) == 0:
         print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
         print 'autotune example [%s|all]'%('|'.join(all_examples))
