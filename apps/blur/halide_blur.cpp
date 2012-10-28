@@ -20,10 +20,9 @@ int main(int argc, char **argv) {
   blur_x.vectorize(x, 8);
   */
 
-  blur_y.tile(x, y, xi, yi, 256, 128).vectorize(xi, 8).parallel(y);
-  blur_x.chunk(x, yi).vectorize(x, 8);
+  blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
+  blur_x.chunk(y, yi).vectorize(x, 8);
 
-
-  blur_y.compileToFile("halide_blur");
+  blur_y.compileToFile("halide_blur"); 
   return 0;
 }

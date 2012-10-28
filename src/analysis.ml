@@ -372,3 +372,41 @@ let rec deduplicate_lanes expr = match expr with
   | Var _ -> failwith "Can't deduplicate the lanes of a generic Var"
   | expr -> mutate_children_in_expr deduplicate_lanes expr
 
+
+
+exception NonDifferentiable
+
+(* Check if an expression is linear in a variable *)
+let derivative v expr =
+  let rec inner v env expr =
+    let d = inner v env in
+    match expr with
+      | Var (_, name) when name = v -> IntImm 1
+      | Var (_, name) ->
+        begin try StringMap.find v env with Not_found -> IntImm 0 end
+      | Bop (Mul, a, b) -> ((d a) *~ b) +~ (a *~ (d b))
+      | Bop (Div, a, b) -> (((d a) *~ b) -~ (a *~ (d b))) /~ (a *~ a)
+      | Bop (Add, a, b) -> (d a) +~ (d b)
+      | Bop (Sub, a, b) -> (d a) -~ (d b)
+      | Bop (Min, a, b) -> Select (a <~ b, d a, d b)
+      | Bop (Max, a, b) -> Select (a >~ b, d a, d b)
+      | Select (cond, a, b) -> Select (cond, d a, d b)
+      | Let (name, value, expr) ->
+        let env = StringMap.add name (d value) env in
+        inner v env expr
+      | IntImm _ -> IntImm 0
+      | FloatImm _ -> FloatImm 0.0
+      | Debug (e, _, _) -> d e
+      | MakeVector list -> MakeVector (List.map d list)
+      | Broadcast (e, n) -> Broadcast (d e, n)
+      | Ramp (b, s, n) -> Ramp (d b, d s, n)
+      | ExtractElement (v, idx) -> ExtractElement (d v, idx)        
+      (* TODO, handle differentiable intrinsics (cos, sin, sqrt) *)
+      | _ ->
+        if (StringMap.mem v (find_vars_in_expr expr)) then
+          raise NonDifferentiable
+        else IntImm 0
+
+  in inner v StringMap.empty expr
+
+       
