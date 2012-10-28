@@ -129,6 +129,7 @@ class AutotuneParams:
     prob_mutate_edit     = 0.2
     prob_mutate_template = 1.0
     prob_mutate_copy     = 0.2
+    prob_mutate_group    = 0.2
     
     # 'replace'  - Replace Func's schedule with a new random schedule
     # 'consts'   - Just modify constants when mutating
@@ -137,6 +138,7 @@ class AutotuneParams:
     # 'edit'     - Edit (replace) a single schedule macro within Func's schedule
     # 'template' - Replace Func's schedule with one sampled by autotune_template
     # 'copy'     - Replace Func's schedule with one randomly sampled from another Func
+    # 'group'    - Randomly sample a Func from a group with nontrivial size and replace all funcs in the group with that schedule
     
     min_depth = 0
     max_depth = DEFAULT_MAX_DEPTH
@@ -327,11 +329,24 @@ def mutate(a, p, constraints, grouping):
             elif mode == 'template':
                 s = autotune_template.sample(halide.func_varlist(a.d[name].func)) # TODO: Use parent variables if chunk...
                 a.d[name] = FragmentList.fromstring(a.d[name].func, s)
-                a.genomelog = 'replace_template(%s)'%a0.identity()
+                a.genomelog = 'mutate_template(%s)'%a0.identity()
             elif mode == 'copy':
                 chosen = random.choice(a.d.keys())
                 a.d[name] = FragmentList(a.d[name].func, a.d[chosen])
-                a.genomelog = 'replace_copy(%s)'%a0.identity()
+                a.genomelog = 'mutate_copy(%s)'%a0.identity()
+            elif mode == 'group':
+                grouping0 = default_grouping(a0.root_func)
+                nontrivial_groups = [group for group in grouping0 if len(group) > 1]
+                if len(nontrivial_groups) == 0:
+                    continue
+                d_func = halide.all_funcs(a0.root_func)
+                
+                group = random.choice(nontrivial_groups)
+                ichosen = random.randrange(len(group))
+                for indiv in group:
+                    a.d[indiv] = FragmentList(d_func[indiv], list(a0.d[group[ichosen]]))
+                #return Schedule(schedule.root_func, ans)
+                a.genomelog = 'mutate_group(%s)'%a0.identity()
             else:
                 raise ValueError('Unknown mutation mode %s'%mode)
         except MutateFailed:
