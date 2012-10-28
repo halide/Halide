@@ -16,10 +16,11 @@ halide_blur.bc: halide_blur
 	./halide_blur
 
 halide_blur.o: halide_blur.bc
-	cat halide_blur.bc | $(OPT) -O3 | $(LLC) -O3 -filetype=obj > halide_blur.o
+	cat halide_blur.bc | $(OPT) -O3 | $(LLC) -O3 -mattr=-avx -filetype=obj > halide_blur.o
 
-test: test.cpp halide_blur.o
-	$(GXX) -fopenmp -std=c++0x -lpng -Wall -O3 test.cpp halide_blur.o -o test -lpthread -ldl -lpng -L/usr/local/cuda/lib -lcuda  $(PNGFLAGS)
+# -O2 is faster than -O3 for this app (O3 unrolls too much)
+test: test.cpp halide_blur.o	
+	$(GXX) -fopenmp -std=c++0x -lpng -Wall -O2 test.cpp halide_blur.o -o test -lpthread -ldl -lpng $(PNGFLAGS)
 
 clean:
 	rm -f test halide_blur.o halide_blur.bc halide_blur
