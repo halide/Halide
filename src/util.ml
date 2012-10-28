@@ -106,6 +106,11 @@ let dbg level =
   else 
     Printf.ifprintf stdout 
 
+let disable_bounds_checking = 
+  let str = try Sys.getenv "HL_DISABLE_BOUNDS_CHECKING" with Not_found -> "0" in
+  let num = try int_of_string str with Failure _ -> 0 in
+  num > 0
+
 let with_file_out filename func =
   let out = open_out filename in
   func out;

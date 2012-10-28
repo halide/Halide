@@ -582,7 +582,10 @@ let rec storage_folding defs stmt =
               let k = pow2 1 in
               let result = (i, IntImm k) in
               dbg 2 "Folding %s over dimension %d by %d\n" func i k;
-              Some result
+
+              match try_fold (rest, (i+1)) with
+                | Some (dim, IntImm j) when j < k -> Some (dim, IntImm j)
+                | _ -> Some result
             end              
             | Range (_, max) -> begin
               dbg 2 "Folding factor for %s over dimension %d: %s\n" func i (string_of_expr max);              
@@ -829,26 +832,29 @@ let lower_image_calls (stmt:stmt) =
   
   let new_stmt = walk_stmt stmt in
 
-  (* Add an assert at the start to make sure we don't load each image out of bounds *)
-  (* TODO: this is slow because it traverses the entire AST, and subs's in let statements *)
-  let asserts = StringSet.fold (fun name asserts -> 
-    let msg = ("Function may load image " ^ name ^ " out of bounds") in
-    let region = required_of_stmt name StringMap.empty stmt in
-    let new_asserts = List.fold_right2 (fun range n asserts ->
-      match range with
-        | Unbounded -> failwith ("Unbounded use of input image " ^ name)
-        | Range (min, max) -> 
-          let img_min = Var (i32, name ^ ".min." ^ (string_of_int n)) in
-          let img_extent = Var (i32, name ^ ".extent." ^ (string_of_int n)) in
-          let check = (min >=~ img_min) &&~ ((max -~ min) <~ img_extent) in
-          (Assert (check, msg)) :: asserts
-    ) region (0 -- (List.length region)) asserts in
-    new_asserts 
-  ) !images [] in
-
-  match new_stmt with 
-    | Block stmts -> Block (asserts @ stmts)
-    | stmt -> Block (asserts @ [new_stmt])
+  if disable_bounds_checking then
+    new_stmt
+  else 
+    (* Add an assert at the start to make sure we don't load each image out of bounds *)
+    (* TODO: this is slow because it traverses the entire AST, and subs's in let statements *)
+    let asserts = StringSet.fold (fun name asserts -> 
+      let msg = ("Function may load image " ^ name ^ " out of bounds") in
+      let region = required_of_stmt name StringMap.empty stmt in
+      let new_asserts = List.fold_right2 (fun range n asserts ->
+        match range with
+          | Unbounded -> failwith ("Unbounded use of input image " ^ name)
+          | Range (min, max) -> 
+            let img_min = Var (i32, name ^ ".min." ^ (string_of_int n)) in
+            let img_extent = Var (i32, name ^ ".extent." ^ (string_of_int n)) in
+            let check = (min >=~ img_min) &&~ ((max -~ min) <~ img_extent) in
+            (Assert (check, msg)) :: asserts
+      ) region (0 -- (List.length region)) asserts in
+      new_asserts 
+    ) !images [] in
+    
+    match new_stmt with 
+      | Block stmts -> Block (asserts @ stmts)
+      | stmt -> Block (asserts @ [new_stmt])
 
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
@@ -1002,7 +1008,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let input_images = StringSet.elements (find_input_images_in_stmt stmt) in
 
   (* Add back in the oob_check on the output image too *)
-  let stmt = Block ([oob_check; stmt]) in  
+  let stmt = if disable_bounds_checking then stmt else Block ([oob_check; stmt]) in  
   let stmt = lower_image_calls stmt in
 
   dump_stmt stmt pass pass_desc "image_loads" 1;
