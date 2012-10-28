@@ -117,32 +117,6 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
             in
             let stmt = Realize (func, return_type, region, stmt) in
             For (for_dim, min, size, order, stmt)
-
-          (* 
-            let stmt = Allocate (func, return_type, alloc_size, stmt) in 
-
-            let strides = List.map (fun dim -> Var (i32, dim ^ ".stride")) dim_names in
-            let (min_computed, extent_computed) = List.split (extent_computed_list sched_list dim_names) in
-            let alloc_size = Var (i32, func ^ ".alloc_size") in
-
-            let stmt = 
-              if strides = [] then 
-                (* skip for zero-dimensional funcs *)
-                LetStmt (func ^ ".alloc_size", IntImm 1, stmt) 
-              else                
-                (* lets for strides *)
-                let lhs = 
-                  (List.map (fun dim -> (dim ^ ".stride")) dim_names) @ 
-                    [func ^ ".alloc_size"] in
-                let rhs = (IntImm 1) :: (List.map2 ( *~ ) strides extent_computed) in
-                (* lets for mins 
-                   Currently uses compute mins at this loop level *)                
-                let lhs = lhs @ (List.map (fun dim -> (dim ^ ".buf_min")) dim_names) in
-                let rhs = rhs @ min_computed in
-                let make_let_stmt l r stmt = LetStmt (l, r, stmt) in
-                List.fold_right2 make_let_stmt lhs rhs stmt
-            in For (for_dim, min, size, order, stmt)
-          *)
           | stmt -> mutate_children_in_stmt (fun x -> x) inject_storage stmt
         in inject_storage stmt
       end
@@ -445,7 +419,8 @@ let rec bounds_inference env schedule = function
             let rewrite_bound precomp (func, arg, min, max) =
               (* Lift the storage of the min *)              
               let precomp = lift_var precomp (func ^ "." ^ arg ^ ".min") min in
-              let precomp = lift_var precomp (func ^ "." ^ arg ^ ".extent") (max -~ min +~ IntImm 1) in
+              let precomp = lift_var precomp (func ^ "." ^ arg ^ ".extent") 
+                ((max -~ min) +~ (IntImm 1)) in
               precomp
             in
             
@@ -568,7 +543,7 @@ let rec storage_folding defs stmt =
         | ([], _) -> None
         | ((Unbounded::rest), i) -> try_fold (rest, (i+1))
         | ((Range (min, max))::rest, i) ->
-          let extent = Constant_fold.constant_fold_expr ((max +~ (IntImm 1)) -~ min) in
+          let extent = Constant_fold.constant_fold_expr ((max -~ min) +~ (IntImm 1)) in
           (* Find the maximum value of extent over the loop *)
           let env = StringMap.add for_dim (Range (for_min, for_min +~ for_size -~ (IntImm 1))) env in
           let max_extent = begin match bounds_of_expr_in_env env extent with
@@ -578,8 +553,10 @@ let rec storage_folding defs stmt =
             end
             | Range (_, IntImm k) -> begin
               (* Round up to the nearest power of two, so that we can just use masking *)
+              (* 
               let rec pow2 x = if (x < k) then pow2 (x*2) else x in
               let k = pow2 1 in
+              *)
               let result = (i, IntImm k) in
               dbg 2 "Folding %s over dimension %d by %d\n" func i k;
 
@@ -595,14 +572,14 @@ let rec storage_folding defs stmt =
             end
           end in
           (* Now check that min is monotonic in for_dim *)
-          let next_min = subs_expr (Var (i32, for_dim)) ((Var (i32, for_dim)) +~ (IntImm 1)) min in
-          let check = Constant_fold.constant_fold_expr ((next_min -~ min) >~ (IntImm 0)) in
-          if (check = bool_imm true || check = bool_imm false) then
-            max_extent
-          else begin
-            dbg 2 "Not folding %s because min didn't simplify: %s\n" func (string_of_expr check);
-            try_fold (rest, (i+1))
-          end          
+          try begin
+            let test = (derivative for_dim min) >=~ (IntImm 0) in
+            let test = Constant_fold.constant_fold_expr test in
+            if test = bool_imm true || test = bool_imm false then
+              max_extent
+            else
+              try_fold (rest, i+1)
+          end with NonDifferentiable -> try_fold (rest, i+1)
       in try_fold (region, 0)
     | LetStmt (n, e, stmt) -> 
       let env = StringMap.add n (bounds_of_expr_in_env env e) env in

@@ -272,12 +272,23 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
       | Float _ | FloatVector (_, _) -> build_frem (cg_expr l) (cg_expr r) "" b
       | UInt _ | UIntVector (_, _) -> build_urem (cg_expr l) (cg_expr r) "" b
       | _ -> 
-          (* l % r is not necessarily positive, but ((l % r) + r) % r
-             should be. *)
-          let r = cg_expr r and l = cg_expr l in
-          let initial_mod = build_srem l r "" b in
-          let made_positive = build_add initial_mod r "" b in
-          build_srem made_positive r "" b
+        (* If we're modding by a power of two, we can use urem even for signed ints *)        
+        let rec is_power_of_two = function
+          | 1 -> true
+          | x -> x = ((x/2)*2) && (is_power_of_two (x/2))
+          | _ -> false
+        in begin match r with
+          | Broadcast (IntImm k, _)
+          | IntImm k when is_power_of_two k -> 
+              build_urem (cg_expr l) (cg_expr r) "" b
+          | _ ->
+            (* l % r is not necessarily positive, but ((l % r) + r) % r
+               should be. *)
+            let r = cg_expr r and l = cg_expr l in
+            let initial_mod = build_srem l r "" b in
+            let made_positive = build_add initial_mod r "" b in
+            build_srem made_positive r "" b
+        end
 
   and cg_cmp iop uop fop l r =
     cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
