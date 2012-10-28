@@ -5,31 +5,24 @@ int main(int argc, char **argv) {
 
   UniformImage input(UInt(16), 2);
   Func blur_x("blur_x"), blur_y("blur_y");
-  Var x("x"), y("y"), xo("blockidx"), yo("blockidy"), xi("threadidx"), yi("threadidy");
+  Var x("x"), y("y"), xi("xi"), yi("yi");
 
   // The algorithm
   blur_x(x, y) = (input(x-1, y) + input(x, y) + input(x+1, y))/3;
   blur_y(x, y) = (blur_x(x, y-1) + blur_x(x, y) + blur_x(x, y+1))/3;
   
   // How to schedule it
-  #if 0
-  blur_y.tile(x, y, xi, yi, 64, 64);
+  /*
+  blur_y.tile(x, y, xi, yi, 128, 32);
   blur_y.vectorize(xi, 8);
   blur_y.parallel(y);
   blur_x.chunk(x);
   blur_x.vectorize(x, 8);
-  #else // GPU
-  blur_y.cudaTile(x, y, 32, 16);
-  
-  #if 0
-  // chunking
-  blur_x.chunk(xo);
-  blur_x.split(x, xi, x, 1).split(y, yi, y, 1);
-  blur_x.parallel(yo).parallel(yi).parallel(xo).parallel(xi);
-  #else
-  // inline
-  #endif
-  #endif
+  */
+
+  blur_y.tile(x, y, xi, yi, 256, 128).vectorize(xi, 8).parallel(y);
+  blur_x.chunk(x, yi).vectorize(x, 8);
+
 
   blur_y.compileToFile("halide_blur");
   return 0;
