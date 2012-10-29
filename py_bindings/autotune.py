@@ -95,6 +95,7 @@ import threading
 import shutil
 import autotune_template
 import psutil
+import operator
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -174,6 +175,8 @@ class AutotuneParams:
     in_images = []                  # List of input images to test (can pass multiple images using -in_images a.png:b.png)
                                     # First image is run many times to yield a best timing
     
+    seed_reasonable = True          # Whether to seed with reasonable schedules
+    
     summary_file = 'summary.txt'
     plot_file = 'plot.png'
 
@@ -220,6 +223,63 @@ def debug_check(f, info=None):
             print '-'*40
             print info
             raise ValueError
+
+def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, *args):
+    """
+    Get a reasonable schedule (like gcc's -O3) given a chunk cutoff (0 means never chunk).
+    """
+    ans = {}
+    schedule = Schedule(root_func, ans, *args)
+    def callback(f, fparent):
+        #do_tile = tile_mode == 1
+        #if tile_mode >= 2:
+        #    do_tile = random.random() < 0.5
+        do_tile = random.random() < tile_prob
+            
+        maxval = 1000
+        if fparent is None:
+            footprint = [maxval]
+        else:
+            footprint = list(fparent.footprint(f))
+        footprint = [(x if x > 0 else maxval) for x in footprint]
+        n = 8   # TODO: Vectorize by 128-bit
+        prob = random.random()
+        #if fparent is not None:
+        #    print f.name(), fparent.name(), footprint
+        if reduce(operator.mul, footprint, 1) == 1:
+            ans[f.name()] = FragmentList(f, [])
+        elif all([x <= chunk_cutoff for x in footprint]):
+            chunk_var = chunk_vars(schedule, f)[0]
+            varlist = halide.func_varlist(f)
+            if len(varlist) == 0:
+                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var)])
+            else:
+                x = varlist[0]
+#                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var), FragmentVectorize(x, n)])
+                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var)])
+        else:
+            varlist = halide.func_varlist(f)
+            if len(varlist) == 0:
+                s = '.root()'
+            elif len(varlist) == 1:
+                x = varlist[0]
+                if do_tile:
+                    s = '.root().split(%(x)s,%(x)s,_c0,8).vectorize(_c0,%(n)d)'%locals()
+                else:
+                    s = '.root().split(%(x)s,%(x)s,_c0,8)'%locals()
+            else:
+                x = varlist[0]
+                y = varlist[1]
+                if do_tile:
+                    s = '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)' % locals()
+                else:
+                    s = '.root().parallel(%(y)s)' % locals()
+            ans[f.name()] = FragmentList.fromstring(f, s)
+
+    halide.visit_funcs(root_func, callback)
+    #sys.exit(1)
+    
+    return schedule
 
 def sample_prob(d):
     "Randomly sample key from dictionary with probabilities given in values."
@@ -914,9 +974,16 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         p.in_images = scope['tune_in_images']
     test_func = tester(input, out_func, p, filter_func_name)
     
+    seed_scheduleL = list(seed_scheduleL)
+        
     currentL = []
     for (iseed, seed) in enumerate(seed_scheduleL):
         currentL.append(constraints.constrain(Schedule.fromstring(out_func, seed, 'seed(%d)'%iseed, 0, iseed)))
+
+    if p.seed_reasonable:
+        chunk_cutoff = 0
+        for tile_prob in numpy.arange(0.0,1.01,1.0/25): #chunk_cutoff in range(1,5):
+            currentL.append(reasonable_schedule(out_func, chunk_cutoff, tile_prob, 'reasonable(%.2f)'%tile_prob, 0, len(currentL)))
 
     if len(seed_scheduleL) == 0:
         currentL.append(constraints.constrain(Schedule.fromstring(out_func, '', 'seed(0)', 0, 0)))
@@ -1296,8 +1363,8 @@ def main():
         #evaluate()
         #T1 = time.time()
         #print 'Time for default schedule: %.4f'%(T1-T0)
-        
         p = AutotuneParams(argd)
+
         #p.parallel_compile_nproc = 4
         exclude = []
         #for key in scope:
