@@ -130,7 +130,7 @@ class AutotuneParams:
     prob_mutate_edit     = 0.2
     prob_mutate_template = 1.0
     prob_mutate_copy     = 0.2
-    prob_mutate_group    = 0.2
+    prob_mutate_group    = 0.0      # Seems to converge to local minima -- do not use.
     
     # 'replace'  - Replace Func's schedule with a new random schedule
     # 'consts'   - Just modify constants when mutating
@@ -176,6 +176,7 @@ class AutotuneParams:
                                     # First image is run many times to yield a best timing
     
     seed_reasonable = True          # Whether to seed with reasonable schedules
+    prob_reasonable = 0.5           # Probability to sample reasonable schedule when sampling random schedule
     
     summary_file = 'summary.txt'
     plot_file = 'plot.png'
@@ -224,12 +225,18 @@ def debug_check(f, info=None):
             print info
             raise ValueError
 
-def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, *args):
+def subsample_join(L):
+    idx = range(len(L))
+    n = random.randrange(1,len(L)+1)
+    idx = sorted(random.sample(idx, n))
+    return ''.join([L[i] for i in idx])
+    
+def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragments=False, schedule_args=()):
     """
     Get a reasonable schedule (like gcc's -O3) given a chunk cutoff (0 means never chunk).
     """
     ans = {}
-    schedule = Schedule(root_func, ans, *args)
+    schedule = Schedule(root_func, ans, *schedule_args)
     def callback(f, fparent):
         #do_tile = tile_mode == 1
         #if tile_mode >= 2:
@@ -242,7 +249,7 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, *args):
         else:
             footprint = list(fparent.footprint(f))
         footprint = [(x if x > 0 else maxval) for x in footprint]
-        n = 8   # TODO: Vectorize by 128-bit
+        n = 128/f.rhs().type().bits   # Vectorize by 128-bit
         prob = random.random()
         #if fparent is not None:
         #    print f.name(), fparent.name(), footprint
@@ -264,14 +271,26 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, *args):
             elif len(varlist) == 1:
                 x = varlist[0]
                 if do_tile:
-                    s = '.root().split(%(x)s,%(x)s,_c0,8).vectorize(_c0,%(n)d)'%locals()
+                    if sample_fragments:
+                        s = '.root()' + subsample_join(['.split(%(x)s,%(x)s,_c0,8)'%locals(),'.vectorize(_c0,%(n)d)'%locals()])
+                        if '.split' not in s:
+                            s = s.replace('vectorize(_c0', 'vectorize(x')
+                    else:
+                        s = '.root().split(%(x)s,%(x)s,_c0,8).vectorize(_c0,%(n)d)'%locals()
                 else:
                     s = '.root().split(%(x)s,%(x)s,_c0,8)'%locals()
             else:
                 x = varlist[0]
                 y = varlist[1]
                 if do_tile:
-                    s = '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)' % locals()
+                    if sample_fragments:
+                        s = '.root()' + subsample_join(['.tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d)'%locals(),
+                                                        '.vectorize(_c0,%(n)d)'%locals(),
+                                                        '.parallel(%(y)s)' % locals()])
+                        if '.tile' not in s:
+                            s = s.replace('vectorize(_c0', 'vectorize(x')
+                    else:
+                        s = '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)' % locals()
                 else:
                     s = '.root().parallel(%(y)s)' % locals()
             ans[f.name()] = FragmentList.fromstring(f, s)
@@ -422,11 +441,18 @@ def mutate(a, p, constraints, grouping):
             
         return a
 
+def random_or_reasonable(root_func, p, max_nontrivial, grouping):
+    if random.random() < p.prob_reasonable:
+        return reasonable_schedule(root_func, 0, random.random(), random.randrange(2), ('reasonable', -2, -2, 'reasonable'))
+    else:
+        return random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
+
 def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping):
     a = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
     b = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
     if random.random() < p.crossover_random_prob:
-        b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
+        #b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
+        b = random_or_reasonable(root_func, p, max_nontrivial, grouping)
     c = crossover(a, b, constraints)
     is_mutated = False
     if random.random() < p.crossover_mutate_prob:
@@ -449,7 +475,8 @@ def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping
 def tournament_select(prevL, p, root_func, max_nontrivial, grouping):
     i = random.randrange(p.tournament_size)
     if i >= len(prevL):
-        ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
+        #ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
+        ans = random_or_reasonable(root_func, p, max_nontrivial, grouping)
     else:
         ans = copy.copy(prevL[i])
     debug_check(ans)
@@ -509,6 +536,11 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     
     Here prevL is list of Schedule instances sorted by decreasing fitness, and p is AutotuneParams.
     """
+    assert len(prevL) == len(timeL)
+    bothL = sorted([(timeL[i]['time'], prevL[i], timeL[i]) for i in range(len(timeL))])
+    prevL = [x[1] for x in bothL]
+    timeL = [x[2] for x in bothL]
+    
     prevL = [prevL[i] for i in range(len(prevL)) if get_error_str(timeL[i]['time']) is None]
     
     grouping = None
@@ -541,13 +573,14 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     def do_mutated():
         append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping)), 'mutated')
     def do_random():
-        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)), 'random')
+#        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)), 'random')
+        append_unique(constraints.constrain(random_or_reasonable(root_func, p, max_nontrivial, grouping)), 'random')
     def do_until_success(func):
         while True:
             try:
                 func()
                 return
-            except Duplicate:
+            except (Duplicate, BadScheduleError):
                 continue
 
 #    random_pct = 1-p.pop_mutated_pct-p.pop_crossover_pct-p.pop_elitism_pct
@@ -557,7 +590,10 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
             current = copy.copy(prevL[i])
             if not '(elite copy of' in current.genomelog:
                 current.genomelog += ' (elite copy of %s)' % current.identity() # FIXMEFIXME
-            append_unique(current, 'elite')
+            try:
+                append_unique(current, 'elite')
+            except Duplicate:
+                pass
     
     # Normalize probabilities after removing elitism
     P_total = p.prob_pop['crossover'] + p.prob_pop['mutated'] + p.prob_pop['random']
@@ -589,7 +625,7 @@ class AutotuneTimer:
     def __init__(self):
         self.start_time = time.time()
     
-def time_generation(L, p, test_gen_func, timer, constraints, display_text='', save_output=False, compare_schedule=None):
+def time_generation(L, p, test_gen_func, timer, constraints, display_text='', save_output=False, compare_schedule=None, trials_override=None):
     #T0 = time.time()
     #Tcompile = [0.0]
     #Trun = [0.0]
@@ -598,7 +634,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text='', sa
         sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link + ' => %s'%p.tune_dir if p.tune_link else p.tune_dir, display_text))
         sys.stderr.flush()
 
-    test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer, save_output, compare_schedule))
+    test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer, save_output, compare_schedule, trials_override))
     def time_schedule():
         info = test_gen_iter.next() #test_func(current, constraints)()
         #print 'time_schedule', current, info
@@ -774,7 +810,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     (out_w, out_h, out_channels) = scope.get('tune_out_dims', (-1, -1, -1))
     
-    def test_func(scheduleL, constraints, status_callback, timer, save_output=False, compare_schedule=None):       # FIXME: Handle constraints
+    def test_func(scheduleL, constraints, status_callback, timer, save_output=False, compare_schedule=None, trials_override=None):       # FIXME: Handle constraints
         in_images = p.in_images
         assert len(in_images) > 0, 'No input images'
         do_check = False
@@ -788,7 +824,10 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             
         def subprocess_args(i, schedule, schedule_str, compile=True, j=0, trials=None):
             if trials is None:
-                trials = p.trials
+                if trials_override is not None:
+                    trials = trials_override[i]
+                else:
+                    trials = p.trials
             binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
             mode_str = 'compile' if compile else 'run'
             
@@ -982,8 +1021,10 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
 
     if p.seed_reasonable:
         chunk_cutoff = 0
-        for tile_prob in numpy.arange(0.0,1.01,1.0/25): #chunk_cutoff in range(1,5):
-            currentL.append(reasonable_schedule(out_func, chunk_cutoff, tile_prob, 'reasonable(%.2f)'%tile_prob, 0, len(currentL)))
+        for sample_fragments in [0, 1]:
+            for tile_prob in numpy.arange(0.0,1.01,0.1): #chunk_cutoff in range(1,5):
+                schedule_args = ('reasonable(%.1f,%d)'%(tile_prob,sample_fragments), 0, len(currentL))
+                currentL.append(reasonable_schedule(out_func, chunk_cutoff, tile_prob, sample_fragments, schedule_args))
 
     if len(seed_scheduleL) == 0:
         currentL.append(constraints.constrain(Schedule.fromstring(out_func, '', 'seed(0)', 0, 0)))
@@ -1006,12 +1047,10 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         if e is not None:
             current_s = '%17s'%e
         return current_s
-    
-    orig_trials = p.trials      # Obtain more accurate times for reference schedules
-    p.trials *= 2
-    
+        
+    trials_override = [p.trials] * (len(currentL)-nref) + [p.trials*2]*nref     # Obtain more accurate times for reference schedules
     # Time reference schedules and obtain reference output image for the first schedule
-    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, True)
+    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, True, trials_override=trials_override)
     #ref_output = ''
     ref_log = '-'*40 + '\nReference Schedules\n' + '-'*40 + '\n'
     compare_schedule = currentL[0]
@@ -1026,8 +1065,6 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         ref_log += line_out + '\n'
     print
     log_sched(p, None, ref_log, filename=p.summary_file)
-    
-    p.trials = orig_trials
     
     # Keep only the seed schedules for the genetic algorithm
     assert len(currentL) == len(timeL)
@@ -1071,8 +1108,6 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         sys.stdout.flush()
         #autotune_plot.main((os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
         os.system('python autotune_plot.py "%s" "%s"' % (os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
-        currentL = [x[1] for x in bothL]
-        timeL = [x[2] for x in bothL]
 
 import inspect
 _scriptfile = inspect.getfile(inspect.currentframe()) # script filename (usually with path)
@@ -1255,7 +1290,7 @@ def main():
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
             if examplename == 'local_laplacian':
-                compile_threads = 1
+                compile_threads = 2
                 if multiprocessing.cpu_count() >= 32:
                     compile_threads = 8
                 rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest #['-cores', '1', '-compile_timeout', '40.0'])
