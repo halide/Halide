@@ -1170,7 +1170,7 @@ def autotune_child(args, timeout=None):
         out_func.compileToFile(func_name)
 
         # copy default_runner locally
-        default_runner = os.path.join(_scriptpath, 'default_runner', 'default_runner.cpp')
+        default_runner = os.path.join(_scriptpath, 'runner', 'default_runner.cpp')
         support_include = os.path.join(_scriptpath, '../support')
 
         in_t  = _ctype_of_type(input.type())
