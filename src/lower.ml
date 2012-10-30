@@ -775,17 +775,15 @@ let rec inject_tracing env = function
     ]
   | Provide (e, name, idx) when trace_verbosity > 1 ->    
     let calls = 
-      List.fold_left string_map_merge 
-        (find_calls_in_expr e)
-        (List.map find_calls_in_expr idx)
+      (find_calls_in_expr e) @ (List.flatten (List.map find_calls_in_expr idx))
     in        
-    let make_print key (cty, rty, args) stmts =
+    let make_print stmts (cty, rty, nm, args) =
       if cty != Extern then
-        (Print ("Loading " ^ key ^ " at ", args))::stmts
+        (Print ("Loading " ^ nm ^ " at ", args))::stmts
       else
         stmts
     in
-    let stmts = StringMap.fold make_print calls [] in
+    let stmts = List.fold_left make_print [] calls in
     let stmts = (Print ("Computing " ^ name ^ " at ", idx))::stmts in
     let stmts = stmts @ [Provide (e, name, idx); 
                          Print ("Storing " ^ name ^ " at ", idx)] in                         
