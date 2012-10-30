@@ -59,7 +59,7 @@ def test_crossover(verbose=False):
             if verbose:
                 print 'c', repr(str(c)), c.new_vars()
             c.apply(constraints)
-            c = mutate(c, p, constraints)
+            c = mutate(c, p, constraints, None)
             if verbose:
                 print 'cmutate', repr(str(c)), c.new_vars()
             c.apply(constraints)

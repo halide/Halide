@@ -265,6 +265,8 @@ def Image(typeval, *args):
     Image(numpy_array)
     """
     if len(args) == 0 and hasattr(typeval, '__len__'):
+        if isinstance(typeval, (str, unicode)):
+            raise ValueError('to build image from PNG/PPM use constructor Image(typeval, filename), e.g. Image(UInt(8), filename)')
         return _image_from_numpy(typeval)
 
     assert isinstance(typeval, Type)
@@ -633,7 +635,7 @@ def inputs_dir():
     "Get directory of example inputs."
     return os.path.dirname(__file__)
     
-def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None, out_dims=None): #, pad_multiple=1):
+def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None, out_dims=None, times=1): #, pad_multiple=1):
     """
     Utility function to filter an image filename or numpy array with a Halide Func, returning output Image of the same size.
     
@@ -663,23 +665,28 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
         out_func.compileJIT()
 
     def evaluate():
-        T0 = time.time()
-        try:
+        T = []
+        for i in range(times):
+            T0 = time.time()
             if eval_func is not None:
-                out.assign(eval_func(input_png))
-                return out
+                realized = eval_func(input_png)
             else:
                 #print 'a', w, h, nchan, out.type()
                 realized = out_func.realize(w, h, nchan)
                 #print 'b'
-                out.assign(realized)
                 #print 'c'
-                return out
-        finally:
-            assert out.width() == w and out.height() == h and out.channels() == nchan
-            #print out.width(), out.height(), out.channels(), w, h, nchan
-            if disp_time:
-                print 'Filtered in', time.time()-T0, 'secs'
+            T.append(time.time()-T0)
+        out.assign(realized)
+
+        assert out.width() == w and out.height() == h and out.channels() == nchan
+        #print out.width(), out.height(), out.channels(), w, h, nchan
+        if disp_time:
+            if times > 1:
+                print 'Filtered %d times, min: %.6f secs, mean: %.6f secs.' % (times, numpy.min(T), numpy.mean(T))
+            else:
+                print 'Filtered in %.6f secs' % T[0]
+                
+        return out
     return evaluate
 
 def example_out():

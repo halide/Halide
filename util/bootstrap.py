@@ -76,7 +76,8 @@ def check_ocaml():
             raise OCamlLibMissingError('%s >= %.1f' % (lib, ver_req))
     
     assert_lib_version('sexplib', 7.0)
-    assert_lib_version('batteries', 1.4)
+    # We don't actually use batteries right now
+    #assert_lib_version('batteries', 1.4)
     return ocamlbuild
 
 ocamlbuild = None
@@ -101,9 +102,14 @@ if 'linux' in platform:
         status('Testing for package libsexplib-camlp4-dev')
         assert isdir('/usr/lib/ocaml/sexplib')
         print '...OK!'
+
+        status('Testing for clang')
+        assert which('clang')
+        print '...OK!'
+            
     except:
         print 'You appear to be missing some required packages. Try:'
-        print 'sudo apt-get install g++ libc6-dev-i386 ocaml libsexplib-camlp4-dev'
+        print 'sudo apt-get install clang g++ libc6-dev-i386 ocaml libsexplib-camlp4-dev'
         sys.exit(1)
 
 if 'darwin' in platform:

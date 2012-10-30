@@ -25,24 +25,17 @@ def filter_func(dtype=UInt(16)):
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
 
-    x, y, c = local_d['x'], local_d['y'], local_d['c']
-    blur_x, blur_y = local_d['blur_x'], local_d['blur_y']
+    if 0:       # Human schedule
+        x, y, c = local_d['x'], local_d['y'], local_d['c']
+        blur_x, blur_y = local_d['blur_x'], local_d['blur_y']
+        input_clamped = local_d['input_clamped']
+    
+        xi, yi = Var('xi'), Var('yi')
 
-    xi, yi = Var('xi'), Var('yi')
-
-    """"
-    if 0:
-        blur_x.root().vectorize(x, 8)
-        blur_y.vectorize(x, 8)
-    else:
         blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
         blur_x.chunk(x).vectorize(x, 8)
-    """
     
-    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo2.ppm'), disp_time=True)
-    for i in range(5):
-        test()
-    test().show()
+    test = filter_image(input, out_func, os.path.join(inputs_dir(), 'apollo2.ppm'), disp_time=True, times=5)().show()
 
 if __name__ == '__main__':
     main()
