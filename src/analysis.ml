@@ -315,17 +315,13 @@ let find_vars_in_expr e =
   in rece StringSet.empty e
 
 let rec find_calls_in_expr e =
-  let merge = string_map_merge in
   match e with
   | Call (cty, rty, nm, args) ->
       let arg_calls =
-        List.fold_left
-          (fun calls e -> merge calls (find_calls_in_expr e))
-          StringMap.empty
-          args
+        List.flatten (List.map find_calls_in_expr args)
       in
-      StringMap.add nm (cty, rty, args) arg_calls
-  | x -> fold_children_in_expr find_calls_in_expr merge StringMap.empty x
+      (cty, rty, nm, args)::arg_calls
+  | x -> fold_children_in_expr find_calls_in_expr (@) [] x
 
 let rec find_loads_in_expr = function
   | Load (_, buf, idx) ->
