@@ -37,20 +37,22 @@ def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(in
         level_heights = [sz[1] for sz in sizes]
     downsampled[0][x,y,c] = select(c<3, input[x,y,c] * input[x,y,3], input[x,y,3])
     
+    clamped = [None] + [Func('clamped%d'%l) for l in range(1,levels)]
+    downx = [None] + [Func('downx%d'%l) for l in range(1,levels)]
     for l in range(1, levels):
-        clamped = Func('clamped%d'%l)
-        clamped[x,y,c] = downsampled[l-1][clamp(cast(int_t,x),cast(int_t,0),cast(int_t,level_widths[l-1]-1)),
-                                          clamp(cast(int_t,y),cast(int_t,0),cast(int_t,level_heights[l-1]-1)), c]
-        downx = Func('downx%d'%l)
-        downx[x,y,c] = (clamped[x*2-1,y,c] + 2.0 * clamped[x*2,y,c] + clamped[x*2+1,y,c]) / 4.0
-        downsampled[l][x,y,c] = (downx[x,y*2-1,c] + 2.0 * downx[x,y*2,c] + downx[x,y*2+1,c]) / 4.0
-        
+        clamped[l][x,y,c] = downsampled[l-1][clamp(cast(int_t,x),cast(int_t,0),cast(int_t,level_widths[l-1]-1)),
+                                             clamp(cast(int_t,y),cast(int_t,0),cast(int_t,level_heights[l-1]-1)), c]
+        downx[l][x,y,c] = (clamped[l][x*2-1,y,c] + 2.0 * clamped[l][x*2,y,c] + clamped[l][x*2+1,y,c]) / 4.0
+        downsampled[l][x,y,c] = (downx[l][x,y*2-1,c] + 2.0 * downx[l][x,y*2,c] + downx[l][x,y*2+1,c]) / 4.0
+    
+    upsampled = [Func('upsampled%d'%l) for l in range(levels-1)]
+    upsampledx = [Func('upsampledx%d'%l) for l in range(levels-1)]
+    
     interpolated[levels-1][x,y,c] = downsampled[levels-1][x,y,c]
     for l in range(levels-1)[::-1]:
-        upsampledx, upsampled = Func('upsampledx%d'%l), Func('upsampled%d'%l)
-        upsampledx[x,y,c] = 0.5 * (interpolated[l+1][x/2 + (x%2),y,c] + interpolated[l+1][x/2,y,c])
-        upsampled[x,y,c] = 0.5 * (upsampledx[x, y/2 + (y%2),c] + upsampledx[x,y/2,c])
-        interpolated[l][x,y,c] = downsampled[l][x,y,c] + (1.0 - downsampled[l][x,y,3]) * upsampled[x,y,c]
+        upsampledx[l][x,y,c] = 0.5 * (interpolated[l+1][x/2 + (x%2),y,c] + interpolated[l+1][x/2,y,c])
+        upsampled[l][x,y,c] = 0.5 * (upsampledx[l][x, y/2 + (y%2),c] + upsampledx[l][x,y/2,c])
+        interpolated[l][x,y,c] = downsampled[l][x,y,c] + (1.0 - downsampled[l][x,y,3]) * upsampled[l][x,y,c]
 
     final = Func('final')
     final[x,y,c] = select(c<3, interpolated[0][x,y,c] / interpolated[0][x,y,3], 1.0)
@@ -70,6 +72,12 @@ def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(in
         return out
     
     root_all(final)
+
+    schedule = 1
+    if schedule == 1:
+        # Human autotuned
+        for i in range(levels):
+            downsampled[i]
 
     return (input, final, evaluate, locals())
 
