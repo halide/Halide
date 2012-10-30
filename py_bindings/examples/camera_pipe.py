@@ -364,7 +364,11 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     #g_r = all_funcs(processed)['g_r']
     #print 'caller_vars for g_r:', autotune.caller_vars(processed, g_r)
     #root_all(processed)
-    
+    print 'Grouping'
+    import autotune
+    for sub in autotune.default_grouping(processed):
+        print sub
+
     # In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
     #Func::Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
     #processed.compileToFile("curved", std::vector<Func::Arg>(args, args+6));

@@ -625,10 +625,10 @@ class Schedule:
 
     def check(self, partial_schedule=None):
         all_funcs = halide.all_funcs(self.root_func)
-        if set(self.d.keys()) != set(all_funcs):
+        if set(self.d.keys()) != set(all_funcs): # and set(self.d.keys())|set(['input_clamped']) != set(all_funcs):
             print sorted(self.d.keys())
             print sorted(halide.all_funcs(self.root_func))
-            raise ValueError(self)
+            raise ValueError(self, self.d.keys(), all_funcs.keys())
         for (fname, f) in all_funcs.items():
             if f.isReduction():
                 L = self.d[fname]
@@ -808,7 +808,7 @@ class Schedule:
 def trivial_func_schedule(f):
     return FragmentList(f, [FragmentRoot()])
     
-def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}, max_nontrivial=None):
+def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=None, constraints={}, max_nontrivial=None, grouping=None):
     """
     Generate Schedule for all functions called by root_func (recursively). Same arguments as schedules_func().
     """
@@ -825,7 +825,9 @@ def random_schedule(root_func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, vars=No
         schedule_obj = Schedule(root_func, schedule, 'random', -2, -2, 'random')
         
         if max_nontrivial is not None and max_nontrivial < len(funcs):
-            chosen = random.sample(funcs, max_nontrivial)
+            chosen = set(random.sample(list(funcs), max_nontrivial))
+        if grouping is not None:
+            chosen = [group[0] for group in grouping]
             
         def callback(f, parent):
             extra_caller_vars = d_new_vars.get(parent.name() if parent is not None else None,[])
@@ -876,29 +878,6 @@ def caller_vars(root_func, func):
             #return ans
             #print 'inside caller_vars', g.name(), func_name, ans, rhs_names
     return sorted(ans)
-
-def dfs(edges, start):
-    G = {}
-    for (a, b) in edges:
-        G.setdefault(a, []).append(b)
-        
-    visited = set()
-    def f(current):
-        visited.add(current)
-        for x in G.get(current, []):
-            if x not in visited:
-                f(x)
-    f(start)
-    return visited
-
-def test_dfs():
-    assert dfs([(1,2),(2,3)],1) == set([1, 2, 3])
-    assert dfs([(1,2),(2,3),(4,5)],1) == set([1, 2, 3])
-    assert dfs([(1,2),(2,3),(4,5),(1,5)],1) == set([1, 2, 3, 5])
-    assert dfs([(1,2),(2,3),(4,5),(1,5),(5,6)],1) == set([1, 2, 3, 5, 6])
-    assert dfs([(1,2),(2,3),(4,5),(1,5),(5,6),(4,5)],1) == set([1, 2, 3, 5, 6])
-    assert dfs([(1,2),(2,3),(4,5),(5,6),(3,4)],1) == set([1, 2, 3, 4, 5, 6])
-    print 'valid_schedules.dfs:          OK'
 
 def callers(root_func):
     "Returns dict mapping func name f => list of all func names calling f."
@@ -959,6 +938,19 @@ def test_toposort():
     
     print 'valid_schedules.toposort:     OK'
 
+def intersect_lists(L):
+    "Take intersection while also preserving order (if possible)."
+    if len(L) == 0:
+        return []
+    ans_set = reduce(set.intersection, [set(x) for x in L])
+    added = set()
+    ans = []
+    for x in L[0]:
+        if x not in added:
+            added.add(x)
+            ans.append(x)
+    return ans
+    
 def chunk_vars(schedule, func, remove_inline=False, verbose=False):
     d_stackL = {}      # Map f name to list of stacks (loop ordering) of variable names
     d_callers = callers(schedule.root_func)
@@ -1035,8 +1027,9 @@ def chunk_vars(schedule, func, remove_inline=False, verbose=False):
                 print '-'*20
                 print
         if fname == func.name():
-            stackL = [set(x) for x in d_stackL[fname]]
-            ans = sorted(reduce(set.intersection, stackL))
+            #stackL = [set(x) for x in d_stackL[fname]]
+            #ans = sorted(reduce(set.intersection, stackL))
+            ans = list(reversed(intersect_lists(d_stackL[fname])))
             if verbose:
                 print 'return d_stackL', d_stackL[fname]
                 print 'return stackL', stackL
@@ -1048,46 +1041,6 @@ def chunk_vars(schedule, func, remove_inline=False, verbose=False):
         # Need to implement: reorder(), split(), tile(), stack popping
         
     
-# Bad algorithm for determining chunk vars
-def chunk_vars_removed(schedule, func, remove_inline=False):
-    "Given partially completed schedule and func, return list of var names that func can chunk over."
-    if remove_inline:
-        schedule.d = dict(x for x in schedule.d.items() if len(x[0]))
-#    print schedule.d
-    ans = set([])
-
-    edges = set()
-    d_func = {}
-    
-    def callback(f, fparent):
-        f_name = f.name()
-        d_func[f_name] = f
-        if fparent is None:
-            return
-        fparent_name = fparent.name()
-        if f_name not in schedule.d:            # Implicitly inline
-            edges.add((f_name, fparent_name))
-        else:
-            L = schedule.d[f_name]
-            if len(L) == 0 or isinstance(L[0], FragmentChunk):
-                edges.add((f_name, fparent_name))
-
-    root_func_name = schedule.root_func.name()
-    halide.visit_funcs(schedule.root_func, callback)
-    #print 'edges', edges
-    #print 'dfs', dfs(edges, func.name())
-    reachable = dfs(edges, func.name()) - set([func.name()])
-    #print 'reachable', reachable
-    
-    for rfunc in reachable:
-        if rfunc == root_func_name:     # Root func is implicitly root()ed.
-            ans |= set(halide.func_varlist(schedule.root_func))
-        if rfunc in schedule.d:          
-            L = schedule.d[rfunc]
-            if len(L) >= 1 and isinstance(L[0], FragmentRoot):
-                ans |= set(L.all_vars())
-    
-    return list(sorted(ans))
 
 def simple_program(cache=[]):
     if len(cache):
@@ -1141,6 +1094,7 @@ def test_chunk_vars_subproc(test_bilateral=True):
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)'), f, remove_inline) == ['_c0', '_c1', 'valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)'), f, remove_inline) == ['_c0', 'valid_x', 'valid_y']
 #        assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)\nvalid_g.chunk(valid_y)'), f, remove_inline) == ['_c0', 'valid_x', 'valid_y']
+        #print chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)\nvalid_g.chunk(valid_y)'), f, remove_inline)
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().split(valid_x,valid_x,_c0,8)\nvalid_g.chunk(valid_y)'), f, remove_inline) == ['valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root()'), f, remove_inline) == ['valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().tile(valid_x,valid_y,_c2,_c3,8,8)'), f, remove_inline) == ['_c2', '_c3', 'valid_x', 'valid_y']
@@ -1209,7 +1163,6 @@ def test_chunk_vars_subproc(test_bilateral=True):
 def test_valid_schedules():
     args = sys.argv[1:]
     if len(args) == 0:
-        test_dfs()
         test_callers()
         test_toposort()
         os.system('python ' + os.path.abspath(__file__) + ' test_chunk_vars 0')

@@ -95,6 +95,7 @@ import threading
 import shutil
 import autotune_template
 import psutil
+import operator
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -129,7 +130,8 @@ class AutotuneParams:
     prob_mutate_edit     = 0.2
     prob_mutate_template = 1.0
     prob_mutate_copy     = 0.2
-    
+    prob_mutate_group    = 0.0      # Seems to converge to local minima -- do not use.
+        
     # 'replace'  - Replace Func's schedule with a new random schedule
     # 'consts'   - Just modify constants when mutating
     # 'add'      - Add a single schedule macro to existing schedule
@@ -137,14 +139,17 @@ class AutotuneParams:
     # 'edit'     - Edit (replace) a single schedule macro within Func's schedule
     # 'template' - Replace Func's schedule with one sampled by autotune_template
     # 'copy'     - Replace Func's schedule with one randomly sampled from another Func
+    # 'group'    - Randomly sample a Func from a group with nontrivial size and replace all funcs in the group with that schedule
     
+    image_ext = IMAGE_EXT               # Image extension for reference outputs. Can be overridden by tune_image_ext special variable.
+
     min_depth = 0
     max_depth = DEFAULT_MAX_DEPTH
     
     trials = 5                  # Timing runs per schedule
     generations = 50
     
-    group_generations = 20            # Iters to run with grouping constraints enabled (0 to not use grouping)
+    group_generations = 0            # Iters to run with grouping constraints enabled (0 to not use grouping)
     
     compile_timeout = 20.0 #15.0        # Compile timeout in sec
     compile_memory_limit = 2500         # Compile memory limit in MB or None for no limit
@@ -171,6 +176,9 @@ class AutotuneParams:
     
     in_images = []                  # List of input images to test (can pass multiple images using -in_images a.png:b.png)
                                     # First image is run many times to yield a best timing
+    
+    seed_reasonable = True          # Whether to seed with reasonable schedules
+    prob_reasonable = 0.5           # Probability to sample reasonable schedule when sampling random schedule
     
     summary_file = 'summary.txt'
     plot_file = 'plot.png'
@@ -218,6 +226,81 @@ def debug_check(f, info=None):
             print '-'*40
             print info
             raise ValueError
+
+def subsample_join(L):
+    idx = range(len(L))
+    n = random.randrange(1,len(L)+1)
+    idx = sorted(random.sample(idx, n))
+    return ''.join([L[i] for i in idx])
+    
+def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragments=False, schedule_args=()):
+    """
+    Get a reasonable schedule (like gcc's -O3) given a chunk cutoff (0 means never chunk).
+    """
+    ans = {}
+    schedule = Schedule(root_func, ans, *schedule_args)
+    def callback(f, fparent):
+        #do_tile = tile_mode == 1
+        #if tile_mode >= 2:
+        #    do_tile = random.random() < 0.5
+        do_tile = random.random() < tile_prob
+            
+        maxval = 1000
+        if fparent is None:
+            footprint = [maxval]
+        else:
+            footprint = list(fparent.footprint(f))
+        footprint = [(x if x > 0 else maxval) for x in footprint]
+        n = 128/f.rhs().type().bits   # Vectorize by 128-bit
+        prob = random.random()
+        #if fparent is not None:
+        #    print f.name(), fparent.name(), footprint
+        if reduce(operator.mul, footprint, 1) == 1:
+            ans[f.name()] = FragmentList(f, [])
+        elif all([x <= chunk_cutoff for x in footprint]):
+            chunk_var = chunk_vars(schedule, f)[0]
+            varlist = halide.func_varlist(f)
+            if len(varlist) == 0:
+                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var)])
+            else:
+                x = varlist[0]
+#                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var), FragmentVectorize(x, n)])
+                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var)])
+        else:
+            varlist = halide.func_varlist(f)
+            if len(varlist) == 0:
+                s = '.root()'
+            elif len(varlist) == 1:
+                x = varlist[0]
+                if do_tile:
+                    if sample_fragments:
+                        s = '.root()' + subsample_join(['.split(%(x)s,%(x)s,_c0,8)'%locals(),'.vectorize(_c0,%(n)d)'%locals()])
+                        if '.split' not in s:
+                            s = s.replace('vectorize(_c0', 'vectorize(x')
+                    else:
+                        s = '.root().split(%(x)s,%(x)s,_c0,8).vectorize(_c0,%(n)d)'%locals()
+                else:
+                    s = '.root().split(%(x)s,%(x)s,_c0,8)'%locals()
+            else:
+                x = varlist[0]
+                y = varlist[1]
+                if do_tile:
+                    if sample_fragments:
+                        s = '.root()' + subsample_join(['.tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d)'%locals(),
+                                                        '.vectorize(_c0,%(n)d)'%locals(),
+                                                        '.parallel(%(y)s)' % locals()])
+                        if '.tile' not in s:
+                            s = s.replace('vectorize(_c0', 'vectorize(x')
+                    else:
+                        s = '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)' % locals()
+                else:
+                    s = '.root().parallel(%(y)s)' % locals()
+            ans[f.name()] = FragmentList.fromstring(f, s)
+
+    halide.visit_funcs(root_func, callback)
+    #sys.exit(1)
+    
+    return schedule
 
 def sample_prob(d):
     "Randomly sample key from dictionary with probabilities given in values."
@@ -272,17 +355,21 @@ def crossover(a, b, constraints):
             
         return ans
 
-def mutate(a, p, constraints):
+def mutate(a, p, constraints, grouping):
     "Mutate existing schedule using AutotuneParams p."
     a0 = a
     extra_caller_vars = []      # FIXME: Implement extra_caller_vars, important for chunk().
     dmutate0 = p.dict_prob_mutate()
     
+    keys = a0.d.keys()
+    if grouping is not None:
+        keys = [group[0] for group in grouping]
+    
     while True:
         a = copy.copy(a0)
 #        for name in a.d.keys():
 #            if random.random() < p.mutation_rate:
-        name = random.choice(a.d.keys())
+        name = random.choice(keys)
         dmutate = dict(dmutate0)
         if len(a.d[name]) <= p.min_depth:
             del dmutate['remove']
@@ -323,11 +410,24 @@ def mutate(a, p, constraints):
             elif mode == 'template':
                 s = autotune_template.sample(halide.func_varlist(a.d[name].func)) # TODO: Use parent variables if chunk...
                 a.d[name] = FragmentList.fromstring(a.d[name].func, s)
-                a.genomelog = 'replace_template(%s)'%a0.identity()
+                a.genomelog = 'mutate_template(%s)'%a0.identity()
             elif mode == 'copy':
                 chosen = random.choice(a.d.keys())
                 a.d[name] = FragmentList(a.d[name].func, a.d[chosen])
-                a.genomelog = 'replace_copy(%s)'%a0.identity()
+                a.genomelog = 'mutate_copy(%s)'%a0.identity()
+            elif mode == 'group':
+                grouping0 = default_grouping(a0.root_func)
+                nontrivial_groups = [group for group in grouping0 if len(group) > 1]
+                if len(nontrivial_groups) == 0:
+                    continue
+                d_func = halide.all_funcs(a0.root_func)
+                
+                group = random.choice(nontrivial_groups)
+                ichosen = random.randrange(len(group))
+                for indiv in group:
+                    a.d[indiv] = FragmentList(d_func[indiv], list(a0.d[group[ichosen]]))
+                #return Schedule(schedule.root_func, ans)
+                a.genomelog = 'mutate_group(%s)'%a0.identity()
             else:
                 raise ValueError('Unknown mutation mode %s'%mode)
         except MutateFailed:
@@ -343,15 +443,22 @@ def mutate(a, p, constraints):
             
         return a
 
-def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial):
-    a = tournament_select(prevL, p, root_func, max_nontrivial)
-    b = tournament_select(prevL, p, root_func, max_nontrivial)
+def random_or_reasonable(root_func, p, max_nontrivial, grouping):
+    if random.random() < p.prob_reasonable:
+        return reasonable_schedule(root_func, 0, random.random(), random.randrange(2), ('reasonable', -2, -2, 'reasonable'))
+    else:
+        return random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
+
+def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping):
+    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
+    b = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
     if random.random() < p.crossover_random_prob:
-        b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial)
+        #b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
+        b = random_or_reasonable(root_func, p, max_nontrivial, grouping)
     c = crossover(a, b, constraints)
     is_mutated = False
     if random.random() < p.crossover_mutate_prob:
-        c = mutate(c, p, constraints)
+        c = mutate(c, p, constraints, grouping)
         is_mutated = True
     c.genomelog = 'crossover(%s, %s)'%(a.identity(), b.identity()) + ('' if not is_mutated else '+'+c.genomelog.replace('(-1_-1)', '()'))
     debug_check(c)
@@ -360,17 +467,18 @@ def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial):
 #        c.identity_str = 'XXXXX'
     return c
 
-def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial):
-    a = tournament_select(prevL, p, root_func, max_nontrivial)
-    c = mutate(a, p, constraints)
+def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping):
+    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
+    c = mutate(a, p, constraints, grouping)
     #c.genomelog = 'mutate(%s)'%a.identity()
     debug_check(c)
     return c
 
-def tournament_select(prevL, p, root_func, max_nontrivial):
+def tournament_select(prevL, p, root_func, max_nontrivial, grouping):
     i = random.randrange(p.tournament_size)
     if i >= len(prevL):
-        ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial)
+        #ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
+        ans = random_or_reasonable(root_func, p, max_nontrivial, grouping)
     else:
         ans = copy.copy(prevL[i])
     debug_check(ans)
@@ -413,14 +521,15 @@ def default_grouping(root_func):
 def is_grouping(p, generation_idx):
     return p.group_generations > 0 and generation_idx < p.group_generations
     
-def apply_grouping(schedule, generation_idx, p):
-    if is_grouping(p, generation_idx):
+def apply_grouping(schedule, grouping):
+    if grouping is not None:
         d_func = halide.all_funcs(schedule.root_func)
         ans = {}
-        for group in default_grouping(schedule.root_func):
+        for group in grouping:
             for indiv in group:
                 ans[indiv] = FragmentList(d_func[indiv], list(schedule.d[group[0]]))
-        return Schedule(schedule.root_func, ans)
+        #return Schedule(schedule.root_func, ans)
+        return Schedule(schedule.root_func, ans, schedule.genomelog, schedule.generation, schedule.index, schedule.identity_str)
     return schedule
     
 def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
@@ -429,12 +538,21 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     
     Here prevL is list of Schedule instances sorted by decreasing fitness, and p is AutotuneParams.
     """
+    assert len(prevL) == len(timeL)
+    bothL = sorted([(timeL[i]['time'], prevL[i], timeL[i]) for i in range(len(timeL))])
+    prevL = [x[1] for x in bothL]
+    timeL = [x[2] for x in bothL]
+    
     prevL = [prevL[i] for i in range(len(prevL)) if get_error_str(timeL[i]['time']) is None]
     
+    grouping = None
+    if is_grouping(p, generation_idx):
+        grouping = default_grouping(root_func)
+
     ans = []
     schedule_strs = set()
     def append_unique(schedule, mode):
-        schedule = apply_grouping(schedule, generation_idx, p)
+        schedule = apply_grouping(schedule, grouping)
         if not schedule.check(schedule):
             raise Duplicate
         s = str(schedule).strip()
@@ -453,17 +571,18 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
         max_nontrivial = 1000**2
     
     def do_crossover():
-        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints, max_nontrivial)), 'crossover')
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping)), 'crossover')
     def do_mutated():
-        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints, max_nontrivial)), 'mutated')
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping)), 'mutated')
     def do_random():
-        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial)), 'random')
+#        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)), 'random')
+        append_unique(constraints.constrain(random_or_reasonable(root_func, p, max_nontrivial, grouping)), 'random')
     def do_until_success(func):
         while True:
             try:
                 func()
                 return
-            except Duplicate:
+            except (Duplicate, BadScheduleError):
                 continue
 
 #    random_pct = 1-p.pop_mutated_pct-p.pop_crossover_pct-p.pop_elitism_pct
@@ -473,7 +592,10 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
             current = copy.copy(prevL[i])
             if not '(elite copy of' in current.genomelog:
                 current.genomelog += ' (elite copy of %s)' % current.identity() # FIXMEFIXME
-            append_unique(current, 'elite')
+            try:
+                append_unique(current, 'elite')
+            except Duplicate:
+                pass
     
     # Normalize probabilities after removing elitism
     P_total = p.prob_pop['crossover'] + p.prob_pop['mutated'] + p.prob_pop['random']
@@ -505,7 +627,7 @@ class AutotuneTimer:
     def __init__(self):
         self.start_time = time.time()
     
-def time_generation(L, p, test_gen_func, timer, constraints, display_text='', save_output=False, compare_schedule=None):
+def time_generation(L, p, test_gen_func, timer, constraints, display_text='', save_output=False, compare_schedule=None, trials_override=None):
     #T0 = time.time()
     #Tcompile = [0.0]
     #Trun = [0.0]
@@ -514,7 +636,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text='', sa
         sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link + ' => %s'%p.tune_dir if p.tune_link else p.tune_dir, display_text))
         sys.stderr.flush()
 
-    test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer, save_output, compare_schedule))
+    test_gen_iter = iter(test_gen_func(L, constraints, status_callback, timer, save_output, compare_schedule, trials_override))
     def time_schedule():
         info = test_gen_iter.next() #test_func(current, constraints)()
         #print 'time_schedule', current, info
@@ -557,19 +679,21 @@ def log_sched(p, schedule, s, no_output=False, filename=LOG_SCHEDULE_FILENAME, f
             f[filename].write(s + '\n')
         f[filename].flush()
 
-COMPILE_TIMEOUT = 10001.0
-COMPILE_FAIL    = 10002.0
-RUN_TIMEOUT     = 10003.0
-RUN_FAIL        = 10004.0
-RUN_CHECK_FAIL  = 10005.0
+COMPILE_TIMEOUT  = 10001.0
+COMPILE_FAIL     = 10002.0
+COMPILE_MEMLIMIT = 10003.0
+RUN_TIMEOUT      = 10004.0
+RUN_FAIL         = 10005.0
+RUN_CHECK_FAIL   = 10006.0
 
 def get_error_str(timeval):
     "Get error string from special (high-valued) timing value (one of the above constants)."
-    d = {COMPILE_TIMEOUT: 'COMPILE_TIMEOUT',
-         COMPILE_FAIL:    'COMPILE_FAIL',
-         RUN_TIMEOUT:     'RUN_TIMEOUT',
-         RUN_FAIL:        'RUN_FAIL',
-         RUN_CHECK_FAIL:  'RUN_CHECK_FAIL'}
+    d = {COMPILE_TIMEOUT:  'COMPILE_TIMEOUT',
+         COMPILE_FAIL:     'COMPILE_FAIL',
+         COMPILE_MEMLIMIT: 'COMPILE_MEMLIMIT',
+         RUN_TIMEOUT:      'RUN_TIMEOUT',
+         RUN_FAIL:         'RUN_FAIL',
+         RUN_CHECK_FAIL:   'RUN_CHECK_FAIL'}
     if timeval in d:
         return d[timeval]
     return None
@@ -670,7 +794,7 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
     return proc.returncode, ans
 
 def schedule_ref_output(p, schedule, j):
-    return os.path.join(p.tune_dir, 'f' + schedule.identity() + '_%d'%j + IMAGE_EXT)
+    return os.path.join(p.tune_dir, 'f' + schedule.identity() + '_%d'%j + p.image_ext)
     
 def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     cache = {}
@@ -688,7 +812,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     (out_w, out_h, out_channels) = scope.get('tune_out_dims', (-1, -1, -1))
     
-    def test_func(scheduleL, constraints, status_callback, timer, save_output=False, compare_schedule=None):       # FIXME: Handle constraints
+    def test_func(scheduleL, constraints, status_callback, timer, save_output=False, compare_schedule=None, trials_override=None):       # FIXME: Handle constraints
         in_images = p.in_images
         assert len(in_images) > 0, 'No input images'
         do_check = False
@@ -702,7 +826,10 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             
         def subprocess_args(i, schedule, schedule_str, compile=True, j=0, trials=None):
             if trials is None:
-                trials = p.trials
+                if trials_override is not None:
+                    trials = trials_override[i]
+                else:
+                    trials = p.trials
             binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
             mode_str = 'compile' if compile else 'run'
             
@@ -718,7 +845,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
                 sh_f.write(sh_line)
-            return (sh_args, sh_line, binary_file + IMAGE_EXT)
+            return (sh_args, sh_line, binary_file + p.image_ext)
             
         # Compile all schedules in parallel
         compile_count = [0]
@@ -886,11 +1013,22 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     if 'tune_in_images' in scope:
         p.in_images = scope['tune_in_images']
+    if 'tune_image_ext' in scope:
+        p.image_ext = scope['tune_image_ext']
     test_func = tester(input, out_func, p, filter_func_name)
     
+    seed_scheduleL = list(seed_scheduleL)
+        
     currentL = []
     for (iseed, seed) in enumerate(seed_scheduleL):
         currentL.append(constraints.constrain(Schedule.fromstring(out_func, seed, 'seed(%d)'%iseed, 0, iseed)))
+
+    if p.seed_reasonable:
+        chunk_cutoff = 0
+        for sample_fragments in [0, 1]:
+            for tile_prob in numpy.arange(0.0,1.01,0.1): #chunk_cutoff in range(1,5):
+                schedule_args = ('reasonable(%.1f,%d)'%(tile_prob,sample_fragments), 0, len(currentL))
+                currentL.append(reasonable_schedule(out_func, chunk_cutoff, tile_prob, sample_fragments, schedule_args))
 
     if len(seed_scheduleL) == 0:
         currentL.append(constraints.constrain(Schedule.fromstring(out_func, '', 'seed(0)', 0, 0)))
@@ -913,12 +1051,10 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         if e is not None:
             current_s = '%17s'%e
         return current_s
-    
-    orig_trials = p.trials      # Obtain more accurate times for reference schedules
-    p.trials *= 2
-    
+        
+    trials_override = [p.trials] * (len(currentL)-nref) + [p.trials*2]*nref     # Obtain more accurate times for reference schedules
     # Time reference schedules and obtain reference output image for the first schedule
-    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, True)
+    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, True, trials_override=trials_override)
     #ref_output = ''
     ref_log = '-'*40 + '\nReference Schedules\n' + '-'*40 + '\n'
     compare_schedule = currentL[0]
@@ -933,8 +1069,6 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         ref_log += line_out + '\n'
     print
     log_sched(p, None, ref_log, filename=p.summary_file)
-    
-    p.trials = orig_trials
     
     # Keep only the seed schedules for the genetic algorithm
     assert len(currentL) == len(timeL)
@@ -958,11 +1092,11 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         
         timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, compare_schedule=compare_schedule)
         
-        bothL = sorted([(timeL[i]['time'], currentL[i]) for i in range(len(timeL))])
+        bothL = sorted([(timeL[i]['time'], currentL[i], timeL[i]) for i in range(len(timeL))])
         display_text = '\n' + '-'*40 + '\n'
         display_text += 'Generation %d'%(gen) + '\n'
         display_text += '-'*40 + '\n'
-        for (j, (timev, current)) in list(enumerate(bothL))[:p.num_print]:
+        for (j, (timev, current, time_dict)) in list(enumerate(bothL))[:p.num_print]:
             display_text += '%s %-4s %s' % (format_time(timev), current.identity(), current.oneline()) + '\n'
         display_text += '\n'
 
@@ -978,7 +1112,6 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         sys.stdout.flush()
         #autotune_plot.main((os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
         os.system('python autotune_plot.py "%s" "%s"' % (os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
-        currentL = [x[1] for x in bothL]
 
 import inspect
 _scriptfile = inspect.getfile(inspect.currentframe()) # script filename (usually with path)
@@ -1138,7 +1271,7 @@ def test():
     
 def main():
     (args, argd) = parse_args()
-    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake bilateral_grid camera_pipe'.split() # local_laplacian'.split()
+    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake interpolate bilateral_grid camera_pipe local_laplacian'.split() # local_laplacian'.split()
     if len(args) == 0:
         print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
         print 'autotune example [%s|all]'%('|'.join(all_examples))
@@ -1161,11 +1294,13 @@ def main():
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
             if examplename == 'local_laplacian':
-                compile_threads = 1
+                compile_threads = 2
                 if multiprocessing.cpu_count() >= 32:
                     compile_threads = 8
-                rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest #['-cores', '1', '-compile_timeout', '40.0'])
-            if examplename in ['camera_pipe', 'bilateral_grid']:
+                rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest
+            elif examplename == 'interpolate':
+                rest = '-compile_timeout 120.0'.split() + rest
+            elif examplename in ['camera_pipe', 'bilateral_grid']:
                 rest = '-generations 150'.split() + rest
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
@@ -1210,9 +1345,9 @@ def main():
                               'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
         p = AutotuneParams()
         exclude = []
-        for key in scope:
-            if key.startswith('input_clamped'):
-                exclude.append(scope[key])
+        #for key in scope:
+        #    if key.startswith('input_clamped'):
+        #        exclude.append(scope[key])
         constraints = Constraints(exclude)
         p.population_size = 300 #1000
         p.tournament_size = 1
@@ -1239,12 +1374,12 @@ def main():
 #        seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blurUInt16)\n' +
 #                              'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
         seed_scheduleL.append('')
-        if filter_func_name == 'examples.snake.filter_func':        # Temporary workaround to test snake by injecting more valid schedules
+        if filter_func_name == 'examples.snake.filter_func' and 0:        # Temporary workaround to test snake by injecting more valid schedules
             seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
             seed_scheduleL.append('Dirac0.root()\nNx0.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
             seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
             seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()')
-        elif filter_func_name == 'examples.camera_pipe.filter_func':    # Workaround for camera_pipe
+        elif filter_func_name == 'examples.camera_pipe.filter_func' and 0:    # Workaround for camera_pipe
             seed_scheduleL = []
             """
             # Below schedule is totally reasonable but fails (compiler bug)
@@ -1254,7 +1389,7 @@ def main():
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
             seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nshifted.root()')
-        elif filter_func_name in ['examples.local_laplacian.filter_func', 'examples.bilateral_grid.filter_func']:
+        elif filter_func_name in ['examples.local_laplacian.filter_func', 'examples.bilateral_grid.filter_func'] or 1:
             seed_scheduleL = []
             seed_scheduleL.append(root_all_str(out_func)) #'clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndownx2.root()\ndownx3.root()\ndownx4.root()\ndownx5.root()\ndowny0.root()\ndowny1.root()\ndowny2.root()\ndowny3.root()\ndowny4.root()\ndowny5.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngPyramid2.root()\ngPyramid3.root()\ngray.root()\ninGPyramid1.root()\ninGPyramid2.root()\ninGPyramid3.root()\nlPyramid0.root()\nlPyramid1.root()\nlPyramid2.root()\noutGPyramid0.root()\noutGPyramid1.root()\noutGPyramid2.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutLPyramid2.root()\noutLPyramid3.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupx2.root()\nupx3.root()\nupx4.root()\nupx5.root()\nupy0.root()\nupy1.root()\nupy2.root()\nupy3.root()\nupy4.root()\nupy5.root()')
             #seed_scheduleL.append('clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndowny0.root()\ndowny1.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngray.root()\ninGPyramid1.root()\nlPyramid0.root()\noutGPyramid0.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupy0.root()\nupy1.root()')
@@ -1269,13 +1404,13 @@ def main():
         #evaluate()
         #T1 = time.time()
         #print 'Time for default schedule: %.4f'%(T1-T0)
-        
         p = AutotuneParams(argd)
+
         #p.parallel_compile_nproc = 4
         exclude = []
-        for key in scope:
-            if key.startswith('input_clamped'):
-                exclude.append(scope[key])
+        #for key in scope:
+        #    if key.startswith('input_clamped'):
+        #        exclude.append(scope[key])
         constraints = Constraints(exclude)
 
         autotune(filter_func_name, p, constraints=constraints, seed_scheduleL=seed_scheduleL)
