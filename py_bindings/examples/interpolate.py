@@ -53,7 +53,6 @@ def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(in
 
     final = Func('final')
     final[x,y,c] = select(c<3, interpolated[0][x,y,c] / interpolated[0][x,y,3], 1.0)
-    root_all(final)
     
     def evaluate(in_png):
         T0 = time.time()
@@ -68,18 +67,22 @@ def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(in
 
         return out
     
-    root_all(final)
-
     # Special tuning variables interpreted by the autotuner
     tune_in_images = [in_filename]
     tune_image_ext = '.png'             # .ppm does not support 4 channel images
 
-    schedule = 1
-    if schedule == 1:
-        # Human autotuned
-        for i in range(levels):
-            downsampled[i]
-
+    human_schedule = 'final.root().tile(x,y,_c0,_c1,4,4).parallel(y).vectorize(_c0,4)\n'
+    for i in range(levels):
+        human_schedule += 'downsampled%d.root().tile(x,y,_c0,_c1,4,4).parallel(y).vectorize(_c0,4).unroll(_c1,4)\n'%i
+        if i < levels-1:
+            human_schedule += 'upsampled%d.chunk(x)\n'%i
+        human_schedule += 'interpolated%d.root().tile(x,y,_c0,_c1,4,4).parallel(y).vectorize(_c0,4).unroll(_c1,4)\n'%i
+        
+    tune_ref_schedules = {'human': human_schedule}
+    
+    import autotune
+    autotune.Schedule.fromstring(final, human_schedule).apply()
+    
     return (input, final, evaluate, locals())
 
 def main():

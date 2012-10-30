@@ -1299,7 +1299,7 @@ def main():
                     compile_threads = 8
                 rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest
             elif examplename == 'interpolate':
-                rest = '-compile_timeout 120.0'.split() + rest
+                rest = '-generations 150 -compile_timeout 120.0'.split() + rest
             elif examplename in ['camera_pipe', 'bilateral_grid']:
                 rest = '-generations 150'.split() + rest
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
