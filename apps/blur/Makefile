@@ -16,7 +16,7 @@ halide_blur.bc: halide_blur
 	./halide_blur
 
 halide_blur.o: halide_blur.bc
-	cat halide_blur.bc | $(OPT) -O3 | $(LLC) -O3 -mattr=-avx -filetype=obj > halide_blur.o
+	cat halide_blur.bc | $(OPT) -O3 -always-inline | $(LLC) -O3 -filetype=obj > halide_blur.o
 
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
 test: test.cpp halide_blur.o	
