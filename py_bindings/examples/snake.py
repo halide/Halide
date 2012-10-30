@@ -204,10 +204,18 @@ def filter_full(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cel
         c = Var('c')
         masked[x,y,c] = select(phi_buf[x, y] < 0.0, im[x, y, c], im[x, y, c]/4)
         out = masked.realize(im.width(), im.height(), 3)
+        print 'Total time %f secs'%(time.time()-T0)
         return out
     #Image(UInt(8),out).save('snake_out.png')
 
-    root_all(phi_new)
+    #import autotune
+    xi,yi=Var('xi'),Var('yi')
+    #print func_varlist(phi_new)
+    ix = phi_new.args()[0].vars()[0]
+    iy = phi_new.args()[1].vars()[0]
+    phi_new.root().parallel(iy).vectorize(ix,4) #tile(ix,iy,xi,yi,4,4).vectorize(xi,4).parallel(iy)
+    #autotune.reasonable_schedule(phi_new, tile_prob=0.0).apply()
+    #root_all(phi_new)
     
     if one_iter:
         return (im, phi_new, None, locals())
@@ -224,8 +232,10 @@ def main():
     #for funcname in sorted(all_funcs(out_func).keys()):
     #    sys.stdout.write(funcname + '.root()\\n')
     #print
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'blood_cells_small.png'), eval_func=evaluate)().show()
-
+#    filter_image(input, out_func, os.path.join(inputs_dir(), 'blood_cells_small_crop.png'), eval_func=evaluate)().show()
+#    filter_image(input, out_func, os.path.join(inputs_dir(), 'blood_cells_small.png'), eval_func=evaluate)().show()
+    filter_image(input, out_func, os.path.join(inputs_dir(), '../apps/snake/blood_cells.png'), eval_func=evaluate)().show()
+    
 if __name__ == '__main__':
     main()
 
