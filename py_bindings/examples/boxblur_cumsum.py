@@ -60,24 +60,41 @@ def boxblur_mode(dtype=UInt(16), is_sat=False, use_uniforms=False):
     
     if schedule == 0:
         pass
-    elif schedule == 1:
+    elif schedule == 1:         # Human
         if not is_sat:
-            #sum.tile(x,y,xi,yi,16,16).parallel(y).vectorize(x,8)
-            #sumx.tile(x,y,xi,yi,16,16).parallel(y).vectorize(x,8)
-            #sum_clamped.tile(x,y,xi,yi,8,16).parallel(y).vectorize(x,8)
-            #weight.chunk(x).vectorize(x,8)
+            sum.tile(x,y,xi,yi,16,16).parallel(y).vectorize(x,8)
+            sumx.tile(x,y,xi,yi,16,16).parallel(y).vectorize(x,8)
+            sum_clamped.tile(x,y,xi,yi,8,16).parallel(y).vectorize(x,8)
+            weight.chunk(x).vectorize(x,8)
+            output.tile(x,y,xi,yi,8,8).parallel(y).vectorize(xi,8)
+        else:
+            sum.tile(x,y,xi,yi,8,8).parallel(y).vectorize(x,8)
+            sum_clamped.parallel(c)
+            weight.chunk(x).vectorize(x,8)
+            output.tile(x,y,xi,yi,8,8).parallel(y).vectorize(xi,8)
+    elif schedule == 2:         # Autotuned
+        if not is_sat:
             sum.parallel(c).vectorize(x,8)
             sumx.parallel(c).vectorize(x,8)
             output.parallel(y).unroll(y,4).vectorize(x,8)
         else:
-            #sum.tile(x,y,xi,yi,8,8).parallel(y).vectorize(x,8)
-            #sum_clamped.parallel(c)
-            #weight.chunk(x).vectorize(x,8)
             sum.parallel(c).unroll(y,4)
             output.tile(x,y,xi,yi,8,8).parallel(y).vectorize(x,8)
     else:
         raise ValueError
-        
+
+    if not is_sat:
+        tune_ref_schedules = {'human': 'sum.root().tile(x,y,_c0,_c1,16,16).parallel(y).vectorize(x,8)\n' +
+                                       'sumx.root().tile(x,y,_c0,_c1,16,16).parallel(y).vectorize(x,8)\n' +
+                                       'sum_clamped.root().tile(x,y,_c0,_c1,8,16).parallel(y).vectorize(x,8)\n' +
+                                       'weight.chunk(x).vectorize(x,8)\n' +
+                                       'output.root().tile(x,y,_c0,_c1,8,8).parallel(y).vectorize(_c0,8)'}
+    else:
+        tune_ref_schedules = {'human': 'sum.root().tile(x,y,_c0,_c1,8,8).parallel(y).vectorize(x,8)\n' +
+                                       'sum_clamped.root().parallel(c)\n' +
+                                       'weight.chunk(x).vectorize(x,8)\n' +
+                                       'output.root().tile(x,y,xi,yi,8,8).parallel(y).vectorize(xi,8)'}
+
     return (input, output, None, locals())
 
 def filter_func(dtype=UInt(16)):
@@ -92,7 +109,7 @@ def main(is_sat=False):
         I = evaluate()
         T = builtin_min(T, time.time()-T0)
     print 'Best time: %.4f'%T
-    I.show()
+    #I.show()
     
 if __name__ == '__main__':
     main()

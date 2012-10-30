@@ -59,7 +59,7 @@ def test_crossover(verbose=False):
             if verbose:
                 print 'c', repr(str(c)), c.new_vars()
             c.apply(constraints)
-            c = mutate(c, p, constraints)
+            c = mutate(c, p, constraints, None)
             if verbose:
                 print 'cmutate', repr(str(c)), c.new_vars()
             c.apply(constraints)
@@ -95,9 +95,9 @@ def test_crossover(verbose=False):
             test_generation(L, prev_gen)
             prev_gen = L
     
-    print 'autotune.crossover:         OK'
-    print 'autotune.mutate:            OK'
-    print 'autotune.next_generation:   OK'
+    print 'autotune.crossover:           OK'
+    print 'autotune.mutate:              OK'
+    print 'autotune.next_generation:     OK'
 
 def test_funcs(cache=[]):
     if len(cache):
@@ -142,7 +142,7 @@ def test_sample_prob():
     for key in d.keys():
         assert abs(dc[key]*1.0/count-d[key])<eps, (key, d[key], dc[key]*1.0/count)
     assert dc['d'] == 0
-    print 'autotune.sample_prob:       OK'
+    print 'autotune.sample_prob:         OK'
 
 def test_schedules(verbose=False, test_random=False):
     #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
@@ -226,7 +226,7 @@ def test_schedules(verbose=False, test_random=False):
     if verbose:
         print 'generated in %.3f secs' % (T1-T0)
 
-    print 'autotune.random_schedule:   OK'
+    print 'autotune.random_schedule:     OK'
     
     r = nontrivial_schedule(g)
     constantL = [str(r)]
@@ -236,7 +236,7 @@ def test_schedules(verbose=False, test_random=False):
         #print
         constantL.append(str(r.randomized_const()))
     assert len(set(constantL)) > 1
-    print 'autotune.randomized_const:  OK'
+    print 'autotune.randomized_const:    OK'
             
 def test():
     random.seed(0)

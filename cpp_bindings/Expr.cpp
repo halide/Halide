@@ -199,8 +199,8 @@ namespace Halide {
         assert(!listEmpty(fp));
 
         std::vector<int> footprint;
-        for (MLVal f = listHead(fp); !listEmpty(fp); fp = listTail(fp)) {
-            footprint.push_back(int(f));
+        for (; !listEmpty(fp); fp = listTail(fp)) {          
+            footprint.push_back(int(listHead(fp)));
         }
 
         return footprint;

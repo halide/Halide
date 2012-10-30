@@ -2,13 +2,12 @@ import sys; sys.path += ['..', '.']
 import math
 from halide import *
 
+DEFAULT_FILENAME = os.path.join(inputs_dir(), 'blood_cells_small_crop.png')
+
 int_t = Int(32)
 float_t = Float(32)
 
-def filter_func(*args):
-    return filter_full(*args, one_iter=True)
-    
-def filter_full(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cells_small.png'), one_iter=False):
+def filter_func(dtype=UInt(8), in_filename=DEFAULT_FILENAME):
     "Snake segmentation."
     exit_on_signal()
 
@@ -139,10 +138,7 @@ def filter_full(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cel
     background = 255.0 * 0.98
     selectPadding = 10
 
-    if one_iter:
-        im = UniformImage(Float(32), 3, 'im')
-    else:
-        im = Image(UInt(8), in_filename)
+    im = Image(UInt(8), in_filename)
 
     gray = Func('gray')
     gray[x, y] = max(cast(float_t, im[x, y, 0]), max(cast(float_t, im[x, y, 1]), cast(float_t, im[x, y, 2])))
@@ -161,10 +157,7 @@ def filter_full(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cel
     g_proxy = Func('g_proxy')
     g_proxy.assign(1.0 / (1.0 + input_dx * input_dx + input_dy * input_dy))
     
-    if one_iter:
-        g_buf = g_proxy
-    else:
-        g_buf = g_proxy.realize(im.width(), im.height())
+    g_buf = g_proxy.realize(im.width(), im.height())
 
     phi_init = Func('phi_init')
     phi_init[x,y] = select((x >= selectPadding)
@@ -173,10 +166,7 @@ def filter_full(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cel
                             & (y < im.height() - selectPadding),
                             -2.0, 2.0)
 
-    if one_iter:
-        phi_input = phi_init
-    else:
-        phi_input = UniformImage(Float(32), 2)
+    phi_input = UniformImage(Float(32), 2)
 
     phi_clamped = Func('phi_clamped')
     phi_clamped[x,y] = phi_input[clamp(x,cast(int_t,0),cast(int_t,im.width()-1)),
@@ -204,28 +194,21 @@ def filter_full(dtype=UInt(8), in_filename=os.path.join(inputs_dir(), 'blood_cel
         c = Var('c')
         masked[x,y,c] = select(phi_buf[x, y] < 0.0, im[x, y, c], im[x, y, c]/4)
         out = masked.realize(im.width(), im.height(), 3)
+        print 'Total time %f secs'%(time.time()-T0)
         return out
-    #Image(UInt(8),out).save('snake_out.png')
 
-    root_all(phi_new)
+    # Human reference schedule
+    human_schedule = 'phi_new.root().parallel(iv1).vectorize(iv0,4)'
+    tune_ref_schedules = {'human': human_schedule}
+    import autotune
+    autotune.Schedule.fromstring(phi_new, human_schedule).apply()
     
-    if one_iter:
-        return (im, phi_new, None, locals())
-        #return (im, phi_new, None, locals())
-    else:
-        return (im, phi_new, evaluate, locals())
+    return (im, phi_new, evaluate, locals())
 
 def main():
-    (input, out_func, evaluate, local_d) = filter_full()
-#    (input, out_func, evaluate, local_d) = filter_func()
-    #for (funcname, f) in sorted(all_funcs(out_func).items()):
-    #    print funcname, ' '.join(func_varlist(f))
-    #print '\n'.join(sorted(all_funcs(out_func).keys()))
-    #for funcname in sorted(all_funcs(out_func).keys()):
-    #    sys.stdout.write(funcname + '.root()\\n')
-    #print
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'blood_cells_small.png'), eval_func=evaluate)().show()
-
+    (input, out_func, evaluate, local_d) = filter_func()
+    filter_image(input, out_func, DEFAULT_FILENAME, eval_func=evaluate)().show()
+    
 if __name__ == '__main__':
     main()
 
