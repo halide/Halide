@@ -1267,7 +1267,7 @@ def test():
     
 def main():
     (args, argd) = parse_args()
-    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake bilateral_grid camera_pipe local_laplacian'.split() # local_laplacian'.split()
+    all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake interpolate bilateral_grid camera_pipe local_laplacian'.split() # local_laplacian'.split()
     if len(args) == 0:
         print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
         print 'autotune example [%s|all]'%('|'.join(all_examples))
@@ -1293,8 +1293,10 @@ def main():
                 compile_threads = 2
                 if multiprocessing.cpu_count() >= 32:
                     compile_threads = 8
-                rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest #['-cores', '1', '-compile_timeout', '40.0'])
-            if examplename in ['camera_pipe', 'bilateral_grid']:
+                rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest
+            elif examplename == 'interpolate':
+                rest = '-compile_timeout 120.0'.split() + rest
+            elif examplename in ['camera_pipe', 'bilateral_grid']:
                 rest = '-generations 150'.split() + rest
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'test_random':
