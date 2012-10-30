@@ -5,7 +5,7 @@ from halide import *
 int_t = Int(32)
 float_t = Float(32)
 
-def filter_func(dtype=Float(32)):
+def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(inputs_dir(), 'interpolate_large.png')):
     "Fast interpolation using a pyramid."
 
     input = UniformImage(dtype, 3, 'input')
@@ -14,11 +14,27 @@ def filter_func(dtype=Float(32)):
     c = Var('c')
     levels = 10
     
+    def pyramid_sizes(w, h):
+        ans = []
+        for l in range(levels):
+            ans.append((w, h))
+            w = w/2 + 1
+            h = h/2 + 1
+        return ans
+
+    # Special tuning variables interpreted by the autotuner
+    tune_in_images = [in_filename]
+    
     downsampled = [Func('downsampled%d'%i) for i in range(levels)]
     interpolated = [Func('interpolated%d'%i) for i in range(levels)]
-    level_widths = [Uniform(int_t,'level_widths%d'%i) for i in range(levels)]
-    level_heights = [Uniform(int_t,'level_heights%d'%i) for i in range(levels)]
-
+    if use_uniforms:
+        level_widths = [Uniform(int_t,'level_widths%d'%i) for i in range(levels)]
+        level_heights = [Uniform(int_t,'level_heights%d'%i) for i in range(levels)]
+    else:
+        I = Image(dtype, tune_in_images[0])
+        sizes = pyramid_sizes(I.width(), I.height())
+        level_widths = [sz[0] for sz in sizes]
+        level_heights = [sz[1] for sz in sizes]
     downsampled[0][x,y,c] = select(c<3, input[x,y,c] * input[x,y,3], input[x,y,3])
     
     for l in range(1, levels):
@@ -40,34 +56,27 @@ def filter_func(dtype=Float(32)):
     final[x,y,c] = select(c<3, interpolated[0][x,y,c] / interpolated[0][x,y,3], 1.0)
     root_all(final)
     
-    #print 'interpolate: finished function setup'
-    
     def evaluate(in_png):
-        #print 'interpolate evaluate'
         T0 = time.time()
-        width  = in_png.width()
-        height = in_png.height()
-        #print width, height
-        for l in range(levels):
-            level_widths[l].assign(width)
-            level_heights[l].assign(height)
-            width = width/2 + 1
-            height = height/2 + 1
-        #print in_png.width(), in_png.height(), 'realizing'
+        if use_uniforms:
+            sizes = pyramid_sizes(in_png.width(), in_png.height())
+            for l in range(levels):
+                level_widths[l].assign(sizes[l][0])
+                level_heights[l].assign(sizes[l][1])
+
         out = final.realize(in_png.width(), in_png.height(), 4)
-        print 'Interpolated in %.4f secs' % (time.time()-T0)
-        #print 'evaluate realized, returning'
+        print 'Interpolated in %.5f secs' % (time.time()-T0)
+
         return out
     
-    #print 'interpolate: returning'
-
     root_all(final)
 
     return (input, final, evaluate, locals())
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'interpolate_in.png'), eval_func=evaluate)().show()
+    filter_image(input, out_func, local_d['tune_in_images'][0], eval_func=evaluate)().show()
+#    filter_image(input, out_func, os.path.join(inputs_dir(), 'interpolate_in.png'))().show()
 
 if __name__ == '__main__':
     main()
