@@ -21,9 +21,6 @@ def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(in
             w = w/2 + 1
             h = h/2 + 1
         return ans
-
-    # Special tuning variables interpreted by the autotuner
-    tune_in_images = [in_filename]
     
     downsampled = [Func('downsampled%d'%i) for i in range(levels)]
     interpolated = [Func('interpolated%d'%i) for i in range(levels)]
@@ -31,7 +28,7 @@ def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(in
         level_widths = [Uniform(int_t,'level_widths%d'%i) for i in range(levels)]
         level_heights = [Uniform(int_t,'level_heights%d'%i) for i in range(levels)]
     else:
-        I = Image(dtype, tune_in_images[0])
+        I = Image(dtype, in_filename)
         sizes = pyramid_sizes(I.width(), I.height())
         level_widths = [sz[0] for sz in sizes]
         level_heights = [sz[1] for sz in sizes]
@@ -72,6 +69,10 @@ def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(in
         return out
     
     root_all(final)
+
+    # Special tuning variables interpreted by the autotuner
+    tune_in_images = [in_filename]
+    tune_image_ext = '.png'             # .ppm does not support 4 channel images
 
     schedule = 1
     if schedule == 1:

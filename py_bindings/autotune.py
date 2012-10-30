@@ -131,7 +131,7 @@ class AutotuneParams:
     prob_mutate_template = 1.0
     prob_mutate_copy     = 0.2
     prob_mutate_group    = 0.0      # Seems to converge to local minima -- do not use.
-    
+        
     # 'replace'  - Replace Func's schedule with a new random schedule
     # 'consts'   - Just modify constants when mutating
     # 'add'      - Add a single schedule macro to existing schedule
@@ -141,6 +141,8 @@ class AutotuneParams:
     # 'copy'     - Replace Func's schedule with one randomly sampled from another Func
     # 'group'    - Randomly sample a Func from a group with nontrivial size and replace all funcs in the group with that schedule
     
+    image_ext = IMAGE_EXT               # Image extension for reference outputs. Can be overridden by tune_image_ext special variable.
+
     min_depth = 0
     max_depth = DEFAULT_MAX_DEPTH
     
@@ -792,7 +794,7 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
     return proc.returncode, ans
 
 def schedule_ref_output(p, schedule, j):
-    return os.path.join(p.tune_dir, 'f' + schedule.identity() + '_%d'%j + IMAGE_EXT)
+    return os.path.join(p.tune_dir, 'f' + schedule.identity() + '_%d'%j + p.image_ext)
     
 def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     cache = {}
@@ -843,7 +845,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
                 sh_f.write(sh_line)
-            return (sh_args, sh_line, binary_file + IMAGE_EXT)
+            return (sh_args, sh_line, binary_file + p.image_ext)
             
         # Compile all schedules in parallel
         compile_count = [0]
@@ -1011,6 +1013,8 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     if 'tune_in_images' in scope:
         p.in_images = scope['tune_in_images']
+    if 'tune_image_ext' in scope:
+        p.image_ext = scope['tune_image_ext']
     test_func = tester(input, out_func, p, filter_func_name)
     
     seed_scheduleL = list(seed_scheduleL)
