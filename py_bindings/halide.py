@@ -265,6 +265,8 @@ def Image(typeval, *args):
     Image(numpy_array)
     """
     if len(args) == 0 and hasattr(typeval, '__len__'):
+        if isinstance(typeval, (str, unicode)):
+            raise ValueError('to build image from PNG/PPM use constructor Image(typeval, filename), e.g. Image(UInt(8), filename)')
         return _image_from_numpy(typeval)
 
     assert isinstance(typeval, Type)
@@ -531,19 +533,27 @@ def test_core():
     f = Func()
     f[x,y]=x+1
     
-    print 'halide.test_core:           OK'
+    print 'halide.test_core:             OK'
 
-def visit_funcs(root_func, callback):
-    "Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func."
+def visit_funcs(root_func, callback, all_calls=False):
+    """
+    Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func.
+    
+    By default calls at most once per f (by marking a function as visited and not calling again).
+    Use all_calls=True to make callback() be called for every caller-callee pair.
+    """
     d = {}
     def visit(x, parent):
         name = x.name()
-        if name not in d:# and len(x.args()) > 0:       # FIXME: Where is the Func('f0') with no args coming from in snake? Seems odd...
+        unvisited = name not in d
+        if all_calls or unvisited:# and len(x.args()) > 0:       # FIXME: Where is the Func('f0') with no args coming from in snake? Seems odd...
             d[name] = x
             callback(x, parent)
             #print x.rhs().funcs()
-            for y in x.rhs().funcs():
-                visit(y, x)
+        if unvisited:
+            for y in x.funcs(): #x.rhs().funcs():
+                if y.name() != name:
+                    visit(y, x)
     visit(root_func, None)
     return d
 
@@ -625,7 +635,7 @@ def inputs_dir():
     "Get directory of example inputs."
     return os.path.dirname(__file__)
     
-def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None, out_dims=None): #, pad_multiple=1):
+def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None, out_dims=None, times=1): #, pad_multiple=1):
     """
     Utility function to filter an image filename or numpy array with a Halide Func, returning output Image of the same size.
     
@@ -655,23 +665,28 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
         out_func.compileJIT()
 
     def evaluate():
-        T0 = time.time()
-        try:
+        T = []
+        for i in range(times):
+            T0 = time.time()
             if eval_func is not None:
-                out.assign(eval_func(input_png))
-                return out
+                realized = eval_func(input_png)
             else:
                 #print 'a', w, h, nchan, out.type()
                 realized = out_func.realize(w, h, nchan)
                 #print 'b'
-                out.assign(realized)
                 #print 'c'
-                return out
-        finally:
-            assert out.width() == w and out.height() == h and out.channels() == nchan
-            #print out.width(), out.height(), out.channels(), w, h, nchan
-            if disp_time:
-                print 'Filtered in', time.time()-T0, 'secs'
+            T.append(time.time()-T0)
+        out.assign(realized)
+
+        assert out.width() == w and out.height() == h and out.channels() == nchan
+        #print out.width(), out.height(), out.channels(), w, h, nchan
+        if disp_time:
+            if times > 1:
+                print 'Filtered %d times, min: %.6f secs, mean: %.6f secs.' % (times, numpy.min(T), numpy.mean(T))
+            else:
+                print 'Filtered in %.6f secs' % T[0]
+                
+        return out
     return evaluate
 
 def example_out():
@@ -729,7 +744,7 @@ def test_blur():
         I1 = numpy.asarray(PIL.open(out_filename))
         os.remove(out_filename)
     
-    print 'halide.filter_image:        OK'
+    print 'halide.filter_image:          OK'
 
 def test_func(compile=True, in_image=in_filename):
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
@@ -855,7 +870,7 @@ def test_all_funcs():
     g[x,y] = h[x,y]*2
     f[x,y] = g[x,y]+1
     assert sorted(all_funcs(f).keys()) == ['f_all_funcs', 'g_all_funcs', 'h_all_funcs']
-    print 'halide.all_funcs:           OK'
+    print 'halide.all_funcs:             OK'
 
 def test_numpy():
     def dist(a,b):
@@ -883,7 +898,7 @@ def test_numpy():
                 #print 'anorm:', dist(a,a*0), 'cnorm:', dist(c,c*0), numpy.min(a.flatten()), numpy.max(a.flatten()), numpy.min(c.flatten()), numpy.max(c.flatten()), a.dtype, c.dtype
                 assert dist(a,c)<=1500, dist(a,c)
 
-    print 'halide.numpy:               OK'
+    print 'halide.numpy:                 OK'
     
 def test():
     exit_on_signal()
