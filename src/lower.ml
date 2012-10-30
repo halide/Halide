@@ -206,31 +206,13 @@ and realize func consume env schedule =
   
   let (args, return_type, body) = make_function_body func env in
   let arg_vars = List.map (fun (t, n) -> Var (t, n)) args in
-  let arg_names = List.map snd args in
-
-  (* Only used for tracing printfs *)
-  let extent_computed = extent_computed_list sched_list arg_names in
 
   match body with
     | Pure body ->
         let inner_stmt = Provide (body, func, arg_vars) in
-
-        let inner_stmt = if (trace_verbosity > 1) then
-            Block [Print ("Storing " ^ func ^ " at ", arg_vars @ [body]); inner_stmt]
-          else inner_stmt
-        in
-
         let produce = List.fold_left (wrap sched_list) inner_stmt sched_list in
-        let rec flatten = function
-          | (x, y)::rest -> x::y::(flatten rest)
-          | [] -> []
-        in
-        let produce = if (trace_verbosity > 0) then            
-            Block [Print ("Time ", [Call (Extern, Int(32), ".currentTime", [])]); 
-                   Print ("Realizing " ^ func ^ " over ", flatten extent_computed);
-                   produce] 
-          else produce in
         Pipeline (func, produce, consume)
+
     | Reduce (init_expr, update_args, update_func, reduction_domain) ->
 
         let init_stmt = Provide (init_expr, func, arg_vars) in
@@ -253,11 +235,6 @@ and realize func consume env schedule =
         let update_expr = subs_name_expr (update_func ^ "." ^ (base_name func)) func update_expr in
 
         let update_stmt = Provide (update_expr, func, update_args) in
-
-        let update_stmt = if (trace_verbosity > 1) then 
-            Block [Print ("Updating " ^ func ^ " at ", update_args @ [update_expr]); update_stmt]
-          else update_stmt
-        in
 
         dbg 2 "Retrieving schedule of update func\n%!";
         let (_, update_sched_list) = find_schedule schedule update_func in
@@ -289,16 +266,7 @@ and realize func consume env schedule =
 
 
         let produce = 
-          if (trace_verbosity > 0) then 
-            let initialize = Block [Print ("Time ", [Call (Extern, Int(32), ".currentTime", [])]); 
-                                    Print ("Initializing " ^ func ^ " over ", flatten extent_computed);
-                                    initialize] in             
-            let update = Block [Print ("Time ", [Call (Extern, Int(32), ".currentTime", [])]); 
-                                Print ("Updating " ^ func, []);
-                                update] in 
-            Block [initialize; update]
-          else
-            Block [initialize; update]
+          Block [initialize; update]
         in
 
         (* Put the whole thing in a pipeline that exposes the updated
@@ -496,10 +464,9 @@ let rec sliding_window (stmt:stmt) (function_env:environment) =
             let new_min = Select (steady_state, new_min, min) in
             let new_extent = Select (steady_state, new_extent, extent) in
             
-            let stmt = produce in
+            let stmt = Pipeline (n, produce, consume) in
             let stmt = LetStmt (name ^ "." ^ dim ^ ".min", new_min, stmt) in
             let stmt = LetStmt (name ^ "." ^ dim ^ ".extent", new_extent, stmt) in
-            let stmt = Pipeline (n, stmt, consume) in 
             stmt
           | _ -> 
             stmt 
@@ -731,11 +698,7 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
           dbg 2 "Flattening a call to %s\n" func;
           let args = List.map recurse args in 
           let index = flatten_args func args arg_names in
-          let load = Load (ty, func, index) in
-          if (trace_verbosity > 1) then
-            Debug (load, "Loading " ^ func ^ " at ", args)
-          else
-            load
+          Load (ty, func, index)
       | x -> mutate_children_in_expr recurse x
   in
   let rec replace_calls_with_loads_in_stmt func arg_names stmt = 
@@ -790,6 +753,45 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
   in
   List.fold_left update stmt functions 
 
+let rec inject_tracing env = function
+  | Realize (name, ty, region, body) when trace_verbosity > 0 ->
+    let (args, _, _) = find_function name env in
+    let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
+    let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
+    Block [
+      Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
+      Print ("Allocating " ^ name ^ " over ", mins @ extents);
+      Realize (name, ty, region, inject_tracing env body);
+      Print ("Freeing " ^ name ^ " over ", mins @ extents)
+    ]
+  | Pipeline (name, produce, consume) ->
+    let (args, _, _) = find_function name env in
+    let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
+    let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
+    Block [
+      Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
+      Print ("Producing " ^ name ^ " over ", mins @ extents);
+      Pipeline (name, inject_tracing env produce, inject_tracing env consume)
+    ]
+  | Provide (e, name, idx) when trace_verbosity > 1 ->    
+    let calls = 
+      List.fold_left string_map_merge 
+        (find_calls_in_expr e)
+        (List.map find_calls_in_expr idx)
+    in        
+    let make_print key (cty, rty, args) stmts =
+      if cty != Extern then
+        (Print ("Loading " ^ key ^ " at ", args))::stmts
+      else
+        stmts
+    in
+    let stmts = StringMap.fold make_print calls [] in
+    let stmts = (Print ("Computing " ^ name ^ " at ", idx))::stmts in
+    let stmts = stmts @ [Provide (e, name, idx); 
+                         Print ("Storing " ^ name ^ " at ", idx)] in                         
+    Block stmts
+  | stmt -> mutate_children_in_stmt (fun x -> x) (inject_tracing env) stmt
+    
 let lower_image_calls (stmt:stmt) =
 
   (* Replace calls to images with loads from image. Accumulate all names of images found as a side-effect *) 
@@ -802,7 +804,10 @@ let lower_image_calls (stmt:stmt) =
         let img_stride = Var (i32, name ^ ".stride." ^ (string_of_int n)) in
         idx +~ (((walk_expr arg) -~ img_min) *~ img_stride) 
       ) args (0 -- (List.length args)) (IntImm 0) in
-      Load (t, name, idx)
+      if trace_verbosity > 1 then
+        Debug (Load (t, name, idx), "Loading " ^ name ^ " at ", args)
+      else
+        Load (t, name, idx)
     | expr -> mutate_children_in_expr walk_expr expr
   in
   let rec walk_stmt stmt = mutate_children_in_stmt walk_expr walk_stmt stmt in
@@ -810,7 +815,7 @@ let lower_image_calls (stmt:stmt) =
   let new_stmt = walk_stmt stmt in
 
   if disable_bounds_checking then
-    new_stmt
+    (new_stmt, !images)
   else 
     (* Add an assert at the start to make sure we don't load each image out of bounds *)
     (* TODO: this is slow because it traverses the entire AST, and subs's in let statements *)
@@ -830,8 +835,8 @@ let lower_image_calls (stmt:stmt) =
     ) !images [] in
     
     match new_stmt with 
-      | Block stmts -> Block (asserts @ stmts)
-      | stmt -> Block (asserts @ [new_stmt])
+      | Block stmts -> (Block (asserts @ stmts), !images)
+      | stmt -> (Block (asserts @ [new_stmt]), !images)
 
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
@@ -973,20 +978,10 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let pass_desc = "Replacing input image references with loads" in
   dbg 1 "%s\n%!" pass_desc;
 
-  (* For a later pass we'll need a list of all external images referenced *)
-  let rec find_input_images = function
-    | Call (Image, ty, f, args) -> StringSet.add f (string_set_concat (List.map find_input_images args))
-    | expr -> fold_children_in_expr find_input_images StringSet.union StringSet.empty expr
-  in
-  let rec find_input_images_in_stmt = function
-    | stmt -> 
-      fold_children_in_stmt find_input_images find_input_images_in_stmt StringSet.union stmt
-  in
-  let input_images = StringSet.elements (find_input_images_in_stmt stmt) in
-
   (* Add back in the oob_check on the output image too *)
   let stmt = if disable_bounds_checking then stmt else Block ([oob_check; stmt]) in  
-  let stmt = lower_image_calls stmt in
+  let (stmt, input_images) = lower_image_calls stmt in
+  let input_images = StringSet.elements input_images in
 
   dump_stmt stmt pass pass_desc "image_loads" 1;
   let pass = pass + 1 in
@@ -1012,6 +1007,16 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let stmt = sliding_window stmt env in
 
   dump_stmt stmt pass pass_desc "sliding_window" 1;
+
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
+  let pass_desc = "Injecting tracing code" in
+  dbg 1 "%s\n%!" pass_desc;
+
+  let stmt = inject_tracing env stmt in
+
+  dump_stmt stmt pass pass_desc "tracing" 1;
 
   let pass = pass + 1 in
 
