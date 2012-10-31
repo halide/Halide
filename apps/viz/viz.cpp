@@ -148,7 +148,6 @@ void parse_log(const char *filename, std::vector<event> &log) {
     fclose(f);
 }
 
-#include <GL/glew.h>
 #include <GL/glut.h>
 #include <GL/freeglut_ext.h>
 
@@ -160,7 +159,9 @@ int log_idx = 0;
 
 struct buffer_pos {
     int x, y;
+    int zoom;
     char name[64];
+    char caption[64];
 };
 std::vector<buffer_pos> positions;
 
@@ -182,8 +183,8 @@ void clear() {
 
     glColor3f(1, 1, 1);
     for (size_t i = 0; i < positions.size(); i++) {
-        glRasterPos2i(positions[i].x*4, positions[i].y*4-10);
-        glutBitmapString(GLUT_BITMAP_HELVETICA_18, (const unsigned char *)positions[i].name);
+        glRasterPos2i(positions[i].x, positions[i].y-10);
+        glutBitmapString(GLUT_BITMAP_HELVETICA_18, (const unsigned char *)positions[i].caption);
     }
 }
 
@@ -204,10 +205,12 @@ void draw_events() {
         event &e = log[log_idx];
 
         int x_off = -100000, y_off = -100000;
+        int zoom = 1;
         for (size_t j = 0; j < positions.size(); j++) {
             if (strncmp(e.name, positions[j].name, 64) == 0) {
                 x_off = positions[j].x;
                 y_off = positions[j].y;
+                zoom = positions[j].zoom;
             }
         }
         log_idx++;
@@ -230,15 +233,15 @@ void draw_events() {
             continue;
         }
 
-        int x = e.location[0] + x_off;
-        int y = e.location[1] + y_off;
-        glVertex3i(4*x, 4*y, 0);
-        x += e.size[0];
-        glVertex3i(4*x, 4*y, 0);
-        y += e.size[1];
-        glVertex3i(4*x, 4*y, 0);
-        x -= e.size[0];
-        glVertex3i(4*x, 4*y, 0);
+        int x = zoom*e.location[0] + x_off;
+        int y = zoom*e.location[1] + y_off;
+        glVertex3i(x, y, 0);
+        x += e.size[0]*zoom;
+        glVertex3i(x, y, 0);
+        y += e.size[1]*zoom;
+        glVertex3i(x, y, 0);
+        x -= e.size[0]*zoom;
+        glVertex3i(x, y, 0);
     }
     glEnd();    
 }
@@ -273,14 +276,17 @@ int main(int argc, char **argv) {
     
     parse_log(argv[1], log);
 
-    for (int i = 2; i < argc-2; i+=3) {
+    for (int i = 2; i < argc-4; i+=5) {
         buffer_pos p;
         p.name[0] = 0;
         strncat(p.name, argv[i], 63);
-        p.x = atoi(argv[i+1]);
-        p.y = atoi(argv[i+2]);
+        p.caption[0] = 0;
+        strncat(p.caption, argv[i+1], 63);
+        p.x = atoi(argv[i+2]);
+        p.y = atoi(argv[i+3]);
+        p.zoom = atoi(argv[i+4]);
         positions.push_back(p);
-        printf("%s at %d %d\n", p.name, p.x, p.y);
+        printf("%s at %d %d zoom %d\n", p.name, p.x, p.y, p.zoom);
     }
 
     glutInit(&argc, argv);
@@ -292,8 +298,6 @@ int main(int argc, char **argv) {
     glutIdleFunc(glutPostRedisplay);    
 
     glutReshapeFunc(reshape);
-
-    glewInit();
 
     init();
     glutMainLoop();    
