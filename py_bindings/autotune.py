@@ -107,7 +107,7 @@ LOG_SCHEDULE_FILENAME = 'log_schedule.txt'
 AUTOTUNE_VERBOSE = False #True #False #True
 IMAGE_EXT = '.ppm'
 DEFAULT_IMAGE = 'apollo3' + IMAGE_EXT
-DEBUG_CHECKS = False
+DEBUG_CHECKS = False      # Do excessive checks to catch errors (turn off for release code)
 
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
@@ -373,10 +373,10 @@ def sample_prob(d):
     return key
     
 def crossover(a, b, constraints):
-    "Cross over two schedules, using 2 point crossover."
+    "Cross over two schedules, using 2 point crossover. Raise BadScheduleError if no valid crossovers possible."
     a0 = a
     b0 = b
-    while True:
+    for iteration in range(10):
         a = constraints.constrain(copy.copy(a0))
         b = constraints.constrain(copy.copy(b0))
         funcL = halide.all_funcs(a.root_func, True)
@@ -403,7 +403,19 @@ def crossover(a, b, constraints):
                 d[names[i]] = copy.copy(b.d[names[i]])
         
         ans = Schedule(a.root_func, d)
-        
+        #print '-'*40
+        #print 'Crossover'
+        #print 'Parent A'
+        #print a
+        #print
+        #print 'Parent B'
+        #print b
+        #print
+        #print 'Result'
+        #print ans
+        #print
+        #print '-'*40
+            
         try:
             ans.apply(constraints, check=True)       # Apply schedule to determine if crossover invalidated new variables that were referenced
         except BadScheduleError: #, halide.ScheduleError):
@@ -412,7 +424,8 @@ def crossover(a, b, constraints):
         debug_check(ans)
             
         return ans
-
+    raise BadScheduleError
+    
 def mutate(a, p, constraints, grouping):
     "Mutate existing schedule using AutotuneParams p."
     a0 = a
