@@ -764,7 +764,7 @@ let rec inject_tracing env = function
       Realize (name, ty, region, inject_tracing env body);
       Print ("Freeing " ^ name ^ " over ", mins @ extents)
     ]
-  | Pipeline (name, produce, consume) ->
+  | Pipeline (name, produce, consume) when trace_verbosity > 0 ->
     let (args, _, _) = find_function name env in
     let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
     let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
