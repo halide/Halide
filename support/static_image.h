@@ -21,7 +21,9 @@ typedef struct buffer_t {
   uint64_t dev;
   bool host_dirty;
   bool dev_dirty;
-  size_t dims[4];
+  int32_t extent[4];
+  int32_t stride[4];
+  int32_t min[4];
   size_t elem_size;
 } buffer_t;
 #endif
@@ -43,10 +45,18 @@ class Image {
 
     void initialize(int w, int h, int c) {
         buffer_t buf;
-        buf.dims[0] = w;
-        buf.dims[1] = h;
-        buf.dims[2] = c;
-        buf.dims[3] = 1;
+        buf.extent[0] = w;
+        buf.extent[1] = h;
+        buf.extent[2] = c;
+        buf.extent[3] = 1;
+        buf.stride[0] = 1;
+        buf.stride[1] = w;
+        buf.stride[2] = w*h;
+        buf.stride[3] = 0;
+        buf.min[0] = 0;
+        buf.min[1] = 0;
+        buf.min[2] = 0;
+        buf.min[3] = 0;
         buf.elem_size = sizeof(T);
 
         uint8_t *ptr = new uint8_t[sizeof(T)*w*h*c+16];
@@ -112,8 +122,8 @@ public:
         contents->buf.host_dirty = true;
 
         T *ptr = (T *)contents->buf.host;
-        int w = contents->buf.dims[0];
-        int h = contents->buf.dims[1];
+        int w = contents->buf.extent[0];
+        int h = contents->buf.extent[1];
         return ptr[(c*h + y)*w + x];
     }
 
@@ -122,9 +132,7 @@ public:
             __copy_to_host(&contents->buf);
 
         const T *ptr = (const T *)contents->buf.host;
-        int w = contents->buf.dims[0];
-        int h = contents->buf.dims[1];
-        return ptr[(c*h + y)*w + x];
+        return ptr[c*contents->buf.stride[2] + y*contents->buf.stride[1] + x*contents->buf.stride[0]];
     }
 
     operator buffer_t *() {
@@ -132,15 +140,15 @@ public:
     }
 
     int width() {
-        return contents->buf.dims[0];
+        return contents->buf.extent[0];
     }
 
     int height() {
-        return contents->buf.dims[1];
+        return contents->buf.extent[1];
     }
 
     int channels() {
-        return contents->buf.dims[2];
+        return contents->buf.extent[2];
     }
 
 };
