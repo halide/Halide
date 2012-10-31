@@ -16,6 +16,7 @@ FORCE_TILE = False
 MUTATE_TRIES = 10
 TILE_PROB_SQUARE = 0.5              # Probability of selecting square tile size (e.g. 8x8).
 CHECK_VERBOSE = False
+SPLIT_STORE_COMPUTE = True          # Whether to use chunk(store, compute)
 
 # --------------------------------------------------------------------------------------------------------------
 # Valid Schedule Enumeration
@@ -171,11 +172,22 @@ class FragmentUnroll(FragmentBlocksizeMixin,Fragment):
         return '.unroll(%s,%d)'%(self.var,self.value)
 
 class FragmentChunk(Fragment):
+    def __init__(self, var=None, storevar=None):
+        self.var = var
+        self.storevar = storevar
+
     @staticmethod
     def random_fragment(root_func, func, cls, vars, extra_caller_vars, partial_schedule):
         #allV = caller_vars(root_func, func)+extra_caller_vars
         allV = chunk_vars(partial_schedule, func)
-        return cls(random.choice(allV)) if len(allV) else None
+        if len(allV) == 0:
+            return None
+        if SPLIT_STORE_COMPUTE:
+            i = random.randrange(len(allV))
+            j = random.randrange(i+1)           # TODO: Should use exponential distribution instead of uniform
+            return cls(allV[i], allV[j])
+        else:
+            return cls(random.choice(allV))
         #return [cls(x) for x in ]
         
     def check(self, L, partial_schedule=None, func=None, vars=None):
@@ -185,10 +197,28 @@ class FragmentChunk(Fragment):
                 if CHECK_VERBOSE:
                     print ' * check fail, chunk %s %r' % (self.var, cvars)
                 return False
+            if SPLIT_STORE_COMPUTE:
+                if self.storevar not in cvars:
+                    if CHECK_VERBOSE:
+                        print ' * check fail, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
+                    return False
         return check_duplicates(self.__class__, L, func)
 
     def __str__(self):
-        return '.chunk(%s)'%self.var
+        if SPLIT_STORE_COMPUTE:
+            return '.chunk(%s,%s)'%(self.storevar, self.var)
+        else:
+            return '.chunk(%s)'%self.var
+
+    @staticmethod
+    def fromstring(avar=None, bvar=None):
+        if SPLIT_STORE_COMPUTE:
+            if bvar is None:
+                bvar = avar
+            return FragmentChunk(bvar, avar)
+        else:
+            assert bvar is None
+            return FragmentChunk(avar)
 
     def var_order(self, prev_order):
         raise ValueError('var_order called on FragmentChunk()')
@@ -201,7 +231,7 @@ class FragmentUpdate(Fragment):
     def var_order(self, prev_order):
         raise ValueError('var_order called on FragmentUpdate()')
 
-for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentUpdate]:
+for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentUpdate]:
     _cls.fromstring = make_fromstring(_cls)
 
 def create_var(vars): #count=[0]):
