@@ -69,9 +69,6 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
       - only things with parent
       - not reductions (if they want to be inline-like they should instead chunk over innermost)
       
-      Root:
-      - always legal
-
       Chunk:
       - legal over any vars in scope
 
@@ -104,9 +101,15 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
           []
       in
 
-      let root_options = [Root] in
+      let rec make_chunk_options = function
+        | [] -> []
+        | (compute_var::rest) -> (
+            List.map (fun store_var -> Chunk (store_var, compute_var)) (compute_var::rest)) @
+            make_chunk_options rest        
+      in
 
-      let chunk_options = List.map (fun v -> Chunk v) vars_in_scope in
+      (* We reverse it so that root is the first option, not the last *)
+      let chunk_options = List.rev (make_chunk_options vars_in_scope) in
 
       let reuse_options =
         let realizations =
@@ -118,14 +121,14 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
         let options =
           List.filter
           (* realization is in scope here (including root = "") *)
-            (fun (var,_) -> List.mem var vars_in_scope || var = "")
+            (fun (var,_) -> List.mem var vars_in_scope)
             realizations
         in
         List.map
           (fun (_,realization) -> Reuse realization)
           options
       in
-      reuse_options @ inline_options @ root_options @ chunk_options
+      reuse_options @ inline_options @ chunk_options
     in
 
     let call_sched_options = 
@@ -159,8 +162,7 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
     (* Update vars_in_scope according to the decision made *)
     (* prune stuff we're outside *)
     let vars_in_scope = match call_sched with
-      | Root -> []
-      | Chunk var -> list_drop_while (fun x -> x <> var) vars_in_scope
+      | Chunk (store_var, compute_var) -> list_drop_while (fun x -> x <> compute_var) vars_in_scope
       | Reuse _ (* doesn't matter - never used because it has no children *)
       | Inline -> vars_in_scope
     in
@@ -189,9 +191,11 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
       StringMap.add (base_name func) ((var,func)::existing) bufs_in_scope
     in
       
+    (* bufs_in_scope is necessary so we know when we can Reuse. For
+       chunking, this is legal if we're inside the compute loop level,
+       because that's where we do bounds inference. *)
     let bufs_in_scope = match call_sched with
-      | Root -> add_realization "" bufs_in_scope
-      | Chunk var -> add_realization var bufs_in_scope
+      | Chunk (store_var, compute_var) -> add_realization compute_var bufs_in_scope
       | Reuse _
       | Inline -> bufs_in_scope
     in
@@ -231,7 +235,7 @@ let generate_schedule (func: string) (env: environment) (guru: scheduling_guru) 
 
   in
 
-  let _,sched = inner func env [] StringMap.empty empty_schedule in
+  let _,sched = inner func env ["<root>"] StringMap.empty empty_schedule in
   
   (* Do any post-processing of the schedule *)
 
@@ -247,7 +251,7 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
 
   (* Start with a for over the function args over the region *)
   let f_schedule = List.map (fun (v, m, s) -> Serial (v, m, s)) region in
-  let schedule = set_schedule schedule func Root f_schedule in
+  let schedule = set_schedule schedule func (Chunk ("<root>", "<root>")) f_schedule in
 
   (* Find all sub-functions and mark them as inline *)
   let rec called_functions f found_calls =
@@ -303,8 +307,9 @@ let make_default_schedule (func: string) (env: environment) (region : (string * 
         (* I'm a reduction *)
         | Reduce (_, _, _, _) -> 
             let f = base_name f in
-            (Root, List.map (fun (t, n) -> Serial (n, Var (t, f ^ "." ^ n ^ ".min"),
-                                                   Var (t, f ^ "." ^ n ^ ".extent"))) args)            
+            (Chunk ("<root>", "<root>"), List.map (fun (t, n) -> 
+              Serial (n, Var (t, f ^ "." ^ n ^ ".min"),
+                      Var (t, f ^ "." ^ n ^ ".extent"))) args)            
         | _ ->            
             let parent = parent_name f in
             let (parent_args, _, parent_body) = find_function parent env in
@@ -440,10 +445,12 @@ let parallel_schedule (func: string) (var: string) (guru: scheduling_guru) =
 
 
 let split_schedule (func: string) (var: string) (outer: string) (inner: string) (n: expr) (guru: scheduling_guru) =
+  (* I think this only matters for vectorization and unrolling, and we can catch those later 
   let int_n = match n with
     | IntImm x -> x
     | _ -> failwith "Can only handle const integer splits for now"
   in
+  *)
   let rec mutate = function
     | (Parallel (v, min, size))::rest when v = var ->
         (Split (v, outer, inner, min))::
@@ -510,27 +517,13 @@ let reorder_schedule (func: string) (vars: string list) (guru: scheduling_guru) 
     splits @ (partial_sort lt others)      
   in mutate_sched_list_guru func mutate guru
   
-(* Set a function to be evaluated at the root (or reuse it) *)
-let root_schedule (func: string) (guru: scheduling_guru) =
-  (* Best so far, remainder of list *)
-  let rec mutate x l = match (x, l) with
-    (* Accept root over nothing, but keep looking *)
-    | (None, Root::rest) -> mutate (Some Root) rest
-    (* Take the first reuse, if there is one *)
-    | (_, (Reuse buf)::rest) -> [Reuse buf]
-    (* Skip past uninteresting things *)
-    | (_, first::rest) -> mutate x rest
-    (* If we found something acceptable, return it *)
-    | (Some x, []) -> [x] 
-    (* Otherwise freak out *)
-    | _ -> failwith ("Could not schedule " ^ func ^ " as root")
-  in mutate_legal_call_schedules_guru func (mutate None) guru
-
-let chunk_schedule (func: string) (var: string) (guru: scheduling_guru) = 
+let chunk_schedule (func: string) (store_var: string) (compute_var: string) (guru: scheduling_guru) = 
   (* Best so far, remainder of list *)
   let rec mutate x l = match (x, l) with
     (* Accept chunk over nothing, but keep looking *)
-    | (None, (Chunk v)::rest) when base_name v = var -> mutate (Some (Chunk v)) rest
+    | (None, (Chunk (sv, cv))::rest) when 
+        base_name sv = store_var && base_name cv = compute_var -> 
+        mutate (Some (Chunk (sv, cv))) rest
     (* Take the first reuse, if there is one *)
     | (_, (Reuse buf)::rest) -> [Reuse buf]
     (* Skip past uninteresting things *)
@@ -538,5 +531,5 @@ let chunk_schedule (func: string) (var: string) (guru: scheduling_guru) =
     (* If we found something acceptable, return it *)
     | (Some x, []) -> [x]
     (* Otherwise freak out *)
-    | _ -> failwith ("Could not schedule " ^ func ^ " as chunked over " ^ var)
+    | _ -> failwith ("Could not schedule " ^ func ^ " as chunked over " ^ store_var ^ ", " ^ compute_var)
   in mutate_legal_call_schedules_guru func (mutate None) guru

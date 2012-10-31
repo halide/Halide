@@ -32,6 +32,16 @@ module StringIntSet = Set.Make (
 let string_int_set_concat (s: StringIntSet.t list) =
   List.fold_left StringIntSet.union StringIntSet.empty s
 
+let string_starts_with a b =
+  let len_a = String.length a in
+  let len_b = String.length b in
+  len_a > len_b && ((String.sub a 0 len_b) = b)
+
+let string_ends_with a b =
+  let len_a = String.length a in
+  let len_b = String.length b in
+  len_a > len_b && ((String.sub a (len_a - len_b) len_b) = b)
+
 (* A range operator - TODO: exclusive, while Batteries equivalent is inclusive *)
 let (--) i j = 
   let rec aux n acc =
@@ -73,7 +83,6 @@ let rec partial_sort (lt: 'a -> 'a -> bool option) = function
             let (a, b) = partition xs in
             (x::a, b)
     in
-    let (a, b) = partition rest in
     match partition rest with
       | (a, []) -> 
         (* first is in the right place *)
@@ -96,6 +105,11 @@ let dbg level =
     Printf.printf 
   else 
     Printf.ifprintf stdout 
+
+let disable_bounds_checking = 
+  let str = try Sys.getenv "HL_DISABLE_BOUNDS_CHECKING" with Not_found -> "0" in
+  let num = try int_of_string str with Failure _ -> 0 in
+  num > 0
 
 let with_file_out filename func =
   let out = open_out filename in

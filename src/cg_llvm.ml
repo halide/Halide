@@ -118,7 +118,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     | Bop (Mul, l, r) -> cg_binop build_mul  build_mul  build_fmul l r
     | Bop (Div, l, r) -> cg_binop build_sdiv build_udiv build_fdiv l r
     (* In most cases architecture-specific code should pick up min and max and generate something better *)
-    | Bop (Min, l, r) -> cg_expr (Select (l <~ r, l, r))
+    | Bop (Ir.Min, l, r) -> cg_expr (Select (l <~ r, l, r))
     | Bop (Max, l, r) -> cg_expr (Select (l <~ r, r, l))
     | Bop (Mod, l, r) -> cg_mod l r
 
@@ -272,12 +272,23 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
       | Float _ | FloatVector (_, _) -> build_frem (cg_expr l) (cg_expr r) "" b
       | UInt _ | UIntVector (_, _) -> build_urem (cg_expr l) (cg_expr r) "" b
       | _ -> 
-          (* l % r is not necessarily positive, but ((l % r) + r) % r
-             should be. *)
-          let r = cg_expr r and l = cg_expr l in
-          let initial_mod = build_srem l r "" b in
-          let made_positive = build_add initial_mod r "" b in
-          build_srem made_positive r "" b
+        (* If we're modding by a power of two, we can use urem even for signed ints *)        
+        let rec is_power_of_two = function
+          | 1 -> true
+          | x -> x = ((x/2)*2) && (is_power_of_two (x/2))
+          | _ -> false
+        in begin match r with
+          | Broadcast (IntImm k, _)
+          | IntImm k when is_power_of_two k -> 
+              build_urem (cg_expr l) (cg_expr r) "" b
+          | _ ->
+            (* l % r is not necessarily positive, but ((l % r) + r) % r
+               should be. *)
+            let r = cg_expr r and l = cg_expr l in
+            let initial_mod = build_srem l r "" b in
+            let made_positive = build_add initial_mod r "" b in
+            build_srem made_positive r "" b
+        end
 
   and cg_cmp iop uop fop l r =
     cg_binop (build_icmp iop) (build_icmp uop) (build_fcmp fop) l r
@@ -516,7 +527,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
         sym_remove name;
         result
 
-    | Pipeline (name, ty, size, produce, consume) ->
+    | Allocate (name, ty, size, body) ->
 
         (* allocate buffer *)
         let elem_size = (IntImm ((bit_width ty)/8)) in 
@@ -525,8 +536,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
         (* push the symbol environment *)
         sym_add name scratch;
 
-        ignore (cg_stmt produce);
-        let res = cg_stmt consume in
+        let res = cg_stmt body in
 
         (* pop the symbol environment *)
         sym_remove name;
@@ -535,6 +545,11 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
         cleanup_scratch cg_context;
 
         res
+
+    | Pipeline (name, produce, consume) ->
+        ignore (cg_stmt produce);
+        cg_stmt consume
+
     | Print (fmt, args) -> cg_print fmt args
     | Assert (e, str) -> cg_assert e str
     | s -> failwith (Printf.sprintf "Can't codegen: %s" (Ir_printer.string_of_stmt s))

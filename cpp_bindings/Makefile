@@ -1,4 +1,4 @@
-CXX_FLAGS=-Wall -Werror -ffast-math -O3 -msse
+CXX_FLAGS=-Wall -Werror -ffast-math -O3 -msse -fno-rtti
 
 HEADERS = MLVal.h Util.h Var.h Type.h Uniform.h Expr.h Image.h Func.h Rehydrate.h Reduction.h Uniform.h
 
