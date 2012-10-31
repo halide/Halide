@@ -15,6 +15,7 @@ DEFAULT_MAX_DEPTH = 4
 FORCE_TILE = False
 MUTATE_TRIES = 10
 TILE_PROB_SQUARE = 0.5              # Probability of selecting square tile size (e.g. 8x8).
+CHECK_VERBOSE = False
 
 # --------------------------------------------------------------------------------------------------------------
 # Valid Schedule Enumeration
@@ -31,10 +32,12 @@ def default_check(cls, L, func):
     else:
         # Handle singleton fragments
         if count(FragmentVectorize) > 1:        # Allow at most one vectorize per Func schedule (FragmentList)
-            #print '  * check ', cls, 'vectorize fail'
+            if CHECK_VERBOSE:
+                print '  * check ', cls, 'vectorize fail'
             return False
         if FORCE_TILE and (len(L) >= 2 and count(FragmentTile) < 1):
-            #print '  * check ', cls, 'tile fail'
+            if CHECK_VERBOSE:
+                print '  * check ', cls, 'tile fail'
             return False
         root_count = count(FragmentRoot)
         chunk_count = count(FragmentChunk)
@@ -42,7 +45,8 @@ def default_check(cls, L, func):
             return True
         elif isinstance(L[0], FragmentChunk) and chunk_count == 1 and root_count == 0:
             return True
-    #print '  * check ', cls, 'generic fail'
+    if CHECK_VERBOSE:
+        print '  * check ', cls, 'generic fail'
     return False
             
 def make_fromstring(cls):
@@ -93,6 +97,8 @@ class FragmentVarMixin:
 
     def check(self, L, partial_schedule=None, func=None, vars=None):
         if vars is not None and self.var not in vars:
+            if CHECK_VERBOSE:
+                print ' * check, var fail %s, %r' % (self.var, vars)
             return False
         return default_check(self.__class__, L, func)
 
@@ -117,6 +123,8 @@ class FragmentBlocksizeMixin(FragmentVarMixin):
 
     def check(self, L, partial_schedule=None, func=None, vars=None):
         if vars is not None and self.var not in vars:
+            if CHECK_VERBOSE:
+                print ' * check BlocksizeMixin var %s fails %r' % (self.var, vars)
             return False
         return check_duplicates(self.__class__, L, func)
 
@@ -133,7 +141,8 @@ def check_duplicates(cls, L, func):
     for x in L:
         s = str(x)
         if s in d:
-            #print '* check_duplicates', cls, 'fail'
+            if CHECK_VERBOSE:
+                print '* check_duplicates', cls, 'fail', s
             return False
         d.add(s)
         
@@ -171,7 +180,10 @@ class FragmentChunk(Fragment):
         
     def check(self, L, partial_schedule=None, func=None, vars=None):
         if partial_schedule is not None:
-            if self.var not in chunk_vars(partial_schedule, func):
+            cvars = chunk_vars(partial_schedule, func)
+            if self.var not in cvars:
+                if CHECK_VERBOSE:
+                    print ' * check fail, chunk %s %r' % (self.var, cvars)
                 return False
         return check_duplicates(self.__class__, L, func)
 
@@ -261,6 +273,8 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
 
     def check(self, L, partial_schedule=None, func=None, vars=None):
         if vars is not None and (self.xvar not in vars or self.yvar not in vars):
+            if CHECK_VERBOSE:
+                print ' * check fail tile %s %s %r' % (self.xvar, self.yvar, vars)
             return False
         return check_duplicates(self.__class__, L, func)
 
@@ -334,6 +348,8 @@ class FragmentReorder(Fragment):
         if vars is not None:
             for var in self.permutation:
                 if var not in vars:
+                    if CHECK_VERBOSE:
+                        print ' * check fail reorder %r %s %r' % (self.permutation, var, vars)
                     return False
         if not default_check(self.__class__, L, func):
             return False
@@ -470,6 +486,8 @@ class FragmentList(list):
         try:
             for x in self:
                 if not x.check(self, partial_schedule, self.func, vars):
+                    if CHECK_VERBOSE:
+                        print ' * check failed on func %s, returning' % self.func.name()
                     return False
                 vars = sorted(set(vars + x.new_vars()))
         except BadScheduleError:
@@ -633,11 +651,15 @@ class Schedule:
             if f.isReduction():
                 L = self.d[fname]
                 if len(L) == 0:
+                    if CHECK_VERBOSE:
+                        print ' * check failed, %s is reduction and inline' % fname
                     return False #raise ValueError(self)
         root_func_name = self.root_func.name()
         if root_func_name in self.d:
             L = self.d[root_func_name]
             if len(L) < 1 or not isinstance(L[0], FragmentRoot):
+                if CHECK_VERBOSE:
+                    print ' * check failed, root func %s is not root' % root_func_name
                 return False
         else:
             return False
