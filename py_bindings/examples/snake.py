@@ -138,10 +138,13 @@ def filter_func(dtype=UInt(8), in_filename=DEFAULT_FILENAME):
     background = 255.0 * 0.98
     selectPadding = 10
 
+    #im = Image(UInt(8), in_filename)
+    im0 = UniformImage(UInt(8), 3)
     im = Image(UInt(8), in_filename)
-
+    im0.assign(im)
+    
     gray = Func('gray')
-    gray[x, y] = max(cast(float_t, im[x, y, 0]), max(cast(float_t, im[x, y, 1]), cast(float_t, im[x, y, 2])))
+    gray[x, y] = max(cast(float_t, im0[x, y, 0]), max(cast(float_t, im0[x, y, 1]), cast(float_t, im0[x, y, 2])))
 
     clamped = Func('clamped')
     clamped[x, y] = gray[clamp(x, cast(int_t, 0), cast(int_t, im.width()-1)),
@@ -200,6 +203,10 @@ def filter_func(dtype=UInt(8), in_filename=DEFAULT_FILENAME):
     # Human reference schedule
     human_schedule = 'phi_new.root().parallel(iv1).vectorize(iv0,4)'
     tune_ref_schedules = {'human': human_schedule}
+    tune_runner = 'snake_runner.cpp'
+    tune_in_images = [DEFAULT_FILENAME]
+    tune_out_type = UInt(8)
+
     import autotune
     autotune.Schedule.fromstring(phi_new, human_schedule).apply()
     

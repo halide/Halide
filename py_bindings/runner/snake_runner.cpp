@@ -15,6 +15,8 @@ The default runner expects:
 #endif
 #define TEST_HEADER TEST_FUNC.h
 
+#include <Halide.h>
+using namespace Halide;
 // Utilities to paste a macro as a string constant in another macro.
 // via: http://gcc.gnu.org/onlinedocs/cpp/Stringification.html
 #define str(s) xstr(s)
@@ -23,7 +25,7 @@ The default runner expects:
 extern "C" {
 #include str(TEST_HEADER)
 }
-#include <static_image.h>
+//#include <static_image.h>
 #include <image_io.h>
 #include "image_equal.h"
 
@@ -47,8 +49,8 @@ int main(int argc, char const *argv[])
     timeval t1, t2;
     unsigned int t;
     
-    Image<TEST_IN_T> input = load<TEST_IN_T>(argv[2]);
-        
+    Halide::Image<TEST_IN_T> input = load<TEST_IN_T>(argv[2]);
+    
     int w        = argc > 4 ? atoi(argv[4]): -1;
     int h        = argc > 5 ? atoi(argv[5]): -1;
     int channels = argc > 6 ? atoi(argv[6]): -1;
@@ -57,20 +59,45 @@ int main(int argc, char const *argv[])
     if (w < 0) { w = input.width(); }
     if (h < 0) { h = input.height(); }
     if (channels < 0) { channels = input.channels(); }
-    
-    Image<TEST_OUT_T> output(w, h, channels);
-    Image<TEST_OUT_T> ref_output(1,1,1);
+
+    Halide::Image<TEST_OUT_T> ref_output(1,1,1);
     bool has_ref = false;
     if (argc > 3 && strcmp(argv[3], "") != 0) {
         ref_output = load<TEST_OUT_T>(argv[3]);
         has_ref = true;
     }
 
+    Halide::Image<TEST_OUT_T> output(1,1,1);
+
+    int selectPadding = 10;
+    int iter_outer = 450;
+
+    Halide::Func phi_init("phi_init");
+    Halide::Var x("x"), y("y"), c("c");
+    phi_init(x,y) = select((x >= selectPadding)
+                            && (x < input.width() - selectPadding)
+                            && (y >= selectPadding)
+                            && (y < input.height() - selectPadding),
+                            -2.0f, 2.0f);
+
     // Timing code
     unsigned int bestT = 0xffffffff;
     for (int i = 0; i < test_iterations; i++) {
         gettimeofday(&t1, NULL);
-        TEST_FUNC(input, output);
+
+        Halide::Image<float> phi_buf(phi_init.realize(input.width(), input.height()));
+        Halide::Image<float> phi_buf2(input.width(), input.height());
+
+        for(int n = 0 ; n < iter_outer ; ++n){
+            TEST_FUNC(Halide::DynImage(input).buffer(), Halide::DynImage(phi_buf).buffer(), Halide::DynImage(phi_buf2).buffer());
+            std::swap(phi_buf, phi_buf2);
+        }
+
+        Halide::Func masked("masked");
+
+        // Dim the unselected areas for visualization
+        masked(x, y, c) = select(phi_buf(x, y) < 0.0f, input(x, y, c), input(x, y, c)/4);
+        output = masked.realize(input.width(), input.height(), 3);
         gettimeofday(&t2, NULL);
         t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
         if (t < bestT) bestT = t;

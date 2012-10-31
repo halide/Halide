@@ -180,6 +180,7 @@ class AutotuneParams:
     seed_reasonable = True          # Whether to seed with reasonable schedules
     prob_reasonable = 0.5           # Probability to sample reasonable schedule when sampling random schedule
     
+    runner_file = 'default_runner.cpp'
     summary_file = 'summary.txt'
     plot_file = 'plot.png'
 
@@ -276,7 +277,7 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
                     if sample_fragments:
                         s = '.root()' + subsample_join(['.split(%(x)s,%(x)s,_c0,8)'%locals(),'.vectorize(_c0,%(n)d)'%locals()])
                         if '.split' not in s:
-                            s = s.replace('vectorize(_c0', 'vectorize(x')
+                            s = s.replace('vectorize(_c0', 'vectorize(%(x)s'%locals())
                     else:
                         s = '.root().split(%(x)s,%(x)s,_c0,8).vectorize(_c0,%(n)d)'%locals()
                 else:
@@ -290,7 +291,7 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
                                                         '.vectorize(_c0,%(n)d)'%locals(),
                                                         '.parallel(%(y)s)' % locals()])
                         if '.tile' not in s:
-                            s = s.replace('vectorize(_c0', 'vectorize(x')
+                            s = s.replace('vectorize(_c0', 'vectorize(%(x)s'%locals())
                     else:
                         s = '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)' % locals()
                 else:
@@ -837,10 +838,10 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             if do_save_output(i):
                 save_filename = schedule_ref_output(p, schedule, j)
                 
-            sh_args = ['HL_NUMTHREADS=%d'%hl_threads, 'python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_images[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels), str(hl_threads)]
+            sh_args = ['HL_NUMTHREADS=%d'%hl_threads, 'python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_images[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels), str(hl_threads), str(p.runner_file)]
             sh_line = (' '.join(sh_args[:5]) + ' "' + repr(sh_args[5])[1:-1] + '" ' + ' '.join(sh_args[6:9]) + ' '  +
                            ('"' + sh_args[9] + '"') + ' ' +
-                           ('"' + sh_args[10] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[11:]) + '\n')
+                           ('"' + sh_args[10] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[11:-1]) + (' "' + sh_args[-1] + '"') + '\n')
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
@@ -1015,6 +1016,8 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         p.in_images = scope['tune_in_images']
     if 'tune_image_ext' in scope:
         p.image_ext = scope['tune_image_ext']
+    if 'tune_runner' in scope:
+        p.runner_file = scope['tune_runner']
     test_func = tester(input, out_func, p, filter_func_name)
     
     seed_scheduleL = list(seed_scheduleL)
@@ -1136,9 +1139,9 @@ def _ctype_of_type(t):
 
 def autotune_child(args, timeout=None):
     rest = args[1:]
-    if len(rest) != 11:
-        raise ValueError('expected 11 args after autotune_*_child')
-    (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads) = rest
+    if len(rest) != 12:
+        raise ValueError('expected 12 args after autotune_*_child')
+    (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads, runner_file) = rest
 
     trials = int(trials)
     #save_output = int(save_output)
@@ -1170,11 +1173,13 @@ def autotune_child(args, timeout=None):
         out_func.compileToFile(func_name)
 
         # copy default_runner locally
-        default_runner = os.path.join(_scriptpath, 'runner', 'default_runner.cpp')
+        default_runner = os.path.join(_scriptpath, 'runner', runner_file)
         support_include = os.path.join(_scriptpath, '../support')
+        halide_include = os.path.join(_scriptpath, '../cpp_bindings')
+        link_dir = os.path.abspath(os.path.join(_scriptpath, '../cpp_bindings'))
 
-        in_t  = _ctype_of_type(input.type())
-        out_t = _ctype_of_type(out_func.returnType())
+        in_t  = _ctype_of_type(scope.get('tune_in_type', input.type()))
+        out_t = _ctype_of_type(scope.get('tune_out_type', out_func.returnType()))
 
         # get PNG flags
         png_flags = subprocess.check_output('libpng-config --cflags --ldflags', shell=True).replace('\n', ' ')
@@ -1190,13 +1195,13 @@ def autotune_child(args, timeout=None):
 
         #save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
         #shutil.copyfile(default_runner, working)
-        compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread %(png_flags)s'
+        compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(halide_include)s -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread -L%(link_dir)s -lHalide %(png_flags)s'
         compile_command = compile_command % locals()
         print compile_command
         try:
             out = subprocess.check_output(compile_command, shell=True)
         except:
-            raise ValueError('Compile failed:\n%s' % out)
+            raise ValueError('Compile failed')
 
         print 'Success %.6f' % (time.time()-T0)
 
