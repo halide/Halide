@@ -36,9 +36,8 @@ type schedule =
  * representation is (with reference to the schedule of the caller), to what caller dimension
  * should I hoist this out to, and should I fuse with other calls to the same callee *)
 type call_schedule =
-  | Chunk of dimension (* of caller *)
+  | Chunk of dimension * dimension (* dimension of caller to store at, and compute at. dimension may be <root> for outermost *)
   | Inline (* block over nothing - just do in place *)
-  | Root (* There is no calling context *)
   | Reuse of string (* Just do what some other function does, using the same data structure *)
 
 (* Schedule for this function, schedule for sub-functions *)
@@ -46,7 +45,7 @@ type schedule_tree =
   | Tree of ((call_schedule * (schedule list) * schedule_tree) StringMap.t) 
 
 (* What is the extent of a schedule over a given dimension *)
-let rec stride_for_dim dim = function
+let rec extent_computed_for_dim dim = function
   | [] -> failwith ("failed to find schedule for dimension " ^ dim)
   | hd::rest ->
       begin match hd with
@@ -57,17 +56,17 @@ let rec stride_for_dim dim = function
         | Split (d, outer, inner, offset) when d = dim ->
             (* search for new dimensions on rest of the sched list -
              they are only allowed after defined by the split *)
-            let (min_outer, size_outer) = stride_for_dim outer rest in
-            let (_,         size_inner) = stride_for_dim inner rest in
+            let (min_outer, size_outer) = extent_computed_for_dim outer rest in
+            let (_,         size_inner) = extent_computed_for_dim inner rest in
             ((min_outer *~ size_inner) +~ offset, size_outer *~ size_inner)
         (* recurse if not found *)
-        | _ -> stride_for_dim dim rest
+        | _ -> extent_computed_for_dim dim rest
       end
 
-(* Return a list of expressions for computing the stride of each dimension of a function given the
+(* Return a list of expressions for computing the extent computed of each dimension of a function given the
  * schedule*)
-let stride_list (sched:schedule list) (args:string list) =
-  List.map (fun arg -> stride_for_dim arg sched) args
+let extent_computed_list (sched:schedule list) (args:string list) =
+  List.map (fun arg -> extent_computed_for_dim arg sched) args
 
 let find_schedule (tree:schedule_tree) (name:string) =
   let rec find (tree:schedule_tree) = function
@@ -95,7 +94,7 @@ let rec set_schedule
           if StringMap.mem first map then
             StringMap.find first map 
           else
-            (Root, [], empty_schedule) 
+            (Chunk ("<root>", "<root>"), [], empty_schedule) 
         in
         if (rest = []) then
           begin match call_sched with
@@ -139,9 +138,8 @@ let list_of_schedule (tree:schedule_tree) =
   find "" (tree)  
 
 let string_of_call_schedule = function
-  | Chunk d -> "Chunk " ^ d 
+  | Chunk (sv, cv) -> "Chunk " ^ sv ^ " " ^ cv
   | Inline -> "Inline"
-  | Root -> "Root"      
   | Reuse s -> "Reuse " ^ s
 
 let string_of_schedule = function

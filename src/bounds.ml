@@ -420,7 +420,16 @@ let footprint_of_func_in_expr fname expr =
 (* What region of the func is used by the statement *)
 let rec required_of_stmt func env = function
   | For (var, min, size, order, body) ->
-      let env = StringMap.add var (make_range (min, min +~ size -~ (IntImm 1))) env in
+      dbg 2 "Adding %s to environment\n" var;
+      let min_min = match bounds_of_expr_in_env env min with
+        | Unbounded -> failwith "Could not compute bounds of min expression in loop"
+        | Range (min, max) -> min
+      in
+      let max_max = match bounds_of_expr_in_env env (min +~ size -~ (IntImm 1)) with
+        | Unbounded -> failwith "Could not compute bounds of max expression in loop"
+        | Range (min, max) -> max
+      in
+      let env = StringMap.add var (make_range (min_min, max_max)) env in
       required_of_stmt func env body
   | LetStmt (name, expr, stmt) ->
       (* Brute force. Might get really slow for long chains of letstmts *)
@@ -439,4 +448,3 @@ let rec required_of_stmt func env = function
   | stmt -> fold_children_in_stmt (required_of_expr_in_env func env) (required_of_stmt func env) region_union stmt
   
 
-        

@@ -106,15 +106,15 @@ namespace Halide {
         // buffer dims from standalone uniforms
         for (MLVal list = callsInExpr(expr); !listEmpty(list); list = listTail(list)) {
             MLVal call = listHead(list);
-            string name = call[0];
-            Type ret = call[1][1];
-            if (callTypeIsFunc(call[1][0])) {
+            string name = call[2];
+            Type ret = call[1];
+            if (callTypeIsFunc(call[0])) {
                 Func f = rehydrateFunc(defs, env, name);
                 e.child(FuncRef(f));
-            } else if (callTypeIsImage(call[1][0])) {
+            } else if (callTypeIsImage(call[0])) {
                 assert (name[0] == '.'); // should be an absolute name
                 name = name.substr(1);   // chop off the leading '.'
-                int dims = listLength(call[1][2]); // count number of args
+                int dims = listLength(call[3]); // count number of args
                 e.child(UniformImage(ret, dims, name));
             }
         }

@@ -30,6 +30,7 @@ WEAK void __copy_to_host(buffer_t* buf) { /* NOP */ }
 #endif //_COPY_TO_HOST
 
 WEAK void *fast_malloc(size_t x) {
+    //fprintf(stderr, "fast_malloc(%d)\n", (int)x);
     void *orig = malloc(x+32);
     // Round up to next multiple of 32. Should add at least 8 bytes so we can fit the original pointer.
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);

@@ -62,7 +62,6 @@ let dump_syms symtab =
 
 (* misc helpers *)
 let context_of_val v = type_context (type_of v)
-let toi32 x b = build_intcast x (i32_type (context_of_val x)) "" b
 let ci c x = const_int (i32_type c) x
 let param_list f = Array.to_list (params f)
 let const_zero c = ci c 0
@@ -79,19 +78,14 @@ let cg_buffer_field_ref bufptr field b =
     b
 
 let cg_buffer_field bufptr field b =
-  let raw =
-    build_load
-      (cg_buffer_field_ref bufptr field b)
-      ((value_name bufptr) ^ "." ^ (string_of_buffer_field field))
-      b
-  in
-  match field with
-    | Dim _ | ElemSize -> toi32 raw b
-    | HostPtr | DevPtr | HostDirty | DevDirty -> raw
+  build_load
+    (cg_buffer_field_ref bufptr field b)
+    ((value_name bufptr) ^ "." ^ (string_of_buffer_field field))
+    b
 
-(* codegen an llvalue which loads buf->dim[i] *)
-let cg_buffer_dim bufptr dim b =
-  cg_buffer_field bufptr (Dim dim) b
+(* codegen an llvalue which loads buf->extent[i] *)
+let cg_buffer_extent bufptr extent b =
+  cg_buffer_field bufptr (Extent extent) b
 
 (* codegen an llvalue which loads buf->host *)
 let cg_buffer_host_ptr bufptr b =
@@ -100,7 +94,10 @@ let cg_buffer_host_ptr bufptr b =
 (* map an Ir.arg to an ordered list of types for its constituent Var parts *)
 let types_of_arg_vars c = function
   | Scalar (_, vt) -> [type_of_val_type c vt]
-  | Buffer _ -> [raw_buffer_t c; i32_type c; i32_type c; i32_type c; i32_type c]
+  | Buffer _ -> [raw_buffer_t c; 
+                 i32_type c; i32_type c; i32_type c; i32_type c;
+                 i32_type c; i32_type c; i32_type c; i32_type c;
+                 i32_type c; i32_type c; i32_type c; i32_type c]
 
 let arg_var_types c arglist = List.flatten (List.map (types_of_arg_vars c) arglist)
 
@@ -108,11 +105,19 @@ let arg_var_types c arglist = List.flatten (List.map (types_of_arg_vars c) argli
  * exploded arg Var values *)
 let vals_of_arg_vars b = function
   | Buffer _, param ->
-      [cg_buffer_host_ptr param b;
-       cg_buffer_dim param 0 b;
-       cg_buffer_dim param 1 b;
-       cg_buffer_dim param 2 b;
-       cg_buffer_dim param 3 b]
+    [cg_buffer_field param HostPtr b;
+     cg_buffer_field param (Extent 0) b;
+     cg_buffer_field param (Extent 1) b;
+     cg_buffer_field param (Extent 2) b;
+     cg_buffer_field param (Extent 3) b;
+     cg_buffer_field param (Stride 0) b;
+     cg_buffer_field param (Stride 1) b;
+     cg_buffer_field param (Stride 2) b;
+     cg_buffer_field param (Stride 3) b;
+     cg_buffer_field param (Min 0) b;
+     cg_buffer_field param (Min 1) b;
+     cg_buffer_field param (Min 2) b;
+     cg_buffer_field param (Min 3) b]
   | _, param -> [param]
 
 (*
@@ -213,9 +218,13 @@ let cg_wrapper c m e inner =
   dbg 1 "  %d params\n%!" (Array.length (params f));
   dbg 1 "  %d inner params\n%!" (Array.length (params inner));
 
+  dbg 2 "Constructing arguments for call to inner function\n%!";
+
   (* construct the argument list from the fields of the params of the wrapper *)
   let call_args = arg_var_vals arglist b in
   set_arg_names arglist call_args;
+
+  dbg 2 "Building call to inner function\n%!";
 
   (* call the inner function, and return void *)
   ignore (build_call inner (Array.of_list call_args) "" b);
