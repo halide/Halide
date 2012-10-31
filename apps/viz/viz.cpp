@@ -154,6 +154,8 @@ void parse_log(const char *filename, std::vector<event> &log) {
 int width = 1600;
 int height = 1200;
 
+int speed = 32;
+
 std::vector<event> log;
 int log_idx = 0;
 
@@ -164,6 +166,18 @@ struct buffer_pos {
     char caption[64];
 };
 std::vector<buffer_pos> positions;
+
+void keyboardEvent(unsigned char key, int x, int y) {
+    printf("%d\n", key);
+    if (key == '+') {
+        speed *= 2;
+        if (speed == 0) speed = 1;
+    } else if (key == '-') {
+        speed /= 2;
+    } else if (key == 'r') {
+        log_idx = 0;
+    }
+}
 
 void init() {
 
@@ -194,14 +208,22 @@ void draw_events() {
     glPointSize(4);
 
     glBegin(GL_QUADS);
-    log_idx -= 1000;
-    if (log_idx < 0) log_idx = 0;
-    for (int i = 0; i < 1025; i++) {        
-        float fade = i/1025.0f;
-        fade *= 2;
-        fade -= 0.5;
-        if (fade < 0) fade = 0;
+    int lookback = speed*15 + 50;
+    log_idx -= lookback;
+    for (int i = 0; i < lookback + speed; i++) {        
+        if (log_idx < 0) {
+            log_idx++;
+            continue;
+        } else if (log_idx == 0) {
+            glEnd();
+            clear();
+            glBegin(GL_QUADS);
+        }
+
+        float fade = (i - lookback*0.5f) / (lookback*0.5f);
         if (fade > 1) fade = 1;
+        if (fade < 0) fade = 0;
+
         event &e = log[log_idx];
 
         int x_off = -100000, y_off = -100000;
@@ -214,12 +236,7 @@ void draw_events() {
             }
         }
         log_idx++;
-        if (log_idx >= (int)log.size()) {
-            glEnd();
-            clear();
-            log_idx = 0;
-            glBegin(GL_QUADS);
-        }
+        if (log_idx > log.size()) continue;
 
         if (e.type == Load) {
             glColor4f(0, fade*0.5+0.5, 0, 1);
@@ -257,7 +274,6 @@ void display() {
 void reshape(int w, int h) {
     printf("%d %d\n", w, h);
     width = w; height = h;
-    log_idx = 0;
 
     glViewport(0, 0, width, height);
     glMatrixMode(GL_PROJECTION);
@@ -270,6 +286,7 @@ void reshape(int w, int h) {
 
     clear();
 
+    log_idx = 0;
 }
 
 int main(int argc, char **argv) {
@@ -296,6 +313,7 @@ int main(int argc, char **argv) {
 
     glutDisplayFunc(display);
     glutIdleFunc(glutPostRedisplay);    
+    glutKeyboardFunc(keyboardEvent);
 
     glutReshapeFunc(reshape);
 
