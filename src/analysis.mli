@@ -2,6 +2,7 @@ exception ModulusOfNonInteger
 exception ModulusOfMakeVector
 exception ModulusOfBroadcast
 exception ModulusOfRamp
+exception NonDifferentiable
 
 val reduce_expr_modulo : Ir.expr -> int -> int option
 val compute_remainder_modulus : Ir.expr -> int * int
@@ -26,7 +27,7 @@ val find_names_in_stmt : Util.StringSet.t -> int -> Ir.stmt -> Util.StringIntSet
 val find_names_in_expr : ?exclude_bufs:bool -> ?exclude_vars:bool -> Util.StringSet.t -> int -> Ir.expr -> Util.StringIntSet.t
 
 val find_vars_in_expr : Ir.expr -> Ir.val_type Util.StringMap.t
-val find_calls_in_expr : Ir.expr -> (Ir.call_type * Ir.val_type * Ir.expr list) Util.StringMap.t
+val find_calls_in_expr : Ir.expr -> (Ir.call_type * Ir.val_type * string * Ir.expr list) list
 
 val find_loads_in_expr : Ir.expr -> Util.StringSet.t
 val find_loads_in_stmt : Ir.stmt -> Util.StringSet.t
@@ -34,3 +35,4 @@ val find_stores_in_stmt : Ir.stmt -> Util.StringSet.t
 
 val duplicated_lanes : Ir.expr -> bool
 val deduplicate_lanes : Ir.expr -> Ir.expr
+val derivative : string -> Ir.expr -> Ir.expr

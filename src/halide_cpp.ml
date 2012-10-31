@@ -197,8 +197,7 @@ let _ =
   Callback.register "makeBoundTransform" (fun func var min size -> bound_schedule func var min size);
   Callback.register "makeSplitTransform" (fun func var outer inner n -> split_schedule func var outer inner n);
   Callback.register "makeReorderTransform" (fun func vars -> reorder_schedule func vars);
-  Callback.register "makeChunkTransform" (fun func var -> chunk_schedule func var);
-  Callback.register "makeRootTransform" (fun func -> root_schedule func);
+  Callback.register "makeChunkTransform" (fun func store_var compute_var -> chunk_schedule func store_var compute_var);
   Callback.register "makeParallelTransform" (fun func var -> parallel_schedule func var);  
   Callback.register "composeFunction" (fun f1 f2 x -> f1 (f2 x));
   Callback.register "makeIdentity" (fun _ x -> x);
@@ -228,7 +227,7 @@ let _ =
   Callback.register "typeOfExpr" val_type_of_expr;
 
   Callback.register "varsInExpr" (fun e -> StringMap.bindings (Analysis.find_vars_in_expr e));
-  Callback.register "callsInExpr" (fun e -> StringMap.bindings (Analysis.find_calls_in_expr e));
+  Callback.register "callsInExpr" (fun e -> Analysis.find_calls_in_expr e);
 
   Callback.register "callTypeIsFunc" (function Func -> true | _ -> false);
   Callback.register "callTypeIsExtern" (function Extern -> true | _ -> false);
