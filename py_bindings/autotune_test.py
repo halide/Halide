@@ -1,6 +1,8 @@
 
 from autotune import *
 
+import valid_schedules
+
 # --------------------------------------------------------------------------------------------------------------
 # Unit Tests
 # --------------------------------------------------------------------------------------------------------------
@@ -214,7 +216,10 @@ def test_schedules(verbose=False, test_random=False):
     T1 = time.time()
     
     s = '\n'.join(s)
-    assert 'f.chunk(_c0)' in s
+    if valid_schedules.SPLIT_STORE_COMPUTE:
+        assert 'f.chunk(_c0,_c0)' in s
+    else:
+        assert 'f.chunk(_c0)' in s
     assert 'f.root().vectorize' in s
     assert 'f.root().unroll' in s
     assert 'f.root().split' in s
