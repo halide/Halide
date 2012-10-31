@@ -227,7 +227,7 @@ let _ =
   Callback.register "typeOfExpr" val_type_of_expr;
 
   Callback.register "varsInExpr" (fun e -> StringMap.bindings (Analysis.find_vars_in_expr e));
-  Callback.register "callsInExpr" (fun e -> (List.map (fun (_, _, nm, _) -> nm) (Analysis.find_calls_in_expr e)));
+  Callback.register "callsInExpr" (fun e -> Analysis.find_calls_in_expr e);
 
   Callback.register "callTypeIsFunc" (function Func -> true | _ -> false);
   Callback.register "callTypeIsExtern" (function Extern -> true | _ -> false);
