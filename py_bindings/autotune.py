@@ -112,6 +112,59 @@ DEBUG_CHECKS = False
 # --------------------------------------------------------------------------------------------------------------
 
 class AutotuneParams:
+    """
+    Genetic Algorithm Parameters:
+    
+      -tournament_size         n Top n individuals are selected for crossover (if not n exist then generate random individuals)
+      -population_size         n Population size
+      -generations             n Total generations
+      -group_generations       n Iters to run with grouping constraints enabled (0 to not use grouping)
+      -min_depth               n Minimum depth (including f.root()) of schedule macros applied to a Func
+      -max_depth               n Minimum depth (including f.root()) of schedule macros
+
+    Probabilities for Mutate/Crossover:
+    
+      -prob_mutate_replace     p In mutation, probability to change Func to new random schedule (probabilities are normalized)
+      -prob_mutate_consts      p Chance to modify constants
+      -prob_mutate_add         p Chance to add a single schedule macro to existing Func's schedule
+      -prob_mutate_remove      p Chance to remove a single schedule macro from existing Func's schedule
+      -prob_mutate_edit        p Chance to edit (replace) a single schedule macro within Func's schedule
+      -prob_mutate_template    p Replace Func's schedule with one sampled by autotune_template (human priors)
+      -prob_mutate_copy        p Replace Func's schedule with one randomly sampled from another Func
+      -prob_mutate_group       p Replace all schedules in a group with the schedule of a single Func from the group
+      -crossover_mutate_prob   p Probability that mutate() is called after crossover
+      -crossover_random_prob   p Probability that crossover is run with a randomly generated parent
+
+    Compilation and Running:
+    
+      -trials                  n Timing runs per schedule
+      -compile_timeout         t Compile timeout in seconds
+      -compile_memory_limit    n Compile memory limit in MB or None for no limit
+      -run_timeout_mul         t Fastest run time multiplied by this factor plus bias is cutoff
+      -run_timeout_bias        t Additional bias time to allow tester process to start up and shut down
+      -run_timeout_default     t Assumed 'fastest run time' before best run time is established
+      -run_save_timeout        t Additional timeout if saving output png
+      -check_output            b Compare output with known reference output (0 or 1)
+      -compile_threads         n Number of threads to use for parallel compile (None defaults to number virtual cores)
+      -hl_threads              n Passed as HL_NUMTHREADS (None defaults to HL_NUMTHREADS if set, else virtual cores over 2)
+
+    Input and Output Options:
+
+      -num_print               n Display the top n individuals in summary
+      -image_ext               s Image extension for reference outputs. Can be overridden by tune_image_ext special variable.
+      -tune_dir                s Autotuning output directory or None to use a default directory
+      -in_images               s List of input images to test (can pass multiple images using -in_images a.png:b.png)
+      -runner_file             s Runner C++ filename, defaults to within runner/ directory.
+      -summary_file            s Summary output filename, defaults to summary.txt
+      -plot_file               s Convergence plot filename, defaults to plot.png
+
+    Experimental Features:
+    
+      -max_nontrivial          n When generating random schedules, max number of nontrivial (non-root/inline) funcs
+      -seed_reasonable         b Whether to seed with reasonable schedules (0 or 1)
+      -prob_reasonable         p Probability to sample reasonable schedule when sampling random schedule
+    """
+    
     #pop_elitism_pct = 0.2
     #pop_crossover_pct = 0.3
     #pop_mutated_pct = 0.3
@@ -177,8 +230,8 @@ class AutotuneParams:
     in_images = []                  # List of input images to test (can pass multiple images using -in_images a.png:b.png)
                                     # First image is run many times to yield a best timing
     
-    seed_reasonable = True          # Whether to seed with reasonable schedules
-    prob_reasonable = 0.5           # Probability to sample reasonable schedule when sampling random schedule
+    seed_reasonable = False          # Whether to seed with reasonable schedules
+    prob_reasonable = 0.0           # Probability to sample reasonable schedule when sampling random schedule
     
     runner_file = 'default_runner.cpp'
     summary_file = 'summary.txt'
@@ -1278,8 +1331,12 @@ def main():
     (args, argd) = parse_args()
     all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake interpolate bilateral_grid camera_pipe local_laplacian'.split() # local_laplacian'.split()
     if len(args) == 0:
-        print 'autotune test|print|autotune examplename|test_sched|test_fromstring|test_variations'
-        print 'autotune example [%s|all]'%('|'.join(all_examples))
+        print 'autotune test|print|autotune examplename.filter_func|test_sched|test_fromstring|test_variations'
+        print '  Internal use.'
+        print
+        print 'autotune example [%s|all|list.txt]'%('|'.join(all_examples))
+        print '  Run on one of the examples (or all examples, or a whitespace separated list in a file with .txt extension)'
+        print '\n'.join(x[4:] for x in AutotuneParams.__doc__.split('\n'))
         sys.exit(0)
     if args[0] == 'test':
         test()
