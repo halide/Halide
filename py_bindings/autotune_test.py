@@ -249,3 +249,6 @@ def test():
 #    test_schedules(True)
     test_schedules(test_random=True)
     test_crossover()
+
+if __name__ == '__main__':
+    test()
