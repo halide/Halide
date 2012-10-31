@@ -154,6 +154,7 @@ let include_llvm = "-I../../llvm/include" in (* TODO: base off of llvm_prefix? *
 flag ["c"; "compile"; "llsupport_cflags"]
   (S[A"-cc"; A"g++";
      A"-ccopt"; A "-fPIC"; (* Linux at least requires PIC *)
+     A"-ccopt"; A "-fno-rtti";
      A"-ccopt"; A include_ocaml;
      A"-ccopt"; A include_llvm;
      A"-ccopt"; A"-D__STDC_LIMIT_MACROS";
