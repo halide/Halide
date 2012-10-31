@@ -179,12 +179,15 @@ class FragmentChunk(Fragment):
     @staticmethod
     def random_fragment(root_func, func, cls, vars, extra_caller_vars, partial_schedule):
         #allV = caller_vars(root_func, func)+extra_caller_vars
-        allV = chunk_vars(partial_schedule, func)
+        allV = chunk_vars(partial_schedule, func)           # This is in reversed loop order (argument order)
         if len(allV) == 0:
             return None
         if SPLIT_STORE_COMPUTE:
             i = random.randrange(len(allV))
-            j = random.randrange(i+1)           # TODO: Should use exponential distribution instead of uniform
+            j = random.randrange(i,len(allV))  # TODO: Should use exponential distribution instead of uniform, also should use chunk(root)
+            #fsplitstore = open('splitstore.txt', 'at')
+            #print >>fsplitstore, 'split_store_compute chunk selecting %r %d %d %s %s' % (allV, i, j, allV[i], allV[j])
+            #fsplitstore.close()
             return cls(allV[i], allV[j])
         else:
             return cls(random.choice(allV))
@@ -202,6 +205,11 @@ class FragmentChunk(Fragment):
                     if CHECK_VERBOSE:
                         print ' * check fail, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
                     return False
+                i = cvars.index(self.var)
+                j = cvars.index(self.storevar)
+                if i > j:
+                    if CHECK_VERBOSE:
+                        print ' * check fail, chunk compute var=%s, store var=%s, i=%d, j=%d, wrong order, cvars=%r' % (self.var, self.storevar, i, j, cvars)
         return check_duplicates(self.__class__, L, func)
 
     def __str__(self):
