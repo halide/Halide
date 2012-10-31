@@ -139,7 +139,7 @@ def filter_func(dtype=UInt(8), in_filename=DEFAULT_FILENAME):
     selectPadding = 10
 
     #im = Image(UInt(8), in_filename)
-    im0 = UniformImage(UInt(8), 3)
+    im0 = UniformImage(UInt(8), 3, 'im')
     im = Image(UInt(8), in_filename)
     im0.assign(im)
     
@@ -169,7 +169,7 @@ def filter_func(dtype=UInt(8), in_filename=DEFAULT_FILENAME):
                             & (y < im.height() - selectPadding),
                             -2.0, 2.0)
 
-    phi_input = UniformImage(Float(32), 2)
+    phi_input = UniformImage(Float(32), 2, 'phi_input')
 
     phi_clamped = Func('phi_clamped')
     phi_clamped[x,y] = phi_input[clamp(x,cast(int_t,0),cast(int_t,im.width()-1)),
