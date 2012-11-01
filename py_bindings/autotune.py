@@ -134,6 +134,7 @@ class AutotuneParams:
       -prob_mutate_template    p Replace Func's schedule with one sampled by autotune_template (human priors)
       -prob_mutate_copy        p Replace Func's schedule with one randomly sampled from another Func
       -prob_mutate_group       p Replace all schedules in a group with the schedule of a single Func from the group
+      -prob_mutate_chunk       p Find a chunk() call and replace with a new random chunk() call
       -crossover_mutate_prob   p Probability that mutate() is called after crossover
       -crossover_random_prob   p Probability that crossover is run with a randomly generated parent
 
@@ -178,7 +179,7 @@ class AutotuneParams:
     mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
     population_size = 128 #64 #5 #32 #128
     
-    # Different mutation modes (mutation is applied to each Func independently)
+    # Different mutation modes (mutation is applied to each Func independently) -- see above docstring for documentation
     prob_mutate_replace  = 0.2
     prob_mutate_consts   = 0.2
     prob_mutate_add      = 0.2
@@ -187,16 +188,8 @@ class AutotuneParams:
     prob_mutate_template = 1.0
     prob_mutate_copy     = 0.2
     prob_mutate_group    = 0.0      # Seems to converge to local minima -- do not use.
+    prob_mutate_chunk    = 0.2
         
-    # 'replace'  - Replace Func's schedule with a new random schedule
-    # 'consts'   - Just modify constants when mutating
-    # 'add'      - Add a single schedule macro to existing schedule
-    # 'remove'   - Removing a single schedule macro from existing schedule
-    # 'edit'     - Edit (replace) a single schedule macro within Func's schedule
-    # 'template' - Replace Func's schedule with one sampled by autotune_template
-    # 'copy'     - Replace Func's schedule with one randomly sampled from another Func
-    # 'group'    - Randomly sample a Func from a group with nontrivial size and replace all funcs in the group with that schedule
-    
     image_ext = IMAGE_EXT               # Image extension for reference outputs. Can be overridden by tune_image_ext special variable.
 
     min_depth = 0
@@ -207,7 +200,7 @@ class AutotuneParams:
     
     group_generations = 0            # Iters to run with grouping constraints enabled (0 to not use grouping)
     
-    compile_timeout = 20.0 #15.0        # Compile timeout in sec
+    compile_timeout = 40.0 #15.0        # Compile timeout in sec
     compile_memory_limit = 2500         # Compile memory limit in MB or None for no limit
     
     run_timeout_mul = 2.0 #3.0           # Fastest run time multiplied by this factor plus bias is cutoff
@@ -499,6 +492,25 @@ def mutate(a, p, constraints, grouping):
                     a.d[indiv] = FragmentList(d_func[indiv], list(a0.d[group[ichosen]]))
                 #return Schedule(schedule.root_func, ans)
                 a.genomelog = 'mutate_group(%s)'%a0.identity()
+            elif mode == 'chunk':
+                chunk_funcs = []
+                for (key, value) in a.d.items():
+                    if sum(isinstance(x, FragmentChunk) for x in value) >= 1:
+                        chunk_funcs.append(key)
+                if len(chunk_funcs) == 0:
+                    continue
+                name = random.choice(chunk_funcs)
+                L = a.d[name]
+                #print 'before:', L
+                found = False
+                for i in range(len(L)):
+                    if isinstance(L[i], FragmentChunk):
+                        found = True
+                        break
+                if not found:
+                    raise KeyError
+                L[i] = FragmentChunk.random_fragment(a.root_func, L.func, FragmentChunk, L.var_order(), [], a)
+                #print 'after:', L
             else:
                 raise ValueError('Unknown mutation mode %s'%mode)
         except MutateFailed:
@@ -509,7 +521,9 @@ def mutate(a, p, constraints, grouping):
             a.apply(constraints, check=True)       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
         except BadScheduleError:#, halide.ScheduleError):
             continue
-            
+        #if mode == 'chunk':
+        #    print '  * check'
+        #    print
         debug_check(a)
             
         return a
