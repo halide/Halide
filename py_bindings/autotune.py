@@ -511,6 +511,7 @@ def mutate(a, p, constraints, grouping):
                     raise KeyError
                 L[i] = FragmentChunk.random_fragment(a.root_func, L.func, FragmentChunk, L.var_order(), [], a)
                 #print 'after:', L
+                a.genomelog = 'mutate_chunk(%s)'%a0.identity()
             else:
                 raise ValueError('Unknown mutation mode %s'%mode)
         except MutateFailed:
