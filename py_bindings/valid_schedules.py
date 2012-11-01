@@ -18,8 +18,8 @@ TILE_PROB_SQUARE = 0.5              # Probability of selecting square tile size 
 SPLIT_STORE_COMPUTE = True          # Whether to use chunk(store, compute)
 
 CHECK_VERBOSE = False
-CHUNK_VARS_VERBOSE = False #True
-VAR_ORDER_VERBOSE = False #True
+CHUNK_VARS_VERBOSE = False
+VAR_ORDER_VERBOSE = False
 
 # --------------------------------------------------------------------------------------------------------------
 # Valid Schedule Enumeration
@@ -1008,7 +1008,7 @@ def test_toposort():
     assert toposort(callers(f)) == ['c_valid2_f']
     assert toposort(callers(g)) == ['c_valid2_g', 'c_valid2_f']
     
-    print 'valid_schedules.toposort:     OK'
+    print 'valid_schedules.toposort:        OK'
 
 def intersect_lists(L):
     "Take intersection while also preserving order (if possible)."
@@ -1018,11 +1018,17 @@ def intersect_lists(L):
     added = set()
     ans = []
     for x in L[0]:
-        if x not in added:
+        if x not in added and x in ans_set:
             added.add(x)
             ans.append(x)
     return ans
-    
+
+def test_intersect_lists():
+    assert intersect_lists([['c', 'y', '_c1', '_c3', '_c2', '_c0', 'x'], ['c', 'z', 'y', 'x']]) == ['c', 'y', 'x']
+    assert intersect_lists([[1,2,3,4,5],[1,3,5]]) == [1, 3, 5]
+    assert intersect_lists([[1,3,5],[1,2,3,4,5]]) == [1, 3, 5]
+    print 'valid_schedules.intersect_lists: OK'
+
 def chunk_vars(schedule, func, remove_inline=False, verbose=CHUNK_VARS_VERBOSE):
     d_stackL = {}      # Map f name to list of stacks (loop ordering) of variable names
     d_callers = callers(schedule.root_func)
@@ -1163,7 +1169,7 @@ def test_callers():
     d = dict((filtname(x), sorted([filtname(z) for z in y])) for (x, y) in callers(h2).items())
     assert d == {'h': ['h2'], 'g': ['h', 'h2'], 'f': ['g', 'h2'], 'h2': []}
 
-    print 'valid_schedules.callers:      OK'
+    print 'valid_schedules.callers:         OK'
     
 def test_chunk_vars_subproc(test_index=0):
     f = halide.Func('valid_f')
@@ -1192,7 +1198,7 @@ def test_chunk_vars_subproc(test_index=0):
         assert chunk_vars(Schedule.fromstring(h, 'valid_h.root().tile(valid_x,valid_y,_c0,_c1,8,8)\nvalid_g.root().parallel(valid_y)'), f, remove_inline) == ['valid_x', 'valid_y']
         assert chunk_vars(Schedule.fromstring(h, ''), f, remove_inline) == ['valid_x', 'valid_y']
 
-    # None of these schedules should pass
+    # None of these schedules should pass. TODO: Also add some positive examples
     if test_index == 0:     # Boxblur (cumsum)
         from examples.boxblur_cumsum import filter_func
     
@@ -1212,8 +1218,9 @@ def test_chunk_vars_subproc(test_index=0):
         (input, out_func, evaluate, scope) = filter_func()
     elif test_index == 1:      # Bilateral grid
         from examples.bilateral_grid import filter_func
-        L = ['blurx.chunk(iv0)\n\nblurz.chunk(y).unroll(y,8).parallel(x).unroll(iv0,8)\nclamped.chunk(_c1)\ngrid.root().vectorize(x,8).unroll(c,16)\n\nsmoothed.root().tile(y,c,_c0,_c1,64,32).tile(_c1,y,_c2,_c3,64,64)',
-            'blurx.chunk(z)\nblury.chunk(z).vectorize(x,4).unroll(iv0,16).reorder(iv0,z,x,y)\nblurz.root().tile(z,iv0,_c0,_c1,4,4)\nclamped.chunk(y).vectorize(y,16)\ngrid.chunk(_c0)\ninterpolated.root().vectorize(x,2).reorder(y,x,iv0)\nsmoothed.root()']
+        # Compiler error of chunk(iv0) schedule: Could not schedule clamped as chunked over _c1, _c1
+        L = ['blurx.chunk(z)\nblury.chunk(z).vectorize(x,4).unroll(iv0,16).reorder(iv0,z,x,y)\nblurz.root().tile(z,iv0,_c0,_c1,4,4)\nclamped.chunk(y).vectorize(y,16)\ngrid.chunk(_c0)\ninterpolated.root().vectorize(x,2).reorder(y,x,iv0)\nsmoothed.root()',
+            'blurx.chunk(iv0)\n\nblurz.chunk(y).unroll(y,8).parallel(x).unroll(iv0,8)\nclamped.chunk(_c1)\ngrid.root().vectorize(x,8).unroll(c,16)\n\nsmoothed.root().tile(y,c,_c0,_c1,64,32).tile(_c1,y,_c2,_c3,64,64)']
         (input, out_func, evaluate, scope) = filter_func()
         assert sorted(callers(scope['smoothed'])['clamped']) == ['grid', 'interpolated']
     else:                      # Blur
@@ -1253,14 +1260,15 @@ def test_chunk_vars_subproc(test_index=0):
     #schedule = Schedule.fromstring(out_func, 'output.root()\n\nsum_clamped.root().vectorize(y,8).tile(x,y,_c0,_c1,4,4).tile(_c0,_c1,_c2,_c3,32,32)\nsumx.chunk(_c2).vectorize(x,4).tile(x,y,_c0,_c1,16,16).unroll(y,4)\nweight.chunk(x).tile(x,y,_c0,_c1,64,64).tile(x,y,_c2,_c3,4,4)')
     #assert not schedule.check(schedule)
 
-    print 'valid_schedules.chunk_vars.%d: OK'%test_index
+    print 'valid_schedules.chunk_vars.%d:    OK'%test_index
 
 def test_valid_schedules():
     args = sys.argv[1:]
     if len(args) == 0:
+        test_intersect_lists()
         test_callers()
         test_toposort()
-        for i in range(3):
+        for i in range(2):
             os.system('python ' + os.path.abspath(__file__) + ' test_chunk_vars %d'%i)
     elif args[0] == 'test_chunk_vars' and len(args) == 2:
         test_chunk_vars_subproc(int(args[1]))
