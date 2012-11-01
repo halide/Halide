@@ -15,8 +15,11 @@ DEFAULT_MAX_DEPTH = 4
 FORCE_TILE = False
 MUTATE_TRIES = 10
 TILE_PROB_SQUARE = 0.5              # Probability of selecting square tile size (e.g. 8x8).
-CHECK_VERBOSE = False
 SPLIT_STORE_COMPUTE = True          # Whether to use chunk(store, compute)
+
+CHECK_VERBOSE = False
+CHUNK_VARS_VERBOSE = False #True
+VAR_ORDER_VERBOSE = False #True
 
 # --------------------------------------------------------------------------------------------------------------
 # Valid Schedule Enumeration
@@ -207,9 +210,12 @@ class FragmentChunk(Fragment):
                     return False
                 i = cvars.index(self.var)
                 j = cvars.index(self.storevar)
+                #if CHECK_VERBOSE:
+                #    print ' * check: cvars=%r, i=%d, j=%d' % (cvars, i, j)
                 if i > j:
                     if CHECK_VERBOSE:
                         print ' * check fail, chunk compute var=%s, store var=%s, i=%d, j=%d, wrong order, cvars=%r' % (self.var, self.storevar, i, j, cvars)
+                    return False
         return check_duplicates(self.__class__, L, func)
 
     def __str__(self):
@@ -402,22 +408,28 @@ class FragmentReorder(Fragment):
         return '.reorder(' + ','.join(v for v in self.permutation) + ')'
 
     def var_order(self, prev_order):
+        if VAR_ORDER_VERBOSE:
+            print 'FragmentReorder.var_order prev_order=%r, permutation=%r' % (prev_order, self.permutation)
+        permutation = list(reversed(self.permutation))
         orig_order = list(reversed(prev_order))      # Argument order (reversed)
         order = list(orig_order)
         try:
-            indices = sorted([order.index(self.permutation[j]) for j in range(len(self.permutation))])
+            indices = sorted([order.index(permutation[j]) for j in range(len(self.permutation))])
         except ValueError:
             raise BadScheduleError
         for (iperm, i) in enumerate(indices):
-            order[i] = self.permutation[iperm]
+            order[i] = permutation[iperm]
 
         sub = [order[indices[j]] for j in range(len(indices))]
-        if sub != list(self.permutation):
+        if sub != list(permutation):
             print 'sub', sub
             print 'permutation', self.permutation
             print 'orig_order', orig_order
             print 'order', order
             raise ValueError
+
+        if VAR_ORDER_VERBOSE:
+            print 'FragmentReorder.var_order returning %r' % order
 
         return order
 
@@ -1011,17 +1023,35 @@ def intersect_lists(L):
             ans.append(x)
     return ans
     
-def chunk_vars(schedule, func, remove_inline=False, verbose=False):
+def chunk_vars(schedule, func, remove_inline=False, verbose=CHUNK_VARS_VERBOSE):
     d_stackL = {}      # Map f name to list of stacks (loop ordering) of variable names
     d_callers = callers(schedule.root_func)
     d_func = halide.all_funcs(schedule.root_func)
     if verbose:
+        print '======================================================='
+        print 'CHUNK_VARS(%s)'%func.name()
+        print '======================================================='
         print 'd_callers:', d_callers
     
     for fname in toposort(d_callers):
+        if fname == func.name():
+            if verbose:
+                print 'Found func %s, returning'%fname
+            all_stacks = []
+            for fparent in d_callers[fname]:
+                all_stacks.extend(d_stackL[fparent])
+            #ans = list(reversed(intersect_lists(d_stackL[fparent])))
+            ans = list(reversed(intersect_lists(all_stacks)))
+            if verbose:
+                print '  Returning %r, all_stacks=%r' % (ans, all_stacks)
+            return ans
+
+
         if len(d_callers[fname]) == 0:                      # Root function (no callers) is implicitly root()
             fragment = schedule.d[fname] if fname in schedule.d else FragmentList(d_func[fname], [])
-            d_stackL[fname] = [fragment.var_order()]
+            d_stackL[fname] = [fragment.var_order()]   # FIXMEFIXME: SHouldn't all var_order() be reversed here?
+            if verbose:
+                print 'No callers, %s, stack: %r' % (fname, d_stackL[fname])
         else:
             if fname in schedule.d:
                 L = schedule.d[fname]
@@ -1086,15 +1116,16 @@ def chunk_vars(schedule, func, remove_inline=False, verbose=False):
                 print 'final stack:', d_stackL[fname]
                 print '-'*20
                 print
-        if fname == func.name():
-            #stackL = [set(x) for x in d_stackL[fname]]
-            #ans = sorted(reduce(set.intersection, stackL))
-            ans = list(reversed(intersect_lists(d_stackL[fname])))
-            if verbose:
-                print 'return d_stackL', d_stackL[fname]
-                print 'return stackL', stackL
-                print 'return ans', ans
-            return ans
+        #if fname == func.name():
+        #    raise ValueError
+        #    #stackL = [set(x) for x in d_stackL[fname]]
+        #    #ans = sorted(reduce(set.intersection, stackL))
+        #    ans = list(reversed(intersect_lists(d_stackL[fname])))
+        #    if verbose:
+        #        print 'return d_stackL', d_stackL[fname]
+        #        print 'return stackL', stackL
+        #        print 'return ans', ans
+        #    return ans
     raise ValueError
         #stack[fname] = 1
         #print 'callers', fname, d_callers[fname]
@@ -1134,7 +1165,7 @@ def test_callers():
 
     print 'valid_schedules.callers:      OK'
     
-def test_chunk_vars_subproc(test_bilateral=True):
+def test_chunk_vars_subproc(test_index=0):
     f = halide.Func('valid_f')
     g = halide.Func('valid_g')
     h = halide.Func('valid_h')
@@ -1162,7 +1193,7 @@ def test_chunk_vars_subproc(test_bilateral=True):
         assert chunk_vars(Schedule.fromstring(h, ''), f, remove_inline) == ['valid_x', 'valid_y']
 
     # None of these schedules should pass
-    if not test_bilateral:
+    if test_index == 0:     # Boxblur (cumsum)
         from examples.boxblur_cumsum import filter_func
     
         L = ['output.root()\n\nsum_clamped.root().unroll(x,4).tile(x,y,_c0,_c1,64,16).split(_c1,_c1,_c2,4)\nsum.root()\nsumx.chunk(_c1).reorder(c,x,y)\nweight.root()',
@@ -1179,12 +1210,16 @@ def test_chunk_vars_subproc(test_bilateral=True):
              'output.root().tile(y,c,_c0,_c1,4,4).unroll(c,4)\nsum.chunk(c)\n\nsumx.chunk(_c1)\nweight.chunk(c).parallel(y).tile(x,y,_c0,_c1,32,4).unroll(_c0,16)',
              'output.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\nsum.root()\nsumx.chunk(_c1)']
         (input, out_func, evaluate, scope) = filter_func()
-    else:
+    elif test_index == 1:      # Bilateral grid
         from examples.bilateral_grid import filter_func
         L = ['blurx.chunk(iv0)\n\nblurz.chunk(y).unroll(y,8).parallel(x).unroll(iv0,8)\nclamped.chunk(_c1)\ngrid.root().vectorize(x,8).unroll(c,16)\n\nsmoothed.root().tile(y,c,_c0,_c1,64,32).tile(_c1,y,_c2,_c3,64,64)',
             'blurx.chunk(z)\nblury.chunk(z).vectorize(x,4).unroll(iv0,16).reorder(iv0,z,x,y)\nblurz.root().tile(z,iv0,_c0,_c1,4,4)\nclamped.chunk(y).vectorize(y,16)\ngrid.chunk(_c0)\ninterpolated.root().vectorize(x,2).reorder(y,x,iv0)\nsmoothed.root()']
         (input, out_func, evaluate, scope) = filter_func()
         assert sorted(callers(scope['smoothed'])['clamped']) == ['grid', 'interpolated']
+    else:                      # Blur
+        from examples.blur import filter_func
+        L = ['blur_y.root().tile(x,y,_c0,_c1,4,4).reorder(y,x,c,_c1,_c0)\ninput_clamped.chunk(x,c).split(c,c,_c0,4).parallel(c)']
+        (input, out_func, evaluate, scope) = filter_func()
         
     L = [Schedule.fromstring(out_func, x, fix=False) for x in L]
 #    n = sum([x.check(x) for x in L])
@@ -1218,15 +1253,15 @@ def test_chunk_vars_subproc(test_bilateral=True):
     #schedule = Schedule.fromstring(out_func, 'output.root()\n\nsum_clamped.root().vectorize(y,8).tile(x,y,_c0,_c1,4,4).tile(_c0,_c1,_c2,_c3,32,32)\nsumx.chunk(_c2).vectorize(x,4).tile(x,y,_c0,_c1,16,16).unroll(y,4)\nweight.chunk(x).tile(x,y,_c0,_c1,64,64).tile(x,y,_c2,_c3,4,4)')
     #assert not schedule.check(schedule)
 
-    print 'valid_schedules.chunk_vars.%d: OK'%test_bilateral
+    print 'valid_schedules.chunk_vars.%d: OK'%test_index
 
 def test_valid_schedules():
     args = sys.argv[1:]
     if len(args) == 0:
         test_callers()
         test_toposort()
-        os.system('python ' + os.path.abspath(__file__) + ' test_chunk_vars 0')
-        os.system('python ' + os.path.abspath(__file__) + ' test_chunk_vars 1')
+        for i in range(3):
+            os.system('python ' + os.path.abspath(__file__) + ' test_chunk_vars %d'%i)
     elif args[0] == 'test_chunk_vars' and len(args) == 2:
         test_chunk_vars_subproc(int(args[1]))
     else:
