@@ -96,6 +96,8 @@ import shutil
 import autotune_template
 import psutil
 import operator
+import glob
+import re
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -105,7 +107,7 @@ LOG_SCHEDULE_FILENAME = 'log_schedule.txt'
 AUTOTUNE_VERBOSE = False #True #False #True
 IMAGE_EXT = '.ppm'
 DEFAULT_IMAGE = 'apollo3' + IMAGE_EXT
-DEBUG_CHECKS = False
+DEBUG_CHECKS = False      # Do excessive checks to catch errors (turn off for release code)
 
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
@@ -132,6 +134,7 @@ class AutotuneParams:
       -prob_mutate_template    p Replace Func's schedule with one sampled by autotune_template (human priors)
       -prob_mutate_copy        p Replace Func's schedule with one randomly sampled from another Func
       -prob_mutate_group       p Replace all schedules in a group with the schedule of a single Func from the group
+      -prob_mutate_chunk       p Find a chunk() call and replace with a new random chunk() call
       -crossover_mutate_prob   p Probability that mutate() is called after crossover
       -crossover_random_prob   p Probability that crossover is run with a randomly generated parent
 
@@ -157,7 +160,8 @@ class AutotuneParams:
       -runner_file             s Runner C++ filename, defaults to within runner/ directory.
       -summary_file            s Summary output filename, defaults to summary.txt
       -plot_file               s Convergence plot filename, defaults to plot.png
-
+      -unbiased_file           s Stores unbiased timing comparisons, defaults to unbiased.txt (summary has biased times)
+      
     Experimental Features:
     
       -max_nontrivial          n When generating random schedules, max number of nontrivial (non-root/inline) funcs
@@ -175,7 +179,7 @@ class AutotuneParams:
     mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
     population_size = 128 #64 #5 #32 #128
     
-    # Different mutation modes (mutation is applied to each Func independently)
+    # Different mutation modes (mutation is applied to each Func independently) -- see above docstring for documentation
     prob_mutate_replace  = 0.2
     prob_mutate_consts   = 0.2
     prob_mutate_add      = 0.2
@@ -184,16 +188,8 @@ class AutotuneParams:
     prob_mutate_template = 1.0
     prob_mutate_copy     = 0.2
     prob_mutate_group    = 0.0      # Seems to converge to local minima -- do not use.
+    prob_mutate_chunk    = 0.2
         
-    # 'replace'  - Replace Func's schedule with a new random schedule
-    # 'consts'   - Just modify constants when mutating
-    # 'add'      - Add a single schedule macro to existing schedule
-    # 'remove'   - Removing a single schedule macro from existing schedule
-    # 'edit'     - Edit (replace) a single schedule macro within Func's schedule
-    # 'template' - Replace Func's schedule with one sampled by autotune_template
-    # 'copy'     - Replace Func's schedule with one randomly sampled from another Func
-    # 'group'    - Randomly sample a Func from a group with nontrivial size and replace all funcs in the group with that schedule
-    
     image_ext = IMAGE_EXT               # Image extension for reference outputs. Can be overridden by tune_image_ext special variable.
 
     min_depth = 0
@@ -204,7 +200,7 @@ class AutotuneParams:
     
     group_generations = 0            # Iters to run with grouping constraints enabled (0 to not use grouping)
     
-    compile_timeout = 20.0 #15.0        # Compile timeout in sec
+    compile_timeout = 40.0 #15.0        # Compile timeout in sec
     compile_memory_limit = 2500         # Compile memory limit in MB or None for no limit
     
     run_timeout_mul = 2.0 #3.0           # Fastest run time multiplied by this factor plus bias is cutoff
@@ -236,7 +232,8 @@ class AutotuneParams:
     runner_file = 'default_runner.cpp'
     summary_file = 'summary.txt'
     plot_file = 'plot.png'
-
+    unbiased_file = 'unbiased.txt'  # For unbiased timing comparisons (summary is biased)
+    
     def __init__(self, argd={}):
         for (key, value) in argd.items():
             if not hasattr(self, key):
@@ -369,10 +366,10 @@ def sample_prob(d):
     return key
     
 def crossover(a, b, constraints):
-    "Cross over two schedules, using 2 point crossover."
+    "Cross over two schedules, using 2 point crossover. Raise BadScheduleError if no valid crossovers possible."
     a0 = a
     b0 = b
-    while True:
+    for iteration in range(10):
         a = constraints.constrain(copy.copy(a0))
         b = constraints.constrain(copy.copy(b0))
         funcL = halide.all_funcs(a.root_func, True)
@@ -399,7 +396,19 @@ def crossover(a, b, constraints):
                 d[names[i]] = copy.copy(b.d[names[i]])
         
         ans = Schedule(a.root_func, d)
-        
+        #print '-'*40
+        #print 'Crossover'
+        #print 'Parent A'
+        #print a
+        #print
+        #print 'Parent B'
+        #print b
+        #print
+        #print 'Result'
+        #print ans
+        #print
+        #print '-'*40
+            
         try:
             ans.apply(constraints, check=True)       # Apply schedule to determine if crossover invalidated new variables that were referenced
         except BadScheduleError: #, halide.ScheduleError):
@@ -408,7 +417,8 @@ def crossover(a, b, constraints):
         debug_check(ans)
             
         return ans
-
+    raise BadScheduleError
+    
 def mutate(a, p, constraints, grouping):
     "Mutate existing schedule using AutotuneParams p."
     a0 = a
@@ -482,6 +492,26 @@ def mutate(a, p, constraints, grouping):
                     a.d[indiv] = FragmentList(d_func[indiv], list(a0.d[group[ichosen]]))
                 #return Schedule(schedule.root_func, ans)
                 a.genomelog = 'mutate_group(%s)'%a0.identity()
+            elif mode == 'chunk':
+                chunk_funcs = []
+                for (key, value) in a.d.items():
+                    if sum(isinstance(x, FragmentChunk) for x in value) >= 1:
+                        chunk_funcs.append(key)
+                if len(chunk_funcs) == 0:
+                    continue
+                name = random.choice(chunk_funcs)
+                L = a.d[name]
+                #print 'before:', L
+                found = False
+                for i in range(len(L)):
+                    if isinstance(L[i], FragmentChunk):
+                        found = True
+                        break
+                if not found:
+                    raise KeyError
+                L[i] = FragmentChunk.random_fragment(a.root_func, L.func, FragmentChunk, L.var_order(), [], a)
+                #print 'after:', L
+                a.genomelog = 'mutate_chunk(%s)'%a0.identity()
             else:
                 raise ValueError('Unknown mutation mode %s'%mode)
         except MutateFailed:
@@ -492,7 +522,9 @@ def mutate(a, p, constraints, grouping):
             a.apply(constraints, check=True)       # Apply schedule to determine if random_schedule() invalidated new variables that were referenced
         except BadScheduleError:#, halide.ScheduleError):
             continue
-            
+        #if mode == 'chunk':
+        #    print '  * check'
+        #    print
         debug_check(a)
             
         return a
@@ -847,8 +879,11 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
         ans = ans.strip().split('\n')[-1].strip()
     return proc.returncode, ans
 
+def identity_prefix():
+    return 'f'
+    
 def schedule_ref_output(p, schedule, j):
-    return os.path.join(p.tune_dir, 'f' + schedule.identity() + '_%d'%j + p.image_ext)
+    return os.path.join(p.tune_dir, identity_prefix() + schedule.identity() + '_%d'%j + p.image_ext)
     
 def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
     cache = {}
@@ -884,7 +919,7 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
                     trials = trials_override[i]
                 else:
                     trials = p.trials
-            binary_file = os.path.join(p.tune_dir, 'f' + schedule.identity())
+            binary_file = os.path.join(p.tune_dir, identity_prefix() + schedule.identity())
             mode_str = 'compile' if compile else 'run'
             
             save_filename = ''
@@ -1091,7 +1126,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
 
     nref = 0
     for (ref_name, ref_schedule_str) in scope.get('tune_ref_schedules', {}).items():
-        currentL.append(constraints.constrain(Schedule.fromstring(out_func, ref_schedule_str, ref_name, 0, len(currentL))))
+        currentL.append(constraints.constrain(Schedule.fromstring(out_func, ref_schedule_str, 'ref_' + ref_name, 0, len(currentL))))
         nref += 1
 
         #print 'seed_schedule new_vars', seed_schedule.new_vars()
@@ -1168,6 +1203,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         sys.stdout.flush()
         #autotune_plot.main((os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
         os.system('python autotune_plot.py "%s" "%s"' % (os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
+        os.system('python autotune.py time "%s" "%s"' % (p.tune_dir, os.path.join(p.tune_dir, p.unbiased_file)))
 
 import inspect
 _scriptfile = inspect.getfile(inspect.currentframe()) # script filename (usually with path)
@@ -1326,16 +1362,33 @@ def test():
     import autotune_test
     autotune_test.test()
     test_valid_schedules()
+
+def split_doublequote(s):
+    L = re.compile(r'''((?:"[^"]*")+)''').split(s)
+    ans = []
+    for x in L:
+        if x.startswith('"'):
+            ans.append(x)
+        else:
+            ans.extend(x.split())
+    return ans
     
 def main():
     (args, argd) = parse_args()
     all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake interpolate bilateral_grid camera_pipe local_laplacian'.split() # local_laplacian'.split()
     if len(args) == 0:
-        print 'autotune test|print|autotune examplename.filter_func|test_sched|test_fromstring|test_variations'
+        print 'autotune test|print|test_sched|test_fromstring|test_variations'
         print '  Internal use.'
         print
-        print 'autotune example [%s|all|list.txt]'%('|'.join(all_examples))
-        print '  Run on one of the examples (or all examples, or a whitespace separated list in a file with .txt extension)'
+        print 'autotune X.Y.filter_func [switches]'
+        print '  Direct use of autotuner: "from X.Y import filter_func" should give a function a la examples/*.py'
+        print
+        print 'autotune example [%s|all|list.txt] [switches]' %('|'.join(all_examples))
+        print '  Helper to tune one example (or all examples, or a whitespace separated list in a file with .txt extension).'
+        print '  Supplies reasonable arguments for the example.'
+        print
+        print 'autotune time tune_dir [log_timefile.txt]'
+        print '  Tuner timings are biased. Run this to get unbiased comparison of ref schedules against best tuned schedule.'
         print '\n'.join(x[4:] for x in AutotuneParams.__doc__.split('\n'))
         sys.exit(0)
     if args[0] == 'test':
@@ -1351,8 +1404,26 @@ def main():
         exampleL = all_examples if examplename == 'all' else [examplename]
         if examplename.lower().endswith('.txt'):
             exampleL = open(examplename,'rt').read().strip().split()
+            
+        def get_tune_dir(examplename):
+            return 'tune_%s'%examplename
+
+        existL = []
         for examplename in exampleL:
-            tune_dir = 'tune_%s'%examplename
+            tune_dir = get_tune_dir(examplename)
+            if os.path.exists(tune_dir):
+                existL.append(tune_dir)
+        if len(existL):
+            print 'The following directories exist, remove them?'
+            print
+            print '\n'.join('  ' + x for x in existL)
+            print 
+            ok = raw_input('Remove [y/n]? ')
+            if ok.strip().lower() != 'y':
+                sys.exit(1)
+            
+        for examplename in exampleL:
+            tune_dir = get_tune_dir(examplename)
             if os.path.exists(tune_dir):
                 shutil.rmtree(tune_dir)
             if examplename == 'local_laplacian':
@@ -1365,6 +1436,79 @@ def main():
             elif examplename in ['camera_pipe', 'bilateral_grid']:
                 rest = '-generations 150'.split() + rest
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
+    elif args[0] == 'time':
+        if len(args) < 2:
+            print >> sys.stderr, 'Expected 2 arguments'
+            sys.exit(1)
+        tune_dir = args[1]
+        log_timefile = None
+        if len(args) > 2:
+            log_timefile = args[2]
+        p = AutotuneParams(argd)
+        summary = open(os.path.join(tune_dir, p.summary_file), 'rt').read().split('\n')
+        reset = False
+        tval = None
+        indiv = None
+        for line in summary:
+            line = line.strip()
+            if line.startswith('Generation'):
+                pass #print '*', line
+            elif line == '-'*len(line) and len(line) >= 1:
+                #print 'turned reset on'
+                reset = True
+            elif reset:
+                if len(line.split()) >= 3:
+                    #print line.split()
+                    tval = line.split()[0]
+                    indiv = identity_prefix() + line.split()[1]
+                    #print 'set', tval, indiv
+                #print 'turned reset off'
+                reset = False
+        if indiv is None:
+            print 'Did not find best individual, timing failed'
+            sys.exit(1)
+        verbose = False
+        if verbose:
+            print 'Found best      individual', indiv, '(biased time previously reported: %s)'%tval
+        refL = sorted(glob.glob(os.path.join(os.path.abspath(tune_dir), 'f000*compile.sh')))
+        if len(refL) == 0:
+            print 'Could not find reference schedules, timing failed'
+            sys.exit(1)
+        ref_indiv = os.path.split(refL[-1])[-1].replace('_compile.sh', '')
+        if verbose:
+            print 'Found reference individual', ref_indiv
+            print
+
+        def do_time(indiv, ref_indiv):
+            sh = open(os.path.join(tune_dir, indiv + '_compile.sh'), 'rt').read().strip()
+            #print sh
+            #L = shlex.split(sh.replace('"', '\x255'))
+            L = split_doublequote(sh)
+            #print L
+            #sys.exit(1)
+            L_orig = L[10].strip('"')
+            L[8] = os.path.abspath(os.path.join(tune_dir, indiv))
+            if indiv != ref_indiv:
+                L[10] = '"' + os.path.abspath(os.path.join(tune_dir, os.path.split(L_orig)[-1])) + '"'
+            sh = ' '.join(L)
+            if verbose:
+                print sh
+            #print
+            subprocess.check_output(sh, shell=True)
+            output = subprocess.check_output(sh.replace('autotune_compile_child', 'autotune_run_child'), shell=True)
+            return output.strip().split('\n')[-1]
+            
+        out1 = do_time(indiv, ref_indiv)
+        out2 = do_time(ref_indiv, ref_indiv)
+        sout = 'Unbiased Timings:\n'
+        sout += 'best      ' + indiv + ' ' + out1 + '\n'
+        sout += 'reference ' + ref_indiv + ' ' + out2 + '\n'
+        sout += '\n'
+        print sout,
+        if log_timefile is not None:
+            f = open(log_timefile, 'at')
+            f.write(sout)
+            f.close()
     elif args[0] == 'test_random':
         import autotune_test
         global use_random_blocksize
