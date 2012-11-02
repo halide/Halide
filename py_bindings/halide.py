@@ -10,6 +10,7 @@ import os
 import sys
 import signal
 from ForkedWatchdog import Watchdog
+root = cvar.root
 
 #exit_on_signal()
 
