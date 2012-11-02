@@ -25,7 +25,7 @@ extern "C" {
 }
 #include <static_image.h>
 #include <image_io.h>
-#include "image_equal.h"
+#include <image_equal.h>
 
 #include <sys/time.h>
 
