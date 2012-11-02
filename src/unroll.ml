@@ -16,9 +16,12 @@ let rec unroll_stmt var stmt =
       end
     | For (name, min, n, order, stmt) -> For (name, min, n, order, unroll stmt)
     | Block l -> Block (List.map unroll l)
-    | Allocate (name, ty, size, body) -> Allocate (name, ty, size, unroll body)
-    | Realize (name, ty, region, body) -> Realize (name, ty, region, unroll body)
-    | Pipeline (name, produce, consume) -> Pipeline (name, unroll produce, unroll consume)
+    | Allocate (name, ty, size, body) -> 
+        Allocate (name, ty, size, unroll body)
+    | Realize (name, ty, region, body) -> 
+        Realize (name, ty, region, unroll body)
+    | Pipeline (name, produce, update, consume) -> 
+        Pipeline (name, unroll produce, option_map unroll update, unroll consume)
     (* Anything that does not contain a sub-statement is unchanged *)
     | x -> x
       
