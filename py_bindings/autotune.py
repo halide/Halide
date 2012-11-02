@@ -1534,7 +1534,11 @@ def main():
             best_schedule_name = os.path.split(schedules[-1])[-1]
             best_schedule_name = best_schedule_name[1:4] + '_000'
             log_schedule = open(os.path.join(tune_dir, LOG_SCHEDULE_FILENAME), 'rt').read()
-            idx = log_schedule.index(best_schedule_name)
+            try:
+                idx = log_schedule.index(best_schedule_name)
+            except ValueError:
+                best_schedule_name = '%3d' % (int(best_schedule_name[1:4])-1) + '_000'
+                idx = log_schedule.index(best_schedule_name)
             idx2 = log_schedule.index('---', idx)
             best_schedule = log_schedule[idx:idx2]
             if len(best_schedule.strip().split('\n')) >= 3:
