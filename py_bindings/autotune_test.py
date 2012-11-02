@@ -214,6 +214,7 @@ def test_schedules(verbose=False, test_random=False):
         #        print 'Success'
         #        sys.exit()
     T1 = time.time()
+    #print '\n'.join([x for x in s if 'chunk' in x])
     
     s = '\n'.join(s)
     if valid_schedules.SPLIT_STORE_COMPUTE:
@@ -226,7 +227,8 @@ def test_schedules(verbose=False, test_random=False):
     assert 'f.root().tile' in s
     assert 'f.root().parallel' in s
     assert 'f.root().reorder' in s
-
+    if valid_schedules.CHUNK_ROOT:
+        assert 'chunk(root' in s
     assert nvalid_random == 100
     if verbose:
         print 'generated in %.3f secs' % (T1-T0)

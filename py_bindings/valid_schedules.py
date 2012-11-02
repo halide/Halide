@@ -16,10 +16,13 @@ FORCE_TILE = False
 MUTATE_TRIES = 10
 TILE_PROB_SQUARE = 0.5              # Probability of selecting square tile size (e.g. 8x8).
 SPLIT_STORE_COMPUTE = True          # Whether to use chunk(store, compute)
+CHUNK_ROOT = True                   # Whether to allow chunk(root, compute)
 
 CHECK_VERBOSE = False
 CHUNK_VARS_VERBOSE = False
 VAR_ORDER_VERBOSE = False
+
+root_var = 'root'                   # Turns into halide.root...special variable for chunk(root, compute)
 
 # --------------------------------------------------------------------------------------------------------------
 # Valid Schedule Enumeration
@@ -186,12 +189,16 @@ class FragmentChunk(Fragment):
         if len(allV) == 0:
             return None
         if SPLIT_STORE_COMPUTE:
-            i = random.randrange(len(allV))
-            j = random.randrange(i,len(allV))  # TODO: Should use exponential distribution instead of uniform, also should use chunk(root)
+            n = len(allV)
+            if CHUNK_ROOT:
+                n += 1
+            j = random.randrange(len(allV))           # Compute. TODO: Optionally use exponential distribution instead of uniform
+            i = random.randrange(-1, j+1)             # Store
+            assert i <= j
             #fsplitstore = open('splitstore.txt', 'at')
             #print >>fsplitstore, 'split_store_compute chunk selecting %r %d %d %s %s' % (allV, i, j, allV[i], allV[j])
             #fsplitstore.close()
-            return cls(allV[i], allV[j])
+            return cls(allV[j], allV[i] if i >= 0 else root_var)
         else:
             return cls(random.choice(allV))
         #return [cls(x) for x in ]
@@ -201,21 +208,24 @@ class FragmentChunk(Fragment):
             cvars = chunk_vars(partial_schedule, func)
             if self.var not in cvars:
                 if CHECK_VERBOSE:
-                    print ' * check fail, chunk %s %r' % (self.var, cvars)
+                    print ' * check fail 1, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
                 return False
             if SPLIT_STORE_COMPUTE:
-                if self.storevar not in cvars:
-                    if CHECK_VERBOSE:
-                        print ' * check fail, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
-                    return False
-                i = cvars.index(self.var)
-                j = cvars.index(self.storevar)
-                #if CHECK_VERBOSE:
-                #    print ' * check: cvars=%r, i=%d, j=%d' % (cvars, i, j)
-                if i > j:
-                    if CHECK_VERBOSE:
-                        print ' * check fail, chunk compute var=%s, store var=%s, i=%d, j=%d, wrong order, cvars=%r' % (self.var, self.storevar, i, j, cvars)
-                    return False
+                if CHUNK_ROOT and self.storevar == root_var:
+                    pass
+                else:
+                    if self.storevar not in cvars:
+                        if CHECK_VERBOSE:
+                            print ' * check fail 2, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
+                        return False
+                    i = cvars.index(self.var)
+                    j = cvars.index(self.storevar)
+                    #if CHECK_VERBOSE:
+                    #    print ' * check: cvars=%r, i=%d, j=%d' % (cvars, i, j)
+                    if i > j:
+                        if CHECK_VERBOSE:
+                            print ' * check fail 3, chunk compute var=%s, store var=%s, i=%d, j=%d, wrong order, cvars=%r' % (self.var, self.storevar, i, j, cvars)
+                        return False
         return check_duplicates(self.__class__, L, func)
 
     def __str__(self):
@@ -790,6 +800,8 @@ class Schedule:
                 f.reset()
                 s = s.replace(name + '.', '__func.')
                 scope['__func'] = f
+                if CHUNK_ROOT:
+                    scope['root'] = halide.root
                 #print 'apply', s
                 #print scope, s
                 if verbose:
