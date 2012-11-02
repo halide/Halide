@@ -1537,7 +1537,7 @@ def main():
             try:
                 idx = log_schedule.index(best_schedule_name)
             except ValueError:
-                best_schedule_name = '%3d' % (int(best_schedule_name[1:4])-1) + '_000'
+                best_schedule_name = '%3d' % (int(best_schedule_name[0:3])-1) + '_000'
                 idx = log_schedule.index(best_schedule_name)
             idx2 = log_schedule.index('---', idx)
             best_schedule = log_schedule[idx:idx2]
