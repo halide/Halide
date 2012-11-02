@@ -1229,6 +1229,9 @@ def _ctype_of_type(t):
 
 def autotune_child(args, timeout=None):
     rest = args[1:]
+    if len(rest) == 11:
+        p = AutotuneParams()
+        rest.append(p.runner_file)
     if len(rest) != 12:
         raise ValueError('expected 12 args after autotune_*_child')
     (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads, runner_file) = rest
