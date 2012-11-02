@@ -677,7 +677,7 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
         if i < len(prevL):
             current = copy.copy(prevL[i])
             if not '(elite copy of' in current.genomelog:
-                current.genomelog += ' (elite copy of %s)' % current.identity() # FIXMEFIXME
+                current.genomelog += ' (elite copy of %s)' % current.identity()
             try:
                 append_unique(current, 'elite')
             except Duplicate:
@@ -713,12 +713,15 @@ class AutotuneTimer:
     def __init__(self):
         self.start_time = time.time()
     
-def time_generation(L, p, test_gen_func, timer, constraints, display_text='', save_output=False, compare_schedule=None, trials_override=None):
+def time_generation(L, p, test_gen_func, timer, constraints, display_text='', save_output=False, compare_schedule=None, trials_override=None, output_stats=None):
     #T0 = time.time()
     #Tcompile = [0.0]
     #Trun = [0.0]
+    #last_stats = [None]
     def status_callback(msg):
         stats_str = 'compile time=%d secs, run time=%d secs, total=%d secs, compile_threads=%d, hl_threads=%d'%(timer.compile_time, timer.run_time, time.time()-timer.start_time, p.compile_threads, p.hl_threads)
+        if output_stats is not None:
+            output_stats[:] = [stats_str]
         sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link + ' => %s'%p.tune_dir if p.tune_link else p.tune_dir, display_text))
         sys.stderr.flush()
 
@@ -750,6 +753,8 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text='', sa
         #stats_str = '%.0f%% succeed, compile time=%d secs, run time=%d secs, total=%d secs' % (success*100.0/(i+1),timer.compile_time, timer.run_time, timer.total_time)
         if AUTOTUNE_VERBOSE:
             print '%.5f secs'%ans[-1]['time']
+    #if last_stats[0] is not None:
+    #    log_sched(p, None, '#' + last_stats[0], filename=p.summary_file)
     #print 'Statistics: %s'%stats_str
     return ans
 
@@ -1089,8 +1094,10 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
     try:
         tune_link0 = '~/.tune'
         tune_link = os.path.expanduser(tune_link0)
-        if os.path.exists(tune_link):
+        try:
             os.remove(tune_link)
+        except:
+            pass
         os.symlink(p.tune_dir, tune_link)
         p.tune_link = tune_link0
     except:
@@ -1181,7 +1188,8 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         #currentL.append(constraints.constrain(Schedule.fromstring(out_func, 'blur_x_blurUInt16.chunk(x_blurUInt16)\nblur_y_blurUInt16.root().vectorize(x_blurUInt16,16)', 'bad_schedule', gen, len(currentL))))
         check_schedules(currentL)
         
-        timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, compare_schedule=compare_schedule)
+        output_stats = []
+        timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, compare_schedule=compare_schedule, output_stats=output_stats)
         
         bothL = sorted([(timeL[i]['time'], currentL[i], timeL[i]) for i in range(len(timeL))])
         display_text = '\n' + '-'*40 + '\n'
@@ -1197,7 +1205,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
             if e is None:
                 success_count += 1
                 
-        display_text += ' '*16 + '%d/%d succeed (%.0f%%)\n' % (success_count, len(timeL), success_count*100.0/len(timeL))
+        display_text += ' '*16 + '%d/%d succeed (%.0f%%), %s\n' % (success_count, len(timeL), success_count*100.0/len(timeL), output_stats[0])
         print display_text
         log_sched(p, None, display_text, filename=p.summary_file)
         sys.stdout.flush()
@@ -1454,6 +1462,7 @@ def main():
             log_timefile = args[2]
         p = AutotuneParams(argd)
         summary = open(os.path.join(tune_dir, p.summary_file), 'rt').read().split('\n')
+        summary = [x for x in summary if not x.startswith('#')]
         reset = False
         tval = None
         indiv = None
