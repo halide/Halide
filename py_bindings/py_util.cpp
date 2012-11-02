@@ -4,7 +4,7 @@
 #include <signal.h>
 #include <string>
 #include "Python.h"
-#include "Python/frameobject.h"
+#include "frameobject.h"
 
 void (*signal(int signum, void (*sighandler)(int)))(int);
 
