@@ -17,6 +17,7 @@ def main(args=None):
     tunedir = os.path.split(os.path.split(os.path.abspath(filename))[0])[1]
     # Parse summary file (a bit of a hack -- should really dump a plot xy points file)
     L = open(filename, 'rt').read().strip().split('\n')
+    L = [x for x in L if not x.startswith('#')]
     gen = 1
     time_d = {}
     for i in range(len(L)):
