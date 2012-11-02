@@ -320,8 +320,8 @@ int main(int argc, char **argv) {
     //printf("%s\n", s.c_str());
 
     // In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
-    Func::Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
-    processed.compileToFile("curved", std::vector<Func::Arg>(args, args+6));
+    Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
+    processed.compileToFile("curved", std::vector<Arg>(args, args+6));
 
     return 0;
 }

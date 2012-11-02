@@ -648,9 +648,9 @@ namespace Halide {
         return fargs;
     }
 
-    Func::Arg::Arg(const UniformImage &u) : arg(makeBufferArg(u.name())) {}
-    Func::Arg::Arg(const DynUniform &u) : arg(makeScalarArg(u.name(), u.type().mlval)) {}
-    Func::Arg::Arg(const DynImage &u) : arg(makeBufferArg(u.name())) {}
+    Arg::Arg(const UniformImage &u) : arg(makeBufferArg(u.name())) {}
+    Arg::Arg(const DynUniform &u) : arg(makeScalarArg(u.name(), u.type().mlval)) {}
+    Arg::Arg(const DynImage &u) : arg(makeBufferArg(u.name())) {}
 
     std::string Func::serialize() {
         return std::string(serializeEnv(buildEnv()));
@@ -669,7 +669,7 @@ namespace Halide {
         doCompileToFile(target, moduleName, args, stmt);
     }
 
-    void Func::compileToFile(const std::string &moduleName, std::vector<Func::Arg> uniforms, std::string target) { 
+    void Func::compileToFile(const std::string &moduleName, std::vector<Arg> uniforms, std::string target) { 
         MLVal stmt = lower();
 
         MLVal args = makeList();

@@ -357,7 +357,7 @@ int main(int argc, char **argv) {
         break;
     }
 
-    std::vector<Func::Arg> args;
+    std::vector<Arg> args;
     args.push_back(levels);
     args.push_back(alpha);
     args.push_back(beta);
