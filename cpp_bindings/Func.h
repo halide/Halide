@@ -51,6 +51,17 @@ namespace Halide {
         shared_ptr<Contents> contents;
     };
 
+    struct Arg {
+        template<typename T>
+        Arg(const Uniform<T> &u) : arg(Arg(DynUniform(u)).arg) {}
+        template<typename T>
+        Arg(const Image<T> &u) : arg(Arg(DynImage(u)).arg) {}
+        Arg(const UniformImage &);
+        Arg(const DynUniform &);
+        Arg(const DynImage &);
+        MLVal arg;
+    };
+
     class Func {
     public:
         Func();
@@ -148,17 +159,6 @@ namespace Halide {
         void compileToFile(const std::string &name, std::string target = "");
 
         void setErrorHandler(void (*)(char *));
-
-        struct Arg {
-            template<typename T>
-            Arg(const Uniform<T> &u) : arg(Arg(DynUniform(u)).arg) {}
-            template<typename T>
-            Arg(const Image<T> &u) : arg(Arg(DynImage(u)).arg) {}
-            Arg(const UniformImage &);
-            Arg(const DynUniform &);
-            Arg(const DynImage &);
-            MLVal arg;
-        };
 
         void compileToFile(const std::string &name, std::vector<Arg> args, std::string target = "");
 

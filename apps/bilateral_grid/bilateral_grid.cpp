@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
     smoothed.root().cudaTile(x, y, s_sigma, s_sigma);
     #endif
 
-    std::vector<Func::Arg> args;
+    std::vector<Arg> args;
     args.push_back(r_sigma);
     args.push_back(input);
     smoothed.compileToFile("bilateral_grid", args);
