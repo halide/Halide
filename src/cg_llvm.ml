@@ -546,8 +546,9 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
 
         res
 
-    | Pipeline (name, produce, consume) ->
+    | Pipeline (name, produce, update, consume) ->
         ignore (cg_stmt produce);
+        ignore (option_map cg_stmt update);
         cg_stmt consume
 
     | Print (fmt, args) -> cg_print fmt args

@@ -447,7 +447,7 @@ let rec cg_stmt (con:context) stmt = match stmt with
       cg_dev_kernel con stmt
 
   (* track dirty data in a pipeline *)
-  | Allocate (name, ty, size, Pipeline (_, produce, consume)) ->
+  | Allocate (name, ty, size, Pipeline (_, produce, update, consume)) ->
 
       (* allocate buffer *)
       let elem_size = (IntImm ((bit_width ty)/8)) in 

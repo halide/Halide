@@ -211,7 +211,7 @@ and realize func consume env schedule =
     | Pure body ->
         let inner_stmt = Provide (body, func, arg_vars) in
         let produce = List.fold_left (wrap sched_list) inner_stmt sched_list in
-        Pipeline (func, produce, consume)
+        Pipeline (func, produce, None, consume)
 
     | Reduce (init_expr, update_args, update_func, reduction_domain) ->
 
@@ -264,21 +264,16 @@ and realize func consume env schedule =
           | [] -> []
         in
 
-
-        let produce = 
-          Block [initialize; update]
-        in
-
         (* Put the whole thing in a pipeline that exposes the updated
            result to the consumer *)
-        Pipeline (func, produce, consume)
+        Pipeline (func, initialize, Some update, consume)
 
 
 (* Figure out interdependent expressions that give the bounds required
    by all the functions defined in some block. *)
 (* bounds is a list of (func, var, min, max) *)
 let rec extract_bounds_soup env var_env bounds = function
-  | Pipeline (func, produce, consume) -> 
+  | Pipeline (func, produce, update, consume) -> 
       (* What function am I producing? *)
       let bounds = try          
         (* Get the args list of the function *)
@@ -289,8 +284,8 @@ let rec extract_bounds_soup env var_env bounds = function
         let region = required_of_stmt func var_env consume in
 
         (* If func is a reduction, also consider the bounds being written to *)
-        let region = match (body, produce) with
-          | (Reduce _, Block [init; update]) ->
+        let region = match update with
+          | Some update ->
               let update_region = required_of_stmt func var_env update in
               let region = region_union region update_region in
               (* fixup any recursive bounds (TODO: this is a giant hack) *)
@@ -311,9 +306,7 @@ let rec extract_bounds_soup env var_env bounds = function
                       | _ -> max
                     in Range (min, max)
                   end                      
-              in List.map2 fix region args
-                
-          | (Reduce _, _) -> failwith "Could not understand the produce side of a reduction"
+              in List.map2 fix region args               
           | _ -> region
         in
 
@@ -414,10 +407,16 @@ let rec bounds_inference env schedule = function
   | Allocate (name, ty, size, body) -> 
       let (body, schedule) = bounds_inference env schedule body in
       (Allocate (name, ty, size, body), schedule)
-  | Pipeline (name, produce, consume) ->
+  | Pipeline (name, produce, update, consume) ->
       let (produce, schedule) = bounds_inference env schedule produce in
       let (consume, schedule) = bounds_inference env schedule consume in
-      (Pipeline (name, produce, consume), schedule)
+      let (update, schedule) = match update with
+        | Some update -> 
+          let (u, s) = bounds_inference env schedule update in
+          (Some u, s)
+        | None -> (None, schedule)
+      in
+      (Pipeline (name, produce, update, consume), schedule)
   | LetStmt (name, value, stmt) ->
       let (stmt, schedule) = bounds_inference env schedule stmt in
       (LetStmt (name, value, stmt), schedule)
@@ -429,13 +428,9 @@ let rec sliding_window (stmt:stmt) (function_env:environment) =
       (* We're within an allocate over name, and a serial for loop over
          dim. Find bounds of realizations of name and rewrite them to take
          into account stuff computed so far *)
-      | Pipeline (n, produce, consume) when n = name ->
+      | Pipeline (n, produce, update, consume) when n = name ->
         dbg 2 "process_dim %s %s\n" name serial_dim;
-        (* Compute new bounds for the realization of n which are the
-           exclusion of the bounds for this iteration and the bounds for
-           the previous iteration. (This is only weakly inductive, we
-           could also consider *all* previous iterations) *)
-        
+
         let serial_dim_expr = Var (i32, serial_dim) in
         
         (* Find which dims depend on the serial_dim ... *)
@@ -464,7 +459,7 @@ let rec sliding_window (stmt:stmt) (function_env:environment) =
             let new_min = Select (steady_state, new_min, min) in
             let new_extent = Select (steady_state, new_extent, extent) in
             
-            let stmt = Pipeline (n, produce, consume) in
+            let stmt = Pipeline (n, produce, update, consume) in
             let stmt = LetStmt (name ^ "." ^ dim ^ ".min", new_min, stmt) in
             let stmt = LetStmt (name ^ "." ^ dim ^ ".extent", new_extent, stmt) in
             stmt
@@ -764,14 +759,14 @@ let rec inject_tracing env = function
       Realize (name, ty, region, inject_tracing env body);
       Print ("Freeing " ^ name ^ " over ", mins @ extents)
     ]
-  | Pipeline (name, produce, consume) when trace_verbosity > 0 ->
+  | Pipeline (name, produce, update, consume) when trace_verbosity > 0 ->
     let (args, _, _) = find_function name env in
     let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
     let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
     Block [
       Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
       Print ("Producing " ^ name ^ " over ", mins @ extents);
-      Pipeline (name, inject_tracing env produce, inject_tracing env consume)
+      Pipeline (name, inject_tracing env produce, option_map (inject_tracing env) update, inject_tracing env consume)
     ]
   | Provide (e, name, idx) when trace_verbosity > 1 ->    
     let calls = 
@@ -912,7 +907,8 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   dbg 1 "%s\n%!" pass_desc;
 
   let stmt = match realize func (Block []) env schedule with 
-    | Pipeline (_, p, _) -> p
+    | Pipeline (_, produce, None, _) -> produce
+    | Pipeline (_, produce, Some update, _) -> Block [produce; update]
     | _ -> failwith "Realize didn't return a pipeline"
   in
 

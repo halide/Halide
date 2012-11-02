@@ -107,9 +107,16 @@ and string_of_stmt stmt =
         (p ^ "realize " ^ name ^ "[" ^ region ^ "] {\n" ^
            string_stmt sp body ^
            p ^ "}\n")
-      | Pipeline (name, produce, consume) -> 
+      | Pipeline (name, produce, None, consume) -> 
           (p ^ "produce " ^ name ^ " {\n" ^ 
              string_stmt sp produce ^ 
+             p ^ "}\n" ^
+             string_stmt p consume)
+      | Pipeline (name, produce, Some update, consume) -> 
+          (p ^ "initialize " ^ name ^ " {\n" ^ 
+             string_stmt sp produce ^ 
+             p ^ "} update {\n" ^ 
+             string_stmt sp update ^ 
              p ^ "}\n" ^
              string_stmt p consume)
       | Print (m, l) -> p ^ "Print(" ^ m ^ (String.concat ", " (List.map string_of_expr l)) ^ ")\n"

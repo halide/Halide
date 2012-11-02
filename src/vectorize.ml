@@ -150,9 +150,10 @@ let rec vectorize_stmt var stmt =
       Allocate (name, ty, size, vectorize_stmt var body)
     | Realize (name, ty, region, body) -> 
       Realize (name, ty, region, vectorize_stmt var body)
-    | Pipeline (name, produce, consume) -> 
+    | Pipeline (name, produce, update, consume) -> 
       Pipeline (name, 
                 vectorize_stmt var produce,
+                option_map (vectorize_stmt var) update,
                 vectorize_stmt var consume)
     (* Anything that doesn't contain a sub-statement is unchanged *)
     | x -> x

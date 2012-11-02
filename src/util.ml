@@ -4,6 +4,10 @@ let option_either x y =
     | (Some a, _) -> Some a
     | (_, b) -> b
 
+let option_map f = function
+  | None -> None
+  | Some x -> Some (f x)
+
 module StringSet = Set.Make (
   struct
     let compare = Pervasives.compare

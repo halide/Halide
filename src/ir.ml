@@ -219,8 +219,10 @@ type stmt =
 
   (* A producer-consumer pair of statements via the named buffer
      (which must have been allocated with an allocate node outside of
-     this) *)
-  | Pipeline of buffer * stmt * stmt
+     this). May also have an optional update step in between for
+     reductions. In the first statement the buffer is write-only, in
+     the second it is read-write, and in the third it is read-only. *)
+  | Pipeline of buffer * stmt * (stmt option) * stmt
 
   (* Assign a scalar value to a variable within the sub-statement *)
   | LetStmt of string * expr * stmt
