@@ -1094,8 +1094,10 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
     try:
         tune_link0 = '~/.tune'
         tune_link = os.path.expanduser(tune_link0)
-        if os.path.exists(tune_link):
+        try:
             os.remove(tune_link)
+        except:
+            pass
         os.symlink(p.tune_dir, tune_link)
         p.tune_link = tune_link0
     except:
