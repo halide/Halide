@@ -1204,6 +1204,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         #autotune_plot.main((os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
         os.system('python autotune_plot.py "%s" "%s"' % (os.path.join(p.tune_dir, p.summary_file), os.path.join(p.tune_dir, p.plot_file)))
         os.system('python autotune.py time "%s" "%s"' % (p.tune_dir, os.path.join(p.tune_dir, p.unbiased_file)))
+        os.system('python autotune.py html "%s"' % (p.tune_dir))
 
 import inspect
 _scriptfile = inspect.getfile(inspect.currentframe()) # script filename (usually with path)
@@ -1228,6 +1229,9 @@ def _ctype_of_type(t):
 
 def autotune_child(args, timeout=None):
     rest = args[1:]
+    if len(rest) == 11:
+        p = AutotuneParams()
+        rest.append(p.runner_file)
     if len(rest) != 12:
         raise ValueError('expected 12 args after autotune_*_child')
     (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads, runner_file) = rest
@@ -1389,6 +1393,10 @@ def main():
         print
         print 'autotune time tune_dir [log_timefile.txt]'
         print '  Tuner timings are biased. Run this to get unbiased comparison of ref schedules against best tuned schedule.'
+        print
+        print 'autotune html [tune_dir1|wildcards]'
+        print '  Create index.html (created by default)'
+        print
         print '\n'.join(x[4:] for x in AutotuneParams.__doc__.split('\n'))
         sys.exit(0)
     if args[0] == 'test':
@@ -1509,6 +1517,62 @@ def main():
             f = open(log_timefile, 'at')
             f.write(sout)
             f.close()
+    elif args[0] == 'html':
+        import socket
+        if len(args) < 2:
+            print >> sys.stderr, 'Expected 2 arguments'
+            sys.exit(1)
+        tune_dirs = []
+        for arg in args[1:]:
+            tune_dirs.extend(glob.glob(arg))
+        p = AutotuneParams(argd)
+        for tune_dir in tune_dirs:
+            if not os.path.exists(os.path.join(tune_dir, p.plot_file)):
+                print p.plot_file, 'missing, generating'
+                os.system('python autotune_plot.py "%s" "%s"' % (os.path.join(tune_dir, p.summary_file), os.path.join(tune_dir, p.plot_file)))
+            if not os.path.exists(os.path.join(tune_dir, p.unbiased_file)):
+                print p.unbiased_file, 'missing, generating'
+                os.system('python autotune.py time "%s" "%s"' % (tune_dir, os.path.join(tune_dir, p.unbiased_file)))
+            schedules = sorted(glob.glob(os.path.join(tune_dir, '*compile.sh')))
+            best_schedule_name = os.path.split(schedules[-1])[-1]
+            best_schedule_name = best_schedule_name[1:4] + '_000'
+            log_schedule = open(os.path.join(tune_dir, LOG_SCHEDULE_FILENAME), 'rt').read()
+            try:
+                idx = log_schedule.index(best_schedule_name)
+            except ValueError:
+                best_schedule_name = '%03d' % (int(best_schedule_name[0:3])-1) + '_000'
+                idx = log_schedule.index(best_schedule_name)
+            idx2 = log_schedule.index('---', idx)
+            best_schedule = log_schedule[idx:idx2]
+            if len(best_schedule.strip().split('\n')) >= 3:
+                L = best_schedule.strip().split('\n')
+                best_schedule = L[0] + '\n\n' + '\n'.join(L[1:-1]) + '\n\n' + L[-1]
+            with open(os.path.join(tune_dir, 'index.html'), 'wt') as f:
+                timestamp = time.ctime(os.path.getmtime(os.path.join(tune_dir, p.summary_file)))
+                print >>f, '<html><body>'
+                print >>f, '<h1>Autotuner: %s</h1><h2>On %s (%s)</h2>' % (os.path.split(tune_dir)[-1], socket.gethostname(), timestamp)
+                #print >>f, '<table border=0 cellpadding=0 cellspacing=2>'
+                #print >>f, '<tr><td><b>Machine:</b></td><td>%s</td></tr>'% socket.gethostname()
+                #print >>f, '<tr><td><b>Time:</b></td><td>%s</td></tr>'%)
+                #print >>f, '</table>'
+                print >>f, '<table border=1 cellpadding=5 cellspacing=0><tr><td><b>Table of Contents</b><ul>'
+                print >>f, '<li><a href="#best">Best Schedule</a><br>'
+                print >>f, '<li><a href="#unbiased">Unbiased Timings</a><br>'
+                print >>f, '<li><a href="#generations">Generations</a></ul></td></tr></table>'
+                print >>f, '<img src="%s" width=900><br>' % (p.plot_file)
+                print >>f, '<a name="best"><h2>Best Schedule</h2>'
+                #print >>f, '<b>%s</b><br>' % best_schedule_name
+                print >>f, '<pre>%s</pre>' % best_schedule
+                print >>f, '<a name="unbiased"><h2>Unbiased Timings</h2>'
+                print >>f, '<b>(Earliest generation at top)</b><br>'
+                print >>f, '<pre>'
+                print >>f, open(os.path.join(tune_dir, p.unbiased_file), 'rt').read()
+                print >>f, '</pre>'
+                print >>f, '<a name="generations"><h2>Generations (Biased Timings)</h2>'
+                print >>f, '<pre>'
+                print >>f, open(os.path.join(tune_dir, p.summary_file), 'rt').read()
+                print >>f, '</pre>'
+                print >>f, '</body></html>'
     elif args[0] == 'test_random':
         import autotune_test
         global use_random_blocksize
@@ -1577,39 +1641,8 @@ def main():
         (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
         
         seed_scheduleL = []
-#        seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8).parallel(y_blurUInt16)\n' +
-#                              'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
-        seed_scheduleL.append('')
-        if filter_func_name == 'examples.snake.filter_func' and 0:        # Temporary workaround to test snake by injecting more valid schedules
-            seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
-            seed_scheduleL.append('Dirac0.root()\nNx0.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
-            seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\nphi_clamped.root()\nphi_new.root()\nproxy_x0.root()\nproxy_y0.root()')
-            seed_scheduleL.append('Dirac0.root()\nNx0.root()\nNy0.root()\ndistReg0.root()\ndx1.root()\ndx2.root()\ndx3.root()\ndx4.root()\ndx5.root()\ndy1.root()\ndy2.root()\ndy3.root()\ndy4.root()\ndy5.root()\ng_clamped.root()\nlap0.root()\nphi0.root()\nphi1.root()\nphi_clamped.root()')
-        elif filter_func_name == 'examples.camera_pipe.filter_func' and 0:    # Workaround for camera_pipe
-            seed_scheduleL = []
-            """
-            # Below schedule is totally reasonable but fails (compiler bug)
-            seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nmatrix.root()\nmatrix_3200.root()\nmatrix_7200.root()\nprocessed.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
-            """
-            #seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nmatrix.root()\nmatrix_3200.root()\nmatrix_7200.root()\nprocessed.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
-            seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
-            seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nr_gb.root()\nr_gr.root()\nr_r.root()\nshifted.root()')
-            seed_scheduleL.append('b_b.root()\nb_gb.root()\nb_gr.root()\nb_r.root()\ncorrected.root()\ncurve.root()\ncurved.root()\ndeinterleaved.root()\ndemosaic.root()\ndenoised.root()\ng_b.root()\ng_gb.root()\ng_gr.root()\ng_r.root()\ninterleave_x1.root()\ninterleave_x2.root()\ninterleave_x3.root()\ninterleave_x4.root()\ninterleave_x5.root()\ninterleave_x6.root()\ninterleave_y1.root()\ninterleave_y2.root()\ninterleave_y3.root()\nr_b.root()\nshifted.root()')
-        elif filter_func_name in ['examples.local_laplacian.filter_func', 'examples.bilateral_grid.filter_func'] or 1:
-            seed_scheduleL = []
-            seed_scheduleL.append(root_all_str(out_func)) #'clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndownx2.root()\ndownx3.root()\ndownx4.root()\ndownx5.root()\ndowny0.root()\ndowny1.root()\ndowny2.root()\ndowny3.root()\ndowny4.root()\ndowny5.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngPyramid2.root()\ngPyramid3.root()\ngray.root()\ninGPyramid1.root()\ninGPyramid2.root()\ninGPyramid3.root()\nlPyramid0.root()\nlPyramid1.root()\nlPyramid2.root()\noutGPyramid0.root()\noutGPyramid1.root()\noutGPyramid2.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutLPyramid2.root()\noutLPyramid3.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupx2.root()\nupx3.root()\nupx4.root()\nupx5.root()\nupy0.root()\nupy1.root()\nupy2.root()\nupy3.root()\nupy4.root()\nupy5.root()')
-            #seed_scheduleL.append('clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndowny0.root()\ndowny1.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngray.root()\ninGPyramid1.root()\nlPyramid0.root()\noutGPyramid0.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupy0.root()\nupy1.root()')
-            #seed_scheduleL = []
-            #seed_scheduleL.append('clamped.root()\ncolor.root()\ndownx0.root()\ndownx1.root()\ndownx10.root()\ndownx11.root()\ndownx12.root()\ndownx13.root()\ndownx2.root()\ndownx3.root()\ndownx4.root()\ndownx5.root()\ndownx6.root()\ndownx7.root()\ndownx8.root()\ndownx9.root()\ndowny0.root()\ndowny1.root()\ndowny10.root()\ndowny11.root()\ndowny12.root()\ndowny13.root()\ndowny2.root()\ndowny3.root()\ndowny4.root()\ndowny5.root()\ndowny6.root()\ndowny7.root()\ndowny8.root()\ndowny9.root()\nfloating.root()\ngPyramid0.root()\ngPyramid1.root()\ngPyramid2.root()\ngPyramid3.root()\ngPyramid4.root()\ngPyramid5.root()\ngPyramid6.root()\ngPyramid7.root()\ngray.root()\ninGPyramid1.root()\ninGPyramid2.root()\ninGPyramid3.root()\ninGPyramid4.root()\ninGPyramid5.root()\ninGPyramid6.root()\ninGPyramid7.root()\nlPyramid0.root()\nlPyramid1.root()\nlPyramid2.root()\nlPyramid3.root()\nlPyramid4.root()\nlPyramid5.root()\nlPyramid6.root()\noutGPyramid0.root()\noutGPyramid1.root()\noutGPyramid2.root()\noutGPyramid3.root()\noutGPyramid4.root()\noutGPyramid5.root()\noutGPyramid6.root()\noutLPyramid0.root()\noutLPyramid1.root()\noutLPyramid2.root()\noutLPyramid3.root()\noutLPyramid4.root()\noutLPyramid5.root()\noutLPyramid6.root()\noutLPyramid7.root()\noutput.root()\nremap.root()\nupx0.root()\nupx1.root()\nupx10.root()\nupx11.root()\nupx12.root()\nupx13.root()\nupx2.root()\nupx3.root()\nupx4.root()\nupx5.root()\nupx6.root()\nupx7.root()\nupx8.root()\nupx9.root()\nupy0.root()\nupy1.root()\nupy10.root()\nupy11.root()\nupy12.root()\nupy13.root()\nupy2.root()\nupy3.root()\nupy4.root()\nupy5.root()\nupy6.root()\nupy7.root()\nupy8.root()\nupy9.root()') #FIXMEFIXME
-        #seed_scheduleL.append('blur_y_blurUInt16.root()\nblur_x_blurUInt16.root()')
-        #seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8)\n' +
-        #                      'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
-        #evaluate = halide.filter_image(input, out_func, DEFAULT_IMAGE)
-        #evaluate()
-        #T0 = time.time()
-        #evaluate()
-        #T1 = time.time()
-        #print 'Time for default schedule: %.4f'%(T1-T0)
+        seed_scheduleL.append(root_all_str(out_func))
+        
         p = AutotuneParams(argd)
 
         #p.parallel_compile_nproc = 4

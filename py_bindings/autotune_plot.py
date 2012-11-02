@@ -11,7 +11,7 @@ def main(args=None):
         args = sys.argv[1:]
     if len(args) == 0:
         print 'autotune_plot tune_X/summary.txt [out.png]'
-    
+        sys.exit(1)    
     filename = args[0]
     out_filename = args[1] if len(args) > 1 else None
     tunedir = os.path.split(os.path.split(os.path.abspath(filename))[0])[1]
