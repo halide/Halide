@@ -216,9 +216,31 @@ def test_schedules(verbose=False, test_random=False):
     T1 = time.time()
     #print '\n'.join([x for x in s if 'chunk' in x])
     
+    s0 = s
+    s0 = [x.replace('\n', '\\n') for x in s0]
     s = '\n'.join(s)
     if valid_schedules.SPLIT_STORE_COMPUTE:
         assert 'f.chunk(_c0,_c0)' in s
+        assert 'f.chunk(x,y' in s #, '\n'.join(x for x in s0 if 'chunk' in x)
+        assert 'f.chunk(y,x' in s
+
+        schedule = Schedule.fromstring(g, 'f.chunk(y,x)\ng.root()')
+        assert schedule.check(schedule)
+
+        schedule = Schedule.fromstring(g, 'f.chunk(x,y)\ng.root()')
+        assert not schedule.check(schedule)
+
+        schedule = Schedule.fromstring(g, 'f.chunk(x,y)\ng.root().reorder(y,x,c)')
+        assert schedule.check(schedule)
+
+        schedule = Schedule.fromstring(g, 'f.chunk(y,x)\ng.root().reorder(y,x,c)')
+        assert not schedule.check(schedule)
+        
+        # Manual check -- these should have e.g. f.chunk(y,x)\ng.root() -- parent's vars without x, y changed in order
+#        print '\n'.join(x for x in s0 if 'chunk(y,x' in x)
+
+        # Manual check -- these should have e.g. f.chunk(x,y)\ng...reorder(y,x) -- parent's vars in order y,x
+#        print '\n'.join(x for x in s0 if 'chunk(x,y' in x)
     else:
         assert 'f.chunk(_c0)' in s
     assert 'f.root().vectorize' in s
@@ -244,13 +266,22 @@ def test_schedules(verbose=False, test_random=False):
         constantL.append(str(r.randomized_const()))
     assert len(set(constantL)) > 1
     print 'autotune.randomized_const:       OK'
-            
-def test():
-    random.seed(0)
+
+def test_all():
     test_sample_prob()
 #    test_schedules(True)
     test_schedules(test_random=True)
     test_crossover()
 
+def test_cuda():
+    set_cuda(True)
+    test_all()
+    set_cuda(False)
+    
+def test():
+    random.seed(0)
+    test_all()
+    #test_cuda()
+    
 if __name__ == '__main__':
     test()

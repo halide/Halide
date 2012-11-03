@@ -4,11 +4,9 @@ from halide import *
 int_t = Int(32)
 float_t = Float(32)
 
-def filter_func(dtype=UInt(16), use_uniforms=False):
+def filter_func(J=8, dtype=UInt(16), use_uniforms=False):
     "Local Laplacian."
 
-    J = 8 #8
-    
     downsample_counter=[0] 
     upsample_counter=[0]
     
