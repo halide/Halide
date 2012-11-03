@@ -69,6 +69,12 @@ and string_of_expr = function
   | Not (a) -> "(not " ^ string_of_expr a ^ ")"
   (* | _ -> "<<UNHANDLED>>" *)
 
+and string_of_loop_type = function
+  | Serial -> "for"
+  | Parallel -> "parallel"
+  | Vectorized -> "vectorized"
+  | Unrolled -> "unrolled"
+
 and string_of_stmt stmt = 
   let rec string_stmt p stmt =
     let sp = p ^ "  " in
@@ -78,7 +84,7 @@ and string_of_stmt stmt =
        " else " ^ string_of_stmt fs *)
       | For(name, min, n, order, s) -> 
           (p ^ (sprintf "%s (%s: %s, %s) {\n" 
-                  (if order then "for" else "pfor")
+                  (string_of_loop_type order)
                   name (string_of_expr min) (string_of_expr n)) ^
              (string_stmt sp s) ^ 
              p ^ "}\n")

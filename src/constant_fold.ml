@@ -132,10 +132,13 @@ let rec constant_fold_expr expr =
 
         (* Convert divide by float constants to multiplication *)
         | (Div, x, FloatImm y) -> Bop (Mul, x, FloatImm (1.0 /. y))
+        | (Div, x, Broadcast (FloatImm y, n)) -> Bop (Mul, x, Broadcast (FloatImm (1.0 /. y), n))
 
         (* Ternary expressions that can be reassociated. Previous passes have cut down on the number we need to check. *)
         (* (X + y) + z -> X + (y + z) *)
         | (Add, Bop (Add, x, y), z) when is_const y && is_const z -> recurse (x +~ (y +~ z))
+        (* (X * y) * z -> X * (y * z) *)
+        | (Mul, Bop (Mul, x, y), z) when is_const y && is_const z -> recurse (x *~ (y *~ z))
         (* (x - Y) + z -> (x + z) - Y *)
         | (Add, Bop (Sub, x, y), z) when is_const x && is_const z -> recurse ((x +~ z) -~ y)            
 
