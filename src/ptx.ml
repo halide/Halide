@@ -447,7 +447,7 @@ let rec cg_stmt (con:context) stmt = match stmt with
       cg_dev_kernel con stmt
 
   (* track dirty data in a pipeline *)
-  | Allocate (name, ty, size, Pipeline (_, produce, update, consume)) ->
+  | Allocate (name, ty, size, body) ->
 
       (* allocate buffer *)
       let elem_size = (IntImm ((bit_width ty)/8)) in 
@@ -456,50 +456,57 @@ let rec cg_stmt (con:context) stmt = match stmt with
       (* push the symbol environment *)
       con.sym_add name scratch;
 
-      (* build the produce *)
-      ignore (cg_stmt con produce);
-
-      (* TODO: this doesn't capture the flow for reductions, where the
-         initialize and update are both in the Produce but may be scheduled
-         different places.
-
-         It needs to be revised to:
-          - start from any buffer writes
-          - walk outward to the nearest containing _sequence_ node (block, pipeline, loop?),
-            where a successor reads or writes the same buffer on the 
-          - place a mark dirty in between
-
-         That should probably actually work by:
-          - any time you cg a statement which introduces sequence (block, pipeline - not for),
-          - inject any flag setting/copying on the boundary in between before/after, depending on before/after contents
-       *)
-
-      (* mark host_dirty if writes by host in produce *)
-      let host_writes = find_host_stores produce in
-      if StringSet.mem name host_writes then begin
-        dbg 0 "found host writes in produce of %s - marking host_dirty\n" name;
-        let buf = con.arch_state.buf_get name in
-        set_buf_field buf name HostDirty (ci con.c 1) con.b;
-      end
-      else
-        dbg 0 "NO host writes in produce of %s\n" name;
-      
-      (* copy_to_host if reads by host in consume *)
-      let host_reads = find_host_loads consume in
-      if StringSet.mem name host_reads then begin
-        dbg 0 "copy back host read of %s\n%!" name;
-        let buf = con.arch_state.buf_get name in
-        copy_to_host con buf
-      end;
-
-      (* build the consumer *)
-      let res = cg_stmt con consume in
+      (* build the body *)
+      let res = cg_stmt con body in
 
       (* pop the symbol environment *)
       con.sym_remove name;
 
       (* free the scratch *)
       cleanup con;
+
+      res
+
+  | Pipeline (name, produce, update, consume) ->
+
+      let cg_host_produce_writes body =
+        (* mark host_dirty if writes by host in produce *)
+        let host_writes = find_host_stores body in
+        if StringSet.mem name host_writes then begin
+          dbg 0 "found host writes in produce of %s - marking host_dirty\n" name;
+          let buf = con.arch_state.buf_get name in
+          set_buf_field buf name HostDirty (ci con.c 1) con.b;
+        end
+        else
+          dbg 0 "NO host writes in produce of %s\n" name;
+      in
+
+      let cg_host_consume_reads body =
+        (* copy_to_host if reads by host in consume *)
+        let host_reads = find_host_loads consume in
+        if StringSet.mem name host_reads then begin
+          dbg 0 "copy back host read of %s\n%!" name;
+          let buf = con.arch_state.buf_get name in
+          copy_to_host con buf
+        end;
+      in
+
+      (* build the produce/initialize step *)
+      ignore (cg_stmt con produce);
+      (* mark host dirty if buffer written on host in produce *)
+      ignore (cg_host_produce_writes produce);
+
+      (* copy_to_host if host reads in update *)
+      ignore (option_map cg_host_consume_reads update);
+      (* codegen update *)
+      ignore (option_map (cg_stmt con) update);
+      (* mark host dirty if host writes in update *)
+      ignore (option_map cg_host_produce_writes update);
+
+      (* copy_to_host if host reads in consume *)
+      ignore (cg_host_consume_reads consume);
+      (* build the consumer *)
+      let res = cg_stmt con consume in
 
       res
 
