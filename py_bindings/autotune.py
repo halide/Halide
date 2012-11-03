@@ -816,7 +816,7 @@ def get_mem_recurse(pid):
     #print 'Memory used:', ans
     #return ans
     ans = 0
-    for x in [proc] + proc.get_children(True):
+    for x in [proc] + proc.get_children():
         try:
             ans += x.get_memory_info()[0]
         except psutil.error.Error:
@@ -830,7 +830,7 @@ def get_mem_recurse(pid):
 def kill_recursive(pid, timeout=1.0):
     proc = psutil.Process(pid)
     T0 = time.time()
-    L = [proc] + proc.get_children(True)
+    L = [proc] + proc.get_children()
     while len(L):
         Lnew = []
         for x in L:
@@ -1261,6 +1261,10 @@ def autotune_child(args, timeout=None):
     if not llvm_path.endswith('/'):
         llvm_path += '/'
 
+    def check_output(s):
+        print s
+        return subprocess.check_output(s,shell=True)
+
     # binary_file: full path
     orig = os.getcwd()
     func_name = os.path.basename(binary_file)
@@ -1286,10 +1290,6 @@ def autotune_child(args, timeout=None):
         png_flags = subprocess.check_output('libpng-config --cflags --ldflags', shell=True).replace('\n', ' ')
         
         # assemble bitcode
-        def check_output(s):
-            print s
-            subprocess.check_output(s,shell=True)
-            
         check_output(
             'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 -filetype=obj -o %(func_name)s.o' % locals()
         )
@@ -1300,7 +1300,7 @@ def autotune_child(args, timeout=None):
         compile_command = compile_command % locals()
         print compile_command
         try:
-            out = subprocess.check_output(compile_command, shell=True)
+            out = check_output(compile_command)
         except:
             raise ValueError('Compile failed')
 
@@ -1316,7 +1316,7 @@ def autotune_child(args, timeout=None):
         # Don't bother running with timeout, parent process will manage that for us
         try:
             if timeout is None:
-                out = subprocess.check_output(run_command, shell=True)
+                out = check_output(run_command)
                 print out.strip()
                 return
             else:
