@@ -16,9 +16,7 @@ int main(int argc, char **argv) {
     
     if (use_gpu()) {
         g.cudaTile(x, y, 8, 8);
-        f.chunk(Var("blockidx"));
-        // Tell f to directly use the thread ids for x and y
-        f.parallel(x).parallel(y).rename(x, Var("threadidx")).rename(y, Var("threadidy"));
+        f.cudaChunk(Var("blockidx"), x, y);
     } else {
         g.tile(x, y, xo, yo, xi, yi, 8, 8);
         f.chunk(xo);

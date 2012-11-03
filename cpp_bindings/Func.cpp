@@ -394,8 +394,37 @@ namespace Halide {
     }
     
     Func &Func::chunk(const Var &caller_store_var, const Var &caller_compute_var) {
+        if (caller_compute_var.name() == "blockidx" || caller_store_var.name() == "blockidy") {
+            warn("Chunk in GPU block - you probably want cudaChunk\n");
+        }
+        _chunk(caller_store_var, caller_compute_var);
+        return *this;
+    }
+
+    void Func::_chunk(const Var &caller_store_var, const Var &caller_compute_var) {
         MLVal t = makeChunkTransform(name(), caller_store_var.name(), caller_compute_var.name());
         contents->guru = composeFunction(t, contents->guru);
+    }
+
+    Func &Func::cudaChunk(const Var &caller_var,
+                          const Var &callee_threadx_var,
+                          const Var &callee_thready_var) {
+        return cudaChunk(caller_var, caller_var, callee_threadx_var, callee_thready_var);
+    }
+
+    Func &Func::cudaChunk(const Var &caller_store_var, const Var &caller_compute_var,
+                          const Var &callee_threadx_var, const Var &callee_thready_var) {
+        assert (caller_compute_var.name() == "blockidx");
+
+        _chunk(caller_store_var, caller_compute_var);
+
+        Var tidx("threadidx");
+        Var tidy("threadidy");
+        rename(callee_threadx_var, tidx);
+        rename(callee_thready_var, tidy);
+        parallel(tidx);
+        parallel(tidy);
+
         return *this;
     }
 
