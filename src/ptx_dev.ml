@@ -119,8 +119,8 @@ let rec cg_stmt con stmt = match stmt with
   | For (name, base, width, ordered, body) when is_simt_var name ->
       (* TODO: loop needs to be turned into If (which we don't have in our IR), not dropped *)
       Printf.eprintf "Dropping %s loop on %s (%s..%s)\n%!"
-        (if ordered then "serial" else "parallel") name (string_of_expr base) (string_of_expr width);
-      assert (not ordered);
+        (if (ordered = Serial) then "serial" else "parallel") name (string_of_expr base) (string_of_expr width);
+      assert (ordered = Parallel);
 
       let b = con.b
       and c = con.c

@@ -512,8 +512,10 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     result
   and cg_stmt_inner = function
     | Store (e, buf, idx) -> cg_store e buf idx
-    | For (name, min, n, order, stmt) ->
-        (if order then cg_for else cg_par_for) name (cg_expr min) (cg_expr n) stmt
+    | For (name, min, n, Parallel, stmt) ->
+        cg_par_for name (cg_expr min) (cg_expr n) stmt
+    | For (name, min, n, Serial, stmt) ->
+        cg_for name (cg_expr min) (cg_expr n) stmt
     | Block (first::second::rest) ->
         ignore(cg_stmt first);
         cg_stmt (Block (second::rest))
