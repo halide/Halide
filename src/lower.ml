@@ -185,13 +185,13 @@ and realize func consume env schedule =
   (* Wrap a statement in for loops using a schedule *)
   let wrap (sched_list: schedule list) (stmt:stmt) = function 
     | Serial     (name, min, size) -> 
-        For (name, min, size, true, stmt)
+        For (name, min, size, Ir.Serial, stmt)
     | Parallel   (name, min, size) -> 
-        For (name, min, size, false, stmt)
+        For (name, min, size, Ir.Parallel, stmt)
     | Unrolled   (name, min, size) -> 
-        Unroll.unroll_stmt name (For (name, min, IntImm size, false, stmt))
+        For (name, min, IntImm size, Ir.Unrolled, stmt)
     | Vectorized (name, min, size) -> 
-        Vectorize.vectorize_stmt name (For (name, min, IntImm size, false, stmt))
+        For (name, min, IntImm size, Ir.Vectorized, stmt)
     | Split (old_dim, new_dim_outer, new_dim_inner, offset) -> 
         let (_, size_new_dim_inner) = extent_computed_for_dim new_dim_inner sched_list in
         let rec expand_old_dim_expr = function
@@ -257,11 +257,6 @@ and realize func consume env schedule =
           )
           update
           (reduction_domain @ pure_domain)
-        in
-
-        let rec flatten = function
-          | (x, y)::rest -> x::y::(flatten rest)
-          | [] -> []
         in
 
         (* Put the whole thing in a pipeline that exposes the updated
@@ -473,11 +468,11 @@ let rec sliding_window (stmt:stmt) (function_env:environment) =
   in
   
   let rec process name dims = function
-    | For (dim, min, extent, true, body) ->
+    | For (dim, min, extent, order, body) when order = Ir.Serial || order = Ir.Unrolled ->
       dbg 2 "Performing sliding window optimization for %s over %s\n" name dim;
       let new_body = process name dims body in
       let new_body = process_dim name dims StringMap.empty dim min new_body in
-      For (dim, min, extent, true, new_body)
+      For (dim, min, extent, order, new_body)
     | stmt -> mutate_children_in_stmt (fun x -> x) (process name dims) stmt
   in
 
@@ -495,7 +490,7 @@ let rec storage_folding defs stmt =
   (* Returns an expression that gives the permissible folding factor *)
   let rec process func env = function
     (* We're inside an allocate over func *)
-    | For (for_dim, for_min, for_size, true, body) ->
+    | For (for_dim, for_min, for_size, order, body) when order = Ir.Serial || order = Ir.Unrolled ->
       dbg 2 "Storage folding inside loop over %s\n" for_dim;
       (* Compute the region of func touched within this body *)
       let region = required_of_stmt func env body in
@@ -831,6 +826,19 @@ let lower_image_calls (stmt:stmt) =
       | Block stmts -> (Block (asserts @ stmts), !images)
       | stmt -> (Block (asserts @ [new_stmt]), !images)
 
+let rec unroll = function
+  | For (name, min, IntImm size, Ir.Unrolled, stmt) ->
+    let stmt = unroll stmt in
+    let gen_stmt i = subs_expr_in_stmt (Var (i32, name)) (min +~ (IntImm i)) stmt in
+    Block (List.map gen_stmt (0 -- size))
+  | stmt -> mutate_children_in_stmt (fun x -> x) unroll stmt
+
+let rec vectorize = function
+  | For (name, min, IntImm size, Ir.Vectorized, stmt) ->
+    let stmt = vectorize stmt in 
+    Vectorize.vectorize_stmt name min size stmt
+  | stmt -> mutate_children_in_stmt (fun x -> x) vectorize stmt
+
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* dump pre-lowered form *)
@@ -946,7 +954,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* Inject a loop over root to help us realize functions scheduled as
      root. This will get constant-folded away later *)
-  let stmt = For ("<root>", IntImm 0, IntImm 1, true, stmt) in
+  let stmt = For ("<root>", IntImm 0, IntImm 1, Ir.Serial, stmt) in
   let stmt = List.fold_left (fun stmt f ->     
     let pass_desc = "Lowering " ^ f in
     dbg 1 "%s\n%!" pass_desc;
@@ -984,7 +992,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let pass_desc = "Bounds inference" in
   dbg 1 "%s\n%!" pass_desc;
   (* Updates stmt and schedule *)
-  let stmt = For ("<root>", IntImm 0, IntImm 1, true, stmt) in
+  let stmt = For ("<root>", IntImm 0, IntImm 1, Ir.Serial, stmt) in
   let (stmt,schedule) = bounds_inference env schedule stmt in
 
   (* let stmt = Constant_fold.constant_fold_stmt stmt in *)
@@ -1133,7 +1141,39 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let stmt = Constant_fold.constant_fold_stmt stmt in
   let stmt = Constant_fold.remove_dead_lets_in_stmt stmt  in
 
+  dump_stmt stmt pass pass_desc "constant_folding" 1;
+
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
+  let pass_desc = "Vectorizing" in
+  dbg 1 "%s\n%!" pass_desc;
+
+  let stmt = vectorize stmt in
+
+  dump_stmt stmt pass pass_desc "vectorizing" 1;
+
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
+  let pass_desc = "Unrolling" in
+  dbg 1 "%s\n%!" pass_desc;
+
+  let stmt = unroll stmt in
+
+  dump_stmt stmt pass pass_desc "unrolling" 1;
+
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
+  let pass_desc = "Constant folding" in
+  dbg 1 "%s\n%!" pass_desc;
+  let stmt = Constant_fold.constant_fold_stmt stmt in
+  let stmt = Constant_fold.remove_dead_lets_in_stmt stmt  in
+
   dump_stmt stmt pass pass_desc "final" 1;
+
+  (* ----------------------------------------------- *)
 
   stmt
 

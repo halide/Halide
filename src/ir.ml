@@ -195,9 +195,12 @@ let rec val_type_of_expr = function
   | Call (_, t, _, _) -> t
 
 
+type loop_type = Serial | Parallel | Vectorized | Unrolled
+with sexp
+
 type stmt =
-  (* var name, base, width, ordered?, body *)
-  | For of string * expr * expr * bool * stmt
+  (* var name, base, width, loop type, body *)
+  | For of string * expr * expr * loop_type * stmt
 
   (* An in-order sequence of statements *)
   | Block of stmt list
