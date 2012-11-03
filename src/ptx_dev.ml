@@ -78,7 +78,7 @@ let rec cg_stmt con stmt = match stmt with
         | Bop (Add, x, Load(_, ld_buf, ld_idx))
           when ld_buf = st_buf && ld_idx = st_idx ->
             (* atomic add reduce *)
-            dbg 0 "Found atomic add: %s\n%!" (string_of_stmt stmt);
+            dbg 2 "Found atomic add: %s\n%!" (string_of_stmt stmt);
             (* let mr = con.cg_memref ty st_buf (Cast ((Int 64), st_idx)) in *)
             let mr = con.cg_memref ty st_buf st_idx in
             (* llvm.ptx.red.[space].[op].[type] e.g. global.add.s32 *)
