@@ -3,10 +3,6 @@ open Ir_printer
 open Cg_llvm
 open Llvm
 open Llvm_executionengine
-open Vectorize
-open Unroll
-open Split
-open Constant_fold
 open Schedule
 open Lower
 open Schedule_transforms
