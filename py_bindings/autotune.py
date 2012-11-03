@@ -167,6 +167,7 @@ class AutotuneParams:
       -max_nontrivial          n When generating random schedules, max number of nontrivial (non-root/inline) funcs
       -seed_reasonable         b Whether to seed with reasonable schedules (0 or 1)
       -prob_reasonable         p Probability to sample reasonable schedule when sampling random schedule
+      -cuda                    b Whether to use Cuda schedules (0 or 1, default 0)
     """
     
     #pop_elitism_pct = 0.2
@@ -174,6 +175,8 @@ class AutotuneParams:
     #pop_mutated_pct = 0.3
     # Population sampling frequencies
     prob_pop = {'elitism': 0.2, 'crossover': 0.3, 'mutated': 0.3, 'random': 0.2}
+    
+    cuda = False
     
     tournament_size = 5 #3
     mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
@@ -255,6 +258,10 @@ class AutotuneParams:
             if 'HL_NUMTHREADS' in os.environ:
                 self.hl_threads = int(os.environ['HL_NUMTHREADS'])
             self.hl_threads = multiprocessing.cpu_count() / 2
+        self.set_globals()
+    
+    def set_globals(self):
+        set_cuda(self.cuda)
 
     def dict_prob_mutate(self):
         start = 'prob_mutate_'
