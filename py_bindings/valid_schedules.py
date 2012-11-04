@@ -827,6 +827,7 @@ class BadScheduleError(Exception):
 
 def cuda_global_check(schedule):
     # All funcs chunk() or inline() (recursively), called by a cudaTile() func cannot be vectorize or parallel
+    # Also, cudaTile() 
     d_cuda = {}
     ok = [True]
     def callback(f, fparent):
