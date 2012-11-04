@@ -265,7 +265,7 @@ def test_schedules(verbose=False, test_random=False):
         assert check(Schedule.fromstring(g, 'g.root().unroll(x,8).cudaTile(y, c, 8, 8)'))
         assert check(Schedule.fromstring(g, 'g.root().unroll(y,8).cudaTile(y, c, 8, 8)'))
         assert check(Schedule.fromstring(g, 'g.root().split(x,x,_c0,8).unroll(_c0,4).cudaTile(x, y, 8, 8)'))
-        assert check(Schedule.fromstring(g, 'g.root().split(x,x,_c0,8).parallel(c).cudaTile(x, y, 8, 8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().split(x,x,_c0,8).parallel(c).cudaTile(x, y, 8, 8)'))
         assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y)'))
         assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(c,y,8,8)'))
         assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(x,c,8,8)'))
