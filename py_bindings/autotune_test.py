@@ -251,9 +251,9 @@ def test_schedules(verbose=False, test_random=False):
         assert 'cudaChunk' in s
         assert 'cudaTile' in s
         
-        f2 = Func('valid_f2')
-        g2 = Func('valid_g2')
-        h2 = Func('valid_h2')
+        f2 = halide.Func('f2')
+        g2 = halide.Func('g2')
+        h2 = halide.Func('h2')
         x = locals_d['x']
         y = locals_d['y']
         c = locals_d['c']
@@ -270,9 +270,11 @@ def test_schedules(verbose=False, test_random=False):
         assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(c,y,8,8)'))
         assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(x,c,8,8)'))
         
-        assert not check(Schedule.fromstring(g, 'h2.root().parallel(y)\nf2.chunk(x).cudaTile(x,y,8,8)'))
-        assert not check(Schedule.fromstring(g, 'h2.root().parallel(y)\ng2.chunk(x)\nf2.chunk(x).cudaTile(x,y,8,8)'))
-        assert not check(Schedule.fromstring(g, 'g.root().parallel(y)\nf.chunk(x).cudaTile(x,y,8,8)'))
+        # Not currently valid to do CUDA launches in parallel
+        assert not check(Schedule.fromstring(h2, 'h2.root().parallel(c)\nf2.chunk(x).cudaTile(x,y,8,8)'))
+        assert not check(Schedule.fromstring(h2, 'h2.root().parallel(c)\ng2.chunk(x)\nf2.chunk(x).cudaTile(x,y,8,8)'))
+        assert not check(Schedule.fromstring(h2, 'g2.root().parallel(c)\nf2.chunk(x).cudaTile(x,y,8,8)'))
+        assert not check(Schedule.fromstring(h2, 'g2.root().parallel(c).cudaTile(x,y,8,8)'))
 
         assert not check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(x,y,8,8)'))
         assert not check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(c,x,8,8)'))

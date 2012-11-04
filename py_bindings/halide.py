@@ -141,6 +141,7 @@ _reset0 = Func.reset
 _split0 = Func.split
 _tile0 = Func.tile
 _reorder0 = Func.reorder
+_bound0 = Func.bound
 
 _generic_getitem = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_assign = lambda x, y: assign(x, wrap(y))
@@ -154,6 +155,7 @@ Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0
 Func.split = lambda self, a, b, c, d: _split0(self, a, b, c, wrap(d))
 Func.tile = lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
 Func.reorder = lambda self, *a: _reorder0(self, ListVar(a))
+Func.bound = lambda self, a, b, c: _bound0(self, a, wrap(b), wrap(c))
 
 # ----------------------------------------------------
 # FuncRef
