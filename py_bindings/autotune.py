@@ -1317,6 +1317,7 @@ def autotune_child(args, timeout=None):
     march = ''
     mattr = ''
     mcpu  = ''
+    ldflags = ''
     
     if target == 'arm':
         march = 'arm'
@@ -1324,6 +1325,9 @@ def autotune_child(args, timeout=None):
         mcpu  = 'cortex-a9'
         remote_host = 'omap4.csail.mit.edu'
         remote_path = '/data/scratch/omap4/tune'
+
+    if target == 'ptx':
+        ldflags = '-lcuda'
 
     march = march and '-march='+march or ''
     mattr = mattr and '-mattr='+mattr or ''
@@ -1364,10 +1368,10 @@ def autotune_child(args, timeout=None):
         #save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
         #shutil.copyfile(default_runner, working)
         if not remote_host:
-            compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread %(png_flags)s'
+            compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread %(png_flags)s %(ldflags)s'
         else:
             compile_command = ['rsync -a %(support_include)s/static_image.h %(support_include)s/image_io.h %(support_include)s/image_equal.h %(default_runner)s %(func_name)s.o %(func_name)s.h %(remote_host)s:%(remote_path)s/',
-                               'ssh %(remote_host)s \'cd %(remote_path)s; g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. default_runner.cpp "%(func_name)s.o" -o "%(func_name)s.exe" -lpthread -lpng\'']
+                               'ssh %(remote_host)s \'cd %(remote_path)s; g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. default_runner.cpp "%(func_name)s.o" -o "%(func_name)s.exe" -lpthread -lpng %(ldflags)s\'']
             compile_command = ';'.join(compile_command)
 
         compile_command = compile_command % locals()
