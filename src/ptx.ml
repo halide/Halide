@@ -408,13 +408,22 @@ let free (con:context) (name:string) host_cleanup ptr =
   ignore (build_call (free_buffer_func con) [| buf |] "" con.b);
   host_cleanup (host_context con)
 
-let malloc con name count elem_size =
+let raw_malloc (con:context) name size =
+  let buf,free = X86.raw_malloc (host_context con) name size in
+  let free = fun con -> free (host_context con) in
+  buf,free
+
+let malloc ?force_heap:(force_heap=false) con name count elem_size =
   dbg 2 "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
   (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
-  let (hostptr, host_cleanup) = X86.malloc (host_context con) name count elem_size in
+  let (hostptr, host_cleanup) = X86.malloc (host_context con) name count elem_size ~force_heap:force_heap in
   
   (* build a buffer_t to track this allocation *)
-  let buf = build_alloca (buffer_struct_type con) ("malloc_" ^ name) con.b in
+  let buf_struct_size = size_of (buffer_struct_type con) in
+  let buf_struct_name = (name ^ "$buffer_t") in
+  (* let buf = build_alloca (buffer_struct_type con) ("malloc_" ^ name) con.b in *)
+  let buf,buf_struct_free = raw_malloc con buf_struct_name buf_struct_size in
+  let buf = build_pointercast buf (pointer_type (buffer_struct_type con)) (name ^ "$buffer_t_ptr") con.b in
   let set_field f v = set_buf_field buf name f v con.b in
 
   let zero = const_zero con.c
