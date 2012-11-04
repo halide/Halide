@@ -42,11 +42,6 @@ let rec cg_expr (con:context) (expr:expr) =
   let i8x32_t = vector_type (i8_type c) 32 in
   let i32_t = i32_type c in
 
-  let rec pow2 = function
-    | 0 -> 1
-    | x -> (pow2 (x-1)) * 2
-  in
-
   let call_intrin name args = 
     let t x = type_of_val_type c (val_type_of_expr x) in
     let intrin = declare_function ("llvm.x86." ^ name) (function_type (t expr) (Array.map t args)) m in
@@ -389,7 +384,7 @@ let malloc (con:context) (name:string) (elems:expr) (elem_size:expr) =
   match size with
     (* Constant-sized allocations go on the stack *)
     | IntImm bytes when bytes < stack_alloc_max ->
-        dbg 1 "Stack allocating %s (%d bytes)!\n%!" name bytes;
+        if verbosity > 2 then dbg "Stack allocating %s (%d bytes)!\n%!" name bytes;
         let chunks = ((bytes + 15)/16) in (* 16-byte aligned stack *)
         (* Get the position at the top of the function *)
         let pos = instr_begin (entry_block (block_parent (insertion_block b))) in

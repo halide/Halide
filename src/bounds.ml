@@ -8,7 +8,7 @@ type bounds_result = Range of (expr * expr) | Unbounded
 let make_range (min, max) =
   let min = constant_fold_expr min in
   let max = constant_fold_expr max in
-  (* dbg 2 "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max);  *)
+  (* if verbosity > 2 then dbg "Making range %s %s\n%!" (Ir_printer.string_of_expr min) (Ir_printer.string_of_expr max);  *)
   assert (is_scalar min);
   assert (is_scalar max);
   Range (min, max)
@@ -54,7 +54,7 @@ let bounds_of_expr_in_env env expr =
   let rec bounds_of_expr_in_env_inner env expr = 
     let recurse e = 
       let result = bounds_of_expr_in_env_inner env e in
-      dbg 2 "Computed bounds of %s...\n%!" (Ir_printer.string_of_expr e);
+      if verbosity > 2 then dbg "Computed bounds of %s...\n%!" (Ir_printer.string_of_expr e);
       (* check_result e result; *)
       result
     in
@@ -343,7 +343,7 @@ let bounds_of_expr_in_env env expr =
             Ir_printer.string_of_expr (constant_fold_expr min) ^ ", " ^ 
             Ir_printer.string_of_expr (constant_fold_expr max) ^ ")"
     in
-    dbg 2 "Bounds of %s = %s\n" (Ir_printer.string_of_expr expr) result_string;
+    if verbosity > 2 then dbg "Bounds of %s = %s\n" (Ir_printer.string_of_expr expr) result_string;
     *)
 
     result
@@ -420,7 +420,6 @@ let footprint_of_func_in_expr fname expr =
 (* What region of the func is used by the statement *)
 let rec required_of_stmt func env = function
   | For (var, min, size, order, body) ->
-      dbg 2 "Adding %s to environment\n" var;
       let min_min = match bounds_of_expr_in_env env min with
         | Unbounded -> failwith "Could not compute bounds of min expression in loop"
         | Range (min, max) -> min

@@ -40,7 +40,7 @@ let rec is_simple x =
 let rec constant_fold_expr expr = 
   let recurse = constant_fold_expr in
 
-  dbg 3 "Constant folding: %s\n" (Ir_printer.string_of_expr expr);
+  if verbosity > 3 then dbg "Constant folding: %s\n" (Ir_printer.string_of_expr expr);
   
   match expr with
     (* Ignoring most const-casts for now, because we can't represent immediates of arbitrary types *)
@@ -343,7 +343,6 @@ let remove_dead_lets_in_stmt stmt =
   let symtab = Hashtbl.create 10 in
   let rec inner_expr = function
     | Var (ty, name) ->      
-      dbg 2 "Visiting var %s\n" name;
       begin try
         let usage = Hashtbl.find symtab name in
         Hashtbl.remove symtab name;
@@ -353,7 +352,6 @@ let remove_dead_lets_in_stmt stmt =
         Var (ty, name)
       end
     | Let (name, value, expr) ->
-      dbg 2 "Visiting let %s\n" name;
       let value = inner_expr value in
       Hashtbl.add symtab name 0;
       let expr = inner_expr expr in
@@ -370,7 +368,6 @@ let remove_dead_lets_in_stmt stmt =
 
   let rec inner_stmt = function
     | LetStmt (name, value, stmt) ->
-      dbg 2 "Visiting letstmt %s\n" name;
       let value = inner_expr value in
       Hashtbl.add symtab name 0;
       let stmt = inner_stmt stmt in
