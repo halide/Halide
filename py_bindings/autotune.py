@@ -98,6 +98,7 @@ import psutil
 import operator
 import glob
 import re
+import json
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -236,6 +237,7 @@ class AutotuneParams:
     summary_file = 'summary.txt'
     plot_file = 'plot.png'
     unbiased_file = 'unbiased.txt'  # For unbiased timing comparisons (summary is biased)
+    params_file = 'params.txt'      # Serializes AutotuneParams to this file
     
     def __init__(self, argd={}, **kw):
         for (key, value) in kw.items():
@@ -265,6 +267,25 @@ class AutotuneParams:
     def set_globals(self):
         set_cuda(self.cuda)
 
+    @staticmethod
+    def loads(s):
+        def deunicode(x):
+            if isinstance(x, unicode):
+                return str(x)
+            return x
+        d = json.loads(s)
+        d = dict([(deunicode(key), deunicode(value)) for (key, value) in d.items()])
+        return AutotuneParams(**d)
+    
+    def dumps(self):
+        d = {}
+        for name in dir(self):
+            value = getattr(self, name)
+            if isinstance(value, (int, float, str, bool, type(None), list, dict)):
+                if not name.startswith('_'):
+                    d[name] = value
+        return json.dumps(d)
+            
     def dict_prob_mutate(self):
         start = 'prob_mutate_'
         return dict([(key[len(start):], getattr(self, key)) for key in dir(self) if key.startswith(start)])
@@ -939,11 +960,16 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             save_filename = ''
             if do_save_output(i):
                 save_filename = schedule_ref_output(p, schedule, j)
-                
-            sh_args = ['HL_NUMTHREADS=%d'%hl_threads, 'python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_images[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels), str(hl_threads), str(p.runner_file)]
+            
+            params_file = os.path.abspath(os.path.join(p.tune_dir, p.params_file))
+            if not os.path.exists(params_file):
+                with open(params_file, 'wt') as f_param:
+                    f_param.write(p.dumps())
+                    
+            sh_args = ['HL_NUMTHREADS=%d'%hl_threads, 'python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_images[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels), str(hl_threads), str(p.runner_file), params_file]
             sh_line = (' '.join(sh_args[:5]) + ' "' + repr(sh_args[5])[1:-1] + '" ' + ' '.join(sh_args[6:9]) + ' '  +
                            ('"' + sh_args[9] + '"') + ' ' +
-                           ('"' + sh_args[10] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[11:-1]) + (' "' + sh_args[-1] + '"') + '\n')
+                           ('"' + sh_args[10] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[11:15]) + (' "' + sh_args[15] + '"') + (' "' + sh_args[16] + '"') + '\n')
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
@@ -1249,9 +1275,14 @@ def autotune_child(args, timeout=None):
     if len(rest) == 11:
         p = AutotuneParams()
         rest.append(p.runner_file)
-    if len(rest) != 12:
-        raise ValueError('expected 12 args after autotune_*_child')
-    (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads, runner_file) = rest
+    elif len(rest) == 12:
+        p = AutotuneParams()
+        (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads, runner_file) = rest
+    elif len(rest) == 13:
+        (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads, runner_file, params_file) = rest
+        p = AutotuneParams.loads(open(params_file, 'rt').read())
+    else:
+        raise ValueError('expected 13 args after autotune_*_child')
 
     trials = int(trials)
     #save_output = int(save_output)
