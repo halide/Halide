@@ -291,7 +291,7 @@ class FragmentUpdate(Fragment):
         raise ValueError('var_order called on FragmentUpdate()')
 
 # FragmentBound is just a stub class for now -- not used in tuning, just for comparing with human reference schedules
-class FragmentBound(FragmentBlocksizeMixin):
+class FragmentBound(Fragment, FragmentBlocksizeMixin):
     def __init__(self, var=None, lower=None, upper=None):
 #        print '__init__', self.__class__
         self.var = var
