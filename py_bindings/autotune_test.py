@@ -253,6 +253,7 @@ def test_schedules(verbose=False, test_random=False):
     if valid_schedules.is_cuda():
         assert 'cudaChunk' in s
         assert 'cudaTile' in s
+        #print '\n\n'.join(x.replace('\\n', '\n') for x in s0 if 'cuda' in x)
     if valid_schedules.CHUNK_ROOT:
         assert 'chunk(root' in s
     assert nvalid_random == 100
@@ -283,8 +284,25 @@ def test_cuda():
     test_all()
     set_cuda(False)
     
+def test_params():
+    p = AutotuneParams()
+    s1 = p.dumps()
+    s2 = AutotuneParams.loads(s1).dumps()
+    
+    assert s1 == s2
+    
+    p2 = AutotuneParams(cuda=1)
+    s3 = p2.dumps()
+    s4 = AutotuneParams.loads(s3).dumps()
+    assert s3 == s4
+    assert s3 != s1
+    
+    p = AutotuneParams()
+    print 'autotune.AutotuneParams:             OK'
+
 def test():
     random.seed(0)
+    test_params()
     test_sample_prob()
     test_all()
     test_cuda()
