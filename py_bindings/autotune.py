@@ -1405,7 +1405,7 @@ def autotune_child(args, timeout=None):
             save_filename = os.path.basename(save_filename)
             run_command = [
                 'rsync -a %(in_image_file)s %(ref_output_file)s %(remote_host)s:%(remote_path)s/',
-                'ssh %(remote_host)s \'cd %(remote_path)s; killall -rq \'f*_*.exe\'; HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d' + (save_filename and '"%(save_filename)s"' or '') + '\''
+                'ssh %(remote_host)s \'cd %(remote_path)s; killall -rq \'f*_*.exe\'; HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d ' + (save_filename and '"%(save_filename)s"' or '') + '\''
             ]
             if save_filename_path:
                 run_command.append('rsync -a %(remote_host)s:%(remote_path)s/%(save_filename)s %(save_filename_path)s')
