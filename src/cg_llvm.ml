@@ -35,7 +35,8 @@ module type Architecture = sig
   val cg_entry : llcontext -> llmodule -> cg_entry -> state make_cg_context -> entrypoint -> string list -> llvalue
   val cg_expr : context -> expr -> llvalue
   val cg_stmt : context -> stmt -> llvalue
-  val malloc  : context -> string -> expr -> expr -> (llvalue * (context -> unit))
+  val malloc  : ?force_heap:bool -> context -> string -> expr -> expr -> (llvalue * (context -> unit))
+  val raw_malloc : context -> string -> llvalue -> (llvalue * (context -> unit))
   val env : environment
   val pointer_size : int
 end

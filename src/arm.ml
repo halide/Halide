@@ -455,11 +455,21 @@ let free (con : context) (name:string) (address:llvalue) =
   let free = declare_function "fast_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
   ignore (build_call free [|address|] "" b)
 
-let malloc (con : context) (name : string) (elems : expr) (elem_size : expr) =
+let raw_malloc con name size =
+  let c = con.c and b = con.b and m = con.m in
+  let safe_malloc = try
+    Sys.getenv "HL_SAFE_MALLOC"
+  with Not_found -> "0" in
+  let malloc_fn = if safe_malloc = "1" then "safe_malloc" else "fast_malloc" in
+  let malloc = declare_function malloc_fn (function_type (pointer_type (i8_type c)) [|i32_type c|]) m in  
+  let addr = build_call malloc [|size|] name b in
+  (addr, fun con -> free con name addr)
+
+let malloc ?force_heap:(force_heap=false) (con : context) (name : string) (elems : expr) (elem_size : expr) =
   let c = con.c and b = con.b and m = con.m in
   let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
   match size with
-    | IntImm bytes when bytes < stack_alloc_max ->
+    | IntImm bytes when bytes < stack_alloc_max && not force_heap ->
         if verbosity > 2 then dbg "Stack allocating %s (%d bytes)!\n%!" name bytes;
         let chunks = ((bytes + 15)/16) in (* 16-byte aligned stack *)
         (* Get the position at the top of the function *)
@@ -471,9 +481,7 @@ let malloc (con : context) (name : string) (elems : expr) (elem_size : expr) =
         let ptr = build_pointercast ptr (pointer_type (i8_type c)) "" b in
         (ptr, fun _ -> ())
     | _ -> 
-        let malloc = declare_function "fast_malloc" (function_type (pointer_type (i8_type c)) [|i32_type c|]) m in  
         let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
-        let addr = build_call malloc [|con.cg_expr size|] name b in
-        (addr, fun con -> free con name addr)
+        raw_malloc con name (con.cg_expr size)
           
 let env = Environment.empty
