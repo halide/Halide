@@ -1274,6 +1274,33 @@ def autotune_child(args, timeout=None):
         print s
         return subprocess.check_output(s,shell=True)
 
+    ###
+    ### auto-initialize remote/cross compile info from HL_TARGET for now
+    ### TODO: hoist this initialization into 
+    ###
+    target = os.getenv('HL_TARGET')
+    if not target: target = 'x86_64'
+
+    remote_host = None
+    remote_path = '~'
+    march = ''
+    mattr = ''
+    mcpu  = ''
+    
+    if target == 'arm':
+        march = 'arm'
+        mattr = '+neon'
+        mcpu  = 'cortex-a9'
+        remote_host = 'omap4.csail.mit.edu'
+        remote_path = '/data/scratch/omap4/tune'
+
+    march = march and '-march='+march or ''
+    mattr = mattr and '-mattr='+mattr or ''
+    mcpu  = mcpu  and '-mcpu=' +mcpu or ''
+    ###
+    ### end auto-initialize remote/cross compile
+    ###
+
     # binary_file: full path
     orig = os.getcwd()
     func_name = os.path.basename(binary_file)
@@ -1300,12 +1327,18 @@ def autotune_child(args, timeout=None):
         
         # assemble bitcode
         check_output(
-            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 -filetype=obj -o %(func_name)s.o' % locals()
+            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 %(march)s %(mattr)s %(mcpu)s -filetype=obj -o %(func_name)s.o' % locals()
         )
 
         #save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
         #shutil.copyfile(default_runner, working)
-        compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(halide_include)s -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread -L%(link_dir)s -lHalide %(png_flags)s'
+        if not remote_host:
+            compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread %(png_flags)s'
+        else:
+            compile_command = ['rsync -a %(support_include)s/static_image.h %(support_include)s/image_io.h %(support_include)s/image_equal.h %(default_runner)s %(func_name)s.o %(func_name)s.h %(remote_host)s:%(remote_path)s/',
+                               'ssh %(remote_host)s \'cd %(remote_path)s; g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. default_runner.cpp "%(func_name)s.o" -o "%(func_name)s.exe" -lpthread -lpng\'']
+            compile_command = ';'.join(compile_command)
+
         compile_command = compile_command % locals()
         print compile_command
         try:
@@ -1318,7 +1351,22 @@ def autotune_child(args, timeout=None):
         #return
 
     if args[0] in ['autotune_run_child', 'autotune_compile_run_child']:
-        run_command = 'HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d "%(save_filename)s"'
+        if not remote_host:
+            run_command = 'HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d "%(save_filename)s"'
+        else:
+            in_image_file = in_image
+            in_image = os.path.basename(in_image)
+            ref_output_file = ref_output
+            ref_output = os.path.basename(ref_output)
+            save_filename_path = save_filename
+            save_filename = os.path.basename(save_filename)
+            run_command = [
+                'rsync -a %(in_image_file)s %(ref_output_file)s %(remote_host)s:%(remote_path)s/',
+                'ssh %(remote_host)s \'cd %(remote_path)s; HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d "%(save_filename)s"\''
+                #'rsync -a %(remote_host)s:%(remote_path)s/%(save_filename)s %(save_filename_path)s'
+            ]
+            run_command = '; '.join(run_command)
+        
         run_command = run_command % locals()
         print 'Testing: %s' % run_command
 
