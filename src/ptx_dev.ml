@@ -197,7 +197,10 @@ let rec cg_stmt con stmt = match stmt with
 let rec cg_entry dev_ctx dev_mod codegen_entry entry opts =
   failwith "Direct use of Ptx_dev.codegen_entry is not supported"
 
-let malloc con name count elem_size =
+let raw_malloc con name size =
+  failwith "malloc not supported inside PTX kernel"
+
+let malloc ?force_heap:(force_heap=false) con name count elem_size =
   let zero = const_zero con.c in
   let size = match constant_fold_expr (count *~ elem_size) with
     | IntImm sz -> sz
