@@ -470,7 +470,7 @@ let malloc ?force_heap:(force_heap=false) (con : context) (name : string) (elems
   let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
   match size with
     | IntImm bytes when bytes < stack_alloc_max && not force_heap ->
-        dbg 1 "Stack allocating %s (%d bytes)!\n%!" name bytes;
+        if verbosity > 2 then dbg "Stack allocating %s (%d bytes)!\n%!" name bytes;
         let chunks = ((bytes + 15)/16) in (* 16-byte aligned stack *)
         (* Get the position at the top of the function *)
         let pos = instr_begin (entry_block (block_parent (insertion_block b))) in

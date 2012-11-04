@@ -158,18 +158,18 @@ let rec find_host_loads s =
 
 (* TODO: clean up and lift to cg_llvm_util *)
 let set_buf_field buf name f v b =
-  dbg 2 "  set_field %s :=%!" (string_of_buffer_field f);
+  if verbosity > 2 then dbg "  set_field %s :=%!" (string_of_buffer_field f);
   (* dump_value v; *)
   let fptr = cg_buffer_field_ref buf f b in
   let fty = element_type (type_of fptr) in
   let v = match classify_type fty with
     | TypeKind.Integer ->
-        dbg 2 "  building const_intcast to %s of%!" (string_of_lltype fty);
+        if verbosity > 2 then dbg "  building const_intcast to %s of%!" (string_of_lltype fty);
         (* dump_value v; *)
         build_intcast v fty (name ^ "_field_type_cast") b
     | _ -> v
   in
-  dbg 2 "   ->%!"; (* dump_value fptr; *)
+  if verbosity > 2 then dbg "   ->%!"; (* dump_value fptr; *)
   ignore (build_store v fptr b)
 
 let cg_expr (con:context) (expr:expr) =
@@ -209,9 +209,9 @@ let cg_dev_kernel con stmt =
   let n_blkid_y = extract_bounds "blockidy" stmt in
   let n_blkid_z = extract_bounds "blockidz" stmt in
 
-  dbg 2 "\ndev kernel root:\n%s\n\n%!" (string_of_stmt stmt);
+  if verbosity > 2 then dbg "\ndev kernel root:\n%s\n\n%!" (string_of_stmt stmt);
 
-  dbg 2 " PTX bounds: (%sx%sx%s) threads, (%sx%sx%s) blocks\n%!"
+  if verbosity > 2 then dbg " PTX bounds: (%sx%sx%s) threads, (%sx%sx%s) blocks\n%!"
     (string_of_expr n_tid_x) (string_of_expr n_tid_y) (string_of_expr n_tid_z)
     (string_of_expr n_blkid_x) (string_of_expr n_blkid_y) (string_of_expr n_blkid_z);
 
@@ -302,7 +302,7 @@ let cg_dev_kernel con stmt =
   
   if dbgprint then dev_con.dump_syms ();
   
-  dbg 2 "--- Starting PTX body codegen ---\n%!";
+  if verbosity > 2 then dbg "--- Starting PTX body codegen ---\n%!";
 
   (* TODO: codegen the main kernel *)
   ignore (Ptx_dev.cg_stmt dev_con stmt);
@@ -340,7 +340,7 @@ let cg_dev_kernel con stmt =
   let entry_name = value_name k in
   let entry_name_str = build_global_stringptr entry_name "__entry_name" con.b in
 
-  dbg 2 "Kernel %s reads:\n  %s\nwrites:\n  %s\n"
+  if verbosity > 2 then dbg "Kernel %s reads:\n  %s\nwrites:\n  %s\n"
     entry_name
     (String.concat ",\n  " closure_reads)
     (String.concat ",\n  " closure_writes);
@@ -389,8 +389,8 @@ let cg_dev_kernel con stmt =
   ] in
 
   let dev_run = dev_run con in
-  dbg 2 "Building call to dev_run (%s) with args:\n%!" (string_of_lltype (type_of dev_run));
-  List.iter (fun a -> dbg 2 "  %s\n%!" (string_of_lltype (type_of a))) launch_args;
+  if verbosity > 2 then dbg "Building call to dev_run (%s) with args:\n%!" (string_of_lltype (type_of dev_run));
+  List.iter (fun a -> if verbosity > 2 then dbg "  %s\n%!" (string_of_lltype (type_of a))) launch_args;
 
   ignore (build_call dev_run (Array.of_list launch_args) "" con.b);
 
@@ -403,7 +403,7 @@ let cg_dev_kernel con stmt =
   const_zero
 
 let free (con:context) (name:string) host_cleanup ptr =
-  dbg 2 "Ptx.free %s\n%!" name;
+  if verbosity > 2 then dbg "Ptx.free %s\n%!" name;
   let buf = con.arch_state.buf_get name in
   ignore (build_call (free_buffer_func con) [| buf |] "" con.b);
   host_cleanup (host_context con)
@@ -414,7 +414,7 @@ let raw_malloc (con:context) name size =
   buf,free
 
 let malloc ?force_heap:(force_heap=false) con name count elem_size =
-  dbg 2 "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
+  if verbosity > 2 then dbg "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
   (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
   let (hostptr, host_cleanup) = X86.malloc (host_context con) name count elem_size ~force_heap:force_heap in
   
@@ -483,19 +483,19 @@ let rec cg_stmt (con:context) stmt = match stmt with
         (* mark host_dirty if writes by host in produce *)
         let host_writes = find_host_stores body in
         if StringSet.mem name host_writes then begin
-          dbg 2 "found host writes in produce of %s - marking host_dirty\n" name;
+          if verbosity > 2 then dbg "found host writes in produce of %s - marking host_dirty\n" name;
           let buf = con.arch_state.buf_get name in
           set_buf_field buf name HostDirty (ci con.c 1) con.b;
         end
         else
-          dbg 2 "NO host writes in produce of %s\n" name;
+          if verbosity > 2 then dbg "NO host writes in produce of %s\n" name;
       in
 
       let cg_host_consume_reads body =
         (* copy_to_host if reads by host in consume *)
         let host_reads = find_host_loads consume in
         if StringSet.mem name host_reads then begin
-          dbg 2 "copy back host read of %s\n%!" name;
+          if verbosity > 2 then dbg "copy back host read of %s\n%!" name;
           let buf = con.arch_state.buf_get name in
           copy_to_host con buf
         end;
@@ -573,10 +573,10 @@ let rec cg_entry c m codegen_entry make_cg_context e opts =
   List.iter
     (fun nm ->
       try
-        dbg 1 "Host reads %s\n%!" nm;
+        if verbosity > 1 then dbg "Host reads %s\n%!" nm;
         if dbgprint then dump_syms param_syms;
         let buf = con.arch_state.buf_get nm in
-        dbg 1 "  copy_to_host at entrypoint\n%!";
+        if verbosity > 1 then dbg "  copy_to_host at entrypoint\n%!";
         ignore (copy_to_host con buf);
       with Not_found -> ()
     )
@@ -597,7 +597,7 @@ let rec cg_entry c m codegen_entry make_cg_context e opts =
 
   if dump_mod then dump_module dev_mod;
   let ptx_src = Llutil.compile_module_to_string dev_mod in
-  dbg 2 "PTX:\n%s\n%!" ptx_src;
+  if verbosity > 2 then dbg "PTX:\n%s\n%!" ptx_src;
   (* log the PTX module to disk *)
   save_bc_to_file dev_mod "kernels.bc";
   with_file_out "kernels.ptx" (fun o -> Printf.fprintf o "%s%!" ptx_src);

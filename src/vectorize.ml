@@ -28,7 +28,7 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
         | x -> fold_children_in_expr contains_vars_in_env (||) false x
       in
 
-      dbg 2 "Vectorizing: %s\n%!" (Ir_printer.string_of_expr expr);
+      if verbosity > 2 then dbg "Vectorizing: %s\n%!" (Ir_printer.string_of_expr expr);
 
       let result = match expr with
       | x when not (contains_vars_in_env x) -> x
@@ -42,7 +42,6 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
             | (Sub, Ramp (ba, sa, _), Ramp (bb, sb, _)) -> Ramp (ba -~ bb, sa -~ sb, width)
             | (Mul, Ramp (b, s, _), x) when is_scalar x -> Ramp (b *~ x, s *~ x, width)
             | (Mul, x, Ramp (b, s, _)) when is_scalar x -> Ramp (x *~ b, x *~ s, width)
-            (* | (Div, Ramp (b, s, _), x) -> Ramp (b /~ x, s /~ x, width) *)
             | (Add, Ramp (b, s, _), x) when is_scalar x -> Ramp (b +~ x, s, width)
             | (Add, x, Ramp (b, s, _)) when is_scalar x -> Ramp (x +~ b, s, width)
             | (Sub, Ramp (b, s, _), x) when is_scalar x -> Ramp (b -~ x, s, width)
@@ -93,7 +92,7 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
           
       | _ -> failwith "Can't vectorize vector code"
       in 
-      dbg 2 "Result: %s\n%!" (Ir_printer.string_of_expr result);
+      if verbosity > 2 then dbg "Result: %s\n%!" (Ir_printer.string_of_expr result);
       result
     in vec expr
 
@@ -101,7 +100,6 @@ let vectorize_expr (var:string) (min:expr) (width:int) (expr:expr) =
   vector_subs_expr (StringMap.add var (Ramp (min, IntImm 1, width)) StringMap.empty) expr
 
 let rec vectorize_stmt (var:string) (min:expr) (width:int) (stmt:stmt) =
-    dbg 2 "Vectorizing (%s, %s, %d): %s\n%!" var (Ir_printer.string_of_expr min) width (Ir_printer.string_of_stmt stmt);
     let vec = vectorize_stmt var min width 
     and vec_expr = vectorize_expr var min width in
     match stmt with
@@ -111,7 +109,6 @@ let rec vectorize_stmt (var:string) (min:expr) (width:int) (stmt:stmt) =
       | Store (expr, buf, idx) -> 
           let vec_e = vec_expr expr in
           let vec_i = vec_expr idx in
-          dbg 2 "Vectorized index and expr: %s %s\n%!" (Ir_printer.string_of_expr vec_i) (Ir_printer.string_of_expr vec_e);
           begin match (is_vector vec_e, is_vector vec_i) with
             (* If idx is a vector but expr is a scalar, insert a broadcast around expr *)
             | (false, true) -> 

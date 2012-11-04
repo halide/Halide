@@ -68,22 +68,24 @@ int main(int argc, char **argv) {
     Expr idx = gray(x, y)*cast<float>(levels-1)*256.0f;
     idx = clamp(cast<int>(idx), 0, (levels-1)*256);
     gPyramid[0](x, y, k) = beta*gray(x, y) + remap(idx - 256*k);
-    //gPyramid[0](x, y, k) = remap(gray(x, y), cast<float>(k) / (levels-1), alpha, beta, levels-1);
-    for (int j = 1; j < J; j++)
+    for (int j = 1; j < J; j++) {
         gPyramid[j](x, y, k) = downsample(gPyramid[j-1])(x, y, k);
-    
+    }    
+
     // Get its laplacian pyramid
     Func lPyramid[J];
     lPyramid[J-1] = gPyramid[J-1];
-    for (int j = J-2; j >= 0; j--) 
+    for (int j = J-2; j >= 0; j--) {
         lPyramid[j](x, y, k) = gPyramid[j](x, y, k) - upsample(gPyramid[j+1])(x, y, k);    
+    }
 
     // Make the Gaussian pyramid of the input
     Func inGPyramid[J];
     inGPyramid[0] = gray;
-    for (int j = 1; j < J; j++)
+    for (int j = 1; j < J; j++) {
         inGPyramid[j](x, y) = downsample(inGPyramid[j-1])(x, y);
-        
+    }        
+
     // Make the laplacian pyramid of the output
     Func outLPyramid[J];
     for (int j = 0; j < J; j++) {
@@ -98,9 +100,10 @@ int main(int argc, char **argv) {
     // Make the Gaussian pyramid of the output
     Func outGPyramid[J];
     outGPyramid[J-1] = outLPyramid[J-1];
-    for (int j = J-2; j >= 0; j--) 
+    for (int j = J-2; j >= 0; j--) {
         outGPyramid[j](x, y) = upsample(outGPyramid[j+1])(x, y) + outLPyramid[j](x, y);
-    
+    }    
+
     // Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
     Func color;
     float eps = 0.01f;
