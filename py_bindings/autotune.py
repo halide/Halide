@@ -875,7 +875,7 @@ def kill_recursive(pid, timeout=1.0):
             print 'Could not kill pid %d and children' % pid
             break
     
-def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False, memory_limit=None):
+def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False, memory_limit=None, remote_host=None):
     """
     Run shell command in list form, e.g. L=['python', 'autotune.py'], using subprocess.
     
@@ -906,6 +906,14 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
     status = wait_timeout(proc, timeout, T0, memory_limit)
     if status in RUN_LIMIT_ERRCODES:
         kill_recursive(proc.pid)
+        if remote_host:
+            print 'run timeout - sending remote killall over ssh'
+            remote_kill_cmd = 'ssh %(remote_host)s killall -rq \'f*_*.exe\'' % locals()
+            try:
+                subprocess.check_output(remote_kill_cmd, shell=True)
+            except:
+                print '...already dead?'
+                pass
         return status, ''
         
     fout.seek(0)
@@ -1140,7 +1148,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         
     log_sched(p, None, None, no_output=True)    # Clear log file
 
-    random.seed(0)
+    #random.seed(0)
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     if 'tune_in_images' in scope:
         p.in_images = scope['tune_in_images']
@@ -1317,6 +1325,8 @@ def autotune_child(args, timeout=None):
     march = ''
     mattr = ''
     mcpu  = ''
+    ldflags = ''
+    max_run_memory_kb = 'unlimited'
     
     if target == 'arm':
         march = 'arm'
@@ -1324,6 +1334,10 @@ def autotune_child(args, timeout=None):
         mcpu  = 'cortex-a9'
         remote_host = 'omap4.csail.mit.edu'
         remote_path = '/data/scratch/omap4/tune'
+	max_run_memory_kb = '500000' # 500mb on omap4 for safety
+
+    if target == 'ptx':
+        ldflags = '-lcuda'
 
     march = march and '-march='+march or ''
     mattr = mattr and '-mattr='+mattr or ''
@@ -1364,10 +1378,10 @@ def autotune_child(args, timeout=None):
         #save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
         #shutil.copyfile(default_runner, working)
         if not remote_host:
-            compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread %(png_flags)s'
+            compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread %(png_flags)s %(ldflags)s'
         else:
             compile_command = ['rsync -a %(support_include)s/static_image.h %(support_include)s/image_io.h %(support_include)s/image_equal.h %(default_runner)s %(func_name)s.o %(func_name)s.h %(remote_host)s:%(remote_path)s/',
-                               'ssh %(remote_host)s \'cd %(remote_path)s; g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. default_runner.cpp "%(func_name)s.o" -o "%(func_name)s.exe" -lpthread -lpng\'']
+                               'ssh %(remote_host)s \'cd %(remote_path)s; g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. default_runner.cpp "%(func_name)s.o" -o "%(func_name)s.exe" -lpthread -lpng %(ldflags)s\'']
             compile_command = ';'.join(compile_command)
 
         compile_command = compile_command % locals()
@@ -1393,9 +1407,10 @@ def autotune_child(args, timeout=None):
             save_filename = os.path.basename(save_filename)
             run_command = [
                 'rsync -a %(in_image_file)s %(ref_output_file)s %(remote_host)s:%(remote_path)s/',
-                'ssh %(remote_host)s \'cd %(remote_path)s; HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d "%(save_filename)s"\''
-                #'rsync -a %(remote_host)s:%(remote_path)s/%(save_filename)s %(save_filename_path)s'
+                'ssh %(remote_host)s \'cd %(remote_path)s; killall -rq \'f*_*.exe\'; ulimit -Sv %(max_run_memory_kb)s; HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d ' + (save_filename and '"%(save_filename)s"' or '') + '\''
             ]
+            if save_filename_path:
+                run_command.append('rsync -a %(remote_host)s:%(remote_path)s/%(save_filename)s %(save_filename_path)s')
             run_command = '; '.join(run_command)
         
         run_command = run_command % locals()
@@ -1408,7 +1423,7 @@ def autotune_child(args, timeout=None):
                 print out.strip()
                 return
             else:
-                return run_limit(run_command, timeout, last_line=True, shell=True)
+                return run_limit(run_command, timeout, last_line=True, shell=True, remote_host=remote_host)
         finally:
             os.chdir(orig)
     #else:
