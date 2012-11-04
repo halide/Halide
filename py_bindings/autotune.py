@@ -284,7 +284,7 @@ class AutotuneParams:
             if isinstance(value, (int, float, str, bool, type(None), list, dict)):
                 if not name.startswith('_'):
                     d[name] = value
-        return json.dumps(d)
+        return json.dumps(d, indent=4)
             
     def dict_prob_mutate(self):
         start = 'prob_mutate_'
