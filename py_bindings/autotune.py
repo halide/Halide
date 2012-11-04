@@ -237,7 +237,9 @@ class AutotuneParams:
     plot_file = 'plot.png'
     unbiased_file = 'unbiased.txt'  # For unbiased timing comparisons (summary is biased)
     
-    def __init__(self, argd={}):
+    def __init__(self, argd={}, **kw):
+        for (key, value) in kw.items():
+            setattr(self, key, value)
         for (key, value) in argd.items():
             if not hasattr(self, key):
                 raise ValueError('unknown command-line switch %s'%key)
@@ -319,11 +321,11 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
             chunk_var = chunk_vars(schedule, f)[0]
             varlist = halide.func_varlist(f)
             if len(varlist) == 0:
-                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var)])
+                ans[f.name()] = FragmentList.fromstring(f, '.chunk(%s)'%chunk_var) #FragmentList(f, [FragmentChunk(chunk_var)])
             else:
                 x = varlist[0]
 #                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var), FragmentVectorize(x, n)])
-                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var)])
+                ans[f.name()] = FragmentList.fromstring(f, '.chunk(%s)'%chunk_var) #FragmentList(f, [FragmentChunk(chunk_var)])
         else:
             varlist = halide.func_varlist(f)
             if len(varlist) == 0:

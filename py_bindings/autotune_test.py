@@ -50,7 +50,7 @@ def test_crossover(verbose=False):
                 print c
         #T1 = time.time()
         
-        p = AutotuneParams()
+        p = AutotuneParams(cuda=valid_schedules.is_cuda())
         #print 'b'
         for i in range(80):
             if verbose:
@@ -97,9 +97,8 @@ def test_crossover(verbose=False):
             test_generation(L, prev_gen)
             prev_gen = L
     
-    print 'autotune.crossover:              OK'
-    print 'autotune.mutate:                 OK'
-    print 'autotune.next_generation:        OK'
+#    print 'autotune.next_generation:        OK'
+    print 'autotune.next_generation(cuda=%d):    OK'%valid_schedules.is_cuda()
 
 def test_funcs(cache=[]):
     if len(cache):
@@ -144,7 +143,7 @@ def test_sample_prob():
     for key in d.keys():
         assert abs(dc[key]*1.0/count-d[key])<eps, (key, d[key], dc[key]*1.0/count)
     assert dc['d'] == 0
-    print 'autotune.sample_prob:            OK'
+    print 'autotune.sample_prob:                OK'
 
 def test_schedules(verbose=False, test_random=False):
     #random_module.seed(int(sys.argv[1]) if len(sys.argv)>1 else 0)
@@ -181,7 +180,8 @@ def test_schedules(verbose=False, test_random=False):
             nvalid_random += 1
 
     s = []
-    for i in range(1000):
+    mul = 1 if not valid_schedules.is_cuda() else 4
+    for i in range(1000*mul):
         d = random_schedule(g, 1, DEFAULT_MAX_DEPTH)
         si = str(d)
         si2 = str(Schedule.fromstring(g, si))
@@ -221,8 +221,9 @@ def test_schedules(verbose=False, test_random=False):
     s = '\n'.join(s)
     if valid_schedules.SPLIT_STORE_COMPUTE:
         assert 'f.chunk(_c0,_c0)' in s
-        assert 'f.chunk(x,y' in s #, '\n'.join(x for x in s0 if 'chunk' in x)
-        assert 'f.chunk(y,x' in s
+        
+        assert 'f.chunk(x,y' in s, '\n'.join(x for x in s0 if 'chunk' in x)
+        assert 'f.chunk(y,x' in s, '\n'.join(x for x in s0 if 'chunk' in x)
 
         schedule = Schedule.fromstring(g, 'f.chunk(y,x)\ng.root()')
         assert schedule.check(schedule)
@@ -249,13 +250,17 @@ def test_schedules(verbose=False, test_random=False):
     assert 'f.root().tile' in s
     assert 'f.root().parallel' in s
     assert 'f.root().reorder' in s
+    if valid_schedules.is_cuda():
+        assert 'cudaChunk' in s
+        assert 'cudaTile' in s
     if valid_schedules.CHUNK_ROOT:
         assert 'chunk(root' in s
     assert nvalid_random == 100
     if verbose:
         print 'generated in %.3f secs' % (T1-T0)
 
-    print 'autotune.random_schedule:        OK'
+#    print 'autotune.random_schedule:        OK'
+    print 'autotune.random_schedule(cuda=%d):    OK'%valid_schedules.is_cuda()
     
     r = nontrivial_schedule(g)
     constantL = [str(r)]
@@ -265,10 +270,10 @@ def test_schedules(verbose=False, test_random=False):
         #print
         constantL.append(str(r.randomized_const()))
     assert len(set(constantL)) > 1
-    print 'autotune.randomized_const:       OK'
+#    print 'autotune.randomized_const:       OK'
+    print 'autotune.randomized_const(cuda=%d):   OK'%valid_schedules.is_cuda()
 
 def test_all():
-    test_sample_prob()
 #    test_schedules(True)
     test_schedules(test_random=True)
     test_crossover()
@@ -280,8 +285,9 @@ def test_cuda():
     
 def test():
     random.seed(0)
+    test_sample_prob()
     test_all()
-    #test_cuda()
+    test_cuda()
     
 if __name__ == '__main__':
     test()
