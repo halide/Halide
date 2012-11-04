@@ -22,6 +22,7 @@ let start_state () =
   }
 (* TODO: track current surrounding thread/block nest scope.
  * should allow malloc to compute correct offsets. *)
+(* TODO: make malloc use thread-local instead of shared when inside a thread *)
 
 let is_simt_var name =
   let name = base_name name in
@@ -65,7 +66,7 @@ let simt_intrinsic name =
 
 let rec cg_expr con = function
   | Debug (e, _, _) ->
-      Printf.printf "Skipping Debug expr inside device kernel\n%!";
+      if verbosity > 2 then dbg "Skipping Debug expr inside device kernel\n%!";
       cg_expr con e
   | e -> con.cg_expr e
 
@@ -116,11 +117,11 @@ let rec cg_stmt con stmt = match stmt with
     *)
 
   | Assert _ | Print _ ->
-      Printf.printf "Dropping Print/Assert stmt inside device kernel\n%!";
+      if verbosity > 2 then dbg "Dropping Print/Assert stmt inside device kernel\n%!";
       const_zero con.c (* ignorable return value *)
   | For (name, base, width, ordered, body) when is_simt_var name ->
       (* TODO: loop needs to be turned into If (which we don't have in our IR), not dropped *)
-      Printf.eprintf "Dropping %s loop on %s (%s..%s)\n%!"
+      if verbosity > 2 then dbg "Dropping %s loop on %s (%s..%s)\n%!"
         (if (ordered = Serial) then "serial" else "parallel") name (string_of_expr base) (string_of_expr width);
       assert (ordered = Parallel);
 
@@ -166,7 +167,7 @@ let rec cg_stmt con stmt = match stmt with
       
       (* conditionally jump into the loop, if our thread corresponds to a valid iteration *)
       let cond = Cmp(LT, simtvar, width) in
-      Printf.eprintf " for -> if (%s)\n%!" (string_of_expr cond);
+      if verbosity > 2 then dbg " for -> if (%s)\n%!" (string_of_expr cond);
       (* dump_module con.m; *)
 
       ignore (build_cond_br (cg_expr cond) loop_bb after_bb b);
@@ -204,7 +205,7 @@ let malloc con name count elem_size =
     | IntImm sz -> sz
     | sz -> failwith (Printf.sprintf "PTX device malloc of %s with non-const size %s\n" name (string_of_expr sz))
   in
-  Printf.printf "malloc %s[%d bytes] on PTX device\n%!" name size;
+  if verbosity > 2 then dbg "malloc %s[%d bytes] on PTX device\n%!" name size;
   con.arch_state.shared_mem_bytes := !(con.arch_state.shared_mem_bytes) + size;
   let elemty = element_type (raw_buffer_t con.c) in
   let ty = array_type elemty size in

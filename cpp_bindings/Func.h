@@ -117,6 +117,8 @@ namespace Halide {
         Func &reorder(const Var &, const Var &, const Var &, const Var &, const Var &);
         Func &chunk(const Var &);
         Func &chunk(const Var &, const Var &);
+        Func &cudaChunk(const Var &, const Var &, const Var &);
+        Func &cudaChunk(const Var &, const Var &, const Var &, const Var &);
         Func &bound(const Var &v, const Expr &min, const Expr &size);
         Func &root();
         Func &parallel(const Var &);
@@ -173,6 +175,8 @@ namespace Halide {
         MLVal buildGuru();
         MLVal lower();
         MLVal inferArguments();
+
+        void _chunk(const Var &, const Var &);
 
         shared_ptr<FuncContents> contents;
     };

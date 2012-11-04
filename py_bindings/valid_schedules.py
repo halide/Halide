@@ -1,5 +1,7 @@
 
-# TODO: Include new added split() or tile() vars in reorder() list
+# Ordinary mode: Reorder is last
+# CUDA mode:     Last two are Reorder().CudaTile()
+# Use gpuChunk() for chunking against the blockidx variable.
 
 import halide
 import random
@@ -24,6 +26,14 @@ VAR_ORDER_VERBOSE = False
 
 root_var = 'root'                   # Turns into halide.root...special variable for chunk(root, compute)
 
+CUDA_CHUNK_VAR = 'blockidx'
+
+_cuda_mode = [False]                # Global variable for whether cuda mode. TODO: Remove global variable.
+def set_cuda(cuda):
+    _cuda_mode[0] = cuda
+def is_cuda():
+    return _cuda_mode[0]
+    
 # --------------------------------------------------------------------------------------------------------------
 # Valid Schedule Enumeration
 # --------------------------------------------------------------------------------------------------------------
@@ -58,7 +68,7 @@ def default_check(cls, L, func):
             
 def make_fromstring(cls):
     @staticmethod
-    def fromstring(var=None, value=None):
+    def fromstring(var=None, value=None, func=None):
         return cls(var, int(value) if value is not None else value)
     return fromstring
 
@@ -178,71 +188,93 @@ class FragmentUnroll(FragmentBlocksizeMixin,Fragment):
         return '.unroll(%s,%d)'%(self.var,self.value)
 
 class FragmentChunk(Fragment):
-    def __init__(self, var=None, storevar=None):
+    def __init__(self, var=None, storevar=None, func=None):
         self.var = var
         self.storevar = storevar
+        self.func = func
+        assert self.func is not None
 
     @staticmethod
     def random_fragment(root_func, func, cls, vars, extra_caller_vars, partial_schedule):
         #allV = caller_vars(root_func, func)+extra_caller_vars
-        allV = chunk_vars(partial_schedule, func)           # This is in reversed loop order (argument order)
+        allV = list(reversed(chunk_vars(partial_schedule, func)))           # In loop order
         if len(allV) == 0:
             return None
         if SPLIT_STORE_COMPUTE:
+            if is_cuda() and CUDA_CHUNK_VAR in allV:          # Cannot chunk anything that is CUDA variable on in
+                allV = allV[:allV.index(CUDA_CHUNK_VAR)+1]
             n = len(allV)
             if CHUNK_ROOT:
                 n += 1
             j = random.randrange(len(allV))           # Compute. TODO: Optionally use exponential distribution instead of uniform
+            if allV[j] == CUDA_CHUNK_VAR:
+                if len(halide.func_varlist(func)) < 2:
+                    return None                         # Invalid since cudaChunk(CUDA_CHUNK_VAR, vars[0], vars[1]) will fail
+            #    return cls(allV[j], allV[j], func=func)
             i = random.randrange(-1, j+1)             # Store
-            assert i <= j
+            assert j >= i
             #fsplitstore = open('splitstore.txt', 'at')
             #print >>fsplitstore, 'split_store_compute chunk selecting %r %d %d %s %s' % (allV, i, j, allV[i], allV[j])
             #fsplitstore.close()
-            return cls(allV[j], allV[i] if i >= 0 else root_var)
+            return cls(allV[j], allV[i] if i >= 0 else root_var, func)
         else:
-            return cls(random.choice(allV))
+            return cls(random.choice(allV), func=func)
         #return [cls(x) for x in ]
         
     def check(self, L, partial_schedule=None, func=None, vars=None):
         if partial_schedule is not None:
-            cvars = chunk_vars(partial_schedule, func)
+            cvars = list(reversed(chunk_vars(partial_schedule, func)))          # In loop ordering
             if self.var not in cvars:
                 if CHECK_VERBOSE:
                     print ' * check fail 1, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
                 return False
             if SPLIT_STORE_COMPUTE:
+                if is_cuda() and CUDA_CHUNK_VAR in cvars:          # Cannot chunk anything that is CUDA variable on in
+                    if self.var in cvars[cvars.index(CUDA_CHUNK_VAR)+1:]:
+                        if CHECK_VERBOSE:
+                            print ' * check fail 4, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
+                        return False
                 if CHUNK_ROOT and self.storevar == root_var:
+                    pass
+                elif self.var == CUDA_CHUNK_VAR:
                     pass
                 else:
                     if self.storevar not in cvars:
                         if CHECK_VERBOSE:
                             print ' * check fail 2, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
                         return False
-                    i = cvars.index(self.var)
-                    j = cvars.index(self.storevar)
+                    j = cvars.index(self.var)           # Compute
+                    i = cvars.index(self.storevar)      # Store
                     #if CHECK_VERBOSE:
                     #    print ' * check: cvars=%r, i=%d, j=%d' % (cvars, i, j)
-                    if i > j:
+                    if j < i:           # If compute is outside store (meaning index is less) then raise error
                         if CHECK_VERBOSE:
                             print ' * check fail 3, chunk compute var=%s, store var=%s, i=%d, j=%d, wrong order, cvars=%r' % (self.var, self.storevar, i, j, cvars)
                         return False
         return check_duplicates(self.__class__, L, func)
 
     def __str__(self):
+        # Only switch to cudaChunk if compute variable is blockidx
+        if self.var == CUDA_CHUNK_VAR:
+            vars = halide.func_varlist(self.func)
+            if len(vars) >= 2:
+                return '.cudaChunk(%s,%s,%s,%s)' % (self.storevar,self.var,vars[0],vars[1])      # TODO: Make this work in general case...need to know elided dimensions
+            else:
+                raise ValueError
         if SPLIT_STORE_COMPUTE:
             return '.chunk(%s,%s)'%(self.storevar, self.var)
         else:
             return '.chunk(%s)'%self.var
 
     @staticmethod
-    def fromstring(avar=None, bvar=None):
+    def fromstring(avar=None, bvar=None, vars0=None, vars1=None, func=None):
         if SPLIT_STORE_COMPUTE:
             if bvar is None:
                 bvar = avar
-            return FragmentChunk(bvar, avar)
+            return FragmentChunk(bvar, avar, func=func)
         else:
             assert bvar is None
-            return FragmentChunk(avar)
+            return FragmentChunk(avar, func=func)
 
     def var_order(self, prev_order):
         raise ValueError('var_order called on FragmentChunk()')
@@ -282,7 +314,7 @@ class FragmentSplit(FragmentBlocksizeMixin,Fragment):
         assert self.reuse_outer
 
     @staticmethod
-    def fromstring(var=None, var_repeat=None, newvar=None, value=None):
+    def fromstring(var=None, var_repeat=None, newvar=None, value=None, func=None):
         return FragmentSplit(var, int(value) if value is not None else value, newvar)
 
     @staticmethod
@@ -305,8 +337,8 @@ class FragmentSplit(FragmentBlocksizeMixin,Fragment):
         except ValueError:
             raise BadScheduleError
         return prev_order[:i] + [self.var, self.newvar] + prev_order[i+1:]
-        
-class FragmentTile(FragmentBlocksizeMixin,Fragment):
+
+class FragmentTileBase(FragmentBlocksizeMixin,Fragment):
     def __init__(self, xvar=None, yvar=None, newvar=None, vars=None, xnewvar=None, ynewvar=None, xsize=None, ysize=None):
         self.xvar=xvar
         self.yvar=yvar
@@ -325,6 +357,7 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
             self.ysize = blocksize_random()
         #print 'randomize_const, tile, size=%d,%d' % (self.xsize, self.ysize)
 
+class FragmentTile(FragmentTileBase):
     def check(self, L, partial_schedule=None, func=None, vars=None):
         if vars is not None and (self.xvar not in vars or self.yvar not in vars):
             if CHECK_VERBOSE:
@@ -332,8 +365,11 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
             return False
         return check_duplicates(self.__class__, L, func)
 
+    def new_vars(self):
+        return [self.xnewvar, self.ynewvar]
+
     @staticmethod
-    def fromstring(xvar, yvar, xnewvar, ynewvar, xsize, ysize):
+    def fromstring(xvar, yvar, xnewvar, ynewvar, xsize, ysize, func=None):
         return FragmentTile(xvar=xvar, yvar=yvar, xsize=int(xsize), ysize=int(ysize), xnewvar=xnewvar, ynewvar=ynewvar)
 
     @staticmethod
@@ -349,9 +385,6 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         #    ans.append(cls(vars[i],vars[j],vars=vars))
         #return ans
 #        return [cls(x,y,vars=vars) for x in vars for y in vars if x != y]
-
-    def new_vars(self):
-        return [self.xnewvar, self.ynewvar]
     
     def __str__(self):
         return '.tile(%s,%s,%s,%s,%d,%d)'%(self.xvar,self.yvar,self.xnewvar,self.ynewvar,self.xsize,self.ysize)
@@ -372,6 +405,89 @@ class FragmentTile(FragmentBlocksizeMixin,Fragment):
         assert len(ans) == len(prev_order) + 2
         return ans
 
+class FragmentCudaTile(FragmentTileBase):
+    def __init__(self, xvar=None, yvar=None, xsize=None, ysize=None):
+        self.xvar=xvar
+        self.yvar=yvar
+        self.xsize = 0 if xsize is None else xsize
+        self.ysize = 0 if ysize is None else ysize
+        if self.xsize == 0 and self.ysize == 0:
+            self.randomize_const()
+
+    def new_vars(self):
+        return [CUDA_CHUNK_VAR]
+
+    def check(self, L, partial_schedule=None, func=None, vars=None):
+        if vars is not None and (self.xvar not in vars or self.yvar not in vars):
+            if CHECK_VERBOSE:
+                print ' * check fail cudaTile %s %s %r' % (self.xvar, self.yvar, vars)
+            return False
+        if not [isinstance(x, FragmentCudaTile) for x in L] == [0]*(len(L)-1)+[1]:
+            return False
+        # Only tile and unroll can be used on the variables within the CUDA special vars
+        yindex = vars.index(self.yvar)
+        remain_vars = set(vars[:yindex] + vars[yindex+2:])
+        allowed_vars = set(vars[:yindex])
+        #print 'allowed_vars', allowed_vars, 'remain_vars', remain_vars
+        #print 'L', L
+        for x in L:
+            if isinstance(x, (FragmentVectorize, FragmentChunk)):
+                #if x.var not in allowed_vars:
+                if CHECK_VERBOSE:
+                    print ' * check fail cudeTile FragmentVectorize %s %r' % (x.var, allowed_vars)
+                return False
+            chosen = []
+            if isinstance(x, FragmentParallel):
+                chosen.append(x.var)
+#            if isinstance(x, FragmentTile):    # unroll(), tile() allowed inside cuda vars
+#                chosen.extend([x.xvar, x.yvar])
+            for v in chosen:
+                if v == CUDA_CHUNK_VAR:
+                    if CHECK_VERBOSE:
+                        print ' * check fail cudaTile var fragment %s' % x.var
+                    return False
+                if v not in allowed_vars: #remain_vars:
+                    if CHECK_VERBOSE:
+                        print ' * check fail cudaTile var fragment %s not in remain vars' % x.var
+                    return False
+        return check_duplicates(self.__class__, L, func)
+
+    @staticmethod
+    def fromstring(xvar, yvar, xsize, ysize, func=None):
+        return FragmentCudaTile(xvar=xvar, yvar=yvar, xsize=int(xsize), ysize=int(ysize))
+
+    @staticmethod
+    def random_fragment(root_func, func, cls, vars, extra_caller_vars, partial_schedule):
+        if len(vars)-1 <= 0:
+            return None
+        i = random.randrange(len(vars)-1)
+        return cls(vars[i+1],vars[i])
+    
+    def __str__(self):
+        return '.cudaTile(%s,%s,%d,%d)'%(self.xvar,self.yvar,self.xsize,self.ysize)
+
+    def var_order(self, prev_order):      # if f(x y c) after tile(x,y,xi,yi) the loop ordering is for c: for y: for x: for yi: for xi   [c y x yi xi]
+                                          # previously the loop ordering was  for c: for y: for x     [c y x]
+        #print 'prev_order', prev_order
+        #print self.xvar, self.yvar
+        try:
+            i = prev_order.index(self.yvar)
+        except ValueError:
+            raise BadScheduleError
+        if i+1 >= len(prev_order):
+            raise BadScheduleError((i, self.xvar, prev_order))
+        if self.xvar != prev_order[i+1]:
+            raise BadScheduleError()
+        ans = prev_order[:i] + [CUDA_CHUNK_VAR] + prev_order[i+2:]      # We are the last fragment, and var_order() upstream is only used for chunking
+        assert len(ans) == len(prev_order) - 1
+        return ans
+
+def reorder_and_cudatile(L):
+    if len(L) < 2:
+        return False
+    return ([isinstance(x, FragmentReorder) for x in L] == [0]*(len(L)-2)+[1,0] and
+            [isinstance(x, FragmentCudaTile) for x in L] == [0]*(len(L)-2)+[0,1])
+
 class FragmentReorder(Fragment):
     # Actually calls Func.reorder()
     def __init__(self, vars=None, idx=None, perm=None):
@@ -384,7 +500,7 @@ class FragmentReorder(Fragment):
         #self.pairwise_swaps = permutation.pairwise_swaps(vars, self.permutation)
 
     @staticmethod
-    def fromstring(*L):
+    def fromstring(*L, **kw):
         return FragmentReorder(perm=L)
         #return FragmentReorder(xvar=xvar, yvar=yvar, xsize=int(xsize), ysize=int(ysize), xnewvar=xnewvar, ynewvar=ynewvar)
 
@@ -407,7 +523,12 @@ class FragmentReorder(Fragment):
                     return False
         if not default_check(self.__class__, L, func):
             return False
-        return [isinstance(x, FragmentReorder) for x in L] == [0]*(len(L)-1)+[1]
+        if [isinstance(x, FragmentReorder) for x in L] == [0]*(len(L)-1)+[1]:
+            return True
+        if is_cuda():
+            if reorder_and_cudatile(L):
+                return True
+        return False
     
     def __str__(self):
         #ans = ''
@@ -444,8 +565,10 @@ class FragmentReorder(Fragment):
         return order
 
 
+def get_fragment_classes():
+    return ([FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentReorder] +
+            ([FragmentCudaTile] if is_cuda() else []))
 
-fragment_classes = [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentChunk, FragmentSplit, FragmentTile, FragmentReorder]
 fragment_map = {'root': FragmentRoot,
                 'vectorize': FragmentVectorize,
                 'parallel': FragmentParallel,
@@ -454,9 +577,11 @@ fragment_map = {'root': FragmentRoot,
                 'split': FragmentSplit,
                 'tile': FragmentTile,
                 'reorder': FragmentReorder,
-                'update': FragmentUpdate}
+                'update': FragmentUpdate,
+                'cudaTile': FragmentCudaTile,
+                'cudaChunk': FragmentChunk}
 
-def fragment_fromstring(s):
+def fragment_fromstring(s, func):
     if '(' not in s:
         raise ValueError(s)
     paren1 = s.index('(')
@@ -466,7 +591,7 @@ def fragment_fromstring(s):
     rest = [x.strip() for x in s[paren1+1:paren2].split(',')]
     #print cls, rest
     #print 'fragment_fromstring |%s|' % s, cls, rest
-    return cls.fromstring(*rest)
+    return cls.fromstring(*rest, func=func)
     
 class MutateFailed(Exception):
     "Mutation can fail due to e.g. trying to add a fragment to f.chunk(c), which is a singleton schedule macro."
@@ -513,7 +638,7 @@ class FragmentList(list):
         s = s[dot+1:]
         ans = []
         for part in s.split('.'):
-            ans.append(fragment_fromstring(part))
+            ans.append(fragment_fromstring(part, func))
         return FragmentList(func, ans)
         
 
@@ -543,13 +668,16 @@ class FragmentList(list):
         #if len(self) == 0:
         #    if self.func.isReduction():
         #        return False
+        var_order = list(reversed(vars))
         try:
-            for x in self:
-                if not x.check(self, partial_schedule, self.func, vars):
+            for (i, x) in enumerate(self):
+                if not x.check(self, partial_schedule, self.func, var_order):
                     if CHECK_VERBOSE:
                         print ' * check failed on func %s, returning' % self.func.name()
                     return False
-                vars = sorted(set(vars + x.new_vars()))
+                if i > 0:
+                    var_order = x.var_order(var_order)
+                #vars = sorted(set(vars + x.new_vars()))
         except BadScheduleError:
             return False
         return True
@@ -598,7 +726,7 @@ class FragmentList(list):
 
 def valid_random_fragment(root_func, func, all_vars, extra_caller_vars, partial_schedule):
     while True:
-        cls = random.choice(fragment_classes)
+        cls = random.choice(get_fragment_classes())
         fragment = cls.random_fragment(root_func, func, cls, all_vars, extra_caller_vars, partial_schedule)
         if fragment is not None: #len(fragments):
             return fragment
@@ -636,7 +764,7 @@ def schedules_depth(root_func, func, vars, depth=0, random=False, extra_caller_v
             #for fragment in L:
             #    all_vars.extend(fragment.new_vars())
             all_vars = FragmentList(func, L).var_order()
-            for cls in randomized(fragment_classes):
+            for cls in randomized(get_fragment_classes()):
                 #print 'all_vars', all_vars
                 fragment = cls.random_fragment(root_func, func, cls, all_vars, extra_caller_vars, partial_schedule)
                 #for fragment in randomized(cls.fragments(root_func, func, cls, all_vars, extra_caller_vars)):
@@ -674,6 +802,28 @@ def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, ra
 
 class BadScheduleError(Exception):
     pass
+
+def cuda_global_check(schedule):
+    # All funcs chunk() or inline() (recursively), called by a cudaTile() func cannot be vectorize or parallel
+    d_cuda = {}
+    ok = [True]
+    def callback(f, fparent):
+        f_name = f.name()
+        L = schedule.d.get(f_name, [])
+        inline_chunk = (len(L) == 0 or isinstance(L[0], FragmentChunk))
+        cuda = False
+        if len(L) >= 1 and isinstance(L[-1], FragmentCudaTile):
+            cuda = True
+        if inline_chunk:
+            if d_cuda.get(fparent.name(), False):
+                cuda = True
+                if sum([isinstance(x,(FragmentVectorize,FragmentParallel)) for x in L]) >= 1:
+                    ok[0] = False
+        d_cuda[f_name] = cuda
+        L = schedule.d[f_name]
+
+    halide.visit_funcs(schedule.root_func, callback)
+    return ok[0]
     
 class Schedule:
     """
@@ -722,6 +872,10 @@ class Schedule:
                     print ' * check failed, root func %s is not root' % root_func_name
                 return False
         else:
+            return False
+        if is_cuda() and not cuda_global_check(self):
+            if CHECK_VERBOSE:
+                print ' * cuda global check failed'
             return False
         #print 'check', self
         for x in self.d.values():
@@ -1020,7 +1174,7 @@ def test_toposort():
     assert toposort(callers(f)) == ['c_valid2_f']
     assert toposort(callers(g)) == ['c_valid2_g', 'c_valid2_f']
     
-    print 'valid_schedules.toposort:        OK'
+    print 'valid_schedules.toposort:            OK'
 
 def intersect_lists(L):
     "Take intersection while also preserving order (if possible)."
@@ -1039,7 +1193,7 @@ def test_intersect_lists():
     assert intersect_lists([['c', 'y', '_c1', '_c3', '_c2', '_c0', 'x'], ['c', 'z', 'y', 'x']]) == ['c', 'y', 'x']
     assert intersect_lists([[1,2,3,4,5],[1,3,5]]) == [1, 3, 5]
     assert intersect_lists([[1,3,5],[1,2,3,4,5]]) == [1, 3, 5]
-    print 'valid_schedules.intersect_lists: OK'
+    print 'valid_schedules.intersect_lists:     OK'
 
 def chunk_vars(schedule, func, remove_inline=False, verbose=CHUNK_VARS_VERBOSE):
     d_stackL = {}      # Map f name to list of stacks (loop ordering) of variable names
@@ -1181,7 +1335,7 @@ def test_callers():
     d = dict((filtname(x), sorted([filtname(z) for z in y])) for (x, y) in callers(h2).items())
     assert d == {'h': ['h2'], 'g': ['h', 'h2'], 'f': ['g', 'h2'], 'h2': []}
 
-    print 'valid_schedules.callers:         OK'
+    print 'valid_schedules.callers:             OK'
     
 def test_chunk_vars_subproc(test_index=0):
     f = halide.Func('valid_f')
@@ -1272,7 +1426,7 @@ def test_chunk_vars_subproc(test_index=0):
     #schedule = Schedule.fromstring(out_func, 'output.root()\n\nsum_clamped.root().vectorize(y,8).tile(x,y,_c0,_c1,4,4).tile(_c0,_c1,_c2,_c3,32,32)\nsumx.chunk(_c2).vectorize(x,4).tile(x,y,_c0,_c1,16,16).unroll(y,4)\nweight.chunk(x).tile(x,y,_c0,_c1,64,64).tile(x,y,_c2,_c3,4,4)')
     #assert not schedule.check(schedule)
 
-    print 'valid_schedules.chunk_vars.%d:    OK'%test_index
+    print 'valid_schedules.chunk_vars.%d:        OK'%test_index
 
 def test_valid_schedules():
     args = sys.argv[1:]
@@ -1280,7 +1434,7 @@ def test_valid_schedules():
         test_intersect_lists()
         test_callers()
         test_toposort()
-        for i in range(2):
+        for i in range(3):
             os.system('python ' + os.path.abspath(__file__) + ' test_chunk_vars %d'%i)
     elif args[0] == 'test_chunk_vars' and len(args) == 2:
         test_chunk_vars_subproc(int(args[1]))
