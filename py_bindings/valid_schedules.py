@@ -184,6 +184,9 @@ class FragmentParallel(FragmentVarMixin,Fragment):
         return '.parallel(%s)'%(self.var)
 
 class FragmentUnroll(FragmentBlocksizeMixin,Fragment):
+    def randomize_const(self):
+        self.value = blocksize_random([2,3,4])
+
     def __str__(self):
         return '.unroll(%s,%d)'%(self.var,self.value)
 
@@ -286,6 +289,24 @@ class FragmentUpdate(Fragment):
 
     def var_order(self, prev_order):
         raise ValueError('var_order called on FragmentUpdate()')
+
+# FragmentBound is just a stub class for now -- not used in tuning, just for comparing with human reference schedules
+class FragmentBound(FragmentBlocksizeMixin):
+    def __init__(self, var=None, lower=None, upper=None):
+#        print '__init__', self.__class__
+        self.var = var
+        self.lower = lower
+        self.upper = upper
+
+    def __str__(self):
+        return '.bound(%s,%d,%d)'%(self.var,self.lower,self.upper)
+
+    def var_order(self, prev_order):
+        return list(prev_order)
+
+    @staticmethod
+    def fromstring(var, lower, upper, func=None):
+        return FragmentBound(var, int(lower), int(upper))
 
 for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentUpdate]:
     _cls.fromstring = make_fromstring(_cls)
@@ -579,7 +600,8 @@ fragment_map = {'root': FragmentRoot,
                 'reorder': FragmentReorder,
                 'update': FragmentUpdate,
                 'cudaTile': FragmentCudaTile,
-                'cudaChunk': FragmentChunk}
+                'cudaChunk': FragmentChunk,
+                'bound': FragmentBound}
 
 def fragment_fromstring(s, func):
     if '(' not in s:
