@@ -1148,7 +1148,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         
     log_sched(p, None, None, no_output=True)    # Clear log file
 
-    random.seed(0)
+    #random.seed(0)
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     if 'tune_in_images' in scope:
         p.in_images = scope['tune_in_images']
@@ -1326,6 +1326,7 @@ def autotune_child(args, timeout=None):
     mattr = ''
     mcpu  = ''
     ldflags = ''
+    max_run_memory_kb = 'unlimited'
     
     if target == 'arm':
         march = 'arm'
@@ -1333,6 +1334,7 @@ def autotune_child(args, timeout=None):
         mcpu  = 'cortex-a9'
         remote_host = 'omap4.csail.mit.edu'
         remote_path = '/data/scratch/omap4/tune'
+	max_run_memory_kb = '500000' # 500mb on omap4 for safety
 
     if target == 'ptx':
         ldflags = '-lcuda'
@@ -1405,7 +1407,7 @@ def autotune_child(args, timeout=None):
             save_filename = os.path.basename(save_filename)
             run_command = [
                 'rsync -a %(in_image_file)s %(ref_output_file)s %(remote_host)s:%(remote_path)s/',
-                'ssh %(remote_host)s \'cd %(remote_path)s; killall -rq \'f*_*.exe\'; HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d ' + (save_filename and '"%(save_filename)s"' or '') + '\''
+                'ssh %(remote_host)s \'cd %(remote_path)s; killall -rq \'f*_*.exe\'; ulimit -Sv %(max_run_memory_kb)s; HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d ' + (save_filename and '"%(save_filename)s"' or '') + '\''
             ]
             if save_filename_path:
                 run_command.append('rsync -a %(remote_host)s:%(remote_path)s/%(save_filename)s %(save_filename_path)s')
