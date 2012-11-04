@@ -40,7 +40,7 @@ module type Architecture = sig
   val pointer_size : int
 end
 
-
+  
 module type Codegen = sig
   type arch_state
   type context = arch_state cg_context
@@ -93,9 +93,9 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     arch_opts = arch_opts;
   }
   and cg_expr e = 
-    dbg 2 "begin cg_expr %s\n%!" (string_of_expr e);
+    if verbosity > 2 then dbg "begin cg_expr %s\n%!" (string_of_expr e);
     let result = Arch.cg_expr cg_context e in
-    dbg 2 "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));
+    if verbosity > 2 then dbg "end cg_expr %s -> %s\n%!" (string_of_expr e) (string_of_lltype (type_of result));
     result
   and cg_expr_inner = function
     (* constants *)
@@ -161,11 +161,11 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
         let scalar_fn = 
           match scalar_fn with
             | None -> 
-                dbg 2 "Did not find %s in initial module. Assuming it's extern.\n%!" scalar_name;
+                if verbosity > 2 then dbg "Did not find %s in initial module. Assuming it's extern.\n%!" scalar_name;
                 let arg_types = List.map (fun arg -> type_of_val_type (element_val_type (val_type_of_expr arg))) args in
                 declare_function scalar_name (function_type (type_of_val_type (element_val_type t)) (Array.of_list arg_types)) m
             | Some fn -> 
-              dbg 2 "Found %s in initial module\n%!" scalar_name;
+              if verbosity > 2 then dbg "Found %s in initial module\n%!" scalar_name;
               fn
         in
 
@@ -176,7 +176,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
           (* Vector call *)
           match vector_fn with 
             | None ->         
-                dbg 2 "Did not find %s in initial module. Calling scalar version.\n%!" vector_name;
+                if verbosity > 2 then dbg "Did not find %s in initial module. Calling scalar version.\n%!" vector_name;
                 (* Couldn't find a vector version. Scalarize. *)
                 let make_call i = 
                   let extract_elt a =
@@ -197,13 +197,13 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
                 let calls = List.map make_call (0 -- elts) in
                 assemble_result (calls, 0)              
             | Some fn ->
-                dbg 2 "Found %s in initial module\n%!" vector_name;
-                dbg 2 "Type is: %s\n%!" (string_of_lltype (type_of fn));
+                if verbosity > 2 then dbg "Found %s in initial module\n%!" vector_name;
+                if verbosity > 2 then dbg "Type is: %s\n%!" (string_of_lltype (type_of fn));
                 let arg_types = Array.map type_of llargs in
-                dbg 2 "Type should be: %s\n%!" (string_of_lltype (function_type (type_of_val_type t) arg_types));
-                dbg 2 "Passing args of type: ";
-                Array.iter (fun a -> dbg 2 "%s " (string_of_lltype (type_of a))) llargs;
-                dbg 2 "\n%!";           
+                if verbosity > 2 then dbg "Type should be: %s\n%!" (string_of_lltype (function_type (type_of_val_type t) arg_types));
+                if verbosity > 2 then dbg "Passing args of type: ";
+                Array.iter (fun a -> if verbosity > 2 then dbg "%s " (string_of_lltype (type_of a))) llargs;
+                if verbosity > 2 then dbg "\n%!";           
                 (* Found a vector version *)
                 build_call fn llargs ("extern_" ^ vector_name) b              
         end
@@ -221,7 +221,6 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     | MakeVector (l) -> cg_makevector(l, val_type_of_expr (MakeVector l), 0)
 
     | Broadcast (e, n) -> 
-        let elem_type = val_type_of_expr e in
         let expr      = cg_expr e in
         let blank     = const_null (vector_type (type_of expr) n) in
         let result    = build_insertelement blank expr (const_int int_imm_t 0) "" b in
@@ -276,7 +275,6 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
         let rec is_power_of_two = function
           | 1 -> true
           | x -> x = ((x/2)*2) && (is_power_of_two (x/2))
-          | _ -> false
         in begin match r with
           | Broadcast (IntImm k, _)
           | IntImm k when is_power_of_two k -> 
@@ -368,7 +366,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
 
       (* TODO: remaining casts *)
       | f,t ->
-        Printf.printf
+        dbg
           "Unimplemented cast: %s -> %s (of %s)\n%!"
           (string_of_val_type f) (string_of_val_type t) (string_of_expr e);
         raise UnimplementedInstruction
@@ -457,7 +455,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     StringIntSet.iter (fun (name, size) ->      
       let current_val = sym_get name in
       let offset = StringMap.find name offset_map in
-      dbg 2 "Storing %s of size %d at offset %d\n%!" name size offset;
+      if verbosity > 2 then dbg "Storing %s of size %d at offset %d\n%!" name size offset;
       let addr = build_bitcast closure (pointer_type (type_of current_val)) "" b in      
       let addr = build_gep addr [| const_int int_imm_t (offset/size) |] "" b in
       ignore (build_store current_val addr b);
@@ -485,7 +483,7 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     ) syms;
 
     (* Make the var name refer to the first argument *)
-    dbg 2 "%s = %s\n%!" var_name "param body_fn 0";
+    if verbosity > 2 then dbg "%s = %s\n%!" var_name "param body_fn 0";
     set_value_name var_name (param body_fn 0);
     Hashtbl.add sub_sym_table var_name (param body_fn 0);
 
@@ -506,9 +504,9 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     const_int int_imm_t 0
 
   and cg_stmt stmt = 
-    dbg 2 "begin cg_stmt %s\n%!" (string_of_stmt stmt);
+    if verbosity > 2 then dbg "begin cg_stmt %s\n%!" (string_of_stmt stmt);
     let result = Arch.cg_stmt cg_context stmt in
-    dbg 2 "end cg_stmt %s\n%!" (string_of_stmt stmt);
+    if verbosity > 2 then dbg "end cg_stmt %s\n%!" (string_of_stmt stmt);
     result
   and cg_stmt_inner = function
     | Store (e, buf, idx) -> cg_store e buf idx
@@ -709,10 +707,6 @@ let rec make_cg_context c m b sym_table arch_state arch_opts =
     set_linkage Llvm.Linkage.Private global_fmt;
     let global_fmt = build_pointercast global_fmt (pointer_type (i8_type c)) "" b in
 
-    (*Printf.printf "cg_debug: %s %s %s\n" (string_of_expr e) (prefix^fmt) (String.concat ", " (List.map string_of_expr args));
-
-    Printf.printf "%s\n%!" (string_of_lltype (type_of global_fmt)); *)
-
     let ll_printf = declare_function "hlprintf" 
       (var_arg_function_type (i32_type c) [|pointer_type (i8_type c)|]) m in
     build_call ll_printf (Array.of_list (global_fmt::ll_args)) "" b
@@ -813,11 +807,11 @@ let codegen_c_wrapper arch_opts c m f =
     match classify_type t with
       | TypeKind.Pointer ->
           let typename = match struct_name (element_type t) with Some nm -> nm | None -> "<unnamed>" in
-          dbg 2 "Wrapping buffer arg type %s\n%!" typename;
+          if verbosity > 2 then dbg "Wrapping buffer arg type %s\n%!" typename;
           assert (typename = "struct.buffer_t");
           build_pointercast arg_ptr t "" b
       | _ ->
-          dbg 2 "Wrapping non-buffer arg type %s\n%!" (string_of_lltype t);
+          if verbosity > 2 then dbg "Wrapping non-buffer arg type %s\n%!" (string_of_lltype t);
           build_load (build_pointercast arg_ptr (pointer_type t) "" b) "" b
   in
 

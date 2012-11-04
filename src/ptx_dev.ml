@@ -70,6 +70,7 @@ let rec cg_expr con = function
   | e -> con.cg_expr e
 
 let rec cg_stmt con stmt = match stmt with
+    (*
   | Store (v, st_buf, st_idx) -> begin
       let ty = val_type_of_expr v in
       match v with
@@ -78,15 +79,15 @@ let rec cg_stmt con stmt = match stmt with
         | Bop (Add, x, Load(_, ld_buf, ld_idx))
           when ld_buf = st_buf && ld_idx = st_idx ->
             (* atomic add reduce *)
-            dbg 2 "Found atomic add: %s\n%!" (string_of_stmt stmt);
+            if verbosity > 2 then dbg "Found atomic add: %s\n%!" (string_of_stmt stmt);
             (* let mr = con.cg_memref ty st_buf (Cast ((Int 64), st_idx)) in *)
             let mr = con.cg_memref ty st_buf st_idx in
             (* llvm.ptx.red.[space].[op].[type] e.g. global.add.s32 *)
             let space = match address_space (type_of mr) with
               | 0 -> "global"
               | 4 -> "shared"
-              | x -> failwith (Printf.sprintf "Bad address space: %d" x)
-            in
+              | x -> failwith (Printf.sprintf "Bad address space: %d" x) 
+            in 
             let op = "add" in
             let opty, mr = match ty with
               | Int 32 ->
@@ -112,6 +113,7 @@ let rec cg_stmt con stmt = match stmt with
             (* mr *)
         | _ -> con.cg_stmt stmt
     end
+    *)
 
   | Assert _ | Print _ ->
       Printf.printf "Dropping Print/Assert stmt inside device kernel\n%!";

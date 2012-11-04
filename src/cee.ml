@@ -133,6 +133,7 @@ let rec sizeof = function
                           (fun s (n,t) -> max s (sizeof t)) 0 ms
   | Fun(_)            -> 4                        
   | TyName _          -> failwith "sizeof: named type"
+  | Bool              -> failwith "sizeof: Bool not implemented"
 
 let rec strip = function
   | Struct(n,Some ms) ->    Struct(n, None)
