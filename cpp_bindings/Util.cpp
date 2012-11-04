@@ -1,6 +1,7 @@
 #include "Util.h"
 #include <sstream>
 #include <stdio.h>
+#include <stdarg.h>
 
 namespace Halide {
     ML_FUNC0(makeList); 
@@ -36,4 +37,11 @@ namespace Halide {
         return result;
     }
 
+    void warn(const char* msg, ...) {
+        va_list args;
+        va_start(args, msg);
+        std::string fmt = "WARNING: " + std::string(msg);
+        vprintf(fmt.c_str(), args);
+        va_end(args);
+    }
 }

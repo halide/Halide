@@ -98,6 +98,7 @@ import psutil
 import operator
 import glob
 import re
+import json
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -167,6 +168,7 @@ class AutotuneParams:
       -max_nontrivial          n When generating random schedules, max number of nontrivial (non-root/inline) funcs
       -seed_reasonable         b Whether to seed with reasonable schedules (0 or 1)
       -prob_reasonable         p Probability to sample reasonable schedule when sampling random schedule
+      -cuda                    b Whether to use Cuda schedules (0 or 1, default 0)
     """
     
     #pop_elitism_pct = 0.2
@@ -174,6 +176,8 @@ class AutotuneParams:
     #pop_mutated_pct = 0.3
     # Population sampling frequencies
     prob_pop = {'elitism': 0.2, 'crossover': 0.3, 'mutated': 0.3, 'random': 0.2}
+    
+    cuda = False
     
     tournament_size = 5 #3
     mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
@@ -233,8 +237,11 @@ class AutotuneParams:
     summary_file = 'summary.txt'
     plot_file = 'plot.png'
     unbiased_file = 'unbiased.txt'  # For unbiased timing comparisons (summary is biased)
+    params_file = 'params.txt'      # Serializes AutotuneParams to this file
     
-    def __init__(self, argd={}):
+    def __init__(self, argd={}, **kw):
+        for (key, value) in kw.items():
+            setattr(self, key, value)
         for (key, value) in argd.items():
             if not hasattr(self, key):
                 raise ValueError('unknown command-line switch %s'%key)
@@ -255,7 +262,30 @@ class AutotuneParams:
             if 'HL_NUMTHREADS' in os.environ:
                 self.hl_threads = int(os.environ['HL_NUMTHREADS'])
             self.hl_threads = multiprocessing.cpu_count() / 2
+        self.set_globals()
+    
+    def set_globals(self):
+        set_cuda(self.cuda)
 
+    @staticmethod
+    def loads(s):
+        def deunicode(x):
+            if isinstance(x, unicode):
+                return str(x)
+            return x
+        d = json.loads(s)
+        d = dict([(deunicode(key), deunicode(value)) for (key, value) in d.items()])
+        return AutotuneParams(**d)
+    
+    def dumps(self):
+        d = {}
+        for name in dir(self):
+            value = getattr(self, name)
+            if isinstance(value, (int, float, str, bool, type(None), list, dict)):
+                if not name.startswith('_'):
+                    d[name] = value
+        return json.dumps(d, indent=4)
+            
     def dict_prob_mutate(self):
         start = 'prob_mutate_'
         return dict([(key[len(start):], getattr(self, key)) for key in dir(self) if key.startswith(start)])
@@ -312,11 +342,11 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
             chunk_var = chunk_vars(schedule, f)[0]
             varlist = halide.func_varlist(f)
             if len(varlist) == 0:
-                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var)])
+                ans[f.name()] = FragmentList.fromstring(f, '.chunk(%s)'%chunk_var) #FragmentList(f, [FragmentChunk(chunk_var)])
             else:
                 x = varlist[0]
 #                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var), FragmentVectorize(x, n)])
-                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var)])
+                ans[f.name()] = FragmentList.fromstring(f, '.chunk(%s)'%chunk_var) #FragmentList(f, [FragmentChunk(chunk_var)])
         else:
             varlist = halide.func_varlist(f)
             if len(varlist) == 0:
@@ -845,7 +875,7 @@ def kill_recursive(pid, timeout=1.0):
             print 'Could not kill pid %d and children' % pid
             break
     
-def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False, memory_limit=None):
+def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False, memory_limit=None, remote_host=None):
     """
     Run shell command in list form, e.g. L=['python', 'autotune.py'], using subprocess.
     
@@ -876,6 +906,14 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
     status = wait_timeout(proc, timeout, T0, memory_limit)
     if status in RUN_LIMIT_ERRCODES:
         kill_recursive(proc.pid)
+        if remote_host:
+            print 'run timeout - sending remote killall over ssh'
+            remote_kill_cmd = 'ssh %(remote_host)s killall -rq \'f*_*.exe\'' % locals()
+            try:
+                subprocess.check_output(remote_kill_cmd, shell=True)
+            except:
+                print '...already dead?'
+                pass
         return status, ''
         
     fout.seek(0)
@@ -930,11 +968,16 @@ def default_tester(input, out_func, p, filter_func_name, allow_cache=True):
             save_filename = ''
             if do_save_output(i):
                 save_filename = schedule_ref_output(p, schedule, j)
-                
-            sh_args = ['HL_NUMTHREADS=%d'%hl_threads, 'python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_images[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels), str(hl_threads), str(p.runner_file)]
+            
+            params_file = os.path.abspath(os.path.join(p.tune_dir, p.params_file))
+            if not os.path.exists(params_file):
+                with open(params_file, 'wt') as f_param:
+                    f_param.write(p.dumps())
+                    
+            sh_args = ['HL_NUMTHREADS=%d'%hl_threads, 'python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_images[j]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels), str(hl_threads), str(p.runner_file), params_file]
             sh_line = (' '.join(sh_args[:5]) + ' "' + repr(sh_args[5])[1:-1] + '" ' + ' '.join(sh_args[6:9]) + ' '  +
                            ('"' + sh_args[9] + '"') + ' ' +
-                           ('"' + sh_args[10] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[11:-1]) + (' "' + sh_args[-1] + '"') + '\n')
+                           ('"' + sh_args[10] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[11:15]) + (' "' + sh_args[15] + '"') + (' "' + sh_args[16] + '"') + '\n')
             sh_name = binary_file + '_' + mode_str + '.sh'
             with open(sh_name, 'wt') as sh_f:
                 os.chmod(sh_name, 0755)
@@ -1105,7 +1148,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         
     log_sched(p, None, None, no_output=True)    # Clear log file
 
-    random.seed(0)
+    #random.seed(0)
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     if 'tune_in_images' in scope:
         p.in_images = scope['tune_in_images']
@@ -1240,9 +1283,14 @@ def autotune_child(args, timeout=None):
     if len(rest) == 11:
         p = AutotuneParams()
         rest.append(p.runner_file)
-    if len(rest) != 12:
-        raise ValueError('expected 12 args after autotune_*_child')
-    (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads, runner_file) = rest
+    elif len(rest) == 12:
+        p = AutotuneParams()
+        (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads, runner_file) = rest
+    elif len(rest) == 13:
+        (filter_func_name, schedule_str, in_image, trials, binary_file, save_filename, ref_output, out_w, out_h, out_channels, hl_threads, runner_file, params_file) = rest
+        p = AutotuneParams.loads(open(params_file, 'rt').read())
+    else:
+        raise ValueError('expected 13 args after autotune_*_child')
 
     trials = int(trials)
     #save_output = int(save_output)
@@ -1264,6 +1312,39 @@ def autotune_child(args, timeout=None):
     def check_output(s):
         print s
         return subprocess.check_output(s,shell=True)
+
+    ###
+    ### auto-initialize remote/cross compile info from HL_TARGET for now
+    ### TODO: hoist this initialization into 
+    ###
+    target = os.getenv('HL_TARGET')
+    if not target: target = 'x86_64'
+
+    remote_host = None
+    remote_path = '~'
+    march = ''
+    mattr = ''
+    mcpu  = ''
+    ldflags = ''
+    max_run_memory_kb = 'unlimited'
+    
+    if target == 'arm':
+        march = 'arm'
+        mattr = '+neon'
+        mcpu  = 'cortex-a9'
+        remote_host = 'omap4.csail.mit.edu'
+        remote_path = '/data/scratch/omap4/tune'
+	max_run_memory_kb = '500000' # 500mb on omap4 for safety
+
+    if target == 'ptx':
+        ldflags = '-lcuda'
+
+    march = march and '-march='+march or ''
+    mattr = mattr and '-mattr='+mattr or ''
+    mcpu  = mcpu  and '-mcpu=' +mcpu or ''
+    ###
+    ### end auto-initialize remote/cross compile
+    ###
 
     # binary_file: full path
     orig = os.getcwd()
@@ -1291,12 +1372,18 @@ def autotune_child(args, timeout=None):
         
         # assemble bitcode
         check_output(
-            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 -filetype=obj -o %(func_name)s.o' % locals()
+            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 %(march)s %(mattr)s %(mcpu)s -filetype=obj -o %(func_name)s.o' % locals()
         )
 
         #save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
         #shutil.copyfile(default_runner, working)
-        compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(halide_include)s -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread -L%(link_dir)s -lHalide %(png_flags)s'
+        if not remote_host:
+            compile_command = 'g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. -I%(support_include)s %(default_runner)s %(func_name)s.o -o %(func_name)s.exe -lpthread %(png_flags)s %(ldflags)s'
+        else:
+            compile_command = ['rsync -a %(support_include)s/static_image.h %(support_include)s/image_io.h %(support_include)s/image_equal.h %(default_runner)s %(func_name)s.o %(func_name)s.h %(remote_host)s:%(remote_path)s/',
+                               'ssh %(remote_host)s \'cd %(remote_path)s; g++ -DTEST_FUNC=%(func_name)s -DTEST_IN_T=%(in_t)s -DTEST_OUT_T=%(out_t)s -I. default_runner.cpp "%(func_name)s.o" -o "%(func_name)s.exe" -lpthread -lpng %(ldflags)s\'']
+            compile_command = ';'.join(compile_command)
+
         compile_command = compile_command % locals()
         print compile_command
         try:
@@ -1309,7 +1396,23 @@ def autotune_child(args, timeout=None):
         #return
 
     if args[0] in ['autotune_run_child', 'autotune_compile_run_child']:
-        run_command = 'HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d "%(save_filename)s"'
+        if not remote_host:
+            run_command = 'HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d "%(save_filename)s"'
+        else:
+            in_image_file = in_image
+            in_image = os.path.basename(in_image)
+            ref_output_file = ref_output
+            ref_output = os.path.basename(ref_output)
+            save_filename_path = save_filename
+            save_filename = os.path.basename(save_filename)
+            run_command = [
+                'rsync -a %(in_image_file)s %(ref_output_file)s %(remote_host)s:%(remote_path)s/',
+                'ssh %(remote_host)s \'cd %(remote_path)s; killall -rq \'f*_*.exe\'; ulimit -Sv %(max_run_memory_kb)s; HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d ' + (save_filename and '"%(save_filename)s"' or '') + '\''
+            ]
+            if save_filename_path:
+                run_command.append('rsync -a %(remote_host)s:%(remote_path)s/%(save_filename)s %(save_filename_path)s')
+            run_command = '; '.join(run_command)
+        
         run_command = run_command % locals()
         print 'Testing: %s' % run_command
 
@@ -1320,7 +1423,7 @@ def autotune_child(args, timeout=None):
                 print out.strip()
                 return
             else:
-                return run_limit(run_command, timeout, last_line=True, shell=True)
+                return run_limit(run_command, timeout, last_line=True, shell=True, remote_host=remote_host)
         finally:
             os.chdir(orig)
     #else:

@@ -7,7 +7,8 @@ open Cg_llvm_util
 open Ptx_dev
 open Analysis
 
-let dbgprint = true
+(* TODO: replace dbgprint references with dbg N calls *)
+let dbgprint = false
 let dump_mod = dbgprint && true
 
 (* Function calling conventions for PTX, from <llvm/CallingConv.h>
@@ -208,9 +209,9 @@ let cg_dev_kernel con stmt =
   let n_blkid_y = extract_bounds "blockidy" stmt in
   let n_blkid_z = extract_bounds "blockidz" stmt in
 
-  Printf.printf "\ndev kernel root:\n%s\n\n%!" (string_of_stmt stmt);
+  if verbosity > 2 then dbg "\ndev kernel root:\n%s\n\n%!" (string_of_stmt stmt);
 
-  Printf.printf " PTX bounds: (%sx%sx%s) threads, (%sx%sx%s) blocks\n%!"
+  if verbosity > 2 then dbg " PTX bounds: (%sx%sx%s) threads, (%sx%sx%s) blocks\n%!"
     (string_of_expr n_tid_x) (string_of_expr n_tid_y) (string_of_expr n_tid_z)
     (string_of_expr n_blkid_x) (string_of_expr n_blkid_y) (string_of_expr n_blkid_z);
 
@@ -301,7 +302,7 @@ let cg_dev_kernel con stmt =
   
   if dbgprint then dev_con.dump_syms ();
   
-  Printf.eprintf "--- Starting PTX body codegen ---\n%!";
+  if verbosity > 2 then dbg "--- Starting PTX body codegen ---\n%!";
 
   (* TODO: codegen the main kernel *)
   ignore (Ptx_dev.cg_stmt dev_con stmt);
@@ -339,7 +340,7 @@ let cg_dev_kernel con stmt =
   let entry_name = value_name k in
   let entry_name_str = build_global_stringptr entry_name "__entry_name" con.b in
 
-  Printf.eprintf "Kernel %s reads:\n  %s\nwrites:\n  %s\n"
+  if verbosity > 2 then dbg "Kernel %s reads:\n  %s\nwrites:\n  %s\n"
     entry_name
     (String.concat ",\n  " closure_reads)
     (String.concat ",\n  " closure_writes);
@@ -388,8 +389,8 @@ let cg_dev_kernel con stmt =
   ] in
 
   let dev_run = dev_run con in
-  Printf.eprintf "Building call to dev_run (%s) with args:\n%!" (string_of_lltype (type_of dev_run));
-  List.iter (fun a -> Printf.eprintf "  %s\n%!" (string_of_lltype (type_of a))) launch_args;
+  if verbosity > 2 then dbg "Building call to dev_run (%s) with args:\n%!" (string_of_lltype (type_of dev_run));
+  List.iter (fun a -> if verbosity > 2 then dbg "  %s\n%!" (string_of_lltype (type_of a))) launch_args;
 
   ignore (build_call dev_run (Array.of_list launch_args) "" con.b);
 
@@ -408,7 +409,7 @@ let free (con:context) (name:string) host_cleanup ptr =
   host_cleanup (host_context con)
 
 let malloc con name count elem_size =
-  Printf.eprintf "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
+  if verbosity > 2 then dbg "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
   (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
   let (hostptr, host_cleanup) = X86.malloc (host_context con) name count elem_size in
   
@@ -564,7 +565,7 @@ let rec cg_entry c m codegen_entry make_cg_context e opts =
     (fun nm ->
       try
         if verbosity > 1 then dbg "Host reads %s\n%!" nm;
-        dump_syms param_syms;
+        if dbgprint then dump_syms param_syms;
         let buf = con.arch_state.buf_get nm in
         if verbosity > 1 then dbg "  copy_to_host at entrypoint\n%!";
         ignore (copy_to_host con buf);
