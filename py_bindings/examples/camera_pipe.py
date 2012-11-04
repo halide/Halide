@@ -326,7 +326,7 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
 
     # Special tuning variables interpreted by the autotuner
     tune_out_dims = OUT_DIMS
-    tune_in_images = [os.path.join(inputs_dir(), '../apps/camera_pipe/raw.png')]
+    tune_in_images = [os.path.join(inputs_dir(), '../apps/camera_pipe/raw_crop.png')]
 
     if schedule == 2:
         # Autotuned schedule
