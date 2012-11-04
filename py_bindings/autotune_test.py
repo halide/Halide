@@ -219,23 +219,20 @@ def test_schedules(verbose=False, test_random=False):
     s0 = s
     s0 = [x.replace('\n', '\\n') for x in s0]
     s = '\n'.join(s)
+    
+    def check(schedule):
+        return schedule.check(schedule)
+        
     if valid_schedules.SPLIT_STORE_COMPUTE:
         assert 'f.chunk(_c0,_c0)' in s
         
         assert 'f.chunk(x,y' in s, '\n'.join(x for x in s0 if 'chunk' in x)
         assert 'f.chunk(y,x' in s, '\n'.join(x for x in s0 if 'chunk' in x)
 
-        schedule = Schedule.fromstring(g, 'f.chunk(y,x)\ng.root()')
-        assert schedule.check(schedule)
-
-        schedule = Schedule.fromstring(g, 'f.chunk(x,y)\ng.root()')
-        assert not schedule.check(schedule)
-
-        schedule = Schedule.fromstring(g, 'f.chunk(x,y)\ng.root().reorder(y,x,c)')
-        assert schedule.check(schedule)
-
-        schedule = Schedule.fromstring(g, 'f.chunk(y,x)\ng.root().reorder(y,x,c)')
-        assert not schedule.check(schedule)
+        assert check(Schedule.fromstring(g, 'f.chunk(y,x)\ng.root()'))
+        assert not check(Schedule.fromstring(g, 'f.chunk(x,y)\ng.root()'))
+        assert check(Schedule.fromstring(g, 'f.chunk(x,y)\ng.root().reorder(y,x,c)'))
+        assert not check(Schedule.fromstring(g, 'f.chunk(y,x)\ng.root().reorder(y,x,c)'))
         
         # Manual check -- these should have e.g. f.chunk(y,x)\ng.root() -- parent's vars without x, y changed in order
 #        print '\n'.join(x for x in s0 if 'chunk(y,x' in x)
@@ -253,6 +250,37 @@ def test_schedules(verbose=False, test_random=False):
     if valid_schedules.is_cuda():
         assert 'cudaChunk' in s
         assert 'cudaTile' in s
+        
+        assert check(Schedule.fromstring(g, 'g.root().cudaTile(x, y, 8, 8)\nf.cudaChunk(blockidx,blockidx,x,y)'))
+        assert check(Schedule.fromstring(g, 'g.root().cudaTile(x, y, 8, 8)\nf.chunk(c)'))
+        assert check(Schedule.fromstring(g, 'g.root().unroll(x,8).cudaTile(y, c, 8, 8)'))
+        assert check(Schedule.fromstring(g, 'g.root().unroll(y,8).cudaTile(y, c, 8, 8)'))
+        assert check(Schedule.fromstring(g, 'g.root().split(x,x,_c0,8).unroll(_c0,4).cudaTile(x, y, 8, 8)'))
+        assert check(Schedule.fromstring(g, 'g.root().split(x,x,_c0,8).parallel(c).cudaTile(x, y, 8, 8)'))
+        assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y)'))
+        assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(c,y,8,8)'))
+        assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(x,c,8,8)'))
+        
+        assert not check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(x,y,8,8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(c,x,8,8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().parallel(y).cudaTile(y, c, 8, 8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().cudaTile(y, c, 8, 8)\nf.chunk(x)'))
+        assert not check(Schedule.fromstring(g, 'g.root().parallel(x).cudaTile(y, c, 8, 8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().vectorize(c,4).cudaTile(x, y, 8, 8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().vectorize(x,4).cudaTile(x, y, 8, 8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().vectorize(y,4).cudaTile(x, y, 8, 8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().vectorize(x,4).cudaTile(y, c, 8, 8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().vectorize(y,4).cudaTile(y, c, 8, 8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().cudaTile(y, c, 8, 8)\nf.chunk(y)'))
+        assert not check(Schedule.fromstring(g, 'g.root().cudaTile(y, c, 8, 8)\nf.chunk(c)'))
+        assert not check(Schedule.fromstring(g, 'g.root().cudaTile(x, y, 8, 8)\nf.chunk(x)'))
+        assert not check(Schedule.fromstring(g, 'g.root().cudaTile(x, y, 8, 8)\nf.chunk(y)'))
+        #schedule = Schedule.fromstring(g, 'g.root().cudaTile(x, y, 8, 8)\nf.chunk(c).vectorize(x,8)')
+        #print 'is_cuda:', is_cuda()
+        #print 'global check:', cuda_global_check(schedule)
+        assert not check(Schedule.fromstring(g, 'g.root().cudaTile(x, y, 8, 8)\nf.chunk(c).vectorize(x,8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().cudaTile(x, y, 8, 8)\nf.chunk(c).parallel(y)'))
+        
         #print '\n\n'.join(x.replace('\\n', '\n') for x in s0 if 'cuda' in x)
     if valid_schedules.CHUNK_ROOT:
         assert 'chunk(root' in s

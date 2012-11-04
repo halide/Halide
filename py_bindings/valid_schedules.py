@@ -201,6 +201,8 @@ class FragmentChunk(Fragment):
         if len(allV) == 0:
             return None
         if SPLIT_STORE_COMPUTE:
+            if is_cuda() and CUDA_CHUNK_VAR in allV:          # Cannot chunk anything that is CUDA variable on in
+                allV = allV[:allV.index(CUDA_CHUNK_VAR)+1]
             n = len(allV)
             if CHUNK_ROOT:
                 n += 1
@@ -227,6 +229,11 @@ class FragmentChunk(Fragment):
                     print ' * check fail 1, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
                 return False
             if SPLIT_STORE_COMPUTE:
+                if is_cuda() and CUDA_CHUNK_VAR in cvars:          # Cannot chunk anything that is CUDA variable on in
+                    if self.var in cvars[cvars.index(CUDA_CHUNK_VAR)+1:]:
+                        if CHECK_VERBOSE:
+                            print ' * check fail 4, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
+                        return False
                 if CHUNK_ROOT and self.storevar == root_var:
                     pass
                 elif self.var == CUDA_CHUNK_VAR:
@@ -418,7 +425,31 @@ class FragmentCudaTile(FragmentTileBase):
         if not [isinstance(x, FragmentCudaTile) for x in L] == [0]*(len(L)-1)+[1]:
             return False
         # Only tile and unroll can be used on the variables within the CUDA special vars
-        inside_vars = vars[vars.index(self.xvar):]
+        yindex = vars.index(self.yvar)
+        remain_vars = set(vars[:yindex] + vars[yindex+2:])
+        allowed_vars = set(vars[:yindex])
+        #print 'allowed_vars', allowed_vars, 'remain_vars', remain_vars
+        #print 'L', L
+        for x in L:
+            if isinstance(x, (FragmentVectorize, FragmentChunk)):
+                #if x.var not in allowed_vars:
+                if CHECK_VERBOSE:
+                    print ' * check fail cudeTile FragmentVectorize %s %r' % (x.var, allowed_vars)
+                return False
+            chosen = []
+            if isinstance(x, FragmentParallel):
+                chosen.append(x.var)
+#            if isinstance(x, FragmentTile):    # unroll(), tile() allowed inside cuda vars
+#                chosen.extend([x.xvar, x.yvar])
+            for v in chosen:
+                if v == CUDA_CHUNK_VAR:
+                    if CHECK_VERBOSE:
+                        print ' * check fail cudaTile var fragment %s' % x.var
+                    return False
+                if v not in allowed_vars: #remain_vars:
+                    if CHECK_VERBOSE:
+                        print ' * check fail cudaTile var fragment %s not in remain vars' % x.var
+                    return False
         return check_duplicates(self.__class__, L, func)
 
     @staticmethod
@@ -771,6 +802,28 @@ def schedules_func(root_func, func, min_depth=0, max_depth=DEFAULT_MAX_DEPTH, ra
 
 class BadScheduleError(Exception):
     pass
+
+def cuda_global_check(schedule):
+    # All funcs chunk() or inline() (recursively), called by a cudaTile() func cannot be vectorize or parallel
+    d_cuda = {}
+    ok = [True]
+    def callback(f, fparent):
+        f_name = f.name()
+        L = schedule.d.get(f_name, [])
+        inline_chunk = (len(L) == 0 or isinstance(L[0], FragmentChunk))
+        cuda = False
+        if len(L) >= 1 and isinstance(L[-1], FragmentCudaTile):
+            cuda = True
+        if inline_chunk:
+            if d_cuda.get(fparent.name(), False):
+                cuda = True
+                if sum([isinstance(x,(FragmentVectorize,FragmentParallel)) for x in L]) >= 1:
+                    ok[0] = False
+        d_cuda[f_name] = cuda
+        L = schedule.d[f_name]
+
+    halide.visit_funcs(schedule.root_func, callback)
+    return ok[0]
     
 class Schedule:
     """
@@ -819,6 +872,10 @@ class Schedule:
                     print ' * check failed, root func %s is not root' % root_func_name
                 return False
         else:
+            return False
+        if is_cuda() and not cuda_global_check(self):
+            if CHECK_VERBOSE:
+                print ' * cuda global check failed'
             return False
         #print 'check', self
         for x in self.d.values():
