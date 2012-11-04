@@ -1434,7 +1434,7 @@ def test_valid_schedules():
         test_intersect_lists()
         test_callers()
         test_toposort()
-        for i in range(2):
+        for i in range(3):
             os.system('python ' + os.path.abspath(__file__) + ' test_chunk_vars %d'%i)
     elif args[0] == 'test_chunk_vars' and len(args) == 2:
         test_chunk_vars_subproc(int(args[1]))
