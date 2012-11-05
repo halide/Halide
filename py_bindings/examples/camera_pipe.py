@@ -8,7 +8,7 @@ from halide import *
 int_t = Int(32)
 float_t = Float(32)
 
-OUT_DIMS = (1264, 1920, 3)
+OUT_DIMS = (1280, 1920, 3)
 
 def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     x, y, tx, ty, c = Var('x'), Var('y'), Var('tx'), Var('ty'), Var('c')
@@ -48,6 +48,9 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
                                                 raw[2*x+1, 2*y+1])))
         return deinterleaved
         
+    def absd(a, b):
+        return select(a > b, a-b, b-a)
+
     def demosaic(deinterleaved):
         # These are the values we already know from the input
         # x_y = the value of channel x at a site in the input of channel y
@@ -69,17 +72,17 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         # Try interpolating vertically and horizontally. Also compute
         # differences vertically and horizontally. Use interpolation in
         # whichever direction had the smallest difference.
-        gv_r  =    (g_gb[x, y-1] + g_gb[x, y])/2
-        gvd_r = abs(g_gb[x, y-1] - g_gb[x, y])
-        gh_r  =    (g_gr[x+1, y] + g_gr[x, y])/2
-        ghd_r = abs(g_gr[x+1, y] - g_gr[x, y])
+        gv_r  =     (g_gb[x, y-1] + g_gb[x, y])/2
+        gvd_r = absd(g_gb[x, y-1], g_gb[x, y])
+        gh_r  =     (g_gr[x+1, y] + g_gr[x, y])/2
+        ghd_r = absd(g_gr[x+1, y], g_gr[x, y])
         
         g_r[x, y]  = select(ghd_r < gvd_r, gh_r, gv_r)
 
-        gv_b  =    (g_gr[x, y+1] + g_gr[x, y])/2
-        gvd_b = abs(g_gr[x, y+1] - g_gr[x, y])
-        gh_b  =    (g_gb[x-1, y] + g_gb[x, y])/2
-        ghd_b = abs(g_gb[x-1, y] - g_gb[x, y])
+        gv_b  =     (g_gr[x, y+1] + g_gr[x, y])/2
+        gvd_b = absd(g_gr[x, y+1], g_gr[x, y])
+        gh_b  =     (g_gb[x-1, y] + g_gb[x, y])/2
+        ghd_b = absd(g_gb[x-1, y], g_gb[x, y])
 
         g_b[x, y]  = select(ghd_b < gvd_b, gh_b, gv_b)
 
@@ -111,11 +114,11 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         
         correction = g_b[x, y]  - (g_r[x, y] + g_r[x-1, y+1])/2
         rp_b       = correction + (r_r[x, y] + r_r[x-1, y+1])/2
-        rpd_b      = abs(r_r[x, y] - r_r[x-1, y+1])
+        rpd_b      = absd(r_r[x, y], r_r[x-1, y+1])
 
         correction = g_b[x, y]  - (g_r[x-1, y] + g_r[x, y+1])/2
         rn_b       = correction + (r_r[x-1, y] + r_r[x, y+1])/2
-        rnd_b      = abs(r_r[x-1, y] - r_r[x, y+1])
+        rnd_b      = absd(r_r[x-1, y], r_r[x, y+1])
 
         r_b[x, y]  = select(rpd_b < rnd_b, rp_b, rn_b)
 
@@ -123,11 +126,11 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         # Same thing for blue at red
         correction = g_r[x, y]  - (g_b[x, y] + g_b[x+1, y-1])/2
         bp_r       = correction + (b_b[x, y] + b_b[x+1, y-1])/2
-        bpd_r      = abs(b_b[x, y] - b_b[x+1, y-1])
+        bpd_r      = absd(b_b[x, y], b_b[x+1, y-1])
 
         correction = g_r[x, y]  - (g_b[x+1, y] + g_b[x, y-1])/2
         bn_r       = correction + (b_b[x+1, y] + b_b[x, y-1])/2
-        bnd_r      = abs(b_b[x+1, y] - b_b[x, y-1])
+        bnd_r      = absd(b_b[x+1, y], b_b[x, y-1])
 
         b_r[x, y]  =  select(bpd_r < bnd_r, bp_r, bn_r)
 
@@ -297,7 +300,7 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     # to make a 2560x1920 output image, just like the FCam pipe, so
     # shift by 16, 12
     shifted = Func('shifted')
-    shifted[x, y] = cast(Int(16), input[clamp(x+16, 0, input.width()-1), clamp(y+12, 0, input.height()-1)])
+    shifted[x, y] = cast(Int(16), input[x+16, y+12])
 
     if use_uniforms:
         matrix_3200 = UniformImage(float_t, 2, 'm3200')
@@ -348,13 +351,14 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
             interleave_y1.chunk(tx).vectorize(x, 8).unroll(y, 2)
             interleave_y2.chunk(tx).vectorize(x, 8).unroll(y, 2)
             interleave_y3.chunk(tx).vectorize(x, 8).unroll(y, 2)
+            curve.root()
             matrix.root()
             matrix_3200.root()
             matrix_7000.root()
             denoised.chunk(tx).vectorize(x, 8)
-            deinterleaved.chunk(tx).vectorize(x, 8)
-            corrected.chunk(tx).vectorize(x, 4)
-            processed.root().tile(tx, ty, _c0, _c1, 32, 32).parallel(ty).reorder(_c0, _c1, c, tx, ty)
+            deinterleaved.chunk(tx).vectorize(x, 8).reorder(c, x, y).unroll(c, 4)
+            corrected.chunk(tx).vectorize(x, 4).reorder(c, x, y).unroll(c, 3)
+            processed.root().bound(c, 0, 3).tile(tx, ty, _c0, _c1, 32, 32).parallel(ty).reorder(_c0, _c1, c, tx, ty)
             """}
     
     #def evaluate(in_png):
