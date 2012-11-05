@@ -1737,9 +1737,23 @@ def main():
             if not os.path.exists(os.path.join(tune_dir, p.unbiased_file)):
                 print p.unbiased_file, 'missing, generating'
                 os.system('python autotune.py time "%s" "%s"' % (tune_dir, os.path.join(tune_dir, p.unbiased_file)))
-            schedules = sorted(glob.glob(os.path.join(tune_dir, '*compile.sh')))
-            best_schedule_name = os.path.split(schedules[-1])[-1]
-            best_schedule_name = best_schedule_name[1:4] + '_000'
+
+            #schedules = sorted(glob.glob(os.path.join(tune_dir, '*compile.sh')))
+            #best_schedule_name = os.path.split(schedules[-1])[-1]
+            #best_schedule_name = best_schedule_name[1:4] + '_000'
+            best_schedule_name = '-000_000'
+            summary = [x for x in open(os.path.join(tune_dir, p.summary_file), 'rt').read().strip().split('\n') if not x.startswith('#')]
+            for line in summary:
+                line_L = line.strip().split(' ')
+                try:
+                    float(line_L[0])
+                    assert '_' in line_L[1]
+                    int(line_L[1].replace('_',''))
+                    if int(line_L[1].split('_')[0]) > int(best_schedule_name.split('_')[0]):
+                        best_schedule_name = line_L[1]
+                except:
+                    pass
+            
             log_schedule = open(os.path.join(tune_dir, LOG_SCHEDULE_FILENAME), 'rt').read()
             try:
                 idx = log_schedule.index(best_schedule_name)
@@ -1751,6 +1765,7 @@ def main():
             if len(best_schedule.strip().split('\n')) >= 3:
                 L = best_schedule.strip().split('\n')
                 best_schedule = L[0] + '\n\n' + '\n'.join(L[1:-1]) + '\n\n' + L[-1]
+
             with open(os.path.join(tune_dir, 'index.html'), 'wt') as f:
                 ref_file = glob.glob(os.path.join(tune_dir, 'f000*_compile.sh'))
                 if len(ref_file) >= 0:
@@ -1775,7 +1790,10 @@ def main():
                 print >>f, '<a name="unbiased"><h2>Unbiased Timings</h2>'
                 print >>f, '<b>(Earliest generation at top)</b><br>'
                 print >>f, '<pre>'
-                print >>f, open(os.path.join(tune_dir, p.unbiased_file), 'rt').read()
+                try:
+                    print >>f, open(os.path.join(tune_dir, p.unbiased_file), 'rt').read()
+                except IOError:
+                    print >>f, 'Read error on %s' % os.path.join(tune_dir, p.unbiased_file)
                 print >>f, '</pre>'
                 print >>f, '<a name="generations"><h2>Generations (Biased Timings)</h2>'
                 print >>f, '<pre>'

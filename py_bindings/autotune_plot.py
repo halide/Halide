@@ -19,23 +19,33 @@ def main(args=None):
     L = open(filename, 'rt').read().strip().split('\n')
     L = [x for x in L if not x.startswith('#')]
     gen = 1
+    is_gen = False
     time_d = {}
     for i in range(len(L)):
-        if len(L[i].split()) == 0:
+        L_split = L[i].split()
+        if len(L_split) == 0:
             continue
-        val = L[i].split()[0]
+        val = L_split[0]
         try:
             val = float(val)
+            if not is_gen:
+                if len(L_split) >= 2 and L_split[1].startswith('ref'):
+                    pass
+                else:
+                    time_d[gen] = min(time_d.get(gen, 1e100), val)
             if not gen in time_d:
                 time_d[gen] = val
         except ValueError:
             if L[i].startswith('Generation'):
+                is_gen = True
                 gen = int(L[i].split()[1])
     x = []
     y = []
     for (xv, yv) in time_d.items():
         x.append(xv)
         y.append(yv*1000)
+    print x
+    print y
 
     if out_filename is not None:
         matplotlib.use('Agg')     # headless
