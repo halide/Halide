@@ -99,6 +99,8 @@ import operator
 import glob
 import re
 import json
+import socket
+import datetime
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -1147,6 +1149,12 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         pass
         
     log_sched(p, None, None, no_output=True)    # Clear log file
+    begin_str = '# Begin tuning on %s, %s' % (socket.gethostname(), str(datetime.datetime.now())[:19].strip())
+    try:
+        begin_str += ', git rev. ' + subprocess.check_output('git rev-parse HEAD',shell=True).strip()[:8]
+    except subprocess.CalledProcessError:
+        pass
+    log_sched(p, None, begin_str + '\n', filename=p.summary_file)
 
     #random.seed(0)
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
@@ -1630,7 +1638,6 @@ def main():
             f.write(sout)
             f.close()
     elif args[0] == 'html':
-        import socket
         if len(args) < 2:
             print >> sys.stderr, 'Expected 2 arguments'
             sys.exit(1)
