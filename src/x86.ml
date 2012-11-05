@@ -382,11 +382,8 @@ let raw_malloc (con:context) name size =
   with Not_found -> "0" in
   let malloc_fn = if safe_malloc = "1" then "safe_malloc" else "fast_malloc" in
   let malloc = declare_function malloc_fn (function_type (pointer_type (i8_type c)) [|i64_type c|]) m in
-  dump_value malloc;
   let size = build_zext size (i64_type c) "malloc_size_64" b in
-  dump_value size;
   let addr = build_call malloc [|size|] name b in
-  dump_value addr;
   (addr, fun con -> free con name addr)
 
 (* Allocate some memory. Returns an llval representing the address,
