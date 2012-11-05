@@ -1553,11 +1553,17 @@ def print_tunables(f):
     print
 
 def root_all_str(f):
-    "String for root all schedule."
+    "String for root all schedule (or cudaTile() all with >= 2 args in cuda mode)."
     ans = []
     for (fname, f) in sorted(halide.all_funcs(f).items()):
 #        print fname, ' '.join(x for x in halide.func_varlist(f))
-        ans.append(fname + '.root()\n')
+        varlist = halide.func_varlist(f)
+        if is_cuda() and len(varlist) >= 2:
+            x = varlist[0]
+            y = varlist[1]
+            ans.append(fname + '.root().cudaTile(%s,%s,8,8)')
+        else:
+            ans.append(fname + '.root()\n')
     return ''.join(ans)
 
 def test():
