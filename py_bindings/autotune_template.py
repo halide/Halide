@@ -9,16 +9,20 @@ def sample(varlist):
         raise autotune.MutateFailed
     x = varlist[0]
     y = varlist[1]
-    r = random.randrange(3)
+    L = ['.chunk(%(x)s).vectorize(%(x)s,%(n)d)',
+         '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)',
+         '.root().parallel(%(y)s).vectorize(%(x)s,%(n)d)']
+    if autotune.is_cuda():
+        L.extend([
+            '.root().cudaTile(%(x)s,%(y)s,%(n)d,%(n)d)'
+        ])
+    
+    r = random.randrange(len(L))
     n = random.choice([2,4,8])
-    if r == 0:
-        return '.chunk(%(x)s).vectorize(%(x)s,%(n)d)'%locals()
-    elif r == 1:
-        return '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)' % locals()
-    elif r == 2:
-        return '.root().parallel(%(y)s).vectorize(%(x)s,%(n)d)' % locals()
+    return L[r]%locals()
 
 def main():
+    autotune.set_cuda(True)
     for i in range(60):
         print sample(['x','y'])
 
