@@ -231,7 +231,7 @@ void draw_events() {
 
     glBegin(GL_QUADS);
 
-    int new_log_tail = std::min(log_tail + speed + 1, log_idx - (speed+1)*10);
+    int new_log_tail = std::min(log_tail + speed, log_idx - (speed+1)*5);
     int new_log_idx = log_idx + speed;
 
     if (single_step) {
@@ -258,7 +258,7 @@ void draw_events() {
         float fade = ((float)j - new_log_tail) / (new_log_idx - new_log_tail);
         if (fade > 1) fade = 1;
         if (fade < 0) fade = 0;
-        fade *= fade*fade;
+        if (j < log_idx) fade *= 0.25;
 
         event &e = log[i];
 
@@ -277,11 +277,11 @@ void draw_events() {
 
             float r = 0, g = 0, b = 0;
             if (e.type == Load) {
-                g = m*fade*0.5 + 0.5;
+                g = fade*0.5 + 0.5;
                 b = 0.1 + 0.1*fade;
             } else if (e.type == Store) {
-                r = m*fade*0.5 + 0.5;
-                g = 0.15 + 0.15*m*fade;
+                r = fade*0.5 + 0.5;
+                g = 0.15 + 0.15*fade;
             } else if (e.type == Allocate) {
                 r = 0.2;
                 g = 0.2;

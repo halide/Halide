@@ -41,17 +41,17 @@ int main(int argc, char **argv) {
       break;
   case 3:
   case 9:
-      blur_y.tile(x, y, xi, yi, 8, 8).parallel(y).vectorize(xi, 4);
+      blur_y.tile(x, y, xi, yi, 8, 8).parallel(y).parallel(x).vectorize(xi, 4);
       blur_x.chunk(x).vectorize(x, 4);
       break;
   case 4:
   case 10:
-      blur_x.chunk(root, y).split(x, x, xi, 16).vectorize(xi, 4).parallel(x);
-      blur_y.split(x, x, xi, 16).vectorize(xi, 4).parallel(x);
+      blur_x.chunk(root, y).split(x, x, xi, 12).vectorize(xi, 4).parallel(x);
+      blur_y.split(x, x, xi, 12).vectorize(xi, 4).parallel(x);
       break;
   case 5:
   case 11:
-      blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 4);
+      blur_y.split(y, y, yi, 6).parallel(y).vectorize(x, 4);
       blur_x.chunk(y, yi).vectorize(x, 4);    
       break;      
   default:
