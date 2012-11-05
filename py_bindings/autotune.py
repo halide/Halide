@@ -908,7 +908,7 @@ def run_limit(L, timeout, last_line=False, time_from_subproc=False, shell=False,
         kill_recursive(proc.pid)
         if remote_host:
             print 'run timeout - sending remote killall over ssh'
-            remote_kill_cmd = 'ssh %(remote_host)s killall -rq \'f*_*.exe\'' % locals()
+            remote_kill_cmd = 'ssh %(remote_host)s killall -rq \'f..._....exe\'' % locals()
             try:
                 subprocess.check_output(remote_kill_cmd, shell=True)
             except:
@@ -1407,7 +1407,7 @@ def autotune_child(args, timeout=None):
             save_filename = os.path.basename(save_filename)
             run_command = [
                 'rsync -a %(in_image_file)s %(ref_output_file)s %(remote_host)s:%(remote_path)s/',
-                'ssh %(remote_host)s \'cd %(remote_path)s; killall -rq \'f*_*.exe\'; ulimit -Sv %(max_run_memory_kb)s; HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d ' + (save_filename and '"%(save_filename)s"' or '') + '\''
+                'ssh %(remote_host)s \'cd %(remote_path)s; killall -rq \'f..._....exe\'; ulimit -Sv %(max_run_memory_kb)s; HL_NUMTHREADS=%(hl_threads)s ./%(func_name)s.exe %(trials)d %(in_image)s "%(ref_output)s" %(out_w)d %(out_h)d %(out_channels)d ' + (save_filename and '"%(save_filename)s"' or '') + '\''
             ]
             if save_filename_path:
                 run_command.append('rsync -a %(remote_host)s:%(remote_path)s/%(save_filename)s %(save_filename_path)s')
