@@ -827,7 +827,6 @@ class BadScheduleError(Exception):
 
 def cuda_global_check(schedule):
     # All funcs chunk() or inline() (recursively), called by a cudaTile() func cannot be vectorize or parallel
-    # Also, cudaTile() 
     d_cuda = {}
     ok = [True]
     def callback(f, fparent):
@@ -843,10 +842,34 @@ def cuda_global_check(schedule):
                 if sum([isinstance(x,(FragmentVectorize,FragmentParallel)) for x in L]) >= 1:
                     ok[0] = False
         d_cuda[f_name] = cuda
-        L = schedule.d[f_name]
+        #L = schedule.d[f_name]
 
     halide.visit_funcs(schedule.root_func, callback)
-    return ok[0]
+    if not ok[0]:
+        return False
+    
+    # Also all funcs chunk() or inline() (recursively) and using cudaTile() cannot be parallel in a caller
+    d_parallel = {}
+    ok = [True]
+    def callback(f, fparent):
+        f_name = f.name()
+        L = schedule.d.get(f_name, [])
+        inline_chunk = (len(L) == 0 or isinstance(L[0], FragmentChunk))
+        parallel = sum([isinstance(x, FragmentParallel) for x in L]) >= 1
+        if inline_chunk:
+            if d_parallel.get(fparent.name(), False):
+                parallel = True
+        if parallel:
+            if sum([isinstance(x,(FragmentCudaTile)) for x in L]) >= 1:
+                ok[0] = False
+        d_parallel[f_name] = parallel
+        #L = schedule.d[f_name]
+
+    halide.visit_funcs(schedule.root_func, callback)
+    if not ok[0]:
+        return False
+    
+    return True
     
 class Schedule:
     """
