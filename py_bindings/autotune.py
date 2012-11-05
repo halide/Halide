@@ -120,6 +120,7 @@ class AutotuneParams:
     """
     Genetic Algorithm Parameters:
     
+      -tournament_sample_frac  p Randomly sample p% for the tournament, of which the top n individuals are selected
       -tournament_size         n Top n individuals are selected for crossover (if not n exist then generate random individuals)
       -population_size         n Population size
       -generations             n Total generations
@@ -140,7 +141,12 @@ class AutotuneParams:
       -prob_mutate_chunk       p Find a chunk() call and replace with a new random chunk() call
       -crossover_mutate_prob   p Probability that mutate() is called after crossover
       -crossover_random_prob   p Probability that crossover is run with a randomly generated parent
-
+      -prob_pop_elitism        p Frequency of elitism
+      -prob_pop_crossover      p Frequency of crossover
+      -prob_pop_mutated        p Frequency of mutated
+      -prob_pop_random         p Frequency of random
+      -adaptive_mutate         b Adaptively turn up mutation rate based on rate of progress (0 or 1, default 0)
+      
     Compilation and Running:
     
       -trials                  n Timing runs per schedule
@@ -150,7 +156,7 @@ class AutotuneParams:
       -run_timeout_bias        t Additional bias time to allow tester process to start up and shut down
       -run_timeout_default     t Assumed 'fastest run time' before best run time is established
       -run_save_timeout        t Additional timeout if saving output png
-      -check_output            b Compare output with known reference output (0 or 1)
+      -check_output            b Compare output with known reference output (0 or 1, default 1)
       -compile_threads         n Number of threads to use for parallel compile (None defaults to number virtual cores)
       -hl_threads              n Passed as HL_NUMTHREADS (None defaults to HL_NUMTHREADS if set, else virtual cores over 2)
 
@@ -168,21 +174,31 @@ class AutotuneParams:
     Experimental Features:
     
       -max_nontrivial          n When generating random schedules, max number of nontrivial (non-root/inline) funcs
-      -seed_reasonable         b Whether to seed with reasonable schedules (0 or 1)
+      -seed_reasonable         b Whether to seed with reasonable schedules (0 or 1, default 0)
       -prob_reasonable         p Probability to sample reasonable schedule when sampling random schedule
       -cuda                    b Whether to use Cuda schedules (0 or 1, default 0)
+      -mutate_more             b Whether to mutate more (0 or 1, default 0)
     """
     
     #pop_elitism_pct = 0.2
     #pop_crossover_pct = 0.3
     #pop_mutated_pct = 0.3
     # Population sampling frequencies
-    prob_pop = {'elitism': 0.2, 'crossover': 0.3, 'mutated': 0.3, 'random': 0.2}
+    #prob_pop = {'elitism': 0.2, 'crossover': 0.3, 'mutated': 0.3, 'random': 0.2}
+    
+    prob_pop_elitism   = 0.2
+    prob_pop_crossover = 0.3
+    prob_pop_mutated   = 0.3
+    prob_pop_random    = 0.2
+    
+    adaptive_mutate = False
+    mutate_more = False
     
     cuda = False
     
     tournament_size = 5 #3
-    mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
+    tournament_sample_frac = 1.0
+    #mutation_rate = 0.15             # Deprecated -- now always mutates exactly once
     population_size = 128 #64 #5 #32 #128
     
     # Different mutation modes (mutation is applied to each Func independently) -- see above docstring for documentation
@@ -266,6 +282,14 @@ class AutotuneParams:
             self.hl_threads = multiprocessing.cpu_count() / 2
         self.set_globals()
     
+        if self.mutate_more:
+            self.tournament_size = int(self.population_size/4)
+            self.tournament_sample_frac = 0.5                   # TODO: Implement
+            self.crossover_mutate_prob = 0.0
+            self.crossover_random_prob = 0.0
+            self.prob_pop_random    = 0.05
+            self.adaptive_mutate = True
+            
     def set_globals(self):
         set_cuda(self.cuda)
 
@@ -292,6 +316,10 @@ class AutotuneParams:
         start = 'prob_mutate_'
         return dict([(key[len(start):], getattr(self, key)) for key in dir(self) if key.startswith(start)])
 
+    def dict_prob_pop(self):
+        start = 'prob_pop_'
+        return dict([(key[len(start):], getattr(self, key)) for key in dir(self) if key.startswith(start)])
+    
 def debug_check(f, info=None):
     if DEBUG_CHECKS:
         if not f.check(f):
@@ -567,9 +595,9 @@ def random_or_reasonable(root_func, p, max_nontrivial, grouping):
     else:
         return random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
 
-def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping):
-    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
-    b = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
+def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed):
+    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed)
+    b = tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed)
     if random.random() < p.crossover_random_prob:
         #b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
         b = random_or_reasonable(root_func, p, max_nontrivial, grouping)
@@ -585,20 +613,25 @@ def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, group
 #        c.identity_str = 'XXXXX'
     return c
 
-def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping):
-    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping)
+def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed):
+    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed)
     c = mutate(a, p, constraints, grouping)
     #c.genomelog = 'mutate(%s)'%a.identity()
     debug_check(c)
     return c
 
-def tournament_select(prevL, p, root_func, max_nontrivial, grouping):
+def tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed):
+    nsample = min(int(p.tournament_sample_frac*p.population_size), len(prevL))
+    #f = open('nsample.txt','wt')
+    #f.write('%d\n'%nsample)
+    #f.close()
+    L = random.Random(tournament_seed).sample(prevL, nsample)
     i = random.randrange(p.tournament_size)
-    if i >= len(prevL):
+    if i >= len(L):
         #ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
         ans = random_or_reasonable(root_func, p, max_nontrivial, grouping)
     else:
-        ans = copy.copy(prevL[i])
+        ans = copy.copy(L[i])
     debug_check(ans)
     return ans
     
@@ -688,10 +721,12 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     if is_grouping(p, generation_idx):
         max_nontrivial = 1000**2
     
+    tournament_seed = random.randrange(2**32)
+    
     def do_crossover():
-        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping)), 'crossover')
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed)), 'crossover')
     def do_mutated():
-        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping)), 'mutated')
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed)), 'mutated')
     def do_random():
 #        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)), 'random')
         append_unique(constraints.constrain(random_or_reasonable(root_func, p, max_nontrivial, grouping)), 'random')
@@ -705,7 +740,9 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
 
 #    random_pct = 1-p.pop_mutated_pct-p.pop_crossover_pct-p.pop_elitism_pct
 
-    for i in range(int(p.population_size*p.prob_pop['elitism'])):
+    prob_pop = p.dict_prob_pop()
+    
+    for i in range(int(p.population_size*prob_pop['elitism'])):
         if i < len(prevL):
             current = copy.copy(prevL[i])
             if not '(elite copy of' in current.genomelog:
@@ -716,10 +753,10 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
                 pass
     
     # Normalize probabilities after removing elitism
-    P_total = p.prob_pop['crossover'] + p.prob_pop['mutated'] + p.prob_pop['random']
-    P_crossover = p.prob_pop['crossover']*1.0 / P_total
-    P_mutated   = p.prob_pop['mutated']*1.0 / P_total
-    P_random    = p.prob_pop['random']*1.0 / P_total
+    P_total = prob_pop['crossover'] + prob_pop['mutated'] + prob_pop['random']
+    P_crossover = prob_pop['crossover']*1.0 / P_total
+    P_mutated   = prob_pop['mutated']*1.0 / P_total
+    P_random    = prob_pop['random']*1.0 / P_total
     
     nrest = p.population_size - len(ans)
     ncrossover = int(P_crossover*nrest)
@@ -1125,6 +1162,39 @@ def call_filter_func(filter_func_name, cache={}):
     cache[filter_func_name] = ans
     return ans
 
+def clampedLerp(t, ta, tb, ya, yb):
+    tfrac = (t-ta)/(tb-ta)
+    if tfrac < 0.0:
+        tfrac = 0.0
+    elif tfrac > 1.0:
+        tfrac = 1.0
+    return ya+(yb-ya)*tfrac
+    
+def set_adaptive_mutate_rate(p, timeGenL):
+    def set_rate(rate):
+        #f = open('rate.txt', 'wt')
+        #f.write('%f\n'%rate)
+        #f.close()
+        d = p.dict_prob_pop()
+        assert 'mutated' in d.keys()
+        sum_non_mutated = sum(v for (k, v) in d.items() if k != 'mutated')
+        #x / (sum_non_mutated + x) = y
+        #x = y ( sum_non_mutated + x)
+        #x = y*sum_non_mutated + x * y
+        #x * (1-y) = y*sum_non_mutated
+        #x = y*sum_non_mutated/(1-y)
+        p.prob_pop_mutated = rate*sum_non_mutated/(1.0-rate)
+    n = 10
+    minRate = 0.3
+    maxRate = 0.6
+    if len(timeGenL) <= n:
+        set_rate(minRate)
+    else:
+        ratio = timeGenL[-1]*1.0/timeGenL[len(timeGenL)-n]
+        ratioMinRate = 0.8
+        ratioMaxRate = 0.9
+        set_rate(clampedLerp(ratio, ratioMinRate, ratioMaxRate, minRate, maxRate))
+
 def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints(), seed_scheduleL=[]):
     timer = AutotuneTimer()
 
@@ -1224,6 +1294,8 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
     nseed = len(currentL)-nref
     currentL = currentL[:nseed]
     timeL = timeL[:nseed]
+    
+    timeGenL = [min([timeL[j]['time'] for j in range(nseed)])]          # Best time vs generation
     #if ref_output == '':
     #    raise ValueError('No reference output')
 #    timeL = time_generation(currentL, p, test_func, timer, constraints, display_text)
@@ -1243,6 +1315,9 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         timeL = time_generation(currentL, p, test_func, timer, constraints, display_text, compare_schedule=compare_schedule, output_stats=output_stats)
         
         bothL = sorted([(timeL[i]['time'], currentL[i], timeL[i]) for i in range(len(timeL))])
+        timeGenL.append(min([timeL[j]['time'] for j in range(len(timeL))]))
+        if p.adaptive_mutate:
+            set_adaptive_mutate_rate(p, timeGenL)
         display_text = '\n' + '-'*40 + '\n'
         display_text += 'Generation %d'%(gen) + '\n'
         display_text += '-'*40 + '\n'
@@ -1256,7 +1331,11 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
             if e is None:
                 success_count += 1
                 
-        display_text += ' '*16 + '%d/%d succeed (%.0f%%), %s\n' % (success_count, len(timeL), success_count*100.0/len(timeL), output_stats[0])
+        extra_str = ''
+        if p.adaptive_mutate:
+            p_total = sum(v for v in p.dict_prob_pop().values())
+            extra_str = ', mutate %.0f%%, crossover %.0f%%, random %.0f%%, elite %.0f%%'%(p.prob_pop_mutated*100.0/p_total, p.prob_pop_crossover*100.0/p_total, p.prob_pop_random*100.0/p_total, p.prob_pop_elitism*100.0/p_total)
+        display_text += ' '*16 + '%d/%d succeed (%.0f%%), %s%s\n' % (success_count, len(timeL), success_count*100.0/len(timeL), output_stats[0], extra_str)
         print display_text
         log_sched(p, None, display_text, filename=p.summary_file)
         sys.stdout.flush()
