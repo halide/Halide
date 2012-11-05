@@ -231,7 +231,7 @@ void draw_events() {
 
     glBegin(GL_QUADS);
 
-    int new_log_tail = std::min(log_tail + speed + 1, log_idx - (speed+1)*5);
+    int new_log_tail = std::min(log_tail + speed + 1, log_idx - (speed+1)*10);
     int new_log_idx = log_idx + speed;
 
     if (single_step) {
@@ -258,6 +258,7 @@ void draw_events() {
         float fade = ((float)j - new_log_tail) / (new_log_idx - new_log_tail);
         if (fade > 1) fade = 1;
         if (fade < 0) fade = 0;
+        fade *= fade*fade;
 
         event &e = log[i];
 
@@ -271,25 +272,32 @@ void draw_events() {
             }
         }
         
-        float r = 0, g = 0, b = 0;
-        if (e.type == Load) {
-            g = fade*0.5 + 0.5;
-        } else if (e.type == Store) {
-            r = fade*0.5 + 0.5;
-        } else if (e.type == Allocate) {
-            r = 0.3;
-            g = 0.3;
-            b = 0.4;
-        } else if (e.type == Free) {
-            r = g = b = 0.2;
-        } else {
-            continue;
-        }
         
-        r /= 2;
-        g /= 2;
-        b /= 2;
         for (int m = 0; m < (zoom > 4 ? 2 : 1); m++) {
+
+            float r = 0, g = 0, b = 0;
+            if (e.type == Load) {
+                g = m*fade*0.5 + 0.5;
+                b = 0.1 + 0.1*fade;
+            } else if (e.type == Store) {
+                r = m*fade*0.5 + 0.5;
+                g = 0.15 + 0.15*m*fade;
+            } else if (e.type == Allocate) {
+                r = 0.2;
+                g = 0.2;
+                b = 0.4;
+            } else if (e.type == Free) {
+                r = g = b = 0.1;
+            } else {
+                continue;
+            }            
+            
+            if (m == 0) {
+                r /= 2;
+                g /= 2;
+                b /= 2;
+            }
+
             glColor4f(r, g, b, 1);
             int margin = m * (zoom/5);
             int x = zoom*e.location[0] + x_off + margin;
@@ -322,10 +330,10 @@ void display() {
     if (screenshot || record_movie) {
         char buf[1024];
         if (screenshot) {
-            snprintf(buf, 1024, "%s_%05d.png", log_filename, log_idx);
+            snprintf(buf, 1024, "pics/%s_%05d.png", log_filename, log_idx);
             screenshot = false;
         } else {
-            snprintf(buf, 1024, "%s_movie_%05d.png", log_filename, movie_frame_counter++);
+            snprintf(buf, 1024, "pics/%s_movie_%05d.png", log_filename, movie_frame_counter++);
         }
 
         Image<uint8_t> im(width, height, 3);
