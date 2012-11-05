@@ -4,14 +4,19 @@
 #include <vector>
 #include <string>
 #include <assert.h>
+#include "../../support/static_image.h"
+#include "../../support/image_io.h"
 
 typedef enum {Load, Store, Compute, Allocate, Free, Produce} event_type;
+
+void __copy_to_host(buffer_t* buf) {}
 
 struct event {
     int location[4];
     int size[4];
     char name[64];
     event_type type;
+    bool chained;
 };
 
 bool next_token(char **first, char **rest) {
@@ -90,6 +95,7 @@ int parse_event_location(char *args, event *events) {
             for (int x = 0; x < width; x++) {                
                 events[x].location[y] = result[y][x];
                 events[x].size[y] = 1;
+                events[x].chained = (x < width-1);
             }
         }
 
@@ -99,6 +105,7 @@ int parse_event_location(char *args, event *events) {
         for (int y = 0; y < height/2; y++) {
             for (int x = 0; x < width; x++) {                
                 events[x].location[y] = result[y][x];
+                events[x].chained = (x < width-1);
             }
         }
         for (int y = height/2; y < height; y++) {
@@ -127,10 +134,10 @@ void parse_log(const char *filename, std::vector<event> &log) {
         next_token(&type, &args);
         if (strncmp(type, "Loading", 7) == 0) t = Load;
         else if (strncmp(type, "Storing", 7) == 0) t = Store;
-        else if (strncmp(type, "Computing", 9) == 0) t = Compute;
+        /* else if (strncmp(type, "Computing", 9) == 0) t = Compute; */
         else if (strncmp(type, "Allocating", 10) == 0) t = Allocate;
         else if (strncmp(type, "Freeing", 7) == 0) t = Free;
-        else if (strncmp(type, "Producing", 9) == 0) t = Produce;
+        /* else if (strncmp(type, "Producing", 9) == 0) t = Produce; */
         else continue;
 
         char *buffer;
@@ -155,9 +162,17 @@ int width = 1600;
 int height = 1200;
 
 int speed = 32;
+bool single_step = true;
 
+bool screenshot = false;
+bool record_movie = false;
+int movie_frame_counter = 0;
+
+const char *log_filename;
 std::vector<event> log;
-int log_idx = 0;
+int log_idx = 0, log_tail = 0;
+
+
 
 struct buffer_pos {
     int x, y;
@@ -168,7 +183,6 @@ struct buffer_pos {
 std::vector<buffer_pos> positions;
 
 void keyboardEvent(unsigned char key, int x, int y) {
-    printf("%d\n", key);
     if (key == '+') {
         speed *= 2;
         if (speed == 0) speed = 1;
@@ -176,6 +190,14 @@ void keyboardEvent(unsigned char key, int x, int y) {
         speed /= 2;
     } else if (key == 'r') {
         log_idx = 0;
+        log_tail = 0;
+    } else if (key == ' ') {
+        single_step = true;
+    } else if (key == 's') {
+        screenshot = true;
+    } else if (key == 'm') {
+        movie_frame_counter = 0;
+        record_movie = !record_movie;
     }
 }
 
@@ -197,7 +219,7 @@ void clear() {
 
     glColor3f(1, 1, 1);
     for (size_t i = 0; i < positions.size(); i++) {
-        glRasterPos2i(positions[i].x, positions[i].y-10);
+        glRasterPos2i(positions[i].x, positions[i].y-10 - positions[i].zoom);
         glutBitmapString(GLUT_BITMAP_HELVETICA_18, (const unsigned char *)positions[i].caption);
     }
 }
@@ -208,23 +230,36 @@ void draw_events() {
     glPointSize(4);
 
     glBegin(GL_QUADS);
-    int lookback = speed*15 + 50;
-    log_idx -= lookback;
-    for (int i = 0; i < lookback + speed; i++) {        
-        if (log_idx < 0) {
-            log_idx++;
-            continue;
-        } else if (log_idx == 0) {
+
+    int new_log_tail = std::min(log_tail + speed + 1, log_idx - (speed+1)*5);
+    int new_log_idx = log_idx + speed;
+
+    if (single_step) {
+        new_log_idx = log_idx+1;
+        while (new_log_idx >= 0 && 
+               new_log_idx < (int)log.size() &&
+               log[new_log_idx].chained) new_log_idx++;        
+        single_step = false;
+        speed = 0;
+   }
+
+    for (int i = log_tail; i <= new_log_idx && i < (int)log.size(); i++) {        
+        if (i < 0) continue;
+        if (i == 0) {
             glEnd();
             clear();
             glBegin(GL_QUADS);
         }
 
-        float fade = (i - lookback*0.5f) / (lookback*0.5f);
+        // log_tail through log_tail + speed should be cleaned up
+
+        int j = i;
+        while (i > new_log_tail && j < (int)log.size() && log[j].chained) j++;
+        float fade = ((float)j - new_log_tail) / (new_log_idx - new_log_tail);
         if (fade > 1) fade = 1;
         if (fade < 0) fade = 0;
 
-        event &e = log[log_idx];
+        event &e = log[i];
 
         int x_off = -100000, y_off = -100000;
         int zoom = 1;
@@ -235,32 +270,46 @@ void draw_events() {
                 zoom = positions[j].zoom;
             }
         }
-        log_idx++;
-        if (log_idx > log.size()) continue;
-
+        
+        float r = 0, g = 0, b = 0;
         if (e.type == Load) {
-            glColor4f(0, fade*0.5+0.5, 0, 1);
+            g = fade*0.5 + 0.5;
         } else if (e.type == Store) {
-            glColor4f(fade*0.5+0.5, 0, 0, 1);
+            r = fade*0.5 + 0.5;
         } else if (e.type == Allocate) {
-            glColor4f(0.2, 0.2, 0.8, 1);
+            r = 0.3;
+            g = 0.3;
+            b = 0.4;
         } else if (e.type == Free) {
-            glColor4f(0.2, 0.2, 0.2, 1);
+            r = g = b = 0.2;
         } else {
             continue;
         }
-
-        int x = zoom*e.location[0] + x_off;
-        int y = zoom*e.location[1] + y_off;
-        glVertex3i(x, y, 0);
-        x += e.size[0]*zoom;
-        glVertex3i(x, y, 0);
-        y += e.size[1]*zoom;
-        glVertex3i(x, y, 0);
-        x -= e.size[0]*zoom;
-        glVertex3i(x, y, 0);
+        
+        r /= 2;
+        g /= 2;
+        b /= 2;
+        for (int m = 0; m < (zoom > 4 ? 2 : 1); m++) {
+            glColor4f(r, g, b, 1);
+            int margin = m * (zoom/5);
+            int x = zoom*e.location[0] + x_off + margin;
+            int y = zoom*e.location[1] + y_off + margin;
+            glVertex3i(x, y, 0);
+            x += e.size[0]*zoom - 2*margin;
+            glVertex3i(x, y, 0);
+            y += e.size[1]*zoom - 2*margin;
+            glVertex3i(x, y, 0);
+            x -= e.size[0]*zoom - 2*margin;
+            glVertex3i(x, y, 0);
+            r *= 2;
+            g *= 2;
+            b *= 2;
+        }
     }
     glEnd();    
+
+    log_tail = new_log_tail;
+    log_idx = new_log_idx;
 }
 
 void display() {    
@@ -269,6 +318,33 @@ void display() {
 
     glutSwapBuffers();
     usleep(16000);
+
+    if (screenshot || record_movie) {
+        char buf[1024];
+        if (screenshot) {
+            snprintf(buf, 1024, "%s_%05d.png", log_filename, log_idx);
+            screenshot = false;
+        } else {
+            snprintf(buf, 1024, "%s_movie_%05d.png", log_filename, movie_frame_counter++);
+        }
+
+        Image<uint8_t> im(width, height, 3);
+        glReadPixels(0, 0, width, height, GL_RED, GL_UNSIGNED_BYTE, &im(0, 0, 0));
+        glReadPixels(0, 0, width, height, GL_GREEN, GL_UNSIGNED_BYTE, &im(0, 0, 1));
+        glReadPixels(0, 0, width, height, GL_BLUE, GL_UNSIGNED_BYTE, &im(0, 0, 2));
+
+        for (int c = 0; c < 3; c++) {
+            for (int y = 0; y < height/2; y++) {
+                for (int x = 0; x < width; x++) {
+                    std::swap(im(x, y, c), im(x, height-1-y, c));
+                }
+            }
+        }
+
+        save_png(im, buf);
+        printf("Saved screenshot %s\n", buf);
+
+    }
 }
 
 void reshape(int w, int h) {
@@ -291,9 +367,13 @@ void reshape(int w, int h) {
 
 int main(int argc, char **argv) {
     
-    parse_log(argv[1], log);
+    width = atoi(argv[1]);
+    height = atoi(argv[2]);
+    parse_log(argv[3], log);
 
-    for (int i = 2; i < argc-4; i+=5) {
+    log_filename = argv[3];
+
+    for (int i = 4; i < argc-4; i+=5) {
         buffer_pos p;
         p.name[0] = 0;
         strncat(p.name, argv[i], 63);
