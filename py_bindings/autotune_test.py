@@ -11,7 +11,10 @@ def test_crossover(verbose=False):
     (f, g, locals_d) = test_funcs()
     constraints = Constraints()
     
-    for j in range(8):
+    crossover_success = 0
+    
+    trials = 8
+    for j in range(trials):
         random.seed(j)
 
 #        for i in range(1000):
@@ -57,7 +60,12 @@ def test_crossover(verbose=False):
                 print '---- Mutate after crossover %d,%d ----'%(j,i)
                 print 'a', repr(str(a)), a.new_vars()
                 print 'b', repr(str(b)), b.new_vars()
-            c = crossover(a, b, constraints)
+            try:
+                c = crossover(a, b, constraints)
+                if i == 0:
+                    crossover_success += 1
+            except BadScheduleError:
+                break
             if verbose:
                 print 'c', repr(str(c)), c.new_vars()
             c.apply(constraints)
@@ -96,6 +104,7 @@ def test_crossover(verbose=False):
                     print '-'*20
             test_generation(L, prev_gen)
             prev_gen = L
+    assert crossover_success >= trials/2
     
 #    print 'autotune.next_generation:        OK'
     print 'autotune.next_generation(cuda=%d):    OK'%valid_schedules.is_cuda()
@@ -251,16 +260,31 @@ def test_schedules(verbose=False, test_random=False):
         assert 'cudaChunk' in s
         assert 'cudaTile' in s
         
+        f2 = halide.Func('f2')
+        g2 = halide.Func('g2')
+        h2 = halide.Func('h2')
+        x = locals_d['x']
+        y = locals_d['y']
+        c = locals_d['c']
+        f2[x,y,c] = x+y+c
+        g2[x,y,c] = f2[x,y,c]+1
+        h2[x,y,c] = g2[x,y,c]+1
         assert check(Schedule.fromstring(g, 'g.root().cudaTile(x, y, 8, 8)\nf.cudaChunk(blockidx,blockidx,x,y)'))
         assert check(Schedule.fromstring(g, 'g.root().cudaTile(x, y, 8, 8)\nf.chunk(c)'))
         assert check(Schedule.fromstring(g, 'g.root().unroll(x,8).cudaTile(y, c, 8, 8)'))
         assert check(Schedule.fromstring(g, 'g.root().unroll(y,8).cudaTile(y, c, 8, 8)'))
         assert check(Schedule.fromstring(g, 'g.root().split(x,x,_c0,8).unroll(_c0,4).cudaTile(x, y, 8, 8)'))
-        assert check(Schedule.fromstring(g, 'g.root().split(x,x,_c0,8).parallel(c).cudaTile(x, y, 8, 8)'))
+        assert not check(Schedule.fromstring(g, 'g.root().split(x,x,_c0,8).parallel(c).cudaTile(x, y, 8, 8)'))
         assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y)'))
         assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(c,y,8,8)'))
         assert check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(x,c,8,8)'))
         
+        # Not currently valid to do CUDA launches in parallel
+        assert not check(Schedule.fromstring(h2, 'h2.root().parallel(c)\nf2.chunk(x).cudaTile(x,y,8,8)'))
+        assert not check(Schedule.fromstring(h2, 'h2.root().parallel(c)\ng2.chunk(x)\nf2.chunk(x).cudaTile(x,y,8,8)'))
+        assert not check(Schedule.fromstring(h2, 'g2.root().parallel(c)\nf2.chunk(x).cudaTile(x,y,8,8)'))
+        assert not check(Schedule.fromstring(h2, 'g2.root().parallel(c).cudaTile(x,y,8,8)'))
+
         assert not check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(x,y,8,8)'))
         assert not check(Schedule.fromstring(g, 'g.root().reorder(x,c,y).cudaTile(c,x,8,8)'))
         assert not check(Schedule.fromstring(g, 'g.root().parallel(y).cudaTile(y, c, 8, 8)'))

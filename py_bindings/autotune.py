@@ -99,6 +99,8 @@ import operator
 import glob
 import re
 import json
+import socket
+import datetime
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -447,7 +449,7 @@ def crossover(a, b, constraints):
         debug_check(ans)
             
         return ans
-    raise BadScheduleError
+    raise BadScheduleError((a, b))
     
 def mutate(a, p, constraints, grouping):
     "Mutate existing schedule using AutotuneParams p."
@@ -1147,6 +1149,12 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         pass
         
     log_sched(p, None, None, no_output=True)    # Clear log file
+    begin_str = '# Begin tuning on %s, %s' % (socket.gethostname(), str(datetime.datetime.now())[:19].strip())
+    try:
+        begin_str += ', git rev. ' + subprocess.check_output('git rev-parse HEAD',shell=True).strip()[:8]
+    except subprocess.CalledProcessError:
+        pass
+    log_sched(p, None, begin_str + '\n', filename=p.summary_file)
 
     #random.seed(0)
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
@@ -1630,7 +1638,6 @@ def main():
             f.write(sout)
             f.close()
     elif args[0] == 'html':
-        import socket
         if len(args) < 2:
             print >> sys.stderr, 'Expected 2 arguments'
             sys.exit(1)
@@ -1660,7 +1667,12 @@ def main():
                 L = best_schedule.strip().split('\n')
                 best_schedule = L[0] + '\n\n' + '\n'.join(L[1:-1]) + '\n\n' + L[-1]
             with open(os.path.join(tune_dir, 'index.html'), 'wt') as f:
-                timestamp = time.ctime(os.path.getmtime(os.path.join(tune_dir, p.summary_file)))
+                ref_file = glob.glob(os.path.join(tune_dir, 'f000*_compile.sh'))
+                if len(ref_file) >= 0:
+                    ref_file = ref_file[0]
+                else:
+                    ref_file = os.path.join(tune_dir, p.summary_file)
+                timestamp = time.ctime(os.path.getmtime(ref_file))
                 print >>f, '<html><body>'
                 print >>f, '<h1>Autotuner: %s</h1><h2>On %s (%s)</h2>' % (os.path.split(tune_dir)[-1], socket.gethostname(), timestamp)
                 #print >>f, '<table border=0 cellpadding=0 cellspacing=2>'
