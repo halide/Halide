@@ -1667,7 +1667,12 @@ def main():
                 L = best_schedule.strip().split('\n')
                 best_schedule = L[0] + '\n\n' + '\n'.join(L[1:-1]) + '\n\n' + L[-1]
             with open(os.path.join(tune_dir, 'index.html'), 'wt') as f:
-                timestamp = time.ctime(os.path.getmtime(os.path.join(tune_dir, p.summary_file)))
+                ref_file = glob.glob(os.path.join(tune_dir, 'f000*_compile.sh'))
+                if len(ref_file) >= 0:
+                    ref_file = ref_file[0]
+                else:
+                    ref_file = os.path.join(tune_dir, p.summary_file)
+                timestamp = time.ctime(os.path.getmtime(ref_file))
                 print >>f, '<html><body>'
                 print >>f, '<h1>Autotuner: %s</h1><h2>On %s (%s)</h2>' % (os.path.split(tune_dir)[-1], socket.gethostname(), timestamp)
                 #print >>f, '<table border=0 cellpadding=0 cellspacing=2>'
