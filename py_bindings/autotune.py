@@ -449,7 +449,7 @@ def crossover(a, b, constraints):
         debug_check(ans)
             
         return ans
-    raise BadScheduleError
+    raise BadScheduleError((a, b))
     
 def mutate(a, p, constraints, grouping):
     "Mutate existing schedule using AutotuneParams p."
