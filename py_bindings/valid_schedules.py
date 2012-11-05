@@ -184,6 +184,9 @@ class FragmentParallel(FragmentVarMixin,Fragment):
         return '.parallel(%s)'%(self.var)
 
 class FragmentUnroll(FragmentBlocksizeMixin,Fragment):
+    def randomize_const(self):
+        self.value = blocksize_random([2,3,4])
+
     def __str__(self):
         return '.unroll(%s,%d)'%(self.var,self.value)
 
@@ -286,6 +289,24 @@ class FragmentUpdate(Fragment):
 
     def var_order(self, prev_order):
         raise ValueError('var_order called on FragmentUpdate()')
+
+# FragmentBound is just a stub class for now -- not used in tuning, just for comparing with human reference schedules
+class FragmentBound(Fragment, FragmentBlocksizeMixin):
+    def __init__(self, var=None, lower=None, upper=None):
+#        print '__init__', self.__class__
+        self.var = var
+        self.lower = lower
+        self.upper = upper
+
+    def __str__(self):
+        return '.bound(%s,%d,%d)'%(self.var,self.lower,self.upper)
+
+    def var_order(self, prev_order):
+        return list(prev_order)
+
+    @staticmethod
+    def fromstring(var, lower, upper, func=None):
+        return FragmentBound(var, int(lower), int(upper))
 
 for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentUpdate]:
     _cls.fromstring = make_fromstring(_cls)
@@ -579,7 +600,8 @@ fragment_map = {'root': FragmentRoot,
                 'reorder': FragmentReorder,
                 'update': FragmentUpdate,
                 'cudaTile': FragmentCudaTile,
-                'cudaChunk': FragmentChunk}
+                'cudaChunk': FragmentChunk,
+                'bound': FragmentBound}
 
 def fragment_fromstring(s, func):
     if '(' not in s:
@@ -820,10 +842,34 @@ def cuda_global_check(schedule):
                 if sum([isinstance(x,(FragmentVectorize,FragmentParallel)) for x in L]) >= 1:
                     ok[0] = False
         d_cuda[f_name] = cuda
-        L = schedule.d[f_name]
+        #L = schedule.d[f_name]
 
     halide.visit_funcs(schedule.root_func, callback)
-    return ok[0]
+    if not ok[0]:
+        return False
+    
+    # Also all funcs chunk() or inline() (recursively) and using cudaTile() cannot be parallel in a caller
+    d_parallel = {}
+    ok = [True]
+    def callback(f, fparent):
+        f_name = f.name()
+        L = schedule.d.get(f_name, [])
+        inline_chunk = (len(L) == 0 or isinstance(L[0], FragmentChunk))
+        parallel = sum([isinstance(x, FragmentParallel) for x in L]) >= 1
+        if inline_chunk:
+            if d_parallel.get(fparent.name(), False):
+                parallel = True
+        if parallel:
+            if sum([isinstance(x,(FragmentCudaTile)) for x in L]) >= 1:
+                ok[0] = False
+        d_parallel[f_name] = parallel
+        #L = schedule.d[f_name]
+
+    halide.visit_funcs(schedule.root_func, callback)
+    if not ok[0]:
+        return False
+    
+    return True
     
 class Schedule:
     """
