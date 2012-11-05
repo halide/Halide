@@ -19,6 +19,7 @@ MUTATE_TRIES = 10
 TILE_PROB_SQUARE = 0.5              # Probability of selecting square tile size (e.g. 8x8).
 SPLIT_STORE_COMPUTE = True          # Whether to use chunk(store, compute)
 CHUNK_ROOT = True                   # Whether to allow chunk(root, compute)
+MAXLEN = 300                        # Maximum length in display of schedule through oneline()
 
 CHECK_VERBOSE = False
 CHUNK_VARS_VERBOSE = False
@@ -892,7 +893,7 @@ class Schedule:
     def oneline(self):
         "One line description for display."
         ans = str(self).replace('\n','\\n')
-        maxlen = 100
+        maxlen = MAXLEN
         if len(ans) > maxlen:
             ans = ans[:maxlen-3] + '...'
         return "'" + ans + "'"

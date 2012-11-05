@@ -15,7 +15,7 @@ def sample(varlist):
     if autotune.is_cuda():
         L.extend([
             '.root().cudaTile(%(x)s,%(y)s,%(n)d,%(n)d)'
-        ])
+        ]*3)
     
     r = random.randrange(len(L))
     n = random.choice([2,4,8])

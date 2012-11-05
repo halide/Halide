@@ -11,7 +11,10 @@ def test_crossover(verbose=False):
     (f, g, locals_d) = test_funcs()
     constraints = Constraints()
     
-    for j in range(8):
+    crossover_success = 0
+    
+    trials = 8
+    for j in range(trials):
         random.seed(j)
 
 #        for i in range(1000):
@@ -57,7 +60,12 @@ def test_crossover(verbose=False):
                 print '---- Mutate after crossover %d,%d ----'%(j,i)
                 print 'a', repr(str(a)), a.new_vars()
                 print 'b', repr(str(b)), b.new_vars()
-            c = crossover(a, b, constraints)
+            try:
+                c = crossover(a, b, constraints)
+                if i == 0:
+                    crossover_success += 1
+            except BadScheduleError:
+                break
             if verbose:
                 print 'c', repr(str(c)), c.new_vars()
             c.apply(constraints)
@@ -96,6 +104,7 @@ def test_crossover(verbose=False):
                     print '-'*20
             test_generation(L, prev_gen)
             prev_gen = L
+    assert crossover_success >= trials/2
     
 #    print 'autotune.next_generation:        OK'
     print 'autotune.next_generation(cuda=%d):    OK'%valid_schedules.is_cuda()
