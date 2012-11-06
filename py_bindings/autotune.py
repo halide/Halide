@@ -1896,6 +1896,9 @@ def main():
                 filename = os.path.split(filename)[-1]
                 assert filename[0] == 'f'
                 return int(filename[1:].split('_')[0])
+            if not os.path.exists(p.resume_from):
+                print >> sys.stderr, 'Directory not found (for resume): %s' % p.resume_from
+                sys.exit(1)
             compileL = glob.glob(os.path.join(p.resume_from, '*compile.sh'))
             genL = [get_gen(x) for x in compileL]
             last_gen = max(genL)
