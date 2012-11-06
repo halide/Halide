@@ -112,6 +112,7 @@ IMAGE_EXT = '.ppm'
 DEFAULT_IMAGE = 'apollo3' + IMAGE_EXT
 DEBUG_CHECKS = False      # Do excessive checks to catch errors (turn off for release code)
 CHECK_REFERENCE = False #True
+AUTOTUNE_CMD_INFO = '# autotune '       # Info at the top of summary file
 
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
@@ -171,6 +172,7 @@ class AutotuneParams:
       -summary_file            s Summary output filename, defaults to summary.txt
       -plot_file               s Convergence plot filename, defaults to plot.png
       -unbiased_file           s Stores unbiased timing comparisons, defaults to unbiased.txt (summary has biased times)
+      -resume_from             s Start new tuning, seeded from the last generation of a previous (and different) tune dir s
       
     Experimental Features:
     
@@ -257,6 +259,7 @@ class AutotuneParams:
     plot_file = 'plot.png'
     unbiased_file = 'unbiased.txt'  # For unbiased timing comparisons (summary is biased)
     params_file = 'params.txt'      # Serializes AutotuneParams to this file
+    resume_from = None
     
     def __init__(self, argd={}, **kw):
         for (key, value) in kw.items():
@@ -266,7 +269,7 @@ class AutotuneParams:
                 raise ValueError('unknown command-line switch %s'%key)
             if key == 'in_images':
                 self.in_images = value.split(':')
-            elif isinstance(getattr(self, key), str) or key in ['tune_dir', 'tune_link']:
+            elif isinstance(getattr(self, key), str) or key in ['tune_dir', 'tune_link', 'resume_from']:
                 setattr(self, key, argd[key])
             else:
                 setattr(self, key, float(argd[key]) if ('.' in value or isinstance(getattr(self, key), float)) else int(argd[key]))
@@ -1198,7 +1201,7 @@ def set_adaptive_mutate_rate(p, timeGenL):
         ratioMaxRate = 0.9
         set_rate(clampedLerp(ratio, ratioMinRate, ratioMaxRate, minRate, maxRate))
 
-def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints(), seed_scheduleL=[]):
+def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints(), seed_scheduleL=[], arg_str=None):
     timer = AutotuneTimer()
 
     p = copy.deepcopy(p)
@@ -1222,6 +1225,8 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         pass
         
     log_sched(p, None, None, no_output=True)    # Clear log file
+    if arg_str is not None:
+        log_sched(p, None, AUTOTUNE_CMD_INFO + arg_str, filename=p.summary_file)
     begin_str = '# Begin tuning on %s, %s' % (socket.gethostname(), str(datetime.datetime.now())[:19].strip())
     try:
         begin_str += ', git rev. ' + subprocess.check_output('git rev-parse HEAD',shell=True).strip()[:8]
@@ -1750,7 +1755,8 @@ def main():
             #best_schedule_name = os.path.split(schedules[-1])[-1]
             #best_schedule_name = best_schedule_name[1:4] + '_000'
             best_schedule_name = '-000_000'
-            summary = [x for x in open(os.path.join(tune_dir, p.summary_file), 'rt').read().strip().split('\n') if not x.startswith('#')]
+            summary0 = [x for x in open(os.path.join(tune_dir, p.summary_file), 'rt').read().strip().split('\n')]
+            summary = [x for x in summary0 if not x.startswith('#')]
             for line in summary:
                 line_L = line.strip().split(' ')
                 try:
@@ -1774,6 +1780,11 @@ def main():
                 L = best_schedule.strip().split('\n')
                 best_schedule = L[0] + '\n\n' + '\n'.join(L[1:-1]) + '\n\n' + L[-1]
 
+            tune_name = os.path.split(tune_dir)[-1]
+            #print summary0[0]
+            #print summary0[0].startswith(AUTOTUNE_CMD_INFO)
+            #if len(summary0) >= 1 and summary0[0].startswith(AUTOTUNE_CMD_INFO):
+            #    tune_name = summary0[0][len(AUTOTUNE_CMD_INFO):]
             with open(os.path.join(tune_dir, 'index.html'), 'wt') as f:
                 ref_file = glob.glob(os.path.join(tune_dir, 'f000*_compile.sh'))
                 if len(ref_file) >= 0:
@@ -1782,7 +1793,7 @@ def main():
                     ref_file = os.path.join(tune_dir, p.summary_file)
                 timestamp = time.ctime(os.path.getmtime(ref_file))
                 print >>f, '<html><body>'
-                print >>f, '<h1>Autotuner: %s</h1><h2>On %s (%s)</h2>' % (os.path.split(tune_dir)[-1], socket.gethostname(), timestamp)
+                print >>f, '<h1>Autotuner: %s</h1><h2>On %s (%s)</h2>' % (tune_name, socket.gethostname(), timestamp)
                 #print >>f, '<table border=0 cellpadding=0 cellspacing=2>'
                 #print >>f, '<tr><td><b>Machine:</b></td><td>%s</td></tr>'% socket.gethostname()
                 #print >>f, '<tr><td><b>Time:</b></td><td>%s</td></tr>'%)
@@ -1878,8 +1889,22 @@ def main():
         p = AutotuneParams(argd)
 
         seed_scheduleL = []
-        seed_scheduleL.append(root_all_str(out_func))
-
+        if p.resume_from is None:
+            seed_scheduleL.append(root_all_str(out_func))
+        else:
+            def get_gen(filename):
+                filename = os.path.split(filename)[-1]
+                assert filename[0] == 'f'
+                return int(filename[1:].split('_')[0])
+            compileL = glob.glob(os.path.join(p.resume_from, '*compile.sh'))
+            genL = [get_gen(x) for x in compileL]
+            last_gen = max(genL)
+            for sh in [x for x in compileL if get_gen(x) == last_gen]:
+                L = split_doublequote(open(sh,'rt').read())
+                schedule_str = L[5]
+                assert schedule_str[0] == '"' and schedule_str[-1] == '"'
+                schedule_str = schedule_str[1:-1]
+                seed_scheduleL.append(schedule_str.replace('\\n', '\n'))
         #p.parallel_compile_nproc = 4
         exclude = []
         #for key in scope:
@@ -1887,7 +1912,7 @@ def main():
         #        exclude.append(scope[key])
         constraints = Constraints(exclude)
 
-        autotune(filter_func_name, p, constraints=constraints, seed_scheduleL=seed_scheduleL)
+        autotune(filter_func_name, p, constraints=constraints, seed_scheduleL=seed_scheduleL, arg_str=' '.join(sys.argv[2:]))
     elif args[0] in ['test_sched']:
         #(input, out_func, test_func) = examples.blur()
         pass
