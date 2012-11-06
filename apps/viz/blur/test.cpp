@@ -32,52 +32,36 @@ buffer_t halideBufferOfImage(Image &im) {
 }
 
 void make_log(int schedule) {
-    Image input(32, 32);
-    Image out(32, 32);
+    Image input(24, 24);
+    Image out(24, 24);
     buffer_t inbuf = halideBufferOfImage(input);
     buffer_t outbuf = halideBufferOfImage(out);
 
     switch(schedule) {
-    case 0:
-      blur_6(&inbuf, &outbuf);
-      blur_6(&inbuf, &outbuf);
-      blur_6(&inbuf, &outbuf);
-      blur_0(&inbuf, &outbuf);
-      return;
+    case 0: 
+        blur_0(&inbuf, &outbuf);
+        return;
     case 1:
-      blur_7(&inbuf, &outbuf);
-      blur_7(&inbuf, &outbuf);
-      blur_7(&inbuf, &outbuf);
-      blur_1(&inbuf, &outbuf);
-      return;
+        blur_1(&inbuf, &outbuf);
+        return;
     case 2:
-      blur_8(&inbuf, &outbuf);
-      blur_8(&inbuf, &outbuf);
-      blur_8(&inbuf, &outbuf);
-      blur_2(&inbuf, &outbuf);
-      return;
+        blur_2(&inbuf, &outbuf);
+        return;
     case 3:
-      blur_9(&inbuf, &outbuf);
-      blur_9(&inbuf, &outbuf);
-      blur_9(&inbuf, &outbuf);
-      blur_3(&inbuf, &outbuf);
-      return;
+        blur_3(&inbuf, &outbuf);
+        return;
     case 4:
-      blur_10(&inbuf, &outbuf);
-      blur_10(&inbuf, &outbuf);
-      blur_10(&inbuf, &outbuf);
-      blur_4(&inbuf, &outbuf);
-      return;
+        blur_4(&inbuf, &outbuf);
+        return;
     case 5:
-      blur_11(&inbuf, &outbuf);
-      blur_11(&inbuf, &outbuf);
-      blur_11(&inbuf, &outbuf);
-      blur_5(&inbuf, &outbuf);
-      return;
+        blur_5(&inbuf, &outbuf);
+        return;
     }
 }
 
 int main(int argc, char **argv) {
-    make_log(atoi(argv[1]));
+    for (int i = 0; i < 5; i++) {
+        make_log(atoi(argv[1]));
+    }
     return 0;
 }
