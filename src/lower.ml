@@ -510,10 +510,8 @@ let rec storage_folding defs stmt =
             end
             | Range (_, IntImm k) -> begin
               (* Round up to the nearest power of two, so that we can just use masking *)
-              (* 
               let rec pow2 x = if (x < k) then pow2 (x*2) else x in
               let k = pow2 1 in
-              *)
               let result = (i, IntImm k) in
               if verbosity > 2 then dbg "Folding %s over dimension %d by %d\n" func i k;
 
