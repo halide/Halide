@@ -44,8 +44,8 @@ def main(args=None):
     for (xv, yv) in time_d.items():
         x.append(xv)
         y.append(yv*1000)
-    print x
-    print y
+#    print x
+#    print y
 
     if out_filename is not None:
         matplotlib.use('Agg')     # headless
