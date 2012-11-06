@@ -78,34 +78,26 @@ public:
 
     T *data() {return (T*)contents->buf.host;}
 
-#if 0 // disabled for pre-C++-11 compatibility
-    Image(std::initializer_list<T> l) {
-        initialize(l.size(), 1, 1);
-        int x = 0;
-        for (auto &iter: l) {
-            (*this)(x++, 0, 0) = iter;
+    void markHostDirty() {
+        // If you use data directly, you must also call this so that
+        // gpu-side code knows that it needs to copy stuff over.
+        contents->buf.host_dirty = true;
+    }
+
+    void copyToHost() {
+        if (contents->buf.dev_dirty) {
+            __copy_to_host(&contents->buf);
+            contents->buf.dev_dirty = false;
         }
     }
 
-    Image(std::initializer_list<std::initializer_list<T> > l) {
-        initialize(l.begin()->size(), l.size(), 1);
-        int y = 0;
-        for (auto &row: l) {
-            int x = 0;
-            for (auto &elem: row) {
-                (*this)(x++, y, 0) = elem;
-            }
-            y++;
-        }
-    }
-#endif
     Image(T vals[]) {
         initialize(sizeof(vals)/sizeof(T), 1, 1);
         for (int i = 0; i < sizeof(vals); i++) (*this)(i, 0, 0) = vals[i];
     }
 
     void copy(T* vals, int width, int height) {
-        // initialize(width, height, 1);
+        assert(contents && "Copying into an uninitialized image");
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < height; x++) {
                 (*this)(x, y, 0) = vals[y * width + x];
@@ -113,13 +105,10 @@ public:
         }
     }
 
+    // Warning. This is slower than you might expect
     T &operator()(int x, int y = 0, int c = 0) {
-        // copy back if needed
-        if (contents->buf.dev_dirty)
-            __copy_to_host(&contents->buf);
-        
-        // mark host dirty
-        contents->buf.host_dirty = true;
+        copyToHost();
+        markHostDirty();
 
         T *ptr = (T *)contents->buf.host;
         int w = contents->buf.extent[0];
@@ -128,8 +117,7 @@ public:
     }
 
     const T &operator()(int x, int y = 0, int c = 0) const {
-        if (contents->buf.dev_dirty)
-            __copy_to_host(&contents->buf);
+        copyToHost();
 
         const T *ptr = (const T *)contents->buf.host;
         return ptr[c*contents->buf.stride[2] + y*contents->buf.stride[1] + x*contents->buf.stride[0]];
@@ -149,6 +137,14 @@ public:
 
     int channels() {
         return contents->buf.extent[2];
+    }
+
+    int stride(int dim) {
+        return contents->buf.stride[dim];
+    }
+
+    int size(int dim) {
+        return contents->buf.extent[dim];
     }
 
 };

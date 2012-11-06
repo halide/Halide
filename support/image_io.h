@@ -112,13 +112,17 @@ Image<T> load_png(std::string filename) {
     _assert((bit_depth == 8) || (bit_depth == 16), "Can only handle 8-bit or 16-bit pngs\n");
 
     // convert the data to T
+    im.markHostDirty();
+    int c_stride = im.stride(2);
+    T *ptr = im.data();
     if (bit_depth == 8) {
         for (int y = 0; y < im.height(); y++) {
             uint8_t *srcPtr = (uint8_t *)(row_pointers[y]);
             for (int x = 0; x < im.width(); x++) {
                 for (int c = 0; c < im.channels(); c++) {                    
-                    convert(*srcPtr++, im(x, y, c));
+                    convert(*srcPtr++, ptr[c*c_stride]);
                 }
+                ptr++;
             }
         }
     } else if (bit_depth == 16) {
@@ -128,8 +132,9 @@ Image<T> load_png(std::string filename) {
                 for (int c = 0; c < im.channels(); c++) {
                     uint16_t hi = (*srcPtr++) << 8;
                     uint16_t lo = hi | (*srcPtr++);
-                    convert(lo, im(x, y, c));
+                    convert(lo, ptr[c*c_stride]);
                 }
+                ptr++;
             }
         }
     }
@@ -145,6 +150,109 @@ Image<T> load_png(std::string filename) {
     return im;
 } 
 
+template<typename T>
+void save_png(Image<T> im, std::string filename) {
+    png_structp png_ptr;
+    png_infop info_ptr;
+    png_bytep *row_pointers;
+    png_byte color_type;
+
+    _assert(im.channels() > 0 && im.channels() < 5,
+           "Can't write PNG files that have other than 1, 2, 3, or 4 channels\n");
+
+    png_byte color_types[4] = {PNG_COLOR_TYPE_GRAY, PNG_COLOR_TYPE_GRAY_ALPHA,
+                               PNG_COLOR_TYPE_RGB,  PNG_COLOR_TYPE_RGB_ALPHA
+                              };
+    color_type = color_types[im.channels() - 1];
+
+    // open file
+    FILE *f = fopen(filename.c_str(), "wb");
+    _assert(f, "[write_png_file] File %s could not be opened for writing\n", filename.c_str());
+
+    // initialize stuff
+    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    _assert(png_ptr, "[write_png_file] png_create_write_struct failed\n");
+
+    info_ptr = png_create_info_struct(png_ptr);
+    _assert(info_ptr, "[write_png_file] png_create_info_struct failed\n");
+
+    _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during init_io\n");
+
+    png_init_io(png_ptr, f);
+
+    unsigned int bit_depth = 16;
+    if (sizeof(T) == 1) {
+        bit_depth = 8;
+    } 
+
+    // write header
+    _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing header\n");
+
+    png_set_IHDR(png_ptr, info_ptr, im.width(), im.height(),
+                 bit_depth, color_type, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+
+    png_write_info(png_ptr, info_ptr);
+
+    row_pointers = new png_bytep[im.height()];
+
+    im.copyToHost(); // in case the image is on the gpu
+
+    int c_stride = im.stride(2);
+    T *srcPtr = im.data();
+
+    for (int y = 0; y < im.height(); y++) {
+        row_pointers[y] = new png_byte[png_get_rowbytes(png_ptr, info_ptr)];
+        uint8_t *dstPtr = (uint8_t *)(row_pointers[y]);
+        if (bit_depth == 16) {
+            // convert to uint16_t
+            for (int x = 0; x < im.width(); x++) {
+                for (int c = 0; c < im.channels(); c++) {
+                    uint16_t out;
+                    convert(srcPtr[c*c_stride], out);
+                    *dstPtr++ = out >> 8; 
+                    *dstPtr++ = out & 0xff;
+                }
+                srcPtr++;
+            }
+        } else if (bit_depth == 8) {
+            // convert to uint8_t
+            for (int x = 0; x < im.width(); x++) {
+                for (int c = 0; c < im.channels(); c++) {
+                    uint8_t out;
+                    convert(srcPtr[c*c_stride], out);
+                    *dstPtr++ = out;
+                }
+                srcPtr++;
+            }
+        } else {
+            _assert(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.");
+        }
+    }
+    
+    // write data
+    _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing bytes");
+
+    png_write_image(png_ptr, row_pointers);
+
+    // finish write
+    _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during end of write");
+
+    png_write_end(png_ptr, NULL);
+
+    // clean up
+    for (int y = 0; y < im.height(); y++) {
+        delete[] row_pointers[y];
+    }
+    delete[] row_pointers;
+
+    fclose(f);
+
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+}
+
+
+
 int is_little_endian() {
     int value = 1;
     return ((char *) &value)[0] == 1;
@@ -154,10 +262,6 @@ int is_little_endian() {
 
 template<typename T>
 Image<T> load_ppm(std::string filename) {
-//    printf("load_ppm\n"); fflush(stdout);
-//    timeval t1, t2;
-//    unsigned int t;
-//    gettimeofday(&t1, NULL);
 
     /* open file and test for it being a ppm */
     FILE *f = fopen(filename.c_str(), "rb");
@@ -180,21 +284,14 @@ Image<T> load_ppm(std::string filename) {
     int channels = 3;
     Image<T> im(width, height, channels);
 
-//    gettimeofday(&t2, NULL);
-//    t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-//    printf("load ppm 1 time: %.4f secs\n", t/(1000.0*1000.0));
-
     // convert the data to T
     if (bit_depth == 8) {
-//        gettimeofday(&t1, NULL);
         uint8_t *data = new uint8_t[width*height*3];
-        _assert(fread((void *) data, sizeof(uint8_t), width*height*3, f) == (size_t) (width*height*3), "Could not read PPM 8-bit data\n");
+        _assert(fread((void *) data, 
+                      sizeof(uint8_t), width*height*3, f) == (size_t) (width*height*3), 
+                "Could not read PPM 8-bit data\n");
         fclose(f);
-//        gettimeofday(&t2, NULL);
-//        t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-//        printf("load ppm 2 time: %.4f secs\n", t/(1000.0*1000.0));
 
-//        gettimeofday(&t1, NULL);
         T *im_data = (T*) im.data();
         for (int y = 0; y < im.height(); y++) {
             uint8_t *row = (uint8_t *)(&data[(y*width)*3]);
@@ -205,20 +302,11 @@ Image<T> load_ppm(std::string filename) {
             }
         }
         delete[] data;
-//        gettimeofday(&t2, NULL);
-//        t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-//        printf("load ppm 3 time: %.4f secs\n", t/(1000.0*1000.0));
     } else if (bit_depth == 16) {
-//        gettimeofday(&t1, NULL);
         int little_endian = is_little_endian();
         uint16_t *data = new uint16_t[width*height*3];
         _assert(fread((void *) data, sizeof(uint16_t), width*height*3, f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n");
         fclose(f);
-//        gettimeofday(&t2, NULL);
-//        t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-//        printf("load ppm(16-bit) 2 time: %.4f secs\n", t/(1000.0*1000.0));
-        
-//        gettimeofday(&t1, NULL);
         T *im_data = (T*) im.data();
         for (int y = 0; y < im.height(); y++) {
             uint16_t *row = (uint16_t *) (&data[(y*width)*3]);
@@ -230,9 +318,6 @@ Image<T> load_ppm(std::string filename) {
             }
         }
         delete[] data;
-//        gettimeofday(&t2, NULL);
-//        t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-//        printf("load ppm(16-bit) 3 time: %.4f secs\n", t/(1000.0*1000.0));
     }
     im(0,0,0) = im(0,0,0);      /* Mark dirty inside read/write functions. */
 
@@ -279,99 +364,6 @@ void save_ppm(Image<T> im, std::string filename) {
     }
     fclose(f);
 } 
-
-template<typename T>
-void save_png(Image<T> im, std::string filename) {
-    png_structp png_ptr;
-    png_infop info_ptr;
-    png_bytep *row_pointers;
-    png_byte color_type;
-
-    _assert(im.channels() > 0 && im.channels() < 5,
-           "Can't write PNG files that have other than 1, 2, 3, or 4 channels\n");
-
-    png_byte color_types[4] = {PNG_COLOR_TYPE_GRAY, PNG_COLOR_TYPE_GRAY_ALPHA,
-                               PNG_COLOR_TYPE_RGB,  PNG_COLOR_TYPE_RGB_ALPHA
-                              };
-    color_type = color_types[im.channels() - 1];
-
-    // open file
-    FILE *f = fopen(filename.c_str(), "wb");
-    _assert(f, "[write_png_file] File %s could not be opened for writing\n", filename.c_str());
-
-    // initialize stuff
-    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    _assert(png_ptr, "[write_png_file] png_create_write_struct failed\n");
-
-    info_ptr = png_create_info_struct(png_ptr);
-    _assert(info_ptr, "[write_png_file] png_create_info_struct failed\n");
-
-    _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during init_io\n");
-
-    png_init_io(png_ptr, f);
-
-	unsigned int bit_depth = 16;
-	if (sizeof(T) == 1) {
-		bit_depth = 8;
-	}
-
-    // write header
-    _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing header\n");
-
-    png_set_IHDR(png_ptr, info_ptr, im.width(), im.height(),
-                 bit_depth, color_type, PNG_INTERLACE_NONE,
-                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
-
-    png_write_info(png_ptr, info_ptr);
-
-    row_pointers = new png_bytep[im.height()];
-    for (int y = 0; y < im.height(); y++) {
-		row_pointers[y] = new png_byte[png_get_rowbytes(png_ptr, info_ptr)];
-        uint8_t *dstPtr = (uint8_t *)(row_pointers[y]);
-		if (bit_depth == 16) {
-    		// convert to uint16_t
-			for (int x = 0; x < im.width(); x++) {
-				for (int c = 0; c < im.channels(); c++) {
-					uint16_t out;
-					convert(im(x, y, c), out);
-					*dstPtr++ = out >> 8; 
-					*dstPtr++ = out & 0xff;
-				}
-            }
-        } else if (bit_depth == 8) {
-    		// convert to uint8_t
-			for (int x = 0; x < im.width(); x++) {
-				for (int c = 0; c < im.channels(); c++) {
-					uint8_t out;
-					convert(im(x, y, c), out);
-					*dstPtr++ = out;
-				}
-            }
-		} else {
-			_assert(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.");
-		}
-    }
-
-    // write data
-    _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing bytes");
-
-    png_write_image(png_ptr, row_pointers);
-
-    // finish write
-    _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during end of write");
-
-    png_write_end(png_ptr, NULL);
-
-    // clean up
-    for (int y = 0; y < im.height(); y++) {
-        delete[] row_pointers[y];
-    }
-    delete[] row_pointers;
-
-    fclose(f);
-
-    png_destroy_write_struct(&png_ptr, &info_ptr);
-}
 
 template<typename T>
 Image<T> load(std::string filename) {
