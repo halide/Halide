@@ -31,6 +31,7 @@ CUDA_CHUNK_VAR = 'blockidx'
 
 _cuda_mode = [False]                # Global variable for whether cuda mode. TODO: Remove global variable.
 def set_cuda(cuda):
+#    print 'set_cuda', cuda
     _cuda_mode[0] = cuda
 def is_cuda():
     return _cuda_mode[0]

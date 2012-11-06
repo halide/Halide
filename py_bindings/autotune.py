@@ -1561,12 +1561,15 @@ def root_all_str(f):
     for (fname, f) in sorted(halide.all_funcs(f).items()):
 #        print fname, ' '.join(x for x in halide.func_varlist(f))
         varlist = halide.func_varlist(f)
+        #print fname, is_cuda(), varlist
         if is_cuda() and len(varlist) >= 2:
             x = varlist[0]
             y = varlist[1]
-            ans.append(fname + '.root().cudaTile(%s,%s,8,8)')
+            ans.append(fname + '.root().cudaTile(%s,%s,8,8)\n'%(x,y))
         else:
             ans.append(fname + '.root()\n')
+#    print ans
+#    sys.exit(1)
     return ''.join(ans)
 
 def test():
@@ -1869,11 +1872,11 @@ def main():
         filter_func_name = args[1]
         #(input, out_func, test_func, scope) = getattr(examples, examplename)()
         (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
-        
+                
+        p = AutotuneParams(argd)
+
         seed_scheduleL = []
         seed_scheduleL.append(root_all_str(out_func))
-        
-        p = AutotuneParams(argd)
 
         #p.parallel_compile_nproc = 4
         exclude = []
