@@ -544,12 +544,16 @@ class FragmentReorder(Fragment):
                         print ' * check fail reorder %r %s %r' % (self.permutation, var, vars)
                     return False
         if not default_check(self.__class__, L, func):
+            if CHECK_VERBOSE:
+                print ' * check default_check for reorder failed'
             return False
         if [isinstance(x, FragmentReorder) for x in L] == [0]*(len(L)-1)+[1]:
             return True
         if is_cuda():
             if reorder_and_cudatile(L):
                 return True
+        if CHECK_VERBOSE:
+            print ' * check reorder failed by default'
         return False
     
     def __str__(self):
@@ -702,6 +706,8 @@ class FragmentList(list):
                     var_order = x.var_order(var_order)
                 #vars = sorted(set(vars + x.new_vars()))
         except BadScheduleError:
+            if CHECK_VERBOSE:
+                print ' * check fragmentlist BadSchedule error failed, returning'
             return False
         return True
 
@@ -927,6 +933,8 @@ class Schedule:
         #print 'check', self
         for x in self.d.values():
             if not x.check(partial_schedule):
+                if CHECK_VERBOSE:
+                    print ' * check on Schedule failed for %s' % x
                 return False
         return True
 

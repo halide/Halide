@@ -111,6 +111,7 @@ AUTOTUNE_VERBOSE = False #True #False #True
 IMAGE_EXT = '.ppm'
 DEFAULT_IMAGE = 'apollo3' + IMAGE_EXT
 DEBUG_CHECKS = False      # Do excessive checks to catch errors (turn off for release code)
+CHECK_REFERENCE = False #True
 
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
@@ -1263,7 +1264,9 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
 #        currentL.
     display_text = '\nTiming reference schedules and obtaining reference output image\n'
     check_schedules(currentL[:len(currentL)-nref])
-    
+    if CHECK_REFERENCE:
+        for schedule in currentL[len(currentL)-nref:]:
+            assert schedule.check(schedule), 'reference schedule check failed %s' % schedule
     def format_time(timev):
         current_s = '%17.6f'%timev
         e = get_error_str(timev)
