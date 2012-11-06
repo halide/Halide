@@ -1565,7 +1565,7 @@ def root_all_str(f):
         if is_cuda() and len(varlist) >= 2:
             x = varlist[0]
             y = varlist[1]
-            ans.append(fname + '.root().cudaTile(%s,%s,8,8)\n'%(x,y))
+            ans.append(fname + '.root().cudaTile(%s,%s,4,4)\n'%(x,y))
         else:
             ans.append(fname + '.root()\n')
 #    print ans
