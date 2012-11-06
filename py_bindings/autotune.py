@@ -141,6 +141,7 @@ class AutotuneParams:
       -prob_mutate_copy        p Replace Func's schedule with one randomly sampled from another Func
       -prob_mutate_group       p Replace all schedules in a group with the schedule of a single Func from the group
       -prob_mutate_chunk       p Find a chunk() call and replace with a new random chunk() call
+      -prob_mutate_chunk_multi p Make a func tile/parallel/vectorize, then choose a random variable in tile and chunk back some distance
       -crossover_mutate_prob   p Probability that mutate() is called after crossover
       -crossover_random_prob   p Probability that crossover is run with a randomly generated parent
       -prob_pop_elitism        p Frequency of elitism
@@ -148,6 +149,7 @@ class AutotuneParams:
       -prob_pop_mutated        p Frequency of mutated
       -prob_pop_random         p Frequency of random
       -adaptive_mutate         b Adaptively turn up mutation rate based on rate of progress (0 or 1, default 0)
+      -chunk_multi_cont_prob   p Probability to continue adding chunk() recursively in 'chunk_multi' mode.
       
     Compilation and Running:
     
@@ -213,8 +215,11 @@ class AutotuneParams:
     prob_mutate_template = 1.0
     prob_mutate_copy     = 0.2
     prob_mutate_group    = 0.0      # Seems to converge to local minima -- do not use.
-    prob_mutate_chunk    = 0.2
-        
+    prob_mutate_chunk    = 0.2 #0.2
+    prob_mutate_chunk_multi = 1.0 
+    
+    chunk_multi_cont_prob = 0.85
+    
     image_ext = IMAGE_EXT               # Image extension for reference outputs. Can be overridden by tune_image_ext special variable.
 
     min_depth = 0
@@ -484,6 +489,76 @@ def crossover(a, b, constraints):
             
         return ans
     raise BadScheduleError((a, b))
+
+def chunk_multi(p, a, verbose=False):
+    "Tile.root.parallel a random point and then chunk back with a randomly selected variable n stages."
+    assert isinstance(a, Schedule)
+    a0 = copy.copy(a)
+    
+    d_callees = halide.callees(a.root_func)
+    d_callers = halide.callers(a.root_func)
+    d_varlist = dict([(name, halide.func_varlist(a.d[name].func)) for name in d_callees])
+    valid = [k for (k, v) in d_callees.items() if len(v) >= 1 and len(d_varlist[name]) >= 2]
+    name = random.choice(valid)
+
+    varlist = d_varlist[name] #halide.func_varlist(a.d[name].func)
+    if len(varlist) < 2:
+        raise ValueError
+    x = varlist[0]
+    y = varlist[1]
+    n = random.choice([2,4,8])
+    
+    if verbose:
+        print '-'*40
+        print a
+        print '-'*40
+    
+    s = '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)' % locals()
+    a.d[name] = FragmentList.fromstring(a.d[name].func, s)
+
+    chunk_var = random.choice([x, y, '_c1'])
+    if verbose:
+        print 'chunk multi root', name
+        print '  callees:', d_callees[name]
+    
+    chunk_count = [0]
+    
+    below_func = {}
+    #coin_fail = {}
+    def callback(f, fparent_ignore):
+        f_name = f.name()
+
+        if f_name == name:
+            below_func[f_name] = True
+        for fparent_name in d_callers[f_name]:
+            if below_func.get(fparent_name, False):
+                below_func[f_name] = True
+        if f_name not in below_func:
+            below_func[f_name] = False
+            
+        if verbose:
+            print 'visit %s, %s, below_func:%d, name=%s' % (f_name, d_callers[f_name], below_func[f_name], name)
+        
+        if below_func[f_name] and f_name != name:
+            # Schedule as chunk
+            chunk_count[0] += 1
+            if verbose:
+                print '  chunk multi func', f_name
+            a.d[f_name] = FragmentList.fromstring(a.d[name].func, '.chunk(%s,%s)'%(chunk_var, chunk_var))
+            
+            # Flip coin, if fail remove below_func
+            if random.random() >= p.chunk_multi_cont_prob:
+                below_func[f_name] = False
+    halide.visit_funcs(a.root_func, callback, toposort=True)
+    
+    a.genomelog = 'mutate_chunk_multi(%s)'%a0.identity()
+    if verbose:
+        print '-'*40
+        print a
+    assert chunk_count[0] >= 1
+    #sys.exit(1)
+    
+    return a
     
 def mutate(a, p, constraints, grouping):
     "Mutate existing schedule using AutotuneParams p."
@@ -578,8 +653,11 @@ def mutate(a, p, constraints, grouping):
                 L[i] = FragmentChunk.random_fragment(a.root_func, L.func, FragmentChunk, L.var_order(), [], a)
                 #print 'after:', L
                 a.genomelog = 'mutate_chunk(%s)'%a0.identity()
+            elif mode == 'chunk_multi':
+                a = chunk_multi(p, a) #, name)
             else:
                 raise ValueError('Unknown mutation mode %s'%mode)
+                
         except MutateFailed:
             continue
             
@@ -1853,12 +1931,12 @@ def main():
         print
         print 'Number successful schedules: %d/%d (%d failed)' % (nsuccess, nprint, nfail)
     elif args[0] == 'test_variations':
-        filter_func_name = 'examples.blur.filter_func'
+        filter_func_name = 'examples.camera_pipe.filter_func' #'examples.blur.filter_func'
         (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
 
-        seed_scheduleL = []
-        seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8)\n' +
-                              'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
+        seed_scheduleL = [root_all_str(out_func)]
+#        seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8)\n' +
+#                              'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
         p = AutotuneParams()
         exclude = []
         #for key in scope:
@@ -1872,7 +1950,8 @@ def main():
         for seed in seed_scheduleL:
             currentL.append(constraints.constrain(Schedule.fromstring(out_func, seed, 'seed')))
         
-        for indiv in next_generation(currentL, p, out_func, constraints, 0):
+        #next_generation(prevL, p, root_func, constraints, generation_idx, timeL)
+        for indiv in next_generation(currentL, p, out_func, constraints, 0, [{'time':0.5}]*len(currentL)):    # FIXMEFIXME
             print '-'*40
             print indiv.title()
             print indiv
