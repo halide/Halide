@@ -178,7 +178,7 @@ class AutotuneParams:
       -seed_reasonable         b Whether to seed with reasonable schedules (0 or 1, default 0)
       -prob_reasonable         p Probability to sample reasonable schedule when sampling random schedule
       -cuda                    b Whether to use Cuda schedules (0 or 1, default 0)
-      -mutate_more             b Whether to mutate more (0 or 1, default 0)
+      -aggressive              b Use strategies hoped to more likely find global minimum (0 or 1, default 0)
     """
     
     #pop_elitism_pct = 0.2
@@ -193,7 +193,7 @@ class AutotuneParams:
     prob_pop_random    = 0.2
     
     adaptive_mutate = False
-    mutate_more = False
+    aggressive = False
     
     cuda = False
     
@@ -283,13 +283,15 @@ class AutotuneParams:
             self.hl_threads = multiprocessing.cpu_count() / 2
         self.set_globals()
     
-        if self.mutate_more:
+        if self.aggressive:
             self.tournament_size = int(self.population_size/4)
             self.tournament_sample_frac = 0.5                   # TODO: Implement
             self.crossover_mutate_prob = 0.0
             self.crossover_random_prob = 0.0
             self.prob_pop_random    = 0.05
             self.adaptive_mutate = True
+            self.seed_reasonable = True
+            self.prob_reasonable = 0.5
             
     def set_globals(self):
         set_cuda(self.cuda)
