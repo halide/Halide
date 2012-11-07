@@ -150,6 +150,7 @@ class AutotuneParams:
       -prob_pop_random         p Frequency of random
       -adaptive_mutate         b Adaptively turn up mutation rate based on rate of progress (0 or 1, default 0)
       -chunk_multi_cont_prob   p Probability to continue adding chunk() recursively in 'chunk_multi' mode.
+      -chunk_multi_parallel_vector b When doing chunk_multi, whether to use parallel().vectorize() (0 or 1, default 1).
       
     Compilation and Running:
     
@@ -219,6 +220,7 @@ class AutotuneParams:
     prob_mutate_chunk_multi = 1.0 
     
     chunk_multi_cont_prob = 0.85
+    chunk_multi_parallel_vector = True
     
     image_ext = IMAGE_EXT               # Image extension for reference outputs. Can be overridden by tune_image_ext special variable.
 
@@ -295,7 +297,7 @@ class AutotuneParams:
             self.tournament_size = int(self.population_size/4)
             self.tournament_sample_frac = 0.5                   # TODO: Implement
             self.crossover_mutate_prob = 0.0
-            self.crossover_random_prob = 0.0
+            #self.crossover_random_prob = 0.0
             self.prob_pop_random    = 0.05
             self.adaptive_mutate = True
             self.seed_reasonable = True
@@ -409,6 +411,8 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
             else:
                 x = varlist[0]
                 y = varlist[1]
+                if is_cuda():
+                    n = random.choice([2,4,8])
                 if do_tile:
                     if sample_fragments:
                         s = '.root()' + subsample_join(['.tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d)'%locals(),
@@ -420,6 +424,8 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
                         s = '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)' % locals()
                 else:
                     s = '.root().parallel(%(y)s)' % locals()
+                if is_cuda():
+                    s = '.root().cudaTile(%(x)s,%(y)s,%(n)d,%(n)d)'%locals()
             ans[f.name()] = FragmentList.fromstring(f, s)
 
     halide.visit_funcs(root_func, callback)
@@ -524,10 +530,19 @@ def chunk_multi_try(p, a, verbose=False):
         print a
         print '-'*40
     
-    s = '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)' % locals()
+    s1 = '.vectorize(_c0,%(n)d).parallel(%(y)s)' if p.chunk_multi_parallel_vector else ''
+    s = ('.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d)'+s1) % locals()
+    if is_cuda():
+        s = '.root().cudaTile(%(x)s,%(y)s,%(n)d,%(n)d)'%locals()
+        
     a.d[name] = FragmentList.fromstring(a.d[name].func, s)
 
     chunk_var = random.choice([x, y, '_c1'])
+    if is_cuda():
+        cvars0 = chunk_vars(a, a.d[name].func)
+        if CUDA_CHUNK_VAR not in cvars0:
+            cvars0.append(CUDA_CHUNK_VAR)
+        chunk_var = random.choice(cvars0)
     if verbose:
         print 'chunk multi root', name
         print '  callees:', d_callees[name]
@@ -561,7 +576,7 @@ def chunk_multi_try(p, a, verbose=False):
                 if verbose:
                     print '  chunk multi func', f_name
                 f_varlist = halide.func_varlist(f)
-                if len(f_varlist) >= 1:
+                if len(f_varlist) >= 1 and p.chunk_multi_parallel_vector:
                     a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s).vectorize(%s,%d)'%(chunk_var, chunk_var, f_varlist[0], n))
                 else:
                     a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s)'%(chunk_var, chunk_var))
@@ -1683,7 +1698,7 @@ def root_all_str(f):
         if is_cuda() and len(varlist) >= 2:
             x = varlist[0]
             y = varlist[1]
-            ans.append(fname + '.root().cudaTile(%s,%s,8,8)\n'%(x,y))
+            ans.append(fname + '.root().cudaTile(%s,%s,4,4)\n'%(x,y))
         else:
             ans.append(fname + '.root()\n')
 #    print ans
