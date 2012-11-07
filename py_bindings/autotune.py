@@ -1769,7 +1769,9 @@ def main():
                 rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest
             elif examplename == 'interpolate':
                 rest = '-generations 150 -compile_timeout 120.0'.split() + rest
-            elif examplename in ['camera_pipe', 'bilateral_grid']:
+            elif examplename == 'camera_pipe':
+                rest = '-generations 200'.split() + rest
+            elif examplename == 'bilateral_grid':
                 rest = '-generations 150'.split() + rest
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'time':
