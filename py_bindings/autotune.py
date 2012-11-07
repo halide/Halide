@@ -490,10 +490,18 @@ def crossover(a, b, constraints):
         return ans
     raise BadScheduleError((a, b))
 
-def chunk_multi(p, a, verbose=False):
+def chunk_multi(*args):
+    while 1:
+        try:
+            return chunk_multi_try(*args)
+        except BadScheduleError:
+            continue
+        
+def chunk_multi_try(p, a, verbose=False):
     "Tile.root.parallel a random point and then chunk back with a randomly selected variable n stages."
     assert isinstance(a, Schedule)
-    a0 = copy.copy(a)
+    a0 = a
+    a = copy.copy(a0)
     
     d_callees = halide.callees(a.root_func)
     d_callers = halide.callers(a.root_func)
@@ -541,21 +549,35 @@ def chunk_multi(p, a, verbose=False):
         
         if below_func[f_name] and f_name != name:
             # Schedule as chunk
-            chunk_count[0] += 1
-            if verbose:
-                print '  chunk multi func', f_name
-            a.d[f_name] = FragmentList.fromstring(a.d[name].func, '.chunk(%s,%s)'%(chunk_var, chunk_var))
+            cvars = chunk_vars(a, f)
+            if chunk_var not in cvars:
+                if verbose:
+                    print '  chunk multi chunk_var missing %s %r'%(chunk_var, cvars)
+            else:
+                chunk_count[0] += 1
+                if verbose:
+                    print '  chunk multi func', f_name
+                a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s)'%(chunk_var, chunk_var))
             
             # Flip coin, if fail remove below_func
             if random.random() >= p.chunk_multi_cont_prob:
                 below_func[f_name] = False
     halide.visit_funcs(a.root_func, callback, toposort=True)
     
+    if chunk_count[0] == 0:
+        raise BadScheduleError
+        
     a.genomelog = 'mutate_chunk_multi(%s)'%a0.identity()
     if verbose:
         print '-'*40
         print a
+        print 'chunk_count: %d' % chunk_count[0]
+        print '(done chunk)'
+        print '-'*40
+        
     assert chunk_count[0] >= 1
+    #print a.d['interleave_y3']
+    assert a.check(a)
     #sys.exit(1)
     
     return a
@@ -833,6 +855,7 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
                 current.genomelog += ' (elite copy of %s)' % current.identity()
             try:
                 append_unique(current, 'elite')
+                yield ans[-1]
             except Duplicate:
                 pass
     
@@ -849,16 +872,19 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     for i in range(ncrossover):
 #        print 'crossover %d/%d'%(i, ncrossover)
         do_until_success(do_crossover)
+        yield ans[-1]
     for i in range(nmutated):
 #        print 'mutated %d/%d'%(i,nmutated)
         do_until_success(do_mutated)
+        yield ans[-1]
     for i in range(nrandom):
 #        print 'random %d/%d'%(i,nrandom)
         do_until_success(do_random)
+        yield ans[-1]
        
     assert len(ans) == p.population_size, (len(ans), p.population_size)
     
-    return ans
+#    return ans
 
 class AutotuneTimer:
     compile_time = 0.0
@@ -1394,7 +1420,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         if gen == 1:
             display_text = '\nTiming generation %d'%gen
 
-        currentL = next_generation(currentL, p, out_func, constraints, gen, timeL)
+        currentL = list(next_generation(currentL, p, out_func, constraints, gen, timeL))
         # The (commented out) following line tests injecting a bad schedule for blur example (should fail with RUN_CHECK_FAIL).
         #currentL.append(constraints.constrain(Schedule.fromstring(out_func, 'blur_x_blurUInt16.chunk(x_blurUInt16)\nblur_y_blurUInt16.root().vectorize(x_blurUInt16,16)', 'bad_schedule', gen, len(currentL))))
         check_schedules(currentL)
@@ -1931,6 +1957,7 @@ def main():
         print
         print 'Number successful schedules: %d/%d (%d failed)' % (nsuccess, nprint, nfail)
     elif args[0] == 'test_variations':
+        random.seed(0)
         filter_func_name = 'examples.camera_pipe.filter_func' #'examples.blur.filter_func'
         (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
 
@@ -1952,9 +1979,10 @@ def main():
         
         #next_generation(prevL, p, root_func, constraints, generation_idx, timeL)
         for indiv in next_generation(currentL, p, out_func, constraints, 0, [{'time':0.5}]*len(currentL)):    # FIXMEFIXME
-            print '-'*40
+            print '='*40 + ' (output from next_generation)'
             print indiv.title()
             print indiv
+            print '='*40
         
 
     elif args[0] == 'autotune':
