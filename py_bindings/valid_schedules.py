@@ -231,7 +231,7 @@ class FragmentChunk(Fragment):
             cvars = list(reversed(chunk_vars(partial_schedule, func)))          # In loop ordering
             if self.var not in cvars:
                 if CHECK_VERBOSE:
-                    print ' * check fail 1, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
+                    print ' * check fail 1, chunk compute=%s store=%s %r, func=%s' % (self.var, self.storevar, cvars, func.name())
                 return False
             if SPLIT_STORE_COMPUTE:
                 if is_cuda() and CUDA_CHUNK_VAR in cvars:          # Cannot chunk anything that is CUDA variable on in
@@ -932,10 +932,13 @@ class Schedule:
                 print ' * cuda global check failed'
             return False
         #print 'check', self
-        for x in self.d.values():
+        for (name, x) in self.d.items():
+            assert x.func.name() == name
             if not x.check(partial_schedule):
                 if CHECK_VERBOSE:
                     print ' * check on Schedule failed for %s' % x
+                    print ' Full schedule:'
+                    print self
                 return False
         return True
 
