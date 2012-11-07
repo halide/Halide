@@ -231,7 +231,7 @@ class FragmentChunk(Fragment):
             cvars = list(reversed(chunk_vars(partial_schedule, func)))          # In loop ordering
             if self.var not in cvars:
                 if CHECK_VERBOSE:
-                    print ' * check fail 1, chunk compute=%s store=%s %r' % (self.var, self.storevar, cvars)
+                    print ' * check fail 1, chunk compute=%s store=%s %r, func=%s' % (self.var, self.storevar, cvars, func.name())
                 return False
             if SPLIT_STORE_COMPUTE:
                 if is_cuda() and CUDA_CHUNK_VAR in cvars:          # Cannot chunk anything that is CUDA variable on in
@@ -932,10 +932,13 @@ class Schedule:
                 print ' * cuda global check failed'
             return False
         #print 'check', self
-        for x in self.d.values():
+        for (name, x) in self.d.items():
+            assert x.func.name() == name
             if not x.check(partial_schedule):
                 if CHECK_VERBOSE:
                     print ' * check on Schedule failed for %s' % x
+                    print ' Full schedule:'
+                    print self
                 return False
         return True
 
@@ -1160,78 +1163,6 @@ def func_lhs_var_names(f):
             ans.append(x.name())
     return ans
 
-def caller_vars(root_func, func):
-    "Given a root Func and current function return list of variables of the caller."
-    func_name = func.name()
-    ans = set()
-    for (name, g) in halide.all_funcs(root_func).items():
-#        rhs_names = [x.name() for x in g.rhs().funcs()]
-        rhs_names = [x.name() for x in g.rhs().transitiveFuncs()]
-        if func_name in rhs_names:
-            ans |= set(func_lhs_var_names(g))
-            #return ans
-            #print 'inside caller_vars', g.name(), func_name, ans, rhs_names
-    return sorted(ans)
-
-def callers(root_func):
-    "Returns dict mapping func name f => list of all func names calling f."
-    d = {}
-    def callback(f, fparent):
-        d.setdefault(f.name(), [])
-        if fparent is not None:
-            d[f.name()].append(fparent.name())
-    halide.visit_funcs(root_func, callback, all_calls=True)
-    return d
-
-def toposort(data):
-    data = dict((a, set(b)) for (a, b) in data.items())
-    
-    for k, v in data.items():
-        v.discard(k)
-        
-    extras = reduce(set.union, data.values(), set()) - set(data.keys())
-    data.update({x:set() for x in extras})
-    
-    ans = []
-    while True:
-        ordered = set(x for (x,dep) in data.items() if not dep)
-        if len(ordered) == 0:
-            break
-        ans.extend(sorted(ordered))
-        data = {x: (dep - ordered) for (x,dep) in data.items() if x not in ordered}
-    return ans
-    
-def test_toposort():
-    h2 = simple_program()
-    d = callers(h2)
-
-    #chunk_vars(Schedule.fromstring(h2,''), h2)
-
-    assert toposort(d) == ['c_valid_h2', 'c_valid_h', 'c_valid_g', 'c_valid_f']
-    
-    f = halide.Func('c_valid2_f')
-    g = halide.Func('c_valid2_g')
-    root = halide.Func('c_valid2_root')
-    h1 = halide.Func('c_valid2_h1')
-    h2 = halide.Func('c_valid2_h2')
-    h3 = halide.Func('c_valid2_h3')
-    x, y = halide.Var('c_valid2_x'), halide.Var('c_valid2_y')
-
-    f[x,y]=x+y
-    g[x,y]=f[x,y]
-    h1[x,y]=f[x,y]+f[x,y]
-    h2[x,y]=h1[x,y]
-    h3[x,y]=h2[x,y]
-    root[x,y]=g[x,y]+h3[x,y]+g[x,y]
-
-    #chunk_vars(Schedule.fromstring(root,''), root)
-    
-    assert toposort(callers(root)) == ['c_valid2_root', 'c_valid2_g', 'c_valid2_h3', 'c_valid2_h2', 'c_valid2_h1', 'c_valid2_f']
-    assert toposort(callers(f)) == ['c_valid2_f']
-    assert toposort(callers(g)) == ['c_valid2_g', 'c_valid2_f']
-    
-    print 'valid_schedules.toposort:            OK'
-
 def intersect_lists(L):
     "Take intersection while also preserving order (if possible)."
     if len(L) == 0:
@@ -1253,7 +1184,7 @@ def test_intersect_lists():
 
 def chunk_vars(schedule, func, remove_inline=False, verbose=CHUNK_VARS_VERBOSE):
     d_stackL = {}      # Map f name to list of stacks (loop ordering) of variable names
-    d_callers = callers(schedule.root_func)
+    d_callers = halide.callers(schedule.root_func)
     d_func = halide.all_funcs(schedule.root_func)
     if verbose:
         print '======================================================='
@@ -1261,7 +1192,7 @@ def chunk_vars(schedule, func, remove_inline=False, verbose=CHUNK_VARS_VERBOSE):
         print '======================================================='
         print 'd_callers:', d_callers
     
-    for fname in toposort(d_callers):
+    for fname in halide.toposort(d_callers):
         if fname == func.name():
             if verbose:
                 print 'Found func %s, returning'%fname
@@ -1302,7 +1233,7 @@ def chunk_vars(schedule, func, remove_inline=False, verbose=CHUNK_VARS_VERBOSE):
                         print 'f', fname
                         print 'd_callers', d_callers
                         print 'd_stackL', d_stackL
-                        print 'toposort', toposort(d_callers)
+                        print 'toposort', halide.toposort(d_callers)
                         raise ValueError
                     for stack in d_stackL[fparent]:
                         if verbose:
@@ -1359,40 +1290,7 @@ def chunk_vars(schedule, func, remove_inline=False, verbose=CHUNK_VARS_VERBOSE):
         #print 'callers', fname, d_callers[fname]
         # Need to implement: reorder(), split(), tile(), stack popping
         
-    
-
-def simple_program(cache=[]):
-    if len(cache):
-        return cache[0]
-    f = halide.Func('c_valid_f')
-    g = halide.Func('c_valid_g')
-    h = halide.Func('c_valid_h')
-    h2 = halide.Func('c_valid_h2')
-    x, y = halide.Var('c_valid_x'), halide.Var('c_valid_y')
-
-    # f callers: g, h2
-    # g callers: h, h2
-    # h callers: h2
-    # h2 callers: []
-    f[x,y]=x+y
-    g[x,y]=f[x,y]+f[x,y]
-    h[x,y]=g[x,y]
-    h2[x,y]=g[x,y]+f[x,y]+h[x,y]+g[x,y]
-    
-    cache.append(h2)
-    return h2
-    
-def test_callers():
-    h2 = simple_program()
-    
-    def filtname(s):
-        return s[len('c_valid_'):]
-        
-    d = dict((filtname(x), sorted([filtname(z) for z in y])) for (x, y) in callers(h2).items())
-    assert d == {'h': ['h2'], 'g': ['h', 'h2'], 'f': ['g', 'h2'], 'h2': []}
-
-    print 'valid_schedules.callers:             OK'
-    
+            
 def test_chunk_vars_subproc(test_index=0):
     f = halide.Func('valid_f')
     g = halide.Func('valid_g')
@@ -1444,9 +1342,9 @@ def test_chunk_vars_subproc(test_index=0):
         L = ['blurx.chunk(z)\nblury.chunk(z).vectorize(x,4).unroll(iv0,16).reorder(iv0,z,x,y)\nblurz.root().tile(z,iv0,_c0,_c1,4,4)\nclamped.chunk(y).vectorize(y,16)\ngrid.chunk(_c0)\ninterpolated.root().vectorize(x,2).reorder(y,x,iv0)\nsmoothed.root()',
             'blurx.chunk(iv0)\n\nblurz.chunk(y).unroll(y,8).parallel(x).unroll(iv0,8)\nclamped.chunk(_c1)\ngrid.root().vectorize(x,8).unroll(c,16)\n\nsmoothed.root().tile(y,c,_c0,_c1,64,32).tile(_c1,y,_c2,_c3,64,64)']
         (input, out_func, evaluate, scope) = filter_func()
-        assert sorted(callers(scope['smoothed'])['clamped']) == ['grid', 'interpolated']
+        assert sorted(halide.callers(scope['smoothed'])['clamped']) == ['grid', 'interpolated']
     else:                      # Blur
-        from examples.blur import filter_func
+        from examples.blur_clamped import filter_func
         L = ['blur_y.root().tile(x,y,_c0,_c1,4,4).reorder(y,x,c,_c1,_c0)\ninput_clamped.chunk(x,c).split(c,c,_c0,4).parallel(c)']
         (input, out_func, evaluate, scope) = filter_func()
         
@@ -1488,8 +1386,6 @@ def test_valid_schedules():
     args = sys.argv[1:]
     if len(args) == 0:
         test_intersect_lists()
-        test_callers()
-        test_toposort()
         for i in range(3):
             os.system('python ' + os.path.abspath(__file__) + ' test_chunk_vars %d'%i)
     elif args[0] == 'test_chunk_vars' and len(args) == 2:

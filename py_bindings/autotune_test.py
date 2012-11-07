@@ -96,7 +96,7 @@ def test_crossover(verbose=False):
         #print 'c'
         prev_gen = []
         for gen in range(2):
-            L = next_generation(prev_gen, p, g, constraints, 0, [{'time': 0.1} for i in range(len(prev_gen))])
+            L = list(next_generation(prev_gen, p, g, constraints, 0, [{'time': 0.1} for i in range(len(prev_gen))]))
             if j == 0 and verbose:
                 for i in range(len(L)):
                     print 'gen=%d, i=%d'%(gen,i)
