@@ -642,7 +642,7 @@ def mutate(a, p, constraints, grouping):
                 a.d[name] = a.d[name].edited(a.root_func, extra_caller_vars, a)
                 a.genomelog = 'mutate_edit(%s)'%a0.identity()
             elif mode == 'template':
-                s = autotune_template.sample(halide.func_varlist(a.d[name].func)) # TODO: Use parent variables if chunk...
+                s = autotune_template.sample(halide.func_varlist(a.d[name].func), a, name) # TODO: Use parent variables if chunk...
                 a.d[name] = FragmentList.fromstring(a.d[name].func, s)
                 a.genomelog = 'mutate_template(%s)'%a0.identity()
             elif mode == 'copy':
