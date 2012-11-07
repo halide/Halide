@@ -354,6 +354,9 @@ def subsample_join(L):
     n = random.randrange(1,len(L)+1)
     idx = sorted(random.sample(idx, n))
     return ''.join([L[i] for i in idx])
+
+def vectorize_width(f):
+    return 128/f.rhs().type().bits
     
 def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragments=False, schedule_args=()):
     """
@@ -373,7 +376,7 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
         else:
             footprint = list(fparent.footprint(f))
         footprint = [(x if x > 0 else maxval) for x in footprint]
-        n = 128/f.rhs().type().bits   # Vectorize by 128-bit
+        n = vectorize_width(f) #128/f.rhs().type().bits   # Vectorize by 128-bit
         prob = random.random()
         #if fparent is not None:
         #    print f.name(), fparent.name(), footprint
@@ -557,7 +560,11 @@ def chunk_multi_try(p, a, verbose=False):
                 chunk_count[0] += 1
                 if verbose:
                     print '  chunk multi func', f_name
-                a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s)'%(chunk_var, chunk_var))
+                f_varlist = halide.func_varlist(f)
+                if len(f_varlist) >= 1:
+                    a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s).vectorize(%s,%d)'%(chunk_var, chunk_var, f_varlist[0], n))
+                else:
+                    a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s)'%(chunk_var, chunk_var))
             
             # Flip coin, if fail remove below_func
             if random.random() >= p.chunk_multi_cont_prob:
