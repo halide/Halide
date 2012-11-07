@@ -577,7 +577,7 @@ def chunk_multi_try(p, a, verbose=False):
         
     assert chunk_count[0] >= 1
     #print a.d['interleave_y3']
-    assert a.check(a)
+    #assert a.check(a)
     #sys.exit(1)
     
     return a
