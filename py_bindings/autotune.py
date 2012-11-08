@@ -1554,14 +1554,14 @@ def autotune_child(args, timeout=None):
     ldflags = ''
     max_run_memory_kb = 'unlimited'
     
-    always_inline = ''
+    always_inline = '  -always-inline'
     if target == 'arm':
         march = 'arm'
         mattr = '+neon'
         mcpu  = 'cortex-a9'
         remote_host = 'omap4.csail.mit.edu'
         remote_path = '/data/scratch/omap4/tune'
-        always_inline = '  -always-inline'
+        always_inline = ''
 	max_run_memory_kb = '500000' # 500mb on omap4 for safety
 
     if target == 'ptx':
