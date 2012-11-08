@@ -1,4 +1,7 @@
 
+# - Debugging interpolate issue:
+#    - Turned off chunk_multi by default (didn't help)
+#
 # - Plan on going to MIT all week next week
 # - Take smaller steps usually in mutation (usually just 1?) -- so we can get to the optimal schedule with higher likelihood
 # - Keep generating schedules until we get something valid
