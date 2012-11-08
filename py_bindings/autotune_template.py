@@ -11,7 +11,7 @@ def sample(varlist, schedule, name):
         raise autotune.MutateFailed
     x = varlist[0]
     y = varlist[1]
-    if autotune.SPECULATIVE_INTERPOLATE:
+    if autotune.SPECULATIVE_INTERPOLATE and len(varlist) >= 3:
         x = varlist[1]
         y = varlist[2]
     

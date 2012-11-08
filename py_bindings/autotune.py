@@ -538,6 +538,9 @@ def chunk_multi_try(p, a, verbose=False):
         raise ValueError
     x = varlist[0]
     y = varlist[1]
+    if SPECULATIVE_INTERPOLATE and len(varlist) >= 3:
+        x = varlist[1]
+        y = varlist[2]
     n = random.choice([2,4,8])
     
     if verbose:
