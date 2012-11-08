@@ -1644,9 +1644,8 @@ def autotune_child(args, timeout=None):
         run_command = run_command % locals()
         print 'Testing: %s' % run_command
 
-        if not os.path.exists('flog.txt'):
-            with open('flog.txt', 'wt') as flog:
-                print >> flog, run_command
+        with open('run_log.txt', 'at') as run_log:
+            print >> run_log, run_command
 
         # Don't bother running with timeout, parent process will manage that for us
         try:
