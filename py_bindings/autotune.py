@@ -1640,6 +1640,10 @@ def autotune_child(args, timeout=None):
             if save_filename_path:
                 run_command.append('rsync -a %(remote_host)s:%(remote_path)s/%(save_filename)s %(save_filename_path)s')
             run_command = '; '.join(run_command)
+
+            if not os.path.exists('flog.txt'):
+                with open('flog.txt', 'wt') as flog:
+                    print >> flog, run_command
         
         run_command = run_command % locals()
         print 'Testing: %s' % run_command
