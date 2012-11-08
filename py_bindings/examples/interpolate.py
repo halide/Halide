@@ -67,7 +67,7 @@ def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(in
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, local_d['tune_in_images'][0], eval_func=evaluate)().show()
+    filter_image(input, out_func, local_d['tune_in_images'][0], eval_func=evaluate, out_dims=local_d['tune_out_dims'])().show()
 #    filter_image(input, out_func, os.path.join(inputs_dir(), 'interpolate_in.png'))().show()
 
 if __name__ == '__main__':

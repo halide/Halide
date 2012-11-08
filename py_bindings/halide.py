@@ -715,7 +715,7 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
     w = input_png.width() if out_dims is None else out_dims[0]
     h = input_png.height() if out_dims is None else out_dims[1]
     nchan = input_png.channels() if out_dims is None else (out_dims[2] if len(out_dims) >= 3 else 1)
-    #print w, h, nchan
+    #print w, h, nchan, out_dims
     #w2 = roundup_multiple(w, pad_multiple)
     #h2 = roundup_multiple(h, pad_multiple)
     #print w2, h2, nchan
