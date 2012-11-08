@@ -8,7 +8,7 @@ from halide import *
 int_t = Int(32)
 float_t = Float(32)
 
-OUT_DIMS = (1280, 1920, 3)
+OUT_DIMS = (1024, 1536, 3) #(1280, 1920, 3)
 
 def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     x, y, tx, ty, c = Var('x'), Var('y'), Var('tx'), Var('ty'), Var('c')
