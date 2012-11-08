@@ -9,10 +9,11 @@ def sample(varlist, schedule, name):
     "Sample template using given variable list."
     if len(varlist) < 2:
         raise autotune.MutateFailed
-#    x = varlist[0]
-#    y = varlist[1]
-    x = varlist[1]
-    y = varlist[2]
+    x = varlist[0]
+    y = varlist[1]
+    if autotune.SPECULATIVE_INTERPOLATE:
+        x = varlist[1]
+        y = varlist[2]
     
     L = ['.chunk(%(chunk_var)s).vectorize(%(x)s,%(n)d)',
          '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)',
