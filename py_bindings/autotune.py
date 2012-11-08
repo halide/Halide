@@ -304,6 +304,9 @@ class AutotuneParams:
             self.prob_reasonable = 0.5
             self.prob_mutate_chunk_multi = 1.0
             
+        if get_target() == 'arm':
+            self.run_timeout_bias = 25.0
+            
     def set_globals(self):
         set_cuda(self.cuda)
 
@@ -924,7 +927,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text='', sa
     #Trun = [0.0]
     #last_stats = [None]
     def status_callback(msg):
-        stats_str = 'compile time=%d secs, run time=%d secs, total=%d secs, compile_threads=%d, hl_threads=%d'%(timer.compile_time, timer.run_time, time.time()-timer.start_time, p.compile_threads, p.hl_threads)
+        stats_str = 'compile time=%d secs, run time=%d secs, total=%d secs, compile_threads=%d, hl_threads=%d, run_timeout_bias=%d'%(timer.compile_time, timer.run_time, time.time()-timer.start_time, p.compile_threads, p.hl_threads, p.run_timeout_bias)
         if output_stats is not None:
             output_stats[:] = [stats_str]
         sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link + ' => %s'%p.tune_dir if p.tune_link else p.tune_dir, display_text))
@@ -1505,6 +1508,10 @@ def _ctype_of_type(t):
             ty = 'uint'
         return ty + width + '_t'
 
+def get_target():
+    target = os.getenv('HL_TARGET')
+    if not target: target = 'x86_64'
+
 def autotune_child(args, timeout=None):
     rest = args[1:]
     if len(rest) == 11:
@@ -1544,9 +1551,8 @@ def autotune_child(args, timeout=None):
     ### auto-initialize remote/cross compile info from HL_TARGET for now
     ### TODO: hoist this initialization into 
     ###
-    target = os.getenv('HL_TARGET')
-    if not target: target = 'x86_64'
-
+    target = get_target()
+    
     remote_host = None
     remote_path = '~'
     march = ''
