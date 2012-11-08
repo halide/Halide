@@ -116,6 +116,7 @@ DEFAULT_IMAGE = 'apollo3' + IMAGE_EXT
 DEBUG_CHECKS = False      # Do excessive checks to catch errors (turn off for release code)
 CHECK_REFERENCE = False #True
 AUTOTUNE_CMD_INFO = '# autotune '       # Info at the top of summary file
+SPECULATIVE_INTERPOLATE = True          # Disble this in general (just a test for interpolate code)
 
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
@@ -399,6 +400,8 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
         elif all([x <= chunk_cutoff for x in footprint]):
             chunk_var = chunk_vars(schedule, f)[0]
             varlist = halide.func_varlist(f)
+            if SPECULATIVE_INTERPOLATE:
+                varlist = varlist[1:]
             if len(varlist) == 0:
                 ans[f.name()] = FragmentList.fromstring(f, '.chunk(%s)'%chunk_var) #FragmentList(f, [FragmentChunk(chunk_var)])
             else:
@@ -407,6 +410,8 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
                 ans[f.name()] = FragmentList.fromstring(f, '.chunk(%s)'%chunk_var) #FragmentList(f, [FragmentChunk(chunk_var)])
         else:
             varlist = halide.func_varlist(f)
+            if SPECULATIVE_INTERPOLATE:
+                varlist = varlist[1:]
             if len(varlist) == 0:
                 s = '.root()'
             elif len(varlist) == 1:
