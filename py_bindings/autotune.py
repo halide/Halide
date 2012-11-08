@@ -364,6 +364,9 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
     """
     Get a reasonable schedule (like gcc's -O3) given a chunk cutoff (0 means never chunk).
     """
+    if is_cuda():
+        n0 = random.choice([4,8,16])
+
     ans = {}
     schedule = Schedule(root_func, ans, *schedule_args)
     def callback(f, fparent):
@@ -379,6 +382,8 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
             footprint = list(fparent.footprint(f))
         footprint = [(x if x > 0 else maxval) for x in footprint]
         n = vectorize_width(f) #128/f.rhs().type().bits   # Vectorize by 128-bit
+        if is_cuda():
+            n = n0
         prob = random.random()
         #if fparent is not None:
         #    print f.name(), fparent.name(), footprint
@@ -411,8 +416,6 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
             else:
                 x = varlist[0]
                 y = varlist[1]
-                if is_cuda():
-                    n = random.choice([4,8,16])
                 if do_tile:
                     if sample_fragments:
                         s = '.root()' + subsample_join(['.tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d)'%locals(),
