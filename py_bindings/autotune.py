@@ -1554,12 +1554,14 @@ def autotune_child(args, timeout=None):
     ldflags = ''
     max_run_memory_kb = 'unlimited'
     
+    always_inline = ''
     if target == 'arm':
         march = 'arm'
         mattr = '+neon'
         mcpu  = 'cortex-a9'
         remote_host = 'omap4.csail.mit.edu'
         remote_path = '/data/scratch/omap4/tune'
+        always_inline = '  -always-inline'
 	max_run_memory_kb = '500000' # 500mb on omap4 for safety
 
     if target == 'ptx':
@@ -1598,7 +1600,7 @@ def autotune_child(args, timeout=None):
         
         # assemble bitcode
         check_output(
-            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 %(march)s %(mattr)s %(mcpu)s -filetype=obj -o %(func_name)s.o' % locals()
+            'cat %(func_name)s.bc | %(llvm_path)sopt -O3%(always_inline)s | %(llvm_path)sllc -O3 %(march)s %(mattr)s %(mcpu)s -filetype=obj -o %(func_name)s.o' % locals()
         )
 
         #save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
