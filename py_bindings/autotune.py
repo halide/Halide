@@ -1511,7 +1511,8 @@ def _ctype_of_type(t):
 def get_target():
     target = os.getenv('HL_TARGET')
     if not target: target = 'x86_64'
-
+    return target
+    
 def autotune_child(args, timeout=None):
     rest = args[1:]
     if len(rest) == 11:
