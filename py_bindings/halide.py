@@ -737,7 +737,7 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
             T.append(time.time()-T0)
         out.assign(realized)
 
-        assert out.width() == w and out.height() == h and out.channels() == nchan
+        assert out.width() == w and out.height() == h and out.channels() == nchan, (out.width(), out.height(), out.channels(), w, h, nchan)
         #print out.width(), out.height(), out.channels(), w, h, nchan
         if disp_time:
             if times > 1:
