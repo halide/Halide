@@ -412,7 +412,7 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
                 x = varlist[0]
                 y = varlist[1]
                 if is_cuda():
-                    n = random.choice([2,4,8])
+                    n = random.choice([4,8,16])
                 if do_tile:
                     if sample_fragments:
                         s = '.root()' + subsample_join(['.tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d)'%locals(),
