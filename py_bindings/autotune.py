@@ -217,7 +217,7 @@ class AutotuneParams:
     prob_mutate_copy     = 0.2
     prob_mutate_group    = 0.0      # Seems to converge to local minima -- do not use.
     prob_mutate_chunk    = 0.2 #0.2
-    prob_mutate_chunk_multi = 1.0 
+    prob_mutate_chunk_multi = 0.0
     
     chunk_multi_cont_prob = 0.85
     chunk_multi_parallel_vector = True
@@ -302,6 +302,7 @@ class AutotuneParams:
             self.adaptive_mutate = True
             self.seed_reasonable = True
             self.prob_reasonable = 0.5
+            self.prob_mutate_chunk_multi = 1.0
             
     def set_globals(self):
         set_cuda(self.cuda)
