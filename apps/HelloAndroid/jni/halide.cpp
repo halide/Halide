@@ -10,23 +10,32 @@ Expr i16(Expr x) {
     return cast(Int(16), x);
 }
 
+Expr f32(Expr x) {
+    return cast(Float(32), x);
+}
+
 int main(int argc, char **argv) {
 
     UniformImage input(UInt(8), 2);
 
     Var x, y;
 
-    Func clamped;
-    clamped(x, y) = i16(input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1)));
+    Func tone_curve;
+    tone_curve(x) = i16(pow(f32(x)/256.0f, 1.8f) * 256.0f);
+
+    Func curved;
+    curved(x, y) = tone_curve(input(x, y));
 
     Func sharper;
-    sharper(x, y) = 9*clamped(x, y) - 2*(clamped(x-1, y) + clamped(x+1, y) + clamped(x, y-1) + clamped(x, y+1));
+    sharper(x, y) = 9*curved(x, y) - 2*(curved(x-1, y) + curved(x+1, y) + curved(x, y-1) + curved(x, y+1));
 
     Func result;
     result(x, y) = u8(clamp(sharper(x, y), 0, 255));
 
-    clamped.root().parallel(y);
-    result.vectorize(x, 8).parallel(y);
+    tone_curve.root();
+    Var yi;
+    curved.chunk(y, yi);
+    result.split(y, y, yi, 60).parallel(y).vectorize(x, 8);
 
     result.compileToFile("halide", "arm.android");    
 
@@ -39,37 +48,16 @@ int main(int argc, char **argv) {
 
 
 
+// All inline
+// Tone curve root
+// Result vectorized
+// Curved root
+// Result and curved parallelized
+// result split into tiles of height 60, curve chunked (y, yi)
 
-
-
-   /* 13 ms
-      clamped.root();
-    */        
-
-    /* 14 ms
-    Var yo, yi;
-    result.split(y, yo, yi, 8);
-    clamped.chunk(yo);
-    */
-
-    /* 12 ms
-    clamped.root();
-    result.vectorize(x, 8);
-    */
-
-    /* 6 ms
-    clamped.root().parallel(y);
-    result.vectorize(x, 8).parallel(y);
-    */
-
-    /* 8 ms
-    clamped.root().parallel(y);
-    result.vectorize(x, 8).parallel(y);
-    sharper.root().vectorize(x, 8).parallel(y);
-    */
-
-    /* 7 ms
-    Var yo, yi;
-    clamped.chunk(yo);
-    result.split(y, yo, yi, 36).vectorize(x, 8).parallel(yo);
-    */
+/*
+Var yi;
+tone_curve.root();
+curved.chunk(y, yi);
+result.root().vectorize(x, 8).split(y, y, yi, 60).parallel(y);
+*/
