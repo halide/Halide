@@ -109,8 +109,10 @@ def filter_func(J=8, dtype=UInt(16), use_uniforms=False):
     tune_ref_schedules = {'human': human_schedule}
     tune_constraints = autotune.bound_recursive(output, 'c', 0, 3)
 
-    #print 'Done with local_laplacian', counter[0]
-    #counter[0] += 1
+    #print '# schedules:'
+    #import math
+    #print math.log(autotune.lower_bound_schedules(output),10)
+    #sys.exit(1)
     
     return (input, output, None, locals())
 

@@ -1179,6 +1179,31 @@ def intersect_lists(L):
             ans.append(x)
     return ans
 
+def lower_bound_schedules(root_func):
+    "Return a (far) lower bound estimate on number of schedules, by using chunk().tile()....tile() form schedules."
+    max_tiles = DEFAULT_MAX_DEPTH-1
+    d_callers = halide.callers(root_func)
+    d_loop_vars = {}
+    ans = [1]
+    
+    def callback(f, fparent):
+        nchunk = 1
+        if len(d_callers[f.name()]) == 1:
+            mparent = len(halide.func_varlist(fparent))
+            if mparent >= 2:
+                nchunk = mparent + 2*max_tiles
+        ans[0] *= nchunk*(nchunk+1)/2
+        
+        m = len(halide.func_varlist(f))
+        if m < 2:
+            return
+        for i in range(max_tiles):
+            ans[0] *= 36*(m-1)
+            m += 2
+        
+    halide.visit_funcs(root_func, callback, toposort=True)
+    return ans[0]
+
 def test_intersect_lists():
     assert intersect_lists([['c', 'y', '_c1', '_c3', '_c2', '_c0', 'x'], ['c', 'z', 'y', 'x']]) == ['c', 'y', 'x']
     assert intersect_lists([[1,2,3,4,5],[1,3,5]]) == [1, 3, 5]
