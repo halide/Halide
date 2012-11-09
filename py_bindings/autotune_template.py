@@ -2,15 +2,20 @@
 
 import random
 import autotune
+import autotune_bounds
 
 CHUNK_X_ALWAYS = False
 
-def sample(varlist, schedule, name):
+def sample(varlist, schedule, name, bounds):
     "Sample template using given variable list."
+    varlist = autotune_bounds.get_xy(schedule.d[name].func, bounds)
     if len(varlist) < 2:
         raise autotune.MutateFailed
     x = varlist[0]
     y = varlist[1]
+    #if autotune.SPECULATIVE_INTERPOLATE and len(varlist) >= 3:
+    #    x = varlist[1]
+    #    y = varlist[2]
     
     L = ['.chunk(%(chunk_var)s).vectorize(%(x)s,%(n)d)',
          '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)',

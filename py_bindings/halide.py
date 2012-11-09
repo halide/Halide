@@ -602,7 +602,8 @@ def visit_funcs(root_func, callback, all_calls=False, toposort=False):
             if not toposort:
                 callback(x, parent)
             else:
-                pairs[name] = (x, parent)
+                pairs.setdefault(name, [])
+                pairs[name].append((x, parent))
             #print x.rhs().funcs()
         if unvisited:
             for y in x.funcs(): #x.rhs().funcs():
@@ -612,7 +613,8 @@ def visit_funcs(root_func, callback, all_calls=False, toposort=False):
     
     if toposort:
         for name in _toposort(callers(root_func)):
-            callback(*pairs[name])
+            for pair in pairs[name]:
+                callback(*pair)
         
     return d
 
@@ -715,7 +717,7 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
     w = input_png.width() if out_dims is None else out_dims[0]
     h = input_png.height() if out_dims is None else out_dims[1]
     nchan = input_png.channels() if out_dims is None else (out_dims[2] if len(out_dims) >= 3 else 1)
-    #print w, h, nchan
+    #print w, h, nchan, out_dims
     #w2 = roundup_multiple(w, pad_multiple)
     #h2 = roundup_multiple(h, pad_multiple)
     #print w2, h2, nchan
@@ -737,7 +739,7 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
             T.append(time.time()-T0)
         out.assign(realized)
 
-        assert out.width() == w and out.height() == h and out.channels() == nchan
+        assert out.width() == w and out.height() == h and out.channels() == nchan, (out.width(), out.height(), out.channels(), w, h, nchan)
         #print out.width(), out.height(), out.channels(), w, h, nchan
         if disp_time:
             if times > 1:

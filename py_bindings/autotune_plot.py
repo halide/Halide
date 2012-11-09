@@ -46,7 +46,10 @@ def main(args=None):
         y.append(yv*1000)
 #    print x
 #    print y
-
+    if len(y) == 0:
+        print 'No data, not plotting'
+        return
+        
     if out_filename is not None:
         matplotlib.use('Agg')     # headless
 

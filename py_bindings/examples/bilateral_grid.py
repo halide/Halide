@@ -91,7 +91,9 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
                                    'blury.root().parallel(z).vectorize(x, 4)\n' +
                                    'blurz.root().parallel(z).vectorize(x, 4)\n' +
                                    'smoothed.root().parallel(y).vectorize(x, 4)\n'}
-
+                                   
+    tune_constraints = autotune.bound_recursive(smoothed, 'c', 0, 3)
+    
     #autotune.print_tunables(smoothed)
     #for i in range(123,10000):
     #    random.seed(i)
