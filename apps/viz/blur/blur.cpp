@@ -28,32 +28,41 @@ int main(int argc, char **argv) {
 
   switch (schedule) {
   case 0:
-  case 6:
       blur_x.chunk(root, root);
       break;
   case 1:
-  case 7:
       blur_x.chunk(x, x);
       break;
   case 2:
-  case 8:
       blur_x.chunk(root, x);
       break;
   case 3:
-  case 9:
-      blur_y.tile(x, y, xi, yi, 8, 8).parallel(y).parallel(x).vectorize(xi, 4);
+      blur_y.tile(x, y, xi, yi, 8, 8).parallel(y).vectorize(xi, 4);
       blur_x.chunk(x).vectorize(x, 4);
       break;
   case 4:
-  case 10:
-      blur_x.chunk(root, y).split(x, x, xi, 12).vectorize(xi, 4).parallel(x);
-      blur_y.split(x, x, xi, 12).vectorize(xi, 4).parallel(x);
+      blur_x.chunk(root, y).split(x, x, xi, 8).vectorize(xi, 4).parallel(x);
+      blur_y.split(x, x, xi, 8).vectorize(xi, 4).parallel(x);
       break;
   case 5:
-  case 11:
-      blur_y.split(y, y, yi, 6).parallel(y).vectorize(x, 4);
+      blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 4);
       blur_x.chunk(y, yi).vectorize(x, 4);    
       break;      
+  case 6:
+      blur_y.root();
+      break;
+  case 7:
+      blur_y.root().reorder(y, x);
+      break;
+  case 8:
+      blur_y.root().vectorize(x, 4);
+      break;
+  case 9:
+      blur_y.root().parallel(y).vectorize(x, 4);
+      break;
+  case 10:
+      blur_y.root().tile(x, y, xi, yi, 4, 4);
+      break;
   default:
       break;
   }

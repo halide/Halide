@@ -137,7 +137,9 @@ let mutate_children_in_expr mutator = function
   | Call (ct, rt, f, args)-> Call (ct, rt, f, List.map mutator args)
   | Let (n, a, b)         -> Let (n, mutator a, mutator b)
   | Debug (e, fmt, args)  -> Debug (mutator e, fmt, List.map mutator args)
-  | x -> x
+  | IntImm x              -> IntImm x
+  | FloatImm x            -> FloatImm x
+  | Var (t, n)            -> Var (t, n)
     
 let mutate_children_in_stmt expr_mutator stmt_mutator = function
   | For (name, min, n, order, body) ->

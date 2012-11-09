@@ -791,42 +791,40 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
   in
   List.fold_left update stmt functions 
 
-let rec inject_tracing env = function
-  | Realize (name, ty, region, body) when trace_verbosity > 0 ->
-    let (args, _, _) = find_function name env in
-    let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
-    let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
-    Block [
-      Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
-      Print ("Allocating " ^ name ^ " over ", mins @ extents);
-      Realize (name, ty, region, inject_tracing env body);
-      Print ("Freeing " ^ name ^ " over ", mins @ extents)
-    ]
-  | Pipeline (name, produce, update, consume) when trace_verbosity > 0 ->
-    let (args, _, _) = find_function name env in
-    let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
-    let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
-    Block [
-      Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
-      Print ("Producing " ^ name ^ " over ", mins @ extents);
-      Pipeline (name, inject_tracing env produce, option_map (inject_tracing env) update, inject_tracing env consume)
-    ]
-  | Provide (e, name, idx) when trace_verbosity > 1 ->    
-    let calls = 
-      (find_calls_in_expr e) @ (List.flatten (List.map find_calls_in_expr idx))
-    in        
-    let make_print stmts (cty, rty, nm, args) =
-      if cty != Extern then
-        (Print ("Loading " ^ nm ^ " at ", args))::stmts
-      else
-        stmts
-    in
-    let stmts = List.fold_left make_print [] calls in
-    let stmts = (Print ("Computing " ^ name ^ " at ", idx))::stmts in
-    let stmts = stmts @ [Provide (e, name, idx); 
-                         Print ("Storing " ^ name ^ " at ", idx)] in                         
-    Block stmts
-  | stmt -> mutate_children_in_stmt (fun x -> x) (inject_tracing env) stmt
+let rec inject_tracing env stmt = 
+
+  let rec inject_call_wrappers = function
+    | Call (cty, rty, nm, args) when cty != Extern ->
+        let new_args = List.map inject_call_wrappers args in        
+        Debug (Call (cty, rty, nm, new_args), "Loading " ^ nm ^ " at ", args)
+    | expr -> mutate_children_in_expr inject_call_wrappers expr 
+  in
+
+  match stmt with
+    | Realize (name, ty, region, body) when trace_verbosity > 0 ->
+        let (args, _, _) = find_function name env in
+        let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
+        let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
+        Block [
+          Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
+          Print ("Allocating " ^ name ^ " over ", mins @ extents);
+          Realize (name, ty, region, inject_tracing env body);
+          Print ("Freeing " ^ name ^ " over ", mins @ extents)
+        ]
+    | Pipeline (name, produce, update, consume) when trace_verbosity > 0 ->
+        let (args, _, _) = find_function name env in
+        let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
+        let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
+        Block [
+          Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
+          Print ("Producing " ^ name ^ " over ", mins @ extents);
+          Pipeline (name, inject_tracing env produce, option_map (inject_tracing env) update, inject_tracing env consume)
+        ]
+    | Provide (e, name, idx) when trace_verbosity > 1 ->    
+        Block [(Print ("Computing " ^ name ^ " at ", idx)) ; 
+               Provide (inject_call_wrappers e, name, List.map inject_call_wrappers idx); 
+               Print ("Storing " ^ name ^ " at ", idx)]
+    | stmt -> mutate_children_in_stmt (fun x -> x) (inject_tracing env) stmt
     
 let lower_image_calls (stmt:stmt) =
 
@@ -877,14 +875,14 @@ let lower_image_calls (stmt:stmt) =
 let rec unroll = function
   | For (name, min, IntImm size, Ir.Unrolled, stmt) ->
     let stmt = unroll stmt in
-    let gen_stmt i = subs_expr_in_stmt (Var (i32, name)) (min +~ (IntImm i)) stmt in
+    let gen_stmt i = LetStmt (name, min +~ (IntImm i), stmt) in
     Block (List.map gen_stmt (0 -- size))
   | stmt -> mutate_children_in_stmt (fun x -> x) unroll stmt
 
 let rec vectorize = function
   | For (name, min, IntImm size, Ir.Vectorized, stmt) ->
     let stmt = vectorize stmt in 
-    Vectorize.vectorize_stmt name min size stmt
+    LetStmt (name, Ramp (min, IntImm 1, size), Vectorize.vectorize_stmt name min size stmt)
   | stmt -> mutate_children_in_stmt (fun x -> x) vectorize stmt
 
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
@@ -1187,9 +1185,8 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let pass_desc = "Constant folding" in
   if verbosity > 1 then dbg "%s\n%!" pass_desc;
   let stmt = Constant_fold.constant_fold_stmt stmt in
-  let stmt = Constant_fold.remove_dead_lets_in_stmt stmt  in
 
-  dump_stmt stmt pass pass_desc "constant_folding" 1;
+  (* dump_stmt stmt pass pass_desc "constant_folding" 1; *)
 
   let pass = pass + 1 in
 
