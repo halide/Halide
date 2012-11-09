@@ -386,7 +386,7 @@ def reasonable_schedule(root_func, bounds, chunk_cutoff=0, tile_prob=0.0, sample
     Get a reasonable schedule (like gcc's -O3) given a chunk cutoff (0 means never chunk).
     """
     if is_cuda():
-        n0 = random.choice([4,8,16])
+        n0 = random.choice([4,8,16,32])
 
     ans = {}
     schedule = Schedule(root_func, ans, *schedule_args)

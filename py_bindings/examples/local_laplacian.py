@@ -105,6 +105,17 @@ def filter_func(J=8, dtype=UInt(16), use_uniforms=False):
             human_schedule += 'gPyramid%d.root().parallel(k).vectorize(x, 4)\n'%j
         human_schedule += '%s.root().split(y, y, _c0, 4).parallel(y).vectorize(x, 4)\n'%outGPyramid[j].name()
     
+    if is_cuda():
+        human_schedule = 'remap.root()\n'
+        human_schedule += 'output.root().cudaTile(x, y, 32, 32)\n'
+        for j in range(J):
+            blockw = blockh = 32
+            if j > 3:
+                blockw = blockh = 2
+            human_schedule += 'inGPyramid%d.root().cudaTile(x, y, %d, %d)\n'%(j, blockw, blockh)
+            human_schedule += 'gPyramid%d.root().cudaTile(x, y, %d, %d)\n'%(j, blockw, blockh)
+            human_schedule += 'outGPyramid%d.root().cudaTile(x, y, %d, %d)\n'%(j, blockw, blockh)
+
     # Special variables interpreted by autotuner
     tune_ref_schedules = {'human': human_schedule}
     tune_constraints = autotune.bound_recursive(output, 'c', 0, 3)
