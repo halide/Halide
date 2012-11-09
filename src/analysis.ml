@@ -137,7 +137,9 @@ let mutate_children_in_expr mutator = function
   | Call (ct, rt, f, args)-> Call (ct, rt, f, List.map mutator args)
   | Let (n, a, b)         -> Let (n, mutator a, mutator b)
   | Debug (e, fmt, args)  -> Debug (mutator e, fmt, List.map mutator args)
-  | x -> x
+  | IntImm x              -> IntImm x
+  | FloatImm x            -> FloatImm x
+  | Var (t, n)            -> Var (t, n)
     
 let mutate_children_in_stmt expr_mutator stmt_mutator = function
   | For (name, min, n, order, body) ->
@@ -379,37 +381,48 @@ let rec deduplicate_lanes expr = match expr with
 
 exception NonDifferentiable
 
-(* Check if an expression is linear in a variable *)
-let derivative v expr =
-  let rec inner v env expr =
-    let d = inner v env in
-    match expr with
-      | Var (_, name) when name = v -> IntImm 1
-      | Var (_, name) ->
-        begin try StringMap.find v env with Not_found -> IntImm 0 end
-      | Bop (Mul, a, b) -> ((d a) *~ b) +~ (a *~ (d b))
-      | Bop (Div, a, b) -> (((d a) *~ b) -~ (a *~ (d b))) /~ (a *~ a)
-      | Bop (Add, a, b) -> (d a) +~ (d b)
-      | Bop (Sub, a, b) -> (d a) -~ (d b)
-      | Bop (Min, a, b) -> Select (a <~ b, d a, d b)
-      | Bop (Max, a, b) -> Select (a >~ b, d a, d b)
-      | Select (cond, a, b) -> Select (cond, d a, d b)
-      | Let (name, value, expr) ->
-        let env = StringMap.add name (d value) env in
-        inner v env expr
-      | IntImm _ -> IntImm 0
-      | FloatImm _ -> FloatImm 0.0
-      | Debug (e, _, _) -> d e
-      | MakeVector list -> MakeVector (List.map d list)
-      | Broadcast (e, n) -> Broadcast (d e, n)
-      | Ramp (b, s, n) -> Ramp (d b, d s, n)
-      | ExtractElement (v, idx) -> ExtractElement (d v, idx)        
-      (* TODO, handle differentiable intrinsics (cos, sin, sqrt) *)
-      | _ ->
-        if (StringMap.mem v (find_vars_in_expr expr)) then
-          raise NonDifferentiable
-        else IntImm 0
-
-  in inner v StringMap.empty expr
-
+(* Mostly used to check if an expression is linear in a variable *)
+let rec derivative_in_env v env expr =
+  let d = derivative_in_env v env in
+  match expr with
+    | Var (_, name) when name = v -> IntImm 1
+    | Var (_, name) ->
+      begin 
+        try d (StringMap.find name env) 
+        with Not_found -> IntImm 0 
+      end
+    | Bop (Mul, a, b) -> ((d a) *~ b) +~ (a *~ (d b))
+    | Bop (Div, a, IntImm b) ->
+      let da = d a in
+      (da -~ (Bop (Mod, da, IntImm b))) /~ (IntImm b)
+    | Bop (Div, a, b) ->
+      begin match val_type_of_expr a with
+        | Float _ | FloatVector _ ->
+          (((d a) *~ b) -~ (a *~ (d b))) /~ (b *~ b)
+        | _ ->
+          (* Same as the quotient rule, but we don't get to combine the fractions because they round down *)
+          ((a +~ (d a)) /~ (b +~ (d b))) -~ (a /~ b)
+      end
+    | Bop (Add, a, b) -> (d a) +~ (d b)
+    | Bop (Sub, a, b) -> (d a) -~ (d b)
+    | Bop (Min, a, b) -> Select (a <~ b, d a, d b)
+    | Bop (Max, a, b) -> Select (a >~ b, d a, d b)
+    | Select (cond, a, b) -> Select (cond, d a, d b)
+    | Let (name, value, expr) ->
+      let env = StringMap.add name value env in
+      derivative_in_env v env expr
+    | IntImm _ -> IntImm 0
+    | FloatImm _ -> FloatImm 0.0
+    | Debug (e, _, _) -> d e
+    | MakeVector list -> MakeVector (List.map d list)
+    | Broadcast (e, n) -> Broadcast (d e, n)
+    | Ramp (b, s, n) -> Ramp (d b, d s, n)
+    | ExtractElement (v, idx) -> ExtractElement (d v, idx)        
+    (* TODO, handle differentiable intrinsics (cos, sin, sqrt) *)
+    | _ ->
+      if (StringMap.mem v (find_vars_in_expr expr)) then
+        raise NonDifferentiable
+      else IntImm 0
        
+let derivative v expr =
+  derivative_in_env v StringMap.empty expr

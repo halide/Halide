@@ -4,11 +4,12 @@
 import sys; sys.path += ['..', '.']
 builtin_min = min
 from halide import *
+import autotune
 
 int_t = Int(32)
 float_t = Float(32)
 
-OUT_DIMS = (1280, 1920, 3)
+OUT_DIMS = (1024, 1536, 3) #(1280, 1920, 3)
 
 def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     x, y, tx, ty, c = Var('x'), Var('y'), Var('tx'), Var('ty'), Var('c')
@@ -333,7 +334,6 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
 
     if schedule == 2:
         # Autotuned schedule
-        import autotune
         asched = autotune.Schedule.fromstring(processed, 'b_b.chunk(x).vectorize(x,2)\nb_gb.chunk(x).vectorize(x,8)\nb_gr.chunk(y).tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\nb_r.chunk(y).tile(x,y,_c0,_c1,8,8).vectorize(_c0,8)\ncorrected.chunk(x).vectorize(x,8)\ncurve.root().vectorize(x,4).split(x,x,_c0,16)\ncurved.root().tile(x,y,_c0,_c1,32,32).parallel(y)\n\n\ndenoised.root().tile(x,y,_c0,_c1,64,64).vectorize(_c0,8).parallel(y)\ng_b.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ng_gb.chunk(x).vectorize(x,4)\ng_gr.chunk(y)\ng_r.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\n\n\ninterleave_x3.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x4.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x5.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x6.root().tile(x,y,_c0,_c1,16,16).vectorize(_c0,16).parallel(y)\ninterleave_y1.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_y2.chunk(x).vectorize(x,8)\ninterleave_y3.chunk(x).vectorize(x,8)\nmatrix.root().tile(x,y,_c0,_c1,4,4).vectorize(_c0,4).parallel(y)\nmatrix_3200.root().tile(x,y,_c0,_c1,4,4).parallel(y)\n\nprocessed.root().vectorize(tx,8)\nr_b.chunk(y).vectorize(x,8)\nr_gb.chunk(y).vectorize(x,8)\nr_gr.chunk(x)\nr_r.chunk(y)\nshifted.chunk(x).vectorize(x,4)')
         print asched
         asched.apply()
@@ -360,6 +360,8 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
             corrected.chunk(tx).vectorize(x, 4).reorder(c, x, y).unroll(c, 3)
             processed.root().bound(c, 0, 3).tile(tx, ty, _c0, _c1, 32, 32).parallel(ty).reorder(_c0, _c1, c, tx, ty)
             """}
+
+    tune_constraints = autotune.bound_recursive(processed, 'c', 0, 3)
     
     #def evaluate(in_png):
     #    output = Image(UInt(8), 2560, 1920, 3); # image size is hard-coded for the N900 raw pipeline
@@ -368,10 +370,10 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     #g_r = all_funcs(processed)['g_r']
     #print 'caller_vars for g_r:', autotune.caller_vars(processed, g_r)
     #root_all(processed)
-    print 'Grouping'
-    import autotune
-    for sub in autotune.default_grouping(processed):
-        print sub
+    #print 'Grouping'
+    #import autotune
+    #for sub in autotune.default_grouping(processed):
+    #    print sub
 
     # In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
     #Func::Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
