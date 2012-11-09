@@ -18,6 +18,7 @@ def filter_func(dtype=UInt(16)):
     tune_ref_schedules = {'human': \
                               "blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 8)\n" \
                               "blur_x.chunk(y, yi).vectorize(x, 8)"}
+    tune_constraints = 'blur_y.bound(c, 0, 3)'
 
     tune_out_dims = OUT_DIMS
 

@@ -135,7 +135,7 @@ void parse_log(const char *filename, std::vector<event> &log) {
         if (strncmp(type, "Loading", 7) == 0) t = Load;
         else if (strncmp(type, "Storing", 7) == 0) t = Store;
         /* else if (strncmp(type, "Computing", 9) == 0) t = Compute; */
-        else if (strncmp(type, "Allocating", 10) == 0) t = Allocate;
+        /* else if (strncmp(type, "Allocating", 10) == 0) t = Allocate; */
         else if (strncmp(type, "Freeing", 7) == 0) t = Free;
         /* else if (strncmp(type, "Producing", 9) == 0) t = Produce; */
         else continue;
@@ -172,10 +172,9 @@ const char *log_filename;
 std::vector<event> log;
 int log_idx = 0, log_tail = 0;
 
-
-
 struct buffer_pos {
     int x, y;
+    int z_stride;
     int zoom;
     char name[64];
     char caption[64];
@@ -202,7 +201,6 @@ void keyboardEvent(unsigned char key, int x, int y) {
 }
 
 void init() {
-
     glutReshapeWindow(width, height);
 
     glDisable(GL_LIGHTING);
@@ -231,17 +229,21 @@ void draw_events() {
 
     glBegin(GL_QUADS);
 
-    int new_log_tail = std::min(log_tail + speed, log_idx - (speed+1)*5);
+    int new_log_tail = std::max(log_tail, log_idx - speed*5 - 1);
     int new_log_idx = log_idx + speed;
 
     if (single_step) {
         new_log_idx = log_idx+1;
-        while (new_log_idx >= 0 && 
-               new_log_idx < (int)log.size() &&
-               log[new_log_idx].chained) new_log_idx++;        
         single_step = false;
         speed = 0;
-   }
+    }
+
+    while (new_log_tail >= log_tail && new_log_tail > 0 && new_log_tail < (int)log.size() && 
+           (log[new_log_tail-1].chained || log[new_log_tail].chained)) new_log_tail--;
+
+    while (new_log_idx >= 0 && 
+           new_log_idx < (int)log.size() &&
+           log[new_log_idx].chained) new_log_idx++;        
 
     for (int i = log_tail; i <= new_log_idx && i < (int)log.size(); i++) {        
         if (i < 0) continue;
@@ -258,20 +260,20 @@ void draw_events() {
         float fade = ((float)j - new_log_tail) / (new_log_idx - new_log_tail);
         if (fade > 1) fade = 1;
         if (fade < 0) fade = 0;
-        if (j < log_idx) fade *= 0.25;
+        if (j <= log_idx && j < new_log_idx) fade *= 0.33;
 
         event &e = log[i];
 
         int x_off = -100000, y_off = -100000;
-        int zoom = 1;
+        int zoom = 1, z_stride = 0;
         for (size_t j = 0; j < positions.size(); j++) {
             if (strncmp(e.name, positions[j].name, 64) == 0) {
                 x_off = positions[j].x;
                 y_off = positions[j].y;
+                z_stride = positions[j].z_stride;
                 zoom = positions[j].zoom;
             }
         }
-        
         
         for (int m = 0; m < (zoom > 4 ? 2 : 1); m++) {
 
@@ -300,7 +302,7 @@ void draw_events() {
 
             glColor4f(r, g, b, 1);
             int margin = m * (zoom/5);
-            int x = zoom*e.location[0] + x_off + margin;
+            int x = zoom*e.location[0] + x_off + margin + z_stride*e.location[2];
             int y = zoom*e.location[1] + y_off + margin;
             glVertex3i(x, y, 0);
             x += e.size[0]*zoom - 2*margin;
@@ -318,6 +320,7 @@ void draw_events() {
 
     log_tail = new_log_tail;
     log_idx = new_log_idx;
+
 }
 
 void display() {    
@@ -381,7 +384,7 @@ int main(int argc, char **argv) {
 
     log_filename = argv[3];
 
-    for (int i = 4; i < argc-4; i+=5) {
+    for (int i = 4; i < argc-5; i+=6) {
         buffer_pos p;
         p.name[0] = 0;
         strncat(p.name, argv[i], 63);
@@ -389,9 +392,10 @@ int main(int argc, char **argv) {
         strncat(p.caption, argv[i+1], 63);
         p.x = atoi(argv[i+2]);
         p.y = atoi(argv[i+3]);
-        p.zoom = atoi(argv[i+4]);
+        p.z_stride = atoi(argv[i+4]);
+        p.zoom = atoi(argv[i+5]);
         positions.push_back(p);
-        printf("%s at %d %d zoom %d\n", p.name, p.x, p.y, p.zoom);
+        printf("%s at %d %d %d zoom %d\n", p.name, p.x, p.y, p.z_stride, p.zoom);
     }
 
     glutInit(&argc, argv);

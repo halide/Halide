@@ -101,6 +101,8 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
         tune_ref_schedules['human'] = gpu_human
 
 
+    tune_constraints = autotune.bound_recursive(smoothed, 'c', 0, 3)
+    
     #autotune.print_tunables(smoothed)
     #for i in range(123,10000):
     #    random.seed(i)

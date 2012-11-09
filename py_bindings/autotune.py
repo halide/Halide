@@ -1,4 +1,7 @@
 
+# - Debugging interpolate issue:
+#    - Turned off chunk_multi by default (didn't help)
+#
 # - Plan on going to MIT all week next week
 # - Take smaller steps usually in mutation (usually just 1?) -- so we can get to the optimal schedule with higher likelihood
 # - Keep generating schedules until we get something valid
@@ -101,6 +104,7 @@ import re
 import json
 import socket
 import datetime
+import autotune_bounds
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -113,6 +117,7 @@ DEFAULT_IMAGE = 'apollo3' + IMAGE_EXT
 DEBUG_CHECKS = False      # Do excessive checks to catch errors (turn off for release code)
 CHECK_REFERENCE = False #True
 AUTOTUNE_CMD_INFO = '# autotune '       # Info at the top of summary file
+SPECULATIVE_INTERPOLATE = True          # Disable this in general (just a test for interpolate code)
 
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
@@ -141,6 +146,7 @@ class AutotuneParams:
       -prob_mutate_copy        p Replace Func's schedule with one randomly sampled from another Func
       -prob_mutate_group       p Replace all schedules in a group with the schedule of a single Func from the group
       -prob_mutate_chunk       p Find a chunk() call and replace with a new random chunk() call
+      -prob_mutate_chunk_multi p Make a func tile/parallel/vectorize, then choose a random variable in tile and chunk back some distance
       -crossover_mutate_prob   p Probability that mutate() is called after crossover
       -crossover_random_prob   p Probability that crossover is run with a randomly generated parent
       -prob_pop_elitism        p Frequency of elitism
@@ -148,6 +154,8 @@ class AutotuneParams:
       -prob_pop_mutated        p Frequency of mutated
       -prob_pop_random         p Frequency of random
       -adaptive_mutate         b Adaptively turn up mutation rate based on rate of progress (0 or 1, default 0)
+      -chunk_multi_cont_prob   p Probability to continue adding chunk() recursively in 'chunk_multi' mode.
+      -chunk_multi_parallel_vector b When doing chunk_multi, whether to use parallel().vectorize() (0 or 1, default 1).
       
     Compilation and Running:
     
@@ -213,8 +221,12 @@ class AutotuneParams:
     prob_mutate_template = 1.0
     prob_mutate_copy     = 0.2
     prob_mutate_group    = 0.0      # Seems to converge to local minima -- do not use.
-    prob_mutate_chunk    = 0.2
-        
+    prob_mutate_chunk    = 0.2 #0.2
+    prob_mutate_chunk_multi = 0.0
+    
+    chunk_multi_cont_prob = 0.85
+    chunk_multi_parallel_vector = True
+    
     image_ext = IMAGE_EXT               # Image extension for reference outputs. Can be overridden by tune_image_ext special variable.
 
     min_depth = 0
@@ -290,11 +302,15 @@ class AutotuneParams:
             self.tournament_size = int(self.population_size/4)
             self.tournament_sample_frac = 0.5                   # TODO: Implement
             self.crossover_mutate_prob = 0.0
-            self.crossover_random_prob = 0.0
+            #self.crossover_random_prob = 0.0
             self.prob_pop_random    = 0.05
             self.adaptive_mutate = True
             self.seed_reasonable = True
             self.prob_reasonable = 0.5
+            self.prob_mutate_chunk_multi = 1.0
+            
+        if get_target() == 'arm':
+            self.run_timeout_bias = 25.0
             
     def set_globals(self):
         set_cuda(self.cuda)
@@ -349,11 +365,29 @@ def subsample_join(L):
     n = random.randrange(1,len(L)+1)
     idx = sorted(random.sample(idx, n))
     return ''.join([L[i] for i in idx])
+
+def vectorize_width(f):
+    return 128/f.rhs().type().bits
     
-def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragments=False, schedule_args=()):
+def bound_recursive(root_func, var, lower, size):
+    """
+    Get a schedule string that calls bound(var, lower, size) (recursively) on every occurrence of var.
+    """
+    ans = [[]]
+    def callback(f, parent):
+        varlist = halide.func_varlist(f)
+        if var in varlist:
+            ans[0].append('%s.bound(%s,%d,%d)' % (f.name(), var, lower, size))
+    halide.visit_funcs(root_func, callback)
+    return '\n'.join(sorted(ans[0]))
+    
+def reasonable_schedule(root_func, bounds, chunk_cutoff=0, tile_prob=0.0, sample_fragments=False, schedule_args=()):
     """
     Get a reasonable schedule (like gcc's -O3) given a chunk cutoff (0 means never chunk).
     """
+    if is_cuda():
+        n0 = random.choice([4,8,16,32])
+
     ans = {}
     schedule = Schedule(root_func, ans, *schedule_args)
     def callback(f, fparent):
@@ -368,7 +402,9 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
         else:
             footprint = list(fparent.footprint(f))
         footprint = [(x if x > 0 else maxval) for x in footprint]
-        n = 128/f.rhs().type().bits   # Vectorize by 128-bit
+        n = vectorize_width(f) #128/f.rhs().type().bits   # Vectorize by 128-bit
+        if is_cuda():
+            n = n0
         prob = random.random()
         #if fparent is not None:
         #    print f.name(), fparent.name(), footprint
@@ -376,7 +412,10 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
             ans[f.name()] = FragmentList(f, [])
         elif all([x <= chunk_cutoff for x in footprint]):
             chunk_var = chunk_vars(schedule, f)[0]
-            varlist = halide.func_varlist(f)
+            #varlist = halide.func_varlist(f)
+            #if SPECULATIVE_INTERPOLATE:
+            #    varlist = varlist[1:]
+            varlist = autotune_bounds.get_xy(f, bounds)
             if len(varlist) == 0:
                 ans[f.name()] = FragmentList.fromstring(f, '.chunk(%s)'%chunk_var) #FragmentList(f, [FragmentChunk(chunk_var)])
             else:
@@ -384,7 +423,10 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
 #                ans[f.name()] = FragmentList(f, [FragmentChunk(chunk_var), FragmentVectorize(x, n)])
                 ans[f.name()] = FragmentList.fromstring(f, '.chunk(%s)'%chunk_var) #FragmentList(f, [FragmentChunk(chunk_var)])
         else:
-            varlist = halide.func_varlist(f)
+            #varlist = halide.func_varlist(f)
+            #if SPECULATIVE_INTERPOLATE:
+            #    varlist = varlist[1:]
+            varlist = autotune_bounds.get_xy(f, bounds)
             if len(varlist) == 0:
                 s = '.root()'
             elif len(varlist) == 1:
@@ -412,6 +454,8 @@ def reasonable_schedule(root_func, chunk_cutoff=0, tile_prob=0.0, sample_fragmen
                         s = '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)' % locals()
                 else:
                     s = '.root().parallel(%(y)s)' % locals()
+                if is_cuda():
+                    s = '.root().cudaTile(%(x)s,%(y)s,%(n)d,%(n)d)'%locals()
             ans[f.name()] = FragmentList.fromstring(f, s)
 
     halide.visit_funcs(root_func, callback)
@@ -484,8 +528,117 @@ def crossover(a, b, constraints):
             
         return ans
     raise BadScheduleError((a, b))
+
+def chunk_multi(*args):
+    while 1:
+        try:
+            return chunk_multi_try(*args)
+        except BadScheduleError:
+            continue
+        
+def chunk_multi_try(p, a, bounds, verbose=False):
+    "Tile.root.parallel a random point and then chunk back with a randomly selected variable n stages."
+    assert isinstance(a, Schedule)
+    a0 = a
+    a = copy.copy(a0)
     
-def mutate(a, p, constraints, grouping):
+    d_callees = halide.callees(a.root_func)
+    d_callers = halide.callers(a.root_func)
+    d_varlist = dict([(name, halide.func_varlist(a.d[name].func)) for name in d_callees])
+    valid = [k for (k, v) in d_callees.items() if len(v) >= 1 and len(d_varlist[name]) >= 2]
+    name = random.choice(valid)
+
+    varlist = d_varlist[name] #halide.func_varlist(a.d[name].func)
+    if len(varlist) < 2:
+        raise ValueError
+    #x = varlist[0]
+    #y = varlist[1]
+    #if SPECULATIVE_INTERPOLATE and len(varlist) >= 3:
+    #    x = varlist[1]
+    #    y = varlist[2]
+    (x,y) = autotune_bounds.get_xy(a.d[name].func, bounds)
+    n = random.choice([2,4,8])
+    
+    if verbose:
+        print '-'*40
+        print a
+        print '-'*40
+    
+    s1 = '.vectorize(_c0,%(n)d).parallel(%(y)s)' if p.chunk_multi_parallel_vector else ''
+    s = ('.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d)'+s1) % locals()
+    if is_cuda():
+        s = '.root().cudaTile(%(x)s,%(y)s,%(n)d,%(n)d)'%locals()
+        
+    a.d[name] = FragmentList.fromstring(a.d[name].func, s)
+
+    chunk_var = random.choice([x, y, '_c1'])
+    if is_cuda():
+        cvars0 = chunk_vars(a, a.d[name].func)
+        if CUDA_CHUNK_VAR not in cvars0:
+            cvars0.append(CUDA_CHUNK_VAR)
+        chunk_var = random.choice(cvars0)
+    if verbose:
+        print 'chunk multi root', name
+        print '  callees:', d_callees[name]
+    
+    chunk_count = [0]
+    
+    below_func = {}
+    #coin_fail = {}
+    def callback(f, fparent_ignore):
+        f_name = f.name()
+
+        if f_name == name:
+            below_func[f_name] = True
+        for fparent_name in d_callers[f_name]:
+            if below_func.get(fparent_name, False):
+                below_func[f_name] = True
+        if f_name not in below_func:
+            below_func[f_name] = False
+            
+        if verbose:
+            print 'visit %s, %s, below_func:%d, name=%s' % (f_name, d_callers[f_name], below_func[f_name], name)
+        
+        if below_func[f_name] and f_name != name:
+            # Schedule as chunk
+            cvars = chunk_vars(a, f)
+            if chunk_var not in cvars:
+                if verbose:
+                    print '  chunk multi chunk_var missing %s %r'%(chunk_var, cvars)
+            else:
+                chunk_count[0] += 1
+                if verbose:
+                    print '  chunk multi func', f_name
+                f_varlist = halide.func_varlist(f)
+                if len(f_varlist) >= 1 and p.chunk_multi_parallel_vector:
+                    a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s).vectorize(%s,%d)'%(chunk_var, chunk_var, f_varlist[0], n))
+                else:
+                    a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s)'%(chunk_var, chunk_var))
+            
+            # Flip coin, if fail remove below_func
+            if random.random() >= p.chunk_multi_cont_prob:
+                below_func[f_name] = False
+    halide.visit_funcs(a.root_func, callback, toposort=True)
+    
+    if chunk_count[0] == 0:
+        raise BadScheduleError
+        
+    a.genomelog = 'mutate_chunk_multi(%s)'%a0.identity()
+    if verbose:
+        print '-'*40
+        print a
+        print 'chunk_count: %d' % chunk_count[0]
+        print '(done chunk)'
+        print '-'*40
+        
+    assert chunk_count[0] >= 1
+    #print a.d['interleave_y3']
+    #assert a.check(a)
+    #sys.exit(1)
+    
+    return a
+    
+def mutate(a, p, constraints, grouping, bounds):
     "Mutate existing schedule using AutotuneParams p."
     a0 = a
     extra_caller_vars = []      # FIXME: Implement extra_caller_vars, important for chunk().
@@ -538,7 +691,7 @@ def mutate(a, p, constraints, grouping):
                 a.d[name] = a.d[name].edited(a.root_func, extra_caller_vars, a)
                 a.genomelog = 'mutate_edit(%s)'%a0.identity()
             elif mode == 'template':
-                s = autotune_template.sample(halide.func_varlist(a.d[name].func)) # TODO: Use parent variables if chunk...
+                s = autotune_template.sample(halide.func_varlist(a.d[name].func), a, name, bounds) # TODO: Use parent variables if chunk...
                 a.d[name] = FragmentList.fromstring(a.d[name].func, s)
                 a.genomelog = 'mutate_template(%s)'%a0.identity()
             elif mode == 'copy':
@@ -578,8 +731,11 @@ def mutate(a, p, constraints, grouping):
                 L[i] = FragmentChunk.random_fragment(a.root_func, L.func, FragmentChunk, L.var_order(), [], a)
                 #print 'after:', L
                 a.genomelog = 'mutate_chunk(%s)'%a0.identity()
+            elif mode == 'chunk_multi':
+                a = chunk_multi(p, a, bounds) #, name)
             else:
                 raise ValueError('Unknown mutation mode %s'%mode)
+                
         except MutateFailed:
             continue
             
@@ -595,22 +751,22 @@ def mutate(a, p, constraints, grouping):
             
         return a
 
-def random_or_reasonable(root_func, p, max_nontrivial, grouping):
+def random_or_reasonable(root_func, p, max_nontrivial, grouping, bounds):
     if random.random() < p.prob_reasonable:
-        return reasonable_schedule(root_func, 0, random.random(), random.randrange(2), ('reasonable', -2, -2, 'reasonable'))
+        return reasonable_schedule(root_func, bounds, 0, random.random(), random.randrange(2), ('reasonable', -2, -2, 'reasonable'))
     else:
         return random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
 
-def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed):
-    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed)
-    b = tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed)
+def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed, bounds):
+    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed, bounds)
+    b = tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed, bounds)
     if random.random() < p.crossover_random_prob:
         #b = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
-        b = random_or_reasonable(root_func, p, max_nontrivial, grouping)
+        b = random_or_reasonable(root_func, p, max_nontrivial, grouping, bounds)
     c = crossover(a, b, constraints)
     is_mutated = False
     if random.random() < p.crossover_mutate_prob:
-        c = mutate(c, p, constraints, grouping)
+        c = mutate(c, p, constraints, grouping, bounds)
         is_mutated = True
     c.genomelog = 'crossover(%s, %s)'%(a.identity(), b.identity()) + ('' if not is_mutated else '+'+c.genomelog.replace('(-1_-1)', '()'))
     debug_check(c)
@@ -619,14 +775,14 @@ def select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, group
 #        c.identity_str = 'XXXXX'
     return c
 
-def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed):
-    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed)
-    c = mutate(a, p, constraints, grouping)
+def select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed, bounds):
+    a = tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed, bounds)
+    c = mutate(a, p, constraints, grouping, bounds)
     #c.genomelog = 'mutate(%s)'%a.identity()
     debug_check(c)
     return c
 
-def tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed):
+def tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_seed, bounds):
     nsample = min(int(p.tournament_sample_frac*p.population_size), len(prevL))
     #f = open('nsample.txt','wt')
     #f.write('%d\n'%nsample)
@@ -635,7 +791,7 @@ def tournament_select(prevL, p, root_func, max_nontrivial, grouping, tournament_
     i = random.randrange(p.tournament_size)
     if i >= len(L):
         #ans = random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)
-        ans = random_or_reasonable(root_func, p, max_nontrivial, grouping)
+        ans = random_or_reasonable(root_func, p, max_nontrivial, grouping, bounds)
     else:
         ans = copy.copy(L[i])
     debug_check(ans)
@@ -689,7 +845,7 @@ def apply_grouping(schedule, grouping):
         return Schedule(schedule.root_func, ans, schedule.genomelog, schedule.generation, schedule.index, schedule.identity_str)
     return schedule
     
-def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
+def next_generation(prevL, p, root_func, constraints, generation_idx, timeL, bounds):
     """"
     Get next generation using elitism/mutate/crossover/random.
     
@@ -730,12 +886,12 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     tournament_seed = random.randrange(2**32)
     
     def do_crossover():
-        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed)), 'crossover')
+        append_unique(constraints.constrain(select_and_crossover(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed, bounds)), 'crossover')
     def do_mutated():
-        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed)), 'mutated')
+        append_unique(constraints.constrain(select_and_mutate(prevL, p, root_func, constraints, max_nontrivial, grouping, tournament_seed, bounds)), 'mutated')
     def do_random():
 #        append_unique(constraints.constrain(random_schedule(root_func, p.min_depth, p.max_depth, max_nontrivial=max_nontrivial, grouping=grouping)), 'random')
-        append_unique(constraints.constrain(random_or_reasonable(root_func, p, max_nontrivial, grouping)), 'random')
+        append_unique(constraints.constrain(random_or_reasonable(root_func, p, max_nontrivial, grouping, bounds)), 'random')
     def do_until_success(func):
         while True:
             try:
@@ -755,6 +911,7 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
                 current.genomelog += ' (elite copy of %s)' % current.identity()
             try:
                 append_unique(current, 'elite')
+                yield ans[-1]
             except Duplicate:
                 pass
     
@@ -771,16 +928,19 @@ def next_generation(prevL, p, root_func, constraints, generation_idx, timeL):
     for i in range(ncrossover):
 #        print 'crossover %d/%d'%(i, ncrossover)
         do_until_success(do_crossover)
+        yield ans[-1]
     for i in range(nmutated):
 #        print 'mutated %d/%d'%(i,nmutated)
         do_until_success(do_mutated)
+        yield ans[-1]
     for i in range(nrandom):
 #        print 'random %d/%d'%(i,nrandom)
         do_until_success(do_random)
+        yield ans[-1]
        
     assert len(ans) == p.population_size, (len(ans), p.population_size)
     
-    return ans
+#    return ans
 
 class AutotuneTimer:
     compile_time = 0.0
@@ -794,7 +954,7 @@ def time_generation(L, p, test_gen_func, timer, constraints, display_text='', sa
     #Trun = [0.0]
     #last_stats = [None]
     def status_callback(msg):
-        stats_str = 'compile time=%d secs, run time=%d secs, total=%d secs, compile_threads=%d, hl_threads=%d'%(timer.compile_time, timer.run_time, time.time()-timer.start_time, p.compile_threads, p.hl_threads)
+        stats_str = 'compile time=%d secs, run time=%d secs, total=%d secs, compile_threads=%d, hl_threads=%d, run_timeout_bias=%d'%(timer.compile_time, timer.run_time, time.time()-timer.start_time, p.compile_threads, p.hl_threads, p.run_timeout_bias)
         if output_stats is not None:
             output_stats[:] = [stats_str]
         sys.stderr.write('\n'*100 + '%s (%s)\n  Tune dir: %s\n%s\n'%(msg,stats_str,p.tune_link + ' => %s'%p.tune_dir if p.tune_link else p.tune_dir, display_text))
@@ -1242,6 +1402,8 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         p.image_ext = scope['tune_image_ext']
     if 'tune_runner' in scope:
         p.runner_file = scope['tune_runner']
+    bounds = autotune_bounds.get_bounds(out_func, scope)
+    
     test_func = tester(input, out_func, p, filter_func_name)
     
     seed_scheduleL = list(seed_scheduleL)
@@ -1255,7 +1417,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         for sample_fragments in [0, 1]:
             for tile_prob in numpy.arange(0.0,1.01,0.1): #chunk_cutoff in range(1,5):
                 schedule_args = ('reasonable(%.1f,%d)'%(tile_prob,sample_fragments), 0, len(currentL))
-                currentL.append(reasonable_schedule(out_func, chunk_cutoff, tile_prob, sample_fragments, schedule_args))
+                currentL.append(reasonable_schedule(out_func, bounds, chunk_cutoff, tile_prob, sample_fragments, schedule_args))
 
     if len(seed_scheduleL) == 0:
         currentL.append(constraints.constrain(Schedule.fromstring(out_func, '', 'seed(0)', 0, 0)))
@@ -1316,7 +1478,7 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         if gen == 1:
             display_text = '\nTiming generation %d'%gen
 
-        currentL = next_generation(currentL, p, out_func, constraints, gen, timeL)
+        currentL = list(next_generation(currentL, p, out_func, constraints, gen, timeL, bounds))
         # The (commented out) following line tests injecting a bad schedule for blur example (should fail with RUN_CHECK_FAIL).
         #currentL.append(constraints.constrain(Schedule.fromstring(out_func, 'blur_x_blurUInt16.chunk(x_blurUInt16)\nblur_y_blurUInt16.root().vectorize(x_blurUInt16,16)', 'bad_schedule', gen, len(currentL))))
         check_schedules(currentL)
@@ -1375,6 +1537,11 @@ def _ctype_of_type(t):
             ty = 'uint'
         return ty + width + '_t'
 
+def get_target():
+    target = os.getenv('HL_TARGET')
+    if not target: target = 'x86_64'
+    return target
+    
 def autotune_child(args, timeout=None):
     rest = args[1:]
     if len(rest) == 11:
@@ -1400,7 +1567,7 @@ def autotune_child(args, timeout=None):
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
     schedule = Schedule.fromstring(out_func, schedule_str.replace('\\n', '\n'))
     constraints = Constraints()         # FIXME: Deal with Constraints() mess
-    schedule.apply(constraints)
+    schedule.apply(constraints, scope=scope)
 
     llvm_path = os.path.abspath('../llvm/Release+Asserts/bin/')
     if not llvm_path.endswith('/'):
@@ -1414,9 +1581,8 @@ def autotune_child(args, timeout=None):
     ### auto-initialize remote/cross compile info from HL_TARGET for now
     ### TODO: hoist this initialization into 
     ###
-    target = os.getenv('HL_TARGET')
-    if not target: target = 'x86_64'
-
+    target = get_target()
+    
     remote_host = None
     remote_path = '~'
     march = ''
@@ -1425,12 +1591,14 @@ def autotune_child(args, timeout=None):
     ldflags = ''
     max_run_memory_kb = 'unlimited'
     
+    always_inline = '  -always-inline'
     if target == 'arm':
         march = 'arm'
         mattr = '+neon'
         mcpu  = 'cortex-a9'
         remote_host = 'omap4.csail.mit.edu'
         remote_path = '/data/scratch/omap4/tune'
+        always_inline = ''
 	max_run_memory_kb = '500000' # 500mb on omap4 for safety
 
     if target == 'ptx':
@@ -1469,7 +1637,7 @@ def autotune_child(args, timeout=None):
         
         # assemble bitcode
         check_output(
-            'cat %(func_name)s.bc | %(llvm_path)sopt -O3 -always-inline | %(llvm_path)sllc -O3 %(march)s %(mattr)s %(mcpu)s -filetype=obj -o %(func_name)s.o' % locals()
+            'cat %(func_name)s.bc | %(llvm_path)sopt -O3%(always_inline)s | %(llvm_path)sllc -O3 %(march)s %(mattr)s %(mcpu)s -filetype=obj -o %(func_name)s.o' % locals()
         )
 
         #save_output_str = '-DSAVE_OUTPUT ' if save_output else ''
@@ -1512,6 +1680,9 @@ def autotune_child(args, timeout=None):
         
         run_command = run_command % locals()
         print 'Testing: %s' % run_command
+
+        with open('run_log.txt', 'at') as run_log:
+            print >> run_log, run_command
 
         # Don't bother running with timeout, parent process will manage that for us
         try:
@@ -1658,7 +1829,9 @@ def main():
                 rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest
             elif examplename == 'interpolate':
                 rest = '-generations 150 -compile_timeout 120.0'.split() + rest
-            elif examplename in ['camera_pipe', 'bilateral_grid']:
+            elif examplename == 'camera_pipe':
+                rest = '-generations 200'.split() + rest
+            elif examplename == 'bilateral_grid':
                 rest = '-generations 150'.split() + rest
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'time':
@@ -1853,12 +2026,14 @@ def main():
         print
         print 'Number successful schedules: %d/%d (%d failed)' % (nsuccess, nprint, nfail)
     elif args[0] == 'test_variations':
-        filter_func_name = 'examples.blur.filter_func'
+        random.seed(0)
+        filter_func_name = 'examples.camera_pipe.filter_func' #'examples.blur.filter_func'
         (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
-
-        seed_scheduleL = []
-        seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8)\n' +
-                              'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
+        bounds = autotune_bounds.get_bounds(out_func, scope)
+        
+        seed_scheduleL = [root_all_str(out_func)]
+#        seed_scheduleL.append('blur_y_blurUInt16.root().tile(x_blurUInt16, y_blurUInt16, _c0, _c1, 8, 8).vectorize(_c0, 8)\n' +
+#                              'blur_x_blurUInt16.chunk(x_blurUInt16).vectorize(x_blurUInt16, 8)')
         p = AutotuneParams()
         exclude = []
         #for key in scope:
@@ -1872,10 +2047,12 @@ def main():
         for seed in seed_scheduleL:
             currentL.append(constraints.constrain(Schedule.fromstring(out_func, seed, 'seed')))
         
-        for indiv in next_generation(currentL, p, out_func, constraints, 0):
-            print '-'*40
+        #next_generation(prevL, p, root_func, constraints, generation_idx, timeL)
+        for indiv in next_generation(currentL, p, out_func, constraints, 0, [{'time':0.5}]*len(currentL), bounds):    # FIXMEFIXME
+            print '='*40 + ' (output from next_generation)'
             print indiv.title()
             print indiv
+            print '='*40
         
 
     elif args[0] == 'autotune':
@@ -1883,10 +2060,10 @@ def main():
             print >> sys.stderr, 'expected 2 arguments to autotune'
             sys.exit(1)
         filter_func_name = args[1]
-        #(input, out_func, test_func, scope) = getattr(examples, examplename)()
-        (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
                 
         p = AutotuneParams(argd)
+
+        (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
 
         seed_scheduleL = []
         if p.resume_from is None:
