@@ -1,6 +1,7 @@
 import sys; sys.path += ['..', '.']
 import time
 from halide import *
+import autotune
 
 int_t = Int(32)
 float_t = Float(32)
@@ -59,8 +60,9 @@ def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(in
         human_schedule += 'i%d.root().vectorize(c, 4).parallel(y)\n'%i
         
     tune_ref_schedules = {'human': human_schedule}
-    
-    import autotune
+#    tune_constraints = 'final.bound(c, 0, 3)'
+    tune_constraints = autotune.bound_recursive(final, 'c', 0, 3)
+   
     autotune.Schedule.fromstring(final, human_schedule).apply()
     
     return (input, final, evaluate, locals())

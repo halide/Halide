@@ -602,7 +602,8 @@ def visit_funcs(root_func, callback, all_calls=False, toposort=False):
             if not toposort:
                 callback(x, parent)
             else:
-                pairs[name] = (x, parent)
+                pairs.setdefault(name, [])
+                pairs[name].append((x, parent))
             #print x.rhs().funcs()
         if unvisited:
             for y in x.funcs(): #x.rhs().funcs():
@@ -612,7 +613,8 @@ def visit_funcs(root_func, callback, all_calls=False, toposort=False):
     
     if toposort:
         for name in _toposort(callers(root_func)):
-            callback(*pairs[name])
+            for pair in pairs[name]:
+                callback(*pair)
         
     return d
 

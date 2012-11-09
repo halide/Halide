@@ -294,21 +294,21 @@ class FragmentUpdate(Fragment):
 
 # FragmentBound is just a stub class for now -- not used in tuning, just for comparing with human reference schedules
 class FragmentBound(Fragment, FragmentBlocksizeMixin):
-    def __init__(self, var=None, lower=None, upper=None):
+    def __init__(self, var=None, lower=None, size=None):
 #        print '__init__', self.__class__
         self.var = var
         self.lower = lower
-        self.upper = upper
+        self.size = size
 
     def __str__(self):
-        return '.bound(%s,%d,%d)'%(self.var,self.lower,self.upper)
+        return '.bound(%s,%d,%d)'%(self.var,self.lower,self.size)
 
     def var_order(self, prev_order):
         return list(prev_order)
 
     @staticmethod
-    def fromstring(var, lower, upper, func=None):
-        return FragmentBound(var, int(lower), int(upper))
+    def fromstring(var, lower, size, func=None):
+        return FragmentBound(var, int(lower), int(size))
 
 for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentUpdate]:
     _cls.fromstring = make_fromstring(_cls)
@@ -982,7 +982,7 @@ class Schedule:
             ans.extend(x.new_vars())
         return list(sorted(set(ans)))
 
-    def apply(self, constraints=None, verbose=False, check=False):   # Apply schedule
+    def apply(self, constraints=None, verbose=False, check=False, scope={}):   # Apply schedule
         if check:
             if not self.check(self):
                 raise BadScheduleError
@@ -991,15 +991,15 @@ class Schedule:
         #print 'apply schedule:'
         #print str(self)
         #halide.inline_all(self.root_func)
-        scope = halide.all_vars(self.root_func)
-        #print 'scope', scope.keys()
+        fscope = halide.all_vars(self.root_func)
+        #print 'fscope', fscope.keys()
         new_vars = self.new_vars()
         if verbose:
             print 'apply, new_vars', new_vars
         for varname in new_vars:
-            scope[varname] = instantiate_var(varname)
+            fscope[varname] = instantiate_var(varname)
         if verbose:
-            print 'apply, scope:', scope
+            print 'apply, fscope:', fscope
         def callback(f, parent):
             name = f.name()
             if verbose:
@@ -1012,15 +1012,16 @@ class Schedule:
                 s = str(self.d[name])
                 f.reset()
                 s = s.replace(name + '.', '__func.')
-                scope['__func'] = f
+                fscope['__func'] = f
+                fscope[name] = f
                 if CHUNK_ROOT:
-                    scope['root'] = halide.root
+                    fscope['root'] = halide.root
                 #print 'apply', s
                 #print scope, s
                 if verbose:
                     print '  exec', s
                 try:
-                    exec s in scope
+                    exec s in fscope
                 except NameError:
                     raise BadScheduleError
             else:
@@ -1028,7 +1029,9 @@ class Schedule:
                     print '  not in d, reset'
                 f.reset()
         halide.visit_funcs(self.root_func, callback)
-        
+        if 'tune_constraints' in scope:
+            exec scope['tune_constraints'] in fscope
+            
     def test(self, shape, input, constraints, eval_func=None):
         """
         Test on zero array of the given shape. Return evaluate() function which when called returns the output Image.
