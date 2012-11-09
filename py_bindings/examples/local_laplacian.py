@@ -105,7 +105,7 @@ def filter_func(J=8, dtype=UInt(16), use_uniforms=False):
             human_schedule += 'gPyramid%d.root().parallel(k).vectorize(x, 4)\n'%j
         human_schedule += '%s.root().split(y, y, _c0, 4).parallel(y).vectorize(x, 4)\n'%outGPyramid[j].name()
     
-    if is_cuda():
+    if autotune.is_cuda():
         human_schedule = 'remap.root()\n'
         human_schedule += 'output.root().cudaTile(x, y, 32, 32)\n'
         for j in range(J):
