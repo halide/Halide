@@ -97,7 +97,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
                 'blury.root().cudaTile(x, y, 8, 8)\n' + \
                 'blurz.root().cudaTile(x, y, 8, 8)\n' + \
                 'smoothed.root().cudaTile(x, y, 8, 8)\n'
-    if autotune.is_cuda() and False:
+    if autotune.is_cuda():
         tune_ref_schedules['human'] = gpu_human
 
 
