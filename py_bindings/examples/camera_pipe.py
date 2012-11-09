@@ -361,7 +361,8 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
             processed.root().bound(c, 0, 3).tile(tx, ty, _c0, _c1, 32, 32).parallel(ty).reorder(_c0, _c1, c, tx, ty)
             """}
 
-    tune_constraints = autotune.bound_recursive(processed, 'c', 0, 3)
+    tune_constraints = autotune.bound_recursive(processed, 'c', 0, 3).replace('deinterleaved.bound(c,0,3)','deinterleaved.bound(c,0,4)')
+    #print tune_constraints
     
     #def evaluate(in_png):
     #    output = Image(UInt(8), 2560, 1920, 3); # image size is hard-coded for the N900 raw pipeline
