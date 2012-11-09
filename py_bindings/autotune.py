@@ -2060,10 +2060,10 @@ def main():
             print >> sys.stderr, 'expected 2 arguments to autotune'
             sys.exit(1)
         filter_func_name = args[1]
-        #(input, out_func, test_func, scope) = getattr(examples, examplename)()
-        (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
                 
         p = AutotuneParams(argd)
+
+        (input, out_func, test_func, scope) = call_filter_func(filter_func_name)
 
         seed_scheduleL = []
         if p.resume_from is None:

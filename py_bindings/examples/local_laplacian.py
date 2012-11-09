@@ -112,9 +112,15 @@ def filter_func(J=8, dtype=UInt(16), use_uniforms=False):
             blockw = blockh = 32
             if j > 3:
                 blockw = blockh = 2
-            human_schedule += 'inGPyramid%d.root().cudaTile(x, y, %d, %d)\n'%(j, blockw, blockh)
+            if j == 0:
+                human_schedule += 'gray.root().cudaTile(x, y, %d, %d)\n'%(blockw, blockh)
+            else:
+                human_schedule += 'inGPyramid%d.root().cudaTile(x, y, %d, %d)\n'%(j, blockw, blockh)
             human_schedule += 'gPyramid%d.root().cudaTile(x, y, %d, %d)\n'%(j, blockw, blockh)
-            human_schedule += 'outGPyramid%d.root().cudaTile(x, y, %d, %d)\n'%(j, blockw, blockh)
+            if j == J-1:
+                human_schedule += 'outLPyramid%d.root().cudaTile(x, y, %d, %d)\n'%(j, blockw, blockh)
+            else:
+                human_schedule += 'outGPyramid%d.root().cudaTile(x, y, %d, %d)\n'%(j, blockw, blockh)
 
     # Special variables interpreted by autotuner
     tune_ref_schedules = {'human': human_schedule}
