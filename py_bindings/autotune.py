@@ -2083,7 +2083,7 @@ def main():
                 sys.exit(1)
             compileL = glob.glob(os.path.join(p.resume_from, '*compile.sh'))
             genL = [get_gen(x) for x in compileL]
-            last_gen = max(genL)
+            last_gen = max(genL)-1
             for sh in [x for x in compileL if get_gen(x) == last_gen]:
                 L = split_doublequote(open(sh,'rt').read())
                 schedule_str = L[5]
