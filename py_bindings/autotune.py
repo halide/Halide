@@ -610,7 +610,7 @@ def chunk_multi_try(p, a, bounds, verbose=False):
                 if verbose:
                     print '  chunk multi func', f_name
                 f_varlist = halide.func_varlist(f)
-                if len(f_varlist) >= 1 and p.chunk_multi_parallel_vector:
+                if len(f_varlist) >= 1 and p.chunk_multi_parallel_vector and not is_cuda():
                     a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s).vectorize(%s,%d)'%(chunk_var, chunk_var, f_varlist[0], n))
                 else:
                     a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s)'%(chunk_var, chunk_var))
