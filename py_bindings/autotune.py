@@ -273,7 +273,7 @@ class AutotuneParams:
     params_file = 'params.txt'      # Serializes AutotuneParams to this file
     resume_from = None
     
-    def __init__(self, argd={}, **kw):
+    def init_params(self, argd, kw):
         for (key, value) in kw.items():
             setattr(self, key, value)
         for (key, value) in argd.items():
@@ -285,6 +285,9 @@ class AutotuneParams:
                 setattr(self, key, argd[key])
             else:
                 setattr(self, key, float(argd[key]) if ('.' in value or isinstance(getattr(self, key), float)) else int(argd[key]))
+        
+    def __init__(self, argd={}, **kw):
+        self.init_params(argd, kw)
 #        print argd
 #        raise ValueError(self.cores)
         if len(self.in_images) == 0:
@@ -310,8 +313,10 @@ class AutotuneParams:
             self.prob_mutate_chunk_multi = 1.0
             
         if get_target() == 'arm':
-            self.run_timeout_bias = 25.0
-            
+            self.run_timeout_bias = 15.0
+
+        self.init_params(argd, kw)
+
     def set_globals(self):
         set_cuda(self.cuda)
 
