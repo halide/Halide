@@ -19,10 +19,13 @@ curved.o: curved.bc
 	cat curved.bc | ../../llvm/Release+Asserts/bin/opt -O3 | ../../llvm/Release+Asserts/bin/llc -O3 -filetype=obj > curved.o
 
 fcam/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
-	$(CXX) -c -I../../support -Wall -O3 $< -o $@
+	$(CXX) -c -I../../support -Wall -fopenmp -O3 $< -o $@
 
-process: process.cpp curved.o fcam/Demosaic.o
-	$(CXX) -I../../support -Wall -O3 $^ -o $@ -lpthread -ldl $(CUDA_LFLAGS) $(PNGFLAGS)
+fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
+	$(CXX) -c -I../../support -Wall -fopenmp -O3 $< -o $@
+
+process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
+	$(CXX) -I../../support -Wall -O3 $^ -o $@ -lpthread -ldl -fopenmp $(CUDA_LFLAGS) $(PNGFLAGS)
 
 out.png: process raw.png
 	./process raw.png 3700 2.0 50 out.png
