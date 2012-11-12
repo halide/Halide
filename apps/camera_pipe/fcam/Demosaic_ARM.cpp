@@ -42,7 +42,11 @@ void demosaic_ARM(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, fl
     const int VEC_WIDTH = ((BLOCK_WIDTH + 8)/8);
     const int VEC_HEIGHT = ((BLOCK_HEIGHT + 8)/2);
 
+#if 0
     int rawPixelsPerRow = input.bytesPerRow()/2 ; // Assumes bytesPerRow is even
+#else
+    int rawPixelsPerRow = input.stride(1); // Assumes bytesPerRow is even
+#endif
 
     int outWidth = rawWidth;
     int outHeight = rawHeight;
@@ -50,8 +54,6 @@ void demosaic_ARM(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, fl
     outWidth *= BLOCK_WIDTH;
     outHeight /= BLOCK_HEIGHT;
     outHeight *= BLOCK_HEIGHT;
-
-    Image out(outWidth, outHeight, RGB24);
 
 #if 0
     // Check we're the right size, if not, crop center
@@ -84,7 +86,7 @@ void demosaic_ARM(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, fl
         src.platform().rawToRGBColorMatrix(src.shot().whiteBalance, colorMatrix_f);
     }
 #else
-    makeColorMatrix(colorMatrix_f, temp)
+    makeColorMatrix(colorMatrix_f, colorTemp);
 #endif
 
     int16x4_t colorMatrix[3];
@@ -145,7 +147,7 @@ void demosaic_ARM(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, fl
 
     // Prepare the lookup table
     unsigned char lut[4096];
-    makeLUT(src, contrast, blackLevel, gamma, lut);
+    makeLUT(contrast, blackLevel, gamma, lut);
 
     // For each block in the input
 #if 0
