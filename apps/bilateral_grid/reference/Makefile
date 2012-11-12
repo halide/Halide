@@ -43,7 +43,7 @@ TARGET	= truncated_kernel_bf
 # Command section
 CC ?= g++-4.6
 LINK	= $(CC)
-CC	= $(CC) -O3 -ffast-math -msse3
+CC	+= -O3 -ffast-math -msse3
 #-march=native - this no longer seems to work portably
 MAKE	= make
 RM	= rm -f
