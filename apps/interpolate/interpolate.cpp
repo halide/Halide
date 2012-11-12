@@ -171,6 +171,7 @@ int main(int argc, char **argv) {
         upsampledx[6].root().vectorize(c,2);
         upsampledx[7].root().parallel(y);
         upsampledx[8].chunk(y,y).vectorize(c,4).unroll(c,4);
+        break;
     }
 
 
