@@ -2,9 +2,9 @@
 #include <CUDAVector3D.h>
 #include <MathUtils.h>
 
-#include <cutil_math.h>
+// #include <cutil_math.h>
 
-#define JRK_SCHEDULE 1
+// #define JRK_SCHEDULE
 
 // TODO: be very careful with this variable
 texture< float2, cudaTextureType2D, cudaReadModeElementType > g_gridTexture( 0, cudaFilterModeLinear );
@@ -319,9 +319,11 @@ void BilateralFilter::createGrid()
 	dim3 blockDim( 16, 16, 1 );
 
 #ifndef JRK_SCHEDULE
+	// fprintf(stderr, "Jiawen schedule\n");
 	int gx = numBins( md_dataImage.width(), blockDim.x );
 	int gy = numBins( md_dataImage.height(), blockDim.y );
 #else
+	// fprintf(stderr, "jrk schedule\n");
 	int gx = numBins( numBins(md_dataImage.width(), m_samplingSpatial), blockDim.x );
 	int gy = numBins( numBins(md_dataImage.height(), m_samplingSpatial), blockDim.y );
 #endif
