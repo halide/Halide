@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     bestT = 0xffffffff;
     for (int i = 0; i < 5; i++) {
         gettimeofday(&t1, NULL);
-        FCam::demosaic(input, output, contrast, true, 0, gamma);
+        FCam::demosaic(input, output, color_temp, contrast, true, 25, gamma);
         gettimeofday(&t2, NULL);
         unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
         if (t < bestT) bestT = t;

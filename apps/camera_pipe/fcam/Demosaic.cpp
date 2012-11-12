@@ -53,12 +53,32 @@ void makeLUT(float contrast, int blackLevel, float gamma, unsigned char *lut) {
     }
 }
 
+// From the Halide camera_pipe's color_correct
+void makeColorMatrix(float colorMatrix[], float colorTemp) {
+    float alpha = (1.0 / colorTemp - 1.0/3200) / (1.0/7000 - 1.0/3200);
+        
+    colorMatrix[0] = alpha*1.6697f     + (1-alpha)*2.2997f;
+    colorMatrix[1] = alpha*-0.2693f    + (1-alpha)*-0.4478f;
+    colorMatrix[2] = alpha*-0.4004f    + (1-alpha)*0.1706f;
+    colorMatrix[3] = alpha*-42.4346f   + (1-alpha)*-39.0923f;
+
+    colorMatrix[4] = alpha*-0.3576f    + (1-alpha)*-0.3826f;
+    colorMatrix[5] = alpha*1.0615f     + (1-alpha)*1.5906f;
+    colorMatrix[6] = alpha*1.5949f     + (1-alpha)*-0.2080f;
+    colorMatrix[7] = alpha*-37.1158f   + (1-alpha)*-25.4311f;
+
+    colorMatrix[8] = alpha*-0.2175f    + (1-alpha)*-0.0888f;
+    colorMatrix[9] = alpha*-1.8751f    + (1-alpha)*-0.7344f;
+    colorMatrix[10]= alpha*6.9640f     + (1-alpha)*2.2832f;
+    colorMatrix[11]= alpha*-26.6970f   + (1-alpha)*-20.0826f;
+}
+
 // Some functions used by demosaic
 inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic(Image<uint16_t> input, Image<uint8_t> out, float contrast, bool denoise, int blackLevel, float gamma) {
+void demosaic(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, float gamma) {
 #if 0
     if (!src.image().valid()) {
         error(Event::DemosaicError, "Cannot demosaic an invalid image");
@@ -146,21 +166,7 @@ void demosaic(Image<uint16_t> input, Image<uint8_t> out, float contrast, bool de
         src.platform().rawToRGBColorMatrix(src.shot().whiteBalance, colorMatrix);
     }
     #else
-    float alpha = 0.2489;
-    colorMatrix[0] = alpha*1.6697f     + (1-alpha)*2.2997f;
-    colorMatrix[1] = alpha*-0.2693f    + (1-alpha)*-0.4478f;
-    colorMatrix[2] = alpha*-0.4004f    + (1-alpha)*0.1706f;
-    colorMatrix[3] = alpha*-42.4346f   + (1-alpha)*-39.0923f;
-
-    colorMatrix[4] = alpha*-0.3576f    + (1-alpha)*-0.3826f;
-    colorMatrix[5] = alpha*1.0615f     + (1-alpha)*1.5906f;
-    colorMatrix[6] = alpha*1.5949f     + (1-alpha)*-0.2080f;
-    colorMatrix[7] = alpha*-37.1158f   + (1-alpha)*-25.4311f;
-
-    colorMatrix[8] = alpha*-0.2175f    + (1-alpha)*-0.0888f;
-    colorMatrix[9] = alpha*-1.8751f    + (1-alpha)*-0.7344f;
-    colorMatrix[10]= alpha*6.9640f     + (1-alpha)*2.2832f;
-    colorMatrix[11]= alpha*-26.6970f   + (1-alpha)*-20.0826f;
+    makeColorMatrix(colorMatrix, colorTemp);
     #endif
 
 #if 0
