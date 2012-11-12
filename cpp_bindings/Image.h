@@ -171,8 +171,16 @@ namespace Halide {
         int height() const {return im.height();}
         int channels() const {return im.channels();}
         int size(int i) const {return im.size(i);}
+        int stride(int i) const {return im.stride(i);}
         int dimensions() const {return im.dimensions();}
         unsigned char *data() const {return im.data();}
+
+        void copyToHost() const {im.copyToHost();}
+        void copyToDev() const {im.copyToDev();}
+        void markHostDirty() const {im.markHostDirty();}
+        void markDevDirty() const {im.markDevDirty();}
+        bool hostDirty() const {return im.hostDirty();}
+        bool devDirty() const {return im.devDirty();}
     };
 
     

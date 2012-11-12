@@ -538,26 +538,84 @@ def test_core():
     
     print 'halide.test_core:                    OK'
 
-def visit_funcs(root_func, callback, all_calls=False):
+def callers(root_func):
+    "Returns dict mapping func name f => list of all func names calling f."
+    assert isinstance(root_func, Func)
+    d = {}
+    def callback(f, fparent):
+        f_name = f.name()
+        d.setdefault(f_name, [])
+        if fparent is not None:
+            d[f_name].append(fparent.name())
+    visit_funcs(root_func, callback, all_calls=True)
+    return d
+
+def callees(root_func):
+    "Returns dict mapping func name f => list of all func names called by f."
+    assert isinstance(root_func, Func)
+    d = {}
+    def callback(f, fparent):
+        if fparent is not None:
+            fparent_name = fparent.name()
+            d.setdefault(fparent_name, [])
+            d[fparent_name].append(f.name())
+    visit_funcs(root_func, callback, all_calls=True)
+    return d
+
+def toposort(data):
+    data = dict((a, set(b)) for (a, b) in data.items())
+    
+    for k, v in data.items():
+        v.discard(k)
+        
+    extras = reduce(set.union, data.values(), set()) - set(data.keys())
+    data.update({x:set() for x in extras})
+    
+    ans = []
+    while True:
+        ordered = set(x for (x,dep) in data.items() if not dep)
+        if len(ordered) == 0:
+            break
+        ans.extend(sorted(ordered))
+        data = {x: (dep - ordered) for (x,dep) in data.items() if x not in ordered}
+    return ans
+    
+_toposort = toposort
+
+def visit_funcs(root_func, callback, all_calls=False, toposort=False):
     """
     Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func.
     
     By default calls at most once per f (by marking a function as visited and not calling again).
-    Use all_calls=True to make callback() be called for every caller-callee pair.
+    Use all_calls=True to make callback() be called for every caller-callee pair. If toposort is
+    True then only call each func when its parent has already been called.
     """
+    #print 'root_func', root_func
+    assert isinstance(root_func, Func)
     d = {}
+    pairs = {}
     def visit(x, parent):
         name = x.name()
         unvisited = name not in d
         if all_calls or unvisited:# and len(x.args()) > 0:       # FIXME: Where is the Func('f0') with no args coming from in snake? Seems odd...
             d[name] = x
-            callback(x, parent)
+            if not toposort:
+                callback(x, parent)
+            else:
+                pairs.setdefault(name, [])
+                pairs[name].append((x, parent))
             #print x.rhs().funcs()
         if unvisited:
             for y in x.funcs(): #x.rhs().funcs():
                 if y.name() != name:
                     visit(y, x)
     visit(root_func, None)
+    
+    if toposort:
+        for name in _toposort(callers(root_func)):
+            for pair in pairs[name]:
+                callback(*pair)
+        
     return d
 
 def all_funcs(root_func, return_list=False):
@@ -659,7 +717,7 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
     w = input_png.width() if out_dims is None else out_dims[0]
     h = input_png.height() if out_dims is None else out_dims[1]
     nchan = input_png.channels() if out_dims is None else (out_dims[2] if len(out_dims) >= 3 else 1)
-    #print w, h, nchan
+    #print w, h, nchan, out_dims
     #w2 = roundup_multiple(w, pad_multiple)
     #h2 = roundup_multiple(h, pad_multiple)
     #print w2, h2, nchan
@@ -681,7 +739,7 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
             T.append(time.time()-T0)
         out.assign(realized)
 
-        assert out.width() == w and out.height() == h and out.channels() == nchan
+        assert out.width() == w and out.height() == h and out.channels() == nchan, (out.width(), out.height(), out.channels(), w, h, nchan)
         #print out.width(), out.height(), out.channels(), w, h, nchan
         if disp_time:
             if times > 1:
@@ -692,6 +750,10 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
         return out
     return evaluate
 
+# -------------------------------------------------------------------------------------------
+# Unit Tests
+# -------------------------------------------------------------------------------------------
+
 def example_out():
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
@@ -699,7 +761,70 @@ def example_out():
     blur_y.compileJIT()
 
     return filter_image(input, blur_y, in_filename)()
+
+def test_simple_program(cache=[]):
+    if len(cache):
+        return cache[0]
+    f = Func('c_valid_f')
+    g = Func('c_valid_g')
+    h = Func('c_valid_h')
+    h2 = Func('c_valid_h2')
+    x, y = Var('c_valid_x'), Var('c_valid_y')
+
+    # f callers: g, h2
+    # g callers: h, h2
+    # h callers: h2
+    # h2 callers: []
+    f[x,y]=x+y
+    g[x,y]=f[x,y]+f[x,y]
+    h[x,y]=g[x,y]
+    h2[x,y]=g[x,y]+f[x,y]+h[x,y]+g[x,y]
     
+    cache.append(h2)
+    return h2
+
+def test_callers():
+    h2 = test_simple_program()
+    
+    def filtname(s):
+        return s[len('c_valid_'):]
+        
+    d = dict((filtname(x), sorted([filtname(z) for z in y])) for (x, y) in callers(h2).items())
+    assert d == {'h': ['h2'], 'g': ['h', 'h2'], 'f': ['g', 'h2'], 'h2': []}
+
+    print 'halide.callers:                      OK'
+
+def test_toposort():
+    h2 = test_simple_program()
+    d = callers(h2)
+
+    #chunk_vars(Schedule.fromstring(h2,''), h2)
+
+    assert toposort(d) == ['c_valid_h2', 'c_valid_h', 'c_valid_g', 'c_valid_f']
+    
+    f = Func('c_valid2_f')
+    g = Func('c_valid2_g')
+    root = Func('c_valid2_root')
+    h1 = Func('c_valid2_h1')
+    h2 = Func('c_valid2_h2')
+    h3 = Func('c_valid2_h3')
+    x, y = Var('c_valid2_x'), Var('c_valid2_y')
+
+    f[x,y]=x+y
+    g[x,y]=f[x,y]
+    h1[x,y]=f[x,y]+f[x,y]
+    h2[x,y]=h1[x,y]
+    h3[x,y]=h2[x,y]
+    root[x,y]=g[x,y]+h3[x,y]+g[x,y]
+
+    #chunk_vars(Schedule.fromstring(root,''), root)
+    
+    assert toposort(callers(root)) == ['c_valid2_root', 'c_valid2_g', 'c_valid2_h3', 'c_valid2_h2', 'c_valid2_h1', 'c_valid2_f']
+    assert toposort(callers(f)) == ['c_valid2_f']
+    assert toposort(callers(g)) == ['c_valid2_g', 'c_valid2_f']
+    
+    print 'halide.toposort:                     OK'
+
 def test_blur():
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
     
@@ -916,6 +1041,8 @@ def test():
     test_blur()
     test_all_funcs()
     test_core()
+    test_callers()
+    test_toposort()
     #test_segfault()
     #test_examples()
 #    test_examples()

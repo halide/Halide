@@ -4,11 +4,12 @@
 import sys; sys.path += ['..', '.']
 builtin_min = min
 from halide import *
+import autotune
 
 int_t = Int(32)
 float_t = Float(32)
 
-OUT_DIMS = (1264, 1920, 3)
+OUT_DIMS = (1024, 1536, 3) #(1280, 1920, 3)
 
 def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     x, y, tx, ty, c = Var('x'), Var('y'), Var('tx'), Var('ty'), Var('c')
@@ -48,6 +49,9 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
                                                 raw[2*x+1, 2*y+1])))
         return deinterleaved
         
+    def absd(a, b):
+        return select(a > b, a-b, b-a)
+
     def demosaic(deinterleaved):
         # These are the values we already know from the input
         # x_y = the value of channel x at a site in the input of channel y
@@ -69,17 +73,17 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         # Try interpolating vertically and horizontally. Also compute
         # differences vertically and horizontally. Use interpolation in
         # whichever direction had the smallest difference.
-        gv_r  =    (g_gb[x, y-1] + g_gb[x, y])/2
-        gvd_r = abs(g_gb[x, y-1] - g_gb[x, y])
-        gh_r  =    (g_gr[x+1, y] + g_gr[x, y])/2
-        ghd_r = abs(g_gr[x+1, y] - g_gr[x, y])
+        gv_r  =     (g_gb[x, y-1] + g_gb[x, y])/2
+        gvd_r = absd(g_gb[x, y-1], g_gb[x, y])
+        gh_r  =     (g_gr[x+1, y] + g_gr[x, y])/2
+        ghd_r = absd(g_gr[x+1, y], g_gr[x, y])
         
         g_r[x, y]  = select(ghd_r < gvd_r, gh_r, gv_r)
 
-        gv_b  =    (g_gr[x, y+1] + g_gr[x, y])/2
-        gvd_b = abs(g_gr[x, y+1] - g_gr[x, y])
-        gh_b  =    (g_gb[x-1, y] + g_gb[x, y])/2
-        ghd_b = abs(g_gb[x-1, y] - g_gb[x, y])
+        gv_b  =     (g_gr[x, y+1] + g_gr[x, y])/2
+        gvd_b = absd(g_gr[x, y+1], g_gr[x, y])
+        gh_b  =     (g_gb[x-1, y] + g_gb[x, y])/2
+        ghd_b = absd(g_gb[x-1, y], g_gb[x, y])
 
         g_b[x, y]  = select(ghd_b < gvd_b, gh_b, gv_b)
 
@@ -111,11 +115,11 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         
         correction = g_b[x, y]  - (g_r[x, y] + g_r[x-1, y+1])/2
         rp_b       = correction + (r_r[x, y] + r_r[x-1, y+1])/2
-        rpd_b      = abs(r_r[x, y] - r_r[x-1, y+1])
+        rpd_b      = absd(r_r[x, y], r_r[x-1, y+1])
 
         correction = g_b[x, y]  - (g_r[x-1, y] + g_r[x, y+1])/2
         rn_b       = correction + (r_r[x-1, y] + r_r[x, y+1])/2
-        rnd_b      = abs(r_r[x-1, y] - r_r[x, y+1])
+        rnd_b      = absd(r_r[x-1, y], r_r[x, y+1])
 
         r_b[x, y]  = select(rpd_b < rnd_b, rp_b, rn_b)
 
@@ -123,11 +127,11 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
         # Same thing for blue at red
         correction = g_r[x, y]  - (g_b[x, y] + g_b[x+1, y-1])/2
         bp_r       = correction + (b_b[x, y] + b_b[x+1, y-1])/2
-        bpd_r      = abs(b_b[x, y] - b_b[x+1, y-1])
+        bpd_r      = absd(b_b[x, y], b_b[x+1, y-1])
 
         correction = g_r[x, y]  - (g_b[x+1, y] + g_b[x, y-1])/2
         bn_r       = correction + (b_b[x+1, y] + b_b[x, y-1])/2
-        bnd_r      = abs(b_b[x+1, y] - b_b[x, y-1])
+        bnd_r      = absd(b_b[x+1, y], b_b[x, y-1])
 
         b_r[x, y]  =  select(bpd_r < bnd_r, bp_r, bn_r)
 
@@ -297,7 +301,7 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     # to make a 2560x1920 output image, just like the FCam pipe, so
     # shift by 16, 12
     shifted = Func('shifted')
-    shifted[x, y] = cast(Int(16), input[clamp(x+16, 0, input.width()-1), clamp(y+12, 0, input.height()-1)])
+    shifted[x, y] = cast(Int(16), input[x+16, y+12])
 
     if use_uniforms:
         matrix_3200 = UniformImage(float_t, 2, 'm3200')
@@ -330,7 +334,6 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
 
     if schedule == 2:
         # Autotuned schedule
-        import autotune
         asched = autotune.Schedule.fromstring(processed, 'b_b.chunk(x).vectorize(x,2)\nb_gb.chunk(x).vectorize(x,8)\nb_gr.chunk(y).tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\nb_r.chunk(y).tile(x,y,_c0,_c1,8,8).vectorize(_c0,8)\ncorrected.chunk(x).vectorize(x,8)\ncurve.root().vectorize(x,4).split(x,x,_c0,16)\ncurved.root().tile(x,y,_c0,_c1,32,32).parallel(y)\n\n\ndenoised.root().tile(x,y,_c0,_c1,64,64).vectorize(_c0,8).parallel(y)\ng_b.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ng_gb.chunk(x).vectorize(x,4)\ng_gr.chunk(y)\ng_r.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\n\n\ninterleave_x3.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x4.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x5.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_x6.root().tile(x,y,_c0,_c1,16,16).vectorize(_c0,16).parallel(y)\ninterleave_y1.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y)\ninterleave_y2.chunk(x).vectorize(x,8)\ninterleave_y3.chunk(x).vectorize(x,8)\nmatrix.root().tile(x,y,_c0,_c1,4,4).vectorize(_c0,4).parallel(y)\nmatrix_3200.root().tile(x,y,_c0,_c1,4,4).parallel(y)\n\nprocessed.root().vectorize(tx,8)\nr_b.chunk(y).vectorize(x,8)\nr_gb.chunk(y).vectorize(x,8)\nr_gr.chunk(x)\nr_r.chunk(y)\nshifted.chunk(x).vectorize(x,4)')
         print asched
         asched.apply()
@@ -348,14 +351,18 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
             interleave_y1.chunk(tx).vectorize(x, 8).unroll(y, 2)
             interleave_y2.chunk(tx).vectorize(x, 8).unroll(y, 2)
             interleave_y3.chunk(tx).vectorize(x, 8).unroll(y, 2)
+            curve.root()
             matrix.root()
             matrix_3200.root()
             matrix_7000.root()
             denoised.chunk(tx).vectorize(x, 8)
-            deinterleaved.chunk(tx).vectorize(x, 8)
-            corrected.chunk(tx).vectorize(x, 4)
-            processed.root().tile(tx, ty, _c0, _c1, 32, 32).parallel(ty).reorder(_c0, _c1, c, tx, ty)
+            deinterleaved.chunk(tx).vectorize(x, 8).reorder(c, x, y).unroll(c, 4)
+            corrected.chunk(tx).vectorize(x, 4).reorder(c, x, y).unroll(c, 3)
+            processed.root().bound(c, 0, 3).tile(tx, ty, _c0, _c1, 32, 32).parallel(ty).reorder(_c0, _c1, c, tx, ty)
             """}
+
+    tune_constraints = autotune.bound_recursive(processed, 'c', 0, 3).replace('deinterleaved.bound(c,0,3)','deinterleaved.bound(c,0,4)')
+    #print tune_constraints
     
     #def evaluate(in_png):
     #    output = Image(UInt(8), 2560, 1920, 3); # image size is hard-coded for the N900 raw pipeline
@@ -364,10 +371,10 @@ def filter_func(result_type=UInt(8), schedule=0, use_uniforms=False):
     #g_r = all_funcs(processed)['g_r']
     #print 'caller_vars for g_r:', autotune.caller_vars(processed, g_r)
     #root_all(processed)
-    print 'Grouping'
-    import autotune
-    for sub in autotune.default_grouping(processed):
-        print sub
+    #print 'Grouping'
+    #import autotune
+    #for sub in autotune.default_grouping(processed):
+    #    print sub
 
     # In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
     #Func::Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};

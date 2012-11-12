@@ -36,3 +36,5 @@ val find_stores_in_stmt : Ir.stmt -> Util.StringSet.t
 val duplicated_lanes : Ir.expr -> bool
 val deduplicate_lanes : Ir.expr -> Ir.expr
 val derivative : string -> Ir.expr -> Ir.expr
+val derivative_in_env : string -> Ir.expr Util.StringMap.t -> Ir.expr -> Ir.expr
+  
