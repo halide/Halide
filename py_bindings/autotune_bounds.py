@@ -47,7 +47,7 @@ def get_xy(f, bounds):
             ans.append((varlist[i], varlist[i+1]))
     if len(ans) > 0:
         return random.choice(ans)
-    raise varlist
+    return varlist
     
 def test():
 #    from examples.interpolate import filter_func

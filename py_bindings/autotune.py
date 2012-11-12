@@ -273,7 +273,7 @@ class AutotuneParams:
     params_file = 'params.txt'      # Serializes AutotuneParams to this file
     resume_from = None
     
-    def __init__(self, argd={}, **kw):
+    def init_params(self, argd, kw):
         for (key, value) in kw.items():
             setattr(self, key, value)
         for (key, value) in argd.items():
@@ -285,6 +285,9 @@ class AutotuneParams:
                 setattr(self, key, argd[key])
             else:
                 setattr(self, key, float(argd[key]) if ('.' in value or isinstance(getattr(self, key), float)) else int(argd[key]))
+        
+    def __init__(self, argd={}, **kw):
+        self.init_params(argd, kw)
 #        print argd
 #        raise ValueError(self.cores)
         if len(self.in_images) == 0:
@@ -310,8 +313,10 @@ class AutotuneParams:
             self.prob_mutate_chunk_multi = 1.0
             
         if get_target() == 'arm':
-            self.run_timeout_bias = 25.0
-            
+            self.run_timeout_bias = 15.0
+
+        self.init_params(argd, kw)
+
     def set_globals(self):
         set_cuda(self.cuda)
 
@@ -610,7 +615,7 @@ def chunk_multi_try(p, a, bounds, verbose=False):
                 if verbose:
                     print '  chunk multi func', f_name
                 f_varlist = halide.func_varlist(f)
-                if len(f_varlist) >= 1 and p.chunk_multi_parallel_vector:
+                if len(f_varlist) >= 1 and p.chunk_multi_parallel_vector and not is_cuda():
                     a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s).vectorize(%s,%d)'%(chunk_var, chunk_var, f_varlist[0], n))
                 else:
                     a.d[f_name] = FragmentList.fromstring(a.d[f_name].func, '.chunk(%s,%s)'%(chunk_var, chunk_var))
@@ -2078,7 +2083,7 @@ def main():
                 sys.exit(1)
             compileL = glob.glob(os.path.join(p.resume_from, '*compile.sh'))
             genL = [get_gen(x) for x in compileL]
-            last_gen = max(genL)
+            last_gen = max(genL)-1
             for sh in [x for x in compileL if get_gen(x) == last_gen]:
                 L = split_doublequote(open(sh,'rt').read())
                 schedule_str = L[5]
