@@ -126,6 +126,8 @@ void demosaic(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, float 
     int rawHeight = input.height();
     int outWidth = rawWidth-32;
     int outHeight = rawHeight-48;
+    outWidth = min(outWidth, out.width());
+    outHeight = min(outHeight, out.height());
     outWidth /= BLOCK_WIDTH;
     outWidth *= BLOCK_WIDTH;
     outHeight /= BLOCK_HEIGHT;

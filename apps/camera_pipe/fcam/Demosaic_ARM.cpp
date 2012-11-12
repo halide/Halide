@@ -50,6 +50,8 @@ void demosaic_ARM(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, fl
 
     int outWidth = rawWidth;
     int outHeight = rawHeight;
+    outWidth = min(outWidth, out.width());
+    outHeight = min(outHeight, out.height());
     outWidth /= BLOCK_WIDTH;
     outWidth *= BLOCK_WIDTH;
     outHeight /= BLOCK_HEIGHT;
