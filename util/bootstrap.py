@@ -99,10 +99,6 @@ if 'linux' in platform:
         except OCamlVersionError as e:
             print 'e'
     
-        status('Testing for package libsexplib-camlp4-dev')
-        assert isdir('/usr/lib/ocaml/sexplib')
-        print '...OK!'
-
         status('Testing for clang')
         assert which('clang')
         print '...OK!'

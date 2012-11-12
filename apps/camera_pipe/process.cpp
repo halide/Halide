@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     }
 
     Image<uint16_t> input = load<uint16_t>(argv[1]);
-    Image<uint8_t> output(2560, 1920, 3); // image size is hard-coded for the N900 raw pipeline
+    Image<uint8_t> output(2560-32, 1920, 3); // image size is hard-coded for the N900 raw pipeline
     
     // These color matrices are for the sensor in the Nokia N900 and are
     // taken from the FCam source.
