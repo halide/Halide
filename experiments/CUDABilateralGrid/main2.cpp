@@ -1,5 +1,7 @@
 #include <cuda_runtime.h>
-#include <cutil_inline.h>
+// #include <cutil_inline.h>
+#include <cutil_standin.h>
+
 
 #include "BilateralFilter.h"
 
@@ -10,6 +12,129 @@
 #include <vecmath/Vector3f.h>
 
 #include <QString>
+
+#ifdef CUDA_CUTIL_MISSING
+/*static*/ CmdArgReader* CmdArgReader::self;
+/*static*/ char** CmdArgReader::rargv;
+/*static*/ int CmdArgReader::rargc;
+
+// functions, exported
+
+////////////////////////////////////////////////////////////////////////////////
+//! Public construction interface
+//! @return a handle to the class instance
+//! @param argc number of command line arguments (as given to main())
+//! @param argv command line argument string (as given to main())
+////////////////////////////////////////////////////////////////////////////////
+/*static*/ void
+CmdArgReader::init( const int argc, const char** argv) 
+{  
+    if ( NULL != self) 
+    {
+        return;
+    }
+
+    // command line arguments 
+    if (( 0 == argc) || ( 0 == argv)) 
+    {
+        LOGIC_EXCEPTION( "No command line arguments given.");
+    }
+
+    self = new CmdArgReader();
+
+    self->createArgsMaps( argc, argv);
+
+    rargc = argc;
+    rargv = const_cast<char**>( argv);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//! Constructor, default
+////////////////////////////////////////////////////////////////////////////////
+CmdArgReader::CmdArgReader() :
+    args(),
+    unprocessed(),
+    iter(),
+    iter_unprocessed()
+{  }
+
+////////////////////////////////////////////////////////////////////////////////
+//! Destructor
+////////////////////////////////////////////////////////////////////////////////
+CmdArgReader::~CmdArgReader() 
+{
+    for( iter = args.begin(); iter != args.end(); ++iter) 
+    {
+        if( *(iter->second.first) == typeid( int)) 
+        {
+            delete static_cast<int*>( iter->second.second);
+            break;
+        }
+        else if( *(iter->second.first) == typeid( bool)) 
+        {
+            delete static_cast<bool*>( iter->second.second);
+            break;
+        }
+        else if( *(iter->second.first) == typeid( std::string)) 
+        {
+            delete static_cast<std::string*>( iter->second.second);
+            break;
+        }
+        else if( *(iter->second.first) == typeid( std::vector< std::string>) ) 
+        {
+            delete static_cast< std::vector< std::string>* >( iter->second.second);
+            break;
+        }
+        else if( *(iter->second.first) == typeid( std::vector<int>) ) 
+        {
+            delete static_cast< std::vector<int>* >( iter->second.second);
+            break;
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//! Read args as token value pair into map for better processing (Even the 
+//! values remain strings until the parameter values is requested by the
+//! program.)
+//! @param argc the argument count (as given to 'main')
+//! @param argv the char* array containing the command line arguments
+////////////////////////////////////////////////////////////////////////////////
+void
+CmdArgReader::createArgsMaps( const int argc, const char** argv) {
+
+    std::string token;
+    std::string val_str;
+
+    std::map< std::string, std::string> args;
+
+    std::string::size_type pos;
+    std::string arg;
+    for( int i=1; i<argc; ++i) 
+    {
+        arg = argv[i];
+
+        // check if valid command line argument: all arguments begin with - or --
+        if (arg[0] != '-') 
+        {
+            RUNTIME_EXCEPTION("Invalid command line argument.");
+        }
+
+        int numDashes = (arg[1] == '-' ? 2 : 1);
+
+        // check if only flag or if a value is given
+        if ( (pos = arg.find( '=')) == std::string::npos) 
+        {  
+            unprocessed[ std::string( arg, numDashes, arg.length()-numDashes)] = "FLAG";                                  
+        }
+        else 
+        {
+            unprocessed[ std::string( arg, numDashes, pos-numDashes)] = 
+                                      std::string( arg, pos+1, arg.length()-1);
+        }
+    }
+}
+#endif // CUDA_CUTIL_MISSING
 
 void testBilateralFilter( const Array2D< float >& input,
 	float ss, float sr,
@@ -84,11 +209,15 @@ void saveArrayAsImage( const Array2D< float >& array, QString prefix, float ss, 
 
 int main( int argc, char* argv[] )
 {
-	int argc2 = 2;
-	char* argv2[2] = { "", "-device=1" };
+	// int argc2 = 2;
+	// char* argv2[2] = { "", "-device=1" };
+	if (argc != 2) {
+		fprintf(stderr, "Usage: grid <in_image.png>\n");
+		exit(0);
+	}
 
 	cudaDeviceProp deviceProp;
-    int devID = cutilChooseCudaDevice( argc2, argv2 );
+    int devID = 0; //cutilChooseCudaDevice( argc2, argv2 );
     if( devID < 0 )
 	{
        printf( "exiting...\n" );
@@ -99,7 +228,8 @@ int main( int argc, char* argv[] )
 
 	//Image4f im( "c:/tmp/tulip.png" );
 	//Image4f im( "c:/tmp/tulip_1080.png" ); // Jiawen version
-	Image4f im( "../../apps/bilateral_grid/input.png" );
+	// Image4f im( "../../apps/bilateral_grid/input.png" );
+	Image4f im(argv[1]);
 	//Image4f im( "c:/tmp/church_panorama_5097x2889.pfm" );
 
 	im = im.flipUD();

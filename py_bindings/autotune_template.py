@@ -21,6 +21,7 @@ def sample(varlist, schedule, name, bounds):
          '.root().tile(%(x)s,%(y)s,_c0,_c1,%(n)d,%(n)d).vectorize(_c0,%(n)d).parallel(%(y)s)',
          '.root().parallel(%(y)s).vectorize(%(x)s,%(n)d)']
     if autotune.is_cuda():
+        L[0] = '.chunk(%(chunk_var)s)'
         L.extend([
             '.root().cudaTile(%(x)s,%(y)s,%(n)d,%(n)d)'
         ]*3)
