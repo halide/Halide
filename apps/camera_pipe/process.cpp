@@ -13,6 +13,7 @@ extern "C" {
 #include <image_io.h>
 
 #include "fcam/Demosaic.h"
+#include "fcam/Demosaic_ARM.h"
 
 int main(int argc, char **argv) {
     if (argc < 6) {
@@ -64,10 +65,22 @@ int main(int argc, char **argv) {
         if (i % 5 == 0) sleep(1);
     }
     printf("C++:\t%u\n", bestT);
+    save(output, "fcam_c.png");
 
-    // Current timings on N900 are (best of 10)
+    bestT = 0xffffffff;
+    for (int i = 0; i < 5; i++) {
+        gettimeofday(&t1, NULL);
+        FCam::demosaic_ARM(input, output, color_temp, contrast, true, 25, gamma);
+        gettimeofday(&t2, NULL);
+        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
+        if (t < bestT) bestT = t;
+        if (i % 5 == 0) sleep(1);
+    }
+    printf("ASM:\t%u\n", bestT);
+    save(output, "fcam_arm.png");
+
+    // Timings on N900 as of SIGGRAPH 2012 camera ready are (best of 10)
     // Halide: 722ms, FCam: 741ms
-    save(output, "fcam.png");
     
     return 0;
 }
