@@ -4,6 +4,10 @@ let option_either x y =
     | (Some a, _) -> Some a
     | (_, b) -> b
 
+let option_map f = function
+  | None -> None
+  | Some x -> Some (f x)
+
 module StringSet = Set.Make (
   struct
     let compare = Pervasives.compare
@@ -100,11 +104,7 @@ let verbosity =
 (* 0 -> print nothing
    1 -> print top-level important stuff
    2 -> print way too much *)
-let dbg level = 
-  if (level < verbosity) then 
-    Printf.printf 
-  else 
-    Printf.ifprintf stdout 
+let dbg = Printf.printf
 
 let disable_bounds_checking = 
   let str = try Sys.getenv "HL_DISABLE_BOUNDS_CHECKING" with Not_found -> "0" in

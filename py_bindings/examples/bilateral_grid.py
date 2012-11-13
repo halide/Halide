@@ -91,7 +91,19 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
                                    'blury.root().parallel(z).vectorize(x, 4)\n' +
                                    'blurz.root().parallel(z).vectorize(x, 4)\n' +
                                    'smoothed.root().parallel(y).vectorize(x, 4)\n'}
+    # GPU
+    gpu_human = 'grid.root().cudaTile(x, y, 16, 16).update().root().cudaTile(x, y, 16, 16)\n' + \
+                'blurx.root().cudaTile(x, y, 8, 8)\n' + \
+                'blury.root().cudaTile(x, y, 8, 8)\n' + \
+                'blurz.root().cudaTile(x, y, 8, 8)\n' + \
+                'smoothed.root().cudaTile(x, y, 8, 8)\n'
+    if autotune.is_cuda():
+        tune_ref_schedules['human'] = gpu_human
 
+
+    tune_constraints = autotune.bound_recursive(smoothed, 'c', 0, 3)
+    print tune_constraints
+    
     #autotune.print_tunables(smoothed)
     #for i in range(123,10000):
     #    random.seed(i)

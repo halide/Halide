@@ -234,7 +234,9 @@ void WEAK __init(const char* ptx_src)
             exit(-1);
         }
 
+        #ifndef NDEBUG
         fprintf(stderr, "Got device %d, about to create context (t=%d)\n", dev, currentTime());
+        #endif
 
 
         // Create context
@@ -247,10 +249,12 @@ void WEAK __init(const char* ptx_src)
     
     // Initialize a module for just this Halide module
     if (!__mod) {
-      // Create module
-      CHECK_CALL( cuModuleLoadData(&__mod, ptx_src), "cuModuleLoadData" );
+        // Create module
+        CHECK_CALL( cuModuleLoadData(&__mod, ptx_src), "cuModuleLoadData" );
 
-      fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
+        #ifndef NDEBUG
+        fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
+        #endif
     }
 }
 

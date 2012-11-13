@@ -69,6 +69,12 @@ and string_of_expr = function
   | Not (a) -> "(not " ^ string_of_expr a ^ ")"
   (* | _ -> "<<UNHANDLED>>" *)
 
+and string_of_loop_type = function
+  | Serial -> "for"
+  | Parallel -> "parallel"
+  | Vectorized -> "vectorized"
+  | Unrolled -> "unrolled"
+
 and string_of_stmt stmt = 
   let rec string_stmt p stmt =
     let sp = p ^ "  " in
@@ -78,7 +84,7 @@ and string_of_stmt stmt =
        " else " ^ string_of_stmt fs *)
       | For(name, min, n, order, s) -> 
           (p ^ (sprintf "%s (%s: %s, %s) {\n" 
-                  (if order then "for" else "pfor")
+                  (string_of_loop_type order)
                   name (string_of_expr min) (string_of_expr n)) ^
              (string_stmt sp s) ^ 
              p ^ "}\n")
@@ -107,9 +113,16 @@ and string_of_stmt stmt =
         (p ^ "realize " ^ name ^ "[" ^ region ^ "] {\n" ^
            string_stmt sp body ^
            p ^ "}\n")
-      | Pipeline (name, produce, consume) -> 
+      | Pipeline (name, produce, None, consume) -> 
           (p ^ "produce " ^ name ^ " {\n" ^ 
              string_stmt sp produce ^ 
+             p ^ "}\n" ^
+             string_stmt p consume)
+      | Pipeline (name, produce, Some update, consume) -> 
+          (p ^ "initialize " ^ name ^ " {\n" ^ 
+             string_stmt sp produce ^ 
+             p ^ "} update {\n" ^ 
+             string_stmt sp update ^ 
              p ^ "}\n" ^
              string_stmt p consume)
       | Print (m, l) -> p ^ "Print(" ^ m ^ (String.concat ", " (List.map string_of_expr l)) ^ ")\n"

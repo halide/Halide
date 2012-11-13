@@ -42,6 +42,10 @@ Func deinterleave(Func raw) {
     return deinterleaved;
 }
 
+Expr absd(Expr a, Expr b) {
+    return select(a > b, a - b, b - a);
+}
+
 Func demosaic(Func deinterleaved) {
     // These are the values we already know from the input
     // x_y = the value of channel x at a site in the input of channel y
@@ -64,16 +68,16 @@ Func demosaic(Func deinterleaved) {
     // differences vertically and horizontally. Use interpolation in
     // whichever direction had the smallest difference.
     Expr gv_r  =    (g_gb(x, y-1) + g_gb(x, y))/2;
-    Expr gvd_r = abs(g_gb(x, y-1) - g_gb(x, y));
+    Expr gvd_r = absd(g_gb(x, y-1), g_gb(x, y));
     Expr gh_r  =    (g_gr(x+1, y) + g_gr(x, y))/2;
-    Expr ghd_r = abs(g_gr(x+1, y) - g_gr(x, y));
+    Expr ghd_r = absd(g_gr(x+1, y), g_gr(x, y));
 
     g_r(x, y)  = select(ghd_r < gvd_r, gh_r, gv_r);
 
     Expr gv_b  =    (g_gr(x, y+1) + g_gr(x, y))/2;
-    Expr gvd_b = abs(g_gr(x, y+1) - g_gr(x, y));
+    Expr gvd_b = absd(g_gr(x, y+1), g_gr(x, y));
     Expr gh_b  =    (g_gb(x-1, y) + g_gb(x, y))/2;
-    Expr ghd_b = abs(g_gb(x-1, y) - g_gb(x, y));
+    Expr ghd_b = absd(g_gb(x-1, y), g_gb(x, y));
 
     g_b(x, y)  = select(ghd_b < gvd_b, gh_b, gv_b);
 
@@ -106,11 +110,11 @@ Func demosaic(Func deinterleaved) {
 
     correction = g_b(x, y)  - (g_r(x, y) + g_r(x-1, y+1))/2;
     Expr rp_b  = correction + (r_r(x, y) + r_r(x-1, y+1))/2;
-    Expr rpd_b = abs(r_r(x, y) - r_r(x-1, y+1));
+    Expr rpd_b = absd(r_r(x, y), r_r(x-1, y+1));
 
     correction = g_b(x, y)  - (g_r(x-1, y) + g_r(x, y+1))/2;
     Expr rn_b  = correction + (r_r(x-1, y) + r_r(x, y+1))/2;
-    Expr rnd_b = abs(r_r(x-1, y) - r_r(x, y+1));
+    Expr rnd_b = absd(r_r(x-1, y), r_r(x, y+1));
 
     r_b(x, y)  = select(rpd_b < rnd_b, rp_b, rn_b);
 
@@ -118,11 +122,11 @@ Func demosaic(Func deinterleaved) {
     // Same thing for blue at red
     correction = g_r(x, y)  - (g_b(x, y) + g_b(x+1, y-1))/2;
     Expr bp_r  = correction + (b_b(x, y) + b_b(x+1, y-1))/2;
-    Expr bpd_r = abs(b_b(x, y) - b_b(x+1, y-1));
+    Expr bpd_r = absd(b_b(x, y), b_b(x+1, y-1));
 
     correction = g_r(x, y)  - (g_b(x+1, y) + g_b(x, y-1))/2;
     Expr bn_r  = correction + (b_b(x+1, y) + b_b(x, y-1))/2;
-    Expr bnd_r = abs(b_b(x+1, y) - b_b(x, y-1));
+    Expr bnd_r = absd(b_b(x+1, y), b_b(x, y-1));
 
     b_r(x, y)  =  select(bpd_r < bnd_r, bp_r, bn_r);    
 
@@ -244,7 +248,6 @@ Func process(Func raw, Type result_type,
              UniformImage matrix_3200, UniformImage matrix_7000, Uniform<float> color_temp, 
              Uniform<float> gamma, Uniform<float> contrast) {
 
-    Func processed("processed");
     Var xi, yi;
 
     Func denoised = hot_pixel_suppression(raw);
@@ -253,31 +256,25 @@ Func process(Func raw, Type result_type,
     Func corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp);
     Func curved = apply_curve(corrected, result_type, gamma, contrast);
 
+    Func processed("processed");
+    processed(tx, ty, c) = curved(tx, ty, c);
+
     // Schedule
-    Var co, ci;
-    //#define USE_CI_HACK
-    #ifndef USE_CI_HACK
-    ci = c;
-    #endif
-    processed(tx, ty, c) = curved(tx, ty, ci);
-    #ifdef USE_CI_HACK
-    processed.split(c, co, ci, 3); // bound color loop to 0-3
-    #else
     processed.bound(c, 0, 3); // bound color loop 0-3, properly
-    #endif
+
     if (schedule == 0) {
         // Compute in chunks over tiles, vectorized by 8
         denoised.chunk(tx).vectorize(x, 8);
-        deinterleaved.chunk(tx).vectorize(x, 8);
-        corrected.chunk(tx).vectorize(x, 4);
-        processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, ci, tx, ty);
+        deinterleaved.chunk(tx).vectorize(x, 8).reorder(c, x, y).unroll(c, 4);
+        corrected.chunk(tx).vectorize(x, 4).reorder(c, x, y).unroll(c, 3);
+        processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
         processed.parallel(ty);
     } else if (schedule == 1) {
         // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
         denoised.chunk(tx);
         deinterleaved.chunk(tx);
         corrected.chunk(tx);
-        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, ci, tx, ty);
+        processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
         processed.parallel(ty);
     } else {
         denoised.root();
@@ -303,7 +300,7 @@ int main(int argc, char **argv) {
     // to make a 2560x1920 output image, just like the FCam pipe, so
     // shift by 16, 12
     Func shifted;
-    shifted(x, y) = input(clamp(x+16, 0, input.width()-1), clamp(y+12, 0, input.height()-1)); 
+    shifted(x, y) = input(x+16, y+12); 
     
     // Parameterized output type, because LLVM PTX (GPU) backend does not
     // currently allow 8-bit computations
@@ -320,8 +317,8 @@ int main(int argc, char **argv) {
     //printf("%s\n", s.c_str());
 
     // In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
-    Func::Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
-    processed.compileToFile("curved", std::vector<Func::Arg>(args, args+6));
+    Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
+    processed.compileToFile("curved", std::vector<Arg>(args, args+6));
 
     return 0;
 }

@@ -44,11 +44,26 @@ template<typename A>
 A mod(A x, A y) {
     return x % y;
 }
+
+template<typename A>
+bool close_enough(A x, A y) {
+    return x == y;
+}
+
+template<>
+bool close_enough<float>(float x, float y) {
+    return fabs(x-y) < 1e-4;
+}
+
+template<>
+bool close_enough<double>(double x, double y) {
+    return fabs(x-y) < 1e-5;
+}
     
 
 template<typename A>
 bool test(int vec_width) {
-    const int W = 3200;
+    const int W = 320;
     const int H = 16;
     
     printf("Testing %s\n", string_of_type<A>());
@@ -56,7 +71,7 @@ bool test(int vec_width) {
     Image<A> input(W+16, H+16);
     for (int y = 0; y < H+16; y++) {
         for (int x = 0; x < W+16; x++) {
-            input(x, y) = (A)(rand()*0.125 + 1.0);
+            input(x, y) = (A)((rand() % 1024)*0.125 + 1.0);
         }
     }
     Var x, y;
@@ -230,7 +245,8 @@ bool test(int vec_width) {
             if (clamped < (A)1) clamped = (A)1;
             if (clamped > (A)3) clamped = (A)3;
             A correct = input(x, y) / clamped;
-            if (im9(x, y) != correct) {
+            // We allow floating point division to take some liberties with accuracy
+            if (!close_enough(im9(x, y), correct)) {
                 printf("im9(%d, %d) = %f instead of %f\n", x, y, (double)(im9(x, y)), (double)(correct));
                 return false;
             }
@@ -248,7 +264,7 @@ bool test(int vec_width) {
 	for (int y = 0; y < H; y++) {
 	    for (int x = 0; x < W; x++) {	  
 		A correct = input(x, y) / c;
-		if (im10(x, y) != correct) {
+                if (!close_enough(im10(x, y), correct)) {
 		    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y, 
 			   (double)(input(x, y)), c,
 			   (double)(im10(x, y)), 

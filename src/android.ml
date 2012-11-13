@@ -15,7 +15,7 @@ let target_triple = "arm-linux-android-eabi"
 
 let cg_entry c m codegen_entry _ e opts =
   (* set up module *)
-  Stdlib.init_module_android m;
+  Stdlib.init_module_arm_android m;
 
   (* build the inner kernel, which takes raw byte*s *)
   let inner = codegen_entry opts c m e in
@@ -70,7 +70,9 @@ let rec cg_stmt (con : context) (stmt : stmt) =
 let free (con : context) (name:string) (address:llvalue) =
   Arm.free con name address
 
-let malloc (con : context) (name : string) (elems : expr) (elem_size : expr) =
-  Arm.malloc con name elems elem_size
+let raw_malloc = Arm.raw_malloc
+
+let malloc ?force_heap:(force_heap=false) (con : context) (name : string) (elems : expr) (elem_size : expr) =
+  Arm.malloc con name elems elem_size ~force_heap:force_heap
 
 let env = Environment.empty

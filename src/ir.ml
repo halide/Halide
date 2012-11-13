@@ -195,9 +195,12 @@ let rec val_type_of_expr = function
   | Call (_, t, _, _) -> t
 
 
+type loop_type = Serial | Parallel | Vectorized | Unrolled
+with sexp
+
 type stmt =
-  (* var name, base, width, ordered?, body *)
-  | For of string * expr * expr * bool * stmt
+  (* var name, base, width, loop type, body *)
+  | For of string * expr * expr * loop_type * stmt
 
   (* An in-order sequence of statements *)
   | Block of stmt list
@@ -219,8 +222,10 @@ type stmt =
 
   (* A producer-consumer pair of statements via the named buffer
      (which must have been allocated with an allocate node outside of
-     this) *)
-  | Pipeline of buffer * stmt * stmt
+     this). May also have an optional update step in between for
+     reductions. In the first statement the buffer is write-only, in
+     the second it is read-write, and in the third it is read-only. *)
+  | Pipeline of buffer * stmt * (stmt option) * stmt
 
   (* Assign a scalar value to a variable within the sub-statement *)
   | LetStmt of string * expr * stmt

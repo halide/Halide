@@ -46,7 +46,10 @@ void interp(vector< Vector4f > &data, Vector2ui size) {
 	small_size.y = size.y / 2 + 1;
 	vector< Vector4f > small_data(small_size.x * small_size.y, make_vector(0.0f, 0.0f, 0.0f, 0.0f));
 	assert(small_data.size() < data.size());
-	for (Vector2ui at = make_vector(0U, 0U); at.y < small_size.y; ++at.y) {
+        #pragma omp parallel for
+        for (unsigned int at_y = 0; at_y < small_size.y; at_y++) {
+            Vector2ui at = make_vector(0U, at_y);
+        //for (Vector2ui at = make_vector(0U, 0U); at.y < small_size.y; ++at.y) {
 		for (at.x = 0U; at.x < small_size.x; ++at.x) {
 			Vector4f &sval = small_data[at.y * small_size.x + at.x];
 			if (at.y * 2U - 1U < size.y) {
@@ -92,7 +95,10 @@ void interp(vector< Vector4f > &data, Vector2ui size) {
 
 	assert((small_size.x - 1) * 2 >= size.x - 1);
 	assert((small_size.y - 1) * 2 >= size.y - 1);
-	for (Vector2ui at = make_vector(0U, 0U); at.y < size.y; at.y += 2) {
+        #pragma omp parallel for
+        for (unsigned int at_y = 0; at_y < size.y; at_y += 2) {
+                //for (Vector2ui at = make_vector(0U, 0U); at.y < size.y; at.y += 2) {
+                Vector2ui at = make_vector(0U, at_y);
 		for (at.x = 0U; at.x < size.x; at.x += 2) {
 			assert(at.y/2 < small_size.y);
 			assert(at.x/2 < small_size.x);
@@ -104,7 +110,7 @@ void interp(vector< Vector4f > &data, Vector2ui size) {
 					+ small_data[(at.y/2) * small_size.x + (at.x/2+1)]);
 			}
 			if (at.y + 1 < size.y) {
-				assert(at.y/2 + 1 < small_size.x);
+				assert(at.y/2 + 1 < small_size.y);
 				upsampled[(at.y+1) * size.x + at.x] = 0.5 * (
 					  small_data[(at.y/2) * small_size.x + (at.x/2)]
 					+ small_data[(at.y/2+1) * small_size.x + (at.x/2)]);

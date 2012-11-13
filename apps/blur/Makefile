@@ -13,7 +13,7 @@ halide_blur: ../../cpp_bindings/ ../../src/ halide_blur.cpp
 	$(GXX) halide_blur.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -o halide_blur -ldl -lpthread
 
 halide_blur.bc: halide_blur
-	./halide_blur
+	HL_DISABLE_BOUNDS_CHECKING=1 ./halide_blur
 
 halide_blur.o: halide_blur.bc
 	cat halide_blur.bc | $(OPT) -O3 -always-inline | $(LLC) -O3 -filetype=obj > halide_blur.o
