@@ -1897,6 +1897,8 @@ def main():
                 rest = '-generations 200'.split() + rest
             elif examplename == 'bilateral_grid':
                 rest = '-generations 150'.split() + rest
+            elif examplename == 'blur':
+                rest = '-run_timeout_bias 20'.split() + rest
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'time':
         if len(args) < 2:
