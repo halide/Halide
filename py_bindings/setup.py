@@ -33,6 +33,12 @@ for ext in ['.png', '.ppm']:
                 except:
                     raise ValueError('Could not convert (via ImageMagick or Python Image library) %s => %s' % (infile, outfile))
 
+if not os.path.exists('apollo1.png'):
+    def system(s):
+        print s
+        os.system(s)
+    system('convert apollo2.png -colorspace Gray -resize 6500x6500 apollo1.png')
+    
 setup(
   name = 'Halide binding',
 #  cmdclass = {'build_ext': build_ext},

@@ -102,6 +102,7 @@ def filter_func(dtype=UInt(16), use_uniforms=False):
 
 
     tune_constraints = autotune.bound_recursive(smoothed, 'c', 0, 3)
+    print tune_constraints
     
     #autotune.print_tunables(smoothed)
     #for i in range(123,10000):
