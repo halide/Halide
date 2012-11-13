@@ -203,7 +203,7 @@ class AutotuneParams:
     prob_pop_random    = 0.2
     
     adaptive_mutate = False
-    aggressive = False
+    aggressive = True
     
     cuda = False
     
