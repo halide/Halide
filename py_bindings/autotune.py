@@ -119,6 +119,21 @@ CHECK_REFERENCE = False #True
 AUTOTUNE_CMD_INFO = '# autotune '       # Info at the top of summary file
 SPECULATIVE_INTERPOLATE = True          # Disable this in general (just a test for interpolate code)
 
+#_update_funcs = []
+#_is_tune_update = [False]
+def set_tune_update(root_func, b):
+#    print 'set_tune_update', b
+#    _is_tune_update[0] = b
+#    print is_tune_update()
+    root_func.tune_update = b
+    
+def is_tune_update(root_func):
+#    print 'is_tune_update', _is_tune_update[0]
+#    return _is_tune_update[0]
+    if hasattr(root_func, 'tune_update'):
+        return root_func.tune_update
+    return False
+    
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
 # --------------------------------------------------------------------------------------------------------------
@@ -189,6 +204,7 @@ class AutotuneParams:
       -prob_reasonable         p Probability to sample reasonable schedule when sampling random schedule
       -cuda                    b Whether to use Cuda schedules (0 or 1, default 0)
       -aggressive              b Use strategies hoped to more likely find global minimum (0 or 1, default 0)
+      -tune_update             b Whether to tune .update() functions (0 or 1, default 0)
     """
     
     #pop_elitism_pct = 0.2
@@ -263,8 +279,10 @@ class AutotuneParams:
     in_images = []                  # List of input images to test (can pass multiple images using -in_images a.png:b.png)
                                     # First image is run many times to yield a best timing
     
-    seed_reasonable = False          # Whether to seed with reasonable schedules
+    seed_reasonable = False         # Whether to seed with reasonable schedules
     prob_reasonable = 0.0           # Probability to sample reasonable schedule when sampling random schedule
+    
+    tune_update = True
     
     runner_file = 'default_runner.cpp'
     summary_file = 'summary.txt'
@@ -319,7 +337,7 @@ class AutotuneParams:
 
     def set_globals(self):
         set_cuda(self.cuda)
-
+        
     @staticmethod
     def loads(s):
         def deunicode(x):
@@ -1411,7 +1429,12 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         p.image_ext = scope['tune_image_ext']
     if 'tune_runner' in scope:
         p.runner_file = scope['tune_runner']
+
+    set_tune_update(out_func, p.tune_update)
+
     bounds = autotune_bounds.get_bounds(out_func, scope)
+#    print 'halide all funcs:', halide.all_funcs(out_func)
+#    raise SystemExit
     
     test_func = tester(input, out_func, p, filter_func_name)
     
@@ -1574,6 +1597,8 @@ def autotune_child(args, timeout=None):
     #os.kill(parent_pid, signal.SIGCONT)
     
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
+    set_tune_update(out_func, p.tune_update)
+
     schedule = Schedule.fromstring(out_func, schedule_str.replace('\\n', '\n'))
     constraints = Constraints()         # FIXME: Deal with Constraints() mess
     schedule.apply(constraints, scope=scope)

@@ -42,6 +42,10 @@ def is_cuda():
 
 def default_check(cls, L, func):
     assert func is not None
+    if halide.update_func_parent(func) is not None:     # If we are scheduling an f.update()
+        if len(L) < 1 or not isinstance(L[0], FragmentRoot):
+            return False
+
     def count(C):
         return sum([isinstance(x, C) for x in L])
     if len(L) == 0:
@@ -1000,8 +1004,8 @@ class Schedule:
             fscope[varname] = instantiate_var(varname)
         if verbose:
             print 'apply, fscope:', fscope
-        def callback(f, parent):
-            name = f.name()
+        def callback(f0, parent):
+            name = f0.name()
             if verbose:
                 print 'apply, name', name, constraints
             if constraints is not None and name in constraints.exclude_names:
@@ -1010,6 +1014,8 @@ class Schedule:
                 return
             if name in self.d:
                 s = str(self.d[name])
+                update_parent = halide.update_func_parent(f0)
+                f = update_parent.update() if update_parent is not None else f0
                 f.reset()
                 s = s.replace(name + '.', '__func.')
                 fscope['__func'] = f
