@@ -842,6 +842,8 @@ def cuda_global_check(schedule):
     d_cuda = {}
     ok = [True]
     def callback(f, fparent):
+        if fparent is None:
+            return
         f_name = f.name()
         L = schedule.d.get(f_name, [])
         inline_chunk = (len(L) == 0 or isinstance(L[0], FragmentChunk))
