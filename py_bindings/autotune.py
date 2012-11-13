@@ -203,7 +203,7 @@ class AutotuneParams:
     prob_pop_random    = 0.2
     
     adaptive_mutate = False
-    aggressive = False
+    aggressive = True
     
     cuda = False
     
@@ -338,7 +338,11 @@ class AutotuneParams:
                 if not name.startswith('_'):
                     d[name] = value
         return json.dumps(d, indent=4)
-            
+    
+    def save(self, filename):
+        with open(filename, 'wt') as f_param:
+            f_param.write(self.dumps())
+
     def dict_prob_mutate(self):
         start = 'prob_mutate_'
         return dict([(key[len(start):], getattr(self, key)) for key in dir(self) if key.startswith(start)])
@@ -1787,6 +1791,9 @@ def main():
         print 'autotune time tune_dir [log_timefile.txt]'
         print '  Tuner timings are biased. Run this to get unbiased comparison of ref schedules against best tuned schedule.'
         print
+        print 'autotune run examplename schedule.txt [imagename] [w] [h] [channels]'
+        print '  Run and get a single timing -- optionally override imagename and w h channels'
+        print
         print 'autotune html [tune_dir1|wildcards]'
         print '  Create index.html (created by default)'
         print
@@ -1794,6 +1801,58 @@ def main():
         sys.exit(0)
     if args[0] == 'test':
         test()
+    elif args[0] == 'run':
+        if len(args) < 3:
+            print >> sys.stderr, 'Expected >= 3 arguments'
+            sys.exit(1)
+        examplename = args[1]
+        filter_func_name = 'examples.%s.filter_func'%examplename
+        schedule = open(args[2], 'rt').read()
+        #schedule = Schedule.fromstring(schedule)
+        schedule_str = schedule.strip().replace('\n', '\\n')
+        
+        p = AutotuneParams(argd)
+
+        (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
+        (out_w, out_h, out_channels) = scope.get('tune_out_dims', (-1, -1, -1))
+
+        in_images = p.in_images
+        if len(args) > 3:
+            in_images = [args[3]]
+        if len(args) > 4:
+            out_w = int(args[4])
+        if len(args) > 5:
+            out_h = int(args[5])
+        if len(args) > 6:
+            out_channels = int(args[6])
+            
+        hl_threads = p.hl_threads
+        trials = p.trials
+        params_file = 'f_run_params.txt'
+        binary_file = os.path.abspath('f_run_binary')
+        save_filename = ''#'""'
+        p.save(params_file)
+        do_check = False
+        print 'in_image:', in_images[0]
+        
+        for mode_str in ['compile', 'run']:
+            sh_args = ['HL_NUMTHREADS=%d'%hl_threads, 'python', 'autotune.py', 'autotune_%s_child'%mode_str, filter_func_name, schedule_str, os.path.abspath(in_images[0]), '%d'%trials, binary_file, save_filename, (ref_output[j] if do_check else ''), str(out_w), str(out_h), str(out_channels), str(hl_threads), str(p.runner_file), params_file]
+            #print ' '.join(sh_args)
+            sh_line = (' '.join(sh_args[:5]) + ' "' + repr(sh_args[5])[1:-1] + '" ' + ' '.join(sh_args[6:9]) + ' '  +
+               ('"' + sh_args[9] + '"') + ' ' +
+               ('"' + sh_args[10] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[11:15]) + (' "' + sh_args[15] + '"') + (' "' + sh_args[16] + '"') + '\n')
+               
+            print sh_line
+            os.system(sh_line)
+            #subprocess.check_output(sh_line,shell=True) #FIXMEFIXME
+#            sub = subprocess.Popen(sh_args)
+#            sub.join()
+
+            #sh_line = (' '.join(sh_args[:5]) + ' "' + repr(sh_args[5])[1:-1] + '" ' + ' '.join(sh_args[6:9]) + ' '  +
+            #               ('"' + sh_args[9] + '"') + ' ' +
+            #               ('"' + sh_args[10] + '"' if p.check_output else '""') + ' ' + ' '.join(sh_args[11:15]) + (' "' + sh_args[15] + '"') + (' "' + sh_args[16] + '"') + '\n')
+            #sh_name = binary_file + '_' + mode_str + '.sh'
+
     elif args[0] == 'example':
         if len(args) < 2:
             print >> sys.stderr, 'Expected 2 arguments'
