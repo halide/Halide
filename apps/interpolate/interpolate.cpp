@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
 
         interpolated[1].chunk(y,y).parallel(y);
         interpolated[2].chunk(y,y).vectorize(c,4);
-        interpolated[3].chunk(y,y).vectorize(c,8);
+        interpolated[3].chunk(y,y).vectorize(c,4);
         interpolated[4].chunk(y,y).vectorize(c,2);
         interpolated[5].chunk(y,y).vectorize(c,4);
         interpolated[6].chunk(y,y).vectorize(c,4);
@@ -171,8 +171,59 @@ int main(int argc, char **argv) {
         upsampledx[6].root().vectorize(c,2);
         upsampledx[7].root().parallel(y);
         upsampledx[8].chunk(y,y).vectorize(c,4).unroll(c,4);
-    }
 
+        clamped.bound(c,0,4);
+        downsampled[0].bound(c,0,4);
+        downsampled[1].bound(c,0,4);
+        downsampled[2].bound(c,0,4);
+        downsampled[3].bound(c,0,4);
+        downsampled[4].bound(c,0,4);
+        downsampled[5].bound(c,0,4);
+        downsampled[6].bound(c,0,4);
+        downsampled[7].bound(c,0,4);
+        downsampled[8].bound(c,0,4);
+        downsampled[9].bound(c,0,4);
+        downx[1].bound(c,0,4);
+        downx[2].bound(c,0,4);
+        downx[3].bound(c,0,4);
+        downx[4].bound(c,0,4);
+        downx[5].bound(c,0,4);
+        downx[6].bound(c,0,4);
+        downx[7].bound(c,0,4);
+        downx[8].bound(c,0,4);
+        downx[9].bound(c,0,4);
+        final.bound(c,0,3);
+        interpolated[0].bound(c,0,4);
+        interpolated[1].bound(c,0,4);
+        interpolated[2].bound(c,0,4);
+        interpolated[3].bound(c,0,4);
+        interpolated[4].bound(c,0,4);
+        interpolated[5].bound(c,0,4);
+        interpolated[6].bound(c,0,4);
+        interpolated[7].bound(c,0,4);
+        interpolated[8].bound(c,0,4);
+        interpolated[9].bound(c,0,4);
+        upsampled[0].bound(c,0,4);
+        upsampled[1].bound(c,0,4);
+        upsampled[2].bound(c,0,4);
+        upsampled[3].bound(c,0,4);
+        upsampled[4].bound(c,0,4);
+        upsampled[5].bound(c,0,4);
+        upsampled[6].bound(c,0,4);
+        upsampled[7].bound(c,0,4);
+        upsampled[8].bound(c,0,4);
+        upsampledx[0].bound(c,0,4);
+        upsampledx[1].bound(c,0,4);
+        upsampledx[2].bound(c,0,4);
+        upsampledx[3].bound(c,0,4);
+        upsampledx[4].bound(c,0,4);
+        upsampledx[5].bound(c,0,4);
+        upsampledx[6].bound(c,0,4);
+        upsampledx[7].bound(c,0,4);
+        upsampledx[8].bound(c,0,4);
+    	break;
+    }
+        
 
     default:
         assert(0 && "No schedule with this number.");
