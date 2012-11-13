@@ -96,7 +96,11 @@ let fold_children_in_stmt expr_mutator stmt_mutator combiner = function
   | Realize (name, ty, region, body) -> 
     List.fold_left (fun result (x, y) -> combiner result (combiner (expr_mutator x) (expr_mutator y))) 
       (stmt_mutator body) region
-  | Pipeline (name, produce, consume) -> combiner (stmt_mutator produce) (stmt_mutator consume)
+  | Pipeline (name, produce, None, consume) -> combiner (stmt_mutator produce) (stmt_mutator consume)
+  | Pipeline (name, produce, Some update, consume) -> 
+    combiner 
+      (combiner (stmt_mutator produce) (stmt_mutator consume)) 
+      (stmt_mutator update)
   | Print (_, []) -> expr_mutator (IntImm 0)
   | Print (_, l) -> List.fold_left combiner (expr_mutator (List.hd l)) (List.map expr_mutator (List.tl l))
   | Assert (e, _) -> expr_mutator e
@@ -133,7 +137,9 @@ let mutate_children_in_expr mutator = function
   | Call (ct, rt, f, args)-> Call (ct, rt, f, List.map mutator args)
   | Let (n, a, b)         -> Let (n, mutator a, mutator b)
   | Debug (e, fmt, args)  -> Debug (mutator e, fmt, List.map mutator args)
-  | x -> x
+  | IntImm x              -> IntImm x
+  | FloatImm x            -> FloatImm x
+  | Var (t, n)            -> Var (t, n)
     
 let mutate_children_in_stmt expr_mutator stmt_mutator = function
   | For (name, min, n, order, body) ->
@@ -149,8 +155,8 @@ let mutate_children_in_stmt expr_mutator stmt_mutator = function
       Allocate (name, ty, expr_mutator size, stmt_mutator body)
   | Realize (name, ty, region, body) ->
       Realize (name, ty, List.map (fun (x, y) -> (expr_mutator x, expr_mutator y)) region, stmt_mutator body)
-  | Pipeline (name, produce, consume) -> 
-      Pipeline (name, stmt_mutator produce, stmt_mutator consume)
+  | Pipeline (name, produce, update, consume) -> 
+      Pipeline (name, stmt_mutator produce, option_map stmt_mutator update, stmt_mutator consume)
   | Print (p, l) -> Print (p, List.map expr_mutator l)
   | Assert (e, str) -> Assert (expr_mutator e, str)
 
@@ -198,9 +204,9 @@ and subs_name_stmt oldname newname stmt =
     | Realize (name, ty, region, body) -> 
         Realize ((if name = oldname then newname else name), 
                  ty, List.map (fun (x, y) -> (subs_expr x, subs_expr y)) region, subs body)                
-    | Pipeline (name, produce, consume) -> 
+    | Pipeline (name, produce, update, consume) -> 
         Pipeline ((if name = oldname then newname else name), 
-                  subs produce, subs consume)      
+                  subs produce, option_map subs update, subs consume)      
     | Print (p, l) -> Print (p, List.map subs_expr l)
     | Assert(e, str) -> Assert(subs_expr e, str)
 
@@ -243,8 +249,8 @@ and prefix_name_stmt prefix stmt =
         Allocate (prefix ^ name, ty, recurse_expr size, recurse_stmt body)      
     | Realize (name, ty, region, body) ->
         Realize (prefix ^ name, ty, List.map (fun (x, y) -> (recurse_expr x, recurse_expr y)) region, recurse_stmt body)
-    | Pipeline (name, produce, consume) -> 
-        Pipeline (prefix ^ name, recurse_stmt produce, recurse_stmt consume)      
+    | Pipeline (name, produce, update, consume) -> 
+        Pipeline (prefix ^ name, recurse_stmt produce, option_map recurse_stmt update, recurse_stmt consume)      
     | Print (p, l) ->
         Print (p, List.map recurse_expr l)
     | Assert(e, str) ->
@@ -265,11 +271,14 @@ let rec find_names_in_stmt internal ptrsize stmt =
       let recs = find_names_in_stmt internal ptrsize in
       let rece = find_names_in_expr internal ptrsize in
       string_int_set_concat [rece size; recs body]
-  | Pipeline (name, produce, consume) ->
+  | Pipeline (name, produce, None, consume) ->
       (* The name in a pipeline is just a helpful annotation. It doesn't change what's in scope *)
       (* let internal = StringSet.add name internal in *)
       let recs = find_names_in_stmt internal ptrsize in
       string_int_set_concat [recs produce; recs consume]
+  | Pipeline (name, produce, Some update, consume) ->
+      let recs = find_names_in_stmt internal ptrsize in
+      string_int_set_concat [recs produce; recs update; recs consume]
   | LetStmt (name, value, stmt) ->
       let internal = StringSet.add name internal in 
       let recs = find_names_in_stmt internal ptrsize in
@@ -372,37 +381,48 @@ let rec deduplicate_lanes expr = match expr with
 
 exception NonDifferentiable
 
-(* Check if an expression is linear in a variable *)
-let derivative v expr =
-  let rec inner v env expr =
-    let d = inner v env in
-    match expr with
-      | Var (_, name) when name = v -> IntImm 1
-      | Var (_, name) ->
-        begin try StringMap.find v env with Not_found -> IntImm 0 end
-      | Bop (Mul, a, b) -> ((d a) *~ b) +~ (a *~ (d b))
-      | Bop (Div, a, b) -> (((d a) *~ b) -~ (a *~ (d b))) /~ (a *~ a)
-      | Bop (Add, a, b) -> (d a) +~ (d b)
-      | Bop (Sub, a, b) -> (d a) -~ (d b)
-      | Bop (Min, a, b) -> Select (a <~ b, d a, d b)
-      | Bop (Max, a, b) -> Select (a >~ b, d a, d b)
-      | Select (cond, a, b) -> Select (cond, d a, d b)
-      | Let (name, value, expr) ->
-        let env = StringMap.add name (d value) env in
-        inner v env expr
-      | IntImm _ -> IntImm 0
-      | FloatImm _ -> FloatImm 0.0
-      | Debug (e, _, _) -> d e
-      | MakeVector list -> MakeVector (List.map d list)
-      | Broadcast (e, n) -> Broadcast (d e, n)
-      | Ramp (b, s, n) -> Ramp (d b, d s, n)
-      | ExtractElement (v, idx) -> ExtractElement (d v, idx)        
-      (* TODO, handle differentiable intrinsics (cos, sin, sqrt) *)
-      | _ ->
-        if (StringMap.mem v (find_vars_in_expr expr)) then
-          raise NonDifferentiable
-        else IntImm 0
-
-  in inner v StringMap.empty expr
-
+(* Mostly used to check if an expression is linear in a variable *)
+let rec derivative_in_env v env expr =
+  let d = derivative_in_env v env in
+  match expr with
+    | Var (_, name) when name = v -> IntImm 1
+    | Var (_, name) ->
+      begin 
+        try d (StringMap.find name env) 
+        with Not_found -> IntImm 0 
+      end
+    | Bop (Mul, a, b) -> ((d a) *~ b) +~ (a *~ (d b))
+    | Bop (Div, a, IntImm b) ->
+      let da = d a in
+      (da -~ (Bop (Mod, da, IntImm b))) /~ (IntImm b)
+    | Bop (Div, a, b) ->
+      begin match val_type_of_expr a with
+        | Float _ | FloatVector _ ->
+          (((d a) *~ b) -~ (a *~ (d b))) /~ (b *~ b)
+        | _ ->
+          (* Same as the quotient rule, but we don't get to combine the fractions because they round down *)
+          ((a +~ (d a)) /~ (b +~ (d b))) -~ (a /~ b)
+      end
+    | Bop (Add, a, b) -> (d a) +~ (d b)
+    | Bop (Sub, a, b) -> (d a) -~ (d b)
+    | Bop (Min, a, b) -> Select (a <~ b, d a, d b)
+    | Bop (Max, a, b) -> Select (a >~ b, d a, d b)
+    | Select (cond, a, b) -> Select (cond, d a, d b)
+    | Let (name, value, expr) ->
+      let env = StringMap.add name value env in
+      derivative_in_env v env expr
+    | IntImm _ -> IntImm 0
+    | FloatImm _ -> FloatImm 0.0
+    | Debug (e, _, _) -> d e
+    | MakeVector list -> MakeVector (List.map d list)
+    | Broadcast (e, n) -> Broadcast (d e, n)
+    | Ramp (b, s, n) -> Ramp (d b, d s, n)
+    | ExtractElement (v, idx) -> ExtractElement (d v, idx)        
+    (* TODO, handle differentiable intrinsics (cos, sin, sqrt) *)
+    | _ ->
+      if (StringMap.mem v (find_vars_in_expr expr)) then
+        raise NonDifferentiable
+      else IntImm 0
        
+let derivative v expr =
+  derivative_in_env v StringMap.empty expr

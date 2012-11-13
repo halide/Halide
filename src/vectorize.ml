@@ -28,7 +28,9 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
         | x -> fold_children_in_expr contains_vars_in_env (||) false x
       in
 
-      match expr with
+      if verbosity > 2 then dbg "Vectorizing: %s\n%!" (Ir_printer.string_of_expr expr);
+
+      let result = match expr with
       | x when not (contains_vars_in_env x) -> x
           
       | Cast (t, expr) -> Cast (vector_of_val_type t width, vec expr)
@@ -38,13 +40,12 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
           begin match (op, va, vb) with
             | (Add, Ramp (ba, sa, _), Ramp (bb, sb, _)) -> Ramp (ba +~ bb, sa +~ sb, width)
             | (Sub, Ramp (ba, sa, _), Ramp (bb, sb, _)) -> Ramp (ba -~ bb, sa -~ sb, width)
-            | (Mul, Ramp (b, s, _), x) -> Ramp (b *~ x, s *~ x, width)
-            | (Mul, x, Ramp (b, s, _)) -> Ramp (x *~ b, x *~ s, width)
-            (* | (Div, Ramp (b, s, _), x) -> Ramp (b /~ x, s /~ x, width) *)
-            | (Add, Ramp (b, s, _), x) -> Ramp (b +~ x, s, width)
-            | (Add, x, Ramp (b, s, _)) -> Ramp (x +~ b, s, width)
-            | (Sub, Ramp (b, s, _), x) -> Ramp (b -~ x, s, width)
-            | (Sub, x, Ramp (b, s, _)) -> Ramp (x -~ b, (Cast (val_type_of_expr s, IntImm 0)) -~ s, width)
+            | (Mul, Ramp (b, s, _), x) when is_scalar x -> Ramp (b *~ x, s *~ x, width)
+            | (Mul, x, Ramp (b, s, _)) when is_scalar x -> Ramp (x *~ b, x *~ s, width)
+            | (Add, Ramp (b, s, _), x) when is_scalar x -> Ramp (b +~ x, s, width)
+            | (Add, x, Ramp (b, s, _)) when is_scalar x -> Ramp (x +~ b, s, width)
+            | (Sub, Ramp (b, s, _), x) when is_scalar x -> Ramp (b -~ x, s, width)
+            | (Sub, x, Ramp (b, s, _)) when is_scalar x -> Ramp (x -~ b, (Cast (val_type_of_expr s, IntImm 0)) -~ s, width)
             | _ -> Bop (op, expand va, expand vb)
           end
             
@@ -90,17 +91,20 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
       | Debug (e, prefix, args) -> Debug (vec e, prefix, List.map vec args)
           
       | _ -> failwith "Can't vectorize vector code"
+      in 
+      if verbosity > 2 then dbg "Result: %s\n%!" (Ir_printer.string_of_expr result);
+      result
     in vec expr
 
 let vectorize_expr (var:string) (min:expr) (width:int) (expr:expr) = 
   vector_subs_expr (StringMap.add var (Ramp (min, IntImm 1, width)) StringMap.empty) expr
 
-let rec vectorize_stmt var stmt =
-  let rec vectorize_stmt_inner (min:expr) (width:int) stmt =
-    let vec = vectorize_stmt_inner min width 
+let rec vectorize_stmt (var:string) (min:expr) (width:int) (stmt:stmt) =
+    let vec = vectorize_stmt var min width 
     and vec_expr = vectorize_expr var min width in
     match stmt with
-      | For (v, min, n, order, stmt) -> For (v, min, n, order, vec stmt)
+      | For (v, min, size, order, stmt) -> 
+        For (v, vec_expr min, vec_expr size, order, vec stmt)
       | Block l -> Block (map vec l)
       | Store (expr, buf, idx) -> 
           let vec_e = vec_expr expr in
@@ -135,24 +139,4 @@ let rec vectorize_stmt var stmt =
           end
       | Print (prefix, args) -> Print (prefix, List.map vec_expr args)
       | s -> failwith (Printf.sprintf "Can't vectorize: %s" (Ir_printer.string_of_stmt s))
-  in
-  match stmt with        
-    | For (name, min, n, order, stmt) when name = var ->
-      assert (not order); (* Doesn't make sense to vectorize ordered For *)
-      begin match n with
-        | IntImm size ->
-          For (name, IntImm 0, IntImm 1, false, vectorize_stmt_inner min size stmt)
-        | _ -> failwith "Can't vectorize map with non-constant size"
-      end
-    | For (name, min, n, order, stmt) -> For (name, min, n, order, vectorize_stmt var stmt)
-    | Block l -> Block (map (vectorize_stmt var) l)
-    | Allocate (name, ty, size, body) -> 
-      Allocate (name, ty, size, vectorize_stmt var body)
-    | Realize (name, ty, region, body) -> 
-      Realize (name, ty, region, vectorize_stmt var body)
-    | Pipeline (name, produce, consume) -> 
-      Pipeline (name, 
-                vectorize_stmt var produce,
-                vectorize_stmt var consume)
-    (* Anything that doesn't contain a sub-statement is unchanged *)
-    | x -> x
+

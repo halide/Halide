@@ -51,6 +51,17 @@ namespace Halide {
         shared_ptr<Contents> contents;
     };
 
+    struct Arg {
+        template<typename T>
+        Arg(const Uniform<T> &u) : arg(Arg(DynUniform(u)).arg) {}
+        template<typename T>
+        Arg(const Image<T> &u) : arg(Arg(DynImage(u)).arg) {}
+        Arg(const UniformImage &);
+        Arg(const DynUniform &);
+        Arg(const DynImage &);
+        MLVal arg;
+    };
+
     class Func {
     public:
         Func();
@@ -106,6 +117,8 @@ namespace Halide {
         Func &reorder(const Var &, const Var &, const Var &, const Var &, const Var &);
         Func &chunk(const Var &);
         Func &chunk(const Var &, const Var &);
+        Func &cudaChunk(const Var &, const Var &, const Var &);
+        Func &cudaChunk(const Var &, const Var &, const Var &, const Var &);
         Func &bound(const Var &v, const Expr &min, const Expr &size);
         Func &root();
         Func &parallel(const Var &);
@@ -149,17 +162,6 @@ namespace Halide {
 
         void setErrorHandler(void (*)(char *));
 
-        struct Arg {
-            template<typename T>
-            Arg(const Uniform<T> &u) : arg(Arg(DynUniform(u)).arg) {}
-            template<typename T>
-            Arg(const Image<T> &u) : arg(Arg(DynImage(u)).arg) {}
-            Arg(const UniformImage &);
-            Arg(const DynUniform &);
-            Arg(const DynImage &);
-            MLVal arg;
-        };
-
         void compileToFile(const std::string &name, std::vector<Arg> args, std::string target = "");
 
         // TODO: make private again
@@ -173,6 +175,8 @@ namespace Halide {
         MLVal buildGuru();
         MLVal lower();
         MLVal inferArguments();
+
+        void _chunk(const Var &, const Var &);
 
         shared_ptr<FuncContents> contents;
     };

@@ -177,7 +177,7 @@ let cg_entry e =
         sym_remove name;
         s
 
-    | Allocate (name, ty, size, Pipeline (_, produce, consume)) ->
+    | Allocate (name, ty, size, Pipeline (_, produce, update, consume)) ->
         (* allocate buffer *)
         let scratch_init = cg_malloc name size ty in
 
@@ -185,6 +185,10 @@ let cg_entry e =
 
         (* do produce, consume *)
         let prod = [C.Comment ("produce " ^ name); cg_stmt produce] in
+        let update = match update with
+          | None -> []
+          | Some stmt -> [C.Comment ("update " ^ name); cg_stmt stmt] 
+        in
         let cons = [C.Comment ("consume " ^ name); cg_stmt consume] in
 
         sym_remove name;
@@ -192,7 +196,7 @@ let cg_entry e =
         (* free buffer *)
         let free = [C.Expr(cg_free name)] in
 
-        C.Block ([scratch_init], prod @ cons @ free)
+        C.Block ([scratch_init], prod @ update @ cons @ free)
 
     | Print (_)
     | Assert (_, _) -> 

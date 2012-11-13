@@ -5,7 +5,6 @@ pretty
 bounds
 x86
 arm
-android
 ptx
 ptx_dev
 schedule_transforms
@@ -21,7 +20,6 @@ ir_printer
 util
 vectorize
 split
-unroll
 constant_fold
 break_false_dependence
 schedule

@@ -55,19 +55,6 @@ let rec cg_expr (con : context) (expr : expr) =
 
   (* Peephole optimizations for arm *)
   match expr with 
-    | Select (cond, thenCase, elseCase) when is_vector cond -> 
-        let elts = vector_elements (val_type_of_expr cond) in
-        let bits = element_width (val_type_of_expr thenCase) in
-        let l = cg_expr thenCase in
-        let r = cg_expr elseCase in
-        let mask = cg_expr cond in
-        let mask = build_sext mask (type_of_val_type c (IntVector (bits, elts))) "" b in
-        let inv_mask = build_not mask "" b in
-        let t = type_of l in
-        let l = build_bitcast l (type_of mask) "" b in
-        let r = build_bitcast r (type_of mask) "" b in
-        let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
-        build_bitcast result t "" b;
     | Bop (Min, l, r) when is_vector l -> 
         begin match (val_type_of_expr l) with
           | IntVector (16, 8) ->
@@ -177,18 +164,20 @@ let rec cg_expr (con : context) (expr : expr) =
 
     (* TODO: generalize strided loads to other types *)
 
-          
-    (* 
-
     (* absolute difference via the pattern x > y ? x - y : y - x *)
     | Select (Cmp (LT, x, y), Bop (Sub, y1, x1), Bop (Sub, x2, y2)) 
     | Select (Cmp (LE, x, y), Bop (Sub, y1, x1), Bop (Sub, x2, y2)) 
     | Select (Cmp (GT, x, y), Bop (Sub, x1, y1), Bop (Sub, y2, x2)) 
     | Select (Cmp (GE, x, y), Bop (Sub, x1, y1), Bop (Sub, y2, x2)) 
         when is_vector x && x = x1 && x = x2 && y = y1 && y = y2 ->
-       TODO
-    *)
-
+      begin match (val_type_of_expr x) with
+        | IntVector (16, 8) ->
+          let op = declare_function "llvm.arm.neon.vabds.v8i16"
+            (function_type (i16x8_t) [|i16x8_t; i16x8_t|]) m in              
+          build_call op [| cg_expr x; cg_expr y |] "" b
+        (* TODO: other types *)
+        | _ -> con.cg_expr expr
+      end      
      
     (* absolute value via the pattern (x > 0 ? x : 0-x) or similar *)
     | Select (Cmp (LT, x, zero), Bop (Sub, zero1, x1), x2) 
@@ -222,6 +211,20 @@ let rec cg_expr (con : context) (expr : expr) =
               end                                
         end
  
+    | Select (cond, thenCase, elseCase) when is_vector cond -> 
+        let elts = vector_elements (val_type_of_expr cond) in
+        let bits = element_width (val_type_of_expr thenCase) in
+        let l = cg_expr thenCase in
+        let r = cg_expr elseCase in
+        let mask = cg_expr cond in
+        let mask = build_sext mask (type_of_val_type c (IntVector (bits, elts))) "" b in
+        let inv_mask = build_not mask "" b in
+        let t = type_of l in
+        let l = build_bitcast l (type_of mask) "" b in
+        let r = build_bitcast r (type_of mask) "" b in
+        let result = build_or (build_and mask l "" b) (build_and inv_mask r "" b) "" b in
+        build_bitcast result t "" b;
+
     (* halving add for integers *)
     | Bop (Div, Bop (Add, l, r), two)
         when two = make_const (val_type_of_expr l) 2 ->
@@ -285,7 +288,6 @@ let rec cg_stmt (con : context) (stmt : stmt) =
      performance. It's a pain to detect when we should use this *)
   let rec try_deinterleave expr = 
     let recurse = try_deinterleave in
-    Printf.printf "try_deinterleave pondering %s\n%!" (string_of_expr expr);
     match expr with
       | Select (Cmp (EQ, Bop(Mod, Ramp (base, IntImm 1, _), Broadcast (IntImm 2, _)), Broadcast (IntImm 0, _)), l, r) 
           when Analysis.reduce_expr_modulo base 2 = Some 0 ->
@@ -352,6 +354,7 @@ let rec cg_stmt (con : context) (stmt : stmt) =
   in
 
   let cg_dense_store e buf base w =
+    dbg "Generating a dense store on arm\n";
     if (bit_width (val_type_of_expr e) = 128) then begin
         let alignment = match (Analysis.reduce_expr_modulo base w, w) with
           (* 16-byte-aligned *)
@@ -377,7 +380,10 @@ let rec cg_stmt (con : context) (stmt : stmt) =
         let addr = build_pointercast addr ptr_t "" b in
         let value = build_bitcast (cg_expr e) i8x16_t "" b in
         build_call st [|addr; value; const_int (i32_t) alignment|] "" b         
-    end else con.cg_stmt (Store (e, buf, Ramp (base, IntImm 1, w))) 
+    end else begin
+      dbg "BAD: %s!\n" (string_of_expr e);
+      con.cg_stmt (Store (e, buf, Ramp (base, IntImm 1, w))) 
+    end
   in
 
   match stmt with
@@ -455,12 +461,22 @@ let free (con : context) (name:string) (address:llvalue) =
   let free = declare_function "fast_free" (function_type (void_type c) [|pointer_type (i8_type c)|]) m in
   ignore (build_call free [|address|] "" b)
 
-let malloc (con : context) (name : string) (elems : expr) (elem_size : expr) =
+let raw_malloc con name size =
+  let c = con.c and b = con.b and m = con.m in
+  let safe_malloc = try
+    Sys.getenv "HL_SAFE_MALLOC"
+  with Not_found -> "0" in
+  let malloc_fn = if safe_malloc = "1" then "safe_malloc" else "fast_malloc" in
+  let malloc = declare_function malloc_fn (function_type (pointer_type (i8_type c)) [|i32_type c|]) m in  
+  let addr = build_call malloc [|size|] name b in
+  (addr, fun con -> free con name addr)
+
+let malloc ?force_heap:(force_heap=false) (con : context) (name : string) (elems : expr) (elem_size : expr) =
   let c = con.c and b = con.b and m = con.m in
   let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
   match size with
-    | IntImm bytes when bytes < stack_alloc_max ->
-        dbg 1 "Stack allocating %s (%d bytes)!\n%!" name bytes;
+    | IntImm bytes when bytes < stack_alloc_max && not force_heap ->
+        if verbosity > 2 then dbg "Stack allocating %s (%d bytes)!\n%!" name bytes;
         let chunks = ((bytes + 15)/16) in (* 16-byte aligned stack *)
         (* Get the position at the top of the function *)
         let pos = instr_begin (entry_block (block_parent (insertion_block b))) in
@@ -471,9 +487,7 @@ let malloc (con : context) (name : string) (elems : expr) (elem_size : expr) =
         let ptr = build_pointercast ptr (pointer_type (i8_type c)) "" b in
         (ptr, fun _ -> ())
     | _ -> 
-        let malloc = declare_function "fast_malloc" (function_type (pointer_type (i8_type c)) [|i32_type c|]) m in  
         let size = Constant_fold.constant_fold_expr (Cast (Int 32, elems *~ elem_size)) in
-        let addr = build_call malloc [|con.cg_expr size|] name b in
-        (addr, fun con -> free con name addr)
+        raw_malloc con name (con.cg_expr size)
           
 let env = Environment.empty

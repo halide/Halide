@@ -7,7 +7,8 @@ open Cg_llvm_util
 open Ptx_dev
 open Analysis
 
-let dbgprint = true
+(* TODO: replace dbgprint references with dbg N calls *)
+let dbgprint = false
 let dump_mod = dbgprint && true
 
 (* Function calling conventions for PTX, from <llvm/CallingConv.h>
@@ -157,18 +158,18 @@ let rec find_host_loads s =
 
 (* TODO: clean up and lift to cg_llvm_util *)
 let set_buf_field buf name f v b =
-  dbg 0 "  set_field %s :=%!" (string_of_buffer_field f);
+  if verbosity > 2 then dbg "  set_field %s :=%!" (string_of_buffer_field f);
   (* dump_value v; *)
   let fptr = cg_buffer_field_ref buf f b in
   let fty = element_type (type_of fptr) in
   let v = match classify_type fty with
     | TypeKind.Integer ->
-        dbg 0 "  building const_intcast to %s of%!" (string_of_lltype fty);
+        if verbosity > 2 then dbg "  building const_intcast to %s of%!" (string_of_lltype fty);
         (* dump_value v; *)
         build_intcast v fty (name ^ "_field_type_cast") b
     | _ -> v
   in
-  dbg 0 "   ->%!"; (* dump_value fptr; *)
+  if verbosity > 2 then dbg "   ->%!"; (* dump_value fptr; *)
   ignore (build_store v fptr b)
 
 let cg_expr (con:context) (expr:expr) =
@@ -208,9 +209,9 @@ let cg_dev_kernel con stmt =
   let n_blkid_y = extract_bounds "blockidy" stmt in
   let n_blkid_z = extract_bounds "blockidz" stmt in
 
-  Printf.printf "\ndev kernel root:\n%s\n\n%!" (string_of_stmt stmt);
+  if verbosity > 2 then dbg "\ndev kernel root:\n%s\n\n%!" (string_of_stmt stmt);
 
-  Printf.printf " PTX bounds: (%sx%sx%s) threads, (%sx%sx%s) blocks\n%!"
+  if verbosity > 2 then dbg " PTX bounds: (%sx%sx%s) threads, (%sx%sx%s) blocks\n%!"
     (string_of_expr n_tid_x) (string_of_expr n_tid_y) (string_of_expr n_tid_z)
     (string_of_expr n_blkid_x) (string_of_expr n_blkid_y) (string_of_expr n_blkid_z);
 
@@ -301,7 +302,7 @@ let cg_dev_kernel con stmt =
   
   if dbgprint then dev_con.dump_syms ();
   
-  Printf.eprintf "--- Starting PTX body codegen ---\n%!";
+  if verbosity > 2 then dbg "--- Starting PTX body codegen ---\n%!";
 
   (* TODO: codegen the main kernel *)
   ignore (Ptx_dev.cg_stmt dev_con stmt);
@@ -339,7 +340,7 @@ let cg_dev_kernel con stmt =
   let entry_name = value_name k in
   let entry_name_str = build_global_stringptr entry_name "__entry_name" con.b in
 
-  Printf.eprintf "Kernel %s reads:\n  %s\nwrites:\n  %s\n"
+  if verbosity > 2 then dbg "Kernel %s reads:\n  %s\nwrites:\n  %s\n"
     entry_name
     (String.concat ",\n  " closure_reads)
     (String.concat ",\n  " closure_writes);
@@ -388,8 +389,8 @@ let cg_dev_kernel con stmt =
   ] in
 
   let dev_run = dev_run con in
-  Printf.eprintf "Building call to dev_run (%s) with args:\n%!" (string_of_lltype (type_of dev_run));
-  List.iter (fun a -> Printf.eprintf "  %s\n%!" (string_of_lltype (type_of a))) launch_args;
+  if verbosity > 2 then dbg "Building call to dev_run (%s) with args:\n%!" (string_of_lltype (type_of dev_run));
+  List.iter (fun a -> if verbosity > 2 then dbg "  %s\n%!" (string_of_lltype (type_of a))) launch_args;
 
   ignore (build_call dev_run (Array.of_list launch_args) "" con.b);
 
@@ -402,18 +403,27 @@ let cg_dev_kernel con stmt =
   const_zero
 
 let free (con:context) (name:string) host_cleanup ptr =
-  dbg 0 "Ptx.free %s\n%!" name;
+  if verbosity > 2 then dbg "Ptx.free %s\n%!" name;
   let buf = con.arch_state.buf_get name in
   ignore (build_call (free_buffer_func con) [| buf |] "" con.b);
   host_cleanup (host_context con)
 
-let malloc con name count elem_size =
-  Printf.eprintf "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
+let raw_malloc (con:context) name size =
+  let buf,free = X86.raw_malloc (host_context con) name size in
+  let free = fun con -> free (host_context con) in
+  buf,free
+
+let malloc ?force_heap:(force_heap=false) con name count elem_size =
+  if verbosity > 2 then dbg "Ptx.malloc %s (%sx%s)\n%!" name (string_of_expr count) (string_of_expr elem_size);
   (* TODO: track malloc llvalue -> size (dynamic llvalue) mapping for cuda memcpy *)
-  let (hostptr, host_cleanup) = X86.malloc (host_context con) name count elem_size in
+  let (hostptr, host_cleanup) = X86.malloc (host_context con) name count elem_size ~force_heap:force_heap in
   
   (* build a buffer_t to track this allocation *)
-  let buf = build_alloca (buffer_struct_type con) ("malloc_" ^ name) con.b in
+  let buf_struct_size = size_of (buffer_struct_type con) in
+  let buf_struct_name = (name ^ "$buffer_t") in
+  (* let buf = build_alloca (buffer_struct_type con) ("malloc_" ^ name) con.b in *)
+  let buf,buf_struct_free = raw_malloc con buf_struct_name buf_struct_size in
+  let buf = build_pointercast buf (pointer_type (buffer_struct_type con)) (name ^ "$buffer_t_ptr") con.b in
   let set_field f v = set_buf_field buf name f v con.b in
 
   let zero = const_zero con.c
@@ -447,7 +457,7 @@ let rec cg_stmt (con:context) stmt = match stmt with
       cg_dev_kernel con stmt
 
   (* track dirty data in a pipeline *)
-  | Allocate (name, ty, size, Pipeline (_, produce, consume)) ->
+  | Allocate (name, ty, size, body) ->
 
       (* allocate buffer *)
       let elem_size = (IntImm ((bit_width ty)/8)) in 
@@ -456,50 +466,57 @@ let rec cg_stmt (con:context) stmt = match stmt with
       (* push the symbol environment *)
       con.sym_add name scratch;
 
-      (* build the produce *)
-      ignore (cg_stmt con produce);
-
-      (* TODO: this doesn't capture the flow for reductions, where the
-         initialize and update are both in the Produce but may be scheduled
-         different places.
-
-         It needs to be revised to:
-          - start from any buffer writes
-          - walk outward to the nearest containing _sequence_ node (block, pipeline, loop?),
-            where a successor reads or writes the same buffer on the 
-          - place a mark dirty in between
-
-         That should probably actually work by:
-          - any time you cg a statement which introduces sequence (block, pipeline - not for),
-          - inject any flag setting/copying on the boundary in between before/after, depending on before/after contents
-       *)
-
-      (* mark host_dirty if writes by host in produce *)
-      let host_writes = find_host_stores produce in
-      if StringSet.mem name host_writes then begin
-        dbg 0 "found host writes in produce of %s - marking host_dirty\n" name;
-        let buf = con.arch_state.buf_get name in
-        set_buf_field buf name HostDirty (ci con.c 1) con.b;
-      end
-      else
-        dbg 0 "NO host writes in produce of %s\n" name;
-      
-      (* copy_to_host if reads by host in consume *)
-      let host_reads = find_host_loads consume in
-      if StringSet.mem name host_reads then begin
-        dbg 0 "copy back host read of %s\n%!" name;
-        let buf = con.arch_state.buf_get name in
-        copy_to_host con buf
-      end;
-
-      (* build the consumer *)
-      let res = cg_stmt con consume in
+      (* build the body *)
+      let res = cg_stmt con body in
 
       (* pop the symbol environment *)
       con.sym_remove name;
 
       (* free the scratch *)
       cleanup con;
+
+      res
+
+  | Pipeline (name, produce, update, consume) ->
+
+      let cg_host_produce_writes body =
+        (* mark host_dirty if writes by host in produce *)
+        let host_writes = find_host_stores body in
+        if StringSet.mem name host_writes then begin
+          if verbosity > 2 then dbg "found host writes in produce of %s - marking host_dirty\n" name;
+          let buf = con.arch_state.buf_get name in
+          set_buf_field buf name HostDirty (ci con.c 1) con.b;
+        end
+        else
+          if verbosity > 2 then dbg "NO host writes in produce of %s\n" name;
+      in
+
+      let cg_host_consume_reads body =
+        (* copy_to_host if reads by host in consume *)
+        let host_reads = find_host_loads consume in
+        if StringSet.mem name host_reads then begin
+          if verbosity > 2 then dbg "copy back host read of %s\n%!" name;
+          let buf = con.arch_state.buf_get name in
+          copy_to_host con buf
+        end;
+      in
+
+      (* build the produce/initialize step *)
+      ignore (cg_stmt con produce);
+      (* mark host dirty if buffer written on host in produce *)
+      ignore (cg_host_produce_writes produce);
+
+      (* copy_to_host if host reads in update *)
+      ignore (option_map cg_host_consume_reads update);
+      (* codegen update *)
+      ignore (option_map (cg_stmt con) update);
+      (* mark host dirty if host writes in update *)
+      ignore (option_map cg_host_produce_writes update);
+
+      (* copy_to_host if host reads in consume *)
+      ignore (cg_host_consume_reads consume);
+      (* build the consumer *)
+      let res = cg_stmt con consume in
 
       res
 
@@ -556,10 +573,10 @@ let rec cg_entry c m codegen_entry make_cg_context e opts =
   List.iter
     (fun nm ->
       try
-        dbg 0 "Host reads %s\n%!" nm;
-        dump_syms param_syms;
+        if verbosity > 1 then dbg "Host reads %s\n%!" nm;
+        if dbgprint then dump_syms param_syms;
         let buf = con.arch_state.buf_get nm in
-        dbg 0 "  copy_to_host at entrypoint\n%!";
+        if verbosity > 1 then dbg "  copy_to_host at entrypoint\n%!";
         ignore (copy_to_host con buf);
       with Not_found -> ()
     )
@@ -580,7 +597,7 @@ let rec cg_entry c m codegen_entry make_cg_context e opts =
 
   if dump_mod then dump_module dev_mod;
   let ptx_src = Llutil.compile_module_to_string dev_mod in
-  dbg 2 "PTX:\n%s\n%!" ptx_src;
+  if verbosity > 2 then dbg "PTX:\n%s\n%!" ptx_src;
   (* log the PTX module to disk *)
   save_bc_to_file dev_mod "kernels.bc";
   with_file_out "kernels.ptx" (fun o -> Printf.fprintf o "%s%!" ptx_src);

@@ -10,164 +10,248 @@ using namespace Halide;
 #include <sys/time.h>
 
 double now() {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	static bool first_call = true;
-	static time_t first_sec = 0;
-	if (first_call) {
-		first_call = false;
-		first_sec = tv.tv_sec;
-	}
-	assert(tv.tv_sec >= first_sec);
-	return (tv.tv_sec - first_sec) + (tv.tv_usec / 1000000.0);
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    static bool first_call = true;
+    static time_t first_sec = 0;
+    if (first_call) {
+        first_call = false;
+        first_sec = tv.tv_sec;
+    }
+    assert(tv.tv_sec >= first_sec);
+    return (tv.tv_sec - first_sec) + (tv.tv_usec / 1000000.0);
 }
 
 int main(int argc, char **argv) {
-	if (argc < 3) {
-		std::cerr << "Usage:\n\t./interpolate in.png out.png\n" << std::endl;
-		return 1;
-	}
+    if (argc < 3) {
+        std::cerr << "Usage:\n\t./interpolate in.png out.png\n" << std::endl;
+        return 1;
+    }
 
-	UniformImage input(Float(32), 3);
+    UniformImage input(Float(32), 3);
 
-	unsigned int levels = 10;
+    unsigned int levels = 10;
 
-	Func downsampled[levels];
-	Func interpolated[levels];
-	Uniform< unsigned int > level_widths[levels];
-	Uniform< unsigned int > level_heights[levels];
-	Var x,y,c;
+    Func downsampled[levels];
+    Func downx[levels];
+    Func interpolated[levels];
+    Func upsampled[levels];
+    Func upsampledx[levels];
+    Var x,y,c;
 
-	downsampled[0](x,y) = (
-		input(x,y,0) * input(x,y,3),
-		input(x,y,1) * input(x,y,3),
-		input(x,y,2) * input(x,y,3),
-			input(x,y,3));
+    Func clamped;
+    clamped(c, x, y) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
 
-	//generate downsample levels:
-	for (unsigned int l = 1; l < levels; ++l) {
-		Func clamped;
-		clamped(x,y,c) = downsampled[l-1](clamp(cast<int>(x),cast<int>(0),cast<int>(level_widths[l-1]-1)), clamp(cast<int>(y),cast<int>(0),cast<int>(level_heights[l-1]-1)), c);
-		Func downx;
-		downx(x,y,c) = (clamped(x*2-1,y,c) + 2.0f * clamped(x*2,y,c) + clamped(x*2+1,y,c)) / 4.0f;
-		downsampled[l](x,y,c) = (downx(x,y*2-1,c) + 2.0f * downx(x,y*2,c) + downx(x,y*2+1,c)) / 4.0f;
-	}
-	interpolated[levels-1](x,y,c) = downsampled[levels-1](x,y,c);
-	//generate interpolated levels:
-	for (unsigned int l = levels-2; l < levels; --l) {
-		Func upsampledx, upsampled;
-		upsampledx(x,y,c) = 0.5f * (interpolated[l+1](x/2 + (x%2),y,c) + interpolated[l+1](x/2,y,c));
-		upsampled(x,y,c) = 0.5f * (upsampledx(x, y/2 + (y%2),c) + upsampledx(x,y/2,c));
-		interpolated[l](x,y,c) = downsampled[l](x,y,c) + (1.0f - downsampled[l](x,y,3)) * upsampled(x,y,c);
-	}
+    downsampled[0](c,x,y) = select(c < 3, clamped(c, x, y) * clamped(3, x, y), clamped(3, x, y));
 
-	Func final;
-	final(x,y) = (
-		interpolated[0](x,y,0) / interpolated[0](x,y,3),
-		interpolated[0](x,y,1) / interpolated[0](x,y,3),
-		interpolated[0](x,y,2) / interpolated[0](x,y,3),
-			1.0f/*interpolated[0](x,y,3)*/);
+    //generate downsample levels:
+    for (unsigned int l = 1; l < levels; ++l) {
+        //Func downx;
+        downx[l](c, x, y) = (downsampled[l-1](c, x*2-1, y) + 
+                          2.0f * downsampled[l-1](c, x*2, y) + 
+                          downsampled[l-1](c, x*2+1, y)) * 0.25f;
+        downsampled[l](c, x, y) = (downx[l](c, x, y*2-1) + 
+                                   2.0f * downx[l](c, x, y*2) + 
+                                   downx[l](c, x, y*2+1)) * 0.25f;
+    }
+    interpolated[levels-1] = downsampled[levels-1];
+    //generate interpolated levels:
+    for (unsigned int l = levels-2; l < levels; --l) {
+        //Func upsampledx, upsampled;
+        upsampledx[l](c, x, y) = 0.5f * (interpolated[l+1](c, x/2 + (x%2), y) + interpolated[l+1](c, x/2, y));
+        upsampled[l](c, x, y) = 0.5f * (upsampledx[l](c, x, y/2 + (y%2)) + upsampledx[l](c, x, y/2));
+        interpolated[l](c, x, y) = downsampled[l](c, x, y) + (1.0f - downsampled[l](3, x, y)) * upsampled[l](c, x, y);
+    }
+
+    Func final;
+    final(x, y, c) = interpolated[0](c, x, y) / interpolated[0](3, x, y);
 	
-	std::cout << "Finished function setup." << std::endl;
+    std::cout << "Finished function setup." << std::endl;
+
+    int sched = 2;
+    switch (sched) {
+    case 0:
+    {
+        std::cout << "Flat schedule." << std::endl;
+        //schedule:
+        for (unsigned int l = 0; l < levels; ++l) {
+            downsampled[l].root();
+            interpolated[l].root();
+        }
+        final.root();
+        break;
+    }
+    case 1:
+    {
+        std::cout << "Flat schedule with vectorization." << std::endl;
+        for (unsigned int l = 0; l < levels; ++l) {
+            downsampled[l].root().vectorize(x,4);
+            interpolated[l].root().vectorize(x,4);
+        }
+        final.root();
+        break;
+    }
+    case 2:
+    {
+        Var yi;
+        std::cout << "Flat schedule with parallelization + vectorization." << std::endl;                
+        //clamped.root().parallel(y).bound(c, 0, 4).vectorize(c, 4);
+        for (unsigned int l = 1; l < levels-1; ++l) {
+            downsampled[l].root().parallel(y).vectorize(c, 4);
+            interpolated[l].root().parallel(y).vectorize(c, 4);
+        }
+        final.parallel(y).bound(c, 0, 3).vectorize(c, 4);
+        break;
+    }
+    case 3:
+    {
+        std::cout << "Flat schedule with vectorization sometimes." << std::endl;
+        for (unsigned int l = 0; l < levels; ++l) {
+            if (l + 4 < levels) {
+                Var yo,yi;
+                downsampled[l].root().vectorize(x,4);
+                interpolated[l].root().vectorize(x,4);
+            } else {
+                downsampled[l].root();
+                interpolated[l].root();
+            }
+        }
+        final.root();
+        break;
+    }
+    case 4:
+    {
+        std::cout << "Autotuned schedule." << std::endl;
+        Var _c0("_c0"), _c1("_c1");
+        downsampled[0].chunk(y,y);
+        downsampled[1].root().tile(x,y,_c0,_c1,4,4).vectorize(_c0,4).parallel(y);
+        downsampled[2].chunk(x,x).vectorize(c,4);
+        downsampled[3].chunk(y,y).vectorize(c,2);
+        downsampled[4].chunk(y,y).vectorize(c,2);
+        downsampled[5].chunk(y,y).vectorize(c,4);
 
 
-
-	int sched = 3;
-	switch (sched) {
-	case 0:
-	{
-		std::cout << "Flat schedule." << std::endl;
-		//schedule:
-		for (unsigned int l = 0; l < levels; ++l) {
-			downsampled[l].root();
-			interpolated[l].root();
-		}
-		final.root();
-		break;
-	}
-	case 1:
-	{
-		std::cout << "Flat schedule with vectorization." << std::endl;
-		for (unsigned int l = 0; l < levels; ++l) {
-			downsampled[l].root().vectorize(x,4);
-			interpolated[l].root().vectorize(x,4);
-		}
-		final.root();
-		break;
-	}
-	case 2:
-	{
-		std::cout << "Flat schedule with parallelization + vectorization." << std::endl;
-		for (unsigned int l = 0; l < levels; ++l) {
-			if (l + 2 < levels) {
-				Var yo,yi;
-				downsampled[l].root().split(y,yo,yi,4).parallel(yo).vectorize(x,4);
-				interpolated[l].root().split(y,yo,yi,4).parallel(yo).vectorize(x,4);
-			} else {
-				downsampled[l].root();
-				interpolated[l].root();
-			}
-		}
-		final.root();
-		break;
-	}
-	case 3:
-	{
-		std::cout << "Flat schedule with vectorization sometimes." << std::endl;
-		for (unsigned int l = 0; l < levels; ++l) {
-			if (l + 4 < levels) {
-				Var yo,yi;
-				downsampled[l].root().vectorize(x,4);
-				interpolated[l].root().vectorize(x,4);
-			} else {
-				downsampled[l].root();
-				interpolated[l].root();
-			}
-		}
-		final.root();
-		break;
-	}
+        downsampled[8].root();
 
 
-	default:
-		assert(0 && "No schedule with this number.");
-	}
+        downx[2].chunk(x,x).vectorize(c,4);
+        downx[3].root().tile(x,y,_c0,_c1,4,4).vectorize(_c0,4).parallel(y);
+        downx[4].root().tile(x,y,_c0,_c1,2,2).vectorize(_c0,2).parallel(y);
+        downx[5].root();
+        downx[6].chunk(x,x).vectorize(c,2);
+        downx[7].root().parallel(y);
+        downx[8].chunk(y,y).vectorize(c,4);
+        downx[9].root().parallel(y);
+        final.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y);
 
-	final.compileJIT();
+        interpolated[1].chunk(y,y).parallel(y);
+        interpolated[2].chunk(y,y).vectorize(c,4);
+        interpolated[3].chunk(y,y).vectorize(c,4);
+        interpolated[4].chunk(y,y).vectorize(c,2);
+        interpolated[5].chunk(y,y).vectorize(c,4);
+        interpolated[6].chunk(y,y).vectorize(c,4);
+        interpolated[7].root().parallel(y);
+        interpolated[8].root().parallel(y);
+        interpolated[9].chunk(y,y).vectorize(c,4).split(c,c,_c0,64);
 
-	std::cout << "Running... " << std::endl;
-	double min = std::numeric_limits< double >::infinity();
-	const unsigned int Iters = 20;
-	for (unsigned int x = 0; x < Iters; ++x) {
 
-        Image< float > in_png = load< float >(argv[1]);
-        assert(in_png.channels() == 4);
-        input = in_png;
+        upsampled[2].root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y);
 
-		{ //set up level sizes:
-			unsigned int width = in_png.width();
-			unsigned int height = in_png.height();
-			for (unsigned int l = 0; l < levels; ++l) {
-				level_widths[l] = width;
-				level_heights[l] = height;
-				width = width / 2 + 1;
-				height = height / 2 + 1;
-			}
-		}
+        upsampled[4].chunk(y,y).vectorize(c,2);
+        upsampled[5].chunk(y,y).vectorize(c,4);
+        upsampled[6].chunk(x,x).vectorize(c,2);
 
-		double before = now();
-		Image< float > out = final.realize(in_png.width(), in_png.height(), 4);
-		double after = now();
-		double amt = after - before;
-		std::cout << "   " << amt * 1000 << std::endl;
-		if (amt < min) min = amt;
+        upsampled[8].chunk(y,y).vectorize(c,4);
+        upsampledx[0].root().parallel(y).unroll(x,4);
+        upsampledx[1].root().tile(x,y,_c0,_c1,4,4).vectorize(_c0,4).parallel(y);
+        upsampledx[2].chunk(y,y).vectorize(c,4);
+        upsampledx[3].root().tile(x,y,_c0,_c1,2,2).vectorize(_c0,2).parallel(y);
+        upsampledx[4].chunk(y,y).vectorize(c,4);
+        upsampledx[5].chunk(y,y).vectorize(c,4);
+        upsampledx[6].root().vectorize(c,2);
+        upsampledx[7].root().parallel(y);
+        upsampledx[8].chunk(y,y).vectorize(c,4).unroll(c,4);
 
-		if (x + 1 == Iters) {
-			Image< float > out = final.realize(in_png.width(), in_png.height(), 4);
-			save(out, argv[2]);
-		}
-	}
-	std::cout << " took " << min * 1000 << " msec." << std::endl;
+        clamped.bound(c,0,4);
+        downsampled[0].bound(c,0,4);
+        downsampled[1].bound(c,0,4);
+        downsampled[2].bound(c,0,4);
+        downsampled[3].bound(c,0,4);
+        downsampled[4].bound(c,0,4);
+        downsampled[5].bound(c,0,4);
+        downsampled[6].bound(c,0,4);
+        downsampled[7].bound(c,0,4);
+        downsampled[8].bound(c,0,4);
+        downsampled[9].bound(c,0,4);
+        downx[1].bound(c,0,4);
+        downx[2].bound(c,0,4);
+        downx[3].bound(c,0,4);
+        downx[4].bound(c,0,4);
+        downx[5].bound(c,0,4);
+        downx[6].bound(c,0,4);
+        downx[7].bound(c,0,4);
+        downx[8].bound(c,0,4);
+        downx[9].bound(c,0,4);
+        final.bound(c,0,3);
+        interpolated[0].bound(c,0,4);
+        interpolated[1].bound(c,0,4);
+        interpolated[2].bound(c,0,4);
+        interpolated[3].bound(c,0,4);
+        interpolated[4].bound(c,0,4);
+        interpolated[5].bound(c,0,4);
+        interpolated[6].bound(c,0,4);
+        interpolated[7].bound(c,0,4);
+        interpolated[8].bound(c,0,4);
+        interpolated[9].bound(c,0,4);
+        upsampled[0].bound(c,0,4);
+        upsampled[1].bound(c,0,4);
+        upsampled[2].bound(c,0,4);
+        upsampled[3].bound(c,0,4);
+        upsampled[4].bound(c,0,4);
+        upsampled[5].bound(c,0,4);
+        upsampled[6].bound(c,0,4);
+        upsampled[7].bound(c,0,4);
+        upsampled[8].bound(c,0,4);
+        upsampledx[0].bound(c,0,4);
+        upsampledx[1].bound(c,0,4);
+        upsampledx[2].bound(c,0,4);
+        upsampledx[3].bound(c,0,4);
+        upsampledx[4].bound(c,0,4);
+        upsampledx[5].bound(c,0,4);
+        upsampledx[6].bound(c,0,4);
+        upsampledx[7].bound(c,0,4);
+        upsampledx[8].bound(c,0,4);
+    	break;
+    }
+        
 
+    default:
+        assert(0 && "No schedule with this number.");
+    }
+
+    final.compileJIT();
+
+    std::cout << "Running... " << std::endl;
+    double min = std::numeric_limits< double >::infinity();
+    const unsigned int Iters = 20;
+
+    Image< float > in_png = load< float >(argv[1]);
+    Image< float > out(in_png.width(), in_png.height(), 3);
+    assert(in_png.channels() == 4);
+    input = in_png;
+
+    for (unsigned int x = 0; x < Iters; ++x) {                        
+        double before = now();
+        final.realize(out);
+        double after = now();
+        double amt = after - before;
+
+        std::cout << "   " << amt * 1000 << std::endl;
+        if (amt < min) min = amt;
+        
+    }
+    std::cout << " took " << min * 1000 << " msec." << std::endl;
+
+    save(out, argv[2]);
 
 }

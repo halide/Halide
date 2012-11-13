@@ -8,6 +8,14 @@ Install and Build
 
 Pre-requisites: SWIG 2.0.7+, Numpy, Python Image Library (PIL), psutil.
 
+  On Mac OS X:
+    sudo easy_install pip
+    brew install freetype libpng swig    # Freetype, libpng needed for matplotlib to succeed
+    sudo pip install numpy
+    sudo pip install matplotlib
+    sudo pip install psutil
+    sudo pip install pil
+
 You can build with 'make' and run the test suite with 'make test'.
 
 There is currently no install option although you can presumably copy the relevant shared object and py files

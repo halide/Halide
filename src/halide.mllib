@@ -20,7 +20,6 @@ ir_printer
 util
 vectorize
 split
-unroll
 constant_fold
 break_false_dependence
 schedule

@@ -12,6 +12,8 @@ namespace Halide {
 
     // Make sure a name has no invalid characters
     std::string sanitizeName(const std::string &name);
+
+    void warn(const char* msg, ...);
     
     // Make ML lists
     MLVal makeList();

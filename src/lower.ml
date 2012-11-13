@@ -51,7 +51,7 @@ let rec resolve_name (context: string) (var: string) (schedule: schedule_tree) =
   end
         
 let make_function_body (name:string) (env:environment) =
-  dbg 2 "make_function_body %s\n%!" name;
+  if verbosity > 2 then dbg "make_function_body %s\n%!" name;
   
   let (args, return_type, body) = find_function name env in
   let prefix = name ^ "." in
@@ -84,14 +84,14 @@ let rec lower_stmt (func:string) (stmt:stmt) (env:environment) (schedule:schedul
   (* Grab the schedule for the next function call to lower *)
   let (call_sched, sched_list) = find_schedule schedule func in
 
-  dbg 2 "Lowering function %s with schedule %s [%s]\n%!" func 
+  if verbosity > 2 then dbg "Lowering function %s with schedule %s [%s]\n%!" func 
     (string_of_call_schedule call_sched)
     (String.concat ", " (List.map string_of_schedule sched_list));
 
   (* grab the body of the function *)
   let (args, return_type, body) = make_function_body func env in
   
-  dbg 2 "Lowering function %s with schedule %s [%s]\n%!" func 
+  if verbosity > 2 then dbg "Lowering function %s with schedule %s [%s]\n%!" func 
     (string_of_call_schedule call_sched)
     (String.concat ", " (List.map string_of_schedule sched_list));
 
@@ -185,13 +185,13 @@ and realize func consume env schedule =
   (* Wrap a statement in for loops using a schedule *)
   let wrap (sched_list: schedule list) (stmt:stmt) = function 
     | Serial     (name, min, size) -> 
-        For (name, min, size, true, stmt)
+        For (name, min, size, Ir.Serial, stmt)
     | Parallel   (name, min, size) -> 
-        For (name, min, size, false, stmt)
+        For (name, min, size, Ir.Parallel, stmt)
     | Unrolled   (name, min, size) -> 
-        Unroll.unroll_stmt name (For (name, min, IntImm size, false, stmt))
+        For (name, min, IntImm size, Ir.Unrolled, stmt)
     | Vectorized (name, min, size) -> 
-        Vectorize.vectorize_stmt name (For (name, min, IntImm size, false, stmt))
+        For (name, min, IntImm size, Ir.Vectorized, stmt)
     | Split (old_dim, new_dim_outer, new_dim_inner, offset) -> 
         let (_, size_new_dim_inner) = extent_computed_for_dim new_dim_inner sched_list in
         let rec expand_old_dim_expr = function
@@ -211,7 +211,7 @@ and realize func consume env schedule =
     | Pure body ->
         let inner_stmt = Provide (body, func, arg_vars) in
         let produce = List.fold_left (wrap sched_list) inner_stmt sched_list in
-        Pipeline (func, produce, consume)
+        Pipeline (func, produce, None, consume)
 
     | Reduce (init_expr, update_args, update_func, reduction_domain) ->
 
@@ -224,7 +224,7 @@ and realize func consume env schedule =
 
         let initialize = List.fold_left (wrap sched_list) init_stmt sched_list in
 
-        dbg 2 "Making body of update function: %s\n%!" update_func;
+        if verbosity > 2 then dbg "Making body of update function: %s\n%!" update_func;
         let (pure_update_args, _, update_body) = make_function_body update_func env in
         let update_expr = match update_body with
           | Pure expr -> expr
@@ -236,11 +236,11 @@ and realize func consume env schedule =
 
         let update_stmt = Provide (update_expr, func, update_args) in
 
-        dbg 2 "Retrieving schedule of update func\n%!";
+        if verbosity > 2 then dbg "Retrieving schedule of update func\n%!";
         let (_, update_sched_list) = find_schedule schedule update_func in
         let update = List.fold_left (wrap update_sched_list) update_stmt update_sched_list in
-
-        dbg 2 "Computing pure domain\n%!";
+        
+        if verbosity > 2 then dbg "Computing pure domain\n%!";
         let pure_domain = List.map 
           (fun (t, n) -> 
             let parent_n = (parent_name update_func) ^ "." ^ (base_name n) in
@@ -259,26 +259,16 @@ and realize func consume env schedule =
           (reduction_domain @ pure_domain)
         in
 
-        let rec flatten = function
-          | (x, y)::rest -> x::y::(flatten rest)
-          | [] -> []
-        in
-
-
-        let produce = 
-          Block [initialize; update]
-        in
-
         (* Put the whole thing in a pipeline that exposes the updated
            result to the consumer *)
-        Pipeline (func, produce, consume)
+        Pipeline (func, initialize, Some update, consume)
 
 
 (* Figure out interdependent expressions that give the bounds required
    by all the functions defined in some block. *)
 (* bounds is a list of (func, var, min, max) *)
 let rec extract_bounds_soup env var_env bounds = function
-  | Pipeline (func, produce, consume) -> 
+  | Pipeline (func, produce, update, consume) -> 
       (* What function am I producing? *)
       let bounds = try          
         (* Get the args list of the function *)
@@ -289,8 +279,8 @@ let rec extract_bounds_soup env var_env bounds = function
         let region = required_of_stmt func var_env consume in
 
         (* If func is a reduction, also consider the bounds being written to *)
-        let region = match (body, produce) with
-          | (Reduce _, Block [init; update]) ->
+        let region = match update with
+          | Some update ->
               let update_region = required_of_stmt func var_env update in
               let region = region_union region update_region in
               (* fixup any recursive bounds (TODO: this is a giant hack) *)
@@ -311,9 +301,7 @@ let rec extract_bounds_soup env var_env bounds = function
                       | _ -> max
                     in Range (min, max)
                   end                      
-              in List.map2 fix region args
-                
-          | (Reduce _, _) -> failwith "Could not understand the produce side of a reduction"
+              in List.map2 fix region args               
           | _ -> region
         in
 
@@ -340,9 +328,9 @@ let rec extract_bounds_soup env var_env bounds = function
       let var_env = StringMap.add name (Range (min, size +~ min -~ IntImm 1)) var_env in
       extract_bounds_soup env var_env bounds body           
   | LetStmt (name, value, body) ->
-      dbg 2 "Entering %s\n" name;
+      if verbosity > 2 then dbg "Entering %s\n" name;
       let var_env = StringMap.add name (bounds_of_expr_in_env var_env value) var_env in
-      dbg 2 "Entering %s (2)\n" name;
+      if verbosity > 2 then dbg "Entering %s (2)\n" name;
       extract_bounds_soup env var_env bounds body
   | x -> bounds
  
@@ -350,11 +338,11 @@ let rec extract_bounds_soup env var_env bounds = function
 
 let rec bounds_inference env schedule = function
   | For (var, min, size, order, body) ->
-      dbg 2 "Performing bounds inference inside loop over %s\n" var;
+      if verbosity > 2 then dbg "Performing bounds inference inside loop over %s\n" var;
       (* Pull out the bounds of all function realizations within this body *)
       begin match extract_bounds_soup env StringMap.empty [] body with
         | [] -> 
-            dbg 2 "Got an empty list from bounds soup\n";
+            if verbosity > 2 then dbg "Got an empty list from bounds soup\n";
             let (body, schedule) = bounds_inference env schedule body in 
             (For (var, min, size, order, body), schedule)              
         | bounds ->
@@ -396,7 +384,7 @@ let rec bounds_inference env schedule = function
 
             let (body, schedule) = bounds_inference env schedule body in               
             
-            dbg 2 "Wrapping for loop body in %d let statements\n" (List.length bounds);
+            if verbosity > 2 then dbg "Wrapping for loop body in %d let statements\n" (List.length bounds);
 
             (For (var, min, size, order, precomp body), schedule)
       end
@@ -414,38 +402,71 @@ let rec bounds_inference env schedule = function
   | Allocate (name, ty, size, body) -> 
       let (body, schedule) = bounds_inference env schedule body in
       (Allocate (name, ty, size, body), schedule)
-  | Pipeline (name, produce, consume) ->
+  | Pipeline (name, produce, update, consume) ->
       let (produce, schedule) = bounds_inference env schedule produce in
       let (consume, schedule) = bounds_inference env schedule consume in
-      (Pipeline (name, produce, consume), schedule)
+      let (update, schedule) = match update with
+        | Some update -> 
+          let (u, s) = bounds_inference env schedule update in
+          (Some u, s)
+        | None -> (None, schedule)
+      in
+      (Pipeline (name, produce, update, consume), schedule)
   | LetStmt (name, value, stmt) ->
       let (stmt, schedule) = bounds_inference env schedule stmt in
       (LetStmt (name, value, stmt), schedule)
   | x -> (x, schedule)
 
-let rec sliding_window (stmt:stmt) (function_env:environment) =
+let sliding_window (stmt:stmt) (function_env:environment) =
   let rec process_dim name dims env serial_dim serial_dim_min stmt =
     match stmt with
       (* We're within an allocate over name, and a serial for loop over
          dim. Find bounds of realizations of name and rewrite them to take
          into account stuff computed so far *)
-      | Pipeline (n, produce, consume) when n = name ->
-        dbg 2 "process_dim %s %s\n" name serial_dim;
-        (* Compute new bounds for the realization of n which are the
-           exclusion of the bounds for this iteration and the bounds for
-           the previous iteration. (This is only weakly inductive, we
-           could also consider *all* previous iterations) *)
-        
+      | Pipeline (n, produce, update, consume) when n = name ->
+        if verbosity > 2 then dbg "process_dim %s %s\n" name serial_dim;
+
         let serial_dim_expr = Var (i32, serial_dim) in
         
+        (* 
+        let rec expr_depends_on_serial_dim = function
+          | Var (_, v) when v = serial_dim -> true
+          | Var (_, v) when StringMap.mem v env -> 
+            (* If it's not in the environment, assume it's a uniform or something,
+               and there's no dependence. *)
+            expr_depends_on_serial_dim (StringMap.find v env)
+          | expr -> fold_children_in_expr expr_depends_on_serial_dim (or) false expr
+        in
+        *)
+        
+        let expr_depends_on_serial_dim expr = 
+          let deriv = derivative_in_env serial_dim env expr in
+          let deriv = Constant_fold.constant_fold_expr deriv in
+          dbg "Derivative is: %s\n" (string_of_expr deriv);
+          deriv <> IntImm 0        
+        in
+
         (* Find which dims depend on the serial_dim ... *)
         let rec find_matching_dim = function
           | [] -> []
           | (dim::dims) -> 
             let min = StringMap.find (name ^ "." ^ dim ^ ".min") env in
             let extent = StringMap.find (name ^ "." ^ dim ^ ".extent") env in
+            if (verbosity > 2) then begin
+              dbg "%s.%s.min = %s\n" name dim (string_of_expr min);
+              dbg "%s.%s.extent = %s\n" name dim (string_of_expr extent);
+            end;
             let list = find_matching_dim dims in
-            if expr_contains_expr serial_dim_expr (min +~ extent) then
+            (* let min = Constant_fold.constant_fold_expr min in
+            let extent = Constant_fold.constant_fold_expr extent in *)
+            let min_depends_on_serial_dim = expr_depends_on_serial_dim min in
+            let extent_depends_on_serial_dim = expr_depends_on_serial_dim extent in
+            if verbosity > 2 then begin
+              if (min_depends_on_serial_dim) then dbg "min depends on serial dim\n";
+              if (extent_depends_on_serial_dim) then dbg "extent depends on serial dim\n";
+            end;
+
+            if min_depends_on_serial_dim && not extent_depends_on_serial_dim then
               (dim, min, extent)::list
             else 
               list
@@ -455,53 +476,61 @@ let rec sliding_window (stmt:stmt) (function_env:environment) =
          in the extent. If none do then this is a silly schedule. If
          multiple do then we don't handle that. *)
         begin match find_matching_dim dims with
-          | ((dim, min, extent)::[]) when not (expr_contains_expr serial_dim_expr extent) ->          
-            dbg 2 "Doing sliding window of %s over %s against %s\n" name serial_dim dim;
-            let stride = min -~ (subs_expr serial_dim_expr (serial_dim_expr -~ (IntImm 1)) min) in
+          | ((dim, min, extent)::[]) ->          
+            if verbosity > 2 then dbg "Doing sliding window of %s over %s against %s\n" name serial_dim dim;
+            (* let stride = min -~ (Let (serial_dim, (serial_dim_expr -~ (IntImm 1)), min)) in *)
+            let stride = derivative_in_env serial_dim env min in
             let new_min = min +~ extent -~ stride in
             let new_extent = stride in
             let steady_state = (serial_dim_expr >~ serial_dim_min) in
             let new_min = Select (steady_state, new_min, min) in
             let new_extent = Select (steady_state, new_extent, extent) in
             
-            let stmt = Pipeline (n, produce, consume) in
+            let stmt = Pipeline (n, produce, update, consume) in
             let stmt = LetStmt (name ^ "." ^ dim ^ ".min", new_min, stmt) in
             let stmt = LetStmt (name ^ "." ^ dim ^ ".extent", new_extent, stmt) in
             stmt
-          | _ -> 
+          | l -> 
+            
+            if (verbosity > 2) then begin
+              Printf.printf "List contained more or less than one element:\n" ;              
+              List.iter (fun (dim, min, extent) -> (dbg "%s %s %s\n" dim (string_of_expr min) (string_of_expr extent))) l
+            end;
             stmt 
         end
       | LetStmt (n, expr, stmt) -> 
-        let new_env = StringMap.add n expr env in
-        LetStmt (n, expr, process_dim name dims new_env serial_dim serial_dim_min stmt)
+        let env = StringMap.add n expr env in
+        let stmt = process_dim name dims env serial_dim serial_dim_min stmt in
+        LetStmt (n, expr, stmt)
       | stmt -> mutate_children_in_stmt (fun x -> x) (process_dim name dims env serial_dim serial_dim_min) stmt
   in
   
-  let rec process name dims = function
-    | For (dim, min, extent, true, body) ->
-      dbg 2 "Performing sliding window optimization for %s over %s\n" name dim;
-      let new_body = process name dims body in
-      let new_body = process_dim name dims StringMap.empty dim min new_body in
-      For (dim, min, extent, true, new_body)
-    | stmt -> mutate_children_in_stmt (fun x -> x) (process name dims) stmt
+  let rec process name dims env = function
+    | For (dim, min, extent, order, body) when order = Ir.Serial || order = Ir.Unrolled ->
+      if verbosity > 2 then dbg "Performing sliding window optimization for %s over %s\n" name dim;
+      let new_body = process name dims env body in
+      let new_body = process_dim name dims env dim min new_body in
+      For (dim, min, extent, order, new_body)
+    | stmt -> mutate_children_in_stmt (fun x -> x) (process name dims env) stmt
   in
 
-  match stmt with
+  let rec sliding_window_env env = function
     | Realize (name, ty, region, body) ->
       let (args, _, _) = find_function name function_env in
       let dims = List.map snd args in
-      let new_body = process name dims body in
-      let new_body = sliding_window new_body function_env in
+      let new_body = process name dims env body in
+      let new_body = sliding_window_env env new_body in
       Realize (name, ty, region, new_body) 
-    | stmt -> mutate_children_in_stmt (fun x -> x) (fun s -> sliding_window s function_env) stmt
-      
+    | stmt -> mutate_children_in_stmt (fun x -> x) (sliding_window_env env) stmt
+  in sliding_window_env StringMap.empty stmt
+
 let rec storage_folding defs stmt = 
 
   (* Returns an expression that gives the permissible folding factor *)
   let rec process func env = function
     (* We're inside an allocate over func *)
-    | For (for_dim, for_min, for_size, true, body) ->
-      dbg 2 "Storage folding inside loop over %s\n" for_dim;
+    | For (for_dim, for_min, for_size, order, body) when order = Ir.Serial || order = Ir.Unrolled ->
+      if verbosity > 2 then dbg "Storage folding inside loop over %s\n" for_dim;
       (* Compute the region of func touched within this body *)
       let region = required_of_stmt func env body in
 
@@ -510,29 +539,34 @@ let rec storage_folding defs stmt =
         | ([], _) -> None
         | ((Unbounded::rest), i) -> try_fold (rest, (i+1))
         | ((Range (min, max))::rest, i) ->
-          let extent = Constant_fold.constant_fold_expr ((max -~ min) +~ (IntImm 1)) in
+          let extent = Constant_fold.constant_fold_expr ((max -~ min) +~ IntImm 1) in
           (* Find the maximum value of extent over the loop *)
           let env = StringMap.add for_dim (Range (for_min, for_min +~ for_size -~ (IntImm 1))) env in
-          let max_extent = begin match bounds_of_expr_in_env env extent with
+          let bounds = match bounds_of_expr_in_env env extent with
+            | Unbounded -> Unbounded
+            | Range (min, max) -> 
+              (* let max = Break_false_dependence.break_false_dependence_expr max in *)
+              Range (min, max)
+          in
+
+          let max_extent = begin match bounds with
             | Unbounded -> begin
-              dbg 2 "Not folding %s over dimension %d because unbounded extent: %s\n" func i (string_of_expr extent);
+              if verbosity > 2 then dbg "Not folding %s over dimension %d because unbounded extent: %s\n" func i (string_of_expr extent);
               try_fold (rest, (i+1))
             end
             | Range (_, IntImm k) -> begin
               (* Round up to the nearest power of two, so that we can just use masking *)
-              (* 
               let rec pow2 x = if (x < k) then pow2 (x*2) else x in
               let k = pow2 1 in
-              *)
               let result = (i, IntImm k) in
-              dbg 2 "Folding %s over dimension %d by %d\n" func i k;
+              if verbosity > 2 then dbg "Folding %s over dimension %d by %d\n" func i k;
 
               match try_fold (rest, (i+1)) with
                 | Some (dim, IntImm j) when j < k -> Some (dim, IntImm j)
                 | _ -> Some result
             end              
             | Range (_, max) -> begin
-              dbg 2 "Folding factor for %s over dimension %d: %s\n" func i (string_of_expr max);              
+              if verbosity > 2 then dbg "Folding factor for %s over dimension %d: %s\n" func i (string_of_expr max);              
               (* Some max *)
               (* For now we rule out dynamic folding factors, because we can't tell whether they're a good idea *)
               try_fold (rest, (i+1))
@@ -555,14 +589,18 @@ let rec storage_folding defs stmt =
         | Some ((dim, factor)) ->
           Some ((dim, subs_expr (Var (val_type_of_expr e, n)) e factor))
       end
-    | Realize (_, _, _, stmt) 
-    | (Block [stmt]) -> process func env stmt
-    | (Block ((Assert (_, _))::rest))
-    | (Block ((Print (_, _))::rest)) -> process func env (Block rest)      
+    | Pipeline (name, produce, update, consume) when name = func -> None
+    | stmt ->
+      (* At this stage of lowering, each func only has one produce
+         node. We're not inside it yet, so we can proceed down all
+         branches. Only one will succeed. *)
+      fold_children_in_stmt (fun _ -> None) (process func env) option_either stmt              
+  (*
     | stmt -> begin
-      dbg 2 "Not folding %s due to hitting an unsupported statement\n" func;
+      if verbosity > 2 then dbg "Not folding %s due to hitting an unsupported statement: %s\n" func (String.sub (string_of_stmt stmt) 0 10);
       None
     end
+  *)
   in      
 
   let rec rewrite_args args factor = function
@@ -589,15 +627,15 @@ let rec storage_folding defs stmt =
       (fold_loads_and_stores func dim factor) 
       stmt
   in
-      
+  
   match stmt with
     | Realize (func, ty, region, stmt) ->
       begin match process func StringMap.empty stmt with
         | None ->
-          dbg 2 "No useful folds found for %s\n" func;
+          if verbosity > 2 then dbg "No useful folds found for %s\n" func;
           Realize (func, ty, region, storage_folding defs stmt)
         | Some ((dim, factor)) -> 
-          dbg 2 "Folding %s over dimension %d by %s\n" func dim (string_of_expr factor);
+          if verbosity > 2 then dbg "Folding %s over dimension %d by %s\n" func dim (string_of_expr factor);
           let new_stmt = storage_folding defs stmt in 
           let new_stmt = fold_loads_and_stores func dim factor new_stmt in
           let rec fix_region idx = function
@@ -610,24 +648,24 @@ let rec storage_folding defs stmt =
           in
           let new_region = fix_region dim region in
 
-          dbg 2 "After folding: %s\n" (string_of_stmt new_stmt);
+          if verbosity > 2 then dbg "After folding: %s\n" (string_of_stmt new_stmt);
           Realize (func, ty, new_region, new_stmt)
       end
-      
+        
     | Allocate (func, ty, size, stmt) -> 
       let (args, _, _) = find_function func defs in
       let args = List.map snd args in
 
       begin match process func StringMap.empty stmt with
         | None ->
-          dbg 2 "No useful folds found for %s\n" func;
+          if verbosity > 2 then dbg "No useful folds found for %s\n" func;
           Allocate (func, ty, size, storage_folding defs stmt)
         | Some ((dim, factor)) -> 
-          dbg 2 "Folding %s over dimension %d by %s\n" func dim (string_of_expr factor);
+          if verbosity > 2 then dbg "Folding %s over dimension %d by %s\n" func dim (string_of_expr factor);
           let new_stmt = storage_folding defs stmt in 
           let new_stmt = fold_loads_and_stores func dim factor new_stmt in
           
-          dbg 2 "After folding: %s\n" (string_of_stmt new_stmt);
+          if verbosity > 2 then dbg "After folding: %s\n" (string_of_stmt new_stmt);
 
           let dim_name = List.nth args dim in
           let new_size = (size /~ (Var (i32, func ^ "." ^ dim_name ^ ".extent"))) *~ factor in
@@ -637,7 +675,7 @@ let rec storage_folding defs stmt =
       
 let qualify_schedule (sched:schedule_tree) =
   let make_schedule (name:string) (schedule:schedule_tree) =
-  (* Printf.printf "Looking up %s in the schedule\n" name; *)
+    (* Printf.printf "Looking up %s in the schedule\n" name; *)
     let (call_sched, sched_list) = find_schedule schedule name in
 
     (* The prefix for this function *)
@@ -695,7 +733,7 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
     match expr with 
       (* Match calls to f from someone else, or recursive calls from f to itself *)
       | Call (Func, ty, f, args) when f = func || f = (func ^ "." ^ (base_name func)) ->
-          dbg 2 "Flattening a call to %s\n" func;
+          if verbosity > 2 then dbg "Flattening a call to %s\n" func;
           let args = List.map recurse args in 
           let index = flatten_args func args arg_names in
           Load (ty, func, index)
@@ -708,12 +746,12 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
     let dim_names = List.map (fun (x, y) -> func ^ "." ^ y) dim_names in
     match stmt with
       | Provide (e, f, args) when f = func ->
-          dbg 2 "Flattening a provide to %s\n" func;
+          if verbosity > 2 then dbg "Flattening a provide to %s\n" func;
           let args = List.map recurse_expr args in
           let index = flatten_args func args arg_names in
           Store (recurse_expr e, f, index)
       | Realize (f, ty, region, stmt) when f = func ->
-          dbg 2 "Flattening a realize to an allocate %s\n" func;
+          if verbosity > 2 then dbg "Flattening a realize to an allocate %s\n" func;
           let region = List.map (fun (x, y) -> (recurse_expr x, recurse_expr y)) region in
           (* Inject a bunch of lets for the strides and buf_mins *)
           let strides = List.map (fun dim -> Var (i32, dim ^ ".stride")) dim_names in
@@ -753,42 +791,40 @@ let lower_function_calls (stmt:stmt) (env:environment) (schedule:schedule_tree) 
   in
   List.fold_left update stmt functions 
 
-let rec inject_tracing env = function
-  | Realize (name, ty, region, body) when trace_verbosity > 0 ->
-    let (args, _, _) = find_function name env in
-    let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
-    let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
-    Block [
-      Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
-      Print ("Allocating " ^ name ^ " over ", mins @ extents);
-      Realize (name, ty, region, inject_tracing env body);
-      Print ("Freeing " ^ name ^ " over ", mins @ extents)
-    ]
-  | Pipeline (name, produce, consume) when trace_verbosity > 0 ->
-    let (args, _, _) = find_function name env in
-    let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
-    let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
-    Block [
-      Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
-      Print ("Producing " ^ name ^ " over ", mins @ extents);
-      Pipeline (name, inject_tracing env produce, inject_tracing env consume)
-    ]
-  | Provide (e, name, idx) when trace_verbosity > 1 ->    
-    let calls = 
-      (find_calls_in_expr e) @ (List.flatten (List.map find_calls_in_expr idx))
-    in        
-    let make_print stmts (cty, rty, nm, args) =
-      if cty != Extern then
-        (Print ("Loading " ^ nm ^ " at ", args))::stmts
-      else
-        stmts
-    in
-    let stmts = List.fold_left make_print [] calls in
-    let stmts = (Print ("Computing " ^ name ^ " at ", idx))::stmts in
-    let stmts = stmts @ [Provide (e, name, idx); 
-                         Print ("Storing " ^ name ^ " at ", idx)] in                         
-    Block stmts
-  | stmt -> mutate_children_in_stmt (fun x -> x) (inject_tracing env) stmt
+let rec inject_tracing env stmt = 
+
+  let rec inject_call_wrappers = function
+    | Call (cty, rty, nm, args) when cty != Extern ->
+        let new_args = List.map inject_call_wrappers args in        
+        Debug (Call (cty, rty, nm, new_args), "Loading " ^ nm ^ " at ", args)
+    | expr -> mutate_children_in_expr inject_call_wrappers expr 
+  in
+
+  match stmt with
+    | Realize (name, ty, region, body) when trace_verbosity > 0 ->
+        let (args, _, _) = find_function name env in
+        let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
+        let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
+        Block [
+          Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
+          Print ("Allocating " ^ name ^ " over ", mins @ extents);
+          Realize (name, ty, region, inject_tracing env body);
+          Print ("Freeing " ^ name ^ " over ", mins @ extents)
+        ]
+    | Pipeline (name, produce, update, consume) when trace_verbosity > 0 ->
+        let (args, _, _) = find_function name env in
+        let mins = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".min")) args in
+        let extents = List.map (fun (_, dim) -> Var (i32, name ^ "." ^ dim ^ ".extent")) args in
+        Block [
+          Print ("Time ", [Call (Extern, i32, ".currentTime", [])]);
+          Print ("Producing " ^ name ^ " over ", mins @ extents);
+          Pipeline (name, inject_tracing env produce, option_map (inject_tracing env) update, inject_tracing env consume)
+        ]
+    | Provide (e, name, idx) when trace_verbosity > 1 ->    
+        Block [(Print ("Computing " ^ name ^ " at ", idx)) ; 
+               Provide (inject_call_wrappers e, name, List.map inject_call_wrappers idx); 
+               Print ("Storing " ^ name ^ " at ", idx)]
+    | stmt -> mutate_children_in_stmt (fun x -> x) (inject_tracing env) stmt
     
 let lower_image_calls (stmt:stmt) =
 
@@ -836,6 +872,19 @@ let lower_image_calls (stmt:stmt) =
       | Block stmts -> (Block (asserts @ stmts), !images)
       | stmt -> (Block (asserts @ [new_stmt]), !images)
 
+let rec unroll = function
+  | For (name, min, IntImm size, Ir.Unrolled, stmt) ->
+    let stmt = unroll stmt in
+    let gen_stmt i = LetStmt (name, min +~ (IntImm i), stmt) in
+    Block (List.map gen_stmt (0 -- size))
+  | stmt -> mutate_children_in_stmt (fun x -> x) unroll stmt
+
+let rec vectorize = function
+  | For (name, min, IntImm size, Ir.Vectorized, stmt) ->
+    let stmt = vectorize stmt in 
+    LetStmt (name, Ramp (min, IntImm 1, size), Vectorize.vectorize_stmt name min size stmt)
+  | stmt -> mutate_children_in_stmt (fun x -> x) vectorize stmt
+
 let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* dump pre-lowered form *)
@@ -854,7 +903,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
 
   (* ----------------------------------------------- *)
-  dbg 1 "Computing the order in which to realize functions\n%!";
+  if verbosity > 1 then dbg "Computing the order in which to realize functions\n%!";
 
   (* A partial order on realization order of functions *)        
   let lt a b =
@@ -890,10 +939,10 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* Topologically sort them *)
   let functions = partial_sort lt functions in
-  dbg 1 "Realization order: %s\n" (String.concat ", " functions);
+  if verbosity > 1 then dbg "Realization order: %s\n" (String.concat ", " functions);
 
   (* ----------------------------------------------- *)
-  dbg 1 "Fully qualifying symbols in the schedule\n%!";
+  if verbosity > 1 then dbg "Fully qualifying symbols in the schedule\n%!";
   let schedule = qualify_schedule schedule in
 
   let dump_stmt stmt pass pass_desc suffix verb = 
@@ -909,10 +958,11 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Realizing initial statement" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
 
   let stmt = match realize func (Block []) env schedule with 
-    | Pipeline (_, p, _) -> p
+    | Pipeline (_, produce, None, _) -> produce
+    | Pipeline (_, produce, Some update, _) -> Block [produce; update]
     | _ -> failwith "Realize didn't return a pipeline"
   in
 
@@ -922,7 +972,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Inserting out-of-bounds checks for output image" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
 
   let region = required_of_stmt func StringMap.empty stmt in
   let true_val = bool_imm true in
@@ -945,15 +995,15 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
   let pass = pass + 1 in
 
   (* ----------------------------------------------- *)
-  dbg 1 "Lowering function calls\n%!";
+  if verbosity > 1 then dbg "Lowering function calls\n%!";
   let functions = List.filter (fun x -> x <> func) functions in  
 
   (* Inject a loop over root to help us realize functions scheduled as
      root. This will get constant-folded away later *)
-  let stmt = For ("<root>", IntImm 0, IntImm 1, true, stmt) in
+  let stmt = For ("<root>", IntImm 0, IntImm 1, Ir.Serial, stmt) in
   let stmt = List.fold_left (fun stmt f ->     
     let pass_desc = "Lowering " ^ f in
-    dbg 1 "%s\n%!" pass_desc;
+    if verbosity > 1 then dbg "%s\n%!" pass_desc;
     
     let stmt = lower_stmt f stmt env schedule in
     
@@ -974,7 +1024,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Replacing input image references with loads" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
 
   (* Add back in the oob_check on the output image too *)
   let stmt = if disable_bounds_checking then stmt else Block ([oob_check; stmt]) in  
@@ -986,9 +1036,9 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Bounds inference" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
   (* Updates stmt and schedule *)
-  let stmt = For ("<root>", IntImm 0, IntImm 1, true, stmt) in
+  let stmt = For ("<root>", IntImm 0, IntImm 1, Ir.Serial, stmt) in
   let (stmt,schedule) = bounds_inference env schedule stmt in
 
   (* let stmt = Constant_fold.constant_fold_stmt stmt in *)
@@ -1000,7 +1050,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Sliding window optimization" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
   (* Updates stmt and schedule *)
   let stmt = sliding_window stmt env in
 
@@ -1010,7 +1060,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Injecting tracing code" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
 
   let stmt = inject_tracing env stmt in
 
@@ -1020,7 +1070,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Storage folding optimization" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
   
   let stmt = storage_folding env stmt in
 
@@ -1030,7 +1080,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Replace function references with loads and stores" in 
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
 
   let stmt = lower_function_calls stmt env schedule in
 
@@ -1040,7 +1090,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Replacing loads and stores to the output with loads and stores to .result" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
   let rec rewrite_loads_from_result = function
     | Load (e, f, idx) when f = func ->
         Load (e, ".result", idx)
@@ -1059,7 +1109,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Replace references to bounds of output function with bounds of output buffer" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
   let args,_,_ = find_function func env in
   let dim_names = List.map snd args in
   let dimensions = List.length args in
@@ -1084,7 +1134,7 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Forcing innermost stride to 1 and mins to 0 on input and output buffers" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
 
   let input_images = ".result"::input_images in
 
@@ -1133,11 +1183,42 @@ let lower_function (func:string) (env:environment) (schedule:schedule_tree) =
 
   (* ----------------------------------------------- *)
   let pass_desc = "Constant folding" in
-  dbg 1 "%s\n%!" pass_desc;
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
+  let stmt = Constant_fold.constant_fold_stmt stmt in
+
+  (* dump_stmt stmt pass pass_desc "constant_folding" 1; *)
+
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
+  let pass_desc = "Vectorizing" in
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
+
+  let stmt = vectorize stmt in
+
+  dump_stmt stmt pass pass_desc "vectorizing" 1;
+
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
+  let pass_desc = "Unrolling" in
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
+
+  let stmt = unroll stmt in
+
+  dump_stmt stmt pass pass_desc "unrolling" 1;
+
+  let pass = pass + 1 in
+
+  (* ----------------------------------------------- *)
+  let pass_desc = "Constant folding" in
+  if verbosity > 1 then dbg "%s\n%!" pass_desc;
   let stmt = Constant_fold.constant_fold_stmt stmt in
   let stmt = Constant_fold.remove_dead_lets_in_stmt stmt  in
 
   dump_stmt stmt pass pass_desc "final" 1;
+
+  (* ----------------------------------------------- *)
 
   stmt
 

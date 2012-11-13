@@ -213,18 +213,20 @@ let cg_wrapper c m e inner =
   let f = define_wrapper c m e in
   let b = builder_at_end c (entry_block f) in
 
-  dbg 1 "Building wrapper\n%!";
-  dbg 1 "  %d args\n" (List.length arglist);
-  dbg 1 "  %d params\n%!" (Array.length (params f));
-  dbg 1 "  %d inner params\n%!" (Array.length (params inner));
+  if verbosity > 1 then begin
+    dbg "Building wrapper\n%!";
+    dbg "  %d args\n" (List.length arglist);
+    dbg "  %d params\n%!" (Array.length (params f));
+    dbg "  %d inner params\n%!" (Array.length (params inner));
+  end;
 
-  dbg 2 "Constructing arguments for call to inner function\n%!";
+  if verbosity > 2 then dbg "Constructing arguments for call to inner function\n%!";
 
   (* construct the argument list from the fields of the params of the wrapper *)
   let call_args = arg_var_vals arglist b in
   set_arg_names arglist call_args;
 
-  dbg 2 "Building call to inner function\n%!";
+  if verbosity > 2 then dbg "Building call to inner function\n%!";
 
   (* call the inner function, and return void *)
   ignore (build_call inner (Array.of_list call_args) "" b);

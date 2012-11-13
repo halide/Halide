@@ -3,10 +3,6 @@ open Ir_printer
 open Cg_llvm
 open Llvm
 open Llvm_executionengine
-open Vectorize
-open Unroll
-open Split
-open Constant_fold
 open Schedule
 open Lower
 open Schedule_transforms
@@ -30,9 +26,9 @@ let compile target name args stmt =
 
   (* Printexc.record_backtrace true; *)
 
-  dbg 2 "Initializing native target\n%!"; 
+  if verbosity > 2 then dbg "Initializing native target\n%!"; 
   ignore (initialize_native_target());
-  dbg 2 "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
+  if verbosity > 2 then dbg "Compiling:\n%s to C callable\n%!" (string_of_toplevel func);
 
   try begin
     let (c, m, f) = Cg_for_target.codegen_entry target target_opts func in
@@ -67,14 +63,15 @@ let compile_to_file target name args stmt =
   let backend = try
     Sys.getenv "HL_BACKEND"
   with Not_found ->
-    dbg 0 "HL_BACKEND not set - defaulting to LLVM\n";
+    if verbosity > 1 then dbg "HL_BACKEND not set - defaulting to LLVM\n";
     "llvm"
   in
 
   try begin 
     match backend with
       | "llvm" ->
-          Cg_for_target.codegen_to_bitcode_and_header target target_opts (name, args, stmt) 
+          if verbosity > 1 then dbg "Generating bitcode\n%!";
+          Cg_for_target.codegen_to_bitcode_and_header target target_opts (name, args, stmt);
       | "c" ->
           Cg_c.codegen_to_file (name, args, stmt) (* TODO: take target and target_opts *)
       | _ -> failwith ("Unrecognized HL_BACKEND: " ^ backend)
@@ -181,7 +178,7 @@ let _ =
   Callback.register "makeNoviceGuru" (fun _ -> novice);
 
   Callback.register "makeSchedule" (fun (f: string) (sizes: expr list) (env: environment) (guru: scheduling_guru) ->
-    dbg 2 "About to make default schedule...\n%!";    
+    if verbosity > 2 then dbg "About to make default schedule...\n%!";    
     generate_schedule f env guru      
   );
   
