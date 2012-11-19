@@ -28,10 +28,13 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     ANativeWindow_acquire(win);
 
     static bool first_call = true;
+    static unsigned counter = 0;
+    static unsigned times[16];
     if (first_call) {
       LOGD("Resetting buffer format");
       ANativeWindow_setBuffersGeometry(win, 640, 360, 0); 
       first_call = false;
+      for (int t = 0; t < 16; t++) times[t] = 0;
     }
 
     ANativeWindow_Buffer buf;
@@ -39,19 +42,25 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     ANativeWindow_lock(win, &buf, &rect);
 
     uint8_t *dst = (uint8_t *)buf.bits;
-    buffer_t srcBuf, dstBuf;
-    srcBuf.host = (uint8_t *)src;
-    srcBuf.dims[0] = 640;
-    srcBuf.dims[1] = 360;
-    srcBuf.dims[2] = 1;
-    srcBuf.dims[3] = 1;
+    buffer_t srcBuf = {0}, dstBuf = {0};
+    srcBuf.host = (uint8_t *)src + 640 + 1;
+    srcBuf.extent[0] = 640;
+    srcBuf.extent[1] = 360;
+    srcBuf.extent[2] = 1;
+    srcBuf.extent[3] = 1;
+    srcBuf.stride[0] = 1;
+    srcBuf.stride[1] = 640;
     srcBuf.elem_size = 1;
 
     dstBuf.host = dst;
-    dstBuf.dims[0] = 640;
-    dstBuf.dims[1] = 360;
-    dstBuf.dims[2] = 1;
-    dstBuf.dims[3] = 1;
+    dstBuf.extent[0] = 638;
+    dstBuf.extent[1] = 358;
+    dstBuf.extent[2] = 1;
+    dstBuf.extent[3] = 1;
+    dstBuf.stride[0] = 1;
+    dstBuf.stride[1] = 640;
+    dstBuf.min[0] = 0;
+    dstBuf.min[1] = 0;
     dstBuf.elem_size = 1;
 
     timeval t1, t2;
@@ -59,8 +68,14 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     halide(&srcBuf, &dstBuf);
     gettimeofday(&t2, NULL);
     unsigned elapsed = (t2.tv_sec - t1.tv_sec)*1000000 + (t2.tv_usec - t1.tv_usec);
-    LOGD("Time taken: %d", elapsed);
 
+    times[counter & 15] = elapsed;
+    counter++;
+    unsigned min = times[0];
+    for (int i = 1; i < 16; i++) {
+        if (times[i] < min) min = times[i];
+    }    
+    LOGD("Time taken: %d (%d)", elapsed, min);
 
     // Just copy over chrominance untouched
     memcpy(dst + 640*360, src + 640*480, 320*180);

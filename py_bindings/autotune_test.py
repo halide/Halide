@@ -9,6 +9,7 @@ import valid_schedules
 
 def test_crossover(verbose=False):
     (f, g, locals_d) = test_funcs()
+    bounds = autotune_bounds.get_bounds(g, locals_d)
     constraints = Constraints()
     
     crossover_success = 0
@@ -69,7 +70,7 @@ def test_crossover(verbose=False):
             if verbose:
                 print 'c', repr(str(c)), c.new_vars()
             c.apply(constraints)
-            c = mutate(c, p, constraints, None)
+            c = mutate(c, p, constraints, None, bounds)
             if verbose:
                 print 'cmutate', repr(str(c)), c.new_vars()
             c.apply(constraints)
@@ -96,7 +97,7 @@ def test_crossover(verbose=False):
         #print 'c'
         prev_gen = []
         for gen in range(2):
-            L = list(next_generation(prev_gen, p, g, constraints, 0, [{'time': 0.1} for i in range(len(prev_gen))]))
+            L = list(next_generation(prev_gen, p, g, constraints, 0, [{'time': 0.1} for i in range(len(prev_gen))], bounds))
             if j == 0 and verbose:
                 for i in range(len(L)):
                     print 'gen=%d, i=%d'%(gen,i)

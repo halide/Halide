@@ -42,6 +42,10 @@ def is_cuda():
 
 def default_check(cls, L, func):
     assert func is not None
+    if halide.update_func_parent(func) is not None:     # If we are scheduling an f.update()
+        if len(L) < 1 or not isinstance(L[0], FragmentRoot):
+            return False
+
     def count(C):
         return sum([isinstance(x, C) for x in L])
     if len(L) == 0:
@@ -294,21 +298,21 @@ class FragmentUpdate(Fragment):
 
 # FragmentBound is just a stub class for now -- not used in tuning, just for comparing with human reference schedules
 class FragmentBound(Fragment, FragmentBlocksizeMixin):
-    def __init__(self, var=None, lower=None, upper=None):
+    def __init__(self, var=None, lower=None, size=None):
 #        print '__init__', self.__class__
         self.var = var
         self.lower = lower
-        self.upper = upper
+        self.size = size
 
     def __str__(self):
-        return '.bound(%s,%d,%d)'%(self.var,self.lower,self.upper)
+        return '.bound(%s,%d,%d)'%(self.var,self.lower,self.size)
 
     def var_order(self, prev_order):
         return list(prev_order)
 
     @staticmethod
-    def fromstring(var, lower, upper, func=None):
-        return FragmentBound(var, int(lower), int(upper))
+    def fromstring(var, lower, size, func=None):
+        return FragmentBound(var, int(lower), int(size))
 
 for _cls in [FragmentRoot, FragmentVectorize, FragmentParallel, FragmentUnroll, FragmentUpdate]:
     _cls.fromstring = make_fromstring(_cls)
@@ -838,6 +842,8 @@ def cuda_global_check(schedule):
     d_cuda = {}
     ok = [True]
     def callback(f, fparent):
+        if fparent is None:
+            return
         f_name = f.name()
         L = schedule.d.get(f_name, [])
         inline_chunk = (len(L) == 0 or isinstance(L[0], FragmentChunk))
@@ -860,6 +866,8 @@ def cuda_global_check(schedule):
     d_parallel = {}
     ok = [True]
     def callback(f, fparent):
+        if fparent is None:
+            return
         f_name = f.name()
         L = schedule.d.get(f_name, [])
         inline_chunk = (len(L) == 0 or isinstance(L[0], FragmentChunk))
@@ -982,7 +990,7 @@ class Schedule:
             ans.extend(x.new_vars())
         return list(sorted(set(ans)))
 
-    def apply(self, constraints=None, verbose=False, check=False):   # Apply schedule
+    def apply(self, constraints=None, verbose=False, check=False, scope={}):   # Apply schedule
         if check:
             if not self.check(self):
                 raise BadScheduleError
@@ -991,17 +999,17 @@ class Schedule:
         #print 'apply schedule:'
         #print str(self)
         #halide.inline_all(self.root_func)
-        scope = halide.all_vars(self.root_func)
-        #print 'scope', scope.keys()
+        fscope = halide.all_vars(self.root_func)
+        #print 'fscope', fscope.keys()
         new_vars = self.new_vars()
         if verbose:
             print 'apply, new_vars', new_vars
         for varname in new_vars:
-            scope[varname] = instantiate_var(varname)
+            fscope[varname] = instantiate_var(varname)
         if verbose:
-            print 'apply, scope:', scope
-        def callback(f, parent):
-            name = f.name()
+            print 'apply, fscope:', fscope
+        def callback(f0, parent):
+            name = f0.name()
             if verbose:
                 print 'apply, name', name, constraints
             if constraints is not None and name in constraints.exclude_names:
@@ -1010,17 +1018,20 @@ class Schedule:
                 return
             if name in self.d:
                 s = str(self.d[name])
+                update_parent = halide.update_func_parent(f0)
+                f = update_parent.update() if update_parent is not None else f0
                 f.reset()
                 s = s.replace(name + '.', '__func.')
-                scope['__func'] = f
+                fscope['__func'] = f
+                fscope[name] = f
                 if CHUNK_ROOT:
-                    scope['root'] = halide.root
+                    fscope['root'] = halide.root
                 #print 'apply', s
                 #print scope, s
                 if verbose:
                     print '  exec', s
                 try:
-                    exec s in scope
+                    exec s in fscope
                 except NameError:
                     raise BadScheduleError
             else:
@@ -1028,7 +1039,9 @@ class Schedule:
                     print '  not in d, reset'
                 f.reset()
         halide.visit_funcs(self.root_func, callback)
-        
+        if 'tune_constraints' in scope:
+            exec scope['tune_constraints'] in fscope
+            
     def test(self, shape, input, constraints, eval_func=None):
         """
         Test on zero array of the given shape. Return evaluate() function which when called returns the output Image.
@@ -1175,6 +1188,31 @@ def intersect_lists(L):
             added.add(x)
             ans.append(x)
     return ans
+
+def lower_bound_schedules(root_func):
+    "Return a (far) lower bound estimate on number of schedules, by using chunk().tile()....tile() form schedules."
+    max_tiles = DEFAULT_MAX_DEPTH-1
+    d_callers = halide.callers(root_func)
+    d_loop_vars = {}
+    ans = [1]
+    
+    def callback(f, fparent):
+        nchunk = 1
+        if len(d_callers[f.name()]) == 1:
+            mparent = len(halide.func_varlist(fparent))
+            if mparent >= 2:
+                nchunk = mparent + 2*max_tiles
+        ans[0] *= nchunk*(nchunk+1)/2
+        
+        m = len(halide.func_varlist(f))
+        if m < 2:
+            return
+        for i in range(max_tiles):
+            ans[0] *= 36*(m-1)
+            m += 2
+        
+    halide.visit_funcs(root_func, callback, toposort=True)
+    return ans[0]
 
 def test_intersect_lists():
     assert intersect_lists([['c', 'y', '_c1', '_c3', '_c2', '_c0', 'x'], ['c', 'z', 'y', 'x']]) == ['c', 'y', 'x']

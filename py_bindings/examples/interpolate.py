@@ -1,6 +1,7 @@
 import sys; sys.path += ['..', '.']
 import time
 from halide import *
+import autotune
 
 int_t = Int(32)
 float_t = Float(32)
@@ -59,15 +60,16 @@ def filter_func(dtype=Float(32), use_uniforms=False, in_filename=os.path.join(in
         human_schedule += 'i%d.root().vectorize(c, 4).parallel(y)\n'%i
         
     tune_ref_schedules = {'human': human_schedule}
+    tune_constraints = autotune.bound_recursive(final, 'c', 0, 4).replace('final.bound(c,0,4)','final.bound(c,0,3)')
+    print tune_constraints
     
-    import autotune
     autotune.Schedule.fromstring(final, human_schedule).apply()
     
     return (input, final, evaluate, locals())
 
 def main():
     (input, out_func, evaluate, local_d) = filter_func()
-    filter_image(input, out_func, local_d['tune_in_images'][0], eval_func=evaluate)().show()
+    filter_image(input, out_func, local_d['tune_in_images'][0], eval_func=evaluate, out_dims=local_d['tune_out_dims'])().show()
 #    filter_image(input, out_func, os.path.join(inputs_dir(), 'interpolate_in.png'))().show()
 
 if __name__ == '__main__':
