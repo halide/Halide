@@ -582,6 +582,26 @@ def toposort(data):
     
 _toposort = toposort
 
+UPDATE_SUFFIX = '_update_'
+
+def create_update_func(f, cache={}):
+    f_name = f.name()
+    if f_name in cache:
+        return cache[f_name]
+    
+    ans = Func(f_name + UPDATE_SUFFIX)
+    varlist = func_varlist(f, get_name=False)
+    ans[tuple(varlist)] = 0.0
+    ans.parent = f
+    
+    cache[f_name] = ans
+    return ans
+
+def update_func_parent(f):
+    if f.name().endswith(UPDATE_SUFFIX):
+        return f.parent
+    return None
+    
 def visit_funcs(root_func, callback, all_calls=False, toposort=False):
     """
     Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func.
@@ -602,17 +622,27 @@ def visit_funcs(root_func, callback, all_calls=False, toposort=False):
             if not toposort:
                 callback(x, parent)
             else:
-                pairs[name] = (x, parent)
+                pairs.setdefault(name, [])
+                pairs[name].append((x, parent))
             #print x.rhs().funcs()
         if unvisited:
             for y in x.funcs(): #x.rhs().funcs():
                 if y.name() != name:
                     visit(y, x)
     visit(root_func, None)
-    
+    if hasattr(root_func, 'tune_update') and root_func.tune_update:
+        for (name, f) in d.items():
+            if f.isReduction():
+                #print 'UPDATE FUNC', name
+                #d_local = {'f': f}
+                #exec "f.name = lambda: %r" % (f.name() + '.update()') in d_local
+                f_update = create_update_func(f)
+                visit(f_update, None)
+
     if toposort:
         for name in _toposort(callers(root_func)):
-            callback(*pairs[name])
+            for pair in pairs[name]:
+                callback(*pair)
         
     return d
 
@@ -635,9 +665,12 @@ def all_vars(root_func):
     visit_funcs(root_func, callback)
     return d
     
-def func_varlist(f):
+def func_varlist(f, get_name=True):
     args = f.args()
-    return [x.vars()[0].name() for x in args]
+    if get_name:
+        return [x.vars()[0].name() for x in args]
+    else:
+        return [x.vars()[0] for x in args]
 
 def get_blur(cache=[]):
     def gen():
@@ -715,7 +748,7 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
     w = input_png.width() if out_dims is None else out_dims[0]
     h = input_png.height() if out_dims is None else out_dims[1]
     nchan = input_png.channels() if out_dims is None else (out_dims[2] if len(out_dims) >= 3 else 1)
-    #print w, h, nchan
+    #print w, h, nchan, out_dims
     #w2 = roundup_multiple(w, pad_multiple)
     #h2 = roundup_multiple(h, pad_multiple)
     #print w2, h2, nchan
@@ -737,7 +770,7 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
             T.append(time.time()-T0)
         out.assign(realized)
 
-        assert out.width() == w and out.height() == h and out.channels() == nchan
+        assert out.width() == w and out.height() == h and out.channels() == nchan, (out.width(), out.height(), out.channels(), w, h, nchan)
         #print out.width(), out.height(), out.channels(), w, h, nchan
         if disp_time:
             if times > 1:

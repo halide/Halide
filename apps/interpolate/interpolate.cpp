@@ -33,7 +33,10 @@ int main(int argc, char **argv) {
     unsigned int levels = 10;
 
     Func downsampled[levels];
+    Func downx[levels];
     Func interpolated[levels];
+    Func upsampled[levels];
+    Func upsampledx[levels];
     Var x,y,c;
 
     Func clamped;
@@ -43,21 +46,21 @@ int main(int argc, char **argv) {
 
     //generate downsample levels:
     for (unsigned int l = 1; l < levels; ++l) {
-        Func downx;
-        downx(c, x, y) = (downsampled[l-1](c, x*2-1, y) + 
+        //Func downx;
+        downx[l](c, x, y) = (downsampled[l-1](c, x*2-1, y) + 
                           2.0f * downsampled[l-1](c, x*2, y) + 
                           downsampled[l-1](c, x*2+1, y)) * 0.25f;
-        downsampled[l](c, x, y) = (downx(c, x, y*2-1) + 
-                                   2.0f * downx(c, x, y*2) + 
-                                   downx(c, x, y*2+1)) * 0.25f;
+        downsampled[l](c, x, y) = (downx[l](c, x, y*2-1) + 
+                                   2.0f * downx[l](c, x, y*2) + 
+                                   downx[l](c, x, y*2+1)) * 0.25f;
     }
     interpolated[levels-1] = downsampled[levels-1];
     //generate interpolated levels:
     for (unsigned int l = levels-2; l < levels; --l) {
-        Func upsampledx, upsampled;
-        upsampledx(c, x, y) = 0.5f * (interpolated[l+1](c, x/2 + (x%2), y) + interpolated[l+1](c, x/2, y));
-        upsampled(c, x, y) = 0.5f * (upsampledx(c, x, y/2 + (y%2)) + upsampledx(c, x, y/2));
-        interpolated[l](c, x, y) = downsampled[l](c, x, y) + (1.0f - downsampled[l](3, x, y)) * upsampled(c, x, y);
+        //Func upsampledx, upsampled;
+        upsampledx[l](c, x, y) = 0.5f * (interpolated[l+1](c, x/2 + (x%2), y) + interpolated[l+1](c, x/2, y));
+        upsampled[l](c, x, y) = 0.5f * (upsampledx[l](c, x, y/2 + (y%2)) + upsampledx[l](c, x, y/2));
+        interpolated[l](c, x, y) = downsampled[l](c, x, y) + (1.0f - downsampled[l](3, x, y)) * upsampled[l](c, x, y);
     }
 
     Func final;
@@ -116,7 +119,111 @@ int main(int argc, char **argv) {
         final.root();
         break;
     }
+    case 4:
+    {
+        std::cout << "Autotuned schedule." << std::endl;
+        Var _c0("_c0"), _c1("_c1");
+        downsampled[0].chunk(y,y);
+        downsampled[1].root().tile(x,y,_c0,_c1,4,4).vectorize(_c0,4).parallel(y);
+        downsampled[2].chunk(x,x).vectorize(c,4);
+        downsampled[3].chunk(y,y).vectorize(c,2);
+        downsampled[4].chunk(y,y).vectorize(c,2);
+        downsampled[5].chunk(y,y).vectorize(c,4);
 
+
+        downsampled[8].root();
+
+
+        downx[2].chunk(x,x).vectorize(c,4);
+        downx[3].root().tile(x,y,_c0,_c1,4,4).vectorize(_c0,4).parallel(y);
+        downx[4].root().tile(x,y,_c0,_c1,2,2).vectorize(_c0,2).parallel(y);
+        downx[5].root();
+        downx[6].chunk(x,x).vectorize(c,2);
+        downx[7].root().parallel(y);
+        downx[8].chunk(y,y).vectorize(c,4);
+        downx[9].root().parallel(y);
+        final.root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y);
+
+        interpolated[1].chunk(y,y).parallel(y);
+        interpolated[2].chunk(y,y).vectorize(c,4);
+        interpolated[3].chunk(y,y).vectorize(c,4);
+        interpolated[4].chunk(y,y).vectorize(c,2);
+        interpolated[5].chunk(y,y).vectorize(c,4);
+        interpolated[6].chunk(y,y).vectorize(c,4);
+        interpolated[7].root().parallel(y);
+        interpolated[8].root().parallel(y);
+        interpolated[9].chunk(y,y).vectorize(c,4).split(c,c,_c0,64);
+
+
+        upsampled[2].root().tile(x,y,_c0,_c1,8,8).vectorize(_c0,8).parallel(y);
+
+        upsampled[4].chunk(y,y).vectorize(c,2);
+        upsampled[5].chunk(y,y).vectorize(c,4);
+        upsampled[6].chunk(x,x).vectorize(c,2);
+
+        upsampled[8].chunk(y,y).vectorize(c,4);
+        upsampledx[0].root().parallel(y).unroll(x,4);
+        upsampledx[1].root().tile(x,y,_c0,_c1,4,4).vectorize(_c0,4).parallel(y);
+        upsampledx[2].chunk(y,y).vectorize(c,4);
+        upsampledx[3].root().tile(x,y,_c0,_c1,2,2).vectorize(_c0,2).parallel(y);
+        upsampledx[4].chunk(y,y).vectorize(c,4);
+        upsampledx[5].chunk(y,y).vectorize(c,4);
+        upsampledx[6].root().vectorize(c,2);
+        upsampledx[7].root().parallel(y);
+        upsampledx[8].chunk(y,y).vectorize(c,4).unroll(c,4);
+
+        clamped.bound(c,0,4);
+        downsampled[0].bound(c,0,4);
+        downsampled[1].bound(c,0,4);
+        downsampled[2].bound(c,0,4);
+        downsampled[3].bound(c,0,4);
+        downsampled[4].bound(c,0,4);
+        downsampled[5].bound(c,0,4);
+        downsampled[6].bound(c,0,4);
+        downsampled[7].bound(c,0,4);
+        downsampled[8].bound(c,0,4);
+        downsampled[9].bound(c,0,4);
+        downx[1].bound(c,0,4);
+        downx[2].bound(c,0,4);
+        downx[3].bound(c,0,4);
+        downx[4].bound(c,0,4);
+        downx[5].bound(c,0,4);
+        downx[6].bound(c,0,4);
+        downx[7].bound(c,0,4);
+        downx[8].bound(c,0,4);
+        downx[9].bound(c,0,4);
+        final.bound(c,0,3);
+        interpolated[0].bound(c,0,4);
+        interpolated[1].bound(c,0,4);
+        interpolated[2].bound(c,0,4);
+        interpolated[3].bound(c,0,4);
+        interpolated[4].bound(c,0,4);
+        interpolated[5].bound(c,0,4);
+        interpolated[6].bound(c,0,4);
+        interpolated[7].bound(c,0,4);
+        interpolated[8].bound(c,0,4);
+        interpolated[9].bound(c,0,4);
+        upsampled[0].bound(c,0,4);
+        upsampled[1].bound(c,0,4);
+        upsampled[2].bound(c,0,4);
+        upsampled[3].bound(c,0,4);
+        upsampled[4].bound(c,0,4);
+        upsampled[5].bound(c,0,4);
+        upsampled[6].bound(c,0,4);
+        upsampled[7].bound(c,0,4);
+        upsampled[8].bound(c,0,4);
+        upsampledx[0].bound(c,0,4);
+        upsampledx[1].bound(c,0,4);
+        upsampledx[2].bound(c,0,4);
+        upsampledx[3].bound(c,0,4);
+        upsampledx[4].bound(c,0,4);
+        upsampledx[5].bound(c,0,4);
+        upsampledx[6].bound(c,0,4);
+        upsampledx[7].bound(c,0,4);
+        upsampledx[8].bound(c,0,4);
+    	break;
+    }
+        
 
     default:
         assert(0 && "No schedule with this number.");
