@@ -139,7 +139,7 @@ namespace HalideInternal {
             consume == op->consume) {
             stmt = op;
         } else {
-            stmt = new Pipeline(produce, update, consume);
+            stmt = new Pipeline(op->buffer, produce, update, consume);
         }
     }
 
