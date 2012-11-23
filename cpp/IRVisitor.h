@@ -2,6 +2,9 @@
 #define IR_VISITOR_H
 
 namespace HalideInternal {
+    struct IR;
+    struct Expr;
+    struct Stmt;
     struct IntImm;
     struct FloatImm;
     struct Cast;
@@ -78,12 +81,6 @@ namespace HalideInternal {
         virtual void visit(const Allocate *);
         virtual void visit(const Realize *);
         virtual void visit(const Block *);
-
-        // This should be used for unit testing and for providing
-        // example usage. You must override this in your IRVisitor. If
-        // you implement it as an empty function Andrew will hit you
-        // with a stick.
-        virtual void test() = 0;
     };
     
 }
