@@ -36,7 +36,7 @@ namespace HalideInternal {
 
     struct IntImm : public Expr {
         int value;
-        IntImm(float v) : value(v) {}
+        IntImm(int v) : value(v) {}
 
         void accept(IRVisitor *v) const {v->visit(this);}
     };
