@@ -332,10 +332,11 @@ namespace HalideInternal {
     };
 
     struct Pipeline : public Stmt {
+        string buffer;
         const Stmt *produce, *update, *consume;
 
-        Pipeline(const Stmt *p, const Stmt *u, const Stmt *c) : 
-            produce(p), update(u), consume(c) {
+        Pipeline(const string b, const Stmt *p, const Stmt *u, const Stmt *c) : 
+            buffer(b), produce(p), update(u), consume(c) {
             assert(produce && "Pipeline of NULL");
             // update is allowed to be null
             assert(consume && "Pipeline of NULL");
