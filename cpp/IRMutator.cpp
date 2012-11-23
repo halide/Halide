@@ -2,6 +2,26 @@
 
 namespace HalideInternal {
 
+    const Expr *IRMutator::mutate(const Expr *e) {
+        if (e) {
+            e->accept(this);
+        } else {
+            expr = NULL;
+        }
+        stmt = NULL;
+        return expr;
+    }
+
+    const Stmt *IRMutator::mutate(const Stmt *s) {
+        if (s) {
+            s->accept(this);
+        } else {
+            stmt = NULL;
+        }
+        expr = NULL;
+        return stmt;
+    }
+
     template<typename T> void mutateBinaryOperator(IRMutator *mutator, const T *op) {
         const Expr *a = mutator->mutate(op->a);
         const Expr *b = mutator->mutate(op->b);
@@ -10,7 +30,6 @@ namespace HalideInternal {
         else mutator->expr = new T(a, b);            
         mutator->stmt = NULL;
     }
-
 
     void IRMutator::visit(const IntImm *v)   {expr = v;}
     void IRMutator::visit(const FloatImm *v) {expr = v;}
@@ -53,9 +72,8 @@ namespace HalideInternal {
     }
 
     void IRMutator::visit(const Ramp *op) {
-        const Expr *base = op->base, *stride = op->stride;
-        base->visit(this); base = expr;
-        stride->visit(this); stride = expr;
+        const Expr *base = mutate(op->base);
+        const Expr *stride = mutate(op->stride);
         if (base == op->base && stride == op->stride) expr = op;
         else expr = new Ramp(base, stride, op->width);
     }

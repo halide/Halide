@@ -20,7 +20,7 @@ namespace HalideInternal {
     };
 
     struct IR {
-        virtual void visit(IRVisitor *v) const = 0;
+        virtual void accept(IRVisitor *v) const = 0;
         int gc_mark;
     };
 
@@ -34,14 +34,14 @@ namespace HalideInternal {
         int value;
         IntImm(float v) : value(v) {}
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct FloatImm : public Expr {
         float value;
         FloatImm(float v) : value(v) {}
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Cast : public Expr {
@@ -51,7 +51,7 @@ namespace HalideInternal {
             assert(v && "Cast of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Var : public Expr {
@@ -59,7 +59,7 @@ namespace HalideInternal {
         const string name;
         Var(Type t, const string n) : type(t), name(n) {}
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Add : public Expr {
@@ -69,7 +69,7 @@ namespace HalideInternal {
             assert(b && "Add of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Sub : public Expr {
@@ -79,7 +79,7 @@ namespace HalideInternal {
             assert(b && "Sub of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Mul : public Expr {
@@ -89,7 +89,7 @@ namespace HalideInternal {
             assert(b && "Mul of NULL");
         }        
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Div : public Expr {
@@ -99,7 +99,7 @@ namespace HalideInternal {
             assert(b && "Div of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Mod : public Expr {
@@ -109,7 +109,7 @@ namespace HalideInternal {
             assert(b && "Mod of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Min : public Expr {
@@ -119,7 +119,7 @@ namespace HalideInternal {
             assert(b && "Min of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Max : public Expr {
@@ -129,7 +129,7 @@ namespace HalideInternal {
             assert(b && "Max of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct EQ : public Expr {
@@ -139,7 +139,7 @@ namespace HalideInternal {
             assert(b && "EQ of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct NE : public Expr {
@@ -149,7 +149,7 @@ namespace HalideInternal {
             assert(b && "NE of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct LT : public Expr {
@@ -159,7 +159,7 @@ namespace HalideInternal {
             assert(b && "LT of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct LE : public Expr {
@@ -169,7 +169,7 @@ namespace HalideInternal {
             assert(b && "LE of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct GT : public Expr {
@@ -179,7 +179,7 @@ namespace HalideInternal {
             assert(b && "GT of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct GE : public Expr {
@@ -189,7 +189,7 @@ namespace HalideInternal {
             assert(b && "GE of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct And : public Expr {
@@ -199,7 +199,7 @@ namespace HalideInternal {
             assert(b && "And of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Or : public Expr {
@@ -209,7 +209,7 @@ namespace HalideInternal {
             assert(b && "Or of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Not : public Expr {
@@ -218,7 +218,7 @@ namespace HalideInternal {
             assert(a && "Not of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Select : public Expr {
@@ -230,7 +230,7 @@ namespace HalideInternal {
             assert(false_value && "Select of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}        
+        void accept(IRVisitor *v) const {v->visit(this);}        
     };
 
     struct Load : public Expr {
@@ -242,7 +242,7 @@ namespace HalideInternal {
             assert(index && "Load of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Ramp : public Expr {
@@ -255,7 +255,7 @@ namespace HalideInternal {
             assert(w > 0 && "Ramp of width <= 0");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Call : public Expr {
@@ -273,7 +273,7 @@ namespace HalideInternal {
         }
 
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Let : public Expr {
@@ -285,7 +285,7 @@ namespace HalideInternal {
             assert(body && "Let of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct LetStmt : public Stmt {
@@ -298,7 +298,7 @@ namespace HalideInternal {
             assert(body && "LetStmt of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct PrintStmt : public Stmt {
@@ -311,7 +311,7 @@ namespace HalideInternal {
             }
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct AssertStmt : public Stmt {
@@ -324,7 +324,7 @@ namespace HalideInternal {
             assert(condition && "AssertStmt of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Pipeline : public Stmt {
@@ -337,7 +337,7 @@ namespace HalideInternal {
             assert(consume && "Pipeline of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
     
     struct For : public Stmt {
@@ -354,7 +354,7 @@ namespace HalideInternal {
             assert(body && "For of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Store : public Stmt {
@@ -367,7 +367,7 @@ namespace HalideInternal {
             assert(index && "Store of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Provide : public Stmt {
@@ -383,7 +383,7 @@ namespace HalideInternal {
             }
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Allocate : public Stmt {
@@ -398,7 +398,7 @@ namespace HalideInternal {
             assert(body && "Allocate of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Realize : public Stmt {
@@ -416,7 +416,7 @@ namespace HalideInternal {
             assert(body && "Realize of NULL");
         }
 
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
     struct Block : public Stmt {
@@ -428,7 +428,7 @@ namespace HalideInternal {
             // rest is allowed to be null
         }
         
-        void visit(IRVisitor *v) const {v->visit(this);}
+        void accept(IRVisitor *v) const {v->visit(this);}
     };
 }
 
