@@ -13,11 +13,15 @@ namespace HalideInternal {
     using std::vector;
     using std::pair;
 
-    class Type {
-        enum {Int, UInt, Float, Stmt} t;
+    struct Type {
+        enum {Int, UInt, Float} t;
         int bits;
         int width;        
     };
+
+    Type Int(int bits, int width = 1);
+    Type UInt(int bits, int width = 1);
+    Type Float(int bits, int width = 1);
 
     struct IR {
         virtual void accept(IRVisitor *v) const = 0;
