@@ -31,8 +31,16 @@ namespace HalideInternal {
         mutator->stmt = NULL;
     }
 
-    void IRMutator::visit(const IntImm *v)   {expr = v;}
-    void IRMutator::visit(const FloatImm *v) {expr = v;}
+    void IRMutator::visit(const IntImm *op)   {expr = op;}
+    void IRMutator::visit(const FloatImm *op) {expr = op;}
+    void IRMutator::visit(const Var *op) {expr = op;}
+
+    void IRMutator::visit(const Cast *op) {
+        const Expr *value = mutate(op->value);
+        if (value == op->value) expr = op;
+        else expr = new Cast(op->type, value);
+    }
+
     void IRMutator::visit(const Add *op)     {mutateBinaryOperator(this, op);}
     void IRMutator::visit(const Sub *op)     {mutateBinaryOperator(this, op);}
     void IRMutator::visit(const Mul *op)     {mutateBinaryOperator(this, op);}
