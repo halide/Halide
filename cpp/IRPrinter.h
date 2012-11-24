@@ -14,7 +14,8 @@ namespace HalideInternal {
         ostream &stream;
         int indent;
     public:
-        IRPrinter(const IR *, ostream &);
+        IRPrinter(Expr, ostream &);
+        IRPrinter(Stmt, ostream &);
 
         void visit(const IntImm *);
         void visit(const FloatImm *);
@@ -55,7 +56,8 @@ namespace HalideInternal {
         static void test();
     };
 
-    ostream &operator<<(ostream &stream, const IR *ir);
+    ostream &operator<<(ostream &stream, Expr);
+    ostream &operator<<(ostream &stream, Stmt);
 }
 
 #endif
