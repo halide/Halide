@@ -4,6 +4,7 @@
 #include <vector>
 #include <utility>
 #include <assert.h>
+#include <stdio.h>
 
 #include "IRVisitor.h"
 
@@ -23,417 +24,453 @@ namespace HalideInternal {
     Type UInt(int bits, int width = 1);
     Type Float(int bits, int width = 1);
 
-    struct IR {
+
+    struct IRNode {
         virtual void accept(IRVisitor *v) const = 0;
-        int gc_mark;
+        IRNode() : ref_count(0) {}
+        virtual ~IRNode() {}
+        mutable int ref_count;
     };
 
-    struct Expr : public IR {
+    struct BaseExprNode : public IRNode {
     };
 
-    struct Stmt : public IR {
+    struct BaseStmtNode : public IRNode {
     };
 
-    struct IntImm : public Expr {
+    template<typename T>
+    struct ExprNode : public BaseExprNode {
+        void accept(IRVisitor *v) const {
+            v->visit((const T *)this);
+        }
+    };
+
+    template<typename T>
+    struct StmtNode : public BaseStmtNode {
+        void accept(IRVisitor *v) const {
+            v->visit((const T *)this);
+        }
+    };
+    
+    struct IRHandle {
+    private:
+        const IRNode *node;
+        void incref() {
+            if (node) {
+                node->ref_count++;
+            }
+        };
+        void decref() {
+            if (node) {
+                node->ref_count--;
+                if (node->ref_count == 0) {
+                    delete node;
+                    node = NULL;
+                }
+            }
+        }
+
+    protected:
+        ~IRHandle() {
+            decref();
+        }
+        IRHandle() : node(NULL) {}
+        IRHandle(const IRNode *n) : node(n) {
+            incref();
+        }
+        IRHandle(const IRHandle &other) : node(other.node) {
+            incref();
+        }
+        IRHandle &operator=(const IRHandle &other) {
+            decref();
+            node = other.node;
+            incref();
+            return *this;
+        }
+    public:
+        void accept(IRVisitor *v) const {
+            node->accept(v);
+        }
+        bool defined() const {
+            return node;
+        }
+        // Equality of reference
+        bool sameAs(const IRHandle &other) {
+            return node == other.node;
+        }
+    };
+
+    struct Expr : public IRHandle {
+        Expr() : IRHandle() {}
+        Expr(const BaseExprNode *n) : IRHandle(n) {}
+
+        // Some more constructors for convenience to make constants
+        // TODO: cache these for efficiency
+        Expr(int);
+        Expr(float);
+    };
+
+    struct Stmt : public IRHandle {
+        Stmt() : IRHandle() {}
+        Stmt(const BaseStmtNode *n) : IRHandle(n) {}
+        virtual const Allocate *asAllocate() {return NULL;}
+    };
+
+    struct IntImm : public ExprNode<IntImm> {
         int value;
+
         IntImm(int v) : value(v) {}
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct FloatImm : public Expr {
+    struct FloatImm : public ExprNode<FloatImm> {
         float value;
+
         FloatImm(float v) : value(v) {}
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Cast : public Expr {
+    struct Cast : public ExprNode<Cast> {
         Type type;
-        const Expr *value;
-        Cast(Type t, const Expr *v) : type(t), value(v) {
-            assert(v && "Cast of NULL");
-        }
+        Expr value;
 
-        void accept(IRVisitor *v) const {v->visit(this);}
+        Cast(Type t, Expr v) : type(t), value(v) {
+            assert(v.defined() && "Cast of undefined");
+        }
     };
 
-    struct Var : public Expr {
+    struct Var : public ExprNode<Var> {
         Type type;
-        const string name;
-        Var(Type t, const string n) : type(t), name(n) {}
+        string name;
 
-        void accept(IRVisitor *v) const {v->visit(this);}
+        Var(Type t, string n) : type(t), name(n) {}
     };
 
-    struct Add : public Expr {
-        const Expr *a, *b;
-        Add(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "Add of NULL");
-            assert(b && "Add of NULL");
+    struct Add : public ExprNode<Add> {
+        Expr a, b;
+
+        Add(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "Add of undefined");
+            assert(b.defined() && "Add of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Sub : public Expr {
-        const Expr *a, *b;
-        Sub(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "Sub of NULL");
-            assert(b && "Sub of NULL");
+    struct Sub : public ExprNode<Sub> {
+        Expr a, b;
+
+        Sub(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "Sub of undefined");
+            assert(b.defined() && "Sub of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Mul : public Expr {
-        const Expr *a, *b;
-        Mul(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "Mul of NULL");
-            assert(b && "Mul of NULL");
+    struct Mul : public ExprNode<Mul> {
+        Expr a, b;
+
+        Mul(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "Mul of undefined");
+            assert(b.defined() && "Mul of undefined");
         }        
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Div : public Expr {
-        const Expr *a, *b;
-        Div(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "Div of NULL");
-            assert(b && "Div of NULL");
+    struct Div : public ExprNode<Div> {
+        Expr a, b;
+
+        Div(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "Div of undefined");
+            assert(b.defined() && "Div of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Mod : public Expr {
-        const Expr *a, *b;
-        Mod(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "Mod of NULL");
-            assert(b && "Mod of NULL");
+    struct Mod : public ExprNode<Mod> {
+        Expr a, b;
+
+        Mod(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "Mod of undefined");
+            assert(b.defined() && "Mod of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Min : public Expr {
-        const Expr *a, *b;
-        Min(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "Min of NULL");
-            assert(b && "Min of NULL");
+    struct Min : public ExprNode<Min> {
+        Expr a, b;
+
+        Min(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "Min of undefined");
+            assert(b.defined() && "Min of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Max : public Expr {
-        const Expr *a, *b;
-        Max(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "Max of NULL");
-            assert(b && "Max of NULL");
+    struct Max : public ExprNode<Max> {
+        Expr a, b;
+
+        Max(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "Max of undefined");
+            assert(b.defined() && "Max of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct EQ : public Expr {
-        const Expr *a, *b;
-        EQ(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "EQ of NULL");
-            assert(b && "EQ of NULL");
+    struct EQ : public ExprNode<EQ> {
+        Expr a, b;
+
+        EQ(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "EQ of undefined");
+            assert(b.defined() && "EQ of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct NE : public Expr {
-        const Expr *a, *b;
-        NE(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "NE of NULL");
-            assert(b && "NE of NULL");
+    struct NE : public ExprNode<NE> {
+        Expr a, b;
+
+        NE(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "NE of undefined");
+            assert(b.defined() && "NE of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct LT : public Expr {
-        const Expr *a, *b;
-        LT(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "LT of NULL");
-            assert(b && "LT of NULL");
+    struct LT : public ExprNode<LT> {
+        Expr a, b;
+
+        LT(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "LT of undefined");
+            assert(b.defined() && "LT of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct LE : public Expr {
-        const Expr *a, *b;
-        LE(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "LE of NULL");
-            assert(b && "LE of NULL");
+    struct LE : public ExprNode<LE> {
+        Expr a, b;
+
+        LE(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "LE of undefined");
+            assert(b.defined() && "LE of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct GT : public Expr {
-        const Expr *a, *b;
-        GT(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "GT of NULL");
-            assert(b && "GT of NULL");
+    struct GT : public ExprNode<GT> {
+        Expr a, b;
+
+        GT(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "GT of undefined");
+            assert(b.defined() && "GT of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct GE : public Expr {
-        const Expr *a, *b;
-        GE(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "GE of NULL");
-            assert(b && "GE of NULL");
+    struct GE : public ExprNode<GE> {
+        Expr a, b;
+
+        GE(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "GE of undefined");
+            assert(b.defined() && "GE of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct And : public Expr {
-        const Expr *a, *b;
-        And(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "And of NULL");
-            assert(b && "And of NULL");
+    struct And : public ExprNode<And> {
+        Expr a, b;
+
+        And(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "And of undefined");
+            assert(b.defined() && "And of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Or : public Expr {
-        const Expr *a, *b;
-        Or(const Expr *_a, const Expr *_b) : a(_a), b(_b) {
-            assert(a && "Or of NULL");
-            assert(b && "Or of NULL");
+    struct Or : public ExprNode<Or> {
+        Expr a, b;
+
+        Or(Expr _a, Expr _b) : a(_a), b(_b) {
+            assert(a.defined() && "Or of undefined");
+            assert(b.defined() && "Or of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Not : public Expr {
-        const Expr *a;
-        Not(const Expr *_a) : a(_a) {
-            assert(a && "Not of NULL");
+    struct Not : public ExprNode<Not> {
+        Expr a;
+
+        Not(Expr _a) : a(_a) {
+            assert(a.defined() && "Not of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Select : public Expr {
-        const Expr *condition, *true_value, *false_value;
-        Select(const Expr *c, const Expr *t, const Expr *f) : 
+    struct Select : public ExprNode<Select> {
+        Expr condition, true_value, false_value;
+
+        Select(Expr c, Expr t, Expr f) : 
             condition(c), true_value(t), false_value(f) {
-            assert(condition && "Select of NULL");
-            assert(true_value && "Select of NULL");
-            assert(false_value && "Select of NULL");
+            assert(condition.defined() && "Select of undefined");
+            assert(true_value.defined() && "Select of undefined");
+            assert(false_value.defined() && "Select of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}        
     };
 
-    struct Load : public Expr {
+    struct Load : public ExprNode<Load> {
         Type type;
-        const string buffer;
-        const Expr *index;
-        Load(Type t, const string b, const Expr *i) : 
-            type(t), buffer(b), index(i) {
-            assert(index && "Load of NULL");
-        }
+        string buffer;
+        Expr index;
 
-        void accept(IRVisitor *v) const {v->visit(this);}
+        Load(Type t, string b, Expr i) : 
+            type(t), buffer(b), index(i) {
+            assert(index.defined() && "Load of undefined");
+        }
     };
 
-    struct Ramp : public Expr {
-        const Expr *base, *stride;
+    struct Ramp : public ExprNode<Ramp> {
+        Expr base, stride;
         int width;
-        Ramp(const Expr *b, const Expr *s, int w) : 
+
+        Ramp(Expr b, Expr s, int w) : 
             base(b), stride(s), width(w) {
-            assert(base && "Ramp of NULL");
-            assert(stride && "Ramp of NULL");
+            assert(base.defined() && "Ramp of undefined");
+            assert(stride.defined() && "Ramp of undefined");
             assert(w > 0 && "Ramp of width <= 0");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Call : public Expr {
+    struct Call : public ExprNode<Call> {
         Type type;
-        const string buffer;
-        vector<const Expr *> args;
+        string buffer;
+        vector<Expr > args;
         typedef enum {Image, Extern, Halide} CallType;
         CallType call_type;
 
-        Call(Type t, const string b, const vector<const Expr *> &a, CallType ct) : 
+        Call(Type t, string b, const vector<Expr > &a, CallType ct) : 
             type(t), buffer(b), args(a), call_type(ct) {
             for (size_t i = 0; i < args.size(); i++) {
-                assert(args[i] && "Call of NULL");
+                assert(args[i].defined() && "Call of undefined");
             }
         }
-
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Let : public Expr {
-        const string name;
-        const Expr *value, *body;
-        Let(const string n, const Expr *v, const Expr *b) : 
+    struct Let : public ExprNode<Let> {
+        string name;
+        Expr value, body;
+
+        Let(string n, Expr v, Expr b) : 
             name(n), value(v), body(b) {
-            assert(value && "Let of NULL");
-            assert(body && "Let of NULL");
+            assert(value.defined() && "Let of undefined");
+            assert(body.defined() && "Let of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct LetStmt : public Stmt {
-        const string name;
-        const Expr *value;
-        const Stmt *body;
-        LetStmt(const string n, const Expr *v, const Stmt *b) : 
+    struct LetStmt : public StmtNode<LetStmt> {
+        string name;
+        Expr value;
+        Stmt body;
+
+        LetStmt(string n, Expr v, Stmt b) : 
             name(n), value(v), body(b) {
-            assert(value && "LetStmt of NULL");
-            assert(body && "LetStmt of NULL");
+            assert(value.defined() && "LetStmt of undefined");
+            assert(body.defined() && "LetStmt of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct PrintStmt : public Stmt {
-        const string prefix;
-        vector<const Expr *> args;
-        PrintStmt(const string p, const vector<const Expr *> &a) :
+    struct PrintStmt : public StmtNode<PrintStmt> {
+        string prefix;
+        vector<Expr > args;
+
+        PrintStmt(string p, const vector<Expr > &a) :
             prefix(p), args(a) {
             for (size_t i = 0; i < args.size(); i++) {
-                assert(args[i] && "PrintStmt of NULL");
+                assert(args[i].defined() && "PrintStmt of undefined");
             }
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct AssertStmt : public Stmt {
+    struct AssertStmt : public StmtNode<AssertStmt> {
         // if condition then val else error out with message
-        const Expr *condition;
-        const string message;
+        Expr condition;
+        string message;
 
-        AssertStmt(const Expr *c, const string m) :
+        AssertStmt(Expr c, string m) :
             condition(c), message(m) {
-            assert(condition && "AssertStmt of NULL");
+            assert(condition.defined() && "AssertStmt of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Pipeline : public Stmt {
+    struct Pipeline : public StmtNode<Pipeline> {
         string buffer;
-        const Stmt *produce, *update, *consume;
+        Stmt produce, update, consume;
 
-        Pipeline(const string b, const Stmt *p, const Stmt *u, const Stmt *c) : 
+        Pipeline(string b, Stmt p, Stmt u, Stmt c) : 
             buffer(b), produce(p), update(u), consume(c) {
-            assert(produce && "Pipeline of NULL");
+            assert(produce.defined() && "Pipeline of undefined");
             // update is allowed to be null
-            assert(consume && "Pipeline of NULL");
+            assert(consume.defined() && "Pipeline of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
     
-    struct For : public Stmt {
-        const string name;
-        const Expr *min, *extent;
+    struct For : public StmtNode<For> {
+        string name;
+        Expr min, extent;
         typedef enum {Serial, Parallel, Vectorized, Unrolled} ForType;
         ForType for_type;
-        const Stmt *body;
+        Stmt body;
 
-        For(const string n, const Expr *m, const Expr *e, ForType f, const Stmt *b) :
+        For(string n, Expr m, Expr e, ForType f, Stmt b) :
             name(n), min(m), extent(e), for_type(f), body(b) {
-            assert(min && "For of NULL");
-            assert(extent && "For of NULL");
-            assert(body && "For of NULL");
+            assert(min.defined() && "For of undefined");
+            assert(extent.defined() && "For of undefined");
+            assert(body.defined() && "For of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Store : public Stmt {
-        const string buffer;
-        const Expr *value, *index;
+    struct Store : public StmtNode<Store> {
+        string buffer;
+        Expr value, index;
 
-        Store(const string b, const Expr *v, const Expr *i) :
+        Store(string b, Expr v, Expr i) :
             buffer(b), value(v), index(i) {
-            assert(value && "Store of NULL");
-            assert(index && "Store of NULL");
+            assert(value.defined() && "Store of undefined");
+            assert(index.defined() && "Store of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Provide : public Stmt {
-        const string buffer;
-        const Expr *value;
-        vector<const Expr *> args;
+    struct Provide : public StmtNode<Provide> {
+        string buffer;
+        Expr value;
+        vector<Expr > args;
 
-        Provide(const string b, const Expr *v, const vector<const Expr *> &a) : 
+        Provide(string b, Expr v, const vector<Expr > &a) : 
             buffer(b), value(v), args(a) {
-            assert(value && "Provide of NULL");
+            assert(value.defined() && "Provide of undefined");
             for (size_t i = 0; i < args.size(); i++) {
-                assert(args[i] && "Provide of NULL");
+                assert(args[i].defined() && "Provide of undefined");
             }
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Allocate : public Stmt {
-        const string buffer;
+    struct Allocate : public StmtNode<Allocate> {
+        string buffer;
         Type type;
-        const Expr *size;
-        const Stmt *body;
+        Expr size;
+        Stmt body;
 
-        Allocate(const string buf, Type t, const Expr *s, const Stmt *bod) : 
+        Allocate(string buf, Type t, Expr s, Stmt bod) : 
             buffer(buf), type(t), size(s), body(bod) {
-            assert(size && "Allocate of NULL");
-            assert(body && "Allocate of NULL");
+            assert(size.defined() && "Allocate of undefined");
+            assert(body.defined() && "Allocate of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Realize : public Stmt {
-        const string buffer;
+    struct Realize : public StmtNode<Realize> {
+        string buffer;
         Type type;
-        vector<pair<const Expr *, const Expr *> > bounds;
-        const Stmt *body;
+        vector<pair<Expr , Expr > > bounds;
+        Stmt body;
 
-        Realize(const string buf, Type t, const vector<pair<const Expr *, const Expr *> > &bou, const Stmt *bod) : 
+        Realize(string buf, Type t, const vector<pair<Expr, Expr> > &bou, Stmt bod) : 
             buffer(buf), type(t), bounds(bou), body(bod) {
             for (size_t i = 0; i < bounds.size(); i++) {
-                assert(bounds[i].first && "Realize of NULL");
-                assert(bounds[i].second && "Realize of NULL");
+                assert(bounds[i].first.defined() && "Realize of undefined");
+                assert(bounds[i].second.defined() && "Realize of undefined");
             }
-            assert(body && "Realize of NULL");
+            assert(body.defined() && "Realize of undefined");
         }
-
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 
-    struct Block : public Stmt {
-        const Stmt *first, *rest;
+    struct Block : public StmtNode<Block> {
+        Stmt first, rest;
         
-        Block(const Stmt *f, const Stmt *r) : 
+        Block(Stmt f, Stmt r) : 
             first(f), rest(r) {
-            assert(first && "Block of NULL");
+            assert(first.defined() && "Block of undefined");
             // rest is allowed to be null
         }
-        
-        void accept(IRVisitor *v) const {v->visit(this);}
     };
 }
 

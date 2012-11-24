@@ -2,7 +2,6 @@
 #define IR_VISITOR_H
 
 namespace HalideInternal {
-    struct IR;
     struct Expr;
     struct Stmt;
     struct IntImm;

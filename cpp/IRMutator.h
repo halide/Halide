@@ -20,15 +20,15 @@ namespace HalideInternal {
         // This is the main interface for using a mutator. Also call
         // these in your subclass to mutate sub-expressions and
         // sub-statements.
-        const Expr *mutate(const Expr *expr);
-        const Stmt *mutate(const Stmt *stmt);
+        Expr mutate(Expr expr);
+        Stmt mutate(Stmt stmt);
 
         // Override some of the visit functions below to achieve your
         // goals. Their default implementations just recursively
         // mutate their children. Put the result in one of the two
         // following variables:
-        const Expr *expr;
-        const Stmt *stmt;
+        Expr expr;
+        Stmt stmt;
 
         virtual void visit(const IntImm *);
         virtual void visit(const FloatImm *);
