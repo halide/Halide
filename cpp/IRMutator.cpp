@@ -87,6 +87,12 @@ namespace HalideInternal {
         else expr = new Ramp(base, stride, op->width);
     }
 
+    void IRMutator::visit(const Broadcast *op) {
+        Expr value = mutate(op->value);
+        if (value.sameAs(op->value)) expr = op;
+        else expr = new Broadcast(value, op->width);
+    }
+
     void IRMutator::visit(const Call *op) {
         vector<Expr > new_args(op->args.size());
         bool changed = false;

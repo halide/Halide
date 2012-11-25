@@ -53,6 +53,7 @@ namespace HalideInternal {
         virtual void visit(const Select *);
         virtual void visit(const Load *);
         virtual void visit(const Ramp *);
+        virtual void visit(const Broadcast *);
         virtual void visit(const Call *);
         virtual void visit(const Let *);
         virtual void visit(const LetStmt *);

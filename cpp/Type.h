@@ -6,12 +6,15 @@ namespace HalideInternal {
         enum {Int, UInt, Float} t;
         int bits;
         int width;        
-        bool is_bool() {return t == UInt && bits == 1;}
-        bool is_vector() {return width > 1;}
-        bool is_scalar() {return width == 1;}
-        bool operator==(const Type &other) {
+        bool is_bool() const {return t == UInt && bits == 1;}
+        bool is_vector() const {return width > 1;}
+        bool is_scalar() const {return width == 1;}
+        bool operator==(const Type &other) const {
             return t == other.t && bits == other.bits && width == other.width;
         }
+        bool is_float() const {return t == Float;}
+        bool is_int() const {return t == Int;}
+        bool is_uint() const {return t == UInt;}
         static Type vector_of(Type t, int width) {
             t.width = width;
             return t;
