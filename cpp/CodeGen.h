@@ -8,21 +8,23 @@
 
 #include <map>
 #include <stack>
+#include <string>
 
 #include "IRVisitor.h"
 #include "IR.h"
 
+namespace HalideInternal {
 
-namespace HalideInteral {
-  
-    using namespace LLVM;
+    using std::map;
+    using std::string;
+    using std::stack;
 
     class SymbolTable {
     private:
-        map<string, stack<Value *> > table;
+        map<string, stack<llvm::Value *> > table;
     public:
-        Value *get(string name);
-        void push(string name, Value *val);
+        llvm::Value *get(string name);
+        void push(string name, llvm::Value *val);
         void pop(string name);        
     };
 
@@ -30,14 +32,19 @@ namespace HalideInteral {
     protected:
         // Codegen state for llvm
         // Current module, function, builder, context, and value
-        Module *module;
-        Function *function;
-        LLVMContext context;
-        BasicBlock *block;
-        IRBuilder<> builder;
-        typedef map<string, stack<Value *> > 
+        llvm::Module *module;
+        llvm::Function *function;
+        llvm::LLVMContext context;
+        llvm::BasicBlock *block;
+        llvm::IRBuilder<> builder;
         SymbolTable symbol_table;
-        Value *value;
+        llvm::Value *value;
+
+        llvm::Value *codegen(Expr);
+        void codegen(Stmt);
+        
+        llvm::Value *codegen_buffer_pointer(string buffer, Type t, llvm::Value *index);
+        llvm::Type *llvm_type_of(Type t);
 
     public:
         CodeGen(Stmt stmt, string name, string target_triple);
