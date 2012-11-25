@@ -110,6 +110,10 @@ namespace HalideInternal {
         op->stride.accept(this);
     }
 
+    void IRVisitor::visit(const Broadcast *op) {
+        op->value.accept(this);
+    }
+
     void IRVisitor::visit(const Call *op) {
         for (size_t i = 0; i < op->args.size(); i++) {
             op->args[i].accept(this);

@@ -259,6 +259,12 @@ namespace HalideInternal {
         stream << ", " << op->width << ")";
     }
 
+    void IRPrinter::visit(const Broadcast *op) {
+        stream << "broadcast(";
+        op->value.accept(this);
+        stream << ", " << op->width << ")";
+    }
+
     void IRPrinter::visit(const Call *op) {
         stream << op->buffer << "(";
         for (size_t i = 0; i < op->args.size(); i++) {

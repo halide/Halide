@@ -102,15 +102,25 @@ namespace HalideInternal {
         Expr(int);
         Expr(float);
 
-        Type type() {
+        Type type() const {
             return ((BaseExprNode *)node)->type;
+        }
+
+        template<typename T> const T *as() const {
+            // If we decide later that rtti is a bad idea, we can
+            // change this method to do something else (e.g. call a
+            // virtual function)
+            return dynamic_cast<const T *>(node);
         }
     };
 
     struct Stmt : public IRHandle {
         Stmt() : IRHandle() {}
         Stmt(const BaseStmtNode *n) : IRHandle(n) {}
-        virtual const Allocate *asAllocate() {return NULL;}
+
+        template<typename T> const T *as() {
+            return dynamic_cast<const T *>(node);
+        }
     };
 
     struct IntImm : public ExprNode<IntImm> {
@@ -318,6 +328,7 @@ namespace HalideInternal {
         Load(Type t, string b, Expr i) : 
             ExprNode<Load>(t), buffer(b), index(i) {
             assert(index.defined() && "Load of undefined");
+            assert(type.width == i.type().width && "Vector width of Load must match vector width of index");
         }
     };
 
@@ -330,8 +341,20 @@ namespace HalideInternal {
             base(b), stride(s), width(w) {
             assert(base.defined() && "Ramp of undefined");
             assert(stride.defined() && "Ramp of undefined");
-            assert(w > 0 && "Ramp of width <= 0");
+            assert(w > 1 && "Ramp of width <= 1");
             assert(stride.type() == type && "Ramp of mismatched types");
+        }
+    };
+
+    struct Broadcast : public ExprNode<Broadcast> {
+        Expr value;
+        int width;
+        
+        Broadcast(Expr v, int w) :
+            ExprNode<Broadcast>(Type::vector_of(v.type(), w)), 
+            value(v), width(w) {
+            assert(v.defined() && "Broadcast of undefined");
+            assert(w > 1 && "Broadcast of width <= 1");            
         }
     };
 
@@ -463,7 +486,7 @@ namespace HalideInternal {
     struct Realize : public StmtNode<Realize> {
         string buffer;
         Type type;
-        vector<pair<Expr , Expr > > bounds;
+        vector<pair<Expr, Expr> > bounds;
         Stmt body;
 
         Realize(string buf, Type t, const vector<pair<Expr, Expr> > &bou, Stmt bod) : 
