@@ -10,6 +10,11 @@ namespace FCam {
 extern void makeLUT(float contrast, int blackLevel, float gamma, unsigned char *lut);
 extern void makeColorMatrix(float colorMatrix[], float colorTemp);
 
+// Some functions used by demosaic
+inline short max(short a, short b) {return a>b ? a : b;}
+inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
+inline short min(short a, short b) {return a<b ? a : b;}
+
 void demosaic_ARM(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, float gamma) {
 
 #ifdef __arm__ // only build on arm
