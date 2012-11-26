@@ -582,6 +582,26 @@ def toposort(data):
     
 _toposort = toposort
 
+UPDATE_SUFFIX = '_update_'
+
+def create_update_func(f, cache={}):
+    f_name = f.name()
+    if f_name in cache:
+        return cache[f_name]
+    
+    ans = Func(f_name + UPDATE_SUFFIX)
+    varlist = func_varlist(f, get_name=False)
+    ans[tuple(varlist)] = 0.0
+    ans.parent = f
+    
+    cache[f_name] = ans
+    return ans
+
+def update_func_parent(f):
+    if f.name().endswith(UPDATE_SUFFIX):
+        return f.parent
+    return None
+    
 def visit_funcs(root_func, callback, all_calls=False, toposort=False):
     """
     Call callback(f, fparent) recursively (DFS) on all functions reachable from root_func.
@@ -610,7 +630,15 @@ def visit_funcs(root_func, callback, all_calls=False, toposort=False):
                 if y.name() != name:
                     visit(y, x)
     visit(root_func, None)
-    
+    if hasattr(root_func, 'tune_update') and root_func.tune_update:
+        for (name, f) in d.items():
+            if f.isReduction():
+                #print 'UPDATE FUNC', name
+                #d_local = {'f': f}
+                #exec "f.name = lambda: %r" % (f.name() + '.update()') in d_local
+                f_update = create_update_func(f)
+                visit(f_update, None)
+
     if toposort:
         for name in _toposort(callers(root_func)):
             for pair in pairs[name]:
@@ -637,9 +665,12 @@ def all_vars(root_func):
     visit_funcs(root_func, callback)
     return d
     
-def func_varlist(f):
+def func_varlist(f, get_name=True):
     args = f.args()
-    return [x.vars()[0].name() for x in args]
+    if get_name:
+        return [x.vars()[0].name() for x in args]
+    else:
+        return [x.vars()[0] for x in args]
 
 def get_blur(cache=[]):
     def gen():

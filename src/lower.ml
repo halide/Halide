@@ -540,15 +540,10 @@ let rec storage_folding defs stmt =
         | ((Unbounded::rest), i) -> try_fold (rest, (i+1))
         | ((Range (min, max))::rest, i) ->
           let extent = Constant_fold.constant_fold_expr ((max -~ min) +~ IntImm 1) in
+          if verbosity > 2 then dbg "Extent of %s over %s = %s\n" func for_dim (string_of_expr extent);
           (* Find the maximum value of extent over the loop *)
           let env = StringMap.add for_dim (Range (for_min, for_min +~ for_size -~ (IntImm 1))) env in
-          let bounds = match bounds_of_expr_in_env env extent with
-            | Unbounded -> Unbounded
-            | Range (min, max) -> 
-              (* let max = Break_false_dependence.break_false_dependence_expr max in *)
-              Range (min, max)
-          in
-
+          let bounds = bounds_of_expr_in_env env extent in
           let max_extent = begin match bounds with
             | Unbounded -> begin
               if verbosity > 2 then dbg "Not folding %s over dimension %d because unbounded extent: %s\n" func i (string_of_expr extent);

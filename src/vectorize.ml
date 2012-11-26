@@ -55,9 +55,7 @@ let rec vector_subs_expr (env:expr StringMap.t) (expr:expr) =
       | And (a, b)     -> And (expand (vec a), expand (vec b))
       | Or (a, b)      -> Or (expand (vec a), expand (vec b))
       | Not (a)        -> Not (vec a)
-          
       | Let (name, a, b) -> 
-          assert (not (StringMap.mem name env));
           let a = vec a in
           let b = 
             if is_vector a then

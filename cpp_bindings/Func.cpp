@@ -52,7 +52,7 @@ namespace Halide {
 
         // Failing that, assume it's whatever this library was built for, with no options
         #ifdef __arm__
-        return "armv7l";
+        return "arm";
         #endif
 
         #ifdef __x86_64__
@@ -737,10 +737,12 @@ namespace Halide {
                     std::string c_name = "./" + name + ".c";
                     snprintf(cmd1, 1024, "g++ -c -O3 %s -fPIC -o %s", c_name.c_str(), obj_name.c_str());
                 } else {
+                    bool use_arm = false;
+		    if (getenv("HL_TARGET") && getenv("HL_TARGET") == std::string("arm")) use_arm = true;
                     std::string bc_name = "./" + name + ".bc";
                     snprintf(cmd1, 1024, 
                              "opt -O3 -always-inline %s | llc -O3 -relocation-model=pic %s -filetype=obj > %s", 
-                             bc_name.c_str(), use_avx() ? "-mcpu=corei7 -mattr=+avx" : "", obj_name.c_str());
+                             bc_name.c_str(), use_avx() ? "-mcpu=corei7 -mattr=+avx" : (use_arm ? "-mcpu=cortex-a9 -mattr=+neon" : ""), obj_name.c_str());
                 }
                 snprintf(cmd2, 1024, "gcc -shared %s -o %s", obj_name.c_str(), so_name.c_str());
                 fprintf(stderr, "%s\n", cmd1);

@@ -2,11 +2,11 @@ GXX ?= g++
 
 PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
 ifeq ($(HL_TARGET),ptx)
-  #SCHEDULE=103
+  SCHEDULE=2
   CUDA_LFLAGS=-L/usr/local/cuda/lib -lcuda
   CPPFLAGS=-DUSE_GPU=1
 else
-  #SCHEDULE=12
+  SCHEDULE=0
 endif
 
 all: filter
@@ -16,7 +16,7 @@ bilateral_grid: ../../cpp_bindings/ bilateral_grid.cpp
 	$(GXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -o bilateral_grid  -lpthread -ldl
 
 bilateral_grid.bc: bilateral_grid bilateral_grid.cpp
-	./bilateral_grid 8
+	./bilateral_grid 8 ${SCHEDULE}
 
 bilateral_grid.o: bilateral_grid.bc
 	../../llvm/Release+Asserts/bin/opt -O3 bilateral_grid.bc | ../../llvm/Release+Asserts/bin/llc -O3 -filetype=obj -o bilateral_grid.o
