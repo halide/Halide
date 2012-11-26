@@ -1,6 +1,9 @@
+#include <iostream>
+#include "IRPrinter.h"
 #include "CodeGen.h"
 #include "llvm/Analysis/Verifier.h"
 #include "IROperator.h"
+#include "Util.h"
 
 namespace HalideInternal {
 
@@ -13,6 +16,7 @@ namespace HalideInternal {
     }
 
     void SymbolTable::push(string name, Value *value) {
+        value->setName(name);
         table[name].push(value);
     }
 
@@ -21,22 +25,167 @@ namespace HalideInternal {
         table[name].pop();
     }
 
-    CodeGen::CodeGen(Stmt stmt, string name, string target_triple) : builder(context) {
+    CodeGen::CodeGen() : builder(context) {
+        // Define some types
+        void_t = llvm::Type::getVoidTy(context);
+        i1 = llvm::Type::getInt1Ty(context);
+        i8 = llvm::Type::getInt8Ty(context);
+        i16 = llvm::Type::getInt16Ty(context);
+        i32 = llvm::Type::getInt32Ty(context);
+        i64 = llvm::Type::getInt64Ty(context);
+        f16 = llvm::Type::getHalfTy(context);
+        f32 = llvm::Type::getFloatTy(context);
+        f64 = llvm::Type::getDoubleTy(context);
+    }
+
+    void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args, string target_triple) {
+        // Make a new module (TODO: and possibly leak the old one?)
         module = new Module(name.c_str(), context);
 
-        llvm::Type *void_t = llvm::Type::getVoidTy(context);
-        FunctionType *func_t = FunctionType::get(void_t, void_t, false);
+        // Start the module off with a definition of a buffer_t
+        define_buffer_t();
+
+        // Now deduce the types of the arguments to our function
+        vector<llvm::Type *> arg_types(args.size());
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_buffer) {
+                arg_types[i] = buffer_t->getPointerTo();
+            } else {
+                arg_types[i] = llvm_type_of(args[i].type);
+            }
+        }
+
+        // Make our function
+        FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
         function = Function::Create(func_t, Function::ExternalLinkage, name, module);
 
+        // Make the initial basic block
         block = BasicBlock::Create(context, "entry", function);
         builder.SetInsertPoint(block);
+
+        // Put the arguments in the symbol table
+        {
+            size_t i = 0;
+            for (Function::arg_iterator iter = function->arg_begin();
+                 iter != function->arg_end();
+                 iter++) {                        
+
+                if (args[i].is_buffer) {
+                    unpack_buffer(args[i].name, iter);
+                } else {
+                    symbol_table.push(args[i].name, iter);
+                }
+                i++;
+            }
+        }
 
         // Ok, we have a module, function, context, and a builder
         // pointing at a brand new basic block. We're good to go.
         stmt.accept(this);
 
+        // Now we need to end the function
+        builder.CreateRetVoid();
+
         // Now verify the function is ok
         llvm::verifyFunction(*function);
+    }
+
+    // Take an llvm Value representing a pointer to a buffer_t,
+    // and populate the symbol table with its constituent parts
+    void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
+        symbol_table.push(name + ".host", buffer_host(buffer));
+        symbol_table.push(name + ".dev", buffer_dev(buffer));
+        symbol_table.push(name + ".host_dirty", buffer_host_dirty(buffer));
+        symbol_table.push(name + ".dev_dirty", buffer_dev_dirty(buffer));
+        symbol_table.push(name + ".extent.0", buffer_extent(buffer, 0));
+        symbol_table.push(name + ".extent.1", buffer_extent(buffer, 1));
+        symbol_table.push(name + ".extent.2", buffer_extent(buffer, 2));
+        symbol_table.push(name + ".extent.3", buffer_extent(buffer, 3));
+        symbol_table.push(name + ".stride.0", buffer_stride(buffer, 0));
+        symbol_table.push(name + ".stride.1", buffer_stride(buffer, 1));
+        symbol_table.push(name + ".stride.2", buffer_stride(buffer, 2));
+        symbol_table.push(name + ".stride.3", buffer_stride(buffer, 3));
+        symbol_table.push(name + ".min.0", buffer_min(buffer, 0));
+        symbol_table.push(name + ".min.1", buffer_min(buffer, 1));
+        symbol_table.push(name + ".min.2", buffer_min(buffer, 2));
+        symbol_table.push(name + ".min.3", buffer_min(buffer, 3));
+        symbol_table.push(name + ".elem_size", buffer_elem_size(buffer));
+    }
+
+    // Add a definition of buffer_t to the module if it isn't already there
+    void CodeGen::define_buffer_t() {
+        buffer_t = module->getTypeByName("struct.buffer_t");
+        if (!buffer_t) {
+            buffer_t = StructType::create(context, "struct.buffer_t");
+        }
+
+        vector<llvm::Type *> fields;
+        fields.push_back(i8->getPointerTo());
+        fields.push_back(i64);
+        fields.push_back(i8);
+        fields.push_back(i8);
+
+        ArrayType* i32x4 = ArrayType::get(i32, 4);        
+        fields.push_back(i32x4); // extent
+        fields.push_back(i32x4); // stride
+        fields.push_back(i32x4); // min
+        fields.push_back(i32); // elem_size
+        if (buffer_t->isOpaque()) {
+            buffer_t->setBody(fields, false);
+        }
+    }
+       
+    // Given an llvm value representing a pointer to a buffer_t, extract various subfields
+    Value *CodeGen::buffer_host(Value *buffer) {
+        Value *ptr = builder.CreateConstGEP2_32(buffer, 0, 0);
+        return builder.CreateLoad(ptr);
+    }
+
+    Value *CodeGen::buffer_dev(Value *buffer) {
+        Value *ptr = builder.CreateConstGEP2_32(buffer, 0, 1);
+        return builder.CreateLoad(ptr);
+    }
+
+    Value *CodeGen::buffer_host_dirty(Value *buffer) {
+        Value *ptr = builder.CreateConstGEP2_32(buffer, 0, 2);
+        return builder.CreateLoad(ptr);
+    }
+
+    Value *CodeGen::buffer_dev_dirty(Value *buffer) {
+        Value *ptr = builder.CreateConstGEP2_32(buffer, 0, 3);
+        return builder.CreateLoad(ptr);
+    }
+
+    Value *CodeGen::buffer_extent(Value *buffer, int i) {
+        llvm::Value *zero = ConstantInt::get(i32, 0);
+        llvm::Value *field = ConstantInt::get(i32, 4);
+        llvm::Value *idx = ConstantInt::get(i32, i);
+        vector<llvm::Value *> args = vec(zero, field, idx);
+        Value *ptr = builder.CreateGEP(buffer, args);
+        return builder.CreateLoad(ptr);
+    }
+
+    Value *CodeGen::buffer_stride(Value *buffer, int i) {
+        llvm::Value *zero = ConstantInt::get(i32, 0);
+        llvm::Value *field = ConstantInt::get(i32, 5);
+        llvm::Value *idx = ConstantInt::get(i32, i);
+        vector<llvm::Value *> args = vec(zero, field, idx);
+        Value *ptr = builder.CreateGEP(buffer, args);
+        return builder.CreateLoad(ptr);
+    }
+
+    Value *CodeGen::buffer_min(Value *buffer, int i) {
+        llvm::Value *zero = ConstantInt::get(i32, 0);
+        llvm::Value *field = ConstantInt::get(i32, 6);
+        llvm::Value *idx = ConstantInt::get(i32, i);
+        vector<llvm::Value *> args = vec(zero, field, idx);
+        Value *ptr = builder.CreateGEP(buffer, args);
+        return builder.CreateLoad(ptr);
+    }
+
+    Value *CodeGen::buffer_elem_size(Value *buffer) {
+        Value *ptr = builder.CreateConstGEP2_32(buffer, 0, 7);
+        return builder.CreateLoad(ptr);
     }
 
     llvm::Type *CodeGen::llvm_type_of(Type t) {
@@ -44,17 +193,17 @@ namespace HalideInternal {
             if (t.is_float()) {
                 switch (t.bits) {
                 case 16:
-                    return llvm::Type::getHalfTy(context);
+                    return f16;
                 case 32:
-                    return llvm::Type::getFloatTy(context);
+                    return f32;
                 case 64:
-                    return llvm::Type::getDoubleTy(context);
+                    return f64;
                 default:
                     assert(false && "There is no llvm type matching this floating-point bit width");
                     return NULL;
                 }
             } else {
-                return llvm::Type::getIntNTy(context, t.width);
+                return llvm::Type::getIntNTy(context, t.bits);
             }
         } else {
             llvm::Type *element_type = llvm_type_of(Type::element_of(t));
@@ -63,6 +212,8 @@ namespace HalideInternal {
     }
 
     Value *CodeGen::codegen(Expr e) {
+        assert(e.defined());
+        std::cout << "Codegen: " << e.type() << ", " << e << std::endl;
         value = NULL;
         e.accept(this);
         assert(value && "Codegen of an expr did not produce an llvm value");
@@ -70,13 +221,14 @@ namespace HalideInternal {
     }
 
     void CodeGen::codegen(Stmt s) {
+        assert(s.defined());
+        std::cout << "Codegen: " << s;
         value = NULL;
         s.accept(this);
     }
 
     void CodeGen::visit(const IntImm *op) {
-        IntegerType *i32_t = llvm::Type::getInt32Ty(context);
-        value = ConstantInt::getSigned(i32_t, op->value);
+        value = ConstantInt::getSigned(i32, op->value);
     }
 
     void CodeGen::visit(const FloatImm *op) {
@@ -170,7 +322,8 @@ namespace HalideInternal {
     void CodeGen::visit(const EQ *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        if (op->type.is_float()) {
+        Type t = op->a.type();
+        if (t.is_float()) {
             value = builder.CreateFCmpOEQ(a, b);
         } else {
             value = builder.CreateICmpEQ(a, b);
@@ -180,7 +333,8 @@ namespace HalideInternal {
     void CodeGen::visit(const NE *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        if (op->type.is_float()) {
+        Type t = op->a.type();
+        if (t.is_float()) {
             value = builder.CreateFCmpONE(a, b);
         } else {
             value = builder.CreateICmpNE(a, b);
@@ -190,9 +344,10 @@ namespace HalideInternal {
     void CodeGen::visit(const LT *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        if (op->type.is_float()) {
+        Type t = op->a.type();
+        if (t.is_float()) {
             value = builder.CreateFCmpOLT(a, b);
-        } else if (op->type.is_int()) {
+        } else if (t.is_int()) {
             value = builder.CreateICmpSLT(a, b);
         } else {
             value = builder.CreateICmpULT(a, b);
@@ -202,9 +357,10 @@ namespace HalideInternal {
     void CodeGen::visit(const LE *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        if (op->type.is_float()) {
+        Type t = op->a.type();
+        if (t.is_float()) {
             value = builder.CreateFCmpOLE(a, b);
-        } else if (op->type.is_int()) {
+        } else if (t.is_int()) {
             value = builder.CreateICmpSLE(a, b);
         } else {
             value = builder.CreateICmpULE(a, b);
@@ -214,9 +370,10 @@ namespace HalideInternal {
     void CodeGen::visit(const GT *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        if (op->type.is_float()) {
+        Type t = op->a.type();
+        if (t.is_float()) {
             value = builder.CreateFCmpOGT(a, b);
-        } else if (op->type.is_int()) {
+        } else if (t.is_int()) {
             value = builder.CreateICmpSGT(a, b);
         } else {
             value = builder.CreateICmpUGT(a, b);
@@ -226,9 +383,10 @@ namespace HalideInternal {
     void CodeGen::visit(const GE *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        if (op->type.is_float()) {
+        Type t = op->a.type();
+        if (t.is_float()) {
             value = builder.CreateFCmpOGE(a, b);
-        } else if (op->type.is_int()) {
+        } else if (t.is_int()) {
             value = builder.CreateICmpSGE(a, b);
         } else {
             value = builder.CreateICmpUGE(a, b);
@@ -255,7 +413,7 @@ namespace HalideInternal {
 
     Value *CodeGen::codegen_buffer_pointer(string buffer, Type type, Value *index) {
         // Find the base address from the symbol table
-        Value *base_address = symbol_table.get(buffer);
+        Value *base_address = symbol_table.get(buffer + ".host");
         llvm::Type *base_address_type = base_address->getType();
         unsigned address_space = base_address_type->getPointerAddressSpace();
 
@@ -263,7 +421,7 @@ namespace HalideInternal {
 
         // If the type doesn't match the expected type, we need to pointer cast
         if (load_type != base_address_type) {
-            printf("Bit-casting pointer type\n");
+            std::cout << "Bit-casting pointer type" << std::endl;
             base_address = builder.CreatePointerCast(base_address, load_type);            
         }
 
@@ -299,6 +457,7 @@ namespace HalideInternal {
     }
 
     void CodeGen::visit(const Ramp *op) {        
+        assert(false && "Ramp not yet implemented");
     }
 
     void CodeGen::visit(const Call *op) {
@@ -307,30 +466,53 @@ namespace HalideInternal {
     }
 
     void CodeGen::visit(const Let *op) {
+        symbol_table.push(op->name, codegen(op->value));
+        value = codegen(op->body);
+        symbol_table.pop(op->name);
     }
 
     void CodeGen::visit(const LetStmt *op) {
+        symbol_table.push(op->name, codegen(op->value));
+        codegen(op->body);
+        symbol_table.pop(op->name);
     }
 
     void CodeGen::visit(const PrintStmt *op) {
+        assert(false && "PrintStmt not yet implemented");
     }
 
     void CodeGen::visit(const AssertStmt *op) {
+        assert(false && "AssertStmt not yet implemented");
     }
 
     void CodeGen::visit(const Pipeline *op) {
+        codegen(op->produce);
+        if (op->update.defined()) codegen(op->update);
+        codegen(op->consume);
     }
 
     void CodeGen::visit(const For *op) {
+        assert(false && "For not yet implemented");
     }
 
     void CodeGen::visit(const Store *op) {
-    }
-
-    void CodeGen::visit(const Allocate *op) {
+        Value *v = codegen(op->value);
+        // Scalar
+        if (op->index.type().is_scalar()) {
+            Value *index = codegen(op->index);
+            Value *ptr = codegen_buffer_pointer(op->buffer, op->value.type(), index);
+            builder.CreateStore(v, ptr);
+        } else {
+            // Aligned dense vector store
+                        
+            // Scatter
+            assert(false && "Vector store not yet implemented");
+        }
     }
 
     void CodeGen::visit(const Block *op) {
+        codegen(op->first);
+        if (op->rest.defined()) codegen(op->rest);
     }        
 
     void CodeGen::visit(const Realize *op) {
@@ -341,9 +523,4 @@ namespace HalideInternal {
         assert(false && "Provide encountered during codegen");
     }
 
-    void CodeGen::test() {
-        // corner cases to test:
-        // signed mod by power of two, non-power of two
-        // loads of mismatched types (e.g. load a float from something allocated as an array of ints)
-    }
 }
