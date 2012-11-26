@@ -2,6 +2,7 @@
 #define IR_PRINTER_H
 
 #include "IRVisitor.h"
+#include "Type.h"
 #include <ostream>
 
 namespace HalideInternal {
@@ -59,6 +60,7 @@ namespace HalideInternal {
 
     ostream &operator<<(ostream &stream, Expr);
     ostream &operator<<(ostream &stream, Stmt);
+    ostream &operator<<(ostream &stream, Type);
 }
 
 #endif
