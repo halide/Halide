@@ -4,13 +4,15 @@
 #include <llvm/Value.h>
 #include <llvm/Module.h>
 #include <llvm/Function.h>
-#include <llvm/Support/IRBuilder.h>
+#include <llvm/IRBuilder.h>
 
 #include <map>
 #include <stack>
 #include <string>
+#include <vector>
 
 #include "IRVisitor.h"
+#include "Argument.h"
 #include "IR.h"
 
 namespace HalideInternal {
@@ -18,6 +20,7 @@ namespace HalideInternal {
     using std::map;
     using std::string;
     using std::stack;
+    using std::vector;
 
     class SymbolTable {
     private:
@@ -29,7 +32,16 @@ namespace HalideInternal {
     };
 
     class CodeGen : public IRVisitor {
+    public:
+        CodeGen();
+
+        void compile_to_file(string name);
+        void *compile_to_function_pointer();
+
     protected:
+
+        void compile(Stmt stmt, string name, const vector<Argument> &args, string target_triple);
+
         // Codegen state for llvm
         // Current module, function, builder, context, and value
         llvm::Module *module;
@@ -42,12 +54,29 @@ namespace HalideInternal {
 
         llvm::Value *codegen(Expr);
         void codegen(Stmt);
-        
+
+        llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
+        llvm::StructType *buffer_t;
+
+        // Take an llvm Value representing a pointer to a buffer_t,
+        // and populate the symbol table with its constituent parts
+        void unpack_buffer(string name, llvm::Value *buffer);
+
+        // Add a definition of buffer_t to the module if it isn't already there
+        void define_buffer_t();
+       
+        // Given an llvm value representing a pointer to a buffer_t, extract various subfields
+        llvm::Value *buffer_host(llvm::Value *);
+        llvm::Value *buffer_dev(llvm::Value *);
+        llvm::Value *buffer_host_dirty(llvm::Value *);
+        llvm::Value *buffer_dev_dirty(llvm::Value *);
+        llvm::Value *buffer_min(llvm::Value *, int);
+        llvm::Value *buffer_extent(llvm::Value *, int);
+        llvm::Value *buffer_stride(llvm::Value *, int);
+        llvm::Value *buffer_elem_size(llvm::Value *);
+
         llvm::Value *codegen_buffer_pointer(string buffer, Type t, llvm::Value *index);
         llvm::Type *llvm_type_of(Type t);
-
-    public:
-        CodeGen(Stmt stmt, string name, string target_triple);
 
         virtual void visit(const IntImm *);
         virtual void visit(const FloatImm *);
@@ -81,11 +110,9 @@ namespace HalideInternal {
         virtual void visit(const For *);
         virtual void visit(const Store *);
         virtual void visit(const Provide *);
-        virtual void visit(const Allocate *);
+        virtual void visit(const Allocate *) = 0; // Allocate is architecture-specific
         virtual void visit(const Realize *);
         virtual void visit(const Block *);        
-
-        static void test();
     };
 
 }
