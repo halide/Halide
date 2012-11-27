@@ -1,6 +1,12 @@
 #include "CodeGen_X86.h"
 #include "IROperator.h"
 #include <iostream>
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/IRReader.h"
+#include "buffer.h"
+
+extern unsigned char builtins_bitcode_x86[];
+extern int builtins_bitcode_x86_length;
 
 namespace HalideInternal {
 
@@ -12,7 +18,25 @@ namespace HalideInternal {
     }
 
     void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) {
-        CodeGen::compile(stmt, name, args, "x86_64-unknown-linux-gnu");
+        assert(builtins_bitcode_x86 && "initial module for x86 is NULL");
+
+        // Wrap the initial module in a memory buffer
+        StringRef sb = StringRef((char *)builtins_bitcode_x86, builtins_bitcode_x86_length);
+        MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
+
+        // Parse it
+        module = ParseBitcodeFile(bitcode_buffer, context);
+
+        // Fix the target triple
+
+        // For now we'll just leave it as whatever the module was
+        // compiled as. This assumes that we're not cross-compiling
+        // between different x86 operating systems
+        //module->setTargetTriple( ... );
+
+        // Pass to the generic codegen
+        CodeGen::compile(stmt, name, args);
+        delete bitcode_buffer;
     }
 
 
@@ -29,7 +53,7 @@ namespace HalideInternal {
 
         Value *size = codegen(alloc->size);
         llvm::Type *llvm_type = llvm_type_of(alloc->type);
-        Value *ptr;
+        Value *ptr;                
 
         if (on_stack) {
             // Do a 32-byte aligned alloca
@@ -40,19 +64,22 @@ namespace HalideInternal {
             ptr = builder.CreatePointerCast(ptr, llvm_type->getPointerTo());
         } else {
             // call malloc
-            assert(false && "Calling malloc not yet implemented");
+            Function *malloc_fn = module->getFunction("fast_malloc");
+            Value *sz = builder.CreateIntCast(size, i64, false);
+            ptr = builder.CreateCall(malloc_fn, sz);
         }
 
         // In the future, we may want to construct an entire buffer_t here
         string allocation_name = alloc->buffer + ".host";
 
-        symbol_table.push(allocation_name, ptr);        
+        symbol_table.push(allocation_name, ptr);
         codegen(alloc->body);
         symbol_table.pop(allocation_name);
 
         if (!on_stack) {
             // call free
-            assert(false && "Calling free not yet implemented");
+            Function *free_fn = module->getFunction("fast_free");
+            builder.CreateCall(free_fn, ptr);
         }
     }
     
@@ -63,19 +90,40 @@ namespace HalideInternal {
 
         // A simple function with no arguments
         Argument buffer_arg = {"buf", true, Int(0)};
-        Argument scalar_arg = {"alpha", false, Float(32)};
-        vector<Argument> args(2);
+        Argument float_arg = {"alpha", false, Float(32)};
+        Argument int_arg = {"beta", false, Int(32)};
+        vector<Argument> args(3);
         args[0] = buffer_arg;
-        args[1] = scalar_arg;
+        args[1] = float_arg;
+        args[2] = int_arg;
         Expr x = new Var(Int(32), "x");
         Expr alpha = new Var(Float(32), "alpha");
+        Expr beta = new Var(Int(32), "beta");
         Expr e = new Select(alpha > 4.0f, 3, 2);
         Stmt s = new Store("buf", e, x);
-        s = new LetStmt("x", 4, s);
-        s = new Allocate("tmp", Int(32), 127, s);
+        s = new LetStmt("x", beta+1, s);
+        s = new Allocate("tmp_stack", Int(32), 127, s);
+        s = new Allocate("tmp_heap", Int(32), 43 * beta, s);
         CodeGen_X86 cg;
         cg.compile(s, "test1", args);
-        cg.module->dump();
+
+        void *ptr = cg.compile_to_function_pointer();
+        typedef void (*fn_type)(::buffer_t *, float, int);
+        fn_type fn = (fn_type)ptr;
+
+        int scratch[16];
+        ::buffer_t buf;
+        memset(&buf, 0, sizeof(buf));
+        buf.host = (uint8_t *)(&scratch[0]);
+
+        memset(&scratch[0], 0, sizeof(scratch));
+        fn(&buf, -32, 0);
+        assert(scratch[1] == 2);
+        fn(&buf, 37.32f, 2);
+        assert(scratch[3] == 3);
+        fn(&buf, 4.0f, 1);
+        assert(scratch[2] == 2);
+
     }
 
 }
