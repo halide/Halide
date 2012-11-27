@@ -5,6 +5,10 @@
 #include <llvm/Module.h>
 #include <llvm/Function.h>
 #include <llvm/IRBuilder.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/PassManager.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/IPO.h>
 
 #include <map>
 #include <stack>
@@ -40,23 +44,33 @@ namespace HalideInternal {
 
     protected:
 
-        void compile(Stmt stmt, string name, const vector<Argument> &args, string target_triple);
+        void compile(Stmt stmt, string name, const vector<Argument> &args);
 
-        // Codegen state for llvm
+        // Codegen state for llvm:
         // Current module, function, builder, context, and value
         llvm::Module *module;
         llvm::Function *function;
         llvm::LLVMContext context;
         llvm::BasicBlock *block;
         llvm::IRBuilder<> builder;
-        SymbolTable symbol_table;
         llvm::Value *value;
+        
+        // All the values in scope
+        SymbolTable symbol_table;
 
-        llvm::Value *codegen(Expr);
-        void codegen(Stmt);
-
+        // Some useful types
         llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
         llvm::StructType *buffer_t;
+
+        // JIT state
+        string function_name;
+        llvm::ExecutionEngine *execution_engine;
+        llvm::FunctionPassManager *function_pass_manager;
+        llvm::PassManager *module_pass_manager;
+
+        // Call these to recursively visit sub-expressions and sub-statements
+        llvm::Value *codegen(Expr);
+        void codegen(Stmt);
 
         // Take an llvm Value representing a pointer to a buffer_t,
         // and populate the symbol table with its constituent parts

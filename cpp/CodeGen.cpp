@@ -4,6 +4,8 @@
 #include "llvm/Analysis/Verifier.h"
 #include "IROperator.h"
 #include "Util.h"
+#include "llvm/ExecutionEngine/JIT.h"
+#include "llvm/Support/TargetSelect.h"
 
 namespace HalideInternal {
 
@@ -25,7 +27,8 @@ namespace HalideInternal {
         table[name].pop();
     }
 
-    CodeGen::CodeGen() : builder(context) {
+    CodeGen::CodeGen() : module(NULL), builder(context), 
+                         execution_engine(NULL), function_pass_manager(NULL), module_pass_manager(NULL) {
         // Define some types
         void_t = llvm::Type::getVoidTy(context);
         i1 = llvm::Type::getInt1Ty(context);
@@ -38,9 +41,10 @@ namespace HalideInternal {
         f64 = llvm::Type::getDoubleTy(context);
     }
 
-    void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args, string target_triple) {
+    void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
         // Make a new module (TODO: and possibly leak the old one?)
-        module = new Module(name.c_str(), context);
+        //module = new Module(name.c_str(), context);
+        assert(module && "The CodeGen subclass should have made an initial module before calling CodeGen::compile");
 
         // Start the module off with a definition of a buffer_t
         define_buffer_t();
@@ -56,6 +60,7 @@ namespace HalideInternal {
         }
 
         // Make our function
+        function_name = name;
         FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
         function = Function::Create(func_t, Function::ExternalLinkage, name, module);
 
@@ -88,6 +93,45 @@ namespace HalideInternal {
 
         // Now verify the function is ok
         llvm::verifyFunction(*function);
+    }
+
+    void *CodeGen::compile_to_function_pointer() {
+        assert(module && "No module defined. Must call compile before calling compile_to_function_pointer");
+               
+        // Create the execution engine if it hasn't already been done
+        if (!execution_engine) {
+            InitializeNativeTarget();
+            std::string error_string;
+            execution_engine = ExecutionEngine::createJIT(module, &error_string, NULL, CodeGenOpt::Aggressive);
+            if (!execution_engine) std::cout << error_string << std::endl;
+            assert(execution_engine && "Couldn't create execution engine");
+
+            function_pass_manager = new FunctionPassManager(module);
+            module_pass_manager = new PassManager();
+
+            PassManagerBuilder b;
+            b.OptLevel = 3;
+            b.Inliner = createAlwaysInlinerPass();
+            b.populateFunctionPassManager(*function_pass_manager);
+            b.populateModulePassManager(*module_pass_manager);
+
+        } else { 
+            std::cout << "Adding module to existing execution engine" << std::endl;
+            // Execution engine is already created. Add this module to it.
+            execution_engine->addModule(module);
+        }            
+                
+        Function *fn = module->getFunction(function_name);
+        assert(fn && "Could not find function inside llvm module");
+        
+        // Run optimization passes
+        module_pass_manager->run(*module);
+        function_pass_manager->doInitialization();
+        function_pass_manager->run(*fn);
+        function_pass_manager->doFinalization();
+        module_pass_manager->run(*module);
+
+        return execution_engine->getPointerToFunction(fn);
     }
 
     // Take an llvm Value representing a pointer to a buffer_t,
