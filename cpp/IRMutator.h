@@ -30,6 +30,7 @@ namespace HalideInternal {
         Expr expr;
         Stmt stmt;
 
+    protected:
         virtual void visit(const IntImm *);
         virtual void visit(const FloatImm *);
         virtual void visit(const Cast *);

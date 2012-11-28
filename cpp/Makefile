@@ -3,7 +3,7 @@ CXX_FLAGS = `llvm-config --cflags`
 LLVM_DIR = ../llvm
 LIBS = -L ../llvm/Release+Asserts/lib `llvm-config --libs all`
 
-OBJECTS = CodeGen.o CodeGen_X86.o IR.o IRMutator.o IRPrinter.o IRVisitor.o
+OBJECTS = CodeGen.o CodeGen_X86.o IR.o IRMutator.o IRPrinter.o IRVisitor.o CodeGen_C.o Substitute.o
 INITIAL_MODULES = architecture.x86.initmod.o
 
 all: libHalide.a
