@@ -11,12 +11,18 @@ namespace HalideInternal {
 
     // Serialize a chunk of IR into human-readable form
     class IRPrinter : public IRVisitor {
-    private:
+    public:
+        IRPrinter(ostream &);
+        void print(Expr);
+        void print(Stmt);
+
+        static void test();
+
+    protected:
         ostream &stream;
         int indent;
-    public:
-        IRPrinter(Expr, ostream &);
-        IRPrinter(Stmt, ostream &);
+
+        void do_indent();
 
         void visit(const IntImm *);
         void visit(const FloatImm *);
@@ -55,7 +61,6 @@ namespace HalideInternal {
         void visit(const Realize *);
         void visit(const Block *);
 
-        static void test();
     };
 
     ostream &operator<<(ostream &stream, Expr);

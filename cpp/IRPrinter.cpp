@@ -70,25 +70,30 @@ namespace HalideInternal {
     }
 
     ostream &operator<<(ostream &stream, Expr ir) {
-        IRPrinter p(ir, stream);
+        IRPrinter p(stream);
+        p.print(ir);
         return stream;
     }
 
     ostream &operator<<(ostream &stream, Stmt ir) {
-        IRPrinter p(ir, stream);
+        IRPrinter p(stream);
+        p.print(ir);
         return stream;
     }
 
-    void do_indent(ostream &out, int indent) {
-        for (int i = 0; i < indent; i++) out << ' ';
-    }
+    IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {}
 
-    IRPrinter::IRPrinter(Expr ir, ostream &s) : stream(s), indent(0) {
+    void IRPrinter::print(Expr ir) {
         ir.accept(this);
     }
 
-    IRPrinter::IRPrinter(Stmt ir, ostream &s) : stream(s), indent(0) {
+    void IRPrinter::print(Stmt ir) {
         ir.accept(this);
+    }
+
+
+    void IRPrinter::do_indent() {
+        for (int i = 0; i < indent; i++) stream << ' ';
     }
     
     void IRPrinter::visit(const IntImm *op) {
@@ -101,7 +106,7 @@ namespace HalideInternal {
     
     void IRPrinter::visit(const Cast *op) { 
         stream << op->type << '(';
-        op->value.accept(this);
+        print(op->value);
         stream << ')';
     }
     
@@ -112,163 +117,163 @@ namespace HalideInternal {
     
     void IRPrinter::visit(const Add *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " + ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const Sub *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " - ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const Mul *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << "*";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const Div *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << "/";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
             
     void IRPrinter::visit(const Mod *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " % ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const Min *op) {
         stream << "min(";
-        op->a.accept(this);
+        print(op->a);
         stream << ", ";
-        op->b.accept(this);
+        print(op->b);
         stream << ")";
     }
 
     void IRPrinter::visit(const Max *op) {
         stream << "max(";
-        op->a.accept(this);
+        print(op->a);
         stream << ", ";
-        op->b.accept(this);
+        print(op->b);
         stream << ")";
     }
 
     void IRPrinter::visit(const EQ *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " == ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const NE *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " != ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const LT *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " < ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const LE *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " <= ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const GT *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " > ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const GE *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " >= ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const And *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " && ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const Or *op) {
         stream << '(';
-        op->a.accept(this);
+        print(op->a);
         stream << " || ";
-        op->b.accept(this);
+        print(op->b);
         stream << ')';
     }
 
     void IRPrinter::visit(const Not *op) {
         stream << '!';
-        op->a.accept(this);
+        print(op->a);
     }
 
     void IRPrinter::visit(const Select *op) {
         stream << "select(";
-        op->condition.accept(this);
+        print(op->condition);
         stream << ", ";
-        op->true_value.accept(this);
+        print(op->true_value);
         stream << ", ";
-        op->false_value.accept(this);
+        print(op->false_value);
         stream << ")";
     }
 
     void IRPrinter::visit(const Load *op) {
         stream << op->buffer << "[";
-        op->index.accept(this);
+        print(op->index);
         stream << "]";
     }
 
     void IRPrinter::visit(const Ramp *op) {
         stream << "ramp(";
-        op->base.accept(this);
+        print(op->base);
         stream << ", ";
-        op->stride.accept(this);
+        print(op->stride);
         stream << ", " << op->width << ")";
     }
 
     void IRPrinter::visit(const Broadcast *op) {
         stream << "broadcast(";
-        op->value.accept(this);
+        print(op->value);
         stream << ", " << op->width << ")";
     }
 
     void IRPrinter::visit(const Call *op) {
         stream << op->buffer << "(";
         for (size_t i = 0; i < op->args.size(); i++) {
-            op->args[i].accept(this);
+            print(op->args[i]);
             if (i < op->args.size() - 1) {
                 stream << ", ";
             }
@@ -278,135 +283,139 @@ namespace HalideInternal {
 
     void IRPrinter::visit(const Let *op) {
         stream << "(let " << op->name << " = ";
-        op->value.accept(this);
+        print(op->value);
         stream << " in ";
-        op->body.accept(this);
+        print(op->body);
         stream << ")";
     }
 
     void IRPrinter::visit(const LetStmt *op) {
-        do_indent(stream, indent);
+        do_indent();
         stream << "let " << op->name << " = ";
-        op->value.accept(this);
+        print(op->value);
         stream << endl;
 
-        do_indent(stream, indent);
-        op->body.accept(this);
+        do_indent();
+        print(op->body);
     }
 
     void IRPrinter::visit(const PrintStmt *op) {
-        do_indent(stream, indent);
+        do_indent();
         stream << "print(" << op->prefix;
         for (size_t i = 0; i < op->args.size(); i++) {
             stream << ", ";
-            op->args[i].accept(this);
+            print(op->args[i]);
         }
         stream << ")" << endl;
     }
 
     void IRPrinter::visit(const AssertStmt *op) {
-        do_indent(stream, indent);
+        do_indent();
         stream << "assert(";
-        op->condition.accept(this);
+        print(op->condition);
         stream << ", \"" << op->message << "\")" << endl;
     }
 
     void IRPrinter::visit(const Pipeline *op) {
-        indent += 2;
 
-        do_indent(stream, indent - 2);
+
+        do_indent();
         stream << "produce " << op->buffer << " {" << endl;
-        op->produce.accept(this);
+        indent += 2;
+        print(op->produce);
+        indent -= 2;
 
         if (op->update.defined()) {
-            do_indent(stream, indent - 2);
+            do_indent();
             stream << "} update {" << endl;
-            op->update.accept(this);            
+            indent += 2;
+            print(op->update);
+            indent -= 2;
         }
         
-        do_indent(stream, indent - 2);
+        do_indent();
         stream << "} consume {" << endl;
-        op->consume.accept(this);
-        
-        do_indent(stream, indent - 2);        
-        stream << "}" << endl;
-
+        indent += 2;
+        print(op->consume);
         indent -= 2;
+
+        do_indent();
+        stream << "}" << endl;
     }
 
     void IRPrinter::visit(const For *op) {
 
-        do_indent(stream, indent);
+        do_indent();
         stream << op->for_type << " (" << op->name << ", ";
-        op->min.accept(this);
+        print(op->min);
         stream << ", ";
-        op->extent.accept(this);
+        print(op->extent);
         stream << ") {" << endl;
         
         indent += 2;
-        op->body.accept(this);
+        print(op->body);
         indent -= 2;
 
-        do_indent(stream, indent);
+        do_indent();
         stream << "}" << endl;
     }
 
     void IRPrinter::visit(const Store *op) {
-        do_indent(stream, indent);
+        do_indent();
         stream << op->buffer << "[";
-        op->index.accept(this);
+        print(op->index);
         stream << "] = ";
-        op->value.accept(this);
+        print(op->value);
         stream << endl;
     }
 
     void IRPrinter::visit(const Provide *op) {
-        do_indent(stream, indent);
+        do_indent();
         stream << op->buffer << "(";
         for (size_t i = 0; i < op->args.size(); i++) {
-            op->args[i].accept(this);
+            print(op->args[i]);
             if (i < op->args.size() - 1) stream << ", ";
         }
         stream << ") = ";
-        op->value.accept(this);
+        print(op->value);
         stream << endl;
     }
 
     void IRPrinter::visit(const Allocate *op) {
-        do_indent(stream, indent);
+        do_indent();
         stream << "allocate " << op->buffer << "[" << op->type << " * ";
-        op->size.accept(this);
+        print(op->size);
         stream << "]" << endl;
-        op->body.accept(this);
+        print(op->body);
 
-        do_indent(stream, indent);
+        do_indent();
         stream << "free " << op->buffer << endl;
     }
 
     void IRPrinter::visit(const Realize *op) {
-        do_indent(stream, indent);
+        do_indent();
         stream << "realize " << op->buffer << "(";
         for (size_t i = 0; i < op->bounds.size(); i++) {
             stream << "[";
-            op->bounds[i].first.accept(this);
+            print(op->bounds[i].first);
             stream << ", ";
-            op->bounds[i].second.accept(this);
+            print(op->bounds[i].second);
             stream << "]";
             if (i < op->bounds.size() - 1) stream << ", ";
         }
         stream << ") {" << endl;
 
         indent += 2;
-        op->body.accept(this);
+        print(op->body);
         indent -= 2;
 
-        do_indent(stream, indent);
+        do_indent();
         stream << "}" << endl;
     }
 
     void IRPrinter::visit(const Block *op) {
-        op->first.accept(this);
-        if (op->rest.defined()) op->rest.accept(this);
+        print(op->first);
+        if (op->rest.defined()) print(op->rest);
     }
 
     

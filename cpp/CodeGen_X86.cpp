@@ -88,7 +88,6 @@ namespace HalideInternal {
         // signed mod by power of two, non-power of two
         // loads of mismatched types (e.g. load a float from something allocated as an array of ints)
 
-        // A simple function with no arguments
         Argument buffer_arg = {"buf", true, Int(0)};
         Argument float_arg = {"alpha", false, Float(32)};
         Argument int_arg = {"beta", false, Int(32)};
