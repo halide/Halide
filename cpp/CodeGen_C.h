@@ -9,15 +9,18 @@
 
 namespace HalideInternal {
 
-    using std::string;
     using std::vector;
+    using std::string;
 
-    // This class emits C++ code equivalent to a halide Stmt. It's
-    // mostly the same as an IRPrinter, but some things have to be
-    // handled differently
+    /* This class emits C++ code equivalent to a halide Stmt. It's
+     * mostly the same as an IRPrinter, but it's wrapped in a function
+     * definition, and some things are handled differently to be valid
+     * C++.
+     */
     class CodeGen_C : public IRPrinter {
     public:
-        CodeGen_C(ostream &);
+        CodeGen_C(std::ostream &);
+
         void compile(Stmt stmt, string name, const vector<Argument> &args);
 
         static void test();

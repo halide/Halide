@@ -4,7 +4,8 @@
 #include "IRMutator.h"
 
 namespace HalideInternal {
-    // Substitute an expression for a variable in a stmt or expr
+
+    /* Substitute an expression for a variable in a stmt or expr */
     Expr substitute(string name, Expr replacement, Expr expr);
     Stmt substitute(string name, Expr replacement, Stmt stmt);
 

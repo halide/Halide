@@ -3,8 +3,13 @@
 
 #include <vector>
 
+/* This file contains various utility functions for Halide. */
+
 namespace HalideInternal {
-    // Make small vectors
+
+    /* Build small vectors of up to 6 elements. If we used C++11 and
+     * had vector initializers, this would not be necessary, but we
+     * don't want to rely on C++11 support. */
     template<typename T>
     std::vector<T> vec(T a) {
         std::vector<T> v(1);

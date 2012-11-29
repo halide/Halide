@@ -41,9 +41,10 @@ namespace HalideInternal {
     struct Realize;
     struct Block;
 
-    // A base class for things that need to walk over the IR. The
-    // default implementations just recursively walk over the
-    // children. Override the ones you care about.
+    /* A base class for things that need to walk over the IR. The
+     * default implementations just recursively walk over the
+     * children. Override the ones you care about.
+     */
     class IRVisitor {
     public:
         virtual void visit(const IntImm *);

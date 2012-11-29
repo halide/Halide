@@ -15,21 +15,48 @@ namespace HalideInternal {
     using std::vector;
     using std::pair;
 
+
+    /* The abstract base classes for a node in the Halide IR. */
     struct IRNode {
+
+       /* We use
+        * the visitor pattern to traverse IR nodes throughout the
+        * compiler, so we have a virtual accept method which accepts
+        * visitors.
+        */
         virtual void accept(IRVisitor *v) const = 0;
         IRNode() : ref_count(0) {}
         virtual ~IRNode() {}
+
+        /* These classes are all managed with intrusive reference
+           counting, so we also track a reference count. It's mutable
+           so that we can do reference counting even through const
+           references to IR nodes. */
         mutable int ref_count;
     };
 
+    /* IR nodes are split into expressions and statements. These are
+       similar to expressions and statements in C - expressions
+       represent some value and have some type (e.g. x + 3), and
+       statements are side-effecting pieces of code that do not
+       represent a value (e.g. assert(x > 3)) */
+
+    /* A base class for statement nodes. They have no properties or
+       methods beyond base IR nodes for now */
+    struct BaseStmtNode : public IRNode {
+    };
+
+    /* A base class for expression nodes. They all contain their types */
     struct BaseExprNode : public IRNode {
         Type type;
         BaseExprNode(Type t) : type(t) {}
     };
 
-    struct BaseStmtNode : public IRNode {
-    };
-
+    /* We use the "curiously recurring template pattern" to avoid
+       duplicated code in the IR Nodes. These classes live between the
+       abstract base classes and the actual IR Nodes in the
+       inheritance hierarchy. It provides an implementation of the
+       accept function necessary for the visitor pattern to work. */
     template<typename T>
     struct ExprNode : public BaseExprNode {
         ExprNode(Type t) : BaseExprNode(t) {}
@@ -45,6 +72,9 @@ namespace HalideInternal {
         }
     };
     
+    /* IR nodes are passed around opaque handles to them. This is a
+       base class for those handles. It manages the reference count,
+       and dispatches visitors. */
     struct IRHandle {
     private:
         void incref() {
@@ -81,60 +111,87 @@ namespace HalideInternal {
             return *this;
         }
     public:
+        /* Dispatch to the correct visitor method for this
+         * node. E.g. if this node is actually an Add node, then this
+         * will call v->visit(const Add *) */
         void accept(IRVisitor *v) const {
             node->accept(v);
         }
+        /* Handles can be null. This checks that. */
         bool defined() const {
             return node;
         }
-        // Equality of reference
+        /* Check if two handles point to the same node. This is
+         * equality of reference, not equality of value. */
         bool sameAs(const IRHandle &other) {
             return node == other.node;
         }
     };
 
+    /* A reference-counted handle on an expression node */
     struct Expr : public IRHandle {
         Expr() : IRHandle() {}
         Expr(const BaseExprNode *n) : IRHandle(n) {}
 
-        // Some more constructors for convenience to make constants
-        // TODO: cache these for efficiency
+        /* Some constructors for convenience to make constants. These
+         * can be used implicitly, so that you can pass constants
+         * around and they'll be treated as expressions. */
         Expr(int);
         Expr(float);
 
+        /* Get at the type of this expression node */
         Type type() const {
             return ((BaseExprNode *)node)->type;
         }
 
+        /* Downcast this expression node to its actual type (e.g. Add,
+         * or Select). This returns NULL if the node is not of the
+         * requested type. Example usage:
+         * 
+         * if (const Add *add = node->as<Add>()) {
+         *   // This is an add node
+         * }
+         */
+
         template<typename T> const T *as() const {
-            // If we decide later that rtti is a bad idea, we can
-            // change this method to do something else (e.g. call a
-            // virtual function)
+            /* If we decide later that compiling with rtti is a bad
+             * idea, we can change this method to do something else
+             * (e.g. call a virtual function)
+             */
             return dynamic_cast<const T *>(node);
         }
     };
 
+    /* A reference-counted handle to a statement node. */
     struct Stmt : public IRHandle {
         Stmt() : IRHandle() {}
         Stmt(const BaseStmtNode *n) : IRHandle(n) {}
 
+        /* This dynamically downcasts to an actual statement type, or
+         * returns NULL. See Expr::as for example usage. */
         template<typename T> const T *as() {
             return dynamic_cast<const T *>(node);
         }
     };
 
+    /* The actual IR nodes begin here. Remember that all the Expr
+     * nodes also have a public "type" property */
+
+    /* Integer constants */
     struct IntImm : public ExprNode<IntImm> {
         int value;
 
         IntImm(int v) : ExprNode<IntImm>(Int(32)), value(v) {}
     };
 
+    /* Floating point constants */
     struct FloatImm : public ExprNode<FloatImm> {
         float value;
 
         FloatImm(float v) : ExprNode<FloatImm>(Float(32)), value(v) {}
     };
 
+    /* Cast a node from one type to another */
     struct Cast : public ExprNode<Cast> {
         Expr value;
 
@@ -143,12 +200,16 @@ namespace HalideInternal {
         }
     };
 
+    /* A named variable. Might be a loop variable, function argument,
+     * or something defined by a Let or LetStmt node. */
     struct Var : public ExprNode<Var> {
         string name;
 
         Var(Type t, string n) : ExprNode<Var>(t), name(n) {}
     };
 
+    /* Arithmetic nodes. If applied to vector types, all of these are
+     * done elementwise. */
     struct Add : public ExprNode<Add> {
         Expr a, b;
 
@@ -189,7 +250,10 @@ namespace HalideInternal {
         }
     };
 
-    struct Mod : public ExprNode<Mod> {
+    /* The remainder of a / b. Mostly equivalent to '%' in C, except
+       that the result here is always positive. For floats, this is
+       equivalent to calling fmod. */
+    struct Mod : public ExprNode<Mod> { 
         Expr a, b;
 
         Mod(Expr _a, Expr _b) : ExprNode<Mod>(_a.type()), a(_a), b(_b) {
@@ -199,6 +263,7 @@ namespace HalideInternal {
         }
     };
 
+    /* The lesser of two values. */
     struct Min : public ExprNode<Min> {
         Expr a, b;
 
@@ -209,6 +274,7 @@ namespace HalideInternal {
         }
     };
 
+    /* The greater of two values */
     struct Max : public ExprNode<Max> {
         Expr a, b;
 
@@ -219,6 +285,8 @@ namespace HalideInternal {
         }
     };
 
+    /* Comparison nodes. Takes two values of the same type, and
+     * returns a bool */
     struct EQ : public ExprNode<EQ> {
         Expr a, b;
 
@@ -273,6 +341,7 @@ namespace HalideInternal {
         }
     };
 
+    /* Logical operators */
     struct And : public ExprNode<And> {
         Expr a, b;
 
@@ -304,6 +373,9 @@ namespace HalideInternal {
         }
     };
 
+    /* A ternary operator. Evalutes 'true_value' and 'false_value',
+     * then selects between them based on 'condition'. Equivalent to
+     * the ternary operator in C. */
     struct Select : public ExprNode<Select> {
         Expr condition, true_value, false_value;
 
@@ -321,6 +393,9 @@ namespace HalideInternal {
         }
     };
 
+    /* Load a value from a named buffer. The buffer is treated as an
+     * array of the 'type' of this Load node. That is, the buffer has
+     * no inherent type. */
     struct Load : public ExprNode<Load> {
         string buffer;
         Expr index;
@@ -332,6 +407,11 @@ namespace HalideInternal {
         }
     };
 
+    /* A linear ramp vector node. This is vector with 'width'
+     * elements, where element i is base + i*stride. This is a
+     * convenient way to pass around vectors without busting them up
+     * into individual elements. E.g. a dense vector load from a
+     * buffer can use a ramp node with stride 1 as the index. */
     struct Ramp : public ExprNode<Ramp> {
         Expr base, stride;
         int width;
@@ -346,6 +426,9 @@ namespace HalideInternal {
         }
     };
 
+    /* A vector with 'width' elements, in which every element is
+     * value. This is a special case of the ramp node above, in which
+     * the stride is zero. */
     struct Broadcast : public ExprNode<Broadcast> {
         Expr value;
         int width;
@@ -358,6 +441,12 @@ namespace HalideInternal {
         }
     };
 
+    /* A function call. This can represent a call to some extern
+     * function (like sin), but it's also our multi-dimensional
+     * version of a Load, so it can be a load from an input image, or
+     * a call to another halide function. The latter two types of call
+     * nodes don't survive all the way down to code generation - the
+     * lowering process converts them to Load nodes. */
     struct Call : public ExprNode<Call> {
         string buffer;
         vector<Expr > args;
@@ -372,6 +461,9 @@ namespace HalideInternal {
         }
     };
 
+    /* A let expression, like you might find in a functional
+     * language. Within the expression 'body', instances of the Var
+     * node 'name' refer to 'value'. */
     struct Let : public ExprNode<Let> {
         string name;
         Expr value, body;
@@ -383,6 +475,8 @@ namespace HalideInternal {
         }
     };
 
+    /* The statement form of a let node. Within the statement 'body',
+     * instances of the Var named 'name' refer to 'value' */
     struct LetStmt : public StmtNode<LetStmt> {
         string name;
         Expr value;
@@ -395,6 +489,8 @@ namespace HalideInternal {
         }
     };
 
+    /* Used largely for debugging and tracing. Dumps the 'prefix'
+     * string and the args to stdout. */
     struct PrintStmt : public StmtNode<PrintStmt> {
         string prefix;
         vector<Expr > args;
@@ -407,6 +503,8 @@ namespace HalideInternal {
         }
     };
 
+    /* If the 'condition' is false, then bail out printing the
+     * 'message' to stderr */
     struct AssertStmt : public StmtNode<AssertStmt> {
         // if condition then val else error out with message
         Expr condition;
@@ -418,6 +516,13 @@ namespace HalideInternal {
         }
     };
 
+    /* This node is a helpful annotation to do with permissions. The
+     * three child statements happen in order. In the 'produce'
+     * statement 'buffer' is write-only. In 'update' it is
+     * read-write. In 'consume' it is read-only. The 'update' node is
+     * often NULL. (check update.defined() to find out). None of this
+     * is actually enforced, the node is purely for informative
+     * purposes to help out our analysis during lowering. */ 
     struct Pipeline : public StmtNode<Pipeline> {
         string buffer;
         Stmt produce, update, consume;
@@ -430,6 +535,18 @@ namespace HalideInternal {
         }
     };
     
+    /* A for loop. Execute the 'body' statement for all values of the
+     * variable 'name' from 'min' to 'min + extent'. There are four
+     * types of For nodes. A 'Serial' for loop is a conventional
+     * one. In a 'Parallel' for loop, each iteration of the loop
+     * happens in parallel or in some unspecified order. In a
+     * 'Vectorized' for loop, each iteration maps to one SIMD lane,
+     * and the whole loop is executed in one shot. For this case,
+     * 'extent' must be some small integer constant (probably 4, 8, or
+     * 16). An 'Unrolled' for loop compiles to a completely unrolled
+     * version of the loop. Each iteration becomes its own
+     * statement. Again in this case, 'extent' should be a small
+     * integer constant. */
     struct For : public StmtNode<For> {
         string name;
         Expr min, extent;
@@ -445,6 +562,8 @@ namespace HalideInternal {
         }
     };
 
+    /* Store a 'value' to a 'buffer' at a given 'index'. The buffer is
+     * interpreted as an array of the same type as 'value'. */
     struct Store : public StmtNode<Store> {
         string buffer;
         Expr value, index;
@@ -456,6 +575,10 @@ namespace HalideInternal {
         }
     };
 
+    /* This defines the value of a function at a multi-dimensional
+     * location. You should think of it as a store to a
+     * multi-dimensional array. It gets lowered to a conventional
+     * Store node. */
     struct Provide : public StmtNode<Provide> {
         string buffer;
         Expr value;
@@ -470,6 +593,9 @@ namespace HalideInternal {
         }
     };
 
+    /* Allocate a scratch area called 'buffer' of 'size' elements of
+     * the given 'type'. The buffer lives for the duration of the
+     * 'body statement, after which it is freed. */
     struct Allocate : public StmtNode<Allocate> {
         string buffer;
         Type type;
@@ -483,6 +609,10 @@ namespace HalideInternal {
         }
     };
 
+    /* This is the multi-dimensional version of Allocate. Create some
+     * scratch memory that will back the function 'buffer' over the
+     * range specified in 'bounds'. The bounds are a list of (min,
+     * extent) pairs for each dimension. */
     struct Realize : public StmtNode<Realize> {
         string buffer;
         Type type;
@@ -499,6 +629,8 @@ namespace HalideInternal {
         }
     };
 
+    /* A sequence of statements to be executed in-order. 'rest' may be
+     * NULL. Used rest.defined() to find out. */
     struct Block : public StmtNode<Block> {
         Stmt first, rest;
         

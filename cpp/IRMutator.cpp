@@ -22,13 +22,14 @@ namespace HalideInternal {
         return stmt;
     }
 
-    template<typename T> void mutateBinaryOperator(IRMutator *mutator, const T *op) {
+    template<typename T> 
+    void mutateBinaryOperator(IRMutator *mutator, const T *op, Expr *expr, Stmt *stmt) {
         Expr a = mutator->mutate(op->a);
         Expr b = mutator->mutate(op->b);
         if (a.sameAs(op->a) && 
-            b.sameAs(op->b)) mutator->expr = op;
-        else mutator->expr = new T(a, b);            
-        mutator->stmt = NULL;
+            b.sameAs(op->b)) *expr = op;
+        else *expr = new T(a, b);            
+        *stmt = NULL;
     }
 
     void IRMutator::visit(const IntImm *op)   {expr = op;}
@@ -41,21 +42,21 @@ namespace HalideInternal {
         else expr = new Cast(op->type, value);
     }
 
-    void IRMutator::visit(const Add *op)     {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const Sub *op)     {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const Mul *op)     {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const Div *op)     {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const Mod *op)     {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const Min *op)     {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const Max *op)     {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const EQ *op)      {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const NE *op)      {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const LT *op)      {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const LE *op)      {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const GT *op)      {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const GE *op)      {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const And *op)     {mutateBinaryOperator(this, op);}
-    void IRMutator::visit(const Or *op)      {mutateBinaryOperator(this, op);}
+    void IRMutator::visit(const Add *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Sub *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Mul *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Div *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Mod *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Min *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Max *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const EQ *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const NE *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const LT *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const LE *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const GT *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const GE *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const And *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Or *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
 
     void IRMutator::visit(const Not *op) {
         Expr a = mutate(op->a);
