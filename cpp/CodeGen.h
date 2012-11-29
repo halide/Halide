@@ -18,6 +18,7 @@
 #include "IRVisitor.h"
 #include "Argument.h"
 #include "IR.h"
+#include "Scope.h"
 
 namespace HalideInternal {
 
@@ -25,17 +26,6 @@ namespace HalideInternal {
     using std::string;
     using std::stack;
     using std::vector;
-
-    /* This class represents a symbol table used for traversing the IR
-     * during code generation */
-    class SymbolTable {
-    private:
-        map<string, stack<llvm::Value *> > table;
-    public:
-        llvm::Value *get(string name);
-        void push(string name, llvm::Value *val);
-        void pop(string name);        
-    };
 
     /* A code generator abstract base class. Actual code generators
        (e.g. CodeGen_X86) inherit from this. This class is responsible
@@ -64,7 +54,8 @@ namespace HalideInternal {
         llvm::Value *value;
         
         // All the values in scope
-        SymbolTable symbol_table;
+        Scope<llvm::Value *> symbol_table;
+        void sym_push(const string &name, llvm::Value *value);
 
         // Some useful types
         llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
