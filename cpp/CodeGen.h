@@ -26,6 +26,8 @@ namespace HalideInternal {
     using std::stack;
     using std::vector;
 
+    /* This class represents a symbol table used for traversing the IR
+     * during code generation */
     class SymbolTable {
     private:
         map<string, stack<llvm::Value *> > table;
@@ -35,14 +37,20 @@ namespace HalideInternal {
         void pop(string name);        
     };
 
+    /* A code generator abstract base class. Actual code generators
+       (e.g. CodeGen_X86) inherit from this. This class is responsible
+       for taking a Halide Stmt and producing llvm bitcode, machine
+       code in an object file, or machine code accessible through a
+       function pointer. */
     class CodeGen : public IRVisitor {
-    public:
+      public:
         CodeGen();
 
         void compile_to_file(string name);
+
         void *compile_to_function_pointer();
 
-    protected:
+      protected:
 
         void compile(Stmt stmt, string name, const vector<Argument> &args);
 

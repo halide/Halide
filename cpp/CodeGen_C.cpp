@@ -4,6 +4,8 @@
 #include <iostream>
 
 namespace HalideInternal {
+
+    using std::ostream;
     using std::endl;
 
     CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s) {}

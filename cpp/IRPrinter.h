@@ -7,19 +7,38 @@
 
 namespace HalideInternal {
 
-    using std::ostream;
+    /* 
+       This header file defines operators that let you dump a Halide
+       expression, statement, or type directly into an output stream
+       in a human readable form.
+       E.g:
 
-    // Serialize a chunk of IR into human-readable form
+       Expr foo = ...
+       std::cout << "Foo is " << foo << std::endl;
+    */
+
+    std::ostream &operator<<(std::ostream &stream, Expr);
+    std::ostream &operator<<(std::ostream &stream, Stmt);
+    std::ostream &operator<<(std::ostream &stream, Type);
+
+    /* 
+       These operators are implemented using the IRPrinter class
+       below. You probably don't need to use it directly, unless
+       you're subclassing it. Construct it with an output stream
+       (e.g. std::cout, or an ostringstream), and call the print
+       method on an expression or statement.
+    */
+
     class IRPrinter : public IRVisitor {
     public:
-        IRPrinter(ostream &);
+        IRPrinter(std::ostream &);
         void print(Expr);
         void print(Stmt);
 
         static void test();
 
     protected:
-        ostream &stream;
+        std::ostream &stream;
         int indent;
 
         void do_indent();
@@ -63,9 +82,6 @@ namespace HalideInternal {
 
     };
 
-    ostream &operator<<(ostream &stream, Expr);
-    ostream &operator<<(ostream &stream, Stmt);
-    ostream &operator<<(ostream &stream, Type);
 }
 
 #endif

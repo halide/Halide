@@ -6,6 +6,7 @@
 
 namespace HalideInternal {
 
+    using std::ostream;
     using std::endl;
 
     void IRPrinter::test() {

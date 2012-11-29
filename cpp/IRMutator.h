@@ -12,25 +12,30 @@ namespace HalideInternal {
     using std::pair;
     using std::make_pair;
 
-    // Here is a base class for passes over the IR which change bits
-    // of IR (e.g. replacing a variable with a value, or
-    // constant-folding).
+    /* Here is a base class for passes over the IR which change bits
+     * of IR (e.g. replacing a variable with a value (Substitute.h), or
+     * constant-folding).
+     */
     class IRMutator : public IRVisitor {
     public:
-        // This is the main interface for using a mutator. Also call
-        // these in your subclass to mutate sub-expressions and
-        // sub-statements.
+
+        /* This is the main interface for using a mutator. Also call
+         * these in your subclass to mutate sub-expressions and
+         * sub-statements.
+         */
         Expr mutate(Expr expr);
         Stmt mutate(Stmt stmt);
 
-        // Override some of the visit functions below to achieve your
-        // goals. Their default implementations just recursively
-        // mutate their children. Put the result in one of the two
-        // following variables:
+    protected:
+        /* Override some of the visit functions below to achieve your
+         * goals. Their default implementations just recursively
+         * mutate their children. Put the result in one of the two
+         * following variables (because the visit functions don't have return values).
+         */
+
         Expr expr;
         Stmt stmt;
 
-    protected:
         virtual void visit(const IntImm *);
         virtual void visit(const FloatImm *);
         virtual void visit(const Cast *);
@@ -67,6 +72,7 @@ namespace HalideInternal {
         virtual void visit(const Allocate *);
         virtual void visit(const Realize *);
         virtual void visit(const Block *);
+
     };    
 }
 
