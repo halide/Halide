@@ -11,22 +11,6 @@ namespace HalideInternal {
 
     using namespace llvm;
 
-    Value *SymbolTable::get(string name) {
-        map<string, stack<Value *> >::iterator iter = table.find(name);
-        assert(iter != table.end() && "Symbol not found");
-        return iter->second.top();
-    }
-
-    void SymbolTable::push(string name, Value *value) {
-        value->setName(name);
-        table[name].push(value);
-    }
-
-    void SymbolTable::pop(string name) {
-        assert(!table[name].empty() && "Name not in symbol table");
-        table[name].pop();
-    }
-
     CodeGen::CodeGen() : module(NULL), builder(context), 
                          execution_engine(NULL), function_pass_manager(NULL), module_pass_manager(NULL) {
         // Define some types
@@ -78,7 +62,7 @@ namespace HalideInternal {
                 if (args[i].is_buffer) {
                     unpack_buffer(args[i].name, iter);
                 } else {
-                    symbol_table.push(args[i].name, iter);
+                    sym_push(args[i].name, iter);
                 }
                 i++;
             }
@@ -134,26 +118,31 @@ namespace HalideInternal {
         return execution_engine->getPointerToFunction(fn);
     }
 
+    void CodeGen::sym_push(const string &name, llvm::Value *value) {
+        value->setName(name);
+        symbol_table.push(name, value);
+    }
+
     // Take an llvm Value representing a pointer to a buffer_t,
     // and populate the symbol table with its constituent parts
     void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
-        symbol_table.push(name + ".host", buffer_host(buffer));
-        symbol_table.push(name + ".dev", buffer_dev(buffer));
-        symbol_table.push(name + ".host_dirty", buffer_host_dirty(buffer));
-        symbol_table.push(name + ".dev_dirty", buffer_dev_dirty(buffer));
-        symbol_table.push(name + ".extent.0", buffer_extent(buffer, 0));
-        symbol_table.push(name + ".extent.1", buffer_extent(buffer, 1));
-        symbol_table.push(name + ".extent.2", buffer_extent(buffer, 2));
-        symbol_table.push(name + ".extent.3", buffer_extent(buffer, 3));
-        symbol_table.push(name + ".stride.0", buffer_stride(buffer, 0));
-        symbol_table.push(name + ".stride.1", buffer_stride(buffer, 1));
-        symbol_table.push(name + ".stride.2", buffer_stride(buffer, 2));
-        symbol_table.push(name + ".stride.3", buffer_stride(buffer, 3));
-        symbol_table.push(name + ".min.0", buffer_min(buffer, 0));
-        symbol_table.push(name + ".min.1", buffer_min(buffer, 1));
-        symbol_table.push(name + ".min.2", buffer_min(buffer, 2));
-        symbol_table.push(name + ".min.3", buffer_min(buffer, 3));
-        symbol_table.push(name + ".elem_size", buffer_elem_size(buffer));
+        sym_push(name + ".host", buffer_host(buffer));
+        sym_push(name + ".dev", buffer_dev(buffer));
+        sym_push(name + ".host_dirty", buffer_host_dirty(buffer));
+        sym_push(name + ".dev_dirty", buffer_dev_dirty(buffer));
+        sym_push(name + ".extent.0", buffer_extent(buffer, 0));
+        sym_push(name + ".extent.1", buffer_extent(buffer, 1));
+        sym_push(name + ".extent.2", buffer_extent(buffer, 2));
+        sym_push(name + ".extent.3", buffer_extent(buffer, 3));
+        sym_push(name + ".stride.0", buffer_stride(buffer, 0));
+        sym_push(name + ".stride.1", buffer_stride(buffer, 1));
+        sym_push(name + ".stride.2", buffer_stride(buffer, 2));
+        sym_push(name + ".stride.3", buffer_stride(buffer, 3));
+        sym_push(name + ".min.0", buffer_min(buffer, 0));
+        sym_push(name + ".min.1", buffer_min(buffer, 1));
+        sym_push(name + ".min.2", buffer_min(buffer, 2));
+        sym_push(name + ".min.3", buffer_min(buffer, 3));
+        sym_push(name + ".elem_size", buffer_elem_size(buffer));
     }
 
     // Add a definition of buffer_t to the module if it isn't already there
@@ -510,13 +499,13 @@ namespace HalideInternal {
     }
 
     void CodeGen::visit(const Let *op) {
-        symbol_table.push(op->name, codegen(op->value));
+        sym_push(op->name, codegen(op->value));
         value = codegen(op->body);
         symbol_table.pop(op->name);
     }
 
     void CodeGen::visit(const LetStmt *op) {
-        symbol_table.push(op->name, codegen(op->value));
+        sym_push(op->name, codegen(op->value));
         codegen(op->body);
         symbol_table.pop(op->name);
     }
