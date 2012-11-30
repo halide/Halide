@@ -49,7 +49,7 @@ namespace HalideInternal {
         function = Function::Create(func_t, Function::ExternalLinkage, name, module);
 
         // Make the initial basic block
-        block = BasicBlock::Create(context, "entry", function);
+        BasicBlock *block = BasicBlock::Create(context, "entry", function);
         builder.SetInsertPoint(block);
 
         // Put the arguments in the symbol table
@@ -525,7 +525,52 @@ namespace HalideInternal {
     }
 
     void CodeGen::visit(const For *op) {
-        assert(false && "For not yet implemented");
+        if (op->for_type == For::Serial) {
+            Value *min = codegen(op->min);
+            Value *max = builder.CreateAdd(min, codegen(op->extent));
+            
+            BasicBlock *preheader_bb = builder.GetInsertBlock();
+
+            // Make a new basic block for the loop
+            BasicBlock *loop_bb = BasicBlock::Create(context, op->name + "_loop", function);
+
+            // Fall through to the loop bb
+            builder.CreateBr(loop_bb);
+            builder.SetInsertPoint(loop_bb);
+
+            // Make our phi node
+            PHINode *phi = builder.CreatePHI(i32, 2);
+            phi->addIncoming(min, preheader_bb);
+
+            // Within the loop, the variable is equal to the phi value
+            sym_push(op->name, phi);
+
+            // Emit the loop body
+            codegen(op->body);
+
+            // Keep track of what basic block we're in
+
+            // Update the counter
+            Value *next_var = builder.CreateAdd(phi, ConstantInt::get(i32, 1));
+
+            // Create the block that comes after the loop
+            BasicBlock *after_bb = BasicBlock::Create(context, op->name + "_after_loop", function);
+
+            // Add the back-edge to the phi node
+            phi->addIncoming(next_var, builder.GetInsertBlock());
+
+            // Maybe exit the loop
+            Value *end_condition = builder.CreateICmpNE(next_var, max);
+            builder.CreateCondBr(end_condition, loop_bb, after_bb);
+            builder.SetInsertPoint(after_bb);
+
+            // Pop the loop variable from the scope
+            symbol_table.pop(op->name);
+        } else if (op->for_type == For::Parallel) {
+            assert(false && "Parallel for not yet implemented");
+        } else {
+            assert(false && "Unknown type of For node. Only Serial and Parallel For nodes should survive down to codegen");
+        }
     }
 
     void CodeGen::visit(const Store *op) {

@@ -4,6 +4,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/IRReader.h"
 #include "buffer.h"
+#include "IRPrinter.h"
 
 extern unsigned char builtins_bitcode_x86[];
 extern int builtins_bitcode_x86_length;
@@ -96,15 +97,20 @@ namespace HalideInternal {
         args[1] = float_arg;
         args[2] = int_arg;
         Expr x = new Var(Int(32), "x");
+        Expr i = new Var(Int(32), "i");
         Expr alpha = new Var(Float(32), "alpha");
         Expr beta = new Var(Int(32), "beta");
         Expr e = new Select(alpha > 4.0f, 3, 2);
-        Stmt s = new Store("buf", e, x);
+        Stmt s = new Store("buf", e, x + i);
         s = new LetStmt("x", beta+1, s);
         s = new Allocate("tmp_stack", Int(32), 127, s);
         s = new Allocate("tmp_heap", Int(32), 43 * beta, s);
+        s = new For("i", -1, 3, For::Serial, s);
         CodeGen_X86 cg;
         cg.compile(s, "test1", args);
+
+        // std::cout << s << std::endl;
+        // cg.module->dump();
 
         void *ptr = cg.compile_to_function_pointer();
         typedef void (*fn_type)(::buffer_t *, float, int);
@@ -117,11 +123,17 @@ namespace HalideInternal {
 
         memset(&scratch[0], 0, sizeof(scratch));
         fn(&buf, -32, 0);
+        assert(scratch[0] == 2);
         assert(scratch[1] == 2);
-        fn(&buf, 37.32f, 2);
-        assert(scratch[3] == 3);
-        fn(&buf, 4.0f, 1);
         assert(scratch[2] == 2);
+        fn(&buf, 37.32f, 2);
+        assert(scratch[2] == 3);
+        assert(scratch[3] == 3);
+        assert(scratch[4] == 3);
+        fn(&buf, 4.0f, 1);
+        assert(scratch[1] == 2);
+        assert(scratch[2] == 2);
+        assert(scratch[3] == 2);
 
     }
 

@@ -49,7 +49,6 @@ namespace HalideInternal {
         llvm::Module *module;
         llvm::Function *function;
         llvm::LLVMContext context;
-        llvm::BasicBlock *block;
         llvm::IRBuilder<> builder;
         llvm::Value *value;
         
