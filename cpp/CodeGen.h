@@ -42,6 +42,8 @@ namespace HalideInternal {
 
       protected:
 
+        class Closure;
+
         void compile(Stmt stmt, string name, const vector<Argument> &args);
 
         // Codegen state for llvm:

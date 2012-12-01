@@ -20,15 +20,15 @@ namespace HalideInternal {
         map<string, stack<T> > table;
     public:
         /* Retrive the value referred to by a name */
-        T get(const string &name) {
-            typename map<string, stack<T> >::iterator iter = table.find(name);
+        T get(const string &name) const {
+            typename map<string, stack<T> >::const_iterator iter = table.find(name);
             assert(iter != table.end() && "Symbol not found");
             return iter->second.top();
         }
         
         /* Tests if a name is in scope */
-        bool contains(const string &name) {
-            typename map<string, stack<T> >::iterator iter = table.find(name);
+        bool contains(const string &name) const {
+            typename map<string, stack<T> >::const_iterator iter = table.find(name);
             return iter != table.end() && !iter->second.empty();
         }
 
