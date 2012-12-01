@@ -109,11 +109,12 @@ namespace HalideInternal {
         assert(fn && "Could not find function inside llvm module");
         
         // Run optimization passes
-        module_pass_manager->run(*module);
+        module_pass_manager->run(*module);        
         function_pass_manager->doInitialization();
         function_pass_manager->run(*fn);
         function_pass_manager->doFinalization();
-        module_pass_manager->run(*module);
+        
+        //module_pass_manager->run(*module);
 
         return execution_engine->getPointerToFunction(fn);
     }
@@ -163,6 +164,7 @@ namespace HalideInternal {
         fields.push_back(i32x4); // stride
         fields.push_back(i32x4); // min
         fields.push_back(i32); // elem_size
+
         if (buffer_t->isOpaque()) {
             buffer_t->setBody(fields, false);
         }
@@ -524,10 +526,99 @@ namespace HalideInternal {
         codegen(op->consume);
     }
 
+    /* A helper class to manage closures - used for parallel for loops */
+    class CodeGen::Closure : public IRVisitor {
+    private:
+        map<string, llvm::Type *> result;
+        Scope<int> ignore;
+        CodeGen *gen;
+
+        void visit(const Let *op) {
+            ignore.push(op->name, 0);
+            op->body.accept(this);
+            ignore.pop(op->name);
+        }
+        void visit(const LetStmt *op) {
+            ignore.push(op->name, 0);
+            op->body.accept(this);
+            ignore.pop(op->name);
+        }
+        void visit(const For *op) {
+            ignore.push(op->name, 0);
+            op->min.accept(this);
+            op->extent.accept(this);
+            op->body.accept(this);
+            ignore.pop(op->name);
+        }
+        void visit(const Load *op) {
+            op->index.accept(this);
+            result[op->buffer + ".host"] = gen->llvm_type_of(op->type)->getPointerTo();
+        }
+        void visit(const Store *op) {
+            op->index.accept(this);
+            op->value.accept(this);
+            result[op->buffer + ".host"] = gen->llvm_type_of(op->value.type())->getPointerTo();
+        }
+        void visit(const Var *op) {            
+            if (ignore.contains(op->name)) {
+                //std::cout << "Ignoring reference to: " << op->name << std::endl;
+            } else {
+                //std::cout << "Putting var in closure: " << op->name << std::endl;
+                result[op->name] = gen->llvm_type_of(op->type);
+            }
+        }
+
+    public:
+        Closure(Stmt s, CodeGen *g, const string &loop_variable) : gen(g) {
+            ignore.push(loop_variable, 0);
+            s.accept(this);
+        }
+
+        StructType *build_type() {
+            StructType *struct_t = StructType::create(gen->context, "closure_t");
+            vector<llvm::Type *> fields;
+            for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
+                 iter != result.end(); iter++) {
+                fields.push_back(iter->second);
+            }
+            struct_t->setBody(fields, false);
+            return struct_t;
+        }
+
+        void pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> &builder) {
+            // dst should be a pointer to a struct of the type returned by build_type
+            int idx = 0;
+            for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
+                 iter != result.end(); iter++) {
+                std::cout << "Putting " << iter->first << " in closure" << std::endl;
+                Value *val = src.get(iter->first);
+                Value *ptr = builder.CreateConstGEP2_32(dst, 0, idx++);
+                if (val->getType() != iter->second) {
+                    val = builder.CreateBitCast(val, iter->second);
+                }
+                builder.CreateStore(val, ptr);
+            }
+        }
+
+        void unpack_struct(Scope<Value *> &dst, Value *src, IRBuilder<> &builder) {
+            // src should be a pointer to a struct of the type returned by build_type
+            int idx = 0;
+            for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
+                 iter != result.end(); iter++) {
+                Value *ptr = builder.CreateConstGEP2_32(src, 0, idx++);
+                Value *val = builder.CreateLoad(ptr);
+                dst.push(iter->first, val);
+                val->setName(iter->first);
+            }
+        }
+    };
+
     void CodeGen::visit(const For *op) {
+        Value *min = codegen(op->min);
+        Value *extent = codegen(op->extent);
+        
         if (op->for_type == For::Serial) {
-            Value *min = codegen(op->min);
-            Value *max = builder.CreateAdd(min, codegen(op->extent));
+            Value *max = builder.CreateAdd(min, extent);
             
             BasicBlock *preheader_bb = builder.GetInsertBlock();
 
@@ -548,8 +639,6 @@ namespace HalideInternal {
             // Emit the loop body
             codegen(op->body);
 
-            // Keep track of what basic block we're in
-
             // Update the counter
             Value *next_var = builder.CreateAdd(phi, ConstantInt::get(i32, 1));
 
@@ -567,7 +656,59 @@ namespace HalideInternal {
             // Pop the loop variable from the scope
             symbol_table.pop(op->name);
         } else if (op->for_type == For::Parallel) {
-            assert(false && "Parallel for not yet implemented");
+
+            // Dump everything relevant in the symbol table into a closure
+            Closure closure(op->body, this, op->name);
+
+            // Allocate a closure
+            StructType *closure_t = closure.build_type();
+            Value *ptr = builder.CreateAlloca(closure_t, ConstantInt::get(i32, 1)); 
+
+            // Fill in the closure
+            closure.pack_struct(ptr, symbol_table, builder);
+
+            // Make a function that represents the body of the loop
+            FunctionType *func_t = FunctionType::get(void_t, vec(i32, (llvm::Type *)(i8->getPointerTo())), false);
+            Function *containing_function = function;
+            function = Function::Create(func_t, Function::InternalLinkage, "par_for_" + op->name, module);
+
+            // Make the initial basic block and jump the builder into the new function
+            BasicBlock *call_site = builder.GetInsertBlock();
+            BasicBlock *block = BasicBlock::Create(context, "entry", function);
+            builder.SetInsertPoint(block);
+
+            // Make a new scope to use       
+            Scope<Value *> saved_symbol_table;
+            std::swap(symbol_table, saved_symbol_table);
+
+            // Get the function arguments
+            Function::arg_iterator iter = function->arg_begin();
+
+            // Make the loop variable refer to the first argument of the function
+            sym_push(op->name, iter);
+
+            // The closure pointer is the second argument. 
+            iter++;
+            iter->setName("closure");
+            Value *closure_handle = builder.CreatePointerCast(iter, closure_t->getPointerTo());
+            // Load everything from the closure into the new scope
+            closure.unpack_struct(symbol_table, closure_handle, builder);
+            
+            // Generate the new function body
+            codegen(op->body);
+            builder.CreateRetVoid();
+
+            // Move the builder pack to the main function and call do_par_for
+            builder.SetInsertPoint(call_site);
+            Function *do_par_for = module->getFunction("do_par_for");
+            ptr = builder.CreatePointerCast(ptr, i8->getPointerTo());
+            vector<Value *> args = vec((Value *)function, min, extent, ptr);
+            std::cout << "Calling do_par_for" << std::endl;
+            builder.CreateCall(do_par_for, args);
+
+            // Now restore the scope
+            std::swap(symbol_table, saved_symbol_table);
+            function = containing_function;
         } else {
             assert(false && "Unknown type of For node. Only Serial and Parallel For nodes should survive down to codegen");
         }

@@ -105,12 +105,14 @@ namespace HalideInternal {
         s = new LetStmt("x", beta+1, s);
         s = new Allocate("tmp_stack", Int(32), 127, s);
         s = new Allocate("tmp_heap", Int(32), 43 * beta, s);
-        s = new For("i", -1, 3, For::Serial, s);
+        s = new For("i", -1, 3, For::Parallel, s);
+        std::cout << s << std::endl;
+
         CodeGen_X86 cg;
         cg.compile(s, "test1", args);
 
-        // std::cout << s << std::endl;
-        // cg.module->dump();
+
+        cg.module->dump();
 
         void *ptr = cg.compile_to_function_pointer();
         typedef void (*fn_type)(::buffer_t *, float, int);
