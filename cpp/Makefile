@@ -1,7 +1,9 @@
 CXX = g++
-CXX_FLAGS = `llvm-config --cflags`
 LLVM_DIR = ../llvm
-LIBS = -L ../llvm/Release+Asserts/lib `llvm-config --libs all`
+LLVM_CONFIG = $(LLVM_DIR)/Release+Asserts/bin/llvm-config
+CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags)
+LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs jit bitwriter bitreader x86 arm linker nvptx ipo)
+
 
 OBJECTS = CodeGen.o CodeGen_X86.o IR.o IRMutator.o IRPrinter.o IRVisitor.o CodeGen_C.o Substitute.o ModulusRemainder.o Bounds.o Derivative.o
 INITIAL_MODULES = architecture.x86.initmod.o architecture.x86_avx.initmod.o architecture.ptx.initmod.o architecture.ptx_dev.initmod.o architecture.arm.initmod.o architecture.arm_android.initmod.o

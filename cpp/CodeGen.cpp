@@ -32,10 +32,18 @@ namespace HalideInternal {
         f32 = llvm::Type::getFloatTy(context);
         f64 = llvm::Type::getDoubleTy(context);
 
-        if (!llvm_initialized) {
-            InitializeAllTargets();
-            InitializeAllAsmPrinters();
-            InitializeAllTargetMCs();
+        // Initialize the targets we want to generate code for
+        if (!llvm_initialized) {            
+            InitializeNativeTarget();
+            LLVMInitializeX86Target();
+            LLVMInitializeX86AsmPrinter();
+            LLVMInitializeX86TargetMC();
+            LLVMInitializeARMTarget();
+            LLVMInitializeARMAsmPrinter();
+            LLVMInitializeARMTargetMC();
+            LLVMInitializeNVPTXTarget();
+            LLVMInitializeNVPTXAsmPrinter();
+            LLVMInitializeNVPTXTargetMC();
             llvm_initialized = true;
         }
     }
@@ -43,8 +51,6 @@ namespace HalideInternal {
     bool CodeGen::llvm_initialized = false;
 
     void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
-        // Make a new module (TODO: and possibly leak the old one?)
-        //module = new Module(name.c_str(), context);
         assert(module && "The CodeGen subclass should have made an initial module before calling CodeGen::compile");
 
         // Start the module off with a definition of a buffer_t
