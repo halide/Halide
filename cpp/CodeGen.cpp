@@ -6,15 +6,21 @@
 #include "Util.h"
 #include <llvm/ExecutionEngine/JIT.h>
 #include <llvm/Support/TargetSelect.h>
+#include <llvm/Target/TargetLibraryInfo.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/FormattedStream.h>
 #include <llvm/Bitcode/ReaderWriter.h>
+#include <llvm/Support/TargetRegistry.h>
+#include <llvm/CodeGen/CommandFlags.h>
+#include <llvm/DataLayout.h>
 
 namespace HalideInternal {
 
     using namespace llvm;
 
-    CodeGen::CodeGen() : module(NULL), builder(context), 
-                         execution_engine(NULL), function_pass_manager(NULL), module_pass_manager(NULL) {
+    LLVMContext CodeGen::context;
+
+    CodeGen::CodeGen() : module(NULL), builder(context) {
         // Define some types
         void_t = llvm::Type::getVoidTy(context);
         i1 = llvm::Type::getInt1Ty(context);
@@ -25,7 +31,16 @@ namespace HalideInternal {
         f16 = llvm::Type::getHalfTy(context);
         f32 = llvm::Type::getFloatTy(context);
         f64 = llvm::Type::getDoubleTy(context);
+
+        if (!llvm_initialized) {
+            InitializeAllTargets();
+            InitializeAllAsmPrinters();
+            InitializeAllTargetMCs();
+            llvm_initialized = true;
+        }
     }
+
+    bool CodeGen::llvm_initialized = false;
 
     void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
         // Make a new module (TODO: and possibly leak the old one?)
@@ -77,64 +92,134 @@ namespace HalideInternal {
         // Now we need to end the function
         builder.CreateRetVoid();
 
+        module->setModuleIdentifier("halide_" + name);
+
         // Now verify the function is ok
         verifyFunction(*function);
         verifyModule(*module);
     }
 
+    ExecutionEngine *CodeGen::execution_engine = NULL;
+
     void *CodeGen::compile_to_function_pointer() {
         assert(module && "No module defined. Must call compile before calling compile_to_function_pointer");
                
+        FunctionPassManager function_pass_manager(module);
+        PassManager module_pass_manager;
+
         // Create the execution engine if it hasn't already been done
         if (!execution_engine) {
-            InitializeNativeTarget();
-            InitializeNativeTargetAsmPrinter();
             std::string error_string;
             EngineBuilder engine_builder(module);
             engine_builder.setErrorStr(&error_string);
             engine_builder.setEngineKind(EngineKind::JIT);
             engine_builder.setUseMCJIT(true);
-            engine_builder.setOptLevel(CodeGenOpt::Aggressive);
+            //engine_builder.setOptLevel(CodeGenOpt::Aggressive);
             execution_engine = engine_builder.create();
             if (!execution_engine) std::cout << error_string << std::endl;
             assert(execution_engine && "Couldn't create execution engine");
-
-            function_pass_manager = new FunctionPassManager(module);
-            module_pass_manager = new PassManager();
-
-            // Make sure things marked as always-inline get inlined
-            module_pass_manager->add(createAlwaysInlinerPass());
-
-            PassManagerBuilder b;
-            b.OptLevel = 3;
-            b.populateFunctionPassManager(*function_pass_manager);
-            b.populateModulePassManager(*module_pass_manager);
-
         } else { 
             std::cout << "Adding module to existing execution engine" << std::endl;
             // Execution engine is already created. Add this module to it.
             execution_engine->addModule(module);
-        }            
+        }
+
+        // Make sure things marked as always-inline get inlined
+        module_pass_manager.add(createAlwaysInlinerPass());
+        
+        PassManagerBuilder b;
+        b.OptLevel = 3;
+        b.populateFunctionPassManager(function_pass_manager);
+        b.populateModulePassManager(module_pass_manager);
                 
         Function *fn = module->getFunction(function_name);
         assert(fn && "Could not find function inside llvm module");
         
         // Run optimization passes
-        module_pass_manager->run(*module);        
-        function_pass_manager->doInitialization();
-        function_pass_manager->run(*fn);
-        function_pass_manager->doFinalization();
-        
-        //module_pass_manager->run(*module);
+        module_pass_manager.run(*module);        
+        function_pass_manager.doInitialization();
+        function_pass_manager.run(*fn);
+        function_pass_manager.doFinalization();
 
         return execution_engine->getPointerToFunction(fn);
     }
 
-    void CodeGen::compile_to_file(string name) {
+    void CodeGen::compile_to_bitcode(const string &filename) {
         assert(module && "No module defined. Must call compile before calling compile_to_file");        
         string error_string;
-        raw_fd_ostream out(name.c_str(), error_string);
+        raw_fd_ostream out(filename.c_str(), error_string);
         WriteBitcodeToFile(module, out);
+    }
+
+    void CodeGen::compile_to_native(const string &filename, bool assembly) {
+         // Get the target specific parser.
+        std::string error_string;
+        std::cout << module->getTargetTriple() << std::endl;
+        const Target *target = TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
+        if (!target) std::cout << error_string << std::endl;
+        assert(target && "Could not create target");
+
+        TargetOptions options;
+        options.LessPreciseFPMADOption = EnableFPMAD;
+        options.NoFramePointerElim = DisableFPElim;
+        options.NoFramePointerElimNonLeaf = DisableFPElimNonLeaf;
+        options.AllowFPOpFusion = FuseFPOps;
+        options.UnsafeFPMath = EnableUnsafeFPMath;
+        options.NoInfsFPMath = EnableNoInfsFPMath;
+        options.NoNaNsFPMath = EnableNoNaNsFPMath;
+        options.HonorSignDependentRoundingFPMathOption =
+            EnableHonorSignDependentRoundingFPMath;
+        options.UseSoftFloat = GenerateSoftFloatCalls;
+        if (FloatABIForCalls != FloatABI::Default)
+            options.FloatABIType = FloatABIForCalls;
+        options.NoZerosInBSS = DontPlaceZerosInBSS;
+        options.GuaranteedTailCallOpt = EnableGuaranteedTailCallOpt;
+        options.DisableTailCalls = DisableTailCalls;
+        options.StackAlignmentOverride = OverrideStackAlignment;
+        options.RealignStack = EnableRealignStack;
+        options.TrapFuncName = TrapFuncName;
+        options.PositionIndependentExecutable = EnablePIE;
+        options.EnableSegmentedStacks = SegmentedStacks;
+        options.UseInitArray = UseInitArray;
+        options.SSPBufferSize = SSPBufferSize;
+
+
+        TargetMachine *target_machine =
+            target->createTargetMachine(module->getTargetTriple(), 
+                                        "", // -mcpu
+                                        "", // features, e.g. avx
+                                        options, 
+                                        Reloc::Default, 
+                                        CodeModel::Default, 
+                                        CodeGenOpt::Aggressive);
+                                
+        assert(target_machine && "Could not allocate target machine!");
+
+        // Figure out where we are going to send the output.
+        raw_fd_ostream raw_out(filename.c_str(), error_string);
+        formatted_raw_ostream out(raw_out);
+
+        // Build up all of the passes that we want to do to the module.
+        PassManager pass_manager;
+
+        // Add an appropriate TargetLibraryInfo pass for the module's triple.
+        pass_manager.add(new TargetLibraryInfo(Triple(module->getTargetTriple())));       
+        pass_manager.add(new TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
+                                                 target_machine->getVectorTargetTransformInfo()));
+        pass_manager.add(new DataLayout(module));
+
+        // Override default to generate verbose assembly.
+        target_machine->setAsmVerbosityDefault(true);
+
+        // Ask the target to add backend passes as necessary.        
+        TargetMachine::CodeGenFileType file_type =
+            assembly ? TargetMachine::CGFT_AssemblyFile : 
+            TargetMachine::CGFT_ObjectFile;
+        target_machine->addPassesToEmitFile(pass_manager, out, file_type);
+
+        pass_manager.run(*module);
+
+        delete target_machine;
     }
 
     void CodeGen::sym_push(const string &name, llvm::Value *value) {
@@ -722,7 +807,6 @@ namespace HalideInternal {
             assert(do_par_for && "Could not find do_par_for in module");
             ptr = builder.CreatePointerCast(ptr, i8->getPointerTo());
             vector<Value *> args = vec((Value *)function, min, extent, ptr);
-            std::cout << "Calling do_par_for" << std::endl;
             builder.CreateCall(do_par_for, args);
 
             // Now restore the scope

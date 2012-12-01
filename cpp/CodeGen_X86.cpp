@@ -33,8 +33,8 @@ namespace HalideInternal {
         // For now we'll just leave it as whatever the module was
         // compiled as. This assumes that we're not cross-compiling
         // between different x86 operating systems
-        //module->setTargetTriple( ... );
-
+        // module->setTargetTriple( ... );
+        
         // Pass to the generic codegen
         CodeGen::compile(stmt, name, args);
         delete bitcode_buffer;
@@ -111,7 +111,11 @@ namespace HalideInternal {
         CodeGen_X86 cg;
         cg.compile(s, "test1", args);
 
-        cg.compile_to_file("test1.bc");
+        /*
+        cg.compile_to_bitcode("test1.bc");
+        cg.compile_to_native("test1.o", false);
+        cg.compile_to_native("test1.s", true);
+        */
 
         void *ptr = cg.compile_to_function_pointer();
         typedef void (*fn_type)(::buffer_t *, float, int);

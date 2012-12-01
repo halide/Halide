@@ -36,7 +36,8 @@ namespace HalideInternal {
       public:
         CodeGen();
 
-        void compile_to_file(string name);
+        void compile_to_bitcode(const string &filename);
+        void compile_to_native(const string &filename, bool assembly = false);
 
         void *compile_to_function_pointer();
 
@@ -48,9 +49,10 @@ namespace HalideInternal {
 
         // Codegen state for llvm:
         // Current module, function, builder, context, and value
+        static bool llvm_initialized;
         llvm::Module *module;
         llvm::Function *function;
-        llvm::LLVMContext context;
+        static llvm::LLVMContext context;
         llvm::IRBuilder<> builder;
         llvm::Value *value;
         
@@ -64,9 +66,7 @@ namespace HalideInternal {
 
         // JIT state
         string function_name;
-        llvm::ExecutionEngine *execution_engine;
-        llvm::FunctionPassManager *function_pass_manager;
-        llvm::PassManager *module_pass_manager;
+        static llvm::ExecutionEngine *execution_engine;
 
         // Call these to recursively visit sub-expressions and sub-statements
         llvm::Value *codegen(Expr);
