@@ -111,8 +111,7 @@ namespace HalideInternal {
         CodeGen_X86 cg;
         cg.compile(s, "test1", args);
 
-
-        cg.module->dump();
+        cg.compile_to_file("test1.bc");
 
         void *ptr = cg.compile_to_function_pointer();
         typedef void (*fn_type)(::buffer_t *, float, int);

@@ -4,8 +4,10 @@
 #include "llvm/Analysis/Verifier.h"
 #include "IROperator.h"
 #include "Util.h"
-#include "llvm/ExecutionEngine/JIT.h"
-#include "llvm/Support/TargetSelect.h"
+#include <llvm/ExecutionEngine/JIT.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Bitcode/ReaderWriter.h>
 
 namespace HalideInternal {
 
@@ -76,7 +78,8 @@ namespace HalideInternal {
         builder.CreateRetVoid();
 
         // Now verify the function is ok
-        llvm::verifyFunction(*function);
+        verifyFunction(*function);
+        verifyModule(*module);
     }
 
     void *CodeGen::compile_to_function_pointer() {
@@ -85,17 +88,25 @@ namespace HalideInternal {
         // Create the execution engine if it hasn't already been done
         if (!execution_engine) {
             InitializeNativeTarget();
+            InitializeNativeTargetAsmPrinter();
             std::string error_string;
-            execution_engine = ExecutionEngine::createJIT(module, &error_string, NULL, CodeGenOpt::Aggressive);
+            EngineBuilder engine_builder(module);
+            engine_builder.setErrorStr(&error_string);
+            engine_builder.setEngineKind(EngineKind::JIT);
+            engine_builder.setUseMCJIT(true);
+            engine_builder.setOptLevel(CodeGenOpt::Aggressive);
+            execution_engine = engine_builder.create();
             if (!execution_engine) std::cout << error_string << std::endl;
             assert(execution_engine && "Couldn't create execution engine");
 
             function_pass_manager = new FunctionPassManager(module);
             module_pass_manager = new PassManager();
 
+            // Make sure things marked as always-inline get inlined
+            module_pass_manager->add(createAlwaysInlinerPass());
+
             PassManagerBuilder b;
             b.OptLevel = 3;
-            b.Inliner = createAlwaysInlinerPass();
             b.populateFunctionPassManager(*function_pass_manager);
             b.populateModulePassManager(*module_pass_manager);
 
@@ -117,6 +128,13 @@ namespace HalideInternal {
         //module_pass_manager->run(*module);
 
         return execution_engine->getPointerToFunction(fn);
+    }
+
+    void CodeGen::compile_to_file(string name) {
+        assert(module && "No module defined. Must call compile before calling compile_to_file");        
+        string error_string;
+        raw_fd_ostream out(name.c_str(), error_string);
+        WriteBitcodeToFile(module, out);
     }
 
     void CodeGen::sym_push(const string &name, llvm::Value *value) {
@@ -701,6 +719,7 @@ namespace HalideInternal {
             // Move the builder pack to the main function and call do_par_for
             builder.SetInsertPoint(call_site);
             Function *do_par_for = module->getFunction("do_par_for");
+            assert(do_par_for && "Could not find do_par_for in module");
             ptr = builder.CreatePointerCast(ptr, i8->getPointerTo());
             vector<Value *> args = vec((Value *)function, min, extent, ptr);
             std::cout << "Calling do_par_for" << std::endl;
