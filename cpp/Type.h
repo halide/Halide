@@ -25,15 +25,15 @@ namespace HalideInternal {
         }
 
         /* Produce a vector of this type, with 'width' elements */
-        static Type vector_of(Type t, int width) {
-            t.width = width;
-            return t;
+        Type vector_of(int w) const {
+            Type type = {t, bits, w};
+            return type;
         }
 
         /* Produce the type of a single element of this vector type */
-        static Type element_of(Type t) {
-            t.width = 1;
-            return t;
+        Type element_of() const {
+            Type type = {t, bits, 1};
+            return type;
         }
     };
 

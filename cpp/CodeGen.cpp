@@ -350,7 +350,7 @@ namespace HalideInternal {
                 return llvm::Type::getIntNTy(context, t.bits);
             }
         } else {
-            llvm::Type *element_type = llvm_type_of(Type::element_of(t));
+            llvm::Type *element_type = llvm_type_of(t.element_of());
             return VectorType::get(element_type, t.width);
         }
     }
@@ -565,13 +565,12 @@ namespace HalideInternal {
 
         // If the type doesn't match the expected type, we need to pointer cast
         if (load_type != base_address_type) {
-            std::cout << "Bit-casting pointer type" << std::endl;
+            std::cout << "Bit-casting pointer type " << std::endl;
             base_address = builder.CreatePointerCast(base_address, load_type);            
         }
 
         return builder.CreateGEP(base_address, index);
     }
-
 
     void CodeGen::visit(const Load *op) {
         // There are several cases. Different architectures may wish to override some
@@ -581,27 +580,65 @@ namespace HalideInternal {
             Value *index = codegen(op->index);
             Value *ptr = codegen_buffer_pointer(op->buffer, op->type, index);
             value = builder.CreateLoad(ptr);
-        } else {
-            // TODO 
-            /*
-            ModulusRemainder mod_rem(op);
-            mod_rem.modulus;
-            mod_rem.remainder;
-            // 2) Aligned dense vector loads 
-            
-            // 3) Unaligned dense vector loads with known alignment
-            
-            // 4) Unaligned dense vector loads with unknown alignment
-            
-            // 5) General gathers
-            */
-            assert(false && "Vector loads not yet implemented");            
+        } else {            
+            const Ramp *ramp;
+            const IntImm *stride;
+            if ((ramp = op->index.as<Ramp>()) &&
+                (stride = ramp->stride.as<IntImm>()) &&
+                (stride->value == 1)) {
+                /* TODO:
+                   ModulusRemainder mod_rem(op);
+                   mod_rem.modulus;
+                   mod_rem.remainder;
+                   // 2) Aligned dense vector loads 
+                   
+                   // 3) Unaligned dense vector loads with known alignment
+                   */
+                
+                // 4) Unaligned dense vector loads with unknown alignment
+                Value *base = codegen(ramp->base);
+                Value *ptr = codegen_buffer_pointer(op->buffer, op->type.element_of(), base);
+                ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
+                value = builder.CreateAlignedLoad(ptr, 1);                
+            } else {                
+                // 5) General gathers
+                std::cout << "Codegen general gather" << std::endl;
+                Value *index = codegen(op->index);
+                value = UndefValue::get(llvm_type_of(op->type));
+                for (int i = 0; i < op->type.width; i++) {
+                    Value *idx = builder.CreateExtractElement(index, ConstantInt::get(i32, i));
+                    Value *ptr = codegen_buffer_pointer(op->buffer, op->type.element_of(), idx);
+                    Value *val = builder.CreateLoad(ptr);
+                    value = builder.CreateInsertElement(value, val, ConstantInt::get(i32, i));
+                }
+            }            
         }
-
     }
 
     void CodeGen::visit(const Ramp *op) {        
-        assert(false && "Ramp not yet implemented");
+        Value *base = codegen(op->base);
+        Value *stride = codegen(op->stride);
+        value = UndefValue::get(llvm_type_of(op->type));
+        for (int i = 0; i < op->type.width; i++) {
+            std::cout << i << std::endl;
+            if (i > 0) {
+                if (op->type.is_float()) {
+                    base = builder.CreateFAdd(base, stride);
+                } else {
+                    base = builder.CreateAdd(base, stride);
+                }
+            }
+            value = builder.CreateInsertElement(value, base, ConstantInt::get(i32, i));
+        }
+    }
+
+    void CodeGen::visit(const Broadcast *op) {
+        value = codegen(op->value);        
+        Constant *undef = UndefValue::get(VectorType::get(value->getType(), 1));
+        Constant *zero = ConstantInt::get(i32, 0);
+        value = builder.CreateInsertElement(undef, value, zero);
+        Constant *zeros = ConstantVector::getSplat(op->width, zero);
+        value = builder.CreateShuffleVector(value, undef, zeros);
     }
 
     void CodeGen::visit(const Call *op) {
@@ -875,17 +912,44 @@ namespace HalideInternal {
     }
 
     void CodeGen::visit(const Store *op) {
-        Value *v = codegen(op->value);
+        Value *val = codegen(op->value);
+        Type value_type = op->value.type();
         // Scalar
-        if (op->index.type().is_scalar()) {
+        if (value_type.is_scalar()) {
             Value *index = codegen(op->index);
-            Value *ptr = codegen_buffer_pointer(op->buffer, op->value.type(), index);
-            builder.CreateStore(v, ptr);
+            Value *ptr = codegen_buffer_pointer(op->buffer, value_type, index);
+            builder.CreateStore(val, ptr);
         } else {
-            // Aligned dense vector store
+            const Ramp *ramp;
+            const IntImm *stride;
+            if ((ramp = op->index.as<Ramp>()) &&
+                (stride = ramp->stride.as<IntImm>()) &&               
+                (stride->value == 1)) {
+                bool aligned = false;
+                if (aligned) {
+                    // Aligned dense vector store
+                    // TODO
+                } else {
+                    // Unaligned dense store
+                    Value *base = codegen(ramp->base);
+                    Value *ptr = codegen_buffer_pointer(op->buffer, value_type.element_of(), base);
+                    ptr = builder.CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
+                    builder.CreateAlignedStore(val, ptr, 1);                    
+                }
+            } else {
+                // Scatter
+                Value *index = codegen(op->index);
+                for (int i = 0; i < value_type.width; i++) {
+                    Value *lane = ConstantInt::get(i32, i);
+                    Value *idx = builder.CreateExtractElement(index, lane);
+                    Value *v = builder.CreateExtractElement(val, lane);
+                    Value *ptr = codegen_buffer_pointer(op->buffer, value_type.element_of(), idx);
+                    builder.CreateStore(v, ptr);
+                }
+            }
                         
-            // Scatter
-            assert(false && "Vector store not yet implemented");
+
+
         }
     }
 

@@ -90,11 +90,12 @@ namespace HalideInternal {
         extern_function_1_was_called = true;
         return x < 0.4 ? 3 : 1;
     }
-    
+
     void CodeGen_X86::test() {
         // corner cases to test:
         // signed mod by power of two, non-power of two
         // loads of mismatched types (e.g. load a float from something allocated as an array of ints)
+        // Calls to vectorized externs, and externs for which no vectorized version exists
 
         Argument buffer_arg = {"buf", true, Int(0)};
         Argument float_arg = {"alpha", false, Float(32)};
@@ -115,7 +116,27 @@ namespace HalideInternal {
         s = new Allocate("tmp_heap", Int(32), 43 * beta, s);
         s = new For("i", -1, 3, For::Parallel, s);        
 
-        Stmt init = new For("i", 0, 16, For::Serial, new Store("buf", 0, i));
+        // We'll clear out the initial buffer except for the first and
+        // last two elements using dense unaligned vectors
+        Stmt init = new For("i", 0, 3, For::Serial, 
+                             new Store("buf", 
+                                       new Ramp(i*4+2, 1, 4),
+                                       new Ramp(i*4+2, 1, 4)));
+
+        // Now set the first and last two elements
+        init = new Block(init, new Store("buf", 0, 0));
+        init = new Block(init, new Store("buf", 1, 1));
+        init = new Block(init, new Store("buf", 14, 14));
+        init = new Block(init, new Store("buf", 15, 15));
+
+        // Then multiply the even terms by 17 using sparse vectors
+        init = new Block(init, 
+                         new For("i", 0, 2, For::Serial, 
+                                 new Store("buf", 
+                                           new Mul(new Broadcast(17, 4), 
+                                                   new Load(Int(32, 4), "buf", new Ramp(i*8, 2, 4))),
+                                           new Ramp(i*8, 2, 4))));
+
         s = new Block(init, s);
 
         std::cout << s << std::endl;
@@ -136,22 +157,35 @@ namespace HalideInternal {
         memset(&buf, 0, sizeof(buf));
         buf.host = (uint8_t *)(&scratch[0]);
         fn(&buf, -32, 0);
+        for (int i = 0; i < 16; i++) std::cout << scratch[i] << ", ";
+        std::cout << std::endl;
         assert(scratch[0] == 5);
         assert(scratch[1] == 5);
         assert(scratch[2] == 5);
-        assert(scratch[3] == 0);
+        assert(scratch[3] == 3);
+        assert(scratch[4] == 4*17);
+        assert(scratch[5] == 5);
+        assert(scratch[6] == 6*17);
         fn(&buf, 37.32f, 2);
-        assert(scratch[1] == 0);
+        for (int i = 0; i < 16; i++) std::cout << scratch[i] << ", ";
+        std::cout << std::endl;
+        assert(scratch[0] == 0);
+        assert(scratch[1] == 1);
         assert(scratch[2] == 4);
         assert(scratch[3] == 4);
         assert(scratch[4] == 4);
-        assert(scratch[5] == 0);
+        assert(scratch[5] == 5);
+        assert(scratch[6] == 6*17);
         fn(&buf, 4.0f, 1);
+        for (int i = 0; i < 16; i++) std::cout << scratch[i] << ", ";
+        std::cout << std::endl;
         assert(scratch[0] == 0);
         assert(scratch[1] == 3);
         assert(scratch[2] == 3);
         assert(scratch[3] == 3);
-        assert(scratch[4] == 0);
+        assert(scratch[4] == 4*17);
+        assert(scratch[5] == 5);
+        assert(scratch[6] == 6*17);
         assert(extern_function_1_was_called);
     }
 
