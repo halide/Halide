@@ -15,11 +15,11 @@ namespace HalideInternal {
 
     CodeGen_X86::CodeGen_X86() : CodeGen() {
         i32x4 = VectorType::get(i32, 4);
-        i32x8 = VectorType::get(i32, 8);        
+        i32x8 = VectorType::get(i32, 8);
     }
 
     void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) {
-        assert(builtins_bitcode_x86 && "initial module for x86 is NULL");
+        assert(builtins_bitcode_x86_length && "initial module for x86 is empty");
 
         // Wrap the initial module in a memory buffer
         StringRef sb = StringRef((char *)builtins_bitcode_x86, builtins_bitcode_x86_length);
