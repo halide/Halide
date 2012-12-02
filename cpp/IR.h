@@ -417,12 +417,12 @@ namespace HalideInternal {
         int width;
 
         Ramp(Expr b, Expr s, int w) : 
-            ExprNode<Ramp>(Type::vector_of(b.type(), w)),
+            ExprNode<Ramp>(b.type().vector_of(w)),
             base(b), stride(s), width(w) {
             assert(base.defined() && "Ramp of undefined");
             assert(stride.defined() && "Ramp of undefined");
             assert(w > 1 && "Ramp of width <= 1");
-            assert(stride.type() == type && "Ramp of mismatched types");
+            assert(stride.type() == base.type() && "Ramp of mismatched types");
         }
     };
 
@@ -434,7 +434,7 @@ namespace HalideInternal {
         int width;
         
         Broadcast(Expr v, int w) :
-            ExprNode<Broadcast>(Type::vector_of(v.type(), w)), 
+            ExprNode<Broadcast>(v.type().vector_of(w)), 
             value(v), width(w) {
             assert(v.defined() && "Broadcast of undefined");
             assert(w > 1 && "Broadcast of width <= 1");            
