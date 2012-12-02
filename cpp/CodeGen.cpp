@@ -166,30 +166,27 @@ namespace HalideInternal {
         assert(target && "Could not create target");
 
         TargetOptions options;
-        options.LessPreciseFPMADOption = EnableFPMAD;
-        options.NoFramePointerElim = DisableFPElim;
-        options.NoFramePointerElimNonLeaf = DisableFPElimNonLeaf;
-        options.AllowFPOpFusion = FuseFPOps;
-        options.UnsafeFPMath = EnableUnsafeFPMath;
-        options.NoInfsFPMath = EnableNoInfsFPMath;
-        options.NoNaNsFPMath = EnableNoNaNsFPMath;
-        options.HonorSignDependentRoundingFPMathOption =
-            EnableHonorSignDependentRoundingFPMath;
-        options.UseSoftFloat = GenerateSoftFloatCalls;
-        if (FloatABIForCalls != FloatABI::Default)
-            options.FloatABIType = FloatABIForCalls;
-        options.NoZerosInBSS = DontPlaceZerosInBSS;
-        options.GuaranteedTailCallOpt = EnableGuaranteedTailCallOpt;
-        options.DisableTailCalls = DisableTailCalls;
-        options.StackAlignmentOverride = OverrideStackAlignment;
-        options.RealignStack = EnableRealignStack;
-        options.TrapFuncName = TrapFuncName;
-        options.PositionIndependentExecutable = EnablePIE;
-        options.EnableSegmentedStacks = SegmentedStacks;
-        options.UseInitArray = UseInitArray;
-        options.SSPBufferSize = SSPBufferSize;
-
-
+        options.LessPreciseFPMADOption = true;
+        options.NoFramePointerElim = false;
+        options.NoFramePointerElimNonLeaf = false;
+        options.AllowFPOpFusion = FPOpFusion::Fast;
+        options.UnsafeFPMath = true;
+        options.NoInfsFPMath = true;
+        options.NoNaNsFPMath = true;
+        options.HonorSignDependentRoundingFPMathOption = false;
+        options.UseSoftFloat = false;
+        options.FloatABIType = FloatABI::Default;
+        options.NoZerosInBSS = false;
+        options.GuaranteedTailCallOpt = false;
+        options.DisableTailCalls = false;
+        options.StackAlignmentOverride = 0;
+        options.RealignStack = false;
+        options.TrapFuncName = "";
+        options.PositionIndependentExecutable = true;
+        options.EnableSegmentedStacks = false;
+        options.UseInitArray = false;
+        options.SSPBufferSize = 0;
+        
         TargetMachine *target_machine =
             target->createTargetMachine(module->getTargetTriple(), 
                                         "", // -mcpu
