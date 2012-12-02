@@ -448,13 +448,13 @@ namespace HalideInternal {
      * nodes don't survive all the way down to code generation - the
      * lowering process converts them to Load nodes. */
     struct Call : public ExprNode<Call> {
-        string buffer;
+        string name;
         vector<Expr > args;
         typedef enum {Image, Extern, Halide} CallType;
         CallType call_type;
 
-        Call(Type t, string b, const vector<Expr > &a, CallType ct) : 
-            ExprNode<Call>(t), buffer(b), args(a), call_type(ct) {
+        Call(Type t, string n, const vector<Expr > &a, CallType ct) : 
+            ExprNode<Call>(t), name(n), args(a), call_type(ct) {
             for (size_t i = 0; i < args.size(); i++) {
                 assert(args[i].defined() && "Call of undefined");
             }

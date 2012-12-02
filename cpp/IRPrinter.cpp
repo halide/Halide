@@ -272,7 +272,7 @@ namespace HalideInternal {
     }
 
     void IRPrinter::visit(const Call *op) {
-        stream << op->buffer << "(";
+        stream << op->name << "(";
         for (size_t i = 0; i < op->args.size(); i++) {
             print(op->args[i]);
             if (i < op->args.size() - 1) {

@@ -36,7 +36,7 @@ architecture.%.initmod.c: architecture.%.stdlib.cpp architecture.%.stdlib.ll arc
 	$(CXX) $(CXX_FLAGS) -c $< -o $@	
 
 test_all: test_all.cpp libHalide.a
-	$(CXX) $(CXX_FLAGS) -g test_all.cpp -L. -lHalide -o test_all -ldl -lpthread
+	$(CXX) $(CXX_FLAGS) -rdynamic -g test_all.cpp -L. -lHalide -o test_all -ldl -lpthread
 
 clean:
 	rm -f libHalide.a

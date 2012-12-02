@@ -9,6 +9,11 @@ namespace HalideInternal {
         return new Add(a, b);
     }
     
+    inline Expr &operator+=(Expr &a, Expr b) {
+        a = new Add(a, b);
+        return a;
+    }
+
     inline Expr operator-(Expr a, Expr b) {
         return new Sub(a, b);
     }
