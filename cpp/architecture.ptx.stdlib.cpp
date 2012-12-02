@@ -259,7 +259,7 @@ void WEAK __init(const char* ptx_src)
 }
 
 void WEAK __release() {
-    CUcontext ignore;
+    //CUcontext ignore;
     // TODO: this is for timing; bad for release-mode performance
     CHECK_CALL( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
     //CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );

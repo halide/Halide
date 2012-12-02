@@ -20,7 +20,8 @@ namespace HalideInternal {
 
     LLVMContext CodeGen::context;
 
-    CodeGen::CodeGen() : module(NULL), builder(context) {
+    CodeGen::CodeGen() : 
+        module(NULL), function(NULL), builder(context), value(NULL), buffer_t(NULL) {
         // Define some types
         void_t = llvm::Type::getVoidTy(context);
         i1 = llvm::Type::getInt1Ty(context);
@@ -684,7 +685,7 @@ namespace HalideInternal {
             StructType *struct_t = StructType::create(gen->context, "closure_t");
             vector<llvm::Type *> fields;
             for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
-                 iter != result.end(); iter++) {
+                 iter != result.end(); ++iter) {
                 fields.push_back(iter->second);
             }
             struct_t->setBody(fields, false);
@@ -695,7 +696,7 @@ namespace HalideInternal {
             // dst should be a pointer to a struct of the type returned by build_type
             int idx = 0;
             for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
-                 iter != result.end(); iter++) {
+                 iter != result.end(); ++iter) {
                 std::cout << "Putting " << iter->first << " in closure" << std::endl;
                 Value *val = src.get(iter->first);
                 Value *ptr = builder.CreateConstGEP2_32(dst, 0, idx++);
@@ -710,7 +711,7 @@ namespace HalideInternal {
             // src should be a pointer to a struct of the type returned by build_type
             int idx = 0;
             for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
-                 iter != result.end(); iter++) {
+                 iter != result.end(); ++iter) {
                 Value *ptr = builder.CreateConstGEP2_32(src, 0, idx++);
                 Value *val = builder.CreateLoad(ptr);
                 dst.push(iter->first, val);

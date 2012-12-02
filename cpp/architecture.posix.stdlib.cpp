@@ -161,7 +161,6 @@ WEAK void *worker(void *void_arg) {
             job->id = 0; // mark the job done
             pthread_mutex_unlock(&work_queue.mutex);
         } else {
-            int remaining = job->max - job->next;
             // Claim some tasks
             //int claimed = (remaining + threads - 1)/threads;
             int claimed = 1;
