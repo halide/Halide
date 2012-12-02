@@ -13,10 +13,12 @@
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/CodeGen/CommandFlags.h>
 #include <llvm/DataLayout.h>
+#include <sstream>
 
 namespace HalideInternal {
 
     using namespace llvm;
+    using std::ostringstream;
 
     LLVMContext CodeGen::context;
 
@@ -604,7 +606,57 @@ namespace HalideInternal {
 
     void CodeGen::visit(const Call *op) {
         assert(op->call_type == Call::Extern && "Can only codegen extern calls");
-        // ugh...
+
+        // First, codegen the args
+        vector<Value *> args(op->args.size());
+        for (size_t i = 0; i < op->args.size(); i++) {
+            args[i] = codegen(op->args[i]);
+        }
+
+        Function *fn = module->getFunction(op->name);
+        
+        llvm::Type *result_type = llvm_type_of(op->type);
+
+        // If we can't find it, declare it extern "C"
+        if (!fn) {
+            std::cout << "Didn't find " << op->name << " in initial module. Assuming it's extern." << std::endl;
+            vector<llvm::Type *> arg_types(args.size());
+            for (size_t i = 0; i < args.size(); i++) {
+                arg_types[i] = args[i]->getType();
+            }
+            FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
+            
+            fn = Function::Create(func_t, Function::ExternalLinkage, op->name, module);
+            fn->setCallingConv(CallingConv::C);            
+        }
+
+        if (op->type.is_scalar()) {
+            value = builder.CreateCall(fn, args);
+        } else {
+            // Check if a vector version of the function already
+            // exists. We use the naming convention that a N-wide
+            // version of a function foo is called fooxN.
+            ostringstream ss;
+            ss << op->name << 'x' << op->type.width;
+            Function *vec_fn = module->getFunction(ss.str());
+            if (vec_fn) {
+                value = builder.CreateCall(vec_fn, args);
+                fn = vec_fn;
+            } else {
+                // Scalarize. Extract each simd lane in turn and do
+                // one scalar call to the function.
+                value = UndefValue::get(result_type);
+                for (int i = 0; i < op->type.width; i++) {
+                    Value *idx = ConstantInt::get(i32, i);
+                    vector<Value *> arg_lane(args.size());
+                    for (size_t j = 0; j < args.size(); j++) {
+                        arg_lane[j] = builder.CreateExtractElement(args[j], idx);
+                    }
+                    Value *result_lane = builder.CreateCall(fn, arg_lane);
+                    value = builder.CreateInsertElement(value, result_lane, idx);
+                }
+            }            
+        }
     }
 
     void CodeGen::visit(const Let *op) {
@@ -697,7 +749,7 @@ namespace HalideInternal {
             int idx = 0;
             for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
                  iter != result.end(); ++iter) {
-                std::cout << "Putting " << iter->first << " in closure" << std::endl;
+                // std::cout << "Putting " << iter->first << " in closure" << std::endl;
                 Value *val = src.get(iter->first);
                 Value *ptr = builder.CreateConstGEP2_32(dst, 0, idx++);
                 if (val->getType() != iter->second) {
@@ -764,7 +816,8 @@ namespace HalideInternal {
             symbol_table.pop(op->name);
         } else if (op->for_type == For::Parallel) {
 
-            // Dump everything relevant in the symbol table into a closure
+            // Find every symbol that the body of this loop refers to
+            // and dump it into a closure
             Closure closure(op->body, this, op->name);
 
             // Allocate a closure
@@ -774,7 +827,7 @@ namespace HalideInternal {
             // Fill in the closure
             closure.pack_struct(ptr, symbol_table, builder);
 
-            // Make a function that represents the body of the loop
+            // Make a new function that does one iteration of the body of the loop
             FunctionType *func_t = FunctionType::get(void_t, vec(i32, (llvm::Type *)(i8->getPointerTo())), false);
             Function *containing_function = function;
             function = Function::Create(func_t, Function::InternalLinkage, "par_for_" + op->name, module);
@@ -784,18 +837,18 @@ namespace HalideInternal {
             BasicBlock *block = BasicBlock::Create(context, "entry", function);
             builder.SetInsertPoint(block);
 
-            // Make a new scope to use       
+            // Make a new scope to use
             Scope<Value *> saved_symbol_table;
             std::swap(symbol_table, saved_symbol_table);
 
             // Get the function arguments
-            Function::arg_iterator iter = function->arg_begin();
 
-            // Make the loop variable refer to the first argument of the function
+            // The loop variable is first argument of the function
+            Function::arg_iterator iter = function->arg_begin();
             sym_push(op->name, iter);
 
             // The closure pointer is the second argument. 
-            iter++;
+            ++iter;
             iter->setName("closure");
             Value *closure_handle = builder.CreatePointerCast(iter, closure_t->getPointerTo());
             // Load everything from the closure into the new scope
@@ -805,10 +858,10 @@ namespace HalideInternal {
             codegen(op->body);
             builder.CreateRetVoid();
 
-            // Move the builder pack to the main function and call do_par_for
+            // Move the builder back to the main function and call do_par_for
             builder.SetInsertPoint(call_site);
             Function *do_par_for = module->getFunction("do_par_for");
-            assert(do_par_for && "Could not find do_par_for in module");
+            assert(do_par_for && "Could not find do_par_for in initial module");
             ptr = builder.CreatePointerCast(ptr, i8->getPointerTo());
             vector<Value *> args = vec((Value *)function, min, extent, ptr);
             builder.CreateCall(do_par_for, args);
