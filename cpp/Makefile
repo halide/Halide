@@ -1,11 +1,11 @@
 CXX = g++
 LLVM_DIR = ../llvm
 LLVM_CONFIG = $(LLVM_DIR)/Release+Asserts/bin/llvm-config
-CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti
+CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -g
 LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs jit bitwriter bitreader x86 arm linker nvptx ipo)
 
 
-OBJECTS = CodeGen.o CodeGen_X86.o IR.o IRMutator.o IRPrinter.o IRVisitor.o CodeGen_C.o Substitute.o ModulusRemainder.o Bounds.o Derivative.o
+OBJECTS = CodeGen.o CodeGen_X86.o IR.o IRMutator.o IRPrinter.o IRVisitor.o CodeGen_C.o Substitute.o ModulusRemainder.o Bounds.o Derivative.o Func.o
 INITIAL_MODULES = architecture.x86.initmod.o architecture.x86_avx.initmod.o architecture.ptx.initmod.o architecture.ptx_dev.initmod.o architecture.arm.initmod.o architecture.arm_android.initmod.o
 
 all: libHalide.a test_all
@@ -36,7 +36,7 @@ architecture.%.initmod.c: architecture.%.stdlib.cpp architecture.%.stdlib.ll arc
 	$(CXX) $(CXX_FLAGS) -c $< -o $@	
 
 test_all: test_all.cpp libHalide.a
-	$(CXX) $(CXX_FLAGS) -rdynamic -g test_all.cpp -L. -lHalide -o test_all -ldl -lpthread
+	$(CXX) $(CXX_FLAGS) -rdynamic test_all.cpp -L. -lHalide -o test_all -ldl -lpthread
 
 clean:
 	rm -f libHalide.a
