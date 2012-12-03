@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <utility>
+#include <map>
 #include <assert.h>
 #include <stdio.h>
 
@@ -14,6 +15,7 @@ namespace HalideInternal {
     using std::string;
     using std::vector;
     using std::pair;
+    using std::map;
 
     /* A class representing a type of IR node (e.g. Add, or Mul, or
        PrintStmt). We use it for rtti (without having to compile with
