@@ -1,7 +1,7 @@
 CXX = g++
 LLVM_DIR = ../llvm
 LLVM_CONFIG = $(LLVM_DIR)/Release+Asserts/bin/llvm-config
-CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror
+CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti
 LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs jit bitwriter bitreader x86 arm linker nvptx ipo)
 
 
