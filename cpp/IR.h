@@ -15,6 +15,10 @@ namespace HalideInternal {
     using std::vector;
     using std::pair;
 
+    /* A class representing a type of IR node (e.g. Add, or Mul, or
+       PrintStmt). We use it for rtti (without having to compile with
+       rtti). */
+    struct IRNodeType {};
 
     /* The abstract base classes for a node in the Halide IR. */
     struct IRNode {
@@ -33,6 +37,14 @@ namespace HalideInternal {
            so that we can do reference counting even through const
            references to IR nodes. */
         mutable int ref_count;
+
+        /* Each IR node subclass should return some unique pointer. We
+         * can compare these pointers to do runtime type
+         * identification. We don't compile with rtti because that
+         * injects run-time type identification stuff everywhere (and
+         * often breaks when linking external libraries compiled
+         * without it), and we only want it for IR nodes. */
+        virtual const IRNodeType *type_info() const = 0;
     };
 
     /* IR nodes are split into expressions and statements. These are
@@ -46,7 +58,8 @@ namespace HalideInternal {
     struct BaseStmtNode : public IRNode {
     };
 
-    /* A base class for expression nodes. They all contain their types */
+    /* A base class for expression nodes. They all contain their types
+     * (e.g. Int(32), Float(32)) */
     struct BaseExprNode : public IRNode {
         Type type;
         BaseExprNode(Type t) : type(t) {}
@@ -56,13 +69,16 @@ namespace HalideInternal {
        duplicated code in the IR Nodes. These classes live between the
        abstract base classes and the actual IR Nodes in the
        inheritance hierarchy. It provides an implementation of the
-       accept function necessary for the visitor pattern to work. */
+       accept function necessary for the visitor pattern to work, and
+       a concrete instantiation of a unique IRNodeType per class. */
     template<typename T>
     struct ExprNode : public BaseExprNode {
         ExprNode(Type t) : BaseExprNode(t) {}
         void accept(IRVisitor *v) const {
             v->visit((const T *)this);
         }
+        virtual IRNodeType *type_info() const {return &_type_info;}
+        static IRNodeType _type_info;
     };
 
     template<typename T>
@@ -70,6 +86,8 @@ namespace HalideInternal {
         void accept(IRVisitor *v) const {
             v->visit((const T *)this);
         }
+        virtual IRNodeType *type_info() const {return &_type_info;}
+        static IRNodeType _type_info;
     };
     
     /* IR nodes are passed around opaque handles to them. This is a
@@ -126,6 +144,20 @@ namespace HalideInternal {
         bool sameAs(const IRHandle &other) {
             return node == other.node;
         }
+
+        /* Downcast this ir node to its actual type (e.g. Add,
+         * or Select). This returns NULL if the node is not of the
+         * requested type. Example usage:
+         * 
+         * if (const Add *add = node->as<Add>()) {
+         *   // This is an add node
+         * }
+         */
+        template<typename T> const T *as() const {
+            if (node->type_info() == &T::_type_info)
+                return (const T *)node;
+            return NULL;
+        }
     };
 
     /* A reference-counted handle on an expression node */
@@ -143,35 +175,12 @@ namespace HalideInternal {
         Type type() const {
             return ((BaseExprNode *)node)->type;
         }
-
-        /* Downcast this expression node to its actual type (e.g. Add,
-         * or Select). This returns NULL if the node is not of the
-         * requested type. Example usage:
-         * 
-         * if (const Add *add = node->as<Add>()) {
-         *   // This is an add node
-         * }
-         */
-
-        template<typename T> const T *as() const {
-            /* If we decide later that compiling with rtti is a bad
-             * idea, we can change this method to do something else
-             * (e.g. call a virtual function)
-             */
-            return dynamic_cast<const T *>(node);
-        }
     };
 
     /* A reference-counted handle to a statement node. */
     struct Stmt : public IRHandle {
         Stmt() : IRHandle() {}
         Stmt(const BaseStmtNode *n) : IRHandle(n) {}
-
-        /* This dynamically downcasts to an actual statement type, or
-         * returns NULL. See Expr::as for example usage. */
-        template<typename T> const T *as() {
-            return dynamic_cast<const T *>(node);
-        }
     };
 
     /* The actual IR nodes begin here. Remember that all the Expr

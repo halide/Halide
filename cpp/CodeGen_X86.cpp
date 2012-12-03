@@ -108,13 +108,6 @@ namespace HalideInternal {
         Expr i = new Var(Int(32), "i");
         Expr alpha = new Var(Float(32), "alpha");
         Expr beta = new Var(Int(32), "beta");
-        Expr e = new Select(alpha > 4.0f, 3, 2);
-        e += (new Call(Int(32), "extern_function_1", vec(alpha), Call::Extern));
-        Stmt s = new Store("buf", e, x + i);
-        s = new LetStmt("x", beta+1, s);
-        s = new Allocate("tmp_stack", Int(32), 127, s);
-        s = new Allocate("tmp_heap", Int(32), 43 * beta, s);
-        s = new For("i", -1, 3, For::Parallel, s);        
 
         // We'll clear out the initial buffer except for the first and
         // last two elements using dense unaligned vectors
@@ -137,7 +130,21 @@ namespace HalideInternal {
                                                    new Load(Int(32, 4), "buf", new Ramp(i*8, 2, 4))),
                                            new Ramp(i*8, 2, 4))));
 
-        s = new Block(init, s);
+        // Then print some stuff
+        vector<Expr> print_args = vec<Expr>(3, 4.5f, new Cast(Int(8), 2), new Ramp(alpha, 3.2f, 4));
+        init = new Block(init, new PrintStmt("Test print: ", print_args));
+
+        // Then run a parallel for loop that clobbers three elements of buf
+        Expr e = new Select(alpha > 4.0f, 3, 2);
+        e += (new Call(Int(32), "extern_function_1", vec(alpha), Call::Extern));
+        Stmt loop = new Store("buf", e, x + i);
+        loop = new LetStmt("x", beta+1, loop);
+        // Do some local allocations within the loop
+        loop = new Allocate("tmp_stack", Int(32), 127, loop);
+        loop = new Allocate("tmp_heap", Int(32), 43 * beta, loop);
+        loop = new For("i", -1, 3, For::Parallel, loop);        
+
+        Stmt s = new Block(init, loop);
 
         std::cout << s << std::endl;
 

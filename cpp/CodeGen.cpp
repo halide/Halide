@@ -19,6 +19,8 @@ namespace HalideInternal {
 
     using namespace llvm;
     using std::ostringstream;
+    using std::cout;
+    using std::endl;
 
     LLVMContext CodeGen::context;
 
@@ -118,17 +120,17 @@ namespace HalideInternal {
 
         // Create the execution engine if it hasn't already been done
         if (!execution_engine) {
-            std::string error_string;
+            string error_string;
             EngineBuilder engine_builder(module);
             engine_builder.setErrorStr(&error_string);
             engine_builder.setEngineKind(EngineKind::JIT);
             engine_builder.setUseMCJIT(true);
             //engine_builder.setOptLevel(CodeGenOpt::Aggressive);
             execution_engine = engine_builder.create();
-            if (!execution_engine) std::cout << error_string << std::endl;
+            if (!execution_engine) cout << error_string << endl;
             assert(execution_engine && "Couldn't create execution engine");
         } else { 
-            std::cout << "Adding module to existing execution engine" << std::endl;
+            cout << "Adding module to existing execution engine" << endl;
             // Execution engine is already created. Add this module to it.
             execution_engine->addModule(module);
         }
@@ -162,10 +164,10 @@ namespace HalideInternal {
 
     void CodeGen::compile_to_native(const string &filename, bool assembly) {
          // Get the target specific parser.
-        std::string error_string;
-        std::cout << module->getTargetTriple() << std::endl;
+        string error_string;
+        cout << module->getTargetTriple() << endl;
         const Target *target = TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
-        if (!target) std::cout << error_string << std::endl;
+        if (!target) cout << error_string << endl;
         assert(target && "Could not create target");
 
         TargetOptions options;
@@ -357,7 +359,7 @@ namespace HalideInternal {
 
     Value *CodeGen::codegen(Expr e) {
         assert(e.defined());
-        std::cout << "Codegen: " << e.type() << ", " << e << std::endl;
+        cout << "Codegen: " << e.type() << ", " << e << endl;
         value = NULL;
         e.accept(this);
         assert(value && "Codegen of an expr did not produce an llvm value");
@@ -366,7 +368,7 @@ namespace HalideInternal {
 
     void CodeGen::codegen(Stmt s) {
         assert(s.defined());
-        std::cout << "Codegen: " << s;
+        cout << "Codegen: " << s;
         value = NULL;
         s.accept(this);
     }
@@ -380,8 +382,31 @@ namespace HalideInternal {
     }
 
     void CodeGen::visit(const Cast *op) {
-        // do nothing for now
         value = codegen(op->value);
+
+        Type src = op->value.type();
+        Type dst = op->type;
+        llvm::Type *llvm_dst = llvm_type_of(dst);
+
+        if (!src.is_float() && !dst.is_float()) {
+            // This has the same semantics as the longer code in
+            // cg_llvm.ml.  Widening integer casts either zero extend
+            // or sign extend, depending on the source type. Narrowing
+            // integer casts always truncate.
+            value = builder.CreateIntCast(value, llvm_dst, src.is_int());
+        } else if (src.is_float() && dst.is_int()) {
+            value = builder.CreateFPToSI(value, llvm_dst);
+        } else if (src.is_float() && dst.is_uint()) {
+            value = builder.CreateFPToUI(value, llvm_dst);
+        } else if (src.is_int() && dst.is_float()) {
+            value = builder.CreateSIToFP(value, llvm_dst);
+        } else if (src.is_uint() && dst.is_float()) {
+            value = builder.CreateUIToFP(value, llvm_dst);
+        } else {
+            assert(src.is_float() && dst.is_float());
+            // Float widening or narrowing
+            value = builder.CreateFPCast(value, llvm_dst);
+        }
     }
 
     void CodeGen::visit(const Var *op) {
@@ -565,7 +590,7 @@ namespace HalideInternal {
 
         // If the type doesn't match the expected type, we need to pointer cast
         if (load_type != base_address_type) {
-            std::cout << "Bit-casting pointer type " << std::endl;
+            cout << "Bit-casting pointer type " << endl;
             base_address = builder.CreatePointerCast(base_address, load_type);            
         }
 
@@ -602,7 +627,7 @@ namespace HalideInternal {
                 value = builder.CreateAlignedLoad(ptr, 1);                
             } else {                
                 // 5) General gathers
-                std::cout << "Codegen general gather" << std::endl;
+                cout << "Codegen general gather" << endl;
                 Value *index = codegen(op->index);
                 value = UndefValue::get(llvm_type_of(op->type));
                 for (int i = 0; i < op->type.width; i++) {
@@ -620,7 +645,7 @@ namespace HalideInternal {
         Value *stride = codegen(op->stride);
         value = UndefValue::get(llvm_type_of(op->type));
         for (int i = 0; i < op->type.width; i++) {
-            std::cout << i << std::endl;
+            cout << i << endl;
             if (i > 0) {
                 if (op->type.is_float()) {
                     base = builder.CreateFAdd(base, stride);
@@ -656,7 +681,7 @@ namespace HalideInternal {
 
         // If we can't find it, declare it extern "C"
         if (!fn) {
-            std::cout << "Didn't find " << op->name << " in initial module. Assuming it's extern." << std::endl;
+            cout << "Didn't find " << op->name << " in initial module. Assuming it's extern." << endl;
             vector<llvm::Type *> arg_types(args.size());
             for (size_t i = 0; i < args.size(); i++) {
                 arg_types[i] = args[i]->getType();
@@ -709,7 +734,69 @@ namespace HalideInternal {
     }
 
     void CodeGen::visit(const PrintStmt *op) {
-        assert(false && "PrintStmt not yet implemented");
+        // Codegen the args, and flatten them into an array of
+        // scalars. Also generate a format string
+        ostringstream format_string;        
+        format_string << op->prefix;
+
+        string fmt_of_type[3];
+        fmt_of_type[Type::UInt] = "%u";
+        fmt_of_type[Type::Int] = "%d";
+        fmt_of_type[Type::Float] = "%3.3f";
+
+        vector<Value *> args;
+        vector<Type> dst_types;
+        for (size_t i = 0; i < op->args.size(); i++) {
+            format_string << ' ';
+            Expr arg = op->args[i];
+            Value *ll_arg = codegen(arg);
+            if (arg.type().is_vector()) {
+                format_string << '[';
+                for (int j = 0; j < arg.type().width; j++) {
+                    if (j > 0) format_string << ' ';
+                    Value *idx = ConstantInt::get(i32, j);
+                    Value *ll_arg_lane = builder.CreateExtractElement(ll_arg, idx);
+                    args.push_back(ll_arg_lane);
+                    dst_types.push_back(arg.type().element_of());
+                    format_string << fmt_of_type[arg.type().t];
+                }
+                format_string << ']';
+            } else {
+                args.push_back(ll_arg);
+                dst_types.push_back(arg.type());
+                format_string << fmt_of_type[arg.type().t];
+            }
+        }
+
+        format_string << endl;
+
+        // Now cast all the args to the appropriate types
+        for (size_t i = 0; i < args.size(); i++) {
+            if (dst_types[i].is_int()) {
+                args[i] = builder.CreateIntCast(args[i], i32, true);                
+            } else if (dst_types[i].is_uint()) {
+                args[i] = builder.CreateIntCast(args[i], i32, false);
+            } else {
+                args[i] = builder.CreateFPCast(args[i], f64);
+            }            
+        }
+
+        // Make the format string a global constant
+        string fmt_string = format_string.str();
+        llvm::Type *fmt_type = ArrayType::get(i8, fmt_string.size()+1);
+        GlobalVariable *fmt_global = new GlobalVariable(*module, fmt_type, true, GlobalValue::PrivateLinkage, 0);
+        fmt_global->setInitializer(ConstantDataArray::getString(context, fmt_string));
+        Value *char_ptr = builder.CreateConstGEP2_32(fmt_global, 0, 0);
+
+        // The format string is the first argument
+        args.insert(args.begin(), char_ptr);
+
+        // Grab the print function from the initial module
+        Function *hlprintf = module->getFunction("hlprintf");
+        assert(hlprintf && "Could not find hlprintf in initial module");
+
+        // Call it
+        builder.CreateCall(hlprintf, args);
     }
 
     void CodeGen::visit(const AssertStmt *op) {
@@ -757,9 +844,9 @@ namespace HalideInternal {
         }
         void visit(const Var *op) {            
             if (ignore.contains(op->name)) {
-                //std::cout << "Ignoring reference to: " << op->name << std::endl;
+                //cout << "Ignoring reference to: " << op->name << endl;
             } else {
-                //std::cout << "Putting var in closure: " << op->name << std::endl;
+                //cout << "Putting var in closure: " << op->name << endl;
                 result[op->name] = gen->llvm_type_of(op->type);
             }
         }
@@ -786,7 +873,7 @@ namespace HalideInternal {
             int idx = 0;
             for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
                  iter != result.end(); ++iter) {
-                // std::cout << "Putting " << iter->first << " in closure" << std::endl;
+                // cout << "Putting " << iter->first << " in closure" << endl;
                 Value *val = src.get(iter->first);
                 Value *ptr = builder.CreateConstGEP2_32(dst, 0, idx++);
                 if (val->getType() != iter->second) {
