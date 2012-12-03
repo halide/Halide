@@ -116,11 +116,10 @@ namespace HalideInternal {
                                        new Ramp(i*4+2, 1, 4),
                                        new Ramp(i*4+2, 1, 4)));
 
-        // Now set the first and last two elements
+        // Now set the first two elements using scalars, and last four elements using a dense aligned vector
         init = new Block(init, new Store("buf", 0, 0));
         init = new Block(init, new Store("buf", 1, 1));
-        init = new Block(init, new Store("buf", 14, 14));
-        init = new Block(init, new Store("buf", 15, 15));
+        init = new Block(init, new Store("buf", new Ramp(12, 1, 4), new Ramp(12, 1, 4)));
 
         // Then multiply the even terms by 17 using sparse vectors
         init = new Block(init, 
