@@ -143,7 +143,7 @@ namespace HalideInternal {
         }
         /* Check if two handles point to the same node. This is
          * equality of reference, not equality of value. */
-        bool sameAs(const IRHandle &other) {
+        bool same_as(const IRHandle &other) {
             return node == other.node;
         }
 
@@ -432,6 +432,8 @@ namespace HalideInternal {
             base(b), stride(s), width(w) {
             assert(base.defined() && "Ramp of undefined");
             assert(stride.defined() && "Ramp of undefined");
+            assert(base.type().is_scalar() && "Ramp with vector base");
+            assert(stride.type().is_scalar() && "Ramp with vector stride");
             assert(w > 1 && "Ramp of width <= 1");
             assert(stride.type() == base.type() && "Ramp of mismatched types");
         }
@@ -448,6 +450,7 @@ namespace HalideInternal {
             ExprNode<Broadcast>(v.type().vector_of(w)), 
             value(v), width(w) {
             assert(v.defined() && "Broadcast of undefined");
+            assert(v.type().is_scalar() && "Broadcast of vector");
             assert(w > 1 && "Broadcast of width <= 1");            
         }
     };
@@ -524,6 +527,7 @@ namespace HalideInternal {
         AssertStmt(Expr c, string m) :
             condition(c), message(m) {
             assert(condition.defined() && "AssertStmt of undefined");
+            assert(condition.type().is_scalar() && "AssertStmt of vector");
         }
     };
 
@@ -569,6 +573,8 @@ namespace HalideInternal {
             name(n), min(m), extent(e), for_type(f), body(b) {
             assert(min.defined() && "For of undefined");
             assert(extent.defined() && "For of undefined");
+            assert(min.type().is_scalar() && "For with vector min");
+            assert(extent.type().is_scalar() && "For with vector extent");
             assert(body.defined() && "For of undefined");
         }
     };
@@ -617,6 +623,7 @@ namespace HalideInternal {
             buffer(buf), type(t), size(s), body(bod) {
             assert(size.defined() && "Allocate of undefined");
             assert(body.defined() && "Allocate of undefined");
+            assert(size.type().is_scalar() == 1 && "Allocate of vector size");
         }
     };
 
@@ -635,6 +642,8 @@ namespace HalideInternal {
             for (size_t i = 0; i < bounds.size(); i++) {
                 assert(bounds[i].first.defined() && "Realize of undefined");
                 assert(bounds[i].second.defined() && "Realize of undefined");
+                assert(bounds[i].first.type().is_scalar() && "Realize of vector size");
+                assert(bounds[i].second.type().is_scalar() && "Realize of vector size");
             }
             assert(body.defined() && "Realize of undefined");
         }
