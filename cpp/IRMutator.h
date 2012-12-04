@@ -27,14 +27,15 @@ namespace HalideInternal {
         Stmt mutate(Stmt stmt);
 
     protected:
-        /* Override some of the visit functions below to achieve your
-         * goals. Their default implementations just recursively
-         * mutate their children. Put the result in one of the two
-         * following variables (because the visit functions don't have return values).
-         */
+
 
         Expr expr;
         Stmt stmt;
+
+        /* Override some of the visit functions below to achieve your
+         * goals. Their default implementations just recursively
+         * mutate their children. Put the result in either expr or stmt.
+         */
 
         virtual void visit(const IntImm *);
         virtual void visit(const FloatImm *);

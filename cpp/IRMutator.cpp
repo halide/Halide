@@ -23,11 +23,11 @@ namespace HalideInternal {
     }
 
     template<typename T> 
-    void mutateBinaryOperator(IRMutator *mutator, const T *op, Expr *expr, Stmt *stmt) {
+    void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *stmt) {
         Expr a = mutator->mutate(op->a);
         Expr b = mutator->mutate(op->b);
-        if (a.sameAs(op->a) && 
-            b.sameAs(op->b)) *expr = op;
+        if (a.same_as(op->a) && 
+            b.same_as(op->b)) *expr = op;
         else *expr = new T(a, b);            
         *stmt = NULL;
     }
@@ -38,29 +38,29 @@ namespace HalideInternal {
 
     void IRMutator::visit(const Cast *op) {
         Expr value = mutate(op->value);
-        if (value.sameAs(op->value)) expr = op;
+        if (value.same_as(op->value)) expr = op;
         else expr = new Cast(op->type, value);
     }
 
-    void IRMutator::visit(const Add *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const Sub *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const Mul *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const Div *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const Mod *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const Min *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const Max *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const EQ *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const NE *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const LT *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const LE *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const GT *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const GE *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const And *op)     {mutateBinaryOperator(this, op, &expr, &stmt);}
-    void IRMutator::visit(const Or *op)      {mutateBinaryOperator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Add *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Sub *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Mul *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Div *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Mod *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Min *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Max *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const EQ *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const NE *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const LT *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const LE *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const GT *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const GE *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const And *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
+    void IRMutator::visit(const Or *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
 
     void IRMutator::visit(const Not *op) {
         Expr a = mutate(op->a);
-        if (a.sameAs(op->a)) expr = a;
+        if (a.same_as(op->a)) expr = a;
         else expr = new Not(a);
     }
 
@@ -68,29 +68,29 @@ namespace HalideInternal {
         Expr cond = mutate(op->condition);
         Expr t = mutate(op->true_value);
         Expr f = mutate(op->false_value);
-        if (cond.sameAs(op->condition) && 
-            t.sameAs(op->true_value) && 
-            f.sameAs(op->false_value)) expr = op;
+        if (cond.same_as(op->condition) && 
+            t.same_as(op->true_value) && 
+            f.same_as(op->false_value)) expr = op;
         else expr = new Select(cond, t, f);
     }
 
     void IRMutator::visit(const Load *op) {
         Expr index = mutate(op->index);
-        if (index.sameAs(op->index)) expr = op;
+        if (index.same_as(op->index)) expr = op;
         else expr = new Load(op->type, op->buffer, index);
     }
 
     void IRMutator::visit(const Ramp *op) {
         Expr base = mutate(op->base);
         Expr stride = mutate(op->stride);
-        if (base.sameAs(op->base) &&
-            stride.sameAs(op->stride)) expr = op;
+        if (base.same_as(op->base) &&
+            stride.same_as(op->stride)) expr = op;
         else expr = new Ramp(base, stride, op->width);
     }
 
     void IRMutator::visit(const Broadcast *op) {
         Expr value = mutate(op->value);
-        if (value.sameAs(op->value)) expr = op;
+        if (value.same_as(op->value)) expr = op;
         else expr = new Broadcast(value, op->width);
     }
 
@@ -102,7 +102,7 @@ namespace HalideInternal {
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
             Expr new_arg = mutate(old_arg);
-            if (!new_arg.sameAs(old_arg)) changed = true;
+            if (!new_arg.same_as(old_arg)) changed = true;
             new_args[i] = new_arg;
         }
 
@@ -113,16 +113,16 @@ namespace HalideInternal {
     void IRMutator::visit(const Let *op) {
         Expr value = mutate(op->value);
         Expr body = mutate(op->body);
-        if (value.sameAs(op->value) &&
-            body.sameAs(op->body)) expr = op;
+        if (value.same_as(op->value) &&
+            body.same_as(op->body)) expr = op;
         else expr = new Let(op->name, value, body);
     }
 
     void IRMutator::visit(const LetStmt *op) {
         Expr value = mutate(op->value);
         Stmt body = mutate(op->body);
-        if (value.sameAs(op->value) &&
-            body.sameAs(op->body)) stmt = op;
+        if (value.same_as(op->value) &&
+            body.same_as(op->body)) stmt = op;
         else stmt = new LetStmt(op->name, value, body);
     }
 
@@ -134,7 +134,7 @@ namespace HalideInternal {
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
             Expr new_arg = mutate(old_arg);
-            if (!new_arg.sameAs(old_arg)) args_changed = true;
+            if (!new_arg.same_as(old_arg)) args_changed = true;
             new_args[i] = new_arg;
         }
 
@@ -144,7 +144,7 @@ namespace HalideInternal {
 
     void IRMutator::visit(const AssertStmt *op) {
         Expr condition = mutate(op->condition);
-        if (condition.sameAs(op->condition)) stmt = op;
+        if (condition.same_as(op->condition)) stmt = op;
         else stmt = new AssertStmt(condition, op->message);
     }
 
@@ -152,9 +152,9 @@ namespace HalideInternal {
         Stmt produce = mutate(op->produce);
         Stmt update = mutate(op->update);
         Stmt consume = mutate(op->consume);
-        if (produce.sameAs(op->produce) &&
-            update.sameAs(op->update) &&
-            consume.sameAs(op->consume)) {
+        if (produce.same_as(op->produce) &&
+            update.same_as(op->update) &&
+            consume.same_as(op->consume)) {
             stmt = op;
         } else {
             stmt = new Pipeline(op->buffer, produce, update, consume);
@@ -165,9 +165,9 @@ namespace HalideInternal {
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
         Stmt body = mutate(op->body);
-        if (min.sameAs(op->min) &&
-            extent.sameAs(op->extent) &&
-            body.sameAs(op->body)) {
+        if (min.same_as(op->min) &&
+            extent.same_as(op->extent) &&
+            body.same_as(op->body)) {
             stmt = op;
         } else {
             stmt = new For(op->name, min, extent, op->for_type, body);
@@ -177,8 +177,8 @@ namespace HalideInternal {
     void IRMutator::visit(const Store *op) {
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
-        if (value.sameAs(op->value) && 
-            index.sameAs(op->index)) stmt = op;
+        if (value.same_as(op->value) && 
+            index.same_as(op->index)) stmt = op;
         else stmt = new Store(op->buffer, value, index);            
     }
 
@@ -190,20 +190,20 @@ namespace HalideInternal {
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
             Expr new_arg = mutate(old_arg);
-            if (!new_arg.sameAs(old_arg)) args_changed = true;
+            if (!new_arg.same_as(old_arg)) args_changed = true;
             new_args[i] = new_arg;
         }
 
         Expr value = mutate(op->value);
             
-        if (!args_changed && value.sameAs(op->value)) stmt = op;
+        if (!args_changed && value.same_as(op->value)) stmt = op;
         else stmt = new Provide(op->buffer, value, new_args);
     }
 
     void IRMutator::visit(const Allocate *op) {
         Expr size = mutate(op->size);
         Stmt body = mutate(op->body);
-        if (size.sameAs(op->size) && body.sameAs(op->body)) stmt = op;
+        if (size.same_as(op->size) && body.same_as(op->body)) stmt = op;
         else stmt = new Allocate(op->buffer, op->type, size, body);
     }
         
@@ -217,20 +217,20 @@ namespace HalideInternal {
             Expr old_extent = op->bounds[i].second;
             Expr new_min    = mutate(old_min);
             Expr new_extent = mutate(old_extent);
-            if (!new_min.sameAs(old_min))       bounds_changed = true;
-            if (!new_extent.sameAs(old_extent)) bounds_changed = true;
+            if (!new_min.same_as(old_min))       bounds_changed = true;
+            if (!new_extent.same_as(old_extent)) bounds_changed = true;
             new_bounds[i] = make_pair(new_min, new_extent);
         }
 
         Stmt body = mutate(op->body);
-        if (!bounds_changed && body.sameAs(op->body)) stmt = op;
+        if (!bounds_changed && body.same_as(op->body)) stmt = op;
         else stmt = new Realize(op->buffer, op->type, new_bounds, body);
     }
 
     void IRMutator::visit(const Block *op) {
         Stmt first = mutate(op->first);
         Stmt rest = mutate(op->rest);
-        if (first.sameAs(op->first) && rest.sameAs(op->rest)) stmt = op;
+        if (first.same_as(op->first) && rest.same_as(op->rest)) stmt = op;
         else stmt = new Block(first, rest);
     }
 }
