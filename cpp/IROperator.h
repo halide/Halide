@@ -18,12 +18,27 @@ namespace HalideInternal {
         return new Sub(a, b);
     }
     
+    inline Expr &operator-=(Expr &a, Expr b) {
+        a = new Sub(a, b);
+        return a;
+    }
+
     inline Expr operator*(Expr a, Expr b) {
         return new Mul(a, b);
     }
     
+    inline Expr &operator*=(Expr &a, Expr b) {
+        a = new Mul(a, b);
+        return a;
+    }
+
     inline Expr operator/(Expr a, Expr b) {
         return new Div(a, b);
+    }
+
+    inline Expr &operator/=(Expr &a, Expr b) {
+        a = new Div(a, b);
+        return a;
     }
 
     inline Expr operator%(Expr a, Expr b) {
