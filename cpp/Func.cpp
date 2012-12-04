@@ -4,14 +4,20 @@
 #include "IRPrinter.h"
 #include "Substitute.h"
 #include <iostream>
+#include <sstream>
+#include <set>
 
 namespace HalideInternal {
+
+    using std::set;
+    using std::ostringstream;
 
     // Turn a function into a loop nest that computes it. It will
     // refer to external vars of the form function_name.arg_name.min
     // and function_name.arg_name.extent to define the bounds over
     // which it should be realized. It will compute at least those
-    // bounds (depending on splits, it may compute more).
+    // bounds (depending on splits, it may compute more). This loop
+    // won't do any allocation.
     Stmt realize(const Func &f) {
         // We'll build it from inside out. 
         
@@ -47,7 +53,7 @@ namespace HalideInternal {
             const Schedule::Dim &dim = f.schedule.dims[i];
             Expr min = new Var(Int(32), prefix + dim.var + ".min");
             Expr extent = new Var(Int(32), prefix + dim.var + ".extent");
-            stmt = new For(dim.var, min, extent, dim.for_type, stmt);
+            stmt = new For(prefix + dim.var, min, extent, dim.for_type, stmt);
         }
 
         // Define the bounds on the split dimensions using the bounds
@@ -67,11 +73,192 @@ namespace HalideInternal {
         return stmt;
     }
 
+    // Inject the allocation and realization of a function into an
+    // existing loop nest using its schedule
+    class InjectRealization : public IRMutator {
+    public:
+        const Func &func;
+        bool found_store_level, found_compute_level;
+        InjectRealization(const Func &f) : func(f) {}
+
+        virtual void visit(const For *for_loop) {            
+            if (for_loop->name == func.schedule.store_level) {
+                // Inject the realization lower down
+                Stmt body = mutate(for_loop->body);
+                vector<pair<Expr, Expr> > bounds(func.args.size());
+                for (size_t i = 0; i < func.args.size(); i++) {
+                    string prefix = func.name + "." + func.args[i];
+                    bounds[i].first = new Var(Int(32), prefix + ".min");
+                    bounds[i].second = new Var(Int(32), prefix + ".extent");
+                }
+                // Change the body of the for loop to do an allocation
+                body = new Realize(func.name, func.value.type(), bounds, body);
+                stmt = new For(for_loop->name, 
+                               for_loop->min, 
+                               for_loop->extent, 
+                               for_loop->for_type, 
+                               body);
+                found_store_level = true;
+            } else if (for_loop->name == func.schedule.compute_level) {
+                assert(found_store_level && "The compute loop level is outside the store loop level!");
+                Stmt produce = realize(func);
+                stmt = new Pipeline(func.name, produce, NULL, for_loop);
+                found_compute_level = true;
+            } else {
+                stmt = new For(for_loop->name, 
+                               for_loop->min, 
+                               for_loop->extent, 
+                               for_loop->for_type, 
+                               mutate(for_loop->body));                
+            }
+        }
+    };
+
+    /* Find all the internal halide calls in an expr */
+    class FindCalls : public IRVisitor {
+    public:
+        FindCalls(Expr e) {e.accept(this);}
+        set<string> calls;
+        void visit(const Call *call) {
+            if (call->call_type == Call::Halide) calls.insert(call->name);
+        }
+    };
+
+    vector<string> realization_order(string output, const map<string, Func> &env) {
+        // Make a DAG representing the pipeline. Each function maps to the set describing its inputs.
+        map<string, set<string> > graph;
+
+        // Populate the graph
+        // TODO: consider dependencies of reductions
+        for (map<string, Func>::const_iterator iter = env.begin(); iter != env.end(); iter++) {
+            graph[iter->first] = FindCalls(iter->second.value).calls;
+        }
+
+        vector<string> result;
+        set<string> result_set;
+
+        while (true) {
+            // Find a function not in result_set, for which all its inputs are
+            // in result_set. Stop when we reach the output function.
+            bool scheduled_something = false;
+            for (map<string, Func>::const_iterator iter = env.begin(); iter != env.end(); iter++) {
+                const string &f = iter->first;
+                if (result_set.find(f) == result_set.end()) {
+                    bool good_to_schedule = true;
+                    const set<string> &inputs = graph[f];
+                    for (set<string>::const_iterator i = inputs.begin(); i != inputs.end(); i++) {
+                        if (result_set.find(*i) == result_set.end()) {
+                            good_to_schedule = false;
+                        }
+                    }
+
+                    if (good_to_schedule) {
+                        scheduled_something = true;
+                        result_set.insert(f);
+                        result.push_back(f);
+                        if (f == output) return result;
+                    }
+                }
+            }
+            
+            assert(scheduled_something && "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?");
+        }
+
+    }
+
+    class FlattenDimensions : public IRMutator {
+        Expr flatten_args(const string &name, const vector<Expr> &args) {
+            Expr idx = 0;
+            for (size_t i = 0; i < args.size(); i++) {
+                ostringstream stride_name, min_name;
+                stride_name << name << ".stride." << i;
+                min_name << name << ".min." << i;
+                Expr stride = new Var(Int(32), stride_name.str());
+                Expr min = new Var(Int(32), min_name.str());
+                idx += (args[i] - min) * stride;
+            }
+            return idx;            
+        }
+
+        void visit(const Realize *realize) {
+            Stmt body = mutate(realize->body);
+
+            // Compute the size
+            Expr size = 1;
+            for (size_t i = 0; i < realize->bounds.size(); i++) {
+                size *= realize->bounds[i].second;
+            }
+            size = mutate(size);
+
+            stmt = new Allocate(realize->buffer, realize->type, size, body);
+
+            // Compute the strides 
+            for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
+                ostringstream stride_name;
+                stride_name << realize->buffer << ".stride." << i;
+                ostringstream prev_stride_name;
+                prev_stride_name << realize->buffer << ".stride." << (i-1);
+                ostringstream prev_extent_name;
+                prev_extent_name << realize->buffer << ".extent." << (i-1);
+                Expr prev_stride = new Var(Int(32), prev_stride_name.str());
+                Expr prev_extent = new Var(Int(32), prev_extent_name.str());
+                stmt = new LetStmt(stride_name.str(), prev_stride * prev_extent, stmt);
+            }
+            // Innermost stride is one
+            stmt = new LetStmt(realize->buffer + ".stride.0", 1, stmt);           
+
+            // Assign the mins and extents stored
+            for (int i = realize->bounds.size(); i > 0; i--) { 
+                ostringstream min_name, extent_name;
+                min_name << realize->buffer << ".min." << (i-1);
+                extent_name << realize->buffer << ".extent." << (i-1);
+                stmt = new LetStmt(min_name.str(), realize->bounds[i-1].first, stmt);
+                stmt = new LetStmt(extent_name.str(), realize->bounds[i-1].second, stmt);
+            }
+        }
+
+        void visit(const Provide *provide) {
+            Expr idx = mutate(flatten_args(provide->buffer, provide->args));
+            Expr val = mutate(provide->value);
+            stmt = new Store(provide->buffer, val, idx); 
+        }
+
+        void visit(const Call *call) {            
+            if (call->call_type == Call::Extern) {
+                expr = call;
+            } else {
+                Expr idx = mutate(flatten_args(call->name, call->args));
+                expr = new Load(call->type, call->name, idx);
+            }
+        }
+
+    };
+
+    class VectorizeAndUnroll : public IRMutator {
+    };
+
     Stmt lower(string func, const map<string, Func> &env) {
-        const Func &f = env.find(func)->second;
-        return realize(f);
         // 1) Compute a realization order
-        // 2) 
+        vector<string> order = realization_order(func, env);
+
+        // 2) Generate initial loop nest
+        Stmt s = realize(env.find(order[order.size()-1])->second);
+        std::cout << std::endl << "Initial statement: " << std::endl << s << std::endl;
+        for (size_t i = order.size()-1; i > 0; i--) {
+            std::cout << std::endl << "Injecting realization of " << order[i-1] << std::endl;
+            s = InjectRealization(env.find(order[i-1])->second).mutate(s);
+            std::cout << s << std::endl;
+        }
+
+        // 3) Do bounds inference        
+
+        // 4) Flatten everything to single-dimensional
+        s = FlattenDimensions().mutate(s);
+
+        // 5) Vectorization and Unrolling
+        s = VectorizeAndUnroll().mutate(s);
+
+        return s;
     };
 
 
@@ -79,12 +266,23 @@ namespace HalideInternal {
         Expr x = new Var(Int(32), "x");
         Expr y = new Var(Int(32), "y");
         Schedule::Split split = {"x", "x_i", "x_o", 4};
+        Schedule::Dim dim_x = {"x", For::Serial};
         Schedule::Dim dim_y = {"y", For::Serial};
         Schedule::Dim dim_i = {"x_i", For::Vectorized};
         Schedule::Dim dim_o = {"x_o", For::Parallel};
-        Schedule s = {"<root>", "<root>", vec(split), vec(dim_i, dim_y, dim_o)};
-        Func f = {"f", vec<string>("x", "y"), x + y, s};
+
+        map<string, Func> env;
+
+        Schedule f_s = {"<root>", "<root>", vec(split), vec(dim_i, dim_y, dim_o)};
+        Expr f_value = new Call(Int(32), "g", vec<Expr>(x+1, 1), Call::Halide);
+        f_value += new Call(Int(32), "g", vec<Expr>(3, x-y), Call::Halide);    
+        Func f = {"f", vec<string>("x", "y"), f_value, f_s};
+        env["f"] = f;
         
-        std::cout << realize(f) << std::endl;
+        Schedule g_s = {"f.x_o", "f.y", vector<Schedule::Split>(), vec(dim_y, dim_x)};
+        Func g = {"g", vec<string>("x", "y"), x - y, g_s};
+        env["g"] = g;
+
+        std::cout << lower("f", env) << std::endl;
     }
 };
