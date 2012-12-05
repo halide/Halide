@@ -424,7 +424,7 @@ namespace HalideInternal {
         void visit(const For *for_loop) {
             if (for_loop->for_type == For::Vectorized) {
                 const IntImm *extent = for_loop->extent.as<IntImm>();
-                assert(extent && "Can only vectorize for loops over a constant extent");                
+                assert(extent && "Can only vectorize for loops over a constant extent");    
 
                 // Replace the var with a ramp within the body
                 Expr for_var = new Ramp(for_loop->min, 1, extent->value);
@@ -440,7 +440,24 @@ namespace HalideInternal {
     };
 
     class UnrollLoops : public IRMutator {
-        
+        void visit(const For *for_loop) {
+            if (for_loop->for_type == For::Unrolled) {
+                const IntImm *extent = for_loop->extent.as<IntImm>();
+                assert(extent && "Can only unroll for loops over a constant extent");
+                Stmt body = mutate(for_loop->body);
+                
+                Block *block = NULL;
+                // Make n copies of the body, each wrapped in a let that defines the loop var for that body
+                for (int i = extent->value-1; i >= 0; i--) {
+                    Stmt iter = new LetStmt(for_loop->name, for_loop->min + i, body);
+                    block = new Block(iter, block);
+                }
+                stmt = block;
+
+            } else {
+                IRMutator::visit(for_loop);
+            }
+        }
     };
 
     Stmt lower(string func, const map<string, Func> &env) {
@@ -479,21 +496,24 @@ namespace HalideInternal {
     void test_lowering() {
         Expr x = new Var(Int(32), "x");
         Expr y = new Var(Int(32), "y");
-        Schedule::Split split = {"x", "x_i", "x_o", 4};
+        Schedule::Split split_x = {"x", "x_i", "x_o", 4};
+        Schedule::Split split_y = {"y", "y_i", "y_o", 2};
         Schedule::Dim dim_x = {"x", For::Serial};
         Schedule::Dim dim_y = {"y", For::Serial};
-        Schedule::Dim dim_i = {"x_i", For::Vectorized};
-        Schedule::Dim dim_o = {"x_o", For::Parallel};
+        Schedule::Dim dim_yo = {"y_o", For::Serial};
+        Schedule::Dim dim_yi = {"y_i", For::Unrolled};
+        Schedule::Dim dim_xo = {"x_o", For::Parallel};
+        Schedule::Dim dim_xi = {"x_i", For::Vectorized};
 
         map<string, Func> env;
 
-        Schedule f_s = {"<root>", "<root>", vec(split), vec(dim_i, dim_y, dim_o)};
+        Schedule f_s = {"<root>", "<root>", vec(split_x), vec(dim_xi, dim_y, dim_xo)};
         Expr f_value = new Call(Int(32), "g", vec<Expr>(x+1, 1), Call::Halide);
         f_value += new Call(Int(32), "g", vec<Expr>(3, x-y), Call::Halide);    
         Func f = {"f", vec<string>("x", "y"), f_value, f_s};
         env["f"] = f;
         
-        Schedule g_s = {"f.x_o", "f.y", vector<Schedule::Split>(), vec(dim_y, dim_x)};
+        Schedule g_s = {"f.x_o", "f.y", vec(split_y), vec(dim_yi, dim_yo, dim_x)};
         Func g = {"g", vec<string>("x", "y"), x - y, g_s};
         env["g"] = g;
 
