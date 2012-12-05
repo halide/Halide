@@ -1,4 +1,5 @@
 #include "Simplify.h"
+#include "IROperator.h"
 
 namespace HalideInternal {
 
@@ -10,8 +11,41 @@ namespace HalideInternal {
         IRMutator::visit(op);
     }
 
+    bool const_float(Expr e, float *f) {
+        const FloatImm *c = e.as<FloatImm>();
+        if (c) {
+            *f = c->value;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    bool const_int(Expr e, int *i) {
+        const IntImm *c = e.as<IntImm>();
+        if (c) {
+            *i = c->value;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     void Simplify::visit(const Cast *op) {
-        IRMutator::visit(op);
+        Expr value = mutate(op->value);        
+        float f;
+        int i;
+        if (value.type() == op->type) {
+            expr = value;
+        } else if (op->type == Int(32) && const_float(value, &f)) {
+            expr = new IntImm((int)f);
+        } else if (op->type == Float(32) && const_int(value, &i)) {
+            expr = new FloatImm((float)i);
+        } else if (value.same_as(op->value)) {
+            expr = op;
+        } else {
+            expr = new Cast(op->type, value);
+        }
     }
 
     void Simplify::visit(const Var *op) {
@@ -25,7 +59,43 @@ namespace HalideInternal {
     }
 
     void Simplify::visit(const Add *op) {
-        IRMutator::visit(op);
+        int ia, ib;
+        float fa, fb;
+
+        Expr a = mutate(op->a), b = mutate(op->b);
+
+        const Ramp *ramp_a = a.as<Ramp>();
+        const Ramp *ramp_b = b.as<Ramp>();
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
+       
+        if (const_int(a, &ia) &&
+            const_int(b, &ib)) {
+            expr = new IntImm(ia + ib);
+        } else if (const_float(a, &fa) &&
+                   const_float(b, &fb)) {
+            expr = new FloatImm(fa + fb);
+        } else if (const_int(a, &ia) && ia == 0) {
+            expr = b;
+        } else if (const_int(b, &ib) && ib == 0) {
+            expr = a;
+        } else if (ramp_a && ramp_b) {
+            expr = new Ramp(mutate(ramp_a->base + ramp_b->base),
+                            mutate(ramp_a->stride + ramp_b->stride), ramp_a->width);
+        } else if (ramp_a && broadcast_b) {
+            expr = new Ramp(mutate(ramp_a->base + broadcast_b->value), 
+                            ramp_a->stride, ramp_a->width);
+        } else if (broadcast_a && ramp_b) {
+            expr = new Ramp(mutate(broadcast_a->value + ramp_b->base), 
+                            ramp_b->stride, ramp_b->width);
+        } else if (broadcast_a && broadcast_b) {
+            expr = new Broadcast(mutate(broadcast_a->value + broadcast_b->value),
+                                 broadcast_a->width);
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new Add(a, b);
+        }
     }
 
     void Simplify::visit(const Sub *op) {
@@ -180,7 +250,7 @@ namespace HalideInternal {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Block *op) {
+    void Simplify::visit(const Block *op) {        
         IRMutator::visit(op);
     }
 };
