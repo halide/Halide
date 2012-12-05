@@ -47,6 +47,44 @@ namespace HalideInternal {
 
     }
 
+    bool is_zero(Expr e) {
+        int i;
+        float f;
+        if (const_int(e, &i)) return i == 0;
+        if (const_float(e, &f)) return f == 0;
+        if (const Cast *c = e.as<Cast>()) return is_zero(c->value);
+        if (const Broadcast *b = e.as<Broadcast>()) return is_zero(b->value);
+        return false;
+    }
+
+    bool is_one(Expr e) {
+        int i;
+        float f;
+        if (const_int(e, &i)) return i == 1;
+        if (const_float(e, &f)) return f == 1.0f;
+        if (const Cast *c = e.as<Cast>()) return is_one(c->value);
+        if (const Broadcast *b = e.as<Broadcast>()) return is_one(b->value);
+        return false;
+    }
+
+    Expr make_zero(Type t) {
+        if (t == Int(32)) return 0;
+        if (t == Float(32)) return 0.0f;
+        if (t.is_vector()) {
+            return new Broadcast(make_zero(t.element_of()), t.width);
+        }
+        return new Cast(t, 0);
+    }
+
+    Expr make_one(Type t) {
+        if (t == Int(32)) return 1;
+        if (t == Float(32)) return 1.0f;
+        if (t.is_vector()) {
+            return new Broadcast(make_one(t.element_of()), t.width);
+        }
+        return new Cast(t, 1);
+    }
+
     void Simplify::visit(const Cast *op) {
         Expr value = mutate(op->value);        
         float f;
@@ -97,18 +135,16 @@ namespace HalideInternal {
 
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
-            expr = new IntImm(ia + ib);
+            expr = ia + ib;
             // const int + const int
         } else if (const_float(a, &fa) &&
                    const_float(b, &fb)) {
             // const float + const float
-            expr = new FloatImm(fa + fb);
-        } else if (const_int(a, &ia) && ia == 0) {
-            // 0 + b
-            expr = b;
-        } else if (const_int(b, &ib) && ib == 0) {            
-            // a + 0
+            expr = fa + fb;
+        } else if (is_zero(b)) {
             expr = a;
+        } else if (is_zero(a)) {
+            expr = b;
         } else if (ramp_a && ramp_b) {
             // Ramp + Ramp
             expr = new Ramp(mutate(ramp_a->base + ramp_b->base),
@@ -156,7 +192,86 @@ namespace HalideInternal {
     }
 
     void Simplify::visit(const Sub *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a), b = mutate(op->b);
+
+        int ia, ib; 
+        float fa, fb;
+
+        const Ramp *ramp_a = a.as<Ramp>();
+        const Ramp *ramp_b = b.as<Ramp>();
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Add *add_a = a.as<Add>();
+        const Add *add_b = b.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Sub *sub_b = b.as<Sub>();
+        const Mul *mul_a = a.as<Mul>();
+        const Mul *mul_b = b.as<Mul>();
+
+        if (is_zero(b)) {
+            expr = a;
+        } else if (equal(a, b)) {
+            expr = make_zero(op->type);
+        } else if (const_int(a, &ia) && const_int(b, &ib)) {
+            expr = ia - ib;
+        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+            expr = fa - fb;
+        } else if (const_int(b, &ib)) {
+            expr = mutate(a + (-ib));
+        } else if (const_float(b, &fb)) {
+            expr = mutate(a + (-fb));
+        } else if (ramp_a && ramp_b) {
+            // Ramp - Ramp
+            expr = new Ramp(mutate(ramp_a->base - ramp_b->base),
+                            mutate(ramp_a->stride - ramp_b->stride), ramp_a->width);
+        } else if (ramp_a && broadcast_b) {
+            // Ramp - Broadcast
+            expr = new Ramp(mutate(ramp_a->base - broadcast_b->value), 
+                            ramp_a->stride, ramp_a->width);
+        } else if (broadcast_a && ramp_b) {
+            // Broadcast - Ramp
+            expr = new Ramp(mutate(broadcast_a->value - ramp_b->base), 
+                            mutate(make_zero(ramp_b->stride.type())- ramp_b->stride),
+                            ramp_b->width);
+        } else if (broadcast_a && broadcast_b) {
+            // Broadcast + Broadcast
+            expr = new Broadcast(mutate(broadcast_a->value - broadcast_b->value),
+                                 broadcast_a->width);
+        } else if (add_a && equal(add_a->b, b)) {
+            // Ternary expressions where a term cancels
+            expr = add_a->a;
+        } else if (add_a && equal(add_a->a, b)) {
+            expr = add_a->b;
+        } else if (add_b && equal(add_b->b, a)) {
+            expr = make_zero(add_b->a.type()) - add_b->a;
+        } else if (add_b && equal(add_b->a, a)) {
+            expr = make_zero(add_b->a.type()) - add_b->b;
+
+        } else if (add_a && is_const(add_a->b)) {
+            // In ternary expressions, pull constants outside
+            if (is_const(b)) expr = mutate(add_a->a + (add_a->b - b));
+            else expr = mutate((add_a->a - b) + add_a->b);
+        } else if (add_b && is_const(add_b->b)) {
+            expr = mutate((a - add_b->a) - add_b->b);
+        } else if (sub_a && is_const(sub_a->a) && is_const(b)) {
+            expr = mutate((sub_a->a - b) - sub_a->b);
+        } else if (sub_b && is_const(sub_b->b)) {
+            if (is_const(a)) expr = mutate((a + sub_b->b) - sub_b->a);
+            expr = mutate((a - sub_b->a) + sub_b->b);
+        } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
+            // Pull out common factors a*x + b*x
+            expr = mutate(mul_a->a * (mul_a->b - mul_b->b));
+        } else if (mul_a && mul_b && equal(mul_a->b, mul_b->a)) {
+            expr = mutate(mul_a->b * (mul_a->a - mul_b->b));
+        } else if (mul_a && mul_b && equal(mul_a->b, mul_b->b)) {
+            expr = mutate(mul_a->b * (mul_a->a - mul_b->a));
+        } else if (mul_a && mul_b && equal(mul_a->a, mul_b->b)) {
+            expr = mutate(mul_a->a * (mul_a->b - mul_b->a));
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new Sub(a, b);
+        }
     }
 
     void Simplify::visit(const Mul *op) {
@@ -351,5 +466,27 @@ namespace HalideInternal {
         check(x*y + z*x, x*(y+z));
         check(y*x + x*z, x*(y+z));
         check(y*x + z*x, x*(y+z));
+
+        check(x - 0, x);
+        check((x/y) - (x/y), 0);
+        check(x - 2, x + (-2));
+        check(Expr(new Ramp(x, 2, 3)) - Expr(new Ramp(y, 4, 3)), new Ramp(x-y, -2, 3));
+        check(Expr(new Broadcast(4.0f, 5)) - Expr(new Ramp(3.25f, 4.5f, 5)), new Ramp(0.75f, -4.5f, 5));
+        check(Expr(new Ramp(3.25f, 4.5f, 5)) - Expr(new Broadcast(4.0f, 5)), new Ramp(-0.75f, 4.5f, 5));
+        check(Expr(new Broadcast(3, 3)) - Expr(new Broadcast(1, 3)), new Broadcast(2, 3));
+        check((x + y) - x, y);
+        check((x + y) - y, x);
+        check(x - (x + y), 0 - y);
+        check(x - (y + x), 0 - y);
+        check((x + 3) - 2, x + 1);
+        check((x + 3) - y, (x - y) + 3);
+        check((x - 3) - y, (x - y) + (-3));
+        check(x - (y - 2), (x - y) + 2);
+        check(3 - (y - 2), 5 - y);
+        check(x*y - x*z, x*(y-z));
+        check(x*y - z*x, x*(y-z));
+        check(y*x - x*z, x*(y-z));
+        check(y*x - z*x, x*(y-z));
+
     }
 };
