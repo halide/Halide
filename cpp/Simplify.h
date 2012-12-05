@@ -53,6 +53,9 @@ namespace HalideInternal {
         void visit(const Allocate *);
         void visit(const Realize *);
         void visit(const Block *);
+
+      public:
+        static void test();
     };
 };
 
