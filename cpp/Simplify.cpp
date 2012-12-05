@@ -147,16 +147,16 @@ namespace HalideInternal {
             expr = b;
         } else if (ramp_a && ramp_b) {
             // Ramp + Ramp
-            expr = new Ramp(mutate(ramp_a->base + ramp_b->base),
-                            mutate(ramp_a->stride + ramp_b->stride), ramp_a->width);
+            expr = mutate(new Ramp(ramp_a->base + ramp_b->base,
+                                   ramp_a->stride + ramp_b->stride, ramp_a->width));
         } else if (ramp_a && broadcast_b) {
             // Ramp + Broadcast
-            expr = new Ramp(mutate(ramp_a->base + broadcast_b->value), 
-                            ramp_a->stride, ramp_a->width);
+            expr = mutate(new Ramp(ramp_a->base + broadcast_b->value, 
+                                   ramp_a->stride, ramp_a->width));
         } else if (broadcast_a && ramp_b) {
             // Broadcast + Ramp
-            expr = new Ramp(mutate(broadcast_a->value + ramp_b->base), 
-                            ramp_b->stride, ramp_b->width);
+            expr = mutate(new Ramp(broadcast_a->value + ramp_b->base, 
+                                   ramp_b->stride, ramp_b->width));
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
             expr = new Broadcast(mutate(broadcast_a->value + broadcast_b->value),
@@ -222,17 +222,20 @@ namespace HalideInternal {
             expr = mutate(a + (-fb));
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
-            expr = new Ramp(mutate(ramp_a->base - ramp_b->base),
-                            mutate(ramp_a->stride - ramp_b->stride), ramp_a->width);
+            expr = mutate(new Ramp(ramp_a->base - ramp_b->base,
+                                   ramp_a->stride - ramp_b->stride, ramp_a->width));
         } else if (ramp_a && broadcast_b) {
             // Ramp - Broadcast
-            expr = new Ramp(mutate(ramp_a->base - broadcast_b->value), 
-                            ramp_a->stride, ramp_a->width);
+            std::cout << Expr(ramp_a) << std::endl << Expr(broadcast_b) << std::endl;
+            std::cout << ramp_a->base.type() << std::endl << broadcast_b->value.type() << std::endl;
+            expr = mutate(new Ramp(ramp_a->base - broadcast_b->value, 
+                                   ramp_a->stride, ramp_a->width));
+            std::cout << "Made a ramp" << std::endl;
         } else if (broadcast_a && ramp_b) {
             // Broadcast - Ramp
-            expr = new Ramp(mutate(broadcast_a->value - ramp_b->base), 
-                            mutate(make_zero(ramp_b->stride.type())- ramp_b->stride),
-                            ramp_b->width);
+            expr = mutate(new Ramp(broadcast_a->value - ramp_b->base, 
+                                   make_zero(ramp_b->stride.type())- ramp_b->stride,
+                                   ramp_b->width));
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
             expr = new Broadcast(mutate(broadcast_a->value - broadcast_b->value),
@@ -270,12 +273,55 @@ namespace HalideInternal {
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
+            std::cout << "Fallback: " << a << ", " << b << std::endl;
             expr = new Sub(a, b);
         }
     }
 
     void Simplify::visit(const Mul *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a), b = mutate(op->b);
+
+        if (is_const(a)) std::swap(a, b);
+
+        int ia, ib; 
+        float fa, fb;
+
+        const Ramp *ramp_a = a.as<Ramp>();
+        const Ramp *ramp_b = b.as<Ramp>();
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Add *add_a = a.as<Add>();
+        const Mul *mul_a = a.as<Mul>();
+
+        // TODO: broadcast * broadcast, ramp * broadcast, broadcast * ramp
+        // (a * const) * const
+        // (a + const) * const
+
+        if (is_zero(b)) {
+            expr = b;
+        } else if (is_one(b)) {
+            expr = a;
+        } else if (const_int(a, &ia) && const_int(b, &ib)) {
+            expr = ia*ib;
+        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+            expr = fa*fb;
+        } else if (broadcast_a && broadcast_b) {
+            expr = new Broadcast(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->width);
+        } else if (ramp_a && broadcast_b) {
+            Expr m = broadcast_b->value;
+            expr = mutate(new Ramp(ramp_a->base * m, ramp_a->stride * m, ramp_a->width));
+        } else if (broadcast_a && ramp_b) {
+            Expr m = broadcast_a->value;
+            expr = mutate(new Ramp(m * ramp_b->base, m * ramp_b->stride, ramp_b->width));
+        } else if (add_a && is_const(add_a->b) && is_const(b)) {
+            expr = mutate(add_a->a * b + add_a->b * b);
+        } else if (mul_a && is_const(mul_a->b) && is_const(b)) {
+            expr = mutate(mul_a->a * (mul_a->b * b));
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new Mul(a, b);
+        }
     }
 
     void Simplify::visit(const Div *op) {
@@ -358,27 +404,28 @@ namespace HalideInternal {
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
         Expr value = mutate(op->value);
-        bool trivial = false;
-        const Ramp *ramp;
-        const Broadcast *broadcast;
-        if (value.as<IntImm>() || value.as<FloatImm>()) {
-            trivial = true;
-        } else if ((ramp = value.as<Ramp>()) &&
-                   ramp->stride.as<IntImm>() && 
-                   ramp->base.as<IntImm>()) {
-            trivial = true;
-        } else if ((broadcast = value.as<Broadcast>()) &&
-                   broadcast->value.as<IntImm>()) {
-            trivial = true;
-        }
-
-        if (trivial) {
+        Stmt body = op->body;
+        bool needs_popping = false;
+        const Ramp *ramp = value.as<Ramp>();
+        const Broadcast *broadcast = value.as<Broadcast>();        
+        if (is_const(value)) {
+            needs_popping = true;
             scope.push(op->name, value);
+        } else if (ramp && is_const(ramp->stride)) {
+            // Make a new name to refer to the base instead, and push the ramp inside
+            needs_popping = true;
+            scope.push(op->name, new Ramp(new Var(ramp->base.type(), op->name + ".base"), ramp->stride, ramp->width));
+            body = new LetStmt(op->name + ".base", ramp->base, body);
+        } else if (broadcast) {
+            // Make the name refer to the scalar version, and push the broadcast inside
+            needs_popping = true;
+            scope.push(op->name, new Broadcast(new Var(broadcast->value.type(), op->name), broadcast->width));
+            value = broadcast->value;
         }
 
-        Stmt body = mutate(op->body);
+        body = mutate(body);
 
-        if (trivial) {
+        if (needs_popping) {
             scope.pop(op->name);
         }
 
@@ -447,6 +494,7 @@ namespace HalideInternal {
         check(new Cast(Int(32), new Cast(Int(32), x)), x);
         check(new Cast(Float(32), 3), 3.0f);
         check(new Cast(Int(32), 5.0f), 5);
+
         check(3 + x, x + 3);
         check(Expr(3) + Expr(8), 11);
         check(Expr(3.25f) + Expr(7.75f), 11.0f);
@@ -488,5 +536,18 @@ namespace HalideInternal {
         check(y*x - x*z, x*(y-z));
         check(y*x - z*x, x*(y-z));
 
+        check(x*0, 0);
+        check(0*x, 0);
+        check(x*1, x);
+        check(1*x, x);
+        check(Expr(2.0f)*4.0f, 8.0f);
+        check(Expr(2)*4, 8);
+        check((3*x)*4, x*12);
+        check(4*(3+x), x*4 + 12);
+        check(Expr(new Broadcast(4.0f, 5)) * Expr(new Ramp(3.0f, 4.0f, 5)), new Ramp(12.0f, 16.0f, 5));
+        check(Expr(new Ramp(3.0f, 4.0f, 5)) * Expr(new Broadcast(2.0f, 5)), new Ramp(6.0f, 8.0f, 5));
+        check(Expr(new Broadcast(3, 3)) * Expr(new Broadcast(2, 3)), new Broadcast(6, 3));
+
+        // TODO: checks for Let, LetStmt
     }
 };

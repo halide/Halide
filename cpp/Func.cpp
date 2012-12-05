@@ -240,6 +240,8 @@ namespace HalideInternal {
 
     class VectorizeLoops : public IRMutator {
         class VectorSubs : public IRMutator {
+            string var;
+            Expr replacement;
             Scope<Type> scope;
 
             Expr widen(Expr e, int width) {
@@ -260,7 +262,9 @@ namespace HalideInternal {
             }
 
             virtual void visit(const Var *op) {
-                if (scope.contains(op->name)) {
+                if (op->name == var) {
+                    expr = replacement;
+                } else if (scope.contains(op->name)) {
                     // The type of a var may have changed. E.g. if
                     // we're vectorizing across x we need to know the
                     // type of y has changed in the following example:
@@ -416,8 +420,7 @@ namespace HalideInternal {
             }
 
         public: 
-            VectorSubs(string var, Type t) {
-                scope.push(var, t);                
+            VectorSubs(string v, Expr r) : var(v), replacement(r) {
             }
         };
         
@@ -427,11 +430,12 @@ namespace HalideInternal {
                 assert(extent && "Can only vectorize for loops over a constant extent");    
 
                 // Replace the var with a ramp within the body
-                Expr for_var = new Ramp(for_loop->min, 1, extent->value);
-                Stmt body = VectorSubs(for_loop->name, for_var.type()).mutate(for_loop->body);
+                Expr for_var = new Var(Int(32), for_loop->name);                
+                Expr replacement = new Ramp(for_var, 1, extent->value);
+                Stmt body = VectorSubs(for_loop->name, replacement).mutate(for_loop->body);
                 
                 // The for loop becomes a simple let statement
-                stmt = new LetStmt(for_loop->name, for_var, body);
+                stmt = new LetStmt(for_loop->name, for_loop->min, body);
 
             } else {
                 IRMutator::visit(for_loop);
