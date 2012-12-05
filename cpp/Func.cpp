@@ -481,9 +481,10 @@ namespace HalideInternal {
         // A constant folding pass
         s = Simplify().mutate(s);
 
-        // Vectorization and Unrolling
+        // Vectorize loops marked for vectorization
         s = VectorizeLoops().mutate(s);
 
+        // Unroll loops marked for unrolling
         s = UnrollLoops().mutate(s);
 
         // Another constant folding pass
