@@ -24,6 +24,10 @@ namespace HalideInternal {
             return t == other.t && bits == other.bits && width == other.width;
         }
 
+        bool operator!=(const Type &other) const {
+            return t != other.t || bits != other.bits || width != other.width;
+        }
+
         /* Produce a vector of this type, with 'width' elements */
         Type vector_of(int w) const {
             Type type = {t, bits, w};
