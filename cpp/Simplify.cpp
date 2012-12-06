@@ -322,7 +322,74 @@ namespace HalideInternal {
     }
 
     void Simplify::visit(const Div *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a), b = mutate(op->b);
+        
+        int ia, ib;
+        float fa, fb;
+
+        const Mul *mul_a = a.as<Mul>();
+        const Add *add_a = a.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Div *div_a = a.as<Div>();
+        const Mul *mul_a_a = NULL;
+        const Mul *mul_a_b = NULL;
+        if (add_a) {
+            mul_a_a = add_a->a.as<Mul>();
+            mul_a_b = add_a->b.as<Mul>();
+        } else if (sub_a) {
+            mul_a_a = sub_a->a.as<Mul>();
+            mul_a_b = sub_a->b.as<Mul>();
+        }
+
+        if (is_zero(a)) {
+            expr = a;
+        } else if (is_one(b)) {
+            expr = a;
+        } else if (equal(a, b)) {
+            expr = make_one(a.type());
+        } else if (const_int(a, &ia) && const_int(b, &ib)) {
+            expr = ia/ib;
+        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+            expr = fa/fb;
+        } else if (div_a && const_int(div_a->b, &ia) && const_int(b, &ib)) {
+            // (x / 3) / 4 -> x / 12
+            expr = mutate(div_a->a / (ia*ib));
+        } else if (mul_a && const_int(mul_a->b, &ia) && const_int(b, &ib) && 
+                   ia && ib && (ia % ib == 0 || ib % ia == 0)) {
+            if (ia % ib == 0) {
+                // (x * 4) / 2 -> x * 2
+                expr = mutate(mul_a->a * (ia / ib));
+            } else {
+                // (x * 2) / 4 -> x / 2
+                expr = mutate(mul_a->a / (ib / ia));
+            }            
+        } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && 
+                   ib && (ia % ib == 0)) {
+            // Pull terms that are a multiple of the divisor out
+            // (x*4 + y) / 2 -> x*2 + y/2            
+            expr = mutate((mul_a_a->a * (ia/ib)) + (add_a->b / b));
+        } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && 
+                   ib && (ia % ib == 0)) {
+            // (y + x*4) / 2 -> y/2 + x*2
+            expr = mutate((add_a->a / b) + (mul_a_b->a * (ia/ib)));
+        } else if (sub_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && 
+                   ib && (ia % ib == 0)) {
+            // Pull terms that are a multiple of the divisor out
+            // (x*4 - y) / 2 -> x*2 - y/2            
+            expr = mutate((mul_a_a->a * (ia/ib)) - (sub_a->b / b));
+        } else if (sub_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && 
+                   ib && (ia % ib == 0)) {
+            // (y - x*4) / 2 -> y/2 - x*2
+            expr = mutate((sub_a->a / b) - (mul_a_b->a * (ia/ib)));
+        } else if (b.type().is_float() && is_const(b)) {
+            // Convert const float division to multiplication
+            // x / 2 -> x * 0.5
+            expr = mutate(a * (make_one(b.type()) / b));
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new Div(a, b);
+        }
     }
 
     void Simplify::visit(const Mod *op) {
@@ -489,6 +556,7 @@ namespace HalideInternal {
         Expr x = new Var(Int(32), "x");
         Expr y = new Var(Int(32), "y");
         Expr z = new Var(Int(32), "z");
+        Expr xf = new Var(Float(32), "x");
 
         Simplify s;
 
@@ -549,7 +617,20 @@ namespace HalideInternal {
         check(Expr(new Ramp(3.0f, 4.0f, 5)) * Expr(new Broadcast(2.0f, 5)), new Ramp(6.0f, 8.0f, 5));
         check(Expr(new Broadcast(3, 3)) * Expr(new Broadcast(2, 3)), new Broadcast(6, 3));
 
-        // TODO: checks for Let, LetStmt
+        check(0/x, 0);
+        check(x/1, x);
+        check(x/x, 1);
+        check(Expr(7)/3, 2);
+        check(Expr(6.0f)/2.0f, 3.0f);
+        check((x / 3) / 4, x / 12);
+        check((x*4)/2, x*2);
+        check((x*2)/4, x/2);
+        check((x*4 + y)/2, x*2 + y/2);
+        check((y + x*4)/2, y/2 + x*2);
+        check((x*4 - y)/2, x*2 - y/2);
+        check((y - x*4)/2, y/2 - x*2);
+        check(xf / 4.0f, xf * 0.25f);
+
         Expr vec = new Var(Int(32, 4), "vec");
         // Check constants get pushed inwards
         check(new Let("x", 3, x+4), new Let("x", 3, 7));
@@ -566,6 +647,7 @@ namespace HalideInternal {
         // Check values don't jump inside lets that share the same name
         check(new Let("x", 3, Expr(new Let("x", y, x+4)) + x), 
               new Let("x", 3, Expr(new Let("x", y, x+4)) + 3));
+
 
         std::cout << "Simplify test passed" << std::endl;
     }
