@@ -333,6 +333,9 @@ namespace HalideInternal {
         const Div *div_a = a.as<Div>();
         const Mul *mul_a_a = NULL;
         const Mul *mul_a_b = NULL;
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
+
         if (add_a) {
             mul_a_a = add_a->a.as<Mul>();
             mul_a_b = add_a->b.as<Mul>();
@@ -351,6 +354,8 @@ namespace HalideInternal {
             expr = ia/ib;
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = fa/fb;
+        } else if (broadcast_a && broadcast_b) {
+            expr = mutate(new Broadcast(broadcast_a->value / broadcast_b->value, broadcast_a->width));
         } else if (div_a && const_int(div_a->b, &ia) && const_int(b, &ib)) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(div_a->a / (ia*ib));
@@ -557,6 +562,7 @@ namespace HalideInternal {
         Expr y = new Var(Int(32), "y");
         Expr z = new Var(Int(32), "z");
         Expr xf = new Var(Float(32), "x");
+        Expr yf = new Var(Float(32), "y");
 
         Simplify s;
 
@@ -630,6 +636,8 @@ namespace HalideInternal {
         check((x*4 - y)/2, x*2 - y/2);
         check((y - x*4)/2, y/2 - x*2);
         check(xf / 4.0f, xf * 0.25f);
+        check(Expr(new Broadcast(y, 4)) / Expr(new Broadcast(x, 4)), 
+              Expr(new Broadcast(y/x, 4)));
 
         Expr vec = new Var(Int(32, 4), "vec");
         // Check constants get pushed inwards
