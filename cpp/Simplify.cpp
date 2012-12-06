@@ -107,6 +107,7 @@ namespace HalideInternal {
         // should just replace it with its value
         if (scope.contains(op->name)) {
             expr = scope.get(op->name);
+            if (!expr.defined()) expr = op;
         } else {
             expr = op;
         }
@@ -396,45 +397,49 @@ namespace HalideInternal {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Let *op) {
-        IRMutator::visit(op);
-    }
-
-    void Simplify::visit(const LetStmt *op) {
+    template<typename T, typename Body> 
+    Body simplify_let(const T *op, Scope<Expr> &scope, IRMutator *mutator) {
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
-        Expr value = mutate(op->value);
-        Stmt body = op->body;
-        bool needs_popping = false;
+        Expr value = mutator->mutate(op->value);
+        Body body = op->body;
         const Ramp *ramp = value.as<Ramp>();
         const Broadcast *broadcast = value.as<Broadcast>();        
         if (is_const(value)) {
-            needs_popping = true;
+            // Substitute the value wherever we see it
             scope.push(op->name, value);
         } else if (ramp && is_const(ramp->stride)) {
             // Make a new name to refer to the base instead, and push the ramp inside
-            needs_popping = true;
             scope.push(op->name, new Ramp(new Var(ramp->base.type(), op->name + ".base"), ramp->stride, ramp->width));
-            body = new LetStmt(op->name + ".base", ramp->base, body);
+            body = new T(op->name + ".base", ramp->base, body);
         } else if (broadcast) {
-            // Make the name refer to the scalar version, and push the broadcast inside
-            needs_popping = true;
-            scope.push(op->name, new Broadcast(new Var(broadcast->value.type(), op->name), broadcast->width));
-            value = broadcast->value;
+            // Make a new name refer to the scalar version, and push the broadcast inside            
+            scope.push(op->name, new Broadcast(new Var(broadcast->value.type(), op->name + ".value"), broadcast->width));
+            body = new T(op->name + ".value", broadcast->value, body);
+        } else {
+            // Push a empty expr on, to make sure we hide anything
+            // else with the same name until this goes out of scope
+            scope.push(op->name, Expr());
         }
 
-        body = mutate(body);
+        body = mutator->mutate(body);
 
-        if (needs_popping) {
-            scope.pop(op->name);
-        }
+        scope.pop(op->name);
 
         if (body.same_as(op->body) && value.same_as(op->value)) {
-            stmt = op;
+            return op;
         } else {
-            stmt = new LetStmt(op->name, value, body);
-        }
+            return new T(op->name, value, body);
+        }        
+    }
 
+
+    void Simplify::visit(const Let *op) {
+        expr = simplify_let<Let, Expr>(op, scope, this);
+    }
+
+    void Simplify::visit(const LetStmt *op) {
+        stmt = simplify_let<LetStmt, Stmt>(op, scope, this);
     }
 
     void Simplify::visit(const PrintStmt *op) {
@@ -549,5 +554,21 @@ namespace HalideInternal {
         check(Expr(new Broadcast(3, 3)) * Expr(new Broadcast(2, 3)), new Broadcast(6, 3));
 
         // TODO: checks for Let, LetStmt
+        Expr vec = new Var(Int(32, 4), "vec");
+        // Check constants get pushed inwards
+        check(new Let("x", 3, x+4), new Let("x", 3, 7));
+        // Check ramps in lets get pushed inwards
+        check(new Let("vec", new Ramp(x*2, 3, 4), vec + Expr(new Broadcast(2, 4))), 
+              new Let("vec", new Ramp(x*2, 3, 4), 
+                      new Let("vec.base", x*2, 
+                              new Ramp(Expr(new Var(Int(32), "vec.base")) + 2, 3, 4))));
+        // Check broadcasts in lets get pushed inwards
+        check(new Let("vec", new Broadcast(x, 4), vec + Expr(new Broadcast(2, 4))),
+              new Let("vec", new Broadcast(x, 4), 
+                      new Let("vec.value", x, 
+                              new Broadcast(Expr(new Var(Int(32), "vec.value")) + 2, 4))));
+        // Check values don't jump inside lets that share the same name
+        check(new Let("x", 3, Expr(new Let("x", y, x+4)) + x), 
+              new Let("x", 3, Expr(new Let("x", y, x+4)) + 3));
     }
 };
