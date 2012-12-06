@@ -43,7 +43,6 @@ namespace HalideInternal {
 
 
     void CodeGen_X86::visit(const Allocate *alloc) {
-        std::cout << "In allocate" << std::endl;
 
         // Allocate anything less than 32k on the stack
         int stack_size = 0;
@@ -129,9 +128,9 @@ namespace HalideInternal {
                                                    new Load(Int(32, 4), "buf", new Ramp(i*8, 2, 4))),
                                            new Ramp(i*8, 2, 4))));
 
-        // Then print some stuff
-        vector<Expr> print_args = vec<Expr>(3, 4.5f, new Cast(Int(8), 2), new Ramp(alpha, 3.2f, 4));
-        init = new Block(init, new PrintStmt("Test print: ", print_args));
+        // Then print some stuff (disabled to prevent debugging spew)
+        // vector<Expr> print_args = vec<Expr>(3, 4.5f, new Cast(Int(8), 2), new Ramp(alpha, 3.2f, 4));
+        // init = new Block(init, new PrintStmt("Test print: ", print_args));
 
         // Then run a parallel for loop that clobbers three elements of buf
         Expr e = new Select(alpha > 4.0f, 3, 2);
@@ -145,15 +144,16 @@ namespace HalideInternal {
 
         Stmt s = new Block(init, loop);
 
-        std::cout << s << std::endl;
-
         CodeGen_X86 cg;
         cg.compile(s, "test1", args);
 
-        cg.compile_to_bitcode("test1.bc");
-        cg.compile_to_native("test1.o", false);
-        cg.compile_to_native("test1.s", true);
+        //cg.compile_to_bitcode("test1.bc");
+        //cg.compile_to_native("test1.o", false);
+        //cg.compile_to_native("test1.s", true);
 
+        if (!getenv("HL_NUMTHREADS")) {
+            setenv("HL_NUMTHREADS", "4", 1);
+        }
         void *ptr = cg.compile_to_function_pointer();
         typedef void (*fn_type)(::buffer_t *, float, int);
         fn_type fn = (fn_type)ptr;
@@ -163,8 +163,7 @@ namespace HalideInternal {
         memset(&buf, 0, sizeof(buf));
         buf.host = (uint8_t *)(&scratch[0]);
         fn(&buf, -32, 0);
-        for (int i = 0; i < 16; i++) std::cout << scratch[i] << ", ";
-        std::cout << std::endl;
+
         assert(scratch[0] == 5);
         assert(scratch[1] == 5);
         assert(scratch[2] == 5);
@@ -173,8 +172,7 @@ namespace HalideInternal {
         assert(scratch[5] == 5);
         assert(scratch[6] == 6*17);
         fn(&buf, 37.32f, 2);
-        for (int i = 0; i < 16; i++) std::cout << scratch[i] << ", ";
-        std::cout << std::endl;
+
         assert(scratch[0] == 0);
         assert(scratch[1] == 1);
         assert(scratch[2] == 4);
@@ -183,8 +181,7 @@ namespace HalideInternal {
         assert(scratch[5] == 5);
         assert(scratch[6] == 6*17);
         fn(&buf, 4.0f, 1);
-        for (int i = 0; i < 16; i++) std::cout << scratch[i] << ", ";
-        std::cout << std::endl;
+
         assert(scratch[0] == 0);
         assert(scratch[1] == 3);
         assert(scratch[2] == 3);
@@ -193,6 +190,8 @@ namespace HalideInternal {
         assert(scratch[5] == 5);
         assert(scratch[6] == 6*17);
         assert(extern_function_1_was_called);
+
+        std::cout << "CodeGen_X86 test passed" << std::endl;
     }
 
 }

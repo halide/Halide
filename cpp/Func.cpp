@@ -464,17 +464,17 @@ namespace HalideInternal {
         }
     };
 
-    Stmt lower(string func, const map<string, Func> &env) {
+    Stmt Func::lower(const map<string, Func> &env) {
         // Compute a realization order
-        vector<string> order = realization_order(func, env);
+        vector<string> order = realization_order(name, env);
 
         // Generate initial loop nest
         Stmt s = realize(env.find(order[order.size()-1])->second);
-        std::cout << std::endl << "Initial statement: " << std::endl << s << std::endl;
+        //std::cout << std::endl << "Initial statement: " << std::endl << s << std::endl;
         for (size_t i = order.size()-1; i > 0; i--) {
-            std::cout << std::endl << "Injecting realization of " << order[i-1] << std::endl;
+            //std::cout << std::endl << "Injecting realization of " << order[i-1] << std::endl;
             s = InjectRealization(env.find(order[i-1])->second).mutate(s);
-            std::cout << s << std::endl;
+            //std::cout << s << std::endl;
         }
 
         // Do bounds inference
@@ -498,7 +498,7 @@ namespace HalideInternal {
     };
 
 
-    void test_lowering() {
+    void Func::test() {
         Expr x = new Var(Int(32), "x");
         Expr y = new Var(Int(32), "y");
         Schedule::Split split_x = {"x", "x_i", "x_o", 4};
@@ -522,6 +522,11 @@ namespace HalideInternal {
         Func g = {"g", vec<string>("x", "y"), x - y, g_s};
         env["g"] = g;
 
-        std::cout << lower("f", env) << std::endl;
+        Stmt result = f.lower(env);
+        assert(result.defined() && "Lowering returned trivial function");
+        //std::cout << lower("f", env) << std::endl;
+
+        // TODO: actually assert something here
+        std::cout << "Func test passed" << std::endl;
     }
 };

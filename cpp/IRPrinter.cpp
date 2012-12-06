@@ -3,6 +3,7 @@
 #include "IR.h"
 
 #include <iostream>
+#include <sstream>
 
 namespace HalideInternal {
 
@@ -14,7 +15,9 @@ namespace HalideInternal {
         Type f32 = Float(32);
         Expr x = new Var(i32, "x");
         Expr y = new Var(i32, "y");
-        std::cout << (x + 3) * (y / 2 + 17) << endl;
+        std::ostringstream expr_source;
+        expr_source << (x + 3) * (y / 2 + 17);
+        assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
         Stmt store = new Store("buf", (x * 17) / (x - 3), y - 1);
         Stmt for_loop = new For("x", -2, y + 2, For::Parallel, store);
@@ -28,7 +31,29 @@ namespace HalideInternal {
         Stmt let_stmt = new LetStmt("y", 17, block);
         Stmt allocate = new Allocate("buf", f32, 1023, let_stmt);
 
-        std::cout << allocate << endl;
+        std::ostringstream source;
+        source << allocate;
+        std::string correct_source = \
+          "allocate buf[f32 * 1023]\n"
+          "let y = 17\n"
+          "assert((y > 3), \"y is greater than 3\")\n"
+          "produce buf {\n"
+          "  parallel (x, -2, (y + 2)) {\n"
+          "    buf[(y - 1)] = ((x*17)/(x - 3))\n"
+          "  }\n"
+          "} consume {\n"
+          "  vectorized (x, 0, y) {\n"
+          "    out[x] = (buf((x % 3)) + 1)\n"
+          "  }\n"
+          "}\n"
+          "free buf\n";
+
+        if (source.str() != correct_source) {
+            std::cout << "Correct output:" << std::endl << correct_source;
+            std::cout << "Actual output:" << std::endl << source.str();
+            assert(false);
+        }        
+        std::cout << "IRPrinter test passed" << std::endl;
     }
 
     ostream &operator<<(ostream &out, Type type) {

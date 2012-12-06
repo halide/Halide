@@ -1,6 +1,7 @@
 #include "CodeGen_C.h"
 #include "Substitute.h"
 #include "IROperator.h"
+#include <sstream>
 #include <iostream>
 
 namespace HalideInternal {
@@ -315,8 +316,45 @@ namespace HalideInternal {
         s = new Allocate("tmp.stack", Int(32), 127, s);
         s = new Allocate("tmp.heap", Int(32), 43 * beta, s);
 
-        CodeGen_C cg(std::cout);
+        std::ostringstream source;
+        CodeGen_C cg(source);
         cg.compile(s, "test1", args);
+        string correct_source = \
+          "#include <iostream>\n"
+          "#include <assert.h>\n"
+          "#include \"buffer.h\"\n"
+          "void test1(buffer_t *_buf, float alpha, int32_t beta) {\n"
+          "uint8_t *buf = _buf->host;\n"
+          "int32_t buf_min_0 = _buf->min[0];\n"
+          "int32_t buf_min_1 = _buf->min[1];\n"
+          "int32_t buf_min_2 = _buf->min[2];\n"
+          "int32_t buf_min_3 = _buf->min[3];\n"
+          "int32_t buf_extent_0 = _buf->extent[0];\n"
+          "int32_t buf_extent_1 = _buf->extent[1];\n"
+          "int32_t buf_extent_2 = _buf->extent[2];\n"
+          "int32_t buf_extent_3 = _buf->extent[3];\n"
+          "int32_t buf_stride_0 = _buf->stride[0];\n"
+          "int32_t buf_stride_1 = _buf->stride[1];\n"
+          "int32_t buf_stride_2 = _buf->stride[2];\n"
+          "int32_t buf_stride_3 = _buf->stride[3];\n"
+          "{\n"
+          "  int32_t *tmp_heap = new int32_t[(43*beta)];\n"
+          "  {\n"
+          "    int32_t tmp_stack[127];\n"
+          "    {\n"
+          "      int32_t x = (beta + 1);\n"
+          "      ((int32_t *)buf)[x] = ((alpha > 4) ? 3 : 2);\n" 
+          "      }\n" 
+          "  }\n"
+          "  delete[] tmp_heap;\n" 
+          "}\n"
+          "}\n";
+        if (source.str() != correct_source) {
+            std::cout << "Correct source code:" << std::endl << correct_source;
+            std::cout << "Actual source code:" << std::endl << source.str();
+            assert(false);
+        }        
+        std::cout << "CodeGen_C test passed" << std::endl;
     }
 
 }

@@ -227,11 +227,8 @@ namespace HalideInternal {
                                    ramp_a->stride - ramp_b->stride, ramp_a->width));
         } else if (ramp_a && broadcast_b) {
             // Ramp - Broadcast
-            std::cout << Expr(ramp_a) << std::endl << Expr(broadcast_b) << std::endl;
-            std::cout << ramp_a->base.type() << std::endl << broadcast_b->value.type() << std::endl;
             expr = mutate(new Ramp(ramp_a->base - broadcast_b->value, 
                                    ramp_a->stride, ramp_a->width));
-            std::cout << "Made a ramp" << std::endl;
         } else if (broadcast_a && ramp_b) {
             // Broadcast - Ramp
             expr = mutate(new Ramp(broadcast_a->value - ramp_b->base, 
@@ -274,7 +271,6 @@ namespace HalideInternal {
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
-            std::cout << "Fallback: " << a << ", " << b << std::endl;
             expr = new Sub(a, b);
         }
     }
@@ -570,5 +566,7 @@ namespace HalideInternal {
         // Check values don't jump inside lets that share the same name
         check(new Let("x", 3, Expr(new Let("x", y, x+4)) + x), 
               new Let("x", 3, Expr(new Let("x", y, x+4)) + 3));
+
+        std::cout << "Simplify test passed" << std::endl;
     }
 };

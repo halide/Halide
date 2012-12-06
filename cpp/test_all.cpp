@@ -12,7 +12,7 @@ int main(int argc, const char **argv) {
     CodeGen_X86::test();
     CodeGen_C::test();
     Simplify::test();
-    test_lowering();
+    Func::test();
     
     return 0;
 }

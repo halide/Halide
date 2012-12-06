@@ -27,11 +27,11 @@ namespace HalideInternal {
         Expr value;
         Schedule schedule;
         // TODO: reduction step lhs, rhs, and schedule        
+
+        Stmt lower(const map<string, Func> &env);
+        static void test();
     };
 
-    Stmt lower(string func, const map<string, Func> &);    
-
-    void test_lowering();
 }
 
 #endif

@@ -130,7 +130,7 @@ namespace HalideInternal {
             if (!execution_engine) cout << error_string << endl;
             assert(execution_engine && "Couldn't create execution engine");
         } else { 
-            cout << "Adding module to existing execution engine" << endl;
+            // cout << "Adding module to existing execution engine" << endl;
             // Execution engine is already created. Add this module to it.
             execution_engine->addModule(module);
         }
@@ -165,7 +165,7 @@ namespace HalideInternal {
     void CodeGen::compile_to_native(const string &filename, bool assembly) {
          // Get the target specific parser.
         string error_string;
-        cout << module->getTargetTriple() << endl;
+        // cout << module->getTargetTriple() << endl;
         const Target *target = TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
         if (!target) cout << error_string << endl;
         assert(target && "Could not create target");
@@ -359,7 +359,7 @@ namespace HalideInternal {
 
     Value *CodeGen::codegen(Expr e) {
         assert(e.defined());
-        cout << "Codegen: " << e.type() << ", " << e << endl;
+        // cout << "Codegen: " << e.type() << ", " << e << endl;
         value = NULL;
         e.accept(this);
         assert(value && "Codegen of an expr did not produce an llvm value");
@@ -368,7 +368,7 @@ namespace HalideInternal {
 
     void CodeGen::codegen(Stmt s) {
         assert(s.defined());
-        cout << "Codegen: " << s;
+        // cout << "Codegen: " << s;
         value = NULL;
         s.accept(this);
     }
@@ -590,7 +590,6 @@ namespace HalideInternal {
 
         // If the type doesn't match the expected type, we need to pointer cast
         if (load_type != base_address_type) {
-            cout << "Bit-casting pointer type " << endl;
             base_address = builder.CreatePointerCast(base_address, load_type);            
         }
 
@@ -627,7 +626,6 @@ namespace HalideInternal {
                 value = builder.CreateAlignedLoad(ptr, 1);                
             } else {                
                 // 5) General gathers
-                cout << "Codegen general gather" << endl;
                 Value *index = codegen(op->index);
                 value = UndefValue::get(llvm_type_of(op->type));
                 for (int i = 0; i < op->type.width; i++) {
@@ -645,7 +643,6 @@ namespace HalideInternal {
         Value *stride = codegen(op->stride);
         value = UndefValue::get(llvm_type_of(op->type));
         for (int i = 0; i < op->type.width; i++) {
-            cout << i << endl;
             if (i > 0) {
                 if (op->type.is_float()) {
                     base = builder.CreateFAdd(base, stride);
@@ -681,7 +678,7 @@ namespace HalideInternal {
 
         // If we can't find it, declare it extern "C"
         if (!fn) {
-            cout << "Didn't find " << op->name << " in initial module. Assuming it's extern." << endl;
+            // cout << "Didn't find " << op->name << " in initial module. Assuming it's extern." << endl;
             vector<llvm::Type *> arg_types(args.size());
             for (size_t i = 0; i < args.size(); i++) {
                 arg_types[i] = args[i]->getType();
