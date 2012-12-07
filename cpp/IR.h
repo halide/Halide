@@ -9,6 +9,7 @@
 
 #include "IRVisitor.h"
 #include "Type.h"
+#include "IntrusivePtr.h"
 
 namespace HalideInternal {
 
@@ -95,56 +96,15 @@ namespace HalideInternal {
     /* IR nodes are passed around opaque handles to them. This is a
        base class for those handles. It manages the reference count,
        and dispatches visitors. */
-    struct IRHandle {
-    private:
-        void incref() {
-            if (node) {
-                node->ref_count++;
-            }
-        };
-        void decref() {
-            if (node) {
-                node->ref_count--;
-                if (node->ref_count == 0) {
-                    delete node;
-                    node = NULL;
-                }
-            }
-        }
+    struct IRHandle : public IntrusivePtr<const IRNode> {
+        IRHandle() : IntrusivePtr<const IRNode>() {}
+        IRHandle(const IRNode *p) : IntrusivePtr<const IRNode>(p) {}
 
-    protected:
-        const IRNode *node;
-        ~IRHandle() {
-            decref();
-        }
-        IRHandle() : node(NULL) {}
-        IRHandle(const IRNode *n) : node(n) {
-            incref();
-        }
-        IRHandle(const IRHandle &other) : node(other.node) {
-            incref();
-        }
-        IRHandle &operator=(const IRHandle &other) {
-            decref();
-            node = other.node;
-            incref();
-            return *this;
-        }
-    public:
         /* Dispatch to the correct visitor method for this
          * node. E.g. if this node is actually an Add node, then this
          * will call v->visit(const Add *) */
         void accept(IRVisitor *v) const {
-            node->accept(v);
-        }
-        /* Handles can be null. This checks that. */
-        bool defined() const {
-            return node;
-        }
-        /* Check if two handles point to the same node. This is
-         * equality of reference, not equality of value. */
-        bool same_as(const IRHandle &other) {
-            return node == other.node;
+            ptr->accept(v);
         }
 
         /* Downcast this ir node to its actual type (e.g. Add,
@@ -156,15 +116,15 @@ namespace HalideInternal {
          * }
          */
         template<typename T> const T *as() const {
-            if (node->type_info() == &T::_type_info)
-                return (const T *)node;
+            if (ptr->type_info() == &T::_type_info)
+                return (const T *)ptr;
             return NULL;
         }
     };
 
     /* A reference-counted handle on an expression node */
     struct Expr : public IRHandle {
-        Expr() : IRHandle() {}
+        Expr() : IRHandle() {}        
         Expr(const BaseExprNode *n) : IRHandle(n) {}
 
         /* Some constructors for convenience to make constants. These
@@ -175,7 +135,7 @@ namespace HalideInternal {
 
         /* Get at the type of this expression node */
         Type type() const {
-            return ((BaseExprNode *)node)->type;
+            return ((BaseExprNode *)ptr)->type;
         }
     };
 

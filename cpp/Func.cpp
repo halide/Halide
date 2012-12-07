@@ -22,30 +22,30 @@ namespace HalideInternal {
     // which it should be realized. It will compute at least those
     // bounds (depending on splits, it may compute more). This loop
     // won't do any allocation.
-    Stmt realize(const Func &f) {
+    Stmt realize(Func f) {
         // We'll build it from inside out. 
         
         // All names will get prepended with the function name to avoid ambiguities
-        string prefix = f.name + ".";
+        string prefix = f.name() + ".";
 
         // Compute the site to store to as the function args
         vector<Expr> site;
-        for (size_t i = 0; i < f.args.size(); i++) {
-            site.push_back(new Var(Int(32), prefix + f.args[i]));
+        for (size_t i = 0; i < f.args().size(); i++) {
+            site.push_back(new Var(Int(32), prefix + f.args()[i]));
         }
 
         // Fully qualify the var names in the function rhs
-        Expr value = f.value;
-        for (size_t i = 0; i < f.args.size(); i++) {
-            value = substitute(f.args[i], new Var(Int(32), prefix + f.args[i]), value);
+        Expr value = f.value();
+        for (size_t i = 0; i < f.args().size(); i++) {
+            value = substitute(f.args()[i], new Var(Int(32), prefix + f.args()[i]), value);
         }
 
         // Make the (multi-dimensional) store node
-        Stmt stmt = new Provide(f.name, value, site);
+        Stmt stmt = new Provide(f.name(), value, site);
 
         // Define the function args in terms of the loop variables using the splits
-        for (size_t i = f.schedule.splits.size(); i > 0; i--) {
-            const Schedule::Split &split = f.schedule.splits[i-1];
+        for (size_t i = f.schedule().splits.size(); i > 0; i--) {
+            const Schedule::Split &split = f.schedule().splits[i-1];
             Expr inner = new Var(Int(32), prefix + split.inner);
             Expr outer = new Var(Int(32), prefix + split.outer);
             Expr old_min = new Var(Int(32), prefix + split.old_var + ".min");
@@ -53,8 +53,8 @@ namespace HalideInternal {
         }
             
         // Build the loop nest
-        for (size_t i = 0; i < f.schedule.dims.size(); i++) {
-            const Schedule::Dim &dim = f.schedule.dims[i];
+        for (size_t i = 0; i < f.schedule().dims.size(); i++) {
+            const Schedule::Dim &dim = f.schedule().dims[i];
             Expr min = new Var(Int(32), prefix + dim.var + ".min");
             Expr extent = new Var(Int(32), prefix + dim.var + ".extent");
             stmt = new For(prefix + dim.var, min, extent, dim.for_type, stmt);
@@ -62,8 +62,8 @@ namespace HalideInternal {
 
         // Define the bounds on the split dimensions using the bounds
         // on the function args
-        for (size_t i = f.schedule.splits.size(); i > 0; i--) {
-            const Schedule::Split &split = f.schedule.splits[i-1];
+        for (size_t i = f.schedule().splits.size(); i > 0; i--) {
+            const Schedule::Split &split = f.schedule().splits[i-1];
             Expr old_var_extent = new Var(Int(32), prefix + split.old_var + ".extent");
             Expr inner_extent = split.factor;
             Expr outer_extent = (old_var_extent + split.factor - 1)/split.factor;
@@ -86,27 +86,27 @@ namespace HalideInternal {
         InjectRealization(const Func &f) : func(f) {}
 
         virtual void visit(const For *for_loop) {            
-            if (for_loop->name == func.schedule.store_level) {
+            if (for_loop->name == func.schedule().store_level) {
                 // Inject the realization lower down
                 Stmt body = mutate(for_loop->body);
-                vector<pair<Expr, Expr> > bounds(func.args.size());
-                for (size_t i = 0; i < func.args.size(); i++) {
-                    string prefix = func.name + "." + func.args[i];
+                vector<pair<Expr, Expr> > bounds(func.args().size());
+                for (size_t i = 0; i < func.args().size(); i++) {
+                    string prefix = func.name() + "." + func.args()[i];
                     bounds[i].first = new Var(Int(32), prefix + ".min");
                     bounds[i].second = new Var(Int(32), prefix + ".extent");
                 }
                 // Change the body of the for loop to do an allocation
-                body = new Realize(func.name, func.value.type(), bounds, body);
+                body = new Realize(func.name(), func.value().type(), bounds, body);
                 stmt = new For(for_loop->name, 
                                for_loop->min, 
                                for_loop->extent, 
                                for_loop->for_type, 
                                body);
                 found_store_level = true;
-            } else if (for_loop->name == func.schedule.compute_level) {
+            } else if (for_loop->name == func.schedule().compute_level) {
                 assert(found_store_level && "The compute loop level is outside the store loop level!");
                 Stmt produce = realize(func);
-                stmt = new Pipeline(func.name, produce, NULL, for_loop);
+                stmt = new Pipeline(func.name(), produce, NULL, for_loop);
                 found_compute_level = true;
             } else {
                 stmt = new For(for_loop->name, 
@@ -135,7 +135,7 @@ namespace HalideInternal {
         // Populate the graph
         // TODO: consider dependencies of reductions
         for (map<string, Func>::const_iterator iter = env.begin(); iter != env.end(); iter++) {
-            graph[iter->first] = FindCalls(iter->second.value).calls;
+            graph[iter->first] = FindCalls(iter->second.value()).calls;
         }
 
         vector<string> result;
@@ -520,7 +520,7 @@ namespace HalideInternal {
 
     Stmt Func::lower(const map<string, Func> &env) {
         // Compute a realization order
-        vector<string> order = realization_order(name, env);
+        vector<string> order = realization_order(name(), env);
 
         // Generate initial loop nest
         Stmt s = realize(env.find(order[order.size()-1])->second);
@@ -558,31 +558,35 @@ namespace HalideInternal {
     void Func::test() {
         Expr x = new Var(Int(32), "x");
         Expr y = new Var(Int(32), "y");
-        Schedule::Split split_x = {"x", "x_i", "x_o", 4};
-        Schedule::Split split_y = {"y", "y_i", "y_o", 2};
-        Schedule::Dim dim_x = {"x", For::Serial};
-        Schedule::Dim dim_y = {"y", For::Serial};
-        Schedule::Dim dim_yo = {"y_o", For::Serial};
-        Schedule::Dim dim_yi = {"y_i", For::Unrolled};
-        Schedule::Dim dim_xo = {"x_o", For::Parallel};
-        Schedule::Dim dim_xi = {"x_i", For::Vectorized};
 
         map<string, Func> env;
+        
+        //Schedule f_s = {"<root>", "<root>", vec(split_x), vec(dim_xi, dim_y, dim_xo)};
 
-        Schedule f_s = {"<root>", "<root>", vec(split_x), vec(dim_xi, dim_y, dim_xo)};
         Expr f_value = new Call(Int(32), "g", vec<Expr>(x+1, 1), Call::Halide);
         f_value += new Call(Int(32), "g", vec<Expr>(3, x-y), Call::Halide);    
-        Func f = {"f", vec<string>("x", "y"), f_value, f_s};
+
+        Func f;
+        f.define("f", vec<string>("x", "y"), f_value);
+        f.split("x", "x_o", "x_i", 4);
+        f.vectorize("x_i");
+        f.parallel("x_o");
+        f.chunk("<root>", "<root>");
         env["f"] = f;
         
-        Schedule g_s = {"f.x_o", "f.y", vec(split_y), vec(dim_yi, dim_yo, dim_x)};
-        Func g = {"g", vec<string>("x", "y"), x - y, g_s};
+        //Schedule g_s = {"f.x_o", "f.y", vec(split_y), vec(dim_yi, dim_yo, dim_x)};
+
+        Func g;
+        g.define("g", vec<string>("x", "y"), x-y);
+        g.split("y", "y_o", "y_i", 2);
+        g.unroll("y_i");
+        g.chunk("f.x_o", "f.y");
         env["g"] = g;
 
         Stmt result = f.lower(env);
         assert(result.defined() && "Lowering returned trivial function");
 
-        // std::cout << result << std::endl;
+        std::cout << result << std::endl;
 
         // TODO: actually assert something here
         std::cout << "Func test passed" << std::endl;
