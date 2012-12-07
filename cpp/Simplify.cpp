@@ -398,15 +398,135 @@ namespace HalideInternal {
     }
 
     void Simplify::visit(const Mod *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a), b = mutate(op->b);
+
+        int ia, ib;
+        float fa, fb;
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Mul *mul_a = a.as<Mul>();
+        const Add *add_a = a.as<Add>();
+        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : NULL;
+        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : NULL;
+        
+        if (const_int(a, &ia) && const_int(b, &ib)) {
+            int i = ia % ib;
+            if (i < 0) i += ib;
+            expr = i;
+        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+            float f = fa - fb * ((int)(fa / fb));
+            if (f < 0) f += fb;
+            expr = f;
+        } else if (broadcast_a && broadcast_b) {
+            expr = mutate(new Broadcast(broadcast_a->value % broadcast_b->value, broadcast_a->width));
+        } else if (mul_a && const_int(b, &ib) && const_int(mul_a->b, &ia) && (ia % ib == 0)) {
+            // (x * (b*a)) % b -> 0
+            expr = make_zero(a.type());
+        } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && (ia % ib == 0)) {
+            // (x * (b*a) + y) % b -> y
+            expr = add_a->b;
+        } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && (ia % ib == 0)) {
+            // (y + x * (b*a)) % b -> y
+            expr = add_a->a;
+        } else if (const_int(b, &ib) && false /*TODO: Something about modulus remainder analysis*/) {
+            
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new Div(a, b);
+        }
     }
 
     void Simplify::visit(const Min *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a), b = mutate(op->b);
+
+        int ia, ib;
+        float fa, fb;
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Add *add_a = a.as<Add>();
+        const Add *add_b = b.as<Add>();
+
+        if (equal(a, b)) {
+            expr = a;
+        } else if (const_int(a, &ia) && const_int(b, &ib)) {
+            expr = std::min(ia, ib);
+        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+            expr = std::min(fa, fb);
+        } else if (broadcast_a && broadcast_b) {
+            expr = mutate(new Broadcast(new Min(broadcast_a->value, broadcast_b->value), broadcast_a->width));
+        } else if (add_a && const_int(add_a->b, &ia) && add_b && const_int(add_b->b, &ib) && equal(add_a->a, add_b->a)) {
+            // min(x + 3, x - 2) -> x - 2
+            if (ia > ib) {
+                expr = b;
+            } else {
+                expr = a;
+            }
+        } else if (add_a && const_int(add_a->b, &ia) && equal(add_a->a, b)) {
+            // min(x + 5, x)
+            if (ia > 0) {
+                expr = b;
+            } else {
+                expr = a;
+            }
+        } else if (add_b && const_int(add_b->b, &ib) && equal(add_b->a, a)) {
+            // min(x, x + 5)
+            if (ib > 0) {
+                expr = a;
+            } else {
+                expr = b;
+            }
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new Min(a, b);
+        }
     }
 
     void Simplify::visit(const Max *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a), b = mutate(op->b);
+
+        int ia, ib;
+        float fa, fb;
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Add *add_a = a.as<Add>();
+        const Add *add_b = b.as<Add>();
+
+        if (equal(a, b)) {
+            expr = a;
+        } else if (const_int(a, &ia) && const_int(b, &ib)) {
+            expr = std::max(ia, ib);
+        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+            expr = std::max(fa, fb);
+        } else if (broadcast_a && broadcast_b) {
+            expr = mutate(new Broadcast(new Max(broadcast_a->value, broadcast_b->value), broadcast_a->width));
+        } else if (add_a && const_int(add_a->b, &ia) && add_b && const_int(add_b->b, &ib) && equal(add_a->a, add_b->a)) {
+            // max(x + 3, x - 2) -> x - 2
+            if (ia > ib) {
+                expr = a;
+            } else {
+                expr = b;
+            }
+        } else if (add_a && const_int(add_a->b, &ia) && equal(add_a->a, b)) {
+            // max(x + 5, x)
+            if (ia > 0) {
+                expr = a;
+            } else {
+                expr = b;
+            }
+        } else if (add_b && const_int(add_b->b, &ib) && equal(add_b->a, a)) {
+            // max(x, x + 5)
+            if (ib > 0) {
+                expr = b;
+            } else {
+                expr = a;
+            }
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new Max(a, b);
+        }
     }
 
     void Simplify::visit(const EQ *op) {
@@ -638,6 +758,31 @@ namespace HalideInternal {
         check(xf / 4.0f, xf * 0.25f);
         check(Expr(new Broadcast(y, 4)) / Expr(new Broadcast(x, 4)), 
               Expr(new Broadcast(y/x, 4)));
+
+        check(Expr(7) % 2, 1);
+        check(Expr(7.25f) % 2.0f, 1.25f);
+        check(Expr(-7.25f) % 2.0f, 0.75f);
+        check(Expr(new Broadcast(x, 4)) % Expr(new Broadcast(y, 4)), 
+              Expr(new Broadcast(x % y, 4)));
+        check((x*8) % 4, 0);
+        check((x*8 + y) % 4, y);
+        check((y + x*8) % 4, y);
+
+        check(new Min(7, 3), 3);
+        check(new Min(4.25f, 1.25f), 1.25f);
+        check(new Min(new Broadcast(x, 4), new Broadcast(y, 4)), 
+              new Broadcast(new Min(x, y), 4));
+        check(new Min(x, x+3), x);
+        check(new Min(x+4, x), x);
+        check(new Min(x-1, x+2), x+(-1));
+
+        check(new Max(7, 3), 7);
+        check(new Max(4.25f, 1.25f), 4.25f);
+        check(new Max(new Broadcast(x, 4), new Broadcast(y, 4)), 
+              new Broadcast(new Max(x, y), 4));
+        check(new Max(x, x+3), x+3);
+        check(new Max(x+4, x), x+4);
+        check(new Max(x-1, x+2), x+2);
 
         Expr vec = new Var(Int(32, 4), "vec");
         // Check constants get pushed inwards
