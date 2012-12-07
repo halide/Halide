@@ -26,6 +26,13 @@ namespace HalideInternal {
             return iter->second.top();
         }
         
+        /* Return a reference to an entry */
+        T &ref(const string &name) {
+            typename map<string, stack<T> >::iterator iter = table.find(name);
+            assert(iter != table.end() && "Symbol not found");
+            return iter->second.top();            
+        }
+
         /* Tests if a name is in scope */
         bool contains(const string &name) const {
             typename map<string, stack<T> >::const_iterator iter = table.find(name);
