@@ -1849,7 +1849,7 @@ def main():
         
         names = []
         for dirname in dirnames:
-            names.extend(subprocess.check_output('find %s -name "*.sh" -o -name "*.txt" -o -name "*.html" -o -name "*.png"' % dirname, shell=True).strip().split('\n'))
+            names.extend(subprocess.check_output('find %s -name "*compile.sh" -o -name "*.txt" -o -name "*.html" -o -name "*.png"' % dirname, shell=True).strip().split('\n'))
         #print names
         filelist = '_filelist.txt'
         with open(filelist, 'wt') as f:
