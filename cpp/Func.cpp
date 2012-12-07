@@ -464,6 +464,60 @@ namespace HalideInternal {
         }
     };
 
+    class RemoveDeadLets : public IRMutator {
+        Scope<int> references;
+
+        void visit(const Var *op) {
+            if (references.contains(op->name)) references.ref(op->name)++;
+            expr = op;
+        }
+
+        void visit(const For *op) {            
+            Expr min = mutate(op->min);
+            Expr extent = mutate(op->extent);
+            references.push(op->name, 0);
+            Stmt body = mutate(op->body);
+            references.pop(op->name);
+            if (min.same_as(op->min) && extent.same_as(op->extent) && body.same_as(op->body)) {
+                stmt = op;
+            } else {
+                stmt = new For(op->name, min, extent, op->for_type, body);
+            }
+        }
+
+        void visit(const LetStmt *op) {
+            references.push(op->name, 0);
+            Stmt body = mutate(op->body);
+            if (references.get(op->name) > 0) {
+                Expr value = mutate(op->value);
+                if (body.same_as(op->body) && value.same_as(op->value)) {
+                    stmt = op;
+                } else {
+                    stmt = new LetStmt(op->name, value, body);
+                }
+            } else {
+                stmt = body;
+            }
+            references.pop(op->name);
+        }
+
+        void visit(const Let *op) {
+            references.push(op->name, 0);
+            Expr body = mutate(op->body);
+            if (references.get(op->name) > 0) {
+                Expr value = mutate(op->value);
+                if (body.same_as(op->body) && value.same_as(op->value)) {
+                    expr = op;
+                } else {
+                    expr = new Let(op->name, value, body);
+                }
+            } else {
+                expr = body;
+            }
+            references.pop(op->name);
+        }
+    };
+
     Stmt Func::lower(const map<string, Func> &env) {
         // Compute a realization order
         vector<string> order = realization_order(name, env);
@@ -493,6 +547,9 @@ namespace HalideInternal {
 
         // Another constant folding pass
         s = Simplify().mutate(s);
+
+        // Removed useless Let and LetStmt nodes
+        s = RemoveDeadLets().mutate(s);
 
         return s;
     };
@@ -524,7 +581,8 @@ namespace HalideInternal {
 
         Stmt result = f.lower(env);
         assert(result.defined() && "Lowering returned trivial function");
-        //std::cout << lower("f", env) << std::endl;
+
+        // std::cout << result << std::endl;
 
         // TODO: actually assert something here
         std::cout << "Func test passed" << std::endl;
