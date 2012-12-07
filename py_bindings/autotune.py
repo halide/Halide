@@ -1842,14 +1842,14 @@ def main():
         archive_name = datetime.datetime.now().strftime('autotune-%s-%%Y-%%m-%%d%s'%(socket.gethostname(),archive_ext))
         if os.path.exists(archive_name):
             for i in range(1,10000):
-                archive_name = datetime.datetime.now().strftime('autotune-%%Y-%%m-%%d_%d%s'%(i,archive_ext))
+                archive_name = datetime.datetime.now().strftime('autotune-%s-%%Y-%%m-%%d_%d%s'%(socket.gethostname(),i,archive_ext))
                 if not os.path.exists(archive_name):
                     break
         print 'Creating', archive_name
         
         names = []
         for dirname in dirnames:
-            names.extend(subprocess.check_output('find %s -name "*compile.sh" -o -name "*.txt" -o -name "*.html" -o -name "*.png"' % dirname, shell=True).strip().split('\n'))
+            names.extend(subprocess.check_output('find %s -name "*.sh" -o -name "*.txt" -o -name "*.html" -o -name "*.png"' % dirname, shell=True).strip().split('\n'))
         #print names
         filelist = '_filelist.txt'
         with open(filelist, 'wt') as f:
