@@ -4,7 +4,7 @@
 #include "IRVisitor.h"
 #include <string>
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
     
     using std::string;
 
@@ -33,6 +33,6 @@ namespace HalideInternal {
     // class Derivative : public IRVisitor {
     // TODO
     // };
-};
+}}
 
 #endif

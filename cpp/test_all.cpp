@@ -5,7 +5,8 @@
 #include "Func.h"
 #include "Simplify.h"
 
-using namespace HalideInternal;
+using namespace Halide;
+using namespace Halide::Internal;
 
 int main(int argc, const char **argv) {
     IRPrinter::test();

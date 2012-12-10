@@ -1,7 +1,7 @@
 
 #include "IR.h"
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
 
     class IREquals : public IRVisitor {
@@ -40,8 +40,8 @@ namespace HalideInternal {
             }
         }
 
-        void visit(const Var *op) {
-            const Var *e = expr.as<Var>();
+        void visit(const Variable *op) {
+            const Variable *e = expr.as<Variable>();
             if (!e || e->name != op->name || e->type != op->type) {
                 result = false;
             }
@@ -303,4 +303,4 @@ namespace HalideInternal {
         return eq.result;
     }
 
-}
+}}

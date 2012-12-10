@@ -4,7 +4,7 @@
 #include "IRPrinter.h"
 #include <iostream>
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     void Simplify::visit(const IntImm *op) {
         IRMutator::visit(op);
@@ -102,7 +102,7 @@ namespace HalideInternal {
         }
     }
 
-    void Simplify::visit(const Var *op) {
+    void Simplify::visit(const Variable *op) {
         // If we marked this var as trivial in the scope, then we
         // should just replace it with its value
         if (scope.contains(op->name)) {
@@ -598,11 +598,11 @@ namespace HalideInternal {
             scope.push(op->name, value);
         } else if (ramp && is_const(ramp->stride)) {
             // Make a new name to refer to the base instead, and push the ramp inside
-            scope.push(op->name, new Ramp(new Var(ramp->base.type(), op->name + ".base"), ramp->stride, ramp->width));
+            scope.push(op->name, new Ramp(new Variable(ramp->base.type(), op->name + ".base"), ramp->stride, ramp->width));
             body = new T(op->name + ".base", ramp->base, body);
         } else if (broadcast) {
             // Make a new name refer to the scalar version, and push the broadcast inside            
-            scope.push(op->name, new Broadcast(new Var(broadcast->value.type(), op->name + ".value"), broadcast->width));
+            scope.push(op->name, new Broadcast(new Variable(broadcast->value.type(), op->name + ".value"), broadcast->width));
             body = new T(op->name + ".value", broadcast->value, body);
         } else {
             // Push a empty expr on, to make sure we hide anything
@@ -678,11 +678,11 @@ namespace HalideInternal {
     }
 
     void Simplify::test() {
-        Expr x = new Var(Int(32), "x");
-        Expr y = new Var(Int(32), "y");
-        Expr z = new Var(Int(32), "z");
-        Expr xf = new Var(Float(32), "x");
-        Expr yf = new Var(Float(32), "y");
+        Expr x = new Variable(Int(32), "x");
+        Expr y = new Variable(Int(32), "y");
+        Expr z = new Variable(Int(32), "z");
+        Expr xf = new Variable(Float(32), "x");
+        Expr yf = new Variable(Float(32), "y");
 
         Simplify s;
 
@@ -784,19 +784,19 @@ namespace HalideInternal {
         check(new Max(x+4, x), x+4);
         check(new Max(x-1, x+2), x+2);
 
-        Expr vec = new Var(Int(32, 4), "vec");
+        Expr vec = new Variable(Int(32, 4), "vec");
         // Check constants get pushed inwards
         check(new Let("x", 3, x+4), new Let("x", 3, 7));
         // Check ramps in lets get pushed inwards
         check(new Let("vec", new Ramp(x*2, 3, 4), vec + Expr(new Broadcast(2, 4))), 
               new Let("vec", new Ramp(x*2, 3, 4), 
                       new Let("vec.base", x*2, 
-                              new Ramp(Expr(new Var(Int(32), "vec.base")) + 2, 3, 4))));
+                              new Ramp(Expr(new Variable(Int(32), "vec.base")) + 2, 3, 4))));
         // Check broadcasts in lets get pushed inwards
         check(new Let("vec", new Broadcast(x, 4), vec + Expr(new Broadcast(2, 4))),
               new Let("vec", new Broadcast(x, 4), 
                       new Let("vec.value", x, 
-                              new Broadcast(Expr(new Var(Int(32), "vec.value")) + 2, 4))));
+                              new Broadcast(Expr(new Variable(Int(32), "vec.value")) + 2, 4))));
         // Check values don't jump inside lets that share the same name
         check(new Let("x", 3, Expr(new Let("x", y, x+4)) + x), 
               new Let("x", 3, Expr(new Let("x", y, x+4)) + 3));
@@ -804,4 +804,4 @@ namespace HalideInternal {
 
         std::cout << "Simplify test passed" << std::endl;
     }
-};
+}}

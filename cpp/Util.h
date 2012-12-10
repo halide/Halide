@@ -2,10 +2,11 @@
 #define UTIL_H
 
 #include <vector>
+#include <string>
 
 /* This file contains various utility functions for Halide. */
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     /* Build small vectors of up to 6 elements. If we used C++11 and
      * had vector initializers, this would not be necessary, but we
@@ -66,6 +67,9 @@ namespace HalideInternal {
         v[5] = f;
         return v;
     }
-}
+
+    // Generate a unique name starting with the given character
+    std::string unique_name(char prefix);
+}}
 
 #endif

@@ -5,7 +5,7 @@ CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Os
 LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs jit bitwriter bitreader x86 arm linker nvptx ipo)
 
 
-OBJECTS = CodeGen.o CodeGen_X86.o IR.o IRMutator.o IRPrinter.o IRVisitor.o CodeGen_C.o Substitute.o ModulusRemainder.o Bounds.o Derivative.o Func.o Simplify.o IREquality.o
+OBJECTS = CodeGen.o CodeGen_X86.o IR.o IRMutator.o IRPrinter.o IRVisitor.o CodeGen_C.o Substitute.o ModulusRemainder.o Bounds.o Derivative.o Func.o Simplify.o IREquality.o Util.o Function.o
 INITIAL_MODULES = architecture.x86.initmod.o architecture.x86_avx.initmod.o architecture.ptx.initmod.o architecture.ptx_dev.initmod.o architecture.arm.initmod.o architecture.arm_android.initmod.o
 
 all: libHalide.a test_all

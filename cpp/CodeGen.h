@@ -20,7 +20,7 @@
 #include "IR.h"
 #include "Scope.h"
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     using std::map;
     using std::string;
@@ -95,7 +95,7 @@ namespace HalideInternal {
         virtual void visit(const IntImm *);
         virtual void visit(const FloatImm *);
         virtual void visit(const Cast *);
-        virtual void visit(const Var *);
+        virtual void visit(const Variable *);
         virtual void visit(const Add *);
         virtual void visit(const Sub *);
         virtual void visit(const Mul *);
@@ -130,6 +130,6 @@ namespace HalideInternal {
         virtual void visit(const Block *);        
     };
 
-}
+}}
 
 #endif

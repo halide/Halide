@@ -1,6 +1,6 @@
 #include "Substitute.h"
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     Expr substitute(string name, Expr replacement, Expr expr) {
         Substitute s(name, replacement);
@@ -16,11 +16,9 @@ namespace HalideInternal {
         var(v), replacement(r) {
     }
 
-    void Substitute::visit(const Var *v) {
+    void Substitute::visit(const Variable *v) {
         if (v->name == var) expr = replacement;
         else expr = v;
     };
 
-
-
-}
+}}

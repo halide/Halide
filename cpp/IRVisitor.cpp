@@ -1,7 +1,7 @@
 #include "IRVisitor.h"
 #include "IR.h"
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
     
     void IRVisitor::visit(const IntImm *) {
     }
@@ -13,7 +13,7 @@ namespace HalideInternal {
         op->value.accept(this);
     }
     
-    void IRVisitor::visit(const Var *) {
+    void IRVisitor::visit(const Variable *) {
     }
 
     void IRVisitor::visit(const Add *op) {
@@ -180,6 +180,6 @@ namespace HalideInternal {
         op->first.accept(this);
         if (op->rest.defined()) op->rest.accept(this);
     }
-}
+}}
 
 

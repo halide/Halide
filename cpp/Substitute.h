@@ -3,7 +3,7 @@
 
 #include "IRMutator.h"
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     /* Substitute an expression for a variable in a stmt or expr */
     Expr substitute(string name, Expr replacement, Expr expr);
@@ -15,8 +15,8 @@ namespace HalideInternal {
     protected:
         string var;
         Expr replacement;
-        void visit(const Var *v);
+        void visit(const Variable *v);
     };
-};
+}}
 
 #endif

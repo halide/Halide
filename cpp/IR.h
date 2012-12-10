@@ -11,12 +11,16 @@
 #include "Type.h"
 #include "IntrusivePtr.h"
 
-namespace HalideInternal {
+namespace Halide {
 
     using std::string;
     using std::vector;
     using std::pair;
     using std::map;
+
+    namespace Internal {
+        class Function;
+    }
 
     /* A class representing a type of IR node (e.g. Add, or Mul, or
        PrintStmt). We use it for rtti (without having to compile with
@@ -31,7 +35,7 @@ namespace HalideInternal {
         * compiler, so we have a virtual accept method which accepts
         * visitors.
         */
-        virtual void accept(IRVisitor *v) const = 0;
+        virtual void accept(Internal::IRVisitor *v) const = 0;
         IRNode() : ref_count(0) {}
         virtual ~IRNode() {}
 
@@ -77,7 +81,7 @@ namespace HalideInternal {
     template<typename T>
     struct ExprNode : public BaseExprNode {
         ExprNode(Type t) : BaseExprNode(t) {}
-        void accept(IRVisitor *v) const {
+        void accept(Internal::IRVisitor *v) const {
             v->visit((const T *)this);
         }
         virtual IRNodeType *type_info() const {return &_type_info;}
@@ -86,7 +90,7 @@ namespace HalideInternal {
 
     template<typename T>
     struct StmtNode : public BaseStmtNode {
-        void accept(IRVisitor *v) const {
+        void accept(Internal::IRVisitor *v) const {
             v->visit((const T *)this);
         }
         virtual IRNodeType *type_info() const {return &_type_info;}
@@ -96,14 +100,14 @@ namespace HalideInternal {
     /* IR nodes are passed around opaque handles to them. This is a
        base class for those handles. It manages the reference count,
        and dispatches visitors. */
-    struct IRHandle : public IntrusivePtr<const IRNode> {
-        IRHandle() : IntrusivePtr<const IRNode>() {}
-        IRHandle(const IRNode *p) : IntrusivePtr<const IRNode>(p) {}
+    struct IRHandle : public Internal::IntrusivePtr<const IRNode> {
+        IRHandle() : Internal::IntrusivePtr<const IRNode>() {}
+        IRHandle(const IRNode *p) : Internal::IntrusivePtr<const IRNode>(p) {}
 
         /* Dispatch to the correct visitor method for this
          * node. E.g. if this node is actually an Add node, then this
          * will call v->visit(const Add *) */
-        void accept(IRVisitor *v) const {
+        void accept(Internal::IRVisitor *v) const {
             ptr->accept(v);
         }
 
@@ -122,7 +126,7 @@ namespace HalideInternal {
         }
     };
 
-    /* A reference-counted handle on an expression node */
+    /* A reference-counted handle on an expression */
     struct Expr : public IRHandle {
         Expr() : IRHandle() {}        
         Expr(const BaseExprNode *n) : IRHandle(n) {}
@@ -137,7 +141,7 @@ namespace HalideInternal {
         Type type() const {
             return ((BaseExprNode *)ptr)->type;
         }
-    };
+    };    
 
     /* A reference-counted handle to a statement node. */
     struct Stmt : public IRHandle {
@@ -173,10 +177,10 @@ namespace HalideInternal {
 
     /* A named variable. Might be a loop variable, function argument,
      * or something defined by a Let or LetStmt node. */
-    struct Var : public ExprNode<Var> {
+    struct Variable : public ExprNode<Variable> {
         string name;
 
-        Var(Type t, string n) : ExprNode<Var>(t), name(n) {}
+        Variable(Type t, string n) : ExprNode<Variable>(t), name(n) {}
     };
 
     /* Arithmetic nodes. If applied to vector types, all of these are
@@ -426,6 +430,10 @@ namespace HalideInternal {
         vector<Expr > args;
         typedef enum {Image, Extern, Halide} CallType;
         CallType call_type;
+
+        // If it's a call to another halide function, this call node
+        // holds onto a pointer to that function
+        Internal::IntrusivePtr<Internal::Function> func;
 
         Call(Type t, string n, const vector<Expr > &a, CallType ct) : 
             ExprNode<Call>(t), name(n), args(a), call_type(ct) {

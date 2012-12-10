@@ -5,7 +5,7 @@
 #include "IRVisitor.h"
 #include "Scope.h"
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
     using std::pair;
 
     /* For things like alignment analysis, often it's helpful to know
@@ -38,7 +38,7 @@ namespace HalideInternal {
         void visit(const IntImm *);
         void visit(const FloatImm *);
         void visit(const Cast *);
-        void visit(const Var *);
+        void visit(const Variable *);
         void visit(const Add *);
         void visit(const Sub *);
         void visit(const Mul *);
@@ -73,6 +73,6 @@ namespace HalideInternal {
         void visit(const Block *);        
     };
 
-};
+}}
 
 #endif

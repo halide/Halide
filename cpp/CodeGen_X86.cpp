@@ -10,7 +10,7 @@
 extern unsigned char builtins_bitcode_x86[];
 extern int builtins_bitcode_x86_length;
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     using namespace llvm;
 
@@ -65,7 +65,7 @@ namespace HalideInternal {
             ptr = builder.CreatePointerCast(ptr, llvm_type->getPointerTo());
         } else {
             // call malloc
-            Function *malloc_fn = module->getFunction("fast_malloc");
+            llvm::Function *malloc_fn = module->getFunction("fast_malloc");
             Value *sz = builder.CreateIntCast(size, i64, false);
             ptr = builder.CreateCall(malloc_fn, sz);
         }
@@ -79,7 +79,7 @@ namespace HalideInternal {
 
         if (!on_stack) {
             // call free
-            Function *free_fn = module->getFunction("fast_free");
+            llvm::Function *free_fn = module->getFunction("fast_free");
             builder.CreateCall(free_fn, ptr);
         }
     }
@@ -103,10 +103,10 @@ namespace HalideInternal {
         args[0] = buffer_arg;
         args[1] = float_arg;
         args[2] = int_arg;        
-        Expr x = new Var(Int(32), "x");
-        Expr i = new Var(Int(32), "i");
-        Expr alpha = new Var(Float(32), "alpha");
-        Expr beta = new Var(Int(32), "beta");
+        Expr x = new Variable(Int(32), "x");
+        Expr i = new Variable(Int(32), "i");
+        Expr alpha = new Variable(Float(32), "alpha");
+        Expr beta = new Variable(Int(32), "beta");
 
         // We'll clear out the initial buffer except for the first and
         // last two elements using dense unaligned vectors
@@ -194,4 +194,4 @@ namespace HalideInternal {
         std::cout << "CodeGen_X86 test passed" << std::endl;
     }
 
-}
+}}

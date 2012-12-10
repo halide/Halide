@@ -4,7 +4,7 @@
 #include <sstream>
 #include <iostream>
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     using std::ostream;
     using std::endl;
@@ -105,7 +105,7 @@ namespace HalideInternal {
         stream << "}" << endl;
     }
 
-    void CodeGen_C::visit(const Var *op) {
+    void CodeGen_C::visit(const Variable *op) {
         print_c_name(op->name);
     }
 
@@ -307,9 +307,9 @@ namespace HalideInternal {
         args[0] = buffer_arg;
         args[1] = float_arg;
         args[2] = int_arg;
-        Expr x = new Var(Int(32), "x");
-        Expr alpha = new Var(Float(32), "alpha");
-        Expr beta = new Var(Int(32), "beta");
+        Expr x = new Variable(Int(32), "x");
+        Expr alpha = new Variable(Float(32), "alpha");
+        Expr beta = new Variable(Int(32), "beta");
         Expr e = new Select(alpha > 4.0f, 3, 2);
         Stmt s = new Store("buf", e, x);
         s = new LetStmt("x", beta+1, s);
@@ -357,4 +357,4 @@ namespace HalideInternal {
         std::cout << "CodeGen_C test passed" << std::endl;
     }
 
-}
+}}

@@ -4,6 +4,7 @@
 #include "llvm/Analysis/Verifier.h"
 #include "IROperator.h"
 #include "Util.h"
+#include "Function.h"
 #include <llvm/ExecutionEngine/JIT.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetLibraryInfo.h>
@@ -15,9 +16,10 @@
 #include <llvm/DataLayout.h>
 #include <sstream>
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     using namespace llvm;
+    using namespace Halide;
     using std::ostringstream;
     using std::cout;
     using std::endl;
@@ -74,7 +76,7 @@ namespace HalideInternal {
         // Make our function
         function_name = name;
         FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
-        function = Function::Create(func_t, Function::ExternalLinkage, name, module);
+        function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
 
         // Make the initial basic block
         BasicBlock *block = BasicBlock::Create(context, "entry", function);
@@ -83,7 +85,7 @@ namespace HalideInternal {
         // Put the arguments in the symbol table
         {
             size_t i = 0;
-            for (Function::arg_iterator iter = function->arg_begin();
+            for (llvm::Function::arg_iterator iter = function->arg_begin();
                  iter != function->arg_end();
                  iter++) {                        
 
@@ -143,7 +145,7 @@ namespace HalideInternal {
         b.populateFunctionPassManager(function_pass_manager);
         b.populateModulePassManager(module_pass_manager);
                 
-        Function *fn = module->getFunction(function_name);
+        llvm::Function *fn = module->getFunction(function_name);
         assert(fn && "Could not find function inside llvm module");
         
         // Run optimization passes
@@ -334,7 +336,7 @@ namespace HalideInternal {
         return builder.CreateLoad(ptr);
     }
 
-    llvm::Type *CodeGen::llvm_type_of(Type t) {
+    llvm::Type *CodeGen::llvm_type_of(Halide::Type t) {
         if (t.width == 1) {
             if (t.is_float()) {
                 switch (t.bits) {
@@ -384,8 +386,8 @@ namespace HalideInternal {
     void CodeGen::visit(const Cast *op) {
         value = codegen(op->value);
 
-        Type src = op->value.type();
-        Type dst = op->type;
+        Halide::Type src = op->value.type();
+        Halide::Type dst = op->type;
         llvm::Type *llvm_dst = llvm_type_of(dst);
 
         if (!src.is_float() && !dst.is_float()) {
@@ -409,7 +411,7 @@ namespace HalideInternal {
         }
     }
 
-    void CodeGen::visit(const Var *op) {
+    void CodeGen::visit(const Variable *op) {
         // look in the symbol table
         value = symbol_table.get(op->name);
     }
@@ -491,7 +493,7 @@ namespace HalideInternal {
     void CodeGen::visit(const EQ *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        Type t = op->a.type();
+        Halide::Type t = op->a.type();
         if (t.is_float()) {
             value = builder.CreateFCmpOEQ(a, b);
         } else {
@@ -502,7 +504,7 @@ namespace HalideInternal {
     void CodeGen::visit(const NE *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        Type t = op->a.type();
+        Halide::Type t = op->a.type();
         if (t.is_float()) {
             value = builder.CreateFCmpONE(a, b);
         } else {
@@ -513,7 +515,7 @@ namespace HalideInternal {
     void CodeGen::visit(const LT *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        Type t = op->a.type();
+        Halide::Type t = op->a.type();
         if (t.is_float()) {
             value = builder.CreateFCmpOLT(a, b);
         } else if (t.is_int()) {
@@ -526,7 +528,7 @@ namespace HalideInternal {
     void CodeGen::visit(const LE *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        Type t = op->a.type();
+        Halide::Type t = op->a.type();
         if (t.is_float()) {
             value = builder.CreateFCmpOLE(a, b);
         } else if (t.is_int()) {
@@ -539,7 +541,7 @@ namespace HalideInternal {
     void CodeGen::visit(const GT *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        Type t = op->a.type();
+        Halide::Type t = op->a.type();
         if (t.is_float()) {
             value = builder.CreateFCmpOGT(a, b);
         } else if (t.is_int()) {
@@ -552,7 +554,7 @@ namespace HalideInternal {
     void CodeGen::visit(const GE *op) {
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        Type t = op->a.type();
+        Halide::Type t = op->a.type();
         if (t.is_float()) {
             value = builder.CreateFCmpOGE(a, b);
         } else if (t.is_int()) {
@@ -580,7 +582,7 @@ namespace HalideInternal {
                                      codegen(op->false_value));
     }
 
-    Value *CodeGen::codegen_buffer_pointer(string buffer, Type type, Value *index) {
+    Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
         // Find the base address from the symbol table
         Value *base_address = symbol_table.get(buffer + ".host");
         llvm::Type *base_address_type = base_address->getType();
@@ -672,7 +674,7 @@ namespace HalideInternal {
             args[i] = codegen(op->args[i]);
         }
 
-        Function *fn = module->getFunction(op->name);
+        llvm::Function *fn = module->getFunction(op->name);
         
         llvm::Type *result_type = llvm_type_of(op->type);
 
@@ -685,7 +687,7 @@ namespace HalideInternal {
             }
             FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
             
-            fn = Function::Create(func_t, Function::ExternalLinkage, op->name, module);
+            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module);
             fn->setCallingConv(CallingConv::C);            
         }
 
@@ -697,7 +699,7 @@ namespace HalideInternal {
             // version of a function foo is called fooxN.
             ostringstream ss;
             ss << op->name << 'x' << op->type.width;
-            Function *vec_fn = module->getFunction(ss.str());
+            llvm::Function *vec_fn = module->getFunction(ss.str());
             if (vec_fn) {
                 value = builder.CreateCall(vec_fn, args);
                 fn = vec_fn;
@@ -737,12 +739,12 @@ namespace HalideInternal {
         format_string << op->prefix;
 
         string fmt_of_type[3];
-        fmt_of_type[Type::UInt] = "%u";
-        fmt_of_type[Type::Int] = "%d";
-        fmt_of_type[Type::Float] = "%3.3f";
+        fmt_of_type[Halide::Type::UInt] = "%u";
+        fmt_of_type[Halide::Type::Int] = "%d";
+        fmt_of_type[Halide::Type::Float] = "%3.3f";
 
         vector<Value *> args;
-        vector<Type> dst_types;
+        vector<Halide::Type> dst_types;
         for (size_t i = 0; i < op->args.size(); i++) {
             format_string << ' ';
             Expr arg = op->args[i];
@@ -789,7 +791,7 @@ namespace HalideInternal {
         args.insert(args.begin(), char_ptr);
 
         // Grab the print function from the initial module
-        Function *hlprintf = module->getFunction("hlprintf");
+        llvm::Function *hlprintf = module->getFunction("hlprintf");
         assert(hlprintf && "Could not find hlprintf in initial module");
 
         // Call it
@@ -839,7 +841,7 @@ namespace HalideInternal {
             op->value.accept(this);
             result[op->buffer + ".host"] = gen->llvm_type_of(op->value.type())->getPointerTo();
         }
-        void visit(const Var *op) {            
+        void visit(const Variable *op) {            
             if (ignore.contains(op->name)) {
                 //cout << "Ignoring reference to: " << op->name << endl;
             } else {
@@ -950,8 +952,8 @@ namespace HalideInternal {
 
             // Make a new function that does one iteration of the body of the loop
             FunctionType *func_t = FunctionType::get(void_t, vec(i32, (llvm::Type *)(i8->getPointerTo())), false);
-            Function *containing_function = function;
-            function = Function::Create(func_t, Function::InternalLinkage, "par_for_" + op->name, module);
+            llvm::Function *containing_function = function;
+            function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, "par_for_" + op->name, module);
 
             // Make the initial basic block and jump the builder into the new function
             BasicBlock *call_site = builder.GetInsertBlock();
@@ -965,7 +967,7 @@ namespace HalideInternal {
             // Get the function arguments
 
             // The loop variable is first argument of the function
-            Function::arg_iterator iter = function->arg_begin();
+            llvm::Function::arg_iterator iter = function->arg_begin();
             sym_push(op->name, iter);
 
             // The closure pointer is the second argument. 
@@ -981,7 +983,7 @@ namespace HalideInternal {
 
             // Move the builder back to the main function and call do_par_for
             builder.SetInsertPoint(call_site);
-            Function *do_par_for = module->getFunction("do_par_for");
+            llvm::Function *do_par_for = module->getFunction("do_par_for");
             assert(do_par_for && "Could not find do_par_for in initial module");
             ptr = builder.CreatePointerCast(ptr, i8->getPointerTo());
             vector<Value *> args = vec((Value *)function, min, extent, ptr);
@@ -997,7 +999,7 @@ namespace HalideInternal {
 
     void CodeGen::visit(const Store *op) {
         Value *val = codegen(op->value);
-        Type value_type = op->value.type();
+        Halide::Type value_type = op->value.type();
         // Scalar
         if (value_type.is_scalar()) {
             Value *index = codegen(op->index);
@@ -1050,4 +1052,4 @@ namespace HalideInternal {
         assert(false && "Provide encountered during codegen");
     }
 
-}
+}}

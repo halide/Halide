@@ -1,7 +1,7 @@
 #ifndef TYPE_H
 #define TYPE_H
 
-namespace HalideInternal {
+namespace Halide {
     /* Types in the halide type system. They can be ints, unsigned
      * ints, or floats of various bit-widths (the 'bits' field). They
      * can also be vectors of the same (by setting the 'width' field

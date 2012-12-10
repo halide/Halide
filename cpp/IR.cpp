@@ -1,6 +1,6 @@
 #include "IR.h"
 
-namespace HalideInternal {
+namespace Halide {
 
     Expr::Expr(int x) : IRHandle(new IntImm(x)) {
     }
@@ -8,11 +8,10 @@ namespace HalideInternal {
     Expr::Expr(float x) : IRHandle(new FloatImm(x)) {
     }
 
-
     template<> IRNodeType ExprNode<IntImm>::_type_info = {};
     template<> IRNodeType ExprNode<FloatImm>::_type_info = {};
     template<> IRNodeType ExprNode<Cast>::_type_info = {};
-    template<> IRNodeType ExprNode<Var>::_type_info = {};
+    template<> IRNodeType ExprNode<Variable>::_type_info = {};
     template<> IRNodeType ExprNode<Add>::_type_info = {};
     template<> IRNodeType ExprNode<Sub>::_type_info = {};
     template<> IRNodeType ExprNode<Mul>::_type_info = {};
@@ -45,4 +44,12 @@ namespace HalideInternal {
     template<> IRNodeType StmtNode<Allocate>::_type_info = {};
     template<> IRNodeType StmtNode<Realize>::_type_info = {};
     template<> IRNodeType StmtNode<Block>::_type_info = {};
+
+    namespace Internal {
+        template<>
+        int &ref_count<Halide::IRNode>(const IRNode *n) {return n->ref_count;}
+
+        template<>
+        void destroy<Halide::IRNode>(const IRNode *n) {delete n;}
+    }
 }
