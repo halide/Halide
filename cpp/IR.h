@@ -440,6 +440,9 @@ namespace Halide {
             for (size_t i = 0; i < args.size(); i++) {
                 assert(args[i].defined() && "Call of undefined");
             }
+            if (call_type == Halide) {
+                assert(func.defined() && "Call nodes to undefined halide function");
+            }
         }
     };
 

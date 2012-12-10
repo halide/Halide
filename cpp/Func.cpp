@@ -33,10 +33,7 @@ namespace Halide {
         g.split(y, yo, yi, 2).unroll(yi);;
         g.store_at(f, xo).compute_at(f, y);
 
-        map<string, Func> env;
-        env[f.name()] = f;
-        env[g.name()] = g;
-        Stmt result = f.lower(env);
+        Stmt result = f.lower();
 
         assert(result.defined() && "Lowering returned trivial function");
 
@@ -339,20 +336,45 @@ namespace Halide {
         class FindCalls : public IRVisitor {
         public:
             FindCalls(Expr e) {e.accept(this);}
-            set<string> calls;
-            void visit(const Call *call) {
-                if (call->call_type == Call::Halide) calls.insert(call->name);
+            map<string, Func> calls;
+            void visit(const Call *call) {                
+                if (call->call_type == Call::Halide) {
+                    calls[call->name] = call->func;
+                }
             }
         };
+
+        void populate_environment(Func f, map<string, Func> &env, bool recursive = true) {
+            if (env.find(f.name()) != env.end()) return;
+            
+            // TODO: consider reductions
+            FindCalls calls(f.value());
+
+            if (!recursive) {
+                env.insert(calls.calls.begin(), calls.calls.end());
+            } else {
+                env[f.name()] = f;            
+
+                for (map<string, Func>::const_iterator iter = calls.calls.begin(); 
+                     iter != calls.calls.end(); ++iter) {
+                    populate_environment(iter->second, env);                    
+                }
+            }
+        }
 
         vector<string> realization_order(string output, const map<string, Func> &env) {
             // Make a DAG representing the pipeline. Each function maps to the set describing its inputs.
             map<string, set<string> > graph;
 
             // Populate the graph
-            // TODO: consider dependencies of reductions
             for (map<string, Func>::const_iterator iter = env.begin(); iter != env.end(); iter++) {
-                graph[iter->first] = FindCalls(iter->second.value()).calls;
+                map<string, Func> calls;
+                populate_environment(iter->second, calls, false);
+
+                for (map<string, Func>::const_iterator j = calls.begin(); 
+                     j != calls.end(); ++j) {
+                    graph[iter->first].insert(j->first);
+                }
             }
 
             vector<string> result;
@@ -736,7 +758,11 @@ namespace Halide {
         };
     }
 
-    Stmt Func::lower(const map<string, Func> &env) {
+    Stmt Func::lower() {
+        // Compute an environment
+        map<string, Func> env;
+        populate_environment(*this, env);
+
         // Compute a realization order
         vector<string> order = realization_order(name(), env);
 
