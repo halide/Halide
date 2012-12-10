@@ -5,56 +5,11 @@
 #include <iostream>
 #include <sstream>
 
-namespace HalideInternal {
+namespace Halide {
 
     using std::ostream;
     using std::endl;
 
-    void IRPrinter::test() {
-        Type i32 = Int(32);
-        Type f32 = Float(32);
-        Expr x = new Var(i32, "x");
-        Expr y = new Var(i32, "y");
-        std::ostringstream expr_source;
-        expr_source << (x + 3) * (y / 2 + 17);
-        assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
-
-        Stmt store = new Store("buf", (x * 17) / (x - 3), y - 1);
-        Stmt for_loop = new For("x", -2, y + 2, For::Parallel, store);
-        vector<Expr> args(1); args[0] = x % 3;
-        Expr call = new Call(i32, "buf", args, Call::Halide);
-        Stmt store2 = new Store("out", call + 1, x);
-        Stmt for_loop2 = new For("x", 0, y, For::Vectorized , store2);
-        Stmt pipeline = new Pipeline("buf", for_loop, Stmt(), for_loop2);
-        Stmt assertion = new AssertStmt(y > 3, "y is greater than 3");
-        Stmt block = new Block(assertion, pipeline);
-        Stmt let_stmt = new LetStmt("y", 17, block);
-        Stmt allocate = new Allocate("buf", f32, 1023, let_stmt);
-
-        std::ostringstream source;
-        source << allocate;
-        std::string correct_source = \
-          "allocate buf[f32 * 1023]\n"
-          "let y = 17\n"
-          "assert((y > 3), \"y is greater than 3\")\n"
-          "produce buf {\n"
-          "  parallel (x, -2, (y + 2)) {\n"
-          "    buf[(y - 1)] = ((x*17)/(x - 3))\n"
-          "  }\n"
-          "} consume {\n"
-          "  vectorized (x, 0, y) {\n"
-          "    out[x] = (buf((x % 3)) + 1)\n"
-          "  }\n"
-          "}\n"
-          "free buf\n";
-
-        if (source.str() != correct_source) {
-            std::cout << "Correct output:" << std::endl << correct_source;
-            std::cout << "Actual output:" << std::endl << source.str();
-            assert(false);
-        }        
-        std::cout << "IRPrinter test passed" << std::endl;
-    }
 
     ostream &operator<<(ostream &out, Type type) {
         switch (type.t) {
@@ -96,15 +51,64 @@ namespace HalideInternal {
     }
 
     ostream &operator<<(ostream &stream, Expr ir) {
-        IRPrinter p(stream);
+        Internal::IRPrinter p(stream);
         p.print(ir);
         return stream;
     }
 
     ostream &operator<<(ostream &stream, Stmt ir) {
-        IRPrinter p(stream);
+        Internal::IRPrinter p(stream);
         p.print(ir);
         return stream;
+    }
+
+
+    namespace Internal {
+
+    void IRPrinter::test() {
+        Type i32 = Int(32);
+        Type f32 = Float(32);
+        Expr x = new Variable(i32, "x");
+        Expr y = new Variable(i32, "y");
+        std::ostringstream expr_source;
+        expr_source << (x + 3) * (y / 2 + 17);
+        assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
+
+        Stmt store = new Store("buf", (x * 17) / (x - 3), y - 1);
+        Stmt for_loop = new For("x", -2, y + 2, For::Parallel, store);
+        vector<Expr> args(1); args[0] = x % 3;
+        Expr call = new Call(i32, "buf", args, Call::Halide);
+        Stmt store2 = new Store("out", call + 1, x);
+        Stmt for_loop2 = new For("x", 0, y, For::Vectorized , store2);
+        Stmt pipeline = new Pipeline("buf", for_loop, Stmt(), for_loop2);
+        Stmt assertion = new AssertStmt(y > 3, "y is greater than 3");
+        Stmt block = new Block(assertion, pipeline);
+        Stmt let_stmt = new LetStmt("y", 17, block);
+        Stmt allocate = new Allocate("buf", f32, 1023, let_stmt);
+
+        std::ostringstream source;
+        source << allocate;
+        std::string correct_source = \
+          "allocate buf[f32 * 1023]\n"
+          "let y = 17\n"
+          "assert((y > 3), \"y is greater than 3\")\n"
+          "produce buf {\n"
+          "  parallel (x, -2, (y + 2)) {\n"
+          "    buf[(y - 1)] = ((x*17)/(x - 3))\n"
+          "  }\n"
+          "} consume {\n"
+          "  vectorized (x, 0, y) {\n"
+          "    out[x] = (buf((x % 3)) + 1)\n"
+          "  }\n"
+          "}\n"
+          "free buf\n";
+
+        if (source.str() != correct_source) {
+            std::cout << "Correct output:" << std::endl << correct_source;
+            std::cout << "Actual output:" << std::endl << source.str();
+            assert(false);
+        }        
+        std::cout << "IRPrinter test passed" << std::endl;
     }
 
     IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {}
@@ -136,7 +140,7 @@ namespace HalideInternal {
         stream << ')';
     }
     
-    void IRPrinter::visit(const Var *op) {
+    void IRPrinter::visit(const Variable *op) {
         // omit the type
         stream << op->name;
     }
@@ -445,4 +449,4 @@ namespace HalideInternal {
     }
 
     
-}
+}}

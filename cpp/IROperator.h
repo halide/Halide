@@ -3,7 +3,7 @@
 
 #include "IR.h"
 
-namespace HalideInternal {
+namespace Halide {
 
     inline Expr operator+(Expr a, Expr b) {
         return new Add(a, b);

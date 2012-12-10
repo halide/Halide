@@ -1,6 +1,6 @@
 #include "IRMutator.h"
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     Expr IRMutator::mutate(Expr e) {
         if (e.defined()) {
@@ -34,7 +34,7 @@ namespace HalideInternal {
 
     void IRMutator::visit(const IntImm *op)   {expr = op;}
     void IRMutator::visit(const FloatImm *op) {expr = op;}
-    void IRMutator::visit(const Var *op) {expr = op;}
+    void IRMutator::visit(const Variable *op) {expr = op;}
 
     void IRMutator::visit(const Cast *op) {
         Expr value = mutate(op->value);
@@ -233,4 +233,4 @@ namespace HalideInternal {
         if (first.same_as(op->first) && rest.same_as(op->rest)) stmt = op;
         else stmt = new Block(first, rest);
     }
-}
+}}

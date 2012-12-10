@@ -5,7 +5,7 @@
 #include <map>
 #include <stack>
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     using std::string;
     using std::map;
@@ -55,6 +55,6 @@ namespace HalideInternal {
         }
     };
     
-};
+}}
 
 #endif

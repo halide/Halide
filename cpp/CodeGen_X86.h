@@ -3,7 +3,7 @@
 
 #include "CodeGen.h"
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
 
     /* A code generator that emits x86 code from a given Halide stmt. */
 
@@ -11,7 +11,7 @@ namespace HalideInternal {
     public:
 
         CodeGen_X86();
-
+        
         /* Compile to an llvm module. Takes a halide statement, the
          * name of the function produced, and the arguments to the
          * function produced. After calling this, call
@@ -30,6 +30,6 @@ namespace HalideInternal {
         virtual void visit(const Allocate *);        
     };
 
-};
+}}
 
 #endif

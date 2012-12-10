@@ -4,7 +4,7 @@
 
 // This file is largely a port of parts of src/analysis.ml
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
     using std::make_pair;
 
     pair<int, int> modulus_remainder(Expr e) {
@@ -57,7 +57,7 @@ namespace HalideInternal {
         remainder = 0;
     }
 
-    void ModulusRemainder::visit(const Var *op) {
+    void ModulusRemainder::visit(const Variable *op) {
         if (scope.contains(op->name)) {
             pair<int, int> mod_rem = scope.get(op->name);
             modulus = mod_rem.first;
@@ -223,4 +223,4 @@ namespace HalideInternal {
     void ModulusRemainder::visit(const Block *) {
         assert(false && "modulus_remainder of statement");
     }
-}
+}}

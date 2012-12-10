@@ -4,7 +4,7 @@
 #include "IRMutator.h"
 #include "Scope.h"
 
-namespace HalideInternal {
+namespace Halide { namespace Internal {
     /* An IR mutator that performs a wide range of simplifications to
      * expressions and statements, including constant folding,
      * substituting in trivial values, arithmetic rearranging,
@@ -20,7 +20,7 @@ namespace HalideInternal {
         void visit(const IntImm *);
         void visit(const FloatImm *);
         void visit(const Cast *);
-        void visit(const Var *);
+        void visit(const Variable *);
         void visit(const Add *);
         void visit(const Sub *);
         void visit(const Mul *);
@@ -57,6 +57,6 @@ namespace HalideInternal {
       public:
         static void test();
     };
-};
+}}
 
 #endif

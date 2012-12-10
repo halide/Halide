@@ -2,5 +2,5 @@
 
 // This file is largely a port of src/bounds.ml
 
-namespace HalideInternal {
-}
+namespace Halide { namespace Internal {
+}}

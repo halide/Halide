@@ -2,128 +2,92 @@
 #define FUNC_H
 
 #include "IR.h"
-#include <iostream>
+#include "Var.h"
+#include "IntrusivePtr.h"
 
-namespace HalideInternal {
-
-    struct Schedule {
-        string store_level, compute_level;
-
-        struct Split {
-            string old_var, outer, inner;
-            Expr factor;
-        };
-        vector<Split> splits;
-
-        struct Dim {
-            string var;
-            For::ForType for_type;
-        };
-        vector<Dim> dims;
-    };
-
-    struct FuncContents {
-        mutable int ref_count;
-        string name;
-        vector<string> args;
-        Expr value;
-        Schedule schedule;
-        // TODO: reduction step lhs, rhs, and schedule
-    };
-
-    class FuncRef {
+namespace Halide {
         
+    namespace Internal {
+        class Function;
+        class Schedule;
+    }
+
+    /* A fragment of front-end syntax of the form f(x, y, z), where x,
+     * y, z are Vars. It could be the left-hand side of a function
+     * definition, or it could be a call to a function. We don't know
+     * yet.
+     */
+    class FuncRefVar {
+        Internal::IntrusivePtr<Internal::Function> func;
+        vector<Var> args;
+    public:
+        FuncRefVar(Internal::IntrusivePtr<Internal::Function>, const vector<Var> &);
+        
+        // Use this as the left-hand-side of a definition
+        void operator=(Expr);
+        
+        // Use this as a call to the function
+        operator Expr();
+    };
+    
+    /* A fragment of front-end syntax of the form f(x, y, z), where x,
+     * y, z are Exprs. If could be the left hand side of a reduction
+     * definition, or it could be a call to a function. We don't know
+     * yet.
+     */
+    class FuncRefExpr {
+        Internal::IntrusivePtr<Internal::Function> func;
+        vector<Expr> args;
+    public:
+        FuncRefExpr(Internal::IntrusivePtr<Internal::Function>, const vector<Expr> &);
+        
+        // Use this as the left-hand-side of a reduction definition
+        void operator=(Expr);
+        
+        // Use this as a call to the function
+        operator Expr();
     };
 
-    class Func : public IntrusivePtr<FuncContents> {
+    /* A halide function. Define it, call it, schedule it. */
+    class Func {
+        Internal::IntrusivePtr<Internal::Function> func;
+        void set_dim_type(Var var, For::ForType t);
+
     public:        
-        Stmt lower(const map<string, Func> &env);
         static void test();
 
-        const string &name() const {return ptr->name;}
-        const vector<string> &args() const {return ptr->args;}
-        Expr value() const {return ptr->value;}
-        const Schedule &schedule() const {return ptr->schedule;}
+        Func(Internal::IntrusivePtr<Internal::Function> f);
+        Func(const string &name);
+        Func();
 
-        void define(string name, const vector<string> &args, Expr value) {
-            assert(!defined() && "Function is already defined");
-            ptr = new FuncContents;
-            ptr->name = name;
-            ptr->value = value;
-            ptr->args = args;
-
-            for (size_t i = 0; i < args.size(); i++) {
-                Schedule::Dim d = {args[i], For::Serial};
-                ptr->schedule.dims.push_back(d);
-            }
-
-
-        }
-
-        Func &split(string old, string outer, string inner, Expr factor) {
-            // Replace the old dimension with the new dimensions in the dims list
-            bool found = false;
-            vector<Schedule::Dim> &dims = ptr->schedule.dims;
-            for (size_t i = 0; (!found) && i < dims.size(); i++) {
-                if (dims[i].var == old) {
-                    found = true;
-                    dims[i].var = inner;
-                    dims.push_back(dims[dims.size()-1]);
-                    for (size_t j = dims.size(); j > i+1; j--) {
-                        dims[j-1] = dims[j-2];
-                    }
-                    dims[i+1].var = outer;
-                }
-            }
-
-            assert(found && "Could not find dimension in argument list for function");
-
-            // Add the split to the splits list
-            Schedule::Split split = {old, outer, inner, factor};
-            ptr->schedule.splits.push_back(split);
-
-            return *this;
-        }
-
-    private:
-        void set_dim_type(string var, For::ForType t) {
-            bool found = false;
-            vector<Schedule::Dim> &dims = ptr->schedule.dims;
-            for (size_t i = 0; (!found) && i < dims.size(); i++) {
-                if (dims[i].var == var) {
-                    found = true;
-                    dims[i].for_type = t;
-                }
-            }
-
-            assert(found && "Could not find dimension in argument list for function");
-        }
-
-    public:
-        Func &parallel(string var) {
-            set_dim_type(var, For::Parallel);
-            return *this;
-        }
-
-        Func &vectorize(string var) {
-            set_dim_type(var, For::Vectorized);
-            return *this;
-        }
-
-        Func &unroll(string var) {
-            set_dim_type(var, For::Unrolled);
-            return *this;
-        }
-
-        Func &chunk(string store, string compute) {
-            ptr->schedule.store_level = store;
-            ptr->schedule.compute_level = compute;
-            return *this;
-        }
+        Stmt lower(const map<string, Func> &env);
         
+        const string &name() const;
+        const vector<Var> &args() const;
+        Expr value() const;
+        const Internal::Schedule &schedule() const;
+
+        FuncRefVar operator()(Var x);
+        FuncRefVar operator()(Var x, Var y);
+        FuncRefVar operator()(Var x, Var y, Var z);
+        FuncRefVar operator()(Var x, Var y, Var z, Var w);
+        FuncRefExpr operator()(Expr x);
+        FuncRefExpr operator()(Expr x, Expr y);
+        FuncRefExpr operator()(Expr x, Expr y, Expr z);
+        FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w);
+        
+        void define(const vector<Var> &args, Expr value);
+    
+        Func &split(Var old, Var outer, Var inner, Expr factor);
+        Func &parallel(Var var);
+        Func &vectorize(Var var);
+        Func &unroll(Var var);
+        Func &compute_at(Func f, Var var);
+        Func &compute_root();
+        Func &store_at(Func f, Var var);
+        Func &store_root();
+        Func &compute_inline();
     };
-
-
 }
 
 #endif
