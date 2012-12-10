@@ -60,7 +60,7 @@ namespace Halide {
         Func(const string &name);
         Func();
 
-        Stmt lower(const map<string, Func> &env);
+        Stmt lower();
         
         const string &name() const;
         const vector<Var> &args() const;
