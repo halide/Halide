@@ -33,9 +33,6 @@ namespace Halide {
         g.split(y, yo, yi, 2).unroll(yi);;
         g.store_at(f, xo).compute_at(f, y);
 
-        std::cout << f.value() << std::endl;
-        std::cout << g.value() << std::endl;
-
         map<string, Func> env;
         env[f.name()] = f;
         env[g.name()] = g;
@@ -217,7 +214,7 @@ namespace Halide {
         for (size_t i = 0; i < expr_args.size(); i++) {
             expr_args[i] = Expr(args[i]);
         }
-        return new Call(func.ptr->value.type(), func.ptr->name, expr_args, Call::Halide);
+        return new Call(func.ptr->value.type(), func.ptr->name, expr_args, Call::Halide, func);
     }
     
     FuncRefExpr::FuncRefExpr(IntrusivePtr<Internal::Function> f, const vector<Expr> &a) : func(f), args(a) {
@@ -230,7 +227,7 @@ namespace Halide {
     
     FuncRefExpr::operator Expr() {                
         assert(func.ptr->value.defined() && "Can't call function with undefined value");
-        return new Call(func.ptr->value.type(), func.ptr->name, args, Call::Halide);
+        return new Call(func.ptr->value.type(), func.ptr->name, args, Call::Halide, func);
     }
     
     namespace Internal {
@@ -570,7 +567,7 @@ namespace Halide {
                         for (size_t i = 0; i < new_args.size(); i++) {
                             new_args[i] = widen(new_args[i], max_width);
                         }
-                        expr = new Call(op->type.vector_of(max_width), op->name, new_args, op->call_type);
+                        expr = new Call(op->type.vector_of(max_width), op->name, new_args, op->call_type, op->func);
                     }
                 }
 

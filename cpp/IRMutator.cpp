@@ -107,7 +107,7 @@ namespace Halide { namespace Internal {
         }
 
         if (!changed) expr = op;
-        else expr = new Call(op->type, op->name, new_args, op->call_type);
+        else expr = new Call(op->type, op->name, new_args, op->call_type, op->func);
     }
 
     void IRMutator::visit(const Let *op) {

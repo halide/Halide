@@ -435,8 +435,8 @@ namespace Halide {
         // holds onto a pointer to that function
         Internal::IntrusivePtr<Internal::Function> func;
 
-        Call(Type t, string n, const vector<Expr > &a, CallType ct) : 
-            ExprNode<Call>(t), name(n), args(a), call_type(ct) {
+        Call(Type t, string n, const vector<Expr > &a, CallType ct, Internal::IntrusivePtr<Internal::Function> f) : 
+            ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f) {
             for (size_t i = 0; i < args.size(); i++) {
                 assert(args[i].defined() && "Call of undefined");
             }
