@@ -1,6 +1,7 @@
 #ifndef SCOPE_H
 #define SCOPE_H
 
+#include <assert.h>
 #include <string>
 #include <map>
 #include <stack>
