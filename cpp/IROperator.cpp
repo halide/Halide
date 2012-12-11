@@ -17,6 +17,32 @@ bool is_const(Expr e) {
             
 }
 
+bool is_positive_const(Expr e) {
+    if (const IntImm *i = e.as<IntImm>()) return i->value > 0;
+    if (const FloatImm *f = e.as<FloatImm>()) return f->value > 0.0f;
+    if (const Ramp *r = e.as<Ramp>()) {
+        // slightly conservative
+        return is_positive_const(r->base) && is_positive_const(r->stride);
+    }
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        return is_positive_const(b->value);
+    }
+    return false;
+}
+
+bool is_negative_const(Expr e) {
+    if (const IntImm *i = e.as<IntImm>()) return i->value < 0;
+    if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
+    if (const Ramp *r = e.as<Ramp>()) {
+        // slightly conservative
+        return is_negative_const(r->base) && is_negative_const(r->stride);
+    }
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        return is_negative_const(b->value);
+    }
+    return false;
+}
+
 bool is_zero(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 0;
     if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 0;
@@ -51,12 +77,12 @@ Expr make_one(Type t) {
     return new Cast(t, 1);
 }
     
-Expr const_true() {
-    return make_one(Bool());
+Expr const_true(int w) {
+    return make_one(UInt(1, w));
 }
 
-Expr const_false() {
-    return make_zero(Bool());
+Expr const_false(int w) {
+    return make_zero(UInt(1, w));
 }
     
 }
