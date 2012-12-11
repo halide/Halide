@@ -12,7 +12,7 @@ int main(int argc, const char **argv) {
     IRPrinter::test();
     CodeGen_X86::test();
     CodeGen_C::test();
-    Simplify::test();
+    simplify_test();
     Func::test();
     
     return 0;
