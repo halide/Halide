@@ -69,14 +69,28 @@ inline Expr operator!=(Expr a, Expr b) {
     return new NE(a, b);
 }
 
+inline Expr operator&&(Expr a, Expr b) {
+    return new And(a, b);
+}
+
+inline Expr operator||(Expr a, Expr b) {
+    return new Or(a, b);
+}
+
+inline Expr operator!(Expr a) {
+    return new Not(a);
+}
+
 namespace Internal {
 bool is_const(Expr e);
+bool is_positive_const(Expr e);
+bool is_negative_const(Expr e);
 bool is_zero(Expr e);
 bool is_one(Expr e);
 Expr make_zero(Type t);
 Expr make_one(Type t);
-Expr const_true();
-Expr const_false();
+Expr const_true(int width = 1);
+Expr const_false(int width = 1);
 }
 
 }

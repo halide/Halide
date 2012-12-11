@@ -50,14 +50,22 @@ ostream &operator<<(ostream &out, For::ForType type) {
 }
 
 ostream &operator<<(ostream &stream, Expr ir) {
-    Internal::IRPrinter p(stream);
-    p.print(ir);
+    if (!ir.defined()) {
+        stream << "(undefined)";
+    } else {
+        Internal::IRPrinter p(stream);
+        p.print(ir);
+    }
     return stream;
 }
 
 ostream &operator<<(ostream &stream, Stmt ir) {
-    Internal::IRPrinter p(stream);
-    p.print(ir);
+    if (!ir.defined()) {
+        stream << "(undefined)" << std::endl;
+    } else {
+        Internal::IRPrinter p(stream);
+        p.print(ir);
+    }
     return stream;
 }
 

@@ -200,10 +200,9 @@ class Simplify : public IRMutator {
         } else if (add_a && equal(add_a->a, b)) {
             expr = add_a->b;
         } else if (add_b && equal(add_b->b, a)) {
-            expr = make_zero(add_b->a.type()) - add_b->a;
+            expr = mutate(make_zero(add_b->a.type()) - add_b->a);
         } else if (add_b && equal(add_b->a, a)) {
-            expr = make_zero(add_b->a.type()) - add_b->b;
-
+            expr = mutate(make_zero(add_b->a.type()) - add_b->b);
         } else if (add_a && is_const(add_a->b)) {
             // In ternary expressions, pull constants outside
             if (is_const(b)) expr = mutate(add_a->a + (add_a->b - b));
@@ -488,27 +487,151 @@ class Simplify : public IRMutator {
     }
 
     void visit(const EQ *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a), b = mutate(op->b);
+        Expr delta = mutate(a - b);
+
+        const Ramp *ramp_a = a.as<Ramp>();
+        const Ramp *ramp_b = b.as<Ramp>();
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Add *add_a = a.as<Add>();
+        const Add *add_b = b.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Sub *sub_b = b.as<Sub>();
+        const Mul *mul_a = a.as<Mul>();
+        const Mul *mul_b = b.as<Mul>();
+
+        if (is_zero(delta)) {
+            expr = const_true(op->type.width);
+        } else if (is_const(delta)) {
+            expr = const_false(op->type.width);
+        } else if (is_const(a) && !is_const(b)) {
+            // Move constants to the right
+            expr = mutate(b == a);
+        } else if (broadcast_a && broadcast_b) {
+            // Push broadcasts outwards
+            expr = mutate(new Broadcast(broadcast_a->value == broadcast_b->value, broadcast_a->width));
+        } else if (ramp_a && ramp_b && equal(ramp_a->stride, ramp_b->stride)) {
+            // Ramps with matching stride
+            Expr bases_match = (ramp_a->base == ramp_b->base);
+            expr = mutate(new Broadcast(bases_match, ramp_a->width));
+        } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
+            // Subtract a term from both sides
+            expr = mutate(add_a->b == add_b->b);
+        } else if (add_a && add_b && equal(add_a->a, add_b->b)) {
+            expr = mutate(add_a->b == add_b->a);
+        } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
+            expr = mutate(add_a->a == add_b->b);
+        } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
+            expr = mutate(add_a->a == add_b->a);
+        } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
+            // Add a term to both sides
+            expr = mutate(sub_a->b == sub_b->b);
+        } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
+            expr = mutate(sub_a->a == sub_b->a);
+        } else if (add_a) {
+            // Rearrange so that all adds and subs are on the rhs to cut down on further cases
+            expr = mutate(add_a->a == (b - add_a->b));
+        } else if (sub_a) {
+            expr = mutate(sub_a->a == (b + sub_a->b));
+        } else if (add_b && equal(add_b->a, a)) {
+            // Subtract a term from both sides
+            expr = mutate(make_zero(add_b->b.type()) == add_b->b);
+        } else if (add_b && equal(add_b->b, a)) {
+            expr = mutate(make_zero(add_b->a.type()) == add_b->a);
+        } else if (sub_b && equal(sub_b->a, a)) {
+            // Add a term to both sides
+            expr = mutate(make_zero(sub_b->b.type()) == sub_b->b);
+        } else if (mul_a && mul_b && is_const(mul_a->b) && is_const(mul_b->b) && equal(mul_a->b, mul_b->b)) {
+            // Divide both sides by a constant
+            assert(!is_zero(mul_a->b) && "Multiplication by zero survived constant folding");
+            expr = mutate(mul_a->a == mul_b->a);
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new EQ(a, b);
+        }
     }
 
     void visit(const NE *op) {
-        IRMutator::visit(op);
+        expr = mutate(new Not(op->a == op->b));
     }
 
     void visit(const LT *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a), b = mutate(op->b);
+        Expr delta = mutate(a - b);
+
+        const Ramp *ramp_a = a.as<Ramp>();
+        const Ramp *ramp_b = b.as<Ramp>();
+        const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Broadcast *broadcast_b = b.as<Broadcast>();
+        const Add *add_a = a.as<Add>();
+        const Add *add_b = b.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Sub *sub_b = b.as<Sub>();
+        const Mul *mul_a = a.as<Mul>();
+        const Mul *mul_b = b.as<Mul>();
+
+        if (is_zero(delta) || is_positive_const(delta)) {
+            expr = const_false(op->type.width);
+        } else if (is_negative_const(delta)) {
+            expr = const_true(op->type.width);
+        } else if (broadcast_a && broadcast_b) {
+            // Push broadcasts outwards
+            expr = mutate(new Broadcast(broadcast_a->value < broadcast_b->value, broadcast_a->width));
+        } else if (ramp_a && ramp_b && equal(ramp_a->stride, ramp_b->stride)) {
+            // Ramps with matching stride
+            Expr bases_lt = (ramp_a->base < ramp_b->base);
+            expr = mutate(new Broadcast(bases_lt, ramp_a->width));
+        } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
+            // Subtract a term from both sides
+            expr = mutate(add_a->b < add_b->b);
+        } else if (add_a && add_b && equal(add_a->a, add_b->b)) {
+            expr = mutate(add_a->b < add_b->a);
+        } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
+            expr = mutate(add_a->a < add_b->b);
+        } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
+            expr = mutate(add_a->a < add_b->a);
+        } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
+            // Add a term to both sides
+            expr = mutate(sub_a->b < sub_b->b);
+        } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
+            expr = mutate(sub_a->a < sub_b->a);
+        } else if (add_a) {
+            // Rearrange so that all adds and subs are on the rhs to cut down on further cases
+            expr = mutate(add_a->a < (b - add_a->b));
+        } else if (sub_a) {
+            expr = mutate(sub_a->a < (b + sub_a->b));
+        } else if (add_b && equal(add_b->a, a)) {
+            // Subtract a term from both sides
+            expr = mutate(make_zero(add_b->b.type()) < add_b->b);
+        } else if (add_b && equal(add_b->b, a)) {
+            expr = mutate(make_zero(add_b->a.type()) < add_b->a);
+        } else if (sub_b && equal(sub_b->a, a)) {
+            // Add a term to both sides
+            expr = mutate(sub_b->b < make_zero(sub_b->b.type()));
+        } else if (mul_a && mul_b && 
+                   is_positive_const(mul_a->b) && is_positive_const(mul_b->b) && 
+                   equal(mul_a->b, mul_b->b)) {
+            // Divide both sides by a constant
+            expr = mutate(mul_a->a < mul_b->a);
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new LT(a, b);
+        }
     }
 
     void visit(const LE *op) {
-        IRMutator::visit(op);
+        expr = mutate(!(op->b < op->a));
     }
 
     void visit(const GT *op) {
-        IRMutator::visit(op);
+        expr = mutate(op->b < op->a);
     }
 
     void visit(const GE *op) {
-        IRMutator::visit(op);
+        expr = mutate(!(op->a < op->b));
     }
 
     void visit(const And *op) {
@@ -520,7 +643,34 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Not *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a);
+        
+        if (is_one(a)) {
+            expr = make_zero(a.type());
+        } else if (is_zero(a)) {
+            expr = make_one(a.type());
+        } else if (const Not *n = a.as<Not>()) {
+            // Double negatives cancel
+            expr = n->a;
+        } else if (const LE *n = a.as<LE>()) {
+            expr = new LT(n->b, n->a);
+        } else if (const GE *n = a.as<GE>()) {
+            expr = new LT(n->a, n->b);
+        } else if (const LT *n = a.as<LT>()) {
+            expr = new LE(n->b, n->a);
+        } else if (const GT *n = a.as<GT>()) {
+            expr = new LE(n->a, n->b);
+        } else if (const NE *n = a.as<NE>()) {
+            expr = new EQ(n->a, n->b);
+        } else if (const EQ *n = a.as<EQ>()) {
+            expr = new NE(n->a, n->b);
+        } else if (const Broadcast *n = a.as<Broadcast>()) {
+            expr = mutate(new Broadcast(!n->value, n->width));
+        } else if (a.same_as(op->a)) {
+            expr = op;
+        } else {
+            expr = new Not(a);
+        }
     }
 
     void visit(const Select *op) {
@@ -751,6 +901,44 @@ void simplify_test() {
     check(new Max(x, x+3), x+3);
     check(new Max(x+4, x), x+4);
     check(new Max(x-1, x+2), x+2);
+
+    Expr t = const_true(), f = const_false();
+    check(x == x, t);
+    check(x == (x+1), f);
+    check(x-2 == y+3, x == y+5);
+    check(x+y == y+z, x == z);
+    check(y+x == y+z, x == z);
+    check(x+y == z+y, x == z);
+    check(y+x == z+y, x == z);
+    check((y+x)*17 == (z+y)*17, x == z);
+    check(x*0 == y*0, t);
+    check(x == x+y, y == 0);
+    check(x+y == x, y == 0);
+
+    check(x < x, f);
+    check(x < (x+1), t);
+    check(x-2 < y+3, x < y+5);
+    check(x+y < y+z, x < z);
+    check(y+x < y+z, x < z);
+    check(x+y < z+y, x < z);
+    check(y+x < z+y, x < z);
+    check((y+x)*17 < (z+y)*17, x < z);
+    check(x*0 < y*0, f);
+    check(x < x+y, 0 < y);
+    check(x+y < x, y < 0);
+
+
+    check(!f, t);
+    check(!t, f);
+    check(!(x < y), y <= x);
+    check(!(x > y), x <= y);
+    check(!(x >= y), x < y);
+    check(!(x <= y), y < x);
+    check(!(x == y), x != y);
+    check(!(x != y), x == y);
+    check(!(!(x == 0)), x == 0);
+    check(!Expr(new Broadcast(x > y, 4)), 
+          new Broadcast(x <= y, 4));
 
     Expr vec = new Variable(Int(32, 4), "vec");
     // Check constants get pushed inwards

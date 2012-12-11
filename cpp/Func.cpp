@@ -37,7 +37,7 @@ void Func::test() {
 
     assert(result.defined() && "Lowering returned trivial function");
 
-    std::cout << result << std::endl;
+    //std::cout << result << std::endl;
 
     std::cout << "Func test passed" << std::endl;
 }

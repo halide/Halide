@@ -71,7 +71,7 @@ public:
 
     /* Check if two handles point to the same ptr. This is
      * equality of reference, not equality of value. */
-    bool same_as(const IntrusivePtr &other) {
+    bool same_as(const IntrusivePtr &other) const {
         return ptr == other.ptr;
     }
 };

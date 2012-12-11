@@ -118,8 +118,9 @@ private:
         op->b.accept(this);
 
         // if we can't statically prove that the divisor can't span zero, then we're unbounded
-        if (!equal(simplify(min > make_zero(min.type())), const_true()) ||
-            !equal(simplify(max < make_zero(min.type())), const_true())) {
+        Expr min_is_positive = simplify(min > make_zero(min.type()));
+        Expr max_is_negative = simplify(max < make_zero(max.type()));
+        if (!equal(min_is_positive, const_true()) && !equal(max_is_negative, const_true())) {
             min = Expr();
             max = Expr();
             return;
@@ -129,10 +130,13 @@ private:
             min = Expr(); max = Expr(); return;
         }
 
+        
+
         Expr a = min_a / min;
         Expr b = min_a / max;
         Expr c = max_a / min;
         Expr d = max_a / max;
+
         min = new Min(new Min(a, b), new Min(c, d));
         max = new Max(new Max(a, b), new Max(c, d));
     }
@@ -328,6 +332,15 @@ void bounds_test() {
     check(scope, x, 0, 10);
     check(scope, x+1, 1, 11);
     check(scope, (x+1)*2, 2, 22);
+    check(scope, x*x, 0, 100);
+    check(scope, x*(5-x), -50, 50); // We don't expect bounds analysis to understand correlated terms
+    check(scope, new Select(x < 4, x, x+100), 0, 110);
+    check(scope, x+y, y, y+10);
+    check(scope, x*y, new Min(0, y*10), new Max(0, y*10));
+    check(scope, x/y, Expr(), Expr());
+    check(scope, 11/(x+1), 1, 11);
+
+    std::cout << "Bounds test passed" << std::endl;
 }
 
 }
