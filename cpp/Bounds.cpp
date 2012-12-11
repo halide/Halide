@@ -82,8 +82,9 @@ private:
         op->a.accept(this);
         Expr min_a = min, max_a = max;
         op->b.accept(this);
-        min = (min.defined() && min_a.defined()) ? new Sub(min_a, min) : Expr();
-        max = (max.defined() && max_a.defined()) ? new Sub(max_a, max) : Expr();
+        Expr min_b = min, max_b = max;
+        min = (max_b.defined() && min_a.defined()) ? new Sub(min_a, max_b) : Expr();
+        max = (min_b.defined() && max_a.defined()) ? new Sub(max_a, min_b) : Expr();
     }
 
     void visit(const Mul *op) {
@@ -333,12 +334,15 @@ void bounds_test() {
     check(scope, x+1, 1, 11);
     check(scope, (x+1)*2, 2, 22);
     check(scope, x*x, 0, 100);
+    check(scope, 5-x, -5, 5);
     check(scope, x*(5-x), -50, 50); // We don't expect bounds analysis to understand correlated terms
     check(scope, new Select(x < 4, x, x+100), 0, 110);
     check(scope, x+y, y, y+10);
     check(scope, x*y, new Min(0, y*10), new Max(0, y*10));
     check(scope, x/y, Expr(), Expr());
     check(scope, 11/(x+1), 1, 11);
+    check(scope, new Load(Int(8), "buf", x), -128, 127);
+    check(scope, y + (new Let("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
 
     std::cout << "Bounds test passed" << std::endl;
 }
