@@ -3,9 +3,13 @@
 
 #include "IR.h"
 
-namespace Halide { namespace Internal {
-    bool equal(Expr a, Expr b);
-    bool equal(Stmt a, Stmt b);
-}}
+namespace Halide { 
+namespace Internal {
+
+bool equal(Expr a, Expr b);
+bool equal(Stmt a, Stmt b);
+
+}
+}
 
 #endif

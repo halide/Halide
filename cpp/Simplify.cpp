@@ -2,15 +2,22 @@
 #include "IROperator.h"
 #include "IREquality.h"
 #include "IRPrinter.h"
+#include "IRMutator.h"
+#include "Scope.h"
 #include <iostream>
 
-namespace Halide { namespace Internal {
+namespace Halide { 
+namespace Internal {
 
-    void Simplify::visit(const IntImm *op) {
+class Simplify : public IRMutator {
+
+    Scope<Expr> scope;
+
+    void visit(const IntImm *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const FloatImm *op) {
+    void visit(const FloatImm *op) {
         IRMutator::visit(op);
     }
 
@@ -34,58 +41,7 @@ namespace Halide { namespace Internal {
         }
     }
 
-    bool is_const(Expr e) {
-        if (e.as<IntImm>()) return true;
-        if (e.as<FloatImm>()) return true;
-        if (const Ramp *r = e.as<Ramp>()) {
-            return is_const(r->base) && is_const(r->stride);
-        }
-        if (const Broadcast *b = e.as<Broadcast>()) {
-            return is_const(b->value);
-        }
-        return false;
-
-    }
-
-    bool is_zero(Expr e) {
-        int i;
-        float f;
-        if (const_int(e, &i)) return i == 0;
-        if (const_float(e, &f)) return f == 0;
-        if (const Cast *c = e.as<Cast>()) return is_zero(c->value);
-        if (const Broadcast *b = e.as<Broadcast>()) return is_zero(b->value);
-        return false;
-    }
-
-    bool is_one(Expr e) {
-        int i;
-        float f;
-        if (const_int(e, &i)) return i == 1;
-        if (const_float(e, &f)) return f == 1.0f;
-        if (const Cast *c = e.as<Cast>()) return is_one(c->value);
-        if (const Broadcast *b = e.as<Broadcast>()) return is_one(b->value);
-        return false;
-    }
-
-    Expr make_zero(Type t) {
-        if (t == Int(32)) return 0;
-        if (t == Float(32)) return 0.0f;
-        if (t.is_vector()) {
-            return new Broadcast(make_zero(t.element_of()), t.width);
-        }
-        return new Cast(t, 0);
-    }
-
-    Expr make_one(Type t) {
-        if (t == Int(32)) return 1;
-        if (t == Float(32)) return 1.0f;
-        if (t.is_vector()) {
-            return new Broadcast(make_one(t.element_of()), t.width);
-        }
-        return new Cast(t, 1);
-    }
-
-    void Simplify::visit(const Cast *op) {
+    void visit(const Cast *op) {
         Expr value = mutate(op->value);        
         float f;
         int i;
@@ -102,7 +58,7 @@ namespace Halide { namespace Internal {
         }
     }
 
-    void Simplify::visit(const Variable *op) {
+    void visit(const Variable *op) {
         // If we marked this var as trivial in the scope, then we
         // should just replace it with its value
         if (scope.contains(op->name)) {
@@ -113,7 +69,7 @@ namespace Halide { namespace Internal {
         }
     }
 
-    void Simplify::visit(const Add *op) {
+    void visit(const Add *op) {
         int ia, ib;
         float fa, fb;
 
@@ -192,7 +148,7 @@ namespace Halide { namespace Internal {
         }
     }
 
-    void Simplify::visit(const Sub *op) {
+    void visit(const Sub *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
         int ia, ib; 
@@ -275,7 +231,7 @@ namespace Halide { namespace Internal {
         }
     }
 
-    void Simplify::visit(const Mul *op) {
+    void visit(const Mul *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
         if (is_const(a)) std::swap(a, b);
@@ -321,7 +277,7 @@ namespace Halide { namespace Internal {
         }
     }
 
-    void Simplify::visit(const Div *op) {
+    void visit(const Div *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
         
         int ia, ib;
@@ -397,7 +353,7 @@ namespace Halide { namespace Internal {
         }
     }
 
-    void Simplify::visit(const Mod *op) {
+    void visit(const Mod *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
         int ia, ib;
@@ -437,7 +393,7 @@ namespace Halide { namespace Internal {
         }
     }
 
-    void Simplify::visit(const Min *op) {
+    void visit(const Min *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
         int ia, ib;
@@ -455,7 +411,9 @@ namespace Halide { namespace Internal {
             expr = std::min(fa, fb);
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(new Broadcast(new Min(broadcast_a->value, broadcast_b->value), broadcast_a->width));
-        } else if (add_a && const_int(add_a->b, &ia) && add_b && const_int(add_b->b, &ib) && equal(add_a->a, add_b->a)) {
+        } else if (add_a && const_int(add_a->b, &ia) && 
+                   add_b && const_int(add_b->b, &ib) && 
+                   equal(add_a->a, add_b->a)) {
             // min(x + 3, x - 2) -> x - 2
             if (ia > ib) {
                 expr = b;
@@ -483,7 +441,7 @@ namespace Halide { namespace Internal {
         }
     }
 
-    void Simplify::visit(const Max *op) {
+    void visit(const Max *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
         int ia, ib;
@@ -529,59 +487,59 @@ namespace Halide { namespace Internal {
         }
     }
 
-    void Simplify::visit(const EQ *op) {
+    void visit(const EQ *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const NE *op) {
+    void visit(const NE *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const LT *op) {
+    void visit(const LT *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const LE *op) {
+    void visit(const LE *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const GT *op) {
+    void visit(const GT *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const GE *op) {
+    void visit(const GE *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const And *op) {
+    void visit(const And *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Or *op) {
+    void visit(const Or *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Not *op) {
+    void visit(const Not *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Select *op) {
+    void visit(const Select *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Load *op) {
+    void visit(const Load *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Ramp *op) {
+    void visit(const Ramp *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Broadcast *op) {
+    void visit(const Broadcast *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Call *op) {
+    void visit(const Call *op) {
         IRMutator::visit(op);
     }
 
@@ -598,11 +556,13 @@ namespace Halide { namespace Internal {
             scope.push(op->name, value);
         } else if (ramp && is_const(ramp->stride)) {
             // Make a new name to refer to the base instead, and push the ramp inside
-            scope.push(op->name, new Ramp(new Variable(ramp->base.type(), op->name + ".base"), ramp->stride, ramp->width));
+            scope.push(op->name, new Ramp(new Variable(ramp->base.type(), op->name + ".base"), 
+                                          ramp->stride, ramp->width));
             body = new T(op->name + ".base", ramp->base, body);
         } else if (broadcast) {
             // Make a new name refer to the scalar version, and push the broadcast inside            
-            scope.push(op->name, new Broadcast(new Variable(broadcast->value.type(), op->name + ".value"), broadcast->width));
+            scope.push(op->name, new Broadcast(new Variable(broadcast->value.type(), op->name + ".value"), 
+                                               broadcast->width));
             body = new T(op->name + ".value", broadcast->value, body);
         } else {
             // Push a empty expr on, to make sure we hide anything
@@ -622,186 +582,195 @@ namespace Halide { namespace Internal {
     }
 
 
-    void Simplify::visit(const Let *op) {
+    void visit(const Let *op) {
         expr = simplify_let<Let, Expr>(op, scope, this);
     }
 
-    void Simplify::visit(const LetStmt *op) {
+    void visit(const LetStmt *op) {
         stmt = simplify_let<LetStmt, Stmt>(op, scope, this);
     }
 
-    void Simplify::visit(const PrintStmt *op) {
+    void visit(const PrintStmt *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const AssertStmt *op) {
+    void visit(const AssertStmt *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Pipeline *op) {
+    void visit(const Pipeline *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const For *op) {
+    void visit(const For *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Store *op) {
+    void visit(const Store *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Provide *op) {
+    void visit(const Provide *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Allocate *op) {
+    void visit(const Allocate *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Realize *op) {
+    void visit(const Realize *op) {
         IRMutator::visit(op);
     }
 
-    void Simplify::visit(const Block *op) {        
+    void visit(const Block *op) {        
         IRMutator::visit(op);
     }    
+};
 
-    void check(Expr a, Expr b) {
-        Expr simpler = Simplify().mutate(a);
-        if (!equal(simpler, b)) {
-            std::cout << std::endl << "Simplification failure: " << std::endl;
-            std::cout << "Input: " << a << std::endl;
-            std::cout << "Output: " << simpler << std::endl;
-            std::cout << "Expected output: " << b << std::endl;
-            assert(false);
-        }
+Expr simplify(Expr e) {
+    return Simplify().mutate(e);
+}
+
+Stmt simplify(Stmt s) {
+    return Simplify().mutate(s);
+}
+
+void check(Expr a, Expr b) {
+    Expr simpler = simplify(a);
+    if (!equal(simpler, b)) {
+        std::cout << std::endl << "Simplification failure: " << std::endl;
+        std::cout << "Input: " << a << std::endl;
+        std::cout << "Output: " << simpler << std::endl;
+        std::cout << "Expected output: " << b << std::endl;
+        assert(false);
     }
+}
+        
 
-    void Simplify::test() {
-        Expr x = new Variable(Int(32), "x");
-        Expr y = new Variable(Int(32), "y");
-        Expr z = new Variable(Int(32), "z");
-        Expr xf = new Variable(Float(32), "x");
-        Expr yf = new Variable(Float(32), "y");
+void simplify_test() {
+    Expr x = new Variable(Int(32), "x");
+    Expr y = new Variable(Int(32), "y");
+    Expr z = new Variable(Int(32), "z");
+    Expr xf = new Variable(Float(32), "x");
+    Expr yf = new Variable(Float(32), "y");
 
-        Simplify s;
+    check(new Cast(Int(32), new Cast(Int(32), x)), x);
+    check(new Cast(Float(32), 3), 3.0f);
+    check(new Cast(Int(32), 5.0f), 5);
 
-        check(new Cast(Int(32), new Cast(Int(32), x)), x);
-        check(new Cast(Float(32), 3), 3.0f);
-        check(new Cast(Int(32), 5.0f), 5);
+    check(3 + x, x + 3);
+    check(Expr(3) + Expr(8), 11);
+    check(Expr(3.25f) + Expr(7.75f), 11.0f);
+    check(x + 0, x);
+    check(0 + x, x);
+    check(Expr(new Ramp(x, 2, 3)) + Expr(new Ramp(y, 4, 3)), new Ramp(x+y, 6, 3));
+    check(Expr(new Broadcast(4.0f, 5)) + Expr(new Ramp(3.25f, 4.5f, 5)), new Ramp(7.25f, 4.5f, 5));
+    check(Expr(new Ramp(3.25f, 4.5f, 5)) + Expr(new Broadcast(4.0f, 5)), new Ramp(7.25f, 4.5f, 5));
+    check(Expr(new Broadcast(3, 3)) + Expr(new Broadcast(1, 3)), new Broadcast(4, 3));
+    check((x + 3) + 4, x + 7);
+    check(4 + (3 + x), x + 7);
+    check((x + 3) + y, (x + y) + 3);
+    check(y + (x + 3), (y + x) + 3);
+    check((3 - x) + x, 3);
+    check(x + (3 - x), 3);
+    check(x*y + x*z, x*(y+z));
+    check(x*y + z*x, x*(y+z));
+    check(y*x + x*z, x*(y+z));
+    check(y*x + z*x, x*(y+z));
 
-        check(3 + x, x + 3);
-        check(Expr(3) + Expr(8), 11);
-        check(Expr(3.25f) + Expr(7.75f), 11.0f);
-        check(x + 0, x);
-        check(0 + x, x);
-        check(Expr(new Ramp(x, 2, 3)) + Expr(new Ramp(y, 4, 3)), new Ramp(x+y, 6, 3));
-        check(Expr(new Broadcast(4.0f, 5)) + Expr(new Ramp(3.25f, 4.5f, 5)), new Ramp(7.25f, 4.5f, 5));
-        check(Expr(new Ramp(3.25f, 4.5f, 5)) + Expr(new Broadcast(4.0f, 5)), new Ramp(7.25f, 4.5f, 5));
-        check(Expr(new Broadcast(3, 3)) + Expr(new Broadcast(1, 3)), new Broadcast(4, 3));
-        check((x + 3) + 4, x + 7);
-        check(4 + (3 + x), x + 7);
-        check((x + 3) + y, (x + y) + 3);
-        check(y + (x + 3), (y + x) + 3);
-        check((3 - x) + x, 3);
-        check(x + (3 - x), 3);
-        check(x*y + x*z, x*(y+z));
-        check(x*y + z*x, x*(y+z));
-        check(y*x + x*z, x*(y+z));
-        check(y*x + z*x, x*(y+z));
+    check(x - 0, x);
+    check((x/y) - (x/y), 0);
+    check(x - 2, x + (-2));
+    check(Expr(new Ramp(x, 2, 3)) - Expr(new Ramp(y, 4, 3)), new Ramp(x-y, -2, 3));
+    check(Expr(new Broadcast(4.0f, 5)) - Expr(new Ramp(3.25f, 4.5f, 5)), new Ramp(0.75f, -4.5f, 5));
+    check(Expr(new Ramp(3.25f, 4.5f, 5)) - Expr(new Broadcast(4.0f, 5)), new Ramp(-0.75f, 4.5f, 5));
+    check(Expr(new Broadcast(3, 3)) - Expr(new Broadcast(1, 3)), new Broadcast(2, 3));
+    check((x + y) - x, y);
+    check((x + y) - y, x);
+    check(x - (x + y), 0 - y);
+    check(x - (y + x), 0 - y);
+    check((x + 3) - 2, x + 1);
+    check((x + 3) - y, (x - y) + 3);
+    check((x - 3) - y, (x - y) + (-3));
+    check(x - (y - 2), (x - y) + 2);
+    check(3 - (y - 2), 5 - y);
+    check(x*y - x*z, x*(y-z));
+    check(x*y - z*x, x*(y-z));
+    check(y*x - x*z, x*(y-z));
+    check(y*x - z*x, x*(y-z));
 
-        check(x - 0, x);
-        check((x/y) - (x/y), 0);
-        check(x - 2, x + (-2));
-        check(Expr(new Ramp(x, 2, 3)) - Expr(new Ramp(y, 4, 3)), new Ramp(x-y, -2, 3));
-        check(Expr(new Broadcast(4.0f, 5)) - Expr(new Ramp(3.25f, 4.5f, 5)), new Ramp(0.75f, -4.5f, 5));
-        check(Expr(new Ramp(3.25f, 4.5f, 5)) - Expr(new Broadcast(4.0f, 5)), new Ramp(-0.75f, 4.5f, 5));
-        check(Expr(new Broadcast(3, 3)) - Expr(new Broadcast(1, 3)), new Broadcast(2, 3));
-        check((x + y) - x, y);
-        check((x + y) - y, x);
-        check(x - (x + y), 0 - y);
-        check(x - (y + x), 0 - y);
-        check((x + 3) - 2, x + 1);
-        check((x + 3) - y, (x - y) + 3);
-        check((x - 3) - y, (x - y) + (-3));
-        check(x - (y - 2), (x - y) + 2);
-        check(3 - (y - 2), 5 - y);
-        check(x*y - x*z, x*(y-z));
-        check(x*y - z*x, x*(y-z));
-        check(y*x - x*z, x*(y-z));
-        check(y*x - z*x, x*(y-z));
+    check(x*0, 0);
+    check(0*x, 0);
+    check(x*1, x);
+    check(1*x, x);
+    check(Expr(2.0f)*4.0f, 8.0f);
+    check(Expr(2)*4, 8);
+    check((3*x)*4, x*12);
+    check(4*(3+x), x*4 + 12);
+    check(Expr(new Broadcast(4.0f, 5)) * Expr(new Ramp(3.0f, 4.0f, 5)), new Ramp(12.0f, 16.0f, 5));
+    check(Expr(new Ramp(3.0f, 4.0f, 5)) * Expr(new Broadcast(2.0f, 5)), new Ramp(6.0f, 8.0f, 5));
+    check(Expr(new Broadcast(3, 3)) * Expr(new Broadcast(2, 3)), new Broadcast(6, 3));
 
-        check(x*0, 0);
-        check(0*x, 0);
-        check(x*1, x);
-        check(1*x, x);
-        check(Expr(2.0f)*4.0f, 8.0f);
-        check(Expr(2)*4, 8);
-        check((3*x)*4, x*12);
-        check(4*(3+x), x*4 + 12);
-        check(Expr(new Broadcast(4.0f, 5)) * Expr(new Ramp(3.0f, 4.0f, 5)), new Ramp(12.0f, 16.0f, 5));
-        check(Expr(new Ramp(3.0f, 4.0f, 5)) * Expr(new Broadcast(2.0f, 5)), new Ramp(6.0f, 8.0f, 5));
-        check(Expr(new Broadcast(3, 3)) * Expr(new Broadcast(2, 3)), new Broadcast(6, 3));
+    check(0/x, 0);
+    check(x/1, x);
+    check(x/x, 1);
+    check(Expr(7)/3, 2);
+    check(Expr(6.0f)/2.0f, 3.0f);
+    check((x / 3) / 4, x / 12);
+    check((x*4)/2, x*2);
+    check((x*2)/4, x/2);
+    check((x*4 + y)/2, x*2 + y/2);
+    check((y + x*4)/2, y/2 + x*2);
+    check((x*4 - y)/2, x*2 - y/2);
+    check((y - x*4)/2, y/2 - x*2);
+    check(xf / 4.0f, xf * 0.25f);
+    check(Expr(new Broadcast(y, 4)) / Expr(new Broadcast(x, 4)), 
+          Expr(new Broadcast(y/x, 4)));
 
-        check(0/x, 0);
-        check(x/1, x);
-        check(x/x, 1);
-        check(Expr(7)/3, 2);
-        check(Expr(6.0f)/2.0f, 3.0f);
-        check((x / 3) / 4, x / 12);
-        check((x*4)/2, x*2);
-        check((x*2)/4, x/2);
-        check((x*4 + y)/2, x*2 + y/2);
-        check((y + x*4)/2, y/2 + x*2);
-        check((x*4 - y)/2, x*2 - y/2);
-        check((y - x*4)/2, y/2 - x*2);
-        check(xf / 4.0f, xf * 0.25f);
-        check(Expr(new Broadcast(y, 4)) / Expr(new Broadcast(x, 4)), 
-              Expr(new Broadcast(y/x, 4)));
+    check(Expr(7) % 2, 1);
+    check(Expr(7.25f) % 2.0f, 1.25f);
+    check(Expr(-7.25f) % 2.0f, 0.75f);
+    check(Expr(new Broadcast(x, 4)) % Expr(new Broadcast(y, 4)), 
+          Expr(new Broadcast(x % y, 4)));
+    check((x*8) % 4, 0);
+    check((x*8 + y) % 4, y);
+    check((y + x*8) % 4, y);
 
-        check(Expr(7) % 2, 1);
-        check(Expr(7.25f) % 2.0f, 1.25f);
-        check(Expr(-7.25f) % 2.0f, 0.75f);
-        check(Expr(new Broadcast(x, 4)) % Expr(new Broadcast(y, 4)), 
-              Expr(new Broadcast(x % y, 4)));
-        check((x*8) % 4, 0);
-        check((x*8 + y) % 4, y);
-        check((y + x*8) % 4, y);
+    check(new Min(7, 3), 3);
+    check(new Min(4.25f, 1.25f), 1.25f);
+    check(new Min(new Broadcast(x, 4), new Broadcast(y, 4)), 
+          new Broadcast(new Min(x, y), 4));
+    check(new Min(x, x+3), x);
+    check(new Min(x+4, x), x);
+    check(new Min(x-1, x+2), x+(-1));
 
-        check(new Min(7, 3), 3);
-        check(new Min(4.25f, 1.25f), 1.25f);
-        check(new Min(new Broadcast(x, 4), new Broadcast(y, 4)), 
-              new Broadcast(new Min(x, y), 4));
-        check(new Min(x, x+3), x);
-        check(new Min(x+4, x), x);
-        check(new Min(x-1, x+2), x+(-1));
+    check(new Max(7, 3), 7);
+    check(new Max(4.25f, 1.25f), 4.25f);
+    check(new Max(new Broadcast(x, 4), new Broadcast(y, 4)), 
+          new Broadcast(new Max(x, y), 4));
+    check(new Max(x, x+3), x+3);
+    check(new Max(x+4, x), x+4);
+    check(new Max(x-1, x+2), x+2);
 
-        check(new Max(7, 3), 7);
-        check(new Max(4.25f, 1.25f), 4.25f);
-        check(new Max(new Broadcast(x, 4), new Broadcast(y, 4)), 
-              new Broadcast(new Max(x, y), 4));
-        check(new Max(x, x+3), x+3);
-        check(new Max(x+4, x), x+4);
-        check(new Max(x-1, x+2), x+2);
-
-        Expr vec = new Variable(Int(32, 4), "vec");
-        // Check constants get pushed inwards
-        check(new Let("x", 3, x+4), new Let("x", 3, 7));
-        // Check ramps in lets get pushed inwards
-        check(new Let("vec", new Ramp(x*2, 3, 4), vec + Expr(new Broadcast(2, 4))), 
-              new Let("vec", new Ramp(x*2, 3, 4), 
-                      new Let("vec.base", x*2, 
-                              new Ramp(Expr(new Variable(Int(32), "vec.base")) + 2, 3, 4))));
-        // Check broadcasts in lets get pushed inwards
-        check(new Let("vec", new Broadcast(x, 4), vec + Expr(new Broadcast(2, 4))),
-              new Let("vec", new Broadcast(x, 4), 
-                      new Let("vec.value", x, 
-                              new Broadcast(Expr(new Variable(Int(32), "vec.value")) + 2, 4))));
-        // Check values don't jump inside lets that share the same name
-        check(new Let("x", 3, Expr(new Let("x", y, x+4)) + x), 
-              new Let("x", 3, Expr(new Let("x", y, x+4)) + 3));
+    Expr vec = new Variable(Int(32, 4), "vec");
+    // Check constants get pushed inwards
+    check(new Let("x", 3, x+4), new Let("x", 3, 7));
+    // Check ramps in lets get pushed inwards
+    check(new Let("vec", new Ramp(x*2, 3, 4), vec + Expr(new Broadcast(2, 4))), 
+          new Let("vec", new Ramp(x*2, 3, 4), 
+                  new Let("vec.base", x*2, 
+                          new Ramp(Expr(new Variable(Int(32), "vec.base")) + 2, 3, 4))));
+    // Check broadcasts in lets get pushed inwards
+    check(new Let("vec", new Broadcast(x, 4), vec + Expr(new Broadcast(2, 4))),
+          new Let("vec", new Broadcast(x, 4), 
+                  new Let("vec.value", x, 
+                          new Broadcast(Expr(new Variable(Int(32), "vec.value")) + 2, 4))));
+    // Check values don't jump inside lets that share the same name
+    check(new Let("x", 3, Expr(new Let("x", y, x+4)) + x), 
+          new Let("x", 3, Expr(new Let("x", y, x+4)) + 3));
 
 
-        std::cout << "Simplify test passed" << std::endl;
-    }
-}}
+    std::cout << "Simplify test passed" << std::endl;
+}
+}
+}

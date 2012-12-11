@@ -4,6 +4,8 @@
 // actually buggy in some respects right now - the product rule is
 // wrong for finite differences) from src/analysis.ml
 
-namespace Halide { namespace Internal {
+namespace Halide { 
+namespace Internal {
   
-}}
+}
+}
