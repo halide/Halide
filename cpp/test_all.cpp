@@ -4,6 +4,7 @@
 #include "CodeGen_C.h"
 #include "Func.h"
 #include "Simplify.h"
+#include "Bounds.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -13,6 +14,7 @@ int main(int argc, const char **argv) {
     CodeGen_X86::test();
     CodeGen_C::test();
     simplify_test();
+    bounds_test();
     Func::test();
     
     return 0;

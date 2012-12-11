@@ -293,12 +293,16 @@ public:
 };
 
 bool equal(Expr a, Expr b) {
+    if (!a.defined() && !b.defined()) return true;
+    if (!a.defined() || !b.defined()) return false;
     IREquals eq(a);
     b.accept(&eq);
     return eq.result;            
 }
 
 bool equal(Stmt a, Stmt b) {
+    if (!a.defined() && !b.defined()) return true;
+    if (!a.defined() || !b.defined()) return false;
     IREquals eq(a);
     b.accept(&eq);
     return eq.result;
