@@ -311,11 +311,13 @@ pair<Expr, Expr> range_union(const pair<Expr, Expr> &a, const pair<Expr, Expr> &
     return make_pair(new Min(a.first, b.first), new Max(a.second, b.second));
 }
 
-class RegionRequired : public IRVisitor {
+class RegionTouched : public IRVisitor {
 public:
     string func;
     Scope<pair<Expr, Expr> > scope;
-    vector<pair<Expr, Expr> > region;
+    vector<pair<Expr, Expr> > region;    
+    bool consider_calls;
+    bool consider_provides;
 private:
     void visit(const LetStmt *op) {
         pair<Expr, Expr> value_bounds = bounds_of_expr_in_scope(op->value, scope);
@@ -344,7 +346,8 @@ private:
     }
 
     void visit(const Call *op) {        
-        if (op->name == func) {
+        IRVisitor::visit(op);
+        if (op->name == func && consider_calls) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
                 if (region.size() > i) {
@@ -353,19 +356,29 @@ private:
                     region.push_back(bounds);
                 }
             }
-        } else {
-            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Provide *op) {        
+        IRVisitor::visit(op);
+        if (op->buffer == func && consider_provides) {
+            for (size_t i = 0; i < op->args.size(); i++) {
+                pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
+                if (region.size() > i) {
+                    region[i] = range_union(region[i], bounds);
+                } else {
+                    region.push_back(bounds);
+                }
+            }
         }
     }
 };
 
-vector<pair<Expr, Expr> > region_provided(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
-    vector<pair<Expr, Expr> > r;
-    return r;
-}
-
-vector<pair<Expr, Expr> > region_required(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
-    RegionRequired r;
+vector<pair<Expr, Expr> > compute_region(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope, 
+                                         bool consider_calls, bool consider_provides) {
+    RegionTouched r;
+    r.consider_calls = consider_calls;
+    r.consider_provides = consider_provides;
     r.func = func;
     r.scope = scope;
     s.accept(&r);
@@ -378,6 +391,20 @@ vector<pair<Expr, Expr> > region_required(string func, Stmt s, const Scope<pair<
     }
     return r.region;
 }
+
+vector<pair<Expr, Expr> > region_provided(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
+    return compute_region(func, s, scope, false, true);
+}
+
+vector<pair<Expr, Expr> > region_required(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
+    return compute_region(func, s, scope, true, false);
+}
+
+vector<pair<Expr, Expr> > region_touched(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
+    return compute_region(func, s, scope, true, true);
+}
+
+
 
 void check(const Scope<pair<Expr, Expr> > &scope, Expr e, Expr correct_min, Expr correct_max) {
     pair<Expr, Expr> result = bounds_of_expr_in_scope(e, scope);
