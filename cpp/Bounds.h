@@ -27,13 +27,13 @@ pair<Expr, Expr> bounds_of_expr_in_scope(Expr expr, const Scope<pair<Expr, Expr>
 /* Compute a rectangular domain large enough to cover all the 'Call's
  * to a function that occur within a given statement. This is useful
  * for figuring out what regions of things to evaluate. */
-vector<pair<Expr, Expr> > region_required_of_function_in_stmt(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
+vector<pair<Expr, Expr> > region_required(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
 
 /* Compute a rectangular domain large enough to cover all the
  * 'Provide's to a function the occur within a given statement. This
  * is useful for figuring out what region of a function a scattering
  * reduction (e.g. a histogram) will touch. */
-vector<pair<Expr, Expr> > region_provided_of_function_in_stmt(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
+vector<pair<Expr, Expr> > region_provided(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
 
 void bounds_test();
         
