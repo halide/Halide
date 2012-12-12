@@ -311,6 +311,21 @@ pair<Expr, Expr> range_union(const pair<Expr, Expr> &a, const pair<Expr, Expr> &
     return make_pair(new Min(a.first, b.first), new Max(a.second, b.second));
 }
 
+vector<pair<Expr, Expr> > region_union(const vector<pair<Expr, Expr> > &a, 
+                                       const vector<pair<Expr, Expr> > &b) {
+    assert(a.size() == b.size() && "Mismatched dimensionality in region union");
+    vector<pair<Expr, Expr> > result;
+    for (size_t i = 0; i < a.size(); i++) {
+        Expr min = new Min(a[i].first, b[i].first);
+        Expr max_a = a[i].first + a[i].second - 1;
+        Expr max_b = b[i].first + b[i].second - 1;
+        Expr max = new Max(max_a, max_b);
+        Expr extent = (max + 1) - min;
+        result.push_back(make_pair(simplify(min), simplify(extent)));
+    }
+    return result;
+}
+
 class RegionTouched : public IRVisitor {
 public:
     string func;
@@ -463,7 +478,14 @@ void bounds_test() {
     r = region_required("input", loop, scope);
     assert(equal(r[0].first, 6));
     assert(equal(r[0].second, 20));
-    
+    r = region_provided("output", loop, scope);
+    assert(equal(r[0].first, 4));
+    assert(equal(r[0].second, 10));
+
+    vector<pair<Expr, Expr> > r2 = vec(make_pair(Expr(5), Expr(15)));
+    r = region_union(r, r2);
+    assert(equal(r[0].first, 4));
+    assert(equal(r[0].second, 16));
 
     std::cout << "Bounds test passed" << std::endl;
 }

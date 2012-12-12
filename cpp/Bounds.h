@@ -32,20 +32,17 @@ vector<pair<Expr, Expr> > region_required(string func, Stmt s, const Scope<pair<
 /* Compute a rectangular domain large enough to cover all the
  * 'Provide's to a function the occur within a given statement. This
  * is useful for figuring out what region of a function a scattering
- * reduction (e.g. a histogram) will touch. */
+ * reduction (e.g. a histogram) might touch. */
 vector<pair<Expr, Expr> > region_provided(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
 
 /* Compute the union of the above two */
 vector<pair<Expr, Expr> > region_touched(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
 
+/* Compute the smallest bounding box that contains two regions */
+vector<pair<Expr, Expr> > region_union(const vector<pair<Expr, Expr> > &, const vector<pair<Expr, Expr> > &);
 
 void bounds_test();
         
-// TODO: Other useful things in src/bounds.ml, such as region of a func required by a stmt
-        
-//class Bounds : public IRVisitor {
-// TODO
-//};
 }
 }
 
