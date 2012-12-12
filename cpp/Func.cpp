@@ -6,6 +6,7 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Function.h"
+#include "Bounds.h"
 #include <iostream>
 #include <sstream>
 #include <set>
@@ -21,23 +22,24 @@ using std::ostringstream;
 
 void Func::test() {
 
-    Func f, g;
-    Var x, y, xi, xo, yi, yo;
-        
-    g(x, y) = x-y;
-    f(x, y) = g(x+1, 1) + g(3, x-y);
+    Func f("f"), g("g"), h("h");
+    Var x("x"), y("y"), xi, xo, yi, yo;
+    
+    h(x, y) = x-y;    
+    g(x, y) = h(x+1, y) + h(x-1, y);
+    f(x, y) = g(x, y-1) + g(x, y+1);
+    
 
-    f.split(x, xo, xi, 4).vectorize(xi).parallel(xo);
-    f.compute_root();       
+    //f.split(x, xo, xi, 4).vectorize(xi).parallel(xo);
+    //f.compute_root();       
 
-    g.split(y, yo, yi, 2).unroll(yi);;
-    g.store_at(f, y).compute_at(f, xo);
+    //g.split(y, yo, yi, 2).unroll(yi);;
+    g.store_at(f, y).compute_at(f, x);
+    h.store_at(f, y).compute_at(f, y);
 
     Stmt result = f.lower();
 
     assert(result.defined() && "Lowering returned trivial function");
-
-    //std::cout << result << std::endl;
 
     std::cout << "Func test passed" << std::endl;
 }
@@ -291,6 +293,52 @@ Stmt realize(Func f) {
     return stmt;
 }
 
+// Inject let stmts defining the bounds of a function required at each loop level
+class BoundsInference : public IRMutator {
+public:
+    const vector<string> &funcs;
+    const map<string, Func> &env;
+
+    BoundsInference(const vector<string> &f, const map<string, Func> &e) : funcs(f), env(e) {}    
+
+    virtual void visit(const For *for_loop) {
+        
+        vector<vector<pair<Expr, Expr> > > regions;
+        Scope<pair<Expr, Expr> > scope;
+
+        // Compute the region required of each function within this loop body
+        for (size_t i = 0; i < funcs.size(); i++) {
+            regions.push_back(region_required(funcs[i], for_loop->body, scope));
+        }
+        
+        // TODO: For reductions we also need to consider the region
+        // provided within any update statements over this function
+        // (but not within the produce statement)
+
+        Stmt body = mutate(for_loop->body);
+
+        // Inject let statements defining those bounds
+        for (size_t i = 0; i < funcs.size(); i++) {
+            const vector<pair<Expr, Expr> > &region = regions[i];
+            const Func &f = env.find(funcs[i])->second;
+            if (region.empty()) continue;
+            assert(region.size() == f.args().size() && "Dimensionality mismatch between function and region required");
+            for (size_t j = 0; j < region.size(); j++) {
+                const string &arg_name = f.args()[j].name();
+                body = new LetStmt(f.name() + "." + arg_name + ".min", region[j].first, body);
+                body = new LetStmt(f.name() + "." + arg_name + ".extent", region[j].second, body);
+            }
+        }
+
+        if (body.same_as(for_loop->body)) {
+            stmt = for_loop;
+        } else {
+            stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, body);
+        }
+    }
+    
+};
+
 // Inject the allocation and realization of a function into an
 // existing loop nest using its schedule
 class InjectRealization : public IRMutator {
@@ -300,7 +348,15 @@ public:
     InjectRealization(const Func &f) : func(f), found_store_level(false), found_compute_level(false) {}
 
     virtual void visit(const For *for_loop) {            
-        if (for_loop->name == func.schedule().store_level) {
+        if (!found_compute_level && for_loop->name == func.schedule().compute_level) {
+            assert((for_loop->name == func.schedule().store_level || found_store_level) && 
+                   "The compute loop level is outside the store loop level!");
+            Stmt produce = realize(func);
+            stmt = new Pipeline(func.name(), produce, NULL, for_loop->body);
+            stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, stmt);
+            found_compute_level = true;
+            stmt = mutate(stmt);
+        } else if (for_loop->name == func.schedule().store_level) {
             // Inject the realization lower down
             found_store_level = true;
             Stmt body = mutate(for_loop->body);
@@ -317,12 +373,6 @@ public:
                            for_loop->extent, 
                            for_loop->for_type, 
                            body);
-
-        } else if (for_loop->name == func.schedule().compute_level) {
-            assert(found_store_level && "The compute loop level is outside the store loop level!");
-            Stmt produce = realize(func);
-            stmt = new Pipeline(func.name(), produce, NULL, for_loop);
-            found_compute_level = true;
         } else {
             stmt = new For(for_loop->name, 
                            for_loop->min, 
@@ -769,6 +819,8 @@ Stmt Func::lower() {
 
     // Generate initial loop nest
     Stmt s = realize(env.find(order[order.size()-1])->second);
+    s = new For("<root>", 0, 1, For::Serial, s);
+
     //std::cout << std::endl << "Initial statement: " << std::endl << s << std::endl;
     for (size_t i = order.size()-1; i > 0; i--) {
         //std::cout << std::endl << "Injecting realization of " << order[i-1] << std::endl;
@@ -777,6 +829,20 @@ Stmt Func::lower() {
     }
 
     // Do bounds inference
+    s = BoundsInference(order, env).mutate(s);
+
+    // For the output function, the bounds required is the size of the buffer
+    for (size_t i = 0; i < args().size(); i++) {
+        ostringstream buf_min_name, buf_extent_name;
+        buf_min_name << name() << ".min." << i;
+        buf_extent_name << name() << ".extent." << i;
+        Expr buf_min = new Variable(Int(32), buf_min_name.str());
+        Expr buf_extent = new Variable(Int(32), buf_extent_name.str());
+        s = new LetStmt(name() + "." + args()[i].name() + ".min", buf_min, s);
+        s = new LetStmt(name() + "." + args()[i].name() + ".extent", buf_extent, s);
+    }
+
+    //std::cout << s << std::endl;
 
     // Flatten everything to single-dimensional
     s = FlattenDimensions().mutate(s);
@@ -790,11 +856,15 @@ Stmt Func::lower() {
     // Unroll loops marked for unrolling
     s = UnrollLoops().mutate(s);
 
-    // Another constant folding pass
-    s = simplify(s);
+    for (size_t i = 0; i < 2; i++) {
+        // Another constant folding pass
+        s = simplify(s);
+        
+        // Removed useless Let and LetStmt nodes
+        s = RemoveDeadLets().mutate(s);
+    }
 
-    // Removed useless Let and LetStmt nodes
-    s = RemoveDeadLets().mutate(s);
+    //std::cout << std::endl << std::endl << s << std::endl;
 
     return s;
 };
