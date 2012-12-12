@@ -5,6 +5,7 @@
 #include "IREquality.h"
 #include "Simplify.h"
 #include "IRPrinter.h"
+#include "Util.h"
 #include <iostream>
 
 
@@ -332,6 +333,16 @@ private:
         scope.pop(op->name);
     }
 
+    void visit(const For *op) {
+        pair<Expr, Expr> min_bounds = bounds_of_expr_in_scope(op->min, scope);
+        pair<Expr, Expr> extent_bounds = bounds_of_expr_in_scope(op->extent, scope);
+        Expr min = min_bounds.first;
+        Expr max = (min_bounds.second + extent_bounds.second) - 1;
+        scope.push(op->name, make_pair(min, max));
+        op->body.accept(this);
+        scope.pop(op->name);
+    }
+
     void visit(const Call *op) {        
         if (op->name == func) {
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -348,17 +359,24 @@ private:
     }
 };
 
-vector<pair<Expr, Expr> > region_provided_of_function_in_stmt(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
+vector<pair<Expr, Expr> > region_provided(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
+    vector<pair<Expr, Expr> > r;
+    return r;
+}
+
+vector<pair<Expr, Expr> > region_required(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
     RegionRequired r;
     r.func = func;
     r.scope = scope;
     s.accept(&r);
-    return r.region;
-}
+    // Convert from (min, max) to min, (extent)
+    for (size_t i = 0; i < r.region.size(); i++) {
+        // the max is likely to be of the form foo-1
+        r.region[i].first = simplify(r.region[i].first);
+        r.region[i].second = simplify((r.region[i].second + 1) - r.region[i].first);
 
-vector<pair<Expr, Expr> > region_required_of_function_in_stmt(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
-    vector<pair<Expr, Expr> > r;
-    return r;
+    }
+    return r.region;
 }
 
 void check(const Scope<pair<Expr, Expr> > &scope, Expr e, Expr correct_min, Expr correct_max) {
@@ -398,6 +416,27 @@ void bounds_test() {
     check(scope, 11/(x+1), 1, 11);
     check(scope, new Load(Int(8), "buf", x), -128, 127);
     check(scope, y + (new Let("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
+
+    vector<Expr> input_site_1 = vec(2*x);
+    vector<Expr> input_site_2 = vec(2*x+1);
+    vector<Expr> output_site = vec(x+1);
+
+    Stmt loop = new For("x", 3, x, For::Serial, 
+                        new Provide("output", 
+                                    new Add(
+                                        new Call(Int(32), "input", input_site_1, Call::Extern, NULL),
+                                        new Call(Int(32), "input", input_site_2, Call::Extern, NULL)),
+                                    output_site));
+
+    vector<pair<Expr, Expr> > r;
+    r = region_required("output", loop, scope);
+    assert(r.empty());
+    r = region_required("pants", loop, scope);
+    assert(r.empty());
+    r = region_required("input", loop, scope);
+    assert(equal(r[0].first, 6));
+    assert(equal(r[0].second, 20));
+    
 
     std::cout << "Bounds test passed" << std::endl;
 }
