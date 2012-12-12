@@ -330,11 +330,12 @@ class RegionTouched : public IRVisitor {
 public:
     string func;
     Scope<pair<Expr, Expr> > scope;
-    vector<pair<Expr, Expr> > region;    
+    vector<pair<Expr, Expr> > region; // Min, Max per dimension
     bool consider_calls;
     bool consider_provides;
 private:
     void visit(const LetStmt *op) {
+        op->value.accept(this);
         pair<Expr, Expr> value_bounds = bounds_of_expr_in_scope(op->value, scope);
         // TODO: What if the value bounds refer to variables that get rebound before this let is used
         scope.push(op->name, value_bounds);
@@ -343,14 +344,17 @@ private:
     }
     
     void visit(const Let *op) {
+        op->value.accept(this);
         pair<Expr, Expr> value_bounds = bounds_of_expr_in_scope(op->value, scope);
         // TODO: What if the value bounds refer to variables that get rebound before this let is used
         scope.push(op->name, value_bounds);
-        op->body.accept(this);
+        op->body.accept(this);        
         scope.pop(op->name);
     }
 
     void visit(const For *op) {
+        op->min.accept(this);
+        op->extent.accept(this);
         pair<Expr, Expr> min_bounds = bounds_of_expr_in_scope(op->min, scope);
         pair<Expr, Expr> extent_bounds = bounds_of_expr_in_scope(op->extent, scope);
         Expr min = min_bounds.first;
