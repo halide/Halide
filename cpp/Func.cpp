@@ -31,7 +31,7 @@ void Func::test() {
     f.compute_root();       
 
     g.split(y, yo, yi, 2).unroll(yi);;
-    g.store_at(f, xo).compute_at(f, y);
+    g.store_at(f, y).compute_at(f, xo);
 
     Stmt result = f.lower();
 
@@ -297,11 +297,12 @@ class InjectRealization : public IRMutator {
 public:
     const Func &func;
     bool found_store_level, found_compute_level;
-    InjectRealization(const Func &f) : func(f) {}
+    InjectRealization(const Func &f) : func(f), found_store_level(false), found_compute_level(false) {}
 
     virtual void visit(const For *for_loop) {            
         if (for_loop->name == func.schedule().store_level) {
             // Inject the realization lower down
+            found_store_level = true;
             Stmt body = mutate(for_loop->body);
             vector<pair<Expr, Expr> > bounds(func.args().size());
             for (size_t i = 0; i < func.args().size(); i++) {
@@ -316,7 +317,7 @@ public:
                            for_loop->extent, 
                            for_loop->for_type, 
                            body);
-            found_store_level = true;
+
         } else if (for_loop->name == func.schedule().compute_level) {
             assert(found_store_level && "The compute loop level is outside the store loop level!");
             Stmt produce = realize(func);
