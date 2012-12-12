@@ -4,8 +4,8 @@
 #include "IntrusivePtr.h"
 #include "Type.h"
 #include "stdint.h"
-
-struct buffer_t;
+#include "buffer.h"
+#include "assert.h"
 
 namespace Halide {
 
@@ -19,25 +19,91 @@ namespace Halide {
  */
 
 namespace Internal {
-class BufferContents;
+struct BufferContents {
+    buffer_t buf;
+    mutable int ref_count;
+    Type type;
+};
 }
 
-class Buffer : public Internal::IntrusivePtr<Internal::BufferContents> {
+class Buffer {
+private:
+    Internal::IntrusivePtr<Internal::BufferContents> contents;
 public:
-    Buffer();
+    Buffer() : contents(NULL) {}
 
-    const buffer_t *raw_buffer() const;
-    void *host_ptr() const;
-    uint64_t device_handle() const;
-    bool host_dirty() const;
-    bool device_dirty() const;
-    int extent(int) const;
-    int stride(int) const;
-    int min(int) const;
-    Type type() const;   
+    void *host_ptr() const {
+        assert(defined());
+        return (void *)contents.ptr->buf.host;
+    }
+    
+    const buffer_t *raw_buffer() const {
+        assert(defined());
+        return &(contents.ptr->buf);
+    }
+    
+    uint64_t device_handle() const {
+        assert(defined());
+        return contents.ptr->buf.dev;
+    }
+    
+    bool host_dirty() const {
+        assert(defined());
+        return contents.ptr->buf.host_dirty;
+    }
+    
+    bool device_dirty() const {
+        assert(defined());
+        return contents.ptr->buf.dev_dirty;
+    }
+    
+    int extent(int dim) const {
+        assert(defined());
+        assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
+        return contents.ptr->buf.extent[dim];
+    }
+    
+    int stride(int dim) const {
+        assert(defined());
+        assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
+        return contents.ptr->buf.stride[dim];
+    }
+    
+    int min(int dim) const {
+        assert(defined());
+        assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
+        return contents.ptr->buf.min[dim];
+    }
+    
+    Type type() const {
+        assert(defined());
+        return contents.ptr->type;
+    }    
+
+    bool same_as(const Buffer &other) const {
+        return contents.same_as(other.contents);
+    }
+
+    bool defined() const {
+        return contents.defined();
+    }
+
+    // Any Image<T> class is allowed to mess with my internals
+    template<typename T>
+    friend class Image;
 };
 
+namespace Internal {
+template<>
+int &ref_count<BufferContents>(const BufferContents *p) {
+    return p->ref_count;
+}
 
+template<>
+void destroy<BufferContents>(const BufferContents *p) {
+    delete p;
+}
+}
 }
 
 #endif
