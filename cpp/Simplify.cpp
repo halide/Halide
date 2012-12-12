@@ -59,12 +59,48 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Variable *op) {
-        // If we marked this var as trivial in the scope, then we
-        // should just replace it with its value
         if (scope.contains(op->name)) {
-            expr = scope.get(op->name);
-            if (!expr.defined()) expr = op;
+            Expr replacement = scope.get(op->name);
+
+            //std::cout << "Pondering replacing " << op->name << " with " << replacement << std::endl;
+
+            // if expr is defined, we should substitute it in (unless
+            // it's a var that has been hidden by a nested scope).
+            if (replacement.defined()) {
+                assert(replacement.type() == op->type);
+                // If it's a naked var, and the var it refers to
+                // hasn't gone out of scope, just replace it with that
+                // var
+                if (const Variable *v = replacement.as<Variable>()) {
+                    if (scope.contains(v->name)) {
+                        if (scope.depth(v->name) < scope.depth(op->name)) {
+                            expr = replacement;
+                        } else {
+                            // Uh oh, the variable we were going to
+                            // subs in has been hidden by another
+                            // variable of the same name, better not
+                            // do anything.
+                            expr = op;
+                        }
+                    } else {
+                        // It is a variable, but the variable this
+                        // refers to hasn't been encountered. It must
+                        // be a uniform, so it's safe to substitute it
+                        // in.
+                        expr = replacement;
+                    }
+                } else {
+                    // It's not a variable, and a replacement is defined
+                    expr = replacement;
+                }
+            } else {
+                // This expression was not something deemed
+                // substitutable - no replacement is defined.
+                expr = op;
+            }
         } else {
+            // We never encountered a let that defines this var. Must
+            // be a uniform. Don't touch it.
             expr = op;
         }
     }
@@ -699,8 +735,11 @@ class Simplify : public IRMutator {
         // we can subs it in later
         Expr value = mutator->mutate(op->value);
         Body body = op->body;
+        assert(value.defined());
+        assert(body.defined());
         const Ramp *ramp = value.as<Ramp>();
         const Broadcast *broadcast = value.as<Broadcast>();        
+        const Variable *var = value.as<Variable>();
         if (is_const(value)) {
             // Substitute the value wherever we see it
             scope.push(op->name, value);
@@ -714,6 +753,11 @@ class Simplify : public IRMutator {
             scope.push(op->name, new Broadcast(new Variable(broadcast->value.type(), op->name + ".value"), 
                                                broadcast->width));
             body = new T(op->name + ".value", broadcast->value, body);
+        } else if (var) {
+            // This var is just equal to another var. We should subs
+            // it in only if the second var is still in scope at the
+            // usage site (this is checked in the visit(Variable*) method.
+            scope.push(op->name, var);
         } else {
             // Push a empty expr on, to make sure we hide anything
             // else with the same name until this goes out of scope
@@ -943,20 +987,23 @@ void simplify_test() {
     Expr vec = new Variable(Int(32, 4), "vec");
     // Check constants get pushed inwards
     check(new Let("x", 3, x+4), new Let("x", 3, 7));
+
     // Check ramps in lets get pushed inwards
     check(new Let("vec", new Ramp(x*2, 3, 4), vec + Expr(new Broadcast(2, 4))), 
           new Let("vec", new Ramp(x*2, 3, 4), 
                   new Let("vec.base", x*2, 
                           new Ramp(Expr(new Variable(Int(32), "vec.base")) + 2, 3, 4))));
+
     // Check broadcasts in lets get pushed inwards
     check(new Let("vec", new Broadcast(x, 4), vec + Expr(new Broadcast(2, 4))),
           new Let("vec", new Broadcast(x, 4), 
-                  new Let("vec.value", x, 
-                          new Broadcast(Expr(new Variable(Int(32), "vec.value")) + 2, 4))));
+                  new Let("vec.value", x, new Broadcast(x + 2, 4))));
     // Check values don't jump inside lets that share the same name
     check(new Let("x", 3, Expr(new Let("x", y, x+4)) + x), 
-          new Let("x", 3, Expr(new Let("x", y, x+4)) + 3));
+          new Let("x", 3, Expr(new Let("x", y, y+4)) + 3));
 
+    check(new Let("x", y, Expr(new Let("x", y*17, x+4)) + x), 
+          new Let("x", y, Expr(new Let("x", y*17, x+4)) + y));
 
     std::cout << "Simplify test passed" << std::endl;
 }
