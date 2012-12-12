@@ -1,6 +1,8 @@
 #ifndef INTRUSIVE_PTR_H
 #define INTRUSIVE_PTR_H
 
+#include <stdlib.h>
+
 namespace Halide { 
 namespace Internal {
 

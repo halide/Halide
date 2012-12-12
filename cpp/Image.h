@@ -2,7 +2,6 @@
 #define HALIDE_IMAGE_H
 
 #include "Buffer.h"
-struct buffer_t;
 
 namespace Halide {
 
