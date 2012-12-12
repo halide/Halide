@@ -306,6 +306,61 @@ pair<Expr, Expr> bounds_of_expr_in_scope(Expr expr, const Scope<pair<Expr, Expr>
     return make_pair(b.min, b.max);
 }
 
+pair<Expr, Expr> range_union(const pair<Expr, Expr> &a, const pair<Expr, Expr> &b) {
+    return make_pair(new Min(a.first, b.first), new Max(a.second, b.second));
+}
+
+class RegionRequired : public IRVisitor {
+public:
+    string func;
+    Scope<pair<Expr, Expr> > scope;
+    vector<pair<Expr, Expr> > region;
+private:
+    void visit(const LetStmt *op) {
+        pair<Expr, Expr> value_bounds = bounds_of_expr_in_scope(op->value, scope);
+        // TODO: What if the value bounds refer to variables that get rebound before this let is used
+        scope.push(op->name, value_bounds);
+        op->body.accept(this);
+        scope.pop(op->name);
+    }
+    
+    void visit(const Let *op) {
+        pair<Expr, Expr> value_bounds = bounds_of_expr_in_scope(op->value, scope);
+        // TODO: What if the value bounds refer to variables that get rebound before this let is used
+        scope.push(op->name, value_bounds);
+        op->body.accept(this);
+        scope.pop(op->name);
+    }
+
+    void visit(const Call *op) {        
+        if (op->name == func) {
+            for (size_t i = 0; i < op->args.size(); i++) {
+                pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
+                if (region.size() > i) {
+                    region[i] = range_union(region[i], bounds);
+                } else {
+                    region.push_back(bounds);
+                }
+            }
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+};
+
+vector<pair<Expr, Expr> > region_provided_of_function_in_stmt(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
+    RegionRequired r;
+    r.func = func;
+    r.scope = scope;
+    s.accept(&r);
+    return r.region;
+}
+
+vector<pair<Expr, Expr> > region_required_of_function_in_stmt(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
+    vector<pair<Expr, Expr> > r;
+    return r;
+}
+
 void check(const Scope<pair<Expr, Expr> > &scope, Expr e, Expr correct_min, Expr correct_max) {
     pair<Expr, Expr> result = bounds_of_expr_in_scope(e, scope);
     if (result.first.defined()) result.first = simplify(result.first);
