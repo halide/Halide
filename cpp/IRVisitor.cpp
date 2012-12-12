@@ -175,6 +175,7 @@ void IRVisitor::visit(const Realize *op) {
         op->bounds[i].first.accept(this);
         op->bounds[i].second.accept(this);
     }
+    op->body.accept(this);
 }
 
 void IRVisitor::visit(const Block *op) {
