@@ -332,7 +332,6 @@ void IRPrinter::visit(const LetStmt *op) {
     print(op->value);
     stream << endl;
 
-    do_indent();
     print(op->body);
 }
 
