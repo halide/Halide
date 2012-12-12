@@ -35,6 +35,10 @@ vector<pair<Expr, Expr> > region_required(string func, Stmt s, const Scope<pair<
  * reduction (e.g. a histogram) will touch. */
 vector<pair<Expr, Expr> > region_provided(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
 
+/* Compute the union of the above two */
+vector<pair<Expr, Expr> > region_touched(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
+
+
 void bounds_test();
         
 // TODO: Other useful things in src/bounds.ml, such as region of a func required by a stmt
