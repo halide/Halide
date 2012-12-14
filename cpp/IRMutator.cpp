@@ -108,7 +108,7 @@ void IRMutator::visit(const Call *op) {
     }
 
     if (!changed) expr = op;
-    else expr = new Call(op->type, op->name, new_args, op->call_type, op->func);
+    else expr = new Call(op->type, op->name, new_args, op->call_type, op->func, op->image);
 }
 
 void IRMutator::visit(const Let *op) {

@@ -70,6 +70,17 @@ inline Type Bool(int width = 1) {
     return UInt(1, width);
 }
 
+template<typename T> Type type_of();
+template<> inline Type type_of<float>() {return Float(32);}
+template<> inline Type type_of<double>() {return Float(64);}
+template<> inline Type type_of<unsigned char>() {return UInt(8);}
+template<> inline Type type_of<unsigned short>() {return UInt(16);}
+template<> inline Type type_of<unsigned int>() {return UInt(32);}
+template<> inline Type type_of<bool>() {return Bool();}
+template<> inline Type type_of<char>() {return Int(8);}
+template<> inline Type type_of<short>() {return Int(16);}
+template<> inline Type type_of<int>() {return Int(32);}
+template<> inline Type type_of<signed char>() {return Int(8);}
 
 }
 

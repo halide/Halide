@@ -470,8 +470,8 @@ void bounds_test() {
     Stmt loop = new For("x", 3, x, For::Serial, 
                         new Provide("output", 
                                     new Add(
-                                        new Call(Int(32), "input", input_site_1, Call::Extern, NULL),
-                                        new Call(Int(32), "input", input_site_2, Call::Extern, NULL)),
+                                        new Call(Int(32), "input", input_site_1, Call::Extern, NULL, Buffer()),
+                                        new Call(Int(32), "input", input_site_2, Call::Extern, NULL, Buffer())),
                                     output_site));
 
     vector<pair<Expr, Expr> > r;

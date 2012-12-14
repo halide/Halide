@@ -135,7 +135,7 @@ void CodeGen_X86::test() {
 
     // Then run a parallel for loop that clobbers three elements of buf
     Expr e = new Select(alpha > 4.0f, 3, 2);
-    e += (new Call(Int(32), "extern_function_1", vec(alpha), Call::Extern, NULL));
+    e += (new Call(Int(32), "extern_function_1", vec(alpha), Call::Extern, NULL, Buffer()));
     Stmt loop = new Store("buf", e, x + i);
     loop = new LetStmt("x", beta+1, loop);
     // Do some local allocations within the loop
@@ -148,14 +148,14 @@ void CodeGen_X86::test() {
     CodeGen_X86 cg;
     cg.compile(s, "test1", args);
 
-    //cg.compile_to_bitcode("test1.bc");
+    cg.compile_to_bitcode("test1.bc");
     //cg.compile_to_native("test1.o", false);
     //cg.compile_to_native("test1.s", true);
 
     if (!getenv("HL_NUMTHREADS")) {
         setenv("HL_NUMTHREADS", "4", 1);
     }
-    void *ptr = cg.compile_to_function_pointer();
+    void *ptr = cg.compile_to_function_pointer(false);
     typedef void (*fn_type)(::buffer_t *, float, int);
     fn_type fn = (fn_type)ptr;
 
@@ -163,8 +163,8 @@ void CodeGen_X86::test() {
     ::buffer_t buf;
     memset(&buf, 0, sizeof(buf));
     buf.host = (uint8_t *)(&scratch[0]);
-    fn(&buf, -32, 0);
 
+    fn(&buf, -32, 0);
     assert(scratch[0] == 5);
     assert(scratch[1] == 5);
     assert(scratch[2] == 5);
@@ -172,8 +172,8 @@ void CodeGen_X86::test() {
     assert(scratch[4] == 4*17);
     assert(scratch[5] == 5);
     assert(scratch[6] == 6*17);
-    fn(&buf, 37.32f, 2);
 
+    fn(&buf, 37.32f, 2);
     assert(scratch[0] == 0);
     assert(scratch[1] == 1);
     assert(scratch[2] == 4);
@@ -181,8 +181,29 @@ void CodeGen_X86::test() {
     assert(scratch[4] == 4);
     assert(scratch[5] == 5);
     assert(scratch[6] == 6*17);
-    fn(&buf, 4.0f, 1);
 
+    fn(&buf, 4.0f, 1);
+    assert(scratch[0] == 0);
+    assert(scratch[1] == 3);
+    assert(scratch[2] == 3);
+    assert(scratch[3] == 3);
+    assert(scratch[4] == 4*17);
+    assert(scratch[5] == 5);
+    assert(scratch[6] == 6*17);
+    assert(extern_function_1_was_called);
+
+    // Check the wrapped version does the same thing
+    ptr = cg.compile_to_function_pointer(true);
+    typedef void (*wrapped_fn_type)(void **);
+    wrapped_fn_type wrapped = (wrapped_fn_type)ptr;
+
+    extern_function_1_was_called = false;
+    for (int i = 0; i < 16; i++) scratch[i] = 0;
+
+    float float_arg_val = 4.0f;
+    int int_arg_val = 1;
+    void *arg_array[] = {&buf, &float_arg_val, &int_arg_val};
+    wrapped(arg_array);
     assert(scratch[0] == 0);
     assert(scratch[1] == 3);
     assert(scratch[2] == 3);

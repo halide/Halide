@@ -110,12 +110,41 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
     // Now verify the function is ok
     verifyFunction(*function);
+
+    // Now we need to make the wrapper function (useful for calling from jit)
+    string wrapper_name = name + "_jit_wrapper";
+    func_t = FunctionType::get(void_t, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
+    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
+    block = BasicBlock::Create(context, "entry", wrapper);
+    builder.SetInsertPoint(block);
+    
+    Value *arg_array = wrapper->arg_begin();
+
+    vector<Value *> wrapper_args(args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        // Get the address of the nth argument
+        Value *ptr = builder.CreateConstGEP1_32(arg_array, i);
+        ptr = builder.CreateLoad(ptr);
+        if (args[i].is_buffer) {
+            // Cast the argument to a buffer_t * 
+            wrapper_args[i] = builder.CreatePointerCast(ptr, buffer_t->getPointerTo());
+        } else {
+            // Cast to the appropriate type and load
+            ptr = builder.CreatePointerCast(ptr, arg_types[i]->getPointerTo());
+            wrapper_args[i] = builder.CreateLoad(ptr);
+        }
+    }
+    builder.CreateCall(function, wrapper_args);
+    builder.CreateRetVoid();
+    verifyFunction(*wrapper);
+
+    // Finally, verify the module is ok
     verifyModule(*module);
 }
 
 ExecutionEngine *CodeGen::execution_engine = NULL;
 
-void *CodeGen::compile_to_function_pointer() {
+void *CodeGen::compile_to_function_pointer(bool wrapped) {
     assert(module && "No module defined. Must call compile before calling compile_to_function_pointer");
                
     FunctionPassManager function_pass_manager(module);
@@ -155,7 +184,12 @@ void *CodeGen::compile_to_function_pointer() {
     function_pass_manager.run(*fn);
     function_pass_manager.doFinalization();
 
-    return execution_engine->getPointerToFunction(fn);
+    if (wrapped) {
+        llvm::Function *wrapper = module->getFunction(function_name + "_jit_wrapper");
+        return execution_engine->getPointerToFunction(wrapper);
+    } else {
+        return execution_engine->getPointerToFunction(fn);
+    }
 }
 
 void CodeGen::compile_to_bitcode(const string &filename) {
