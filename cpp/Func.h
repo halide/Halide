@@ -60,8 +60,9 @@ public:
     Func(const string &name);
     Func();
 
-    Stmt lower();
-        
+    Buffer realize(int x_size, int y_size = 1, int z_size = 1, int w_size = 1);
+    void realize(Buffer dst);
+
     const string &name() const;
     const vector<Var> &args() const;
     Expr value() const;
