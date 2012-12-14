@@ -29,10 +29,11 @@ using std::stack;
 using std::vector;
 
 /* A code generator abstract base class. Actual code generators
-   (e.g. CodeGen_X86) inherit from this. This class is responsible
-   for taking a Halide Stmt and producing llvm bitcode, machine
-   code in an object file, or machine code accessible through a
-   function pointer. */
+ * (e.g. CodeGen_X86) inherit from this. This class is responsible
+ * for taking a Halide Stmt and producing llvm bitcode, machine
+ * code in an object file, or machine code accessible through a
+ * function pointer. 
+ */
 class CodeGen : public IRVisitor {
 public:
     CodeGen();
@@ -40,7 +41,15 @@ public:
     void compile_to_bitcode(const string &filename);
     void compile_to_native(const string &filename, bool assembly = false);
 
-    void *compile_to_function_pointer();
+    /* Return a function pointer with type given by the vector of
+     * Arguments passed to compile.  If wrapped is true, instead
+     * returns a pointer to a single-argument function that takes an
+     * array of void * (i.e. a void **). Each entry in this array
+     * either points to a buffer_t, or to a scalar of the type
+     * specified by the argument list.
+     */
+
+    void *compile_to_function_pointer(bool wrapped = false);
 
 protected:
 

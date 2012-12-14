@@ -84,7 +84,7 @@ void IRPrinter::test() {
     Stmt store = new Store("buf", (x * 17) / (x - 3), y - 1);
     Stmt for_loop = new For("x", -2, y + 2, For::Parallel, store);
     vector<Expr> args(1); args[0] = x % 3;
-    Expr call = new Call(i32, "buf", args, Call::Extern, NULL);
+    Expr call = new Call(i32, "buf", args, Call::Extern, NULL, Buffer());
     Stmt store2 = new Store("out", call + 1, x);
     Stmt for_loop2 = new For("x", 0, y, For::Vectorized , store2);
     Stmt pipeline = new Pipeline("buf", for_loop, Stmt(), for_loop2);

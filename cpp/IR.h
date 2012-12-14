@@ -10,6 +10,7 @@
 #include "IRVisitor.h"
 #include "Type.h"
 #include "IntrusivePtr.h"
+#include "Buffer.h"
 
 namespace Halide {
 
@@ -435,13 +436,20 @@ struct Call : public ExprNode<Call> {
     // holds onto a pointer to that function
     Internal::IntrusivePtr<Internal::Function> func;
 
-    Call(Type t, string n, const vector<Expr > &a, CallType ct, Internal::IntrusivePtr<Internal::Function> f) : 
-        ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f) {
+    // If it's a call to an image, this call nodes hold a
+    // pointer to that image's buffer
+    Buffer image;
+
+    Call(Type t, string n, const vector<Expr > &a, CallType ct, 
+         Internal::IntrusivePtr<Internal::Function> f, Buffer m) : 
+        ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f), image(m) {
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Call of undefined");
         }
         if (call_type == Halide) {
             assert(func.defined() && "Call nodes to undefined halide function");
+        } else if (call_type == Image) {
+            assert(image.defined() && "Call node to undefined image");
         }
     }
 };

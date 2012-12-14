@@ -23,12 +23,13 @@ struct BufferContents {
     buffer_t buf;
     mutable int ref_count;
     Type type;
+    bool own_host_allocation;
 };
 }
 
 class Buffer {
 private:
-    Internal::IntrusivePtr<Internal::BufferContents> contents;
+    Internal::IntrusivePtr<const Internal::BufferContents> contents;
 public:
     Buffer() : contents(NULL) {}
 
@@ -95,12 +96,13 @@ public:
 
 namespace Internal {
 template<>
-int &ref_count<BufferContents>(const BufferContents *p) {
+inline int &ref_count<BufferContents>(const BufferContents *p) {
     return p->ref_count;
 }
 
 template<>
-void destroy<BufferContents>(const BufferContents *p) {
+inline void destroy<BufferContents>(const BufferContents *p) {
+    if (p->own_host_allocation) free(p->buf.host);
     delete p;
 }
 }
