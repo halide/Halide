@@ -5,6 +5,7 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "Simplify.h"
+#include "IRPrinter.h"
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -153,6 +154,7 @@ public:
 
 // Inject the allocation and realization of a function into an
 // existing loop nest using its schedule
+// TODO: deal with inline
 class InjectRealization : public IRMutator {
 public:
     const Func &func;
@@ -180,6 +182,21 @@ public:
             }
             // Change the body of the for loop to do an allocation
             body = new Realize(func.name(), func.value().type(), bounds, body);
+
+
+            /*
+              vector<Expr> print_args;
+              for (size_t i = 0; i < func.args().size(); i++) {
+              print_args.push_back(bounds[i].first);
+              print_args.push_back(bounds[i].second);                
+              }            
+
+              body = new Block(
+              new PrintStmt("Allocating " + func.name() + " over", print_args), 
+              new Block(body,
+              new PrintStmt("Freeing " + func.name(), vector<Expr>())));
+            */
+
             stmt = new For(for_loop->name, 
                            for_loop->min, 
                            for_loop->extent, 

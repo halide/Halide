@@ -19,7 +19,7 @@ private:
     void prepare_for_direct_pixel_access() {
         // TODO: make sure buffer has been copied to host
         if (buffer.defined()) {
-            base = buffer.host_ptr();;
+            base = (T *)buffer.host_ptr();
             stride_1 = buffer.stride(1);
             stride_2 = buffer.stride(2);
             stride_3 = buffer.stride(3);
@@ -83,14 +83,14 @@ public:
     Expr operator()(Expr x) {
         vector<Expr> args;
         args.push_back(x);
-        return new Call(type_of<T>(), name(), args, Call::Image, NULL, buffer);
+        return new Call(type_of<T>(), buffer.name(), args, Call::Image, NULL, buffer);
     }
 
     Expr operator()(Expr x, Expr y) {
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
-        return new Call(type_of<T>(), name(), args, Call::Image, NULL, buffer);
+        return new Call(type_of<T>(), buffer.name(), args, Call::Image, NULL, buffer);
     }
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) {
@@ -99,7 +99,7 @@ public:
         args.push_back(y);
         args.push_back(z);
         args.push_back(w);
-        return new Call(type_of<T>(), name(), args, Call::Image, NULL, buffer);
+        return new Call(type_of<T>(), buffer.name(), args, Call::Image, NULL, buffer);
     }
     
     operator const buffer_t *() {return buffer.raw_buffer();}

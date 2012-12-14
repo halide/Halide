@@ -6,6 +6,7 @@
 #include <map>
 #include <stack>
 #include <utility>
+#include <iostream>
 
 namespace Halide { 
 namespace Internal {
@@ -30,14 +31,20 @@ public:
     /* Retrive the value referred to by a name */
     T get(const string &name) const {
         typename map<string, stack<pair<T, int> > >::const_iterator iter = table.find(name);
-        assert(iter != table.end() && "Symbol not found");
+        if (iter == table.end()) {
+            std::cerr << "Symbol '" << name << "' not found" << std::endl;
+            assert(false);
+        }
         return iter->second.top().first;
     }
         
     /* Return a reference to an entry */
     T &ref(const string &name) {
         typename map<string, stack<pair<T, int> > >::iterator iter = table.find(name);
-        assert(iter != table.end() && "Symbol not found");
+        if (iter == table.end()) {
+            std::cerr << "Symbol '" << name << "' not found" << std::endl;
+            assert(false);
+        }
         return iter->second.top().first;
     }
 
@@ -45,7 +52,10 @@ public:
      * depth of B if A was pushed before B. */
     int depth(const string &name) {
         typename map<string, stack<pair<T, int> > >::const_iterator iter = table.find(name);
-        assert(iter != table.end() && "Symbol not found");
+        if (iter == table.end()) {
+            std::cerr << "Symbol '" << name << "' not found" << std::endl;
+            assert(false);
+        }
         return iter->second.top().second;
     }
 
