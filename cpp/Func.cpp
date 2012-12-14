@@ -6,6 +6,7 @@
 #include "Argument.h"
 #include "Lower.h"
 #include "CodeGen_X86.h"
+#include "Image.h"
 #include <iostream>
 
 namespace Halide {
@@ -239,15 +240,48 @@ void Func::realize(Buffer dst) {
     Stmt stmt = lower(*this);
     
     // Infer arguments
+    vector<Argument> arg_types;
+
+    Argument me = {name(), true, Int(1)};
+    arg_types.push_back(me);
 
     // TODO: Assume we're jitting for x86 for now
-    //CodeGen_X86 cg;
-    //cg.compile(stmt, name(), args);
+    CodeGen_X86 cg;
+    cg.compile(stmt, name(), arg_types);
 
+    void *fn_ptr = cg.compile_to_function_pointer(true);
+    typedef void (*wrapped_fn_type)(const void **);
+    wrapped_fn_type wrapped = (wrapped_fn_type)fn_ptr;   
+
+    const void *arg_values[] = {dst.raw_buffer()};
+
+    wrapped(arg_values);
+
+
+    
 }
 
 void Func::test() {
+
+    Func f, g;
+    Var x, y;
+    f(x, y) = x * y;
+    g(x, y) = f(x-1, y) + 2*f(x+1, y);
+    
+
+    f.compute_root();
+
+    Image<int> result = g.realize(5, 5);
+
+    for (size_t y = 0; y < 5; y++) {
+        for (size_t x = 0; x < 5; x++) {
+            int correct = (x-1)*y + 2*(x+1)*y;
+            assert(result(x, y) == correct);
+        }
+    }
+
     std::cout << "Func test passed" << std::endl;
+
 }
 
 }

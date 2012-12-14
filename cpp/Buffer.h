@@ -3,9 +3,10 @@
 
 #include "IntrusivePtr.h"
 #include "Type.h"
-#include "stdint.h"
+#include "Util.h"
 #include "buffer.h"
-#include "assert.h"
+#include <assert.h>
+#include <stdint.h>
 
 namespace Halide {
 
@@ -24,9 +25,10 @@ struct BufferContents {
     mutable int ref_count;
     Type type;
     bool own_host_allocation;
+    std::string name;
 
     BufferContents(Type t, int x_size, int y_size, int z_size, int w_size) : 
-        type(t), own_host_allocation(true) {
+        type(t), own_host_allocation(true), name(unique_name('b')) {
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
         buf.elem_size = t.bits / 8;
         buf.host = (uint8_t *)calloc(buf.elem_size, x_size*y_size*z_size*w_size);
@@ -122,6 +124,10 @@ public:
 
     bool defined() const {
         return contents.defined();
+    }
+
+    const std::string &name() const {
+        return contents.ptr->name;
     }
 
 };

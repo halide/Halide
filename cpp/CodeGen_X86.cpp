@@ -46,6 +46,7 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
 void CodeGen_X86::visit(const Allocate *alloc) {
 
     // Allocate anything less than 32k on the stack
+    int bytes_per_element = alloc->type.bits / 8;
     int stack_size = 0;
     bool on_stack = false;
     if (const IntImm *size = alloc->size.as<IntImm>()) {            
@@ -53,13 +54,12 @@ void CodeGen_X86::visit(const Allocate *alloc) {
         on_stack = stack_size < 32*1024;
     }
 
-    Value *size = codegen(alloc->size);
+    Value *size = codegen(alloc->size * bytes_per_element);
     llvm::Type *llvm_type = llvm_type_of(alloc->type);
     Value *ptr;                
 
     if (on_stack) {
         // Do a 32-byte aligned alloca
-        int bytes_per_element = alloc->type.bits / 8;
         int total_bytes = stack_size * bytes_per_element;            
         int chunks = (total_bytes + 31)/32;
         ptr = builder.CreateAlloca(i32x8, ConstantInt::get(i32, chunks)); 
