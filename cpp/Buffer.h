@@ -24,6 +24,33 @@ struct BufferContents {
     mutable int ref_count;
     Type type;
     bool own_host_allocation;
+
+    BufferContents(Type t, int x_size, int y_size, int z_size, int w_size) : 
+        type(t), own_host_allocation(true) {
+        assert(t.width == 1 && "Can't create of a buffer of a vector type");
+        buf.elem_size = t.bits / 8;
+        buf.host = (uint8_t *)calloc(buf.elem_size, x_size*y_size*z_size*w_size);
+        buf.host_dirty = false;
+        buf.dev_dirty = false;
+        buf.extent[0] = x_size;
+        buf.extent[1] = y_size;
+        buf.extent[2] = z_size;
+        buf.extent[3] = w_size;
+        buf.stride[0] = 1;
+        buf.stride[1] = x_size;
+        buf.stride[2] = x_size*y_size;
+        buf.stride[3] = x_size*y_size*z_size;
+        buf.min[0] = 0;
+        buf.min[1] = 0;
+        buf.min[2] = 0;
+        buf.min[3] = 0;
+    }
+
+    BufferContents(Type t, const buffer_t *b) :
+        type(t), own_host_allocation(false) {
+        buf = *b;
+        assert(t.width == 1 && "Can't create of a buffer of a vector type");
+    }
 };
 }
 
@@ -32,6 +59,14 @@ private:
     Internal::IntrusivePtr<const Internal::BufferContents> contents;
 public:
     Buffer() : contents(NULL) {}
+
+    Buffer(Type t, int x_size, int y_size = 1, int z_size = 1, int w_size = 1) : 
+        contents(new Internal::BufferContents(t, x_size, y_size, z_size, w_size)) {
+    }
+    
+    Buffer(Type t, const buffer_t *buf) : 
+        contents(new Internal::BufferContents(t, buf)) {
+    }
 
     void *host_ptr() const {
         assert(defined());
@@ -89,9 +124,6 @@ public:
         return contents.defined();
     }
 
-    // Any Image<T> class is allowed to mess with my internals
-    template<typename T>
-    friend class Image;
 };
 
 namespace Internal {

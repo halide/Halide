@@ -16,77 +16,36 @@ private:
     T *base;
     int stride_1, stride_2, stride_3;
 
-    void create_buffer(int x, int y, int z, int w) {
-        Internal::BufferContents *buf = new Internal::BufferContents;
-        buf->buf.host = (uint8_t *)calloc(sizeof(T), x*y*z*w);
-        buf->buf.host_dirty = false;
-        buf->buf.dev_dirty = false;
-        buf->buf.extent[0] = x;
-        buf->buf.extent[1] = y;
-        buf->buf.extent[2] = z;
-        buf->buf.extent[3] = w;
-        buf->buf.stride[0] = 1;
-        buf->buf.stride[1] = x;
-        buf->buf.stride[2] = x*y;
-        buf->buf.stride[3] = x*y*z;
-        buf->buf.min[0] = 0;
-        buf->buf.min[1] = 0;
-        buf->buf.min[2] = 0;
-        buf->buf.min[3] = 0;
-        buf->buf.elem_size = sizeof(T);
-        buf->ref_count = 0;
-        buf->type = type_of<T>();
-        buf->own_host_allocation = true;
-
-        base = buf->buf.host;
-        stride_1 = buf->buf.stride[1];
-        stride_2 = buf->buf.stride[2];
-        stride_3 = buf->buf.stride[3];
-
-        buffer.contents = Internal::IntrusivePtr<Internal::BufferContents>(buf);
+    void prepare_for_direct_pixel_access() {
+        // TODO: make sure buffer has been copied to host
+        if (buffer.defined()) {
+            base = buffer.host_ptr();;
+            stride_1 = buffer.stride(1);
+            stride_2 = buffer.stride(2);
+            stride_3 = buffer.stride(3);
+        } else {
+            base = NULL;
+            stride_1 = stride_2 = stride_3 = 0;
+        }
     }
 
 public:
     Image() {}
 
-    Image(int x) {
-        create_buffer(x, 1, 1, 1);
+    Image(int x, int y = 1, int z = 1, int w = 1) : buffer(Buffer(type_of<T>, x, y, z, w)) {
+        prepare_for_direct_pixel_access();
     }
-
-    Image(int x, int y) {
-        create_buffer(x, y, 1, 1);
-    }
-
-    Image(int x, int y, int z) {
-        create_buffer(x, y, z, 1);
-    }
-
-    Image(int x, int y, int z, int w) {
-        create_buffer(x, y, z, w);
-    }
-
-    bool defined() {return buffer.defined();}
 
     Image(const Buffer &buf) : buffer(buf) {
-        if (buffer.defined()) {
-            base = buf.contents.ptr->buf.host;
-            stride_1 = buf.contents.ptr->buf.stride[1];
-            stride_2 = buf.contents.ptr->buf.stride[2];
-            stride_3 = buf.contents.ptr->buf.stride[3];
-        }        
+        prepare_for_direct_pixel_access();
     }
 
-    Image(const buffer_t *b) {
-        Internal::BufferContents *buf = new Internal::BufferContents;
-        buf->buf = *b;
-        buf->ref_count = 0;
-        buf->type = type_of<T>();
-        buf->own_host_allocation = false;
-        base = buf->buf.host;
-        stride_1 = buf->buf.stride[1];
-        stride_2 = buf->buf.stride[2];
-        stride_3 = buf->buf.stride[3];
-        buffer.contents = Internal::IntrusivePtr<Internal::BufferContents>(buf);        
+    Image(const buffer_t *b) : buffer(type_of<T>, b) {
+        prepare_for_direct_pixel_access();
+    }
+
+    bool defined() {
+        return buffer.defined();
     }
 
     T operator()(int x) const {
