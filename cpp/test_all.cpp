@@ -5,6 +5,7 @@
 #include "Func.h"
 #include "Simplify.h"
 #include "Bounds.h"
+#include "Lower.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -15,6 +16,7 @@ int main(int argc, const char **argv) {
     CodeGen_C::test();
     simplify_test();
     bounds_test();
+    lower_test();
     Func::test();
     
     return 0;
