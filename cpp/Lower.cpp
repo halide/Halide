@@ -41,7 +41,14 @@ void lower_test() {
     std::cout << "Lowering test passed" << std::endl;
 }
 
-
+Expr build_qualified_rhs(Func f) {
+    // Fully qualify the var names in the function rhs
+    Expr value = f.value();
+    for (size_t i = 0; i < f.args().size(); i++) {
+        value = substitute(f.args()[i].name(), new Variable(Int(32), f.name() + "." + f.args()[i].name()), value);
+    }
+    return value;
+}
 
 
 // Turn a function into a loop nest that computes it. It will
@@ -63,11 +70,7 @@ Stmt build_realization(Func f) {
         site.push_back(new Variable(Int(32), prefix + f.args()[i].name()));
     }
             
-    // Fully qualify the var names in the function rhs
-    Expr value = f.value();
-    for (size_t i = 0; i < f.args().size(); i++) {
-        value = substitute(f.args()[i].name(), new Variable(Int(32), prefix + f.args()[i].name()), value);
-    }
+    Expr value = build_qualified_rhs(f);
             
     // Make the (multi-dimensional) store node
     Stmt stmt = new Provide(f.name(), value, site);
@@ -208,6 +211,29 @@ public:
                            for_loop->extent, 
                            for_loop->for_type, 
                            mutate(for_loop->body));                
+        }
+    }
+};
+
+class InlineFunction : public IRMutator {
+    Func func;
+public:
+    InlineFunction(Func f) : func(f) {}
+private:
+    void visit(const Call *op) {
+        if (op->name == func.name()) {
+            // Grab the body
+            Expr body = build_qualified_rhs(func);
+            // Bind the args
+            assert(op->args.size() == func.args().size());
+            for (size_t i = 0; i < op->args.size(); i++) {
+                body = new Let(func.name() + "." + func.args()[i].name(), 
+                               op->args[i], 
+                               body);
+            }
+            expr = body;
+        } else {
+            IRMutator::visit(op);
         }
     }
 };
@@ -654,8 +680,13 @@ Stmt lower(Func f) {
 
     //std::cout << std::endl << "Initial statement: " << std::endl << s << std::endl;
     for (size_t i = order.size()-1; i > 0; i--) {
+        Func f = env.find(order[i-1])->second;
         //std::cout << std::endl << "Injecting realization of " << order[i-1] << std::endl;
-        s = InjectRealization(env.find(order[i-1])->second).mutate(s);
+        if (f.schedule().compute_level.empty()) {
+            s = InlineFunction(f).mutate(s);
+        } else {
+            s = InjectRealization(f).mutate(s);
+        }
         //std::cout << s << std::endl;
     }
 
