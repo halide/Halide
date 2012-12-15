@@ -93,6 +93,14 @@ public:
         return new Call(type_of<T>(), buffer.name(), args, Call::Image, NULL, buffer);
     }
 
+    Expr operator()(Expr x, Expr y, Expr z) {
+        vector<Expr> args;
+        args.push_back(x);
+        args.push_back(y);
+        args.push_back(z);
+        return new Call(type_of<T>(), buffer.name(), args, Call::Image, NULL, buffer);
+    }
+
     Expr operator()(Expr x, Expr y, Expr z, Expr w) {
         vector<Expr> args;
         args.push_back(x);
