@@ -269,7 +269,7 @@ void Func::test() {
     g(x, y) = f(x-1, y) + 2*f(x+1, y);
     
 
-    f.compute_root();
+    //f.compute_root();
 
     Image<int> result = g.realize(5, 5);
 
