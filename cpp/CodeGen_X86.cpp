@@ -126,7 +126,7 @@ void CodeGen_X86::test() {
                      new For("i", 0, 2, For::Serial, 
                              new Store("buf", 
                                        new Mul(new Broadcast(17, 4), 
-                                               new Load(Int(32, 4), "buf", new Ramp(i*8, 2, 4))),
+                                               new Load(Int(32, 4), "buf", new Ramp(i*8, 2, 4), Buffer())),
                                        new Ramp(i*8, 2, 4))));
 
     // Then print some stuff (disabled to prevent debugging spew)
