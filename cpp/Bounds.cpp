@@ -460,7 +460,7 @@ void bounds_test() {
     check(scope, x*y, new Min(0, y*10), new Max(0, y*10));
     check(scope, x/y, Expr(), Expr());
     check(scope, 11/(x+1), 1, 11);
-    check(scope, new Load(Int(8), "buf", x), -128, 127);
+    check(scope, new Load(Int(8), "buf", x, Buffer()), -128, 127);
     check(scope, y + (new Let("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
 
     vector<Expr> input_site_1 = vec(2*x);

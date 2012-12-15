@@ -32,7 +32,7 @@ private:
 public:
     Image() {}
 
-    Image(int x, int y = 1, int z = 1, int w = 1) : buffer(Buffer(type_of<T>, x, y, z, w)) {
+    Image(int x, int y = 1, int z = 1, int w = 1) : buffer(Buffer(type_of<T>(), x, y, z, w)) {
         prepare_for_direct_pixel_access();
     }
 

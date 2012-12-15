@@ -376,8 +376,12 @@ struct Load : public ExprNode<Load> {
     string buffer;
     Expr index;
 
-    Load(Type t, string b, Expr i) : 
-        ExprNode<Load>(t), buffer(b), index(i) {
+    // If it's a load from an image argument or compiled-in constant
+    // image, this will point to that
+    Buffer image;
+
+    Load(Type t, string b, Expr i, Buffer m) : 
+        ExprNode<Load>(t), buffer(b), index(i), image(m) {
         assert(index.defined() && "Load of undefined");
         assert(type.width == i.type().width && "Vector width of Load must match vector width of index");
     }

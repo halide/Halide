@@ -78,7 +78,7 @@ void IRMutator::visit(const Select *op)  {
 void IRMutator::visit(const Load *op) {
     Expr index = mutate(op->index);
     if (index.same_as(op->index)) expr = op;
-    else expr = new Load(op->type, op->buffer, index);
+    else expr = new Load(op->type, op->buffer, index, op->image);
 }
 
 void IRMutator::visit(const Ramp *op) {

@@ -212,26 +212,33 @@ Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
     return buf;
 }
 
-/*
+
 class InferArguments : public IRVisitor {
 public:
     vector<Argument> arg_types;
-    vector<void *> arg_values;
+    vector<const void *> arg_values;
     
 private:
     void visit(const Load *op) {
-        if (op->buffer.defined()) {
-            
-        }
-    }
-
-    void visit(const Store *op) {
-        if (op->buffer.defined()) {
-            
+        if (op->image.defined()) {            
+            Argument arg = {op->image.name(), true, Int(1)};
+            bool already_included = false;
+            for (size_t i = 0; i < arg_types.size(); i++) {
+                if (arg_types[i].name == op->image.name()) {
+                    already_included = true;
+                }
+            }
+            if (!already_included) {
+                //std::cout << "Adding buffer " << op->image.name() << " to the arguments" << std::endl;
+                arg_types.push_back(arg);
+                arg_values.push_back(op->image.raw_buffer());
+            } else {
+                //std::cout << "Not adding buffer " << op->image.name() << " to the arguments" << std::endl;
+            }
         }
     }
 };
-*/
+
 
 void Func::realize(Buffer dst) {
     assert(func.defined() && "Can't realize NULL function handle");
@@ -240,22 +247,22 @@ void Func::realize(Buffer dst) {
     Stmt stmt = lower(*this);
     
     // Infer arguments
-    vector<Argument> arg_types;
-
+    InferArguments infer_args;
+    stmt.accept(&infer_args);
+    
     Argument me = {name(), true, Int(1)};
-    arg_types.push_back(me);
+    infer_args.arg_types.push_back(me);
+    infer_args.arg_values.push_back(dst.raw_buffer());
 
     // TODO: Assume we're jitting for x86 for now
     CodeGen_X86 cg;
-    cg.compile(stmt, name(), arg_types);
+    cg.compile(stmt, name(), infer_args.arg_types);
 
     void *fn_ptr = cg.compile_to_function_pointer(true);
     typedef void (*wrapped_fn_type)(const void **);
     wrapped_fn_type wrapped = (wrapped_fn_type)fn_ptr;   
 
-    const void *arg_values[] = {dst.raw_buffer()};
-
-    wrapped(arg_values);
+    wrapped(&(infer_args.arg_values[0]));
 
 
     
@@ -263,19 +270,27 @@ void Func::realize(Buffer dst) {
 
 void Func::test() {
 
+    Image<int> input(7, 5);
+    for (size_t y = 0; y < 5; y++) {
+        for (size_t x = 0; x < 5; x++) {
+            input(x, y) = x*y + 10/(y+3);
+        }
+    }
+
+
     Func f, g;
     Var x, y;
-    f(x, y) = x * y;
+    f(x, y) = input(x+1, y) + input(x+1, y)*3 + 1;
     g(x, y) = f(x-1, y) + 2*f(x+1, y);
     
 
-    //f.compute_root();
+    f.compute_root();
 
     Image<int> result = g.realize(5, 5);
 
     for (size_t y = 0; y < 5; y++) {
         for (size_t x = 0; x < 5; x++) {
-            int correct = (x-1)*y + 2*(x+1)*y;
+            int correct = (4*input(x, y)+1) + 2*(4*input(x+2, y)+1);
             assert(result(x, y) == correct);
         }
     }
