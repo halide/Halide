@@ -9,6 +9,7 @@
 #include "CodeGen_X86.h"
 #include "Image.h"
 #include <iostream>
+#include <fstream>
 
 namespace Halide {
 
@@ -30,13 +31,13 @@ void Func::set_dim_type(Var var, For::ForType t) {
     assert(found && "Could not find dimension in argument list for function");
 }
 
-Func::Func(Internal::Function f) : func(f) {
+Func::Func(Internal::Function f) : func(f), function_ptr(NULL) {
 }
 
-Func::Func(const string &name) : func(name) {
+Func::Func(const string &name) : func(name), function_ptr(NULL) {
 }
 
-Func::Func() : func(unique_name('f')) {
+Func::Func() : func(unique_name('f')), function_ptr(NULL) {
 }
         
 const string &Func::name() const {
@@ -119,6 +120,20 @@ Func &Func::unroll(Var var) {
     return *this;
 }
 
+Func &Func::vectorize(Var var, int factor) {
+    Var tmp;
+    split(var, var, tmp, factor);
+    vectorize(tmp);
+    return *this;
+}
+
+Func &Func::unroll(Var var, int factor) {
+    Var tmp;
+    split(var, var, tmp, factor);
+    unroll(tmp);
+    return *this;
+}
+
 Func &Func::compute_at(Func f, Var var) {
     string loop_level = f.name() + "." + var.name();
     func.schedule().compute_level = loop_level;
@@ -147,6 +162,12 @@ Func &Func::store_root() {
 Func &Func::compute_inline() {
     func.schedule().compute_level = "";
     func.schedule().store_level = "";
+    return *this;
+}
+
+Func &Func::bound(Var var, Expr min, Expr extent) {
+    Schedule::Bound b = {var.name(), min, extent};
+    func.schedule().bounds.push_back(b);
     return *this;
 }
 
@@ -229,30 +250,42 @@ Stmt Func::lower() {
 }
 
 void Func::realize(Buffer dst) {
-    assert(func.defined() && "Can't realize NULL function handle");
-    assert(value().defined() && "Can't realize undefined function");
-    
-    Stmt stmt = lower();
-    
-    // Infer arguments
-    InferArguments infer_args;
-    stmt.accept(&infer_args);
-    
-    Argument me = {name(), true, Int(1)};
-    infer_args.arg_types.push_back(me);
-    infer_args.arg_values.push_back(dst.raw_buffer());
+    if (!function_ptr) {
+   
+        assert(func.defined() && "Can't realize NULL function handle");
+        assert(value().defined() && "Can't realize undefined function");
+        
+        Stmt stmt = lower();
+        
+        // Infer arguments
+        InferArguments infer_args;
+        stmt.accept(&infer_args);
+        
+        Argument me = {name(), true, Int(1)};
+        infer_args.arg_types.push_back(me);
+        arg_values = infer_args.arg_values;
+        arg_values.push_back(dst.raw_buffer());
+        
+        // TODO: Assume we're jitting for x86 for now
+        CodeGen_X86 cg;
+        cg.compile(stmt, name(), infer_args.arg_types);
+        
+        /*
+          cg.compile_to_native(name() + ".s", true);
+          cg.compile_to_bitcode(name() + ".bc");
+          std::ofstream stmt_debug((name() + ".stmt").c_str());
+          stmt_debug << stmt;
+        */
 
-    // TODO: Assume we're jitting for x86 for now
-    CodeGen_X86 cg;
-    cg.compile(stmt, name(), infer_args.arg_types);
+        void *fn_ptr = cg.compile_to_function_pointer(true);
+        typedef void (*wrapped_fn_type)(const void **);
+        function_ptr = (wrapped_fn_type)fn_ptr;   
+    } else {
+        // Update the address of the buffer we're realizing into
+        arg_values[arg_values.size()-1] = dst.raw_buffer();
+    }
 
-    void *fn_ptr = cg.compile_to_function_pointer(true);
-    typedef void (*wrapped_fn_type)(const void **);
-    wrapped_fn_type wrapped = (wrapped_fn_type)fn_ptr;   
-
-    wrapped(&(infer_args.arg_values[0]));
-
-
+    function_ptr(&(arg_values[0]));
     
 }
 

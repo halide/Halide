@@ -39,7 +39,7 @@ test_vector_extern \
 test_vectorize \
 test_vector_math
 
-%/a.out: %/test.cpp 
+%/a.out: %/test.cpp ../libHalide.a
 	g++ $< -I.. -L.. -lHalide -lpthread -ldl -o $@	
 
 test_%: %/a.out

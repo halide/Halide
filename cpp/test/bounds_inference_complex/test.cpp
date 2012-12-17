@@ -23,11 +23,11 @@ int main(int argc, char **argv) {
         if (i < K-1) {
             switch (rand() % 3) {
             case 0:
-                f[i].root();
+                f[i].compute_root();
                 f[i].vectorize(x, 4);
                 break;
             case 1:
-                f[i].chunk(y);
+                f[i].compute_at(f[i+1], y);
                 f[i].vectorize(x, 4);
                 break;
             default:

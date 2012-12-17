@@ -156,6 +156,23 @@ public:
     
 };
 
+Stmt inject_explicit_bounds(Stmt body, Function func) {           
+    // Inject any explicit bounds
+    for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
+        Schedule::Bound b = func.schedule().bounds[i];
+        string min_name = func.name() + "." + b.var + ".min";
+        string extent_name = func.name() + "." + b.var + ".extent";
+        Expr min_var = new Variable(Int(32), min_name);
+        Expr extent_var = new Variable(Int(32), extent_name);
+        Expr check = (b.min <= min_var) && ((b.min + b.extent) >= (min_var + extent_var)); 
+        string error_msg = "Bounds given for " + b.var + " in " + func.name() + " don't cover required region";
+        body = new Block(new AssertStmt(check, error_msg),
+                         new LetStmt(min_name, b.min, 
+                                     new LetStmt(extent_name, b.extent, body)));
+    }            
+    return body;
+}
+
 // Inject the allocation and realization of a function into an
 // existing loop nest using its schedule
 class InjectRealization : public IRMutator {
@@ -185,7 +202,8 @@ public:
             }
             // Change the body of the for loop to do an allocation
             body = new Realize(func.name(), func.value().type(), bounds, body);
-
+            
+            body = inject_explicit_bounds(body, func);
 
             /*
               vector<Expr> print_args;
@@ -246,6 +264,23 @@ public:
     void visit(const Call *call) {                
         if (call->call_type == Call::Halide) {
             calls[call->name] = call->func;
+        }
+    }
+};
+
+/* Find all the external buffers in a stmt */
+class FindBuffers : public IRVisitor {
+public:
+    FindBuffers(Stmt s) {s.accept(this);}
+    vector<string> buffers;
+    void visit(const Load *load) {
+        IRVisitor::visit(load);
+        Buffer b = load->image;
+        if (b.defined()) {
+            for (size_t i = 0; i < buffers.size(); i++) {
+                if (buffers[i] == b.name()) return;
+            }
+            buffers.push_back(b.name());
         }
     }
 };
@@ -676,6 +711,7 @@ Stmt lower(Function f) {
 
     // Generate initial loop nest
     Stmt s = build_realization(env.find(order[order.size()-1])->second);
+    s = inject_explicit_bounds(s, f);
     s = new For("<root>", 0, 1, For::Serial, s);
 
     //std::cout << std::endl << "Initial statement: " << std::endl << s << std::endl;
@@ -704,13 +740,25 @@ Stmt lower(Function f) {
         s = new LetStmt(f.name() + "." + f.args()[i] + ".extent", buf_extent, s);
     }
 
-    //std::cout << s << std::endl;
-
     // Flatten everything to single-dimensional
     s = FlattenDimensions().mutate(s);
 
+    // Assert that the strides on dimension zero of the input and output buffers are one
+    vector<string> bufs = FindBuffers(s).buffers;
+    bufs.push_back(f.name());
+    for (size_t i = 0; i < bufs.size(); i++) {
+        string var_name = bufs[i] + ".stride.0";
+        Expr var = new Variable(Int(32), var_name);
+        string error_msg = "stride on innermost dimension of " + bufs[i] + " must be one";
+        s = new Block(new AssertStmt(var == 1, error_msg), 
+                      new LetStmt(var_name, 1, s));
+                      
+    }
+
     // A constant folding pass
     s = simplify(s);
+
+    //std::cout << s << std::endl;
 
     // Vectorize loops marked for vectorization
     s = VectorizeLoops().mutate(s);

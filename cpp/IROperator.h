@@ -102,6 +102,10 @@ inline Expr cast(Type t, Expr a) {
     return new Cast(t, a);
 }
 
+inline Expr select(Expr a, Expr b, Expr c) {
+    return new Select(a, b, c);
+}
+
 namespace Internal {
 bool is_const(Expr e);
 bool is_positive_const(Expr e);

@@ -49,6 +49,10 @@ class Func {
     Internal::Function func;
     void set_dim_type(Var var, For::ForType t);
 
+    // Save this state when we jit, so that we can run the function again cheaply
+    void (*function_ptr)(const void **);
+    vector<const void *> arg_values;
+
 public:        
     static void test();
 
@@ -75,11 +79,14 @@ public:
     Func &parallel(Var var);
     Func &vectorize(Var var);
     Func &unroll(Var var);
+    Func &vectorize(Var var, int factor);
+    Func &unroll(Var var, int factor);
     Func &compute_at(Func f, Var var);
     Func &compute_root();
     Func &store_at(Func f, Var var);
     Func &store_root();
     Func &compute_inline();
+    Func &bound(Var var, Expr min, Expr extent);
 
     Stmt lower();
 };

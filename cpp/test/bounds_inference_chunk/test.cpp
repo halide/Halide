@@ -17,8 +17,8 @@ int main(int argc, char **argv) {
     g(x, y) = (h(x-1, y-1) + h(x+1, y+1))/2;
     f(x, y) = (g(x-1, y-1) + g(x+1, y+1))/2;
 
-    h.root();
-    g.chunk(y);
+    h.compute_root();
+    g.compute_at(f, y);
 
     //f.trace();
 
