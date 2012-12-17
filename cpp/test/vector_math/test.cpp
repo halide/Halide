@@ -209,7 +209,7 @@ bool test(int vec_width) {
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             if (im7(x, y) < (A)10 || im7(x, y) > (A)20) {
-                printf("im7(%d, %d) = %f instead of %f\n", x, y, (double)(im7(x, y)));
+                printf("im7(%d, %d) = %f\n", x, y, (double)(im7(x, y)));
                 return false;
             }
         }
@@ -226,7 +226,7 @@ bool test(int vec_width) {
         for (int x = 0; x < W; x++) {
             float correct = powf(1.1f, (float)input(x, y));
             if (im8(x, y) != correct) {
-                printf("im8(%d, %d) = %f instead of %f\n", x, y, im8(x, y));
+                printf("im8(%d, %d) = %f\n", x, y, (double)im8(x, y));
                 return false;
             }
         }

@@ -26,6 +26,12 @@ struct Schedule {
         For::ForType for_type;
     };
     vector<Dim> dims;
+
+    struct Bound {
+        string var;
+        Expr min, extent;
+    };
+    vector<Bound> bounds;
 };
         
 struct FunctionContents {

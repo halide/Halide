@@ -67,6 +67,7 @@ class Simplify : public IRMutator {
             // if expr is defined, we should substitute it in (unless
             // it's a var that has been hidden by a nested scope).
             if (replacement.defined()) {
+                //std::cout << "Replacing " << op->name << " of type " << op->type << " with " << replacement << std::endl;
                 assert(replacement.type() == op->type);
                 // If it's a naked var, and the var it refers to
                 // hasn't gone out of scope, just replace it with that
@@ -740,6 +741,8 @@ class Simplify : public IRMutator {
         const Ramp *ramp = value.as<Ramp>();
         const Broadcast *broadcast = value.as<Broadcast>();        
         const Variable *var = value.as<Variable>();
+        string wrapper_name;
+        Expr wrapper_value;
         if (is_const(value)) {
             // Substitute the value wherever we see it
             scope.push(op->name, value);
@@ -747,12 +750,14 @@ class Simplify : public IRMutator {
             // Make a new name to refer to the base instead, and push the ramp inside
             scope.push(op->name, new Ramp(new Variable(ramp->base.type(), op->name + ".base"), 
                                           ramp->stride, ramp->width));
-            body = new T(op->name + ".base", ramp->base, body);
+            wrapper_name = op->name + ".base";
+            wrapper_value = ramp->base;
         } else if (broadcast) {
             // Make a new name refer to the scalar version, and push the broadcast inside            
             scope.push(op->name, new Broadcast(new Variable(broadcast->value.type(), op->name + ".value"), 
                                                broadcast->width));
-            body = new T(op->name + ".value", broadcast->value, body);
+            wrapper_name = op->name + ".value";
+            wrapper_value = broadcast->value;
         } else if (var) {
             // This var is just equal to another var. We should subs
             // it in only if the second var is still in scope at the
@@ -768,7 +773,9 @@ class Simplify : public IRMutator {
 
         scope.pop(op->name);
 
-        if (body.same_as(op->body) && value.same_as(op->value)) {
+        if (wrapper_value.defined()) {
+            return new T(wrapper_name, wrapper_value, new T(op->name, value, body));
+        } else if (body.same_as(op->body) && value.same_as(op->value)) {
             return op;
         } else {
             return new T(op->name, value, body);
@@ -990,14 +997,15 @@ void simplify_test() {
 
     // Check ramps in lets get pushed inwards
     check(new Let("vec", new Ramp(x*2, 3, 4), vec + Expr(new Broadcast(2, 4))), 
-          new Let("vec", new Ramp(x*2, 3, 4), 
-                  new Let("vec.base", x*2, 
+          new Let("vec.base", x*2, 
+                  new Let("vec", new Ramp(x*2, 3, 4), 
                           new Ramp(Expr(new Variable(Int(32), "vec.base")) + 2, 3, 4))));
 
     // Check broadcasts in lets get pushed inwards
     check(new Let("vec", new Broadcast(x, 4), vec + Expr(new Broadcast(2, 4))),
-          new Let("vec", new Broadcast(x, 4), 
-                  new Let("vec.value", x, new Broadcast(x + 2, 4))));
+          new Let("vec.value", x, 
+                  new Let("vec", new Broadcast(x, 4), 
+                          new Broadcast(Expr(new Variable(Int(32), "vec.value")) + 2, 4))));
     // Check values don't jump inside lets that share the same name
     check(new Let("x", 3, Expr(new Let("x", y, x+4)) + x), 
           new Let("x", 3, Expr(new Let("x", y, y+4)) + 3));

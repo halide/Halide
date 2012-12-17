@@ -834,7 +834,7 @@ void CodeGen::visit(const PrintStmt *op) {
 }
 
 void CodeGen::visit(const AssertStmt *op) {
-    assert(false && "AssertStmt not yet implemented");
+    //assert(false && "AssertStmt not yet implemented");
 }
 
 void CodeGen::visit(const Pipeline *op) {
