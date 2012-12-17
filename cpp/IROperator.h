@@ -81,6 +81,27 @@ inline Expr operator!(Expr a) {
     return new Not(a);
 }
 
+inline Expr max(Expr a, Expr b) {
+    return new Max(a, b);
+}
+
+inline Expr min(Expr a, Expr b) {
+    return new Min(a, b);
+}
+
+inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
+    return new Max(new Min(a, max_val), min_val);
+}
+
+template<typename T>
+inline Expr cast(Expr a) {
+    return new Cast(type_of<T>(), a);
+}
+
+inline Expr cast(Type t, Expr a) {
+    return new Cast(t, a);
+}
+
 namespace Internal {
 bool is_const(Expr e);
 bool is_positive_const(Expr e);
