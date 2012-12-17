@@ -1,3 +1,6 @@
+# Don't delete the a.out files
+.SECONDARY: 
+
 all: test_bound \
 test_bounds \
 test_bounds_inference \
