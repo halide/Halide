@@ -59,7 +59,8 @@ Expr build_qualified_rhs(Function f) {
 // won't do any allocation.
 
 Stmt build_realization(Function f) {
-    // We'll build it from inside out. 
+    // We'll build it from inside out, starting from a store node,
+    // then wrapping it in for loops.
             
     // All names will get prepended with the function name to avoid ambiguities
     string prefix = f.name() + ".";
