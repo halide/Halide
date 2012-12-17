@@ -238,15 +238,22 @@ class InlineFunction : public IRMutator {
 public:
     InlineFunction(Function f) : func(f) {}
 private:
-    void visit(const Call *op) {
+
+    void visit(const Call *op) {        
+        // std::cout << "Found call to " << op->name << std::endl;
         if (op->name == func.name()) {
+            // Mutate the args
+            vector<Expr> args(op->args.size());
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = mutate(op->args[i]);
+            }
             // Grab the body
             Expr body = build_qualified_rhs(func);
             // Bind the args
-            assert(op->args.size() == func.args().size());
-            for (size_t i = 0; i < op->args.size(); i++) {
+            assert(args.size() == func.args().size());
+            for (size_t i = 0; i < args.size(); i++) {
                 body = new Let(func.name() + "." + func.args()[i], 
-                               op->args[i], 
+                               args[i], 
                                body);
             }
             expr = body;
@@ -262,6 +269,7 @@ public:
     FindCalls(Expr e) {e.accept(this);}
     map<string, Function> calls;
     void visit(const Call *call) {                
+        IRVisitor::visit(call);
         if (call->call_type == Call::Halide) {
             calls[call->name] = call->func;
         }
@@ -717,14 +725,19 @@ Stmt lower(Function f) {
     //std::cout << std::endl << "Initial statement: " << std::endl << s << std::endl;
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
-        //std::cout << std::endl << "Injecting realization of " << order[i-1] << std::endl;
         if (f.schedule().compute_level.empty()) {
+            //std::cout << std::endl << "Inlining " << order[i-1] << std::endl;
             s = InlineFunction(f).mutate(s);
         } else {
-            s = InjectRealization(f).mutate(s);
+            //std::cout << std::endl << "Injecting realization of " << order[i-1] << std::endl;
+            InjectRealization injector(f);
+            s = injector.mutate(s);
+            assert(injector.found_store_level && injector.found_compute_level);
         }
         //std::cout << s << std::endl;
     }
+
+    //std::cout << s << std::endl;
 
     // Do bounds inference
     s = BoundsInference(order, env).mutate(s);
@@ -757,8 +770,6 @@ Stmt lower(Function f) {
 
     // A constant folding pass
     s = simplify(s);
-
-    //std::cout << s << std::endl;
 
     // Vectorize loops marked for vectorization
     s = VectorizeLoops().mutate(s);
