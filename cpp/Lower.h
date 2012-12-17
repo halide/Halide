@@ -7,7 +7,7 @@
 namespace Halide {
 namespace Internal {
 
-Stmt lower(Func f);
+Stmt lower(Function f);
 
 void lower_test();
 

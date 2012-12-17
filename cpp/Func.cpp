@@ -1,3 +1,4 @@
+#include "IR.h"
 #include "Func.h"
 #include "Util.h"
 #include "IROperator.h"
@@ -18,9 +19,9 @@ using std::min;
 
 void Func::set_dim_type(Var var, For::ForType t) {
     bool found = false;
-    vector<Schedule::Dim> &dims = func.ptr->schedule.dims;
+    vector<Schedule::Dim> &dims = func.schedule().dims;
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
-        if (dims[i].var == var) {
+        if (dims[i].var == var.name()) {
             found = true;
             dims[i].for_type = t;
         }
@@ -29,31 +30,21 @@ void Func::set_dim_type(Var var, For::ForType t) {
     assert(found && "Could not find dimension in argument list for function");
 }
 
-Func::Func(IntrusivePtr<Internal::Function> f) : func(f) {
+Func::Func(Internal::Function f) : func(f) {
 }
 
-Func::Func(const string &name) : func(new Internal::Function) {
-    func.ptr->name = name;
+Func::Func(const string &name) : func(name) {
 }
 
-Func::Func() : func(new Internal::Function) {
-    func.ptr->name = unique_name('f');
+Func::Func() : func(unique_name('f')) {
 }
         
 const string &Func::name() const {
-    return func.ptr->name;
-}
-
-const vector<Var> &Func::args() const {
-    return func.ptr->args;
+    return func.name();
 }
 
 Expr Func::value() const {
-    return func.ptr->value;
-}
-
-const Schedule &Func::schedule() const {
-    return func.ptr->schedule;
+    return func.value();
 }
 
 FuncRefVar Func::operator()(Var x) {
@@ -88,38 +79,28 @@ FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) {
     return FuncRefExpr(func, vec(x, y, z, w));
 }  
 
-void Func::define(const vector<Var> &args, Expr value) {
-    assert(!func.ptr->value.defined() && "Function is already defined");
-    func.ptr->value = value;
-    func.ptr->args = args;
-        
-    for (size_t i = 0; i < args.size(); i++) {
-        Schedule::Dim d = {args[i], For::Serial};
-        func.ptr->schedule.dims.push_back(d);
-    }        
-}
 
 Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
-    vector<Schedule::Dim> &dims = func.ptr->schedule.dims;
+    vector<Schedule::Dim> &dims = func.schedule().dims;
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
-        if (dims[i].var == old) {
+        if (dims[i].var == old.name()) {
             found = true;
-            dims[i].var = inner;
+            dims[i].var = inner.name();
             dims.push_back(dims[dims.size()-1]);
             for (size_t j = dims.size(); j > i+1; j--) {
                 dims[j-1] = dims[j-2];
             }
-            dims[i+1].var = outer;
+            dims[i+1].var = outer.name();
         }
     }
         
     assert(found && "Could not find dimension in argument list for function");
         
     // Add the split to the splits list
-    Schedule::Split split = {old, outer, inner, factor};
-    func.ptr->schedule.splits.push_back(split);
+    Schedule::Split split = {old.name(), outer.name(), inner.name(), factor};
+    func.schedule().splits.push_back(split);
     return *this;
 }
 
@@ -140,54 +121,58 @@ Func &Func::unroll(Var var) {
 
 Func &Func::compute_at(Func f, Var var) {
     string loop_level = f.name() + "." + var.name();
-    func.ptr->schedule.compute_level = loop_level;
-    if (func.ptr->schedule.store_level.empty()) {
-        func.ptr->schedule.store_level = loop_level;
+    func.schedule().compute_level = loop_level;
+    if (func.schedule().store_level.empty()) {
+        func.schedule().store_level = loop_level;
     }
     return *this;
 }
         
 Func &Func::compute_root() {
-    func.ptr->schedule.compute_level = "<root>";
-    func.ptr->schedule.store_level = "<root>";
+    func.schedule().compute_level = "<root>";
+    func.schedule().store_level = "<root>";
     return *this;
 }
 
 Func &Func::store_at(Func f, Var var) {
-    func.ptr->schedule.store_level = f.name() + "." + var.name();
+    func.schedule().store_level = f.name() + "." + var.name();
     return *this;
 }
 
 Func &Func::store_root() {
-    func.ptr->schedule.store_level = "<root>";
+    func.schedule().store_level = "<root>";
     return *this;
 }
 
 Func &Func::compute_inline() {
-    func.ptr->schedule.compute_level = "";
-    func.ptr->schedule.store_level = "";
+    func.schedule().compute_level = "";
+    func.schedule().store_level = "";
     return *this;
 }
 
 
-FuncRefVar::FuncRefVar(IntrusivePtr<Internal::Function> f, const vector<Var> &a) : func(f), args(a) {
+FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a) : func(f) {
     assert(f.defined() && "Can't construct reference to undefined Func");
+    args.resize(a.size());
+    for (size_t i = 0; i < a.size(); i++) {
+        args[i] = a[i].name();
+    }
 }           
     
 void FuncRefVar::operator=(Expr e) {            
-    Func(func).define(args, e);
+    func.define(args, e);
 }
     
 FuncRefVar::operator Expr() {
-    assert(func.ptr->value.defined() && "Can't call function with undefined value");
+    assert(func.value().defined() && "Can't call function with undefined value");
     vector<Expr> expr_args(args.size());
     for (size_t i = 0; i < expr_args.size(); i++) {
-        expr_args[i] = Expr(args[i]);
+        expr_args[i] = new Variable(Int(32), args[i]);
     }
-    return new Call(func.ptr->value.type(), func.ptr->name, expr_args, Call::Halide, func, Buffer());
+    return new Call(func.value().type(), func.name(), expr_args, Call::Halide, func, Buffer());
 }
     
-FuncRefExpr::FuncRefExpr(IntrusivePtr<Internal::Function> f, const vector<Expr> &a) : func(f), args(a) {
+FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
     assert(f.defined() && "Can't construct reference to undefined Func");
 }
     
@@ -196,8 +181,8 @@ void FuncRefExpr::operator=(Expr) {
 }
 
 FuncRefExpr::operator Expr() {                
-    assert(func.ptr->value.defined() && "Can't call function with undefined value");
-    return new Call(func.ptr->value.type(), func.ptr->name, args, Call::Halide, func, Buffer());
+    assert(func.value().defined() && "Can't call function with undefined value");
+    return new Call(func.value().type(), func.name(), args, Call::Halide, func, Buffer());
 }
 
 namespace Internal {
@@ -239,12 +224,15 @@ private:
     }
 };
 
+Stmt Func::lower() {
+    return Halide::Internal::lower(func);
+}
 
 void Func::realize(Buffer dst) {
     assert(func.defined() && "Can't realize NULL function handle");
     assert(value().defined() && "Can't realize undefined function");
     
-    Stmt stmt = lower(*this);
+    Stmt stmt = lower();
     
     // Infer arguments
     InferArguments infer_args;
