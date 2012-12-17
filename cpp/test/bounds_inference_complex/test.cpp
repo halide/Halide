@@ -20,19 +20,9 @@ int main(int argc, char **argv) {
         int j3 = rand() % i; 
         f[i](x, y) = f[j1](x-1, y-1) + f[j2](x+1, clamp(f[j3](x+1, y-1), 0, 7));
 
-        if (i < K-1) {
-            switch (rand() % 3) {
-            case 0:
-                f[i].compute_root();
-                f[i].vectorize(x, 4);
-                break;
-            case 1:
-                f[i].compute_at(f[i+1], y);
-                f[i].vectorize(x, 4);
-                break;
-            default:
-                break;
-            }
+        if (rand() & 1) {
+            f[i].compute_root();
+            f[i].vectorize(x, 4);
         }
     }
 
