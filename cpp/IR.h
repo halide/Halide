@@ -19,10 +19,6 @@ using std::vector;
 using std::pair;
 using std::map;
 
-namespace Internal {
-class Function;
-}
-
 /* A class representing a type of IR node (e.g. Add, or Mul, or
    PrintStmt). We use it for rtti (without having to compile with
    rtti). */
@@ -424,40 +420,6 @@ struct Broadcast : public ExprNode<Broadcast> {
     }
 };
 
-/* A function call. This can represent a call to some extern
- * function (like sin), but it's also our multi-dimensional
- * version of a Load, so it can be a load from an input image, or
- * a call to another halide function. The latter two types of call
- * nodes don't survive all the way down to code generation - the
- * lowering process converts them to Load nodes. */
-struct Call : public ExprNode<Call> {
-    string name;
-    vector<Expr > args;
-    typedef enum {Image, Extern, Halide} CallType;
-    CallType call_type;
-
-    // If it's a call to another halide function, this call node
-    // holds onto a pointer to that function
-    Internal::IntrusivePtr<Internal::Function> func;
-
-    // If it's a call to an image, this call nodes hold a
-    // pointer to that image's buffer
-    Buffer image;
-
-    Call(Type t, string n, const vector<Expr > &a, CallType ct, 
-         Internal::IntrusivePtr<Internal::Function> f, Buffer m) : 
-        ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f), image(m) {
-        for (size_t i = 0; i < args.size(); i++) {
-            assert(args[i].defined() && "Call of undefined");
-        }
-        if (call_type == Halide) {
-            assert(func.defined() && "Call nodes to undefined halide function");
-        } else if (call_type == Image) {
-            assert(image.defined() && "Call node to undefined image");
-        }
-    }
-};
-
 /* A let expression, like you might find in a functional
  * language. Within the expression 'body', instances of the Var
  * node 'name' refer to 'value'. */
@@ -643,6 +605,47 @@ struct Block : public StmtNode<Block> {
         // rest is allowed to be null
     }
 };
+
+/* A function call. This can represent a call to some extern
+ * function (like sin), but it's also our multi-dimensional
+ * version of a Load, so it can be a load from an input image, or
+ * a call to another halide function. The latter two types of call
+ * nodes don't survive all the way down to code generation - the
+ * lowering process converts them to Load nodes. */
+
+}
+#include "Function.h"
+#include "Buffer.h"
+namespace Halide {
+
+struct Call : public ExprNode<Call> {
+    string name;
+    vector<Expr > args;
+    typedef enum {Image, Extern, Halide} CallType;
+    CallType call_type;
+
+    // If it's a call to another halide function, this call node
+    // holds onto a pointer to that function
+    Internal::Function func;
+
+    // If it's a call to an image, this call nodes hold a
+    // pointer to that image's buffer
+    Buffer image;
+
+    Call(Type t, string n, const vector<Expr > &a, CallType ct, 
+         Internal::Function f, Buffer m) : 
+        ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f), image(m) {
+        for (size_t i = 0; i < args.size(); i++) {
+            assert(args[i].defined() && "Call of undefined");
+        }
+        if (call_type == Halide) {
+            assert(func.defined() && "Call nodes to undefined halide function");
+        } else if (call_type == Image) {
+            assert(image.defined() && "Call node to undefined image");
+        }
+    }
+};
+
 }
 
 #endif

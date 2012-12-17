@@ -56,7 +56,7 @@ public:
         args.push_back(y);
         args.push_back(z);
         args.push_back(w);
-        return new Call(_type, name(), args, Call::Image, NULL, Buffer());
+        return new Call(_type, name(), args, Call::Image, NULL, Buffer(), *this);
     }
    
 };

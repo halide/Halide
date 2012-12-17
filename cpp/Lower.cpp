@@ -34,18 +34,18 @@ void lower_test() {
     g.store_at(f, y).compute_at(f, x);
     h.store_at(f, y).compute_at(f, y);
 
-    Stmt result = lower(f);
+    Stmt result = f.lower();
 
     assert(result.defined() && "Lowering returned trivial function");
 
     std::cout << "Lowering test passed" << std::endl;
 }
 
-Expr build_qualified_rhs(Func f) {
+Expr build_qualified_rhs(Function f) {
     // Fully qualify the var names in the function rhs
     Expr value = f.value();
     for (size_t i = 0; i < f.args().size(); i++) {
-        value = substitute(f.args()[i].name(), new Variable(Int(32), f.name() + "." + f.args()[i].name()), value);
+        value = substitute(f.args()[i], new Variable(Int(32), f.name() + "." + f.args()[i]), value);
     }
     return value;
 }
@@ -58,7 +58,7 @@ Expr build_qualified_rhs(Func f) {
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
 
-Stmt build_realization(Func f) {
+Stmt build_realization(Function f) {
     // We'll build it from inside out. 
             
     // All names will get prepended with the function name to avoid ambiguities
@@ -67,7 +67,7 @@ Stmt build_realization(Func f) {
     // Compute the site to store to as the function args
     vector<Expr> site;
     for (size_t i = 0; i < f.args().size(); i++) {
-        site.push_back(new Variable(Int(32), prefix + f.args()[i].name()));
+        site.push_back(new Variable(Int(32), prefix + f.args()[i]));
     }
             
     Expr value = build_qualified_rhs(f);
@@ -78,31 +78,31 @@ Stmt build_realization(Func f) {
     // Define the function args in terms of the loop variables using the splits
     for (size_t i = f.schedule().splits.size(); i > 0; i--) {
         const Schedule::Split &split = f.schedule().splits[i-1];
-        Expr inner = new Variable(Int(32), prefix + split.inner.name());
-        Expr outer = new Variable(Int(32), prefix + split.outer.name());
-        Expr old_min = new Variable(Int(32), prefix + split.old_var.name() + ".min");
-        stmt = new LetStmt(prefix + split.old_var.name(), outer * split.factor + inner + old_min, stmt);
+        Expr inner = new Variable(Int(32), prefix + split.inner);
+        Expr outer = new Variable(Int(32), prefix + split.outer);
+        Expr old_min = new Variable(Int(32), prefix + split.old_var + ".min");
+        stmt = new LetStmt(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
     }
             
     // Build the loop nest
     for (size_t i = 0; i < f.schedule().dims.size(); i++) {
         const Schedule::Dim &dim = f.schedule().dims[i];
-        Expr min = new Variable(Int(32), prefix + dim.var.name() + ".min");
-        Expr extent = new Variable(Int(32), prefix + dim.var.name() + ".extent");
-        stmt = new For(prefix + dim.var.name(), min, extent, dim.for_type, stmt);
+        Expr min = new Variable(Int(32), prefix + dim.var + ".min");
+        Expr extent = new Variable(Int(32), prefix + dim.var + ".extent");
+        stmt = new For(prefix + dim.var, min, extent, dim.for_type, stmt);
     }
 
     // Define the bounds on the split dimensions using the bounds
     // on the function args
     for (size_t i = f.schedule().splits.size(); i > 0; i--) {
         const Schedule::Split &split = f.schedule().splits[i-1];
-        Expr old_var_extent = new Variable(Int(32), prefix + split.old_var.name() + ".extent");
+        Expr old_var_extent = new Variable(Int(32), prefix + split.old_var + ".extent");
         Expr inner_extent = split.factor;
         Expr outer_extent = (old_var_extent + split.factor - 1)/split.factor;
-        stmt = new LetStmt(prefix + split.inner.name() + ".min", 0, stmt);
-        stmt = new LetStmt(prefix + split.inner.name() + ".extent", inner_extent, stmt);
-        stmt = new LetStmt(prefix + split.outer.name() + ".min", 0, stmt);
-        stmt = new LetStmt(prefix + split.outer.name() + ".extent", outer_extent, stmt);            
+        stmt = new LetStmt(prefix + split.inner + ".min", 0, stmt);
+        stmt = new LetStmt(prefix + split.inner + ".extent", inner_extent, stmt);
+        stmt = new LetStmt(prefix + split.outer + ".min", 0, stmt);
+        stmt = new LetStmt(prefix + split.outer + ".extent", outer_extent, stmt);            
     }
 
     // TODO: inject bounds for any explicitly bounded dimensions        
@@ -113,9 +113,9 @@ Stmt build_realization(Func f) {
 class BoundsInference : public IRMutator {
 public:
     const vector<string> &funcs;
-    const map<string, Func> &env;
+    const map<string, Function> &env;
 
-    BoundsInference(const vector<string> &f, const map<string, Func> &e) : funcs(f), env(e) {}    
+    BoundsInference(const vector<string> &f, const map<string, Function> &e) : funcs(f), env(e) {}    
 
     virtual void visit(const For *for_loop) {
         
@@ -136,11 +136,11 @@ public:
         // Inject let statements defining those bounds
         for (size_t i = 0; i < funcs.size(); i++) {
             const vector<pair<Expr, Expr> > &region = regions[i];
-            const Func &f = env.find(funcs[i])->second;
+            const Function &f = env.find(funcs[i])->second;
             if (region.empty()) continue;
             assert(region.size() == f.args().size() && "Dimensionality mismatch between function and region required");
             for (size_t j = 0; j < region.size(); j++) {
-                const string &arg_name = f.args()[j].name();
+                const string &arg_name = f.args()[j];
                 body = new LetStmt(f.name() + "." + arg_name + ".min", region[j].first, body);
                 body = new LetStmt(f.name() + "." + arg_name + ".extent", region[j].second, body);
             }
@@ -157,12 +157,11 @@ public:
 
 // Inject the allocation and realization of a function into an
 // existing loop nest using its schedule
-// TODO: deal with inline
 class InjectRealization : public IRMutator {
 public:
-    const Func &func;
+    const Function &func;
     bool found_store_level, found_compute_level;
-    InjectRealization(const Func &f) : func(f), found_store_level(false), found_compute_level(false) {}
+    InjectRealization(const Function &f) : func(f), found_store_level(false), found_compute_level(false) {}
 
     virtual void visit(const For *for_loop) {            
         if (!found_compute_level && for_loop->name == func.schedule().compute_level) {
@@ -179,7 +178,7 @@ public:
             Stmt body = mutate(for_loop->body);
             vector<pair<Expr, Expr> > bounds(func.args().size());
             for (size_t i = 0; i < func.args().size(); i++) {
-                string prefix = func.name() + "." + func.args()[i].name();
+                string prefix = func.name() + "." + func.args()[i];
                 bounds[i].first = new Variable(Int(32), prefix + ".min");
                 bounds[i].second = new Variable(Int(32), prefix + ".extent");
             }
@@ -216,9 +215,9 @@ public:
 };
 
 class InlineFunction : public IRMutator {
-    Func func;
+    Function func;
 public:
-    InlineFunction(Func f) : func(f) {}
+    InlineFunction(Function f) : func(f) {}
 private:
     void visit(const Call *op) {
         if (op->name == func.name()) {
@@ -227,7 +226,7 @@ private:
             // Bind the args
             assert(op->args.size() == func.args().size());
             for (size_t i = 0; i < op->args.size(); i++) {
-                body = new Let(func.name() + "." + func.args()[i].name(), 
+                body = new Let(func.name() + "." + func.args()[i], 
                                op->args[i], 
                                body);
             }
@@ -242,7 +241,7 @@ private:
 class FindCalls : public IRVisitor {
 public:
     FindCalls(Expr e) {e.accept(this);}
-    map<string, Func> calls;
+    map<string, Function> calls;
     void visit(const Call *call) {                
         if (call->call_type == Call::Halide) {
             calls[call->name] = call->func;
@@ -250,7 +249,7 @@ public:
     }
 };
 
-void populate_environment(Func f, map<string, Func> &env, bool recursive = true) {
+void populate_environment(Function f, map<string, Function> &env, bool recursive = true) {
     if (env.find(f.name()) != env.end()) return;
             
     // TODO: consider reductions
@@ -261,23 +260,23 @@ void populate_environment(Func f, map<string, Func> &env, bool recursive = true)
     } else {
         env[f.name()] = f;            
 
-        for (map<string, Func>::const_iterator iter = calls.calls.begin(); 
+        for (map<string, Function>::const_iterator iter = calls.calls.begin(); 
              iter != calls.calls.end(); ++iter) {
             populate_environment(iter->second, env);                    
         }
     }
 }
 
-vector<string> realization_order(string output, const map<string, Func> &env) {
+vector<string> realization_order(string output, const map<string, Function> &env) {
     // Make a DAG representing the pipeline. Each function maps to the set describing its inputs.
     map<string, set<string> > graph;
 
     // Populate the graph
-    for (map<string, Func>::const_iterator iter = env.begin(); iter != env.end(); iter++) {
-        map<string, Func> calls;
+    for (map<string, Function>::const_iterator iter = env.begin(); iter != env.end(); iter++) {
+        map<string, Function> calls;
         populate_environment(iter->second, calls, false);
 
-        for (map<string, Func>::const_iterator j = calls.begin(); 
+        for (map<string, Function>::const_iterator j = calls.begin(); 
              j != calls.end(); ++j) {
             graph[iter->first].insert(j->first);
         }
@@ -290,7 +289,7 @@ vector<string> realization_order(string output, const map<string, Func> &env) {
         // Find a function not in result_set, for which all its inputs are
         // in result_set. Stop when we reach the output function.
         bool scheduled_something = false;
-        for (map<string, Func>::const_iterator iter = env.begin(); iter != env.end(); iter++) {
+        for (map<string, Function>::const_iterator iter = env.begin(); iter != env.end(); iter++) {
             const string &f = iter->first;
             if (result_set.find(f) == result_set.end()) {
                 bool good_to_schedule = true;
@@ -666,9 +665,9 @@ class RemoveDeadLets : public IRMutator {
 };
 
 
-Stmt lower(Func f) {
+Stmt lower(Function f) {
     // Compute an environment
-    map<string, Func> env;
+    map<string, Function> env;
     populate_environment(f, env);
 
     // Compute a realization order
@@ -680,7 +679,7 @@ Stmt lower(Func f) {
 
     //std::cout << std::endl << "Initial statement: " << std::endl << s << std::endl;
     for (size_t i = order.size()-1; i > 0; i--) {
-        Func f = env.find(order[i-1])->second;
+        Function f = env.find(order[i-1])->second;
         //std::cout << std::endl << "Injecting realization of " << order[i-1] << std::endl;
         if (f.schedule().compute_level.empty()) {
             s = InlineFunction(f).mutate(s);
@@ -700,8 +699,8 @@ Stmt lower(Func f) {
         buf_extent_name << f.name() << ".extent." << i;
         Expr buf_min = new Variable(Int(32), buf_min_name.str());
         Expr buf_extent = new Variable(Int(32), buf_extent_name.str());
-        s = new LetStmt(f.name() + "." + f.args()[i].name() + ".min", buf_min, s);
-        s = new LetStmt(f.name() + "." + f.args()[i].name() + ".extent", buf_extent, s);
+        s = new LetStmt(f.name() + "." + f.args()[i] + ".min", buf_min, s);
+        s = new LetStmt(f.name() + "." + f.args()[i] + ".extent", buf_extent, s);
     }
 
     //std::cout << s << std::endl;

@@ -135,7 +135,7 @@ void CodeGen_X86::test() {
 
     // Then run a parallel for loop that clobbers three elements of buf
     Expr e = new Select(alpha > 4.0f, 3, 2);
-    e += (new Call(Int(32), "extern_function_1", vec(alpha), Call::Extern, NULL, Buffer()));
+    e += (new Call(Int(32), "extern_function_1", vec(alpha), Call::Extern, Function(), Buffer()));
     Stmt loop = new Store("buf", e, x + i);
     loop = new LetStmt("x", beta+1, loop);
     // Do some local allocations within the loop
