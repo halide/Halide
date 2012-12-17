@@ -489,7 +489,7 @@ void CodeGen::visit(const Mod *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
 
-    if (op->type.is_int()) {
+    if (op->type.is_float()) {
         value = builder.CreateFRem(a, b);
     } else if (op->type.is_uint()) {
         value = builder.CreateURem(a, b);
