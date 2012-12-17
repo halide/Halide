@@ -448,6 +448,10 @@ void CodeGen::visit(const Cast *op) {
 
 void CodeGen::visit(const Variable *op) {
     // look in the symbol table
+    if (!symbol_table.contains(op->name)) {
+        std::cerr << "Symbol not found: " << op->name << std::endl;
+        assert(false);
+    }
     value = symbol_table.get(op->name);
 }
 
