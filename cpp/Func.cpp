@@ -171,6 +171,46 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
     return *this;
 }
 
+Func &Func::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+    std::cout << "Tile: " << x.name() << ", " << y.name() << ", " << xo.name() << ", " << yo.name() << ", " << xi.name() << ", " << yi.name() << std::endl;
+    split(x, xo, xi, xfactor);
+    split(y, yo, yi, yfactor);
+    reorder(xi, yi, xo, yo);
+    return *this;
+}
+
+Func &Func::reorder(Var x, Var y) {
+    vector<Schedule::Dim> &dims = func.schedule().dims;
+    bool found_y = false;
+    size_t y_loc = 0;
+    std::cout << "Swapping " << x.name() << " and " << y.name() << std::endl;
+    for (size_t i = 0; i < dims.size(); i++) {
+        std::cout << "Considering " << dims[i].var << std::endl;
+        if (dims[i].var == y.name()) {
+            found_y = true;
+            y_loc = i;
+        } else if (dims[i].var == x.name()) {
+            if (found_y) std::swap(dims[i], dims[y_loc]);
+            return *this;
+        }
+    }
+    assert(false && "Could not find these variables to reorder in schedule");
+    return *this;
+}
+    
+
+Func &Func::reorder(Var x, Var y, Var z) {
+    return reorder(x, y).reorder(x, z).reorder(y, z);
+}
+
+Func &Func::reorder(Var x, Var y, Var z, Var w) {
+    return reorder(x, y).reorder(x, z).reorder(x, w).reorder(y, z, w);
+}
+
+Func &Func::reorder(Var x, Var y, Var z, Var w, Var t) {
+    return reorder(x, y).reorder(x, z).reorder(x, w).reorder(x, t).reorder(y, z, w, t);
+}
+
 
 FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a) : func(f) {
     assert(f.defined() && "Can't construct reference to undefined Func");

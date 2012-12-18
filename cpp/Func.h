@@ -87,6 +87,11 @@ public:
     Func &store_root();
     Func &compute_inline();
     Func &bound(Var var, Expr min, Expr extent);
+    Func &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    Func &reorder(Var x, Var y);
+    Func &reorder(Var x, Var y, Var z);
+    Func &reorder(Var x, Var y, Var z, Var w);
+    Func &reorder(Var x, Var y, Var z, Var w, Var t);
 
     Stmt lower();
 };
