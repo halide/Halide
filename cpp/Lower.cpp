@@ -111,6 +111,47 @@ Stmt build_realization(Function f) {
     return stmt;
 }
 
+class InjectTracing : public IRMutator {
+public:
+    int level;
+    InjectTracing() {
+        char *trace = getenv("HL_TRACE");
+        level = trace ? atoi(trace) : level;
+    }
+
+
+private:
+    void visit(const Call *op) {
+        expr = op;
+    }
+
+    void visit(const Provide *op) {       
+        IRMutator::visit(op);
+        if (level >= 2) {
+            const Provide *op = stmt.as<Provide>();
+            vector<Expr> args = op->args;
+            args.push_back(op->value);
+            Stmt print = new PrintStmt("Provide " + op->buffer, args);
+            stmt = new Block(print, op);
+        }
+    }
+
+    void visit(const Realize *op) {
+        IRMutator::visit(op);
+        if (level >= 1) {
+            const Realize *op = stmt.as<Realize>();
+            vector<Expr> args;
+            for (size_t i = 0; i < op->bounds.size(); i++) {
+                args.push_back(op->bounds[i].first);
+                args.push_back(op->bounds[i].second);
+            }
+            Stmt print = new PrintStmt("Realizing " + op->buffer + " over ", args);
+            Stmt body = new Block(print, op->body);
+            stmt = new Realize(op->buffer, op->type, op->bounds, body);
+        }        
+    }
+};
+
 // Inject let stmts defining the bounds of a function required at each loop level
 class BoundsInference : public IRMutator {
 public:
@@ -135,11 +176,15 @@ public:
 
         Stmt body = mutate(for_loop->body);
 
+
+        log(3) << "Bounds inference considering loop over " << for_loop->name << '\n';
+
         // Inject let statements defining those bounds
         for (size_t i = 0; i < funcs.size(); i++) {
             const vector<pair<Expr, Expr> > &region = regions[i];
             const Function &f = env.find(funcs[i])->second;
             if (region.empty()) continue;
+            log(3) << "Injecting bounds for " << funcs[i] << '\n';
             assert(region.size() == f.args().size() && "Dimensionality mismatch between function and region required");
             for (size_t j = 0; j < region.size(); j++) {
                 const string &arg_name = f.args()[j];
@@ -738,7 +783,11 @@ Stmt lower(Function f) {
         log(2) << s << '\n';
     }
 
-    log(2) << "All realizations injected: " << '\n' << s << '\n';
+    log(2) << "All realizations injected:\n" << s << '\n';
+
+    s = InjectTracing().mutate(s);
+
+    log(2) << "Tracing injected:\n" << s << '\n';
 
     // Do bounds inference
     s = BoundsInference(order, env).mutate(s);
@@ -798,8 +847,8 @@ Stmt lower(Function f) {
         log(2) << "Simplified: \n" << s << "\n\n";
         
         // Removed useless Let and LetStmt nodes
-        s = RemoveDeadLets().mutate(s);
-        log(2) << "Remove dead lets: \n" << s << "\n\n";
+        //s = RemoveDeadLets().mutate(s);
+        //log(2) << "Remove dead lets: \n" << s << "\n\n";
     }
 
     log(1) << "Lowered statement: \n" << s << "\n\n";
