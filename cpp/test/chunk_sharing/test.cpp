@@ -13,16 +13,16 @@ int main(int argc, char **argv) {
     c(i, j) = a(i, j) * 2;
     d(x, y) = b(x, y) + c(x, y);
 
-    c.chunk(y);
-    b.chunk(y);
-    a.chunk(y);
+    c.compute_at(d, y);
+    b.compute_at(d, y);
+    a.compute_at(d, y);
 
     printf("Realizing function...\n");
 
     Image<int> im = d.realize(32, 32);
 
-    for (size_t y = 0; y < 32; y++) {
-        for (size_t x = 0; x < 32; x++) {
+    for (int y = 0; y < 32; y++) {
+        for (int x = 0; x < 32; x++) {
             int a = x + y;
             int b = a + 1;
             int c = a * 2;

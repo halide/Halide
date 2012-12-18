@@ -12,8 +12,8 @@ int main(int argc, char **argv) {
     g(x) = h(x-1) + h(x+1);
     f(x, y) = (g(x-1) + g(x+1)) + y;
 
-    h.root().vectorize(x, 4);
-    g.root().vectorize(x, 4);
+    h.compute_root().vectorize(x, 4);
+    g.compute_root().vectorize(x, 4);
 
     Image<int> out = f.realize(36, 2);
 
