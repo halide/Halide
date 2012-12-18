@@ -6,6 +6,7 @@
 #include "Bounds.h"
 #include "Simplify.h"
 #include "IRPrinter.h"
+#include "Log.h"
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -240,7 +241,7 @@ public:
 private:
 
     void visit(const Call *op) {        
-        // std::cout << "Found call to " << op->name << std::endl;
+        // std::cout << "Found call to " << op->name << endl;
         if (op->name == func.name()) {
             // Mutate the args
             vector<Expr> args(op->args.size());
@@ -722,25 +723,27 @@ Stmt lower(Function f) {
     s = inject_explicit_bounds(s, f);
     s = new For("<root>", 0, 1, For::Serial, s);
 
-    //std::cout << std::endl << "Initial statement: " << std::endl << s << std::endl;
+    log(2) << "Initial statement: " << '\n' << s << '\n';
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
         if (f.schedule().compute_level.empty()) {
-            //std::cout << std::endl << "Inlining " << order[i-1] << std::endl;
+            log(2) << "Inlining " << order[i-1] << '\n';
             s = InlineFunction(f).mutate(s);
         } else {
-            //std::cout << std::endl << "Injecting realization of " << order[i-1] << std::endl;
+            log(2) << "Injecting realization of " << order[i-1] << '\n';
             InjectRealization injector(f);
             s = injector.mutate(s);
             assert(injector.found_store_level && injector.found_compute_level);
         }
-        //std::cout << s << std::endl;
+        log(2) << s << '\n';
     }
 
-    //std::cout << s << std::endl;
+    log(2) << "All realizations injected: " << '\n' << s << '\n';
 
     // Do bounds inference
     s = BoundsInference(order, env).mutate(s);
+
+    log(2) << "Bounds inference: " << '\n' << s << '\n';
 
     // For the output function, the bounds required is the size of the buffer
     for (size_t i = 0; i < f.args().size(); i++) {
@@ -753,8 +756,12 @@ Stmt lower(Function f) {
         s = new LetStmt(f.name() + "." + f.args()[i] + ".extent", buf_extent, s);
     }
 
+    log(2) << "Bounds of output buffer: " << '\n' << s << "\n\n";
+
     // Flatten everything to single-dimensional
     s = FlattenDimensions().mutate(s);
+
+    log(2) << "Storage flattening: " << '\n' << s << "\n\n";
 
     // Assert that the strides on dimension zero of the input and output buffers are one
     vector<string> bufs = FindBuffers(s).buffers;
@@ -768,24 +775,34 @@ Stmt lower(Function f) {
                       
     }
 
+    log(2) << "Set buffer stride 0 to 1: \n" << s << "\n\n";
+
     // A constant folding pass
     s = simplify(s);
+
+    log(2) << "Simplified: \n" << s << "\n\n";
 
     // Vectorize loops marked for vectorization
     s = VectorizeLoops().mutate(s);
 
+    log(2) << "Vectorized: \n" << s << "\n\n";
+
     // Unroll loops marked for unrolling
     s = UnrollLoops().mutate(s);
+
+    log(2) << "Unrolled: \n" << s << "\n\n";
 
     for (size_t i = 0; i < 2; i++) {
         // Another constant folding pass
         s = simplify(s);
+        log(2) << "Simplified: \n" << s << "\n\n";
         
         // Removed useless Let and LetStmt nodes
         s = RemoveDeadLets().mutate(s);
+        log(2) << "Remove dead lets: \n" << s << "\n\n";
     }
 
-    //std::cout << std::endl << std::endl << s << std::endl;
+    log(1) << "Lowered statement: \n" << s << "\n\n";
 
     return s;
 } 
