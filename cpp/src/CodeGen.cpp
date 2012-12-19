@@ -4,6 +4,7 @@
 #include "llvm/Analysis/Verifier.h"
 #include "IROperator.h"
 #include "Util.h"
+#include "Log.h"
 #include "Function.h"
 #include <llvm/ExecutionEngine/JIT.h>
 #include <llvm/Support/TargetSelect.h>
@@ -396,7 +397,7 @@ llvm::Type *CodeGen::llvm_type_of(Halide::Type t) {
 
 Value *CodeGen::codegen(Expr e) {
     assert(e.defined());
-    // cout << "Codegen: " << e.type() << ", " << e << endl;
+    log(4) << "Codegen: " << e.type() << ", " << e << "\n";
     value = NULL;
     e.accept(this);
     assert(value && "Codegen of an expr did not produce an llvm value");
@@ -405,7 +406,7 @@ Value *CodeGen::codegen(Expr e) {
 
 void CodeGen::codegen(Stmt s) {
     assert(s.defined());
-    // cout << "Codegen: " << s;
+    log(3) << "Codegen: " << s << "\n";
     value = NULL;
     s.accept(this);
 }
@@ -859,11 +860,13 @@ private:
         op->body.accept(this);
         ignore.pop(op->name);
     }
+
     void visit(const LetStmt *op) {
         ignore.push(op->name, 0);
         op->body.accept(this);
         ignore.pop(op->name);
     }
+
     void visit(const For *op) {
         ignore.push(op->name, 0);
         op->min.accept(this);
@@ -871,19 +874,34 @@ private:
         op->body.accept(this);
         ignore.pop(op->name);
     }
+
     void visit(const Load *op) {
         op->index.accept(this);
-        result[op->buffer + ".host"] = gen->llvm_type_of(op->type)->getPointerTo();
+        if (!ignore.contains(op->buffer)) {
+            result[op->buffer + ".host"] = gen->llvm_type_of(op->type)->getPointerTo();
+        }
     }
+
     void visit(const Store *op) {
         op->index.accept(this);
         op->value.accept(this);
-        result[op->buffer + ".host"] = gen->llvm_type_of(op->value.type())->getPointerTo();
+        if (!ignore.contains(op->buffer)) {
+            result[op->buffer + ".host"] = gen->llvm_type_of(op->value.type())->getPointerTo();
+        }
     }
+
+    void visit(const Allocate *op) {
+        ignore.push(op->buffer, 0);
+        op->size.accept(this);
+        op->body.accept(this);
+        ignore.pop(op->buffer);
+    }
+
     void visit(const Variable *op) {            
         if (ignore.contains(op->name)) {
             //cout << "Ignoring reference to: " << op->name << endl;
         } else {
+            log(3) << "Adding " << op->name << " to closure\n";
             //cout << "Putting var in closure: " << op->name << endl;
             result[op->name] = gen->llvm_type_of(op->type);
         }
