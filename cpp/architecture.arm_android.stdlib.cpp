@@ -4,7 +4,7 @@
 #include <cfloat>
 
 typedef unsigned size_t;
-#include "buffer.h"
+#include "buffer_t.h"
 
 extern "C" {
 

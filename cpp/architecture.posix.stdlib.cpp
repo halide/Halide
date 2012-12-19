@@ -7,7 +7,7 @@
 #include <cfloat>
 #include <stdarg.h>
 
-#include "buffer.h"
+#include "buffer_t.h"
 
 
 extern "C" {

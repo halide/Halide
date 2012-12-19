@@ -4,7 +4,7 @@
 #include "IntrusivePtr.h"
 #include "Type.h"
 #include "Util.h"
-#include "buffer.h"
+#include "buffer_t.h"
 #include <assert.h>
 #include <stdint.h>
 

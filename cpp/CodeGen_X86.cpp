@@ -3,7 +3,7 @@
 #include <iostream>
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/IRReader.h"
-#include "buffer.h"
+#include "buffer_t.h"
 #include "IRPrinter.h"
 #include "Util.h"
 

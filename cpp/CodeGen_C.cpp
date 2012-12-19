@@ -48,7 +48,7 @@ void CodeGen_C::print_c_name(const string &name) {
 void CodeGen_C::compile(Stmt s, string name, const vector<Argument> &args) {
     stream << "#include <iostream>" << endl;
     stream << "#include <assert.h>" << endl;
-    stream << "#include \"buffer.h\"" << endl;
+    stream << "#include \"buffer_t.h\"" << endl;
 
 
     // Emit the function prototype
@@ -323,7 +323,7 @@ void CodeGen_C::test() {
     string correct_source = \
         "#include <iostream>\n"
         "#include <assert.h>\n"
-        "#include \"buffer.h\"\n"
+        "#include \"buffer_t.h\"\n"
         "void test1(buffer_t *_buf, float alpha, int32_t beta) {\n"
         "uint8_t *buf = _buf->host;\n"
         "int32_t buf_min_0 = _buf->min[0];\n"
