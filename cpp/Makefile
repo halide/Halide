@@ -61,50 +61,9 @@ clean:
 
 .SECONDARY:
 
-TESTS = \
-internal \
-bound \
-bounds \
-bounds_inference \
-bounds_inference_chunk \
-bounds_inference_complex \
-c_function \
-chunk \
-chunk_sharing \
-convolution \
-fibonacci \
-footprint \
-gameoflife \
-gpu_large_alloc \
-histogram \
-histogram_equalize \
-input_image_bounds_check \
-jit_stress \
-logical \
-mod \
-parallel \
-parallel_alloc \
-parallel_nested \
-parallel_performance \
-partial_application \
-reduction \
-reduction_schedule \
-reduction_subregion \
-rehydrate \
-side_effects \
-simd_op_check \
-split_reuse_inner_name_bug \
-split_store_compute \
-two_vector_args \
-uniform \
-unrolled_reduction \
-vector_bounds_inference \
-vector_cast \
-vector_extern \
-vectorize \
-vector_math
+TESTS = $(shell ls test/*.cpp)
 
-tests: $(TESTS:%=test_%)
+tests: $(TESTS:test/%.cpp=test_%)
 
 bin/test_internal: test/internal.cpp bin/libHalide.a
 	$(CXX) $(CXX_FLAGS) -rdynamic $< -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
@@ -114,7 +73,6 @@ bin/test_%: test/%.cpp bin/libHalide.a
 
 test_%: bin/test_%
 	@-mkdir -p tmp
-	@-echo
 	cd tmp ; ../$<
-
+	@-echo
 
