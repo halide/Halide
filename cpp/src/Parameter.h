@@ -20,7 +20,7 @@ struct ParameterContents {
     template<typename T>
     T &as() {
         assert(type == type_of<T>());
-        return *((float *)(&data));
+        return *((T *)(&data));
     }
 };
 
