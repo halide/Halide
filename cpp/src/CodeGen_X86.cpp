@@ -7,11 +7,11 @@
 #include "IRPrinter.h"
 #include "Util.h"
 
-extern unsigned char builtins_bitcode_x86[];
-extern int builtins_bitcode_x86_length;
-
 namespace Halide { 
 namespace Internal {
+
+extern unsigned char builtins_bitcode_x86[];
+extern int builtins_bitcode_x86_length;
 
 using namespace llvm;
 
