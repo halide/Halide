@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
 
 
     // We only support power-of-two vector widths for now
-    for (int vec_width = 1; vec_width < 32; vec_width*=2) {
+    for (int vec_width = 2; vec_width < 32; vec_width*=2) {
         ok = ok && test_all<float>(vec_width);
         ok = ok && test_all<double>(vec_width);
         ok = ok && test_all<uint8_t>(vec_width);
