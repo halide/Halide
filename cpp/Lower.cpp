@@ -116,7 +116,7 @@ public:
     int level;
     InjectTracing() {
         char *trace = getenv("HL_TRACE");
-        level = trace ? atoi(trace) : level;
+        level = trace ? atoi(trace) : 0;
     }
 
 
