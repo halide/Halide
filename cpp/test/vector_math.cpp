@@ -198,7 +198,7 @@ bool test(int vec_width) {
             }
         }
     }
-    
+
     // Min/max
     printf("Min/max\n");
     Func f7;
@@ -257,7 +257,7 @@ bool test(int vec_width) {
     printf("Dividing by small constants\n");
     for (int c = 2; c < 16; c++) {
 	Func f10;
-	f10(x, y) = input(x, y) / c;
+	f10(x, y) = input(x, y) / cast<A>(Expr(c));
 	f10.vectorize(x, vec_width);
 	Image<A> im10 = f10.realize(W, H);
 	
@@ -321,7 +321,7 @@ bool test(int vec_width) {
         for (int x = 0; x < W; x++) {
             A correct = input(x+3, y);
             if (im13(x, y) != correct) {
-                printf("im13(%d, %d) = %f instead of %d\n", x, y, (double)(im13(x, y)), (double)(correct));
+                printf("im13(%d, %d) = %f instead of %f\n", x, y, (double)(im13(x, y)), (double)(correct));
             }
         }
     }
