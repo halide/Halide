@@ -468,7 +468,7 @@ class FlattenDimensions : public IRMutator {
             expr = call;
         } else {
             Expr idx = mutate(flatten_args(call->name, call->args));
-            expr = new Load(call->type, call->name, idx, call->image);
+            expr = new Load(call->type, call->name, idx, call->image, call->param);
         }
     }
 
@@ -562,7 +562,7 @@ class VectorizeLoops : public IRMutator {
                 expr = op;
             } else {
                 int w = index.type().width;
-                expr = new Load(op->type.vector_of(w), op->buffer, index, op->image);
+                expr = new Load(op->type.vector_of(w), op->buffer, index, op->image, op->param);
             }
         }
 
@@ -586,7 +586,8 @@ class VectorizeLoops : public IRMutator {
                 for (size_t i = 0; i < new_args.size(); i++) {
                     new_args[i] = widen(new_args[i], max_width);
                 }
-                expr = new Call(op->type.vector_of(max_width), op->name, new_args, op->call_type, op->func, op->image);
+                expr = new Call(op->type.vector_of(max_width), op->name, new_args, 
+                                op->call_type, op->func, op->image, op->param);
             }
         }
 

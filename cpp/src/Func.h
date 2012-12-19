@@ -5,6 +5,7 @@
 #include "Var.h"
 #include "IntrusivePtr.h"
 #include "Function.h"
+#include "Param.h"
 
 namespace Halide {
         
@@ -52,6 +53,9 @@ class Func {
     // Save this state when we jit, so that we can run the function again cheaply
     void (*function_ptr)(const void **);
     vector<const void *> arg_values;
+
+    // Some of those void *'s need to be rebound on every call if the image params change
+    vector<pair<int, ImageParam> > image_param_args;
 
 public:        
     static void test();

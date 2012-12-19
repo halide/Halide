@@ -11,6 +11,7 @@
 #include "Type.h"
 #include "IntrusivePtr.h"
 #include "Buffer.h"
+#include "Parameter.h"
 
 namespace Halide {
 
@@ -170,14 +171,6 @@ struct Cast : public ExprNode<Cast> {
     Cast(Type t, Expr v) : ExprNode<Cast>(t), value(v) {
         assert(v.defined() && "Cast of undefined");
     }
-};
-
-/* A named variable. Might be a loop variable, function argument,
- * or something defined by a Let or LetStmt node. */
-struct Variable : public ExprNode<Variable> {
-    string name;
-
-    Variable(Type t, string n) : ExprNode<Variable>(t), name(n) {}
 };
 
 /* Arithmetic nodes. If applied to vector types, all of these are
@@ -376,8 +369,11 @@ struct Load : public ExprNode<Load> {
     // image, this will point to that
     Buffer image;
 
-    Load(Type t, string b, Expr i, Buffer m) : 
-        ExprNode<Load>(t), buffer(b), index(i), image(m) {
+    // If it's a load from an image parameter, this points to that
+    Internal::Parameter param;
+
+    Load(Type t, string b, Expr i, Buffer m, Internal::Parameter p) : 
+        ExprNode<Load>(t), buffer(b), index(i), image(m), param(p) {
         assert(index.defined() && "Load of undefined");
         assert(type.width == i.type().width && "Vector width of Load must match vector width of index");
     }
@@ -606,17 +602,17 @@ struct Block : public StmtNode<Block> {
     }
 };
 
+}
+// Now that we've defined an Expr and ForType, we can include the definition of a function
+#include "Function.h"
+namespace Halide {
+
 /* A function call. This can represent a call to some extern
  * function (like sin), but it's also our multi-dimensional
  * version of a Load, so it can be a load from an input image, or
  * a call to another halide function. The latter two types of call
  * nodes don't survive all the way down to code generation - the
  * lowering process converts them to Load nodes. */
-
-}
-#include "Function.h"
-#include "Buffer.h"
-namespace Halide {
 
 struct Call : public ExprNode<Call> {
     string name;
@@ -632,18 +628,59 @@ struct Call : public ExprNode<Call> {
     // pointer to that image's buffer
     Buffer image;
 
-    Call(Type t, string n, const vector<Expr > &a, CallType ct, 
-         Internal::Function f, Buffer m) : 
-        ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f), image(m) {
+    // If it's a call to an image parameter, this call nodes holds a
+    // pointer to that
+    Internal::Parameter param;
+
+    Call(Type t, string n, const vector<Expr> &a, CallType ct, 
+         Internal::Function f, Buffer m, Internal::Parameter p) : 
+        ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f), image(m), param(p) {
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Call of undefined");
         }
         if (call_type == Halide) {
             assert(func.defined() && "Call nodes to undefined halide function");
         } else if (call_type == Image) {
-            assert(image.defined() && "Call node to undefined image");
+            assert((param.defined() || image.defined()) && "Call node to undefined image");
         }
     }
+
+    // Convenience constructor for extern calls
+    Call(Type t, string n, const vector<Expr > &a) : 
+        ExprNode<Call>(t), name(n), args(a), call_type(Extern), 
+        func(Internal::Function()), image(Buffer()), param(Internal::Parameter()) {
+        for (size_t i = 0; i < args.size(); i++) {
+            assert(args[i].defined() && "Call of undefined");
+        }
+    }
+
+    // Convenience constructor for image calls
+    Call(Buffer b, const vector<Expr> &a) :
+        ExprNode<Call>(b.type()), name(b.name()), args(a), call_type(Image), 
+        func(Internal::Function()), image(b), param(Internal::Parameter()) {
+    }
+
+    Call(Internal::Parameter p, const vector<Expr> &a) :
+        ExprNode<Call>(p.type()), name(p.name()), args(a), call_type(Image), 
+        func(Internal::Function()), image(Buffer()), param(p) {
+    }
+
+    // Convenience constructor for function calls
+    Call(Internal::Function f, const vector<Expr> &a) :
+        ExprNode<Call>(f.value().type()), name(f.name()), args(a), call_type(Halide), 
+        func(f), image(Buffer()), param(Internal::Parameter()) {
+    }
+    
+};
+
+/* A named variable. Might be a loop variable, function argument,
+ * or something defined by a Let or LetStmt node. */
+struct Variable : public ExprNode<Variable> {
+    string name;
+    Internal::Parameter param;
+
+    Variable(Type t, string n, Internal::Parameter p) : ExprNode<Variable>(t), name(n), param(p) {}
+    Variable(Type t, string n) : ExprNode<Variable>(t), name(n) {}
 };
 
 }

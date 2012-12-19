@@ -8,18 +8,20 @@ int main(int argc, char **argv) {
     Var x("x");
     Func f("f");
 
-    Uniform<float> u;
+    Param<float> u;
 
     f(x) = u;
     
+    /*
     if (use_gpu()) {
         f.cudaTile(x, 256);
     }
+    */
 
-    u = 17.0f;
+    u.set(17.0f);
     Image<float> out_17 = f.realize(1024);
 
-    u = 123.0f;
+    u.set(123.0f);
     Image<float> out_123 = f.realize(1024);
 
     for (int i = 0; i < 1024; i++) {

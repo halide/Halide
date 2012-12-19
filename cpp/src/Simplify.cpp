@@ -4,6 +4,7 @@
 #include "IRPrinter.h"
 #include "IRMutator.h"
 #include "Scope.h"
+#include "Var.h"
 #include <iostream>
 
 namespace Halide { 
@@ -847,13 +848,10 @@ void check(Expr a, Expr b) {
     }
 }
         
-
 void simplify_test() {
-    Expr x = new Variable(Int(32), "x");
-    Expr y = new Variable(Int(32), "y");
-    Expr z = new Variable(Int(32), "z");
-    Expr xf = new Variable(Float(32), "x");
-    Expr yf = new Variable(Float(32), "y");
+    Expr x = Var("x"), y = Var("y"), z = Var("z");
+    Expr xf = cast<float>(x);
+    Expr yf = cast<float>(y);
 
     check(new Cast(Int(32), new Cast(Int(32), x)), x);
     check(new Cast(Float(32), 3), 3.0f);

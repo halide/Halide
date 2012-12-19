@@ -7,6 +7,8 @@
 #include "IRPrinter.h"
 #include "Log.h"
 #include "Util.h"
+#include "Var.h"
+#include "Param.h"
 
 namespace Halide { 
 namespace Internal {
@@ -106,10 +108,9 @@ void CodeGen_X86::test() {
     args[0] = buffer_arg;
     args[1] = float_arg;
     args[2] = int_arg;        
-    Expr x = new Variable(Int(32), "x");
-    Expr i = new Variable(Int(32), "i");
-    Expr alpha = new Variable(Float(32), "alpha");
-    Expr beta = new Variable(Int(32), "beta");
+    Var x("x"), i("i");
+    Param<float> alpha("alpha");
+    Param<int> beta("beta");
 
     // We'll clear out the initial buffer except for the first and
     // last two elements using dense unaligned vectors
@@ -128,7 +129,7 @@ void CodeGen_X86::test() {
                      new For("i", 0, 2, For::Serial, 
                              new Store("buf", 
                                        new Mul(new Broadcast(17, 4), 
-                                               new Load(Int(32, 4), "buf", new Ramp(i*8, 2, 4), Buffer())),
+                                               new Load(Int(32, 4), "buf", new Ramp(i*8, 2, 4), Buffer(), Parameter())),
                                        new Ramp(i*8, 2, 4))));
 
     // Then print some stuff (disabled to prevent debugging spew)
@@ -137,7 +138,7 @@ void CodeGen_X86::test() {
 
     // Then run a parallel for loop that clobbers three elements of buf
     Expr e = new Select(alpha > 4.0f, 3, 2);
-    e += (new Call(Int(32), "extern_function_1", vec(alpha), Call::Extern, Function(), Buffer()));
+    e += (new Call(Int(32), "extern_function_1", vec<Expr>(alpha)));
     Stmt loop = new Store("buf", e, x + i);
     loop = new LetStmt("x", beta+1, loop);
     // Do some local allocations within the loop

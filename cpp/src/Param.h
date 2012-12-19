@@ -1,45 +1,77 @@
 #ifndef HALIDE_PARAM_H
 #define HALIDE_PARAM_H
 
-namespace Halide {
+#include "IR.h"
 
-class ScalarParam {
-    
-};
+namespace Halide {
 
 template<typename T>
 class Param {
-    
+    Internal::Parameter param;
+public:
+    Param() : param(type_of<T>()) {}
+    Param(const string &n) : param(type_of<T>(), n) {}
+
+    const string &name() const {
+        return param.name();
+    }
+
+    T get() const {
+        return param.get_scalar<T>();
+    }
+
+    void set(T val) {
+        param.set_scalar<T>(val);
+    }
+
+    bool defined() const {
+        return param.defined();
+    }
+
+    operator Expr() const {
+        return new Variable(type_of<T>(), name(), param);
+    }
 };
 
 class ImageParam {
-    string _name;
-    Type _type;
-    Buffer buffer;
+    Internal::Parameter param;
 public:
-    ImageParam(Type t) : _name(unique_name('m')), _type(t) {}
-    ImageParam(Type t, const string &n) : _name(n), _type(t) {}
+    ImageParam() {}
+    ImageParam(Type t) : param(t) {}
+    ImageParam(Type t, const string &n) : param(t, n) {}
+    ImageParam(Internal::Parameter p) : param(p) {}
 
-    const string &name() {return _name;}
-    int dimensions() {return dims;}
-    Type type() {return _type;}
+    const string &name() const {
+        return param.name();
+    }
 
-    void bind(Buffer b) {
-        assert(_type == b.type());
-        buffer = b
+    Type type() const {
+        return param.type();
+    }
+
+    void set(Buffer b) {
+        param.set_buffer(b);
+    }
+    
+    Buffer get() const {
+        return param.get_buffer();
+    }
+
+    bool defined() const {
+        return param.defined();
     }
 
     Expr operator()(Expr x) {
         vector<Expr> args;
         args.push_back(x);
-        return new Call(_type, name(), args, Call::Image, NULL, Buffer(), *this);
+        return new Call(param, args);
     }
 
     Expr operator()(Expr x, Expr y) {
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
-        return new Call(_type, name(), args, Call::Image, NULL, Buffer(), *this);
+        return new Call(param, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z) {
@@ -47,7 +79,7 @@ public:
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);
-        return new Call(_type, name(), args, Call::Image, NULL, Buffer(), *this);
+        return new Call(param, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) {
@@ -56,7 +88,7 @@ public:
         args.push_back(y);
         args.push_back(z);
         args.push_back(w);
-        return new Call(_type, name(), args, Call::Image, NULL, Buffer(), *this);
+        return new Call(param, args);
     }
    
 };

@@ -6,6 +6,7 @@
 #include "Simplify.h"
 #include "IRPrinter.h"
 #include "Util.h"
+#include "Var.h"
 #include <iostream>
 
 
@@ -445,8 +446,7 @@ void check(const Scope<pair<Expr, Expr> > &scope, Expr e, Expr correct_min, Expr
 
 void bounds_test() {
     Scope<pair<Expr, Expr> > scope;
-    Expr x = new Variable(Int(32), "x");
-    Expr y = new Variable(Int(32), "y");
+    Var x("x"), y("y");
     scope.push("x", make_pair(Expr(0), Expr(10)));
 
     check(scope, x, 0, 10);
@@ -460,7 +460,7 @@ void bounds_test() {
     check(scope, x*y, new Min(0, y*10), new Max(0, y*10));
     check(scope, x/y, Expr(), Expr());
     check(scope, 11/(x+1), 1, 11);
-    check(scope, new Load(Int(8), "buf", x, Buffer()), -128, 127);
+    check(scope, new Load(Int(8), "buf", x, Buffer(), Parameter()), -128, 127);
     check(scope, y + (new Let("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
 
     vector<Expr> input_site_1 = vec(2*x);
@@ -470,8 +470,8 @@ void bounds_test() {
     Stmt loop = new For("x", 3, x, For::Serial, 
                         new Provide("output", 
                                     new Add(
-                                        new Call(Int(32), "input", input_site_1, Call::Extern, Function(), Buffer()),
-                                        new Call(Int(32), "input", input_site_2, Call::Extern, Function(), Buffer())),
+                                        new Call(Int(32), "input", input_site_1),
+                                        new Call(Int(32), "input", input_site_2)),
                                     output_site));
 
     vector<pair<Expr, Expr> > r;

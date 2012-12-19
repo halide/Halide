@@ -78,7 +78,7 @@ void IRMutator::visit(const Select *op)  {
 void IRMutator::visit(const Load *op) {
     Expr index = mutate(op->index);
     if (index.same_as(op->index)) expr = op;
-    else expr = new Load(op->type, op->buffer, index, op->image);
+    else expr = new Load(op->type, op->buffer, index, op->image, op->param);
 }
 
 void IRMutator::visit(const Ramp *op) {
@@ -108,7 +108,7 @@ void IRMutator::visit(const Call *op) {
     }
 
     if (!changed) expr = op;
-    else expr = new Call(op->type, op->name, new_args, op->call_type, op->func, op->image);
+    else expr = new Call(op->type, op->name, new_args, op->call_type, op->func, op->image, op->param);
 }
 
 void IRMutator::visit(const Let *op) {
