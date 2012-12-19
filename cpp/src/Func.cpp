@@ -174,7 +174,6 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
 }
 
 Func &Func::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor) {
-    std::cout << "Tile: " << x.name() << ", " << y.name() << ", " << xo.name() << ", " << yo.name() << ", " << xi.name() << ", " << yi.name() << std::endl;
     split(x, xo, xi, xfactor);
     split(y, yo, yi, yfactor);
     reorder(xi, yi, xo, yo);
@@ -185,9 +184,7 @@ Func &Func::reorder(Var x, Var y) {
     vector<Schedule::Dim> &dims = func.schedule().dims;
     bool found_y = false;
     size_t y_loc = 0;
-    std::cout << "Swapping " << x.name() << " and " << y.name() << std::endl;
     for (size_t i = 0; i < dims.size(); i++) {
-        std::cout << "Considering " << dims[i].var << std::endl;
         if (dims[i].var == y.name()) {
             found_y = true;
             y_loc = i;
