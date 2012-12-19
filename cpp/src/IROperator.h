@@ -171,14 +171,14 @@ inline Expr round(Expr x) {
     }
 }
 
-inline Expr floor(Expr x, Expr y) {
+inline Expr pow(Expr x, Expr y) {
     if (x.type() == Float(64)) {
         y = cast<double>(y);
-        return new Call(Float(64), "floor_f64", vec(x, y));
+        return new Call(Float(64), "pow_f64", vec(x, y));
     } else {
         x = cast<float>(x);
         y = cast<float>(y);
-        return new Call(Float(32), "floor_f32", vec(x, y));
+        return new Call(Float(32), "pow_f32", vec(x, y));
     }
 }
 
