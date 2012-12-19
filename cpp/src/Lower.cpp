@@ -465,7 +465,17 @@ class FlattenDimensions : public IRMutator {
 
     void visit(const Call *call) {            
         if (call->call_type == Call::Extern) {
-            expr = call;
+            vector<Expr> args(call->args.size());
+            bool changed = false;
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = mutate(call->args[i]);
+                if (!args[i].same_as(call->args[i])) changed = true;
+            }
+            if (!changed) {
+                expr = call;
+            } else {
+                expr = new Call(call->type, call->name, args);
+            }
         } else {
             Expr idx = mutate(flatten_args(call->name, call->args));
             expr = new Load(call->type, call->name, idx, call->image, call->param);
