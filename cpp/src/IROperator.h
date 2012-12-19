@@ -99,11 +99,87 @@ inline Expr cast(Expr a) {
 }
 
 inline Expr cast(Type t, Expr a) {
+    if (a.type() == t) return a;
     return new Cast(t, a);
 }
 
 inline Expr select(Expr a, Expr b, Expr c) {
     return new Select(a, b, c);
+}
+
+inline Expr sin(Expr x) {
+    if (x.type() == Float(64)) {
+        return new Call(Float(64), "sin_f64", vec(x), Call::Extern, Internal::Function(), Buffer());
+    } else {
+        return new Call(Float(32), "sin_f32", vec(cast<float>(x)), Call::Extern, Internal::Function(), Buffer());
+    }
+}
+
+inline Expr cos(Expr x) {
+    if (x.type() == Float(64)) {
+        return new Call(Float(64), "cos_f64", vec(x), Call::Extern, Internal::Function(), Buffer());
+    } else {
+        return new Call(Float(32), "cos_f32", vec(cast<float>(x)), Call::Extern, Internal::Function(), Buffer());
+    }
+}
+
+inline Expr sqrt(Expr x) {
+    if (x.type() == Float(64)) {
+        return new Call(Float(64), "sqrt_f64", vec(x), Call::Extern, Internal::Function(), Buffer());
+    } else {
+        return new Call(Float(32), "sqrt_f32", vec(cast<float>(x)), Call::Extern, Internal::Function(), Buffer());
+    }
+}
+
+inline Expr exp(Expr x) {
+    if (x.type() == Float(64)) {
+        return new Call(Float(64), "exp_f64", vec(x), Call::Extern, Internal::Function(), Buffer());
+    } else {
+        return new Call(Float(32), "exp_f32", vec(cast<float>(x)), Call::Extern, Internal::Function(), Buffer());
+    }
+}
+
+inline Expr log(Expr x) {
+    if (x.type() == Float(64)) {
+        return new Call(Float(64), "log_f64", vec(x), Call::Extern, Internal::Function(), Buffer());
+    } else {
+        return new Call(Float(32), "log_f32", vec(cast<float>(x)), Call::Extern, Internal::Function(), Buffer());
+    }
+}
+
+inline Expr floor(Expr x) {
+    if (x.type() == Float(64)) {
+        return new Call(Float(64), "floor_f64", vec(x), Call::Extern, Internal::Function(), Buffer());
+    } else {
+        return new Call(Float(32), "floor_f32", vec(cast<float>(x)), Call::Extern, Internal::Function(), Buffer());
+    }
+}
+
+inline Expr ceil(Expr x) {
+    if (x.type() == Float(64)) {
+        return new Call(Float(64), "ceil_f64", vec(x), Call::Extern, Internal::Function(), Buffer());
+    } else {
+        return new Call(Float(32), "ceil_f32", vec(cast<float>(x)), Call::Extern, Internal::Function(), Buffer());
+    }
+}
+
+inline Expr round(Expr x) {
+    if (x.type() == Float(64)) {
+        return new Call(Float(64), "round_f64", vec(x), Call::Extern, Internal::Function(), Buffer());
+    } else {
+        return new Call(Float(32), "round_f32", vec(cast<float>(x)), Call::Extern, Internal::Function(), Buffer());
+    }
+}
+
+inline Expr floor(Expr x, Expr y) {
+    if (x.type() == Float(64)) {
+        y = cast<double>(y);
+        return new Call(Float(64), "floor_f64", vec(x, y), Call::Extern, Internal::Function(), Buffer());
+    } else {
+        x = cast<float>(x);
+        y = cast<float>(y);
+        return new Call(Float(32), "floor_f32", vec(x, y), Call::Extern, Internal::Function(), Buffer());
+    }
 }
 
 namespace Internal {
