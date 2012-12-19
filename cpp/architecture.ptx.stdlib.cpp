@@ -8,7 +8,7 @@
 #include <stdlib.h>
 //#include <cuda.h>
 #include <assert.h>
-#include "buffer.h"
+#include "buffer_t.h"
 
 #define WEAK __attribute__((weak))
 
