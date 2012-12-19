@@ -40,14 +40,17 @@ INITMOD_OPTS_ptx_dev = ""
 
 -include $(OBJECTS:.o=.d)
 
-build/architecture.%.initmod.c: src/architecture.%.stdlib.cpp src/architecture.%.stdlib.ll src/architecture.posix.stdlib.cpp
+build/architecture.%.initmod.cpp: bin/bitcode2cpp src/architecture.%.stdlib.cpp src/architecture.%.stdlib.ll src/architecture.posix.stdlib.cpp
 	@-mkdir -p build
 	$(CLANG) $(INITMOD_OPTS_$*) -emit-llvm -O3 -S src/architecture.$*.stdlib.cpp -o - | \
 	cat - src/architecture.$*.stdlib.ll | \
 	$(LLVM_AS) -o - | \
-	python util/bitcode2cpp.py $* > $@
+	./bin/bitcode2cpp $* > $@
 
-build/%.o: build/%.c
+bin/bitcode2cpp: src/bitcode2cpp.cpp
+	$(CXX) $< -o $@
+
+build/architecture.%.initmod.o: build/architecture.%.initmod.cpp
 	$(CXX) -c $< -o $@ 
 
 build/%.o: src/%.cpp src/%.h
