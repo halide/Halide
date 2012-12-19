@@ -21,7 +21,8 @@ STDLIB_SOURCES = \
 INITIAL_MODULES = $(STDLIB_ARCHS:%=build/architecture.%.initmod.o)
 
 .PHONY: all
-all: bin/libHalide.a bin/test_all
+all: bin/libHalide.a bin/test_internal
+	./bin/test_internal
 
 bin/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@-mkdir -p bin
@@ -53,10 +54,6 @@ build/%.o: src/%.cpp src/%.h
 	@-mkdir -p build
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF build/$*.d -MT build/$*.o 
 
-bin/test_all: src/test_all.cpp bin/libHalide.a
-	@-mkdir -p bin
-	$(CXX) $(CXX_FLAGS) -rdynamic src/test_all.cpp -Lbin -lHalide -o bin/test_all -ldl -lpthread
-
 .PHONY: clean
 clean:
 	rm -f bin/*
@@ -65,6 +62,7 @@ clean:
 .SECONDARY:
 
 TESTS = \
+internal \
 bound \
 bounds \
 bounds_inference \
@@ -108,8 +106,11 @@ vector_math
 
 tests: $(TESTS:%=test_%)
 
+bin/test_internal: test/internal.cpp bin/libHalide.a
+	$(CXX) $(CXX_FLAGS) -rdynamic $< -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
+
 bin/test_%: test/%.cpp bin/libHalide.a
-	$(CXX) $< -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
+	$(CXX) $< -rdynamic -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
 
 test_%: bin/test_%
 	@-mkdir -p tmp
