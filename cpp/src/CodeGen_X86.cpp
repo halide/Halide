@@ -5,6 +5,7 @@
 #include "llvm/Support/IRReader.h"
 #include "buffer_t.h"
 #include "IRPrinter.h"
+#include "Log.h"
 #include "Util.h"
 
 namespace Halide { 
@@ -73,6 +74,7 @@ void CodeGen_X86::visit(const Allocate *alloc) {
 
     // In the future, we may want to construct an entire buffer_t here
     string allocation_name = alloc->buffer + ".host";
+    log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
     symbol_table.push(allocation_name, ptr);
     codegen(alloc->body);

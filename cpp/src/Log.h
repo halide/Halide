@@ -36,7 +36,7 @@ struct log {
     }
 
     template<typename T>
-    log &operator<<(const T &x) {
+    log &operator<<(T x) {
         if (verbosity > debug_level) return *this;
         std::cerr << x;
         return *this;
