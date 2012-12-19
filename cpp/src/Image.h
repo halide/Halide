@@ -83,14 +83,14 @@ public:
     Expr operator()(Expr x) {
         vector<Expr> args;
         args.push_back(x);
-        return new Call(type_of<T>(), buffer.name(), args, Call::Image, Internal::Function(), buffer);
+        return new Call(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y) {
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
-        return new Call(type_of<T>(), buffer.name(), args, Call::Image, Internal::Function(), buffer);
+        return new Call(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z) {
@@ -98,7 +98,7 @@ public:
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);
-        return new Call(type_of<T>(), buffer.name(), args, Call::Image, Internal::Function(), buffer);
+        return new Call(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) {
@@ -107,7 +107,7 @@ public:
         args.push_back(y);
         args.push_back(z);
         args.push_back(w);
-        return new Call(type_of<T>(), buffer.name(), args, Call::Image, Internal::Function(), buffer);
+        return new Call(buffer, args);
     }
     
     operator const buffer_t *() {return buffer.raw_buffer();}

@@ -8,6 +8,8 @@
 #include "Lower.h"
 #include "CodeGen_X86.h"
 #include "Image.h"
+#include "Param.h"
+#include "Log.h"
 #include <iostream>
 #include <fstream>
 
@@ -228,9 +230,9 @@ FuncRefVar::operator Expr() {
     assert(func.value().defined() && "Can't call function with undefined value");
     vector<Expr> expr_args(args.size());
     for (size_t i = 0; i < expr_args.size(); i++) {
-        expr_args[i] = new Variable(Int(32), args[i]);
+        expr_args[i] = Var(args[i]);
     }
-    return new Call(func.value().type(), func.name(), expr_args, Call::Halide, func, Buffer());
+    return new Call(func, expr_args);
 }
     
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
@@ -243,7 +245,7 @@ void FuncRefExpr::operator=(Expr) {
 
 FuncRefExpr::operator Expr() {                
     assert(func.value().defined() && "Can't call function with undefined value");
-    return new Call(func.value().type(), func.name(), args, Call::Halide, func, Buffer());
+    return new Call(func, args);
 }
 
 namespace Internal {
@@ -263,24 +265,59 @@ class InferArguments : public IRVisitor {
 public:
     vector<Argument> arg_types;
     vector<const void *> arg_values;
-    
+    vector<pair<int, ImageParam> > image_param_args;    
+
 private:
     void visit(const Load *op) {
+        IRVisitor::visit(op);
+
+        Buffer b;
+        string arg_name;
         if (op->image.defined()) {            
-            Argument arg = {op->image.name(), true, Int(1)};
+            Internal::log(2) << "Found an image argument: " << op->image.name() << "\n";
+            b = op->image;
+            arg_name = op->image.name();
+        } else if (op->param.defined()) {
+            Internal::log(2) << "Found an image param argument: " << op->param.name() << "\n";
+            b = op->param.get_buffer();
+            arg_name = op->param.name();
+        } else {
+            return;
+        }
+
+        assert(b.defined() && "Can't JIT compile a call to an undefined buffer");
+
+        Argument arg = {arg_name, true, Int(1)};
+        bool already_included = false;
+        for (size_t i = 0; i < arg_types.size(); i++) {
+            if (arg_types[i].name == b.name()) {
+                already_included = true;
+            }
+        }
+        if (!already_included) {
+            if (op->param.defined()) {
+                int idx = (int)(arg_values.size());
+                image_param_args.push_back(make_pair(idx, op->param));
+            }
+            arg_types.push_back(arg);
+            arg_values.push_back(b.raw_buffer());
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (op->param.defined()) {
+            Internal::log(2) << "Found a scalar param: " << op->param.name() << "\n";
+            Argument arg = {op->param.name(), false, op->param.type()};
             bool already_included = false;
             for (size_t i = 0; i < arg_types.size(); i++) {
-                if (arg_types[i].name == op->image.name()) {
+                if (arg_types[i].name == op->param.name()) {
                     already_included = true;
                 }
             }
             if (!already_included) {
-                //std::cout << "Adding buffer " << op->image.name() << " to the arguments" << std::endl;
                 arg_types.push_back(arg);
-                arg_values.push_back(op->image.raw_buffer());
-            } else {
-                //std::cout << "Not adding buffer " << op->image.name() << " to the arguments" << std::endl;
-            }
+                arg_values.push_back(op->param.get_scalar_address());
+            }            
         }
     }
 };
@@ -305,6 +342,14 @@ void Func::realize(Buffer dst) {
         infer_args.arg_types.push_back(me);
         arg_values = infer_args.arg_values;
         arg_values.push_back(dst.raw_buffer());
+        image_param_args = infer_args.image_param_args;
+
+        Internal::log(2) << "Inferred argument list:\n";
+        for (size_t i = 0; i < infer_args.arg_types.size(); i++) {
+            Internal::log(2) << infer_args.arg_types[i].name << ", " 
+                             << infer_args.arg_types[i].type << ", " 
+                             << infer_args.arg_types[i].is_buffer << "\n";
+        }
         
         // TODO: Assume we're jitting for x86 for now
         CodeGen_X86 cg;
@@ -323,6 +368,12 @@ void Func::realize(Buffer dst) {
     } else {
         // Update the address of the buffer we're realizing into
         arg_values[arg_values.size()-1] = dst.raw_buffer();
+        // update the addresses of the image param args
+        for (size_t i = 0; i < image_param_args.size(); i++) {
+            Buffer b = image_param_args[i].second.get();
+            assert(b.defined() && "An ImageParam is not bound to a buffer");
+            arg_values[image_param_args[i].first] = b.raw_buffer();
+        }
     }
 
     function_ptr(&(arg_values[0]));

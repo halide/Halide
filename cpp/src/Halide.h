@@ -4,5 +4,7 @@
 #include "Func.h"
 #include "IROperator.h"
 #include "Image.h"
+#include "Param.h"
+
 
 #endif

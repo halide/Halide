@@ -1,6 +1,8 @@
 #include "CodeGen_C.h"
 #include "Substitute.h"
 #include "IROperator.h"
+#include "Param.h"
+#include "Var.h"
 #include <sstream>
 #include <iostream>
 
@@ -308,9 +310,9 @@ void CodeGen_C::test() {
     args[0] = buffer_arg;
     args[1] = float_arg;
     args[2] = int_arg;
-    Expr x = new Variable(Int(32), "x");
-    Expr alpha = new Variable(Float(32), "alpha");
-    Expr beta = new Variable(Int(32), "beta");
+    Var x("x");
+    Param<float> alpha("alpha");
+    Param<int> beta("beta");
     Expr e = new Select(alpha > 4.0f, 3, 2);
     Stmt s = new Store("buf", e, x);
     s = new LetStmt("x", beta+1, s);
