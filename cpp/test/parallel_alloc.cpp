@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     f(x, y) = g(x-1, y) + g(x+1, y);
 
 
-    g.chunk(y);
+    g.compute_at(f, y);
     f.parallel(y);
 
     Image<int> im = f.realize(8, 8);
