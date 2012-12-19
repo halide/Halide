@@ -48,6 +48,7 @@ build/architecture.%.initmod.cpp: bin/bitcode2cpp src/architecture.%.stdlib.cpp 
 	./bin/bitcode2cpp $* > $@
 
 bin/bitcode2cpp: src/bitcode2cpp.cpp
+	@-mkdir -p bin
 	$(CXX) $< -o $@
 
 build/architecture.%.initmod.o: build/architecture.%.initmod.cpp
