@@ -148,7 +148,7 @@ void CodeGen_X86::test() {
     CodeGen_X86 cg;
     cg.compile(s, "test1", args);
 
-    cg.compile_to_bitcode("test1.bc");
+    //cg.compile_to_bitcode("test1.bc");
     //cg.compile_to_native("test1.o", false);
     //cg.compile_to_native("test1.s", true);
 
