@@ -55,7 +55,7 @@ private:
 
     void visit(const Cast *op) {
         // Assume no overflow
-        op->accept(this);
+        op->value.accept(this);
         min = min.defined() ? new Cast(op->type, min) : Expr();
         max = max.defined() ? new Cast(op->type, max) : Expr();
     }
