@@ -1,9 +1,5 @@
 GXX ?= g++
 
-LLVM_ROOT=../../llvm/Release+Asserts
-LLC=$(LLVM_ROOT)/bin/llc
-OPT=$(LLVM_ROOT)/bin/opt
-
 PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
 ifeq ($(HL_TARGET),ptx)
   SCHEDULE=103
@@ -14,9 +10,9 @@ endif
 
 all: process
 
-local_laplacian: ../../cpp_bindings/ local_laplacian.cpp
-	$(MAKE) -C ../../cpp_bindings libHalide.a
-	$(GXX) local_laplacian.cpp -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -lpng -o local_laplacian -lpthread -ldl $(PNGFLAGS) -O3
+local_laplacian: ../../ local_laplacian.cpp
+	$(MAKE) -C ../../ bin/libHalide.a
+	$(GXX) local_laplacian.cpp -I ../../src ../../bin/libHalide.a -o local_laplacian -lpthread -ldl -O3
 
 local_laplacian.bc: local_laplacian
 	./local_laplacian $(SCHEDULE)
