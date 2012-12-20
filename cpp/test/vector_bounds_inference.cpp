@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    Func f, g, h; 
+    Func f("f"), g("g"), h("h"); 
     Var x, y;
    
     h(x) = x;
