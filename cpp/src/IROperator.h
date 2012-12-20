@@ -42,6 +42,10 @@ inline Expr operator-(Expr a, Expr b) {
     Internal::match_types(a, b);
     return new Sub(a, b);
 }
+
+inline Expr operator-(Expr a) {
+    return new Sub(Internal::make_zero(a.type()), a);
+}
     
 inline Expr &operator-=(Expr &a, Expr b) {
     a = new Sub(a, cast(a.type(), b));
@@ -129,6 +133,22 @@ inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
     min_val = cast(a.type(), min_val);
     max_val = cast(a.type(), max_val);
     return new Max(new Min(a, max_val), min_val);
+}
+
+inline Expr abs(Expr a) {
+    if (a.type() == Int(8))
+        return new Call(Int(8), "abs_i8", vec(a));
+    if (a.type() == Int(16)) 
+        return new Call(Int(16), "abs_i16", vec(a));
+    if (a.type() == Int(32)) 
+        return new Call(Int(32), "abs_i32", vec(a));
+    if (a.type() == Int(64)) 
+        return new Call(Int(64), "abs_i64", vec(a));
+    if (a.type() == Float(32)) 
+        return new Call(Float(32), "abs_f32", vec(a));
+    if (a.type() == Float(64)) 
+        return new Call(Float(64), "abs_f64", vec(a));
+    assert(false && "Invalid type for abs");
 }
 
 inline Expr select(Expr a, Expr b, Expr c) {
