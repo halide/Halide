@@ -426,7 +426,7 @@ class Simplify : public IRMutator {
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
-            expr = new Div(a, b);
+            expr = new Mod(a, b);
         }
     }
 
