@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Func f("f");
 
     f(x) = 1;
-    f.root().split(x, xo, x, 2);
+    f.compute_root().split(x, xo, x, 2);
     f.realize(30);
 
     printf("Success!\n");

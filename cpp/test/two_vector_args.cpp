@@ -15,8 +15,9 @@ int main(int argc, char **argv) {
     f.vectorize(x, 4);
 
     Image<int> out = f.realize(4, 4);
+
+    printf("Success!\n");
     
     return 0;
 }
-
 

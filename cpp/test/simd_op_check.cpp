@@ -27,7 +27,7 @@ void check(const char *op, int vector_width, Expr e, const char *args) {
     if (filter) {
 	if (strncmp(op, filter, strlen(filter)) != 0) return;
     }
-    std::string name = std::string("test_") + op + uniqueName('_');
+    std::string name = std::string("test_") + op + Internal::unique_name('_');
     for (int i = 0; i < name.size(); i++) {
         if (name[i] == '.') name[i] = '_';
     }
@@ -35,9 +35,32 @@ void check(const char *op, int vector_width, Expr e, const char *args) {
     f(x, y) = e;
     f.vectorize(x, vector_width);
 
+    vector<Internal::Argument> arg_types;
+    Internal::Argument arg = {"", true, Int(1)};
+    arg.name = "in_f32";
+    arg_types.push_back(arg);
+    arg.name = "in_f64";
+    arg_types.push_back(arg);
+    arg.name = "in_i8";
+    arg_types.push_back(arg);
+    arg.name = "in_u8";
+    arg_types.push_back(arg);
+    arg.name = "in_i16";
+    arg_types.push_back(arg);
+    arg.name = "in_u16";
+    arg_types.push_back(arg);
+    arg.name = "in_i32";
+    arg_types.push_back(arg);
+    arg.name = "in_u32";
+    arg_types.push_back(arg);
+    arg.name = "in_i64";
+    arg_types.push_back(arg);
+    arg.name = "in_u64";
+    arg_types.push_back(arg);
+
     char *module = new char[1024];
     snprintf(module, 1024, "test_%s_%s", op, f.name().c_str());
-    f.compileToFile(module);
+    f.compile_to_assembly(module, arg_types);
 
     job j = {op, args, module, f, NULL};
     jobs.push_back(j);
@@ -49,18 +72,16 @@ void do_job(job &j) {
     const char *module = j.module;
     Func f = j.f;
     
-    const char *llc = "../../../llvm/Release+Asserts/bin/llc";
-    const char *opt = "../../../llvm/Release+Asserts/bin/opt";
     char cmd[1024];
     snprintf(cmd, 1024, 
-	     "cat %s.bc | %s -always-inline | %s %s -o - 2> %s.llc_stderr | "
+	     "cat %s | "
 	     "sed -n '/%s.v1_loop/,/%s.v0_afterloop/p' | "
 	     "grep -v 'v1_loop' | "
 	     "grep -v 'Loop' | "
 	     "grep -v 'v0_afterloop' | "
 	     "sed 's/@.*//' > %s.s && "
 	     "grep \"\tv\\{0,1\\}%s\" %s.s > /dev/null", 
-	     module, opt, llc, args, module, f.name().c_str(), f.name().c_str(), module, op, module);
+	     module, f.name().c_str(), f.name().c_str(), module, op, module);
 
     if (system(cmd) != 0) {
 	snprintf(cmd, 1024, "cat %s.llc_stderr >> %s.s", module, module);
@@ -184,16 +205,16 @@ Expr absd(Expr a, Expr b) {
 }
 
 void check_sse_all() {
-    UniformImage in_f32(Float(32), 1, "in_f32");
-    UniformImage in_f64(Float(64), 1, "in_f64");
-    UniformImage in_i8(Int(8), 1, "in_i8");
-    UniformImage in_u8(UInt(8), 1, "in_u8");
-    UniformImage in_i16(Int(16), 1, "in_i16");
-    UniformImage in_u16(UInt(16), 1, "in_u16");
-    UniformImage in_i32(Int(32), 1, "in_i32");
-    UniformImage in_u32(UInt(32), 1, "in_u32");
-    UniformImage in_i64(Int(64), 1, "in_i64");
-    UniformImage in_u64(UInt(64), 1, "in_u64");
+    ImageParam in_f32(Float(32), "in_f32");
+    ImageParam in_f64(Float(64), "in_f64");
+    ImageParam in_i8(Int(8), "in_i8");
+    ImageParam in_u8(UInt(8), "in_u8");
+    ImageParam in_i16(Int(16), "in_i16");
+    ImageParam in_u16(UInt(16), "in_u16");
+    ImageParam in_i32(Int(32), "in_i32");
+    ImageParam in_u32(UInt(32), "in_u32");
+    ImageParam in_i64(Int(64), "in_i64");
+    ImageParam in_u64(UInt(64), "in_u64");
 
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
@@ -328,7 +349,7 @@ void check_sse_all() {
     check_sse("pmulld", 4, i32_1 * i32_2);
 
     check_sse("blendvps", 4, select(f32_1 > 0.7f, f32_1, f32_2));
-    check_sse("blendvpd", 2, select(f64_1 > 0.7, f64_1, f64_2));
+    check_sse("blendvpd", 2, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
     check_sse("pblendvb", 16, select(u8_1 > 7, u8_1, u8_2));
 
     check_sse("pmaxsb", 16, max(i8_1, i8_2));
@@ -393,7 +414,7 @@ void check_sse_all() {
 	check_sse("vcmpltps", 8, select(f32_1 < f32_2, 1.0f, 2.0f));
 	
 	check_sse("vblendvps", 8, select(f32_1 > 0.7f, f32_1, f32_2));
-	check_sse("vblendvpd", 4, select(f64_1 > 0.7, f64_1, f64_2));
+	check_sse("vblendvpd", 4, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
 	        
 	check_sse("vcvttps2dq", 8, i32(f32_1));
 	check_sse("vcvtdq2ps", 8, f32(i32_1));    
@@ -475,16 +496,16 @@ void check_sse_all() {
 }
 
 void check_neon_all() {
-    UniformImage in_f32(Float(32), 1, "in_f32");
-    UniformImage in_f64(Float(64), 1, "in_f64");
-    UniformImage in_i8(Int(8), 1, "in_i8");
-    UniformImage in_u8(UInt(8), 1, "in_u8");
-    UniformImage in_i16(Int(16), 1, "in_i16");
-    UniformImage in_u16(UInt(16), 1, "in_u16");
-    UniformImage in_i32(Int(32), 1, "in_i32");
-    UniformImage in_u32(UInt(32), 1, "in_u32");
-    UniformImage in_i64(Int(64), 1, "in_i64");
-    UniformImage in_u64(UInt(64), 1, "in_u64");
+    ImageParam in_f32(Float(32), "in_f32");
+    ImageParam in_f64(Float(64), "in_f64");
+    ImageParam in_i8(Int(8), "in_i8");
+    ImageParam in_u8(UInt(8), "in_u8");
+    ImageParam in_i16(Int(16), "in_i16");
+    ImageParam in_u16(UInt(16), "in_u16");
+    ImageParam in_i32(Int(32), "in_i32");
+    ImageParam in_u32(UInt(32), "in_u32");
+    ImageParam in_i64(Int(64), "in_i64");
+    ImageParam in_u64(UInt(64), "in_u64");
 
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
