@@ -13,9 +13,9 @@ int main(int argc, char **argv) {
     h(x, y) = (g(x, y-1) + g(x-1, y) + g(x, y) + g(x+1, y) + g(x, y+1));
         
 
-    h.chunk(root);
-    g.chunk(root, y); // chunk it at z, but compute it at x
-    f.root();
+    g.store_root();
+    g.compute_at(h, y);
+    f.compute_root();
     
     Image<int> imh = h.realize(32, 32, 1);
 

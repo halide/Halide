@@ -6,7 +6,8 @@ int main(int argc, char **argv) {
     Var x;
     Func f;
 
-    Uniform<int> k = 3;
+    Param<int> k;
+    k.set(3);
 
     f(x) = x*k;
 
