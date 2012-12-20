@@ -336,6 +336,13 @@ public:
             }
             buffers.push_back(b.name());
         }
+        Parameter p = load->param;
+        if (p.defined()) {
+            for (size_t i = 0; i < buffers.size(); i++) {
+                if (buffers[i] == p.name()) return;
+            }
+            buffers.push_back(p.name());
+        }
     }
 };
 
