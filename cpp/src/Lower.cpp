@@ -82,7 +82,7 @@ Stmt build_realization(Function f) {
         const Schedule::Split &split = f.schedule().splits[i-1];
         Expr inner = new Variable(Int(32), prefix + split.inner);
         Expr outer = new Variable(Int(32), prefix + split.outer);
-        Expr old_min = new Variable(Int(32), prefix + split.old_var + ".min");
+        Expr old_min = new Variable(Int(32), prefix + split.old_var + ".splitmin");
         stmt = new LetStmt(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
     }
             
@@ -105,6 +105,8 @@ Stmt build_realization(Function f) {
         stmt = new LetStmt(prefix + split.inner + ".extent", inner_extent, stmt);
         stmt = new LetStmt(prefix + split.outer + ".min", 0, stmt);
         stmt = new LetStmt(prefix + split.outer + ".extent", outer_extent, stmt);            
+        Expr old_min = new Variable(Int(32), prefix + split.old_var + ".min");
+        stmt = new LetStmt(prefix + split.old_var + ".splitmin", old_min, stmt);
     }
 
     // TODO: inject bounds for any explicitly bounded dimensions        
@@ -240,12 +242,18 @@ public:
             // Inject the realization lower down
             found_store_level = true;
             Stmt body = mutate(for_loop->body);
+            /*
             vector<pair<Expr, Expr> > bounds(func.args().size());
             for (size_t i = 0; i < func.args().size(); i++) {
                 string prefix = func.name() + "." + func.args()[i];
                 bounds[i].first = new Variable(Int(32), prefix + ".min");
                 bounds[i].second = new Variable(Int(32), prefix + ".extent");
             }
+            */
+
+            Scope<pair<Expr, Expr> > scope;
+            vector<pair<Expr, Expr> > bounds = region_provided(func.name(), body, scope);
+
             // Change the body of the for loop to do an allocation
             body = new Realize(func.name(), func.value().type(), bounds, body);
             
