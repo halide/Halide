@@ -6,6 +6,7 @@
 #include "IntrusivePtr.h"
 #include "Function.h"
 #include "Param.h"
+#include "Argument.h"
 
 namespace Halide {
         
@@ -22,9 +23,12 @@ public:
         
     // Use this as the left-hand-side of a definition
     void operator=(Expr);
+
+    // Override the usual assignment operator, so that f(x, y) = g(x, y) works
+    void operator=(const FuncRefVar &e) {*this = Expr(e);}
         
     // Use this as a call to the function
-    operator Expr();
+    operator Expr() const;
 };
     
 /* A fragment of front-end syntax of the form f(x, y, z), where x,
@@ -40,9 +44,12 @@ public:
         
     // Use this as the left-hand-side of a reduction definition
     void operator=(Expr);
+
+    // Override the usual assignment operator, so that f(x, y) = g(x, y) works
+    void operator=(const FuncRefExpr &e) {*this = Expr(e);}
         
     // Use this as a call to the function
-    operator Expr();
+    operator Expr() const;
 };
 
 /* A halide function. Define it, call it, schedule it. */
@@ -66,6 +73,10 @@ public:
 
     Buffer realize(int x_size, int y_size = 1, int z_size = 1, int w_size = 1);
     void realize(Buffer dst);
+
+    void compile_to_bitcode(const string &filename, std::vector<Internal::Argument>);
+    void compile_to_object(const string &filename, std::vector<Internal::Argument>);
+    void compile_to_assembly(const string &filename, std::vector<Internal::Argument>);    
 
     const string &name() const;
     Expr value() const;

@@ -223,7 +223,7 @@ void FuncRefVar::operator=(Expr e) {
     func.define(args, e);
 }
     
-FuncRefVar::operator Expr() {
+FuncRefVar::operator Expr() const {
     assert(func.value().defined() && "Can't call function with undefined value");
     vector<Expr> expr_args(args.size());
     for (size_t i = 0; i < expr_args.size(); i++) {
@@ -240,7 +240,7 @@ void FuncRefExpr::operator=(Expr) {
     assert(false && "Reductions not yet implemented");
 }
 
-FuncRefExpr::operator Expr() {                
+FuncRefExpr::operator Expr() const {
     assert(func.value().defined() && "Can't call function with undefined value");
     return new Call(func, args);
 }
@@ -257,6 +257,44 @@ Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
     return buf;
 }
 
+void Func::compile_to_bitcode(const string &filename, std::vector<Argument> args) {
+    assert(func.defined() && "Can't compile NULL function handle");
+    assert(value().defined() && "Can't compile undefined function");    
+
+    Stmt stmt = lower();
+    Argument me = {name(), true, Int(1)};
+    args.push_back(me);
+
+    CodeGen_X86 cg;
+    cg.compile(stmt, name(), args);
+    cg.compile_to_bitcode(filename);
+}
+
+void Func::compile_to_object(const string &filename, std::vector<Argument> args) {
+    assert(func.defined() && "Can't compile NULL function handle");
+    assert(value().defined() && "Can't compile undefined function");    
+
+    Stmt stmt = lower();
+    Argument me = {name(), true, Int(1)};
+    args.push_back(me);
+
+    CodeGen_X86 cg;
+    cg.compile(stmt, name(), args);
+    cg.compile_to_native(filename, false);
+}
+
+void Func::compile_to_assembly(const string &filename, std::vector<Argument> args) {
+    assert(func.defined() && "Can't compile NULL function handle");
+    assert(value().defined() && "Can't compile undefined function");    
+
+    Stmt stmt = lower();
+    Argument me = {name(), true, Int(1)};
+    args.push_back(me);
+
+    CodeGen_X86 cg;
+    cg.compile(stmt, name(), args);
+    cg.compile_to_native(filename, true);
+}
 
 class InferArguments : public IRVisitor {
 public:
