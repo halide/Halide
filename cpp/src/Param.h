@@ -2,6 +2,7 @@
 #define HALIDE_PARAM_H
 
 #include "IR.h"
+#include <sstream>
 
 namespace Halide {
 
@@ -22,6 +23,10 @@ public:
 
     void set(T val) {
         param.set_scalar<T>(val);
+    }
+
+    Type type() {
+        return type_of<T>();
     }
 
     bool defined() const {
@@ -59,6 +64,24 @@ public:
 
     bool defined() const {
         return param.defined();
+    }
+
+    Expr extent(int x) {
+        std::ostringstream s;
+        s << name() << ".extent." << x;
+        return new Variable(Int(32), s.str(), param);
+    }
+
+    Expr width() {
+        return extent(0);
+    }
+
+    Expr height() {
+        return extent(1);
+    }
+    
+    Expr channels() {
+        return extent(2);
     }
 
     Expr operator()(Expr x) {
