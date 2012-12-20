@@ -350,8 +350,15 @@ private:
                 }
             }
             if (!already_included) {
+                if (op->param.get_buffer().defined()) {
+                    int idx = (int)(arg_values.size());
+                    image_param_args.push_back(make_pair(idx, op->param));                    
+                    arg_values.push_back(op->param.get_buffer().raw_buffer());
+                } else {
+                    arg_values.push_back(op->param.get_scalar_address());
+                }
                 arg_types.push_back(arg);
-                arg_values.push_back(op->param.get_scalar_address());
+
             }            
         }
     }
