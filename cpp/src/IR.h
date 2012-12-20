@@ -255,7 +255,7 @@ struct Max : public ExprNode<Max> {
 struct EQ : public ExprNode<EQ> {
     Expr a, b;
 
-    EQ(Expr _a, Expr _b) : ExprNode<EQ>(Bool()), a(_a), b(_b) {
+    EQ(Expr _a, Expr _b) : ExprNode<EQ>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "EQ of undefined");
         assert(b.defined() && "EQ of undefined");
     }
@@ -264,7 +264,7 @@ struct EQ : public ExprNode<EQ> {
 struct NE : public ExprNode<NE> {
     Expr a, b;
 
-    NE(Expr _a, Expr _b) : ExprNode<NE>(Bool()), a(_a), b(_b) {
+    NE(Expr _a, Expr _b) : ExprNode<NE>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "NE of undefined");
         assert(b.defined() && "NE of undefined");
     }
@@ -273,7 +273,7 @@ struct NE : public ExprNode<NE> {
 struct LT : public ExprNode<LT> {
     Expr a, b;
 
-    LT(Expr _a, Expr _b) : ExprNode<LT>(Bool()), a(_a), b(_b) {
+    LT(Expr _a, Expr _b) : ExprNode<LT>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "LT of undefined");
         assert(b.defined() && "LT of undefined");
     }
@@ -282,7 +282,7 @@ struct LT : public ExprNode<LT> {
 struct LE : public ExprNode<LE> {
     Expr a, b;
 
-    LE(Expr _a, Expr _b) : ExprNode<LE>(Bool()), a(_a), b(_b) {
+    LE(Expr _a, Expr _b) : ExprNode<LE>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "LE of undefined");
         assert(b.defined() && "LE of undefined");
     }
@@ -291,7 +291,7 @@ struct LE : public ExprNode<LE> {
 struct GT : public ExprNode<GT> {
     Expr a, b;
 
-    GT(Expr _a, Expr _b) : ExprNode<GT>(Bool()), a(_a), b(_b) {
+    GT(Expr _a, Expr _b) : ExprNode<GT>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "GT of undefined");
         assert(b.defined() && "GT of undefined");
     }
@@ -300,7 +300,7 @@ struct GT : public ExprNode<GT> {
 struct GE : public ExprNode<GE> {
     Expr a, b;
 
-    GE(Expr _a, Expr _b) : ExprNode<GE>(Bool()), a(_a), b(_b) {
+    GE(Expr _a, Expr _b) : ExprNode<GE>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "GE of undefined");
         assert(b.defined() && "GE of undefined");
     }
@@ -310,7 +310,7 @@ struct GE : public ExprNode<GE> {
 struct And : public ExprNode<And> {
     Expr a, b;
 
-    And(Expr _a, Expr _b) : ExprNode<And>(Bool()), a(_a), b(_b) {
+    And(Expr _a, Expr _b) : ExprNode<And>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "And of undefined");
         assert(b.defined() && "And of undefined");
         assert(a.type().is_bool() && "lhs of And is not a bool");
@@ -321,7 +321,7 @@ struct And : public ExprNode<And> {
 struct Or : public ExprNode<Or> {
     Expr a, b;
 
-    Or(Expr _a, Expr _b) : ExprNode<Or>(Bool()), a(_a), b(_b) {
+    Or(Expr _a, Expr _b) : ExprNode<Or>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "Or of undefined");
         assert(b.defined() && "Or of undefined");
         assert(a.type().is_bool() && "lhs of Or is not a bool");
@@ -332,7 +332,7 @@ struct Or : public ExprNode<Or> {
 struct Not : public ExprNode<Not> {
     Expr a;
 
-    Not(Expr _a) : ExprNode<Not>(Bool()), a(_a) {
+    Not(Expr _a) : ExprNode<Not>(Bool(_a.type().width)), a(_a) {
         assert(a.defined() && "Not of undefined");
         assert(a.type().is_bool() && "argument of Not is not a bool");
     }
