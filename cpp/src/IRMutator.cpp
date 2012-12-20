@@ -61,7 +61,7 @@ void IRMutator::visit(const Or *op)      {mutate_binary_operator(this, op, &expr
 
 void IRMutator::visit(const Not *op) {
     Expr a = mutate(op->a);
-    if (a.same_as(op->a)) expr = a;
+    if (a.same_as(op->a)) expr = op;
     else expr = new Not(a);
 }
 
