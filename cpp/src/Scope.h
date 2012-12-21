@@ -28,6 +28,8 @@ private:
 public:
     Scope() : count(0) {}
 
+    const map<string, stack<pair<T, int> > > &get_table() {return table;}
+
     /* Retrive the value referred to by a name */
     T get(const string &name) const {
         typename map<string, stack<pair<T, int> > >::const_iterator iter = table.find(name);

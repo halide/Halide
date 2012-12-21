@@ -7,6 +7,7 @@
 #include "IRPrinter.h"
 #include "Util.h"
 #include "Var.h"
+#include "Log.h"
 #include <iostream>
 
 
@@ -154,17 +155,18 @@ private:
         op->a.accept(this);
         Expr min_a = min, max_a = max;
         op->b.accept(this);
+        Expr min_b = min, max_b = max;
 
-        if (min.defined() && min_a.defined()) {
-            min = new Min(min, min_a);
+        if (min_a.defined() && min_b.defined()) {
+            min = new Min(min_a, min_b);
         } else {
             min = Expr();
         }
 
-        if (max.defined() && max_a.defined()) {
-            max = new Min(max, max_a);
+        if (max_a.defined() && max_b.defined()) {
+            max = new Min(max_a, max_b);
         } else {
-            max = max.defined() ? max : max_a;
+            max = max_a.defined() ? max_a : max_b;
         }
     }
 
@@ -173,18 +175,20 @@ private:
         op->a.accept(this);
         Expr min_a = min, max_a = max;
         op->b.accept(this);
+        Expr min_b = min, max_b = max;
 
-        if (min.defined() && min_a.defined()) {
-            min = new Max(min, min_a);
+        if (min_a.defined() && min_b.defined()) {
+            min = new Max(min_a, min_b);
         } else {
-            min = min.defined() ? min : min_a;
+            min = min_a.defined() ? min_a : min_b;
         }
 
-        if (max.defined() && max_a.defined()) {
-            max = new Max(max, max_a);
+        if (max_a.defined() && max_b.defined()) {
+            max = new Max(max_a, max_a);
         } else {
             max = Expr();
         }
+
     }
 
     void visit(const EQ *) {
@@ -308,8 +312,11 @@ pair<Expr, Expr> bounds_of_expr_in_scope(Expr expr, const Scope<pair<Expr, Expr>
     return make_pair(b.min, b.max);
 }
 
-pair<Expr, Expr> range_union(const pair<Expr, Expr> &a, const pair<Expr, Expr> &b) {
-    return make_pair(new Min(a.first, b.first), new Max(a.second, b.second));
+pair<Expr, Expr> range_union(const pair<Expr, Expr> &a, const pair<Expr, Expr> &b) {    
+    Expr max, min;
+    if (a.second.defined() && b.second.defined()) max = new Max(a.second, b.second);
+    if (a.first.defined() && b.first.defined()) min = new Min(a.first, b.first);
+    return make_pair(min, max);
 }
 
 vector<pair<Expr, Expr> > region_union(const vector<pair<Expr, Expr> > &a, 
@@ -404,6 +411,14 @@ vector<pair<Expr, Expr> > compute_region(string func, Stmt s, const Scope<pair<E
     s.accept(&r);
     // Convert from (min, max) to min, (extent)
     for (size_t i = 0; i < r.region.size(); i++) {
+        if (!r.region[i].first.defined()) {
+            std::cerr << "Usage of " << func << " is unbounded below in the following statement: " << s << std::endl;
+            assert(false);
+        }
+        if (!r.region[i].second.defined()) {
+            std::cerr << "Usage of " << func << " is unbounded above in the following statement: " << s << std::endl;
+            assert(false);
+        }
         // the max is likely to be of the form foo-1
         r.region[i].first = simplify(r.region[i].first);
         r.region[i].second = simplify((r.region[i].second + 1) - r.region[i].first);
@@ -462,6 +477,7 @@ void bounds_test() {
     check(scope, 11/(x+1), 1, 11);
     check(scope, new Load(Int(8), "buf", x, Buffer(), Parameter()), -128, 127);
     check(scope, y + (new Let("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
+    check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
 
     vector<Expr> input_site_1 = vec(2*x);
     vector<Expr> input_site_2 = vec(2*x+1);

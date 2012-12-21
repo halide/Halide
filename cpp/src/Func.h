@@ -57,6 +57,9 @@ class Func {
     Internal::Function func;
     void set_dim_type(Var var, For::ForType t);
 
+    void add_implicit_vars(vector<Var> &);
+    void add_implicit_vars(vector<Expr> &);
+
     // Save this state when we jit, so that we can run the function again cheaply
     void (*function_ptr)(const void **);
     vector<const void *> arg_values;
@@ -76,11 +79,15 @@ public:
 
     void compile_to_bitcode(const string &filename, std::vector<Internal::Argument>);
     void compile_to_object(const string &filename, std::vector<Internal::Argument>);
+    void compile_to_header(const string &filename, std::vector<Internal::Argument>);
     void compile_to_assembly(const string &filename, std::vector<Internal::Argument>);    
 
     const string &name() const;
     Expr value() const;
 
+    int dimensions() const;
+
+    FuncRefVar operator()();
     FuncRefVar operator()(Var x);
     FuncRefVar operator()(Var x, Var y);
     FuncRefVar operator()(Var x, Var y, Var z);
@@ -109,6 +116,13 @@ public:
     Func &reorder(Var x, Var y, Var z, Var w, Var t);
 
     Stmt lower();
+
+    operator Expr() {
+        return (*this)();
+    }
+    void operator=(Expr e) {
+        (*this)() = e;
+    }
 };
 }
 
