@@ -25,18 +25,18 @@ using std::vector;
 pair<Expr, Expr> bounds_of_expr_in_scope(Expr expr, const Scope<pair<Expr, Expr> > &scope);    
 
 /* Compute a rectangular domain large enough to cover all the 'Call's
- * to a function that occur within a given statement. This is useful
+ * to each function that occur within a given statement. This is useful
  * for figuring out what regions of things to evaluate. */
-vector<pair<Expr, Expr> > region_required(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
+map<string, vector<pair<Expr, Expr> > > regions_required(Stmt s, const Scope<pair<Expr, Expr> > &scope);
 
 /* Compute a rectangular domain large enough to cover all the
  * 'Provide's to a function the occur within a given statement. This
  * is useful for figuring out what region of a function a scattering
  * reduction (e.g. a histogram) might touch. */
-vector<pair<Expr, Expr> > region_provided(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
+map<string, vector<pair<Expr, Expr> > > regions_provided(Stmt s, const Scope<pair<Expr, Expr> > &scope);
 
 /* Compute the union of the above two */
-vector<pair<Expr, Expr> > region_touched(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope);
+map<string, vector<pair<Expr, Expr> > > regions_touched(Stmt s, const Scope<pair<Expr, Expr> > &scope);
 
 /* Compute the smallest bounding box that contains two regions */
 vector<pair<Expr, Expr> > region_union(const vector<pair<Expr, Expr> > &, const vector<pair<Expr, Expr> > &);

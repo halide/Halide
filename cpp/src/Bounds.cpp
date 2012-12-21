@@ -91,24 +91,38 @@ private:
     }
 
     void visit(const Mul *op) {
-        op->a.accept(this);
-        Expr min_a = min, max_a = max;
-        if (!min.defined() || !max.defined()) {
-            min = Expr(); max = Expr(); return;
+        // Special-case optimizations to generate less work for the constant-folder
+        if (is_const(op->a)) {
+            op->b.accept(this);
+            if (is_negative_const(op->a)) std::swap(min, max);
+            if (min.defined()) min *= op->a;
+            if (max.defined()) max *= op->a;
+        } else if (is_const(op->b)) {
+            op->a.accept(this);
+            if (is_negative_const(op->b)) std::swap(min, max);
+            if (min.defined()) min *= op->b;
+            if (max.defined()) max *= op->b;            
+        } else {
+
+            op->a.accept(this);
+            Expr min_a = min, max_a = max;
+            if (!min.defined() || !max.defined()) {
+                min = Expr(); max = Expr(); return;
+            }
+            
+            op->b.accept(this);
+            if (!min.defined() || !max.defined()) {
+                min = Expr(); max = Expr(); return;
+            }
+            
+            Expr a = min_a * min;
+            Expr b = min_a * max;
+            Expr c = max_a * min;
+            Expr d = max_a * max;
+            
+            min = new Min(new Min(a, b), new Min(c, d));
+            max = new Max(new Max(a, b), new Max(c, d));
         }
-
-        op->b.accept(this);
-        if (!min.defined() || !max.defined()) {
-            min = Expr(); max = Expr(); return;
-        }
-
-        Expr a = min_a * min;
-        Expr b = min_a * max;
-        Expr c = max_a * min;
-        Expr d = max_a * max;
-
-        min = new Min(new Min(a, b), new Min(c, d));
-        max = new Max(new Max(a, b), new Max(c, d));
     }
 
     void visit(const Div *op) {
@@ -118,31 +132,36 @@ private:
             min = Expr(); max = Expr(); return;
         }
 
-        Expr min_a = min, max_a = max;
-        op->b.accept(this);
+        if (is_const(op->b)) {
+            if (is_negative_const(op->b)) std::swap(min, max);                
+            if (min.defined()) min /= op->b;
+            if (max.defined()) max /= op->b;
+        } else {
 
-        // if we can't statically prove that the divisor can't span zero, then we're unbounded
-        Expr min_is_positive = simplify(min > make_zero(min.type()));
-        Expr max_is_negative = simplify(max < make_zero(max.type()));
-        if (!equal(min_is_positive, const_true()) && !equal(max_is_negative, const_true())) {
-            min = Expr();
-            max = Expr();
-            return;
+            Expr min_a = min, max_a = max;
+            op->b.accept(this);
+            
+            // if we can't statically prove that the divisor can't span zero, then we're unbounded
+            Expr min_is_positive = simplify(min > make_zero(min.type()));
+            Expr max_is_negative = simplify(max < make_zero(max.type()));
+            if (!equal(min_is_positive, const_true()) && !equal(max_is_negative, const_true())) {
+                min = Expr();
+                max = Expr();
+                return;
+            }
+            
+            if (!min.defined() || !max.defined()) {
+                min = Expr(); max = Expr(); return;
+            }
+                                    
+            Expr a = min_a / min;
+            Expr b = min_a / max;
+            Expr c = max_a / min;
+            Expr d = max_a / max;
+            
+            min = new Min(new Min(a, b), new Min(c, d));
+            max = new Max(new Max(a, b), new Max(c, d));
         }
-
-        if (!min.defined() || !max.defined()) {
-            min = Expr(); max = Expr(); return;
-        }
-
-        
-
-        Expr a = min_a / min;
-        Expr b = min_a / max;
-        Expr c = max_a / min;
-        Expr d = max_a / max;
-
-        min = new Min(new Min(a, b), new Min(c, d));
-        max = new Max(new Max(a, b), new Max(c, d));
     }
 
     void visit(const Mod *op) {
@@ -336,9 +355,8 @@ vector<pair<Expr, Expr> > region_union(const vector<pair<Expr, Expr> > &a,
 
 class RegionTouched : public IRVisitor {
 public:
-    string func;
     Scope<pair<Expr, Expr> > scope;
-    vector<pair<Expr, Expr> > region; // Min, Max per dimension
+    map<string, vector<pair<Expr, Expr> > > regions; // Min, Max per dimension
     bool consider_calls;
     bool consider_provides;
 private:
@@ -374,7 +392,8 @@ private:
 
     void visit(const Call *op) {        
         IRVisitor::visit(op);
-        if (op->name == func && consider_calls) {
+        if (consider_calls) {
+            vector<pair<Expr, Expr> > &region = regions[op->name];
             for (size_t i = 0; i < op->args.size(); i++) {
                 pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
                 if (region.size() > i) {
@@ -388,7 +407,8 @@ private:
 
     void visit(const Provide *op) {        
         IRVisitor::visit(op);
-        if (op->buffer == func && consider_provides) {
+        if (consider_provides) {
+            vector<pair<Expr, Expr> > &region = regions[op->buffer];
             for (size_t i = 0; i < op->args.size(); i++) {
                 pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
                 if (region.size() > i) {
@@ -401,42 +421,43 @@ private:
     }
 };
 
-vector<pair<Expr, Expr> > compute_region(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope, 
-                                         bool consider_calls, bool consider_provides) {
+map<string, vector<pair<Expr, Expr> > > compute_regions_touched(Stmt s, const Scope<pair<Expr, Expr> > &scope, 
+                                                                bool consider_calls, bool consider_provides) {
     RegionTouched r;
     r.consider_calls = consider_calls;
     r.consider_provides = consider_provides;
-    r.func = func;
     r.scope = scope;
     s.accept(&r);
     // Convert from (min, max) to min, (extent)
-    for (size_t i = 0; i < r.region.size(); i++) {
-        if (!r.region[i].first.defined()) {
-            std::cerr << "Usage of " << func << " is unbounded below in the following statement: " << s << std::endl;
-            assert(false);
+    for (map<string, vector<pair<Expr, Expr> > >::iterator iter = r.regions.begin(); 
+         iter != r.regions.end(); iter++) {
+        for (size_t i = 0; i < iter->second.size(); i++) {
+            if (!iter->second[i].first.defined()) {
+                std::cerr << "Usage of " << iter->first << " is unbounded below in the following statement: " << s << std::endl;
+                assert(false);
+            }
+            if (!iter->second[i].second.defined()) {
+                std::cerr << "Usage of " << iter->first << " is unbounded above in the following statement: " << s << std::endl;
+                assert(false);
+            }
+            // the max is likely to be of the form foo-1
+            iter->second[i].first = simplify(iter->second[i].first);
+            iter->second[i].second = simplify((iter->second[i].second + 1) - iter->second[i].first);
         }
-        if (!r.region[i].second.defined()) {
-            std::cerr << "Usage of " << func << " is unbounded above in the following statement: " << s << std::endl;
-            assert(false);
-        }
-        // the max is likely to be of the form foo-1
-        r.region[i].first = simplify(r.region[i].first);
-        r.region[i].second = simplify((r.region[i].second + 1) - r.region[i].first);
-
     }
-    return r.region;
+    return r.regions;
 }
 
-vector<pair<Expr, Expr> > region_provided(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
-    return compute_region(func, s, scope, false, true);
+map<string, vector<pair<Expr, Expr> > > regions_provided(Stmt s, const Scope<pair<Expr, Expr> > &scope) {
+    return compute_regions_touched(s, scope, false, true);
 }
 
-vector<pair<Expr, Expr> > region_required(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
-    return compute_region(func, s, scope, true, false);
+map<string, vector<pair<Expr, Expr> > > regions_required(Stmt s, const Scope<pair<Expr, Expr> > &scope) {
+    return compute_regions_touched(s, scope, true, false);
 }
 
-vector<pair<Expr, Expr> > region_touched(string func, Stmt s, const Scope<pair<Expr, Expr> > &scope) {
-    return compute_region(func, s, scope, true, true);
+map<string, vector<pair<Expr, Expr> > > regions_touched(Stmt s, const Scope<pair<Expr, Expr> > &scope) {
+    return compute_regions_touched(s, scope, true, true);
 }
 
 
@@ -490,22 +511,19 @@ void bounds_test() {
                                         new Call(Int(32), "input", input_site_2)),
                                     output_site));
 
-    vector<pair<Expr, Expr> > r;
-    r = region_required("output", loop, scope);
-    assert(r.empty());
-    r = region_required("pants", loop, scope);
-    assert(r.empty());
-    r = region_required("input", loop, scope);
-    assert(equal(r[0].first, 6));
-    assert(equal(r[0].second, 20));
-    r = region_provided("output", loop, scope);
-    assert(equal(r[0].first, 4));
-    assert(equal(r[0].second, 10));
+    map<string, vector<pair<Expr, Expr> > > r;
+    r = regions_required(loop, scope);
+    assert(r.find("output") == r.end());
+    assert(equal(r["input"][0].first, 6));
+    assert(equal(r["input"][0].second, 20));
+    r = regions_provided(loop, scope);
+    assert(equal(r["output"][0].first, 4));
+    assert(equal(r["output"][0].second, 10));
 
     vector<pair<Expr, Expr> > r2 = vec(make_pair(Expr(5), Expr(15)));
-    r = region_union(r, r2);
-    assert(equal(r[0].first, 4));
-    assert(equal(r[0].second, 16));
+    r2 = region_union(r["output"], r2);
+    assert(equal(r2[0].first, 4));
+    assert(equal(r2[0].second, 16));
 
     std::cout << "Bounds test passed" << std::endl;
 }
