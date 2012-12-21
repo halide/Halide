@@ -125,13 +125,20 @@ int main(int argc, char **argv) {
 
     std::vector<Internal::Argument> args;
     Internal::Argument arg;
-    arg = {levels.name(), false, levels.type()};
+    arg.name = levels.name();
+    arg.is_buffer = false;
+    arg.type = levels.type();
     args.push_back(arg);
-    arg = {alpha.name(), false, alpha.type()};
+    arg.name = alpha.name();
+    arg.is_buffer = false;
+    arg.type = alpha.type();
     args.push_back(arg);
-    arg = {beta.name(), false, beta.type()};
+    arg.name = beta.name();
+    arg.is_buffer = false;
+    arg.type = beta.type();
     args.push_back(arg);
-    arg = {input.name(), true, Int(1)};
+    arg.name = input.name();
+    arg.is_buffer = true;
     args.push_back(arg);
     output.compile_to_object("local_laplacian.o", args);
     output.compile_to_header("local_laplacian.h", args);
