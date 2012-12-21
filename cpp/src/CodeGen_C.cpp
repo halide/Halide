@@ -47,7 +47,43 @@ void CodeGen_C::print_c_name(const string &name) {
     }
 }
 
-void CodeGen_C::compile(Stmt s, string name, const vector<Argument> &args) {
+void CodeGen_C::compile_header(const string &name, const vector<Argument> &args) {
+    stream << "#ifndef HALIDE_" << name << endl
+           << "#define HALIDE_" << name << endl;
+
+    // Throw in a definition of a buffer_t
+    stream << "#ifndef BUFFER_T_DEFINED" << endl
+           << "#define BUFFER_T_DEFINED" << endl
+           << "#include <stdint.h>" << endl
+           << "typedef struct buffer_t {" << endl
+           << "    uint8_t* host;" << endl
+           << "    uint64_t dev;" << endl
+           << "    bool host_dirty;" << endl
+           << "    bool dev_dirty;" << endl
+           << "    int32_t extent[4];" << endl
+           << "    int32_t stride[4];" << endl
+           << "    int32_t min[4];" << endl
+           << "    int32_t elem_size;" << endl
+           << "} buffer_t;" << endl
+           << "#endif" << endl;
+
+    // Now the function prototype
+    stream << "extern \"C\" void " << name << "(";
+    for (size_t i = 0; i < args.size(); i++) {
+        if (i > 0) stream << ", ";
+        if (args[i].is_buffer) {
+            stream << "const buffer_t *" << args[i].name;
+        } else {
+            print_c_type(args[i].type);
+            stream << " " << args[i].name;
+        }
+    }
+    stream << ");" << endl;
+
+    stream << "#endif" << endl;    
+}
+
+void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args) {
     stream << "#include <iostream>" << endl;
     stream << "#include <assert.h>" << endl;
     stream << "#include \"buffer_t.h\"" << endl;

@@ -5,6 +5,7 @@
 #include "IROperator.h"
 #include "Util.h"
 #include "Log.h"
+#include "CodeGen_C.h"
 #include "Function.h"
 #include <llvm/ExecutionEngine/JIT.h>
 #include <llvm/Support/TargetSelect.h>
@@ -100,6 +101,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
         }
     }
 
+    log(1) << "Generating llvm bitcode...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
     stmt.accept(this);
@@ -141,6 +143,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
     // Finally, verify the module is ok
     verifyModule(*module);
+    log(2) << "Done generating llvm bitcode\n";
 }
 
 ExecutionEngine *CodeGen::execution_engine = NULL;
@@ -150,6 +153,8 @@ void *CodeGen::compile_to_function_pointer(bool wrapped) {
                
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
+
+    log(1) << "JIT compiling...\n";
 
     // Create the execution engine if it hasn't already been done
     if (!execution_engine) {
@@ -194,15 +199,17 @@ void *CodeGen::compile_to_function_pointer(bool wrapped) {
 }
 
 void CodeGen::compile_to_bitcode(const string &filename) {
-    assert(module && "No module defined. Must call compile before calling compile_to_file");        
+    assert(module && "No module defined. Must call compile before calling compile_to_bitcode");        
     string error_string;
     raw_fd_ostream out(filename.c_str(), error_string);
     WriteBitcodeToFile(module, out);
 }
 
 void CodeGen::compile_to_native(const string &filename, bool assembly) {
+    assert(module && "No module defined. Must call compile before calling compile_to_native");
     // Get the target specific parser.
     string error_string;
+    log(1) << "Compiling to native code...\n";
     // cout << module->getTargetTriple() << endl;
     const Target *target = TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
     if (!target) cout << error_string << endl;
@@ -243,6 +250,10 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
 
     // Figure out where we are going to send the output.
     raw_fd_ostream raw_out(filename.c_str(), error_string);
+    if (!error_string.empty()) {
+        std::cerr << "Error opening output " << filename << ": " << error_string << std::endl;
+        assert(false);
+    }
     formatted_raw_ostream out(raw_out);
 
     // Build up all of the passes that we want to do to the module.
@@ -451,6 +462,16 @@ void CodeGen::visit(const Variable *op) {
     // look in the symbol table
     if (!symbol_table.contains(op->name)) {
         std::cerr << "Symbol not found: " << op->name << std::endl;
+
+        if (log::debug_level > 0) {
+            std::cerr << "The following names are in scope:\n";
+            const map<string, stack<pair<Value *, int> > > &table = symbol_table.get_table();
+            map<string, stack<pair<Value *, int> > >::const_iterator iter;
+            for (iter = table.begin(); iter != table.end(); iter++) {
+                std::cerr << iter->first << "\n";
+            }
+        }
+
         assert(false);
     }
     value = symbol_table.get(op->name);
@@ -522,12 +543,17 @@ void CodeGen::visit(const Mod *op) {
 }
 
 void CodeGen::visit(const Min *op) {
-    // Min and max should probably be overridden in an architecture-specific way
-    value = codegen(new Select(op->a < op->b, op->a, op->b));
+    Expr a = new Variable(op->a.type(), "a");
+    Expr b = new Variable(op->a.type(), "b");
+    Expr equiv = new Let("a", op->a, new Let("b", op->b, new Select(a < b, a, b)));
+    value = codegen(equiv);
 }
 
 void CodeGen::visit(const Max *op) {
-    value = codegen(new Select(op->a > op->b, op->a, op->b));
+    Expr a = new Variable(op->a.type(), "a");
+    Expr b = new Variable(op->a.type(), "b");
+    Expr equiv = new Let("a", op->a, new Let("b", op->b, new Select(a > b, a, b)));
+    value = codegen(equiv);
 }
 
 void CodeGen::visit(const EQ *op) {
@@ -856,12 +882,14 @@ private:
     CodeGen *gen;
 
     void visit(const Let *op) {
+        op->value.accept(this);
         ignore.push(op->name, 0);
         op->body.accept(this);
         ignore.pop(op->name);
     }
 
     void visit(const LetStmt *op) {
+        op->value.accept(this);
         ignore.push(op->name, 0);
         op->body.accept(this);
         ignore.pop(op->name);
@@ -878,7 +906,10 @@ private:
     void visit(const Load *op) {
         op->index.accept(this);
         if (!ignore.contains(op->buffer)) {
+            log(3) << "Adding " << op->buffer << " to closure\n";
             result[op->buffer + ".host"] = gen->llvm_type_of(op->type)->getPointerTo();
+        } else {
+            log(3) << "Not adding " << op->buffer << " to closure\n";
         }
     }
 
@@ -886,7 +917,10 @@ private:
         op->index.accept(this);
         op->value.accept(this);
         if (!ignore.contains(op->buffer)) {
+            log(3) << "Adding " << op->buffer << " to closure\n";
             result[op->buffer + ".host"] = gen->llvm_type_of(op->value.type())->getPointerTo();
+        } else {
+            log(3) << "Not adding " << op->buffer << " to closure\n";
         }
     }
 
@@ -899,10 +933,9 @@ private:
 
     void visit(const Variable *op) {            
         if (ignore.contains(op->name)) {
-            //cout << "Ignoring reference to: " << op->name << endl;
+            log(3) << "Not adding " << op->name << " to closure\n";
         } else {
             log(3) << "Adding " << op->name << " to closure\n";
-            //cout << "Putting var in closure: " << op->name << endl;
             result[op->name] = gen->llvm_type_of(op->type);
         }
     }
@@ -996,6 +1029,8 @@ void CodeGen::visit(const For *op) {
         symbol_table.pop(op->name);
     } else if (op->for_type == For::Parallel) {
 
+        log(3) << "Entering parallel for loop over " << op->name << "\n";
+
         // Find every symbol that the body of this loop refers to
         // and dump it into a closure
         Closure closure(op->body, this, op->name);
@@ -1045,6 +1080,8 @@ void CodeGen::visit(const For *op) {
         ptr = builder.CreatePointerCast(ptr, i8->getPointerTo());
         vector<Value *> args = vec((Value *)function, min, extent, ptr);
         builder.CreateCall(do_par_for, args);
+
+        log(3) << "Leaving parallel for loop over " << op->name << "\n";
 
         // Now restore the scope
         std::swap(symbol_table, saved_symbol_table);

@@ -75,7 +75,7 @@ public:
         return contents.ptr->schedule;
     }   
 
-    bool defined() {
+    bool defined() const {
         return contents.defined();
     }
 

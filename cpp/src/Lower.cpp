@@ -798,10 +798,10 @@ Stmt lower(Function f) {
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
         if (f.schedule().compute_level.empty()) {
-            log(2) << "Inlining " << order[i-1] << '\n';
+            log(1) << "Inlining " << order[i-1] << '\n';
             s = InlineFunction(f).mutate(s);
         } else {
-            log(2) << "Injecting realization of " << order[i-1] << '\n';
+            log(1) << "Injecting realization of " << order[i-1] << '\n';
             InjectRealization injector(f);
             s = injector.mutate(s);
             assert(injector.found_store_level && injector.found_compute_level);
@@ -811,14 +811,13 @@ Stmt lower(Function f) {
 
     log(2) << "All realizations injected:\n" << s << '\n';
 
+    log(1) << "Injecting tracing...\n";
     s = InjectTracing().mutate(s);
-
     log(2) << "Tracing injected:\n" << s << '\n';
 
     // Do bounds inference
+    log(1) << "Performing bounds inference...\n";
     s = BoundsInference(order, env).mutate(s);
-
-    log(2) << "Bounds inference: " << '\n' << s << '\n';
 
     // For the output function, the bounds required is the size of the buffer
     for (size_t i = 0; i < f.args().size(); i++) {
@@ -830,12 +829,11 @@ Stmt lower(Function f) {
         s = new LetStmt(f.name() + "." + f.args()[i] + ".min", buf_min, s);
         s = new LetStmt(f.name() + "." + f.args()[i] + ".extent", buf_extent, s);
     }
-
-    log(2) << "Bounds of output buffer: " << '\n' << s << "\n\n";
+    log(2) << "Bounds inference: " << '\n' << s << '\n';
 
     // Flatten everything to single-dimensional
+    log(1) << "Performing storage flattening...\n";
     s = FlattenDimensions().mutate(s);
-
     log(2) << "Storage flattening: " << '\n' << s << "\n\n";
 
     // Assert that the strides on dimension zero of the input and output buffers are one
@@ -853,29 +851,25 @@ Stmt lower(Function f) {
     log(2) << "Set buffer stride 0 to 1: \n" << s << "\n\n";
 
     // A constant folding pass
-    s = simplify(s);
 
+    log(1) << "Simplifying...\n";
+    s = simplify(s);
     log(2) << "Simplified: \n" << s << "\n\n";
 
     // Vectorize loops marked for vectorization
-    s = VectorizeLoops().mutate(s);
 
+    log(1) << "Vectorizing...\n";
+    s = VectorizeLoops().mutate(s);
     log(2) << "Vectorized: \n" << s << "\n\n";
 
     // Unroll loops marked for unrolling
+    log(1) << "Unrolling...\n";
     s = UnrollLoops().mutate(s);
-
     log(2) << "Unrolled: \n" << s << "\n\n";
 
-    for (size_t i = 0; i < 2; i++) {
-        // Another constant folding pass
-        s = simplify(s);
-        log(2) << "Simplified: \n" << s << "\n\n";
-        
-        // Removed useless Let and LetStmt nodes
-        //s = RemoveDeadLets().mutate(s);
-        //log(2) << "Remove dead lets: \n" << s << "\n\n";
-    }
+    // Another constant folding pass
+    log(1) << "Simplifying...\n";
+    s = simplify(s);
 
     log(1) << "Lowered statement: \n" << s << "\n\n";
 

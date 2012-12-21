@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     float eps = 0.01f;
     color(x, y, c) = outGPyramid[0](x, y) * (clamped(x, y, c)+eps) / (gray(x, y)+eps);
         
-    Func output;
+    Func output("local_laplacian");
     // Convert back to 16-bit
     output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
 
@@ -133,8 +133,8 @@ int main(int argc, char **argv) {
     args.push_back(arg);
     arg = {input.name(), true, Int(1)};
     args.push_back(arg);
-    output.compile_to_object("local_laplacian", args);
-
+    output.compile_to_object("local_laplacian.o", args);
+    output.compile_to_header("local_laplacian.h", args);
 
     return 0;
 }

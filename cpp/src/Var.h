@@ -4,6 +4,7 @@
 #include <string>
 #include "Util.h"
 #include "IR.h"
+#include <sstream>
 
 namespace Halide {
     using std::string;
@@ -16,6 +17,12 @@ namespace Halide {
         const string &name() const {return _name;}
         bool operator==(const Var &other) {return _name == other._name;}
         bool operator!=(const Var &other) {return _name != other._name;}
+
+        static Var implicit(int n) {
+            std::ostringstream str;
+            str << "iv." << n;
+            return Var(str.str());
+        }
 
         operator Expr() {
             return new Variable(Int(32), name());

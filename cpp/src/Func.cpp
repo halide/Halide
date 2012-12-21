@@ -7,6 +7,7 @@
 #include "Argument.h"
 #include "Lower.h"
 #include "CodeGen_X86.h"
+#include "CodeGen_C.h"
 #include "Image.h"
 #include "Param.h"
 #include "Log.h"
@@ -50,38 +51,82 @@ Expr Func::value() const {
     return func.value();
 }
 
+int Func::dimensions() const {
+    if (!func.defined()) return 0;
+    return (int)func.args().size();
+}
+
+FuncRefVar Func::operator()() {
+    // Bulk up the argument list using implicit vars
+    vector<Var> args;
+    add_implicit_vars(args);
+    return FuncRefVar(func, args);
+}
+
 FuncRefVar Func::operator()(Var x) {
-    return FuncRefVar(func, vec(x));
+    // Bulk up the argument list using implicit vars
+    vector<Var> args = vec(x);
+    add_implicit_vars(args);
+    return FuncRefVar(func, args);
 }
 
 FuncRefVar Func::operator()(Var x, Var y) {
-    return FuncRefVar(func, vec(x, y));
+    vector<Var> args = vec(x, y);
+    add_implicit_vars(args);
+    return FuncRefVar(func, args);
 }
 
 FuncRefVar Func::operator()(Var x, Var y, Var z) {
-    return FuncRefVar(func, vec(x, y, z));
+    vector<Var> args = vec(x, y, z);
+    add_implicit_vars(args);
+    return FuncRefVar(func, args);
 }
 
 FuncRefVar Func::operator()(Var x, Var y, Var z, Var w) {
-    return FuncRefVar(func, vec(x, y, z, w));
+    vector<Var> args = vec(x, y, z, w);
+    add_implicit_vars(args);
+    return FuncRefVar(func, args);
 }
  
 FuncRefExpr Func::operator()(Expr x) {
-    return FuncRefExpr(func, vec(x));
+    vector<Expr> args = vec(x);
+    add_implicit_vars(args);
+    return FuncRefExpr(func, args);
 }
 
 FuncRefExpr Func::operator()(Expr x, Expr y) {
-    return FuncRefExpr(func, vec(x, y));
+    vector<Expr> args = vec(x, y);
+    add_implicit_vars(args);
+    return FuncRefExpr(func, args);
 }
 
 FuncRefExpr Func::operator()(Expr x, Expr y, Expr z) {
-    return FuncRefExpr(func, vec(x, y, z));
+    vector<Expr> args = vec(x, y, z);
+    add_implicit_vars(args);
+    return FuncRefExpr(func, args);
 }
 
 FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) {
-    return FuncRefExpr(func, vec(x, y, z, w));
+    vector<Expr> args = vec(x, y, z, w);
+    add_implicit_vars(args);
+    return FuncRefExpr(func, args);
 }  
 
+void Func::add_implicit_vars(vector<Var> &args) {
+    int i = 0;    
+    while ((int)args.size() < dimensions()) {        
+        Internal::log(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+        args.push_back(Var::implicit(i++));
+    }
+}
+    
+void Func::add_implicit_vars(vector<Expr> &args) {
+    int i = 0;
+    while ((int)args.size() < dimensions()) {
+        Internal::log(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+        args.push_back(Var::implicit(i++));
+    }
+}
 
 Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
     // Replace the old dimension with the new dimensions in the dims list
@@ -219,8 +264,31 @@ FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a) : func(f) {
     }
 }           
     
+namespace {
+class CountImplicitVars : public Internal::IRVisitor {
+public:
+    int count;
+    CountImplicitVars(Expr e) : count(0) {
+        e.accept(this);
+    }
+    void visit(const Variable *v) {
+        if (v->name.size() > 3 && v->name.substr(0, 3) == "iv.") {
+            int n = atoi(v->name.c_str()+3);
+            if (n >= count) count = n+1;
+        }
+    }    
+};
+}
+
 void FuncRefVar::operator=(Expr e) {            
-    func.define(args, e);
+    // Find implicit args in the expr and add them to the args list before calling define
+    vector<string> a = args;
+    CountImplicitVars f(e);
+    Internal::log(2) << "Adding " << f.count << " implicit vars to LHS of " << func.name() << "\n";
+    for (int i = 0; i < f.count; i++) {
+        a.push_back(Var::implicit(i).name());
+    }
+    func.define(a, e);
 }
     
 FuncRefVar::operator Expr() const {
@@ -281,6 +349,15 @@ void Func::compile_to_object(const string &filename, std::vector<Argument> args)
     CodeGen_X86 cg;
     cg.compile(stmt, name(), args);
     cg.compile_to_native(filename, false);
+}
+
+void Func::compile_to_header(const string &filename, std::vector<Argument> args) {
+    Argument me = {name(), true, Int(1)};
+    args.push_back(me);
+
+    std::ofstream header(filename.c_str());
+    CodeGen_C cg(header);
+    cg.compile_header(name(), args);
 }
 
 void Func::compile_to_assembly(const string &filename, std::vector<Argument> args) {

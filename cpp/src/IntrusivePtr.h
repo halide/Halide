@@ -59,10 +59,12 @@ public:
         incref();
     }
 
-    IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {
-        decref();
-        ptr = other.ptr;
-        incref();
+    IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {        
+        if (ptr != other.ptr) {
+            decref();
+            ptr = other.ptr;
+            incref();
+        }
         return *this;
     }
 

@@ -22,13 +22,16 @@ namespace Halide {
         public:
             CodeGen_C(std::ostream &);
             
-            void compile(Stmt stmt, string name, const vector<Argument> &args);
-            
+            void compile(Stmt stmt, const string &name, const vector<Argument> &args);
+            void compile_header(const string &name, const vector<Argument> &args);
+
             static void test();
+
         protected:
             
-            void print_c_name(const string &);
+            // This is public so that CodeGen can use it too (for generating header files)
             void print_c_type(Type);
+            void print_c_name(const string &);
             
             void visit(const Variable *);
             void visit(const Cast *);
