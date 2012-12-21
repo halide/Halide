@@ -164,13 +164,10 @@ public:
 
     virtual void visit(const For *for_loop) {
         
-        vector<vector<pair<Expr, Expr> > > regions;
         Scope<pair<Expr, Expr> > scope;
 
         // Compute the region required of each function within this loop body
-        for (size_t i = 0; i < funcs.size(); i++) {
-            regions.push_back(region_required(funcs[i], for_loop->body, scope));
-        }
+        map<string, vector<pair<Expr, Expr> > > regions = regions_required(for_loop->body, scope);
         
         // TODO: For reductions we also need to consider the region
         // provided within any update statements over this function
@@ -183,7 +180,7 @@ public:
 
         // Inject let statements defining those bounds
         for (size_t i = 0; i < funcs.size(); i++) {
-            const vector<pair<Expr, Expr> > &region = regions[i];
+            const vector<pair<Expr, Expr> > &region = regions[funcs[i]];
             const Function &f = env.find(funcs[i])->second;
             if (region.empty()) continue;
             log(3) << "Injecting bounds for " << funcs[i] << '\n';
@@ -252,7 +249,8 @@ public:
             */
 
             Scope<pair<Expr, Expr> > scope;
-            vector<pair<Expr, Expr> > bounds = region_provided(func.name(), body, scope);
+            map<string, vector<pair<Expr, Expr> > > regions = regions_provided(body, scope);            
+            vector<pair<Expr, Expr> > bounds = regions[func.name()];
 
             // Change the body of the for loop to do an allocation
             body = new Realize(func.name(), func.value().type(), bounds, body);
