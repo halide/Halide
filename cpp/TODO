@@ -13,3 +13,5 @@ visit the bounds of the reduction domain
 name. Should be replaced with prefixing.
 
 Add front-end version of Internal::Argument (call it Arg)
+
+Consider bounds written to in update step of reduction

@@ -225,6 +225,13 @@ Func &Func::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Exp
     return *this;
 }
 
+Func &Func::tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+    split(x, x, xi, xfactor);
+    split(y, y, yi, yfactor);
+    reorder(xi, yi, x, y);
+    return *this;
+}
+
 Func &Func::reorder(Var x, Var y) {
     vector<Schedule::Dim> &dims = func.schedule().dims;
     bool found_y = false;
@@ -280,17 +287,47 @@ public:
 };
 }
 
-void FuncRefVar::operator=(Expr e) {            
-    // Find implicit args in the expr and add them to the args list before calling define
-    vector<string> a = args;
+void FuncRefVar::add_implicit_vars(vector<string> &a, Expr e) {
     CountImplicitVars count(e);
     Internal::log(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
     for (int i = 0; i < count.count; i++) {
         a.push_back(Var::implicit(i).name());
+    }    
+}
+
+void FuncRefVar::operator=(Expr e) {            
+    // If the function has already been defined, this must actually be a reduction
+    if (func.value().defined()) {
+        FuncRefExpr(func, args) = e;
+        return;
     }
+
+    // Find implicit args in the expr and add them to the args list before calling define
+    vector<string> a = args;
+    add_implicit_vars(a, e);
     func.define(a, e);
 }
     
+void FuncRefVar::operator+=(Expr e) {
+    // This is actually a reduction
+    FuncRefExpr(func, args) += e;
+}
+
+void FuncRefVar::operator*=(Expr e) {
+    // This is actually a reduction
+    FuncRefExpr(func, args) *= e;
+}
+
+void FuncRefVar::operator-=(Expr e) {
+    // This is actually a reduction
+    FuncRefExpr(func, args) -= e;
+}
+
+void FuncRefVar::operator/=(Expr e) {
+    // This is actually a reduction
+    FuncRefExpr(func, args) /= e;
+}
+
 FuncRefVar::operator Expr() const {
     assert(func.value().defined() && "Can't call function with undefined value");
     vector<Expr> expr_args(args.size());
@@ -299,16 +336,20 @@ FuncRefVar::operator Expr() const {
     }
     return new Call(func, expr_args);
 }
-    
+
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
     assert(f.defined() && "Can't construct reference to undefined Func");
 }
-    
-void FuncRefExpr::operator=(Expr e) {
-    assert(func.defined() && func.value().defined() && 
-           "Can't add a reduction definition to an undefined function");
 
-    vector<Expr> a = args;
+FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a) : func(f) {
+    assert(f.defined() && "Can't construct reference to undefined Func");
+    args.resize(a.size());
+    for (size_t i = 0; i < a.size(); i++) {
+        args[i] = Var(a[i]);
+    }
+}
+    
+void FuncRefExpr::add_implicit_vars(vector<Expr> &a, Expr e) {
     CountImplicitVars f(e);
     // Implicit vars are also allowed in the lhs of a reduction. E.g.:
     // f(x, y) = x+y
@@ -322,7 +363,60 @@ void FuncRefExpr::operator=(Expr e) {
     for (int i = 0; i < f.count; i++) {
         a.push_back(Var::implicit(i));
     }
+}
+
+void FuncRefExpr::operator=(Expr e) {
+    assert(func.defined() && func.value().defined() && 
+           "Can't add a reduction definition to an undefined function");
+    
+    vector<Expr> a = args;
+    add_implicit_vars(a, e);
+
     func.define_reduction(args, e);
+}
+
+// Inject a suitable base-case definition given a reduction
+// definition. This is a helper for FuncRefExpr::operator+= and co.
+void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
+    if (func.value().defined()) return;
+    vector<Var> pure_args(a.size());
+
+    // Reuse names of existing pure args
+    for (size_t i = 0; i < a.size(); i++) {
+        if (const Variable *v = a[i].as<Variable>()) {
+            if (!v->param.defined()) pure_args[i] = Var(v->name);
+        }
+    }    
+
+    FuncRefVar(func, pure_args) = e;
+}
+
+void FuncRefExpr::operator+=(Expr e) {
+    vector<Expr> a = args;
+    add_implicit_vars(a, e);
+    define_base_case(func, a, cast(e.type(), 0));
+    (*this) = Expr(*this) + e;
+}
+
+void FuncRefExpr::operator*=(Expr e) {
+    vector<Expr> a = args;
+    add_implicit_vars(a, e);
+    define_base_case(func, a, cast(e.type(), 1));
+    (*this) = Expr(*this) * e;
+}
+
+void FuncRefExpr::operator-=(Expr e) {
+    vector<Expr> a = args;
+    add_implicit_vars(a, e);
+    define_base_case(func, a, cast(e.type(), 0));
+    (*this) = Expr(*this) - e;
+}
+
+void FuncRefExpr::operator/=(Expr e) {
+    vector<Expr> a = args;
+    add_implicit_vars(a, e);
+    define_base_case(func, a, cast(e.type(), 1));
+    (*this) = Expr(*this) / e;
 }
 
 FuncRefExpr::operator Expr() const {

@@ -302,7 +302,7 @@ public:
             */
 
             Scope<pair<Expr, Expr> > scope;
-            map<string, vector<pair<Expr, Expr> > > regions = regions_provided(body, scope);            
+            map<string, vector<pair<Expr, Expr> > > regions = regions_touched(body, scope);            
             vector<pair<Expr, Expr> > bounds = regions[func.name()];
 
             // Change the body of the for loop to do an allocation
@@ -458,7 +458,7 @@ vector<string> realization_order(string output, const map<string, Function> &env
                 bool good_to_schedule = true;
                 const set<string> &inputs = graph[f];
                 for (set<string>::const_iterator i = inputs.begin(); i != inputs.end(); i++) {
-                    if (result_set.find(*i) == result_set.end()) {
+                    if (*i != f && result_set.find(*i) == result_set.end()) {
                         good_to_schedule = false;
                     }
                 }
@@ -871,6 +871,13 @@ Stmt lower(Function f) {
     log(2) << "Initial statement: " << '\n' << s << '\n';
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
+
+        // Schedule reductions as root by default (we can't inline them)
+        if (f.is_reduction() && f.schedule().compute_level.empty()) {
+            f.schedule().compute_level = "<root>";
+            f.schedule().store_level = "<root>";
+        }
+
         if (f.schedule().compute_level.empty()) {
             log(1) << "Inlining " << order[i-1] << '\n';
             s = InlineFunction(f).mutate(s);

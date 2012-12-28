@@ -433,12 +433,19 @@ class Simplify : public IRMutator {
     void visit(const Min *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
+        // Move constants to the right to cut down on number of cases to check
+        if (is_const(a) && !is_const(b)) {
+            std::swap(a, b);
+        }
+
         int ia, ib;
         float fa, fb;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
+        const Min *min_a = a.as<Min>();
+        //const Min *min_b = b.as<Min>();
 
         if (equal(a, b)) {
             expr = a;
@@ -471,6 +478,9 @@ class Simplify : public IRMutator {
             } else {
                 expr = b;
             }
+        } else if (min_a && is_const(min_a->b) && is_const(b)) {
+            // min(min(x, 4), 5) -> min(x, 4)
+            expr = new Min(min_a->a, mutate(new Min(min_a->b, b)));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -481,12 +491,18 @@ class Simplify : public IRMutator {
     void visit(const Max *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
+        // Move constants to the right to cut down on number of cases to check
+        if (is_const(a) && !is_const(b)) {
+            std::swap(a, b);
+        }
+
         int ia, ib;
         float fa, fb;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
+        const Max *max_a = a.as<Max>();
 
         if (equal(a, b)) {
             expr = a;
@@ -517,6 +533,9 @@ class Simplify : public IRMutator {
             } else {
                 expr = a;
             }
+        } else if (max_a && is_const(max_a->b) && is_const(b)) {
+            // max(max(x, 4), 5) -> max(x, 5)
+            expr = new Max(max_a->a, mutate(new Max(max_a->b, b)));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -942,6 +961,7 @@ void simplify_test() {
     check(new Min(x, x+3), x);
     check(new Min(x+4, x), x);
     check(new Min(x-1, x+2), x+(-1));
+    check(new Min(7, new Min(x, 3)), new Min(x, 3));
 
     check(new Max(7, 3), 7);
     check(new Max(4.25f, 1.25f), 4.25f);
@@ -950,6 +970,7 @@ void simplify_test() {
     check(new Max(x, x+3), x+3);
     check(new Max(x+4, x), x+4);
     check(new Max(x-1, x+2), x+2);
+    check(new Max(7, new Max(x, 3)), new Max(x, 7));
 
     Expr t = const_true(), f = const_false();
     check(x == x, t);
