@@ -392,7 +392,7 @@ private:
 
     void visit(const Call *op) {        
         IRVisitor::visit(op);
-        if (consider_calls) {
+        if (consider_calls && op->call_type == Call::Halide) {
             vector<pair<Expr, Expr> > &region = regions[op->name];
             for (size_t i = 0; i < op->args.size(); i++) {
                 pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
