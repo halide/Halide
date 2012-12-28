@@ -605,6 +605,10 @@ struct Block : public StmtNode<Block> {
 }
 // Now that we've defined an Expr and ForType, we can include the definition of a function
 #include "Function.h"
+
+// And the definition of a reduction domain
+#include "Reduction.h"
+
 namespace Halide {
 
 /* A function call. This can represent a call to some extern
@@ -674,12 +678,21 @@ struct Call : public ExprNode<Call> {
 };
 
 /* A named variable. Might be a loop variable, function argument,
- * or something defined by a Let or LetStmt node. */
+ * parameter, reduction variable, or something defined by a Let or
+ * LetStmt node. */
 struct Variable : public ExprNode<Variable> {
     string name;
+
+    // References to scalar parameters, or to the dimensions of buffer
+    // parameters hang onto those expressions
     Internal::Parameter param;
 
+    // Reduction variables hang onto their domains
+    Internal::ReductionDomain reduction_domain;
+
     Variable(Type t, string n, Internal::Parameter p) : ExprNode<Variable>(t), name(n), param(p) {}
+    Variable(Type t, string n, Internal::ReductionDomain d) : ExprNode<Variable>(t), name(n), reduction_domain(d) {}
+
     Variable(Type t, string n) : ExprNode<Variable>(t), name(n) {}
 };
 

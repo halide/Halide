@@ -34,15 +34,14 @@ int main(int argc, char **argv) {
     RDom r(tent);
     blur(x, y) += tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1);
 
-    if (use_gpu() && false) { // TODO: broken
-        blur.cudaTile(x, y, 16, 16);
-    } else {
-        // Take this opportunity to test tiling reductions
-        Var xi("xi"), yi("yi");
-        //Var xi, yi;
-        blur.tile(x, y, xi, yi, 6, 6);
-        blur.update().tile(x, y, xi, yi, 4, 4);
-    }
+    //if (use_gpu() && false) { // TODO: broken
+    //blur.cudaTile(x, y, 16, 16);
+    //} else {
+
+    // Take this opportunity to test tiling reductions
+    Var xi("xi"), yi("yi");
+    blur.tile(x, y, xi, yi, 6, 6);
+    blur.update().tile(x, y, xi, yi, 4, 4);
 
     Image<uint16_t> out = blur.realize(W, H);
 

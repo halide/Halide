@@ -283,9 +283,9 @@ public:
 void FuncRefVar::operator=(Expr e) {            
     // Find implicit args in the expr and add them to the args list before calling define
     vector<string> a = args;
-    CountImplicitVars f(e);
-    Internal::log(2) << "Adding " << f.count << " implicit vars to LHS of " << func.name() << "\n";
-    for (int i = 0; i < f.count; i++) {
+    CountImplicitVars count(e);
+    Internal::log(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
+    for (int i = 0; i < count.count; i++) {
         a.push_back(Var::implicit(i).name());
     }
     func.define(a, e);
@@ -304,17 +304,31 @@ FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f),
     assert(f.defined() && "Can't construct reference to undefined Func");
 }
     
-void FuncRefExpr::operator=(Expr) {
-    assert(false && "Reductions not yet implemented");
+void FuncRefExpr::operator=(Expr e) {
+    assert(func.defined() && func.value().defined() && 
+           "Can't add a reduction definition to an undefined function");
+
+    vector<Expr> a = args;
+    CountImplicitVars f(e);
+    // Implicit vars are also allowed in the lhs of a reduction. E.g.:
+    // f(x, y) = x+y
+    // g(x, y) = 0
+    // g(f(r.x)) = 1   (this means g(f(r.x, i0), i0) = 1)
+
+    for (size_t i = 0; i < args.size(); i++) {
+        args[i].accept(&f);
+    }
+    Internal::log(2) << "Adding " << f.count << " implicit vars to LHS of " << func.name() << "\n";
+    for (int i = 0; i < f.count; i++) {
+        a.push_back(Var::implicit(i));
+    }
+    func.define_reduction(args, e);
 }
 
 FuncRefExpr::operator Expr() const {
     assert(func.value().defined() && "Can't call function with undefined value");
     return new Call(func, args);
 }
-
-namespace Internal {
-};
 
 Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
     assert(func.defined() && "Can't realize NULL function handle");
@@ -473,13 +487,13 @@ void Func::realize(Buffer dst) {
         // TODO: Assume we're jitting for x86 for now
         CodeGen_X86 cg;
         cg.compile(stmt, name(), infer_args.arg_types);
-        
-        /*
-          cg.compile_to_native(name() + ".s", true);
-          cg.compile_to_bitcode(name() + ".bc");
-          std::ofstream stmt_debug((name() + ".stmt").c_str());
-          stmt_debug << stmt;
-        */
+
+        if (log::debug_level >= 3) {
+            cg.compile_to_native(name() + ".s", true);
+            cg.compile_to_bitcode(name() + ".bc");
+            std::ofstream stmt_debug((name() + ".stmt").c_str());
+            stmt_debug << stmt;
+        }
 
         void *fn_ptr = cg.compile_to_function_pointer(true);
         typedef void (*wrapped_fn_type)(const void **);

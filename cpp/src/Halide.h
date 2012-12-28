@@ -6,6 +6,6 @@
 #include "Image.h"
 #include "Param.h"
 #include "Extern.h"
-
+#include "RDom.h"
 
 #endif
