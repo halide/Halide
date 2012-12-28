@@ -668,8 +668,9 @@ class VectorizeLoops : public IRMutator {
                 
             Expr value = mutate(op->value);
 
-            if (!changed && value.same_as(op->value)) stmt = op;
-            else {
+            if (!changed && value.same_as(op->value)) {
+                stmt = op;
+            } else {
                 // Widen the args to have the same width as the max width found
                 for (size_t i = 0; i < new_args.size(); i++) {
                     new_args[i] = widen(new_args[i], max_width);
@@ -677,6 +678,17 @@ class VectorizeLoops : public IRMutator {
                 value = widen(value, max_width);
                 stmt = new Provide(op->buffer, value, new_args);
             }                
+        }
+
+        void visit(const Store *op) {
+            Expr value = mutate(op->value);
+            Expr index = mutate(op->index);
+            if (value.same_as(op->value) && index.same_as(op->index)) {
+                stmt = op;
+            } else {
+                int width = std::max(value.type().width, index.type().width);
+                stmt = new Store(op->buffer, widen(value, width), widen(index, width));
+            }
         }
 
     public: 
