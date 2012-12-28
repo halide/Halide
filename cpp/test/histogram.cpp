@@ -23,18 +23,18 @@ int main(int argc, char **argv) {
     Func hist("hist");
 
     RDom r(in);
-    hist(clamp(cast<int>(in(r.x, r.y)), 0, 255))++;
+    hist(clamp(cast<int>(in(r.x, r.y)), 0, 255))+=1;
 
-    if (use_gpu()) {
+    /*if (use_gpu()) {
 	hist.cudaTile(hist.arg(0), 64);
 	hist.update().cudaTile(r.x, r.y, 16, 16);
-    } else {
+        } else { */
     
-        // Grab a handle to the update step of a reduction for scheduling
-        // using the "update()" method.
-        Var xi, yi;
-        hist.update().tile(r.x, r.y, xi, yi, 32, 32);
-    }
+    // Grab a handle to the update step of a reduction for scheduling
+    // using the "update()" method.
+    Var xi, yi;
+    //hist.update().tile(r.x, r.y, xi, yi, 32, 32);
+
 
     Image<int32_t> h = hist.realize(256);
 
