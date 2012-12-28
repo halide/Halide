@@ -32,8 +32,6 @@ struct Schedule {
         Expr min, extent;
     };
     vector<Bound> bounds;
-
-    ReductionDomain reduction_domain;
 };
         
 struct FunctionContents {
@@ -46,6 +44,7 @@ struct FunctionContents {
     Expr reduction_value;
     vector<Expr> reduction_args;
     Schedule reduction_schedule;
+    ReductionDomain reduction_domain;
 };        
 
 class Function {
@@ -94,7 +93,11 @@ public:
     }
 
     const vector<Expr> &reduction_args() const {
-        return contents.ptr->reduction_args;
+        return contents.ptr->reduction_args;        
+    }
+
+    ReductionDomain reduction_domain() const {
+        return contents.ptr->reduction_domain;
     }
 
     bool is_reduction() const {

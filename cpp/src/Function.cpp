@@ -18,7 +18,7 @@ void destroy<FunctionContents>(const FunctionContents *f) {delete f;}
 struct CheckVars : public IRVisitor {
     vector<string> pure_args;
     ReductionDomain reduction_domain;
-    Scope<string> defined_internally;
+    Scope<int> defined_internally;
 
     void visit(const Let *let) {
         defined_internally.push(let->name, 0);
@@ -117,7 +117,7 @@ void Function::define_reduction(const vector<Expr> &args, Expr value) {
 
     contents.ptr->reduction_args = args;
     contents.ptr->reduction_value = value;
-    contents.ptr->reduction_schedule.reduction_domain = check.reduction_domain;
+    contents.ptr->reduction_domain = check.reduction_domain;
 
     // First add the pure args in order
     for (size_t i = 0; i < pure_args.size(); i++) {

@@ -42,44 +42,52 @@ void lower_test() {
     std::cout << "Lowering test passed" << std::endl;
 }
 
-Expr build_qualified_rhs(Function f) {
-    // Fully qualify the var names in the function rhs
-    Expr value = f.value();
-    for (size_t i = 0; i < f.args().size(); i++) {
-        value = substitute(f.args()[i], new Variable(Int(32), f.name() + "." + f.args()[i]), value);
+class QualifyExpr : public IRMutator {
+    string prefix;
+    Scope<int> internal;
+    void visit(const Variable *v) {
+        if (internal.contains(v->name)) {
+            expr = v;
+        } else if (v->param.defined()) {
+            expr = v;
+        } else {
+            expr = new Variable(v->type, prefix + v->name, v->reduction_domain);
+        }
     }
-    return value;
+    void visit(const Let *op) {
+        Expr value = mutate(op->value);
+        internal.push(op->name, 0);
+        Expr body = mutate(op->body);
+        if (value.same_as(op->value) && body.same_as(op->body)) {
+            expr = op;
+        } else {
+            expr = new Let(op->name, value, body);
+        }
+        internal.pop(op->name);
+    }
+public:
+    QualifyExpr(string p) : prefix(p) {}
+};
+
+Expr qualify_expr(Function f, Expr value) {
+    QualifyExpr q(f.name() + ".");
+    return q.mutate(value);
 }
 
 
-// Turn a function into a loop nest that computes it. It will
-// refer to external vars of the form function_name.arg_name.min
-// and function_name.arg_name.extent to define the bounds over
-// which it should be realized. It will compute at least those
-// bounds (depending on splits, it may compute more). This loop
-// won't do any allocation.
-
-Stmt build_realization(Function f) {
+Stmt build_provide_loop_nest(string buffer, vector<Expr> site, Expr value, const Schedule &s) {
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
             
     // All names will get prepended with the function name to avoid ambiguities
-    string prefix = f.name() + ".";
-            
-    // Compute the site to store to as the function args
-    vector<Expr> site;
-    for (size_t i = 0; i < f.args().size(); i++) {
-        site.push_back(new Variable(Int(32), prefix + f.args()[i]));
-    }
-            
-    Expr value = build_qualified_rhs(f);
-            
+    string prefix = buffer + ".";
+           
     // Make the (multi-dimensional) store node
-    Stmt stmt = new Provide(f.name(), value, site);
+    Stmt stmt = new Provide(buffer, value, site);
             
     // Define the function args in terms of the loop variables using the splits
-    for (size_t i = f.schedule().splits.size(); i > 0; i--) {
-        const Schedule::Split &split = f.schedule().splits[i-1];
+    for (size_t i = s.splits.size(); i > 0; i--) {
+        const Schedule::Split &split = s.splits[i-1];
         Expr inner = new Variable(Int(32), prefix + split.inner);
         Expr outer = new Variable(Int(32), prefix + split.outer);
         Expr old_min = new Variable(Int(32), prefix + split.old_var + ".splitmin");
@@ -87,8 +95,8 @@ Stmt build_realization(Function f) {
     }
             
     // Build the loop nest
-    for (size_t i = 0; i < f.schedule().dims.size(); i++) {
-        const Schedule::Dim &dim = f.schedule().dims[i];
+    for (size_t i = 0; i < s.dims.size(); i++) {
+        const Schedule::Dim &dim = s.dims[i];
         Expr min = new Variable(Int(32), prefix + dim.var + ".min");
         Expr extent = new Variable(Int(32), prefix + dim.var + ".extent");
         stmt = new For(prefix + dim.var, min, extent, dim.for_type, stmt);
@@ -96,8 +104,8 @@ Stmt build_realization(Function f) {
 
     // Define the bounds on the split dimensions using the bounds
     // on the function args
-    for (size_t i = f.schedule().splits.size(); i > 0; i--) {
-        const Schedule::Split &split = f.schedule().splits[i-1];
+    for (size_t i = s.splits.size(); i > 0; i--) {
+        const Schedule::Split &split = s.splits[i-1];
         Expr old_var_extent = new Variable(Int(32), prefix + split.old_var + ".extent");
         Expr inner_extent = split.factor;
         Expr outer_extent = (old_var_extent + split.factor - 1)/split.factor;
@@ -109,8 +117,51 @@ Stmt build_realization(Function f) {
         stmt = new LetStmt(prefix + split.old_var + ".splitmin", old_min, stmt);
     }
 
-    // TODO: inject bounds for any explicitly bounded dimensions        
     return stmt;
+}
+
+// Turn a function into a loop nest that computes it. It will
+// refer to external vars of the form function_name.arg_name.min
+// and function_name.arg_name.extent to define the bounds over
+// which it should be realized. It will compute at least those
+// bounds (depending on splits, it may compute more). This loop
+// won't do any allocation.
+
+Stmt build_realization(Function f) {
+
+    // Compute the site to store to as the function args
+    vector<Expr> site;
+    Expr value = qualify_expr(f, f.value());   
+
+    for (size_t i = 0; i < f.args().size(); i++) {
+        site.push_back(new Variable(Int(32), f.name() + "." + f.args()[i]));
+    }
+    
+    return build_provide_loop_nest(f.name(), site, value, f.schedule());
+}
+
+Stmt build_reduction_update(Function f) {
+    if (!f.is_reduction()) return Stmt();
+
+    vector<Expr> site;
+    Expr value = qualify_expr(f, f.reduction_value());
+
+    for (size_t i = 0; i < f.reduction_args().size(); i++) {
+        site.push_back(qualify_expr(f, f.reduction_args()[i]));
+        log(2) << "Reduction site " << i << " = " << site[i] << "\n";
+    }
+
+    Stmt loop = build_provide_loop_nest(f.name(), site, value, f.reduction_schedule());
+
+    // Now define the bounds on the reduction domain
+    const vector<ReductionVariable> &dom = f.reduction_domain().domain();
+    for (size_t i = 0; i < dom.size(); i++) {
+        string prefix = f.name() + "." + dom[i].var;
+        loop = new LetStmt(prefix + ".min", dom[i].min, loop);
+        loop = new LetStmt(prefix + ".extent", dom[i].extent, loop);
+    }
+
+    return loop;
 }
 
 class InjectTracing : public IRMutator {
@@ -231,7 +282,8 @@ public:
             assert((for_loop->name == func.schedule().store_level || found_store_level) && 
                    "The compute loop level is outside the store loop level!");
             Stmt produce = build_realization(func);
-            stmt = new Pipeline(func.name(), produce, NULL, for_loop->body);
+            Stmt update = build_reduction_update(func);
+            stmt = new Pipeline(func.name(), produce, update, for_loop->body);
             stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, stmt);
             found_compute_level = true;
             stmt = mutate(stmt);
@@ -239,6 +291,7 @@ public:
             // Inject the realization lower down
             found_store_level = true;
             Stmt body = mutate(for_loop->body);
+
             /*
             vector<pair<Expr, Expr> > bounds(func.args().size());
             for (size_t i = 0; i < func.args().size(); i++) {
@@ -300,7 +353,7 @@ private:
                 args[i] = mutate(op->args[i]);
             }
             // Grab the body
-            Expr body = build_qualified_rhs(func);
+            Expr body = qualify_expr(func, func.value());
             // Bind the args
             assert(args.size() == func.args().size());
             for (size_t i = 0; i < args.size(); i++) {
@@ -355,8 +408,15 @@ public:
 void populate_environment(Function f, map<string, Function> &env, bool recursive = true) {
     if (env.find(f.name()) != env.end()) return;
             
-    // TODO: consider reductions
     FindCalls calls(f.value());
+
+    // Consider reductions
+    if (f.is_reduction()) {
+        f.reduction_value().accept(&calls);
+        for (size_t i = 0; i < f.reduction_args().size(); i++) {
+            f.reduction_args()[i].accept(&calls);
+        }
+    }
 
     if (!recursive) {
         env.insert(calls.calls.begin(), calls.calls.end());
@@ -799,8 +859,12 @@ Stmt lower(Function f) {
     // Compute a realization order
     vector<string> order = realization_order(f.name(), env);
 
-    // Generate initial loop nest
-    Stmt s = build_realization(env.find(order[order.size()-1])->second);
+    // Generate initial loop nest    
+    assert(env.find(order[order.size()-1])->second.same_as(f));
+    Stmt s = build_realization(f);
+    if (f.is_reduction()) {
+        s = new Block(s, build_reduction_update(f));
+    }
     s = inject_explicit_bounds(s, f);
     s = new For("<root>", 0, 1, For::Serial, s);
 
