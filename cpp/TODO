@@ -15,3 +15,5 @@ name. Should be replaced with prefixing.
 Add front-end version of Internal::Argument (call it Arg)
 
 Consider bounds written to in update step of reduction
+
+Out-of-bounds read and write checks on image parameters
