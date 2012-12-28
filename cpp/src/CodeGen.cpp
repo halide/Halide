@@ -144,6 +144,10 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     // Finally, verify the module is ok
     verifyModule(*module);
     log(2) << "Done generating llvm bitcode\n";
+
+    if (log::debug_level >= 3) {
+        module->dump();
+    }
 }
 
 ExecutionEngine *CodeGen::execution_engine = NULL;

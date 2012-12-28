@@ -2,9 +2,9 @@
 #define HALIDE_FUNCTION_H
 
 #include "IntrusivePtr.h"
+#include "Reduction.h"
 #include <string>
 #include <vector>
-
 
 namespace Halide { 
 namespace Internal {
@@ -32,6 +32,8 @@ struct Schedule {
         Expr min, extent;
     };
     vector<Bound> bounds;
+
+    ReductionDomain reduction_domain;
 };
         
 struct FunctionContents {
@@ -40,7 +42,10 @@ struct FunctionContents {
     vector<string> args;
     Expr value;
     Schedule schedule;
-    // TODO: reduction step lhs, rhs, and schedule
+
+    Expr reduction_value;
+    vector<Expr> reduction_args;
+    Schedule reduction_schedule;
 };        
 
 class Function {
@@ -50,6 +55,7 @@ public:
     Function() : contents(NULL) {}
 
     void define(const vector<string> &args, Expr value);   
+    void define_reduction(const vector<Expr> &args, Expr value);
 
     Function(const string &n) : contents(new FunctionContents) {
         contents.ptr->name = n;
@@ -74,6 +80,26 @@ public:
     const Schedule &schedule() const {
         return contents.ptr->schedule;
     }   
+
+    Schedule &reduction_schedule() {
+        return contents.ptr->reduction_schedule;
+    }
+
+    const Schedule &reduction_schedule() const {
+        return contents.ptr->reduction_schedule;
+    }
+
+    Expr reduction_value() const {
+        return contents.ptr->reduction_value;
+    }
+
+    const vector<Expr> &reduction_args() const {
+        return contents.ptr->reduction_args;
+    }
+
+    bool is_reduction() const {
+        return reduction_value().defined();
+    }
 
     bool defined() const {
         return contents.defined();
