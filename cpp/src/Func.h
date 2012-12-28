@@ -18,11 +18,18 @@ namespace Halide {
 class FuncRefVar {
     Internal::Function func;
     vector<string> args;
+    void add_implicit_vars(vector<string> &args, Expr e);
 public:
     FuncRefVar(Internal::Function, const vector<Var> &);
         
     // Use this as the left-hand-side of a definition
     void operator=(Expr);
+
+    // Short-hands for common reduction patterns
+    void operator+=(Expr);
+    void operator-=(Expr);
+    void operator*=(Expr);
+    void operator/=(Expr);
 
     // Override the usual assignment operator, so that f(x, y) = g(x, y) works
     void operator=(const FuncRefVar &e) {*this = Expr(e);}
@@ -39,11 +46,19 @@ public:
 class FuncRefExpr {
     Internal::Function func;
     vector<Expr> args;
+    void add_implicit_vars(vector<Expr> &args, Expr e);
 public:
     FuncRefExpr(Internal::Function, const vector<Expr> &);
+    FuncRefExpr(Internal::Function, const vector<string> &);
         
     // Use this as the left-hand-side of a reduction definition
     void operator=(Expr);
+
+    // Short-hands for common reduction patterns
+    void operator+=(Expr);
+    void operator-=(Expr);
+    void operator*=(Expr);
+    void operator/=(Expr);
 
     // Override the usual assignment operator, so that f(x, y) = g(x, y) works
     void operator=(const FuncRefExpr &e) {*this = Expr(e);}
@@ -110,6 +125,7 @@ public:
     Func &compute_inline();
     Func &bound(Var var, Expr min, Expr extent);
     Func &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    Func &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
     Func &reorder(Var x, Var y);
     Func &reorder(Var x, Var y, Var z);
     Func &reorder(Var x, Var y, Var z, Var w);

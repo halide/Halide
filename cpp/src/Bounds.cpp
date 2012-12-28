@@ -392,7 +392,7 @@ private:
 
     void visit(const Call *op) {        
         IRVisitor::visit(op);
-        if (consider_calls && op->call_type == Call::Halide) {
+        if (consider_calls) {
             vector<pair<Expr, Expr> > &region = regions[op->name];
             for (size_t i = 0; i < op->args.size(); i++) {
                 pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
@@ -428,10 +428,11 @@ map<string, vector<pair<Expr, Expr> > > compute_regions_touched(Stmt s, const Sc
     r.consider_provides = consider_provides;
     r.scope = scope;
     s.accept(&r);
-    // Convert from (min, max) to min, (extent)
+    // Convert from (min, max) to (min, extent)
     for (map<string, vector<pair<Expr, Expr> > >::iterator iter = r.regions.begin(); 
          iter != r.regions.end(); iter++) {
         for (size_t i = 0; i < iter->second.size(); i++) {
+            /*
             if (!iter->second[i].first.defined()) {
                 std::cerr << "Usage of " << iter->first << " is unbounded below in the following statement: " << s << std::endl;
                 assert(false);
@@ -440,9 +441,14 @@ map<string, vector<pair<Expr, Expr> > > compute_regions_touched(Stmt s, const Sc
                 std::cerr << "Usage of " << iter->first << " is unbounded above in the following statement: " << s << std::endl;
                 assert(false);
             }
-            // the max is likely to be of the form foo-1
-            iter->second[i].first = simplify(iter->second[i].first);
-            iter->second[i].second = simplify((iter->second[i].second + 1) - iter->second[i].first);
+            */
+            if (!iter->second[i].first.defined() || !iter->second[i].second.defined()) {
+                iter->second[i] = make_pair(Expr(), Expr());
+            } else {
+                // the max is likely to be of the form foo-1
+                iter->second[i].first = simplify(iter->second[i].first);
+                iter->second[i].second = simplify((iter->second[i].second + 1) - iter->second[i].first);
+            }
         }
     }
     return r.regions;
@@ -493,7 +499,7 @@ void bounds_test() {
     check(scope, x*(5-x), -50, 50); // We don't expect bounds analysis to understand correlated terms
     check(scope, new Select(x < 4, x, x+100), 0, 110);
     check(scope, x+y, y, y+10);
-    check(scope, x*y, new Min(0, y*10), new Max(0, y*10));
+    check(scope, x*y, new Min(y*10, 0), new Max(y*10, 0));
     check(scope, x/y, Expr(), Expr());
     check(scope, 11/(x+1), 1, 11);
     check(scope, new Load(Int(8), "buf", x, Buffer(), Parameter()), -128, 127);
@@ -514,9 +520,11 @@ void bounds_test() {
     map<string, vector<pair<Expr, Expr> > > r;
     r = regions_required(loop, scope);
     assert(r.find("output") == r.end());
+    assert(r.find("input") != r.end());
     assert(equal(r["input"][0].first, 6));
     assert(equal(r["input"][0].second, 20));
     r = regions_provided(loop, scope);
+    assert(r.find("output") != r.end());
     assert(equal(r["output"][0].first, 4));
     assert(equal(r["output"][0].second, 10));
 
