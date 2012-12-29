@@ -526,8 +526,8 @@ private:
 
     void visit(const Variable *op) {
         if (op->param.defined()) {
-            Internal::log(2) << "Found a scalar param: " << op->param.name() << "\n";
-            Argument arg = {op->param.name(), false, op->param.type()};
+            Internal::log(2) << "Found a param: " << op->param.name() << "\n";
+            Argument arg = {op->param.name(), op->param.get_buffer().defined(), op->param.type()};
             bool already_included = false;
             for (size_t i = 0; i < arg_types.size(); i++) {
                 if (arg_types[i].name == op->param.name()) {
