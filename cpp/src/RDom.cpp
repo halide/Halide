@@ -1,5 +1,6 @@
 #include "RDom.h"
 #include "Util.h"
+#include "IROperator.h"
 
 namespace Halide {
 
@@ -35,6 +36,8 @@ Internal::ReductionDomain build_domain(string name0, Expr min0, Expr extent0,
 }
 
 RDom::RDom(Expr min, Expr extent, string name) {
+    min = cast<int>(min);
+    extent = cast<int>(extent);
     if (name == "") name = Internal::unique_name('r');
     domain = build_domain(name + ".x", min, extent, 
                           "", Expr(), Expr(), 
@@ -44,6 +47,10 @@ RDom::RDom(Expr min, Expr extent, string name) {
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
+    min0 = cast<int>(min0);
+    extent0 = cast<int>(extent0);
+    min1 = cast<int>(min1);
+    extent1 = cast<int>(extent1);
     if (name == "") name = Internal::unique_name('r');
     domain = build_domain(name + ".x", min0, extent0, 
                           name + ".y", min1, extent1,
@@ -54,6 +61,12 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, string name) {
+    min0 = cast<int>(min0);
+    extent0 = cast<int>(extent0);
+    min1 = cast<int>(min1);
+    extent1 = cast<int>(extent1);
+    min2 = cast<int>(min2);
+    extent2 = cast<int>(extent2);
     if (name == "") name = Internal::unique_name('r');
     domain = build_domain(name + ".x", min0, extent0, 
                           name + ".y", min1, extent1,
@@ -65,6 +78,14 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, string name) {
+    min0 = cast<int>(min0);
+    extent0 = cast<int>(extent0);
+    min1 = cast<int>(min1);
+    extent1 = cast<int>(extent1);
+    min2 = cast<int>(min2);
+    extent2 = cast<int>(extent2);
+    min3 = cast<int>(min3);
+    extent3 = cast<int>(extent3);
     if (name == "") name = Internal::unique_name('r');
     domain = build_domain(name + ".x", min0, extent0, 
                           name + ".y", min1, extent1, 
