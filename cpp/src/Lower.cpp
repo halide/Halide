@@ -44,11 +44,8 @@ void lower_test() {
 
 class QualifyExpr : public IRMutator {
     string prefix;
-    Scope<int> internal;
     void visit(const Variable *v) {
-        if (internal.contains(v->name)) {
-            expr = v;
-        } else if (v->param.defined()) {
+        if (v->param.defined()) {
             expr = v;
         } else {
             expr = new Variable(v->type, prefix + v->name, v->reduction_domain);
@@ -56,32 +53,23 @@ class QualifyExpr : public IRMutator {
     }
     void visit(const Let *op) {
         Expr value = mutate(op->value);
-        internal.push(op->name, 0);
         Expr body = mutate(op->body);
-        if (value.same_as(op->value) && body.same_as(op->body)) {
-            expr = op;
-        } else {
-            expr = new Let(op->name, value, body);
-        }
-        internal.pop(op->name);
+        expr = new Let(prefix + op->name, value, body);
     }
 public:
     QualifyExpr(string p) : prefix(p) {}
 };
 
-Expr qualify_expr(Function f, Expr value) {
-    QualifyExpr q(f.name() + ".");
+Expr qualify_expr(string prefix, Expr value) {
+    QualifyExpr q(prefix);
     return q.mutate(value);
 }
 
 
-Stmt build_provide_loop_nest(string buffer, vector<Expr> site, Expr value, const Schedule &s) {
+Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Expr value, const Schedule &s) {
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
             
-    // All names will get prepended with the function name to avoid ambiguities
-    string prefix = buffer + ".";
-           
     // Make the (multi-dimensional) store node
     Stmt stmt = new Provide(buffer, value, site);
             
@@ -129,29 +117,33 @@ Stmt build_provide_loop_nest(string buffer, vector<Expr> site, Expr value, const
 
 Stmt build_realization(Function f) {
 
+    string prefix = f.name() + ".";
+
     // Compute the site to store to as the function args
     vector<Expr> site;
-    Expr value = qualify_expr(f, f.value());   
+    Expr value = qualify_expr(prefix, f.value());   
 
     for (size_t i = 0; i < f.args().size(); i++) {
         site.push_back(new Variable(Int(32), f.name() + "." + f.args()[i]));
     }
-    
-    return build_provide_loop_nest(f.name(), site, value, f.schedule());
+
+    return build_provide_loop_nest(f.name(), prefix, site, value, f.schedule());
 }
 
 Stmt build_reduction_update(Function f) {
     if (!f.is_reduction()) return Stmt();
 
+    string prefix = f.name() + ".";
+
     vector<Expr> site;
-    Expr value = qualify_expr(f, f.reduction_value());
+    Expr value = qualify_expr(prefix, f.reduction_value());
 
     for (size_t i = 0; i < f.reduction_args().size(); i++) {
-        site.push_back(qualify_expr(f, f.reduction_args()[i]));
+        site.push_back(qualify_expr(prefix, f.reduction_args()[i]));
         log(2) << "Reduction site " << i << " = " << site[i] << "\n";
     }
 
-    Stmt loop = build_provide_loop_nest(f.name(), site, value, f.reduction_schedule());
+    Stmt loop = build_provide_loop_nest(f.name(), prefix, site, value, f.reduction_schedule());
 
     // Now define the bounds on the reduction domain
     const vector<ReductionVariable> &dom = f.reduction_domain().domain();
@@ -209,7 +201,8 @@ private:
 class BoundsInference : public IRMutator {
 public:
     const vector<string> &funcs;
-    const map<string, Function> &env;
+    const map<string, Function> &env;    
+    Scope<int> in_update;
 
     BoundsInference(const vector<string> &f, const map<string, Function> &e) : funcs(f), env(e) {}    
 
@@ -231,6 +224,7 @@ public:
 
         // Inject let statements defining those bounds
         for (size_t i = 0; i < funcs.size(); i++) {
+            if (in_update.contains(funcs[i])) continue;
             const vector<pair<Expr, Expr> > &region = regions[funcs[i]];
             const Function &f = env.find(funcs[i])->second;
             if (region.empty()) continue;
@@ -248,8 +242,26 @@ public:
         } else {
             stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, body);
         }
+    }    
+
+    virtual void visit(const Pipeline *pipeline) {
+        Stmt produce = mutate(pipeline->produce);
+
+        Stmt update;
+        if (pipeline->update.defined()) {
+            // Even though there are calls to a function within the
+            // update step of a pipeline, we shouldn't modify the
+            // bounds computed - they've already been fixed. Any
+            // dependencies required should have been scheduled within
+            // the initialization, not the update step, so these
+            // bounds can't be of use to anyone anyway.
+            in_update.push(pipeline->buffer, 0);
+            update = mutate(pipeline->update);
+            in_update.pop(pipeline->buffer);
+        }
+        Stmt consume = mutate(pipeline->consume);
+        stmt = new Pipeline(pipeline->buffer, produce, update, consume);
     }
-    
 };
 
 Stmt inject_explicit_bounds(Stmt body, Function func) {           
@@ -278,11 +290,46 @@ public:
     InjectRealization(const Function &f) : func(f), found_store_level(false), found_compute_level(false) {}
 
     virtual void visit(const For *for_loop) {            
+        Scope<pair<Expr, Expr> > scope;
+            
         if (!found_compute_level && for_loop->name == func.schedule().compute_level) {
             assert((for_loop->name == func.schedule().store_level || found_store_level) && 
                    "The compute loop level is outside the store loop level!");
             Stmt produce = build_realization(func);
             Stmt update = build_reduction_update(func);
+
+            if (update.defined()) {
+                // Expand the bounds computed in the produce step
+                // using the bounds read in the update step. This is
+                // necessary because later bounds inference does not
+                // consider the bounds read during an update step
+                map<string, vector<pair<Expr, Expr> > > regions = regions_required(update, scope);
+                vector<pair<Expr, Expr> > bounds = regions[func.name()];
+                if (bounds.size() > 0) {
+                    assert(bounds.size() == func.args().size());
+                    // Update the region to be computed using the region read in the update step
+                    for (size_t i = 0; i < bounds.size(); i++) {                        
+                        string var = func.name() + "." + func.args()[i];
+                        Expr update_min = new Variable(Int(32), var + ".update_min");
+                        Expr update_extent = new Variable(Int(32), var + ".update_extent");
+                        Expr consume_min = new Variable(Int(32), var + ".min");
+                        Expr consume_extent = new Variable(Int(32), var + ".extent");
+                        Expr init_min = new Min(update_min, consume_min);
+                        Expr init_max_plus_one = new Max(update_min + update_extent, consume_min + consume_extent);
+                        Expr init_extent = init_max_plus_one - init_min;
+                        produce = new LetStmt(var + ".min", init_min, produce);
+                        produce = new LetStmt(var + ".extent", init_extent, produce);
+                    }
+
+                    // Define the region read during the update step
+                    for (size_t i = 0; i < bounds.size(); i++) {
+                        string var = func.name() + "." + func.args()[i];
+                        produce = new LetStmt(var + ".update_min", bounds[i].first, produce);
+                        produce = new LetStmt(var + ".update_extent", bounds[i].second, produce);
+                    }
+                }
+            }
+
             stmt = new Pipeline(func.name(), produce, update, for_loop->body);
             stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, stmt);
             found_compute_level = true;
@@ -301,7 +348,6 @@ public:
             }
             */
 
-            Scope<pair<Expr, Expr> > scope;
             map<string, vector<pair<Expr, Expr> > > regions = regions_touched(body, scope);            
             vector<pair<Expr, Expr> > bounds = regions[func.name()];
 
@@ -353,7 +399,7 @@ private:
                 args[i] = mutate(op->args[i]);
             }
             // Grab the body
-            Expr body = qualify_expr(func, func.value());
+            Expr body = qualify_expr(func.name() + ".", func.value());
             // Bind the args
             assert(args.size() == func.args().size());
             for (size_t i = 0; i < args.size(); i++) {

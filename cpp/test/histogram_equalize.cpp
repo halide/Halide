@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     Var x, y, i;
 
     // Compute the histogram
-    hist(in(r.x, r.y))++;
+    hist(in(r.x, r.y))+=1;
 
     // Integrate it to produce a cdf
     cdf(i) = 0;
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     equalized(x, y) = cdf(in(x, y));
 
     // Scale the result back to 8-bit
-    int pixels = in.width()*in.height();
+    int pixels = in.extent(0)*in.extent(1);
     rescaled = cast<uint8_t>((equalized*256)/pixels);
 
     Image<uint8_t> out = rescaled.realize(in.width(), in.height());    
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
         }
     }
     for (int i = 0; i < 16; i++) {
-        printf("%d %d\n", in_hist[i], out_hist[i]);
+        //printf("%d %d\n", in_hist[i], out_hist[i]);
         // There should be roughly 1000*1000/16 pixels per bucket = 62500
         int correct = (in.width()*in.height())/16;
         if (out_hist[i] < correct/2 || out_hist[i] > 2*correct) {

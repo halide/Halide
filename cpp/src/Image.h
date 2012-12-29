@@ -8,7 +8,7 @@ namespace Halide {
 template<typename T>
 class Image {
 private:
-    const Buffer buffer;    
+    Buffer buffer;    
 
     // These fields are also stored in the buffer, but they're cached
     // here in the handle to make operator() fast. This is safe to do
@@ -44,8 +44,26 @@ public:
         prepare_for_direct_pixel_access();
     }
 
-    bool defined() {
+    bool defined() const {
         return buffer.defined();
+    }
+
+    int extent(int dim) const {
+        assert(defined());
+        assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
+        return buffer.extent(dim);
+    }
+
+    int width() const {
+        return extent(0);
+    }
+
+    int height() const {
+        return extent(1);
+    }
+
+    int channels() const {
+        return extent(2);
     }
 
     T operator()(int x) const {

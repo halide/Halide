@@ -359,6 +359,7 @@ public:
     map<string, vector<pair<Expr, Expr> > > regions; // Min, Max per dimension
     bool consider_calls;
     bool consider_provides;
+    Scope<int> inside_update;
 private:
     void visit(const LetStmt *op) {
         op->value.accept(this);
@@ -392,7 +393,7 @@ private:
 
     void visit(const Call *op) {        
         IRVisitor::visit(op);
-        if (consider_calls) {
+        if (consider_calls && !inside_update.contains(op->name)) {
             vector<pair<Expr, Expr> > &region = regions[op->name];
             for (size_t i = 0; i < op->args.size(); i++) {
                 pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
@@ -418,6 +419,16 @@ private:
                 }
             }
         }
+    }
+
+    void visit(const Pipeline *op) {
+        op->produce.accept(this);
+        if (op->update.defined()) {
+            inside_update.push(op->buffer, 0);
+            op->update.accept(this);
+            inside_update.pop(op->buffer);
+        }
+        op->consume.accept(this);
     }
 };
 
