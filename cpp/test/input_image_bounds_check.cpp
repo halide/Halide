@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     Func f;
     f(x) = input(x)*2;
 
-    f.setErrorHandler(&halide_error);
+    f.set_error_handler(&halide_error);
 
     // One easy way to read out of bounds
     f.realize(23);
@@ -36,9 +36,9 @@ int main(int argc, char **argv) {
     Func g, h;
     g(x) = input(x)*2;
     h(x) = g(x);
-    g.root().vectorize(x, 4);
+    g.compute_root().vectorize(x, 4);
 
-    h.setErrorHandler(&halide_error);
+    h.set_error_handler(&halide_error);
     h.realize(19);
     
     if (!error_occurred) {

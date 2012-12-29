@@ -9,11 +9,11 @@ int main(int argc, char **argv) {
     RDom r(2, 18);
 
     fib(x) = 1; 
-    fib(r.x) = fib(r.x-2) + fib(r.x-1);
+    fib(r) = fib(r-2) + fib(r-1);
 
     g(x) = fib(x+10);
 
-    Image<int> out = g.realize(20);
+    Image<int> out = g.realize(10);
 
     int fib_ref[20];
     fib_ref[0] = fib_ref[1] = 1;

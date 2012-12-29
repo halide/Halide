@@ -7,14 +7,14 @@ Expr u8(Expr a) {
 }
 
 /* Do n unrolled iterations of game of life on a torus */
-Func gameOfLife(UniformImage input, int n) {
+Func gameOfLife(ImageParam input, int n) {
     Var x, y;
     Func in;
     if (n == 1) {
         in(x, y) = input(x, y);
     } else {
         in = gameOfLife(input, n-1);
-        in.root();
+        in.compute_root();
     }
 
     Expr w = input.width(), h = input.height();
@@ -43,24 +43,23 @@ int main(int argc, char **argv) {
         }
     }
     
-    UniformImage input(UInt(8), 2);
+    ImageParam input(UInt(8));
 
     {
         // Outer loop in C
 
         Func oneIteration = gameOfLife(input, 1);
         Func twoIterations = gameOfLife(input, 2);
-        oneIteration.compileJIT();
-        twoIterations.compileJIT();
         
         for (int i = 0; i < 10; i++) {
-            input = board1;
+            input.set(board1);
             board1 = oneIteration.realize(32, 32);
-            input = board1;
+            input.set(board1);
             board1 = oneIteration.realize(32, 32);
-            input = board2;
+            input.set(board2);
             board2 = twoIterations.realize(32, 32);
             
+            /*
             for (int y = 0; y < 32; y++) {
                 for (int x = 0; x < 32; x++) {
                     printf(board1(x, y) ? "#" : " ");
@@ -71,7 +70,8 @@ int main(int argc, char **argv) {
                 }
                 printf("\n");
             }
-            
+            */
+
             for (int y = 0; y < 32; y++) {
                 for (int x = 0; x < 32; x++) {
                     if (board1(x, y) != board2(x, y)) {
@@ -107,9 +107,10 @@ int main(int argc, char **argv) {
         Func output;
         output(x, y) = life(x, y, 1);        
 
-        input = board3;
+        input.set(board3);
         output.realize(board3);
 
+        /*
         for (int y = 0; y < 32; y++) {
             for (int x = 0; x < 32; x++) {
                 printf(board1(x, y) ? "#" : " ");
@@ -120,7 +121,8 @@ int main(int argc, char **argv) {
             }
             printf("\n");
         }
-        
+        */
+
         for (int y = 0; y < 32; y++) {
             for (int x = 0; x < 32; x++) {
                 if (board1(x, y) != board3(x, y)) {
