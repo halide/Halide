@@ -41,13 +41,13 @@ void Func::set_dim_type(Var var, For::ForType t) {
     assert(found && "Could not find dimension in argument list for function");
 }
 
-Func::Func(Internal::Function f) : func(f), function_ptr(NULL) {
+Func::Func(Internal::Function f) : func(f) {
 }
 
-Func::Func(const string &name) : func(name), function_ptr(NULL) {
+Func::Func(const string &name) : func(name) {
 }
 
-Func::Func() : func(unique_name('f')), function_ptr(NULL) {
+Func::Func() : func(unique_name('f')) {
 }
         
 const string &Func::name() const {
@@ -501,6 +501,13 @@ void Func::compile_to_assembly(const string &filename, std::vector<Argument> arg
     cg.compile_to_native(filename, true);
 }
 
+void Func::set_error_handler(void (*handler)(char *)) {
+    error_handler = handler;
+    if (compiled_module.set_error_handler) {
+        compiled_module.set_error_handler(handler);
+    }
+}
+
 class InferArguments : public IRVisitor {
 public:
     vector<Argument> arg_types;
@@ -574,7 +581,7 @@ Stmt Func::lower() {
 }
 
 void Func::realize(Buffer dst) {
-    if (!function_ptr) {
+    if (!compiled_module.wrapped_function) {
    
         assert(func.defined() && "Can't realize NULL function handle");
         assert(value().defined() && "Can't realize undefined function");
@@ -609,9 +616,9 @@ void Func::realize(Buffer dst) {
             stmt_debug << stmt;
         }
 
-        void *fn_ptr = cg.compile_to_function_pointer(true);
-        typedef void (*wrapped_fn_type)(const void **);
-        function_ptr = (wrapped_fn_type)fn_ptr;   
+        compiled_module = cg.compile_to_function_pointers();
+
+        if (error_handler) compiled_module.set_error_handler(error_handler);
     } else {
         // Update the address of the buffer we're realizing into
         arg_values[arg_values.size()-1] = dst.raw_buffer();
@@ -623,7 +630,7 @@ void Func::realize(Buffer dst) {
         }
     }
 
-    function_ptr(&(arg_values[0]));
+    compiled_module.wrapped_function(&(arg_values[0]));
     
 }
 

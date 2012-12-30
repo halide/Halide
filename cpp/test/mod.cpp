@@ -12,11 +12,10 @@ bool test() {
 
     for (int i = 0; i < 16; i++) {
         if (im(i) != (T)(i%2)) {
-            printf("%f ", (double)(im(i)));
+            printf("%f\n", (double)(im(i)));
             return false;
         }
     }
-    printf("\n");
 
     return true;
 }
