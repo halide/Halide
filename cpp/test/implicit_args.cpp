@@ -10,10 +10,10 @@ int main(int argc, char **argv) {
     assert(im1.dimensions() == 3);
     // im1 is a 3d imageparam
 
-    Image<int> im1_val = (Lambda(x, y, z) = x*y*z).realize(10, 10, 10);
+    Image<int> im1_val = lambda(x, y, z, x*y*z).realize(10, 10, 10);
     im1.set(im1_val);
 
-    Image<int> im2 = (Lambda(x, y) = x+y).realize(10, 10);
+    Image<int> im2 = lambda(x, y, x+y).realize(10, 10);
     assert(im2.dimensions() == 2);
     assert(im2(4, 6) == 10);
     // im2 is a 2d image

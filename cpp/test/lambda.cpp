@@ -8,10 +8,10 @@ int main(int argc, char **argv) {
     Var x, y;
     f(x, y) = x*y;
 
-    Func g = (Lambda(x, y) = x*y);
+    Func g = lambda(x, y, x*y);
 
     // Use lambdas and implicit args in the one line
-    Image<int> im = (Lambda() = (f - g + (Lambda(x, y) = x+y))).realize(10, 10);
+    Image<int> im = lambda(f - g + lambda(x, y, x+y)).realize(10, 10);
 
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
