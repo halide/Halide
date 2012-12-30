@@ -1,3 +1,5 @@
 Out-of-bounds read and write checks on image parameters
 
 hook up error handler
+
+update scheduling

@@ -158,9 +158,9 @@ void CodeGen_X86::test() {
     if (!getenv("HL_NUMTHREADS")) {
         setenv("HL_NUMTHREADS", "4", 1);
     }
-    void *ptr = cg.compile_to_function_pointer(false);
+    JITCompiledModule m = cg.compile_to_function_pointers();
     typedef void (*fn_type)(::buffer_t *, float, int);
-    fn_type fn = (fn_type)ptr;
+    fn_type fn = (fn_type)m.function;
 
     int scratch[16];
     ::buffer_t buf;
@@ -196,17 +196,13 @@ void CodeGen_X86::test() {
     assert(extern_function_1_was_called);
 
     // Check the wrapped version does the same thing
-    ptr = cg.compile_to_function_pointer(true);
-    typedef void (*wrapped_fn_type)(void **);
-    wrapped_fn_type wrapped = (wrapped_fn_type)ptr;
-
     extern_function_1_was_called = false;
     for (int i = 0; i < 16; i++) scratch[i] = 0;
 
     float float_arg_val = 4.0f;
     int int_arg_val = 1;
-    void *arg_array[] = {&buf, &float_arg_val, &int_arg_val};
-    wrapped(arg_array);
+    const void *arg_array[] = {&buf, &float_arg_val, &int_arg_val};
+    m.wrapped_function(arg_array);
     assert(scratch[0] == 0);
     assert(scratch[1] == 3);
     assert(scratch[2] == 3);

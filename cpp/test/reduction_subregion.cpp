@@ -14,8 +14,6 @@ void halide_error(char *msg) {
     error_occurred = true;
 }
 
-extern "C" void set_error_handler(void (*)(char *));
-
 int main(int argc, char **argv) {
     Var x;
     Func f;
@@ -23,7 +21,7 @@ int main(int argc, char **argv) {
     f(x) = x;
     f(r) = f(r-1) + f(r+1);
 
-    f.setErrorHandler(&halide_error);
+    f.set_error_handler(&halide_error);
     Image<int> result = f.realize(10);
 
     if (!error_occurred) {

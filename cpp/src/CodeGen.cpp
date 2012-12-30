@@ -152,7 +152,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
 ExecutionEngine *CodeGen::execution_engine = NULL;
 
-void *CodeGen::compile_to_function_pointer(bool wrapped) {
+JITCompiledModule CodeGen::compile_to_function_pointers() {
     assert(module && "No module defined. Must call compile before calling compile_to_function_pointer");
                
     FunctionPassManager function_pass_manager(module);
@@ -194,12 +194,24 @@ void *CodeGen::compile_to_function_pointer(bool wrapped) {
     function_pass_manager.run(*fn);
     function_pass_manager.doFinalization();
 
-    if (wrapped) {
-        llvm::Function *wrapper = module->getFunction(function_name + "_jit_wrapper");
-        return execution_engine->getPointerToFunction(wrapper);
-    } else {
-        return execution_engine->getPointerToFunction(fn);
-    }
+    JITCompiledModule m;
+    void *f = execution_engine->getPointerToFunction(fn);
+    m.function = f;    
+    assert(f && "Compiling function returned NULL");
+
+    llvm::Function *wrapper = module->getFunction(function_name + "_jit_wrapper");
+    assert(wrapper && "Could not find wrapped function inside llvm module");
+    f = execution_engine->getPointerToFunction(wrapper);
+    m.wrapped_function = (void (*)(const void **))f;
+    assert(f && "Compiling wrapped function returned NULL");
+
+    llvm::Function *set_error_handler = module->getFunction("set_error_handler");
+    assert(set_error_handler && "Could not set_error_handler function inside llvm module");
+    f = execution_engine->getPointerToFunction(set_error_handler);
+    m.set_error_handler = (void (*)(JITCompiledModule::ErrorHandler))f;
+    assert(f && "Compiling set_error_handler function returned NULL");
+
+    return m;
 }
 
 void CodeGen::compile_to_bitcode(const string &filename) {

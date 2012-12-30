@@ -76,7 +76,9 @@ class Func {
     void add_implicit_vars(vector<Expr> &);
 
     // Save this state when we jit, so that we can run the function again cheaply
-    void (*function_ptr)(const void **);
+    Internal::JITCompiledModule compiled_module;
+    void (*error_handler)(char *);
+
     vector<const void *> arg_values;
 
     // Some of those void *'s need to be rebound on every call if the image params change
@@ -96,6 +98,8 @@ public:
     void compile_to_object(const string &filename, std::vector<Argument>);
     void compile_to_header(const string &filename, std::vector<Argument>);
     void compile_to_assembly(const string &filename, std::vector<Argument>);    
+
+    void set_error_handler(void (*handler)(char *));
 
     const string &name() const;
     Expr value() const;

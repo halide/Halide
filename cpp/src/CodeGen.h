@@ -42,14 +42,18 @@ public:
     void compile_to_native(const string &filename, bool assembly = false);
 
     /* Return a function pointer with type given by the vector of
-     * Arguments passed to compile.  If wrapped is true, instead
-     * returns a pointer to a single-argument function that takes an
+     * Arguments passed to compile. Also returns a wrapped version of
+     * the function, which is a single-argument function that takes an
      * array of void * (i.e. a void **). Each entry in this array
      * either points to a buffer_t, or to a scalar of the type
      * specified by the argument list.
+     *
+     * Also returns various other useful functions within the module,
+     * such as a hook for setting the function to call when an assert
+     * fails.
      */
 
-    void *compile_to_function_pointer(bool wrapped = false);
+    JITCompiledModule compile_to_function_pointers();
 
 protected:
 
