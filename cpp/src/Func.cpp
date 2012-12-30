@@ -438,7 +438,7 @@ void Func::compile_to_bitcode(const string &filename, std::vector<Argument> args
     assert(value().defined() && "Can't compile undefined function");    
 
     Stmt stmt = lower();
-    Argument me = {name(), true, Int(1)};
+    Argument me(name(), true, Int(1));
     args.push_back(me);
 
     CodeGen_X86 cg;
@@ -451,7 +451,7 @@ void Func::compile_to_object(const string &filename, std::vector<Argument> args)
     assert(value().defined() && "Can't compile undefined function");    
 
     Stmt stmt = lower();
-    Argument me = {name(), true, Int(1)};
+    Argument me(name(), true, Int(1));
     args.push_back(me);
 
     CodeGen_X86 cg;
@@ -460,7 +460,7 @@ void Func::compile_to_object(const string &filename, std::vector<Argument> args)
 }
 
 void Func::compile_to_header(const string &filename, std::vector<Argument> args) {
-    Argument me = {name(), true, Int(1)};
+    Argument me(name(), true, Int(1));
     args.push_back(me);
 
     std::ofstream header(filename.c_str());
@@ -473,7 +473,7 @@ void Func::compile_to_assembly(const string &filename, std::vector<Argument> arg
     assert(value().defined() && "Can't compile undefined function");    
 
     Stmt stmt = lower();
-    Argument me = {name(), true, Int(1)};
+    Argument me(name(), true, Int(1));
     args.push_back(me);
 
     CodeGen_X86 cg;
@@ -507,7 +507,7 @@ private:
 
         assert(b.defined() && "Can't JIT compile a call to an undefined buffer");
 
-        Argument arg = {arg_name, true, Int(1)};
+        Argument arg(arg_name, true, Int(1));
         bool already_included = false;
         for (size_t i = 0; i < arg_types.size(); i++) {
             if (arg_types[i].name == b.name()) {
@@ -527,7 +527,7 @@ private:
     void visit(const Variable *op) {
         if (op->param.defined()) {
             Internal::log(2) << "Found a param: " << op->param.name() << "\n";
-            Argument arg = {op->param.name(), op->param.get_buffer().defined(), op->param.type()};
+            Argument arg(op->param.name(), op->param.get_buffer().defined(), op->param.type());
             bool already_included = false;
             for (size_t i = 0; i < arg_types.size(); i++) {
                 if (arg_types[i].name == op->param.name()) {
@@ -565,7 +565,7 @@ void Func::realize(Buffer dst) {
         InferArguments infer_args;
         stmt.accept(&infer_args);
         
-        Argument me = {name(), true, Int(1)};
+        Argument me(name(), true, Int(1));
         infer_args.arg_types.push_back(me);
         arg_values = infer_args.arg_values;
         arg_values.push_back(dst.raw_buffer());

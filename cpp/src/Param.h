@@ -25,7 +25,7 @@ public:
         param.set_scalar<T>(val);
     }
 
-    Type type() {
+    Type type() const {
         return type_of<T>();
     }
 
@@ -35,6 +35,10 @@ public:
 
     operator Expr() const {
         return new Variable(type_of<T>(), name(), param);
+    }
+
+    operator Argument() const {
+        return Argument(name(), false, type());
     }
 };
 
@@ -113,7 +117,10 @@ public:
         args.push_back(w);
         return new Call(param, args);
     }
-   
+
+    operator Argument() const {
+        return Argument(name(), true, type());
+    }   
 };
 
 }

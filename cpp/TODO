@@ -2,16 +2,7 @@ Track number of dimensions on Buffers and ImageParams in front end in
 order to check references and to insert the right number of implicit
 args, and to build reduction domains of the correct size
 
-Check that reductions over image parameters where the code doesn't
-actually use the parameter correctly pull in the image parameter in
-order to use its dimensions
-
-More generally: when visiting variables, it might be necessary to
-visit the bounds of the reduction domain
-
 .splitmin will be hidden in the case of repeated splits on the same
 name. Should be replaced with prefixing.
-
-Add front-end version of Internal::Argument (call it Arg)
 
 Out-of-bounds read and write checks on image parameters
