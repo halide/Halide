@@ -1,7 +1,3 @@
-Track number of dimensions on Buffers and ImageParams in front end in
-order to check references and to insert the right number of implicit
-args, and to build reduction domains of the correct size
-
 .splitmin will be hidden in the case of repeated splits on the same
 name. Should be replaced with prefixing.
 

@@ -80,7 +80,7 @@ class Func {
     vector<const void *> arg_values;
 
     // Some of those void *'s need to be rebound on every call if the image params change
-    vector<pair<int, ImageParam> > image_param_args;
+    vector<pair<int, Internal::Parameter> > image_param_args;
 
 public:        
     static void test();
@@ -89,7 +89,7 @@ public:
     Func(const string &name);
     Func();
 
-    Buffer realize(int x_size, int y_size = 1, int z_size = 1, int w_size = 1);
+    Buffer realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     void realize(Buffer dst);
 
     void compile_to_bitcode(const string &filename, std::vector<Argument>);
@@ -107,11 +107,13 @@ public:
     FuncRefVar operator()(Var x, Var y);
     FuncRefVar operator()(Var x, Var y, Var z);
     FuncRefVar operator()(Var x, Var y, Var z, Var w);
+    FuncRefVar operator()(vector<Var>);
     FuncRefExpr operator()(Expr x);
     FuncRefExpr operator()(Expr x, Expr y);
     FuncRefExpr operator()(Expr x, Expr y, Expr z);
     FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w);
-        
+    FuncRefExpr operator()(vector<Expr>);
+
     Func &split(Var old, Var outer, Var inner, Expr factor);
     Func &parallel(Var var);
     Func &vectorize(Var var);

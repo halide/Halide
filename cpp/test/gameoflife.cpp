@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
         }
     }
     
-    ImageParam input(UInt(8));
+    ImageParam input(UInt(8), 2);
 
     {
         // Outer loop in C

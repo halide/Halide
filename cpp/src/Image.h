@@ -32,7 +32,7 @@ private:
 public:
     Image() {}
 
-    Image(int x, int y = 1, int z = 1, int w = 1) : buffer(Buffer(type_of<T>(), x, y, z, w)) {
+    Image(int x, int y = 0, int z = 0, int w = 0) : buffer(Buffer(type_of<T>(), x, y, z, w)) {
         prepare_for_direct_pixel_access();
     }
 
@@ -46,6 +46,10 @@ public:
 
     bool defined() const {
         return buffer.defined();
+    }
+
+    int dimensions() const {
+        return buffer.dimensions();
     }
 
     int extent(int dim) const {
@@ -98,38 +102,64 @@ public:
         return base[x + y*stride_1 + z*stride_2 + w*stride_3];
     }
 
-    Expr operator()(Expr x) {
-        vector<Expr> args;
-        args.push_back(x);
+    Expr operator()() const {
+        assert(dimensions() >= 0);
+        vector<Expr> args;        
+        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+            args.push_back(Var::implicit(i));
+        }
         return new Call(buffer, args);
     }
 
-    Expr operator()(Expr x, Expr y) {
+    Expr operator()(Expr x) const {
+        assert(dimensions() >= 1);
+        vector<Expr> args;
+        args.push_back(x);
+        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+            args.push_back(Var::implicit(i));
+        }
+        return new Call(buffer, args);
+    }
+
+    Expr operator()(Expr x, Expr y) const {
+        assert(dimensions() >= 2);
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
+        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+            args.push_back(Var::implicit(i));
+        }
         return new Call(buffer, args);
     }
 
-    Expr operator()(Expr x, Expr y, Expr z) {
+    Expr operator()(Expr x, Expr y, Expr z) const {
+        assert(dimensions() >= 3);
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);
+        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+            args.push_back(Var::implicit(i));
+        }
         return new Call(buffer, args);
     }
 
-    Expr operator()(Expr x, Expr y, Expr z, Expr w) {
+    Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
+        assert(dimensions() >= 4);
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);
         args.push_back(w);
+        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+            args.push_back(Var::implicit(i));
+        }
         return new Call(buffer, args);
     }
     
-    operator const buffer_t *() {return buffer.raw_buffer();}
-    operator Buffer() {return buffer;}
+    operator const buffer_t *() const {return buffer.raw_buffer();}
+    operator Buffer() const {return buffer;}
+    operator Expr() const {return (*this)();}
 };
 
 }

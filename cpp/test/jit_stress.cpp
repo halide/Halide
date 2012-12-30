@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Var x;
 
-    ImageParam a(Int(32));
+    ImageParam a(Int(32), 1);
     Image<int> b(1), c(1);
     b(0) = 17;
     c(0) = 0;

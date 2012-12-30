@@ -205,16 +205,16 @@ Expr absd(Expr a, Expr b) {
 }
 
 void check_sse_all() {
-    ImageParam in_f32(Float(32), "in_f32");
-    ImageParam in_f64(Float(64), "in_f64");
-    ImageParam in_i8(Int(8), "in_i8");
-    ImageParam in_u8(UInt(8), "in_u8");
-    ImageParam in_i16(Int(16), "in_i16");
-    ImageParam in_u16(UInt(16), "in_u16");
-    ImageParam in_i32(Int(32), "in_i32");
-    ImageParam in_u32(UInt(32), "in_u32");
-    ImageParam in_i64(Int(64), "in_i64");
-    ImageParam in_u64(UInt(64), "in_u64");
+    ImageParam in_f32(Float(32), 1, "in_f32");
+    ImageParam in_f64(Float(64), 1, "in_f64");
+    ImageParam in_i8(Int(8), 1, "in_i8");
+    ImageParam in_u8(UInt(8), 1, "in_u8");
+    ImageParam in_i16(Int(16), 1, "in_i16");
+    ImageParam in_u16(UInt(16), 1, "in_u16");
+    ImageParam in_i32(Int(32), 1, "in_i32");
+    ImageParam in_u32(UInt(32), 1, "in_u32");
+    ImageParam in_i64(Int(64), 1, "in_i64");
+    ImageParam in_u64(UInt(64), 1, "in_u64");
 
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
@@ -496,16 +496,16 @@ void check_sse_all() {
 }
 
 void check_neon_all() {
-    ImageParam in_f32(Float(32), "in_f32");
-    ImageParam in_f64(Float(64), "in_f64");
-    ImageParam in_i8(Int(8), "in_i8");
-    ImageParam in_u8(UInt(8), "in_u8");
-    ImageParam in_i16(Int(16), "in_i16");
-    ImageParam in_u16(UInt(16), "in_u16");
-    ImageParam in_i32(Int(32), "in_i32");
-    ImageParam in_u32(UInt(32), "in_u32");
-    ImageParam in_i64(Int(64), "in_i64");
-    ImageParam in_u64(UInt(64), "in_u64");
+    ImageParam in_f32(Float(32), 1, "in_f32");
+    ImageParam in_f64(Float(64), 1, "in_f64");
+    ImageParam in_i8(Int(8), 1, "in_i8");
+    ImageParam in_u8(UInt(8), 1, "in_u8");
+    ImageParam in_i16(Int(16), 1, "in_i16");
+    ImageParam in_u16(UInt(16), 1, "in_u16");
+    ImageParam in_i32(Int(32), 1, "in_i32");
+    ImageParam in_u32(UInt(32), 1, "in_u32");
+    ImageParam in_i64(Int(64), 1, "in_i64");
+    ImageParam in_u64(UInt(64), 1, "in_u64");
 
     Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
     Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);

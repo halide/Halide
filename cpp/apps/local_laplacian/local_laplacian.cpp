@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     // Parameters controlling the filter
     Param<float> alpha, beta;
     // Takes a 16-bit input
-    ImageParam input(UInt(16));
+    ImageParam input(UInt(16), 3);
 
     // loop variables
     Var c, k;
