@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
 
     f(x, y, z) = g(x, y) + g(x+1, y);
 
-    g.chunk(y);
+    g.compute_at(f, y);
     f.unroll(z, 2);
 
     Image<float> im = f.realize(64, 64, 4);
