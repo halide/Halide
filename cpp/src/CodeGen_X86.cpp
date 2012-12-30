@@ -101,9 +101,9 @@ void CodeGen_X86::test() {
     // loads of mismatched types (e.g. load a float from something allocated as an array of ints)
     // Calls to vectorized externs, and externs for which no vectorized version exists
 
-    Argument buffer_arg = {"buf", true, Int(0)};
-    Argument float_arg = {"alpha", false, Float(32)};
-    Argument int_arg = {"beta", false, Int(32)};
+    Argument buffer_arg("buf", true, Int(0));
+    Argument float_arg("alpha", false, Float(32));
+    Argument int_arg("beta", false, Int(32));
     vector<Argument> args(3);
     args[0] = buffer_arg;
     args[1] = float_arg;

@@ -35,8 +35,8 @@ void check(const char *op, int vector_width, Expr e, const char *args) {
     f(x, y) = e;
     f.vectorize(x, vector_width);
 
-    vector<Internal::Argument> arg_types;
-    Internal::Argument arg = {"", true, Int(1)};
+    vector<Argument> arg_types;
+    Argument arg("", true, Int(1));
     arg.name = "in_f32";
     arg_types.push_back(arg);
     arg.name = "in_f64";

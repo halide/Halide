@@ -3,6 +3,7 @@
 
 #include "IntrusivePtr.h"
 #include "Type.h"
+#include "Argument.h"
 #include "Util.h"
 #include "buffer_t.h"
 #include <assert.h>
@@ -128,6 +129,10 @@ public:
 
     const std::string &name() const {
         return contents.ptr->name;
+    }
+
+    operator Argument() const {
+        return Argument(name(), true, type());
     }
 
 };

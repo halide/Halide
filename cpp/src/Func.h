@@ -92,10 +92,10 @@ public:
     Buffer realize(int x_size, int y_size = 1, int z_size = 1, int w_size = 1);
     void realize(Buffer dst);
 
-    void compile_to_bitcode(const string &filename, std::vector<Internal::Argument>);
-    void compile_to_object(const string &filename, std::vector<Internal::Argument>);
-    void compile_to_header(const string &filename, std::vector<Internal::Argument>);
-    void compile_to_assembly(const string &filename, std::vector<Internal::Argument>);    
+    void compile_to_bitcode(const string &filename, std::vector<Argument>);
+    void compile_to_object(const string &filename, std::vector<Argument>);
+    void compile_to_header(const string &filename, std::vector<Argument>);
+    void compile_to_assembly(const string &filename, std::vector<Argument>);    
 
     const string &name() const;
     Expr value() const;
@@ -140,6 +140,7 @@ public:
         (*this)() = e;
     }
 };
+
 }
 
 #endif

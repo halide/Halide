@@ -5,7 +5,6 @@
 #include "Type.h"
 
 namespace Halide { 
-namespace Internal {
 
 /* A struct representing an argument to a halide-generated
  * function. Used for specifying the function signature of
@@ -18,8 +17,10 @@ struct Argument {
      */
     bool is_buffer;
     Type type;
+
+    Argument() {}
+    Argument(const std::string &n, bool b, Type t) : name(n), is_buffer(b), type(t) {}
 };
-}
 }
 
 #endif

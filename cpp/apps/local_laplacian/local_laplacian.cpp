@@ -126,23 +126,11 @@ int main(int argc, char **argv) {
         if (j < 4) outGPyramid[j].split(y, y, yi, 4).parallel(y).vectorize(x, 8);
     }
 
-    std::vector<Internal::Argument> args;
-    Internal::Argument arg;
-    arg.name = levels.name();
-    arg.is_buffer = false;
-    arg.type = levels.type();
-    args.push_back(arg);
-    arg.name = alpha.name();
-    arg.is_buffer = false;
-    arg.type = alpha.type();
-    args.push_back(arg);
-    arg.name = beta.name();
-    arg.is_buffer = false;
-    arg.type = beta.type();
-    args.push_back(arg);
-    arg.name = input.name();
-    arg.is_buffer = true;
-    args.push_back(arg);
+    std::vector<Argument> args(4);
+    args[0] = levels;
+    args[1] = alpha;
+    args[2] = beta;
+    args[3] = input;
     output.compile_to_object("local_laplacian.o", args);
     output.compile_to_header("local_laplacian.h", args);
     output.compile_to_assembly("local_laplacian.s", args);
