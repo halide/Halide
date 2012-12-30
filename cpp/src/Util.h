@@ -72,6 +72,9 @@ std::vector<T> vec(T a, T b, T c, T d, T e, T f) {
 // Generate a unique name starting with the given character
 std::string unique_name(char prefix);
 
+bool starts_with(const std::string &str, const std::string &prefix);
+bool ends_with(const std::string &str, const std::string &suffix);
+
 }
 }
 
