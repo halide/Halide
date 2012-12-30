@@ -4,20 +4,34 @@
 
 namespace Halide {
 
-class Lambda {
-    std::vector<Var> vars;
-public:
-    Lambda() {}
-    Lambda(Var x) : vars(Internal::vec(x)) {}
-    Lambda(Var x, Var y) : vars(Internal::vec(x, y)) {}
-    Lambda(Var x, Var y, Var z) : vars(Internal::vec(x, y, z)) {}
-    Lambda(Var x, Var y, Var z, Var w) : vars(Internal::vec(x, y, z, w)) {}
+Func lambda(Expr e) {
+    Func f;
+    f() = e;
+    return f;
+}
 
-    Func operator=(Expr e) {
-        Func f;
-        f(vars) = e;
-        return f;
-    }
-};
+Func lambda(Var x, Expr e) {
+    Func f;
+    f(x) = e;
+    return f;
+}
+
+Func lambda(Var x, Var y, Expr e) {
+    Func f;
+    f(x, y) = e;
+    return f;
+}
+
+Func lambda(Var x, Var y, Var z, Expr e) {
+    Func f;
+    f(x, y, z) = e;
+    return f;
+}
+
+Func lambda(Var x, Var y, Var z, Var w, Expr e) {
+    Func f;
+    f(x, y, z, w) = e;
+    return f;
+}
 
 }
