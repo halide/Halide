@@ -1,4 +1,3 @@
-.splitmin will be hidden in the case of repeated splits on the same
-name. Should be replaced with prefixing.
-
 Out-of-bounds read and write checks on image parameters
+
+hook up error handler

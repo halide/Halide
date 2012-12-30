@@ -74,11 +74,11 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
     Stmt stmt = new Provide(buffer, value, site);
             
     // Define the function args in terms of the loop variables using the splits
-    for (size_t i = s.splits.size(); i > 0; i--) {
-        const Schedule::Split &split = s.splits[i-1];
+    for (size_t i = 0; i < s.splits.size(); i++) {
+        const Schedule::Split &split = s.splits[i];
         Expr inner = new Variable(Int(32), prefix + split.inner);
         Expr outer = new Variable(Int(32), prefix + split.outer);
-        Expr old_min = new Variable(Int(32), prefix + split.old_var + ".splitmin");
+        Expr old_min = new Variable(Int(32), prefix + split.old_var + ".min");
         stmt = new LetStmt(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
     }
             
@@ -101,8 +101,6 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
         stmt = new LetStmt(prefix + split.inner + ".extent", inner_extent, stmt);
         stmt = new LetStmt(prefix + split.outer + ".min", 0, stmt);
         stmt = new LetStmt(prefix + split.outer + ".extent", outer_extent, stmt);            
-        Expr old_min = new Variable(Int(32), prefix + split.old_var + ".min");
-        stmt = new LetStmt(prefix + split.old_var + ".splitmin", old_min, stmt);
     }
 
     return stmt;
@@ -291,9 +289,11 @@ public:
 
     virtual void visit(const For *for_loop) {            
         Scope<pair<Expr, Expr> > scope;
+        const Schedule::LoopLevel &compute_level = func.schedule().compute_level;
+        const Schedule::LoopLevel &store_level = func.schedule().store_level;
             
-        if (!found_compute_level && for_loop->name == func.schedule().compute_level) {
-            assert((for_loop->name == func.schedule().store_level || found_store_level) && 
+        if (!found_compute_level && compute_level.match(for_loop->name)) {
+            assert((store_level.match(for_loop->name) || found_store_level) && 
                    "The compute loop level is outside the store loop level!");
             Stmt produce = build_realization(func);
             Stmt update = build_reduction_update(func);
@@ -307,7 +307,7 @@ public:
                 vector<pair<Expr, Expr> > bounds = regions[func.name()];
                 if (bounds.size() > 0) {
                     assert(bounds.size() == func.args().size());
-                    // Update the region to be computed using the region read in the update step
+                    // Expand the region to be computed using the region read in the update step
                     for (size_t i = 0; i < bounds.size(); i++) {                        
                         string var = func.name() + "." + func.args()[i];
                         Expr update_min = new Variable(Int(32), var + ".update_min");
@@ -334,20 +334,13 @@ public:
             stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, stmt);
             found_compute_level = true;
             stmt = mutate(stmt);
-        } else if (for_loop->name == func.schedule().store_level) {
+        } else if (store_level.match(for_loop->name)) {
+
             // Inject the realization lower down
             found_store_level = true;
             Stmt body = mutate(for_loop->body);
 
-            /*
-            vector<pair<Expr, Expr> > bounds(func.args().size());
-            for (size_t i = 0; i < func.args().size(); i++) {
-                string prefix = func.name() + "." + func.args()[i];
-                bounds[i].first = new Variable(Int(32), prefix + ".min");
-                bounds[i].second = new Variable(Int(32), prefix + ".extent");
-            }
-            */
-
+            // The allocate should cover everything touched below this point
             map<string, vector<pair<Expr, Expr> > > regions = regions_touched(body, scope);            
             vector<pair<Expr, Expr> > bounds = regions[func.name()];
 
@@ -355,19 +348,6 @@ public:
             body = new Realize(func.name(), func.value().type(), bounds, body);
             
             body = inject_explicit_bounds(body, func);
-
-            /*
-              vector<Expr> print_args;
-              for (size_t i = 0; i < func.args().size(); i++) {
-              print_args.push_back(bounds[i].first);
-              print_args.push_back(bounds[i].second);                
-              }            
-
-              body = new Block(
-              new PrintStmt("Allocating " + func.name() + " over", print_args), 
-              new Block(body,
-              new PrintStmt("Freeing " + func.name(), vector<Expr>())));
-            */
 
             stmt = new For(for_loop->name, 
                            for_loop->min, 
@@ -912,19 +892,20 @@ Stmt lower(Function f) {
         s = new Block(s, build_reduction_update(f));
     }
     s = inject_explicit_bounds(s, f);
-    s = new For("<root>", 0, 1, For::Serial, s);
+    string root_var = Schedule::LoopLevel::root().func + "." + Schedule::LoopLevel::root().var;
+    s = new For(root_var, 0, 1, For::Serial, s);
 
     log(2) << "Initial statement: " << '\n' << s << '\n';
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
 
         // Schedule reductions as root by default (we can't inline them)
-        if (f.is_reduction() && f.schedule().compute_level.empty()) {
-            f.schedule().compute_level = "<root>";
-            f.schedule().store_level = "<root>";
+        if (f.is_reduction() && f.schedule().compute_level.is_inline()) {
+            f.schedule().compute_level = Schedule::LoopLevel::root();
+            f.schedule().store_level = Schedule::LoopLevel::root();
         }
-
-        if (f.schedule().compute_level.empty()) {
+        
+        if (f.schedule().compute_level.is_inline()) {
             log(1) << "Inlining " << order[i-1] << '\n';
             s = InlineFunction(f).mutate(s);
         } else {

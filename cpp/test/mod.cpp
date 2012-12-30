@@ -11,8 +11,10 @@ bool test() {
     Image<T> im = f.realize(16);
 
     for (int i = 0; i < 16; i++) {
-        printf("%f ", (double)(im(i)));
-        if (im(i) != (T)(i%2)) return false;
+        if (im(i) != (T)(i%2)) {
+            printf("%f ", (double)(im(i)));
+            return false;
+        }
     }
     printf("\n");
 

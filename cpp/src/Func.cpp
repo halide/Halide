@@ -21,11 +21,18 @@ using namespace Internal;
 using std::max;
 using std::min;
 
+namespace {
+bool var_name_match(string candidate, string var) {
+    if (candidate == var) return true;
+    return Internal::ends_with(candidate, "." + var);
+}
+}
+
 void Func::set_dim_type(Var var, For::ForType t) {
     bool found = false;
     vector<Schedule::Dim> &dims = func.schedule().dims;
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
-        if (dims[i].var == var.name()) {
+        if (var_name_match(dims[i].var, var.name())) {
             found = true;
             dims[i].for_type = t;
         }
@@ -141,23 +148,27 @@ void Func::add_implicit_vars(vector<Expr> &args) {
 Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
+    string inner_name, outer_name, old_name;
     vector<Schedule::Dim> &dims = func.schedule().dims;
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
-        if (dims[i].var == old.name()) {
+        if (var_name_match(dims[i].var, old.name())) {
             found = true;
-            dims[i].var = inner.name();
+            old_name = dims[i].var;
+            inner_name = old_name + "." + inner.name();
+            outer_name = old_name + "." + outer.name();
+            dims[i].var = inner_name;
             dims.push_back(dims[dims.size()-1]);
             for (size_t j = dims.size(); j > i+1; j--) {
                 dims[j-1] = dims[j-2];
             }
-            dims[i+1].var = outer.name();
+            dims[i+1].var = outer_name;
         }
     }
         
     assert(found && "Could not find dimension in argument list for function");
         
     // Add the split to the splits list
-    Schedule::Split split = {old.name(), outer.name(), inner.name(), factor};
+    Schedule::Split split = {old_name, outer_name, inner_name, factor};
     func.schedule().splits.push_back(split);
     return *this;
 }
@@ -192,33 +203,33 @@ Func &Func::unroll(Var var, int factor) {
 }
 
 Func &Func::compute_at(Func f, Var var) {
-    string loop_level = f.name() + "." + var.name();
+    Schedule::LoopLevel loop_level(f.name(), var.name());
     func.schedule().compute_level = loop_level;
-    if (func.schedule().store_level.empty()) {
+    if (func.schedule().store_level.is_inline()) {
         func.schedule().store_level = loop_level;
     }
     return *this;
 }
         
 Func &Func::compute_root() {
-    func.schedule().compute_level = "<root>";
-    func.schedule().store_level = "<root>";
+    func.schedule().compute_level = Schedule::LoopLevel::root();
+    func.schedule().store_level = Schedule::LoopLevel::root();
     return *this;
 }
 
 Func &Func::store_at(Func f, Var var) {
-    func.schedule().store_level = f.name() + "." + var.name();
+    func.schedule().store_level = Schedule::LoopLevel(f.name(), var.name());
     return *this;
 }
 
 Func &Func::store_root() {
-    func.schedule().store_level = "<root>";
+    func.schedule().store_level = Schedule::LoopLevel::root();
     return *this;
 }
 
 Func &Func::compute_inline() {
-    func.schedule().compute_level = "";
-    func.schedule().store_level = "";
+    func.schedule().compute_level = Schedule::LoopLevel();
+    func.schedule().store_level = Schedule::LoopLevel();
     return *this;
 }
 
@@ -247,10 +258,10 @@ Func &Func::reorder(Var x, Var y) {
     bool found_y = false;
     size_t y_loc = 0;
     for (size_t i = 0; i < dims.size(); i++) {
-        if (dims[i].var == y.name()) {
+        if (var_name_match(dims[i].var, y.name())) {
             found_y = true;
             y_loc = i;
-        } else if (dims[i].var == x.name()) {
+        } else if (var_name_match(dims[i].var, x.name())) {
             if (found_y) std::swap(dims[i], dims[y_loc]);
             return *this;
         }
