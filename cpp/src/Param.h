@@ -2,6 +2,7 @@
 #define HALIDE_PARAM_H
 
 #include "IR.h"
+#include "Var.h"
 #include <sstream>
 
 namespace Halide {
@@ -44,11 +45,12 @@ public:
 
 class ImageParam {
     Internal::Parameter param;
+    int dims;
 public:
     ImageParam() {}
-    ImageParam(Type t) : param(t) {}
-    ImageParam(Type t, const string &n) : param(t, n) {}
-    ImageParam(Internal::Parameter p) : param(p) {}
+    ImageParam(Type t, int d) : param(t), dims(d) {}
+    ImageParam(Type t, int d, const string &n) : param(t, n), dims(d) {}
+    ImageParam(Internal::Parameter p, int d) : param(p), dims(d) {}
 
     const string &name() const {
         return param.name();
@@ -70,57 +72,90 @@ public:
         return param.defined();
     }
 
-    Expr extent(int x) {
+    Expr extent(int x) const {
         std::ostringstream s;
         s << name() << ".extent." << x;
         return new Variable(Int(32), s.str(), param);
     }
 
-    Expr width() {
+    int dimensions() const {
+        return dims;
+    };
+
+    Expr width() const {
         return extent(0);
     }
 
-    Expr height() {
+    Expr height() const {
         return extent(1);
     }
     
-    Expr channels() {
+    Expr channels() const {
         return extent(2);
     }
 
-    Expr operator()(Expr x) {
+    Expr operator()() const {
+        assert(dimensions() >= 0);
         vector<Expr> args;
-        args.push_back(x);
+        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+            args.push_back(Var::implicit(i));
+        }
         return new Call(param, args);
     }
 
-    Expr operator()(Expr x, Expr y) {
+    Expr operator()(Expr x) const {
+        assert(dimensions() >= 1);
+        vector<Expr> args;
+        args.push_back(x);
+        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+            args.push_back(Var::implicit(i));
+        }
+        return new Call(param, args);
+    }
+
+    Expr operator()(Expr x, Expr y) const {
+        assert(dimensions() >= 2);
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
+        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+            args.push_back(Var::implicit(i));
+        }
         return new Call(param, args);
     }
 
-    Expr operator()(Expr x, Expr y, Expr z) {
+    Expr operator()(Expr x, Expr y, Expr z) const {
+        assert(dimensions() >= 3);
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);
+        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+            args.push_back(Var::implicit(i));
+        }
         return new Call(param, args);
     }
 
-    Expr operator()(Expr x, Expr y, Expr z, Expr w) {
+    Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
+        assert(dimensions() >= 4);
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);
         args.push_back(w);
+        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+            args.push_back(Var::implicit(i));
+        }
         return new Call(param, args);
     }
 
     operator Argument() const {
         return Argument(name(), true, type());
     }   
+
+    operator Expr() const {
+        return (*this)();
+    }
 };
 
 }

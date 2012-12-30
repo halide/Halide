@@ -31,8 +31,13 @@ struct BufferContents {
     BufferContents(Type t, int x_size, int y_size, int z_size, int w_size) : 
         type(t), own_host_allocation(true), name(unique_name('b')) {
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
-        buf.elem_size = t.bits / 8;
-        buf.host = (uint8_t *)calloc(buf.elem_size, x_size*y_size*z_size*w_size);
+        buf.elem_size = t.bits / 8;        
+        size_t size = 1;
+        if (x_size) size *= x_size;
+        if (y_size) size *= y_size;
+        if (z_size) size *= z_size;
+        if (w_size) size *= w_size;
+        buf.host = (uint8_t *)calloc(buf.elem_size, size);
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.extent[0] = x_size;
@@ -63,7 +68,7 @@ private:
 public:
     Buffer() : contents(NULL) {}
 
-    Buffer(Type t, int x_size, int y_size = 1, int z_size = 1, int w_size = 1) : 
+    Buffer(Type t, int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0) : 
         contents(new Internal::BufferContents(t, x_size, y_size, z_size, w_size)) {
     }
     
@@ -96,6 +101,13 @@ public:
         return contents.ptr->buf.dev_dirty;
     }
     
+    int dimensions() const {
+        for (int i = 0; i < 4; i++) {
+            if (extent(i) == 0) return i;
+        }
+        return 4;
+    }
+
     int extent(int dim) const {
         assert(defined());
         assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");

@@ -87,6 +87,11 @@ FuncRefVar Func::operator()(Var x, Var y, Var z, Var w) {
     add_implicit_vars(args);
     return FuncRefVar(func, args);
 }
+
+FuncRefVar Func::operator()(vector<Var> args) {
+    add_implicit_vars(args);
+    return FuncRefVar(func, args);
+}
  
 FuncRefExpr Func::operator()(Expr x) {
     vector<Expr> args = vec(x);
@@ -111,6 +116,11 @@ FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) {
     add_implicit_vars(args);
     return FuncRefExpr(func, args);
 }  
+
+FuncRefExpr Func::operator()(vector<Expr> args) {
+    add_implicit_vars(args);
+    return FuncRefExpr(func, args);
+}
 
 void Func::add_implicit_vars(vector<Var> &args) {
     int i = 0;    
@@ -261,7 +271,6 @@ Func &Func::reorder(Var x, Var y, Var z, Var w) {
 Func &Func::reorder(Var x, Var y, Var z, Var w, Var t) {
     return reorder(x, y).reorder(x, z).reorder(x, w).reorder(x, t).reorder(y, z, w, t);
 }
-
 
 FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a) : func(f) {
     assert(f.defined() && "Can't construct reference to undefined Func");
@@ -485,7 +494,7 @@ class InferArguments : public IRVisitor {
 public:
     vector<Argument> arg_types;
     vector<const void *> arg_values;
-    vector<pair<int, ImageParam> > image_param_args;    
+    vector<pair<int, Internal::Parameter> > image_param_args;    
 
 private:
     void visit(const Load *op) {
@@ -597,7 +606,7 @@ void Func::realize(Buffer dst) {
         arg_values[arg_values.size()-1] = dst.raw_buffer();
         // update the addresses of the image param args
         for (size_t i = 0; i < image_param_args.size(); i++) {
-            Buffer b = image_param_args[i].second.get();
+            Buffer b = image_param_args[i].second.get_buffer();
             assert(b.defined() && "An ImageParam is not bound to a buffer");
             arg_values[image_param_args[i].first] = b.raw_buffer();
         }

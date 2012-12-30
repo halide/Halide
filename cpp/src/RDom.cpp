@@ -98,25 +98,45 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
 }
 
 RDom::RDom(Buffer b) {   
-    domain = build_domain(b.name() + ".x", b.min(0), b.extent(0),
-                          b.name() + ".y", b.min(1), b.extent(1),
-                          b.name() + ".z", b.min(2), b.extent(2), 
-                          b.name() + ".w", b.min(3), b.extent(3));
-    x = RVar(b.name() + ".x", b.min(0), b.extent(1), domain);
-    y = RVar(b.name() + ".y", b.min(1), b.extent(1), domain);
-    z = RVar(b.name() + ".z", b.min(2), b.extent(2), domain);
-    w = RVar(b.name() + ".w", b.min(3), b.extent(3), domain);
+    Expr min[4], extent[4];
+    for (int i = 0; i < 4; i++) {
+        if (b.dimensions() > i) {
+            min[i] = b.min(i);
+            extent[i] = b.extent(i);
+        }    
+    }
+    string names[] = {b.name() + ".x", b.name() + ".y", b.name() + ".z", b.name() + ".w"};
+    domain = build_domain(names[0], min[0], extent[0],
+                          names[1], min[1], extent[1],
+                          names[2], min[2], extent[2],
+                          names[3], min[3], extent[3]);    
+    RVar *vars[] = {&x, &y, &z, &w};
+    for (int i = 0; i < 4; i++) {
+        if (b.dimensions() > i) {
+            *(vars[i]) = RVar(names[i], min[i], extent[i], domain);
+        }
+    }
 }
 
 RDom::RDom(ImageParam p) {
-    domain = build_domain(p.name() + ".x", 0, p.extent(0),
-                          p.name() + ".y", 0, p.extent(1),
-                          p.name() + ".z", 0, p.extent(2), 
-                          p.name() + ".w", 0, p.extent(3));
-    x = RVar(p.name() + ".x", 0, p.extent(1), domain);
-    y = RVar(p.name() + ".y", 0, p.extent(1), domain);
-    z = RVar(p.name() + ".z", 0, p.extent(2), domain);
-    w = RVar(p.name() + ".w", 0, p.extent(3), domain);
+    Expr min[4], extent[4];
+    for (int i = 0; i < 4; i++) {
+        if (p.dimensions() > i) {
+            min[i] = 0;
+            extent[i] = p.extent(i);
+        }    
+    }
+    string names[] = {p.name() + ".x", p.name() + ".y", p.name() + ".z", p.name() + ".w"};
+    domain = build_domain(names[0], min[0], extent[0],
+                          names[1], min[1], extent[1],
+                          names[2], min[2], extent[2],
+                          names[3], min[3], extent[3]);    
+    RVar *vars[] = {&x, &y, &z, &w};
+    for (int i = 0; i < 4; i++) {
+        if (p.dimensions() > i) {
+            *(vars[i]) = RVar(names[i], min[i], extent[i], domain);
+        }
+    }
 }
 
 

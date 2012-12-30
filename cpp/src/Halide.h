@@ -7,5 +7,6 @@
 #include "Param.h"
 #include "Extern.h"
 #include "RDom.h"
+#include "Lambda.h"
 
 #endif
