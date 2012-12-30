@@ -14,7 +14,7 @@ private:
     // here in the handle to make operator() fast. This is safe to do
     // because the buffer is const.
     T *base;
-    int stride_1, stride_2, stride_3;
+    int stride_1, stride_2, stride_3, dims;
 
     void prepare_for_direct_pixel_access() {
         // TODO: make sure buffer has been copied to host
@@ -23,9 +23,11 @@ private:
             stride_1 = buffer.stride(1);
             stride_2 = buffer.stride(2);
             stride_3 = buffer.stride(3);
+            dims = buffer.dimensions();
         } else {
             base = NULL;
             stride_1 = stride_2 = stride_3 = 0;
+            dims = 0;
         }
     }
 
@@ -49,7 +51,7 @@ public:
     }
 
     int dimensions() const {
-        return buffer.dimensions();
+        return dims;
     }
 
     int extent(int dim) const {
@@ -103,55 +105,55 @@ public:
     }
 
     Expr operator()() const {
-        assert(dimensions() >= 0);
+        assert(dims >= 0);
         vector<Expr> args;        
-        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+        for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
         return new Call(buffer, args);
     }
 
     Expr operator()(Expr x) const {
-        assert(dimensions() >= 1);
+        assert(dims >= 1);
         vector<Expr> args;
         args.push_back(x);
-        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+        for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
         return new Call(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y) const {
-        assert(dimensions() >= 2);
+        assert(dims >= 2);
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
-        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+        for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
         return new Call(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z) const {
-        assert(dimensions() >= 3);
+        assert(dims >= 3);
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);
-        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+        for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
         return new Call(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
-        assert(dimensions() >= 4);
+        assert(dims >= 4);
         vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);
         args.push_back(w);
-        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
+        for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
         return new Call(buffer, args);
