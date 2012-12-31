@@ -47,7 +47,7 @@ template<> IRNodeType StmtNode<Block>::_type_info = {};
 
 namespace Internal {
 template<>
-int &ref_count<Halide::IRNode>(const IRNode *n) {return n->ref_count;}
+RefCount &ref_count<Halide::IRNode>(const IRNode *n) {return n->ref_count;}
 
 template<>
 void destroy<Halide::IRNode>(const IRNode *n) {delete n;}

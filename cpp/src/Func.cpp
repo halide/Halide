@@ -41,13 +41,13 @@ void Func::set_dim_type(Var var, For::ForType t) {
     assert(found && "Could not find dimension in argument list for function");
 }
 
-Func::Func(Internal::Function f) : func(f) {
+Func::Func(Internal::Function f) : func(f), error_handler(NULL) {
 }
 
-Func::Func(const string &name) : func(name) {
+Func::Func(const string &name) : func(name), error_handler(NULL) {
 }
 
-Func::Func() : func(unique_name('f')) {
+Func::Func() : func(unique_name('f')), error_handler(NULL) {
 }
         
 const string &Func::name() const {
@@ -359,6 +359,9 @@ FuncRefVar::operator Expr() const {
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
     assert(f.defined() && "Can't construct reference to undefined Func");
+    for (size_t i = 0; i < args.size(); i++) {
+        args[i] = cast<int>(args[i]);
+    }
 }
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a) : func(f) {
@@ -553,7 +556,6 @@ private:
 
     void visit(const Variable *op) {
         if (op->param.defined()) {
-            Internal::log(2) << "Found a param: " << op->param.name() << "\n";
             Argument arg(op->param.name(), op->param.get_buffer().defined(), op->param.type());
             bool already_included = false;
             for (size_t i = 0; i < arg_types.size(); i++) {
@@ -562,6 +564,7 @@ private:
                 }
             }
             if (!already_included) {
+                Internal::log(2) << "Found a param: " << op->param.name() << "\n";
                 if (op->param.get_buffer().defined()) {
                     int idx = (int)(arg_values.size());
                     image_param_args.push_back(make_pair(idx, op->param));                    
@@ -619,6 +622,7 @@ void Func::realize(Buffer dst) {
         compiled_module = cg.compile_to_function_pointers();
 
         if (error_handler) compiled_module.set_error_handler(error_handler);
+        else compiled_module.set_error_handler(NULL);
     } else {
         // Update the address of the buffer we're realizing into
         arg_values[arg_values.size()-1] = dst.raw_buffer();

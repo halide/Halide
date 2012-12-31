@@ -881,7 +881,34 @@ void CodeGen::visit(const PrintStmt *op) {
 }
 
 void CodeGen::visit(const AssertStmt *op) {
-    //assert(false && "AssertStmt not yet implemented");
+    codegen(op->condition);
+
+    // Make a new basic block for the assert
+    BasicBlock *assert_fails_bb = BasicBlock::Create(context, "assert_failed", function);
+    BasicBlock *assert_succeeds_bb = BasicBlock::Create(context, "after_assert", function);
+
+    // If the condition fails, enter the assert body, otherwise, enter the block after
+    builder.CreateCondBr(value, assert_succeeds_bb, assert_fails_bb);
+
+    // Build the failure case
+    builder.SetInsertPoint(assert_fails_bb);
+
+    // Make the error message string a global constant
+    llvm::Type *msg_type = ArrayType::get(i8, op->message.size()+1);
+    GlobalVariable *msg_global = new GlobalVariable(*module, msg_type, true, GlobalValue::PrivateLinkage, 0);
+    msg_global->setInitializer(ConstantDataArray::getString(context, op->message));
+    Value *char_ptr = builder.CreateConstGEP2_32(msg_global, 0, 0);
+
+    // Call the error handler
+    llvm::Function *error_handler = module->getFunction("halide_error");
+    assert(error_handler && "Could not find halide_error in initial module");
+    builder.CreateCall(error_handler, vec(char_ptr));
+
+    // Bail out
+    builder.CreateRetVoid();
+
+    // Continue on using the success case
+    builder.SetInsertPoint(assert_succeeds_bb);
 }
 
 void CodeGen::visit(const Pipeline *op) {

@@ -62,7 +62,7 @@ struct Schedule {
 };
         
 struct FunctionContents {
-    mutable int ref_count;
+    mutable RefCount ref_count;
     string name;
     vector<string> args;
     Expr value;

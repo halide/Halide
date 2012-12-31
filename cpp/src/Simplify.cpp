@@ -445,7 +445,7 @@ class Simplify : public IRMutator {
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
         const Min *min_a = a.as<Min>();
-        //const Min *min_b = b.as<Min>();
+        const Min *min_b = b.as<Min>();
 
         if (equal(a, b)) {
             expr = a;
@@ -481,6 +481,12 @@ class Simplify : public IRMutator {
         } else if (min_a && is_const(min_a->b) && is_const(b)) {
             // min(min(x, 4), 5) -> min(x, 4)
             expr = new Min(min_a->a, mutate(new Min(min_a->b, b)));
+        } else if (min_a && (equal(min_a->b, b) || equal(min_a->a, b))) {
+            // min(min(x, y), y) -> min(x, y)
+            expr = a;
+        } else if (min_b && (equal(min_b->b, a) || equal(min_b->a, a))) {
+            // min(y, min(x, y)) -> min(x, y)
+            expr = b;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -503,6 +509,7 @@ class Simplify : public IRMutator {
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
         const Max *max_a = a.as<Max>();
+        const Max *max_b = b.as<Max>();
 
         if (equal(a, b)) {
             expr = a;
@@ -536,6 +543,12 @@ class Simplify : public IRMutator {
         } else if (max_a && is_const(max_a->b) && is_const(b)) {
             // max(max(x, 4), 5) -> max(x, 5)
             expr = new Max(max_a->a, mutate(new Max(max_a->b, b)));
+        } else if (max_a && (equal(max_a->b, b) || equal(max_a->a, b))) {
+            // max(max(x, y), y) -> max(x, y)
+            expr = a;
+        } else if (max_b && (equal(max_b->b, a) || equal(max_b->a, a))) {
+            // max(y, max(x, y)) -> max(x, y)
+            expr = b;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -692,11 +705,39 @@ class Simplify : public IRMutator {
     }
 
     void visit(const And *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a), b = mutate(op->b);
+
+        if (is_one(op->a)) {
+            expr = op->b;
+        } else if (is_one(op->b)) {
+            expr = op->a;
+        } else if (is_zero(op->a)) {
+            expr = op->a;
+        } else if (is_zero(op->b)) {
+            expr = op->b;
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new And(a, b);
+        }
     }
 
     void visit(const Or *op) {
-        IRMutator::visit(op);
+        Expr a = mutate(op->a), b = mutate(op->b);
+
+        if (is_one(op->a)) {
+            expr = op->a;
+        } else if (is_one(op->b)) {
+            expr = op->b;
+        } else if (is_zero(op->a)) {
+            expr = op->b;
+        } else if (is_zero(op->b)) {
+            expr = op->a;
+        } else if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = new Or(a, b);
+        }
     }
 
     void visit(const Not *op) {
@@ -962,6 +1003,10 @@ void simplify_test() {
     check(new Min(x+4, x), x);
     check(new Min(x-1, x+2), x+(-1));
     check(new Min(7, new Min(x, 3)), new Min(x, 3));
+    check(new Min(new Min(x, y), x), new Min(x, y));
+    check(new Min(new Min(x, y), y), new Min(x, y));
+    check(new Min(x, new Min(x, y)), new Min(x, y));
+    check(new Min(y, new Min(x, y)), new Min(x, y));
 
     check(new Max(7, 3), 7);
     check(new Max(4.25f, 1.25f), 4.25f);
@@ -971,6 +1016,10 @@ void simplify_test() {
     check(new Max(x+4, x), x+4);
     check(new Max(x-1, x+2), x+2);
     check(new Max(7, new Max(x, 3)), new Max(x, 7));
+    check(new Max(new Max(x, y), x), new Max(x, y));
+    check(new Max(new Max(x, y), y), new Max(x, y));
+    check(new Max(x, new Max(x, y)), new Max(x, y));
+    check(new Max(y, new Max(x, y)), new Max(x, y));
 
     Expr t = const_true(), f = const_false();
     check(x == x, t);
@@ -1009,6 +1058,11 @@ void simplify_test() {
     check(!(!(x == 0)), x == 0);
     check(!Expr(new Broadcast(x > y, 4)), 
           new Broadcast(x <= y, 4));
+
+    check(t && (x < 0), x < 0);
+    check(f && (x < 0), f);
+    check(t || (x < 0), t);
+    check(f || (x < 0), x < 0);
 
     Expr vec = new Variable(Int(32, 4), "vec");
     // Check constants get pushed inwards

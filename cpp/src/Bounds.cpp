@@ -27,16 +27,16 @@ private:
     void bounds_of_type(Type t) {
         if (t.is_uint()) {
             if (t.bits <= 16) {
-                max = (1 << t.bits) - 1;
-                min = 0;
+                max = cast(t, (1 << t.bits) - 1);
+                min = cast(t, 0);
             } else {
                 max = Expr();
                 min = Expr();
             }
         } else if (t.is_int()) {
             if (t.bits <= 16) {
-                max = (1 << (t.bits-1)) - 1;
-                min = -(1 << (t.bits-1));
+                max = cast(t, (1 << (t.bits-1)) - 1);
+                min = cast(t, -(1 << (t.bits-1)));
             }
         } else {
             max = Expr();
@@ -168,9 +168,13 @@ private:
         op->b.accept(this);
         if (!min.defined() || !max.defined()) return;
         min = make_zero(op->type);
+        if (!max.type().is_float()) {
+            max = max - 1;
+        }
     }
 
     void visit(const Min *op) {
+        log(3) << "Bounds of " << Expr(op) << "\n";
         op->a.accept(this);
         Expr min_a = min, max_a = max;
         op->b.accept(this);
@@ -191,6 +195,7 @@ private:
 
 
     void visit(const Max *op) {
+        log(3) << "Bounds of " << Expr(op) << "\n";
         op->a.accept(this);
         Expr min_a = min, max_a = max;
         op->b.accept(this);
@@ -333,6 +338,7 @@ pair<Expr, Expr> bounds_of_expr_in_scope(Expr expr, const Scope<pair<Expr, Expr>
 
 pair<Expr, Expr> range_union(const pair<Expr, Expr> &a, const pair<Expr, Expr> &b) {    
     Expr max, min;
+    log(3) << "Range union of " << a.first << ", " << a.second << ",  " << b.first << ", " << b.second << "\n";
     if (a.second.defined() && b.second.defined()) max = new Max(a.second, b.second);
     if (a.first.defined() && b.first.defined()) min = new Min(a.first, b.first);
     return make_pair(min, max);
@@ -513,7 +519,7 @@ void bounds_test() {
     check(scope, x*y, new Min(y*10, 0), new Max(y*10, 0));
     check(scope, x/y, Expr(), Expr());
     check(scope, 11/(x+1), 1, 11);
-    check(scope, new Load(Int(8), "buf", x, Buffer(), Parameter()), -128, 127);
+    check(scope, new Load(Int(8), "buf", x, Buffer(), Parameter()), cast(Int(8), -128), cast(Int(8), 127));
     check(scope, y + (new Let("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
 

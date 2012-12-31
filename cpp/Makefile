@@ -73,7 +73,7 @@ bin/test_internal: test/internal.cpp bin/libHalide.a
 	$(CXX) $(CXX_FLAGS) -rdynamic $< -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
 
 bin/test_%: test/%.cpp bin/libHalide.a
-	$(CXX) $< -rdynamic -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
+	$(CXX) -g $< -rdynamic -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
 
 test_%: bin/test_%
 	@-mkdir -p tmp

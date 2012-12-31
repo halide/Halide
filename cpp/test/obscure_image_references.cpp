@@ -1,5 +1,8 @@
 #include "Halide.h"
 
+#include <iostream>
+#include "IRPrinter.h"
+
 using namespace Halide;
 
 int main(int argc, char **argv) {
@@ -14,7 +17,7 @@ int main(int argc, char **argv) {
     Func f;
     Var x;
     f(x) = x + im1.width();
-    RDom r(0, im2(j));
+    RDom r(0, clamp(im2(j), 0, 99));
     f(r) = 37;
 
     im2(3) = 10;

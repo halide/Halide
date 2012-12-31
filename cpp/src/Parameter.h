@@ -9,7 +9,7 @@ namespace Internal {
 using std::string;
 
 struct ParameterContents {
-    mutable int ref_count;
+    mutable RefCount ref_count;
     Type type;
     string name;
     Buffer buffer;
