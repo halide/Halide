@@ -47,6 +47,7 @@ void lower_test() {
     std::cout << "Lowering test passed" << std::endl;
 }
 
+// Prefix all names in an expression with some string.
 class QualifyExpr : public IRMutator {
     string prefix;
     void visit(const Variable *v) {
@@ -70,7 +71,7 @@ Expr qualify_expr(string prefix, Expr value) {
     return q.mutate(value);
 }
 
-
+// Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Expr value, const Schedule &s) {
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
@@ -117,7 +118,6 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-
 Stmt build_realization(Function f) {
 
     string prefix = f.name() + ".";
@@ -133,6 +133,7 @@ Stmt build_realization(Function f) {
     return build_provide_loop_nest(f.name(), prefix, site, value, f.schedule());
 }
 
+// Build the loop nest that updates a function (assuming it's a reduction).
 Stmt build_reduction_update(Function f) {
     if (!f.is_reduction()) return Stmt();
 
@@ -159,6 +160,10 @@ Stmt build_reduction_update(Function f) {
     return loop;
 }
 
+// A schedule may include explicit bounds on some dimension. This
+// injects let statements that set those bounds, and assertions that
+// check that those bounds are sufficiently large to cover the
+// inferred bounds required.
 Stmt inject_explicit_bounds(Stmt body, Function func) {           
     // Inject any explicit bounds
     for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
@@ -396,7 +401,6 @@ vector<string> realization_order(string output, const map<string, Function> &env
 }
 
 Stmt create_initial_loop_nest(Function f) {
-    
     // Generate initial loop nest    
     Stmt s = build_realization(f);
     if (f.is_reduction()) {
@@ -414,7 +418,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order, const map<string, F
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
 
-        // Schedule reductions as root by default (we can't inline them)
+        // Reductions are scheduled as root by default
         if (f.is_reduction() && f.schedule().compute_level.is_inline()) {
             f.schedule().compute_level = Schedule::LoopLevel::root();
             f.schedule().store_level = Schedule::LoopLevel::root();
@@ -439,6 +443,9 @@ Stmt schedule_functions(Stmt s, const vector<string> &order, const map<string, F
     
 }
 
+// Insert checks to make sure a statement doesn't read out of bounds
+// on inputs or outputs, and that the inputs and outputs conform to
+// the format required (e.g. stride.0 must be 1).
 Stmt add_image_checks(Stmt s, Function f) {
     vector<string> bufs = FindBuffers(s).buffers;    
 
