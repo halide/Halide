@@ -10,6 +10,30 @@
 namespace Halide { 
 namespace Internal {
 
+// Is a constant representable as a certain type
+int do_indirect_int_cast(Type t, int x) {
+    if (t == Int(8)) {
+        return (int8_t)x;
+    } else if (t == UInt(8)) {
+        return (uint8_t)x;
+    } else if (t == Int(16)) {
+        return (int16_t)x;
+    } else if (t == UInt(16)) {
+        return (uint16_t)x;
+    } else if (t == UInt(32)) {
+        return (uint32_t)x;
+    } else if (t.is_int()) {
+        return x;
+    } else if (t == Float(32)) {
+        return (float)x;
+    } else if (t == Float(64)) {
+        return (double)x;
+    } else {
+        assert(false && "Can't do an indirect int cast via this type");
+        return 0;
+    }
+}
+
 class Simplify : public IRMutator {
 
     Scope<Expr> scope;
@@ -44,6 +68,7 @@ class Simplify : public IRMutator {
 
     void visit(const Cast *op) {
         Expr value = mutate(op->value);        
+        const Cast *cast = value.as<Cast>();
         float f;
         int i;
         if (value.type() == op->type) {
@@ -52,6 +77,9 @@ class Simplify : public IRMutator {
             expr = new IntImm((int)f);
         } else if (op->type == Float(32) && const_int(value, &i)) {
             expr = new FloatImm((float)i);
+        } else if (op->type == Int(32) && cast && const_int(cast->value, &i)) {
+            // Cast to something then back to int
+            expr = do_indirect_int_cast(cast->type, i);
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
@@ -916,6 +944,9 @@ void simplify_test() {
     check(new Cast(Int(32), new Cast(Int(32), x)), x);
     check(new Cast(Float(32), 3), 3.0f);
     check(new Cast(Int(32), 5.0f), 5);
+
+    check(new Cast(Int(32), new Cast(Int(8), 3)), 3);
+    check(new Cast(Int(32), new Cast(Int(8), 1232)), -48);
 
     check(3 + x, x + 3);
     check(Expr(3) + Expr(8), 11);
