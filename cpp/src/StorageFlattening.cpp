@@ -88,7 +88,7 @@ class FlattenDimensions : public IRMutator {
 
 };
 
-Stmt do_storage_flattening(Stmt s) {
+Stmt storage_flattening(Stmt s) {
     return FlattenDimensions().mutate(s);
 }
 

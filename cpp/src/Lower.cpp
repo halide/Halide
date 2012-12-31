@@ -505,11 +505,11 @@ Stmt lower(Function f) {
     log(2) << "Image checks injected:\n" << s << '\n';
 
     log(1) << "Performing bounds inference...\n";
-    s = do_bounds_inference(s, order, env);
+    s = bounds_inference(s, order, env);
     log(2) << "Bounds inference:\n" << s << '\n';
 
     log(1) << "Performing storage flattening...\n";
-    s = do_storage_flattening(s);
+    s = storage_flattening(s);
     log(2) << "Storage flattening: " << '\n' << s << "\n\n";
 
     log(1) << "Simplifying...\n";

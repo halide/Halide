@@ -18,6 +18,5 @@ int main(int argc, const char **argv) {
     bounds_test();
     lower_test();
     Func::test();
-    
     return 0;
 }
