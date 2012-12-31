@@ -10,7 +10,12 @@
 #include <iostream>
 #include <set>
 #include <sstream>
-
+#include "RemoveDeadLets.h"
+#include "Tracing.h"
+#include "StorageFlattening.h"
+#include "BoundsInference.h"
+#include "VectorizeLoops.h"
+#include "UnrollLoops.h"
 
 namespace Halide {
 namespace Internal {
@@ -153,142 +158,6 @@ Stmt build_reduction_update(Function f) {
 
     return loop;
 }
-
-class InjectTracing : public IRMutator {
-public:
-    int level;
-    InjectTracing() {
-        char *trace = getenv("HL_TRACE");
-        level = trace ? atoi(trace) : 0;
-    }
-
-
-private:
-    void visit(const Call *op) {
-        expr = op;
-    }
-
-    void visit(const Provide *op) {       
-        IRMutator::visit(op);
-        if (level >= 2) {
-            const Provide *op = stmt.as<Provide>();
-            vector<Expr> args = op->args;
-            args.push_back(op->value);
-            Stmt print = new PrintStmt("Provide " + op->buffer, args);
-            stmt = new Block(print, op);
-        }
-    }
-
-    void visit(const Realize *op) {
-        IRMutator::visit(op);
-        if (level >= 1) {
-            const Realize *op = stmt.as<Realize>();
-            vector<Expr> args;
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                args.push_back(op->bounds[i].first);
-                args.push_back(op->bounds[i].second);
-            }
-            Stmt print = new PrintStmt("Realizing " + op->buffer + " over ", args);
-            Stmt body = new Block(print, op->body);
-            stmt = new Realize(op->buffer, op->type, op->bounds, body);
-        }        
-    }
-};
-
-// Inject let stmts defining the bounds of a function required at each loop level
-class BoundsInference : public IRMutator {
-public:
-    const vector<string> &funcs;
-    const map<string, Function> &env;    
-    Scope<int> in_update;
-
-    BoundsInference(const vector<string> &f, const map<string, Function> &e) : funcs(f), env(e) {}    
-
-    virtual void visit(const For *for_loop) {
-        
-        Scope<pair<Expr, Expr> > scope;
-
-        // Compute the region required of each function within this loop body
-        map<string, vector<pair<Expr, Expr> > > regions = regions_required(for_loop->body, scope);
-        
-        // TODO: For reductions we also need to consider the region
-        // provided within any update statements over this function
-        // (but not within the produce statement)
-
-        Stmt body = mutate(for_loop->body);
-
-
-        log(3) << "Bounds inference considering loop over " << for_loop->name << '\n';
-
-        // Inject let statements defining those bounds
-        for (size_t i = 0; i < funcs.size(); i++) {
-            if (in_update.contains(funcs[i])) continue;
-            const vector<pair<Expr, Expr> > &region = regions[funcs[i]];
-            const Function &f = env.find(funcs[i])->second;
-            if (region.empty()) continue;
-            log(3) << "Injecting bounds for " << funcs[i] << '\n';
-            assert(region.size() == f.args().size() && "Dimensionality mismatch between function and region required");
-            for (size_t j = 0; j < region.size(); j++) {
-                const string &arg_name = f.args()[j];
-                body = new LetStmt(f.name() + "." + arg_name + ".min", region[j].first, body);
-                body = new LetStmt(f.name() + "." + arg_name + ".extent", region[j].second, body);
-            }
-        }
-
-        if (body.same_as(for_loop->body)) {
-            stmt = for_loop;
-        } else {
-            stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, body);
-        }
-    }    
-
-    virtual void visit(const Pipeline *pipeline) {
-        Stmt produce = mutate(pipeline->produce);
-
-        Stmt update;
-        if (pipeline->update.defined()) {
-            // Even though there are calls to a function within the
-            // update step of a pipeline, we shouldn't modify the
-            // bounds computed - they've already been fixed. Any
-            // dependencies required should have been scheduled within
-            // the initialization, not the update step, so these
-            // bounds can't be of use to anyone anyway.
-            in_update.push(pipeline->buffer, 0);
-            update = mutate(pipeline->update);
-            in_update.pop(pipeline->buffer);
-        }
-        Stmt consume = mutate(pipeline->consume);
-        stmt = new Pipeline(pipeline->buffer, produce, update, consume);
-    }
-};
-
-Stmt do_bounds_inference(Stmt s, const vector<string> &order, const map<string, Function> &env) {
-    // Add a new outermost loop to make sure we get outermost bounds definitions too
-    s = new For("outermost", 0, 1, For::Serial, s);
-
-    s = BoundsInference(order, env).mutate(s);
-
-    // We can remove the loop over root now
-    const For *root_loop = s.as<For>();
-    assert(root_loop);
-    s = root_loop->body;    
-
-    // For the output function, the bounds required is the size of the buffer
-    Function f = env.find(order[order.size()-1])->second;
-    for (size_t i = 0; i < f.args().size(); i++) {
-        log(2) << f.name() << ", " << f.args()[i] << "\n";
-        ostringstream buf_min_name, buf_extent_name;
-        buf_min_name << f.name() << ".min." << i;
-        buf_extent_name << f.name() << ".extent." << i;
-        Expr buf_min = new Variable(Int(32), buf_min_name.str());
-        Expr buf_extent = new Variable(Int(32), buf_extent_name.str());
-        s = new LetStmt(f.name() + "." + f.args()[i] + ".min", buf_min, s);
-        s = new LetStmt(f.name() + "." + f.args()[i] + ".extent", buf_extent, s);
-    }   
-
-    return s;
-}
-
 
 Stmt inject_explicit_bounds(Stmt body, Function func) {           
     // Inject any explicit bounds
@@ -526,379 +395,6 @@ vector<string> realization_order(string output, const map<string, Function> &env
 
 }
 
-class FlattenDimensions : public IRMutator {
-    Expr flatten_args(const string &name, const vector<Expr> &args) {
-        Expr idx = 0;
-        for (size_t i = 0; i < args.size(); i++) {
-            ostringstream stride_name, min_name;
-            stride_name << name << ".stride." << i;
-            min_name << name << ".min." << i;
-            Expr stride = new Variable(Int(32), stride_name.str());
-            Expr min = new Variable(Int(32), min_name.str());
-            idx += (args[i] - min) * stride;
-        }
-        return idx;            
-    }
-
-    void visit(const Realize *realize) {
-        Stmt body = mutate(realize->body);
-
-        // Compute the size
-        Expr size = 1;
-        for (size_t i = 0; i < realize->bounds.size(); i++) {
-            size *= realize->bounds[i].second;
-        }
-
-
-        size = mutate(size);
-
-        stmt = new Allocate(realize->buffer, realize->type, size, body);
-
-        // Compute the strides 
-        for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
-            ostringstream stride_name;
-            stride_name << realize->buffer << ".stride." << i;
-            ostringstream prev_stride_name;
-            prev_stride_name << realize->buffer << ".stride." << (i-1);
-            ostringstream prev_extent_name;
-            prev_extent_name << realize->buffer << ".extent." << (i-1);
-            Expr prev_stride = new Variable(Int(32), prev_stride_name.str());
-            Expr prev_extent = new Variable(Int(32), prev_extent_name.str());
-            stmt = new LetStmt(stride_name.str(), prev_stride * prev_extent, stmt);
-        }
-        // Innermost stride is one
-        stmt = new LetStmt(realize->buffer + ".stride.0", 1, stmt);           
-
-        // Assign the mins and extents stored
-        for (int i = realize->bounds.size(); i > 0; i--) { 
-            ostringstream min_name, extent_name;
-            min_name << realize->buffer << ".min." << (i-1);
-            extent_name << realize->buffer << ".extent." << (i-1);
-            stmt = new LetStmt(min_name.str(), realize->bounds[i-1].first, stmt);
-            stmt = new LetStmt(extent_name.str(), realize->bounds[i-1].second, stmt);
-        }
-    }
-
-    void visit(const Provide *provide) {
-        Expr idx = mutate(flatten_args(provide->buffer, provide->args));
-        Expr val = mutate(provide->value);
-        stmt = new Store(provide->buffer, val, idx); 
-    }
-
-    void visit(const Call *call) {            
-        if (call->call_type == Call::Extern) {
-            vector<Expr> args(call->args.size());
-            bool changed = false;
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(call->args[i]);
-                if (!args[i].same_as(call->args[i])) changed = true;
-            }
-            if (!changed) {
-                expr = call;
-            } else {
-                expr = new Call(call->type, call->name, args);
-            }
-        } else {
-            Expr idx = mutate(flatten_args(call->name, call->args));
-            expr = new Load(call->type, call->name, idx, call->image, call->param);
-        }
-    }
-
-};
-
-class VectorizeLoops : public IRMutator {
-    class VectorSubs : public IRMutator {
-        string var;
-        Expr replacement;
-        Scope<Type> scope;
-
-        Expr widen(Expr e, int width) {
-            if (e.type().width == width) return e;
-            else if (e.type().width == 1) return new Broadcast(e, width);
-            else assert(false && "Mismatched vector widths in VectorSubs");
-            return Expr();
-        }
-            
-        virtual void visit(const Cast *op) {
-            Expr value = mutate(op->value);
-            if (value.same_as(op->value)) {
-                expr = op;
-            } else {
-                Type t = op->type.vector_of(value.type().width);
-                expr = new Cast(t, value);
-            }
-        }
-
-        virtual void visit(const Variable *op) {
-            if (op->name == var) {
-                expr = replacement;
-            } else if (scope.contains(op->name)) {
-                // The type of a var may have changed. E.g. if
-                // we're vectorizing across x we need to know the
-                // type of y has changed in the following example:
-                // let y = x + 1 in y*3
-                expr = new Variable(scope.get(op->name), op->name);
-            } else {
-                expr = op;
-            }
-        }
-
-        template<typename T> 
-        void mutate_binary_operator(const T *op) {
-            Expr a = mutate(op->a), b = mutate(op->b);
-            if (a.same_as(op->a) && b.same_as(op->b)) {
-                expr = op;
-            } else {
-                int w = std::max(a.type().width, b.type().width);
-                expr = new T(widen(a, w), widen(b, w));
-            }
-        }
-
-        void visit(const Add *op) {mutate_binary_operator(op);}
-        void visit(const Sub *op) {mutate_binary_operator(op);}
-        void visit(const Mul *op) {mutate_binary_operator(op);}
-        void visit(const Div *op) {mutate_binary_operator(op);}
-        void visit(const Mod *op) {mutate_binary_operator(op);}
-        void visit(const Min *op) {mutate_binary_operator(op);}
-        void visit(const Max *op) {mutate_binary_operator(op);}
-        void visit(const EQ *op)  {mutate_binary_operator(op);}
-        void visit(const NE *op)  {mutate_binary_operator(op);}
-        void visit(const LT *op)  {mutate_binary_operator(op);}
-        void visit(const LE *op)  {mutate_binary_operator(op);}
-        void visit(const GT *op)  {mutate_binary_operator(op);}
-        void visit(const GE *op)  {mutate_binary_operator(op);}
-        void visit(const And *op) {mutate_binary_operator(op);}
-        void visit(const Or *op)  {mutate_binary_operator(op);}
-
-        void visit(const Select *op) {
-            Expr condition = mutate(op->condition);
-            Expr true_value = mutate(op->true_value);
-            Expr false_value = mutate(op->false_value);
-            if (condition.same_as(op->condition) &&
-                true_value.same_as(op->true_value) &&
-                false_value.same_as(op->false_value)) {
-                expr = op;
-            } else {
-                int width = std::max(true_value.type().width, false_value.type().width);
-                width = std::max(width, condition.type().width);
-                // Widen the true and false values, but we don't have to widen the condition
-                true_value = widen(true_value, width);
-                false_value = widen(false_value, width);
-                expr = new Select(condition, true_value, false_value);
-            }
-        }
-
-        void visit(const Load *op) {
-            Expr index = mutate(op->index);
-            if (index.same_as(op->index)) {
-                expr = op;
-            } else {
-                int w = index.type().width;
-                expr = new Load(op->type.vector_of(w), op->buffer, index, op->image, op->param);
-            }
-        }
-
-        void visit(const Call *op) {
-            vector<Expr> new_args(op->args.size());
-            bool changed = false;
-                
-            // Mutate the args
-            int max_width = 0;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                Expr old_arg = op->args[i];
-                Expr new_arg = mutate(old_arg);
-                if (!new_arg.same_as(old_arg)) changed = true;
-                new_args[i] = new_arg;
-                max_width = std::max(new_arg.type().width, max_width);
-            }
-                
-            if (!changed) expr = op;
-            else {
-                // Widen the args to have the same width as the max width found
-                for (size_t i = 0; i < new_args.size(); i++) {
-                    new_args[i] = widen(new_args[i], max_width);
-                }
-                expr = new Call(op->type.vector_of(max_width), op->name, new_args, 
-                                op->call_type, op->func, op->image, op->param);
-            }
-        }
-
-        void visit(const Let *op) {
-            Expr value = mutate(op->value);
-            if (value.type().is_vector()) {
-                scope.push(op->name, value.type());
-            }
-
-            Expr body = mutate(op->body);
-
-            if (value.type().is_vector()) {
-                scope.pop(op->name);
-            }
-
-            if (value.same_as(op->value) && body.same_as(op->body)) {
-                expr = op;
-            } else {
-                expr = new Let(op->name, value, body);
-            }                
-        }
-
-        void visit(const LetStmt *op) {
-            Expr value = mutate(op->value);
-            if (value.type().is_vector()) {
-                scope.push(op->name, value.type());
-            }
-
-            Stmt body = mutate(op->body);
-
-            if (value.type().is_vector()) {
-                scope.pop(op->name);
-            }
-
-            if (value.same_as(op->value) && body.same_as(op->body)) {
-                stmt = op;
-            } else {
-                stmt = new LetStmt(op->name, value, body);
-            }                
-        }
-
-        void visit(const Provide *op) {
-            vector<Expr> new_args(op->args.size());
-            bool changed = false;
-                
-            // Mutate the args
-            int max_width = 0;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                Expr old_arg = op->args[i];
-                Expr new_arg = mutate(old_arg);
-                if (!new_arg.same_as(old_arg)) changed = true;
-                new_args[i] = new_arg;
-                max_width = std::max(new_arg.type().width, max_width);
-            }
-                
-            Expr value = mutate(op->value);
-
-            if (!changed && value.same_as(op->value)) {
-                stmt = op;
-            } else {
-                // Widen the args to have the same width as the max width found
-                for (size_t i = 0; i < new_args.size(); i++) {
-                    new_args[i] = widen(new_args[i], max_width);
-                }
-                value = widen(value, max_width);
-                stmt = new Provide(op->buffer, value, new_args);
-            }                
-        }
-
-        void visit(const Store *op) {
-            Expr value = mutate(op->value);
-            Expr index = mutate(op->index);
-            if (value.same_as(op->value) && index.same_as(op->index)) {
-                stmt = op;
-            } else {
-                int width = std::max(value.type().width, index.type().width);
-                stmt = new Store(op->buffer, widen(value, width), widen(index, width));
-            }
-        }
-
-    public: 
-        VectorSubs(string v, Expr r) : var(v), replacement(r) {
-        }
-    };
-        
-    void visit(const For *for_loop) {
-        if (for_loop->for_type == For::Vectorized) {
-            const IntImm *extent = for_loop->extent.as<IntImm>();
-            assert(extent && "Can only vectorize for loops over a constant extent");    
-
-            // Replace the var with a ramp within the body
-            Expr for_var = new Variable(Int(32), for_loop->name);                
-            Expr replacement = new Ramp(for_var, 1, extent->value);
-            Stmt body = VectorSubs(for_loop->name, replacement).mutate(for_loop->body);
-                
-            // The for loop becomes a simple let statement
-            stmt = new LetStmt(for_loop->name, for_loop->min, body);
-
-        } else {
-            IRMutator::visit(for_loop);
-        }
-    }
-};
-
-class UnrollLoops : public IRMutator {
-    void visit(const For *for_loop) {
-        if (for_loop->for_type == For::Unrolled) {
-            const IntImm *extent = for_loop->extent.as<IntImm>();
-            assert(extent && "Can only unroll for loops over a constant extent");
-            Stmt body = mutate(for_loop->body);
-                
-            Block *block = NULL;
-            // Make n copies of the body, each wrapped in a let that defines the loop var for that body
-            for (int i = extent->value-1; i >= 0; i--) {
-                Stmt iter = new LetStmt(for_loop->name, for_loop->min + i, body);
-                block = new Block(iter, block);
-            }
-            stmt = block;
-
-        } else {
-            IRMutator::visit(for_loop);
-        }
-    }
-};
-
-class RemoveDeadLets : public IRMutator {
-    Scope<int> references;
-
-    void visit(const Variable *op) {
-        if (references.contains(op->name)) references.ref(op->name)++;
-        expr = op;
-    }
-
-    void visit(const For *op) {            
-        Expr min = mutate(op->min);
-        Expr extent = mutate(op->extent);
-        references.push(op->name, 0);
-        Stmt body = mutate(op->body);
-        references.pop(op->name);
-        if (min.same_as(op->min) && extent.same_as(op->extent) && body.same_as(op->body)) {
-            stmt = op;
-        } else {
-            stmt = new For(op->name, min, extent, op->for_type, body);
-        }
-    }
-
-    void visit(const LetStmt *op) {
-        references.push(op->name, 0);
-        Stmt body = mutate(op->body);
-        if (references.get(op->name) > 0) {
-            Expr value = mutate(op->value);
-            if (body.same_as(op->body) && value.same_as(op->value)) {
-                stmt = op;
-            } else {
-                stmt = new LetStmt(op->name, value, body);
-            }
-        } else {
-            stmt = body;
-        }
-        references.pop(op->name);
-    }
-
-    void visit(const Let *op) {
-        references.push(op->name, 0);
-        Expr body = mutate(op->body);
-        if (references.get(op->name) > 0) {
-            Expr value = mutate(op->value);
-            if (body.same_as(op->body) && value.same_as(op->value)) {
-                expr = op;
-            } else {
-                expr = new Let(op->name, value, body);
-            }
-        } else {
-            expr = body;
-        }
-        references.pop(op->name);
-    }
-};
-
 Stmt create_initial_loop_nest(Function f) {
     
     // Generate initial loop nest    
@@ -1001,7 +497,7 @@ Stmt lower(Function f) {
     log(2) << "All realizations injected:\n" << s << '\n';
 
     log(1) << "Injecting tracing...\n";
-    s = InjectTracing().mutate(s);
+    s = inject_tracing(s);
     log(2) << "Tracing injected:\n" << s << '\n';
 
     log(1) << "Adding checks for images\n";
@@ -1013,7 +509,7 @@ Stmt lower(Function f) {
     log(2) << "Bounds inference:\n" << s << '\n';
 
     log(1) << "Performing storage flattening...\n";
-    s = FlattenDimensions().mutate(s);
+    s = do_storage_flattening(s);
     log(2) << "Storage flattening: " << '\n' << s << "\n\n";
 
     log(1) << "Simplifying...\n";
@@ -1021,15 +517,16 @@ Stmt lower(Function f) {
     log(2) << "Simplified: \n" << s << "\n\n";
 
     log(1) << "Vectorizing...\n";
-    s = VectorizeLoops().mutate(s);
+    s = vectorize_loops(s);
     log(2) << "Vectorized: \n" << s << "\n\n";
 
     log(1) << "Unrolling...\n";
-    s = UnrollLoops().mutate(s);
+    s = unroll_loops(s);
     log(2) << "Unrolled: \n" << s << "\n\n";
 
     log(1) << "Simplifying...\n";
     s = simplify(s);
+    s = remove_dead_lets(s);
     log(1) << "Lowered statement: \n" << s << "\n\n";
 
     return s;

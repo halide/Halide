@@ -1,7 +1,11 @@
-test_parallal_alloc crashes about 8% of the time
+test_parallel_alloc crashes about 8% of the time
 
 update scheduling
 
 free allocations on assertion failure
 
 Tell llvm that the input buffers don't alias
+
+storage folding
+
+sliding window optimization
