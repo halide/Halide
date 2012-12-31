@@ -77,7 +77,7 @@ static void (*halide_error_handler)(char *) = NULL;
 
 WEAK void halide_error(char *msg) {
     if (halide_error_handler) (*halide_error_handler)(msg);
-    else {
+    else {        
         fprintf(stderr, "Error: %s\n", msg);
         exit(1);
     }

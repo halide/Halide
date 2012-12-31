@@ -22,15 +22,17 @@ int main(int argc, char **argv) {
     timeval t1, t2;
 
     gettimeofday(&t1, NULL);
-    f.realize(W, H);
+    f.realize(imf);
     gettimeofday(&t2, NULL);
 
     double parallelTime = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;
 
+    printf("Realizing g\n");
     Image<float> img = g.realize(W, H);
+    printf("Done realizing g\n");
 
     gettimeofday(&t1, NULL);
-    g.realize(W, H);
+    g.realize(img);
     gettimeofday(&t2, NULL);
     double serialTime = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;
 
@@ -53,6 +55,6 @@ int main(int argc, char **argv) {
         return 0;
     }
     
-    printf("Success!");
+    printf("Success!\n");
     return 0;
 }

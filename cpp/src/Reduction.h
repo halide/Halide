@@ -12,7 +12,7 @@ struct ReductionVariable {
 };
 
 struct ReductionDomainContents {
-    mutable int ref_count;
+    mutable RefCount ref_count;
     vector<ReductionVariable> domain;
 };
 

@@ -34,14 +34,14 @@ struct IRNode {
      * visitors.
      */
     virtual void accept(Internal::IRVisitor *v) const = 0;
-    IRNode() : ref_count(0) {}
+    IRNode() {}
     virtual ~IRNode() {}
 
     /* These classes are all managed with intrusive reference
        counting, so we also track a reference count. It's mutable
        so that we can do reference counting even through const
        references to IR nodes. */
-    mutable int ref_count;
+    mutable Internal::RefCount ref_count;
 
     /* Each IR node subclass should return some unique pointer. We
      * can compare these pointers to do runtime type

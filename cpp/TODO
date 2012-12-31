@@ -1,5 +1,5 @@
-Out-of-bounds read and write checks on image parameters
-
-hook up error handler
+test_parallal_alloc crashes about 8% of the time
 
 update scheduling
+
+free allocations on assertion failure

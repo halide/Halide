@@ -6,7 +6,7 @@ namespace Halide {
 namespace Internal {
 
 template<>
-int &ref_count<FunctionContents>(const FunctionContents *f) {return f->ref_count;}
+RefCount &ref_count<FunctionContents>(const FunctionContents *f) {return f->ref_count;}
 
 template<>
 void destroy<FunctionContents>(const FunctionContents *f) {delete f;}

@@ -146,9 +146,9 @@ Stmt build_reduction_update(Function f) {
     // Now define the bounds on the reduction domain
     const vector<ReductionVariable> &dom = f.reduction_domain().domain();
     for (size_t i = 0; i < dom.size(); i++) {
-        string prefix = f.name() + "." + dom[i].var;
-        loop = new LetStmt(prefix + ".min", dom[i].min, loop);
-        loop = new LetStmt(prefix + ".extent", dom[i].extent, loop);
+        string p = prefix + dom[i].var;
+        loop = new LetStmt(p + ".min", dom[i].min, loop);
+        loop = new LetStmt(p + ".extent", dom[i].extent, loop);
     }
 
     return loop;
@@ -261,6 +261,34 @@ public:
         stmt = new Pipeline(pipeline->buffer, produce, update, consume);
     }
 };
+
+Stmt do_bounds_inference(Stmt s, const vector<string> &order, const map<string, Function> &env) {
+    // Add a new outermost loop to make sure we get outermost bounds definitions too
+    s = new For("outermost", 0, 1, For::Serial, s);
+
+    s = BoundsInference(order, env).mutate(s);
+
+    // We can remove the loop over root now
+    const For *root_loop = s.as<For>();
+    assert(root_loop);
+    s = root_loop->body;    
+
+    // For the output function, the bounds required is the size of the buffer
+    Function f = env.find(order[order.size()-1])->second;
+    for (size_t i = 0; i < f.args().size(); i++) {
+        log(2) << f.name() << ", " << f.args()[i] << "\n";
+        ostringstream buf_min_name, buf_extent_name;
+        buf_min_name << f.name() << ".min." << i;
+        buf_extent_name << f.name() << ".extent." << i;
+        Expr buf_min = new Variable(Int(32), buf_min_name.str());
+        Expr buf_extent = new Variable(Int(32), buf_extent_name.str());
+        s = new LetStmt(f.name() + "." + f.args()[i] + ".min", buf_min, s);
+        s = new LetStmt(f.name() + "." + f.args()[i] + ".extent", buf_extent, s);
+    }   
+
+    return s;
+}
+
 
 Stmt inject_explicit_bounds(Stmt body, Function func) {           
     // Inject any explicit bounds
@@ -407,27 +435,22 @@ public:
     }
 };
 
-/* Find all the external buffers in a stmt */
+/* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRVisitor {
 public:
     FindBuffers(Stmt s) {s.accept(this);}
     vector<string> buffers;
-    void visit(const Load *load) {
-        IRVisitor::visit(load);
-        Buffer b = load->image;
-        if (b.defined()) {
-            for (size_t i = 0; i < buffers.size(); i++) {
-                if (buffers[i] == b.name()) return;
-            }
-            buffers.push_back(b.name());
+
+    void include(const string &name) {
+        for (size_t i = 0; i < buffers.size(); i++) {
+            if (buffers[i] == name) return;
         }
-        Parameter p = load->param;
-        if (p.defined()) {
-            for (size_t i = 0; i < buffers.size(); i++) {
-                if (buffers[i] == p.name()) return;
-            }
-            buffers.push_back(p.name());
-        }
+        buffers.push_back(name);        
+    }
+
+    void visit(const Call *op) {
+        IRVisitor::visit(op);
+        if (op->call_type == Call::Image) include(op->name);
     }
 };
 
@@ -876,26 +899,22 @@ class RemoveDeadLets : public IRMutator {
     }
 };
 
-
-Stmt lower(Function f) {
-    // Compute an environment
-    map<string, Function> env;
-    populate_environment(f, env);
-
-    // Compute a realization order
-    vector<string> order = realization_order(f.name(), env);
-
+Stmt create_initial_loop_nest(Function f) {
+    
     // Generate initial loop nest    
-    assert(env.find(order[order.size()-1])->second.same_as(f));
     Stmt s = build_realization(f);
     if (f.is_reduction()) {
         s = new Block(s, build_reduction_update(f));
     }
-    s = inject_explicit_bounds(s, f);
+    return inject_explicit_bounds(s, f);
+}
+
+Stmt schedule_functions(Stmt s, const vector<string> &order, const map<string, Function> &env) {
+
+    // Inject a loop over root to give us a scheduling point
     string root_var = Schedule::LoopLevel::root().func + "." + Schedule::LoopLevel::root().var;
     s = new For(root_var, 0, 1, For::Serial, s);
 
-    log(2) << "Initial statement: " << '\n' << s << '\n';
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
 
@@ -917,68 +936,100 @@ Stmt lower(Function f) {
         log(2) << s << '\n';
     }
 
+    // We can remove the loop over root now
+    const For *root_loop = s.as<For>();
+    assert(root_loop);
+    return root_loop->body;    
+    
+}
+
+Stmt add_image_checks(Stmt s, Function f) {
+    vector<string> bufs = FindBuffers(s).buffers;    
+
+    bufs.push_back(f.name());
+
+    Scope<pair<Expr, Expr> > scope;
+    map<string, vector<pair<Expr, Expr> > > regions = regions_touched(s, scope);
+    for (size_t i = 0; i < bufs.size(); i++) {
+        // Validate the buffer arguments
+        string var_name = bufs[i] + ".stride.0";
+        Expr var = new Variable(Int(32), var_name);
+        string error_msg = "stride on innermost dimension of " + bufs[i] + " must be one";
+        s = new Block(new AssertStmt(var == 1, error_msg), 
+                      new LetStmt(var_name, 1, s));
+        // Figure out the region touched
+        const vector<pair<Expr, Expr> > &region = regions[bufs[i]];
+        if (region.size()) {
+            log(3) << "In image " << bufs[i] << " region touched is:\n";
+            for (size_t j = 0; j < region.size(); j++) {
+                log(3) << region[j].first << ", " << region[j].second << "\n";
+                ostringstream min_name, extent_name;
+                min_name << bufs[i] << ".min." << j;
+                extent_name << bufs[i] << ".extent." << j;
+                Expr actual_min = new Variable(Int(32), min_name.str());
+                Expr actual_extent = new Variable(Int(32), extent_name.str());
+                Expr min_used = region[j].first;
+                Expr extent_used = region[j].second;
+                if (!min_used.defined() || !extent_used.defined()) {
+                    std::cerr << "Region used of buffer " << bufs[i] 
+                              << " is unbounded in dimension " << i << std::endl;
+                    assert(false);
+                }
+                string error_msg = bufs[i] + " is accessed out of bounds";
+                Stmt check = new AssertStmt((actual_min <= min_used) &&
+                                            (actual_min + actual_extent >= min_used + extent_used), 
+                                            error_msg);
+                s = new Block(check, s);
+            }
+        }
+    }    
+
+    return s;
+}
+
+Stmt lower(Function f) {
+    // Compute an environment
+    map<string, Function> env;
+    populate_environment(f, env);
+
+    // Compute a realization order
+    vector<string> order = realization_order(f.name(), env);
+    Stmt s = create_initial_loop_nest(f);
+
+    log(2) << "Initial statement: " << '\n' << s << '\n';
+    s = schedule_functions(s, order, env);
     log(2) << "All realizations injected:\n" << s << '\n';
 
     log(1) << "Injecting tracing...\n";
     s = InjectTracing().mutate(s);
     log(2) << "Tracing injected:\n" << s << '\n';
 
-    // Do bounds inference
+    log(1) << "Adding checks for images\n";
+    s = add_image_checks(s, f);    
+    log(2) << "Image checks injected:\n" << s << '\n';
+
     log(1) << "Performing bounds inference...\n";
-    s = BoundsInference(order, env).mutate(s);
+    s = do_bounds_inference(s, order, env);
+    log(2) << "Bounds inference:\n" << s << '\n';
 
-    // For the output function, the bounds required is the size of the buffer
-    for (size_t i = 0; i < f.args().size(); i++) {
-        ostringstream buf_min_name, buf_extent_name;
-        buf_min_name << f.name() << ".min." << i;
-        buf_extent_name << f.name() << ".extent." << i;
-        Expr buf_min = new Variable(Int(32), buf_min_name.str());
-        Expr buf_extent = new Variable(Int(32), buf_extent_name.str());
-        s = new LetStmt(f.name() + "." + f.args()[i] + ".min", buf_min, s);
-        s = new LetStmt(f.name() + "." + f.args()[i] + ".extent", buf_extent, s);
-    }
-    log(2) << "Bounds inference: " << '\n' << s << '\n';
-
-    // Flatten everything to single-dimensional
     log(1) << "Performing storage flattening...\n";
     s = FlattenDimensions().mutate(s);
     log(2) << "Storage flattening: " << '\n' << s << "\n\n";
-
-    // Assert that the strides on dimension zero of the input and output buffers are one
-    vector<string> bufs = FindBuffers(s).buffers;
-    bufs.push_back(f.name());
-    for (size_t i = 0; i < bufs.size(); i++) {
-        string var_name = bufs[i] + ".stride.0";
-        Expr var = new Variable(Int(32), var_name);
-        string error_msg = "stride on innermost dimension of " + bufs[i] + " must be one";
-        s = new Block(new AssertStmt(var == 1, error_msg), 
-                      new LetStmt(var_name, 1, s));
-                      
-    }
-
-    log(2) << "Set buffer stride 0 to 1: \n" << s << "\n\n";
-
-    // A constant folding pass
 
     log(1) << "Simplifying...\n";
     s = simplify(s);
     log(2) << "Simplified: \n" << s << "\n\n";
 
-    // Vectorize loops marked for vectorization
-
     log(1) << "Vectorizing...\n";
     s = VectorizeLoops().mutate(s);
     log(2) << "Vectorized: \n" << s << "\n\n";
 
-    // Unroll loops marked for unrolling
     log(1) << "Unrolling...\n";
     s = UnrollLoops().mutate(s);
     log(2) << "Unrolled: \n" << s << "\n\n";
 
-    // Another constant folding pass
     log(1) << "Simplifying...\n";
     s = simplify(s);
-
     log(1) << "Lowered statement: \n" << s << "\n\n";
 
     return s;
