@@ -10,7 +10,7 @@ namespace Internal {
 // representations of the bounds over which things should be realized,
 // and inject expressions defining those bounds.
 
-Stmt do_bounds_inference(Stmt, const vector<string> &realization_order, const map<string, Function> &environment);
+Stmt bounds_inference(Stmt, const vector<string> &realization_order, const map<string, Function> &environment);
 
 }
 }
