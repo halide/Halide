@@ -84,8 +84,6 @@ void do_job(job &j) {
 	     module, f.name().c_str(), f.name().c_str(), module, op, module);
 
     if (system(cmd) != 0) {
-	snprintf(cmd, 1024, "cat %s.llc_stderr >> %s.s", module, module);
-	system(cmd);
 	j.result = new char[4096];
 	snprintf(j.result, 1024, "%s did not generate. Instead we got:\n", op);
 	char asmfile[1024];
@@ -240,13 +238,13 @@ void check_sse_all() {
     check_sse("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, max_i8)));
     check_sse("psubsb", 16, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, max_i8)));
     check_sse("paddusb", 16, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-    check_sse("psubusb", 16, u8(min(u16(u8_1) - u16(u8_2), max_u8)));
+    check_sse("psubusb", 16, u8(max(i16(u8_1) - i16(u8_2), 0)));
     check_sse("paddw", 8, u16_1 + u16_2);
     check_sse("psubw", 8, u16_1 - u16_2);
     check_sse("paddsw", 8, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
     check_sse("psubsw", 8, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
     check_sse("paddusw", 8, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-    check_sse("psubusw", 8, u16(min(u32(u16_1) - u32(u16_2), max_u16)));
+    check_sse("psubusw", 8, u16(max(i32(u16_1) - i32(u16_2), 0)));
     check_sse("paddd", 4, i32_1 + i32_2);
     check_sse("psubd", 4, i32_1 - i32_2);
     check_sse("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
