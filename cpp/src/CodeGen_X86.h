@@ -27,8 +27,13 @@ protected:
     // Some useful types
     llvm::Type *i32x4, *i32x8;
 
+    llvm::Value *call_intrin(Type t, const string &name, Expr arg1, Expr arg2 = Expr());    
+
     // Nodes that we handle specially
-    virtual void visit(const Allocate *);        
+    void visit(const Cast *);
+    void visit(const Allocate *);        
+
+
 };
 
 }}
