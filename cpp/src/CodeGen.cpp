@@ -281,6 +281,9 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
                                              target_machine->getVectorTargetTransformInfo()));
     pass_manager.add(new DataLayout(module));
 
+    // Make sure things marked as always-inline get inlined
+    pass_manager.add(createAlwaysInlinerPass());
+
     // Override default to generate verbose assembly.
     target_machine->setAsmVerbosityDefault(true);
 
@@ -881,14 +884,14 @@ void CodeGen::visit(const PrintStmt *op) {
 }
 
 void CodeGen::visit(const AssertStmt *op) {
-    codegen(op->condition);
+    Value *cond = codegen(op->condition);
 
     // Make a new basic block for the assert
     BasicBlock *assert_fails_bb = BasicBlock::Create(context, "assert_failed", function);
     BasicBlock *assert_succeeds_bb = BasicBlock::Create(context, "after_assert", function);
 
     // If the condition fails, enter the assert body, otherwise, enter the block after
-    builder.CreateCondBr(value, assert_succeeds_bb, assert_fails_bb);
+    builder.CreateCondBr(cond, assert_succeeds_bb, assert_fails_bb);
 
     // Build the failure case
     builder.SetInsertPoint(assert_fails_bb);
