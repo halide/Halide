@@ -60,32 +60,26 @@ bool is_one(Expr e) {
     if (const Broadcast *b = e.as<Broadcast>()) return is_one(b->value);
     return false;
 }
+
+Expr make_const(Type t, int val) {
+    if (t == Int(32)) return val;
+    if (t == Float(32)) return (float)val;
+    if (t.is_vector()) {
+        return new Broadcast(make_const(t.element_of(), val), t.width);
+    }
+    return new Cast(t, val);
+}
         
 Expr make_zero(Type t) {
-    if (t == Int(32)) return 0;
-    if (t == Float(32)) return 0.0f;
-    if (t.is_vector()) {
-        return new Broadcast(make_zero(t.element_of()), t.width);
-    }
-    return new Cast(t, 0);
+    return make_const(t, 0);
 }
         
 Expr make_one(Type t) {
-    if (t == Int(32)) return 1;
-    if (t == Float(32)) return 1.0f;
-    if (t.is_vector()) {
-        return new Broadcast(make_one(t.element_of()), t.width);
-    }
-    return new Cast(t, 1);
+    return make_const(t, 1);
 }
 
 Expr make_two(Type t) {
-    if (t == Int(32)) return 2;
-    if (t == Float(32)) return 2.0f;
-    if (t.is_vector()) {
-        return new Broadcast(make_two(t.element_of()), t.width);
-    }
-    return new Cast(t, 2);
+    return make_const(t, 2);
 }
     
 Expr const_true(int w) {
@@ -99,45 +93,47 @@ Expr const_false(int w) {
 
 
 void match_types(Expr &a, Expr &b) {
+    if (a.type() == b.type()) return;
+
+    // First widen to match
+    if (a.type().is_scalar() && b.type().is_vector()) {
+        a = new Broadcast(a, b.type().width);
+    } else if (a.type().is_vector() && b.type().is_scalar()) {
+        b = new Broadcast(b, a.type().width);
+    } else {
+        assert(a.type().width == b.type().width && "Can't match types of differing widths");
+    }
+
     Type ta = a.type(), tb = b.type();
 
-    if (ta == tb) return;
-
-    assert(ta.width == 1 && tb.width == 1 && "Can't do type coercion on vector types");
-    
-    // int(a) * float(b) -> float(b)
-    // uint(a) * float(b) -> float(b)
-    if (!ta.is_float() && tb.is_float()) {a = cast(tb, a); return;}
-    if (ta.is_float() && !tb.is_float()) {b = cast(ta, b); return;}
-    
-    // float(a) * float(b) -> float(max(a, b))
-    if (ta.is_float() && tb.is_float()) {
+    if (!ta.is_float() && tb.is_float()) {
+        // int(a) * float(b) -> float(b)
+        // uint(a) * float(b) -> float(b)        
+        a = cast(tb, a);
+    } else if (ta.is_float() && !tb.is_float()) {
+        b = cast(ta, b);
+    } else if (ta.is_float() && tb.is_float()) {    
+        // float(a) * float(b) -> float(max(a, b))
         if (ta.bits > tb.bits) b = cast(ta, b);
         else a = cast(tb, a); 
-        return;
-    }
-    
-    // (u)int(a) * (u)intImm(b) -> int(a)
-    if (!ta.is_float() && !tb.is_float() && is_const(b)) {b = cast(ta, b); return;}
-    if (!tb.is_float() && !ta.is_float() && is_const(a)) {a = cast(tb, a); return;}
-
-    // uint(a) * uint(b) -> uint(max(a, b))
-    if (ta.is_uint() && tb.is_uint()) {
+    } else if (!ta.is_float() && !tb.is_float() && is_const(b)) {
+        // (u)int(a) * (u)intImm(b) -> int(a)
+        b = cast(ta, b); 
+    } else if (!tb.is_float() && !ta.is_float() && is_const(a)) {
+        a = cast(tb, a); 
+    } else if (ta.is_uint() && tb.is_uint()) {
+        // uint(a) * uint(b) -> uint(max(a, b))        
         if (ta.bits > tb.bits) b = cast(ta, b);
         else a = cast(tb, a);
-        return;
-    }
-
-    // int(a) * (u)int(b) -> int(max(a, b))
-    if (!ta.is_float() && !tb.is_float()) {
+    } else if (!ta.is_float() && !tb.is_float()) {
+        // int(a) * (u)int(b) -> int(max(a, b))
         int bits = std::max(ta.bits, tb.bits);
         a = cast(Int(bits), a);
         b = cast(Int(bits), b);
-        return;
-    }        
-
-    std::cerr << "Could not match types: " << ta << ", " << tb << std::endl;
-    assert(false && "Failed type coercion");    
+    } else {
+        std::cerr << "Could not match types: " << ta << ", " << tb << std::endl;
+        assert(false && "Failed type coercion");    
+    }
 }
 
     
