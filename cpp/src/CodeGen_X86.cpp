@@ -33,19 +33,6 @@ CodeGen_X86::CodeGen_X86(bool sse_41) : CodeGen(), use_sse_41(sse_41) {
     wild_u32x4 = new Variable(UInt(32, 4), "*");
     wild_f32x4 = new Variable(Float(32, 4), "*");
     wild_f64x2 = new Variable(Float(64, 2), "*");
-
-    min_i8 = new Broadcast(cast(Int(16), -128), 16);
-    max_i8 = new Broadcast(cast(Int(16), 127), 16);
-    min_i16 = new Broadcast(cast(Int(32), -32768), 8);
-    max_i16 = new Broadcast(cast(Int(32), 32767), 8);
-    min_u8 = new Broadcast(cast(Int(16), 0), 16);
-    max_u8u = new Broadcast(cast(UInt(16), 255), 16);
-    max_u8i = new Broadcast(cast(Int(16), 255), 16);
-    min_u16 = new Broadcast(0, 8);
-    max_u16u = new Broadcast(cast(UInt(32), 65535), 8);
-    max_u16i = new Broadcast(65535, 8);
-
-
 }
 
 void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) {
@@ -138,39 +125,41 @@ void CodeGen_X86::visit(const Cast *op) {
         Expr pattern;
     };
 
+    log(1) << _i8(clamp(_i16(wild_i8x16) + _i16(wild_i8x16), -128, 127)) << "\n";
+
     Pattern patterns[] = {
         {false, false, Int(8, 16), "sse2.padds.b", 
-         _i8(clamp(_i16(wild_i8x16) + _i16(wild_i8x16), min_i8, max_i8))},
+         _i8(clamp(_i16(wild_i8x16) + _i16(wild_i8x16), -128, 127))},
         {false, false, Int(8, 16), "sse2.psubs.b", 
-         _i8(clamp(_i16(wild_i8x16) - _i16(wild_i8x16), min_i8, max_i8))},
+         _i8(clamp(_i16(wild_i8x16) - _i16(wild_i8x16), -128, 127))},
         {false, false, UInt(8, 16), "sse2.paddus.b", 
-         _u8(min(_u16(wild_u8x16) + _u16(wild_u8x16), max_u8u))},
+         _u8(min(_u16(wild_u8x16) + _u16(wild_u8x16), 255))},
         {false, false, UInt(8, 16), "sse2.psubus.b", 
-         _u8(max(_i16(wild_u8x16) - _i16(wild_u8x16), min_u8))},
+         _u8(max(_i16(wild_u8x16) - _i16(wild_u8x16), 0))},
         {false, false, Int(16, 8), "sse2.padds.w", 
-         _i16(clamp(_i32(wild_i16x8) + _i32(wild_i16x8), min_i16, max_i16))},
+         _i16(clamp(_i32(wild_i16x8) + _i32(wild_i16x8), -32768, 32767))},
         {false, false, Int(16, 8), "sse2.psubs.w", 
-         _i16(clamp(_i32(wild_i16x8) - _i32(wild_i16x8), min_i16, max_i16))},
+         _i16(clamp(_i32(wild_i16x8) - _i32(wild_i16x8), -32768, 32767))},
         {false, false, UInt(16, 8), "sse2.paddus.w", 
-         _u16(min(_u32(wild_u16x8) + _u32(wild_u16x8), max_u16u))},
+         _u16(min(_u32(wild_u16x8) + _u32(wild_u16x8), 65535))},
         {false, false, UInt(16, 8), "sse2.psubus.w", 
-         _u16(max(_i32(wild_u16x8) - _i32(wild_u16x8), min_u16))},
+         _u16(max(_i32(wild_u16x8) - _i32(wild_u16x8), 0))},
         {false, false, Int(16, 8), "sse2.pmulh.w", 
-         _i16((_i32(wild_i16x8) * _i32(wild_i16x8)) / (new Broadcast(65536, 8)))},
+         _i16((_i32(wild_i16x8) * _i32(wild_i16x8)) / 65536)},
         {false, false, UInt(16, 8), "sse2.pmulhu.w", 
-         _u16((_u32(wild_u16x8) * _u32(wild_u16x8)) / (new Broadcast(cast(UInt(32), 65536), 8)))},
+         _u16((_u32(wild_u16x8) * _u32(wild_u16x8)) / 65536)},
         {false, false, UInt(8, 16), "sse2.pavg.b",
-         _u8(((_u16(wild_u8x16) + _u16(wild_u8x16)) + make_one(UInt(16, 16))) / make_two(UInt(16, 16)))},
+         _u8(((_u16(wild_u8x16) + _u16(wild_u8x16)) + 1) / 2)},
         {false, false, UInt(16, 8), "sse2.pavg.w",
-         _u16(((_u32(wild_u16x8) + _u32(wild_u16x8)) + make_one(UInt(32, 8))) / make_two(UInt(32, 8)))},
+         _u16(((_u32(wild_u16x8) + _u32(wild_u16x8)) + 1) / 2)},
         {false, true, Int(16, 8), "packssdw", 
-         _i16(clamp(wild_i32x8, min_i16, max_i16))},
+         _i16(clamp(wild_i32x8, -32768, 32767))},
         {false, true, Int(8, 16), "packsswb", 
-         _i8(clamp(wild_i16x16, min_i8, max_i8))},
+         _i8(clamp(wild_i16x16, -128, 127))},
         {false, true, UInt(8, 16), "packuswb", 
-         _u8(clamp(wild_i16x16, min_u8, max_u8i))},
+         _u8(clamp(wild_i16x16, 0, 255))},
         {true, true, UInt(16, 8), "packusdw",
-         _u16(clamp(wild_i32x8, min_u16, max_u16i))}
+         _u16(clamp(wild_i32x8, 0, 65535))}
     };
         
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
@@ -189,12 +178,12 @@ void CodeGen_X86::visit(const Cast *op) {
     CodeGen::visit(op);
 
     /*
-    check_sse("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, max_i8)));
-    check_sse("psubsb", 16, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, max_i8)));
+    check_sse("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, 127)));
+    check_sse("psubsb", 16, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, 127)));
     check_sse("paddusb", 16, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
     check_sse("psubusb", 16, u8(min(u16(u8_1) - u16(u8_2), max_u8)));
-    check_sse("paddsw", 8, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
-    check_sse("psubsw", 8, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
+    check_sse("paddsw", 8, i16(clamp(i32(i16_1) + i32(i16_2), -32768, 32767)));
+    check_sse("psubsw", 8, i16(clamp(i32(i16_1) - i32(i16_2), -32768, 32767)));
     check_sse("paddusw", 8, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
     check_sse("psubusw", 8, u16(min(u32(u16_1) - u32(u16_2), max_u16)));
     check_sse("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
@@ -212,8 +201,8 @@ void CodeGen_X86::visit(const Cast *op) {
     check_sse("shufps", 4, in_f32(2*x));
 
     // SSE 2
-    check_sse("packssdw", 8, i16(clamp(i32_1, min_i16, max_i16)));
-    check_sse("packsswb", 16, i8(clamp(i16_1, min_i8, max_i8)));
+    check_sse("packssdw", 8, i16(clamp(i32_1, -32768, 32767)));
+    check_sse("packsswb", 16, i8(clamp(i16_1, min_i8, 127)));
     check_sse("packuswb", 16, u8(clamp(i16_1, 0, max_u8)));
 
     check_sse("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));

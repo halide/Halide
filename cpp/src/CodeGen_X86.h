@@ -33,8 +33,6 @@ protected:
     Expr wild_i8x16, wild_i16x8, wild_i16x16, wild_i32x4, wild_i32x8;
     Expr wild_u8x16, wild_u16x8, wild_u32x4;
     Expr wild_f32x4, wild_f64x2;
-    Expr min_i8, max_i8, min_i16, max_i16;
-    Expr min_u8, max_u8u, max_u8i, min_u16, max_u16u, max_u16i;
 
     llvm::Value *call_intrin(Type t, const string &name, std::vector<Expr>);    
 
