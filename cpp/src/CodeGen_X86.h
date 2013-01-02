@@ -35,6 +35,7 @@ protected:
     Expr wild_f32x4, wild_f32x8, wild_f64x2;
 
     llvm::Value *call_intrin(Type t, const string &name, std::vector<Expr>);    
+    llvm::Value *call_intrin(Type t, const string &name, std::vector<llvm::Value *>);    
 
     // Nodes that we handle specially
     void visit(const Cast *);
