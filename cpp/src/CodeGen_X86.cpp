@@ -16,10 +16,12 @@ namespace Internal {
 
 extern unsigned char builtins_bitcode_x86[];
 extern int builtins_bitcode_x86_length;
+extern unsigned char builtins_bitcode_x86_avx[];
+extern int builtins_bitcode_x86_avx_length;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(bool sse_41) : CodeGen(), use_sse_41(sse_41) {
+CodeGen_X86::CodeGen_X86(bool sse_41, bool avx) : CodeGen(), use_sse_41(sse_41), use_avx(avx) {
     i32x4 = VectorType::get(i32, 4);
     i32x8 = VectorType::get(i32, 8);
  
@@ -32,20 +34,29 @@ CodeGen_X86::CodeGen_X86(bool sse_41) : CodeGen(), use_sse_41(sse_41) {
     wild_u16x8 = new Variable(UInt(16, 8), "*");
     wild_u32x4 = new Variable(UInt(32, 4), "*");
     wild_f32x4 = new Variable(Float(32, 4), "*");
+    wild_f32x8 = new Variable(Float(32, 8), "*");
     wild_f64x2 = new Variable(Float(64, 2), "*");
 }
 
 void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) {
-    assert(builtins_bitcode_x86_length && "initial module for x86 is empty");
 
-    // Wrap the initial module in a memory buffer
-    StringRef sb = StringRef((char *)builtins_bitcode_x86, builtins_bitcode_x86_length);
+
+    StringRef sb;
+
+    if (use_avx) {
+        assert(builtins_bitcode_x86_avx_length && "initial module for x86_avx is empty");
+        sb = StringRef((char *)builtins_bitcode_x86_avx, builtins_bitcode_x86_avx_length);
+    } else {
+        assert(builtins_bitcode_x86_length && "initial module for x86 is empty");
+        sb = StringRef((char *)builtins_bitcode_x86, builtins_bitcode_x86_length);
+    }
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
     // Parse it
     module = ParseBitcodeFile(bitcode_buffer, context);
 
     // Fix the target triple
+    log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // For now we'll just leave it as whatever the module was
     // compiled as. This assumes that we're not cross-compiling
@@ -64,7 +75,6 @@ Expr _i64(Expr e) {
 Expr _u64(Expr e) {
     return cast(UInt(64, e.type().width), e);
 }
-
 Expr _i32(Expr e) {
     return cast(Int(32, e.type().width), e);
 }
@@ -106,10 +116,14 @@ Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Exp
         arg_values[i] = codegen(args[i]);
     }
 
-    FunctionType *func_t = FunctionType::get(llvm_type_of(result_type), arg_types, false);
-    
-    llvm::Function *fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.x86." + name, module);
-    fn->setCallingConv(CallingConv::C);            
+    llvm::Function *fn = module->getFunction("llvm.x86." + name);
+
+    if (!fn) {
+        FunctionType *func_t = FunctionType::get(llvm_type_of(result_type), arg_types, false);    
+        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.x86." + name, module);
+        fn->setCallingConv(CallingConv::C);
+    }
+
     return builder.CreateCall(fn, arg_values);
 }
  
@@ -124,8 +138,6 @@ void CodeGen_X86::visit(const Cast *op) {
         string intrin;
         Expr pattern;
     };
-
-    log(1) << _i8(clamp(_i16(wild_i8x16) + _i16(wild_i8x16), -128, 127)) << "\n";
 
     Pattern patterns[] = {
         {false, false, Int(8, 16), "sse2.padds.b", 
@@ -217,6 +229,13 @@ void CodeGen_X86::visit(const Div *op) {
             value = call_intrin(Float(32, 4), "sse.rsqrt.ps", matches);
         } else {
             value = call_intrin(Float(32, 4), "sse.rcp.ps", vec(op->b));
+        }
+    } else if (use_avx && op->type == Float(32, 8) && is_one(op->a)) {
+        // Reciprocal and reciprocal square root
+        if (expr_match(new Call(Float(32, 8), "sqrt_f32", vec(wild_f32x8)), op->b, matches)) {            
+            value = call_intrin(Float(32, 8), "avx.rsqrt.ps.256", matches);
+        } else {
+            value = call_intrin(Float(32, 8), "avx.rcp.ps.256", vec(op->b));
         }
     } else {    
         CodeGen::visit(op);
@@ -426,6 +445,16 @@ void CodeGen_X86::test() {
     assert(extern_function_1_was_called);
 
     std::cout << "CodeGen_X86 test passed" << std::endl;
+}
+
+std::string CodeGen_X86::mcpu() const {
+    if (use_avx) return "corei7-avx";
+    if (use_sse_41) return "corei7";
+    return "core2";
+}
+
+std::string CodeGen_X86::mattrs() const {
+    return "";
 }
 
 }}

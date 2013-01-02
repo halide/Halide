@@ -1398,7 +1398,7 @@ int main(int argc, char **argv) {
     char *target = getenv("HL_TARGET");
     use_avx = target && strstr(target, "avx");
     use_avx2 = target && strstr(target, "avx2");
-    if (!target || strncasecmp(target, "x86_64", 6) == 0) {
+    if (!target || strncasecmp(target, "x86", 3) == 0) {
 	check_sse_all();
     } else if (strncasecmp(target, "arm", 3) == 0) {
 	check_neon_all();

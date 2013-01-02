@@ -6,7 +6,7 @@
 #include "Function.h"
 #include "Argument.h"
 #include "Lower.h"
-#include "CodeGen_X86.h"
+#include "StmtCompiler.h"
 #include "CodeGen_C.h"
 #include "Image.h"
 #include "Param.h"
@@ -20,6 +20,7 @@ using namespace Internal;
 
 using std::max;
 using std::min;
+using std::make_pair;
 
 namespace {
 bool var_name_match(string candidate, string var) {
@@ -464,7 +465,7 @@ void Func::compile_to_bitcode(const string &filename, std::vector<Argument> args
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
-    CodeGen_X86 cg;
+    StmtCompiler cg;
     cg.compile(stmt, name(), args);
     cg.compile_to_bitcode(filename);
 }
@@ -477,7 +478,7 @@ void Func::compile_to_object(const string &filename, std::vector<Argument> args)
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
-    CodeGen_X86 cg;
+    StmtCompiler cg;
     cg.compile(stmt, name(), args);
     cg.compile_to_native(filename, false);
 }
@@ -499,7 +500,7 @@ void Func::compile_to_assembly(const string &filename, std::vector<Argument> arg
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
-    CodeGen_X86 cg;
+    StmtCompiler cg;
     cg.compile(stmt, name(), args);
     cg.compile_to_native(filename, true);
 }
@@ -608,8 +609,7 @@ void Func::realize(Buffer dst) {
                              << infer_args.arg_types[i].is_buffer << "\n";
         }
         
-        // TODO: Assume we're jitting for x86 for now
-        CodeGen_X86 cg;
+        StmtCompiler cg;
         cg.compile(stmt, name(), infer_args.arg_types);
 
         if (log::debug_level >= 3) {

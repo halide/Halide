@@ -255,8 +255,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
         
     TargetMachine *target_machine =
         target->createTargetMachine(module->getTargetTriple(), 
-                                    "", // -mcpu
-                                    "", // features, e.g. avx
+                                    mcpu(), mattrs(),
                                     options, 
                                     Reloc::Default, 
                                     CodeModel::Default, 
@@ -692,11 +691,9 @@ void CodeGen::visit(const Load *op) {
         Value *ptr = codegen_buffer_pointer(op->buffer, op->type, index);
         value = builder.CreateLoad(ptr);
     } else {            
-        const Ramp *ramp;
-        const IntImm *stride;
-        if ((ramp = op->index.as<Ramp>()) &&
-            (stride = ramp->stride.as<IntImm>()) &&
-            (stride->value == 1)) {
+        const Ramp *ramp = op->index.as<Ramp>();
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+        if (ramp && stride && stride->value == 1) {
             /* TODO:
                ModulusRemainder mod_rem(op);
                mod_rem.modulus;
@@ -711,6 +708,35 @@ void CodeGen::visit(const Load *op) {
             Value *ptr = codegen_buffer_pointer(op->buffer, op->type.element_of(), base);
             ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             value = builder.CreateAlignedLoad(ptr, 1);                
+        } else if (ramp && stride && stride->value == 2) {
+            // Load two vectors worth and then shuffle
+            Value *base = codegen(ramp->base);
+            Value *ptr = codegen_buffer_pointer(op->buffer, op->type.element_of(), base);
+            ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
+            Value *a = builder.CreateAlignedLoad(ptr, 1);
+            ptr = builder.CreateConstGEP1_32(ptr, 1);
+            Value *b = builder.CreateAlignedLoad(ptr, 1);
+            Value *indices = UndefValue::get(VectorType::get(i32, ramp->width));
+            for (int i = 0; i < ramp->width; i++) {
+                indices = builder.CreateInsertElement(indices, 
+                                                      ConstantInt::get(i32, i*2), 
+                                                      ConstantInt::get(i32, i));
+            }
+            value = builder.CreateShuffleVector(a, b, indices);
+        } else if (ramp && stride && stride->value == -1) {
+            // Load the vector and then flip it in-place
+            Value *base = codegen(ramp->base - ramp->width + 1);
+            Value *ptr = codegen_buffer_pointer(op->buffer, op->type.element_of(), base);
+            ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
+            Value *vec = builder.CreateAlignedLoad(ptr, 1);            
+            Value *undef = UndefValue::get(vec->getType());
+            Value *indices = UndefValue::get(VectorType::get(i32, ramp->width));
+            for (int i = 0; i < ramp->width; i++) {
+                indices = builder.CreateInsertElement(indices, 
+                                                      ConstantInt::get(i32, ramp->width-1-i), 
+                                                      ConstantInt::get(i32, i));
+            }
+            value = builder.CreateShuffleVector(vec, undef, indices);
         } else {                
             // 5) General gathers
             Value *index = codegen(op->index);
@@ -1191,5 +1217,11 @@ void CodeGen::visit(const Realize *op) {
 void CodeGen::visit(const Provide *op) {
     assert(false && "Provide encountered during codegen");
 }
+
+template<>
+RefCount &ref_count<CodeGen>(const CodeGen *p) {return p->ref_count;}
+
+template<>
+void destroy<CodeGen>(const CodeGen *p) {delete p;}
 
 }}
