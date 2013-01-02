@@ -78,6 +78,15 @@ Expr make_one(Type t) {
     }
     return new Cast(t, 1);
 }
+
+Expr make_two(Type t) {
+    if (t == Int(32)) return 2;
+    if (t == Float(32)) return 2.0f;
+    if (t.is_vector()) {
+        return new Broadcast(make_two(t.element_of()), t.width);
+    }
+    return new Cast(t, 2);
+}
     
 Expr const_true(int w) {
     return make_one(UInt(1, w));

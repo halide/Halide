@@ -13,6 +13,7 @@ bool is_zero(Expr e);
 bool is_one(Expr e);
 Expr make_zero(Type t);
 Expr make_one(Type t);
+Expr make_two(Type t);
 Expr const_true(int width = 1);
 Expr const_false(int width = 1);
 void match_types(Expr &a, Expr &b);
