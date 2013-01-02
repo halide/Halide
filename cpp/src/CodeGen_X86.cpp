@@ -10,6 +10,7 @@
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
+#include "integer_division_table.h"
 
 namespace Halide { 
 namespace Internal {
@@ -126,6 +127,23 @@ Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Exp
 
     return builder.CreateCall(fn, arg_values);
 }
+
+Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Value *> arg_values) {
+    vector<llvm::Type *> arg_types(arg_values.size());
+    for (size_t i = 0; i < arg_values.size(); i++) {
+        arg_types[i] = arg_values[i]->getType();
+    }
+
+    llvm::Function *fn = module->getFunction("llvm.x86." + name);
+
+    if (!fn) {
+        FunctionType *func_t = FunctionType::get(llvm_type_of(result_type), arg_types, false);    
+        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.x86." + name, module);
+        fn->setCallingConv(CallingConv::C);
+    }
+
+    return builder.CreateCall(fn, arg_values);
+}
  
 void CodeGen_X86::visit(const Cast *op) {
 
@@ -221,7 +239,14 @@ void CodeGen_X86::visit(const Cast *op) {
     */
 }
 
-void CodeGen_X86::visit(const Div *op) {
+void CodeGen_X86::visit(const Div *op) {    
+
+    // Detect if it's a small int division
+    const Broadcast *broadcast = op->b.as<Broadcast>();
+    const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;    
+    const IntImm *int_imm = cast_b ? cast_b->value.as<IntImm>() : NULL;
+    int const_divisor = int_imm ? int_imm->value : 0;
+
     vector<Expr> matches;    
     if (op->type == Float(32, 4) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
@@ -237,6 +262,63 @@ void CodeGen_X86::visit(const Div *op) {
         } else {
             value = call_intrin(Float(32, 8), "avx.rcp.ps.256", vec(op->b));
         }
+    } else if (op->type == Int(16, 8) && const_divisor > 1 && const_divisor < 64) {
+        int method     = IntegerDivision::table_s16[const_divisor-2][0];
+        int multiplier = IntegerDivision::table_s16[const_divisor-2][1];
+        int shift      = IntegerDivision::table_s16[const_divisor-2][2];        
+
+        Value *val = codegen(op->a);
+        
+        // Start with multiply and keep high half
+        Value *mult;
+        if (multiplier != 0) {
+            mult = codegen(cast(op->type, multiplier));
+            mult = call_intrin(Int(16, 8), "sse2.pmulh.w", vec(val, mult));
+
+            // Possibly add a correcting factor
+            if (method == 1) {
+                mult = builder.CreateAdd(mult, val);
+            }
+        } else {
+            mult = val;
+        }
+
+        // Do the shift
+        Value *sh;
+        if (shift) {
+            sh = codegen(cast(op->type, shift));
+            mult = builder.CreateAShr(mult, sh);
+        }
+
+        // Add one for negative numbers
+        sh = codegen(cast(op->type, op->type.bits - 1));
+        Value *sign_bit = builder.CreateLShr(val, sh);
+        value = builder.CreateAdd(mult, sign_bit);
+    } else if (op->type == UInt(16, 8) && const_divisor > 1 && const_divisor < 64) {
+        int method     = IntegerDivision::table_u16[const_divisor-2][0];
+        int multiplier = IntegerDivision::table_u16[const_divisor-2][1];
+        int shift      = IntegerDivision::table_u16[const_divisor-2][2];        
+
+        Value *val = codegen(op->a);
+        
+        // Start with multiply and keep high half
+        Value *mult = val;
+        if (method > 0) {
+            mult = codegen(cast(op->type, multiplier));
+            mult = call_intrin(UInt(16, 8), "sse2.pmulhu.w", vec(val, mult));
+
+            // Possibly add a correcting factor
+            if (method == 2) {
+                Value *correction = builder.CreateSub(val, mult);
+                correction = builder.CreateLShr(correction, codegen(make_one(op->type)));
+                mult = builder.CreateAdd(mult, correction);
+            }
+        }
+
+        // Do the shift
+        Value *sh = codegen(cast(op->type, shift));
+        value = builder.CreateLShr(mult, sh);
+
     } else {    
         CodeGen::visit(op);
     }
