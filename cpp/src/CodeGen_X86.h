@@ -32,6 +32,7 @@ protected:
     // Some variables used for matching
     Expr wild_i8x16, wild_i16x8, wild_i16x16, wild_i32x4, wild_i32x8;
     Expr wild_u8x16, wild_u16x8, wild_u32x4;
+    Expr wild_f32x4, wild_f64x2;
     Expr min_i8, max_i8, min_i16, max_i16;
     Expr min_u8, max_u8u, max_u8i, min_u16, max_u16u, max_u16i;
 
@@ -39,10 +40,10 @@ protected:
 
     // Nodes that we handle specially
     void visit(const Cast *);
-    void visit(const Allocate *);        
+    void visit(const Div *);
     void visit(const Min *);
     void visit(const Max *);
-
+    void visit(const Allocate *);        
 };
 
 }}
