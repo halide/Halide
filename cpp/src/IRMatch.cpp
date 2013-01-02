@@ -8,30 +8,32 @@ namespace Halide {
 namespace Internal {
 
 void expr_match_test() {
-    map<string, Expr> env;
+    vector<Expr> matches;
+    Expr w = new Variable(Int(32), "*");
+    Expr fw = new Variable(Float(32), "*");
     Expr x = new Variable(Int(32), "x");
     Expr y = new Variable(Int(32), "y");
     Expr fx = new Variable(Float(32), "fx");
     Expr fy = new Variable(Float(32), "fy");
 
-    assert(expr_match(x, 3, env) && 
-           equal(env["x"], 3));
+    assert(expr_match(w, 3, matches) && 
+           equal(matches[0], 3));
 
-    assert(expr_match(x + 3, (y*2) + 3, env) &&
-           equal(env["x"], y*2));
+    assert(expr_match(w + 3, (y*2) + 3, matches) &&
+           equal(matches[0], y*2));
 
-    assert(expr_match(fx * 17 + cast<float>(y + cast<int>(fy)), 
-                      (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(4.5f)), env) &&
-           equal(env["fx"], 81.0f * fy) &&
-           equal(env["y"], x/2) &&
-           equal(env["fy"], 4.5f));
+    assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)), 
+                      (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(4.5f)), matches) &&
+           equal(matches[0], 81.0f * fy) &&
+           equal(matches[1], x/2) &&
+           equal(matches[2], 4.5f));
 
-    assert(!expr_match(fx + 17, fx + 18, env) &&
-           env.empty());
-    assert(!expr_match((fx*2) + 17, fx + 17, env) &&
-           env.empty());
-    assert(!expr_match(x * 3, 3 * x, env) &&
-           env.empty());
+    assert(!expr_match(fw + 17, fx + 18, matches) &&
+           matches.empty());
+    assert(!expr_match((w*2) + 17, fx + 17, matches) &&
+           matches.empty());
+    assert(!expr_match(w * 3, 3 * x, matches) &&
+           matches.empty());
 
     std::cout << "expr_match test passed" << std::endl;
 }
@@ -39,10 +41,10 @@ void expr_match_test() {
 class IRMatch : public IRVisitor {
 public:
     bool result;
-    map<string, Expr> env;
+    vector<Expr> &matches;
     Expr expr;
 
-    IRMatch(Expr e) : result(true), expr(e) {
+    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(m), expr(e) {
     }
 
     void visit(const IntImm *op) {
@@ -72,8 +74,11 @@ public:
     void visit(const Variable *op) {
         if (op->type != expr.type()) {
             result = false;
-        } else {
-            env[op->name] = expr;
+        } else if (op->name == "*") {
+            matches.push_back(expr);
+        } else if (result) {
+            const Variable *e = expr.as<Variable>();
+            result = e && (e->name == op->name);
         }
     }
 
@@ -191,17 +196,17 @@ public:
     }
 };
 
-bool expr_match(Expr pattern, Expr expr, map<string, Expr> &env) {
+bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
+    matches.clear();
     if (!pattern.defined() && !pattern.defined()) return true;
     if (!pattern.defined() || !pattern.defined()) return false;
 
-    IRMatch eq(expr);
+    IRMatch eq(expr, matches);
     pattern.accept(&eq);
     if (eq.result) {
-        env.swap(eq.env);
         return true;
     } else {
-        env.clear();
+        matches.clear();
         return false;
     }
 }

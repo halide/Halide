@@ -22,19 +22,15 @@ using namespace llvm;
 CodeGen_X86::CodeGen_X86(bool sse_41) : CodeGen(), use_sse_41(sse_41) {
     i32x4 = VectorType::get(i32, 4);
     i32x8 = VectorType::get(i32, 8);
-
-    i8_1 = new Variable(Int(8, 16), "i8_1");
-    i8_2 = new Variable(Int(8, 16), "i8_2");
-    i16_1 = new Variable(Int(16, 8), "i16_1");
-    i16_2 = new Variable(Int(16, 8), "i16_2");
-    i32_1 = new Variable(Int(32, 4), "i32_1");
-    i32_2 = new Variable(Int(32, 4), "i32_2");
-    u8_1 = new Variable(UInt(8, 16), "u8_1");
-    u8_2 = new Variable(UInt(8, 16), "u8_2");
-    u16_1 = new Variable(UInt(16, 8), "u16_1");
-    u16_2 = new Variable(UInt(16, 8), "u16_2");
-    u32_1 = new Variable(UInt(32, 4), "u32_1");
-    u32_2 = new Variable(UInt(32, 4), "u32_2");
+ 
+    wild_i8x16 = new Variable(Int(8, 16), "*");
+    wild_i16x8 = new Variable(Int(16, 8), "*");
+    wild_i16x16 = new Variable(Int(16, 16), "*");
+    wild_i32x4 = new Variable(Int(32, 4), "*");
+    wild_i32x8 = new Variable(Int(32, 8), "*");
+    wild_u8x16 = new Variable(UInt(8, 16), "*");
+    wild_u16x8 = new Variable(UInt(16, 8), "*");
+    wild_u32x4 = new Variable(UInt(32, 4), "*");
 
     min_i8 = new Broadcast(cast(Int(16), -128), 16);
     max_i8 = new Broadcast(cast(Int(16), 127), 16);
@@ -112,15 +108,13 @@ Expr _f64(Expr e) {
     return cast(Float(64, e.type().width), e);
 }
 
-Value *CodeGen_X86::call_intrin(Type result_type, const string &name, Expr arg1, Expr arg2) {
-    assert(arg1.defined());
-
-    vector<llvm::Type *> arg_types = vec(llvm_type_of(arg1.type()));
-    vector<Value *> arg_values = vec(codegen(arg1));
-
-    if (arg2.defined()) {
-        arg_types.push_back(llvm_type_of(arg2.type()));
-        arg_values.push_back(codegen(arg2));
+Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Expr> args) {
+    vector<llvm::Type *> arg_types(args.size());
+    vector<Value *> arg_values(args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        assert(args[i].defined());
+        arg_types[i] = llvm_type_of(args[i].type());
+        arg_values[i] = codegen(args[i]);
     }
 
     FunctionType *func_t = FunctionType::get(llvm_type_of(result_type), arg_types, false);
@@ -129,47 +123,64 @@ Value *CodeGen_X86::call_intrin(Type result_type, const string &name, Expr arg1,
     fn->setCallingConv(CallingConv::C);            
     return builder.CreateCall(fn, arg_values);
 }
-
+ 
 void CodeGen_X86::visit(const Cast *op) {
 
-    map<string, Expr> env;       
+    vector<Expr> matches;
+ 
+    struct Pattern {
+        bool needs_sse_41;
+        bool extern_call;
+        Type type;
+        string intrin;
+        Expr pattern;
+    };
 
-    // some 256-bit vectors for use in the pack instructions
-    Expr i16x2 = new Variable(Int(16, 16), "i16x2");
-    Expr i32x2 = new Variable(Int(32, 8), "i32x2");
-
-    // Patterns to recognize for various sse ops clamping-casting ops
-    if (expr_match(_i8(clamp(_i16(i8_1) + _i16(i8_2), min_i8, max_i8)), op, env)) {
-        value = call_intrin(Int(8, 16), "sse2.padds.b", env["i8_1"], env["i8_2"]);
-    } else if (expr_match(_i8(clamp(_i16(i8_1) - _i16(i8_2), min_i8, max_i8)), op, env)) {
-        value = call_intrin(Int(8, 16), "sse2.psubs.b", env["i8_1"], env["i8_2"]);
-    } else if (expr_match(_u8(min(_u16(u8_1) + _u16(u8_2), max_u8u)), op, env)) {
-        value = call_intrin(UInt(8, 16), "sse2.paddus.b", env["u8_1"], env["u8_2"]);
-    } else if (expr_match(_u8(max(_i16(u8_1) - _i16(u8_2), min_u8)), op, env)) {
-        value = call_intrin(UInt(8, 16), "sse2.psubus.b", env["u8_1"], env["u8_2"]);
-    } else if (expr_match(_i16(clamp(_i32(i16_1) + _i32(i16_2), min_i16, max_i16)), op, env)) {
-        value = call_intrin(Int(16, 8), "sse2.padds.w", env["i16_1"], env["i16_2"]);
-    } else if (expr_match(_i16(clamp(_i32(i16_1) - _i32(i16_2), min_i16, max_i16)), op, env)) {
-        value = call_intrin(Int(16, 8), "sse2.psubs.w", env["i16_1"], env["i16_2"]);
-    } else if (expr_match(_u16(min(_u32(u16_1) + _u32(u16_2), max_u16u)), op, env)) {
-        value = call_intrin(UInt(16, 8), "sse2.paddus.w", env["u16_1"], env["u16_2"]);
-    } else if (expr_match(_u16(max(_i32(u16_1) - _i32(u16_2), min_u16)), op, env)) {
-        value = call_intrin(UInt(16, 8), "sse2.psubus.w", env["u16_1"], env["u16_2"]);
-    } else if (expr_match(_i16((_i32(i16_1) * _i32(i16_2)) / (new Broadcast(65536, 8))), op, env)) {
-        value = call_intrin(Int(16, 8), "sse2.pmulh.w", env["i16_1"], env["i16_2"]);
-    } else if (expr_match(_u16((_u32(u16_1) * _u32(u16_2)) / (new Broadcast(cast(UInt(32), 65536), 8))), op, env)) {
-        value = call_intrin(UInt(16, 8), "sse2.pmulhu.w", env["u16_1"], env["u16_2"]);
-    } else if (expr_match(_i16(clamp(i32x2, min_i16, max_i16)), op, env)) {
-        value = codegen(new Call(Int(16, 8), "packssdw", vec(env["i32x2"])));
-    } else if (expr_match(_i8(clamp(i16x2, min_i8, max_i8)), op, env)) {
-        value = codegen(new Call(Int(8, 16), "packsswb", vec(env["i16x2"])));
-    } else if (expr_match(_u8(clamp(i16x2, min_u8, max_u8i)), op, env)) {
-        value = codegen(new Call(UInt(8, 16), "packuswb", vec(env["i16x2"])));
-    } else if (use_sse_41 && expr_match(_u16(clamp(i32x2, min_u16, max_u16i)), op, env)) {
-        value = codegen(new Call(UInt(16, 8), "packusdw", vec(env["i32x2"])));
-    } else {
-        CodeGen::visit(op);
+    Pattern patterns[] = {
+        {false, false, Int(8, 16), "sse2.padds.b", 
+         _i8(clamp(_i16(wild_i8x16) + _i16(wild_i8x16), min_i8, max_i8))},
+        {false, false, Int(8, 16), "sse2.psubs.b", 
+         _i8(clamp(_i16(wild_i8x16) - _i16(wild_i8x16), min_i8, max_i8))},
+        {false, false, UInt(8, 16), "sse2.paddus.b", 
+         _u8(min(_u16(wild_u8x16) + _u16(wild_u8x16), max_u8u))},
+        {false, false, UInt(8, 16), "sse2.psubus.b", 
+         _u8(max(_i16(wild_u8x16) - _i16(wild_u8x16), min_u8))},
+        {false, false, Int(16, 8), "sse2.padds.w", 
+         _i16(clamp(_i32(wild_i16x8) + _i32(wild_i16x8), min_i16, max_i16))},
+        {false, false, Int(16, 8), "sse2.psubs.w", 
+         _i16(clamp(_i32(wild_i16x8) - _i32(wild_i16x8), min_i16, max_i16))},
+        {false, false, UInt(16, 8), "sse2.paddus.w", 
+         _u16(min(_u32(wild_u16x8) + _u32(wild_u16x8), max_u16u))},
+        {false, false, UInt(16, 8), "sse2.psubus.w", 
+         _u16(max(_i32(wild_u16x8) - _i32(wild_u16x8), min_u16))},
+        {false, false, Int(16, 8), "sse2.pmulh.w", 
+         _i16((_i32(wild_i16x8) * _i32(wild_i16x8)) / (new Broadcast(65536, 8)))},
+        {false, false, UInt(16, 8), "sse2.pmulhu.w", 
+         _u16((_u32(wild_u16x8) * _u32(wild_u16x8)) / (new Broadcast(cast(UInt(32), 65536), 8)))},
+        {false, true, Int(16, 8), "packssdw", 
+         _i16(clamp(wild_i32x8, min_i16, max_i16))},
+        {false, true, Int(8, 16), "packsswb", 
+         _i8(clamp(wild_i16x16, min_i8, max_i8))},
+        {false, true, UInt(8, 16), "packuswb", 
+         _u8(clamp(wild_i16x16, min_u8, max_u8i))},
+        {true, true, UInt(16, 8), "packusdw",
+         _u16(clamp(wild_i32x8, min_u16, max_u16i))}
+    };
+        
+    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+        const Pattern &pattern = patterns[i];
+        if (!use_sse_41 && pattern.needs_sse_41) continue;
+        if (expr_match(pattern.pattern, op, matches)) {
+            if (pattern.extern_call) {
+                value = codegen(new Call(pattern.type, pattern.intrin, matches));
+            } else {
+                value = call_intrin(pattern.type, pattern.intrin, matches);
+            }
+            return;
+        }
     }
+        
+    CodeGen::visit(op);
 
     /*
     check_sse("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, max_i8)));
@@ -205,17 +216,17 @@ void CodeGen_X86::visit(const Cast *op) {
 
 void CodeGen_X86::visit(const Min *op) {
     if (op->type == UInt(8, 16)) {
-        value = call_intrin(UInt(8, 16), "sse2.pminu.b", op->a, op->b);
+        value = call_intrin(UInt(8, 16), "sse2.pminu.b", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == Int(8, 16)) {
-        value = call_intrin(Int(8, 16), "sse41.pminsb", op->a, op->b);
+        value = call_intrin(Int(8, 16), "sse41.pminsb", vec(op->a, op->b));
     } else if (op->type == Int(16, 8)) {
-        value = call_intrin(Int(16, 8), "sse2.pmins.w", op->a, op->b);
+        value = call_intrin(Int(16, 8), "sse2.pmins.w", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == UInt(16, 8)) {
-        value = call_intrin(UInt(16, 8), "sse41.pminuw", op->a, op->b);
+        value = call_intrin(UInt(16, 8), "sse41.pminuw", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == Int(32, 4)) {
-        value = call_intrin(Int(32, 4), "sse41.pminsd", op->a, op->b);
+        value = call_intrin(Int(32, 4), "sse41.pminsd", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == UInt(32, 4)) {
-        value = call_intrin(UInt(32, 4), "sse41.pminud", op->a, op->b);               
+        value = call_intrin(UInt(32, 4), "sse41.pminud", vec(op->a, op->b));               
     } else {
         CodeGen::visit(op);
     }
@@ -223,17 +234,17 @@ void CodeGen_X86::visit(const Min *op) {
 
 void CodeGen_X86::visit(const Max *op) {
     if (op->type == UInt(8, 16)) {
-        value = call_intrin(UInt(8, 16), "sse2.pmaxu.b", op->a, op->b);
+        value = call_intrin(UInt(8, 16), "sse2.pmaxu.b", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == Int(8, 16)) {
-        value = call_intrin(Int(8, 16), "sse41.pmaxsb", op->a, op->b);
+        value = call_intrin(Int(8, 16), "sse41.pmaxsb", vec(op->a, op->b));
     } else if (op->type == Int(16, 8)) {
-        value = call_intrin(Int(16, 8), "sse2.pmaxs.w", op->a, op->b);
+        value = call_intrin(Int(16, 8), "sse2.pmaxs.w", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == UInt(16, 8)) {
-        value = call_intrin(UInt(16, 8), "sse41.pmaxuw", op->a, op->b);
+        value = call_intrin(UInt(16, 8), "sse41.pmaxuw", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == Int(32, 4)) {
-        value = call_intrin(Int(32, 4), "sse41.pmaxsd", op->a, op->b);
+        value = call_intrin(Int(32, 4), "sse41.pmaxsd", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == UInt(32, 4)) {
-        value = call_intrin(UInt(32, 4), "sse41.pmaxud", op->a, op->b);               
+        value = call_intrin(UInt(32, 4), "sse41.pmaxud", vec(op->a, op->b));               
     } else {
         CodeGen::visit(op);
     }    
