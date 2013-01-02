@@ -36,8 +36,12 @@ using std::vector;
  */
 class CodeGen : public IRVisitor {
 public:
+    mutable RefCount ref_count;
+
     CodeGen();
 
+    virtual void compile(Stmt stmt, string name, const vector<Argument> &args);
+    
     void compile_to_bitcode(const string &filename);
     void compile_to_native(const string &filename, bool assembly = false);
 
@@ -58,8 +62,6 @@ public:
 protected:
 
     class Closure;
-
-    void compile(Stmt stmt, string name, const vector<Argument> &args);
 
     // Codegen state for llvm:
     // Current module, function, builder, context, and value
@@ -142,6 +144,10 @@ protected:
     virtual void visit(const Allocate *) = 0; // Allocate is architecture-specific
     virtual void visit(const Realize *);
     virtual void visit(const Block *);        
+
+    // What should be passed as -mcpu and -mattrs for compilation
+    virtual std::string mcpu() const = 0;
+    virtual std::string mattrs() const = 0;
 };
 
 }}

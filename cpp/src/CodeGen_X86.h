@@ -11,7 +11,7 @@ namespace Internal {
 class CodeGen_X86 : public CodeGen {
 public:
 
-    CodeGen_X86(bool use_sse_41 = true);
+    CodeGen_X86(bool use_sse_41 = true, bool use_avx = true);
         
     /* Compile to an llvm module. Takes a halide statement, the
      * name of the function produced, and the arguments to the
@@ -24,7 +24,7 @@ public:
     static void test();
 
 protected:
-    bool use_sse_41;
+    bool use_sse_41, use_avx;
 
     // Some useful types
     llvm::Type *i32x4, *i32x8;
@@ -32,7 +32,7 @@ protected:
     // Some variables used for matching
     Expr wild_i8x16, wild_i16x8, wild_i16x16, wild_i32x4, wild_i32x8;
     Expr wild_u8x16, wild_u16x8, wild_u32x4;
-    Expr wild_f32x4, wild_f64x2;
+    Expr wild_f32x4, wild_f32x8, wild_f64x2;
 
     llvm::Value *call_intrin(Type t, const string &name, std::vector<Expr>);    
 
@@ -42,6 +42,9 @@ protected:
     void visit(const Min *);
     void visit(const Max *);
     void visit(const Allocate *);        
+
+    std::string mcpu() const;
+    std::string mattrs() const;
 };
 
 }}

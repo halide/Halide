@@ -116,14 +116,11 @@ int main(int argc, char **argv) {
     remap.compute_root();
 
     Var yi;
-    output.split(y, y, yi, 32).parallel(y).vectorize(x, 8);
+    output.split(y, y, yi, 32).parallel(y).vectorize(x, 4);
     for (int j = 0; j < J; j++) {
-        inGPyramid[j].compute_root();
-        if (j < 4) inGPyramid[j].split(y, y, yi, 4).parallel(y).vectorize(x, 8);
-        if (j > 0) gPyramid[j].compute_root();
-        if (j > 0 && j < 4) gPyramid[j].parallel(k).vectorize(x, 8);
-        outGPyramid[j].compute_root();
-        if (j < 4) outGPyramid[j].split(y, y, yi, 4).parallel(y).vectorize(x, 8);
+        inGPyramid[j].compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+        if (j > 0) gPyramid[j].compute_root().parallel(k).vectorize(x, 4);
+        outGPyramid[j].compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
     }
 
     std::vector<Argument> args(4);

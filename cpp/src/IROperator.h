@@ -27,12 +27,13 @@ inline Expr cast(Expr a) {
 
 inline Expr cast(Type t, Expr a) {
     if (a.type() == t) return a;
-    if (a.type().width == 1 && t.width > 1) {
-        return new Broadcast(cast(t.element_of(), a), t.width);
-    }
-    if (const Broadcast *b = a.as<Broadcast>()) {
-        assert(b->width == t.width);
-        return new Broadcast(cast(t.element_of(), b->value), t.width);
+    if (t.is_vector()) {
+        if (a.type().is_scalar()) {
+            return new Broadcast(cast(t.element_of(), a), t.width);
+        } else if (const Broadcast *b = a.as<Broadcast>()) {
+            assert(b->width == t.width);
+            return new Broadcast(cast(t.element_of(), b->value), t.width);
+        }
     }
     return new Cast(t, a);
 }
