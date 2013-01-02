@@ -8,15 +8,16 @@
 namespace Halide { 
 namespace Internal {
 
-// Does the first expression have the same structure as the
-// second? Variables in the first expression are interpreted as
-// wildcards, and their matching equivalent in the second expression
-// is placed in the map given as the third argument.
+// Does the first expression have the same structure as the second?
+// Variables in the first expression with the name * are interpreted
+// as wildcards, and their matching equivalent in the second
+// expression is placed in the vector give as the third argument.
 //
-// E.g. match(x + y, 3 + (2*k), env) should return true, and set
-// env["x"] to 3 and env["y"] to 2*k
+// E.g. with x being some Variable with name "*":
+// match(x + x, 3 + (2*k), result) should return true, and set result to
+// vec(3, 2*k)
 
-bool expr_match(Expr pattern, Expr expr, std::map<std::string, Expr> &);
+bool expr_match(Expr pattern, Expr expr, vector<Expr> &result);
 void expr_match_test();
 
 }
