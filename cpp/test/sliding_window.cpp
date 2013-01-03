@@ -65,6 +65,23 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    f = Func();
+    g = Func();
+
+    // Now a trickier example. In order for this to work, Halide would have to slide diagonally. We don't handle this.
+    count = 0;
+    f(x, y) = call_counter(x);    
+    // When x was two smaller the second term was computed. When y was two smaller the third term was computed.
+    g(x, y) = f(x+y, x-y) + f((x-2)+y, (x-2)-y) + f(x+(y-2), x-(y-2)); 
+    f.store_root().compute_at(g, x);
+
+    Image<int> im4 = g.realize(10, 10);
+    printf("%d\n", count);
+    if (count != 1500) {
+        printf("f was called %d times instead of %d times\n", count, 1500);
+        return -1;
+    }
+
     printf("Success!\n");
     return 0;    
 }

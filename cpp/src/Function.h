@@ -146,7 +146,8 @@ struct JITCompiledModule {
     void (*wrapped_function)(const void **);
     typedef void (*ErrorHandler)(char *);
     void (*set_error_handler)(ErrorHandler);
-    JITCompiledModule() : function(NULL), wrapped_function(NULL), set_error_handler(NULL) {}
+    void (*set_custom_allocator)(void *(*malloc)(size_t), void (*free)(void *));
+    JITCompiledModule() : function(NULL), wrapped_function(NULL), set_error_handler(NULL), set_custom_allocator(NULL) {}
 };
         
 }}
