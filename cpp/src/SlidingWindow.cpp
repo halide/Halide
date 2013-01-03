@@ -8,9 +8,7 @@
 namespace Halide {
 namespace Internal {
 
-// Does an expression depend on a particular variable. Slightly
-// conservative, in that we ignore let statements that might mask the
-// var name
+// Does an expression depend on a particular variable.
 class ExprDependsOnVar : public IRVisitor {    
     void visit(const Variable *op) {
         if (op->name == var) result = true;
@@ -84,14 +82,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 
                 Expr loop_var_expr = new Variable(Int(32), loop_var);
                 Expr steady_state = loop_var_expr > loop_min;
-                Expr initial_min = substitute(loop_var, loop_min, min);
 
                 // The new min is one beyond the max we reached on the last loop iteration
                 Expr new_min = substitute(loop_var, loop_var_expr - 1, min + extent);
                 // The new extent is the old extent shrunk by how much we trimmed off the min
                 Expr new_extent = extent + min - new_min;
 
-                new_min = new Select(steady_state, new_min, initial_min);
+                new_min = new Select(steady_state, new_min, min);
                 new_extent = new Select(steady_state, new_extent, extent);
 
                 stmt = new LetStmt(func.name() + "." + dim + ".extent", new_extent, op);

@@ -9,11 +9,10 @@ namespace Internal {
     
 using std::string;
 
-/* Compute the analytic derivative of the expression with respect
- * to the variable, or return false if it's non-differentiable
- * (e.g. if it calls an extern function that we have no knowledge
- * of). */
-bool derivative(Expr expr, const string &var, Expr *result);
+/* Compute the analytic derivative of the expression with respect to
+ * the variable. May returned an undefined Expr if it's
+ * non-differentiable. */
+//Expr derivative(Expr expr, const string &var);
 
 /* 
  * Compute the finite difference version of the derivative:
@@ -29,11 +28,8 @@ bool derivative(Expr expr, const string &var, Expr *result);
  * are the same. The quotient and product rules are not.
  *
  */
-bool finite_difference(Expr expr, const string &var, Expr *result);
+Expr finite_difference(Expr expr, const string &var);
 
-// class Derivative : public IRVisitor {
-// TODO
-// };
 }
 }
 
