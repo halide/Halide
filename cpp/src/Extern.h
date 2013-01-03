@@ -9,14 +9,14 @@
 
 #define HalideExtern_0(rt, name)                                        \
     Halide::Expr name() {                                               \
-        vec<Expr> args;                                                 \
-        return new Halide::Call(Halide::type_of<rt>(), name, args);     \
+        vector<Expr> args;                                              \
+        return new Halide::Call(Halide::type_of<rt>(), #name, args);     \
     }
 
 #define HalideExtern_1(rt, name, t1)                                    \
     Halide::Expr name(Halide::Expr a1) {                                \
         assert(a1.type() == Halide::type_of<t1>() && "Type mismatch for argument 1 of " #name); \
-        return new Halide::Call(Halide::type_of<rt>(), name, vec(a1));  \
+        return new Halide::Call(Halide::type_of<rt>(), #name, vec(a1));  \
     }
 
 #define HalideExtern_2(rt, name, t1, t2)                                \
