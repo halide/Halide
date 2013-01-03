@@ -375,6 +375,10 @@ void CodeGen_X86::visit(const Allocate *alloc) {
     llvm::Type *llvm_type = llvm_type_of(alloc->type);
     Value *ptr;                
 
+    // In the future, we may want to construct an entire buffer_t here
+    string allocation_name = alloc->buffer + ".host";
+    log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
+
     if (on_stack) {
         // Do a 32-byte aligned alloca
         int total_bytes = stack_size * bytes_per_element;            
@@ -386,20 +390,27 @@ void CodeGen_X86::visit(const Allocate *alloc) {
         llvm::Function *malloc_fn = module->getFunction("fast_malloc");
         Value *sz = builder.CreateIntCast(size, i64, false);
         ptr = builder.CreateCall(malloc_fn, sz);
+        heap_allocations.push(ptr);
     }
-
-    // In the future, we may want to construct an entire buffer_t here
-    string allocation_name = alloc->buffer + ".host";
-    log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
     symbol_table.push(allocation_name, ptr);
     codegen(alloc->body);
     symbol_table.pop(allocation_name);
 
     if (!on_stack) {
+        heap_allocations.pop();
         // call free
         llvm::Function *free_fn = module->getFunction("fast_free");
         builder.CreateCall(free_fn, ptr);
+    }
+}
+
+void CodeGen_X86::prepare_for_early_exit() {
+    
+    llvm::Function *free_fn = module->getFunction("fast_free");
+    while (!heap_allocations.empty()) {
+        builder.CreateCall(free_fn, heap_allocations.top());        
+        heap_allocations.pop();
     }
 }
 

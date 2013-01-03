@@ -44,6 +44,9 @@ protected:
     void visit(const Max *);
     void visit(const Allocate *);        
 
+    stack<llvm::Value *> heap_allocations;
+    void prepare_for_early_exit();
+
     std::string mcpu() const;
     std::string mattrs() const;
 };
