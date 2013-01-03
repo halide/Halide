@@ -78,6 +78,8 @@ class Func {
     // Save this state when we jit, so that we can run the function again cheaply
     Internal::JITCompiledModule compiled_module;
     void (*error_handler)(char *);
+    void *(*custom_malloc)(size_t);
+    void (*custom_free)(void *);
 
     vector<const void *> arg_values;
 
@@ -100,6 +102,7 @@ public:
     void compile_to_assembly(const string &filename, std::vector<Argument>);    
 
     void set_error_handler(void (*handler)(char *));
+    void set_custom_allocator(void *(*malloc)(size_t), void (*free)(void *));
 
     const string &name() const;
     Expr value() const;

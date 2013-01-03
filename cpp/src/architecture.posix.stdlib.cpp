@@ -29,17 +29,31 @@ extern "C" {
 WEAK void __copy_to_host(buffer_t* buf) { /* NOP */ }
 #endif //_COPY_TO_HOST
 
+static void *(*halide_custom_malloc)(size_t) = NULL;
+static void (*halide_custom_free)(void *) = NULL;
+WEAK void set_custom_allocator(void *(*cust_malloc)(size_t), void (*cust_free)(void *)) {
+    halide_custom_malloc = cust_malloc;
+    halide_custom_free = cust_free;
+}
+
 WEAK void *fast_malloc(size_t x) {
-    //fprintf(stderr, "fast_malloc(%d)\n", (int)x);
-    void *orig = malloc(x+32);
-    // Round up to next multiple of 32. Should add at least 8 bytes so we can fit the original pointer.
-    void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
-    ((void **)ptr)[-1] = orig;
-    return ptr;
+    if (halide_custom_malloc) {
+        return halide_custom_malloc(x);
+    } else {
+        void *orig = malloc(x+32);
+        // Round up to next multiple of 32. Should add at least 8 bytes so we can fit the original pointer.
+        void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
+        ((void **)ptr)[-1] = orig;
+        return ptr;
+    }
 }
 
 WEAK void fast_free(void *ptr) {
-    free(((void**)ptr)[-1]);
+    if (halide_custom_free) {
+        halide_custom_free(ptr);
+    } else {
+        free(((void**)ptr)[-1]);
+    }
 }
 
 WEAK void *safe_malloc(size_t x) {

@@ -42,13 +42,13 @@ void Func::set_dim_type(Var var, For::ForType t) {
     assert(found && "Could not find dimension in argument list for function");
 }
 
-Func::Func(Internal::Function f) : func(f), error_handler(NULL) {
+Func::Func(Internal::Function f) : func(f), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
 }
 
-Func::Func(const string &name) : func(name), error_handler(NULL) {
+Func::Func(const string &name) : func(name), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
 }
 
-Func::Func() : func(unique_name('f')), error_handler(NULL) {
+Func::Func() : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
 }
         
 const string &Func::name() const {
@@ -512,6 +512,14 @@ void Func::set_error_handler(void (*handler)(char *)) {
     }
 }
 
+void Func::set_custom_allocator(void *(*cust_malloc)(size_t), void (*cust_free)(void *)) {
+    custom_malloc = cust_malloc;
+    custom_free = cust_free;
+    if (compiled_module.set_custom_allocator) {
+        compiled_module.set_custom_allocator(cust_malloc, cust_free);
+    }
+}
+
 class InferArguments : public IRVisitor {
 public:
     vector<Argument> arg_types;
@@ -621,8 +629,18 @@ void Func::realize(Buffer dst) {
 
         compiled_module = cg.compile_to_function_pointers();
 
-        if (error_handler) compiled_module.set_error_handler(error_handler);
-        else compiled_module.set_error_handler(NULL);
+        if (error_handler) {
+            compiled_module.set_error_handler(error_handler);
+        } else {
+            compiled_module.set_error_handler(NULL);
+        }
+        
+        if (custom_malloc && custom_free) {
+            compiled_module.set_custom_allocator(custom_malloc, custom_free);
+        } else {
+            compiled_module.set_custom_allocator(NULL, NULL);
+        }
+
     } else {
         // Update the address of the buffer we're realizing into
         arg_values[arg_values.size()-1] = dst.raw_buffer();

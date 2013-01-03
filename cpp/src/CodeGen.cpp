@@ -211,6 +211,13 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     m.set_error_handler = (void (*)(JITCompiledModule::ErrorHandler))f;
     assert(f && "Compiling set_error_handler function returned NULL");
 
+
+    llvm::Function *set_custom_allocator = module->getFunction("set_custom_allocator");
+    assert(set_custom_allocator && "Could not set_custom_allocator function inside llvm module");
+    f = execution_engine->getPointerToFunction(set_custom_allocator);
+    m.set_custom_allocator = (void (*)(void *(*)(size_t), void (*)(void *)))f;
+    assert(f && "Compiling set_custom_allocator function returned NULL");
+
     return m;
 }
 
