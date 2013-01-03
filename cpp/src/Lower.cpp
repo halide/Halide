@@ -16,6 +16,7 @@
 #include "BoundsInference.h"
 #include "VectorizeLoops.h"
 #include "UnrollLoops.h"
+#include "SlidingWindow.h"
 
 namespace Halide {
 namespace Internal {
@@ -514,6 +515,10 @@ Stmt lower(Function f) {
     log(1) << "Performing bounds inference...\n";
     s = bounds_inference(s, order, env);
     log(2) << "Bounds inference:\n" << s << '\n';
+
+    log(1) << "Performing sliding window optimization...\n";
+    s = sliding_window(s, env);
+    log(2) << "Sliding window:\n" << s << '\n';
 
     log(1) << "Performing storage flattening...\n";
     s = storage_flattening(s);
