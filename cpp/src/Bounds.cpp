@@ -370,7 +370,6 @@ private:
     void visit(const LetStmt *op) {
         op->value.accept(this);
         pair<Expr, Expr> value_bounds = bounds_of_expr_in_scope(op->value, scope);
-        // TODO: What if the value bounds refer to variables that get rebound before this let is used
         scope.push(op->name, value_bounds);
         op->body.accept(this);
         scope.pop(op->name);
@@ -379,7 +378,6 @@ private:
     void visit(const Let *op) {
         op->value.accept(this);
         pair<Expr, Expr> value_bounds = bounds_of_expr_in_scope(op->value, scope);
-        // TODO: What if the value bounds refer to variables that get rebound before this let is used
         scope.push(op->name, value_bounds);
         op->body.accept(this);        
         scope.pop(op->name);
@@ -399,6 +397,12 @@ private:
 
     void visit(const Call *op) {        
         IRVisitor::visit(op);
+        // Ignore calls to a function from within it's own update step
+        // (i.e. recursive calls from a function to itself). Including
+        // these gives recursive definitions of the bounds (f requires
+        // as much as f requires!). We make sure we cover the bounds
+        // required by the update step of a reduction elsewhere (in
+        // InjectRealization in Lower.cpp)
         if (consider_calls && !inside_update.contains(op->name)) {
             vector<pair<Expr, Expr> > &region = regions[op->name];
             for (size_t i = 0; i < op->args.size(); i++) {
