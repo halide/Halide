@@ -26,10 +26,6 @@ public:
         // Compute the region required of each function within this loop body
         map<string, vector<pair<Expr, Expr> > > regions = regions_required(for_loop->body, scope);
         
-        // TODO: For reductions we also need to consider the region
-        // provided within any update statements over this function
-        // (but not within the produce statement)
-
         Stmt body = mutate(for_loop->body);
 
 
