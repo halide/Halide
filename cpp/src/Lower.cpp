@@ -17,6 +17,7 @@
 #include "VectorizeLoops.h"
 #include "UnrollLoops.h"
 #include "SlidingWindow.h"
+#include "StorageFolding.h"
 
 namespace Halide {
 namespace Internal {
@@ -519,6 +520,14 @@ Stmt lower(Function f) {
     log(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
     log(2) << "Sliding window:\n" << s << '\n';
+
+    log(1) << "Simplifying...\n";
+    s = simplify(s);
+    log(2) << "Simplified: \n" << s << "\n\n";
+
+    log(1) << "Performing storage folding optimization...\n";
+    s = storage_folding(s);
+    log(2) << "Storage folding:\n" << s << '\n';
 
     log(1) << "Performing storage flattening...\n";
     s = storage_flattening(s);

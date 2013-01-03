@@ -800,7 +800,23 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Select *op) {
-        IRMutator::visit(op);
+        Expr condition = mutate(op->condition);
+        Expr true_value = mutate(op->true_value);
+        Expr false_value = mutate(op->false_value);
+
+        if (is_one(condition)) {
+            expr = true_value;
+        } else if (is_zero(condition)) {
+            expr = false_value;
+        } else if (equal(true_value, false_value)) {
+            expr = true_value;
+        } else if (condition.same_as(op->condition) &&
+                   true_value.same_as(op->true_value) &&
+                   false_value.same_as(op->false_value)) {
+            expr = op;
+        } else {
+            expr = new Select(condition, true_value, false_value);
+        }
     }
 
     void visit(const Load *op) {
@@ -1077,6 +1093,9 @@ void simplify_test() {
     check(x < x+y, 0 < y);
     check(x+y < x, y < 0);
 
+    check(select(x < 3, 2, 2), 2);
+    check(select(x < (x+1), 9, 2), 9);
+    check(select(x > (x+1), 9, 2), 2);
 
     check(!f, t);
     check(!t, f);

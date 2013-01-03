@@ -629,17 +629,8 @@ void Func::realize(Buffer dst) {
 
         compiled_module = cg.compile_to_function_pointers();
 
-        if (error_handler) {
-            compiled_module.set_error_handler(error_handler);
-        } else {
-            compiled_module.set_error_handler(NULL);
-        }
-        
-        if (custom_malloc && custom_free) {
-            compiled_module.set_custom_allocator(custom_malloc, custom_free);
-        } else {
-            compiled_module.set_custom_allocator(NULL, NULL);
-        }
+        compiled_module.set_error_handler(error_handler);
+        compiled_module.set_custom_allocator(custom_malloc, custom_free);
 
     } else {
         // Update the address of the buffer we're realizing into
