@@ -148,6 +148,9 @@ protected:
     // What should be passed as -mcpu and -mattrs for compilation
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
+
+    // If we have to bail out of a pipeline midway, this should inject the appropriate cleanup code
+    virtual void prepare_for_early_exit() {}
 };
 
 }}

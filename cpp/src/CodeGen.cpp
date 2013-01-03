@@ -940,6 +940,9 @@ void CodeGen::visit(const AssertStmt *op) {
     assert(error_handler && "Could not find halide_error in initial module");
     builder.CreateCall(error_handler, vec(char_ptr));
 
+    // Do any architecture-specific cleanup necessary
+    prepare_for_early_exit();
+
     // Bail out
     builder.CreateRetVoid();
 
