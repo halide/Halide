@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     g(x, y) = 0;
     g(x, r) = f(r, x)+1;
 
-    f.compute_at(g, x);
+    f.compute_at(g, r);
     g.realize(10, 10);
     
     printf("Success!\n");
