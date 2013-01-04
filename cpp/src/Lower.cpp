@@ -18,6 +18,7 @@
 #include "UnrollLoops.h"
 #include "SlidingWindow.h"
 #include "StorageFolding.h"
+#include "RemoveTrivialForLoops.h"
 
 namespace Halide {
 namespace Internal {
@@ -222,6 +223,26 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
     return body;
 }
 
+class IsCalledInStmt : public IRVisitor {
+    string func;
+    
+    void visit(const Call *op) {
+        IRVisitor::visit(op);
+        if (op->name == func) result = true;
+    }
+
+public:
+    bool result;
+    IsCalledInStmt(Function f, Stmt s) : func(f.name()), result(false) {
+        s.accept(this);
+    }
+    
+};
+
+bool function_is_called_in_stmt(Function f, Stmt s) {
+    return IsCalledInStmt(f, s).result;
+}
+
 // Inject the allocation and realization of a function into an
 // existing loop nest using its schedule
 class InjectRealization : public IRMutator {
@@ -252,62 +273,55 @@ private:
         log(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
         const Schedule::LoopLevel &compute_level = func.schedule().compute_level;
         const Schedule::LoopLevel &store_level = func.schedule().store_level;
-            
-        if (!found_compute_level && compute_level.match(for_loop->name)) {
-            assert((store_level.match(for_loop->name) || found_store_level) && 
-                   "The compute loop level is outside the store loop level!");
 
-            Stmt stmt = build_pipeline(for_loop->body);
-            stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, stmt);
+        Stmt body = mutate(for_loop->body);
+
+        if (compute_level.match(for_loop->name)) {
+            log(3) << "Found compute level\n";
+            if (function_is_called_in_stmt(func, body)) {
+                body = build_pipeline(body);
+            }
             found_compute_level = true;
-            stmt = mutate(stmt);
-        } else if (store_level.match(for_loop->name)) {
+        } 
 
-            // Inject the realization lower down
+        if (store_level.match(for_loop->name)) {
+            log(3) << "Found store level\n";
+            assert(found_compute_level && 
+                   "The compute loop level was not found within the store loop level!");
+
+            if (function_is_called_in_stmt(func, body)) {
+                body = build_realize(body);
+            }
+
             found_store_level = true;
-            Stmt body = mutate(for_loop->body);
+        }
 
-            body = build_realize(body);
 
+        if (body.same_as(for_loop->body)) {
+            stmt = for_loop;
+        } else {
             stmt = new For(for_loop->name, 
                            for_loop->min, 
                            for_loop->extent, 
                            for_loop->for_type, 
                            body);
-        } else {
-            Stmt new_body = mutate(for_loop->body);
-            if (new_body.same_as(for_loop->body)) {
-                stmt = for_loop;
-            } else {
-                stmt = new For(for_loop->name, 
-                               for_loop->min, 
-                               for_loop->extent, 
-                               for_loop->for_type, 
-                               new_body);
-            }
-        }        
+        }
     }
     
     // If we're an inline reduction, we may need to inject a realization here
-    bool calls_me;
     virtual void visit(const Provide *op) {               
-        if (op->buffer != func.name() && func.is_reduction() && func.schedule().compute_level.is_inline()) {
-            calls_me = false;
-            IRMutator::visit(op);
-            if (calls_me) {
-                log(2) << "Injecting realization of " << func.name() << " around node " << Stmt(op) << "\n";
-                stmt = build_realize(build_pipeline(op));
-                found_store_level = found_compute_level = true;
-            }
+        if (op->buffer != func.name() && 
+            func.is_reduction() && 
+            func.schedule().compute_level.is_inline() &&
+            function_is_called_in_stmt(func, op)) {
+            log(2) << "Injecting realization of " << func.name() << " around node " << Stmt(op) << "\n";
+            stmt = build_realize(build_pipeline(op));
+            found_store_level = found_compute_level = true;
         } else {
             stmt = op;
         }
     }
 
-    virtual void visit(const Call *op) {
-        if (op->name == func.name()) calls_me = true;
-        IRMutator::visit(op);
-    }
 };
 
 class InlineFunction : public IRMutator {
@@ -586,6 +600,8 @@ Stmt lower(Function f) {
     log(2) << "Unrolled: \n" << s << "\n\n";
 
     log(1) << "Simplifying...\n";
+    s = simplify(s);
+    s = remove_trivial_for_loops(s);
     s = simplify(s);
     s = remove_dead_lets(s);
     log(1) << "Lowered statement: \n" << s << "\n\n";

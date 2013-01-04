@@ -41,13 +41,6 @@ public:
     RVar x, y, z, w;
 };
 
-// Some inline reductions. They expect the expression argument to
-// refer to some reduction domain. They may contain free variables.
-Expr sum(Expr);
-Expr product(Expr);
-Expr maximum(Expr);
-Expr minimum(Expr);
-
 }
 
 #endif
