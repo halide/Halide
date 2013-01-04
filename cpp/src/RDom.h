@@ -36,6 +36,7 @@ public:
 
     int dimensions() const;
     RVar operator[](int);
+    operator RVar() const;
     operator Expr() const;
 
     RVar x, y, z, w;

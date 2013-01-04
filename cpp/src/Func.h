@@ -7,6 +7,7 @@
 #include "Function.h"
 #include "Param.h"
 #include "Argument.h"
+#include "RDom.h"
 
 namespace Halide {
         
@@ -128,8 +129,10 @@ public:
     Func &vectorize(Var var, int factor);
     Func &unroll(Var var, int factor);
     Func &compute_at(Func f, Var var);
+    Func &compute_at(Func f, RVar var);
     Func &compute_root();
     Func &store_at(Func f, Var var);
+    Func &store_at(Func f, RVar var);
     Func &store_root();
     Func &compute_inline();
     Func &bound(Var var, Expr min, Expr extent);

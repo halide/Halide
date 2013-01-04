@@ -158,4 +158,9 @@ RDom::operator Expr() const {
     return Expr(x);
 }
 
+RDom::operator RVar() const {
+    assert(dimensions() == 1 && "Can only treat single-dimensional RDoms as RVars");
+    return x;
+}
+
 }

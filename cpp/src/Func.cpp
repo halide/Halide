@@ -203,6 +203,10 @@ Func &Func::unroll(Var var, int factor) {
     return *this;
 }
 
+Func &Func::compute_at(Func f, RVar var) {
+    return compute_at(f, Var(var.name()));
+}
+
 Func &Func::compute_at(Func f, Var var) {
     Schedule::LoopLevel loop_level(f.name(), var.name());
     func.schedule().compute_level = loop_level;
@@ -216,6 +220,10 @@ Func &Func::compute_root() {
     func.schedule().compute_level = Schedule::LoopLevel::root();
     func.schedule().store_level = Schedule::LoopLevel::root();
     return *this;
+}
+
+Func &Func::store_at(Func f, RVar var) {
+    return store_at(f, Var(var.name()));
 }
 
 Func &Func::store_at(Func f, Var var) {
