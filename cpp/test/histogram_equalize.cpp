@@ -31,6 +31,9 @@ int main(int argc, char **argv) {
     // Remap the input using the cdf
     equalized(x, y) = cdf(in(x, y));
 
+    hist.compute_root();
+    cdf.compute_root();
+
     // Scale the result back to 8-bit
     int pixels = in.extent(0)*in.extent(1);
     rescaled = cast<uint8_t>((equalized*256)/pixels);

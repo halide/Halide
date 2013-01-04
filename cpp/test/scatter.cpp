@@ -12,6 +12,8 @@ int main(int argc, char **argv) {
     f(x, y) = 17;
     f(r, y) = f(r, y-1) + 100; 
     g(x, y) = f(x+5, y+5);
+
+    f.compute_root();
     Image<int> result = g.realize(10, 1);
 
     
