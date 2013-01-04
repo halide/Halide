@@ -98,6 +98,7 @@ void Function::define_reduction(const vector<Expr> &args, Expr value) {
         assert(args[i].defined() && "Undefined expression in left-hand-side of reduction");
         if (const Variable *var = args[i].as<Variable>()) {           
             if (!var->param.defined() && !var->reduction_domain.defined()) {
+                assert(var->name == contents.ptr->args[i] && "Pure argument to update step must have the same name as pure argument to initialization step in the same dimension");
                 pure_args.push_back(var->name);
             }
         }
