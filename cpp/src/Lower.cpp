@@ -120,7 +120,7 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_realization(Function f) {
+Stmt build_produce(Function f) {
 
     string prefix = f.name() + ".";
 
@@ -136,7 +136,7 @@ Stmt build_realization(Function f) {
 }
 
 // Build the loop nest that updates a function (assuming it's a reduction).
-Stmt build_reduction_update(Function f) {
+Stmt build_update(Function f) {
     if (!f.is_reduction()) return Stmt();
 
     string prefix = f.name() + ".";
@@ -160,6 +160,45 @@ Stmt build_reduction_update(Function f) {
     }
 
     return loop;
+}
+
+pair<Stmt, Stmt> build_realization(Function func) {
+    Stmt produce = build_produce(func);
+    Stmt update = build_update(func);
+    
+    if (update.defined()) {
+        // Expand the bounds computed in the produce step
+        // using the bounds read in the update step. This is
+        // necessary because later bounds inference does not
+        // consider the bounds read during an update step
+        Scope<pair<Expr, Expr> > scope;
+        map<string, vector<pair<Expr, Expr> > > regions = regions_required(update, scope);
+        vector<pair<Expr, Expr> > bounds = regions[func.name()];
+        if (bounds.size() > 0) {
+            assert(bounds.size() == func.args().size());
+            // Expand the region to be computed using the region read in the update step
+            for (size_t i = 0; i < bounds.size(); i++) {                        
+                string var = func.name() + "." + func.args()[i];
+                Expr update_min = new Variable(Int(32), var + ".update_min");
+                Expr update_extent = new Variable(Int(32), var + ".update_extent");
+                Expr consume_min = new Variable(Int(32), var + ".min");
+                Expr consume_extent = new Variable(Int(32), var + ".extent");
+                Expr init_min = new Min(update_min, consume_min);
+                Expr init_max_plus_one = new Max(update_min + update_extent, consume_min + consume_extent);
+                Expr init_extent = init_max_plus_one - init_min;
+                produce = new LetStmt(var + ".min", init_min, produce);
+                produce = new LetStmt(var + ".extent", init_extent, produce);
+            }
+            
+            // Define the region read during the update step
+            for (size_t i = 0; i < bounds.size(); i++) {
+                string var = func.name() + "." + func.args()[i];
+                produce = new LetStmt(var + ".update_min", bounds[i].first, produce);
+                produce = new LetStmt(var + ".update_extent", bounds[i].second, produce);
+            }
+        }
+    }    
+    return make_pair(produce, update);
 }
 
 // A schedule may include explicit bounds on some dimension. This
@@ -189,52 +228,36 @@ class InjectRealization : public IRMutator {
 public:
     const Function &func;
     bool found_store_level, found_compute_level;
-    InjectRealization(const Function &f) : func(f), found_store_level(false), found_compute_level(false) {}
+    InjectRealization(const Function &f) : func(f), found_store_level(false), found_compute_level(false) {}    
+
+private:
+    Stmt build_pipeline(Stmt s) {
+        pair<Stmt, Stmt> realization = build_realization(func);
+        return new Pipeline(func.name(), realization.first, realization.second, s);
+    }
+
+    Stmt build_realize(Stmt s) {
+        // The allocate should cover everything touched below this point
+        Scope<pair<Expr, Expr> > scope;
+        map<string, vector<pair<Expr, Expr> > > regions = regions_touched(s, scope);            
+        vector<pair<Expr, Expr> > bounds = regions[func.name()];
+        
+        // Change the body of the for loop to do an allocation
+        s = new Realize(func.name(), func.value().type(), bounds, s);
+        
+        return inject_explicit_bounds(s, func);        
+    }
 
     virtual void visit(const For *for_loop) {            
-        Scope<pair<Expr, Expr> > scope;
+        log(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
         const Schedule::LoopLevel &compute_level = func.schedule().compute_level;
         const Schedule::LoopLevel &store_level = func.schedule().store_level;
             
         if (!found_compute_level && compute_level.match(for_loop->name)) {
             assert((store_level.match(for_loop->name) || found_store_level) && 
                    "The compute loop level is outside the store loop level!");
-            Stmt produce = build_realization(func);
-            Stmt update = build_reduction_update(func);
 
-            if (update.defined()) {
-                // Expand the bounds computed in the produce step
-                // using the bounds read in the update step. This is
-                // necessary because later bounds inference does not
-                // consider the bounds read during an update step
-                map<string, vector<pair<Expr, Expr> > > regions = regions_required(update, scope);
-                vector<pair<Expr, Expr> > bounds = regions[func.name()];
-                if (bounds.size() > 0) {
-                    assert(bounds.size() == func.args().size());
-                    // Expand the region to be computed using the region read in the update step
-                    for (size_t i = 0; i < bounds.size(); i++) {                        
-                        string var = func.name() + "." + func.args()[i];
-                        Expr update_min = new Variable(Int(32), var + ".update_min");
-                        Expr update_extent = new Variable(Int(32), var + ".update_extent");
-                        Expr consume_min = new Variable(Int(32), var + ".min");
-                        Expr consume_extent = new Variable(Int(32), var + ".extent");
-                        Expr init_min = new Min(update_min, consume_min);
-                        Expr init_max_plus_one = new Max(update_min + update_extent, consume_min + consume_extent);
-                        Expr init_extent = init_max_plus_one - init_min;
-                        produce = new LetStmt(var + ".min", init_min, produce);
-                        produce = new LetStmt(var + ".extent", init_extent, produce);
-                    }
-
-                    // Define the region read during the update step
-                    for (size_t i = 0; i < bounds.size(); i++) {
-                        string var = func.name() + "." + func.args()[i];
-                        produce = new LetStmt(var + ".update_min", bounds[i].first, produce);
-                        produce = new LetStmt(var + ".update_extent", bounds[i].second, produce);
-                    }
-                }
-            }
-
-            stmt = new Pipeline(func.name(), produce, update, for_loop->body);
+            Stmt stmt = build_pipeline(for_loop->body);
             stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, stmt);
             found_compute_level = true;
             stmt = mutate(stmt);
@@ -244,14 +267,7 @@ public:
             found_store_level = true;
             Stmt body = mutate(for_loop->body);
 
-            // The allocate should cover everything touched below this point
-            map<string, vector<pair<Expr, Expr> > > regions = regions_touched(body, scope);            
-            vector<pair<Expr, Expr> > bounds = regions[func.name()];
-
-            // Change the body of the for loop to do an allocation
-            body = new Realize(func.name(), func.value().type(), bounds, body);
-            
-            body = inject_explicit_bounds(body, func);
+            body = build_realize(body);
 
             stmt = new For(for_loop->name, 
                            for_loop->min, 
@@ -259,19 +275,47 @@ public:
                            for_loop->for_type, 
                            body);
         } else {
-            stmt = new For(for_loop->name, 
-                           for_loop->min, 
-                           for_loop->extent, 
-                           for_loop->for_type, 
-                           mutate(for_loop->body));                
+            Stmt new_body = mutate(for_loop->body);
+            if (new_body.same_as(for_loop->body)) {
+                stmt = for_loop;
+            } else {
+                stmt = new For(for_loop->name, 
+                               for_loop->min, 
+                               for_loop->extent, 
+                               for_loop->for_type, 
+                               new_body);
+            }
+        }        
+    }
+    
+    // If we're an inline reduction, we may need to inject a realization here
+    bool calls_me;
+    virtual void visit(const Provide *op) {               
+        if (op->buffer != func.name() && func.is_reduction() && func.schedule().compute_level.is_inline()) {
+            calls_me = false;
+            IRMutator::visit(op);
+            if (calls_me) {
+                log(2) << "Injecting realization of " << func.name() << " around node " << Stmt(op) << "\n";
+                stmt = build_realize(build_pipeline(op));
+                found_store_level = found_compute_level = true;
+            }
+        } else {
+            stmt = op;
         }
+    }
+
+    virtual void visit(const Call *op) {
+        if (op->name == func.name()) calls_me = true;
+        IRMutator::visit(op);
     }
 };
 
 class InlineFunction : public IRMutator {
     Function func;
 public:
-    InlineFunction(Function f) : func(f) {}
+    InlineFunction(Function f) : func(f) {
+        assert(!f.is_reduction());
+    }
 private:
 
     void visit(const Call *op) {        
@@ -355,10 +399,8 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
     }
 }
 
-vector<string> realization_order(string output, const map<string, Function> &env) {
+vector<string> realization_order(string output, const map<string, Function> &env, map<string, set<string> > &graph) {
     // Make a DAG representing the pipeline. Each function maps to the set describing its inputs.
-    map<string, set<string> > graph;
-
     // Populate the graph
     for (map<string, Function>::const_iterator iter = env.begin(); iter != env.end(); iter++) {
         map<string, Function> calls;
@@ -404,14 +446,17 @@ vector<string> realization_order(string output, const map<string, Function> &env
 
 Stmt create_initial_loop_nest(Function f) {
     // Generate initial loop nest    
-    Stmt s = build_realization(f);
-    if (f.is_reduction()) {
-        s = new Block(s, build_reduction_update(f));
+    pair<Stmt, Stmt> r = build_realization(f);
+    Stmt s = r.first;
+    if (r.second.defined()) {
+        s = new Block(r.first, r.second);
     }
     return inject_explicit_bounds(s, f);
 }
 
-Stmt schedule_functions(Stmt s, const vector<string> &order, const map<string, Function> &env) {
+Stmt schedule_functions(Stmt s, const vector<string> &order, 
+                        const map<string, Function> &env, 
+                        const map<string, set<string> > &graph) {
 
     // Inject a loop over root to give us a scheduling point
     string root_var = Schedule::LoopLevel::root().func + "." + Schedule::LoopLevel::root().var;
@@ -420,13 +465,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order, const map<string, F
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
 
-        // Reductions are scheduled as root by default
-        if (f.is_reduction() && f.schedule().compute_level.is_inline()) {
-            f.schedule().compute_level = Schedule::LoopLevel::root();
-            f.schedule().store_level = Schedule::LoopLevel::root();
-        }
-        
-        if (f.schedule().compute_level.is_inline()) {
+        if (!f.is_reduction() && f.schedule().compute_level.is_inline()) {
             log(1) << "Inlining " << order[i-1] << '\n';
             s = InlineFunction(f).mutate(s);
         } else {
@@ -498,11 +537,12 @@ Stmt lower(Function f) {
     populate_environment(f, env);
 
     // Compute a realization order
-    vector<string> order = realization_order(f.name(), env);
+    map<string, set<string> > graph;
+    vector<string> order = realization_order(f.name(), env, graph);
     Stmt s = create_initial_loop_nest(f);
 
     log(2) << "Initial statement: " << '\n' << s << '\n';
-    s = schedule_functions(s, order, env);
+    s = schedule_functions(s, order, env, graph);
     log(2) << "All realizations injected:\n" << s << '\n';
 
     log(1) << "Injecting tracing...\n";

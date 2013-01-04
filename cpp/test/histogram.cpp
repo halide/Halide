@@ -25,6 +25,8 @@ int main(int argc, char **argv) {
     RDom r(in);
     hist(clamp(cast<int>(in(r.x, r.y)), 0, 255))+=1;
 
+    hist.compute_root();
+
     Func g;
     Var x;
     g(x) = hist(x+10);

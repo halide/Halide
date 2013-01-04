@@ -13,6 +13,7 @@ int main(int argc, char **argv) {
 
     g(x) = fib(x+10);
 
+    fib.compute_root();
     Image<int> out = g.realize(10);
 
     int fib_ref[20];

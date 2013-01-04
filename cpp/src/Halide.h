@@ -8,5 +8,6 @@
 #include "Extern.h"
 #include "RDom.h"
 #include "Lambda.h"
+#include "InlineReductions.h"
 
 #endif

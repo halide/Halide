@@ -93,17 +93,18 @@ int main(int argc, char **argv) {
         life(x, y, z) = input(x, y);
 
         // Update step
-        RDom t(0, 21);
-        Expr lastT = (t.x+1)%2;
         Expr w = input.width(), h = input.height();
-        Expr W = (x+w-1) % w, E = (x+1) % w, N = (y+h-1) % h, S = (y+1) % h;
-        Expr alive = life(x, y, lastT) != u8(0);
-        Expr livingNeighbors = (life(W, N, lastT) + life(x, N, lastT) +
-                                life(E, N, lastT) + life(W, y, lastT) + 
-                                life(E, y, lastT) + life(W, S, lastT) +
-                                life(x, S, lastT) + life(E, S, lastT));            
-        life(x, y, t.x%2) = select(livingNeighbors == 3 || (alive && livingNeighbors == 2), u8(1), u8(0));
-        
+        RDom t(0, w, 0, h, 0, 21);
+        Expr lastT = (t.z+1)%2;
+        Expr W = (t.x+w-1) % w, E = (t.x+1) % w, N = (t.y+h-1) % h, S = (t.y+1) % h;
+        Expr alive = life(t.x, t.y, lastT) != u8(0);
+        Expr livingNeighbors = (life(W, N, lastT) + life(t.x, N, lastT) +
+                                life(E, N, lastT) + life(W, t.y, lastT) + 
+                                life(E, t.y, lastT) + life(W, S, lastT) +
+                                life(t.x, S, lastT) + life(E, S, lastT));            
+        life(t.x, t.y, t.z%2) = select(livingNeighbors == 3 || (alive && livingNeighbors == 2), u8(1), u8(0));
+        life.compute_root();
+
         Func output;
         output(x, y) = life(x, y, 1);        
 
@@ -127,7 +128,7 @@ int main(int argc, char **argv) {
             for (int x = 0; x < 32; x++) {
                 if (board1(x, y) != board3(x, y)) {
                     printf("Boards one and three disagree at %d, %d: %d vs %d\n", 
-                           x, y, board1(x, y), board2(x, y));
+                           x, y, board1(x, y), board3(x, y));
                     return -1;
                 }
             }
