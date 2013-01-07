@@ -506,6 +506,14 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
 
+        if (f.schedule().compute_level.is_inline() &&
+            !f.schedule().store_level.is_inline()) {
+            std::cerr << "Function " << f.name() << " is scheduled to be computed inline, "
+                      << "but is not scheduled to be stored inline. A storage schedule "
+                      << "makes no sense for functions computed inline" << std::endl;
+            assert(false);
+        }
+
         if (!f.is_reduction() && f.schedule().compute_level.is_inline()) {
             log(1) << "Inlining " << order[i-1] << '\n';
             s = InlineFunction(f).mutate(s);
