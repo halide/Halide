@@ -542,31 +542,40 @@ Stmt add_image_checks(Stmt s, Function f) {
         string error_msg = "stride on innermost dimension of " + bufs[i] + " must be one";
         s = new Block(new AssertStmt(var == 1, error_msg), 
                       new LetStmt(var_name, 1, s));
-        // Figure out the region touched
-        const vector<pair<Expr, Expr> > &region = regions[bufs[i]];
-        if (region.size()) {
-            log(3) << "In image " << bufs[i] << " region touched is:\n";
-            for (size_t j = 0; j < region.size(); j++) {
-                log(3) << region[j].first << ", " << region[j].second << "\n";
-                ostringstream min_name, extent_name;
-                min_name << bufs[i] << ".min." << j;
-                extent_name << bufs[i] << ".extent." << j;
-                Expr actual_min = new Variable(Int(32), min_name.str());
-                Expr actual_extent = new Variable(Int(32), extent_name.str());
-                Expr min_used = region[j].first;
-                Expr extent_used = region[j].second;
-                if (!min_used.defined() || !extent_used.defined()) {
-                    std::cerr << "Region used of buffer " << bufs[i] 
-                              << " is unbounded in dimension " << i << std::endl;
-                    assert(false);
+
+
+        // Bounds checking can be disabled via HL_DISABLE_BOUNDS_CHECKING
+        const char *disable = getenv("HL_DISABLE_BOUNDS_CHECKING");
+        if (!disable || atoi(disable) == 0) {
+
+            // Figure out the region touched
+            const vector<pair<Expr, Expr> > &region = regions[bufs[i]];
+            if (region.size()) {
+                log(3) << "In image " << bufs[i] << " region touched is:\n";
+                for (size_t j = 0; j < region.size(); j++) {
+                    log(3) << region[j].first << ", " << region[j].second << "\n";
+                    ostringstream min_name, extent_name;
+                    min_name << bufs[i] << ".min." << j;
+                    extent_name << bufs[i] << ".extent." << j;
+                    Expr actual_min = new Variable(Int(32), min_name.str());
+                    Expr actual_extent = new Variable(Int(32), extent_name.str());
+                    Expr min_used = region[j].first;
+                    Expr extent_used = region[j].second;
+                    if (!min_used.defined() || !extent_used.defined()) {
+                        std::cerr << "Region used of buffer " << bufs[i] 
+                                  << " is unbounded in dimension " << i << std::endl;
+                        assert(false);
+                    }
+                    ostringstream error_msg;
+                    error_msg << bufs[i] << " is accessed out of bounds in dimension " << j;
+                    Stmt check = new AssertStmt((actual_min <= min_used) &&
+                                                (actual_min + actual_extent >= min_used + extent_used), 
+                                                error_msg.str());
+                    s = new Block(check, s);
                 }
-                ostringstream error_msg;
-                error_msg << bufs[i] << " is accessed out of bounds in dimension " << j;
-                Stmt check = new AssertStmt((actual_min <= min_used) &&
-                                            (actual_min + actual_extent >= min_used + extent_used), 
-                                            error_msg.str());
-                s = new Block(check, s);
             }
+        } else {
+            log(2) << "Bounds checking disabled via HL_DISABLE_BOUNDS_CHECKING\n";
         }
     }    
 

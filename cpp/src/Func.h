@@ -118,13 +118,13 @@ public:
     Buffer realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     void realize(Buffer dst);
 
-    void compile_to_bitcode(const string &filename, std::vector<Argument>);
-    void compile_to_object(const string &filename, std::vector<Argument>);
-    void compile_to_header(const string &filename, std::vector<Argument>);
-    void compile_to_assembly(const string &filename, std::vector<Argument>);    
+    void compile_to_bitcode(const string &filename, std::vector<Argument>, const string &fn_name = "");
+    void compile_to_object(const string &filename, std::vector<Argument>, const string &fn_name = "");
+    void compile_to_header(const string &filename, std::vector<Argument>, const string &fn_name = "");
+    void compile_to_assembly(const string &filename, std::vector<Argument>, const string &fn_name = "");    
     
     // Compile to object file and header pair, with the given
-    // arguments. Also renames the output function to match the first
+    // arguments. Also names the C function to match the first
     // argument.
     void compile_to_file(const string &filename_prefix, std::vector<Argument> args);
     void compile_to_file(const string &filename_prefix);

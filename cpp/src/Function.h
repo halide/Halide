@@ -44,10 +44,6 @@ public:
         return contents.ptr->name;
     }
 
-    void rename(const std::string &n) {
-        contents.ptr->name = n;
-    }
-
     const vector<string> &args() const {
         return contents.ptr->args;
     }
