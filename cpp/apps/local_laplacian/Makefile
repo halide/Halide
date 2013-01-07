@@ -10,7 +10,7 @@ endif
 
 all: process
 
-local_laplacian: ../../bin/libHalide.a local_laplacian.cpp
+local_laplacian: ../../ local_laplacian.cpp
 	$(MAKE) -C ../../ bin/libHalide.a
 	$(GXX) local_laplacian.cpp -I ../../src ../../bin/libHalide.a -o local_laplacian -lpthread -ldl -O3
 
@@ -18,7 +18,7 @@ local_laplacian.o: local_laplacian
 	./local_laplacian
 
 process: process.cpp local_laplacian.o
-	$(GXX) -I../../support -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
+	$(GXX) -I../support -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
 
 out.png: process
 	./process input.png 8 1 1 out.png
