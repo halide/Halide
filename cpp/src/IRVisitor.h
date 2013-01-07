@@ -1,5 +1,5 @@
-#ifndef IR_VISITOR_H
-#define IR_VISITOR_H
+#ifndef HALIDE_IR_VISITOR_H
+#define HALIDE_IR_VISITOR_H
 
 namespace Halide {
 struct Expr;
@@ -44,8 +44,8 @@ struct Block;
 
 namespace Internal {
    
-/* A base class for things that need to walk over the IR. The
- * default implementations just recursively walk over the
+/** A base class for algorithms that need to recursively walk over the
+ * IR. The default implementations just recursively walk over the
  * children. Override the ones you care about.
  */
 class IRVisitor {

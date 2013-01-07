@@ -1,5 +1,5 @@
-#ifndef CODEGEN_X86_H
-#define CODEGEN_X86_H
+#ifndef HALIDE_CODEGEN_X86_H
+#define HALIDE_CODEGEN_X86_H
 
 #include "CodeGen.h"
 

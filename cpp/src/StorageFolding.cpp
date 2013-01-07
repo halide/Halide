@@ -35,10 +35,10 @@ class FoldStorageOfFunction : public IRMutator {
         IRMutator::visit(op);
         op = stmt.as<Provide>();
         assert(op);
-        if (op->buffer == func) {
+        if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = args[dim] % factor;
-            stmt = new Provide(op->buffer, op->value, args);
+            stmt = new Provide(op->name, op->value, args);
         }
     }
 
@@ -51,7 +51,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
     string func;
 
     void visit(const Pipeline *op) {
-        if (op->buffer == func) {
+        if (op->name == func) {
             // Can't proceed into the pipeline for this func
             stmt = op;
         } else {
@@ -135,7 +135,7 @@ public:
 // Look for opportunities for storage folding in a statement
 class StorageFolding : public IRMutator {
     void visit(const Realize *op) {
-        AttemptStorageFoldingOfFunction folder(op->buffer);
+        AttemptStorageFoldingOfFunction folder(op->name);
         Stmt new_body = folder.mutate(op->body);
 
         if (new_body.same_as(op->body)) {
@@ -145,7 +145,7 @@ class StorageFolding : public IRMutator {
 
             bounds[folder.dim_folded] = make_pair(0, folder.fold_factor);
             
-            stmt = new Realize(op->buffer, op->type, bounds, new_body);
+            stmt = new Realize(op->name, op->type, bounds, new_body);
         }
     }
 };

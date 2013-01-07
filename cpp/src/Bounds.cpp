@@ -427,7 +427,7 @@ private:
     void visit(const Provide *op) {        
         IRVisitor::visit(op);
         if (consider_provides) {
-            vector<pair<Expr, Expr> > &region = regions[op->buffer];
+            vector<pair<Expr, Expr> > &region = regions[op->name];
             for (size_t i = 0; i < op->args.size(); i++) {
                 pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
                 if (region.size() > i) {
@@ -442,9 +442,9 @@ private:
     void visit(const Pipeline *op) {
         op->produce.accept(this);
         if (op->update.defined()) {
-            inside_update.push(op->buffer, 0);
+            inside_update.push(op->name, 0);
             op->update.accept(this);
-            inside_update.pop(op->buffer);
+            inside_update.pop(op->name);
         }
         op->consume.accept(this);
     }

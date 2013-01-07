@@ -1,5 +1,5 @@
-#ifndef IR_MUTATOR_H
-#define IR_MUTATOR_H
+#ifndef HALIDE_IR_MUTATOR_H
+#define HALIDE_IR_MUTATOR_H
 
 #include "IRVisitor.h"
 #include "IR.h"
@@ -9,10 +9,6 @@
 
 namespace Halide { 
 namespace Internal {
-
-using std::vector;
-using std::pair;
-using std::make_pair;
 
 /* Here is a base class for passes over the IR which change bits
  * of IR (e.g. replacing a variable with a value (Substitute.h), or

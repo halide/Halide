@@ -1,5 +1,5 @@
-#ifndef TYPE_H
-#define TYPE_H
+#ifndef HALIDE_TYPE_H
+#define HALIDE_TYPE_H
 
 namespace Halide {
 /* Types in the halide type system. They can be ints, unsigned

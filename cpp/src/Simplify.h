@@ -1,5 +1,5 @@
-#ifndef SIMPLIFY_H
-#define SIMPLIFY_H
+#ifndef HALIDE_SIMPLIFY_H
+#define HALIDE_SIMPLIFY_H
 
 #include "IR.h"
 

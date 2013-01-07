@@ -1,5 +1,5 @@
-#ifndef CODEGEN_C_H
-#define CODEGEN_C_H
+#ifndef HALIDE_CODEGEN_C_H
+#define HALIDE_CODEGEN_C_H
 
 #include "IRPrinter.h"
 #include "Argument.h"
@@ -9,9 +9,6 @@
 
 namespace Halide { 
     namespace Internal {
-
-        using std::vector;
-        using std::string;
         
         /* This class emits C++ code equivalent to a halide Stmt. It's
          * mostly the same as an IRPrinter, but it's wrapped in a function
@@ -22,8 +19,8 @@ namespace Halide {
         public:
             CodeGen_C(std::ostream &);
             
-            void compile(Stmt stmt, const string &name, const vector<Argument> &args);
-            void compile_header(const string &name, const vector<Argument> &args);
+            void compile(Stmt stmt, const std::string &name, const std::vector<Argument> &args);
+            void compile_header(const std::string &name, const std::vector<Argument> &args);
 
             static void test();
 
@@ -31,7 +28,7 @@ namespace Halide {
             
             // This is public so that CodeGen can use it too (for generating header files)
             void print_c_type(Type);
-            void print_c_name(const string &);
+            void print_c_name(const std::string &);
             
             void visit(const Variable *);
             void visit(const Cast *);

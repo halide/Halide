@@ -1,5 +1,5 @@
-#ifndef REMOVE_DEAD_LETS_H
-#define REMOVE_DEAD_LETS_H
+#ifndef HALIDE_REMOVE_DEAD_LETS_H
+#define HALIDE_REMOVE_DEAD_LETS_H
 
 #include "IR.h"
 

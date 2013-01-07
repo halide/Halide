@@ -1,5 +1,5 @@
-#ifndef IR_OPERATOR_H
-#define IR_OPERATOR_H
+#ifndef HALIDE_IR_OPERATOR_H
+#define HALIDE_IR_OPERATOR_H
 
 #include "IR.h"
 

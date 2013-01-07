@@ -1,5 +1,5 @@
-#ifndef DERIVATIVE_H
-#define DERIVATIVE_H
+#ifndef HALIDE_DERIVATIVE_H
+#define HALIDE_DERIVATIVE_H
 
 #include "IRVisitor.h"
 #include <string>

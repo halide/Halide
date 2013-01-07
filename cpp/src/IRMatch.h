@@ -1,5 +1,5 @@
-#ifndef IR_MATCH_H
-#define IR_MATCH_H
+#ifndef HALIDE_IR_MATCH_H
+#define HALIDE_IR_MATCH_H
 
 #include "IR.h"
 #include <map>

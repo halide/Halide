@@ -11,6 +11,7 @@ namespace Internal {
 
 using std::ostream;
 using std::endl;
+using std::string;
 
 CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s) {}
 
@@ -160,7 +161,7 @@ void CodeGen_C::visit(const Load *op) {
     stream << "((";
     print_c_type(op->type);
     stream << " *)";
-    print_c_name(op->buffer);
+    print_c_name(op->name);
     stream << ")[";
     print(op->index);
     stream << "]";
@@ -172,7 +173,7 @@ void CodeGen_C::visit(const Store *op) {
     stream << "((";
     print_c_type(t);
     stream << " *)";
-    print_c_name(op->buffer);
+    print_c_name(op->name);
     stream << ")[";
     print(op->index);
     stream << "] = ";
@@ -241,17 +242,17 @@ void CodeGen_C::visit(const AssertStmt *op) {
 void CodeGen_C::visit(const Pipeline *op) {
 
     do_indent();
-    stream << "// produce " << op->buffer << endl;
+    stream << "// produce " << op->name << endl;
     op->produce.accept(this);
 
     if (op->update.defined()) {
         do_indent();
-        stream << "// update " << op->buffer << endl;
+        stream << "// update " << op->name << endl;
         op->update.accept(this);            
     }
         
     do_indent();
-    stream << "// consume " << op->buffer << endl;
+    stream << "// consume " << op->name << endl;
     op->consume.accept(this);
 }
 
@@ -308,11 +309,11 @@ void CodeGen_C::visit(const Allocate *op) {
     }
 
     if (on_stack) {
-        print_c_name(op->buffer);
+        print_c_name(op->name);
         stream << "[" << stack_size << "];" << endl;
     } else {        
         stream << "*";
-        print_c_name(op->buffer);
+        print_c_name(op->name);
         stream << " = new ";
         print_c_type(op->type);
         stream << "[";
@@ -325,7 +326,7 @@ void CodeGen_C::visit(const Allocate *op) {
     if (!on_stack) {
         do_indent();
         stream << "delete[] ";
-        print_c_name(op->buffer);
+        print_c_name(op->name);
         stream << ";" << endl;
     }
 

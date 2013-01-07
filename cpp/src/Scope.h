@@ -1,5 +1,5 @@
-#ifndef SCOPE_H
-#define SCOPE_H
+#ifndef HALIDE_SCOPE_H
+#define HALIDE_SCOPE_H
 
 #include <assert.h>
 #include <string>

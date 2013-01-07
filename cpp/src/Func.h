@@ -1,5 +1,5 @@
-#ifndef FUNC_H
-#define FUNC_H
+#ifndef HALIDE_FUNC_H
+#define HALIDE_FUNC_H
 
 #include "IR.h"
 #include "Var.h"

@@ -1,5 +1,5 @@
-#ifndef UTIL_H
-#define UTIL_H
+#ifndef HALIDE_UTIL_H
+#define HALIDE_UTIL_H
 
 #include <vector>
 #include <string>

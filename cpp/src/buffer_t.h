@@ -1,5 +1,5 @@
-#ifndef _BUFFER_T
-#define _BUFFER_T
+#ifndef HALIDE_BUFFER_T
+#define HALIDE_BUFFER_T
 
 #include <stdint.h>
 
@@ -17,4 +17,4 @@ typedef struct buffer_t {
     int32_t elem_size;
 } buffer_t;
 
-#endif //_BUFFER_T
+#endif

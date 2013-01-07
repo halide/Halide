@@ -1,5 +1,5 @@
-#ifndef IR_PRINTER_H
-#define IR_PRINTER_H
+#ifndef HALIDE_IR_PRINTER_H
+#define HALIDE_IR_PRINTER_H
 
 #include "IRVisitor.h"
 #include "Type.h"

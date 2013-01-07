@@ -1,5 +1,5 @@
-#ifndef CODEGEN_H
-#define CODEGEN_H
+#ifndef HALIDE_CODEGEN_H
+#define HALIDE_CODEGEN_H
 
 #include <llvm/Value.h>
 #include <llvm/Module.h>

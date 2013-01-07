@@ -1,5 +1,5 @@
-#ifndef IR_EQUALITY_H
-#define IR_EQUALITY_H
+#ifndef HALIDE_IR_EQUALITY_H
+#define HALIDE_IR_EQUALITY_H
 
 #include "IR.h"
 

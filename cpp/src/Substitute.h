@@ -1,5 +1,5 @@
-#ifndef SUBSTITUTE_H
-#define SUBSTITUTE_H
+#ifndef HALIDE_SUBSTITUTE_H
+#define HALIDE_SUBSTITUTE_H
 
 #include "IRMutator.h"
 

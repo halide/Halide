@@ -40,7 +40,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Scope<Expr> scope;
 
     void visit(const Pipeline *op) {
-        if (op->buffer != func.name()) {
+        if (op->name != func.name()) {
             IRMutator::visit(op);
         } else {
             
@@ -146,7 +146,7 @@ class SlidingWindow : public IRMutator {
 
     void visit(const Realize *op) {
         // Find the args for this function
-        map<string, Function>::const_iterator iter = env.find(op->buffer);
+        map<string, Function>::const_iterator iter = env.find(op->name);
 
         Stmt new_body = op->body;
         if (iter != env.end()) {
@@ -157,7 +157,7 @@ class SlidingWindow : public IRMutator {
         if (new_body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = new Realize(op->buffer, op->type, op->bounds, new_body);
+            stmt = new Realize(op->name, op->type, op->bounds, new_body);
         }
     }
 public:

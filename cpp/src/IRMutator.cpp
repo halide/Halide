@@ -3,6 +3,8 @@
 namespace Halide {
 namespace Internal {
 
+using std::make_pair;
+
 Expr IRMutator::mutate(Expr e) {
     if (e.defined()) {
         e.accept(this);
@@ -78,7 +80,7 @@ void IRMutator::visit(const Select *op)  {
 void IRMutator::visit(const Load *op) {
     Expr index = mutate(op->index);
     if (index.same_as(op->index)) expr = op;
-    else expr = new Load(op->type, op->buffer, index, op->image, op->param);
+    else expr = new Load(op->type, op->name, index, op->image, op->param);
 }
 
 void IRMutator::visit(const Ramp *op) {
@@ -158,7 +160,7 @@ void IRMutator::visit(const Pipeline *op) {
         consume.same_as(op->consume)) {
         stmt = op;
     } else {
-        stmt = new Pipeline(op->buffer, produce, update, consume);
+        stmt = new Pipeline(op->name, produce, update, consume);
     }
 }
 
@@ -180,7 +182,7 @@ void IRMutator::visit(const Store *op) {
     Expr index = mutate(op->index);
     if (value.same_as(op->value) && 
         index.same_as(op->index)) stmt = op;
-    else stmt = new Store(op->buffer, value, index);            
+    else stmt = new Store(op->name, value, index);            
 }
 
 void IRMutator::visit(const Provide *op) {
@@ -198,14 +200,14 @@ void IRMutator::visit(const Provide *op) {
     Expr value = mutate(op->value);
             
     if (!args_changed && value.same_as(op->value)) stmt = op;
-    else stmt = new Provide(op->buffer, value, new_args);
+    else stmt = new Provide(op->name, value, new_args);
 }
 
 void IRMutator::visit(const Allocate *op) {
     Expr size = mutate(op->size);
     Stmt body = mutate(op->body);
     if (size.same_as(op->size) && body.same_as(op->body)) stmt = op;
-    else stmt = new Allocate(op->buffer, op->type, size, body);
+    else stmt = new Allocate(op->name, op->type, size, body);
 }
         
 void IRMutator::visit(const Realize *op) {
@@ -225,7 +227,7 @@ void IRMutator::visit(const Realize *op) {
 
     Stmt body = mutate(op->body);
     if (!bounds_changed && body.same_as(op->body)) stmt = op;
-    else stmt = new Realize(op->buffer, op->type, new_bounds, body);
+    else stmt = new Realize(op->name, op->type, new_bounds, body);
 }
 
 void IRMutator::visit(const Block *op) {

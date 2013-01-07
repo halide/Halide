@@ -289,7 +289,7 @@ void IRPrinter::visit(const Select *op) {
 }
 
 void IRPrinter::visit(const Load *op) {
-    stream << op->buffer << "[";
+    stream << op->name << "[";
     print(op->index);
     stream << "]";
 }
@@ -357,7 +357,7 @@ void IRPrinter::visit(const Pipeline *op) {
 
 
     do_indent();
-    stream << "produce " << op->buffer << " {" << endl;
+    stream << "produce " << op->name << " {" << endl;
     indent += 2;
     print(op->produce);
     indent -= 2;
@@ -399,7 +399,7 @@ void IRPrinter::visit(const For *op) {
 
 void IRPrinter::visit(const Store *op) {
     do_indent();
-    stream << op->buffer << "[";
+    stream << op->name << "[";
     print(op->index);
     stream << "] = ";
     print(op->value);
@@ -408,7 +408,7 @@ void IRPrinter::visit(const Store *op) {
 
 void IRPrinter::visit(const Provide *op) {
     do_indent();
-    stream << op->buffer << "(";
+    stream << op->name << "(";
     for (size_t i = 0; i < op->args.size(); i++) {
         print(op->args[i]);
         if (i < op->args.size() - 1) stream << ", ";
@@ -420,18 +420,18 @@ void IRPrinter::visit(const Provide *op) {
 
 void IRPrinter::visit(const Allocate *op) {
     do_indent();
-    stream << "allocate " << op->buffer << "[" << op->type << " * ";
+    stream << "allocate " << op->name << "[" << op->type << " * ";
     print(op->size);
     stream << "]" << endl;
     print(op->body);
 
     do_indent();
-    stream << "free " << op->buffer << endl;
+    stream << "free " << op->name << endl;
 }
 
 void IRPrinter::visit(const Realize *op) {
     do_indent();
-    stream << "realize " << op->buffer << "(";
+    stream << "realize " << op->name << "(";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
         print(op->bounds[i].first);
