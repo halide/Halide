@@ -434,9 +434,9 @@ void IRPrinter::visit(const Realize *op) {
     stream << "realize " << op->name << "(";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
-        print(op->bounds[i].first);
+        print(op->bounds[i].min);
         stream << ", ";
-        print(op->bounds[i].second);
+        print(op->bounds[i].extent);
         stream << "]";
         if (i < op->bounds.size() - 1) stream << ", ";
     }

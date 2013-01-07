@@ -66,9 +66,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             return;
         }
             
-        Scope<pair<Expr, Expr> > scope;
-        map<string, vector<pair<Expr, Expr> > > regions = regions_touched(op->body, scope);
-        const vector<pair<Expr, Expr> > &region = regions[func];
+        map<string, Region> regions = regions_touched(op->body);
+        const Region &region = regions[func];
 
         if (!region.size()) {
             // This for loop doesn't use this function
@@ -78,8 +77,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         
         // Try each dimension in turn from outermost in
         for (size_t i = region.size(); i > 0; i--) {
-            Expr min = region[i-1].first;
-            Expr extent = region[i-1].second;
+            Expr min = region[i-1].min;
+            Expr extent = region[i-1].extent;
             Expr loop_var = new Variable(Int(32), op->name);
 
             // The min has to be monotonic with the loop variable            
@@ -90,8 +89,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             //Expr min_deriv = simplify(finite_difference(min, op->name));
 
             // The max of the extent over all values of the loop variable must be a constant
-            scope.push(op->name, make_pair(op->min, op->min + op->extent - 1));
-            Expr max_extent = bounds_of_expr_in_scope(extent, scope).second;
+            Scope<Interval> scope;
+            scope.push(op->name, Interval(op->min, op->min + op->extent - 1));
+            Expr max_extent = bounds_of_expr_in_scope(extent, scope).max;
             scope.pop(op->name);
 
             max_extent = simplify(max_extent);
@@ -141,9 +141,9 @@ class StorageFolding : public IRMutator {
         if (new_body.same_as(op->body)) {
             stmt = op;
         } else {
-            vector<pair<Expr, Expr> > bounds = op->bounds;
+            Region bounds = op->bounds;
 
-            bounds[folder.dim_folded] = make_pair(0, folder.fold_factor);
+            bounds[folder.dim_folded] = Range(0, folder.fold_factor);
             
             stmt = new Realize(op->name, op->type, bounds, new_body);
         }

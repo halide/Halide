@@ -35,8 +35,8 @@ private:
             const Realize *op = stmt.as<Realize>();
             vector<Expr> args;
             for (size_t i = 0; i < op->bounds.size(); i++) {
-                args.push_back(op->bounds[i].first);
-                args.push_back(op->bounds[i].second);
+                args.push_back(op->bounds[i].min);
+                args.push_back(op->bounds[i].extent);
             }
             Stmt print = new PrintStmt("Realizing " + op->name + " over ", args);
             Stmt body = new Block(print, op->body);

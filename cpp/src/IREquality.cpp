@@ -267,10 +267,10 @@ public:
         const Realize *s = stmt.as<Realize>();
         if (result && s && s->name == op->name && s->type == op->type) {
             for (size_t i = 0; result && (i < s->bounds.size()); i++) {
-                expr = s->bounds[i].first;
-                op->bounds[i].first.accept(this);
-                expr = s->bounds[i].second;
-                op->bounds[i].second.accept(this);
+                expr = s->bounds[i].min;
+                op->bounds[i].min.accept(this);
+                expr = s->bounds[i].extent;
+                op->bounds[i].extent.accept(this);
             }                                      
         } else {
             result = false;

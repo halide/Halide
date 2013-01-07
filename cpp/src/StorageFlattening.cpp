@@ -28,7 +28,7 @@ class FlattenDimensions : public IRMutator {
         // Compute the size
         Expr size = 1;
         for (size_t i = 0; i < realize->bounds.size(); i++) {
-            size *= realize->bounds[i].second;
+            size *= realize->bounds[i].extent;
         }
 
 
@@ -56,8 +56,8 @@ class FlattenDimensions : public IRMutator {
             ostringstream min_name, extent_name;
             min_name << realize->name << ".min." << (i-1);
             extent_name << realize->name << ".extent." << (i-1);
-            stmt = new LetStmt(min_name.str(), realize->bounds[i-1].first, stmt);
-            stmt = new LetStmt(extent_name.str(), realize->bounds[i-1].second, stmt);
+            stmt = new LetStmt(min_name.str(), realize->bounds[i-1].min, stmt);
+            stmt = new LetStmt(extent_name.str(), realize->bounds[i-1].extent, stmt);
         }
     }
 
