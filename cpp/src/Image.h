@@ -60,6 +60,12 @@ public:
         return buffer.extent(dim);
     }
 
+    int stride(int dim) const {
+        assert(defined());
+        assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
+        return buffer.stride(dim);
+    }
+
     int width() const {
         return extent(0);
     }
@@ -70,6 +76,10 @@ public:
 
     int channels() const {
         return extent(2);
+    }
+
+    T *data() const {
+        return base;
     }
 
     T operator()(int x) const {

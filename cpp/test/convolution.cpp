@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
      *       for x: 
      *         blur1(x, y) += tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1)
      *     
-     * In general reductions iterate over the reduction domain outermost.
+     * In general, reductions iterate over the reduction domain outermost.
      */
     Func blur1("blur1");
     blur1(x, y) += tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1);

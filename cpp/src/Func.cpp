@@ -30,6 +30,10 @@ Func::Func(const string &name) : func(name), error_handler(NULL), custom_malloc(
 
 Func::Func() : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
 }
+
+Func::Func(Expr e) : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
+    (*this)() = e;
+}
         
 const string &Func::name() const {
     return func.name();
@@ -623,12 +627,11 @@ private:
             return;
         }
 
-        assert(b.defined() && "Can't JIT compile a call to an undefined buffer");
-
         Argument arg(arg_name, true, Int(1));
         bool already_included = false;
         for (size_t i = 0; i < arg_types.size(); i++) {
-            if (arg_types[i].name == b.name()) {
+            if (arg_types[i].name == op->buffer) {
+                Internal::log(2) << "Already included.\n";
                 already_included = true;
             }
         }
@@ -638,13 +641,18 @@ private:
                 image_param_args.push_back(make_pair(idx, op->param));
             }
             arg_types.push_back(arg);
-            arg_values.push_back(b.raw_buffer());
+            if (op->image.defined()) {
+                assert(b.defined());
+                arg_values.push_back(b.raw_buffer());
+            } else {
+                arg_values.push_back(NULL);
+            }
         }
     }
 
     void visit(const Variable *op) {
         if (op->param.defined()) {
-            Argument arg(op->param.name(), op->param.get_buffer().defined(), op->param.type());
+            Argument arg(op->param.name(), op->param.is_buffer(), op->param.type());
             bool already_included = false;
             for (size_t i = 0; i < arg_types.size(); i++) {
                 if (arg_types[i].name == op->param.name()) {
@@ -653,10 +661,10 @@ private:
             }
             if (!already_included) {
                 Internal::log(2) << "Found a param: " << op->param.name() << "\n";
-                if (op->param.get_buffer().defined()) {
+                if (op->param.is_buffer()) {
                     int idx = (int)(arg_values.size());
                     image_param_args.push_back(make_pair(idx, op->param));                    
-                    arg_values.push_back(op->param.get_buffer().raw_buffer());
+                    arg_values.push_back(NULL);
                 } else {
                     arg_values.push_back(op->param.get_scalar_address());
                 }
@@ -672,58 +680,71 @@ Stmt Func::lower() {
 }
 
 void Func::realize(Buffer dst) {
-    if (!compiled_module.wrapped_function) {
-   
-        assert(func.defined() && "Can't realize NULL function handle");
-        assert(value().defined() && "Can't realize undefined function");
-        
-        Stmt stmt = lower();
-        
-        // Infer arguments
-        InferArguments infer_args;
-        stmt.accept(&infer_args);
-        
-        Argument me(name(), true, Int(1));
-        infer_args.arg_types.push_back(me);
-        arg_values = infer_args.arg_values;
-        arg_values.push_back(dst.raw_buffer());
-        image_param_args = infer_args.image_param_args;
+    if (!compiled_module.wrapped_function) compile_jit();
 
-        Internal::log(2) << "Inferred argument list:\n";
-        for (size_t i = 0; i < infer_args.arg_types.size(); i++) {
-            Internal::log(2) << infer_args.arg_types[i].name << ", " 
-                             << infer_args.arg_types[i].type << ", " 
-                             << infer_args.arg_types[i].is_buffer << "\n";
-        }
-        
-        StmtCompiler cg;
-        cg.compile(stmt, name(), infer_args.arg_types);
+    assert(compiled_module.wrapped_function);
 
-        if (log::debug_level >= 3) {
-            cg.compile_to_native(name() + ".s", true);
-            cg.compile_to_bitcode(name() + ".bc");
-            std::ofstream stmt_debug((name() + ".stmt").c_str());
-            stmt_debug << stmt;
-        }
+    // In case these have changed since the last realization
+    compiled_module.set_error_handler(error_handler);
+    compiled_module.set_custom_allocator(custom_malloc, custom_free);   
 
-        compiled_module = cg.compile_to_function_pointers();
+    // Update the address of the buffer we're realizing into
+    arg_values[arg_values.size()-1] = dst.raw_buffer();
 
-        compiled_module.set_error_handler(error_handler);
-        compiled_module.set_custom_allocator(custom_malloc, custom_free);
-
-    } else {
-        // Update the address of the buffer we're realizing into
-        arg_values[arg_values.size()-1] = dst.raw_buffer();
-        // update the addresses of the image param args
-        for (size_t i = 0; i < image_param_args.size(); i++) {
-            Buffer b = image_param_args[i].second.get_buffer();
-            assert(b.defined() && "An ImageParam is not bound to a buffer");
-            arg_values[image_param_args[i].first] = b.raw_buffer();
-        }
+    // Update the addresses of the image param args
+    Internal::log(3) << image_param_args.size() << " image param args to set\n";
+    for (size_t i = 0; i < image_param_args.size(); i++) {
+        Internal::log(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
+        Buffer b = image_param_args[i].second.get_buffer();
+        assert(b.defined() && "An ImageParam is not bound to a buffer");
+        arg_values[image_param_args[i].first] = b.raw_buffer();
     }
 
-    compiled_module.wrapped_function(&(arg_values[0]));
+    for (size_t i = 0; i < arg_values.size(); i++) {
+        Internal::log(2) << "Arg " << i << " = " << arg_values[i] << "\n";
+        assert(arg_values[i] != NULL && "An argument to a jitted function is null\n");
+    }
+
+    Internal::log(2) << "Calling jitted function\n";
+    compiled_module.wrapped_function(&(arg_values[0]));    
+    Internal::log(2) << "Back from jitted function\n";
+}
+
+void Func::compile_jit() {
+    assert(func.defined() && "Can't realize NULL function handle");
+    assert(value().defined() && "Can't realize undefined function");
     
+    Stmt stmt = lower();
+    
+    // Infer arguments
+    InferArguments infer_args;
+    stmt.accept(&infer_args);
+    
+    Argument me(name(), true, Int(1));
+    infer_args.arg_types.push_back(me);
+    arg_values = infer_args.arg_values;
+    arg_values.push_back(NULL); // A spot to put the address of the output buffer
+    image_param_args = infer_args.image_param_args;
+    
+    Internal::log(2) << "Inferred argument list:\n";
+    for (size_t i = 0; i < infer_args.arg_types.size(); i++) {
+        Internal::log(2) << infer_args.arg_types[i].name << ", " 
+                         << infer_args.arg_types[i].type << ", " 
+                         << infer_args.arg_types[i].is_buffer << "\n";
+    }
+    
+    StmtCompiler cg;
+    cg.compile(stmt, name(), infer_args.arg_types);
+    
+    if (log::debug_level >= 3) {
+        cg.compile_to_native(name() + ".s", true);
+        cg.compile_to_bitcode(name() + ".bc");
+        std::ofstream stmt_debug((name() + ".stmt").c_str());
+        stmt_debug << stmt;
+    }
+    
+    compiled_module = cg.compile_to_function_pointers();    
+
 }
 
 void Func::test() {

@@ -11,8 +11,8 @@ template<typename T>
 class Param {
     Internal::Parameter param;
 public:
-    Param() : param(type_of<T>()) {}
-    Param(const string &n) : param(type_of<T>(), n) {}
+    Param() : param(type_of<T>(), false) {}
+    Param(const string &n) : param(type_of<T>(), false, n) {}
 
     const string &name() const {
         return param.name();
@@ -48,8 +48,8 @@ class ImageParam {
     int dims;
 public:
     ImageParam() {}
-    ImageParam(Type t, int d) : param(t), dims(d) {}
-    ImageParam(Type t, int d, const string &n) : param(t, n), dims(d) {}
+    ImageParam(Type t, int d) : param(t, true), dims(d) {}
+    ImageParam(Type t, int d, const string &n) : param(t, true, n), dims(d) {}
     ImageParam(Internal::Parameter p, int d) : param(p), dims(d) {}
 
     const string &name() const {

@@ -11,10 +11,11 @@ using std::string;
 struct ParameterContents {
     mutable RefCount ref_count;
     Type type;
+    bool is_buffer;
     string name;
     Buffer buffer;
     uint64_t data;
-    ParameterContents(Type t, const string &n) : type(t), name(n), buffer(Buffer()), data(0) {
+    ParameterContents(Type t, bool b, const string &n) : type(t), is_buffer(b), name(n), buffer(Buffer()), data(0) {
     }
 
     template<typename T>
@@ -29,12 +30,12 @@ class Parameter {
 public:
     Parameter() : contents(NULL) {}
 
-    Parameter(Type t) : 
-        contents(new ParameterContents(t, unique_name('p'))) {
+    Parameter(Type t, bool b) : 
+        contents(new ParameterContents(t, b, unique_name('p'))) {
     }
 
-    Parameter(Type t, const string &n) : 
-        contents(new ParameterContents(t, n)) {
+    Parameter(Type t, bool b, const string &n) : 
+        contents(new ParameterContents(t, b, n)) {
     }
 
     Type type() const {
@@ -47,25 +48,30 @@ public:
         return contents.ptr->name;
     }
 
+    bool is_buffer() const {
+        assert(contents.defined());
+        return contents.ptr->is_buffer;
+    }
+
     template<typename T>
     T get_scalar() const {
-        assert(contents.defined());
+        assert(contents.defined() && !contents.ptr->is_buffer);
         return contents.ptr->as<T>();
     }
 
     Buffer get_buffer() const {
-        assert(contents.defined());
+        assert(contents.defined() && contents.ptr->is_buffer);
         return contents.ptr->buffer;
     }
 
     template<typename T>
     void set_scalar(T val) {
-        assert(contents.defined());
+        assert(contents.defined() && !contents.ptr->is_buffer);
         contents.ptr->as<T>() = val;
     }
 
     void set_buffer(Buffer b) {
-        assert(contents.defined());
+        assert(contents.defined() && contents.ptr->is_buffer);
         contents.ptr->buffer = b;
     }
 
