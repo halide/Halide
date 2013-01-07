@@ -2,11 +2,13 @@
 
 namespace Halide {
 
-Expr::Expr(int x) : IRHandle(new IntImm(x)) {
+Expr::Expr(int x) : Internal::IRHandle(new IntImm(x)) {
 }
 
-Expr::Expr(float x) : IRHandle(new FloatImm(x)) {
+Expr::Expr(float x) : Internal::IRHandle(new FloatImm(x)) {
 }
+
+namespace Internal {
 
 template<> IRNodeType ExprNode<IntImm>::_type_info = {};
 template<> IRNodeType ExprNode<FloatImm>::_type_info = {};
@@ -45,11 +47,10 @@ template<> IRNodeType StmtNode<Allocate>::_type_info = {};
 template<> IRNodeType StmtNode<Realize>::_type_info = {};
 template<> IRNodeType StmtNode<Block>::_type_info = {};
 
-namespace Internal {
 template<>
-RefCount &ref_count<Halide::IRNode>(const IRNode *n) {return n->ref_count;}
+RefCount &ref_count<IRNode>(const IRNode *n) {return n->ref_count;}
 
 template<>
-void destroy<Halide::IRNode>(const IRNode *n) {delete n;}
+void destroy<IRNode>(const IRNode *n) {delete n;}
 }
 }

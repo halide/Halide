@@ -376,7 +376,7 @@ void CodeGen_X86::visit(const Allocate *alloc) {
     Value *ptr;                
 
     // In the future, we may want to construct an entire buffer_t here
-    string allocation_name = alloc->buffer + ".host";
+    string allocation_name = alloc->name + ".host";
     log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
     if (on_stack) {

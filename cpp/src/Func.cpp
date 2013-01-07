@@ -659,7 +659,7 @@ private:
         Argument arg(arg_name, true, Int(1));
         bool already_included = false;
         for (size_t i = 0; i < arg_types.size(); i++) {
-            if (arg_types[i].name == op->buffer) {
+            if (arg_types[i].name == op->name) {
                 Internal::log(2) << "Already included.\n";
                 already_included = true;
             }

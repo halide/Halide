@@ -1,5 +1,5 @@
-#ifndef BOUNDS_H
-#define BOUNDS_H
+#ifndef HALIDE_BOUNDS_H
+#define HALIDE_BOUNDS_H
 
 #include "IRVisitor.h"
 #include "Scope.h"

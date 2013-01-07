@@ -336,7 +336,7 @@ private:
     
     // If we're an inline reduction, we may need to inject a realization here
     virtual void visit(const Provide *op) {               
-        if (op->buffer != func.name() && 
+        if (op->name != func.name() && 
             func.is_reduction() && 
             func.schedule().compute_level.is_inline() &&
             function_is_called_in_stmt(func, op)) {

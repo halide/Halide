@@ -137,7 +137,7 @@ public:
 
     void visit(const Load *op) {
         const Load *e = expr.as<Load>();
-        if (result && e && e->type == op->type && e->buffer == op->buffer) {
+        if (result && e && e->type == op->type && e->name == op->name) {
             expr = e->index;
             op->index.accept(this);
         } else {

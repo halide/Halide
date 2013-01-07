@@ -1,5 +1,5 @@
-#ifndef IR_H
-#define IR_H
+#ifndef HALIDE_IR_H
+#define HALIDE_IR_H
 #include <string>
 #include <vector>
 #include <utility>
@@ -20,30 +20,31 @@ using std::vector;
 using std::pair;
 using std::map;
 
-/* A class representing a type of IR node (e.g. Add, or Mul, or
-   PrintStmt). We use it for rtti (without having to compile with
-   rtti). */
+namespace Internal {
+
+/** A class representing a type of IR node (e.g. Add, or Mul, or
+ * PrintStmt). We use it for rtti (without having to compile with
+ * rtti). */
 struct IRNodeType {};
 
-/* The abstract base classes for a node in the Halide IR. */
+/** The abstract base classes for a node in the Halide IR. */
 struct IRNode {
 
-    /* We use
-     * the visitor pattern to traverse IR nodes throughout the
+    /** We use the visitor pattern to traverse IR nodes throughout the
      * compiler, so we have a virtual accept method which accepts
      * visitors.
      */
-    virtual void accept(Internal::IRVisitor *v) const = 0;
+    virtual void accept(IRVisitor *v) const = 0;
     IRNode() {}
     virtual ~IRNode() {}
 
-    /* These classes are all managed with intrusive reference
+    /** These classes are all managed with intrusive reference
        counting, so we also track a reference count. It's mutable
        so that we can do reference counting even through const
        references to IR nodes. */
-    mutable Internal::RefCount ref_count;
+    mutable RefCount ref_count;
 
-    /* Each IR node subclass should return some unique pointer. We
+    /** Each IR node subclass should return some unique pointer. We
      * can compare these pointers to do runtime type
      * identification. We don't compile with rtti because that
      * injects run-time type identification stuff everywhere (and
@@ -52,25 +53,25 @@ struct IRNode {
     virtual const IRNodeType *type_info() const = 0;
 };
 
-/* IR nodes are split into expressions and statements. These are
+/** IR nodes are split into expressions and statements. These are
    similar to expressions and statements in C - expressions
    represent some value and have some type (e.g. x + 3), and
    statements are side-effecting pieces of code that do not
    represent a value (e.g. assert(x > 3)) */
 
-/* A base class for statement nodes. They have no properties or
+/** A base class for statement nodes. They have no properties or
    methods beyond base IR nodes for now */
 struct BaseStmtNode : public IRNode {
 };
 
-/* A base class for expression nodes. They all contain their types
+/** A base class for expression nodes. They all contain their types
  * (e.g. Int(32), Float(32)) */
 struct BaseExprNode : public IRNode {
     Type type;
     BaseExprNode(Type t) : type(t) {}
 };
 
-/* We use the "curiously recurring template pattern" to avoid
+/** We use the "curiously recurring template pattern" to avoid
    duplicated code in the IR Nodes. These classes live between the
    abstract base classes and the actual IR Nodes in the
    inheritance hierarchy. It provides an implementation of the
@@ -79,7 +80,7 @@ struct BaseExprNode : public IRNode {
 template<typename T>
 struct ExprNode : public BaseExprNode {
     ExprNode(Type t) : BaseExprNode(t) {}
-    void accept(Internal::IRVisitor *v) const {
+    void accept(IRVisitor *v) const {
         v->visit((const T *)this);
     }
     virtual IRNodeType *type_info() const {return &_type_info;}
@@ -88,30 +89,30 @@ struct ExprNode : public BaseExprNode {
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
-    void accept(Internal::IRVisitor *v) const {
+    void accept(IRVisitor *v) const {
         v->visit((const T *)this);
     }
     virtual IRNodeType *type_info() const {return &_type_info;}
     static IRNodeType _type_info;
 };
     
-/* IR nodes are passed around opaque handles to them. This is a
+/** IR nodes are passed around opaque handles to them. This is a
    base class for those handles. It manages the reference count,
    and dispatches visitors. */
-struct IRHandle : public Internal::IntrusivePtr<const IRNode> {
-    IRHandle() : Internal::IntrusivePtr<const IRNode>() {}
-    IRHandle(const IRNode *p) : Internal::IntrusivePtr<const IRNode>(p) {}
+struct IRHandle : public IntrusivePtr<const IRNode> {
+    IRHandle() : IntrusivePtr<const IRNode>() {}
+    IRHandle(const IRNode *p) : IntrusivePtr<const IRNode>(p) {}
 
-    /* Dispatch to the correct visitor method for this
-     * node. E.g. if this node is actually an Add node, then this
-     * will call v->visit(const Add *) */
-    void accept(Internal::IRVisitor *v) const {
+    /** Dispatch to the correct visitor method for this node. E.g. if
+     * this node is actually an Add node, then this will call
+     * IRVisitor::visit(const Add *) */
+    void accept(IRVisitor *v) const {
         ptr->accept(v);
     }
 
-    /* Downcast this ir node to its actual type (e.g. Add,
-     * or Select). This returns NULL if the node is not of the
-     * requested type. Example usage:
+    /** Downcast this ir node to its actual type (e.g. Add, or
+     * Select). This returns NULL if the node is not of the requested
+     * type. Example usage:
      * 
      * if (const Add *add = node->as<Add>()) {
      *   // This is an add node
@@ -124,193 +125,204 @@ struct IRHandle : public Internal::IntrusivePtr<const IRNode> {
     }
 };
 
-/* A reference-counted handle on an expression */
-struct Expr : public IRHandle {
-    Expr() : IRHandle() {}        
-    Expr(const BaseExprNode *n) : IRHandle(n) {}
+}
 
-    /* Some constructors for convenience to make constants. These
-     * can be used implicitly, so that you can pass constants
-     * around and they'll be treated as expressions. */
+/** A reference-counted handle to a concrete expression node */
+struct Expr : public Internal::IRHandle {
+    /** Make an undefined expression */
+    Expr() : Internal::IRHandle() {}        
+
+    /** Make an expression from a concrete expression node pointer (e.g. Add) */
+    Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
+
+    /** Make an expression representing a const 32-bit int (i.e. an IntImm) */
     Expr(int);
+
+    /** Make an expression representing a const 32-bit float (i.e. a FloatImm) */
     Expr(float);
 
-    /* Get at the type of this expression node */
+    /** Get the type of this expression node */
     Type type() const {
-        return ((BaseExprNode *)ptr)->type;
+        return ((Internal::BaseExprNode *)ptr)->type;
     }
 };    
 
-/* A reference-counted handle to a statement node. */
-struct Stmt : public IRHandle {
-    Stmt() : IRHandle() {}
-    Stmt(const BaseStmtNode *n) : IRHandle(n) {}
+/** A reference-counted handle to a statement node. */
+struct Stmt : public Internal::IRHandle {
+    Stmt() : Internal::IRHandle() {}
+    Stmt(const Internal::BaseStmtNode *n) : IRHandle(n) {}
 };
 
-/* The actual IR nodes begin here. Remember that all the Expr
+/** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */
 
-/* Integer constants */
-struct IntImm : public ExprNode<IntImm> {
+/** Integer constants */
+struct IntImm : public Internal::ExprNode<IntImm> {
     int value;
 
-    IntImm(int v) : ExprNode<IntImm>(Int(32)), value(v) {}
+    IntImm(int v) : Internal::ExprNode<IntImm>(Int(32)), value(v) {}
 };
 
-/* Floating point constants */
-struct FloatImm : public ExprNode<FloatImm> {
+/** Floating point constants */
+struct FloatImm : public Internal::ExprNode<FloatImm> {
     float value;
 
-    FloatImm(float v) : ExprNode<FloatImm>(Float(32)), value(v) {}
+    FloatImm(float v) : Internal::ExprNode<FloatImm>(Float(32)), value(v) {}
 };
 
-/* Cast a node from one type to another */
-struct Cast : public ExprNode<Cast> {
+/** Cast a node from one type to another */
+struct Cast : public Internal::ExprNode<Cast> {
     Expr value;
 
-    Cast(Type t, Expr v) : ExprNode<Cast>(t), value(v) {
+    Cast(Type t, Expr v) : Internal::ExprNode<Cast>(t), value(v) {
         assert(v.defined() && "Cast of undefined");
     }
 };
 
-/* Arithmetic nodes. If applied to vector types, all of these are
- * done elementwise. */
-struct Add : public ExprNode<Add> {
+/** The sum of two expressions */
+struct Add : public Internal::ExprNode<Add> {
     Expr a, b;
 
-    Add(Expr _a, Expr _b) : ExprNode<Add>(_a.type()), a(_a), b(_b) {
+    Add(Expr _a, Expr _b) : Internal::ExprNode<Add>(_a.type()), a(_a), b(_b) {
         assert(a.defined() && "Add of undefined");
         assert(b.defined() && "Add of undefined");
         assert(b.type() == type && "Add of mismatched types");
     }
 };
 
-struct Sub : public ExprNode<Sub> {
+/** The difference of two expressions */
+struct Sub : public Internal::ExprNode<Sub> {
     Expr a, b;
 
-    Sub(Expr _a, Expr _b) : ExprNode<Sub>(_a.type()), a(_a), b(_b) {
+    Sub(Expr _a, Expr _b) : Internal::ExprNode<Sub>(_a.type()), a(_a), b(_b) {
         assert(a.defined() && "Sub of undefined");
         assert(b.defined() && "Sub of undefined");
         assert(b.type() == type && "Sub of mismatched types");
     }
 };
 
-struct Mul : public ExprNode<Mul> {
+/** The product of two expressions */
+struct Mul : public Internal::ExprNode<Mul> {
     Expr a, b;
 
-    Mul(Expr _a, Expr _b) : ExprNode<Mul>(_a.type()), a(_a), b(_b) {
+    Mul(Expr _a, Expr _b) : Internal::ExprNode<Mul>(_a.type()), a(_a), b(_b) {
         assert(a.defined() && "Mul of undefined");
         assert(b.defined() && "Mul of undefined");
         assert(b.type() == type && "Mul of mismatched types");
     }        
 };
 
-struct Div : public ExprNode<Div> {
+/** The ratio of two expressions */
+struct Div : public Internal::ExprNode<Div> {
     Expr a, b;
 
-    Div(Expr _a, Expr _b) : ExprNode<Div>(_a.type()), a(_a), b(_b) {
+    Div(Expr _a, Expr _b) : Internal::ExprNode<Div>(_a.type()), a(_a), b(_b) {
         assert(a.defined() && "Div of undefined");
         assert(b.defined() && "Div of undefined");
         assert(b.type() == type && "Div of mismatched types");
     }
 };
 
-/* The remainder of a / b. Mostly equivalent to '%' in C, except
-   that the result here is always positive. For floats, this is
-   equivalent to calling fmod. */
-struct Mod : public ExprNode<Mod> { 
+/** The remainder of a / b. Mostly equivalent to '%' in C, except that
+ * the result here is always positive. For floats, this is equivalent
+ * to calling fmod. */
+struct Mod : public Internal::ExprNode<Mod> { 
     Expr a, b;
 
-    Mod(Expr _a, Expr _b) : ExprNode<Mod>(_a.type()), a(_a), b(_b) {
+    Mod(Expr _a, Expr _b) : Internal::ExprNode<Mod>(_a.type()), a(_a), b(_b) {
         assert(a.defined() && "Mod of undefined");
         assert(b.defined() && "Mod of undefined");
         assert(b.type() == type && "Mod of mismatched types");
     }
 };
 
-/* The lesser of two values. */
-struct Min : public ExprNode<Min> {
+/** The lesser of two values. */
+struct Min : public Internal::ExprNode<Min> {
     Expr a, b;
 
-    Min(Expr _a, Expr _b) : ExprNode<Min>(_a.type()), a(_a), b(_b) {
+    Min(Expr _a, Expr _b) : Internal::ExprNode<Min>(_a.type()), a(_a), b(_b) {
         assert(a.defined() && "Min of undefined");
         assert(b.defined() && "Min of undefined");
         assert(b.type() == type && "Min of mismatched types");
     }
 };
 
-/* The greater of two values */
-struct Max : public ExprNode<Max> {
+/** The greater of two values */
+struct Max : public Internal::ExprNode<Max> {
     Expr a, b;
 
-    Max(Expr _a, Expr _b) : ExprNode<Max>(_a.type()), a(_a), b(_b) {
+    Max(Expr _a, Expr _b) : Internal::ExprNode<Max>(_a.type()), a(_a), b(_b) {
         assert(a.defined() && "Max of undefined");
         assert(b.defined() && "Max of undefined");
         assert(b.type() == type && "Max of mismatched types");
     }
 };
 
-/* Comparison nodes. Takes two values of the same type, and
- * returns a bool */
-struct EQ : public ExprNode<EQ> {
+/** Is the first expression equal to the second */
+struct EQ : public Internal::ExprNode<EQ> {
     Expr a, b;
 
-    EQ(Expr _a, Expr _b) : ExprNode<EQ>(Bool(_a.type().width)), a(_a), b(_b) {
+    EQ(Expr _a, Expr _b) : Internal::ExprNode<EQ>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "EQ of undefined");
         assert(b.defined() && "EQ of undefined");
     }
 };
 
-struct NE : public ExprNode<NE> {
+/** Is the first expression not equal to the second */
+struct NE : public Internal::ExprNode<NE> {
     Expr a, b;
 
-    NE(Expr _a, Expr _b) : ExprNode<NE>(Bool(_a.type().width)), a(_a), b(_b) {
+    NE(Expr _a, Expr _b) : Internal::ExprNode<NE>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "NE of undefined");
         assert(b.defined() && "NE of undefined");
     }
 };
 
-struct LT : public ExprNode<LT> {
+/** Is the first expression less than the second. */
+struct LT : public Internal::ExprNode<LT> {
     Expr a, b;
 
-    LT(Expr _a, Expr _b) : ExprNode<LT>(Bool(_a.type().width)), a(_a), b(_b) {
+    LT(Expr _a, Expr _b) : Internal::ExprNode<LT>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "LT of undefined");
         assert(b.defined() && "LT of undefined");
     }
 };
 
-struct LE : public ExprNode<LE> {
+/** Is the first expression less than or equal to the second. */
+struct LE : public Internal::ExprNode<LE> {
     Expr a, b;
 
-    LE(Expr _a, Expr _b) : ExprNode<LE>(Bool(_a.type().width)), a(_a), b(_b) {
+    LE(Expr _a, Expr _b) : Internal::ExprNode<LE>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "LE of undefined");
         assert(b.defined() && "LE of undefined");
     }
 };
 
-struct GT : public ExprNode<GT> {
+/** Is the first expression greater than the second. */
+struct GT : public Internal::ExprNode<GT> {
     Expr a, b;
 
-    GT(Expr _a, Expr _b) : ExprNode<GT>(Bool(_a.type().width)), a(_a), b(_b) {
+    GT(Expr _a, Expr _b) : Internal::ExprNode<GT>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "GT of undefined");
         assert(b.defined() && "GT of undefined");
     }
 };
 
-struct GE : public ExprNode<GE> {
+/** Is the first expression greater than or equal to the second. */
+struct GE : public Internal::ExprNode<GE> {
     Expr a, b;
 
-    GE(Expr _a, Expr _b) : ExprNode<GE>(Bool(_a.type().width)), a(_a), b(_b) {
+    GE(Expr _a, Expr _b) : Internal::ExprNode<GE>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "GE of undefined");
         assert(b.defined() && "GE of undefined");
     }
 };
 
-/* Logical operators */
-struct And : public ExprNode<And> {
+/** Logical and - are both expressions true */
+struct And : public Internal::ExprNode<And> {
     Expr a, b;
 
-    And(Expr _a, Expr _b) : ExprNode<And>(Bool(_a.type().width)), a(_a), b(_b) {
+    And(Expr _a, Expr _b) : Internal::ExprNode<And>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "And of undefined");
         assert(b.defined() && "And of undefined");
         assert(a.type().is_bool() && "lhs of And is not a bool");
@@ -318,10 +330,11 @@ struct And : public ExprNode<And> {
     }
 };
 
-struct Or : public ExprNode<Or> {
+/** Logical or - is at least one of the expression true */
+struct Or : public Internal::ExprNode<Or> {
     Expr a, b;
 
-    Or(Expr _a, Expr _b) : ExprNode<Or>(Bool(_a.type().width)), a(_a), b(_b) {
+    Or(Expr _a, Expr _b) : Internal::ExprNode<Or>(Bool(_a.type().width)), a(_a), b(_b) {
         assert(a.defined() && "Or of undefined");
         assert(b.defined() && "Or of undefined");
         assert(a.type().is_bool() && "lhs of Or is not a bool");
@@ -329,23 +342,24 @@ struct Or : public ExprNode<Or> {
     }
 };
 
-struct Not : public ExprNode<Not> {
+/** Logical not - true if the expression false */
+struct Not : public Internal::ExprNode<Not> {
     Expr a;
 
-    Not(Expr _a) : ExprNode<Not>(Bool(_a.type().width)), a(_a) {
+    Not(Expr _a) : Internal::ExprNode<Not>(Bool(_a.type().width)), a(_a) {
         assert(a.defined() && "Not of undefined");
         assert(a.type().is_bool() && "argument of Not is not a bool");
     }
 };
 
-/* A ternary operator. Evalutes 'true_value' and 'false_value',
+/** A ternary operator. Evalutes 'true_value' and 'false_value',
  * then selects between them based on 'condition'. Equivalent to
  * the ternary operator in C. */
-struct Select : public ExprNode<Select> {
+struct Select : public Internal::ExprNode<Select> {
     Expr condition, true_value, false_value;
 
     Select(Expr c, Expr t, Expr f) : 
-        ExprNode<Select>(t.type()), 
+        Internal::ExprNode<Select>(t.type()), 
         condition(c), true_value(t), false_value(f) {
         assert(condition.defined() && "Select of undefined");
         assert(true_value.defined() && "Select of undefined");
@@ -358,11 +372,11 @@ struct Select : public ExprNode<Select> {
     }
 };
 
-/* Load a value from a named buffer. The buffer is treated as an
+/** Load a value from a named buffer. The buffer is treated as an
  * array of the 'type' of this Load node. That is, the buffer has
  * no inherent type. */
-struct Load : public ExprNode<Load> {
-    string buffer;
+struct Load : public Internal::ExprNode<Load> {
+    string name;
     Expr index;
 
     // If it's a load from an image argument or compiled-in constant
@@ -373,66 +387,66 @@ struct Load : public ExprNode<Load> {
     Internal::Parameter param;
 
     Load(Type t, string b, Expr i, Buffer m, Internal::Parameter p) : 
-        ExprNode<Load>(t), buffer(b), index(i), image(m), param(p) {
+        Internal::ExprNode<Load>(t), name(b), index(i), image(m), param(p) {
         assert(index.defined() && "Load of undefined");
         assert(type.width == i.type().width && "Vector width of Load must match vector width of index");
     }
 };
 
-/* A linear ramp vector node. This is vector with 'width'
- * elements, where element i is base + i*stride. This is a
- * convenient way to pass around vectors without busting them up
- * into individual elements. E.g. a dense vector load from a
- * buffer can use a ramp node with stride 1 as the index. */
-struct Ramp : public ExprNode<Ramp> {
+/** A linear ramp vector node. This is vector with 'width' elements,
+ * where element i is 'base' + i*'stride'. This is a convenient way to
+ * pass around vectors without busting them up into individual
+ * elements. E.g. a dense vector load from a buffer can use a ramp
+ * node with stride 1 as the index. */
+struct Ramp : public Internal::ExprNode<Ramp> {
     Expr base, stride;
     int width;
 
-    Ramp(Expr b, Expr s, int w) : 
-        ExprNode<Ramp>(b.type().vector_of(w)),
-        base(b), stride(s), width(w) {
+    Ramp(Expr base, Expr stride, int width) : 
+        Internal::ExprNode<Ramp>(base.type().vector_of(width)),
+        base(base), stride(stride), width(width) {
         assert(base.defined() && "Ramp of undefined");
         assert(stride.defined() && "Ramp of undefined");
         assert(base.type().is_scalar() && "Ramp with vector base");
         assert(stride.type().is_scalar() && "Ramp with vector stride");
-        assert(w > 1 && "Ramp of width <= 1");
+        assert(width > 1 && "Ramp of width <= 1");
         assert(stride.type() == base.type() && "Ramp of mismatched types");
     }
 };
 
-/* A vector with 'width' elements, in which every element is
- * value. This is a special case of the ramp node above, in which
+/** A vector with 'width' elements, in which every element is
+ * 'value'. This is a special case of the ramp node above, in which
  * the stride is zero. */
-struct Broadcast : public ExprNode<Broadcast> {
+struct Broadcast : public Internal::ExprNode<Broadcast> {
     Expr value;
     int width;
         
-    Broadcast(Expr v, int w) :
-        ExprNode<Broadcast>(v.type().vector_of(w)), 
-        value(v), width(w) {
-        assert(v.defined() && "Broadcast of undefined");
-        assert(v.type().is_scalar() && "Broadcast of vector");
-        assert(w > 1 && "Broadcast of width <= 1");            
+    Broadcast(Expr value, int width) :
+        Internal::ExprNode<Broadcast>(value.type().vector_of(width)), 
+        value(value), width(width) {
+        assert(value.defined() && "Broadcast of undefined");
+        assert(value.type().is_scalar() && "Broadcast of vector");
+        assert(width > 1 && "Broadcast of width <= 1");            
     }
 };
 
-/* A let expression, like you might find in a functional
- * language. Within the expression 'body', instances of the Var
- * node 'name' refer to 'value'. */
-struct Let : public ExprNode<Let> {
+/** A let expression, like you might find in a functional
+ * language. Within the expression \ref body, instances of the Var
+ * node \ref name refer to \ref value. */
+struct Let : public Internal::ExprNode<Let> {
     string name;
     Expr value, body;
 
     Let(string n, Expr v, Expr b) : 
-        ExprNode<Let>(b.type()), name(n), value(v), body(b) {
+        Internal::ExprNode<Let>(b.type()), name(n), value(v), body(b) {
         assert(value.defined() && "Let of undefined");
         assert(body.defined() && "Let of undefined");
     }
 };
 
-/* The statement form of a let node. Within the statement 'body',
+/** The statement form of a let node. Within the statement 'body',
  * instances of the Var named 'name' refer to 'value' */
-struct LetStmt : public StmtNode<LetStmt> {
+struct LetStmt : public Internal::StmtNode<LetStmt> {
     string name;
     Expr value;
     Stmt body;
@@ -444,9 +458,9 @@ struct LetStmt : public StmtNode<LetStmt> {
     }
 };
 
-/* Used largely for debugging and tracing. Dumps the 'prefix'
+/** Used largely for debugging and tracing. Dumps the 'prefix'
  * string and the args to stdout. */
-struct PrintStmt : public StmtNode<PrintStmt> {
+struct PrintStmt : public Internal::StmtNode<PrintStmt> {
     string prefix;
     vector<Expr > args;
 
@@ -458,9 +472,9 @@ struct PrintStmt : public StmtNode<PrintStmt> {
     }
 };
 
-/* If the 'condition' is false, then bail out printing the
+/** If the 'condition' is false, then bail out printing the
  * 'message' to stderr */
-struct AssertStmt : public StmtNode<AssertStmt> {
+struct AssertStmt : public Internal::StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
     string message;
@@ -472,26 +486,26 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     }
 };
 
-/* This node is a helpful annotation to do with permissions. The
+/** This node is a helpful annotation to do with permissions. The
  * three child statements happen in order. In the 'produce'
  * statement 'buffer' is write-only. In 'update' it is
  * read-write. In 'consume' it is read-only. The 'update' node is
  * often NULL. (check update.defined() to find out). None of this
  * is actually enforced, the node is purely for informative
  * purposes to help out our analysis during lowering. */ 
-struct Pipeline : public StmtNode<Pipeline> {
-    string buffer;
+struct Pipeline : public Internal::StmtNode<Pipeline> {
+    string name;
     Stmt produce, update, consume;
 
     Pipeline(string b, Stmt p, Stmt u, Stmt c) : 
-        buffer(b), produce(p), update(u), consume(c) {
+        name(b), produce(p), update(u), consume(c) {
         assert(produce.defined() && "Pipeline of undefined");
         // update is allowed to be null
         assert(consume.defined() && "Pipeline of undefined");
     }
 };
     
-/* A for loop. Execute the 'body' statement for all values of the
+/** A for loop. Execute the 'body' statement for all values of the
  * variable 'name' from 'min' to 'min + extent'. There are four
  * types of For nodes. A 'Serial' for loop is a conventional
  * one. In a 'Parallel' for loop, each iteration of the loop
@@ -503,7 +517,7 @@ struct Pipeline : public StmtNode<Pipeline> {
  * version of the loop. Each iteration becomes its own
  * statement. Again in this case, 'extent' should be a small
  * integer constant. */
-struct For : public StmtNode<For> {
+struct For : public Internal::StmtNode<For> {
     string name;
     Expr min, extent;
     typedef enum {Serial, Parallel, Vectorized, Unrolled} ForType;
@@ -520,30 +534,30 @@ struct For : public StmtNode<For> {
     }
 };
 
-/* Store a 'value' to a 'buffer' at a given 'index'. The buffer is
+/** Store a 'value' to a 'buffer' at a given 'index'. The buffer is
  * interpreted as an array of the same type as 'value'. */
-struct Store : public StmtNode<Store> {
-    string buffer;
+struct Store : public Internal::StmtNode<Store> {
+    string name;
     Expr value, index;
 
     Store(string b, Expr v, Expr i) :
-        buffer(b), value(v), index(i) {
+        name(b), value(v), index(i) {
         assert(value.defined() && "Store of undefined");
         assert(index.defined() && "Store of undefined");
     }
 };
 
-/* This defines the value of a function at a multi-dimensional
+/** This defines the value of a function at a multi-dimensional
  * location. You should think of it as a store to a
  * multi-dimensional array. It gets lowered to a conventional
  * Store node. */
-struct Provide : public StmtNode<Provide> {
-    string buffer;
+struct Provide : public Internal::StmtNode<Provide> {
+    string name;
     Expr value;
     vector<Expr > args;
 
     Provide(string b, Expr v, const vector<Expr > &a) : 
-        buffer(b), value(v), args(a) {
+        name(b), value(v), args(a) {
         assert(value.defined() && "Provide of undefined");
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Provide of undefined");
@@ -551,35 +565,35 @@ struct Provide : public StmtNode<Provide> {
     }
 };
 
-/* Allocate a scratch area called 'buffer' of 'size' elements of
- * the given 'type'. The buffer lives for the duration of the
- * 'body statement, after which it is freed. */
-struct Allocate : public StmtNode<Allocate> {
-    string buffer;
+/** Allocate a scratch area called with the given name, type, and
+ * size. The buffer lives for the duration of the 'body statement,
+ * after which it is freed. */
+struct Allocate : public Internal::StmtNode<Allocate> {
+    string name;
     Type type;
     Expr size;
     Stmt body;
 
     Allocate(string buf, Type t, Expr s, Stmt bod) : 
-        buffer(buf), type(t), size(s), body(bod) {
+        name(buf), type(t), size(s), body(bod) {
         assert(size.defined() && "Allocate of undefined");
         assert(body.defined() && "Allocate of undefined");
         assert(size.type().is_scalar() == 1 && "Allocate of vector size");
     }
 };
 
-/* This is the multi-dimensional version of Allocate. Create some
- * scratch memory that will back the function 'buffer' over the
- * range specified in 'bounds'. The bounds are a list of (min,
- * extent) pairs for each dimension. */
-struct Realize : public StmtNode<Realize> {
-    string buffer;
+/** Allocate a multi-dimensional buffer of the given type and
+ * size. Create some scratch memory that will back the function 'name'
+ * over the range specified in 'bounds'. The bounds are a vector of
+ * (min, extent) pairs for each dimension. */
+struct Realize : public Internal::StmtNode<Realize> {
+    string name;
     Type type;
     vector<pair<Expr, Expr> > bounds;
     Stmt body;
 
     Realize(string buf, Type t, const vector<pair<Expr, Expr> > &bou, Stmt bod) : 
-        buffer(buf), type(t), bounds(bou), body(bod) {
+        name(buf), type(t), bounds(bou), body(bod) {
         for (size_t i = 0; i < bounds.size(); i++) {
             assert(bounds[i].first.defined() && "Realize of undefined");
             assert(bounds[i].second.defined() && "Realize of undefined");
@@ -590,9 +604,9 @@ struct Realize : public StmtNode<Realize> {
     }
 };
 
-/* A sequence of statements to be executed in-order. 'rest' may be
+/** A sequence of statements to be executed in-order. 'rest' may be
  * NULL. Used rest.defined() to find out. */
-struct Block : public StmtNode<Block> {
+struct Block : public Internal::StmtNode<Block> {
     Stmt first, rest;
         
     Block(Stmt f, Stmt r) : 
@@ -611,14 +625,14 @@ struct Block : public StmtNode<Block> {
 
 namespace Halide {
 
-/* A function call. This can represent a call to some extern
+/** A function call. This can represent a call to some extern
  * function (like sin), but it's also our multi-dimensional
  * version of a Load, so it can be a load from an input image, or
  * a call to another halide function. The latter two types of call
  * nodes don't survive all the way down to code generation - the
  * lowering process converts them to Load nodes. */
 
-struct Call : public ExprNode<Call> {
+struct Call : public Internal::ExprNode<Call> {
     string name;
     vector<Expr > args;
     typedef enum {Image, Extern, Halide} CallType;
@@ -638,7 +652,7 @@ struct Call : public ExprNode<Call> {
 
     Call(Type t, string n, const vector<Expr> &a, CallType ct, 
          Internal::Function f, Buffer m, Internal::Parameter p) : 
-        ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f), image(m), param(p) {
+        Internal::ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f), image(m), param(p) {
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Call of undefined");
         }
@@ -651,7 +665,7 @@ struct Call : public ExprNode<Call> {
 
     // Convenience constructor for extern calls
     Call(Type t, string n, const vector<Expr > &a) : 
-        ExprNode<Call>(t), name(n), args(a), call_type(Extern), 
+        Internal::ExprNode<Call>(t), name(n), args(a), call_type(Extern), 
         func(Internal::Function()), image(Buffer()), param(Internal::Parameter()) {
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Call of undefined");
@@ -660,27 +674,27 @@ struct Call : public ExprNode<Call> {
 
     // Convenience constructor for image calls
     Call(Buffer b, const vector<Expr> &a) :
-        ExprNode<Call>(b.type()), name(b.name()), args(a), call_type(Image), 
+        Internal::ExprNode<Call>(b.type()), name(b.name()), args(a), call_type(Image), 
         func(Internal::Function()), image(b), param(Internal::Parameter()) {
     }
 
     Call(Internal::Parameter p, const vector<Expr> &a) :
-        ExprNode<Call>(p.type()), name(p.name()), args(a), call_type(Image), 
+        Internal::ExprNode<Call>(p.type()), name(p.name()), args(a), call_type(Image), 
         func(Internal::Function()), image(Buffer()), param(p) {
     }
 
     // Convenience constructor for function calls
     Call(Internal::Function f, const vector<Expr> &a) :
-        ExprNode<Call>(f.value().type()), name(f.name()), args(a), call_type(Halide), 
+        Internal::ExprNode<Call>(f.value().type()), name(f.name()), args(a), call_type(Halide), 
         func(f), image(Buffer()), param(Internal::Parameter()) {
     }
     
 };
 
-/* A named variable. Might be a loop variable, function argument,
+/** A named variable. Might be a loop variable, function argument,
  * parameter, reduction variable, or something defined by a Let or
  * LetStmt node. */
-struct Variable : public ExprNode<Variable> {
+struct Variable : public Internal::ExprNode<Variable> {
     string name;
 
     // References to scalar parameters, or to the dimensions of buffer
@@ -690,10 +704,10 @@ struct Variable : public ExprNode<Variable> {
     // Reduction variables hang onto their domains
     Internal::ReductionDomain reduction_domain;
 
-    Variable(Type t, string n, Internal::Parameter p) : ExprNode<Variable>(t), name(n), param(p) {}
-    Variable(Type t, string n, Internal::ReductionDomain d) : ExprNode<Variable>(t), name(n), reduction_domain(d) {}
+    Variable(Type t, string n, Internal::Parameter p) : Internal::ExprNode<Variable>(t), name(n), param(p) {}
+    Variable(Type t, string n, Internal::ReductionDomain d) : Internal::ExprNode<Variable>(t), name(n), reduction_domain(d) {}
 
-    Variable(Type t, string n) : ExprNode<Variable>(t), name(n) {}
+    Variable(Type t, string n) : Internal::ExprNode<Variable>(t), name(n) {}
 };
 
 }

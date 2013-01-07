@@ -103,7 +103,7 @@ public:
 
     void visit(const Load *op) {
         const Load *e = expr.as<Load>();
-        if (result && e && e->type == op->type && e->buffer == op->buffer) {
+        if (result && e && e->type == op->type && e->name == op->name) {
             expr = e->index;
             op->index.accept(this);
         } else {
@@ -197,7 +197,7 @@ public:
 
     void visit(const Pipeline *op) {
         const Pipeline *s = stmt.as<Pipeline>();
-        if (result && s && s->buffer == op->buffer && 
+        if (result && s && s->name == op->name && 
             (s->update.defined() == op->update.defined())) {
             stmt = s->produce;
             op->produce.accept(this);
@@ -228,7 +228,7 @@ public:
 
     void visit(const Store *op) {
         const Store *s = stmt.as<Store>();
-        if (result && s && s->buffer == op->buffer) {
+        if (result && s && s->name == op->name) {
             expr = s->value;
             op->value.accept(this);
             expr = s->index;
@@ -240,7 +240,7 @@ public:
 
     void visit(const Provide *op) {
         const Provide *s = stmt.as<Provide>();
-        if (result && s && s->buffer == op->buffer) {
+        if (result && s && s->name == op->name) {
             expr = s->value;
             op->value.accept(this);
             for (size_t i = 0; result && (i < s->args.size()); i++) {
@@ -254,7 +254,7 @@ public:
 
     void visit(const Allocate *op) {
         const Allocate *s = stmt.as<Allocate>();
-        if (result && s && s->buffer == op->buffer && s->type == op->type) {
+        if (result && s && s->name == op->name && s->type == op->type) {
             expr = s->size;
             op->size.accept(this);
         } else {
@@ -265,7 +265,7 @@ public:
 
     void visit(const Realize *op) {
         const Realize *s = stmt.as<Realize>();
-        if (result && s && s->buffer == op->buffer && s->type == op->type) {
+        if (result && s && s->name == op->name && s->type == op->type) {
             for (size_t i = 0; result && (i < s->bounds.size()); i++) {
                 expr = s->bounds[i].first;
                 op->bounds[i].first.accept(this);

@@ -1,5 +1,5 @@
-#ifndef MODULUS_REMAINDER_H
-#define MODULUS_REMAINDER_H
+#ifndef HALIDE_MODULUS_REMAINDER_H
+#define HALIDE_MODULUS_REMAINDER_H
 
 #include <utility>
 #include "IRVisitor.h"

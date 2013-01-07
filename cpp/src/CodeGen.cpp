@@ -695,7 +695,7 @@ void CodeGen::visit(const Load *op) {
     if (op->type.is_scalar()) {
         // 1) Scalar loads
         Value *index = codegen(op->index);
-        Value *ptr = codegen_buffer_pointer(op->buffer, op->type, index);
+        Value *ptr = codegen_buffer_pointer(op->name, op->type, index);
         value = builder.CreateLoad(ptr);
     } else {            
         const Ramp *ramp = op->index.as<Ramp>();
@@ -712,13 +712,13 @@ void CodeGen::visit(const Load *op) {
                 
             // 4) Unaligned dense vector loads with unknown alignment
             Value *base = codegen(ramp->base);
-            Value *ptr = codegen_buffer_pointer(op->buffer, op->type.element_of(), base);
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             value = builder.CreateAlignedLoad(ptr, 1);                
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
             Value *base = codegen(ramp->base);
-            Value *ptr = codegen_buffer_pointer(op->buffer, op->type.element_of(), base);
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             Value *a = builder.CreateAlignedLoad(ptr, 1);
             ptr = builder.CreateConstGEP1_32(ptr, 1);
@@ -733,7 +733,7 @@ void CodeGen::visit(const Load *op) {
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Value *base = codegen(ramp->base - ramp->width + 1);
-            Value *ptr = codegen_buffer_pointer(op->buffer, op->type.element_of(), base);
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             Value *vec = builder.CreateAlignedLoad(ptr, 1);            
             Value *undef = UndefValue::get(vec->getType());
@@ -750,7 +750,7 @@ void CodeGen::visit(const Load *op) {
             value = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.width; i++) {
                 Value *idx = builder.CreateExtractElement(index, ConstantInt::get(i32, i));
-                Value *ptr = codegen_buffer_pointer(op->buffer, op->type.element_of(), idx);
+                Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 Value *val = builder.CreateLoad(ptr);
                 value = builder.CreateInsertElement(value, val, ConstantInt::get(i32, i));
             }
@@ -987,30 +987,30 @@ private:
 
     void visit(const Load *op) {
         op->index.accept(this);
-        if (!ignore.contains(op->buffer)) {
-            log(3) << "Adding " << op->buffer << " to closure\n";
-            result[op->buffer + ".host"] = gen->llvm_type_of(op->type)->getPointerTo();
+        if (!ignore.contains(op->name)) {
+            log(3) << "Adding " << op->name << " to closure\n";
+            result[op->name + ".host"] = gen->llvm_type_of(op->type)->getPointerTo();
         } else {
-            log(3) << "Not adding " << op->buffer << " to closure\n";
+            log(3) << "Not adding " << op->name << " to closure\n";
         }
     }
 
     void visit(const Store *op) {
         op->index.accept(this);
         op->value.accept(this);
-        if (!ignore.contains(op->buffer)) {
-            log(3) << "Adding " << op->buffer << " to closure\n";
-            result[op->buffer + ".host"] = gen->llvm_type_of(op->value.type())->getPointerTo();
+        if (!ignore.contains(op->name)) {
+            log(3) << "Adding " << op->name << " to closure\n";
+            result[op->name + ".host"] = gen->llvm_type_of(op->value.type())->getPointerTo();
         } else {
-            log(3) << "Not adding " << op->buffer << " to closure\n";
+            log(3) << "Not adding " << op->name << " to closure\n";
         }
     }
 
     void visit(const Allocate *op) {
-        ignore.push(op->buffer, 0);
+        ignore.push(op->name, 0);
         op->size.accept(this);
         op->body.accept(this);
-        ignore.pop(op->buffer);
+        ignore.pop(op->name);
     }
 
     void visit(const Variable *op) {            
@@ -1179,7 +1179,7 @@ void CodeGen::visit(const Store *op) {
     // Scalar
     if (value_type.is_scalar()) {
         Value *index = codegen(op->index);
-        Value *ptr = codegen_buffer_pointer(op->buffer, value_type, index);
+        Value *ptr = codegen_buffer_pointer(op->name, value_type, index);
         builder.CreateStore(val, ptr);
     } else {
         const Ramp *ramp;
@@ -1194,7 +1194,7 @@ void CodeGen::visit(const Store *op) {
             } else {
                 // Unaligned dense store
                 Value *base = codegen(ramp->base);
-                Value *ptr = codegen_buffer_pointer(op->buffer, value_type.element_of(), base);
+                Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), base);
                 ptr = builder.CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
                 builder.CreateAlignedStore(val, ptr, 1);                    
             }
@@ -1205,7 +1205,7 @@ void CodeGen::visit(const Store *op) {
                 Value *lane = ConstantInt::get(i32, i);
                 Value *idx = builder.CreateExtractElement(index, lane);
                 Value *v = builder.CreateExtractElement(val, lane);
-                Value *ptr = codegen_buffer_pointer(op->buffer, value_type.element_of(), idx);
+                Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
                 builder.CreateStore(v, ptr);
             }
         }

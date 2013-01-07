@@ -8,6 +8,8 @@ int main(int argc, char **argv) {
     Var x, y;
     f(x, y) = x*y;
 
+    // g is equivalent to f above - a two argument function that
+    // returns the product of the arguments
     Func g = lambda(x, y, x*y);
 
     // Use lambdas and implicit args in the one line

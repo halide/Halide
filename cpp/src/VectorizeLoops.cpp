@@ -93,7 +93,7 @@ class VectorizeLoops : public IRMutator {
                 expr = op;
             } else {
                 int w = index.type().width;
-                expr = new Load(op->type.vector_of(w), op->buffer, index, op->image, op->param);
+                expr = new Load(op->type.vector_of(w), op->name, index, op->image, op->param);
             }
         }
 
@@ -184,7 +184,7 @@ class VectorizeLoops : public IRMutator {
                     new_args[i] = widen(new_args[i], max_width);
                 }
                 value = widen(value, max_width);
-                stmt = new Provide(op->buffer, value, new_args);
+                stmt = new Provide(op->name, value, new_args);
             }                
         }
 
@@ -195,7 +195,7 @@ class VectorizeLoops : public IRMutator {
                 stmt = op;
             } else {
                 int width = std::max(value.type().width, index.type().width);
-                stmt = new Store(op->buffer, widen(value, width), widen(index, width));
+                stmt = new Store(op->name, widen(value, width), widen(index, width));
             }
         }
 

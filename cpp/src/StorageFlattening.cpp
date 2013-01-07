@@ -34,37 +34,37 @@ class FlattenDimensions : public IRMutator {
 
         size = mutate(size);
 
-        stmt = new Allocate(realize->buffer, realize->type, size, body);
+        stmt = new Allocate(realize->name, realize->type, size, body);
 
         // Compute the strides 
         for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
             ostringstream stride_name;
-            stride_name << realize->buffer << ".stride." << i;
+            stride_name << realize->name << ".stride." << i;
             ostringstream prev_stride_name;
-            prev_stride_name << realize->buffer << ".stride." << (i-1);
+            prev_stride_name << realize->name << ".stride." << (i-1);
             ostringstream prev_extent_name;
-            prev_extent_name << realize->buffer << ".extent." << (i-1);
+            prev_extent_name << realize->name << ".extent." << (i-1);
             Expr prev_stride = new Variable(Int(32), prev_stride_name.str());
             Expr prev_extent = new Variable(Int(32), prev_extent_name.str());
             stmt = new LetStmt(stride_name.str(), prev_stride * prev_extent, stmt);
         }
         // Innermost stride is one
-        stmt = new LetStmt(realize->buffer + ".stride.0", 1, stmt);           
+        stmt = new LetStmt(realize->name + ".stride.0", 1, stmt);           
 
         // Assign the mins and extents stored
         for (int i = realize->bounds.size(); i > 0; i--) { 
             ostringstream min_name, extent_name;
-            min_name << realize->buffer << ".min." << (i-1);
-            extent_name << realize->buffer << ".extent." << (i-1);
+            min_name << realize->name << ".min." << (i-1);
+            extent_name << realize->name << ".extent." << (i-1);
             stmt = new LetStmt(min_name.str(), realize->bounds[i-1].first, stmt);
             stmt = new LetStmt(extent_name.str(), realize->bounds[i-1].second, stmt);
         }
     }
 
     void visit(const Provide *provide) {
-        Expr idx = mutate(flatten_args(provide->buffer, provide->args));
+        Expr idx = mutate(flatten_args(provide->name, provide->args));
         Expr val = mutate(provide->value);
-        stmt = new Store(provide->buffer, val, idx); 
+        stmt = new Store(provide->name, val, idx); 
     }
 
     void visit(const Call *call) {            

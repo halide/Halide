@@ -64,12 +64,12 @@ public:
             // dependencies required should have been scheduled within
             // the initialization, not the update step, so these
             // bounds can't be of use to anyone anyway.
-            in_update.push(pipeline->buffer, 0);
+            in_update.push(pipeline->name, 0);
             update = mutate(pipeline->update);
-            in_update.pop(pipeline->buffer);
+            in_update.pop(pipeline->name);
         }
         Stmt consume = mutate(pipeline->consume);
-        stmt = new Pipeline(pipeline->buffer, produce, update, consume);
+        stmt = new Pipeline(pipeline->name, produce, update, consume);
     }
 };
 

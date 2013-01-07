@@ -24,7 +24,7 @@ private:
             const Provide *op = stmt.as<Provide>();
             vector<Expr> args = op->args;
             args.push_back(op->value);
-            Stmt print = new PrintStmt("Provide " + op->buffer, args);
+            Stmt print = new PrintStmt("Provide " + op->name, args);
             stmt = new Block(print, op);
         }
     }
@@ -38,9 +38,9 @@ private:
                 args.push_back(op->bounds[i].first);
                 args.push_back(op->bounds[i].second);
             }
-            Stmt print = new PrintStmt("Realizing " + op->buffer + " over ", args);
+            Stmt print = new PrintStmt("Realizing " + op->name + " over ", args);
             Stmt body = new Block(print, op->body);
-            stmt = new Realize(op->buffer, op->type, op->bounds, body);
+            stmt = new Realize(op->name, op->type, op->bounds, body);
         }        
     }
 };
