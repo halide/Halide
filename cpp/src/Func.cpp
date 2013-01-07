@@ -575,6 +575,36 @@ void Func::compile_to_header(const string &filename, std::vector<Argument> args)
     cg.compile_header(name(), args);
 }
 
+void Func::compile_to_file(const string &filename_prefix, std::vector<Argument> args) {
+    func.rename(filename_prefix);
+    compile_to_header(filename_prefix + ".h", args);
+    compile_to_object(filename_prefix + ".o", args);
+}
+
+void Func::compile_to_file(const string &filename_prefix) {
+    compile_to_file(filename_prefix, vector<Argument>());
+}
+
+void Func::compile_to_file(const string &filename_prefix, Argument a) {
+    compile_to_file(filename_prefix, Internal::vec(a));    
+}
+
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b) {
+    compile_to_file(filename_prefix, Internal::vec(a, b));    
+}
+
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c) {
+    compile_to_file(filename_prefix, Internal::vec(a, b, c));    
+}
+
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d) {
+    compile_to_file(filename_prefix, Internal::vec(a, b, c, d));    
+}
+
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e) {
+    compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e));    
+}
+
 void Func::compile_to_assembly(const string &filename, std::vector<Argument> args) {
     assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
