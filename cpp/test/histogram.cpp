@@ -36,14 +36,7 @@ int main(int argc, char **argv) {
 	hist.update().cudaTile(r.x, r.y, 16, 16);
         } else { */
     
-    // Grab a handle to the update step of a reduction for scheduling
-    // using the "update()" method.
-    Var xi, yi;
-    //hist.update().tile(r.x, r.y, xi, yi, 32, 32);
-
-
-    //Image<int32_t> h = hist.realize(256);
-    Image<int32_t> histogram = g.realize(10); // buckets 10-20
+    Image<int32_t> histogram = g.realize(10); // buckets 10-20 only
 
     for (int i = 10; i < 20; i++) {
         if (histogram(i-10) != reference_hist[i]) {

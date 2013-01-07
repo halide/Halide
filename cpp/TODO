@@ -1,5 +1,3 @@
-update scheduling
-
 arm
 
 ptx
@@ -8,8 +6,4 @@ alignment analysis
 
 interleaving store pattern
 
-chunk inside update step of reduction?
-
 warning on compute inline but store not blank
-
-inline something that inlines a reduction

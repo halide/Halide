@@ -22,26 +22,6 @@ using std::max;
 using std::min;
 using std::make_pair;
 
-namespace {
-bool var_name_match(string candidate, string var) {
-    if (candidate == var) return true;
-    return Internal::ends_with(candidate, "." + var);
-}
-}
-
-void Func::set_dim_type(Var var, For::ForType t) {
-    bool found = false;
-    vector<Schedule::Dim> &dims = func.schedule().dims;
-    for (size_t i = 0; (!found) && i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, var.name())) {
-            found = true;
-            dims[i].for_type = t;
-        }
-    }
-        
-    assert(found && "Could not find dimension in argument list for function");
-}
-
 Func::Func(Internal::Function f) : func(f), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
 }
 
@@ -146,11 +126,32 @@ void Func::add_implicit_vars(vector<Expr> &args) {
     }
 }
 
-Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
+
+namespace {
+bool var_name_match(string candidate, string var) {
+    if (candidate == var) return true;
+    return Internal::ends_with(candidate, "." + var);
+}
+}
+
+void ScheduleHandle::set_dim_type(Var var, For::ForType t) {
+    bool found = false;
+    vector<Schedule::Dim> &dims = schedule.dims;
+    for (size_t i = 0; (!found) && i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, var.name())) {
+            found = true;
+            dims[i].for_type = t;
+        }
+    }
+        
+    assert(found && "Could not find dimension in argument list for function");
+}
+
+ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor) {
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
     string inner_name, outer_name, old_name;
-    vector<Schedule::Dim> &dims = func.schedule().dims;
+    vector<Schedule::Dim> &dims = schedule.dims;
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old.name())) {
             found = true;
@@ -170,36 +171,152 @@ Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
         
     // Add the split to the splits list
     Schedule::Split split = {old_name, outer_name, inner_name, factor};
-    func.schedule().splits.push_back(split);
+    schedule.splits.push_back(split);
     return *this;
 }
 
-Func &Func::parallel(Var var) {
+ScheduleHandle &ScheduleHandle::parallel(Var var) {
     set_dim_type(var, For::Parallel);
     return *this;
 }
 
-Func &Func::vectorize(Var var) {
+ScheduleHandle &ScheduleHandle::vectorize(Var var) {
     set_dim_type(var, For::Vectorized);
     return *this;
 }
 
-Func &Func::unroll(Var var) {
+ScheduleHandle &ScheduleHandle::unroll(Var var) {
     set_dim_type(var, For::Unrolled);
     return *this;
 }
 
-Func &Func::vectorize(Var var, int factor) {
+ScheduleHandle &ScheduleHandle::vectorize(Var var, int factor) {
     Var tmp;
     split(var, var, tmp, factor);
     vectorize(tmp);
     return *this;
 }
 
-Func &Func::unroll(Var var, int factor) {
+ScheduleHandle &ScheduleHandle::unroll(Var var, int factor) {
     Var tmp;
     split(var, var, tmp, factor);
     unroll(tmp);
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::bound(Var var, Expr min, Expr extent) {
+    Schedule::Bound b = {var.name(), min, extent};
+    schedule.bounds.push_back(b);
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+    split(x, xo, xi, xfactor);
+    split(y, yo, yi, yfactor);
+    reorder(xi, yi, xo, yo);
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+    split(x, x, xi, xfactor);
+    split(y, y, yi, yfactor);
+    reorder(xi, yi, x, y);
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::reorder(Var x, Var y) {
+    vector<Schedule::Dim> &dims = schedule.dims;
+    bool found_y = false;
+    size_t y_loc = 0;
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, y.name())) {
+            found_y = true;
+            y_loc = i;
+        } else if (var_name_match(dims[i].var, x.name())) {
+            if (found_y) std::swap(dims[i], dims[y_loc]);
+            return *this;
+        }
+    }
+    assert(false && "Could not find these variables to reorder in schedule");
+    return *this;
+}
+    
+
+ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z) {
+    return reorder(x, y).reorder(x, z).reorder(y, z);
+}
+
+ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w) {
+    return reorder(x, y).reorder(x, z).reorder(x, w).reorder(y, z, w);
+}
+
+ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t) {
+    return reorder(x, y).reorder(x, z).reorder(x, w).reorder(x, t).reorder(y, z, w, t);
+}
+
+
+Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
+    ScheduleHandle(func.schedule()).split(old, outer, inner, factor);
+    return *this;
+}
+
+Func &Func::parallel(Var var) {
+    ScheduleHandle(func.schedule()).parallel(var);
+    return *this;
+}
+
+Func &Func::vectorize(Var var) {
+    ScheduleHandle(func.schedule()).vectorize(var);
+    return *this;
+}
+
+Func &Func::unroll(Var var) {
+    ScheduleHandle(func.schedule()).unroll(var);
+    return *this;
+}
+
+Func &Func::vectorize(Var var, int factor) {
+    ScheduleHandle(func.schedule()).vectorize(var, factor);
+    return *this;
+}
+
+Func &Func::unroll(Var var, int factor) {
+    ScheduleHandle(func.schedule()).unroll(var, factor);
+    return *this;
+}
+
+Func &Func::bound(Var var, Expr min, Expr extent) {
+    ScheduleHandle(func.schedule()).bound(var, min, extent);
+    return *this;
+}
+
+Func &Func::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+    ScheduleHandle(func.schedule()).tile(x, y, xo, yo, xi, yi, xfactor, yfactor);
+    return *this;
+}
+
+Func &Func::tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+    ScheduleHandle(func.schedule()).tile(x, y, xi, yi, xfactor, yfactor);
+    return *this;
+}
+
+Func &Func::reorder(Var x, Var y) {
+    ScheduleHandle(func.schedule()).reorder(x, y);
+    return *this;
+}    
+
+Func &Func::reorder(Var x, Var y, Var z) {
+    ScheduleHandle(func.schedule()).reorder(x, y, z);
+    return *this;
+}
+
+Func &Func::reorder(Var x, Var y, Var z, Var w) {
+    ScheduleHandle(func.schedule()).reorder(x, y, z, w);
+    return *this;
+}
+
+Func &Func::reorder(Var x, Var y, Var z, Var w, Var t) {
+    ScheduleHandle(func.schedule()).reorder(x, y, z, w, t);
     return *this;
 }
 
@@ -242,54 +359,8 @@ Func &Func::compute_inline() {
     return *this;
 }
 
-Func &Func::bound(Var var, Expr min, Expr extent) {
-    Schedule::Bound b = {var.name(), min, extent};
-    func.schedule().bounds.push_back(b);
-    return *this;
-}
-
-Func &Func::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor) {
-    split(x, xo, xi, xfactor);
-    split(y, yo, yi, yfactor);
-    reorder(xi, yi, xo, yo);
-    return *this;
-}
-
-Func &Func::tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor) {
-    split(x, x, xi, xfactor);
-    split(y, y, yi, yfactor);
-    reorder(xi, yi, x, y);
-    return *this;
-}
-
-Func &Func::reorder(Var x, Var y) {
-    vector<Schedule::Dim> &dims = func.schedule().dims;
-    bool found_y = false;
-    size_t y_loc = 0;
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, y.name())) {
-            found_y = true;
-            y_loc = i;
-        } else if (var_name_match(dims[i].var, x.name())) {
-            if (found_y) std::swap(dims[i], dims[y_loc]);
-            return *this;
-        }
-    }
-    assert(false && "Could not find these variables to reorder in schedule");
-    return *this;
-}
-    
-
-Func &Func::reorder(Var x, Var y, Var z) {
-    return reorder(x, y).reorder(x, z).reorder(y, z);
-}
-
-Func &Func::reorder(Var x, Var y, Var z, Var w) {
-    return reorder(x, y).reorder(x, z).reorder(x, w).reorder(y, z, w);
-}
-
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t) {
-    return reorder(x, y).reorder(x, z).reorder(x, w).reorder(x, t).reorder(y, z, w, t);
+ScheduleHandle Func::update() {
+    return ScheduleHandle(func.reduction_schedule());
 }
 
 FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a) : func(f) {
