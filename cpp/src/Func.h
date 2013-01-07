@@ -113,6 +113,7 @@ public:
     Func(Internal::Function f);
     Func(const string &name);
     Func();
+    Func(Expr e);
 
     Buffer realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     void realize(Buffer dst);
@@ -121,6 +122,7 @@ public:
     void compile_to_object(const string &filename, std::vector<Argument>);
     void compile_to_header(const string &filename, std::vector<Argument>);
     void compile_to_assembly(const string &filename, std::vector<Argument>);    
+    void compile_jit();
 
     void set_error_handler(void (*handler)(char *));
     void set_custom_allocator(void *(*malloc)(size_t), void (*free)(void *));
@@ -173,9 +175,11 @@ public:
     operator Expr() {
         return (*this)();
     }
+
     void operator=(Expr e) {
         (*this)() = e;
     }
+
 };
 
 

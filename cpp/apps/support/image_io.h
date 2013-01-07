@@ -112,7 +112,7 @@ Image<T> load_png(std::string filename) {
     _assert((bit_depth == 8) || (bit_depth == 16), "Can only handle 8-bit or 16-bit pngs\n");
 
     // convert the data to T
-    im.markHostDirty();
+    //im.markHostDirty();
     int c_stride = im.stride(2);
     T *ptr = (T*)im.data();
     if (bit_depth == 8) {
@@ -196,7 +196,7 @@ void save_png(Image<T> im, std::string filename) {
 
     row_pointers = new png_bytep[im.height()];
 
-    im.copyToHost(); // in case the image is on the gpu
+    // im.copyToHost(); // in case the image is on the gpu
 
     int c_stride = im.stride(2);
     T *srcPtr = (T*)im.data();
