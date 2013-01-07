@@ -68,10 +68,30 @@ public:
     operator Expr() const;
 };
 
+// A wrapper around a schedule used for common schedule manipulations
+class ScheduleHandle {
+    Internal::Schedule &schedule;
+    void set_dim_type(Var var, For::ForType t);
+public:
+    ScheduleHandle(Internal::Schedule &s) : schedule(s) {}
+    ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
+    ScheduleHandle &parallel(Var var);
+    ScheduleHandle &vectorize(Var var);
+    ScheduleHandle &unroll(Var var);
+    ScheduleHandle &vectorize(Var var, int factor);
+    ScheduleHandle &unroll(Var var, int factor);
+    ScheduleHandle &bound(Var var, Expr min, Expr extent);
+    ScheduleHandle &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    ScheduleHandle &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    ScheduleHandle &reorder(Var x, Var y);
+    ScheduleHandle &reorder(Var x, Var y, Var z);
+    ScheduleHandle &reorder(Var x, Var y, Var z, Var w);
+    ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t);
+};
+
 /* A halide function. Define it, call it, schedule it. */
 class Func {
     Internal::Function func;
-    void set_dim_type(Var var, For::ForType t);
 
     void add_implicit_vars(vector<Var> &);
     void add_implicit_vars(vector<Expr> &);
@@ -107,9 +127,9 @@ public:
 
     const string &name() const;
     Expr value() const;
-
     int dimensions() const;
 
+    /* Function call operators. May also be the left-hand-side of a definition */
     FuncRefVar operator()();
     FuncRefVar operator()(Var x);
     FuncRefVar operator()(Var x, Var y);
@@ -121,20 +141,14 @@ public:
     FuncRefExpr operator()(Expr x, Expr y, Expr z);
     FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w);
     FuncRefExpr operator()(vector<Expr>);
-
+    
+    /* Scheduling calls that control how the domain of this function is traversed */
     Func &split(Var old, Var outer, Var inner, Expr factor);
     Func &parallel(Var var);
     Func &vectorize(Var var);
     Func &unroll(Var var);
     Func &vectorize(Var var, int factor);
     Func &unroll(Var var, int factor);
-    Func &compute_at(Func f, Var var);
-    Func &compute_at(Func f, RVar var);
-    Func &compute_root();
-    Func &store_at(Func f, Var var);
-    Func &store_at(Func f, RVar var);
-    Func &store_root();
-    Func &compute_inline();
     Func &bound(Var var, Expr min, Expr extent);
     Func &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
     Func &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
@@ -143,7 +157,18 @@ public:
     Func &reorder(Var x, Var y, Var z, Var w);
     Func &reorder(Var x, Var y, Var z, Var w, Var t);
 
+    /* Scheduling calls that control when and where this function is computed */
+    Func &compute_at(Func f, Var var);
+    Func &compute_at(Func f, RVar var);
+    Func &compute_root();
+    Func &store_at(Func f, Var var);
+    Func &store_at(Func f, RVar var);
+    Func &store_root();
+    Func &compute_inline();
+
     Stmt lower();
+
+    ScheduleHandle update();
 
     operator Expr() {
         return (*this)();
@@ -152,6 +177,7 @@ public:
         (*this)() = e;
     }
 };
+
 
 }
 

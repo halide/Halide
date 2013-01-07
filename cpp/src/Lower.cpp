@@ -274,7 +274,20 @@ private:
         const Schedule::LoopLevel &compute_level = func.schedule().compute_level;
         const Schedule::LoopLevel &store_level = func.schedule().store_level;
 
-        Stmt body = mutate(for_loop->body);
+        Stmt body = for_loop->body;
+
+        // Can't schedule things inside a vector for loop
+        if (for_loop->for_type != For::Vectorized) {
+            body = mutate(for_loop->body);
+        } else if (func.is_reduction() && 
+                   func.schedule().compute_level.is_inline() &&
+                   function_is_called_in_stmt(func, for_loop)) {
+            // If we're trying to inline a reduction, schedule it here and bail out            
+            log(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
+            stmt = build_realize(build_pipeline(for_loop));
+            found_store_level = found_compute_level = true;
+            return;
+        }
 
         if (compute_level.match(for_loop->name)) {
             log(3) << "Found compute level\n";
@@ -463,7 +476,8 @@ Stmt create_initial_loop_nest(Function f) {
     pair<Stmt, Stmt> r = build_realization(f);
     Stmt s = r.first;
     if (r.second.defined()) {
-        s = new Block(r.first, r.second);
+        // This must be in a pipeline so that bounds inference understands the update step
+        s = new Pipeline(f.name(), r.first, r.second, new AssertStmt(const_true(), "Dummy consume step"));
     }
     return inject_explicit_bounds(s, f);
 }
