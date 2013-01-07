@@ -21,7 +21,7 @@ using std::make_pair;
 class Bounds : public IRVisitor {
 public:
     Expr min, max;
-    Scope<pair<Expr, Expr> > scope;
+    Scope<Interval> scope;
 
 private:
     void bounds_of_type(Type t) {
@@ -63,9 +63,9 @@ private:
 
     void visit(const Variable *op) {
         if (scope.contains(op->name)) {
-            pair<Expr, Expr> bounds = scope.get(op->name);
-            min = bounds.first;
-            max = bounds.second;
+            Interval bounds = scope.get(op->name);
+            min = bounds.min;
+            max = bounds.max;
         } else {
             min = op;
             max = op;
@@ -288,7 +288,7 @@ private:
 
     void visit(const Let *op) {
         op->value.accept(this);
-        scope.push(op->name, make_pair(min, max));
+        scope.push(op->name, Interval(min, max));
         op->body.accept(this);
         scope.pop(op->name);
     }
@@ -334,47 +334,46 @@ private:
     }
 };
 
-pair<Expr, Expr> bounds_of_expr_in_scope(Expr expr, const Scope<pair<Expr, Expr> > &scope) {
+Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope) {
     Bounds b;
     b.scope = scope;
     expr.accept(&b);
-    return make_pair(b.min, b.max);
+    return Interval(b.min, b.max);
 }
 
-pair<Expr, Expr> range_union(const pair<Expr, Expr> &a, const pair<Expr, Expr> &b) {    
+Interval interval_union(const Interval &a, const Interval &b) {    
     Expr max, min;
-    log(3) << "Range union of " << a.first << ", " << a.second << ",  " << b.first << ", " << b.second << "\n";
-    if (a.second.defined() && b.second.defined()) max = new Max(a.second, b.second);
-    if (a.first.defined() && b.first.defined()) min = new Min(a.first, b.first);
-    return make_pair(min, max);
+    log(3) << "Interval union of " << a.min << ", " << a.max << ",  " << b.min << ", " << b.max << "\n";
+    if (a.max.defined() && b.max.defined()) max = new Max(a.max, b.max);
+    if (a.min.defined() && b.min.defined()) min = new Min(a.min, b.min);
+    return Interval(min, max);
 }
 
-vector<pair<Expr, Expr> > region_union(const vector<pair<Expr, Expr> > &a, 
-                                       const vector<pair<Expr, Expr> > &b) {
+Region region_union(const Region &a, const Region &b) {
     assert(a.size() == b.size() && "Mismatched dimensionality in region union");
-    vector<pair<Expr, Expr> > result;
+    Region result;
     for (size_t i = 0; i < a.size(); i++) {
-        Expr min = new Min(a[i].first, b[i].first);
-        Expr max_a = a[i].first + a[i].second - 1;
-        Expr max_b = b[i].first + b[i].second - 1;
-        Expr max = new Max(max_a, max_b);
-        Expr extent = (max + 1) - min;
-        result.push_back(make_pair(simplify(min), simplify(extent)));
+        Expr min = new Min(a[i].min, b[i].min);
+        Expr max_a = a[i].min + a[i].extent;
+        Expr max_b = b[i].min + b[i].extent;
+        Expr max_plus_one = new Max(max_a, max_b);
+        Expr extent = max_plus_one - min;
+        result.push_back(Range(simplify(min), simplify(extent)));
     }
     return result;
 }
 
 class RegionTouched : public IRVisitor {
 public:
-    Scope<pair<Expr, Expr> > scope;
-    map<string, vector<pair<Expr, Expr> > > regions; // Min, Max per dimension
+    Scope<Interval> scope;
+    map<string, vector<Interval> > regions; // Min, Max per dimension
     bool consider_calls;
     bool consider_provides;
     Scope<int> inside_update;
 private:
     void visit(const LetStmt *op) {
         op->value.accept(this);
-        pair<Expr, Expr> value_bounds = bounds_of_expr_in_scope(op->value, scope);
+        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
         scope.push(op->name, value_bounds);
         op->body.accept(this);
         scope.pop(op->name);
@@ -382,7 +381,7 @@ private:
     
     void visit(const Let *op) {
         op->value.accept(this);
-        pair<Expr, Expr> value_bounds = bounds_of_expr_in_scope(op->value, scope);
+        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
         scope.push(op->name, value_bounds);
         op->body.accept(this);        
         scope.pop(op->name);
@@ -391,11 +390,11 @@ private:
     void visit(const For *op) {
         op->min.accept(this);
         op->extent.accept(this);
-        pair<Expr, Expr> min_bounds = bounds_of_expr_in_scope(op->min, scope);
-        pair<Expr, Expr> extent_bounds = bounds_of_expr_in_scope(op->extent, scope);
-        Expr min = min_bounds.first;
-        Expr max = (min_bounds.second + extent_bounds.second) - 1;
-        scope.push(op->name, make_pair(min, max));
+        Interval min_bounds = bounds_of_expr_in_scope(op->min, scope);
+        Interval extent_bounds = bounds_of_expr_in_scope(op->extent, scope);
+        Expr min = min_bounds.min;
+        Expr max = (min_bounds.max + extent_bounds.max) - 1;
+        scope.push(op->name, Interval(min, max));
         op->body.accept(this);
         scope.pop(op->name);
     }
@@ -410,13 +409,13 @@ private:
         // InjectRealization in Lower.cpp)
         if (consider_calls && !inside_update.contains(op->name)) {
             log(3) << "Found call to " << op->name << ": " << Expr(op) << "\n";
-            vector<pair<Expr, Expr> > &region = regions[op->name];
+            vector<Interval> &region = regions[op->name];
             for (size_t i = 0; i < op->args.size(); i++) {
-                pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
+                Interval bounds = bounds_of_expr_in_scope(op->args[i], scope);
                 log(3) << "Bounds of call to " << op->name << " in dimension " << i << ": " 
-                       << bounds.first << ", " << bounds.second << "\n";
+                       << bounds.min << ", " << bounds.max << "\n";
                 if (region.size() > i) {
-                    region[i] = range_union(region[i], bounds);
+                    region[i] = interval_union(region[i], bounds);
                 } else {
                     region.push_back(bounds);
                 }
@@ -427,11 +426,11 @@ private:
     void visit(const Provide *op) {        
         IRVisitor::visit(op);
         if (consider_provides) {
-            vector<pair<Expr, Expr> > &region = regions[op->name];
+            vector<Interval> &region = regions[op->name];
             for (size_t i = 0; i < op->args.size(); i++) {
-                pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
+                Interval bounds = bounds_of_expr_in_scope(op->args[i], scope);
                 if (region.size() > i) {
-                    region[i] = range_union(region[i], bounds);
+                    region[i] = interval_union(region[i], bounds);
                 } else {
                     region.push_back(bounds);
                 }
@@ -450,65 +449,58 @@ private:
     }
 };
 
-map<string, vector<pair<Expr, Expr> > > compute_regions_touched(Stmt s, const Scope<pair<Expr, Expr> > &scope, 
-                                                                bool consider_calls, bool consider_provides) {
+map<string, Region> compute_regions_touched(Stmt s, bool consider_calls, bool consider_provides) {
     RegionTouched r;
     r.consider_calls = consider_calls;
     r.consider_provides = consider_provides;
-    r.scope = scope;
     s.accept(&r);
+    map<string, Region> regions;
     // Convert from (min, max) to (min, extent)
-    for (map<string, vector<pair<Expr, Expr> > >::iterator iter = r.regions.begin(); 
+    for (map<string, vector<Interval> >::iterator iter = r.regions.begin(); 
          iter != r.regions.end(); iter++) {
-        for (size_t i = 0; i < iter->second.size(); i++) {
-            /*
-            if (!iter->second[i].first.defined()) {
-                std::cerr << "Usage of " << iter->first << " is unbounded below in the following statement: " << s << std::endl;
-                assert(false);
-            }
-            if (!iter->second[i].second.defined()) {
-                std::cerr << "Usage of " << iter->first << " is unbounded above in the following statement: " << s << std::endl;
-                assert(false);
-            }
-            */
-            if (!iter->second[i].first.defined() || !iter->second[i].second.defined()) {
-                iter->second[i] = make_pair(Expr(), Expr());
+        Region region;
+        const vector<Interval> &box = iter->second;
+        for (size_t i = 0; i < box.size(); i++) {
+            if (!box[i].min.defined() || 
+                !box[i].max.defined()) {
+                region.push_back(Range());
             } else {
                 // the max is likely to be of the form foo-1
-                iter->second[i].first = simplify(iter->second[i].first);
-                iter->second[i].second = simplify((iter->second[i].second + 1) - iter->second[i].first);
+                region.push_back(Range(simplify(box[i].min), 
+                                       simplify((box[i].max + 1) - box[i].min)));
             }
         }
+        regions[iter->first] = region;
     }
-    return r.regions;
+    return regions;
 }
 
-map<string, vector<pair<Expr, Expr> > > regions_provided(Stmt s, const Scope<pair<Expr, Expr> > &scope) {
-    return compute_regions_touched(s, scope, false, true);
+map<string, Region> regions_provided(Stmt s) {
+    return compute_regions_touched(s, false, true);
 }
 
-map<string, vector<pair<Expr, Expr> > > regions_required(Stmt s, const Scope<pair<Expr, Expr> > &scope) {
-    return compute_regions_touched(s, scope, true, false);
+map<string, Region> regions_required(Stmt s) {
+    return compute_regions_touched(s, true, false);
 }
 
-map<string, vector<pair<Expr, Expr> > > regions_touched(Stmt s, const Scope<pair<Expr, Expr> > &scope) {
-    return compute_regions_touched(s, scope, true, true);
+map<string, Region> regions_touched(Stmt s) {
+    return compute_regions_touched(s, true, true);
 }
 
 
 
-void check(const Scope<pair<Expr, Expr> > &scope, Expr e, Expr correct_min, Expr correct_max) {
-    pair<Expr, Expr> result = bounds_of_expr_in_scope(e, scope);
-    if (result.first.defined()) result.first = simplify(result.first);
-    if (result.second.defined()) result.second = simplify(result.second);
+void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_max) {
+    Interval result = bounds_of_expr_in_scope(e, scope);
+    if (result.min.defined()) result.min = simplify(result.min);
+    if (result.max.defined()) result.max = simplify(result.max);
     bool success = true;
-    if (!equal(result.first, correct_min)) {
-        std::cout << "Incorrect min: " << result.first << std::endl
+    if (!equal(result.min, correct_min)) {
+        std::cout << "Incorrect min: " << result.min << std::endl
                   << "Should have been: " << correct_min << std::endl;
         success = false;
     }
-    if (!equal(result.second, correct_max)) {
-        std::cout << "Incorrect max: " << result.second << std::endl
+    if (!equal(result.max, correct_max)) {
+        std::cout << "Incorrect max: " << result.max << std::endl
                   << "Should have been: " << correct_max << std::endl;
         success = false;
     }
@@ -516,9 +508,9 @@ void check(const Scope<pair<Expr, Expr> > &scope, Expr e, Expr correct_min, Expr
 }
 
 void bounds_test() {
-    Scope<pair<Expr, Expr> > scope;
+    Scope<Interval> scope;
     Var x("x"), y("y");
-    scope.push("x", make_pair(Expr(0), Expr(10)));
+    scope.push("x", Interval(Expr(0), Expr(10)));
 
     check(scope, x, 0, 10);
     check(scope, x+1, 1, 11);
@@ -539,28 +531,28 @@ void bounds_test() {
     vector<Expr> input_site_2 = vec(2*x+1);
     vector<Expr> output_site = vec(x+1);
 
-    Stmt loop = new For("x", 3, x, For::Serial, 
+    Stmt loop = new For("x", 3, 10, For::Serial, 
                         new Provide("output", 
                                     new Add(
                                         new Call(Int(32), "input", input_site_1),
                                         new Call(Int(32), "input", input_site_2)),
                                     output_site));
 
-    map<string, vector<pair<Expr, Expr> > > r;
-    r = regions_required(loop, scope);
+    map<string, Region> r;
+    r = regions_required(loop);
     assert(r.find("output") == r.end());
     assert(r.find("input") != r.end());
-    assert(equal(r["input"][0].first, 6));
-    assert(equal(r["input"][0].second, 20));
-    r = regions_provided(loop, scope);
+    assert(equal(r["input"][0].min, 6));
+    assert(equal(r["input"][0].extent, 20));
+    r = regions_provided(loop);
     assert(r.find("output") != r.end());
-    assert(equal(r["output"][0].first, 4));
-    assert(equal(r["output"][0].second, 10));
+    assert(equal(r["output"][0].min, 4));
+    assert(equal(r["output"][0].extent, 10));
 
-    vector<pair<Expr, Expr> > r2 = vec(make_pair(Expr(5), Expr(15)));
+    Region r2 = vec(Range(Expr(5), Expr(15)));
     r2 = region_union(r["output"], r2);
-    assert(equal(r2[0].first, 4));
-    assert(equal(r2[0].second, 16));
+    assert(equal(r2[0].min, 4));
+    assert(equal(r2[0].extent, 16));
 
     std::cout << "Bounds test passed" << std::endl;
 }

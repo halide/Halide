@@ -582,6 +582,21 @@ struct Allocate : public Internal::StmtNode<Allocate> {
     }
 };
 
+namespace Internal {
+/** A single-dimensional span. Includes all numbers between min and
+ * (min + extent - 1) */
+struct Range {
+    Expr min, extent;
+    Range() {}
+    Range(Expr min, Expr extent) : min(min), extent(extent) {
+        assert(min.type() == extent.type() && "Region min and extent must have same type");
+    }
+};
+
+/** A multi-dimensional box. The outer product of the elements */
+typedef std::vector<Range> Region;   
+}
+
 /** Allocate a multi-dimensional buffer of the given type and
  * size. Create some scratch memory that will back the function 'name'
  * over the range specified in 'bounds'. The bounds are a vector of
@@ -589,16 +604,16 @@ struct Allocate : public Internal::StmtNode<Allocate> {
 struct Realize : public Internal::StmtNode<Realize> {
     string name;
     Type type;
-    vector<pair<Expr, Expr> > bounds;
+    Internal::Region bounds;
     Stmt body;
 
-    Realize(string buf, Type t, const vector<pair<Expr, Expr> > &bou, Stmt bod) : 
+    Realize(string buf, Type t, const Internal::Region &bou, Stmt bod) : 
         name(buf), type(t), bounds(bou), body(bod) {
         for (size_t i = 0; i < bounds.size(); i++) {
-            assert(bounds[i].first.defined() && "Realize of undefined");
-            assert(bounds[i].second.defined() && "Realize of undefined");
-            assert(bounds[i].first.type().is_scalar() && "Realize of vector size");
-            assert(bounds[i].second.type().is_scalar() && "Realize of vector size");
+            assert(bounds[i].min.defined() && "Realize of undefined");
+            assert(bounds[i].extent.defined() && "Realize of undefined");
+            assert(bounds[i].min.type().is_scalar() && "Realize of vector size");
+            assert(bounds[i].extent.type().is_scalar() && "Realize of vector size");
         }
         assert(body.defined() && "Realize of undefined");
     }
@@ -631,7 +646,6 @@ namespace Halide {
  * a call to another halide function. The latter two types of call
  * nodes don't survive all the way down to code generation - the
  * lowering process converts them to Load nodes. */
-
 struct Call : public Internal::ExprNode<Call> {
     string name;
     vector<Expr > args;

@@ -21,10 +21,8 @@ public:
 
     virtual void visit(const For *for_loop) {
         
-        Scope<pair<Expr, Expr> > scope;
-
         // Compute the region required of each function within this loop body
-        map<string, vector<pair<Expr, Expr> > > regions = regions_required(for_loop->body, scope);
+        map<string, Region> regions = regions_required(for_loop->body);
         
         Stmt body = mutate(for_loop->body);
 
@@ -34,15 +32,15 @@ public:
         // Inject let statements defining those bounds
         for (size_t i = 0; i < funcs.size(); i++) {
             if (in_update.contains(funcs[i])) continue;
-            const vector<pair<Expr, Expr> > &region = regions[funcs[i]];
+            const Region &region = regions[funcs[i]];
             const Function &f = env.find(funcs[i])->second;
             if (region.empty()) continue;
             log(3) << "Injecting bounds for " << funcs[i] << '\n';
             assert(region.size() == f.args().size() && "Dimensionality mismatch between function and region required");
             for (size_t j = 0; j < region.size(); j++) {
                 const string &arg_name = f.args()[j];
-                body = new LetStmt(f.name() + "." + arg_name + ".min", region[j].first, body);
-                body = new LetStmt(f.name() + "." + arg_name + ".extent", region[j].second, body);
+                body = new LetStmt(f.name() + "." + arg_name + ".min", region[j].min, body);
+                body = new LetStmt(f.name() + "." + arg_name + ".extent", region[j].extent, body);
             }
         }
 

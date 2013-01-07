@@ -4,6 +4,10 @@
 #include <string>
 #include "Type.h"
 
+/** \file 
+ * A type representing top-level arguments to a halide pipeline 
+ */
+
 namespace Halide { 
 
 /**

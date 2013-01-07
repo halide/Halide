@@ -211,18 +211,18 @@ void IRMutator::visit(const Allocate *op) {
 }
         
 void IRMutator::visit(const Realize *op) {
-    vector<pair<Expr, Expr> > new_bounds(op->bounds.size());
+    Region new_bounds(op->bounds.size());
     bool bounds_changed = false;
 
     // Mutate the bounds
     for (size_t i = 0; i < op->bounds.size(); i++) {
-        Expr old_min    = op->bounds[i].first;
-        Expr old_extent = op->bounds[i].second;
+        Expr old_min    = op->bounds[i].min;
+        Expr old_extent = op->bounds[i].extent;
         Expr new_min    = mutate(old_min);
         Expr new_extent = mutate(old_extent);
         if (!new_min.same_as(old_min))       bounds_changed = true;
         if (!new_extent.same_as(old_extent)) bounds_changed = true;
-        new_bounds[i] = make_pair(new_min, new_extent);
+        new_bounds[i] = Range(new_min, new_extent);
     }
 
     Stmt body = mutate(op->body);

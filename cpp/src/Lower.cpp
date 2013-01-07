@@ -172,9 +172,8 @@ pair<Stmt, Stmt> build_realization(Function func) {
         // using the bounds read in the update step. This is
         // necessary because later bounds inference does not
         // consider the bounds read during an update step
-        Scope<pair<Expr, Expr> > scope;
-        map<string, vector<pair<Expr, Expr> > > regions = regions_required(update, scope);
-        vector<pair<Expr, Expr> > bounds = regions[func.name()];
+        map<string, Region> regions = regions_required(update);
+        Region bounds = regions[func.name()];
         if (bounds.size() > 0) {
             assert(bounds.size() == func.args().size());
             // Expand the region to be computed using the region read in the update step
@@ -194,8 +193,8 @@ pair<Stmt, Stmt> build_realization(Function func) {
             // Define the region read during the update step
             for (size_t i = 0; i < bounds.size(); i++) {
                 string var = func.name() + "." + func.args()[i];
-                produce = new LetStmt(var + ".update_min", bounds[i].first, produce);
-                produce = new LetStmt(var + ".update_extent", bounds[i].second, produce);
+                produce = new LetStmt(var + ".update_min", bounds[i].min, produce);
+                produce = new LetStmt(var + ".update_extent", bounds[i].extent, produce);
             }
         }
     }    
@@ -259,17 +258,16 @@ private:
 
     Stmt build_realize(Stmt s) {
         // The allocate should cover everything touched below this point
-        Scope<pair<Expr, Expr> > scope;
-        map<string, vector<pair<Expr, Expr> > > regions = regions_touched(s, scope);            
-        vector<pair<Expr, Expr> > bounds = regions[func.name()];
+        map<string, Region> regions = regions_touched(s);
+        Region bounds = regions[func.name()];
         
         for (size_t i = 0; i < bounds.size(); i++) {
-            if (!bounds[i].first.defined()) {
+            if (!bounds[i].min.defined()) {
                 std::cerr << "Use of " << func.name() << " is unbounded below in dimension " 
                           << func.args()[i] << " in the following statement:\n" << s << "\n";
                 assert(false);
             }
-            if (!bounds[i].second.defined()) {
+            if (!bounds[i].extent.defined()) {
                 std::cerr << "Use of " << func.name() << " is unbounded above in dimension " 
                           << func.args()[i] << " in the following statement:\n" << s << "\n";
                 assert(false);
@@ -541,8 +539,7 @@ Stmt add_image_checks(Stmt s, Function f) {
 
     bufs.push_back(f.name());
 
-    Scope<pair<Expr, Expr> > scope;
-    map<string, vector<pair<Expr, Expr> > > regions = regions_touched(s, scope);
+    map<string, Region> regions = regions_touched(s);
     for (size_t i = 0; i < bufs.size(); i++) {
         // Validate the buffer arguments
         string var_name = bufs[i] + ".stride.0";
@@ -557,18 +554,18 @@ Stmt add_image_checks(Stmt s, Function f) {
         if (!disable || atoi(disable) == 0) {
 
             // Figure out the region touched
-            const vector<pair<Expr, Expr> > &region = regions[bufs[i]];
+            const Region &region = regions[bufs[i]];
             if (region.size()) {
                 log(3) << "In image " << bufs[i] << " region touched is:\n";
                 for (size_t j = 0; j < region.size(); j++) {
-                    log(3) << region[j].first << ", " << region[j].second << "\n";
+                    log(3) << region[j].min << ", " << region[j].extent << "\n";
                     ostringstream min_name, extent_name;
                     min_name << bufs[i] << ".min." << j;
                     extent_name << bufs[i] << ".extent." << j;
                     Expr actual_min = new Variable(Int(32), min_name.str());
                     Expr actual_extent = new Variable(Int(32), extent_name.str());
-                    Expr min_used = region[j].first;
-                    Expr extent_used = region[j].second;
+                    Expr min_used = region[j].min;
+                    Expr extent_used = region[j].extent;
                     if (!min_used.defined() || !extent_used.defined()) {
                         std::cerr << "Region used of buffer " << bufs[i] 
                                   << " is unbounded in dimension " << i << std::endl;
