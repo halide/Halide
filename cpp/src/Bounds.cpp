@@ -144,7 +144,7 @@ private:
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
             Expr min_is_positive = simplify(min > make_zero(min.type()));
             Expr max_is_negative = simplify(max < make_zero(max.type()));
-            if (!equal(min_is_positive, const_true()) && !equal(max_is_negative, const_true())) {
+            if (!equal(min, max) && !equal(min_is_positive, const_true()) && !equal(max_is_negative, const_true())) {
                 min = Expr();
                 max = Expr();
                 return;
@@ -174,11 +174,12 @@ private:
     }
 
     void visit(const Min *op) {
-        log(3) << "Bounds of " << Expr(op) << "\n";
         op->a.accept(this);
         Expr min_a = min, max_a = max;
         op->b.accept(this);
         Expr min_b = min, max_b = max;
+
+        log(3) << "Bounds of " << Expr(op) << "\n";
 
         if (min_a.defined() && min_b.defined()) {
             min = new Min(min_a, min_b);
@@ -191,15 +192,18 @@ private:
         } else {
             max = max_a.defined() ? max_a : max_b;
         }
+
+        log(3) << min << ", " << max << "\n";
     }
 
 
     void visit(const Max *op) {
-        log(3) << "Bounds of " << Expr(op) << "\n";
         op->a.accept(this);
         Expr min_a = min, max_a = max;
         op->b.accept(this);
         Expr min_b = min, max_b = max;
+
+        log(3) << "Bounds of " << Expr(op) << "\n";
 
         if (min_a.defined() && min_b.defined()) {
             min = new Max(min_a, min_b);
@@ -213,6 +217,7 @@ private:
             max = Expr();
         }
 
+        log(3) << min << ", " << max << "\n";
     }
 
     void visit(const EQ *) {
@@ -404,9 +409,12 @@ private:
         // required by the update step of a reduction elsewhere (in
         // InjectRealization in Lower.cpp)
         if (consider_calls && !inside_update.contains(op->name)) {
+            log(3) << "Found call to " << op->name << ": " << Expr(op) << "\n";
             vector<pair<Expr, Expr> > &region = regions[op->name];
             for (size_t i = 0; i < op->args.size(); i++) {
                 pair<Expr, Expr> bounds = bounds_of_expr_in_scope(op->args[i], scope);
+                log(3) << "Bounds of call to " << op->name << " in dimension " << i << ": " 
+                       << bounds.first << ", " << bounds.second << "\n";
                 if (region.size() > i) {
                     region[i] = range_union(region[i], bounds);
                 } else {
@@ -521,7 +529,7 @@ void bounds_test() {
     check(scope, new Select(x < 4, x, x+100), 0, 110);
     check(scope, x+y, y, y+10);
     check(scope, x*y, new Min(y*10, 0), new Max(y*10, 0));
-    check(scope, x/y, Expr(), Expr());
+    check(scope, x/(x+y), Expr(), Expr());
     check(scope, 11/(x+1), 1, 11);
     check(scope, new Load(Int(8), "buf", x, Buffer(), Parameter()), cast(Int(8), -128), cast(Int(8), 127));
     check(scope, y + (new Let("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x

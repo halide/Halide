@@ -263,6 +263,19 @@ private:
         map<string, vector<pair<Expr, Expr> > > regions = regions_touched(s, scope);            
         vector<pair<Expr, Expr> > bounds = regions[func.name()];
         
+        for (size_t i = 0; i < bounds.size(); i++) {
+            if (!bounds[i].first.defined()) {
+                std::cerr << "Use of " << func.name() << " is unbounded below in dimension " 
+                          << func.args()[i] << " in the following statement:\n" << s << "\n";
+                assert(false);
+            }
+            if (!bounds[i].second.defined()) {
+                std::cerr << "Use of " << func.name() << " is unbounded above in dimension " 
+                          << func.args()[i] << " in the following statement:\n" << s << "\n";
+                assert(false);
+            }
+        }
+
         // Change the body of the for loop to do an allocation
         s = new Realize(func.name(), func.value().type(), bounds, s);
         
