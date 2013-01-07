@@ -540,7 +540,7 @@ Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
     return buf;
 }
 
-void Func::compile_to_bitcode(const string &filename, std::vector<Argument> args) {
+void Func::compile_to_bitcode(const string &filename, std::vector<Argument> args, const string &fn_name) {
     assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
@@ -549,11 +549,11 @@ void Func::compile_to_bitcode(const string &filename, std::vector<Argument> args
     args.push_back(me);
 
     StmtCompiler cg;
-    cg.compile(stmt, name(), args);
+    cg.compile(stmt, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_bitcode(filename);
 }
 
-void Func::compile_to_object(const string &filename, std::vector<Argument> args) {
+void Func::compile_to_object(const string &filename, std::vector<Argument> args, const string &fn_name) {
     assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
@@ -562,23 +562,22 @@ void Func::compile_to_object(const string &filename, std::vector<Argument> args)
     args.push_back(me);
 
     StmtCompiler cg;
-    cg.compile(stmt, name(), args);
+    cg.compile(stmt, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_native(filename, false);
 }
 
-void Func::compile_to_header(const string &filename, std::vector<Argument> args) {
+void Func::compile_to_header(const string &filename, std::vector<Argument> args, const string &fn_name) {    
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
     std::ofstream header(filename.c_str());
     CodeGen_C cg(header);
-    cg.compile_header(name(), args);
+    cg.compile_header(fn_name.empty() ? name() : fn_name, args);
 }
 
 void Func::compile_to_file(const string &filename_prefix, std::vector<Argument> args) {
-    func.rename(filename_prefix);
-    compile_to_header(filename_prefix + ".h", args);
-    compile_to_object(filename_prefix + ".o", args);
+    compile_to_header(filename_prefix + ".h", args, filename_prefix);
+    compile_to_object(filename_prefix + ".o", args, filename_prefix);
 }
 
 void Func::compile_to_file(const string &filename_prefix) {
@@ -605,7 +604,7 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
     compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e));    
 }
 
-void Func::compile_to_assembly(const string &filename, std::vector<Argument> args) {
+void Func::compile_to_assembly(const string &filename, std::vector<Argument> args, const string &fn_name) {
     assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
@@ -614,7 +613,7 @@ void Func::compile_to_assembly(const string &filename, std::vector<Argument> arg
     args.push_back(me);
 
     StmtCompiler cg;
-    cg.compile(stmt, name(), args);
+    cg.compile(stmt, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_native(filename, true);
 }
 
