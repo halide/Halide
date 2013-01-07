@@ -122,6 +122,17 @@ public:
     void compile_to_object(const string &filename, std::vector<Argument>);
     void compile_to_header(const string &filename, std::vector<Argument>);
     void compile_to_assembly(const string &filename, std::vector<Argument>);    
+    
+    // Compile to object file and header pair, with the given
+    // arguments. Also renames the output function to match the first
+    // argument.
+    void compile_to_file(const string &filename_prefix, std::vector<Argument> args);
+    void compile_to_file(const string &filename_prefix);
+    void compile_to_file(const string &filename_prefix, Argument a);
+    void compile_to_file(const string &filename_prefix, Argument a, Argument b);
+    void compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c);
+    void compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d);
+    void compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e);
     void compile_jit();
 
     void set_error_handler(void (*handler)(char *));

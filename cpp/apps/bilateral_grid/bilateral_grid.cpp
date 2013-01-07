@@ -66,11 +66,7 @@ int main(int argc, char **argv) {
     blurz.compute_root().parallel(z).vectorize(x, 4);
     bilateral_grid.compute_root().parallel(y).vectorize(x, 4);
 
-    std::vector<Argument> args;
-    args.push_back(r_sigma);
-    args.push_back(input);
-    bilateral_grid.compile_to_object("bilateral_grid.o", args);
-    bilateral_grid.compile_to_header("bilateral_grid.h", args);
+    bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input);
 
     return 0;
 }

@@ -128,14 +128,7 @@ int main(int argc, char **argv) {
         outGPyramid[j].compute_root().parallel(y);
     }
 
-    std::vector<Argument> args(4);
-    args[0] = levels;
-    args[1] = alpha;
-    args[2] = beta;
-    args[3] = input;
-    output.compile_to_object("local_laplacian.o", args);
-    output.compile_to_header("local_laplacian.h", args);
-    output.compile_to_assembly("local_laplacian.s", args);
+    output.compile_to_file("local_laplacian", levels, alpha, beta, input);
 
     return 0;
 }
