@@ -32,26 +32,6 @@ ostream &operator<<(ostream &out, Type type) {
     return out;
 }
 
-ostream &operator<<(ostream &out, For::ForType type) {
-    switch (type) {
-    case For::Serial:
-        out << "for";
-        break;
-    case For::Parallel:
-        out << "parallel";
-        break;
-    case For::Unrolled:
-        out << "unrolled";
-        break;
-    case For::Vectorized:
-        out << "vectorized";
-        break;
-    default:
-        assert(false && "Malformed for type");
-    }
-    return out;
-}
-
 ostream &operator<<(ostream &stream, Expr ir) {
     if (!ir.defined()) {
         stream << "(undefined)";
@@ -61,17 +41,6 @@ ostream &operator<<(ostream &stream, Expr ir) {
     }
     return stream;
 }
-
-ostream &operator<<(ostream &stream, Stmt ir) {
-    if (!ir.defined()) {
-        stream << "(undefined)" << std::endl;
-    } else {
-        Internal::IRPrinter p(stream);
-        p.print(ir);
-    }
-    return stream;
-}
-
 
 namespace Internal {
 
@@ -119,6 +88,36 @@ void IRPrinter::test() {
         assert(false);
     }        
     std::cout << "IRPrinter test passed" << std::endl;
+}
+
+ostream &operator<<(ostream &out, For::ForType type) {
+    switch (type) {
+    case For::Serial:
+        out << "for";
+        break;
+    case For::Parallel:
+        out << "parallel";
+        break;
+    case For::Unrolled:
+        out << "unrolled";
+        break;
+    case For::Vectorized:
+        out << "vectorized";
+        break;
+    default:
+        assert(false && "Malformed for type");
+    }
+    return out;
+}
+
+ostream &operator<<(ostream &stream, Stmt ir) {
+    if (!ir.defined()) {
+        stream << "(undefined)" << std::endl;
+    } else {
+        Internal::IRPrinter p(stream);
+        p.print(ir);
+    }
+    return stream;
 }
 
 IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {}

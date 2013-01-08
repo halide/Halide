@@ -142,6 +142,8 @@ struct Expr : public Internal::IRHandle {
     }
 };    
 
+namespace Internal {
+
 /** A reference-counted handle to a statement node. */
 struct Stmt : public Internal::IRHandle {
     Stmt() : Internal::IRHandle() {}
@@ -577,7 +579,6 @@ struct Allocate : public Internal::StmtNode<Allocate> {
     }
 };
 
-namespace Internal {
 /** A single-dimensional span. Includes all numbers between min and
  * (min + extent - 1) */
 struct Range {
@@ -590,7 +591,6 @@ struct Range {
 
 /** A multi-dimensional box. The outer product of the elements */
 typedef std::vector<Range> Region;   
-}
 
 /** Allocate a multi-dimensional buffer of the given type and
  * size. Create some scratch memory that will back the function 'name'
@@ -627,6 +627,7 @@ struct Block : public Internal::StmtNode<Block> {
 };
 
 }
+}
 // Now that we've defined an Expr and ForType, we can include the definition of a function
 #include "Function.h"
 
@@ -634,6 +635,7 @@ struct Block : public Internal::StmtNode<Block> {
 #include "Reduction.h"
 
 namespace Halide {
+namespace Internal {
 
 /** A function call. This can represent a call to some extern
  * function (like sin), but it's also our multi-dimensional
@@ -719,6 +721,7 @@ struct Variable : public Internal::ExprNode<Variable> {
     Variable(Type t, std::string n) : Internal::ExprNode<Variable>(t), name(n) {}
 };
 
+}
 }
 
 #endif

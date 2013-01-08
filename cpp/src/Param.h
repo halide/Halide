@@ -36,7 +36,7 @@ public:
     }
 
     operator Expr() const {
-        return new Variable(type_of<T>(), name(), param);
+        return new Internal::Variable(type_of<T>(), name(), param);
     }
 
     operator Argument() const {
@@ -76,7 +76,7 @@ public:
     Expr extent(int x) const {
         std::ostringstream s;
         s << name() << ".extent." << x;
-        return new Variable(Int(32), s.str(), param);
+        return new Internal::Variable(Int(32), s.str(), param);
     }
 
     int dimensions() const {
@@ -101,7 +101,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Call(param, args);
+        return new Internal::Call(param, args);
     }
 
     Expr operator()(Expr x) const {
@@ -111,7 +111,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Call(param, args);
+        return new Internal::Call(param, args);
     }
 
     Expr operator()(Expr x, Expr y) const {
@@ -122,7 +122,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Call(param, args);
+        return new Internal::Call(param, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z) const {
@@ -134,7 +134,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Call(param, args);
+        return new Internal::Call(param, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
@@ -147,7 +147,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Call(param, args);
+        return new Internal::Call(param, args);
     }
 
     operator Argument() const {

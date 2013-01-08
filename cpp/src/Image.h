@@ -120,7 +120,7 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Call(buffer, args);
+        return new Internal::Call(buffer, args);
     }
 
     Expr operator()(Expr x) const {
@@ -130,7 +130,7 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Call(buffer, args);
+        return new Internal::Call(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y) const {
@@ -141,7 +141,7 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Call(buffer, args);
+        return new Internal::Call(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z) const {
@@ -153,7 +153,7 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Call(buffer, args);
+        return new Internal::Call(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
@@ -166,7 +166,7 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Call(buffer, args);
+        return new Internal::Call(buffer, args);
     }
     
     operator const buffer_t *() const {return buffer.raw_buffer();}

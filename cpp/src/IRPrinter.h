@@ -18,7 +18,6 @@ namespace Halide {
 */
 
 std::ostream &operator<<(std::ostream &stream, Expr);
-std::ostream &operator<<(std::ostream &stream, Stmt);
 std::ostream &operator<<(std::ostream &stream, Type);
 
 /* 
@@ -30,6 +29,8 @@ std::ostream &operator<<(std::ostream &stream, Type);
 */
 
 namespace Internal {
+
+std::ostream &operator<<(std::ostream &stream, Stmt);
 
 class IRPrinter : public IRVisitor {
 public:
