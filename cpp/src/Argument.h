@@ -5,7 +5,8 @@
 #include "Type.h"
 
 /** \file 
- * A type representing top-level arguments to a halide pipeline 
+ * Defines a type used for expressing the type signature of a
+ * generated halide pipeline
  */
 
 namespace Halide { 
@@ -16,17 +17,21 @@ namespace Halide {
  * generated code. 
  */
 struct Argument {
+    /** The name of the argument */
     std::string name;        
             
-    /* An argument is either a primitive type (for parameters), or a
+    /** An argument is either a primitive type (for parameters), or a
      * buffer pointer. If 'is_buffer' is true, then 'type' should be
-     * ignored. 
+     * ignored.
      */
     bool is_buffer;
+
+    /** If this is a scalar parameter, then this is its type */
     Type type;
 
     Argument() {}
-    Argument(const std::string &n, bool b, Type t) : name(n), is_buffer(b), type(t) {}
+    Argument(const std::string &_name, bool _is_buffer, Type _type) : 
+        name(_name), is_buffer(_is_buffer), type(_type) {}
 };
 }
 

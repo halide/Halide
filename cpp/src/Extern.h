@@ -1,17 +1,13 @@
 #ifndef HALIDE_EXTERN_H
 #define HALIDE_EXTERN_H
 
-/* Convenience macros that lift functions that take regular types
- * into functions that take and return exprs, and call the original
+/** \file
+ * 
+ * Convenience macros that lift functions that take C types into
+ * functions that take and return exprs, and call the original
  * function at runtime under the hood. See test/c_function.cpp for
  * example usage.
  */
-
-#define HalideExtern_0(rt, name)                                        \
-    Halide::Expr name() {                                               \
-        vector<Expr> args;                                              \
-        return new Halide::Call(Halide::type_of<rt>(), #name, args);     \
-    }
 
 #define HalideExtern_1(rt, name, t1)                                    \
     Halide::Expr name(Halide::Expr a1) {                                \

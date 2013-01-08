@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 /** \file 
- * This file defines the internal runtime representation of an image: buffer_t
+ * Defines the internal runtime representation of an image: buffer_t
  */
 
 
