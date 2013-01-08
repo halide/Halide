@@ -26,9 +26,6 @@ namespace Halide {
 
 using namespace Internal;
 
-Func::Func(Internal::Function f) : func(f), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
-}
-
 Func::Func(const string &name) : func(name), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
 }
 
@@ -45,7 +42,7 @@ const string &Func::name() const {
 
 Expr Func::value() const {
     return func.value();
-}
+} 
 
 int Func::dimensions() const {
     if (!func.defined()) return 0;
@@ -548,7 +545,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
     assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
-    Stmt stmt = lower();
+    Stmt stmt = Halide::Internal::lower(func);
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
@@ -561,7 +558,7 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
     assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
-    Stmt stmt = lower();
+    Stmt stmt = Halide::Internal::lower(func);
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
@@ -612,7 +609,7 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
     assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
-    Stmt stmt = lower();
+    Stmt stmt = Halide::Internal::lower(func);
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
@@ -708,10 +705,6 @@ private:
     }
 };
 
-Stmt Func::lower() {
-    return Halide::Internal::lower(func);
-}
-
 void Func::realize(Buffer dst) {
     if (!compiled_module.wrapped_function) compile_jit();
 
@@ -747,7 +740,7 @@ void Func::compile_jit() {
     assert(func.defined() && "Can't realize NULL function handle");
     assert(value().defined() && "Can't realize undefined function");
     
-    Stmt stmt = lower();
+    Stmt stmt = Halide::Internal::lower(func);
     
     // Infer arguments
     InferArguments infer_args;
