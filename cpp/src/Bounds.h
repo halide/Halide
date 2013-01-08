@@ -7,6 +7,11 @@
 #include <utility>
 #include <vector>
 
+/** \file 
+ * Methods for computing the upper and lower bounds of an expression,
+ * and the regions of a function read or written by a statement. 
+ */
+
 namespace Halide {
 namespace Internal {
 

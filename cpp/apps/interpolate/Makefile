@@ -12,4 +12,4 @@ out.png: interpolate
 	./interpolate in.png out.png
 
 clean:
-	rm interpolate interpolate.h out.png
+	rm -f interpolate interpolate.h out.png

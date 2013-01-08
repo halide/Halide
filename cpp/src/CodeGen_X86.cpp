@@ -12,6 +12,9 @@
 #include "Param.h"
 #include "integer_division_table.h"
 
+using std::vector;
+using std::string;
+
 namespace Halide { 
 namespace Internal {
 
@@ -393,9 +396,9 @@ void CodeGen_X86::visit(const Allocate *alloc) {
         heap_allocations.push(ptr);
     }
 
-    symbol_table.push(allocation_name, ptr);
+    sym_push(allocation_name, ptr);
     codegen(alloc->body);
-    symbol_table.pop(allocation_name);
+    sym_pop(allocation_name);
 
     if (!on_stack) {
         heap_allocations.pop();
@@ -540,13 +543,13 @@ void CodeGen_X86::test() {
     std::cout << "CodeGen_X86 test passed" << std::endl;
 }
 
-std::string CodeGen_X86::mcpu() const {
+string CodeGen_X86::mcpu() const {
     if (use_avx) return "corei7-avx";
     if (use_sse_41) return "corei7";
     return "core2";
 }
 
-std::string CodeGen_X86::mattrs() const {
+string CodeGen_X86::mattrs() const {
     return "";
 }
 

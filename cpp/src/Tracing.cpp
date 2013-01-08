@@ -1,6 +1,8 @@
 #include "Tracing.h"
 #include "IRMutator.h"
 
+using std::vector;
+
 namespace Halide {
 namespace Internal {
 

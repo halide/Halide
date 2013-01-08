@@ -116,7 +116,7 @@ public:
 
     Expr operator()() const {
         assert(dims >= 0);
-        vector<Expr> args;        
+        std::vector<Expr> args;        
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
@@ -125,7 +125,7 @@ public:
 
     Expr operator()(Expr x) const {
         assert(dims >= 1);
-        vector<Expr> args;
+        std::vector<Expr> args;
         args.push_back(x);
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
@@ -135,7 +135,7 @@ public:
 
     Expr operator()(Expr x, Expr y) const {
         assert(dims >= 2);
-        vector<Expr> args;
+        std::vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         for (int i = 0; args.size() < (size_t)dims; i++) {
@@ -146,7 +146,7 @@ public:
 
     Expr operator()(Expr x, Expr y, Expr z) const {
         assert(dims >= 3);
-        vector<Expr> args;
+        std::vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);
@@ -158,7 +158,7 @@ public:
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
         assert(dims >= 4);
-        vector<Expr> args;
+        std::vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);

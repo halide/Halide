@@ -19,7 +19,7 @@ public:
      * CodeGen::compile_to_file or
      * CodeGen::compile_to_function_pointer to get at the x86
      * machine code. */
-    void compile(Stmt stmt, string name, const vector<Argument> &args);
+    void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
 
     static void test();
 
@@ -34,8 +34,8 @@ protected:
     Expr wild_u8x16, wild_u16x8, wild_u32x4;
     Expr wild_f32x4, wild_f32x8, wild_f64x2;
 
-    llvm::Value *call_intrin(Type t, const string &name, std::vector<Expr>);    
-    llvm::Value *call_intrin(Type t, const string &name, std::vector<llvm::Value *>);    
+    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);    
+    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<llvm::Value *>);    
 
     // Nodes that we handle specially
     void visit(const Cast *);
@@ -44,7 +44,7 @@ protected:
     void visit(const Max *);
     void visit(const Allocate *);        
 
-    stack<llvm::Value *> heap_allocations;
+    std::stack<llvm::Value *> heap_allocations;
     void prepare_for_early_exit();
 
     std::string mcpu() const;

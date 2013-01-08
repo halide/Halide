@@ -1,5 +1,7 @@
 #include "Substitute.h"
 
+using std::string;
+
 namespace Halide { 
 namespace Internal {
 

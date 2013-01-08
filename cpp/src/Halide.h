@@ -9,5 +9,6 @@
 #include "RDom.h"
 #include "Lambda.h"
 #include "InlineReductions.h"
+#include "IRPrinter.h"
 
 #endif

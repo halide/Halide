@@ -7,6 +7,8 @@
 #include "Var.h"
 #include <iostream>
 
+using std::string;
+
 namespace Halide { 
 namespace Internal {
 

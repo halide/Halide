@@ -4,6 +4,7 @@
 #include "IR.h"
 #include "Var.h"
 #include <sstream>
+#include <vector>
 
 namespace Halide {
 
@@ -12,9 +13,9 @@ class Param {
     Internal::Parameter param;
 public:
     Param() : param(type_of<T>(), false) {}
-    Param(const string &n) : param(type_of<T>(), false, n) {}
+    Param(const std::string &n) : param(type_of<T>(), false, n) {}
 
-    const string &name() const {
+    const std::string &name() const {
         return param.name();
     }
 
@@ -49,10 +50,10 @@ class ImageParam {
 public:
     ImageParam() {}
     ImageParam(Type t, int d) : param(t, true), dims(d) {}
-    ImageParam(Type t, int d, const string &n) : param(t, true, n), dims(d) {}
+    ImageParam(Type t, int d, const std::string &n) : param(t, true, n), dims(d) {}
     ImageParam(Internal::Parameter p, int d) : param(p), dims(d) {}
 
-    const string &name() const {
+    const std::string &name() const {
         return param.name();
     }
 
@@ -96,7 +97,7 @@ public:
 
     Expr operator()() const {
         assert(dimensions() >= 0);
-        vector<Expr> args;
+        std::vector<Expr> args;
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
@@ -105,7 +106,7 @@ public:
 
     Expr operator()(Expr x) const {
         assert(dimensions() >= 1);
-        vector<Expr> args;
+        std::vector<Expr> args;
         args.push_back(x);
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
@@ -115,7 +116,7 @@ public:
 
     Expr operator()(Expr x, Expr y) const {
         assert(dimensions() >= 2);
-        vector<Expr> args;
+        std::vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
@@ -126,7 +127,7 @@ public:
 
     Expr operator()(Expr x, Expr y, Expr z) const {
         assert(dimensions() >= 3);
-        vector<Expr> args;
+        std::vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);
@@ -138,7 +139,7 @@ public:
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
         assert(dimensions() >= 4);
-        vector<Expr> args;
+        std::vector<Expr> args;
         args.push_back(x);
         args.push_back(y);
         args.push_back(z);

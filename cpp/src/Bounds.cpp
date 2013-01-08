@@ -17,6 +17,9 @@ namespace Halide {
 namespace Internal {
 
 using std::make_pair;
+using std::map;
+using std::vector;
+using std::string;
 
 class Bounds : public IRVisitor {
 public:

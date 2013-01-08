@@ -5,6 +5,9 @@
 namespace Halide {
 namespace Internal {
 
+using std::vector;
+using std::string;
+
 template<>
 RefCount &ref_count<FunctionContents>(const FunctionContents *f) {return f->ref_count;}
 

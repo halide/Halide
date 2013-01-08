@@ -1,4 +1,9 @@
-CXX = g++
+# 'make' builds libHalide.a, the internal test suite, and runs the internal test suite
+# 'make tests' builds and runs all the end-to-end tests in the test subdirectory
+# 'make test_foo' builds and runs test/foo.cpp for any cpp file in the test folder
+# 'make test_apps' checks some of the apps build and run (but does not check their output)
+
+CXX ?= g++
 LLVM_DIR = ../llvm
 LLVM_CONFIG = $(LLVM_DIR)/Release+Asserts/bin/llvm-config
 LLVM_AS = $(LLVM_DIR)/Release+Asserts/bin/llvm-as
@@ -80,3 +85,17 @@ test_%: bin/test_%
 	cd tmp ; ../$<
 	@-echo
 
+
+.PHONY: test_apps
+test_apps: bin/libHalide.a
+	make -C apps/bilateral_grid clean
+	make -C apps/bilateral_grid out.png
+	make -C apps/local_laplacian clean
+	make -C apps/local_laplacian out.png
+	make -C apps/interpolate clean
+	make -C apps/interpolate out.png
+	make -C apps/blur clean
+	make -C apps/blur test
+	./apps/blur/test
+	make -C apps/wavelet filter
+	cd apps/wavelet; ./filter input.png; cd ../..

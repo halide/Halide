@@ -8,15 +8,15 @@ namespace Halide {
 
 // This is the front-end handle to a reduction domain
 class RVar {
-    string _name;
+    std::string _name;
     Expr _min, _extent;
     Internal::ReductionDomain domain;
 public:
     RVar() {}
-    RVar(string name, Expr m, Expr e, Internal::ReductionDomain d) : _name(name), _min(m), _extent(e), domain(d) {}
+    RVar(std::string name, Expr m, Expr e, Internal::ReductionDomain d) : _name(name), _min(m), _extent(e), domain(d) {}
     Expr min() const {return _min;}
     Expr extent() const {return _extent;}
-    const string &name() const {return _name;}
+    const std::string &name() const {return _name;}
 
     operator Expr() const;
 };
@@ -24,10 +24,10 @@ public:
 class RDom {
     Internal::ReductionDomain domain;
 public:
-    RDom(Expr min, Expr extent, string name = "");
-    RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name = "");
-    RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, string name = "");
-    RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, string name = "");
+    RDom(Expr min, Expr extent, std::string name = "");
+    RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, std::string name = "");
+    RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, std::string name = "");
+    RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, std::string name = "");
     RDom(Buffer);
     RDom(ImageParam);
 

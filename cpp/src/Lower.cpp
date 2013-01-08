@@ -20,11 +20,16 @@
 #include "StorageFolding.h"
 #include "RemoveTrivialForLoops.h"
 
-namespace Halide {
-namespace Internal {
-
 using std::set;
 using std::ostringstream;
+using std::string;
+using std::vector;
+using std::map;
+using std::pair;
+using std::make_pair;
+
+namespace Halide {
+namespace Internal {
 
 void lower_test() {
 

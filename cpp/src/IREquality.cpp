@@ -4,7 +4,6 @@
 namespace Halide { 
 namespace Internal {
 
-
 class IREquals : public IRVisitor {
 public:
     bool result;

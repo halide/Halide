@@ -1,6 +1,12 @@
 #ifndef HALIDE_CODEGEN_H
 #define HALIDE_CODEGEN_H
 
+/** \file
+ * 
+ * This file defines the base-class for all architecture-specific code
+ * generators that use llvm.
+ */
+
 #include <llvm/Value.h>
 #include <llvm/Module.h>
 #include <llvm/Function.h>
@@ -23,12 +29,7 @@
 namespace Halide { 
 namespace Internal {
 
-using std::map;
-using std::string;
-using std::stack;
-using std::vector;
-
-/* A code generator abstract base class. Actual code generators
+/** A code generator abstract base class. Actual code generators
  * (e.g. CodeGen_X86) inherit from this. This class is responsible
  * for taking a Halide Stmt and producing llvm bitcode, machine
  * code in an object file, or machine code accessible through a
@@ -40,62 +41,78 @@ public:
 
     CodeGen();
 
-    virtual void compile(Stmt stmt, string name, const vector<Argument> &args);
+    /** Take a halide statement and compiles it to an llvm module held
+     * internally. Call this before calling compile_to_bitcode or
+     * compile_to_native. */
+    virtual void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
     
-    void compile_to_bitcode(const string &filename);
-    void compile_to_native(const string &filename, bool assembly = false);
+    /** Emit a compiled halide statement as llvm bitcode. Call this
+     * after calling compile. */
+    void compile_to_bitcode(const std::string &filename);
 
-    /* Return a function pointer with type given by the vector of
-     * Arguments passed to compile. Also returns a wrapped version of
-     * the function, which is a single-argument function that takes an
-     * array of void * (i.e. a void **). Each entry in this array
-     * either points to a buffer_t, or to a scalar of the type
-     * specified by the argument list.
-     *
-     * Also returns various other useful functions within the module,
-     * such as a hook for setting the function to call when an assert
-     * fails.
-     */
+    /** Emit a compiled halide statement as either an object file, or
+     * as raw assembly, depending on the value of the second
+     * argument. Call this after calling compile. */
+    void compile_to_native(const std::string &filename, bool assembly = false);
 
+    /** Compile to machine code stored in memory, and return some
+     * functions pointers into that machine code. */
     JITCompiledModule compile_to_function_pointers();
 
 protected:
 
     class Closure;
 
-    // Codegen state for llvm:
-    // Current module, function, builder, context, and value
+    /** State needed by llvm for code generation, including the
+     * current module, function, context, builder, and most recently
+     * generated llvm value. */
+    //@{
     static bool llvm_initialized;
     llvm::Module *module;
     llvm::Function *function;
     static llvm::LLVMContext context;
     llvm::IRBuilder<> builder;
     llvm::Value *value;
-        
-    // All the values in scope
-    Scope<llvm::Value *> symbol_table;
-    void sym_push(const string &name, llvm::Value *value);
+    //@}
 
-    // Some useful types
+    /** Add an entry to the symbol table, hiding previous entries with
+     * the same name. Call this when new values come into scope. */
+    void sym_push(const std::string &name, llvm::Value *value);
+
+    /** Remove an entry for the symbol table, revealing any previous
+     * entries with the same name. Call this when values go out of
+     * scope. */
+    void sym_pop(const std::string &name);
+
+    /** Some useful llvm types */
+    // @{
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
     llvm::StructType *buffer_t;
+    // @}
 
-    // JIT state
-    string function_name;
+    /** The llvm execution engine, which manages JIT state */
     static llvm::ExecutionEngine *execution_engine;
 
-    // Call these to recursively visit sub-expressions and sub-statements
+    /** The name of the function being generated */
+    std::string function_name;
+
+    /** Emit code that evaluates an expression, and return the llvm
+     * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
+    
+    /** Emit code that runs a statement */
     void codegen(Stmt);
 
-    // Take an llvm Value representing a pointer to a buffer_t,
-    // and populate the symbol table with its constituent parts
-    void unpack_buffer(string name, llvm::Value *buffer);
+    /** Take an llvm Value representing a pointer to a buffer_t,
+     * and populate the symbol table with its constituent parts
+     */
+    void unpack_buffer(std::string name, llvm::Value *buffer);
 
-    // Add a definition of buffer_t to the module if it isn't already there
+    /** Add a definition of buffer_t to the module if it isn't already there */
     void define_buffer_t();
        
-    // Given an llvm value representing a pointer to a buffer_t, extract various subfields
+    /** Given an llvm value representing a pointer to a buffer_t, extract various subfields */
+    // @{
     llvm::Value *buffer_host(llvm::Value *);
     llvm::Value *buffer_dev(llvm::Value *);
     llvm::Value *buffer_host_dirty(llvm::Value *);
@@ -104,10 +121,20 @@ protected:
     llvm::Value *buffer_extent(llvm::Value *, int);
     llvm::Value *buffer_stride(llvm::Value *, int);
     llvm::Value *buffer_elem_size(llvm::Value *);
+    // @}
 
-    llvm::Value *codegen_buffer_pointer(string buffer, Type t, llvm::Value *index);
-    llvm::Type *llvm_type_of(Type t);
+    /** Generate a pointer into a named buffer at a given index, of a
+     * given type. The index counts according to the scalar type of
+     * the type passed in. */
+    llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
 
+    /** Return the llvm version of a halide type */
+    llvm::Type *llvm_type_of(Type type);
+
+    /** Generate code for various IR nodes. These can be overridden by
+     * architecture-specific code to perform peephole
+     * optimizations. The result of each is stored in \ref value */
+    // @{
     virtual void visit(const IntImm *);
     virtual void visit(const FloatImm *);
     virtual void visit(const Cast *);
@@ -140,17 +167,40 @@ protected:
     virtual void visit(const Pipeline *);
     virtual void visit(const For *);
     virtual void visit(const Store *);
-    virtual void visit(const Provide *);
-    virtual void visit(const Allocate *) = 0; // Allocate is architecture-specific
-    virtual void visit(const Realize *);
     virtual void visit(const Block *);        
+    // @}
 
-    // What should be passed as -mcpu and -mattrs for compilation
+    /** Generate code for an allocate node. It has no default
+     * implementation - it must be handled in an architecture-specific
+     * way. */
+    virtual void visit(const Allocate *) = 0; 
+
+    /** These IR nodes should have been removed during
+     * lowering. CodeGen will error out if they are present */
+    // @{
+    virtual void visit(const Provide *);
+    virtual void visit(const Realize *);
+    // @}
+
+
+    /** What should be passed as -mcpu and -mattrs for
+     * compilation. The architecture-specific code generator should
+     * define these. */
+    // @{
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
+    // @}
 
-    // If we have to bail out of a pipeline midway, this should inject the appropriate cleanup code
+    /** If we have to bail out of a pipeline midway, this should
+     * inject the appropriate cleanup code. */
     virtual void prepare_for_early_exit() {}
+
+private:
+    /** All the values in scope at the current code location during
+     * codegen. Use sym_push and sym_pop to access. */
+    Scope<llvm::Value *> symbol_table;
+
+
 };
 
 }}

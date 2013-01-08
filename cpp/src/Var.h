@@ -7,14 +7,13 @@
 #include <sstream>
 
 namespace Halide {
-    using std::string;
 
     class Var {
-        string _name;
+        std::string _name;
     public:
-        Var(const string &n) : _name(n) {}
+        Var(const std::string &n) : _name(n) {}
         Var() : _name(Internal::unique_name('v')) {}
-        const string &name() const {return _name;}
+        const std::string &name() const {return _name;}
         bool operator==(const Var &other) {return _name == other._name;}
         bool operator!=(const Var &other) {return _name != other._name;}
 

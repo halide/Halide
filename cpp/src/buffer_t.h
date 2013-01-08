@@ -3,9 +3,16 @@
 
 #include <stdint.h>
 
-/* This is the raw representation of an image passed around by
-   generated Halide code. It includes some stuff to track whether the
-   image is actually stored on a device (like a GPU). */
+/** \file 
+ * This file defines the internal runtime representation of an image: buffer_t
+ */
+
+
+/**
+ * The raw representation of an image passed around by generated
+ * Halide code. It includes some stuff to track whether the image is
+ * not actually in main memory, but instead on a device (like a
+ * GPU). */
 typedef struct buffer_t {
     uint8_t* host;
     uint64_t dev;

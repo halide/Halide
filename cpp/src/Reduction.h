@@ -2,6 +2,8 @@
 #define HALIDE_REDUCTION_H
 
 #include "IntrusivePtr.h"
+#include <string>
+#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -13,7 +15,7 @@ struct ReductionVariable {
 
 struct ReductionDomainContents {
     mutable RefCount ref_count;
-    vector<ReductionVariable> domain;
+    std::vector<ReductionVariable> domain;
 };
 
 class ReductionDomain {
@@ -21,7 +23,7 @@ class ReductionDomain {
 public:
     ReductionDomain() : contents(NULL) {}
 
-    ReductionDomain(const vector<ReductionVariable> &domain) : 
+    ReductionDomain(const std::vector<ReductionVariable> &domain) : 
         contents(new ReductionDomainContents) {
         contents.ptr->domain = domain;
     }
@@ -34,7 +36,7 @@ public:
         return contents.same_as(other.contents);
     }
 
-    const vector<ReductionVariable> &domain() const {
+    const std::vector<ReductionVariable> &domain() const {
         return contents.ptr->domain;
     }
 };
