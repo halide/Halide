@@ -3,7 +3,7 @@
 
 /** \file
  * 
- * This file defines the base-class for all architecture-specific code
+ * Defines the base-class for all architecture-specific code
  * generators that use llvm.
  */
 

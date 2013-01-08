@@ -1,18 +1,23 @@
 #ifndef HALIDE_DERIVATIVE_H
 #define HALIDE_DERIVATIVE_H
 
+/** \file
+ * 
+ * Methods for taking derivatives of halide expressions. Not currently used anywhere 
+ */
+
 #include "IRVisitor.h"
 #include <string>
 
 namespace Halide { 
 namespace Internal {
     
-/* Compute the analytic derivative of the expression with respect to
+/** Compute the analytic derivative of the expression with respect to
  * the variable. May returned an undefined Expr if it's
  * non-differentiable. */
 //Expr derivative(Expr expr, const string &var);
 
-/* 
+/** 
  * Compute the finite difference version of the derivative:
  * expr(var+1) - expr(var). The reason to do this as a derivative,
  * instead of just explicitly constructing expr(var+1) -

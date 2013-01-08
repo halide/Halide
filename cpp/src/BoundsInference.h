@@ -4,7 +4,7 @@
 #include "IR.h"
 
 /** \file 
- * This file defines the bounds_inference lowering pass.
+ * Defines the bounds_inference lowering pass.
  */
 
 namespace Halide {
