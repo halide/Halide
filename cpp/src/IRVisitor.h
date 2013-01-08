@@ -2,7 +2,11 @@
 #define HALIDE_IR_VISITOR_H
 
 namespace Halide {
+
 struct Expr;
+
+namespace Internal {
+
 struct Stmt;
 struct IntImm;
 struct FloatImm;
@@ -41,9 +45,6 @@ struct Allocate;
 struct Realize;
 struct Block;
 
-
-namespace Internal {
-   
 /** A base class for algorithms that need to recursively walk over the
  * IR. The default implementations just recursively walk over the
  * children. Override the ones you care about.
@@ -87,6 +88,7 @@ public:
     virtual void visit(const Realize *);
     virtual void visit(const Block *);
 };
+
 }
 }
 

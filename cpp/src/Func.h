@@ -71,7 +71,7 @@ public:
 // A wrapper around a schedule used for common schedule manipulations
 class ScheduleHandle {
     Internal::Schedule &schedule;
-    void set_dim_type(Var var, For::ForType t);
+    void set_dim_type(Var var, Internal::For::ForType t);
 public:
     ScheduleHandle(Internal::Schedule &s) : schedule(s) {}
     ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
@@ -205,7 +205,7 @@ public:
     Func &store_root();
     Func &compute_inline();
 
-    Stmt lower();
+    Internal::Stmt lower();
 
     ScheduleHandle update();
 

@@ -24,7 +24,7 @@ namespace Halide {
         }
 
         operator Expr() {
-            return new Variable(Int(32), name());
+            return new Internal::Variable(Int(32), name());
         }
     };
 

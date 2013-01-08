@@ -75,7 +75,7 @@ Expr maximum(Expr e) {
     Func f("maximum" + Internal::unique_name('_'));
     ostringstream ss;
     ss << "minval_" << e.type();
-    f(v.free_vars) = new Call(e.type(), ss.str(), vector<Expr>());
+    f(v.free_vars) = new Internal::Call(e.type(), ss.str(), vector<Expr>());
     f(v.free_vars) = max(f(v.free_vars), e);
     return f(v.free_vars);
 }
@@ -85,7 +85,7 @@ Expr minimum(Expr e) {
     Func f("minimum" + Internal::unique_name('_'));
     ostringstream ss;
     ss << "maxval_" << e.type();
-    f(v.free_vars) = new Call(e.type(), ss.str(), vector<Expr>());
+    f(v.free_vars) = new Internal::Call(e.type(), ss.str(), vector<Expr>());
     f(v.free_vars) = min(f(v.free_vars), e);
     return f(v.free_vars);
     
