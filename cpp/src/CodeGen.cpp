@@ -18,14 +18,18 @@
 #include <llvm/DataLayout.h>
 #include <sstream>
 
-namespace Halide { 
-namespace Internal {
-
 using namespace llvm;
-using namespace Halide;
 using std::ostringstream;
 using std::cout;
 using std::endl;
+using std::string;
+using std::vector;
+using std::pair;
+using std::map;
+using std::stack;
+
+namespace Halide { 
+namespace Internal {
 
 LLVMContext CodeGen::context;
 
@@ -307,6 +311,10 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
 void CodeGen::sym_push(const string &name, llvm::Value *value) {
     value->setName(name);
     symbol_table.push(name, value);
+}
+
+void CodeGen::sym_pop(const string &name) {
+    symbol_table.pop(name);
 }
 
 // Take an llvm Value representing a pointer to a buffer_t,
@@ -841,13 +849,13 @@ void CodeGen::visit(const Call *op) {
 void CodeGen::visit(const Let *op) {
     sym_push(op->name, codegen(op->value));
     value = codegen(op->body);
-    symbol_table.pop(op->name);
+    sym_pop(op->name);
 }
 
 void CodeGen::visit(const LetStmt *op) {
     sym_push(op->name, codegen(op->value));
     codegen(op->body);
-    symbol_table.pop(op->name);
+    sym_pop(op->name);
 }
 
 void CodeGen::visit(const PrintStmt *op) {
@@ -1108,7 +1116,7 @@ void CodeGen::visit(const For *op) {
         builder.SetInsertPoint(after_bb);
 
         // Pop the loop variable from the scope
-        symbol_table.pop(op->name);
+        sym_pop(op->name);
     } else if (op->for_type == For::Parallel) {
 
         log(3) << "Entering parallel for loop over " << op->name << "\n";

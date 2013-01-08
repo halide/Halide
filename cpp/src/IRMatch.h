@@ -2,8 +2,7 @@
 #define HALIDE_IR_MATCH_H
 
 #include "IR.h"
-#include <map>
-#include <string>
+#include <vector>
 
 namespace Halide { 
 namespace Internal {
@@ -17,7 +16,7 @@ namespace Internal {
 // match(x + x, 3 + (2*k), result) should return true, and set result to
 // vec(3, 2*k)
 
-bool expr_match(Expr pattern, Expr expr, vector<Expr> &result);
+bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
 void expr_match_test();
 
 }

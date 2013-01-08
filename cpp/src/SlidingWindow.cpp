@@ -5,10 +5,13 @@
 #include "Log.h"
 #include "Substitute.h"
 
+using std::string;
+using std::map;
+
 namespace Halide {
 namespace Internal {
 
-// Does an expression depend on a particular variable.
+// Does an expression depend on a particular variable?
 class ExprDependsOnVar : public IRVisitor {    
     void visit(const Variable *op) {
         if (op->name == var) result = true;
@@ -16,7 +19,8 @@ class ExprDependsOnVar : public IRVisitor {
 
     void visit(const Let *op) {
         op->value.accept(this);
-        // The name might be hidden within the body of the let
+        // The name might be hidden within the body of the let, in
+        // which case there's no point descending.
         if (op->name != var) {
             op->body.accept(this);
         }

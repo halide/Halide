@@ -9,16 +9,11 @@
 #include <assert.h>
 #include <stdint.h>
 
-namespace Halide {
-
-/* This class represents a halide buffer that can be passed to a
- * halide function. It may be stored in main memory, or some other
- * memory space (e.g. a gpu). If you want to use this as an Image, see
- * the Image class. Casting a Buffer to an Image will do any
- * appropriate copy-back. This class is a fairly thin wrapper on a
- * buffer_t, which is the C-style type Halide uses for passing buffers
- * around. 
+/** \file 
+ * Defines Buffer - A c++ wrapper around a buffer_t.
  */
+
+namespace Halide {
 
 namespace Internal {
 struct BufferContents {
@@ -62,6 +57,15 @@ struct BufferContents {
 };
 }
 
+/** The internal representation of an image, or other dense array
+ * data. The Image type provides a typed view onto a buffer for the
+ * purposes of direct manipulation. A buffer may be stored in main
+ * memory, or some other memory space (e.g. a gpu). If you want to use
+ * this as an Image, see the Image class. Casting a Buffer to an Image
+ * will do any appropriate copy-back. This class is a fairly thin
+ * wrapper on a buffer_t, which is the C-style type Halide uses for
+ * passing buffers around.
+ */
 class Buffer {
 private:
     Internal::IntrusivePtr<const Internal::BufferContents> contents;

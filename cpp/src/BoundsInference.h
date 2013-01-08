@@ -3,6 +3,10 @@
 
 #include "IR.h"
 
+/** \file 
+ * This file defines the bounds_inference lowering pass.
+ */
+
 namespace Halide {
 namespace Internal {
 
@@ -10,8 +14,9 @@ namespace Internal {
  * representations of the bounds over which things should be realized,
  * and inject expressions defining those bounds.
  */
-
-Stmt bounds_inference(Stmt, const vector<string> &realization_order, const map<string, Function> &environment);
+Stmt bounds_inference(Stmt, 
+                      const std::vector<std::string> &realization_order, 
+                      const std::map<std::string, Function> &environment);
 
 }
 }

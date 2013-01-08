@@ -4,10 +4,11 @@
 
 // This file is largely a port of parts of src/analysis.ml
 
+using std::pair;
+using std::make_pair;
+
 namespace Halide { 
 namespace Internal {
-
-using std::make_pair;
 
 pair<int, int> modulus_remainder(Expr e) {
     ModulusRemainder mr;

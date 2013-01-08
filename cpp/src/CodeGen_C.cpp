@@ -6,12 +6,14 @@
 #include <sstream>
 #include <iostream>
 
-namespace Halide { 
-namespace Internal {
-
 using std::ostream;
 using std::endl;
 using std::string;
+using std::vector;
+using std::ostringstream;
+
+namespace Halide { 
+namespace Internal {
 
 CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s) {}
 
@@ -356,7 +358,7 @@ void CodeGen_C::test() {
     s = new Allocate("tmp.stack", Int(32), 127, s);
     s = new Allocate("tmp.heap", Int(32), 43 * beta, s);
 
-    std::ostringstream source;
+    ostringstream source;
     CodeGen_C cg(source);
     cg.compile(s, "test1", args);
     string correct_source = \

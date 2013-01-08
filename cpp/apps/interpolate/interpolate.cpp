@@ -9,6 +9,8 @@ using namespace Halide;
 
 #include <sys/time.h>
 
+using std::vector;
+
 double now() {
     struct timeval tv;
     gettimeofday(&tv, NULL);

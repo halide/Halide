@@ -8,8 +8,6 @@
 namespace Halide { 
 namespace Internal {
 
-using std::pair;
-
 /* For things like alignment analysis, often it's helpful to know
  * if an integer expression is some multiple of a constant plus
  * some other constant. For example, it is straight-forward to
@@ -22,7 +20,7 @@ using std::pair;
  * index for an aligned load. If all else fails, we can just say
  * that an integer is congruent to zero modulo one. 
  */   
-pair<int, int> modulus_remainder(Expr e);
+std::pair<int, int> modulus_remainder(Expr e);
 
 /* Reduce an expression modulo some integer. Returns true if an
  * answer could be found. */
@@ -30,12 +28,12 @@ bool reduce_expr_modulo(Expr e, int modulus, int *remainder);
 
 class ModulusRemainder : public IRVisitor {
 public:
-    pair<int, int> analyze(Expr e);
+    std::pair<int, int> analyze(Expr e);
 
     static void test();
 protected:
     int modulus, remainder;
-    Scope<pair<int, int> > scope;
+    Scope<std::pair<int, int> > scope;
 
     void visit(const IntImm *);
     void visit(const FloatImm *);

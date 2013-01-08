@@ -2,6 +2,8 @@
 #define HALIDE_SCHEDULE_H
 
 #include "IR.h"
+#include <string>
+#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -9,10 +11,10 @@ namespace Internal {
         
 struct Schedule {
     struct LoopLevel {
-        string func, var;
+        std::string func, var;
 
         // Some variable of some function
-        LoopLevel(string f, string v) : func(f), var(v) {}
+        LoopLevel(std::string f, std::string v) : func(f), var(v) {}
 
         // Represents inline
         LoopLevel() {} 
@@ -25,7 +27,7 @@ struct Schedule {
         bool is_root() const {return var == "<root>";}
 
         // Does this loop level refer to a particular for loop variable?
-        bool match(const string &loop) const {
+        bool match(const std::string &loop) const {
             return starts_with(loop, func + ".") && ends_with(loop, "." + var);
         }
 
@@ -36,24 +38,24 @@ struct Schedule {
       
     // Which dimensions have been split into inner and outer sub-dimensions
     struct Split {
-        string old_var, outer, inner;
+        std::string old_var, outer, inner;
         Expr factor;
     };
-    vector<Split> splits;
+    std::vector<Split> splits;
         
     // The list of dimensions after splits, and how to traverse each dimension
     struct Dim {
-        string var;
+        std::string var;
         For::ForType for_type;
     };
-    vector<Dim> dims;
+    std::vector<Dim> dims;
 
     // Any (optional) explicit bounds on dimensions
     struct Bound {
-        string var;
+        std::string var;
         Expr min, extent;
     };
-    vector<Bound> bounds;
+    std::vector<Bound> bounds;
 };
 
 }

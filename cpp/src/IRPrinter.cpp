@@ -5,10 +5,13 @@
 #include <iostream>
 #include <sstream>
 
-namespace Halide {
-
 using std::ostream;
 using std::endl;
+using std::vector;
+using std::string;
+using std::ostringstream;
+
+namespace Halide {
 
 ostream &operator<<(ostream &out, Type type) {
     switch (type.t) {
@@ -77,7 +80,7 @@ void IRPrinter::test() {
     Type f32 = Float(32);
     Expr x = new Variable(Int(32), "x");
     Expr y = new Variable(Int(32), "y");
-    std::ostringstream expr_source;
+    ostringstream expr_source;
     expr_source << (x + 3) * (y / 2 + 17);
     assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
@@ -93,7 +96,7 @@ void IRPrinter::test() {
     Stmt let_stmt = new LetStmt("y", 17, block);
     Stmt allocate = new Allocate("buf", f32, 1023, let_stmt);
 
-    std::ostringstream source;
+    ostringstream source;
     source << allocate;
     std::string correct_source = \
         "allocate buf[f32 * 1023]\n"

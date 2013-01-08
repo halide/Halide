@@ -4,6 +4,8 @@
 #include "IROperator.h"
 #include <iostream>
 
+using std::vector;
+
 namespace Halide { 
 namespace Internal {
 

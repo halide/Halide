@@ -3,6 +3,9 @@
 #include "IROperator.h"
 #include "Scope.h"
 
+using std::string;
+using std::vector;
+
 namespace Halide {
 
 RVar::operator Expr() const {

@@ -3,11 +3,11 @@
 #include "CodeGen_X86.h"
 #include <iostream>
 
-namespace Halide {
-namespace Internal {
-
 using std::string;
 using std::vector;
+
+namespace Halide {
+namespace Internal {
 
 StmtCompiler::StmtCompiler(string arch) {
     if (arch.empty()) {

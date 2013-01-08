@@ -6,16 +6,14 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
-
 struct ParameterContents {
     mutable RefCount ref_count;
     Type type;
     bool is_buffer;
-    string name;
+    std::string name;
     Buffer buffer;
     uint64_t data;
-    ParameterContents(Type t, bool b, const string &n) : type(t), is_buffer(b), name(n), buffer(Buffer()), data(0) {
+    ParameterContents(Type t, bool b, const std::string &n) : type(t), is_buffer(b), name(n), buffer(Buffer()), data(0) {
     }
 
     template<typename T>
@@ -34,7 +32,7 @@ public:
         contents(new ParameterContents(t, b, unique_name('p'))) {
     }
 
-    Parameter(Type t, bool b, const string &n) : 
+    Parameter(Type t, bool b, const std::string &n) : 
         contents(new ParameterContents(t, b, n)) {
     }
 
@@ -43,7 +41,7 @@ public:
         return contents.ptr->type;
     }
 
-    const string &name() const {
+    const std::string &name() const {
         assert(contents.defined());
         return contents.ptr->name;
     }

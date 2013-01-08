@@ -10,6 +10,10 @@
 #include "Log.h"
 #include "Derivative.h"
 
+using std::string;
+using std::vector;
+using std::map;
+
 namespace Halide {
 namespace Internal {
 

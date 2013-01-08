@@ -4,9 +4,13 @@
 #include "IRPrinter.h"
 #include "IROperator.h"
 
-namespace Halide {
+using std::string;
+using std::vector;
+using std::ostringstream;
 
+namespace Halide {
 namespace Internal {
+
 class FindFreeVars : public IRVisitor {
 public:
     vector<Var> free_vars;
@@ -69,7 +73,7 @@ Expr product(Expr e) {
 Expr maximum(Expr e) {
     Internal::FindFreeVars v(e);
     Func f("maximum" + Internal::unique_name('_'));
-    std::ostringstream ss;
+    ostringstream ss;
     ss << "minval_" << e.type();
     f(v.free_vars) = new Call(e.type(), ss.str(), vector<Expr>());
     f(v.free_vars) = max(f(v.free_vars), e);
@@ -79,7 +83,7 @@ Expr maximum(Expr e) {
 Expr minimum(Expr e) {
     Internal::FindFreeVars v(e);
     Func f("minimum" + Internal::unique_name('_'));
-    std::ostringstream ss;
+    ostringstream ss;
     ss << "maxval_" << e.type();
     f(v.free_vars) = new Call(e.type(), ss.str(), vector<Expr>());
     f(v.free_vars) = min(f(v.free_vars), e);

@@ -5,10 +5,13 @@
 #include "Log.h"
 #include <sstream>
 
+using std::string;
+using std::ostringstream;
+using std::vector;
+using std::map;
+
 namespace Halide {
 namespace Internal {
-
-using std::ostringstream;
 
 // Inject let stmts defining the bounds of a function required at each loop level
 class BoundsInference : public IRMutator {

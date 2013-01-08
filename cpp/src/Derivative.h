@@ -7,8 +7,6 @@
 namespace Halide { 
 namespace Internal {
     
-using std::string;
-
 /* Compute the analytic derivative of the expression with respect to
  * the variable. May returned an undefined Expr if it's
  * non-differentiable. */
@@ -28,7 +26,7 @@ using std::string;
  * are the same. The quotient and product rules are not.
  *
  */
-Expr finite_difference(Expr expr, const string &var);
+Expr finite_difference(Expr expr, const std::string &var);
 
 }
 }

@@ -6,6 +6,8 @@ using namespace Halide;
 
 // This tests that we can correctly generate all the simd ops
 
+using std::vector;
+
 bool failed = false;
 Var x, y;
 
@@ -21,7 +23,7 @@ struct job {
     char *result;
 };
 
-std::vector<job> jobs;
+vector<job> jobs;
 
 void check(const char *op, int vector_width, Expr e, const char *args) {
     if (filter) {

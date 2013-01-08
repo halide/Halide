@@ -15,11 +15,6 @@
 
 namespace Halide {
 
-using std::string;
-using std::vector;
-using std::pair;
-using std::map;
-
 namespace Internal {
 
 /** A class representing a type of IR node (e.g. Add, or Mul, or
@@ -376,7 +371,7 @@ struct Select : public Internal::ExprNode<Select> {
  * array of the 'type' of this Load node. That is, the buffer has
  * no inherent type. */
 struct Load : public Internal::ExprNode<Load> {
-    string name;
+    std::string name;
     Expr index;
 
     // If it's a load from an image argument or compiled-in constant
@@ -386,7 +381,7 @@ struct Load : public Internal::ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Internal::Parameter param;
 
-    Load(Type t, string b, Expr i, Buffer m, Internal::Parameter p) : 
+    Load(Type t, std::string b, Expr i, Buffer m, Internal::Parameter p) : 
         Internal::ExprNode<Load>(t), name(b), index(i), image(m), param(p) {
         assert(index.defined() && "Load of undefined");
         assert(type.width == i.type().width && "Vector width of Load must match vector width of index");
@@ -434,10 +429,10 @@ struct Broadcast : public Internal::ExprNode<Broadcast> {
  * language. Within the expression \ref body, instances of the Var
  * node \ref name refer to \ref value. */
 struct Let : public Internal::ExprNode<Let> {
-    string name;
+    std::string name;
     Expr value, body;
 
-    Let(string n, Expr v, Expr b) : 
+    Let(std::string n, Expr v, Expr b) : 
         Internal::ExprNode<Let>(b.type()), name(n), value(v), body(b) {
         assert(value.defined() && "Let of undefined");
         assert(body.defined() && "Let of undefined");
@@ -447,11 +442,11 @@ struct Let : public Internal::ExprNode<Let> {
 /** The statement form of a let node. Within the statement 'body',
  * instances of the Var named 'name' refer to 'value' */
 struct LetStmt : public Internal::StmtNode<LetStmt> {
-    string name;
+    std::string name;
     Expr value;
     Stmt body;
 
-    LetStmt(string n, Expr v, Stmt b) : 
+    LetStmt(std::string n, Expr v, Stmt b) : 
         name(n), value(v), body(b) {
         assert(value.defined() && "LetStmt of undefined");
         assert(body.defined() && "LetStmt of undefined");
@@ -461,10 +456,10 @@ struct LetStmt : public Internal::StmtNode<LetStmt> {
 /** Used largely for debugging and tracing. Dumps the 'prefix'
  * string and the args to stdout. */
 struct PrintStmt : public Internal::StmtNode<PrintStmt> {
-    string prefix;
-    vector<Expr > args;
+    std::string prefix;
+    std::vector<Expr> args;
 
-    PrintStmt(string p, const vector<Expr > &a) :
+    PrintStmt(std::string p, const std::vector<Expr> &a) :
         prefix(p), args(a) {
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "PrintStmt of undefined");
@@ -477,9 +472,9 @@ struct PrintStmt : public Internal::StmtNode<PrintStmt> {
 struct AssertStmt : public Internal::StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
-    string message;
+    std::string message;
 
-    AssertStmt(Expr c, string m) :
+    AssertStmt(Expr c, std::string m) :
         condition(c), message(m) {
         assert(condition.defined() && "AssertStmt of undefined");
         assert(condition.type().is_scalar() && "AssertStmt of vector");
@@ -494,10 +489,10 @@ struct AssertStmt : public Internal::StmtNode<AssertStmt> {
  * is actually enforced, the node is purely for informative
  * purposes to help out our analysis during lowering. */ 
 struct Pipeline : public Internal::StmtNode<Pipeline> {
-    string name;
+    std::string name;
     Stmt produce, update, consume;
 
-    Pipeline(string b, Stmt p, Stmt u, Stmt c) : 
+    Pipeline(std::string b, Stmt p, Stmt u, Stmt c) : 
         name(b), produce(p), update(u), consume(c) {
         assert(produce.defined() && "Pipeline of undefined");
         // update is allowed to be null
@@ -518,13 +513,13 @@ struct Pipeline : public Internal::StmtNode<Pipeline> {
  * statement. Again in this case, 'extent' should be a small
  * integer constant. */
 struct For : public Internal::StmtNode<For> {
-    string name;
+    std::string name;
     Expr min, extent;
     typedef enum {Serial, Parallel, Vectorized, Unrolled} ForType;
     ForType for_type;
     Stmt body;
 
-    For(string n, Expr m, Expr e, ForType f, Stmt b) :
+    For(std::string n, Expr m, Expr e, ForType f, Stmt b) :
         name(n), min(m), extent(e), for_type(f), body(b) {
         assert(min.defined() && "For of undefined");
         assert(extent.defined() && "For of undefined");
@@ -537,10 +532,10 @@ struct For : public Internal::StmtNode<For> {
 /** Store a 'value' to a 'buffer' at a given 'index'. The buffer is
  * interpreted as an array of the same type as 'value'. */
 struct Store : public Internal::StmtNode<Store> {
-    string name;
+    std::string name;
     Expr value, index;
 
-    Store(string b, Expr v, Expr i) :
+    Store(std::string b, Expr v, Expr i) :
         name(b), value(v), index(i) {
         assert(value.defined() && "Store of undefined");
         assert(index.defined() && "Store of undefined");
@@ -552,11 +547,11 @@ struct Store : public Internal::StmtNode<Store> {
  * multi-dimensional array. It gets lowered to a conventional
  * Store node. */
 struct Provide : public Internal::StmtNode<Provide> {
-    string name;
+    std::string name;
     Expr value;
-    vector<Expr > args;
+    std::vector<Expr> args;
 
-    Provide(string b, Expr v, const vector<Expr > &a) : 
+    Provide(std::string b, Expr v, const std::vector<Expr> &a) : 
         name(b), value(v), args(a) {
         assert(value.defined() && "Provide of undefined");
         for (size_t i = 0; i < args.size(); i++) {
@@ -569,12 +564,12 @@ struct Provide : public Internal::StmtNode<Provide> {
  * size. The buffer lives for the duration of the 'body statement,
  * after which it is freed. */
 struct Allocate : public Internal::StmtNode<Allocate> {
-    string name;
+    std::string name;
     Type type;
     Expr size;
     Stmt body;
 
-    Allocate(string buf, Type t, Expr s, Stmt bod) : 
+    Allocate(std::string buf, Type t, Expr s, Stmt bod) : 
         name(buf), type(t), size(s), body(bod) {
         assert(size.defined() && "Allocate of undefined");
         assert(body.defined() && "Allocate of undefined");
@@ -602,12 +597,12 @@ typedef std::vector<Range> Region;
  * over the range specified in 'bounds'. The bounds are a vector of
  * (min, extent) pairs for each dimension. */
 struct Realize : public Internal::StmtNode<Realize> {
-    string name;
+    std::string name;
     Type type;
     Internal::Region bounds;
     Stmt body;
 
-    Realize(string buf, Type t, const Internal::Region &bou, Stmt bod) : 
+    Realize(std::string buf, Type t, const Internal::Region &bou, Stmt bod) : 
         name(buf), type(t), bounds(bou), body(bod) {
         for (size_t i = 0; i < bounds.size(); i++) {
             assert(bounds[i].min.defined() && "Realize of undefined");
@@ -647,8 +642,8 @@ namespace Halide {
  * nodes don't survive all the way down to code generation - the
  * lowering process converts them to Load nodes. */
 struct Call : public Internal::ExprNode<Call> {
-    string name;
-    vector<Expr > args;
+    std::string name;
+    std::vector<Expr> args;
     typedef enum {Image, Extern, Halide} CallType;
     CallType call_type;
 
@@ -664,7 +659,7 @@ struct Call : public Internal::ExprNode<Call> {
     // pointer to that
     Internal::Parameter param;
 
-    Call(Type t, string n, const vector<Expr> &a, CallType ct, 
+    Call(Type t, std::string n, const std::vector<Expr> &a, CallType ct, 
          Internal::Function f, Buffer m, Internal::Parameter p) : 
         Internal::ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f), image(m), param(p) {
         for (size_t i = 0; i < args.size(); i++) {
@@ -678,7 +673,7 @@ struct Call : public Internal::ExprNode<Call> {
     }
 
     // Convenience constructor for extern calls
-    Call(Type t, string n, const vector<Expr > &a) : 
+    Call(Type t, std::string n, const std::vector<Expr> &a) : 
         Internal::ExprNode<Call>(t), name(n), args(a), call_type(Extern), 
         func(Internal::Function()), image(Buffer()), param(Internal::Parameter()) {
         for (size_t i = 0; i < args.size(); i++) {
@@ -687,18 +682,18 @@ struct Call : public Internal::ExprNode<Call> {
     }
 
     // Convenience constructor for image calls
-    Call(Buffer b, const vector<Expr> &a) :
+    Call(Buffer b, const std::vector<Expr> &a) :
         Internal::ExprNode<Call>(b.type()), name(b.name()), args(a), call_type(Image), 
         func(Internal::Function()), image(b), param(Internal::Parameter()) {
     }
 
-    Call(Internal::Parameter p, const vector<Expr> &a) :
+    Call(Internal::Parameter p, const std::vector<Expr> &a) :
         Internal::ExprNode<Call>(p.type()), name(p.name()), args(a), call_type(Image), 
         func(Internal::Function()), image(Buffer()), param(p) {
     }
 
     // Convenience constructor for function calls
-    Call(Internal::Function f, const vector<Expr> &a) :
+    Call(Internal::Function f, const std::vector<Expr> &a) :
         Internal::ExprNode<Call>(f.value().type()), name(f.name()), args(a), call_type(Halide), 
         func(f), image(Buffer()), param(Internal::Parameter()) {
     }
@@ -709,7 +704,7 @@ struct Call : public Internal::ExprNode<Call> {
  * parameter, reduction variable, or something defined by a Let or
  * LetStmt node. */
 struct Variable : public Internal::ExprNode<Variable> {
-    string name;
+    std::string name;
 
     // References to scalar parameters, or to the dimensions of buffer
     // parameters hang onto those expressions
@@ -718,10 +713,10 @@ struct Variable : public Internal::ExprNode<Variable> {
     // Reduction variables hang onto their domains
     Internal::ReductionDomain reduction_domain;
 
-    Variable(Type t, string n, Internal::Parameter p) : Internal::ExprNode<Variable>(t), name(n), param(p) {}
-    Variable(Type t, string n, Internal::ReductionDomain d) : Internal::ExprNode<Variable>(t), name(n), reduction_domain(d) {}
+    Variable(Type t, std::string n, Internal::Parameter p) : Internal::ExprNode<Variable>(t), name(n), param(p) {}
+    Variable(Type t, std::string n, Internal::ReductionDomain d) : Internal::ExprNode<Variable>(t), name(n), reduction_domain(d) {}
 
-    Variable(Type t, string n) : Internal::ExprNode<Variable>(t), name(n) {}
+    Variable(Type t, std::string n) : Internal::ExprNode<Variable>(t), name(n) {}
 };
 
 }

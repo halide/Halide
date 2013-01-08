@@ -4,6 +4,8 @@
 #include "Scope.h"
 #include "IROperator.h"
 
+using std::string;
+
 namespace Halide { 
 namespace Internal {
 

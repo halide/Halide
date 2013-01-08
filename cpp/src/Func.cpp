@@ -14,13 +14,17 @@
 #include <iostream>
 #include <fstream>
 
-namespace Halide {
-
-using namespace Internal;
-
 using std::max;
 using std::min;
 using std::make_pair;
+using std::string;
+using std::vector;
+using std::pair;
+using std::ofstream;
+
+namespace Halide {
+
+using namespace Internal;
 
 Func::Func(Internal::Function f) : func(f), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
 }
@@ -540,7 +544,7 @@ Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
     return buf;
 }
 
-void Func::compile_to_bitcode(const string &filename, std::vector<Argument> args, const string &fn_name) {
+void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name) {
     assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
@@ -553,7 +557,7 @@ void Func::compile_to_bitcode(const string &filename, std::vector<Argument> args
     cg.compile_to_bitcode(filename);
 }
 
-void Func::compile_to_object(const string &filename, std::vector<Argument> args, const string &fn_name) {
+void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name) {
     assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
@@ -566,16 +570,16 @@ void Func::compile_to_object(const string &filename, std::vector<Argument> args,
     cg.compile_to_native(filename, false);
 }
 
-void Func::compile_to_header(const string &filename, std::vector<Argument> args, const string &fn_name) {    
+void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name) {    
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
-    std::ofstream header(filename.c_str());
+    ofstream header(filename.c_str());
     CodeGen_C cg(header);
     cg.compile_header(fn_name.empty() ? name() : fn_name, args);
 }
 
-void Func::compile_to_file(const string &filename_prefix, std::vector<Argument> args) {
+void Func::compile_to_file(const string &filename_prefix, vector<Argument> args) {
     compile_to_header(filename_prefix + ".h", args, filename_prefix);
     compile_to_object(filename_prefix + ".o", args, filename_prefix);
 }
@@ -604,7 +608,7 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
     compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e));    
 }
 
-void Func::compile_to_assembly(const string &filename, std::vector<Argument> args, const string &fn_name) {
+void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name) {
     assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
@@ -768,7 +772,7 @@ void Func::compile_jit() {
     if (log::debug_level >= 3) {
         cg.compile_to_native(name() + ".s", true);
         cg.compile_to_bitcode(name() + ".bc");
-        std::ofstream stmt_debug((name() + ".stmt").c_str());
+        ofstream stmt_debug((name() + ".stmt").c_str());
         stmt_debug << stmt;
     }
     
