@@ -48,7 +48,7 @@ void lower_test() {
     g.store_at(f, y).compute_at(f, x);
     h.store_at(f, y).compute_at(f, y);
 
-    Stmt result = f.lower();
+    Stmt result = lower(f.function());
 
     assert(result.defined() && "Lowering returned trivial function");
 
