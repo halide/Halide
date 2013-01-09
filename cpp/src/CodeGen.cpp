@@ -62,6 +62,8 @@ CodeGen::CodeGen() :
     }
 }
 
+CodeGen::~CodeGen() {}
+
 bool CodeGen::llvm_initialized = false;
 
 void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
