@@ -127,21 +127,21 @@ public:
     /** Get an expression giving the extent in dimension 0, which by
      * convention is the width of the image */
     Expr width() const {
-        assert(dimensions >= 0);
+        assert(dims >= 0);
         return extent(0);
     }
 
     /** Get an expression giving the extent in dimension 1, which by
      * convention is the height of the image */
     Expr height() const {
-        assert(dimensions >= 1);
+        assert(dims >= 1);
         return extent(1);
     }
     
     /** Get an expression giving the extent in dimension 2, which by
      * convention is the channel-count of the image */
     Expr channels() const {
-        assert(dimensions >= 2);
+        assert(dims >= 2);
         return extent(2);
     }
 

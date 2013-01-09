@@ -8,12 +8,17 @@
 #include <utility>
 #include <iostream>
 
+/** \file
+ * Defines the Scope class, which is used for keeping track of names in a scope while traversing IR 
+ */
+
 namespace Halide { 
 namespace Internal {
 
-/* A common pattern when traversing Halide IR is that you need to
- * keep track of stuff when you find a Let or a LetStmt. This
- * class helps with that. */
+/** A common pattern when traversing Halide IR is that you need to
+ * keep track of stuff when you find a Let or a LetStmt, and that it
+ * should hide previous values with the same name until you leave the Let or LetStmt nodes
+ * This class helps with that. */
 template<typename T>
 class Scope {
 private:

@@ -84,8 +84,8 @@ public:
     FuncRefExpr(Internal::Function, const std::vector<Expr> &);
     FuncRefExpr(Internal::Function, const std::vector<std::string> &);
         
-    /** Use this as the left-hand-side of a reduction definition. The
-     * function must already have a pure definition.
+    /** Use this as the left-hand-side of a reduction definition (see
+     * \ref RDom). The function must already have a pure definition.
      */
     void operator=(Expr);
 
@@ -173,7 +173,7 @@ public:
 
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This
-     * can be Halide perform some optimizations. E.g. if you know
+     * can let Halide perform some optimizations. E.g. if you know
      * there are going to be 4 color channels, you can completely
      * vectorize the color channel dimension without the overhead of
      * splitting it up. If bounds inference decides that it requires
@@ -383,10 +383,11 @@ public:
     // @}
 
     /** Either calls to the function, or the left-hand-side of a
-     * reduction definition. If the function has already been defined,
-     * and fewer arguments are given than the function has dimensions,
-     * then enough implicit vars are added to the end of the argument
-     * list to make up the difference. (see \ref Var::implicit)*/
+     * reduction definition (see \ref RDom). If the function has
+     * already been defined, and fewer arguments are given than the
+     * function has dimensions, then enough implicit vars are added to
+     * the end of the argument list to make up the difference. (see
+     * \ref Var::implicit)*/
     // @{
     FuncRefExpr operator()(Expr x);
     FuncRefExpr operator()(Expr x, Expr y);
@@ -658,7 +659,8 @@ public:
     Func &compute_inline();
     
     /** Get a handle on the update step of a reduction for the
-     * purposes of scheduling it */
+     * purposes of scheduling it. Only the pure dimensions of the
+     * update step can be meaningfully manipulated (see \ref RDom) */
     ScheduleHandle update();
 
     /** Get a handle on the internal halide function that this Func
