@@ -26,8 +26,7 @@ STDLIB_SOURCES = \
 INITIAL_MODULES = $(STDLIB_ARCHS:%=build/architecture.%.initmod.o)
 
 .PHONY: all
-all: bin/libHalide.a bin/test_internal
-	./bin/test_internal
+all: bin/libHalide.a bin/libHalide.so test_internal
 
 bin/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@-mkdir -p bin
