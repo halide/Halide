@@ -366,8 +366,12 @@ public:
      * function. Zero if the function is not yet defined. */
     int dimensions() const;
 
-    /** Either the left-hand-side of a definition, or a call to a
-     * functions that happens to only contain vars as arguments */
+    /** Construct either the left-hand-side of a definition, or a call
+     * to a functions that happens to only contain vars as
+     * arguments. If the function has already been defined, and fewer
+     * arguments are given than the function has dimensions, then
+     * enough implicit vars are added to the end of the argument list
+     * to make up the difference (see \ref Var::implicit) */
     // @{
     FuncRefVar operator()();
     FuncRefVar operator()(Var x);
@@ -378,7 +382,10 @@ public:
     // @}
 
     /** Either calls to the function, or the left-hand-side of a
-     * reduction definition */
+     * reduction definition. If the function has already been defined,
+     * and fewer arguments are given than the function has dimensions,
+     * then enough implicit vars are added to the end of the argument
+     * list to make up the difference. (see \ref Var::implicit)*/
     // @{
     FuncRefExpr operator()(Expr x);
     FuncRefExpr operator()(Expr x, Expr y);
@@ -660,7 +667,8 @@ public:
 
     /** Casting a function to an expression is equivalent to calling
      * the function with zero arguments. Implicit variables will be
-     * injected according to the function's dimensionality.
+     * injected according to the function's dimensionality 
+     * (see \ref Var::implicit).
      * 
      * Combined with Func::operator=, this lets you write things like:
      * 
