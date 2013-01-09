@@ -84,7 +84,7 @@ bin/test_%: test/%.cpp bin/libHalide.so
 
 test_%: bin/test_%
 	@-mkdir -p tmp
-	cd tmp ; LD_LIBRARY_PATH=../bin ../$<
+	cd tmp ; DYLD_LIBRARY_PATH=../bin LD_LIBRARY_PATH=../bin ../$<
 	@-echo
 
 
