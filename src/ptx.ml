@@ -348,7 +348,7 @@ let cg_dev_kernel con stmt =
   (* build the void* kernel args array *)
   let arg_t = pointer_type (i8_type con.c) in (* void* *)
   let cuArgsArr = build_alloca
-                    (array_type arg_t (List.length closure_vars))
+                    (array_type arg_t ((List.length closure_vars) + 1)) (* null-terminated list *)
                     "cuArgs"
                     con.b in
 
@@ -371,13 +371,15 @@ let cg_dev_kernel con stmt =
       end
       (List.combine closure_vars closure_vals)
   in
+  let store_arg i v =
+    let bits = build_bitcast v arg_t "" con.b in
+    let ptr = build_gep cuArgsArr [| (ci con.c 0); (ci con.c i) |] "" con.b in
+    ignore (build_store bits ptr con.b)
+  in
   Array.iteri
-    begin fun i v ->
-      let bits = build_bitcast v arg_t "" con.b in
-      let ptr = build_gep cuArgsArr [| (ci con.c 0); (ci con.c i) |] "" con.b in
-      ignore (build_store bits ptr con.b)
-    end
+    store_arg
     (Array.of_list closure_stack_vals);
+  ignore (store_arg (List.length closure_vars) (ci con.c 0)); (* store null terminator *)
 
   (* the basic launch args *)
   let launch_args = [
