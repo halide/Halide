@@ -41,6 +41,7 @@ public:
     mutable RefCount ref_count;
 
     CodeGen();
+    virtual ~CodeGen();
 
     /** Take a halide statement and compiles it to an llvm module held
      * internally. Call this before calling compile_to_bitcode or
