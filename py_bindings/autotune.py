@@ -105,6 +105,7 @@ import json
 import socket
 import datetime
 import autotune_bounds
+import tarfile
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -1814,7 +1815,7 @@ def main():
         print '  Supplies reasonable arguments for the example.'
         print
         print 'autotune time tune_dir [log_timefile.txt]'
-        print '  Tuner timings are biased. Run this to get unbiased comparison of ref schedules against best tuned schedule.'
+        print '  Tuner timings are biased. Run this to get unbiased comparison (done by default).'
         print
         print 'autotune run examplename schedule.txt [imagename] [w] [h] [channels]'
         print '  Run and get a single timing -- optionally override imagename and w h channels'
@@ -1822,10 +1823,42 @@ def main():
         print 'autotune html [tune_dir1|wildcards]'
         print '  Create index.html (created by default)'
         print
+        print 'autotune archive dirspec1 [dirspec2] [...]'
+        print '  Create an archive .tar.gz containing all subdirectories of dirname (binaries are excluded to reduce size)'
+        print 
         print '\n'.join(x[4:] for x in AutotuneParams.__doc__.split('\n'))
         sys.exit(0)
     if args[0] == 'test':
         test()
+    elif args[0] == 'archive':
+        if len(args) < 2:
+            print >> sys.stderr, 'autotune archive dirspec1 [dirspec2] [...]'
+            sys.exit(1)
+        dirnames = []
+        for dirspec in args[1:]:
+            dirnames.extend(glob.glob(dirspec))
+            
+        archive_ext = '.tar.gz'
+        archive_name = datetime.datetime.now().strftime('autotune-%s-%%Y-%%m-%%d%s'%(socket.gethostname(),archive_ext))
+        if os.path.exists(archive_name):
+            for i in range(1,10000):
+                archive_name = datetime.datetime.now().strftime('autotune-%s-%%Y-%%m-%%d_%d%s'%(socket.gethostname(),i,archive_ext))
+                if not os.path.exists(archive_name):
+                    break
+        print 'Creating', archive_name
+        
+        names = []
+        for dirname in dirnames:
+            names.extend(subprocess.check_output('find %s -name "*.sh" -o -name "*.txt" -o -name "*.html" -o -name "*.png"' % dirname, shell=True).strip().split('\n'))
+        #print names
+        filelist = '_filelist.txt'
+        with open(filelist, 'wt') as f:
+            f.write('\n'.join(names))
+        os.system('tar cvz -T %s -f %s' % (filelist, archive_name))
+        os.remove(filelist)
+        
+        print 'Finished archiving to', archive_name
+        
     elif args[0] == 'run':
         if len(args) < 3:
             print >> sys.stderr, 'Expected >= 3 arguments'
