@@ -36,6 +36,9 @@ bin/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	ar q bin/libHalide.a build/Halide.o
 	ranlib bin/libHalide.a
 
+bin/libHalide.so: bin/libHalide.a
+	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) -o bin/libHalide.so
+
 INITMOD_OPTS_x86 = -march=corei7 -mattr=-avx
 INITMOD_OPTS_ptx = -march=corei7 
 INITMOD_OPTS_x86_avx = -march=corei7-avx -mattr=+avx
@@ -74,15 +77,15 @@ TESTS = $(shell ls test/*.cpp)
 
 tests: $(TESTS:test/%.cpp=test_%)
 
-bin/test_internal: test/internal.cpp bin/libHalide.a
+bin/test_internal: test/internal.cpp bin/libHalide.so
 	$(CXX) $(CXX_FLAGS) -rdynamic $< -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
 
-bin/test_%: test/%.cpp bin/libHalide.a
+bin/test_%: test/%.cpp bin/libHalide.so
 	$(CXX) -g $< -rdynamic -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
 
 test_%: bin/test_%
 	@-mkdir -p tmp
-	cd tmp ; ../$<
+	cd tmp ; LD_LIBRARY_PATH=../bin ../$<
 	@-echo
 
 
