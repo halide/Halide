@@ -70,6 +70,7 @@ public:
 
     void set_buffer(Buffer b) {
         assert(contents.defined() && contents.ptr->is_buffer);
+        if (b.defined()) assert(contents.ptr->type == b.type());
         contents.ptr->buffer = b;
     }
 

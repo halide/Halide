@@ -1,6 +1,10 @@
 #ifndef HALIDE_IR_MUTATOR_H
 #define HALIDE_IR_MUTATOR_H
 
+/** \file 
+ * Defines a base class for passes over the IR that modify it 
+ */
+
 #include "IRVisitor.h"
 #include "IR.h"
 
@@ -10,14 +14,21 @@
 namespace Halide { 
 namespace Internal {
 
-/* Here is a base class for passes over the IR which change bits
- * of IR (e.g. replacing a variable with a value (Substitute.h), or
+/** A base class for passes over the IR which modify it
+ * (e.g. replacing a variable with a value (Substitute.h), or
  * constant-folding).
+ *
+ * Your mutate should override the visit methods you can about. Return
+ * the new expression by assigning to expr or stmt. The default ones
+ * recursively mutate their children. To mutate sub-expressions and
+ * sub-statements you should the mutate method, which will dispatch to
+ * the appropriate visit method and then return the value of expr or
+ * stmt after the call to visit.
  */
 class IRMutator : public IRVisitor {
 public:
 
-    /* This is the main interface for using a mutator. Also call
+    /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and
      * sub-statements.
      */
@@ -26,14 +37,13 @@ public:
 
 protected:
 
-
+    /** visit methods that take Exprs assign to this to return their
+     * new value */
     Expr expr;
-    Stmt stmt;
 
-    /* Override some of the visit functions below to achieve your
-     * goals. Their default implementations just recursively
-     * mutate their children. Put the result in either expr or stmt.
-     */
+    /** visit methods that take Stmts assign to this to return their
+     * new value */
+    Stmt stmt;
 
     virtual void visit(const IntImm *);
     virtual void visit(const FloatImm *);

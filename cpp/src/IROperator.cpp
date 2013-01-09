@@ -8,6 +8,9 @@ namespace Internal {
 bool is_const(Expr e) {
     if (e.as<IntImm>()) return true;
     if (e.as<FloatImm>()) return true;
+    if (const Cast *c = e.as<Cast>()) {
+        return is_const(c->value);
+    }
     if (const Ramp *r = e.as<Ramp>()) {
         return is_const(r->base) && is_const(r->stride);
     }
@@ -22,6 +25,9 @@ bool is_const(Expr e) {
 bool is_positive_const(Expr e) {
     if (const IntImm *i = e.as<IntImm>()) return i->value > 0;
     if (const FloatImm *f = e.as<FloatImm>()) return f->value > 0.0f;
+    if (const Cast *c = e.as<Cast>()) {
+        return is_positive_const(c->value);
+    }
     if (const Ramp *r = e.as<Ramp>()) {
         // slightly conservative
         return is_positive_const(r->base) && is_positive_const(r->stride);
@@ -35,6 +41,9 @@ bool is_positive_const(Expr e) {
 bool is_negative_const(Expr e) {
     if (const IntImm *i = e.as<IntImm>()) return i->value < 0;
     if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
+    if (const Cast *c = e.as<Cast>()) {
+        return is_negative_const(c->value);
+    }
     if (const Ramp *r = e.as<Ramp>()) {
         // slightly conservative
         return is_negative_const(r->base) && is_negative_const(r->stride);

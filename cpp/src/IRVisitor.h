@@ -1,6 +1,10 @@
 #ifndef HALIDE_IR_VISITOR_H
 #define HALIDE_IR_VISITOR_H
 
+/** \file
+ * Defines the base class for things that recursively walk over the IR
+ */
+
 namespace Halide {
 
 struct Expr;

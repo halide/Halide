@@ -60,6 +60,7 @@ struct CheckVars : public IRVisitor {
 };
 
 void Function::define(const vector<string> &args, Expr value) {
+    assert(!name().empty() && "A function needs a name");
     assert(value.defined() && "Undefined expression in right-hand-side of function definition\n");
 
     // Make sure all the vars in the value are either args or are
@@ -86,7 +87,8 @@ void Function::define(const vector<string> &args, Expr value) {
 }
 
 void Function::define_reduction(const vector<Expr> &args, Expr value) {
-    assert(defined() && "Can't add a reduction definition without a regular definition first");
+    assert(!name().empty() && "A function needs a name");
+    assert(contents.ptr->value.defined() && "Can't add a reduction definition without a regular definition first");
     assert(!is_reduction() && "Function already has a reduction definition");
     assert(value.defined() && "Undefined expression in right-hand-side of reduction");
 
@@ -101,7 +103,8 @@ void Function::define_reduction(const vector<Expr> &args, Expr value) {
         assert(args[i].defined() && "Undefined expression in left-hand-side of reduction");
         if (const Variable *var = args[i].as<Variable>()) {           
             if (!var->param.defined() && !var->reduction_domain.defined()) {
-                assert(var->name == contents.ptr->args[i] && "Pure argument to update step must have the same name as pure argument to initialization step in the same dimension");
+                assert(var->name == contents.ptr->args[i] && 
+                       "Pure argument to update step must have the same name as pure argument to initialization step in the same dimension");
                 pure_args.push_back(var->name);
             }
         }

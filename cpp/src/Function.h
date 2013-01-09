@@ -1,6 +1,10 @@
 #ifndef HALIDE_FUNCTION_H
 #define HALIDE_FUNCTION_H
 
+/** \file
+ * Defines the internal representation of a halide function and related classes
+ */
+
 #include "IntrusivePtr.h"
 #include "Reduction.h"
 #include "Schedule.h"
@@ -9,7 +13,7 @@
 
 namespace Halide { 
 namespace Internal {
-        
+
 struct FunctionContents {
     mutable RefCount ref_count;
     std::string name;
@@ -23,104 +27,98 @@ struct FunctionContents {
     ReductionDomain reduction_domain;
 };        
 
+/** A reference-counted handle to Halide's internal representation of
+ * a function. Similar to a front-end Func object, but with no
+ * syntactic sugar to help with definitions. */
 class Function {
 private:
     IntrusivePtr<FunctionContents> contents;
 public:
-    Function() : contents(NULL) {}
+    /** Construct a new function with no definitions and no name. This
+     * constructor only exists so that you can make vectors of
+     * functions, etc.
+     */
+    Function() : contents(new FunctionContents) {}
 
+    /** Add a pure definition to this function. It may not already
+     * have a definition. All the free variables in 'value' must
+     * appear in the args list. 'value' must not depend on any
+     * reduction domain */
     void define(const std::vector<std::string> &args, Expr value);   
+
+    /** Add a reduction definition to this function. It must already
+     * have a pure definition but not a reduction definition, and the
+     * length of args must match the length of args used in the pure
+     * definition. 'value' must depend on some reduction domain, and
+     * may contain variables from that domain as well as pure
+     * variables. Any pure variables must also appear as Variables in
+     * the args array, and they must have the same name as the pure
+     * definition's argument in the same index. */
     void define_reduction(const std::vector<Expr> &args, Expr value);
 
+    /** Construct a new function with the given name */
     Function(const std::string &n) : contents(new FunctionContents) {
         contents.ptr->name = n;
     }
 
+    /** Get the name of the function */
     const std::string &name() const {
         return contents.ptr->name;
     }
 
+    /** Get the pure arguments */
     const std::vector<std::string> &args() const {
         return contents.ptr->args;
     }
 
+    /** Get the right-hand-side of the pure definition */
     Expr value() const {
         return contents.ptr->value;
     }
 
+    /** Get a handle to the schedule for the purpose of modifying
+     * it */
     Schedule &schedule() {
         return contents.ptr->schedule;
     }   
 
+    /** Get a const handle to the schedule for inspecting it */
     const Schedule &schedule() const {
         return contents.ptr->schedule;
     }   
 
+    /** Get a mutable handle to the schedule for the reduction
+     * stage */
     Schedule &reduction_schedule() {
         return contents.ptr->reduction_schedule;
     }
 
+    /** Get a const handle to the schedule for the reduction stage */
     const Schedule &reduction_schedule() const {
         return contents.ptr->reduction_schedule;
     }
 
+    /** Get the right-hand-side of the reduction definition */
     Expr reduction_value() const {
         return contents.ptr->reduction_value;
     }
 
+    /** Get the left-hand-side of the reduction definition */
     const std::vector<Expr> &reduction_args() const {
         return contents.ptr->reduction_args;        
     }
 
+    /** Get the reduction domain for the reduction definition */
     ReductionDomain reduction_domain() const {
         return contents.ptr->reduction_domain;
     }
 
+    /** Is this function a reduction? */
     bool is_reduction() const {
         return reduction_value().defined();
     }
-
-    bool defined() const {
-        return contents.defined();
-    }
-
-    bool same_as(const Function &other) {
-        return contents.same_as(other.contents);
-    }
-
 };
 
-/** Function pointers into a compiled halide module. */
-struct JITCompiledModule {
-    /** A pointer to the raw halide function. It's true type depends
-     * on the Argument vector passed to CodeGen::compile. Image
-     * parameters become (buffer_t *), and scalar parameters become
-     * pointers to the appropriate values. The final argument is a
-     * pointer to the buffer_t defining the output. */
-    void *function;
-
-    /** A slightly more type-safe wrapper around the raw halide
-     * module. Takes it arguments as an array of pointers that
-     * correspond to the arguments to \ref function */
-    void (*wrapped_function)(const void **);
-
-    /** The type of a halide runtime error handler function */
-    typedef void (*ErrorHandler)(char *);
-
-    /** Set the runtime error handler for this module */
-    void (*set_error_handler)(ErrorHandler);
-
-    /** Set a custom malloc and free for this module to use. Malloc
-     * should return 32-byte aligned chunks of memory, with 32-bytes
-     * extra allocated on the start and end so that vector loads can
-     * spill off the end slightly. Metadata (e.g. the base address of
-     * the region allocated) can go in this margin - it is only read,
-     * not written. */
-    void (*set_custom_allocator)(void *(*malloc)(size_t), void (*free)(void *));
-
-    JITCompiledModule() : function(NULL), wrapped_function(NULL), set_error_handler(NULL), set_custom_allocator(NULL) {}
-};
-        
 }}
 
 #endif

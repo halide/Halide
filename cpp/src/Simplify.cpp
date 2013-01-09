@@ -5,12 +5,17 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "Var.h"
+#include "Log.h"
 #include <iostream>
 
 using std::string;
 
 namespace Halide { 
 namespace Internal {
+
+bool is_simple_const(Expr e) {
+    return is_const(e) && (!e.as<Cast>());
+}
 
 // Is a constant representable as a certain type
 int do_indirect_int_cast(Type t, int x) {
@@ -138,6 +143,8 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Add *op) {
+        log(3) << "Simplifying " << Expr(op) << "\n";
+
         int ia, ib;
         float fa, fb;
 
@@ -145,7 +152,7 @@ class Simplify : public IRMutator {
 
         // rearrange const + varying to varying + const, to cut down
         // on cases to check
-        if (is_const(a)) std::swap(a, b);
+        if (is_simple_const(a) && !is_simple_const(b)) std::swap(a, b);
 
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
@@ -186,13 +193,13 @@ class Simplify : public IRMutator {
             // Broadcast + Broadcast
             expr = new Broadcast(mutate(broadcast_a->value + broadcast_b->value),
                                  broadcast_a->width);
-        } else if (add_a && is_const(add_a->b)) {
+        } else if (add_a && is_simple_const(add_a->b)) {
             // In ternary expressions, pull constants outside
-            if (is_const(b)) expr = mutate(add_a->a + (add_a->b + b));
+            if (is_simple_const(b)) expr = mutate(add_a->a + (add_a->b + b));
             else expr = mutate((add_a->a + b) + add_a->b);
-        } else if (add_b && is_const(add_b->b)) {
+        } else if (add_b && is_simple_const(add_b->b)) {
             expr = mutate((a + add_b->a) + add_b->b);
-        } else if (sub_a && is_const(sub_a->a) && is_const(b)) {
+        } else if (sub_a && is_simple_const(sub_a->a) && is_simple_const(b)) {
             expr = mutate((sub_a->a + b) - sub_a->b);
         } else if (sub_a && equal(b, sub_a->b)) {
             // Additions that cancel an inner term
@@ -217,6 +224,8 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Sub *op) {
+        log(3) << "Simplifying " << Expr(op) << "\n";
+
         Expr a = mutate(op->a), b = mutate(op->b);
 
         int ia, ib; 
@@ -271,16 +280,16 @@ class Simplify : public IRMutator {
             expr = mutate(make_zero(add_b->a.type()) - add_b->a);
         } else if (add_b && equal(add_b->a, a)) {
             expr = mutate(make_zero(add_b->a.type()) - add_b->b);
-        } else if (add_a && is_const(add_a->b)) {
+        } else if (add_a && is_simple_const(add_a->b)) {
             // In ternary expressions, pull constants outside
-            if (is_const(b)) expr = mutate(add_a->a + (add_a->b - b));
+            if (is_simple_const(b)) expr = mutate(add_a->a + (add_a->b - b));
             else expr = mutate((add_a->a - b) + add_a->b);
-        } else if (add_b && is_const(add_b->b)) {
+        } else if (add_b && is_simple_const(add_b->b)) {
             expr = mutate((a - add_b->a) - add_b->b);
-        } else if (sub_a && is_const(sub_a->a) && is_const(b)) {
+        } else if (sub_a && is_simple_const(sub_a->a) && is_simple_const(b)) {
             expr = mutate((sub_a->a - b) - sub_a->b);
-        } else if (sub_b && is_const(sub_b->b)) {
-            if (is_const(a)) expr = mutate((a + sub_b->b) - sub_b->a);
+        } else if (sub_b && is_simple_const(sub_b->b)) {
+            if (is_simple_const(a)) expr = mutate((a + sub_b->b) - sub_b->a);
             expr = mutate((a - sub_b->a) + sub_b->b);
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
             // Pull out common factors a*x + b*x
@@ -301,7 +310,7 @@ class Simplify : public IRMutator {
     void visit(const Mul *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
-        if (is_const(a)) std::swap(a, b);
+        if (is_simple_const(a)) std::swap(a, b);
 
         int ia, ib; 
         float fa, fb;
@@ -333,9 +342,9 @@ class Simplify : public IRMutator {
         } else if (broadcast_a && ramp_b) {
             Expr m = broadcast_a->value;
             expr = mutate(new Ramp(m * ramp_b->base, m * ramp_b->stride, ramp_b->width));
-        } else if (add_a && is_const(add_a->b) && is_const(b)) {
+        } else if (add_a && is_simple_const(add_a->b) && is_simple_const(b)) {
             expr = mutate(add_a->a * b + add_a->b * b);
-        } else if (mul_a && is_const(mul_a->b) && is_const(b)) {
+        } else if (mul_a && is_simple_const(mul_a->b) && is_simple_const(b)) {
             expr = mutate(mul_a->a * (mul_a->b * b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -409,7 +418,7 @@ class Simplify : public IRMutator {
                    ib && (ia % ib == 0)) {
             // (y - x*4) / 2 -> y/2 - x*2
             expr = mutate((sub_a->a / b) - (mul_a_b->a * (ia/ib)));
-        } else if (b.type().is_float() && is_const(b)) {
+        } else if (b.type().is_float() && is_simple_const(b)) {
             // Convert const float division to multiplication
             // x / 2 -> x * 0.5
             expr = mutate(a * (make_one(b.type()) / b));
@@ -464,7 +473,7 @@ class Simplify : public IRMutator {
         Expr a = mutate(op->a), b = mutate(op->b);
 
         // Move constants to the right to cut down on number of cases to check
-        if (is_const(a) && !is_const(b)) {
+        if (is_simple_const(a) && !is_simple_const(b)) {
             std::swap(a, b);
         }
 
@@ -508,7 +517,7 @@ class Simplify : public IRMutator {
             } else {
                 expr = b;
             }
-        } else if (min_a && is_const(min_a->b) && is_const(b)) {
+        } else if (min_a && is_simple_const(min_a->b) && is_simple_const(b)) {
             // min(min(x, 4), 5) -> min(x, 4)
             expr = new Min(min_a->a, mutate(new Min(min_a->b, b)));
         } else if (min_a && (equal(min_a->b, b) || equal(min_a->a, b))) {
@@ -528,7 +537,7 @@ class Simplify : public IRMutator {
         Expr a = mutate(op->a), b = mutate(op->b);
 
         // Move constants to the right to cut down on number of cases to check
-        if (is_const(a) && !is_const(b)) {
+        if (is_simple_const(a) && !is_simple_const(b)) {
             std::swap(a, b);
         }
 
@@ -570,7 +579,7 @@ class Simplify : public IRMutator {
             } else {
                 expr = a;
             }
-        } else if (max_a && is_const(max_a->b) && is_const(b)) {
+        } else if (max_a && is_simple_const(max_a->b) && is_simple_const(b)) {
             // max(max(x, 4), 5) -> max(x, 5)
             expr = new Max(max_a->a, mutate(new Max(max_a->b, b)));
         } else if (max_a && (equal(max_a->b, b) || equal(max_a->a, b))) {
@@ -603,9 +612,9 @@ class Simplify : public IRMutator {
 
         if (is_zero(delta)) {
             expr = const_true(op->type.width);
-        } else if (is_const(delta)) {
+        } else if (is_simple_const(delta)) {
             expr = const_false(op->type.width);
-        } else if (is_const(a) && !is_const(b)) {
+        } else if (is_simple_const(a) && !is_simple_const(b)) {
             // Move constants to the right
             expr = mutate(b == a);
         } else if (broadcast_a && broadcast_b) {
@@ -642,7 +651,7 @@ class Simplify : public IRMutator {
         } else if (sub_b && equal(sub_b->a, a)) {
             // Add a term to both sides
             expr = mutate(make_zero(sub_b->b.type()) == sub_b->b);
-        } else if (mul_a && mul_b && is_const(mul_a->b) && is_const(mul_b->b) && equal(mul_a->b, mul_b->b)) {
+        } else if (mul_a && mul_b && is_simple_const(mul_a->b) && is_simple_const(mul_b->b) && equal(mul_a->b, mul_b->b)) {
             // Divide both sides by a constant
             assert(!is_zero(mul_a->b) && "Multiplication by zero survived constant folding");
             expr = mutate(mul_a->a == mul_b->a);
@@ -850,10 +859,10 @@ class Simplify : public IRMutator {
         const Variable *var = value.as<Variable>();
         string wrapper_name;
         Expr wrapper_value;
-        if (is_const(value)) {
+        if (is_simple_const(value)) {
             // Substitute the value wherever we see it
             scope.push(op->name, value);
-        } else if (ramp && is_const(ramp->stride)) {
+        } else if (ramp && is_simple_const(ramp->stride)) {
             // Make a new name to refer to the base instead, and push the ramp inside
             scope.push(op->name, new Ramp(new Variable(ramp->base.type(), op->name + ".base"), 
                                           ramp->stride, ramp->width));
