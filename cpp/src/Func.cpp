@@ -45,7 +45,7 @@ Expr Func::value() const {
 } 
 
 int Func::dimensions() const {
-    if (!func.defined()) return 0;
+    if (!func.value().defined()) return 0;
     return (int)func.args().size();
 }
 
@@ -369,7 +369,6 @@ ScheduleHandle Func::update() {
 }
 
 FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a) : func(f) {
-    assert(f.defined() && "Can't construct reference to undefined Func");
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
         args[i] = a[i].name();
@@ -443,14 +442,12 @@ FuncRefVar::operator Expr() const {
 }
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
-    assert(f.defined() && "Can't construct reference to undefined Func");
     for (size_t i = 0; i < args.size(); i++) {
         args[i] = cast<int>(args[i]);
     }
 }
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a) : func(f) {
-    assert(f.defined() && "Can't construct reference to undefined Func");
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
         args[i] = Var(a[i]);
@@ -474,7 +471,7 @@ void FuncRefExpr::add_implicit_vars(vector<Expr> &a, Expr e) {
 }
 
 void FuncRefExpr::operator=(Expr e) {
-    assert(func.defined() && func.value().defined() && 
+    assert(func.value().defined() && 
            "Can't add a reduction definition to an undefined function");
     
     vector<Expr> a = args;
@@ -533,7 +530,6 @@ FuncRefExpr::operator Expr() const {
 }
 
 Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
-    assert(func.defined() && "Can't realize NULL function handle");
     assert(value().defined() && "Can't realize undefined function");
     Type t = value().type();
     Buffer buf(t, x_size, y_size, z_size, w_size);
@@ -542,7 +538,6 @@ Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
 }
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name) {
-    assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
     Stmt stmt = Halide::Internal::lower(func);
@@ -555,7 +550,6 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 }
 
 void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name) {
-    assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
     Stmt stmt = Halide::Internal::lower(func);
@@ -606,7 +600,6 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 }
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name) {
-    assert(func.defined() && "Can't compile NULL function handle");
     assert(value().defined() && "Can't compile undefined function");    
 
     Stmt stmt = Halide::Internal::lower(func);
@@ -737,7 +730,6 @@ void Func::realize(Buffer dst) {
 }
 
 void Func::compile_jit() {
-    assert(func.defined() && "Can't realize NULL function handle");
     assert(value().defined() && "Can't realize undefined function");
     
     Stmt stmt = Halide::Internal::lower(func);

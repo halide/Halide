@@ -51,7 +51,7 @@ std::map<std::string, Region> regions_provided(Stmt s);
  * Provides to each function that occurs within a given statement */
 std::map<std::string, Region> regions_touched(Stmt s);;
 
-/* Compute the smallest bounding box that contains two regions */
+/** Compute the smallest bounding box that contains two regions */
 Region region_union(const Region &, const Region &);
 
 void bounds_test();

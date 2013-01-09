@@ -1,6 +1,11 @@
 #ifndef HALIDE_PARAM_H
 #define HALIDE_PARAM_H
 
+/** \file
+ * 
+ * Classes for declaring scalar and image parameters to halide pipelines
+ */
+
 #include "IR.h"
 #include "Var.h"
 #include <sstream>
@@ -8,93 +13,144 @@
 
 namespace Halide {
 
+/** A scalar parameter to a halide pipeline. If you're jitting, this
+ * should be bound to an actual value of type T using the set method
+ * before you realize the function uses this. If you're statically
+ * compiling, this param should appear in the argument list. */
 template<typename T>
 class Param {
+    /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
 public:
+    /** Construct a scalar parameter of type T with a unique
+     * auto-generated name */
     Param() : param(type_of<T>(), false) {}
+
+    /** Construct a scalar parameter of type T with the given name */
     Param(const std::string &n) : param(type_of<T>(), false, n) {}
 
+    /** Get the name of this parameter */
     const std::string &name() const {
         return param.name();
     }
 
+    /** Get the current value of this parameter. Only meaningful when jitting. */
     T get() const {
         return param.get_scalar<T>();
     }
 
+    /** Set the current value of this parameter. Only meaningful when jitting */
     void set(T val) {
         param.set_scalar<T>(val);
     }
 
+    /** Get the halide type of T */
     Type type() const {
         return type_of<T>();
     }
 
-    bool defined() const {
-        return param.defined();
-    }
-
+    /** You can use this parameter as an expression in a halide
+     * function definition */
     operator Expr() const {
         return new Internal::Variable(type_of<T>(), name(), param);
     }
 
+    /** Construct the appropriate argument matching this parameter,
+     * for the purpose of generating the right type signature when
+     * statically compiling halide pipelines. */
     operator Argument() const {
         return Argument(name(), false, type());
     }
 };
 
+/** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam {
+    /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
+
+    /** The dimensionality of this image. We need to know in order to
+     * inject the right number of implicit vars when calling
+     * operator() */
     int dims;
 public:
-    ImageParam() {}
-    ImageParam(Type t, int d) : param(t, true), dims(d) {}
-    ImageParam(Type t, int d, const std::string &n) : param(t, true, n), dims(d) {}
-    ImageParam(Internal::Parameter p, int d) : param(p), dims(d) {}
 
+    /** Construct a NULL image parameter handle. */
+    ImageParam() {}
+
+    /** Construct an image parameter of the given type and
+     * dimensionality, with an auto-generated unique name. */
+    ImageParam(Type t, int d) : param(t, true), dims(d) {}
+
+    /** Construct an image parameter of the given type and
+     * dimensionality, with the given name */
+    ImageParam(Type t, int d, const std::string &n) : param(t, true, n), dims(d) {}
+
+    /** Get the name of this ImageParam */
     const std::string &name() const {
         return param.name();
     }
 
+    /** Get the type of the image data this ImageParam refers to */
     Type type() const {
         return param.type();
     }
 
+    /** Bind a buffer or image to this ImageParam. Only relevant for jitting */
     void set(Buffer b) {
+        if (b.defined()) assert(b.type() == type() && "Setting buffer of incorrect type");
         param.set_buffer(b);
     }
     
+    /** Get the buffer bound to this ImageParam. Only relevant for jitting */
     Buffer get() const {
         return param.get_buffer();
     }
 
+    /** Is this handle non-NULL */
     bool defined() const {
         return param.defined();
     }
 
+    /** Get an expression representing the extent of this image
+     * parameter in the given dimension */
     Expr extent(int x) const {
         std::ostringstream s;
         s << name() << ".extent." << x;
         return new Internal::Variable(Int(32), s.str(), param);
     }
 
+    /** Get the dimensionality of this image parameter */
     int dimensions() const {
         return dims;
     };
 
+    /** Get an expression giving the extent in dimension 0, which by
+     * convention is the width of the image */
     Expr width() const {
+        assert(dimensions >= 0);
         return extent(0);
     }
 
+    /** Get an expression giving the extent in dimension 1, which by
+     * convention is the height of the image */
     Expr height() const {
+        assert(dimensions >= 1);
         return extent(1);
     }
     
+    /** Get an expression giving the extent in dimension 2, which by
+     * convention is the channel-count of the image */
     Expr channels() const {
+        assert(dimensions >= 2);
         return extent(2);
     }
 
+    /** Construct an expression which loads from this image
+     * parameter. The location is extended with enough implicit
+     * variables to match the dimensionality of the image
+     * (see \ref Var::implicit) 
+     */
+    // @{
     Expr operator()() const {
         assert(dimensions() >= 0);
         std::vector<Expr> args;
@@ -149,11 +205,28 @@ public:
         }
         return new Internal::Call(param, args);
     }
+    // @}
 
+    /** Construct the appropriate argument matching this parameter,
+     * for the purpose of generating the right type signature when
+     * statically compiling halide pipelines. */
     operator Argument() const {
         return Argument(name(), true, type());
     }   
 
+    /** Treating the image parameter as an Expr is equivalent to call
+     * it with no arguments. For example, you can say:
+     *
+     \code
+     ImageParam im(UInt(8), 2);
+     Func f;
+     f = im*2;
+     \endcode
+     * 
+     * This will define f as a two-dimensional function with value at
+     * position (x, y) equal to twice the value of the image parameter
+     * at the same location.
+     */
     operator Expr() const {
         return (*this)();
     }

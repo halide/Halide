@@ -7,43 +7,60 @@
 
 namespace Halide { 
 
-/* 
-   This header file defines operators that let you dump a Halide
-   expression, statement, or type directly into an output stream
-   in a human readable form.
-   E.g:
+/** \file 
+ * This header file defines operators that let you dump a Halide
+ * expression, statement, or type directly into an output stream
+ * in a human readable form.
+ * E.g:
+ \code
+ Expr foo = ...
+ std::cout << "Foo is " << foo << std::endl;
+ \endcode
+ * 
+ * These operators are implemented using \ref Halide::Internal::IRPrinter
+ */
 
-   Expr foo = ...
-   std::cout << "Foo is " << foo << std::endl;
-*/
-
+/** Emit an expression on an output stream (such as std::cout) in a
+ * human-readable form */
 std::ostream &operator<<(std::ostream &stream, Expr);
-std::ostream &operator<<(std::ostream &stream, Type);
 
-/* 
-   These operators are implemented using the IRPrinter class
-   below. You probably don't need to use it directly, unless
-   you're subclassing it. Construct it with an output stream
-   (e.g. std::cout, or an ostringstream), and call the print
-   method on an expression or statement.
-*/
+/** Emit a halide type on an output stream (such as std::cout) in a
+ * human-readable form */
+std::ostream &operator<<(std::ostream &stream, Type);
 
 namespace Internal {
 
+/** Emit a halide statement on an output stream (such as std::cout) in
+ * a human-readable form */
 std::ostream &operator<<(std::ostream &stream, Stmt);
 
+/** An IRVisitor that emits IR to the given output stream in a human
+ * readable form. Can be subclassed if you want to modify the way in
+ * which it prints.
+ */
 class IRPrinter : public IRVisitor {
 public:
+    /** Construct an IRPrinter pointed at a given output stream
+     * (e.g. std::cout, or a std::ofstream) */
     IRPrinter(std::ostream &);
+
+    /** emit an expression on the output stream */
     void print(Expr);
+
+    /** emit a statement on the output stream */
     void print(Stmt);
 
     static void test();
 
 protected:
+    /** The stream we're outputting on */
     std::ostream &stream;
+
+    /** The current indentation level, useful for pretty-printing
+     * statements */
     int indent;
 
+    /** Emit spaces according to the current indentation level */
     void do_indent();
 
     void visit(const IntImm *);

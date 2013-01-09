@@ -2,6 +2,8 @@
 #define HALIDE_STMT_COMPILER_H
 
 #include "IR.h"
+#include "JITCompiledModule.h"
+
 #include <string>
 #include <vector>
 

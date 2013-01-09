@@ -13,6 +13,7 @@
 #include "Param.h"
 #include "Argument.h"
 #include "RDom.h"
+#include "JITCompiledModule.h"
 
 namespace Halide {
         

@@ -25,6 +25,7 @@
 #include "Argument.h"
 #include "IR.h"
 #include "Scope.h"
+#include "JITCompiledModule.h"
 
 namespace Halide { 
 namespace Internal {
