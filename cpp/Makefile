@@ -3,7 +3,7 @@
 # 'make test_foo' builds and runs test/foo.cpp for any cpp file in the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
-CXX ?= g++
+CXX = g++
 LLVM_DIR = ../llvm
 LLVM_CONFIG = $(LLVM_DIR)/Release+Asserts/bin/llvm-config
 LLVM_AS = $(LLVM_DIR)/Release+Asserts/bin/llvm-as
@@ -68,8 +68,8 @@ build/%.o: src/%.cpp src/%.h
 
 .PHONY: clean
 clean:
-	rm -f bin/*
-	rm -f build/*
+	rm -rf bin/*
+	rm -rf build/*
 
 .SECONDARY:
 
