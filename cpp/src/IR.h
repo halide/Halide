@@ -126,7 +126,9 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
 
 }
 
-/** A reference-counted handle to a concrete expression node */
+/** A fragment of Halide syntax. It's implemented as reference-counted
+ * handle to a concrete expression node, but it's immutable, so you
+ * can treat it as a value type. */
 struct Expr : public Internal::IRHandle {
     /** Make an undefined expression */
     Expr() : Internal::IRHandle() {}        

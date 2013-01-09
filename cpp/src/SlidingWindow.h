@@ -4,7 +4,9 @@
 #include "IR.h"
 
 /** \file
- * This file defines the sliding_window lowering pass 
+ *
+ * Defines the sliding_window lowering optimization pass, which avoids
+ * computing provably-already-computed values.
  */
 
 namespace Halide {
