@@ -8,8 +8,6 @@ LLVM_CONFIG ?= llvm-config
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version)
 CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
-HAVE_CLANG_31 = $(findstring 3.1,$(CLANG_VERSION))
-HAVE_CLANG_32 = $(findstring 3.2,$(CLANG_VERSION))
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 CLANG = clang
@@ -114,19 +112,30 @@ CLANG_OK=yes
 endif
 endif
 
+ifneq (,$(findstring Apple clang version 4.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring 3.,$(LLVM_VERSION)))
 ifeq (,$(findstring 3.0,$(LLVM_VERSION)))
+ifeq (,$(findstring 3.1,$(LLVM_VERSION)))
 LLVM_OK=yes
+endif
 endif
 endif
 
 ifdef CLANG_OK
 build/clang_ok:
 	@echo "Found a new enough version of clang"
+	mkdir -p build
 	touch build/clang_ok
 else
 build/clang_ok:
 	@echo "Can't find clang or version of clang too old (we need 3.1 or greater):"
+	@echo "You can override this check by setting CLANG_OK=y"
+	echo '$(CLANG_VERSION)'
+	echo $(findstring version 3,$(CLANG_VERSION))
+	echo $(findstring version 3.0,$(CLANG_VERSION))
 	$(CLANG) --version
 	@exit 1
 endif
@@ -134,10 +143,12 @@ endif
 ifdef LLVM_OK
 build/llvm_ok:
 	@echo "Found a new enough version of llvm"
+	mkdir -p build
 	touch build/llvm_ok
 else
 build/llvm_ok:
-	@echo "Can't find llvm or version of llvm too old (we need 3.1 or greater):"
+	@echo "Can't find llvm or version of llvm too old (we need 3.2 or greater):"
+	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
 	@exit 1
 endif
