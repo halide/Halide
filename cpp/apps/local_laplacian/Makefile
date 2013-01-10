@@ -24,4 +24,4 @@ out.png: process
 	./process input.png 8 1 1 out.png
 
 clean:
-	rm process local_laplacian.o local_laplacian
+	rm -f process local_laplacian.o local_laplacian
