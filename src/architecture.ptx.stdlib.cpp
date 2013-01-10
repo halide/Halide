@@ -116,6 +116,7 @@ typedef enum {
 CUresult CUDAAPI cuInit(unsigned int Flags);
 CUresult CUDAAPI cuDeviceGetCount(int *count);
 CUresult CUDAAPI cuDeviceGet(CUdevice *device, int ordinal);
+CUresult CUDAAPI cuDeviceGetName(char* name, int len, CUdevice dev);
 CUresult CUDAAPI cuCtxCreate(CUcontext *pctx, unsigned int flags, CUdevice dev);
 CUresult CUDAAPI cuModuleLoadData(CUmodule *module, const void *image);
 CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name);
@@ -224,17 +225,36 @@ void WEAK __init(const char* ptx_src)
         CUdevice dev;
         // Get device
         CUresult status;
-        for (int id = 2; id >= 0; id--) {
-            // Try to get a device >0 first, since 0 should be our display device
-            status = cuDeviceGet(&dev, id);
-            if ( status == CUDA_SUCCESS ) break;
+
+        bool got_device = false;
+
+        if (getenv("HL_CUDADEVICE")) {
+           int id = atoi(getenv("HL_CUDADEVICE"));
+           if (id >= 0 && id < deviceCount) {
+               status = cuDeviceGet(&dev, id);
+               if ( status == CUDA_SUCCESS ) got_device = true;
+           }
+           else
+               fprintf(stderr, "HL_CUDADEVICE: Invalid CUDA Device");
         }
+
+        if (!getenv("HL_CUDADEVICE") || !got_device) {
+            for (int id = 2; id >= 0; id--) {
+                // Try to get a device >0 first, since 0 should be our display device
+                status = cuDeviceGet(&dev, id);
+                if ( status == CUDA_SUCCESS ) break;
+            }
+        }
+
         if (status != CUDA_SUCCESS) {
             fprintf(stderr, "Failed to get device\n");
             exit(-1);
         }
 
         #ifndef NDEBUG
+        char name[100];
+        cuDeviceGetName (name, 100, dev);
+        fprintf(stderr, "Device name: %s\n", name);
         fprintf(stderr, "Got device %d, about to create context (t=%d)\n", dev, currentTime());
         #endif
 
