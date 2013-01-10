@@ -4,7 +4,6 @@
 #include <vector>
 #include <utility>
 #include <map>
-#include <assert.h>
 #include <stdio.h>
 
 #include "IRVisitor.h"
@@ -12,6 +11,7 @@
 #include "IntrusivePtr.h"
 #include "Buffer.h"
 #include "Parameter.h"
+#include "Util.h"
 
 /** \file
  * Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)

@@ -4,9 +4,14 @@
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
 CXX = g++
-LLVM_DIR = ../llvm
-LLVM_CONFIG = $(LLVM_DIR)/Release+Asserts/bin/llvm-config
-LLVM_AS = $(LLVM_DIR)/Release+Asserts/bin/llvm-as
+LLVM_CONFIG ?= llvm-config
+LLVM_VERSION = $(shell $(LLVM_CONFIG) --version)
+CLANG ?= clang
+CLANG_VERSION = $(shell $(CLANG) --version)
+HAVE_CLANG_31 = $(findstring 3.1,$(CLANG_VERSION))
+HAVE_CLANG_32 = $(findstring 3.2,$(CLANG_VERSION))
+LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
+LLVM_AS = $(LLVM_BINDIR)/llvm-as
 CLANG = clang
 CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Os
 LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs jit bitwriter bitreader x86 arm linker nvptx ipo)
@@ -47,7 +52,7 @@ INITMOD_OPTS_ptx_dev = ""
 
 -include $(OBJECTS:.o=.d)
 
-build/architecture.%.initmod.cpp: bin/bitcode2cpp src/architecture.%.stdlib.cpp src/architecture.%.stdlib.ll src/architecture.posix.stdlib.cpp
+build/architecture.%.initmod.cpp: bin/bitcode2cpp src/architecture.%.stdlib.cpp src/architecture.%.stdlib.ll src/architecture.posix.stdlib.cpp build/llvm_ok build/clang_ok
 	@-mkdir -p build
 	$(CLANG) $(INITMOD_OPTS_$*) -emit-llvm -O3 -S src/architecture.$*.stdlib.cpp -o - | \
 	cat - src/architecture.$*.stdlib.ll | \
@@ -61,7 +66,7 @@ bin/bitcode2cpp: src/bitcode2cpp.cpp
 build/architecture.%.initmod.o: build/architecture.%.initmod.cpp
 	$(CXX) -c $< -o $@ 
 
-build/%.o: src/%.cpp src/%.h
+build/%.o: src/%.cpp src/%.h build/llvm_ok
 	@-mkdir -p build
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF build/$*.d -MT build/$*.o 
 
@@ -101,3 +106,39 @@ test_apps: bin/libHalide.a
 	./apps/blur/test
 	make -C apps/wavelet filter
 	cd apps/wavelet; ./filter input.png; cd ../..
+
+
+ifneq (,$(findstring version 3.,$(CLANG_VERSION)))
+ifeq (,$(findstring version 3.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+endif
+
+ifneq (,$(findstring 3.,$(LLVM_VERSION)))
+ifeq (,$(findstring 3.0,$(LLVM_VERSION)))
+LLVM_OK=yes
+endif
+endif
+
+ifdef CLANG_OK
+build/clang_ok:
+	@echo "Found a new enough version of clang"
+	touch build/clang_ok
+else
+build/clang_ok:
+	@echo "Can't find clang or version of clang too old (we need 3.1 or greater):"
+	$(CLANG) --version
+	@exit 1
+endif
+
+ifdef LLVM_OK
+build/llvm_ok:
+	@echo "Found a new enough version of llvm"
+	touch build/llvm_ok
+else
+build/llvm_ok:
+	@echo "Can't find llvm or version of llvm too old (we need 3.1 or greater):"
+	$(LLVM_CONFIG) --version
+	@exit 1
+endif
+

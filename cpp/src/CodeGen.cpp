@@ -1,12 +1,13 @@
 #include <iostream>
 #include "IRPrinter.h"
 #include "CodeGen.h"
-#include "llvm/Analysis/Verifier.h"
 #include "IROperator.h"
 #include "Util.h"
 #include "Log.h"
 #include "CodeGen_C.h"
 #include "Function.h"
+
+#include <llvm/Analysis/Verifier.h>
 #include <llvm/ExecutionEngine/JIT.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetLibraryInfo.h>
@@ -15,7 +16,21 @@
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/CodeGen/CommandFlags.h>
+
+#if LLVM_VERSION_MINOR < 3
+#include <llvm/Value.h>
+#include <llvm/Module.h>
+#include <llvm/Function.h>
+#include <llvm/TargetTransformInfo.h>
 #include <llvm/DataLayout.h>
+#else
+#include <llvm/IR/Value.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Function.h>
+#include <llvm/Analysis/TargetTransformInfo.h>
+#include <llvm/IR/DataLayout.h>
+#endif
+
 #include <sstream>
 
 using namespace llvm;
@@ -31,10 +46,17 @@ using std::stack;
 namespace Halide { 
 namespace Internal {
 
-LLVMContext CodeGen::context;
+namespace {
+LLVMContext &get_global_context() {
+    static LLVMContext *c = NULL;
+    if (!c) c = new LLVMContext;
+    return *c;    
+}
+}
 
 CodeGen::CodeGen() : 
-    module(NULL), function(NULL), builder(context), value(NULL), buffer_t(NULL) {
+    module(NULL), function(NULL), context(get_global_context()), 
+    builder(context), value(NULL), buffer_t(NULL) {
     // Define some types
     void_t = llvm::Type::getVoidTy(context);
     i1 = llvm::Type::getInt1Ty(context);
@@ -156,7 +178,37 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     }
 }
 
-ExecutionEngine *CodeGen::execution_engine = NULL;
+// Wraps an execution engine. Takes ownership of the given module and
+// the memory for jit compiled code.
+struct JITModuleHolder {
+    mutable RefCount ref_count;    
+    JITModuleHolder(Module *module) {
+        log(2) << "Creating new execution engine\n";
+        string error_string;
+        EngineBuilder engine_builder(module);
+        engine_builder.setErrorStr(&error_string);
+        engine_builder.setEngineKind(EngineKind::JIT);
+        engine_builder.setUseMCJIT(true);
+        //engine_builder.setOptLevel(CodeGenOpt::Aggressive);
+        execution_engine = engine_builder.create();
+        if (!execution_engine) cout << error_string << endl;
+        assert(execution_engine && "Couldn't create execution engine");        
+    }
+    ~JITModuleHolder() {
+        shutdown_thread_pool();
+        delete execution_engine;
+        
+    }
+    void (*shutdown_thread_pool)();
+    llvm::ExecutionEngine *execution_engine;
+};
+
+template<>
+RefCount &ref_count<JITModuleHolder>(const JITModuleHolder *f) {return f->ref_count;}
+
+template<>
+void destroy<JITModuleHolder>(const JITModuleHolder *f) {delete f;}
+
 
 JITCompiledModule CodeGen::compile_to_function_pointers() {
     assert(module && "No module defined. Must call compile before calling compile_to_function_pointer");
@@ -166,22 +218,8 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
 
     log(1) << "JIT compiling...\n";
 
-    // Create the execution engine if it hasn't already been done
-    if (!execution_engine) {
-        string error_string;
-        EngineBuilder engine_builder(module);
-        engine_builder.setErrorStr(&error_string);
-        engine_builder.setEngineKind(EngineKind::JIT);
-        engine_builder.setUseMCJIT(true);
-        //engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-        execution_engine = engine_builder.create();
-        if (!execution_engine) cout << error_string << endl;
-        assert(execution_engine && "Couldn't create execution engine");
-    } else { 
-        // cout << "Adding module to existing execution engine" << endl;
-        // Execution engine is already created. Add this module to it.
-        execution_engine->addModule(module);
-    }
+    IntrusivePtr<JITModuleHolder> module_holder(new JITModuleHolder(module));
+    ExecutionEngine *execution_engine = module_holder.ptr->execution_engine;
 
     // Make sure things marked as always-inline get inlined
     module_pass_manager.add(createAlwaysInlinerPass());
@@ -212,18 +250,25 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     assert(f && "Compiling wrapped function returned NULL");
 
     llvm::Function *set_error_handler = module->getFunction("set_error_handler");
-    assert(set_error_handler && "Could not set_error_handler function inside llvm module");
+    assert(set_error_handler && "Could not find set_error_handler function inside llvm module");
     f = execution_engine->getPointerToFunction(set_error_handler);
     m.set_error_handler = (void (*)(JITCompiledModule::ErrorHandler))f;
     assert(f && "Compiling set_error_handler function returned NULL");
 
 
     llvm::Function *set_custom_allocator = module->getFunction("set_custom_allocator");
-    assert(set_custom_allocator && "Could not set_custom_allocator function inside llvm module");
+    assert(set_custom_allocator && "Could not find set_custom_allocator function inside llvm module");
     f = execution_engine->getPointerToFunction(set_custom_allocator);
     m.set_custom_allocator = (void (*)(void *(*)(size_t), void (*)(void *)))f;
     assert(f && "Compiling set_custom_allocator function returned NULL");
 
+    m.module = module_holder;
+    llvm::Function *shutdown_thread_pool = module->getFunction("shutdown_thread_pool");
+    assert(shutdown_thread_pool && "Could not find shutdown_thread_pool function inside llvm module");    
+    f = execution_engine->getPointerToFunction(shutdown_thread_pool);
+    m.module.ptr->shutdown_thread_pool = (void (*)())f;
+    assert(f && "Compiling shutdown_thread_pool function returned NULL");
+    
     return m;
 }
 
@@ -289,8 +334,13 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
 
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
     pass_manager.add(new TargetLibraryInfo(Triple(module->getTargetTriple())));       
+
+    #if LLVM_VERSION_MINOR < 3
     pass_manager.add(new TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
                                              target_machine->getVectorTargetTransformInfo()));
+    #else
+    target_machine->addAnalysisPasses(pass_manager);
+    #endif
     pass_manager.add(new DataLayout(module));
 
     // Make sure things marked as always-inline get inlined

@@ -1,0 +1,41 @@
+------------------------------------------------------------------
+Dependencies
+------------------------------------------------------------------
+
+Building halide requires llvm 3.2, along with the matching version of
+clang. llvm-config and clang must be somewhere in the path. If your OS
+does not have packages for llvm-3.2, you can find binaries for it at
+http://llvm.org/releases/download.html. Download an appropriate
+package and then either install it, or at least put the bin
+subdirectory in your path.
+
+If you want to build it yourself, first check it out from subversions:
+
+svn co https://llvm.org/svn/llvm-project/llvm/branches/release_32 llvm3.2
+svn co https://llvm.org/svn/llvm-project/cfe/branches/release_32 llvm3.2/tools/clang
+
+Then build it like so:
+
+cd llvm3.2
+./configure --enable-optimized --with-clang
+make -j8
+
+Then finally put it in the path like so:
+
+export PATH=<path to llvm3.2>/Release+Asserts/bin:$PATH
+
+Newer versions of llvm may also work. Support for these is
+experimental.
+
+------------------------------------------------------------------
+Building Halide
+------------------------------------------------------------------
+
+With llvm-config and clang in your path, you should be able to just
+run 'make' in this directory. 'make tests' will run the JIT test
+suite, and 'make test_apps' will make sure all the apps compile and
+run (but won't check their output).
+
+There is no 'make install' or 'make distrib' yet. If you want to make
+an install package, grab bin/libHalide.a and bin/libHalide.so, and all
+the header files in src.
