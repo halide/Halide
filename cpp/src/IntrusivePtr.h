@@ -8,7 +8,7 @@
  */ 
 
 #include <stdlib.h>
-
+#include <iostream>
 namespace Halide { 
 namespace Internal {
 
@@ -64,6 +64,7 @@ private:
         if (ptr) {
             ref_count(ptr).decrement();
             if (ref_count(ptr).is_zero()) {
+                //std::cout << "Destroying " << ptr << ", " << live_objects << "\n";
                 destroy(ptr);
             }
         }
@@ -80,6 +81,9 @@ public:
     }
 
     IntrusivePtr(T *p) : ptr(p) {
+        if (ptr && ref_count(ptr).is_zero()) {
+            //std::cout << "Creating " << ptr << ", " << live_objects << "\n";
+        }
         incref(ptr);
     }
 

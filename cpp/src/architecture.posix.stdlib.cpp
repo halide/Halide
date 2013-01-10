@@ -135,9 +135,6 @@ static bool thread_pool_initialized = false;
 WEAK void shutdown_thread_pool() {
     if (!thread_pool_initialized) return;
 
-    // TODO: this doesn't work yet. Just leak it for now.
-    return;
-
     // Wake everyone up and tell them the party's over and it's time
     // to go home
     pthread_mutex_lock(&work_queue.mutex);
@@ -149,22 +146,29 @@ WEAK void shutdown_thread_pool() {
     for (int i = 0; i < threads-1; i++) {
         //fprintf(stderr, "Waiting for thread %d to exit\n", i);
         void *retval;
-        //pthread_join(work_queue.threads[i], &retval);
+        pthread_join(work_queue.threads[i], &retval);
     }
-    
+
+    //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
     // Tidy up
-    //pthread_mutex_destroy(&work_queue.mutex);
-    //pthread_cond_destroy(&work_queue.not_empty);
+    pthread_mutex_destroy(&work_queue.mutex);
+    pthread_cond_destroy(&work_queue.not_empty);
     thread_pool_initialized = false;
 }
 
 WEAK void *worker(void *void_arg) {
+    /*
+    int id = -1;
+    for (int i = 0; i < threads-1; i++) {
+        if (work_queue.threads[i] == pthread_self()) id = i;
+    }
+    */
     worker_arg *arg = (worker_arg *)void_arg;
-    //fprintf(stderr, "Worker %p: thread running\n", arg);
+    //fprintf(stderr, "Worker %d: thread running\n", id);
     while (1) {
-        //fprintf(stderr, "Worker %p: About to lock mutex\n", arg);
+        //fprintf(stderr, "Worker %d: About to lock mutex\n", id);
         pthread_mutex_lock(&work_queue.mutex);
-        //fprintf(stderr, "Worker %p: Mutex locked, checking for work\n", arg);
+        //fprintf(stderr, "Worker %d: Mutex locked, checking for work\n", id);
 
         // we're master, and there's no more work
         if (arg && arg->job->id != arg->id) {
@@ -185,26 +189,26 @@ WEAK void *worker(void *void_arg) {
             //fprintf(stderr, "Master %d: This task is done.\n", arg->id);
             return NULL;
         }
+
+        if (work_queue.shutdown) {
+            pthread_mutex_unlock(&work_queue.mutex);
+            //fprintf(stderr, "Worker %d: quitting\n", id);
+            return NULL;
+        }
             
         if (work_queue.head == work_queue.tail) {
             assert(!arg); // the master should never get here
-            //fprintf(stderr, "Worker %p: Going to sleep.\n", arg); fflush(stderr);
-
+            //fprintf(stderr, "Worker %d: Going to sleep.\n", id); fflush(stderr);
             pthread_cond_wait(&work_queue.not_empty, &work_queue.mutex);
             pthread_mutex_unlock(&work_queue.mutex);
-            //fprintf(stderr, "Worker %p: Waking up.\n", arg); fflush(stderr);
-            if (work_queue.shutdown) {
-                pthread_cond_broadcast(&work_queue.not_empty);
-                //fprintf(stderr, "Worker thread quitting\n");
-                return NULL;
-            }
+            //fprintf(stderr, "Worker %d: Waking up.\n", id); fflush(stderr);
             continue;
         }
 
-        //fprintf(stderr, "Worker %p: There is work\n", arg);
+        //fprintf(stderr, "Worker %d: There is work\n", id);
         work *job = work_queue.jobs + work_queue.head;
         if (job->next == job->max) {
-            //fprintf(stderr, "Worker %p: Found a finished job. Removing it\n", arg);
+            //fprintf(stderr, "Worker %d: Found a finished job. Removing it\n", id);
             work_queue.head = (work_queue.head + 1) % MAX_JOBS;            
             job->id = 0; // mark the job done
             pthread_mutex_unlock(&work_queue.mutex);
@@ -212,16 +216,16 @@ WEAK void *worker(void *void_arg) {
             // Claim some tasks
             //int claimed = (remaining + threads - 1)/threads;
             int claimed = 1;
-            //fprintf(stderr, "Worker %p: Claiming %d tasks\n", arg, claimed);
+            //fprintf(stderr, "Worker %d: Claiming %d tasks\n", id, claimed);
             work myjob = *job;
             job->next += claimed;            
             myjob.max = job->next;
             job->active_workers++;
             pthread_mutex_unlock(&work_queue.mutex);
             for (; myjob.next < myjob.max; myjob.next++) {
-                //fprintf(stderr, "Worker %p: Doing job %d\n", arg, myjob.next);
+                //fprintf(stderr, "Worker %d: Doing job %d\n", id, myjob.next);
                 myjob.f(myjob.next, myjob.closure);
-                //fprintf(stderr, "Worker %p: Done with job %d\n", arg, myjob.next);
+                //fprintf(stderr, "Worker %d: Done with job %d\n", id, myjob.next);
             }
             pthread_mutex_lock(&work_queue.mutex);
             job->active_workers--;
