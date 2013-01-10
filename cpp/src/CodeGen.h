@@ -7,10 +7,20 @@
  * generators that use llvm.
  */
 
-#include <llvm/Value.h>
+#include <llvm/Config/config.h>
+
+#if LLVM_VERSION_MINOR < 3
 #include <llvm/Module.h>
 #include <llvm/Function.h>
+#include <llvm/Value.h>
 #include <llvm/IRBuilder.h>
+#else
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/Value.h>
+#include <llvm/IR/IRBuilder.h>
+#endif
+
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/PassManager.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
@@ -72,7 +82,7 @@ protected:
     static bool llvm_initialized;
     llvm::Module *module;
     llvm::Function *function;
-    static llvm::LLVMContext context;
+    llvm::LLVMContext &context;
     llvm::IRBuilder<> builder;
     llvm::Value *value;
     //@}
@@ -91,9 +101,6 @@ protected:
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
     llvm::StructType *buffer_t;
     // @}
-
-    /** The llvm execution engine, which manages JIT state */
-    static llvm::ExecutionEngine *execution_engine;
 
     /** The name of the function being generated */
     std::string function_name;

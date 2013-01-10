@@ -3,6 +3,8 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+
+    for (int i = 0; i < 1; i++) {
     Var x, y, z;
     Func f, g;
 
@@ -23,7 +25,8 @@ int main(int argc, char **argv) {
           }
         }
     }
-    
+    }    
+
     printf("Success!\n");
     return 0;
 }

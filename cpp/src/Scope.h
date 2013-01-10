@@ -1,12 +1,13 @@
 #ifndef HALIDE_SCOPE_H
 #define HALIDE_SCOPE_H
 
-#include <assert.h>
 #include <string>
 #include <map>
 #include <stack>
 #include <utility>
 #include <iostream>
+
+#include "Util.h"
 
 /** \file
  * Defines the Scope class, which is used for keeping track of names in a scope while traversing IR 
