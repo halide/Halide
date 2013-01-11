@@ -1,11 +1,12 @@
 #ifndef HALIDE_BOUNDS_INFERENCE_H
 #define HALIDE_BOUNDS_INFERENCE_H
 
-#include "IR.h"
-
 /** \file 
  * Defines the bounds_inference lowering pass.
  */
+
+#include "IR.h"
+#include <map>
 
 namespace Halide {
 namespace Internal {

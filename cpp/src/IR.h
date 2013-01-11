@@ -1,10 +1,12 @@
 #ifndef HALIDE_IR_H
 #define HALIDE_IR_H
+
+/** \file
+ * Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
+ */
+
 #include <string>
 #include <vector>
-#include <utility>
-#include <map>
-#include <stdio.h>
 
 #include "IRVisitor.h"
 #include "Type.h"
@@ -12,10 +14,6 @@
 #include "Buffer.h"
 #include "Parameter.h"
 #include "Util.h"
-
-/** \file
- * Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
- */
 
 namespace Halide {
 

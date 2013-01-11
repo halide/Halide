@@ -16,9 +16,11 @@ LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs jit bit
 
 SOURCE_FILES = CodeGen.cpp CodeGen_X86.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Log.cpp Parameter.cpp Reduction.cpp RDom.cpp Tracing.cpp RemoveDeadLets.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp
 
-SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
+HEADER_FILES = Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Halide.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h
 
+SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=build/%.o)
+HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
 STDLIB_ARCHS = x86 x86_avx ptx ptx_dev arm arm_android
 
@@ -29,7 +31,7 @@ STDLIB_SOURCES = \
 INITIAL_MODULES = $(STDLIB_ARCHS:%=build/architecture.%.initmod.o)
 
 .PHONY: all
-all: bin/libHalide.a bin/libHalide.so test_internal
+all: bin/libHalide.a bin/libHalide.so include/Halide.h test_internal
 
 bin/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@-mkdir -p bin
@@ -40,6 +42,13 @@ bin/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 
 bin/libHalide.so: bin/libHalide.a
 	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) -o bin/libHalide.so
+
+include/Halide.h: $(HEADERS) bin/build_halide_h
+	mkdir -p include
+	cd src; ../bin/build_halide_h $(HEADER_FILES) > ../include/Halide.h; cd ..
+
+bin/build_halide_h: src/build_halide_h.cpp
+	g++ $< -o $@
 
 INITMOD_OPTS_x86 = -march=corei7 -mattr=-avx
 INITMOD_OPTS_ptx = -march=corei7 

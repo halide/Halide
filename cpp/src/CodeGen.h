@@ -7,24 +7,17 @@
  * generators that use llvm.
  */
 
-#include <llvm/Config/config.h>
-
-#if LLVM_VERSION_MINOR < 3
-#include <llvm/Module.h>
-#include <llvm/Function.h>
-#include <llvm/Value.h>
-#include <llvm/IRBuilder.h>
-#else
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Value.h>
-#include <llvm/IR/IRBuilder.h>
-#endif
-
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/PassManager.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
-#include <llvm/Transforms/IPO.h>
+namespace llvm {
+class Value;
+class Module;
+class Function;
+template<bool> class IRBuilderDefaultInserter;
+class ConstantFolder;
+template<bool, typename, typename> class IRBuilder;
+class LLVMContext;
+class Type;
+class StructType;
+}
 
 #include <map>
 #include <stack>
@@ -84,7 +77,7 @@ protected:
     bool owns_module;
     llvm::Function *function;
     llvm::LLVMContext &context;
-    llvm::IRBuilder<> builder;
+    llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
     llvm::Value *value;
     //@}
 

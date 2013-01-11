@@ -8,6 +8,8 @@
 #include "Function.h"
 #include "Deinterleave.h"
 
+#include <llvm/Config/config.h>
+
 #include <llvm/Analysis/Verifier.h>
 #include <llvm/ExecutionEngine/JIT.h>
 #include <llvm/Support/TargetSelect.h>
@@ -17,6 +19,10 @@
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/CodeGen/CommandFlags.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/PassManager.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/IPO.h>
 
 #if LLVM_VERSION_MINOR < 3
 #include <llvm/Value.h>
@@ -24,12 +30,14 @@
 #include <llvm/Function.h>
 #include <llvm/TargetTransformInfo.h>
 #include <llvm/DataLayout.h>
+#include <llvm/IRBuilder.h>
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Function.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/IR/DataLayout.h>
+#include <llvm/IR/IRBuilder.h>
 #endif
 
 #include <sstream>
@@ -57,7 +65,7 @@ LLVMContext &get_global_context() {
 
 CodeGen::CodeGen() : 
     module(NULL), function(NULL), context(get_global_context()), 
-    builder(context), value(NULL), buffer_t(NULL) {
+    builder(new IRBuilder<>(context)), value(NULL), buffer_t(NULL) {
     // Define some types
     void_t = llvm::Type::getVoidTy(context);
     i1 = llvm::Type::getInt1Ty(context);
@@ -91,6 +99,8 @@ CodeGen::~CodeGen() {
         module = NULL;
         owns_module = false;
     }
+    delete builder;
+    builder = NULL;
 }
 
 bool CodeGen::llvm_initialized = false;
@@ -119,7 +129,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(context, "entry", function);
-    builder.SetInsertPoint(block);
+    builder->SetInsertPoint(block);
 
     // Put the arguments in the symbol table
     {
@@ -143,7 +153,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     stmt.accept(this);
 
     // Now we need to end the function
-    builder.CreateRetVoid();
+    builder->CreateRetVoid();
 
     module->setModuleIdentifier("halide_" + name);
 
@@ -155,26 +165,26 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     func_t = FunctionType::get(void_t, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
     block = BasicBlock::Create(context, "entry", wrapper);
-    builder.SetInsertPoint(block);
+    builder->SetInsertPoint(block);
     
     Value *arg_array = wrapper->arg_begin();
 
     vector<Value *> wrapper_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         // Get the address of the nth argument
-        Value *ptr = builder.CreateConstGEP1_32(arg_array, i);
-        ptr = builder.CreateLoad(ptr);
+        Value *ptr = builder->CreateConstGEP1_32(arg_array, i);
+        ptr = builder->CreateLoad(ptr);
         if (args[i].is_buffer) {
             // Cast the argument to a buffer_t * 
-            wrapper_args[i] = builder.CreatePointerCast(ptr, buffer_t->getPointerTo());
+            wrapper_args[i] = builder->CreatePointerCast(ptr, buffer_t->getPointerTo());
         } else {
             // Cast to the appropriate type and load
-            ptr = builder.CreatePointerCast(ptr, arg_types[i]->getPointerTo());
-            wrapper_args[i] = builder.CreateLoad(ptr);
+            ptr = builder->CreatePointerCast(ptr, arg_types[i]->getPointerTo());
+            wrapper_args[i] = builder->CreateLoad(ptr);
         }
     }
-    builder.CreateCall(function, wrapper_args);
-    builder.CreateRetVoid();
+    builder->CreateCall(function, wrapper_args);
+    builder->CreateRetVoid();
     verifyFunction(*wrapper);
 
     // Finally, verify the module is ok
@@ -427,23 +437,23 @@ void CodeGen::define_buffer_t() {
        
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
 Value *CodeGen::buffer_host(Value *buffer) {
-    Value *ptr = builder.CreateConstGEP2_32(buffer, 0, 0);
-    return builder.CreateLoad(ptr);
+    Value *ptr = builder->CreateConstGEP2_32(buffer, 0, 0);
+    return builder->CreateLoad(ptr);
 }
 
 Value *CodeGen::buffer_dev(Value *buffer) {
-    Value *ptr = builder.CreateConstGEP2_32(buffer, 0, 1);
-    return builder.CreateLoad(ptr);
+    Value *ptr = builder->CreateConstGEP2_32(buffer, 0, 1);
+    return builder->CreateLoad(ptr);
 }
 
 Value *CodeGen::buffer_host_dirty(Value *buffer) {
-    Value *ptr = builder.CreateConstGEP2_32(buffer, 0, 2);
-    return builder.CreateLoad(ptr);
+    Value *ptr = builder->CreateConstGEP2_32(buffer, 0, 2);
+    return builder->CreateLoad(ptr);
 }
 
 Value *CodeGen::buffer_dev_dirty(Value *buffer) {
-    Value *ptr = builder.CreateConstGEP2_32(buffer, 0, 3);
-    return builder.CreateLoad(ptr);
+    Value *ptr = builder->CreateConstGEP2_32(buffer, 0, 3);
+    return builder->CreateLoad(ptr);
 }
 
 Value *CodeGen::buffer_extent(Value *buffer, int i) {
@@ -451,8 +461,8 @@ Value *CodeGen::buffer_extent(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 4);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    Value *ptr = builder.CreateGEP(buffer, args);
-    return builder.CreateLoad(ptr);
+    Value *ptr = builder->CreateGEP(buffer, args);
+    return builder->CreateLoad(ptr);
 }
 
 Value *CodeGen::buffer_stride(Value *buffer, int i) {
@@ -460,8 +470,8 @@ Value *CodeGen::buffer_stride(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 5);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    Value *ptr = builder.CreateGEP(buffer, args);
-    return builder.CreateLoad(ptr);
+    Value *ptr = builder->CreateGEP(buffer, args);
+    return builder->CreateLoad(ptr);
 }
 
 Value *CodeGen::buffer_min(Value *buffer, int i) {
@@ -469,13 +479,13 @@ Value *CodeGen::buffer_min(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 6);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    Value *ptr = builder.CreateGEP(buffer, args);
-    return builder.CreateLoad(ptr);
+    Value *ptr = builder->CreateGEP(buffer, args);
+    return builder->CreateLoad(ptr);
 }
 
 Value *CodeGen::buffer_elem_size(Value *buffer) {
-    Value *ptr = builder.CreateConstGEP2_32(buffer, 0, 7);
-    return builder.CreateLoad(ptr);
+    Value *ptr = builder->CreateConstGEP2_32(buffer, 0, 7);
+    return builder->CreateLoad(ptr);
 }
 
 llvm::Type *CodeGen::llvm_type_of(Halide::Type t) {
@@ -537,19 +547,19 @@ void CodeGen::visit(const Cast *op) {
         // cg_llvm.ml.  Widening integer casts either zero extend
         // or sign extend, depending on the source type. Narrowing
         // integer casts always truncate.
-        value = builder.CreateIntCast(value, llvm_dst, src.is_int());
+        value = builder->CreateIntCast(value, llvm_dst, src.is_int());
     } else if (src.is_float() && dst.is_int()) {
-        value = builder.CreateFPToSI(value, llvm_dst);
+        value = builder->CreateFPToSI(value, llvm_dst);
     } else if (src.is_float() && dst.is_uint()) {
-        value = builder.CreateFPToUI(value, llvm_dst);
+        value = builder->CreateFPToUI(value, llvm_dst);
     } else if (src.is_int() && dst.is_float()) {
-        value = builder.CreateSIToFP(value, llvm_dst);
+        value = builder->CreateSIToFP(value, llvm_dst);
     } else if (src.is_uint() && dst.is_float()) {
-        value = builder.CreateUIToFP(value, llvm_dst);
+        value = builder->CreateUIToFP(value, llvm_dst);
     } else {
         assert(src.is_float() && dst.is_float());
         // Float widening or narrowing
-        value = builder.CreateFPCast(value, llvm_dst);
+        value = builder->CreateFPCast(value, llvm_dst);
     }
 }
 
@@ -574,35 +584,35 @@ void CodeGen::visit(const Variable *op) {
 
 void CodeGen::visit(const Add *op) {
     if (op->type.is_float()) {
-        value = builder.CreateFAdd(codegen(op->a), codegen(op->b));
+        value = builder->CreateFAdd(codegen(op->a), codegen(op->b));
     } else {
-        value = builder.CreateAdd(codegen(op->a), codegen(op->b));
+        value = builder->CreateAdd(codegen(op->a), codegen(op->b));
     }
 }
 
 void CodeGen::visit(const Sub *op) {
     if (op->type.is_float()) {
-        value = builder.CreateFSub(codegen(op->a), codegen(op->b));
+        value = builder->CreateFSub(codegen(op->a), codegen(op->b));
     } else {
-        value = builder.CreateSub(codegen(op->a), codegen(op->b));
+        value = builder->CreateSub(codegen(op->a), codegen(op->b));
     }
 }
 
 void CodeGen::visit(const Mul *op) {
     if (op->type.is_float()) {
-        value = builder.CreateFMul(codegen(op->a), codegen(op->b));
+        value = builder->CreateFMul(codegen(op->a), codegen(op->b));
     } else {
-        value = builder.CreateMul(codegen(op->a), codegen(op->b));
+        value = builder->CreateMul(codegen(op->a), codegen(op->b));
     }
 }
 
 void CodeGen::visit(const Div *op) {
     if (op->type.is_float()) {
-        value = builder.CreateFDiv(codegen(op->a), codegen(op->b));
+        value = builder->CreateFDiv(codegen(op->a), codegen(op->b));
     } else if (op->type.is_uint()) {
-        value = builder.CreateUDiv(codegen(op->a), codegen(op->b));
+        value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
     } else {
-        value = builder.CreateSDiv(codegen(op->a), codegen(op->b));
+        value = builder->CreateSDiv(codegen(op->a), codegen(op->b));
     }
 }
 
@@ -611,9 +621,9 @@ void CodeGen::visit(const Mod *op) {
     Value *b = codegen(op->b);
 
     if (op->type.is_float()) {
-        value = builder.CreateFRem(a, b);
+        value = builder->CreateFRem(a, b);
     } else if (op->type.is_uint()) {
-        value = builder.CreateURem(a, b);
+        value = builder->CreateURem(a, b);
     } else {
         Expr modulus = op->b;
         const Broadcast *broadcast = modulus.as<Broadcast>();
@@ -625,15 +635,15 @@ void CodeGen::visit(const Mod *op) {
                 if (v & 1) is_power_of_two = false;
             }
             if (is_power_of_two) {
-                value = builder.CreateURem(a, b);
+                value = builder->CreateURem(a, b);
                 return;
             }
         }
 
         // to ensure the result of a signed mod is positive, we have to mod, add the modulus, then mod again
-        value = builder.CreateSRem(a, b);
-        value = builder.CreateAdd(value, b);
-        value = builder.CreateSRem(value, b);
+        value = builder->CreateSRem(a, b);
+        value = builder->CreateAdd(value, b);
+        value = builder->CreateSRem(value, b);
     }
 }
 
@@ -656,9 +666,9 @@ void CodeGen::visit(const EQ *op) {
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
     if (t.is_float()) {
-        value = builder.CreateFCmpOEQ(a, b);
+        value = builder->CreateFCmpOEQ(a, b);
     } else {
-        value = builder.CreateICmpEQ(a, b);
+        value = builder->CreateICmpEQ(a, b);
     }
 }
 
@@ -667,9 +677,9 @@ void CodeGen::visit(const NE *op) {
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
     if (t.is_float()) {
-        value = builder.CreateFCmpONE(a, b);
+        value = builder->CreateFCmpONE(a, b);
     } else {
-        value = builder.CreateICmpNE(a, b);
+        value = builder->CreateICmpNE(a, b);
     }
 }
 
@@ -678,11 +688,11 @@ void CodeGen::visit(const LT *op) {
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
     if (t.is_float()) {
-        value = builder.CreateFCmpOLT(a, b);
+        value = builder->CreateFCmpOLT(a, b);
     } else if (t.is_int()) {
-        value = builder.CreateICmpSLT(a, b);
+        value = builder->CreateICmpSLT(a, b);
     } else {
-        value = builder.CreateICmpULT(a, b);
+        value = builder->CreateICmpULT(a, b);
     }
 }
 
@@ -691,11 +701,11 @@ void CodeGen::visit(const LE *op) {
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
     if (t.is_float()) {
-        value = builder.CreateFCmpOLE(a, b);
+        value = builder->CreateFCmpOLE(a, b);
     } else if (t.is_int()) {
-        value = builder.CreateICmpSLE(a, b);
+        value = builder->CreateICmpSLE(a, b);
     } else {
-        value = builder.CreateICmpULE(a, b);
+        value = builder->CreateICmpULE(a, b);
     }
 }
 
@@ -704,11 +714,11 @@ void CodeGen::visit(const GT *op) {
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
     if (t.is_float()) {
-        value = builder.CreateFCmpOGT(a, b);
+        value = builder->CreateFCmpOGT(a, b);
     } else if (t.is_int()) {
-        value = builder.CreateICmpSGT(a, b);
+        value = builder->CreateICmpSGT(a, b);
     } else {
-        value = builder.CreateICmpUGT(a, b);
+        value = builder->CreateICmpUGT(a, b);
     }
 }
 
@@ -717,24 +727,24 @@ void CodeGen::visit(const GE *op) {
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
     if (t.is_float()) {
-        value = builder.CreateFCmpOGE(a, b);
+        value = builder->CreateFCmpOGE(a, b);
     } else if (t.is_int()) {
-        value = builder.CreateICmpSGE(a, b);
+        value = builder->CreateICmpSGE(a, b);
     } else {
-        value = builder.CreateICmpUGE(a, b);
+        value = builder->CreateICmpUGE(a, b);
     }
 }
 
 void CodeGen::visit(const And *op) {
-    value = builder.CreateAnd(codegen(op->a), codegen(op->b));
+    value = builder->CreateAnd(codegen(op->a), codegen(op->b));
 }
 
 void CodeGen::visit(const Or *op) {
-    value = builder.CreateOr(codegen(op->a), codegen(op->b));
+    value = builder->CreateOr(codegen(op->a), codegen(op->b));
 }
 
 void CodeGen::visit(const Not *op) {
-    value = builder.CreateNot(codegen(op->a));
+    value = builder->CreateNot(codegen(op->a));
 }
 
 void CodeGen::visit(const Select *op) {
@@ -772,12 +782,12 @@ void CodeGen::visit(const Select *op) {
                 indices[i] = ConstantInt::get(i32, idx);
             }
 
-            value = builder.CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+            value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
             return;
         }
     }
 
-    value = builder.CreateSelect(codegen(op->condition), 
+    value = builder->CreateSelect(codegen(op->condition), 
                                  codegen(op->true_value), 
                                  codegen(op->false_value));
 
@@ -793,10 +803,10 @@ Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *
 
     // If the type doesn't match the expected type, we need to pointer cast
     if (load_type != base_address_type) {
-        base_address = builder.CreatePointerCast(base_address, load_type);            
+        base_address = builder->CreatePointerCast(base_address, load_type);            
     }
 
-    return builder.CreateGEP(base_address, index);
+    return builder->CreateGEP(base_address, index);
 }
 
 void CodeGen::visit(const Load *op) {
@@ -806,7 +816,7 @@ void CodeGen::visit(const Load *op) {
         // 1) Scalar loads
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, op->type, index);
-        value = builder.CreateLoad(ptr);
+        value = builder->CreateLoad(ptr);
     } else {            
         const Ramp *ramp = op->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
@@ -823,43 +833,43 @@ void CodeGen::visit(const Load *op) {
             // 4) Unaligned dense vector loads with unknown alignment
             Value *base = codegen(ramp->base);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
-            ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            value = builder.CreateAlignedLoad(ptr, 1);                
+            ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
+            value = builder->CreateAlignedLoad(ptr, 1);                
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
             Value *base = codegen(ramp->base);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
-            ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            Value *a = builder.CreateAlignedLoad(ptr, 1);
-            ptr = builder.CreateConstGEP1_32(ptr, 1);
-            Value *b = builder.CreateAlignedLoad(ptr, 1);
+            ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
+            Value *a = builder->CreateAlignedLoad(ptr, 1);
+            ptr = builder->CreateConstGEP1_32(ptr, 1);
+            Value *b = builder->CreateAlignedLoad(ptr, 1);
             vector<Constant *> indices(ramp->width);
             for (int i = 0; i < ramp->width; i++) {
                 indices[i] = ConstantInt::get(i32, i*2);
             }
-            value = builder.CreateShuffleVector(a, b, ConstantVector::get(indices));
+            value = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Value *base = codegen(ramp->base - ramp->width + 1);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
-            ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            Value *vec = builder.CreateAlignedLoad(ptr, 1);            
+            ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
+            Value *vec = builder->CreateAlignedLoad(ptr, 1);            
             Value *undef = UndefValue::get(vec->getType());
 
             vector<Constant *> indices(ramp->width);
             for (int i = 0; i < ramp->width; i++) {
                 indices[i] = ConstantInt::get(i32, ramp->width-1-i);
             }
-            value = builder.CreateShuffleVector(vec, undef, ConstantVector::get(indices));
+            value = builder->CreateShuffleVector(vec, undef, ConstantVector::get(indices));
         } else {                
             // 5) General gathers
             Value *index = codegen(op->index);
             value = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.width; i++) {
-                Value *idx = builder.CreateExtractElement(index, ConstantInt::get(i32, i));
+                Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-                Value *val = builder.CreateLoad(ptr);
-                value = builder.CreateInsertElement(value, val, ConstantInt::get(i32, i));
+                Value *val = builder->CreateLoad(ptr);
+                value = builder->CreateInsertElement(value, val, ConstantInt::get(i32, i));
             }
         }            
     }
@@ -884,12 +894,12 @@ void CodeGen::visit(const Ramp *op) {
         for (int i = 0; i < op->type.width; i++) {
             if (i > 0) {
                 if (op->type.is_float()) {
-                    base = builder.CreateFAdd(base, stride);
+                    base = builder->CreateFAdd(base, stride);
                 } else {
-                    base = builder.CreateAdd(base, stride);
+                    base = builder->CreateAdd(base, stride);
                 }
             }
-            value = builder.CreateInsertElement(value, base, ConstantInt::get(i32, i));
+            value = builder->CreateInsertElement(value, base, ConstantInt::get(i32, i));
         }
     }
 }
@@ -898,9 +908,9 @@ void CodeGen::visit(const Broadcast *op) {
     value = codegen(op->value);        
     Constant *undef = UndefValue::get(VectorType::get(value->getType(), 1));
     Constant *zero = ConstantInt::get(i32, 0);
-    value = builder.CreateInsertElement(undef, value, zero);
+    value = builder->CreateInsertElement(undef, value, zero);
     Constant *zeros = ConstantVector::getSplat(op->width, zero);
-    value = builder.CreateShuffleVector(value, undef, zeros);
+    value = builder->CreateShuffleVector(value, undef, zeros);
 }
 
 void CodeGen::visit(const Call *op) {
@@ -923,7 +933,7 @@ void CodeGen::visit(const Call *op) {
         for (size_t i = 0; i < indices.size(); i++) {
             indices[i] = ConstantInt::get(i32, even ? (i*2) : (i*2 + 1));
         }
-        value = builder.CreateShuffleVector(args[0], args[0], ConstantVector::get(indices));
+        value = builder->CreateShuffleVector(args[0], args[0], ConstantVector::get(indices));
         return;
     }
 
@@ -945,7 +955,7 @@ void CodeGen::visit(const Call *op) {
     }
 
     if (op->type.is_scalar()) {
-        value = builder.CreateCall(fn, args);
+        value = builder->CreateCall(fn, args);
     } else {
         // Check if a vector version of the function already
         // exists. We use the naming convention that a N-wide
@@ -954,7 +964,7 @@ void CodeGen::visit(const Call *op) {
         ss << op->name << 'x' << op->type.width;
         llvm::Function *vec_fn = module->getFunction(ss.str());
         if (vec_fn) {
-            value = builder.CreateCall(vec_fn, args);
+            value = builder->CreateCall(vec_fn, args);
             fn = vec_fn;
         } else {
             // Scalarize. Extract each simd lane in turn and do
@@ -964,10 +974,10 @@ void CodeGen::visit(const Call *op) {
                 Value *idx = ConstantInt::get(i32, i);
                 vector<Value *> arg_lane(args.size());
                 for (size_t j = 0; j < args.size(); j++) {
-                    arg_lane[j] = builder.CreateExtractElement(args[j], idx);
+                    arg_lane[j] = builder->CreateExtractElement(args[j], idx);
                 }
-                Value *result_lane = builder.CreateCall(fn, arg_lane);
-                value = builder.CreateInsertElement(value, result_lane, idx);
+                Value *result_lane = builder->CreateCall(fn, arg_lane);
+                value = builder->CreateInsertElement(value, result_lane, idx);
             }
         }            
     }
@@ -1007,7 +1017,7 @@ void CodeGen::visit(const PrintStmt *op) {
             for (int j = 0; j < arg.type().width; j++) {
                 if (j > 0) format_string << ' ';
                 Value *idx = ConstantInt::get(i32, j);
-                Value *ll_arg_lane = builder.CreateExtractElement(ll_arg, idx);
+                Value *ll_arg_lane = builder->CreateExtractElement(ll_arg, idx);
                 args.push_back(ll_arg_lane);
                 dst_types.push_back(arg.type().element_of());
                 format_string << fmt_of_type[arg.type().t];
@@ -1025,11 +1035,11 @@ void CodeGen::visit(const PrintStmt *op) {
     // Now cast all the args to the appropriate types
     for (size_t i = 0; i < args.size(); i++) {
         if (dst_types[i].is_int()) {
-            args[i] = builder.CreateIntCast(args[i], i32, true);                
+            args[i] = builder->CreateIntCast(args[i], i32, true);                
         } else if (dst_types[i].is_uint()) {
-            args[i] = builder.CreateIntCast(args[i], i32, false);
+            args[i] = builder->CreateIntCast(args[i], i32, false);
         } else {
-            args[i] = builder.CreateFPCast(args[i], f64);
+            args[i] = builder->CreateFPCast(args[i], f64);
         }            
     }
 
@@ -1038,7 +1048,7 @@ void CodeGen::visit(const PrintStmt *op) {
     llvm::Type *fmt_type = ArrayType::get(i8, fmt_string.size()+1);
     GlobalVariable *fmt_global = new GlobalVariable(*module, fmt_type, true, GlobalValue::PrivateLinkage, 0);
     fmt_global->setInitializer(ConstantDataArray::getString(context, fmt_string));
-    Value *char_ptr = builder.CreateConstGEP2_32(fmt_global, 0, 0);
+    Value *char_ptr = builder->CreateConstGEP2_32(fmt_global, 0, 0);
 
     // The format string is the first argument
     args.insert(args.begin(), char_ptr);
@@ -1048,7 +1058,7 @@ void CodeGen::visit(const PrintStmt *op) {
     assert(hlprintf && "Could not find hlprintf in initial module");
 
     // Call it
-    builder.CreateCall(hlprintf, args);
+    builder->CreateCall(hlprintf, args);
 }
 
 void CodeGen::visit(const AssertStmt *op) {
@@ -1059,30 +1069,30 @@ void CodeGen::visit(const AssertStmt *op) {
     BasicBlock *assert_succeeds_bb = BasicBlock::Create(context, "after_assert", function);
 
     // If the condition fails, enter the assert body, otherwise, enter the block after
-    builder.CreateCondBr(cond, assert_succeeds_bb, assert_fails_bb);
+    builder->CreateCondBr(cond, assert_succeeds_bb, assert_fails_bb);
 
     // Build the failure case
-    builder.SetInsertPoint(assert_fails_bb);
+    builder->SetInsertPoint(assert_fails_bb);
 
     // Make the error message string a global constant
     llvm::Type *msg_type = ArrayType::get(i8, op->message.size()+1);
     GlobalVariable *msg_global = new GlobalVariable(*module, msg_type, true, GlobalValue::PrivateLinkage, 0);
     msg_global->setInitializer(ConstantDataArray::getString(context, op->message));
-    Value *char_ptr = builder.CreateConstGEP2_32(msg_global, 0, 0);
+    Value *char_ptr = builder->CreateConstGEP2_32(msg_global, 0, 0);
 
     // Call the error handler
     llvm::Function *error_handler = module->getFunction("halide_error");
     assert(error_handler && "Could not find halide_error in initial module");
-    builder.CreateCall(error_handler, vec(char_ptr));
+    builder->CreateCall(error_handler, vec(char_ptr));
 
     // Do any architecture-specific cleanup necessary
     prepare_for_early_exit();
 
     // Bail out
-    builder.CreateRetVoid();
+    builder->CreateRetVoid();
 
     // Continue on using the success case
-    builder.SetInsertPoint(assert_succeeds_bb);
+    builder->SetInsertPoint(assert_succeeds_bb);
 }
 
 void CodeGen::visit(const Pipeline *op) {
@@ -1174,28 +1184,28 @@ public:
         return struct_t;
     }
 
-    void pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> &builder) {
+    void pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> *builder) {
         // dst should be a pointer to a struct of the type returned by build_type
         int idx = 0;
         for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
              iter != result.end(); ++iter) {
             // cout << "Putting " << iter->first << " in closure" << endl;
             Value *val = src.get(iter->first);
-            Value *ptr = builder.CreateConstGEP2_32(dst, 0, idx++);
+            Value *ptr = builder->CreateConstGEP2_32(dst, 0, idx++);
             if (val->getType() != iter->second) {
-                val = builder.CreateBitCast(val, iter->second);
+                val = builder->CreateBitCast(val, iter->second);
             }
-            builder.CreateStore(val, ptr);
+            builder->CreateStore(val, ptr);
         }
     }
 
-    void unpack_struct(Scope<Value *> &dst, Value *src, IRBuilder<> &builder) {
+    void unpack_struct(Scope<Value *> &dst, Value *src, IRBuilder<> *builder) {
         // src should be a pointer to a struct of the type returned by build_type
         int idx = 0;
         for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
              iter != result.end(); ++iter) {
-            Value *ptr = builder.CreateConstGEP2_32(src, 0, idx++);
-            Value *val = builder.CreateLoad(ptr);
+            Value *ptr = builder->CreateConstGEP2_32(src, 0, idx++);
+            Value *val = builder->CreateLoad(ptr);
             dst.push(iter->first, val);
             val->setName(iter->first);
         }
@@ -1207,19 +1217,19 @@ void CodeGen::visit(const For *op) {
     Value *extent = codegen(op->extent);
         
     if (op->for_type == For::Serial) {
-        Value *max = builder.CreateAdd(min, extent);
+        Value *max = builder->CreateAdd(min, extent);
             
-        BasicBlock *preheader_bb = builder.GetInsertBlock();
+        BasicBlock *preheader_bb = builder->GetInsertBlock();
 
         // Make a new basic block for the loop
         BasicBlock *loop_bb = BasicBlock::Create(context, op->name + "_loop", function);
 
         // Fall through to the loop bb
-        builder.CreateBr(loop_bb);
-        builder.SetInsertPoint(loop_bb);
+        builder->CreateBr(loop_bb);
+        builder->SetInsertPoint(loop_bb);
 
         // Make our phi node
-        PHINode *phi = builder.CreatePHI(i32, 2);
+        PHINode *phi = builder->CreatePHI(i32, 2);
         phi->addIncoming(min, preheader_bb);
 
         // Within the loop, the variable is equal to the phi value
@@ -1229,18 +1239,18 @@ void CodeGen::visit(const For *op) {
         codegen(op->body);
 
         // Update the counter
-        Value *next_var = builder.CreateAdd(phi, ConstantInt::get(i32, 1));
+        Value *next_var = builder->CreateAdd(phi, ConstantInt::get(i32, 1));
 
         // Create the block that comes after the loop
         BasicBlock *after_bb = BasicBlock::Create(context, op->name + "_after_loop", function);
 
         // Add the back-edge to the phi node
-        phi->addIncoming(next_var, builder.GetInsertBlock());
+        phi->addIncoming(next_var, builder->GetInsertBlock());
 
         // Maybe exit the loop
-        Value *end_condition = builder.CreateICmpNE(next_var, max);
-        builder.CreateCondBr(end_condition, loop_bb, after_bb);
-        builder.SetInsertPoint(after_bb);
+        Value *end_condition = builder->CreateICmpNE(next_var, max);
+        builder->CreateCondBr(end_condition, loop_bb, after_bb);
+        builder->SetInsertPoint(after_bb);
 
         // Pop the loop variable from the scope
         sym_pop(op->name);
@@ -1254,7 +1264,7 @@ void CodeGen::visit(const For *op) {
 
         // Allocate a closure
         StructType *closure_t = closure.build_type();
-        Value *ptr = builder.CreateAlloca(closure_t, ConstantInt::get(i32, 1)); 
+        Value *ptr = builder->CreateAlloca(closure_t, ConstantInt::get(i32, 1)); 
 
         // Fill in the closure
         closure.pack_struct(ptr, symbol_table, builder);
@@ -1265,9 +1275,9 @@ void CodeGen::visit(const For *op) {
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, "par_for_" + op->name, module);
 
         // Make the initial basic block and jump the builder into the new function
-        BasicBlock *call_site = builder.GetInsertBlock();
+        BasicBlock *call_site = builder->GetInsertBlock();
         BasicBlock *block = BasicBlock::Create(context, "entry", function);
-        builder.SetInsertPoint(block);
+        builder->SetInsertPoint(block);
 
         // Make a new scope to use
         Scope<Value *> saved_symbol_table;
@@ -1282,21 +1292,21 @@ void CodeGen::visit(const For *op) {
         // The closure pointer is the second argument. 
         ++iter;
         iter->setName("closure");
-        Value *closure_handle = builder.CreatePointerCast(iter, closure_t->getPointerTo());
+        Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
         // Load everything from the closure into the new scope
         closure.unpack_struct(symbol_table, closure_handle, builder);
             
         // Generate the new function body
         codegen(op->body);
-        builder.CreateRetVoid();
+        builder->CreateRetVoid();
 
         // Move the builder back to the main function and call do_par_for
-        builder.SetInsertPoint(call_site);
+        builder->SetInsertPoint(call_site);
         llvm::Function *do_par_for = module->getFunction("do_par_for");
         assert(do_par_for && "Could not find do_par_for in initial module");
-        ptr = builder.CreatePointerCast(ptr, i8->getPointerTo());
+        ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
         vector<Value *> args = vec((Value *)function, min, extent, ptr);
-        builder.CreateCall(do_par_for, args);
+        builder->CreateCall(do_par_for, args);
 
         log(3) << "Leaving parallel for loop over " << op->name << "\n";
 
@@ -1315,7 +1325,7 @@ void CodeGen::visit(const Store *op) {
     if (value_type.is_scalar()) {
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, value_type, index);
-        builder.CreateStore(val, ptr);
+        builder->CreateStore(val, ptr);
     } else {
         const Ramp *ramp;
         const IntImm *stride;
@@ -1330,18 +1340,18 @@ void CodeGen::visit(const Store *op) {
                 // Unaligned dense store
                 Value *base = codegen(ramp->base);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), base);
-                ptr = builder.CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
-                builder.CreateAlignedStore(val, ptr, 1);                    
+                ptr = builder->CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
+                builder->CreateAlignedStore(val, ptr, 1);                    
             }
         } else {
             // Scatter
             Value *index = codegen(op->index);
             for (int i = 0; i < value_type.width; i++) {
                 Value *lane = ConstantInt::get(i32, i);
-                Value *idx = builder.CreateExtractElement(index, lane);
-                Value *v = builder.CreateExtractElement(val, lane);
+                Value *idx = builder->CreateExtractElement(index, lane);
+                Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
-                builder.CreateStore(v, ptr);
+                builder->CreateStore(v, ptr);
             }
         }
         
