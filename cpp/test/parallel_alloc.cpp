@@ -6,7 +6,7 @@ int main(int argc, char **argv) {
 
     setenv("HL_NUMTHREADS", "8", 0);
 
-    for (int i = 0; i < 20 ; i++) {
+    for (int i = 0; i < 20; i++) {
         Var x, y, z;
         Func f, g;
         
@@ -18,6 +18,7 @@ int main(int argc, char **argv) {
         f.parallel(y);
 
         Image<int> im = f.realize(8, 8);
+        f.realize(im);
         
         for (int x = 0; x < 8; x++) {
             for (int y = 0; y < 8; y++) {

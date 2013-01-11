@@ -44,6 +44,7 @@ CodeGen_X86::CodeGen_X86(bool sse_41, bool avx) : CodeGen(), use_sse_41(sse_41),
 
 void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
+    if (module && owns_module) delete module;
 
     StringRef sb;
 
@@ -56,7 +57,7 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     }
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
-    // Parse it
+    // Parse it    
     module = ParseBitcodeFile(bitcode_buffer, context);
 
     // Fix the target triple

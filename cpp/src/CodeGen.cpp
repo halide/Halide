@@ -84,12 +84,19 @@ CodeGen::CodeGen() :
     }
 }
 
-CodeGen::~CodeGen() {}
+CodeGen::~CodeGen() {
+    if (module && owns_module) {
+        delete module;
+        module = NULL;
+        owns_module = false;
+    }
+}
 
 bool CodeGen::llvm_initialized = false;
 
 void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     assert(module && "The CodeGen subclass should have made an initial module before calling CodeGen::compile");
+    owns_module = true;
 
     // Start the module off with a definition of a buffer_t
     define_buffer_t();
@@ -197,10 +204,9 @@ struct JITModuleHolder {
     ~JITModuleHolder() {
         shutdown_thread_pool();
         delete execution_engine;
-        
     }
     void (*shutdown_thread_pool)();
-    llvm::ExecutionEngine *execution_engine;
+    llvm::ExecutionEngine *execution_engine;    
 };
 
 template<>
@@ -268,6 +274,9 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     f = execution_engine->getPointerToFunction(shutdown_thread_pool);
     m.module.ptr->shutdown_thread_pool = (void (*)())f;
     assert(f && "Compiling shutdown_thread_pool function returned NULL");
+
+    // We now relinquish ownership of the module
+    owns_module = false;
     
     return m;
 }
