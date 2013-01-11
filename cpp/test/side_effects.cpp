@@ -1,5 +1,6 @@
-#include "Halide.h"
-#include "math.h"
+#include <stdio.h>
+#include <Halide.h>
+#include <math.h>
 #include <dlfcn.h>
 
 using namespace Halide;

@@ -1,8 +1,6 @@
 #include "CodeGen_X86.h"
 #include "IROperator.h"
 #include <iostream>
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/IRReader.h"
 #include "buffer_t.h"
 #include "IRPrinter.h"
 #include "IRMatch.h"
@@ -11,6 +9,28 @@
 #include "Var.h"
 #include "Param.h"
 #include "integer_division_table.h"
+
+#include <llvm/Config/config.h>
+
+#if LLVM_VERSION_MINOR < 3
+#include <llvm/Value.h>
+#include <llvm/Module.h>
+#include <llvm/Function.h>
+#include <llvm/TargetTransformInfo.h>
+#include <llvm/DataLayout.h>
+#include <llvm/IRBuilder.h>
+#else
+#include <llvm/IR/Value.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Function.h>
+#include <llvm/Analysis/TargetTransformInfo.h>
+#include <llvm/IR/DataLayout.h>
+#include <llvm/IR/IRBuilder.h>
+#endif
+
+#include <llvm/Support/MemoryBuffer.h>
+#include <llvm/Support/IRReader.h>
+
 
 using std::vector;
 using std::string;
@@ -129,7 +149,7 @@ Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Exp
         fn->setCallingConv(CallingConv::C);
     }
 
-    return builder.CreateCall(fn, arg_values);
+    return builder->CreateCall(fn, arg_values);
 }
 
 Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Value *> arg_values) {
@@ -146,7 +166,7 @@ Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Val
         fn->setCallingConv(CallingConv::C);
     }
 
-    return builder.CreateCall(fn, arg_values);
+    return builder->CreateCall(fn, arg_values);
 }
  
 void CodeGen_X86::visit(const Cast *op) {
@@ -281,7 +301,7 @@ void CodeGen_X86::visit(const Div *op) {
 
             // Possibly add a correcting factor
             if (method == 1) {
-                mult = builder.CreateAdd(mult, val);
+                mult = builder->CreateAdd(mult, val);
             }
         } else {
             mult = val;
@@ -291,13 +311,13 @@ void CodeGen_X86::visit(const Div *op) {
         Value *sh;
         if (shift) {
             sh = codegen(cast(op->type, shift));
-            mult = builder.CreateAShr(mult, sh);
+            mult = builder->CreateAShr(mult, sh);
         }
 
         // Add one for negative numbers
         sh = codegen(cast(op->type, op->type.bits - 1));
-        Value *sign_bit = builder.CreateLShr(val, sh);
-        value = builder.CreateAdd(mult, sign_bit);
+        Value *sign_bit = builder->CreateLShr(val, sh);
+        value = builder->CreateAdd(mult, sign_bit);
     } else if (op->type == UInt(16, 8) && const_divisor > 1 && const_divisor < 64) {
         int method     = IntegerDivision::table_u16[const_divisor-2][0];
         int multiplier = IntegerDivision::table_u16[const_divisor-2][1];
@@ -313,15 +333,15 @@ void CodeGen_X86::visit(const Div *op) {
 
             // Possibly add a correcting factor
             if (method == 2) {
-                Value *correction = builder.CreateSub(val, mult);
-                correction = builder.CreateLShr(correction, codegen(make_one(op->type)));
-                mult = builder.CreateAdd(mult, correction);
+                Value *correction = builder->CreateSub(val, mult);
+                correction = builder->CreateLShr(correction, codegen(make_one(op->type)));
+                mult = builder->CreateAdd(mult, correction);
             }
         }
 
         // Do the shift
         Value *sh = codegen(cast(op->type, shift));
-        value = builder.CreateLShr(mult, sh);
+        value = builder->CreateLShr(mult, sh);
 
     } else {    
         CodeGen::visit(op);
@@ -387,13 +407,13 @@ void CodeGen_X86::visit(const Allocate *alloc) {
         // Do a 32-byte aligned alloca
         int total_bytes = stack_size * bytes_per_element;            
         int chunks = (total_bytes + 31)/32;
-        ptr = builder.CreateAlloca(i32x8, ConstantInt::get(i32, chunks)); 
-        ptr = builder.CreatePointerCast(ptr, llvm_type->getPointerTo());
+        ptr = builder->CreateAlloca(i32x8, ConstantInt::get(i32, chunks)); 
+        ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
     } else {
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("fast_malloc");
-        Value *sz = builder.CreateIntCast(size, i64, false);
-        ptr = builder.CreateCall(malloc_fn, sz);
+        Value *sz = builder->CreateIntCast(size, i64, false);
+        ptr = builder->CreateCall(malloc_fn, sz);
         heap_allocations.push(ptr);
     }
 
@@ -405,7 +425,7 @@ void CodeGen_X86::visit(const Allocate *alloc) {
         heap_allocations.pop();
         // call free
         llvm::Function *free_fn = module->getFunction("fast_free");
-        builder.CreateCall(free_fn, ptr);
+        builder->CreateCall(free_fn, ptr);
     }
 }
 
@@ -413,7 +433,7 @@ void CodeGen_X86::prepare_for_early_exit() {
     
     llvm::Function *free_fn = module->getFunction("fast_free");
     while (!heap_allocations.empty()) {
-        builder.CreateCall(free_fn, heap_allocations.top());        
+        builder->CreateCall(free_fn, heap_allocations.top());        
         heap_allocations.pop();
     }
 }

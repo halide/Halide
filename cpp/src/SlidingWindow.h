@@ -1,13 +1,14 @@
 #ifndef HALIDE_SLIDING_WINDOW_H
 #define HALIDE_SLIDING_WINDOW_H
 
-#include "IR.h"
-
 /** \file
  *
  * Defines the sliding_window lowering optimization pass, which avoids
  * computing provably-already-computed values.
  */
+
+#include "IR.h"
+#include <map>
 
 namespace Halide {
 namespace Internal {
