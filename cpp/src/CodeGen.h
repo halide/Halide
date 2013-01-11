@@ -81,6 +81,7 @@ protected:
     //@{
     static bool llvm_initialized;
     llvm::Module *module;
+    bool owns_module;
     llvm::Function *function;
     llvm::LLVMContext &context;
     llvm::IRBuilder<> builder;
