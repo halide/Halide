@@ -6,6 +6,7 @@
 #include "Log.h"
 #include "CodeGen_C.h"
 #include "Function.h"
+#include "Deinterleave.h"
 
 #include <llvm/Analysis/Verifier.h>
 #include <llvm/ExecutionEngine/JIT.h>
@@ -737,9 +738,49 @@ void CodeGen::visit(const Not *op) {
 }
 
 void CodeGen::visit(const Select *op) {
+    // Interleaving two shorter vectors should be done using shufflevector, not select:
+    // select(ramp % 2 == 0, a, b)
+    const EQ *eq = op->condition.as<EQ>();
+    const Mod *mod = eq ? eq->a.as<Mod>() : NULL;
+    const Ramp *ramp = mod ? mod->a.as<Ramp>() : NULL;
+    if (false && ramp && is_one(ramp->stride) && is_const(eq->b) && is_two(mod->b)) {
+        log(3) << "Detected interleave vector pattern. Deinterleaving.\n";
+        // TODO: modulus remainder analysis can make this test much more powerful:
+        const Mul *base_mul = ramp->base.as<Mul>();
+        const Add *base_add = ramp->base.as<Add>();
+        const Mul *base_add_mul = base_add ? base_add->a.as<Mul>() : NULL;
+        bool base_is_even = base_mul && is_two(base_mul->b);
+        bool base_is_odd = base_add_mul && is_one(base_add->b) && is_two(base_add_mul->b);
+        Expr a, b;
+        if ((is_zero(eq->b) && base_is_even) || 
+            (is_one(eq->b) && base_is_odd)) {
+            a = extract_even_lanes(op->true_value);
+            b = extract_odd_lanes(op->false_value);
+        } else if ((is_one(eq->b) && base_is_even) || 
+                   (is_zero(eq->b) && base_is_odd)) {
+            a = extract_even_lanes(op->false_value);
+            b = extract_odd_lanes(op->true_value);
+        }        
+
+        if (a.defined() && b.defined()) {
+            log(3) << "Resulting vectors to interleave: " << a << ", " << b << "\n";
+            
+            vector<Constant *> indices(ramp->width);
+            for (int i = 0; i < ramp->width; i++) {
+                int idx = i/2;
+                if (i % 2 == 1) idx += a.type().width;
+                indices[i] = ConstantInt::get(i32, idx);
+            }
+
+            value = builder.CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+            return;
+        }
+    }
+
     value = builder.CreateSelect(codegen(op->condition), 
                                  codegen(op->true_value), 
                                  codegen(op->false_value));
+
 }
 
 Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
@@ -792,13 +833,11 @@ void CodeGen::visit(const Load *op) {
             Value *a = builder.CreateAlignedLoad(ptr, 1);
             ptr = builder.CreateConstGEP1_32(ptr, 1);
             Value *b = builder.CreateAlignedLoad(ptr, 1);
-            Value *indices = UndefValue::get(VectorType::get(i32, ramp->width));
+            vector<Constant *> indices(ramp->width);
             for (int i = 0; i < ramp->width; i++) {
-                indices = builder.CreateInsertElement(indices, 
-                                                      ConstantInt::get(i32, i*2), 
-                                                      ConstantInt::get(i32, i));
+                indices[i] = ConstantInt::get(i32, i*2);
             }
-            value = builder.CreateShuffleVector(a, b, indices);
+            value = builder.CreateShuffleVector(a, b, ConstantVector::get(indices));
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Value *base = codegen(ramp->base - ramp->width + 1);
@@ -806,13 +845,12 @@ void CodeGen::visit(const Load *op) {
             ptr = builder.CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             Value *vec = builder.CreateAlignedLoad(ptr, 1);            
             Value *undef = UndefValue::get(vec->getType());
-            Value *indices = UndefValue::get(VectorType::get(i32, ramp->width));
+
+            vector<Constant *> indices(ramp->width);
             for (int i = 0; i < ramp->width; i++) {
-                indices = builder.CreateInsertElement(indices, 
-                                                      ConstantInt::get(i32, ramp->width-1-i), 
-                                                      ConstantInt::get(i32, i));
+                indices[i] = ConstantInt::get(i32, ramp->width-1-i);
             }
-            value = builder.CreateShuffleVector(vec, undef, indices);
+            value = builder.CreateShuffleVector(vec, undef, ConstantVector::get(indices));
         } else {                
             // 5) General gathers
             Value *index = codegen(op->index);
@@ -828,18 +866,31 @@ void CodeGen::visit(const Load *op) {
 }
 
 void CodeGen::visit(const Ramp *op) {        
-    Value *base = codegen(op->base);
-    Value *stride = codegen(op->stride);
-    value = UndefValue::get(llvm_type_of(op->type));
-    for (int i = 0; i < op->type.width; i++) {
-        if (i > 0) {
-            if (op->type.is_float()) {
-                base = builder.CreateFAdd(base, stride);
-            } else {
-                base = builder.CreateAdd(base, stride);
+    if (is_const(op->stride) && !is_const(op->base)) {
+        // If the stride is const and the base is not (e.g. ramp(x, 1,
+        // 4)), we can lift out the stride and broadcast the base so
+        // we can do a single vector broadcast and add instead of
+        // repeated insertion
+        Expr broadcast = new Broadcast(op->base, op->width);
+        Expr ramp = new Ramp(make_zero(op->base.type()), op->stride, op->width);
+        value = codegen(broadcast + ramp);
+    } else {
+        // Otherwise we generate element by element by adding the stride to the base repeatedly        
+
+        Value *base = codegen(op->base);
+        Value *stride = codegen(op->stride);
+
+        value = UndefValue::get(llvm_type_of(op->type));
+        for (int i = 0; i < op->type.width; i++) {
+            if (i > 0) {
+                if (op->type.is_float()) {
+                    base = builder.CreateFAdd(base, stride);
+                } else {
+                    base = builder.CreateAdd(base, stride);
+                }
             }
+            value = builder.CreateInsertElement(value, base, ConstantInt::get(i32, i));
         }
-        value = builder.CreateInsertElement(value, base, ConstantInt::get(i32, i));
     }
 }
 
@@ -859,6 +910,21 @@ void CodeGen::visit(const Call *op) {
     vector<Value *> args(op->args.size());
     for (size_t i = 0; i < op->args.size(); i++) {
         args[i] = codegen(op->args[i]);
+    }
+
+    // Some call nodes are actually injected at various stages as a
+    // cue for llvm to generate particular ops. In general these are
+    // handled in the standard library, but ones with e.g. varying
+    // types are handled here.
+    if (op->name == "extract odd lanes" || op->name == "extract even lanes") {
+        bool even = (op->name == "extract even lanes");
+        assert(args.size() == 1);
+        vector<Constant *> indices(op->type.width);
+        for (size_t i = 0; i < indices.size(); i++) {
+            indices[i] = ConstantInt::get(i32, even ? (i*2) : (i*2 + 1));
+        }
+        value = builder.CreateShuffleVector(args[0], args[0], ConstantVector::get(indices));
+        return;
     }
 
     llvm::Function *fn = module->getFunction(op->name);

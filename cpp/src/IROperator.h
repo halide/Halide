@@ -33,6 +33,10 @@ bool is_zero(Expr e);
  * to one (in all lanes, if a vector expression) */
 bool is_one(Expr e);
 
+/** Is the expression a const (as defined by is_const), and also equal
+ * to two (in all lanes, if a vector expression) */
+bool is_two(Expr e);
+
 /** Construct a const of the given type */
 Expr make_const(Type t, int val);
 

@@ -7,6 +7,7 @@
 #include "Bounds.h"
 #include "Lower.h"
 #include "IRMatch.h"
+#include "Deinterleave.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -20,5 +21,6 @@ int main(int argc, const char **argv) {
     lower_test();
     Func::test();
     expr_match_test();
+    deinterleave_vector_test();
     return 0;
 }
