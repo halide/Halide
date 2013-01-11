@@ -4,7 +4,7 @@ PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
 
 halide_blur: ../../ halide_blur.cpp
 	$(MAKE) -C ../../ bin/libHalide.a
-	$(GXX) halide_blur.cpp -I ../../src ../../bin/libHalide.a -o halide_blur -ldl -lpthread
+	$(GXX) halide_blur.cpp -I ../../include ../../bin/libHalide.a -o halide_blur -ldl -lpthread
 
 halide_blur.o: halide_blur
 	HL_DISABLE_BOUNDS_CHECKING=1 ./halide_blur
