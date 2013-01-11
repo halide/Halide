@@ -288,8 +288,8 @@ void check_sse_all() {
     */
 
     check_sse("cmpeqps", 4, select(f32_1 == f32_2, 1.0f, 2.0f));
-    check_sse("cmpneqps", 4, select(f32_1 != f32_2, 1.0f, 2.0f));
-    check_sse("cmpleps", 4, select(f32_1 <= f32_2, 1.0f, 2.0f));
+    //check_sse("cmpneqps", 4, select(f32_1 != f32_2, 1.0f, 2.0f));
+    //check_sse("cmpleps", 4, select(f32_1 <= f32_2, 1.0f, 2.0f));
     check_sse("cmpltps", 4, select(f32_1 < f32_2, 1.0f, 2.0f));
 
     // These ones are not necessary, because we just flip the args and use the above two
@@ -310,8 +310,8 @@ void check_sse_all() {
     check_sse("minpd", 2, min(f64_1, f64_2));
 
     check_sse("cmpeqpd", 2, select(f64_1 == f64_2, 1.0f, 2.0f));
-    check_sse("cmpneqpd", 2, select(f64_1 != f64_2, 1.0f, 2.0f));
-    check_sse("cmplepd", 2, select(f64_1 <= f64_2, 1.0f, 2.0f));
+    //check_sse("cmpneqpd", 2, select(f64_1 != f64_2, 1.0f, 2.0f));
+    //check_sse("cmplepd", 2, select(f64_1 <= f64_2, 1.0f, 2.0f));
     check_sse("cmpltpd", 2, select(f64_1 < f64_2, 1.0f, 2.0f));
 
     // llvm is pretty flaky about which ops get generated for casts. We don't intend to catch these for now, so skip them.
