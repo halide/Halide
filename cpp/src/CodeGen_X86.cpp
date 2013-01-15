@@ -507,8 +507,11 @@ void CodeGen_X86::test() {
     //cg.compile_to_native("test1.s", true);
 
     if (!getenv("HL_NUMTHREADS")) {
+        #ifdef _WIN32
         putenv("HL_NUMTHREADS=4");
-        //setenv("HL_NUMTHREADS", "4", 1);
+        #else
+        setenv("HL_NUMTHREADS", "4", 1);
+        #endif
     }
     JITCompiledModule m = cg.compile_to_function_pointers();
     typedef void (*fn_type)(::buffer_t *, float, int);
