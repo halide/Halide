@@ -5,8 +5,7 @@
 int main(int argc, const char **argv) {
     assert(argc == 2 && "Requires target name as an argument (e.g. x86)");
     const char *target = argv[1];
-    printf("namespace Halide { namespace Internal {");
-    printf("unsigned char builtins_bitcode_%s[] = {\n", target);
+    printf("extern \"C\" unsigned char halide_internal_initmod_%s[] = {\n", target);
     int count = 0;
     while (1) {
         int c = getchar();
@@ -15,7 +14,6 @@ int main(int argc, const char **argv) {
         count++;
     }
     printf("0};\n");
-    printf("int builtins_bitcode_%s_length = %d;\n", target, count);
-    printf("}}\n");
+    printf("extern \"C\" int halide_internal_initmod_%s_length = %d;\n", target, count);
     return 0;
 }

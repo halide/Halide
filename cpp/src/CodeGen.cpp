@@ -63,6 +63,7 @@ LLVMContext &get_global_context() {
 }
 }
 
+
 CodeGen::CodeGen() : 
     module(NULL), function(NULL), context(get_global_context()), 
     builder(new IRBuilder<>(context)), value(NULL), buffer_t(NULL) {
@@ -198,8 +199,9 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
 // Wraps an execution engine. Takes ownership of the given module and
 // the memory for jit compiled code.
-struct JITModuleHolder {
-    mutable RefCount ref_count;    
+class JITModuleHolder {
+public:
+	mutable RefCount ref_count;    
     JITModuleHolder(Module *module) {
         log(2) << "Creating new execution engine\n";
         string error_string;

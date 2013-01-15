@@ -1,0 +1,245 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release-Static|Win32">
+      <Configuration>Release-Static</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <TargetExt>.dll</TargetExt>
+    <CustomBuildBeforeTargets>Link</CustomBuildBeforeTargets>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <TargetExt>.dll</TargetExt>
+    <CustomBuildBeforeTargets>
+    </CustomBuildBeforeTargets>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <TargetExt>.lib</TargetExt>
+    <CustomBuildBeforeTargets>
+    </CustomBuildBeforeTargets>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>C:\Users\abadams\projects\halide\cpp\msvc\llvm\build\include;C:\Users\abadams\projects\halide\cpp\msvc\llvm\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <TargetMachine>MachineX86</TargetMachine>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>Release/halide_initial_modules.lib;llvm/build/lib/Release/LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <CustomBuildStep>
+      <Command>Release\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; Halide.h</Command>
+    </CustomBuildStep>
+    <CustomBuildStep>
+      <Outputs>Release\Halide.h</Outputs>
+      <Inputs>
+      </Inputs>
+    </CustomBuildStep>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalIncludeDirectories>C:\Users\abadams\projects\halide\cpp\msvc\llvm\build\include;C:\Users\abadams\projects\halide\cpp\msvc\llvm\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <TargetMachine>MachineX86</TargetMachine>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>Release/halide_initial_modules.lib;llvm/build/lib/Release/LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <CustomBuildStep>
+      <Command>cd ..\src
+..\msvc\Release\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; ..\msvc\Release\Halide.h
+cd ..\msvc</Command>
+    </CustomBuildStep>
+    <CustomBuildStep>
+      <Outputs>Release\Halide.h</Outputs>
+      <Inputs>
+      </Inputs>
+    </CustomBuildStep>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalIncludeDirectories>C:\Users\abadams\projects\halide\cpp\msvc\llvm\build\include;C:\Users\abadams\projects\halide\cpp\msvc\llvm\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <TargetMachine>MachineX86</TargetMachine>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>Release/halide_initial_modules.lib;llvm/build/lib/Release/LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <CustomBuildStep>
+      <Command>cd ..\src
+..\msvc\Release\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; ..\msvc\Release-Static\Halide.h
+cd ..\msvc</Command>
+    </CustomBuildStep>
+    <CustomBuildStep>
+      <Outputs>Release-Static\Halide.h</Outputs>
+      <Inputs>
+      </Inputs>
+    </CustomBuildStep>
+    <ProjectReference>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+    <Lib>
+      <AdditionalDependencies>Release/halide_initial_modules.lib;llvm/build/lib/Release/LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\Bounds.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="..\src\BoundsInference.cpp" />
+    <ClCompile Include="..\src\build_halide_h.cpp" />
+    <ClCompile Include="..\src\CodeGen.cpp" />
+    <ClCompile Include="..\src\CodeGen_C.cpp" />
+    <ClCompile Include="..\src\CodeGen_X86.cpp" />
+    <ClCompile Include="..\src\Deinterleave.cpp" />
+    <ClCompile Include="..\src\Derivative.cpp" />
+    <ClCompile Include="..\src\Func.cpp" />
+    <ClCompile Include="..\src\Function.cpp" />
+    <ClCompile Include="..\src\InlineReductions.cpp" />
+    <ClCompile Include="..\src\integer_division_table.cpp" />
+    <ClCompile Include="..\src\IR.cpp" />
+    <ClCompile Include="..\src\IREquality.cpp" />
+    <ClCompile Include="..\src\IRMatch.cpp" />
+    <ClCompile Include="..\src\IRMutator.cpp" />
+    <ClCompile Include="..\src\IROperator.cpp" />
+    <ClCompile Include="..\src\IRPrinter.cpp" />
+    <ClCompile Include="..\src\IRVisitor.cpp" />
+    <ClCompile Include="..\src\Log.cpp" />
+    <ClCompile Include="..\src\Lower.cpp" />
+    <ClCompile Include="..\src\ModulusRemainder.cpp" />
+    <ClCompile Include="..\src\Parameter.cpp" />
+    <ClCompile Include="..\src\RDom.cpp" />
+    <ClCompile Include="..\src\Reduction.cpp" />
+    <ClCompile Include="..\src\RemoveDeadLets.cpp" />
+    <ClCompile Include="..\src\RemoveTrivialForLoops.cpp" />
+    <ClCompile Include="..\src\Simplify.cpp" />
+    <ClCompile Include="..\src\SlidingWindow.cpp" />
+    <ClCompile Include="..\src\StmtCompiler.cpp" />
+    <ClCompile Include="..\src\StorageFlattening.cpp" />
+    <ClCompile Include="..\src\StorageFolding.cpp" />
+    <ClCompile Include="..\src\Substitute.cpp" />
+    <ClCompile Include="..\src\Tracing.cpp" />
+    <ClCompile Include="..\src\UnrollLoops.cpp" />
+    <ClCompile Include="..\src\Util.cpp" />
+    <ClCompile Include="..\src\VectorizeLoops.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\Argument.h" />
+    <ClInclude Include="..\src\Bounds.h" />
+    <ClInclude Include="..\src\BoundsInference.h" />
+    <ClInclude Include="..\src\Buffer.h" />
+    <ClInclude Include="..\src\buffer_t.h" />
+    <ClInclude Include="..\src\CodeGen.h" />
+    <ClInclude Include="..\src\CodeGen_C.h" />
+    <ClInclude Include="..\src\CodeGen_X86.h" />
+    <ClInclude Include="..\src\Deinterleave.h" />
+    <ClInclude Include="..\src\Derivative.h" />
+    <ClInclude Include="..\src\Extern.h" />
+    <ClInclude Include="..\src\Func.h" />
+    <ClInclude Include="..\src\Function.h" />
+    <ClInclude Include="..\src\Image.h" />
+    <ClInclude Include="..\src\InlineReductions.h" />
+    <ClInclude Include="..\src\integer_division_table.h" />
+    <ClInclude Include="..\src\IntrusivePtr.h" />
+    <ClInclude Include="..\src\IR.h" />
+    <ClInclude Include="..\src\IREquality.h" />
+    <ClInclude Include="..\src\IRMatch.h" />
+    <ClInclude Include="..\src\IRMutator.h" />
+    <ClInclude Include="..\src\IROperator.h" />
+    <ClInclude Include="..\src\IRPrinter.h" />
+    <ClInclude Include="..\src\IRVisitor.h" />
+    <ClInclude Include="..\src\JITCompiledModule.h" />
+    <ClInclude Include="..\src\Lambda.h" />
+    <ClInclude Include="..\src\Log.h" />
+    <ClInclude Include="..\src\Lower.h" />
+    <ClInclude Include="..\src\MainPage.h" />
+    <ClInclude Include="..\src\ModulusRemainder.h" />
+    <ClInclude Include="..\src\Param.h" />
+    <ClInclude Include="..\src\Parameter.h" />
+    <ClInclude Include="..\src\RDom.h" />
+    <ClInclude Include="..\src\Reduction.h" />
+    <ClInclude Include="..\src\RemoveDeadLets.h" />
+    <ClInclude Include="..\src\RemoveTrivialForLoops.h" />
+    <ClInclude Include="..\src\Schedule.h" />
+    <ClInclude Include="..\src\Scope.h" />
+    <ClInclude Include="..\src\Simplify.h" />
+    <ClInclude Include="..\src\SlidingWindow.h" />
+    <ClInclude Include="..\src\StmtCompiler.h" />
+    <ClInclude Include="..\src\StorageFlattening.h" />
+    <ClInclude Include="..\src\StorageFolding.h" />
+    <ClInclude Include="..\src\Substitute.h" />
+    <ClInclude Include="..\src\Tracing.h" />
+    <ClInclude Include="..\src\Type.h" />
+    <ClInclude Include="..\src\UnrollLoops.h" />
+    <ClInclude Include="..\src\Util.h" />
+    <ClInclude Include="..\src\Var.h" />
+    <ClInclude Include="..\src\VectorizeLoops.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

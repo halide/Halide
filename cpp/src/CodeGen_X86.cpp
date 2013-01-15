@@ -35,13 +35,15 @@
 using std::vector;
 using std::string;
 
+
+extern "C" unsigned char halide_internal_initmod_x86[];
+extern "C" int halide_internal_initmod_x86_length;
+extern "C" unsigned char halide_internal_initmod_x86_avx[];
+extern "C" int halide_internal_initmod_x86_avx_length;
+
 namespace Halide { 
 namespace Internal {
 
-extern unsigned char builtins_bitcode_x86[];
-extern int builtins_bitcode_x86_length;
-extern unsigned char builtins_bitcode_x86_avx[];
-extern int builtins_bitcode_x86_avx_length;
 
 using namespace llvm;
 
@@ -69,11 +71,11 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     StringRef sb;
 
     if (use_avx) {
-        assert(builtins_bitcode_x86_avx_length && "initial module for x86_avx is empty");
-        sb = StringRef((char *)builtins_bitcode_x86_avx, builtins_bitcode_x86_avx_length);
+        assert(halide_internal_initmod_x86_avx_length && "initial module for x86_avx is empty");
+        sb = StringRef((char *)halide_internal_initmod_x86_avx, halide_internal_initmod_x86_avx_length);
     } else {
-        assert(builtins_bitcode_x86_length && "initial module for x86 is empty");
-        sb = StringRef((char *)builtins_bitcode_x86, builtins_bitcode_x86_length);
+        assert(halide_internal_initmod_x86_length && "initial module for x86 is empty");
+        sb = StringRef((char *)halide_internal_initmod_x86, halide_internal_initmod_x86_length);
     }
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
@@ -505,7 +507,8 @@ void CodeGen_X86::test() {
     //cg.compile_to_native("test1.s", true);
 
     if (!getenv("HL_NUMTHREADS")) {
-        setenv("HL_NUMTHREADS", "4", 1);
+        putenv("HL_NUMTHREADS=4");
+        //setenv("HL_NUMTHREADS", "4", 1);
     }
     JITCompiledModule m = cg.compile_to_function_pointers();
     typedef void (*fn_type)(::buffer_t *, float, int);

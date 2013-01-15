@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/mman.h>
 #include <math.h>
 #include <pthread.h>
 #include <assert.h>
@@ -54,29 +53,6 @@ WEAK void fast_free(void *ptr) {
     } else {
         free(((void**)ptr)[-1]);
     }
-}
-
-WEAK void *safe_malloc(size_t x) {
-    void *mem;
-    x = ((x + 4095)/4096) * 4096;
-    posix_memalign(&mem, 4096, x + 4096 * 3);
-    printf("Allocated %u bytes at %p with an electric fence\n", (uint32_t)x, mem);
-
-    // write the end address to unprotect in the initial fence
-    ((void **)mem)[0] = PTR_OFFSET(mem, x + 4096);
-    
-    mprotect(mem, 4096, PROT_NONE);
-    mprotect(PTR_OFFSET(mem, x + 4096), 4096, PROT_NONE);
-    
-    return PTR_OFFSET(mem, 4096);
-}
-
-WEAK void safe_free(void *ptr) {
-    void *start = PTR_OFFSET(ptr, -4096);
-    mprotect(start, 4096, PROT_READ | PROT_WRITE | PROT_EXEC);
-    void *end = ((void **)start)[0];
-    mprotect(end, 4096, PROT_READ | PROT_WRITE | PROT_EXEC);
-    free(start);
 }
 
 WEAK int hlprintf(const char * fmt, ...) {
@@ -282,6 +258,11 @@ WEAK void do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *clos
     //fprintf(stderr, "Parallel for done\n");
 }
 
+#ifdef _WIN32
+extern "C" float roundf(float);
+extern "C" double round(double);
+#endif
+
 INLINE float sqrt_f32(float x) {return sqrtf(x);}
 INLINE float sin_f32(float x) {return sinf(x);}
 INLINE float cos_f32(float x) {return cosf(x);}
@@ -330,10 +311,15 @@ INLINE int64_t abs_i64(int64_t a) {return a >= 0 ? a : -a;}
 INLINE float abs_f32(float a) {return a >= 0 ? a : -a;}
 INLINE double abs_f64(double a) {return a >= 0 ? a : -a;}
 
-#include <sys/time.h>
+
+#ifdef _WIN32
+// TODO: currentTime definition for windows
+#define current_time_defined
+#endif
 
 #ifndef current_time_defined
 #define current_time_defined
+#include <sys/time.h>
 WEAK int currentTime() {
     static bool initialized = false;
     static timeval start;
