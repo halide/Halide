@@ -1,3 +1,6 @@
+#ifndef HALIDE_LAMBDA_H
+#define HALIDE_LAMBDA_H
+
 #include "Func.h"
 #include "Var.h"
 #include "Util.h"
@@ -54,3 +57,5 @@ inline Func lambda(Var x, Var y, Var z, Var w, Expr e) {
 }
 
 }
+
+#endif //HALIDE_LAMBDA_H
