@@ -1,6 +1,5 @@
-#include "Halide.h"
-#include "IRPrinter.h"
-#include <iostream>
+#include <stdio.h>
+#include <Halide.h>
 
 using namespace Halide;
 

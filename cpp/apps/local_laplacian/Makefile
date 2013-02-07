@@ -12,7 +12,7 @@ all: process
 
 local_laplacian: ../../ local_laplacian.cpp
 	$(MAKE) -C ../../ bin/libHalide.a
-	$(GXX) local_laplacian.cpp -I ../../src ../../bin/libHalide.a -o local_laplacian -lpthread -ldl -O3
+	$(GXX) local_laplacian.cpp -I ../../include ../../bin/libHalide.a -o local_laplacian -lpthread -ldl -O3
 
 local_laplacian.o: local_laplacian
 	./local_laplacian
@@ -24,4 +24,4 @@ out.png: process
 	./process input.png 8 1 1 out.png
 
 clean:
-	rm process local_laplacian.o local_laplacian
+	rm -f process local_laplacian.o local_laplacian

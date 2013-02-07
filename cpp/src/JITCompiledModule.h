@@ -5,8 +5,12 @@
  * Defines the struct representing a JIT compiled halide pipeline 
  */
 
+#include "IntrusivePtr.h"
+
 namespace Halide {
 namespace Internal {
+
+class JITModuleHolder;
 
 /** Function pointers into a compiled halide module. */
 struct JITCompiledModule {
@@ -36,7 +40,10 @@ struct JITCompiledModule {
      * not written. */
     void (*set_custom_allocator)(void *(*malloc)(size_t), void (*free)(void *));
 
-    JITCompiledModule() : function(NULL), wrapped_function(NULL), set_error_handler(NULL), set_custom_allocator(NULL) {}
+    // The JIT Module Allocator holds onto the memory storing the functions above.
+    IntrusivePtr<JITModuleHolder> module;
+
+    JITCompiledModule() : function(NULL), wrapped_function(NULL), set_error_handler(NULL), set_custom_allocator(NULL), module(NULL) {}
 };
         
 }

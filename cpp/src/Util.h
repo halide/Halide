@@ -7,6 +7,15 @@
 #include <vector>
 #include <string>
 
+// Always use assert, even if llvm-config defines NDEBUG
+#ifdef NDEBUG
+#undef NDEBUG
+#include <assert.h>
+#define NDEBUG
+#else
+#include <assert.h>
+#endif
+
 namespace Halide { 
 namespace Internal {
 

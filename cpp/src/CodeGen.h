@@ -7,14 +7,17 @@
  * generators that use llvm.
  */
 
-#include <llvm/Value.h>
-#include <llvm/Module.h>
-#include <llvm/Function.h>
-#include <llvm/IRBuilder.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/PassManager.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
-#include <llvm/Transforms/IPO.h>
+namespace llvm {
+class Value;
+class Module;
+class Function;
+template<bool> class IRBuilderDefaultInserter;
+class ConstantFolder;
+template<bool, typename, typename> class IRBuilder;
+class LLVMContext;
+class Type;
+class StructType;
+}
 
 #include <map>
 #include <stack>
@@ -71,9 +74,10 @@ protected:
     //@{
     static bool llvm_initialized;
     llvm::Module *module;
+    bool owns_module;
     llvm::Function *function;
-    static llvm::LLVMContext context;
-    llvm::IRBuilder<> builder;
+    llvm::LLVMContext &context;
+    llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
     llvm::Value *value;
     //@}
 
@@ -91,9 +95,6 @@ protected:
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
     llvm::StructType *buffer_t;
     // @}
-
-    /** The llvm execution engine, which manages JIT state */
-    static llvm::ExecutionEngine *execution_engine;
 
     /** The name of the function being generated */
     std::string function_name;

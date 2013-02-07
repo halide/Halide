@@ -28,4 +28,4 @@ out.png: filter
 	./filter input.png out.png 0.1
 
 clean:
-	rm bilateral_grid bilateral_grid.o bilateral_grid.h bilateral_grid.bc filter
+	rm -f bilateral_grid bilateral_grid.o bilateral_grid.h bilateral_grid.bc filter

@@ -366,6 +366,7 @@ class Simplify : public IRMutator {
         const Mul *mul_a_a = NULL;
         const Mul *mul_a_b = NULL;
         const Broadcast *broadcast_a = a.as<Broadcast>();
+        const Ramp *ramp_a = a.as<Ramp>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
 
         if (add_a) {
@@ -388,6 +389,11 @@ class Simplify : public IRMutator {
             expr = fa/fb;
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(new Broadcast(broadcast_a->value / broadcast_b->value, broadcast_a->width));
+        } else if (ramp_a && broadcast_b && 
+                   const_int(broadcast_b->value, &ib) && 
+                   const_int(ramp_a->stride, &ia) && ((ia % ib) == 0)) {
+            // ramp(x, ia, w) / broadcast(ib, w) -> ramp(x/ib, ia/ib, w) when ib divides ia
+            expr = mutate(new Ramp(ramp_a->base/ib, ia/ib, ramp_a->width));
         } else if (div_a && const_int(div_a->b, &ia) && const_int(b, &ib)) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(div_a->a / (ia*ib));
@@ -821,6 +827,12 @@ class Simplify : public IRMutator {
             expr = false_value;
         } else if (equal(true_value, false_value)) {
             expr = true_value;
+        } else if (const NE *ne = condition.as<NE>()) {
+            // Normalize select(a != b, c, d) to select(a == b, d, c) 
+            expr = mutate(new Select(ne->a == ne->b, false_value, true_value));               
+        } else if (const LE *le = condition.as<LE>()) {
+            // Normalize select(a <= b, c, d) to select(b < a, d, c) 
+            expr = mutate(new Select(le->b < le->a, false_value, true_value));               
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
@@ -1043,6 +1055,7 @@ void simplify_test() {
     check(xf / 4.0f, xf * 0.25f);
     check(Expr(new Broadcast(y, 4)) / Expr(new Broadcast(x, 4)), 
           Expr(new Broadcast(y/x, 4)));
+    check(Expr(new Ramp(x, 4, 4)) / 2, new Ramp(x/2, 2, 4));
 
     check(Expr(7) % 2, 1);
     check(Expr(7.25f) % 2.0f, 1.25f);
@@ -1107,6 +1120,11 @@ void simplify_test() {
     check(select(x < 3, 2, 2), 2);
     check(select(x < (x+1), 9, 2), 9);
     check(select(x > (x+1), 9, 2), 2);
+    // Selects of comparisons should always become selects of LT or selects of EQ
+    check(select(x != 5, 2, 3), select(x == 5, 3, 2));    
+    check(select(x >= 5, 2, 3), select(x < 5, 3, 2));    
+    check(select(x <= 5, 2, 3), select(5 < x, 3, 2));    
+    check(select(x > 5, 2, 3), select(5 < x, 2, 3));    
 
     check(!f, t);
     check(!t, f);

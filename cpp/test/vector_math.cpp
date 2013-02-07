@@ -1,6 +1,7 @@
 #include <Halide.h>
 #include <math.h>
 #include <sys/time.h>
+#include <stdio.h>
 
 using namespace Halide;
 

@@ -12,7 +12,7 @@ all: filter
 
 wavelet: ../../ wavelet.cpp
 	$(MAKE) -C ../../ bin/libHalide.a
-	$(GXX) wavelet.cpp -I ../../src ../../bin/libHalide.a -o wavelet -lpthread -ldl 
+	$(GXX) wavelet.cpp -I ../../include ../../bin/libHalide.a -o wavelet -lpthread -ldl 
 
 $(HL_MODULES): wavelet 
 	./wavelet
