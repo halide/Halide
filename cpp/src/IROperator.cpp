@@ -70,6 +70,14 @@ bool is_one(Expr e) {
     return false;
 }
 
+bool is_two(Expr e) {
+    if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 2;
+    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 2.0f;
+    if (const Cast *c = e.as<Cast>()) return is_two(c->value);
+    if (const Broadcast *b = e.as<Broadcast>()) return is_two(b->value);
+    return false;
+}
+
 Expr make_const(Type t, int val) {
     if (t == Int(32)) return val;
     if (t == Float(32)) return (float)val;

@@ -1,4 +1,3 @@
-#include <assert.h>
 #include "ModulusRemainder.h"
 #include "IR.h"
 

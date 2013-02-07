@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <Halide.h>
 #include <sys/time.h>
 

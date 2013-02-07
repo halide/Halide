@@ -1,21 +1,19 @@
 #ifndef HALIDE_IR_H
 #define HALIDE_IR_H
+
+/** \file
+ * Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
+ */
+
 #include <string>
 #include <vector>
-#include <utility>
-#include <map>
-#include <assert.h>
-#include <stdio.h>
 
 #include "IRVisitor.h"
 #include "Type.h"
 #include "IntrusivePtr.h"
 #include "Buffer.h"
 #include "Parameter.h"
-
-/** \file
- * Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
- */
+#include "Util.h"
 
 namespace Halide {
 
@@ -722,8 +720,12 @@ struct Variable : public ExprNode<Variable> {
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
-    Variable(Type t, std::string n, Parameter p) : ExprNode<Variable>(t), name(n), param(p) {}
-    Variable(Type t, std::string n, ReductionDomain d) : ExprNode<Variable>(t), name(n), reduction_domain(d) {}
+    Variable(Type t, std::string n, Parameter p) : 
+        ExprNode<Variable>(t), name(n), param(p) {}
+    Variable(Type t, std::string n, ReductionDomain d) : 
+        ExprNode<Variable>(t), name(n), reduction_domain(d) {}
+    Variable(Type t, std::string n, Parameter p, ReductionDomain d) : 
+        ExprNode<Variable>(t), name(n), param(p), reduction_domain(d) {}
 
     Variable(Type t, std::string n) : ExprNode<Variable>(t), name(n) {}
 };

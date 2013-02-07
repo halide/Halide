@@ -6,7 +6,7 @@ all: filter
 
 bilateral_grid: ../../ bilateral_grid.cpp
 	$(MAKE) -C ../../ bin/libHalide.a
-	$(GXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../src/ ../../bin/libHalide.a -o bilateral_grid  -lpthread -ldl
+	$(GXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../include/ ../../bin/libHalide.a -o bilateral_grid  -lpthread -ldl
 
 bilateral_grid.o: bilateral_grid
 	./bilateral_grid 8
@@ -18,4 +18,4 @@ out.png: filter
 	./filter input.png out.png 0.1
 
 clean:
-	rm bilateral_grid bilateral_grid.o bilateral_grid.h filter
+	rm -f bilateral_grid bilateral_grid.o bilateral_grid.h filter
