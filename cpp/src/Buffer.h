@@ -22,8 +22,9 @@ struct BufferContents {
     bool own_host_allocation;
     std::string name;
 
-    BufferContents(Type t, int x_size, int y_size, int z_size, int w_size) : 
-        type(t), own_host_allocation(true), name(unique_name('b')) {
+    BufferContents(Type t, int x_size, int y_size, int z_size, int w_size,
+                   uint8_t* data = NULL) :
+        type(t), own_host_allocation(data==NULL), name(unique_name('b')) {
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
         buf.elem_size = t.bits / 8;        
         size_t size = 1;
@@ -31,7 +32,8 @@ struct BufferContents {
         if (y_size) size *= y_size;
         if (z_size) size *= z_size;
         if (w_size) size *= w_size;
-        buf.host = (uint8_t *)calloc(buf.elem_size, size);
+        if (own_host_allocation) buf.host = (uint8_t *)calloc(buf.elem_size, size);
+        else buf.host = data;
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.extent[0] = x_size;
@@ -71,8 +73,9 @@ private:
 public:
     Buffer() : contents(NULL) {}
 
-    Buffer(Type t, int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0) : 
-        contents(new Internal::BufferContents(t, x_size, y_size, z_size, w_size)) {
+    Buffer(Type t, int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+           uint8_t* data = NULL) :
+        contents(new Internal::BufferContents(t, x_size, y_size, z_size, w_size, data)) {
     }
     
     Buffer(Type t, const buffer_t *buf) : 
