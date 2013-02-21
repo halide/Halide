@@ -1,8 +1,8 @@
-#ifndef HALIDE_CODEGEN_X86_H
-#define HALIDE_CODEGEN_X86_H
+#ifndef HALIDE_CODEGEN_ARM_H
+#define HALIDE_CODEGEN_ARM_H
 
 /** \file
- * Defines the code-generator for producing x86 machine code 
+ * Defines the code-generator for producing ARM machine code 
  */
 
 #include "CodeGen_Posix.h"
@@ -10,43 +10,42 @@
 namespace Halide { 
 namespace Internal {
 
-/** A code generator that emits x86 code from a given Halide stmt. */
-class CodeGen_X86 : public CodeGen_Posix {
+/** A code generator that emits ARM code from a given Halide stmt. */
+class CodeGen_ARM : public CodeGen_Posix {
 public:
 
-    /** Create an x86 code generator. Processor features can be
+    /** Create an ARM code generator. Processor features can be
      * enabled using the appropriate arguments */
-    CodeGen_X86(bool use_sse_41 = true, bool use_avx = true);
+    CodeGen_ARM(bool android = false);
         
     /** Compile to an internally-held llvm module. Takes a halide
      * statement, the name of the function produced, and the arguments
      * to the function produced. After calling this, call
      * CodeGen::compile_to_file or
-     * CodeGen::compile_to_function_pointer to get at the x86 machine
+     * CodeGen::compile_to_function_pointer to get at the ARM machine
      * code. */
     void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
 
     static void test();
 
 protected:
-    /** Should the emitted code make use of sse 4.1 */
-    bool use_sse_41;
 
-    /** Should the emitted code use avx 1 operations */
-    bool use_avx;
+    /** Use the android-specific standard library */
+    bool use_android;
 
-    /** Generate a call to an sse or avx intrinsic */
+    /** Generate a call to a neon intrinsic */
     // @{
     llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);    
     llvm::Value *call_intrin(Type t, const std::string &name, std::vector<llvm::Value *>);    
     // @}
 
-    /** Nodes for which we want to emit specific sse/avx intrinsics */
+    /** Nodes for which we want to emit specific neon intrinsics */
     // @{
     void visit(const Cast *);
     void visit(const Div *);
     void visit(const Min *);
     void visit(const Max *);
+    void visit(const Select *);
     // @}
 
     std::string mcpu() const;

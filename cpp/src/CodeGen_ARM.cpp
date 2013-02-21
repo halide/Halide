@@ -1,9 +1,10 @@
-#include "CodeGen_X86.h"
+#include "CodeGen_ARM.h"
 #include "IROperator.h"
 #include <iostream>
 #include "buffer_t.h"
 #include "IRPrinter.h"
 #include "IRMatch.h"
+#include "IREquality.h"
 #include "Log.h"
 #include "Util.h"
 #include "Var.h"
@@ -34,12 +35,12 @@
 
 using std::vector;
 using std::string;
+using std::ostringstream;
 
-
-extern "C" unsigned char halide_internal_initmod_x86[];
-extern "C" int halide_internal_initmod_x86_length;
-extern "C" unsigned char halide_internal_initmod_x86_avx[];
-extern "C" int halide_internal_initmod_x86_avx_length;
+extern "C" unsigned char halide_internal_initmod_arm[];
+extern "C" int halide_internal_initmod_arm_length;
+extern "C" unsigned char halide_internal_initmod_arm_android[];
+extern "C" int halide_internal_initmod_arm_android_length;
 
 namespace Halide { 
 namespace Internal {
@@ -47,40 +48,40 @@ namespace Internal {
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(bool sse_41, bool avx) : CodeGen_Posix(), use_sse_41(sse_41), use_avx(avx) {
+CodeGen_ARM::CodeGen_ARM(bool android) : CodeGen_Posix(), use_android(android) {
 }
 
-void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) {
+void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
     if (module && owns_module) delete module;
 
     StringRef sb;
 
-    if (use_avx) {
-        assert(halide_internal_initmod_x86_avx_length && "initial module for x86_avx is empty");
-        sb = StringRef((char *)halide_internal_initmod_x86_avx, halide_internal_initmod_x86_avx_length);
+    if (use_android) {
+        assert(halide_internal_initmod_arm_android_length && 
+               "initial module for arm_android is empty");
+        sb = StringRef((char *)halide_internal_initmod_arm_android, 
+                       halide_internal_initmod_arm_android_length);
     } else {
-        assert(halide_internal_initmod_x86_length && "initial module for x86 is empty");
-        sb = StringRef((char *)halide_internal_initmod_x86, halide_internal_initmod_x86_length);
+        assert(halide_internal_initmod_arm_length && "initial module for arm is empty");
+        sb = StringRef((char *)halide_internal_initmod_arm, halide_internal_initmod_arm_length);
     }
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
     // Parse it    
     module = ParseBitcodeFile(bitcode_buffer, context);
 
-    // Fix the target triple
+    // Fix the target triple. The initial module was probably compiled for x86
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+    module->setTargetTriple("arm-linux-eabi");
+    log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";        
 
-    // For now we'll just leave it as whatever the module was
-    // compiled as. This assumes that we're not cross-compiling
-    // between different x86 operating systems
-    // module->setTargetTriple( ... );
-        
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
     delete bitcode_buffer;
 }
 
+namespace {
 Expr _i64(Expr e) {
     return cast(Int(64, e.type().width), e);
 }
@@ -119,8 +120,9 @@ Expr _f32(Expr e) {
 Expr _f64(Expr e) {
     return cast(Float(64, e.type().width), e);
 }
+}
 
-Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Expr> args) {
+Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Expr> args) {    
     vector<Value *> arg_values(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         arg_values[i] = codegen(args[i]);
@@ -129,25 +131,28 @@ Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Exp
     return call_intrin(result_type, name, arg_values);
 }
 
-Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Value *> arg_values) {
+Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Value *> arg_values) {
     vector<llvm::Type *> arg_types(arg_values.size());
     for (size_t i = 0; i < arg_values.size(); i++) {
         arg_types[i] = arg_values[i]->getType();
     }
 
-    llvm::Function *fn = module->getFunction("llvm.x86." + name);
+    llvm::Function *fn = module->getFunction("llvm.arm.neon." + name);
 
     if (!fn) {
         FunctionType *func_t = FunctionType::get(llvm_type_of(result_type), arg_types, false);    
-        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.x86." + name, module);
+        fn = llvm::Function::Create(func_t, 
+                                    llvm::Function::ExternalLinkage, 
+                                    "llvm.arm.neon." + name, module);
         fn->setCallingConv(CallingConv::C);
     }
 
     return builder->CreateCall(fn, arg_values);
 }
  
-void CodeGen_X86::visit(const Cast *op) {
+void CodeGen_ARM::visit(const Cast *op) {
 
+    /*
     vector<Expr> matches;
  
     struct Pattern {
@@ -206,6 +211,8 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
         
+    */
+
     CodeGen::visit(op);
 
     /*
@@ -240,7 +247,9 @@ void CodeGen_X86::visit(const Cast *op) {
     */
 }
 
-void CodeGen_X86::visit(const Div *op) {    
+void CodeGen_ARM::visit(const Div *op) {    
+
+    /*
 
     // Detect if it's a small int division
     const Broadcast *broadcast = op->b.as<Broadcast>();
@@ -320,12 +329,17 @@ void CodeGen_X86::visit(const Div *op) {
         Value *sh = codegen(cast(op->type, shift));
         value = builder->CreateLShr(mult, sh);
 
-    } else {    
+    } else {        
+
         CodeGen::visit(op);
     }
+    */
+
+    CodeGen::visit(op);
 }
 
-void CodeGen_X86::visit(const Min *op) {
+void CodeGen_ARM::visit(const Min *op) {    
+    /*
     if (op->type == UInt(8, 16)) {
         value = call_intrin(UInt(8, 16), "sse2.pminu.b", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == Int(8, 16)) {
@@ -341,9 +355,13 @@ void CodeGen_X86::visit(const Min *op) {
     } else {
         CodeGen::visit(op);
     }
+    */
+
+    CodeGen::visit(op);
 }
 
-void CodeGen_X86::visit(const Max *op) {
+void CodeGen_ARM::visit(const Max *op) {
+    /* 
     if (op->type == UInt(8, 16)) {
         value = call_intrin(UInt(8, 16), "sse2.pmaxu.b", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == Int(8, 16)) {
@@ -359,146 +377,44 @@ void CodeGen_X86::visit(const Max *op) {
     } else {
         CodeGen::visit(op);
     }    
+    */
+    CodeGen::visit(op);    
 }
 
-static bool extern_function_1_was_called = false;
-extern "C" int extern_function_1(float x) {
-    extern_function_1_was_called = true;
-    return x < 0.4 ? 3 : 1;
-}
+void CodeGen_ARM::visit(const Select *op) {
 
-void CodeGen_X86::test() {
-    // corner cases to test:
-    // signed mod by power of two, non-power of two
-    // loads of mismatched types (e.g. load a float from something allocated as an array of ints)
-    // Calls to vectorized externs, and externs for which no vectorized version exists
+    // Absolute difference patterns:
+    // select(a < b, b - a, a - b)    
+    const LT *cmp = op->condition.as<LT>();    
+    const Sub *a = op->true_value.as<Sub>();
+    const Sub *b = op->false_value.as<Sub>();
+    Type t = op->type;
 
-    Argument buffer_arg("buf", true, Int(0));
-    Argument float_arg("alpha", false, Float(32));
-    Argument int_arg("beta", false, Int(32));
-    vector<Argument> args(3);
-    args[0] = buffer_arg;
-    args[1] = float_arg;
-    args[2] = int_arg;        
-    Var x("x"), i("i");
-    Param<float> alpha("alpha");
-    Param<int> beta("beta");
+    if (cmp && a && b && 
+        equal(a->a, b->b) &&
+        equal(a->b, b->a) &&
+        equal(cmp->a, a->b) &&
+        equal(cmp->b, a->a) &&
+        (!t.is_float()) && 
+        (t.bits == 8 || t.bits == 16 || t.bits == 32) &&
+        (t.bits * t.width == 64 || t.bits * t.width == 128)) {
 
-    // We'll clear out the initial buffer except for the first and
-    // last two elements using dense unaligned vectors
-    Stmt init = new For("i", 0, 3, For::Serial, 
-                        new Store("buf", 
-                                  new Ramp(i*4+2, 1, 4),
-                                  new Ramp(i*4+2, 1, 4)));
+        ostringstream ss;
+        ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits;
+        value = call_intrin(t, ss.str(), vec(cmp->a, cmp->b));
 
-    // Now set the first two elements using scalars, and last four elements using a dense aligned vector
-    init = new Block(init, new Store("buf", 0, 0));
-    init = new Block(init, new Store("buf", 1, 1));
-    init = new Block(init, new Store("buf", new Ramp(12, 1, 4), new Ramp(12, 1, 4)));
-
-    // Then multiply the even terms by 17 using sparse vectors
-    init = new Block(init, 
-                     new For("i", 0, 2, For::Serial, 
-                             new Store("buf", 
-                                       new Mul(new Broadcast(17, 4), 
-                                               new Load(Int(32, 4), "buf", new Ramp(i*8, 2, 4), Buffer(), Parameter())),
-                                       new Ramp(i*8, 2, 4))));
-
-    // Then print some stuff (disabled to prevent debugging spew)
-    // vector<Expr> print_args = vec<Expr>(3, 4.5f, new Cast(Int(8), 2), new Ramp(alpha, 3.2f, 4));
-    // init = new Block(init, new PrintStmt("Test print: ", print_args));
-
-    // Then run a parallel for loop that clobbers three elements of buf
-    Expr e = new Select(alpha > 4.0f, 3, 2);
-    e += (new Call(Int(32), "extern_function_1", vec<Expr>(alpha)));
-    Stmt loop = new Store("buf", e, x + i);
-    loop = new LetStmt("x", beta+1, loop);
-    // Do some local allocations within the loop
-    loop = new Allocate("tmp_stack", Int(32), 127, loop);
-    loop = new Allocate("tmp_heap", Int(32), 43 * beta, loop);
-    loop = new For("i", -1, 3, For::Parallel, loop);        
-
-    Stmt s = new Block(init, loop);
-
-    CodeGen_X86 cg;
-    cg.compile(s, "test1", args);
-
-    //cg.compile_to_bitcode("test1.bc");
-    //cg.compile_to_native("test1.o", false);
-    //cg.compile_to_native("test1.s", true);
-
-    if (!getenv("HL_NUMTHREADS")) {
-        #ifdef _WIN32
-        putenv("HL_NUMTHREADS=4");
-        #else
-        setenv("HL_NUMTHREADS", "4", 1);
-        #endif
+        return;
     }
-    JITCompiledModule m = cg.compile_to_function_pointers();
-    typedef void (*fn_type)(::buffer_t *, float, int);
-    fn_type fn = (fn_type)m.function;
 
-    int scratch[16];
-    ::buffer_t buf;
-    memset(&buf, 0, sizeof(buf));
-    buf.host = (uint8_t *)(&scratch[0]);
-
-    fn(&buf, -32, 0);
-    assert(scratch[0] == 5);
-    assert(scratch[1] == 5);
-    assert(scratch[2] == 5);
-    assert(scratch[3] == 3);
-    assert(scratch[4] == 4*17);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
-
-    fn(&buf, 37.32f, 2);
-    assert(scratch[0] == 0);
-    assert(scratch[1] == 1);
-    assert(scratch[2] == 4);
-    assert(scratch[3] == 4);
-    assert(scratch[4] == 4);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
-
-    fn(&buf, 4.0f, 1);
-    assert(scratch[0] == 0);
-    assert(scratch[1] == 3);
-    assert(scratch[2] == 3);
-    assert(scratch[3] == 3);
-    assert(scratch[4] == 4*17);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
-    assert(extern_function_1_was_called);
-
-    // Check the wrapped version does the same thing
-    extern_function_1_was_called = false;
-    for (int i = 0; i < 16; i++) scratch[i] = 0;
-
-    float float_arg_val = 4.0f;
-    int int_arg_val = 1;
-    const void *arg_array[] = {&buf, &float_arg_val, &int_arg_val};
-    m.wrapped_function(arg_array);
-    assert(scratch[0] == 0);
-    assert(scratch[1] == 3);
-    assert(scratch[2] == 3);
-    assert(scratch[3] == 3);
-    assert(scratch[4] == 4*17);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
-    assert(extern_function_1_was_called);
-
-    std::cout << "CodeGen_X86 test passed" << std::endl;
+    CodeGen::visit(op);
 }
 
-string CodeGen_X86::mcpu() const {
-    if (use_avx) return "corei7-avx";
-    if (use_sse_41) return "corei7";
-    return "core2";
+string CodeGen_ARM::mcpu() const {
+    return "cortex-a8";
 }
 
-string CodeGen_X86::mattrs() const {
-    return "";
+string CodeGen_ARM::mattrs() const {
+    return "+neon";
 }
 
 }}
