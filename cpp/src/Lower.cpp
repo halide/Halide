@@ -393,7 +393,13 @@ public:
     void visit(const Call *call) {                
         IRVisitor::visit(call);
         if (call->call_type == Call::Halide) {
-            calls[call->name] = call->func;
+            map<string, Function>::iterator iter = calls.find(call->name);
+            if (iter == calls.end()) {
+                calls[call->name] = call->func;
+            } else {
+                assert(iter->second.same_as(call->func) && 
+                       "Can't compile a pipeline using multiple functions with same name");
+            }
         }
     }
 };
@@ -417,8 +423,13 @@ public:
     }
 };
 
-void populate_environment(Function f, map<string, Function> &env, bool recursive = true) {
-    if (env.find(f.name()) != env.end()) return;
+void populate_environment(Function f, map<string, Function> &env, bool recursive = true) {    
+    map<string, Function>::const_iterator iter = env.find(f.name());
+    if (iter != env.end()) {
+        assert(iter->second.same_as(f) && 
+               "Can't compile a pipeline using multiple functions with same name");
+        return;
+    }
             
     FindCalls calls(f.value());
 
