@@ -82,12 +82,17 @@ CodeGen::CodeGen() :
     if (!llvm_initialized) {            
         InitializeNativeTarget();
         LLVMInitializeX86Target();
+        LLVMInitializeX86TargetInfo();
         LLVMInitializeX86AsmPrinter();
         LLVMInitializeX86TargetMC();
+        
         LLVMInitializeARMTarget();
+        LLVMInitializeARMTargetInfo();
         LLVMInitializeARMAsmPrinter();
         LLVMInitializeARMTargetMC();
+
         LLVMInitializeNVPTXTarget();
+        LLVMInitializeNVPTXTargetInfo();
         LLVMInitializeNVPTXAsmPrinter();
         LLVMInitializeNVPTXTargetMC();
         llvm_initialized = true;
@@ -306,10 +311,16 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     // Get the target specific parser.
     string error_string;
     log(1) << "Compiling to native code...\n";
-    // cout << module->getTargetTriple() << endl;
+    log(2) << "Target triple: " << module->getTargetTriple() << "\n";
+
     const Target *target = TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
-    if (!target) cout << error_string << endl;
+    if (!target) {
+        cout << error_string << endl;
+        TargetRegistry::printRegisteredTargetsForVersion();   
+    }
     assert(target && "Could not create target");
+
+    log(2) << "Selected target: " << target->getName() << "\n";
 
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
