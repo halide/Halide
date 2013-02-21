@@ -703,6 +703,10 @@ void Func::realize(Buffer dst) {
 
     assert(compiled_module.wrapped_function);
 
+    // Check the type and dimensionality of the buffer
+    assert(dst.dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
+    assert(dst.type() == value().type() && "Buffer and Func have different element types");
+
     // In case these have changed since the last realization
     compiled_module.set_error_handler(error_handler);
     compiled_module.set_custom_allocator(custom_malloc, custom_free);   
