@@ -1225,9 +1225,12 @@ void CodeGen::visit(const For *op) {
 
         // Make a new basic block for the loop
         BasicBlock *loop_bb = BasicBlock::Create(context, op->name + "_loop", function);
+        // Create the block that comes after the loop
+        BasicBlock *after_bb = BasicBlock::Create(context, op->name + "_after_loop", function);
 
-        // Fall through to the loop bb
-        builder->CreateBr(loop_bb);
+        // If min < max, fall through to the loop bb
+        Value *enter_condition = builder->CreateICmpSLT(min, max);
+        builder->CreateCondBr(enter_condition, loop_bb, after_bb);
         builder->SetInsertPoint(loop_bb);
 
         // Make our phi node
@@ -1242,9 +1245,6 @@ void CodeGen::visit(const For *op) {
 
         // Update the counter
         Value *next_var = builder->CreateAdd(phi, ConstantInt::get(i32, 1));
-
-        // Create the block that comes after the loop
-        BasicBlock *after_bb = BasicBlock::Create(context, op->name + "_after_loop", function);
 
         // Add the back-edge to the phi node
         phi->addIncoming(next_var, builder->GetInsertBlock());
