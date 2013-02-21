@@ -117,6 +117,11 @@ public:
     bool is_reduction() const {
         return reduction_value().defined();
     }
+
+    /** Equality of identity */
+    bool same_as(const Function &other) const {
+        return contents.same_as(other.contents);
+    }
 };
 
 }}
