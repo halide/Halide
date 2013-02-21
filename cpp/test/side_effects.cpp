@@ -40,10 +40,6 @@ int main(int argc, char **argv) {
     int idx = result(0);
     printf("sin(%d/10.0f+17) = %f\n", idx, sinf(idx/10.0f+17));
 
-    printf("Realizing function...\n");
-
-    Image<float> imf = f.realize(32, 32);
-
     printf("Success!\n");
     return 0;
 }
