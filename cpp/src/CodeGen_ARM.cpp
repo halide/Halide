@@ -152,99 +152,65 @@ Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Val
  
 void CodeGen_ARM::visit(const Cast *op) {
 
-    /*
     vector<Expr> matches;
  
     struct Pattern {
-        bool needs_sse_41;
-        bool extern_call;
-        Type type;
         string intrin;
         Expr pattern;
     };
 
     Pattern patterns[] = {
-        {false, false, Int(8, 16), "sse2.padds.b", 
+        {"vsubhn.v8i8", _i8((wild_i16x8 - wild_i16x8)/256)},
+        {"vsubhn.v4i16", _i16((wild_i32x4 - wild_i32x4)/65536)},
+        {"vsubhn.v8i8", _u8((wild_u16x8 - wild_u16x8)/256)},
+        {"vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536)},
+        {"sentinel", 0}
+        /*
+        {"sse2.padds.b", 
          _i8(clamp(_i16(wild_i8x16) + _i16(wild_i8x16), -128, 127))},
-        {false, false, Int(8, 16), "sse2.psubs.b", 
+        {"sse2.psubs.b", 
          _i8(clamp(_i16(wild_i8x16) - _i16(wild_i8x16), -128, 127))},
-        {false, false, UInt(8, 16), "sse2.paddus.b", 
+        {"sse2.paddus.b", 
          _u8(min(_u16(wild_u8x16) + _u16(wild_u8x16), 255))},
-        {false, false, UInt(8, 16), "sse2.psubus.b", 
+        {"sse2.psubus.b", 
          _u8(max(_i16(wild_u8x16) - _i16(wild_u8x16), 0))},
-        {false, false, Int(16, 8), "sse2.padds.w", 
+        {"sse2.padds.w", 
          _i16(clamp(_i32(wild_i16x8) + _i32(wild_i16x8), -32768, 32767))},
-        {false, false, Int(16, 8), "sse2.psubs.w", 
+        {"sse2.psubs.w", 
          _i16(clamp(_i32(wild_i16x8) - _i32(wild_i16x8), -32768, 32767))},
-        {false, false, UInt(16, 8), "sse2.paddus.w", 
+        {"sse2.paddus.w", 
          _u16(min(_u32(wild_u16x8) + _u32(wild_u16x8), 65535))},
-        {false, false, UInt(16, 8), "sse2.psubus.w", 
+        {"sse2.psubus.w", 
          _u16(max(_i32(wild_u16x8) - _i32(wild_u16x8), 0))},
-        {false, false, Int(16, 8), "sse2.pmulh.w", 
+        {"sse2.pmulh.w", 
          _i16((_i32(wild_i16x8) * _i32(wild_i16x8)) / 65536)},
-        {false, false, UInt(16, 8), "sse2.pmulhu.w", 
+        {"sse2.pmulhu.w", 
          _u16((_u32(wild_u16x8) * _u32(wild_u16x8)) / 65536)},
-        {false, false, UInt(8, 16), "sse2.pavg.b",
+        {"sse2.pavg.b",
          _u8(((_u16(wild_u8x16) + _u16(wild_u8x16)) + 1) / 2)},
-        {false, false, UInt(16, 8), "sse2.pavg.w",
+        {"sse2.pavg.w",
          _u16(((_u32(wild_u16x8) + _u32(wild_u16x8)) + 1) / 2)},
-        {false, true, Int(16, 8), "packssdw", 
+        {"packssdw", 
          _i16(clamp(wild_i32x8, -32768, 32767))},
-        {false, true, Int(8, 16), "packsswb", 
+        {"packsswb", 
          _i8(clamp(wild_i16x16, -128, 127))},
-        {false, true, UInt(8, 16), "packuswb", 
+        {"packuswb", 
          _u8(clamp(wild_i16x16, 0, 255))},
-        {true, true, UInt(16, 8), "packusdw",
+        {"packusdw",
          _u16(clamp(wild_i32x8, 0, 65535))}
+        */
     };
         
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
-        if (!use_sse_41 && pattern.needs_sse_41) continue;
         if (expr_match(pattern.pattern, op, matches)) {
-            if (pattern.extern_call) {
-                value = codegen(new Call(pattern.type, pattern.intrin, matches));
-            } else {
-                value = call_intrin(pattern.type, pattern.intrin, matches);
-            }
+            value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
             return;
         }
     }
-        
-    */
 
     CodeGen::visit(op);
 
-    /*
-    check_sse("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, 127)));
-    check_sse("psubsb", 16, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, 127)));
-    check_sse("paddusb", 16, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-    check_sse("psubusb", 16, u8(min(u16(u8_1) - u16(u8_2), max_u8)));
-    check_sse("paddsw", 8, i16(clamp(i32(i16_1) + i32(i16_2), -32768, 32767)));
-    check_sse("psubsw", 8, i16(clamp(i32(i16_1) - i32(i16_2), -32768, 32767)));
-    check_sse("paddusw", 8, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-    check_sse("psubusw", 8, u16(min(u32(u16_1) - u32(u16_2), max_u16)));
-    check_sse("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
-    check_sse("pmulhw", 8, i16_1 / 15);
-
-    // SSE 1
-    check_sse("rcpps", 4, 1.0f / f32_2);
-    check_sse("rsqrtps", 4, 1.0f / sqrt(f32_2));
-    check_sse("pavgb", 16, u8((u16(u8_1) + u16(u8_2) + 1)/2));
-    check_sse("pavgw", 8, u16((u32(u16_1) + u32(u16_2) + 1)/2));
-
-    check_sse("pmulhuw", 8, u16((u32(u16_1) * u32(u16_2))/(256*256)));
-    check_sse("pmulhuw", 8, u16_1 / 15);
-
-    check_sse("shufps", 4, in_f32(2*x));
-
-    // SSE 2
-    check_sse("packssdw", 8, i16(clamp(i32_1, -32768, 32767)));
-    check_sse("packsswb", 16, i8(clamp(i16_1, min_i8, 127)));
-    check_sse("packuswb", 16, u8(clamp(i16_1, 0, max_u8)));
-
-    check_sse("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));
-    */
 }
 
 void CodeGen_ARM::visit(const Div *op) {    
@@ -334,6 +300,15 @@ void CodeGen_ARM::visit(const Div *op) {
         CodeGen::visit(op);
     }
     */
+
+    CodeGen::visit(op);
+}
+
+void CodeGen_ARM::visit(const Add *op) {
+    CodeGen::visit(op);
+}
+
+void CodeGen_ARM::visit(const Sub *op) {
 
     CodeGen::visit(op);
 }

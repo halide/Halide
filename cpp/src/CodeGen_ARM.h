@@ -40,8 +40,10 @@ protected:
     // @}
 
     /** Nodes for which we want to emit specific neon intrinsics */
-    // @{
+    // @{    
     void visit(const Cast *);
+    void visit(const Add *);
+    void visit(const Sub *);
     void visit(const Div *);
     void visit(const Min *);
     void visit(const Max *);
