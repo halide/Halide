@@ -402,6 +402,54 @@ void CodeGen_ARM::visit(const Max *op) {
     CodeGen::visit(op);    
 }
 
+void CodeGen_ARM::visit(const LT *op) {
+    const Call *a = op->a.as<Call>(), *b = op->b.as<Call>();
+    
+    if (a && b) {
+        Constant *zero = ConstantVector::getSplat(op->type.width, ConstantInt::get(i32, 0));
+        if (a->type == Float(32, 4) && 
+            a->name == "abs_f32" && 
+            b->name == "abs_f32") {            
+            value = call_intrin(Int(32, 4), "vacgtq", vec(b->args[0], a->args[0]));            
+            value = builder->CreateICmpNE(value, zero);
+        } else if (a->type == Float(32, 2) && 
+            a->name == "abs_f32" && 
+            b->name == "abs_f32") {            
+            value = call_intrin(Int(32, 2), "vacgtd", vec(b->args[0], a->args[0]));            
+            value = builder->CreateICmpNE(value, zero);
+        } else {
+            CodeGen::visit(op);
+        }
+    } else {
+        CodeGen::visit(op);
+    }
+    
+}
+
+void CodeGen_ARM::visit(const LE *op) {
+    const Call *a = op->a.as<Call>(), *b = op->b.as<Call>();
+    
+    if (a && b) {
+        Constant *zero = ConstantVector::getSplat(op->type.width, ConstantInt::get(i32, 0));
+        if (a->type == Float(32, 4) && 
+            a->name == "abs_f32" && 
+            b->name == "abs_f32") {            
+            value = call_intrin(Int(32, 4), "vacgeq", vec(b->args[0], a->args[0]));            
+            value = builder->CreateICmpNE(value, zero);            
+        } else if (a->type == Float(32, 2) && 
+            a->name == "abs_f32" && 
+            b->name == "abs_f32") {            
+            value = call_intrin(Int(32, 2), "vacged", vec(b->args[0], a->args[0]));            
+            value = builder->CreateICmpNE(value, zero);
+        } else {
+            CodeGen::visit(op);
+        }
+    } else {
+        CodeGen::visit(op);
+    }
+    
+}
+
 void CodeGen_ARM::visit(const Select *op) {
 
     // Absolute difference patterns:

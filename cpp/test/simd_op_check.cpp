@@ -590,8 +590,13 @@ void check_neon_all() {
     // VACGT	F	-	Absolute Compare Greater Than
     // VACLE	F	-	Absolute Compare Less Than or Equal
     // VACLT	F	-	Absolute Compare Less Than
-    check_neon("vacge.f32", 2, select(abs(f32_1) >= abs(f32_2), 1.0f, 2.0f));
-    check_neon("vacge.f32", 4, select(abs(f32_1) >= abs(f32_2), 1.0f, 2.0f));
+
+    // We add a bogus first term to prevent the select from
+    // simplifying the >= to a < with the 1 and 2 switched. The
+    // pattern to use is just abs(f32_1) >= abs(f32_2).
+    check_neon("vacge.f32", 2, select((f32_1 == f32_2) || (abs(f32_1) >= abs(f32_2)), 1.0f, 2.0f));
+    check_neon("vacge.f32", 4, select((f32_1 == f32_2) || (abs(f32_1) >= abs(f32_2)), 1.0f, 2.0f));
+
     check_neon("vacgt.f32", 2, select(abs(f32_1) > abs(f32_2), 1.0f, 2.0f));
     check_neon("vacgt.f32", 4, select(abs(f32_1) > abs(f32_2), 1.0f, 2.0f));
 
