@@ -45,6 +45,8 @@ protected:
     void visit(const Div *);
     void visit(const Min *);
     void visit(const Max *);
+    void visit(const LT *);
+    void visit(const LE *);
     void visit(const Select *);
     // @}
 
