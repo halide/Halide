@@ -1342,10 +1342,6 @@ void check_neon_all() {
     check_neon("vsubhn.i16", 8,  u8((u16_1 - u16_2)/256));
     check_neon("vsubhn.i32", 4, i16((i32_1 - i32_2)/65536));
     check_neon("vsubhn.i32", 4, u16((u32_1 - u32_2)/65536));
-    check_neon("vsubhn.i16", 4,  i8((i16_1 - i16_2)/256));
-    check_neon("vsubhn.i16", 4,  u8((u16_1 - u16_2)/256));
-    check_neon("vsubhn.i32", 2, i16((i32_1 - i32_2)/65536));
-    check_neon("vsubhn.i32", 2, u16((u32_1 - u32_2)/65536));
 
     // VSUBL	I	-	Subtract Long
     check_neon("vsubl.s8",  8, i16(i8_1)  - i16(i8_2));
@@ -1354,10 +1350,6 @@ void check_neon_all() {
     check_neon("vsubl.u16", 4, u32(u16_1) - u32(u16_2));
     check_neon("vsubl.s32", 2, i64(i32_1) - i64(i32_2));
     check_neon("vsubl.u32", 2, u64(u32_1) - u64(u32_2));
-    check_neon("vsubl.s8",  4, i16(i8_1)  - i16(i8_2));
-    check_neon("vsubl.u8",  4, u16(u8_1)  - u16(u8_2));
-    check_neon("vsubl.s16", 2, i32(i16_1) - i32(i16_2));
-    check_neon("vsubl.u16", 2, u32(u16_1) - u32(u16_2));    
 
     // VSUBW	I	-	Subtract Wide
     check_neon("vsubw.s8",  8, i16_1 - i8_1);
@@ -1366,10 +1358,6 @@ void check_neon_all() {
     check_neon("vsubw.u16", 4, u32_1 - u16_1);
     check_neon("vsubw.s32", 2, i64_1 - i32_1);
     check_neon("vsubw.u32", 2, u64_1 - u32_1);
-    check_neon("vsubw.s8",  4, i16_1 - i8_1);
-    check_neon("vsubw.u8",  4, u16_1 - u8_1);
-    check_neon("vsubw.s16", 2, i32_1 - i16_1);
-    check_neon("vsubw.u16", 2, u32_1 - u16_1);    
 
     // VSWP	I	-	Swap Contents
     // Swaps the contents of two registers. Not sure why this would be useful.
