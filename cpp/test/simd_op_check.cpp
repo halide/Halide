@@ -581,7 +581,6 @@ void check_neon_all() {
     check_neon("vabs.s32", 2, abs(i32_1));
     check_neon("vabs.s16", 4, abs(i16_1));
     check_neon("vabs.s8", 8, abs(i8_1));
-    check_neon("vabs.f64", 2, abs(f32_1));
     check_neon("vabs.f32", 4, abs(f32_1));
     check_neon("vabs.s32", 4, abs(i32_1));
     check_neon("vabs.s16", 8, abs(i16_1));

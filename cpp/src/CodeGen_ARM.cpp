@@ -339,45 +339,66 @@ void CodeGen_ARM::visit(const Div *op) {
 }
 
 void CodeGen_ARM::visit(const Min *op) {    
-    /*
-    if (op->type == UInt(8, 16)) {
-        value = call_intrin(UInt(8, 16), "sse2.pminu.b", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(8, 16)) {
-        value = call_intrin(Int(8, 16), "sse41.pminsb", vec(op->a, op->b));
-    } else if (op->type == Int(16, 8)) {
-        value = call_intrin(Int(16, 8), "sse2.pmins.w", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(16, 8)) {
-        value = call_intrin(UInt(16, 8), "sse41.pminuw", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(32, 4)) {
-        value = call_intrin(Int(32, 4), "sse41.pminsd", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(32, 4)) {
-        value = call_intrin(UInt(32, 4), "sse41.pminud", vec(op->a, op->b));               
-    } else {
-        CodeGen::visit(op);
+
+    struct {
+        Type t;
+        const char *op;
+    } patterns[] = {
+        {UInt(8, 8), "vminu.v8i8"},
+        {UInt(8, 16), "vminu.v16i8"},
+        {UInt(16, 4), "vminu.v4i16"},
+        {UInt(16, 8), "vminu.v8i16"},
+        {UInt(32, 2), "vminu.v2i32"},
+        {UInt(32, 4), "vminu.v4i32"},
+        {Int(8, 8), "vmins.v8i8"},
+        {Int(8, 16), "vmins.v16i8"},
+        {Int(16, 4), "vmins.v4i16"},
+        {Int(16, 8), "vmins.v8i16"},
+        {Int(32, 2), "vmins.v2i32"},
+        {Int(32, 4), "vmins.v4i32"},
+        {Float(32, 2), "vmins.v2f32"},
+        {Float(32, 4), "vmins.v4f32"}
+    };
+
+    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+        if (op->type == patterns[i].t) {
+            value = call_intrin(op->type, patterns[i].op, vec(op->a, op->b));
+            return;
+        } 
     }
-    */
 
     CodeGen::visit(op);
 }
 
-void CodeGen_ARM::visit(const Max *op) {
-    /* 
-    if (op->type == UInt(8, 16)) {
-        value = call_intrin(UInt(8, 16), "sse2.pmaxu.b", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(8, 16)) {
-        value = call_intrin(Int(8, 16), "sse41.pmaxsb", vec(op->a, op->b));
-    } else if (op->type == Int(16, 8)) {
-        value = call_intrin(Int(16, 8), "sse2.pmaxs.w", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(16, 8)) {
-        value = call_intrin(UInt(16, 8), "sse41.pmaxuw", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(32, 4)) {
-        value = call_intrin(Int(32, 4), "sse41.pmaxsd", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(32, 4)) {
-        value = call_intrin(UInt(32, 4), "sse41.pmaxud", vec(op->a, op->b));               
-    } else {
-        CodeGen::visit(op);
-    }    
-    */
+void CodeGen_ARM::visit(const Max *op) {    
+
+    struct {
+        Type t;
+        const char *op;
+    } patterns[] = {
+        {UInt(8, 8), "vmaxu.v8i8"},
+        {UInt(8, 16), "vmaxu.v16i8"},
+        {UInt(16, 4), "vmaxu.v4i16"},
+        {UInt(16, 8), "vmaxu.v8i16"},
+        {UInt(32, 2), "vmaxu.v2i32"},
+        {UInt(32, 4), "vmaxu.v4i32"},
+        {Int(8, 8), "vmaxs.v8i8"},
+        {Int(8, 16), "vmaxs.v16i8"},
+        {Int(16, 4), "vmaxs.v4i16"},
+        {Int(16, 8), "vmaxs.v8i16"},
+        {Int(32, 2), "vmaxs.v2i32"},
+        {Int(32, 4), "vmaxs.v4i32"},
+        {Float(32, 2), "vmaxs.v2f32"},
+        {Float(32, 4), "vmaxs.v4f32"}
+    };
+
+    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+        if (op->type == patterns[i].t) {
+            value = call_intrin(op->type, patterns[i].op, vec(op->a, op->b));
+            return;
+        } 
+    }
+
     CodeGen::visit(op);    
 }
 
@@ -390,18 +411,36 @@ void CodeGen_ARM::visit(const Select *op) {
     const Sub *b = op->false_value.as<Sub>();
     Type t = op->type;
 
+    int vec_bits = t.bits * t.width;
+
     if (cmp && a && b && 
         equal(a->a, b->b) &&
         equal(a->b, b->a) &&
         equal(cmp->a, a->b) &&
         equal(cmp->b, a->a) &&
         (!t.is_float()) && 
-        (t.bits == 8 || t.bits == 16 || t.bits == 32) &&
-        (t.bits * t.width == 64 || t.bits * t.width == 128)) {
+        (t.bits == 8 || t.bits == 16 || t.bits == 32 || t.bits == 64) &&
+        (vec_bits == 64 || vec_bits == 128)) {
 
         ostringstream ss;
-        ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits;
-        value = call_intrin(t, ss.str(), vec(cmp->a, cmp->b));
+
+        // If cmp->a and cmp->b are both widening casts of a narrower
+        // int, we can use vadbl instead of vabd. llvm reaches vabdl
+        // by expecting you to widen the result of a narrower vabd.
+        const Cast *ca = cmp->a.as<Cast>();
+        const Cast *cb = cmp->b.as<Cast>();
+        if (ca && cb && vec_bits == 128 &&
+            ca->value.type().bits * 2 == t.bits &&
+            cb->value.type().bits * 2 == t.bits &&
+            ca->value.type().t == t.t &&
+            cb->value.type().t == t.t) {
+            ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits/2;
+            value = call_intrin(ca->value.type(), ss.str(), vec(ca->value, cb->value));
+            value = builder->CreateIntCast(value, llvm_type_of(t), false);
+        } else {
+            ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits;
+            value = call_intrin(t, ss.str(), vec(cmp->a, cmp->b));
+        }
 
         return;
     }
