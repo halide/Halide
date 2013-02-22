@@ -150,8 +150,6 @@ inline Expr operator-(Expr a) {
 /** Modify the first expression to be the difference of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
-/** Change the first expression to be the sum of two expressions,
- * doing any necessary type coercion */    
 inline Expr &operator-=(Expr &a, Expr b) {
     assert(a.defined() && b.defined() && "operator-= of undefined");
     a = new Internal::Sub(a, cast(a.type(), b));
