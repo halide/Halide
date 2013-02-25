@@ -42,9 +42,33 @@ extern "C" int halide_internal_initmod_arm_length;
 extern "C" unsigned char halide_internal_initmod_arm_android[];
 extern "C" int halide_internal_initmod_arm_android_length;
 
+
 namespace Halide { 
 namespace Internal {
 
+namespace {
+bool is_const_power_of_two(Expr e, int *bits) {
+    const Broadcast *b = e.as<Broadcast>();
+    if (b) return is_const_power_of_two(b->value, bits);
+    
+    const Cast *c = e.as<Cast>();
+    if (c) return is_const_power_of_two(c->value, bits);
+
+    const IntImm *int_imm = e.as<IntImm>();
+    if (int_imm) {
+        int bit_count = 0;
+        int tmp;
+        for (tmp = 1; tmp < int_imm->value; tmp *= 2) {
+            bit_count++;
+        }
+        if (tmp == int_imm->value) {
+            *bits = bit_count;
+            return true;
+        }
+    }
+    return false;
+}
+}
 
 using namespace llvm;
 
@@ -157,13 +181,20 @@ void CodeGen_ARM::visit(const Cast *op) {
     struct Pattern {
         string intrin;
         Expr pattern;
+        int shift;
     };
 
     Pattern patterns[] = {
-        {"vsubhn.v8i8", _i8((wild_i16x8 - wild_i16x8)/256)},
-        {"vsubhn.v4i16", _i16((wild_i32x4 - wild_i32x4)/65536)},
-        {"vsubhn.v8i8", _u8((wild_u16x8 - wild_u16x8)/256)},
-        {"vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536)},
+        {"vsubhn.v8i8", _i8((wild_i16x8 - wild_i16x8)/256), false},
+        {"vsubhn.v4i16", _i16((wild_i32x4 - wild_i32x4)/65536), false},
+        {"vsubhn.v8i8", _u8((wild_u16x8 - wild_u16x8)/256), false},
+        {"vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536), false},
+        {"vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), true},
+        {"vshiftn.v4i16", _i16(wild_i32x4/wild_i32x4), true},
+        {"vshiftn.v2i32", _i32(wild_i64x2/wild_i64x2), true},
+        {"vshiftn.v8i8", _u8(wild_u16x8/wild_u16x8), true},
+        {"vshiftn.v4i16", _u16(wild_u32x4/wild_u32x4), true},
+        {"vshiftn.v2i32", _u32(wild_u64x2/wild_u64x2), true},
         {"sentinel", 0}
         /*
         {"sse2.padds.b", 
@@ -204,8 +235,20 @@ void CodeGen_ARM::visit(const Cast *op) {
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
         if (expr_match(pattern.pattern, op, matches)) {
-            value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
-            return;
+            if (pattern.shift) {
+                Expr divisor = matches[1];
+                int shift_amount;
+                bool power_of_two = is_const_power_of_two(divisor, &shift_amount);
+                if (power_of_two && shift_amount < matches[0].type().bits) {
+                    Value *shift = ConstantInt::get(llvm_type_of(matches[0].type()), -shift_amount);
+                    value = call_intrin(pattern.pattern.type(), pattern.intrin, 
+                                        vec(codegen(matches[0]), shift));
+                    return;
+                }
+            } else {
+                value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
+                return;
+            }
         }
     }
 
@@ -213,32 +256,124 @@ void CodeGen_ARM::visit(const Cast *op) {
 
 }
 
+void CodeGen_ARM::visit(const Mul *op) {  
+    // If the rhs is a power of two, consider a shift
+    int shift_amount = 0;
+    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
+    const Cast *cast_a = op->a.as<Cast>();
+
+    Value *shift = NULL;
+    if (cast_a) {
+        shift = ConstantInt::get(llvm_type_of(cast_a->value.type()), shift_amount);
+    } else {
+        shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
+    }
+
+    // Widening left shifts
+    if (power_of_two && cast_a && 
+        cast_a->type == Int(16, 8) && cast_a->value.type() == Int(8, 8)) {
+        Value *lhs = codegen(cast_a->value);
+        value = call_intrin(Int(16, 8), "vshiftls.v8i16", vec(lhs, shift));
+    } else if (power_of_two && cast_a && 
+               cast_a->type == Int(32, 4) && cast_a->value.type() == Int(16, 4)) {
+        Value *lhs = codegen(cast_a->value);
+        value = call_intrin(Int(32, 4), "vshiftls.v4i32", vec(lhs, shift));
+    } else if (power_of_two && cast_a && 
+               cast_a->type == Int(64, 2) && cast_a->value.type() == Int(32, 2)) {
+        Value *lhs = codegen(cast_a->value);
+        value = call_intrin(Int(64, 2), "vshiftls.v2i64", vec(lhs, shift));
+    } else if (power_of_two && cast_a && 
+               cast_a->type == UInt(16, 8) && cast_a->value.type() == UInt(8, 8)) {
+        Value *lhs = codegen(cast_a->value);
+        value = call_intrin(UInt(16, 8), "vshiftlu.v8i16", vec(lhs, shift));
+    } else if (power_of_two && cast_a && 
+               cast_a->type == UInt(32, 4) && cast_a->value.type() == UInt(16, 4)) {
+        Value *lhs = codegen(cast_a->value);
+        value = call_intrin(UInt(32, 4), "vshiftlu.v4i32", vec(lhs, shift));
+    } else if (power_of_two && cast_a && 
+               cast_a->type == UInt(64, 2) && cast_a->value.type() == UInt(32, 2)) {
+        Value *lhs = codegen(cast_a->value);
+        value = call_intrin(UInt(64, 2), "vshiftlu.v2i64", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == Int(8, 8)) {
+        // Non-widening left shifts
+        Value *lhs = codegen(op->a);
+        value = call_intrin(Int(8, 8), "vshifts.v8i8", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == Int(16, 4)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(Int(16, 4), "vshifts.v4i16", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == Int(32, 2)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(Int(32, 2), "vshifts.v2i32", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == Int(8, 16)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(Int(8, 16), "vshifts.v16i8", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == Int(16, 8)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(Int(16, 8), "vshifts.v8i16", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == Int(32, 4)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(Int(32, 4), "vshifts.v4i32", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == Int(64, 2)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(Int(64, 2), "vshifts.v2i64", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == UInt(8, 8)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(UInt(8, 8), "vshiftu.v8i8", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == UInt(16, 4)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(UInt(16, 4), "vshiftu.v4i16", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == UInt(32, 2)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(UInt(32, 2), "vshiftu.v2i32", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == UInt(8, 16)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(UInt(8, 16), "vshiftu.v16i8", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == UInt(16, 8)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(UInt(16, 8), "vshiftu.v8i16", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == UInt(32, 4)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(UInt(32, 4), "vshiftu.v4i32", vec(lhs, shift));
+    } else if (power_of_two && op->a.type() == UInt(64, 2)) {
+        Value *lhs = codegen(op->a);
+        value = call_intrin(UInt(64, 2), "vshiftu.v2i64", vec(lhs, shift));
+    } else {
+        CodeGen::visit(op);
+    }
+}
+
 void CodeGen_ARM::visit(const Div *op) {    
 
-    /*
+    
 
     // Detect if it's a small int division
     const Broadcast *broadcast = op->b.as<Broadcast>();
     const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;    
     const IntImm *int_imm = cast_b ? cast_b->value.as<IntImm>() : NULL;
+    if (broadcast && !int_imm) int_imm = broadcast->value.as<IntImm>();
     int const_divisor = int_imm ? int_imm->value : 0;
+
+    // Check if the divisor is a power of two
+    int shift_amount;
+    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
 
     vector<Expr> matches;    
     if (op->type == Float(32, 4) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
-        if (expr_match(new Call(Float(32, 4), "sqrt_f32", vec(wild_f32x4)), op->b, matches)) {            
-            value = call_intrin(Float(32, 4), "sse.rsqrt.ps", matches);
+        if (expr_match(new Call(Float(32, 4), "sqrt_f32", vec(wild_f32x4)), op->b, matches)) {
+            value = call_intrin(Float(32, 4), "vrsqrte.v4f32", matches);
         } else {
-            value = call_intrin(Float(32, 4), "sse.rcp.ps", vec(op->b));
+            value = call_intrin(Float(32, 4), "vrecpe.v4f32", vec(op->b));
         }
-    } else if (use_avx && op->type == Float(32, 8) && is_one(op->a)) {
-        // Reciprocal and reciprocal square root
-        if (expr_match(new Call(Float(32, 8), "sqrt_f32", vec(wild_f32x8)), op->b, matches)) {            
-            value = call_intrin(Float(32, 8), "avx.rsqrt.ps.256", matches);
-        } else {
-            value = call_intrin(Float(32, 8), "avx.rcp.ps.256", vec(op->b));
-        }
-    } else if (op->type == Int(16, 8) && const_divisor > 1 && const_divisor < 64) {
+    } else if (power_of_two && op->type.is_int()) {
+        Value *numerator = codegen(op->a);
+        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
+        value = builder->CreateAShr(numerator, shift);
+    } else if (power_of_two && op->type.is_uint()) {
+        Value *numerator = codegen(op->a);
+        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
+        value = builder->CreateLShr(numerator, shift);
+    } else if (op->type == Int(16, 4) && const_divisor > 1 && const_divisor < 64) {
         int method     = IntegerDivision::table_s16[const_divisor-2][0];
         int multiplier = IntegerDivision::table_s16[const_divisor-2][1];
         int shift      = IntegerDivision::table_s16[const_divisor-2][2];        
@@ -249,7 +384,9 @@ void CodeGen_ARM::visit(const Div *op) {
         Value *mult;
         if (multiplier != 0) {
             mult = codegen(cast(op->type, multiplier));
-            mult = call_intrin(Int(16, 8), "sse2.pmulh.w", vec(val, mult));
+            mult = call_intrin(Int(32, 4), "vmulls.v4i32", vec(val, mult));
+            Value *sixteen = ConstantVector::getSplat(4, ConstantInt::get(i32, -16));
+            mult = call_intrin(Int(16, 4), "vshiftn.v4i16", vec(mult, sixteen));
 
             // Possibly add a correcting factor
             if (method == 1) {
@@ -281,7 +418,9 @@ void CodeGen_ARM::visit(const Div *op) {
         Value *mult = val;
         if (method > 0) {
             mult = codegen(cast(op->type, multiplier));
-            mult = call_intrin(UInt(16, 8), "sse2.pmulhu.w", vec(val, mult));
+            mult = call_intrin(Int(32, 4), "vmullu.v4i32", vec(val, mult));
+            Value *sixteen = ConstantVector::getSplat(4, ConstantInt::get(i32, -16));
+            mult = call_intrin(Int(16, 4), "vshiftn.v4i16", vec(mult, sixteen));
 
             // Possibly add a correcting factor
             if (method == 2) {
@@ -299,9 +438,6 @@ void CodeGen_ARM::visit(const Div *op) {
 
         CodeGen::visit(op);
     }
-    */
-
-    CodeGen::visit(op);
 }
 
 void CodeGen_ARM::visit(const Add *op) {

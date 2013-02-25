@@ -30,8 +30,8 @@ protected:
     // @{
     Expr wild_i8x8, wild_i16x4, wild_i32x2; // 64-bit signed ints
     Expr wild_u8x8, wild_u16x4, wild_u32x2; // 64-bit unsigned ints
-    Expr wild_i8x16, wild_i16x8, wild_i32x4; // 128-bit signed ints
-    Expr wild_u8x16, wild_u16x8, wild_u32x4; // 128-bit unsigned ints
+    Expr wild_i8x16, wild_i16x8, wild_i32x4, wild_i64x2; // 128-bit signed ints
+    Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2; // 128-bit unsigned ints
     Expr wild_i8x32, wild_i16x16, wild_i32x8; // 256-bit signed ints
     Expr wild_u8x32, wild_u16x16, wild_u32x8; // 256-bit unsigned ints
     Expr wild_f32x4, wild_f64x2; // 128-bit floats
