@@ -1097,15 +1097,7 @@ void check_neon_all() {
     // VQDMLSL	I	-	Saturating Double Multiply Subtract Long
     // VQDMULH	I	-	Saturating Doubling Multiply Returning High Half
     // VQDMULL	I	-	Saturating Doubling Multiply Long
-
-    // These ops are largely useful for fixed-point multiplication,
-    // accumulation, and division. The only one we access through
-    // halide is the one we can directly use for integer division by a
-    // constant.
-    check_neon("vqdmulh.s16", 8, i16_1 / 7);
-    check_neon("vqdmulh.s32", 4, i32_1 / 7);
-    check_neon("vqdmulh.s16", 4, i16_1 / 7);
-    check_neon("vqdmulh.s32", 2, i32_1 / 7);
+    // Not sure why I'd use these
 
     // VQMOVN	I	-	Saturating Move and Narrow
     check_neon("vqmovn.s16", 8,  i8(clamp(i16_1, min_i8,  max_i8)));
@@ -1219,9 +1211,6 @@ void check_neon_all() {
 
     // VRSQRTE	I, F	-	Reciprocal Square Root Estimate
     check_neon("vrsqrte.f32", 4, 1.0f/sqrt(f32_1));
-    check_neon("vrsqrte.f32", 2, 1.0f/sqrt(f32_1));    
-    check_neon("vrsqrte.f32", 4, f32_2/sqrt(f32_1));
-    check_neon("vrsqrte.f32", 2, f32_2/sqrt(f32_1));    
 
     // VRSQRTS	F	-	Reciprocal Square Root Step
     // One newtown rhapson iteration of 1/sqrt(x). Skip it.
@@ -1231,20 +1220,20 @@ void check_neon_all() {
     // Boo rounding ops
 
     // VSHL	I	-	Shift Left
-    check_neon("vshl.s8", 16,  i8_1*16);
-    check_neon("vshl.s16", 8, i16_1*16);
-    check_neon("vshl.s32", 4, i32_1*16);
-    check_neon("vshl.s64", 2, i64_1*16);
-    check_neon("vshl.s8",  8,  i8_1*16);
-    check_neon("vshl.s16", 4, i16_1*16);
-    check_neon("vshl.s32", 2, i32_1*16);
-    check_neon("vshl.u8", 16,  u8_1*16);
-    check_neon("vshl.u16", 8, u16_1*16);
-    check_neon("vshl.u32", 4, u32_1*16);
-    check_neon("vshl.u64", 2, u64_1*16);
-    check_neon("vshl.u8",  8,  u8_1*16);
-    check_neon("vshl.u16", 4, u16_1*16);
-    check_neon("vshl.u32", 2, u32_1*16);
+    check_neon("vshl.i8", 16,  i8_1*16);
+    check_neon("vshl.i16", 8, i16_1*16);
+    check_neon("vshl.i32", 4, i32_1*16);
+    check_neon("vshl.i64", 2, i64_1*16);
+    check_neon("vshl.i8",  8,  i8_1*16);
+    check_neon("vshl.i16", 4, i16_1*16);
+    check_neon("vshl.i32", 2, i32_1*16);
+    check_neon("vshl.i8", 16,  u8_1*16);
+    check_neon("vshl.i16", 8, u16_1*16);
+    check_neon("vshl.i32", 4, u32_1*16);
+    check_neon("vshl.i64", 2, u64_1*16);
+    check_neon("vshl.i8",  8,  u8_1*16);
+    check_neon("vshl.i16", 4, u16_1*16);
+    check_neon("vshl.i32", 2, u32_1*16);
 
     
     // VSHLL	I	-	Shift Left Long
@@ -1272,12 +1261,14 @@ void check_neon_all() {
     check_neon("vshr.u32", 2, u32_1/16);    
 
     // VSHRN	I	-	Shift Right Narrow
+    check_neon("vshrn.i16", 8,  i8(i16_1/256));
+    check_neon("vshrn.i32", 4, i16(i32_1/65536));
+    check_neon("vshrn.i16",  8,  u8(u16_1/256));
+    check_neon("vshrn.i32",  4, u16(u32_1/65536));
     check_neon("vshrn.i16", 8,  i8(i16_1/16));
     check_neon("vshrn.i32", 4, i16(i32_1/16));
-    check_neon("vshrn.i64", 2, i32(i64_1/16));
-    check_neon("vshr.i16",  8,  u8(u16_1/16));
-    check_neon("vshr.i32",  4, u16(u32_1/16));
-    check_neon("vshr.i64",  2, u32(u64_1/16));
+    check_neon("vshrn.i16",  8,  u8(u16_1/16));
+    check_neon("vshrn.i32",  4, u16(u32_1/16));
 
     // VSLI	X	-	Shift Left and Insert
     // I guess this could be used for (x*256) | (y & 255)? We don't do bitwise ops on integers, so skip it.
