@@ -99,6 +99,7 @@ inline Expr cast(Expr a) {
 
 /** Cast an expression to a new type. */
 inline Expr cast(Type t, Expr a) {
+    assert(a.defined() && "cast of undefined");
     if (a.type() == t) return a;
     if (t.is_vector()) {
         if (a.type().is_scalar()) {
@@ -114,6 +115,7 @@ inline Expr cast(Type t, Expr a) {
 /** Return the sum of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
 inline Expr operator+(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator+ of undefined");
     Internal::match_types(a, b);
     return new Internal::Add(a, b);
 }
@@ -122,6 +124,7 @@ inline Expr operator+(Expr a, Expr b) {
  * without changing its type. This casts the second argument to match
  * the type of the first. */
 inline Expr &operator+=(Expr &a, Expr b) {
+    assert(a.defined() && b.defined() && "operator+= of undefined");
     a = new Internal::Add(a, cast(a.type(), b));
     return a;
 }
@@ -129,6 +132,7 @@ inline Expr &operator+=(Expr &a, Expr b) {
 /** Return the difference of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
 inline Expr operator-(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator- of undefined");
     Internal::match_types(a, b);
     return new Internal::Sub(a, b);
 }
@@ -139,15 +143,15 @@ inline Expr operator-(Expr a, Expr b) {
  * still an unsigned integer. E.g. in UInt(8), the negative of 56 is
  * 200, because 56 + 200 == 0 */
 inline Expr operator-(Expr a) {
+    assert(a.defined() && "operator- of undefined");
     return new Internal::Sub(Internal::make_zero(a.type()), a);
 }
 
 /** Modify the first expression to be the difference of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
-/** Change the first expression to be the sum of two expressions,
- * doing any necessary type coercion */    
 inline Expr &operator-=(Expr &a, Expr b) {
+    assert(a.defined() && b.defined() && "operator-= of undefined");
     a = new Internal::Sub(a, cast(a.type(), b));
     return a;
 }
@@ -155,6 +159,7 @@ inline Expr &operator-=(Expr &a, Expr b) {
 /** Return the product of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
 inline Expr operator*(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator* of undefined");
     Internal::match_types(a, b);
     return new Internal::Mul(a, b);
 }
@@ -163,6 +168,7 @@ inline Expr operator*(Expr a, Expr b) {
  * without changing its type. This casts the second argument to match
  * the type of the first. */
 inline Expr &operator*=(Expr &a, Expr b) {
+    assert(a.defined() && b.defined() && "operator*= of undefined");
     a = new Internal::Mul(a, cast(a.type(), b));
     return a;
 }
@@ -170,6 +176,7 @@ inline Expr &operator*=(Expr &a, Expr b) {
 /** Return the ratio of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
 inline Expr operator/(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator/ of undefined");
     Internal::match_types(a, b);
     return new Internal::Div(a, b);
 }
@@ -178,6 +185,7 @@ inline Expr operator/(Expr a, Expr b) {
  * without changing its type. This casts the second argument to match
  * the type of the first. */
 inline Expr &operator/=(Expr &a, Expr b) {
+    assert(a.defined() && b.defined() && "operator/= of undefined");
     a = new Internal::Div(a, cast(a.type(), b));
     return a;
 }
@@ -185,6 +193,7 @@ inline Expr &operator/=(Expr &a, Expr b) {
 /** Return the first argument reduced modulo the second, doing any
  * necessary type coercion using \ref Internal::match_types */
 inline Expr operator%(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator% of undefined");
     Internal::match_types(a, b);
     return new Internal::Mod(a, b);
 }
@@ -193,6 +202,7 @@ inline Expr operator%(Expr a, Expr b) {
  * is greater than the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
 inline Expr operator>(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator> of undefined");
     Internal::match_types(a, b);
     return new Internal::GT(a, b);
 }
@@ -201,6 +211,7 @@ inline Expr operator>(Expr a, Expr b) {
  * is less than the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
 inline Expr operator<(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator< of undefined");
     Internal::match_types(a, b);
     return new Internal::LT(a, b);
 }
@@ -209,6 +220,7 @@ inline Expr operator<(Expr a, Expr b) {
  * is less than or equal to the second, after doing any necessary type
  * coercion using \ref Internal::match_types */
 inline Expr operator<=(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator<= of undefined");
     Internal::match_types(a, b);
     return new Internal::LE(a, b);
 }
@@ -218,6 +230,7 @@ inline Expr operator<=(Expr a, Expr b) {
  * type coercion using \ref Internal::match_types */
 
 inline Expr operator>=(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator>= of undefined");
     Internal::match_types(a, b);
     return new Internal::GE(a, b);
 }
@@ -226,6 +239,7 @@ inline Expr operator>=(Expr a, Expr b) {
  * is equal to the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
 inline Expr operator==(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator== of undefined");
     Internal::match_types(a, b);
     return new Internal::EQ(a, b);
 }
@@ -234,6 +248,7 @@ inline Expr operator==(Expr a, Expr b) {
  * is not equal to the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
 inline Expr operator!=(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "operator!= of undefined");
     Internal::match_types(a, b);
     return new Internal::NE(a, b);
 }
@@ -257,6 +272,7 @@ inline Expr operator!(Expr a) {
  * arguments, after doing any necessary type coercion using 
  * \ref Internal::match_types */
 inline Expr max(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "max of undefined");
     Internal::match_types(a, b);
     return new Internal::Max(a, b);
 }
@@ -265,6 +281,7 @@ inline Expr max(Expr a, Expr b) {
  * arguments, after doing any necessary type coercion using 
  * \ref Internal::match_types */
 inline Expr min(Expr a, Expr b) {
+    assert(a.defined() && b.defined() && "min of undefined");
     Internal::match_types(a, b);
     return new Internal::Min(a, b);
 }
@@ -272,6 +289,8 @@ inline Expr min(Expr a, Expr b) {
 /** Clamps an expression to lie within the given bounds. The bounds
  * are type-cast to match the expression. */
 inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
+    assert(a.defined() && min_val.defined() && max_val.defined() &&
+           "clamp of undefined");
     min_val = cast(a.type(), min_val);
     max_val = cast(a.type(), max_val);
     return new Internal::Max(new Internal::Min(a, max_val), min_val);
@@ -280,6 +299,7 @@ inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
 /** Returns the absolute value of a signed integer or floating-point
  * expression */
 inline Expr abs(Expr a) {
+    assert(a.defined() && "abs of undefined");
     if (a.type() == Int(8))
         return new Internal::Call(Int(8), "abs_i8", vec(a));
     if (a.type() == Int(16)) 
@@ -305,6 +325,7 @@ inline Expr select(Expr a, Expr b, Expr c) {
 /** Return the sine of a floating-point expression. If the argument is
  * not floating-point, is it cast to Float(32). */
 inline Expr sin(Expr x) {
+    assert(x.defined() && "sin of undefined");
     if (x.type() == Float(64)) {
         return new Internal::Call(Float(64), "sin_f64", vec(x));
     } else {
@@ -315,6 +336,7 @@ inline Expr sin(Expr x) {
 /** Return the cosine of a floating-point expression. If the argument
  * is not floating-point, is it cast to Float(32). */
 inline Expr cos(Expr x) {
+    assert(x.defined() && "cos of undefined");
     if (x.type() == Float(64)) {
         return new Internal::Call(Float(64), "cos_f64", vec(x));
     } else {
@@ -325,6 +347,7 @@ inline Expr cos(Expr x) {
 /** Return the square root of a floating-point expression. If the
  * argument is not floating-point, is it cast to Float(32). */
 inline Expr sqrt(Expr x) {
+    assert(x.defined() && "sqrt of undefined");
     if (x.type() == Float(64)) {
         return new Internal::Call(Float(64), "sqrt_f64", vec(x));
     } else {
@@ -335,6 +358,7 @@ inline Expr sqrt(Expr x) {
 /** Return the exponential of a floating-point expression. If the
  * argument is not floating-point, is it cast to Float(32). */
 inline Expr exp(Expr x) {
+    assert(x.defined() && "exp of undefined");
     if (x.type() == Float(64)) {
         return new Internal::Call(Float(64), "exp_f64", vec(x));
     } else {
@@ -345,6 +369,7 @@ inline Expr exp(Expr x) {
 /** Return the logarithm of a floating-point expression. If the
  * argument is not floating-point, is it cast to Float(32). */
 inline Expr log(Expr x) {
+    assert(x.defined() && "log of undefined");
     if (x.type() == Float(64)) {
         return new Internal::Call(Float(64), "log_f64", vec(x));
     } else {
@@ -357,6 +382,7 @@ inline Expr log(Expr x) {
  * is it cast to Float(32). The return value is still in floating
  * point, despite being a whole number. */
 inline Expr floor(Expr x) {
+    assert(x.defined() && "floor of undefined");
     if (x.type() == Float(64)) {
         return new Internal::Call(Float(64), "floor_f64", vec(x));
     } else {
@@ -369,6 +395,7 @@ inline Expr floor(Expr x) {
  * is it cast to Float(32). The return value is still in floating
  * point, despite being a whole number. */
 inline Expr ceil(Expr x) {
+    assert(x.defined() && "ceil of undefined");
     if (x.type() == Float(64)) {
         return new Internal::Call(Float(64), "ceil_f64", vec(x));
     } else {
@@ -381,6 +408,7 @@ inline Expr ceil(Expr x) {
  * return value is still in floating point, despite being a whole
  * number. On ties, we round up. */
 inline Expr round(Expr x) {
+    assert(x.defined() && "round of undefined");
     if (x.type() == Float(64)) {
         return new Internal::Call(Float(64), "round_f64", vec(x));
     } else {
@@ -393,6 +421,7 @@ inline Expr round(Expr x) {
  * argument. If the first argument is not a floating-point type, it is
  * cast to Float(32) */
 inline Expr pow(Expr x, Expr y) {
+    assert(x.defined() && y.defined() && "pow of undefined");
     if (x.type() == Float(64)) {
         y = cast<double>(y);
         return new Internal::Call(Float(64), "pow_f64", vec(x, y));
