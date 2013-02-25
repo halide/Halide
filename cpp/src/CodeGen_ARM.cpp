@@ -152,99 +152,65 @@ Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Val
  
 void CodeGen_ARM::visit(const Cast *op) {
 
-    /*
     vector<Expr> matches;
  
     struct Pattern {
-        bool needs_sse_41;
-        bool extern_call;
-        Type type;
         string intrin;
         Expr pattern;
     };
 
     Pattern patterns[] = {
-        {false, false, Int(8, 16), "sse2.padds.b", 
+        {"vsubhn.v8i8", _i8((wild_i16x8 - wild_i16x8)/256)},
+        {"vsubhn.v4i16", _i16((wild_i32x4 - wild_i32x4)/65536)},
+        {"vsubhn.v8i8", _u8((wild_u16x8 - wild_u16x8)/256)},
+        {"vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536)},
+        {"sentinel", 0}
+        /*
+        {"sse2.padds.b", 
          _i8(clamp(_i16(wild_i8x16) + _i16(wild_i8x16), -128, 127))},
-        {false, false, Int(8, 16), "sse2.psubs.b", 
+        {"sse2.psubs.b", 
          _i8(clamp(_i16(wild_i8x16) - _i16(wild_i8x16), -128, 127))},
-        {false, false, UInt(8, 16), "sse2.paddus.b", 
+        {"sse2.paddus.b", 
          _u8(min(_u16(wild_u8x16) + _u16(wild_u8x16), 255))},
-        {false, false, UInt(8, 16), "sse2.psubus.b", 
+        {"sse2.psubus.b", 
          _u8(max(_i16(wild_u8x16) - _i16(wild_u8x16), 0))},
-        {false, false, Int(16, 8), "sse2.padds.w", 
+        {"sse2.padds.w", 
          _i16(clamp(_i32(wild_i16x8) + _i32(wild_i16x8), -32768, 32767))},
-        {false, false, Int(16, 8), "sse2.psubs.w", 
+        {"sse2.psubs.w", 
          _i16(clamp(_i32(wild_i16x8) - _i32(wild_i16x8), -32768, 32767))},
-        {false, false, UInt(16, 8), "sse2.paddus.w", 
+        {"sse2.paddus.w", 
          _u16(min(_u32(wild_u16x8) + _u32(wild_u16x8), 65535))},
-        {false, false, UInt(16, 8), "sse2.psubus.w", 
+        {"sse2.psubus.w", 
          _u16(max(_i32(wild_u16x8) - _i32(wild_u16x8), 0))},
-        {false, false, Int(16, 8), "sse2.pmulh.w", 
+        {"sse2.pmulh.w", 
          _i16((_i32(wild_i16x8) * _i32(wild_i16x8)) / 65536)},
-        {false, false, UInt(16, 8), "sse2.pmulhu.w", 
+        {"sse2.pmulhu.w", 
          _u16((_u32(wild_u16x8) * _u32(wild_u16x8)) / 65536)},
-        {false, false, UInt(8, 16), "sse2.pavg.b",
+        {"sse2.pavg.b",
          _u8(((_u16(wild_u8x16) + _u16(wild_u8x16)) + 1) / 2)},
-        {false, false, UInt(16, 8), "sse2.pavg.w",
+        {"sse2.pavg.w",
          _u16(((_u32(wild_u16x8) + _u32(wild_u16x8)) + 1) / 2)},
-        {false, true, Int(16, 8), "packssdw", 
+        {"packssdw", 
          _i16(clamp(wild_i32x8, -32768, 32767))},
-        {false, true, Int(8, 16), "packsswb", 
+        {"packsswb", 
          _i8(clamp(wild_i16x16, -128, 127))},
-        {false, true, UInt(8, 16), "packuswb", 
+        {"packuswb", 
          _u8(clamp(wild_i16x16, 0, 255))},
-        {true, true, UInt(16, 8), "packusdw",
+        {"packusdw",
          _u16(clamp(wild_i32x8, 0, 65535))}
+        */
     };
         
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
-        if (!use_sse_41 && pattern.needs_sse_41) continue;
         if (expr_match(pattern.pattern, op, matches)) {
-            if (pattern.extern_call) {
-                value = codegen(new Call(pattern.type, pattern.intrin, matches));
-            } else {
-                value = call_intrin(pattern.type, pattern.intrin, matches);
-            }
+            value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
             return;
         }
     }
-        
-    */
 
     CodeGen::visit(op);
 
-    /*
-    check_sse("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, 127)));
-    check_sse("psubsb", 16, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, 127)));
-    check_sse("paddusb", 16, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-    check_sse("psubusb", 16, u8(min(u16(u8_1) - u16(u8_2), max_u8)));
-    check_sse("paddsw", 8, i16(clamp(i32(i16_1) + i32(i16_2), -32768, 32767)));
-    check_sse("psubsw", 8, i16(clamp(i32(i16_1) - i32(i16_2), -32768, 32767)));
-    check_sse("paddusw", 8, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-    check_sse("psubusw", 8, u16(min(u32(u16_1) - u32(u16_2), max_u16)));
-    check_sse("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
-    check_sse("pmulhw", 8, i16_1 / 15);
-
-    // SSE 1
-    check_sse("rcpps", 4, 1.0f / f32_2);
-    check_sse("rsqrtps", 4, 1.0f / sqrt(f32_2));
-    check_sse("pavgb", 16, u8((u16(u8_1) + u16(u8_2) + 1)/2));
-    check_sse("pavgw", 8, u16((u32(u16_1) + u32(u16_2) + 1)/2));
-
-    check_sse("pmulhuw", 8, u16((u32(u16_1) * u32(u16_2))/(256*256)));
-    check_sse("pmulhuw", 8, u16_1 / 15);
-
-    check_sse("shufps", 4, in_f32(2*x));
-
-    // SSE 2
-    check_sse("packssdw", 8, i16(clamp(i32_1, -32768, 32767)));
-    check_sse("packsswb", 16, i8(clamp(i16_1, min_i8, 127)));
-    check_sse("packuswb", 16, u8(clamp(i16_1, 0, max_u8)));
-
-    check_sse("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));
-    */
 }
 
 void CodeGen_ARM::visit(const Div *op) {    
@@ -338,47 +304,125 @@ void CodeGen_ARM::visit(const Div *op) {
     CodeGen::visit(op);
 }
 
-void CodeGen_ARM::visit(const Min *op) {    
-    /*
-    if (op->type == UInt(8, 16)) {
-        value = call_intrin(UInt(8, 16), "sse2.pminu.b", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(8, 16)) {
-        value = call_intrin(Int(8, 16), "sse41.pminsb", vec(op->a, op->b));
-    } else if (op->type == Int(16, 8)) {
-        value = call_intrin(Int(16, 8), "sse2.pmins.w", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(16, 8)) {
-        value = call_intrin(UInt(16, 8), "sse41.pminuw", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(32, 4)) {
-        value = call_intrin(Int(32, 4), "sse41.pminsd", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(32, 4)) {
-        value = call_intrin(UInt(32, 4), "sse41.pminud", vec(op->a, op->b));               
-    } else {
-        CodeGen::visit(op);
-    }
-    */
+void CodeGen_ARM::visit(const Add *op) {
+    CodeGen::visit(op);
+}
+
+void CodeGen_ARM::visit(const Sub *op) {
 
     CodeGen::visit(op);
 }
 
-void CodeGen_ARM::visit(const Max *op) {
-    /* 
-    if (op->type == UInt(8, 16)) {
-        value = call_intrin(UInt(8, 16), "sse2.pmaxu.b", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(8, 16)) {
-        value = call_intrin(Int(8, 16), "sse41.pmaxsb", vec(op->a, op->b));
-    } else if (op->type == Int(16, 8)) {
-        value = call_intrin(Int(16, 8), "sse2.pmaxs.w", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(16, 8)) {
-        value = call_intrin(UInt(16, 8), "sse41.pmaxuw", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(32, 4)) {
-        value = call_intrin(Int(32, 4), "sse41.pmaxsd", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(32, 4)) {
-        value = call_intrin(UInt(32, 4), "sse41.pmaxud", vec(op->a, op->b));               
+void CodeGen_ARM::visit(const Min *op) {    
+
+    struct {
+        Type t;
+        const char *op;
+    } patterns[] = {
+        {UInt(8, 8), "vminu.v8i8"},
+        {UInt(8, 16), "vminu.v16i8"},
+        {UInt(16, 4), "vminu.v4i16"},
+        {UInt(16, 8), "vminu.v8i16"},
+        {UInt(32, 2), "vminu.v2i32"},
+        {UInt(32, 4), "vminu.v4i32"},
+        {Int(8, 8), "vmins.v8i8"},
+        {Int(8, 16), "vmins.v16i8"},
+        {Int(16, 4), "vmins.v4i16"},
+        {Int(16, 8), "vmins.v8i16"},
+        {Int(32, 2), "vmins.v2i32"},
+        {Int(32, 4), "vmins.v4i32"},
+        {Float(32, 2), "vmins.v2f32"},
+        {Float(32, 4), "vmins.v4f32"}
+    };
+
+    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+        if (op->type == patterns[i].t) {
+            value = call_intrin(op->type, patterns[i].op, vec(op->a, op->b));
+            return;
+        } 
+    }
+
+    CodeGen::visit(op);
+}
+
+void CodeGen_ARM::visit(const Max *op) {    
+
+    struct {
+        Type t;
+        const char *op;
+    } patterns[] = {
+        {UInt(8, 8), "vmaxu.v8i8"},
+        {UInt(8, 16), "vmaxu.v16i8"},
+        {UInt(16, 4), "vmaxu.v4i16"},
+        {UInt(16, 8), "vmaxu.v8i16"},
+        {UInt(32, 2), "vmaxu.v2i32"},
+        {UInt(32, 4), "vmaxu.v4i32"},
+        {Int(8, 8), "vmaxs.v8i8"},
+        {Int(8, 16), "vmaxs.v16i8"},
+        {Int(16, 4), "vmaxs.v4i16"},
+        {Int(16, 8), "vmaxs.v8i16"},
+        {Int(32, 2), "vmaxs.v2i32"},
+        {Int(32, 4), "vmaxs.v4i32"},
+        {Float(32, 2), "vmaxs.v2f32"},
+        {Float(32, 4), "vmaxs.v4f32"}
+    };
+
+    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+        if (op->type == patterns[i].t) {
+            value = call_intrin(op->type, patterns[i].op, vec(op->a, op->b));
+            return;
+        } 
+    }
+
+    CodeGen::visit(op);    
+}
+
+void CodeGen_ARM::visit(const LT *op) {
+    const Call *a = op->a.as<Call>(), *b = op->b.as<Call>();
+    
+    if (a && b) {
+        Constant *zero = ConstantVector::getSplat(op->type.width, ConstantInt::get(i32, 0));
+        if (a->type == Float(32, 4) && 
+            a->name == "abs_f32" && 
+            b->name == "abs_f32") {            
+            value = call_intrin(Int(32, 4), "vacgtq", vec(b->args[0], a->args[0]));            
+            value = builder->CreateICmpNE(value, zero);
+        } else if (a->type == Float(32, 2) && 
+            a->name == "abs_f32" && 
+            b->name == "abs_f32") {            
+            value = call_intrin(Int(32, 2), "vacgtd", vec(b->args[0], a->args[0]));            
+            value = builder->CreateICmpNE(value, zero);
+        } else {
+            CodeGen::visit(op);
+        }
     } else {
         CodeGen::visit(op);
-    }    
-    */
-    CodeGen::visit(op);    
+    }
+    
+}
+
+void CodeGen_ARM::visit(const LE *op) {
+    const Call *a = op->a.as<Call>(), *b = op->b.as<Call>();
+    
+    if (a && b) {
+        Constant *zero = ConstantVector::getSplat(op->type.width, ConstantInt::get(i32, 0));
+        if (a->type == Float(32, 4) && 
+            a->name == "abs_f32" && 
+            b->name == "abs_f32") {            
+            value = call_intrin(Int(32, 4), "vacgeq", vec(b->args[0], a->args[0]));            
+            value = builder->CreateICmpNE(value, zero);            
+        } else if (a->type == Float(32, 2) && 
+            a->name == "abs_f32" && 
+            b->name == "abs_f32") {            
+            value = call_intrin(Int(32, 2), "vacged", vec(b->args[0], a->args[0]));            
+            value = builder->CreateICmpNE(value, zero);
+        } else {
+            CodeGen::visit(op);
+        }
+    } else {
+        CodeGen::visit(op);
+    }
+    
 }
 
 void CodeGen_ARM::visit(const Select *op) {
@@ -390,18 +434,36 @@ void CodeGen_ARM::visit(const Select *op) {
     const Sub *b = op->false_value.as<Sub>();
     Type t = op->type;
 
+    int vec_bits = t.bits * t.width;
+
     if (cmp && a && b && 
         equal(a->a, b->b) &&
         equal(a->b, b->a) &&
         equal(cmp->a, a->b) &&
         equal(cmp->b, a->a) &&
         (!t.is_float()) && 
-        (t.bits == 8 || t.bits == 16 || t.bits == 32) &&
-        (t.bits * t.width == 64 || t.bits * t.width == 128)) {
+        (t.bits == 8 || t.bits == 16 || t.bits == 32 || t.bits == 64) &&
+        (vec_bits == 64 || vec_bits == 128)) {
 
         ostringstream ss;
-        ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits;
-        value = call_intrin(t, ss.str(), vec(cmp->a, cmp->b));
+
+        // If cmp->a and cmp->b are both widening casts of a narrower
+        // int, we can use vadbl instead of vabd. llvm reaches vabdl
+        // by expecting you to widen the result of a narrower vabd.
+        const Cast *ca = cmp->a.as<Cast>();
+        const Cast *cb = cmp->b.as<Cast>();
+        if (ca && cb && vec_bits == 128 &&
+            ca->value.type().bits * 2 == t.bits &&
+            cb->value.type().bits * 2 == t.bits &&
+            ca->value.type().t == t.t &&
+            cb->value.type().t == t.t) {
+            ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits/2;
+            value = call_intrin(ca->value.type(), ss.str(), vec(ca->value, cb->value));
+            value = builder->CreateIntCast(value, llvm_type_of(t), false);
+        } else {
+            ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits;
+            value = call_intrin(t, ss.str(), vec(cmp->a, cmp->b));
+        }
 
         return;
     }
