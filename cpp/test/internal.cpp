@@ -8,6 +8,7 @@
 #include "Lower.h"
 #include "IRMatch.h"
 #include "Deinterleave.h"
+#include "ModulusRemainder.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -22,5 +23,6 @@ int main(int argc, const char **argv) {
     Func::test();
     expr_match_test();
     deinterleave_vector_test();
+    modulus_remainder_test();
     return 0;
 }

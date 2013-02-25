@@ -766,7 +766,7 @@ void CodeGen::visit(const Select *op) {
     const EQ *eq = op->condition.as<EQ>();
     const Mod *mod = eq ? eq->a.as<Mod>() : NULL;
     const Ramp *ramp = mod ? mod->a.as<Ramp>() : NULL;
-    if (false && ramp && is_one(ramp->stride) && is_const(eq->b) && is_two(mod->b)) {
+    if (ramp && is_one(ramp->stride) && is_const(eq->b) && is_two(mod->b)) {
         log(3) << "Detected interleave vector pattern. Deinterleaving.\n";
         // TODO: modulus remainder analysis can make this test much more powerful:
         const Mul *base_mul = ramp->base.as<Mul>();

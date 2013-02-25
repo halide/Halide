@@ -1300,7 +1300,12 @@ void check_neon_all() {
     check_neon("vst1.8", 16, i8_1);
 
     // VST2	X	-	Store two-element structures
-    check_neon("vst2.8", 32, select(x%2 == 0, in_i8(x/2), in_i8(x/2 + 16)));
+    Func tmp1, tmp2;
+    tmp1(x) = i8(x);
+    tmp1.compute_root();
+    tmp2(x) = select(x%2 == 0, tmp1(x/2), tmp1(x/2 + 16));
+    tmp2.compute_root().vectorize(x, 32);
+    check_neon("vst2.8", 32, tmp2(0) + tmp2(63));
 
     // VST3	X	-	Store three-element structures
     // VST4	X	-	Store four-element structures

@@ -196,40 +196,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         {"vshiftn.v4i16", _u16(wild_u32x4/wild_u32x4), true},
         {"vshiftn.v2i32", _u32(wild_u64x2/wild_u64x2), true},
         {"sentinel", 0}
-        /*
-        {"sse2.padds.b", 
-         _i8(clamp(_i16(wild_i8x16) + _i16(wild_i8x16), -128, 127))},
-        {"sse2.psubs.b", 
-         _i8(clamp(_i16(wild_i8x16) - _i16(wild_i8x16), -128, 127))},
-        {"sse2.paddus.b", 
-         _u8(min(_u16(wild_u8x16) + _u16(wild_u8x16), 255))},
-        {"sse2.psubus.b", 
-         _u8(max(_i16(wild_u8x16) - _i16(wild_u8x16), 0))},
-        {"sse2.padds.w", 
-         _i16(clamp(_i32(wild_i16x8) + _i32(wild_i16x8), -32768, 32767))},
-        {"sse2.psubs.w", 
-         _i16(clamp(_i32(wild_i16x8) - _i32(wild_i16x8), -32768, 32767))},
-        {"sse2.paddus.w", 
-         _u16(min(_u32(wild_u16x8) + _u32(wild_u16x8), 65535))},
-        {"sse2.psubus.w", 
-         _u16(max(_i32(wild_u16x8) - _i32(wild_u16x8), 0))},
-        {"sse2.pmulh.w", 
-         _i16((_i32(wild_i16x8) * _i32(wild_i16x8)) / 65536)},
-        {"sse2.pmulhu.w", 
-         _u16((_u32(wild_u16x8) * _u32(wild_u16x8)) / 65536)},
-        {"sse2.pavg.b",
-         _u8(((_u16(wild_u8x16) + _u16(wild_u8x16)) + 1) / 2)},
-        {"sse2.pavg.w",
-         _u16(((_u32(wild_u16x8) + _u32(wild_u16x8)) + 1) / 2)},
-        {"packssdw", 
-         _i16(clamp(wild_i32x8, -32768, 32767))},
-        {"packsswb", 
-         _i8(clamp(wild_i16x16, -128, 127))},
-        {"packuswb", 
-         _u8(clamp(wild_i16x16, 0, 255))},
-        {"packusdw",
-         _u16(clamp(wild_i32x8, 0, 65535))}
-        */
+
     };
         
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {

@@ -1,22 +1,19 @@
 #include "ModulusRemainder.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
 #include "IR.h"
 
 // This file is largely a port of parts of src/analysis.ml
-
-using std::pair;
-using std::make_pair;
-
 namespace Halide { 
 namespace Internal {
 
-class ModulusRemainder : public IRVisitor {
+class ComputeModulusRemainder : public IRVisitor {
 public:
-    std::pair<int, int> analyze(Expr e);
+    ModulusRemainder analyze(Expr e);
 
-    static void test();
 protected:
     int modulus, remainder;
-    Scope<std::pair<int, int> > scope;
+    Scope<ModulusRemainder > scope;
 
     void visit(const IntImm *);
     void visit(const FloatImm *);
@@ -56,13 +53,13 @@ protected:
     void visit(const Block *);        
 };
 
-pair<int, int> modulus_remainder(Expr e) {
-    ModulusRemainder mr;
+ModulusRemainder modulus_remainder(Expr e) {
+    ComputeModulusRemainder mr;
     return mr.analyze(e);        
 }
 
 bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
-    pair<int, int> result = modulus_remainder(expr);
+    ModulusRemainder result = modulus_remainder(expr);
 
     /* As an example: If we asked for expr mod 8, and the analysis
      * said that expr = 16*k + 13, then because 16 % 8 == 0, the
@@ -71,25 +68,51 @@ bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
      * return false. 
      */
 
-    if (result.first % modulus == 0) {
-        *remainder = result.second % modulus;
+    if (result.modulus % modulus == 0) {
+        *remainder = result.remainder % modulus;
         return true;
     } else {
         return false;            
     }
 }    
 
-pair<int, int> ModulusRemainder::analyze(Expr e) {
+ModulusRemainder ComputeModulusRemainder::analyze(Expr e) {
     e.accept(this);
-    return make_pair(modulus, remainder);
+    return ModulusRemainder(modulus, remainder);
 }
 
-void ModulusRemainder::test() {
-    // TODO;
+namespace {
+void check(Expr e, int m, int r) {
+    ModulusRemainder result = modulus_remainder(e);
+    if (result.modulus != m || result.remainder != r) {
+        std::cerr << "Test failed for modulus_remainder:\n";
+        std::cerr << "Expression: " << e << "\n";
+        std::cerr << "Correct modulus, remainder  = " << m << ", " << r << "\n";
+        std::cerr << "Computed modulus, remainder = " 
+                  << result.modulus << ", " 
+                  << result.remainder << "\n";
+        exit(-1);
+    }
+}
+}
+
+void modulus_remainder_test() {
+    Expr x = new Variable(Int(32), "x");
+    Expr y = new Variable(Int(32), "y");
+    
+    check((30*x + 3) + (40*y + 2), 10, 5);   
+    check((6*x + 3) * (4*y + 1), 2, 1); 
+    check(max(30*x - 24, 40*y + 31), 5, 1);
+    check(10*x - 33*y, 1, 0);
+    check(10*x - 35*y, 5, 0);
+    check(123, 0, 123);
+    check(new Let("y", x*3 + 4, y*3 + 4), 9, 7);
+
+    std::cerr << "modulus_remainder test passed\n";
 }
 
 
-void ModulusRemainder::visit(const IntImm *op) {
+void ComputeModulusRemainder::visit(const IntImm *op) {
     // Equal to op->value modulo anything. We'll use zero as the
     // modulus to mark this special case. We'd better be able to
     // handle zero in the rest of the code...
@@ -97,20 +120,20 @@ void ModulusRemainder::visit(const IntImm *op) {
     modulus = 0;
 }
 
-void ModulusRemainder::visit(const FloatImm *) {
+void ComputeModulusRemainder::visit(const FloatImm *) {
     assert(false && "modulus_remainder of float");
 }
 
-void ModulusRemainder::visit(const Cast *) {
+void ComputeModulusRemainder::visit(const Cast *) {
     modulus = 1;
     remainder = 0;
 }
 
-void ModulusRemainder::visit(const Variable *op) {
+void ComputeModulusRemainder::visit(const Variable *op) {
     if (scope.contains(op->name)) {
-        pair<int, int> mod_rem = scope.get(op->name);
-        modulus = mod_rem.first;
-        remainder = mod_rem.second;
+        ModulusRemainder mod_rem = scope.get(op->name);
+        modulus = mod_rem.modulus;
+        remainder = mod_rem.remainder;
     } else {
         modulus = 1;
         remainder = 0;
@@ -134,142 +157,221 @@ int mod(int a, int m) {
     return a;
 }
 
-void ModulusRemainder::visit(const Add *op) {
-    pair<int, int> a = analyze(op->a);
-    pair<int, int> b = analyze(op->b);
-    modulus = gcd(a.first, b.first);
-    remainder = mod(a.second + b.second, modulus);
+void ComputeModulusRemainder::visit(const Add *op) {
+    ModulusRemainder a = analyze(op->a);
+    ModulusRemainder b = analyze(op->b);
+    modulus = gcd(a.modulus, b.modulus);
+    remainder = mod(a.remainder + b.remainder, modulus);
 }
 
-void ModulusRemainder::visit(const Sub *) {
-    // TODO
+void ComputeModulusRemainder::visit(const Sub *op) {
+    ModulusRemainder a = analyze(op->a);
+    ModulusRemainder b = analyze(op->b);
+    modulus = gcd(a.modulus, b.modulus);
+    remainder = mod(a.remainder - b.remainder, modulus);
 }
 
-void ModulusRemainder::visit(const Mul *) {
-    // TODO
+void ComputeModulusRemainder::visit(const Mul *op) {
+    ModulusRemainder a = analyze(op->a);
+    ModulusRemainder b = analyze(op->b);
+    
+    if (a.modulus == 0) {
+        // a is constant
+        modulus = a.remainder * b.modulus;
+        remainder = a.remainder * b.remainder;
+    } else if (b.modulus == 0) {
+        // b is constant
+        modulus = b.remainder * a.modulus;
+        remainder = a.remainder * b.remainder;
+    } else if (a.remainder == 0 && b.remainder == 0) {
+        // multiple times multiple
+        modulus = a.modulus * b.modulus;
+        remainder = 0;
+    } else if (a.remainder == 0) {
+        modulus = a.modulus * gcd(b.modulus, b.remainder);
+        remainder = 0;
+    } else if (b.remainder == 0) {
+        modulus = b.modulus * gcd(a.modulus, a.remainder);
+        remainder = 0;
+    } else {
+        // All our tricks failed. Convert them to the same modulus and multiply
+        modulus = gcd(a.modulus, b.modulus);
+        a.remainder = mod(a.remainder * b.remainder, modulus);        
+    }
 }
 
-void ModulusRemainder::visit(const Div *) {
-    // TODO
+void ComputeModulusRemainder::visit(const Div *) {
+    // We might be able to say something about this if the numerator
+    // modulus is provably a multiple of a constant denominator, but
+    // in this case we should have simplified away the division.
+    remainder = 0;
+    modulus = 1;
 }
 
-void ModulusRemainder::visit(const Mod *) {
-    // TODO
+namespace {
+ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
+    // We don't know if we're going to get a or b, so we'd better find
+    // a single modulus remainder that works for both. 
+
+    // For example:
+    // max(30*_ + 13, 40*_ + 27) ->
+    // max(10*_ + 3, 10*_ + 7) ->
+    // max(2*_ + 1, 2*_ + 1) ->
+    // 2*_ + 1
+
+    // Reduce them to the same modulus and the same remainder       
+    int modulus = gcd(a.modulus, b.modulus);
+    int diff = a.remainder - b.remainder;
+    if (diff < 0) diff = -diff;
+    modulus = gcd(diff, modulus);
+    int ra = mod(a.remainder, modulus);
+    int rb = mod(b.remainder, modulus);
+
+    assert(ra == rb && "There's a bug inside ModulusRemainder in unify_alternatives");
+
+    return ModulusRemainder(modulus, ra);
+}
+}
+
+void ComputeModulusRemainder::visit(const Mod *op) {   
+    // We can treat x mod y as x + z*y, where we know nothing about z.
+    // (ax + b) + z (cx + d) ->
+    // ax + b + zcx + dz ->
+    // gcd(a, c, d) * w + b
+
+    // E.g:
+    // (8x + 5) mod (6x + 2) ->
+    // (8x + 5) + z (6x + 2) ->
+    // (8x + 6zx + 2x) + 5 ->
+    // 2(4x + 3zx + x) + 5 ->
+    // 2w + 1
+    ModulusRemainder a = analyze(op->a);
+    ModulusRemainder b = analyze(op->b);    
+    modulus = gcd(a.modulus, b.modulus);
+    modulus = gcd(modulus, b.remainder);
+    remainder = mod(a.remainder, modulus);
 } 
 
-void ModulusRemainder::visit(const Min *) {
-    // TODO
+void ComputeModulusRemainder::visit(const Min *op) {
+    ModulusRemainder r = unify_alternatives(analyze(op->a), analyze(op->b));
+    modulus = r.modulus;
+    remainder = r.remainder;
 }
 
-void ModulusRemainder::visit(const Max *) {
-    // TODO
+void ComputeModulusRemainder::visit(const Max *op) {
+    ModulusRemainder r = unify_alternatives(analyze(op->a), analyze(op->b));
+    modulus = r.modulus;
+    remainder = r.remainder;
 }
 
-void ModulusRemainder::visit(const EQ *) {
+void ComputeModulusRemainder::visit(const EQ *) {
     assert(false && "modulus_remainder of bool");
 }
 
-void ModulusRemainder::visit(const NE *) {
+void ComputeModulusRemainder::visit(const NE *) {
     assert(false && "modulus_remainder of bool");
 }
 
-void ModulusRemainder::visit(const LT *) {
+void ComputeModulusRemainder::visit(const LT *) {
     assert(false && "modulus_remainder of bool");
 }
 
-void ModulusRemainder::visit(const LE *) {
+void ComputeModulusRemainder::visit(const LE *) {
     assert(false && "modulus_remainder of bool");
 }
 
-void ModulusRemainder::visit(const GT *) {
+void ComputeModulusRemainder::visit(const GT *) {
     assert(false && "modulus_remainder of bool");
 }
 
-void ModulusRemainder::visit(const GE *) {
+void ComputeModulusRemainder::visit(const GE *) {
     assert(false && "modulus_remainder of bool");
 }
 
-void ModulusRemainder::visit(const And *) {
+void ComputeModulusRemainder::visit(const And *) {
     assert(false && "modulus_remainder of bool");
 }
 
-void ModulusRemainder::visit(const Or *) {
+void ComputeModulusRemainder::visit(const Or *) {
     assert(false && "modulus_remainder of bool");
 }
 
-void ModulusRemainder::visit(const Not *) {
+void ComputeModulusRemainder::visit(const Not *) {
     assert(false && "modulus_remainder of bool");
 }
 
-void ModulusRemainder::visit(const Select *) {
-    // TODO
+void ComputeModulusRemainder::visit(const Select *op) {
+    ModulusRemainder r = unify_alternatives(analyze(op->true_value), 
+                                            analyze(op->false_value));
+    modulus = r.modulus;
+    remainder = r.remainder;
 }
 
-void ModulusRemainder::visit(const Load *) {
+void ComputeModulusRemainder::visit(const Load *) {
     modulus = 1;
     remainder = 0;
 }
 
-void ModulusRemainder::visit(const Ramp *) {
+void ComputeModulusRemainder::visit(const Ramp *) {
     assert(false && "modulus_remainder of vector");
 }
 
-void ModulusRemainder::visit(const Broadcast *) {
+void ComputeModulusRemainder::visit(const Broadcast *) {
     assert(false && "modulus_remainder of vector");
 }
 
-void ModulusRemainder::visit(const Call *) {
+void ComputeModulusRemainder::visit(const Call *) {
     modulus = 1;
     remainder = 0;
 }
 
-void ModulusRemainder::visit(const Let *op) {
-    pair<int, int> val = analyze(op->value);
+void ComputeModulusRemainder::visit(const Let *op) {
+    ModulusRemainder val = analyze(op->value);
     scope.push(op->name, val);
     val = analyze(op->body);
     scope.pop(op->name);
 
-    modulus = val.first;
-    remainder = val.second;
+    modulus = val.modulus;
+    remainder = val.remainder;
 }
 
-void ModulusRemainder::visit(const LetStmt *) {
+void ComputeModulusRemainder::visit(const LetStmt *) {
     assert(false && "modulus_remainder of statement");
 }
 
-void ModulusRemainder::visit(const PrintStmt *) {
+void ComputeModulusRemainder::visit(const PrintStmt *) {
     assert(false && "modulus_remainder of statement");
 }
 
-void ModulusRemainder::visit(const AssertStmt *) {
+void ComputeModulusRemainder::visit(const AssertStmt *) {
     assert(false && "modulus_remainder of statement");
 }
 
-void ModulusRemainder::visit(const Pipeline *) {
+void ComputeModulusRemainder::visit(const Pipeline *) {
     assert(false && "modulus_remainder of statement");
 }
 
-void ModulusRemainder::visit(const For *) {
+void ComputeModulusRemainder::visit(const For *) {
     assert(false && "modulus_remainder of statement");
 }
 
-void ModulusRemainder::visit(const Store *) {
+void ComputeModulusRemainder::visit(const Store *) {
     assert(false && "modulus_remainder of statement");
 }
 
-void ModulusRemainder::visit(const Provide *) {
+void ComputeModulusRemainder::visit(const Provide *) {
     assert(false && "modulus_remainder of statement");
 }
 
-void ModulusRemainder::visit(const Allocate *) {
+void ComputeModulusRemainder::visit(const Allocate *) {
     assert(false && "modulus_remainder of statement");
 }
 
-void ModulusRemainder::visit(const Realize *) {
+void ComputeModulusRemainder::visit(const Realize *) {
     assert(false && "modulus_remainder of statement");
 }
 
-void ModulusRemainder::visit(const Block *) {
+void ComputeModulusRemainder::visit(const Block *) {
     assert(false && "modulus_remainder of statement");
 }
 
