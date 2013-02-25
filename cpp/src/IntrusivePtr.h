@@ -92,9 +92,11 @@ public:
     }
 
     IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {        
-        incref(other.ptr);
+        // other can be inside of something owned by this
+        T *temp = other.ptr;
+        incref(temp);
         decref(ptr);
-        ptr = other.ptr;
+        ptr = temp;
         return *this;
     }
 
