@@ -9,6 +9,7 @@
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
+#include "Simplify.h"
 #include "integer_division_table.h"
 
 #include <llvm/Config/config.h>
@@ -150,10 +151,12 @@ Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Exp
         arg_values[i] = codegen(args[i]);
     }
 
-    return call_intrin(result_type, name, arg_values);
+    return call_intrin(llvm_type_of(result_type), name, arg_values);
 }
 
-Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Value *> arg_values) {
+Value *CodeGen_ARM::call_intrin(llvm::Type *result_type, 
+                                const string &name, 
+                                vector<Value *> arg_values) {
     vector<llvm::Type *> arg_types(arg_values.size());
     for (size_t i = 0; i < arg_values.size(); i++) {
         arg_types[i] = arg_values[i]->getType();
@@ -162,14 +165,14 @@ Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Val
     llvm::Function *fn = module->getFunction("llvm.arm.neon." + name);
 
     if (!fn) {
-        FunctionType *func_t = FunctionType::get(llvm_type_of(result_type), arg_types, false);    
+        FunctionType *func_t = FunctionType::get(result_type, arg_types, false);    
         fn = llvm::Function::Create(func_t, 
                                     llvm::Function::ExternalLinkage, 
                                     "llvm.arm.neon." + name, module);
         fn->setCallingConv(CallingConv::C);
     }
 
-    return builder->CreateCall(fn, arg_values);
+    return builder->CreateCall(fn, arg_values, name);
 }
  
 void CodeGen_ARM::call_void_intrin(const string &name, vector<Expr> args) {    
@@ -235,7 +238,8 @@ void CodeGen_ARM::visit(const Cast *op) {
                 bool power_of_two = is_const_power_of_two(divisor, &shift_amount);
                 if (power_of_two && shift_amount < matches[0].type().bits) {
                     Value *shift = ConstantInt::get(llvm_type_of(matches[0].type()), -shift_amount);
-                    value = call_intrin(pattern.pattern.type(), pattern.intrin, 
+                    value = call_intrin(llvm_type_of(pattern.pattern.type()), 
+                                        pattern.intrin, 
                                         vec(codegen(matches[0]), shift));
                     return;
                 }
@@ -267,70 +271,70 @@ void CodeGen_ARM::visit(const Mul *op) {
     if (power_of_two && cast_a && 
         cast_a->type == Int(16, 8) && cast_a->value.type() == Int(8, 8)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(Int(16, 8), "vshiftls.v8i16", vec(lhs, shift));
+        value = call_intrin(i16x8, "vshiftls.v8i16", vec(lhs, shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == Int(32, 4) && cast_a->value.type() == Int(16, 4)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(Int(32, 4), "vshiftls.v4i32", vec(lhs, shift));
+        value = call_intrin(i32x4, "vshiftls.v4i32", vec(lhs, shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == Int(64, 2) && cast_a->value.type() == Int(32, 2)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(Int(64, 2), "vshiftls.v2i64", vec(lhs, shift));
+        value = call_intrin(i64x2, "vshiftls.v2i64", vec(lhs, shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == UInt(16, 8) && cast_a->value.type() == UInt(8, 8)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(UInt(16, 8), "vshiftlu.v8i16", vec(lhs, shift));
+        value = call_intrin(i16x8, "vshiftlu.v8i16", vec(lhs, shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == UInt(32, 4) && cast_a->value.type() == UInt(16, 4)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(UInt(32, 4), "vshiftlu.v4i32", vec(lhs, shift));
+        value = call_intrin(i32x4, "vshiftlu.v4i32", vec(lhs, shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == UInt(64, 2) && cast_a->value.type() == UInt(32, 2)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(UInt(64, 2), "vshiftlu.v2i64", vec(lhs, shift));
+        value = call_intrin(i64x2, "vshiftlu.v2i64", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == Int(8, 8)) {
         // Non-widening left shifts
         Value *lhs = codegen(op->a);
-        value = call_intrin(Int(8, 8), "vshifts.v8i8", vec(lhs, shift));
+        value = call_intrin(i8x8, "vshifts.v8i8", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == Int(16, 4)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(Int(16, 4), "vshifts.v4i16", vec(lhs, shift));
+        value = call_intrin(i16x4, "vshifts.v4i16", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == Int(32, 2)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(Int(32, 2), "vshifts.v2i32", vec(lhs, shift));
+        value = call_intrin(i32x2, "vshifts.v2i32", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == Int(8, 16)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(Int(8, 16), "vshifts.v16i8", vec(lhs, shift));
+        value = call_intrin(i8x16, "vshifts.v16i8", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == Int(16, 8)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(Int(16, 8), "vshifts.v8i16", vec(lhs, shift));
+        value = call_intrin(i16x8, "vshifts.v8i16", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == Int(32, 4)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(Int(32, 4), "vshifts.v4i32", vec(lhs, shift));
+        value = call_intrin(i32x4, "vshifts.v4i32", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == Int(64, 2)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(Int(64, 2), "vshifts.v2i64", vec(lhs, shift));
+        value = call_intrin(i64x2, "vshifts.v2i64", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == UInt(8, 8)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(UInt(8, 8), "vshiftu.v8i8", vec(lhs, shift));
+        value = call_intrin(i8x8, "vshiftu.v8i8", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == UInt(16, 4)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(UInt(16, 4), "vshiftu.v4i16", vec(lhs, shift));
+        value = call_intrin(i16x4, "vshiftu.v4i16", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == UInt(32, 2)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(UInt(32, 2), "vshiftu.v2i32", vec(lhs, shift));
+        value = call_intrin(i32x2, "vshiftu.v2i32", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == UInt(8, 16)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(UInt(8, 16), "vshiftu.v16i8", vec(lhs, shift));
+        value = call_intrin(i8x16, "vshiftu.v16i8", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == UInt(16, 8)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(UInt(16, 8), "vshiftu.v8i16", vec(lhs, shift));
+        value = call_intrin(i16x8, "vshiftu.v8i16", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == UInt(32, 4)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(UInt(32, 4), "vshiftu.v4i32", vec(lhs, shift));
+        value = call_intrin(i32x4, "vshiftu.v4i32", vec(lhs, shift));
     } else if (power_of_two && op->a.type() == UInt(64, 2)) {
         Value *lhs = codegen(op->a);
-        value = call_intrin(UInt(64, 2), "vshiftu.v2i64", vec(lhs, shift));
+        value = call_intrin(i64x2, "vshiftu.v2i64", vec(lhs, shift));
     } else {
         CodeGen::visit(op);
     }
@@ -378,9 +382,9 @@ void CodeGen_ARM::visit(const Div *op) {
         Value *mult;
         if (multiplier != 0) {
             mult = codegen(cast(op->type, multiplier));
-            mult = call_intrin(Int(32, 4), "vmulls.v4i32", vec(val, mult));
+            mult = call_intrin(i32x4, "vmulls.v4i32", vec(val, mult));
             Value *sixteen = ConstantVector::getSplat(4, ConstantInt::get(i32, -16));
-            mult = call_intrin(Int(16, 4), "vshiftn.v4i16", vec(mult, sixteen));
+            mult = call_intrin(i16x4, "vshiftn.v4i16", vec(mult, sixteen));
 
             // Possibly add a correcting factor
             if (method == 1) {
@@ -412,9 +416,9 @@ void CodeGen_ARM::visit(const Div *op) {
         Value *mult = val;
         if (method > 0) {
             mult = codegen(cast(op->type, multiplier));
-            mult = call_intrin(Int(32, 4), "vmullu.v4i32", vec(val, mult));
+            mult = call_intrin(i32x4, "vmullu.v4i32", vec(val, mult));
             Value *sixteen = ConstantVector::getSplat(4, ConstantInt::get(i32, -16));
-            mult = call_intrin(Int(16, 4), "vshiftn.v4i16", vec(mult, sixteen));
+            mult = call_intrin(i16x4, "vshiftn.v4i16", vec(mult, sixteen));
 
             // Possibly add a correcting factor
             if (method == 2) {
@@ -648,6 +652,69 @@ void CodeGen_ARM::visit(const Store *op) {
 }
 
 void CodeGen_ARM::visit(const Load *op) {
+    const Ramp *ramp = op->index.as<Ramp>();
+
+    // strided loads (vld2)
+    if (ramp && is_two(ramp->stride)) {
+        // Check alignment on the base. 
+        Expr base = ramp->base;
+        bool odd = false;
+        ModulusRemainder mod_rem = modulus_remainder(ramp->base);
+        if ((mod_rem.remainder & 1) && !(mod_rem.modulus & 1)) {
+            // If we can guarantee it's odd-aligned, we should round
+            // down by one in order to possibly share this vld2 with
+            // an adjacent one. (e.g. averaging down patterns like
+            // f(2*x) + f(2*x+1))
+            base = simplify(base - 1);
+            mod_rem.remainder--;
+            odd = true;
+        }
+        const Add *add = base.as<Add>();
+        if (!odd && add && is_one(add->b) && (mod_rem.modulus & 1)) {
+            // If it just ends in +1, but we can't analyze the base,
+            // it's probably still worth removing that +1 to encourage
+            // sharing.
+            base = add->a;
+            odd = true;
+        }
+
+        int alignment = op->type.bits / 8;
+        alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
+        Value *align = ConstantInt::get(i32, alignment);
+
+        Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(base));
+        ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
+
+        llvm::StructType *result_type = 
+            StructType::get(context, vec(llvm_type_of(op->type),
+                                         llvm_type_of(op->type)));
+       
+        Value *pair = NULL;
+        if (op->type == Int(8, 8) || op->type == UInt(8, 8)) {
+            pair = call_intrin(result_type, "vld2.v8i8", vec(ptr, align));
+        } else if (op->type == Int(16, 4) || op->type == UInt(16, 4)) {
+            pair = call_intrin(result_type, "vld2.v4i16", vec(ptr, align));
+        } else if (op->type == Int(32, 2) || op->type == UInt(32, 2)) {
+            pair = call_intrin(result_type, "vld2.v2i32", vec(ptr, align));
+        } else if (op->type == Float(32, 2)) {
+            pair = call_intrin(result_type, "vld2.v2f32", vec(ptr, align));
+        } else if (op->type == Int(8, 16) || op->type == UInt(8, 16)) {
+            pair = call_intrin(result_type, "vld2.v16i8", vec(ptr, align));
+        } else if (op->type == Int(16, 8) || op->type == UInt(16, 8)) {
+            pair = call_intrin(result_type, "vld2.v8i16", vec(ptr, align));
+        } else if (op->type == Int(32, 4) || op->type == UInt(32, 4)) {
+            pair = call_intrin(result_type, "vld2.v4i32", vec(ptr, align));
+        } else if (op->type == Float(32, 4)) {
+            pair = call_intrin(result_type, "vld2.v4f32", vec(ptr, align));
+        }
+
+        if (pair) {            
+            unsigned int idx = odd ? 1 : 0;
+            value = builder->CreateExtractValue(pair, vec(idx));
+            return;
+        }
+    }
+
     CodeGen::visit(op);
 }
 

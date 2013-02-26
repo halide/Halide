@@ -22,7 +22,12 @@ protected:
 
     /** Some useful llvm types for subclasses */
     // @{
-    llvm::Type *i32x4, *i32x8;
+    llvm::Type *i8x8, *i8x16, *i8x32;
+    llvm::Type *i16x4, *i16x8, *i16x16;
+    llvm::Type *i32x2, *i32x4, *i32x8;
+    llvm::Type *i64x2, *i64x4;
+    llvm::Type *f32x2, *f32x4, *f32x8;
+    llvm::Type *f64x2, *f64x4;
     // @}
 
     /** Some wildcard variables used for peephole optimizations in
