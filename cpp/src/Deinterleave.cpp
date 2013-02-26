@@ -86,6 +86,8 @@ Expr extract_even_lanes(Expr e) {
 class Interleaver : public IRMutator {
     Scope<ModulusRemainder> alignment_info;
 
+    using IRMutator::visit;
+
     void visit(const Let *op) {
         Expr value = mutate(op->value);
         if (value.type() == Int(32)) alignment_info.push(op->name, modulus_remainder(value));
