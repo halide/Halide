@@ -3,10 +3,10 @@
 #include "IROperator.h"
 #include "Scope.h"
 
+namespace Halide {
+
 using std::string;
 using std::vector;
-
-namespace Halide {
 
 RVar::operator Expr() const {
     return new Internal::Variable(Int(32), name(), domain);

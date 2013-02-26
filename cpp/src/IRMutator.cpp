@@ -1,9 +1,9 @@
 #include "IRMutator.h"
 
-using std::vector;
-
 namespace Halide {
 namespace Internal {
+
+using std::vector;
 
 Expr IRMutator::mutate(Expr e) {
     if (e.defined()) {

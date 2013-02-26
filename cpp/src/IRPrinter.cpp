@@ -5,13 +5,13 @@
 #include <iostream>
 #include <sstream>
 
+namespace Halide {
+
 using std::ostream;
 using std::endl;
 using std::vector;
 using std::string;
 using std::ostringstream;
-
-namespace Halide {
 
 ostream &operator<<(ostream &out, Type type) {
     switch (type.t) {

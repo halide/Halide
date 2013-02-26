@@ -31,13 +31,11 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/IRReader.h>
 
-
-using std::vector;
-using std::string;
-
 namespace Halide { 
 namespace Internal {
 
+using std::vector;
+using std::string;
 
 using namespace llvm;
 

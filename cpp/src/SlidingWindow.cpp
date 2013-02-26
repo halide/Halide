@@ -5,11 +5,11 @@
 #include "Log.h"
 #include "Substitute.h"
 
-using std::string;
-using std::map;
-
 namespace Halide {
 namespace Internal {
+
+using std::string;
+using std::map;
 
 // Does an expression depend on a particular variable?
 class ExprDependsOnVar : public IRVisitor {    

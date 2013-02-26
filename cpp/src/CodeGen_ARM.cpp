@@ -32,19 +32,17 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/IRReader.h>
 
-
-using std::vector;
-using std::string;
-using std::ostringstream;
-
 extern "C" unsigned char halide_internal_initmod_arm[];
 extern "C" int halide_internal_initmod_arm_length;
 extern "C" unsigned char halide_internal_initmod_arm_android[];
 extern "C" int halide_internal_initmod_arm_android_length;
 
-
 namespace Halide { 
 namespace Internal {
+
+using std::vector;
+using std::string;
+using std::ostringstream;
 
 namespace {
 bool is_const_power_of_two(Expr e, int *bits) {

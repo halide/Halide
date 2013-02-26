@@ -10,12 +10,12 @@
 #include "Log.h"
 #include "Derivative.h"
 
+namespace Halide {
+namespace Internal {
+
 using std::string;
 using std::vector;
 using std::map;
-
-namespace Halide {
-namespace Internal {
 
 // Fold the storage of a function in a particular dimension by a particular factor
 class FoldStorageOfFunction : public IRMutator {

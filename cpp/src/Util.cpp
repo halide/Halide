@@ -1,11 +1,11 @@
 #include "Util.h"
 #include <sstream>
 
-using std::string;
-using std::ostringstream;
-
 namespace Halide { 
 namespace Internal {
+
+using std::string;
+using std::ostringstream;
 
 string unique_name(char prefix) {
     // arrays with static storage duration should be initialized to zero automatically

@@ -3,12 +3,12 @@
 #include "IROperator.h"
 #include <sstream>
 
+namespace Halide {
+namespace Internal {
+
 using std::ostringstream;
 using std::string;
 using std::vector;
-
-namespace Halide {
-namespace Internal {
 
 class FlattenDimensions : public IRMutator {
     Expr flatten_args(const string &name, const vector<Expr> &args) {

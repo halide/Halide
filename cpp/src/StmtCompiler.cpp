@@ -4,11 +4,11 @@
 #include "CodeGen_ARM.h"
 #include <iostream>
 
-using std::string;
-using std::vector;
-
 namespace Halide {
 namespace Internal {
+
+using std::string;
+using std::vector;
 
 StmtCompiler::StmtCompiler(string arch) {
     if (arch.empty()) {

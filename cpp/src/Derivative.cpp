@@ -4,10 +4,10 @@
 #include "Scope.h"
 #include "IROperator.h"
 
-using std::string;
-
 namespace Halide { 
 namespace Internal {
+
+using std::string;
 
 class FiniteDifference : public IRMutator {
     Scope<Expr> scope;
