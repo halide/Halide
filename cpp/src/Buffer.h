@@ -17,14 +17,14 @@ namespace Halide {
 namespace Internal {
 struct BufferContents {
     buffer_t buf;
-    mutable RefCount ref_count;
     Type type;
-    bool own_host_allocation;
+    uint8_t *allocation;
+    mutable RefCount ref_count;
     std::string name;
 
     BufferContents(Type t, int x_size, int y_size, int z_size, int w_size,
                    uint8_t* data = NULL) :
-        type(t), own_host_allocation(data==NULL), name(unique_name('b')) {
+        type(t), allocation(NULL), name(unique_name('b')) {
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
         buf.elem_size = t.bits / 8;        
         size_t size = 1;
@@ -32,8 +32,13 @@ struct BufferContents {
         if (y_size) size *= y_size;
         if (z_size) size *= z_size;
         if (w_size) size *= w_size;
-        if (own_host_allocation) buf.host = (uint8_t *)calloc(buf.elem_size, size);
-        else buf.host = data;
+        if (!data) {
+            allocation = (uint8_t *)calloc(buf.elem_size, size + 32/buf.elem_size);
+            buf.host = allocation;
+            while ((size_t)(buf.host) & 0x1f) buf.host++;
+        } else {
+            buf.host = data;
+        }
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.extent[0] = x_size;
@@ -51,7 +56,7 @@ struct BufferContents {
     }
 
     BufferContents(Type t, const buffer_t *b) :
-        type(t), own_host_allocation(false) {
+        type(t), allocation(NULL) {
         buf = *b;
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
     }
@@ -163,7 +168,7 @@ inline RefCount &ref_count<BufferContents>(const BufferContents *p) {
 
 template<>
 inline void destroy<BufferContents>(const BufferContents *p) {    
-    if (p->own_host_allocation) free(p->buf.host);
+    if (p->allocation) free(p->allocation);
     delete p;
 }
 }

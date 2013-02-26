@@ -405,8 +405,17 @@ void CodeGen::sym_pop(const string &name) {
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
 void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
-    sym_push(name + ".host", buffer_host(buffer));
-    // TODO: assert that the buffer is 32-byte aligned
+    Value *host_ptr = buffer_host(buffer);
+
+    // Check it's 32-byte aligned
+    Value *base = builder->CreatePtrToInt(host_ptr, i64);
+    Value *check_alignment = builder->CreateAnd(base, 0x1f);
+    check_alignment = builder->CreateIsNull(check_alignment);
+                                            
+    string error_message = "Buffer " + name + " is not 32-byte aligned";
+    create_assertion(check_alignment, error_message);
+
+    sym_push(name + ".host", host_ptr);
     sym_push(name + ".dev", buffer_dev(buffer));
     sym_push(name + ".host_dirty", buffer_host_dirty(buffer));
     sym_push(name + ".dev_dirty", buffer_dev_dirty(buffer));
@@ -1071,7 +1080,10 @@ void CodeGen::visit(const PrintStmt *op) {
 }
 
 void CodeGen::visit(const AssertStmt *op) {
-    Value *cond = codegen(op->condition);
+    create_assertion(codegen(op->condition), op->message);
+}
+
+void CodeGen::create_assertion(Value *cond, const string &message) {
 
     // Make a new basic block for the assert
     BasicBlock *assert_fails_bb = BasicBlock::Create(context, "assert_failed", function);
@@ -1084,9 +1096,10 @@ void CodeGen::visit(const AssertStmt *op) {
     builder->SetInsertPoint(assert_fails_bb);
 
     // Make the error message string a global constant
-    llvm::Type *msg_type = ArrayType::get(i8, op->message.size()+1);
-    GlobalVariable *msg_global = new GlobalVariable(*module, msg_type, true, GlobalValue::PrivateLinkage, 0);
-    msg_global->setInitializer(ConstantDataArray::getString(context, op->message));
+    llvm::Type *msg_type = ArrayType::get(i8, message.size()+1);
+    GlobalVariable *msg_global = new GlobalVariable(*module, msg_type, 
+                                                    true, GlobalValue::PrivateLinkage, 0);
+    msg_global->setInitializer(ConstantDataArray::getString(context, message));
     Value *char_ptr = builder->CreateConstGEP2_32(msg_global, 0, 0);
 
     // Call the error handler
@@ -1098,6 +1111,9 @@ void CodeGen::visit(const AssertStmt *op) {
     prepare_for_early_exit();
 
     // Bail out
+
+    // TODO: What if an assertion happens inside a parallel for loop?
+    // This doesn't bail out all the way
     builder->CreateRetVoid();
 
     // Continue on using the success case
