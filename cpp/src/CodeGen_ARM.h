@@ -36,7 +36,7 @@ protected:
     /** Generate a call to a neon intrinsic */
     // @{
     llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);    
-    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<llvm::Value *>);    
+    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);    
     void call_void_intrin(const std::string &name, std::vector<Expr>);
     void call_void_intrin(const std::string &name, std::vector<llvm::Value *>);
     // @}
