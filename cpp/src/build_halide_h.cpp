@@ -5,11 +5,9 @@
 #include <string>
 #include <assert.h>
 
-using namespace std;
+std::set<std::string> done;
 
-set<string> done;
-
-void dump_header(string header) {
+void dump_header(std::string header) {
     if (done.find(header) != done.end()) return;
     done.insert(header);
 
