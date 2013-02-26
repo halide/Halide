@@ -2,11 +2,11 @@
 #include "IRMutator.h"
 #include "Scope.h"
 
-using std::string;
-using std::vector;
-
 namespace Halide {
 namespace Internal {
+
+using std::string;
+using std::vector;
 
 class VectorizeLoops : public IRMutator {
     class VectorSubs : public IRMutator {

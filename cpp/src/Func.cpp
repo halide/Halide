@@ -14,6 +14,8 @@
 #include <iostream>
 #include <fstream>
 
+namespace Halide {
+
 using std::max;
 using std::min;
 using std::make_pair;
@@ -21,8 +23,6 @@ using std::string;
 using std::vector;
 using std::pair;
 using std::ofstream;
-
-namespace Halide {
 
 using namespace Internal;
 

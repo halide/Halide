@@ -42,6 +42,9 @@
 
 #include <sstream>
 
+namespace Halide { 
+namespace Internal {
+
 using namespace llvm;
 using std::ostringstream;
 using std::cout;
@@ -51,9 +54,6 @@ using std::vector;
 using std::pair;
 using std::map;
 using std::stack;
-
-namespace Halide { 
-namespace Internal {
 
 namespace {
 LLVMContext &get_global_context() {

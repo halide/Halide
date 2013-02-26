@@ -8,11 +8,11 @@
 #include "Log.h"
 #include "Scope.h"
 
-using std::pair;
-using std::make_pair;
-
 namespace Halide {
 namespace Internal {
+
+using std::pair;
+using std::make_pair;
 
 class Deinterleaver : public IRMutator {
 public:

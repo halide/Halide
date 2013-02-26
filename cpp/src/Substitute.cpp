@@ -1,9 +1,9 @@
 #include "Substitute.h"
 
-using std::string;
-
 namespace Halide { 
 namespace Internal {
+
+using std::string;
 
 class Substitute : public IRMutator {
 public:

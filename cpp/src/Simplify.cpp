@@ -8,10 +8,10 @@
 #include "Log.h"
 #include <iostream>
 
-using std::string;
-
 namespace Halide { 
 namespace Internal {
+
+using std::string;
 
 bool is_simple_const(Expr e) {
     return is_const(e) && (!e.as<Cast>());

@@ -31,11 +31,6 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/IRReader.h>
 
-
-using std::vector;
-using std::string;
-
-
 extern "C" unsigned char halide_internal_initmod_x86[];
 extern "C" int halide_internal_initmod_x86_length;
 extern "C" unsigned char halide_internal_initmod_x86_avx[];
@@ -44,6 +39,8 @@ extern "C" int halide_internal_initmod_x86_avx_length;
 namespace Halide { 
 namespace Internal {
 
+using std::vector;
+using std::string;
 
 using namespace llvm;
 
