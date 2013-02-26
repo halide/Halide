@@ -3,6 +3,9 @@
 
 namespace Halide { 
 namespace Internal {
+
+IRVisitor::~IRVisitor() {
+}
     
 void IRVisitor::visit(const IntImm *) {
 }
