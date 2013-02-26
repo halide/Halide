@@ -22,6 +22,8 @@ public:
 
     BoundsInference(const vector<string> &f, const map<string, Function> &e) : funcs(f), env(e) {}    
 
+    using IRMutator::visit;
+
     virtual void visit(const For *for_loop) {
         
         // Compute the region required of each function within this loop body

@@ -23,6 +23,8 @@ struct CheckVars : public IRVisitor {
     ReductionDomain reduction_domain;
     Scope<int> defined_internally;
 
+    using IRVisitor::visit;
+
     void visit(const Let *let) {
         defined_internally.push(let->name, 0);
         let->value.accept(this);

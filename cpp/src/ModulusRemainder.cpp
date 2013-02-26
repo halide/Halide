@@ -14,6 +14,8 @@ public:
     int modulus, remainder;
     Scope<ModulusRemainder> scope;
 
+    using IRVisitor::visit;
+
     void visit(const IntImm *);
     void visit(const FloatImm *);
     void visit(const Cast *);

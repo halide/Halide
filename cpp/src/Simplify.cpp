@@ -45,6 +45,8 @@ class Simplify : public IRMutator {
 
     Scope<Expr> scope;
 
+    using IRMutator::visit;
+
     void visit(const IntImm *op) {
         IRMutator::visit(op);
     }

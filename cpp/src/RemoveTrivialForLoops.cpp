@@ -5,6 +5,8 @@ namespace Halide {
 namespace Internal {
 
 class RemoveTrivialForLoops : public IRMutator {
+    using IRMutator::visit;
+
     void visit(const For *for_loop) {
         Stmt body = mutate(for_loop->body);
         const IntImm *extent = for_loop->extent.as<IntImm>();

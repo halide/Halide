@@ -382,6 +382,9 @@ public:
     CountImplicitVars(Expr e) : count(0) {
         e.accept(this);
     }
+
+    using IRVisitor::visit;
+
     void visit(const Variable *v) {
         if (v->name.size() > 3 && v->name.substr(0, 3) == "iv.") {
             int n = atoi(v->name.c_str()+3);
@@ -633,6 +636,8 @@ public:
     vector<pair<int, Internal::Parameter> > image_param_args;    
 
 private:
+    using IRVisitor::visit;
+
     void visit(const Load *op) {
         IRVisitor::visit(op);
 

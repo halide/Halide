@@ -16,6 +16,8 @@ public:
 
 
 private:
+    using IRMutator::visit;
+
     void visit(const Call *op) {
         expr = op;
     }

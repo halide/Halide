@@ -135,6 +135,8 @@ protected:
     /** Return the llvm version of a halide type */
     llvm::Type *llvm_type_of(Type type);
 
+    using IRVisitor::visit;
+
     /** Generate code for various IR nodes. These can be overridden by
      * architecture-specific code to perform peephole
      * optimizations. The result of each is stored in \ref value */

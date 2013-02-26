@@ -20,6 +20,9 @@ public:
     }
 private:
     Scope<int> internal;
+
+    using IRVisitor::visit;
+
     void visit(const Let *op) {
         op->value.accept(this);
         internal.push(op->name, 0);

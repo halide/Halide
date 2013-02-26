@@ -41,6 +41,8 @@ protected:
     void call_void_intrin(const std::string &name, std::vector<llvm::Value *>);
     // @}
 
+    using CodeGen_Posix::visit;
+
     /** Nodes for which we want to emit specific neon intrinsics */
     // @{    
     void visit(const Cast *);

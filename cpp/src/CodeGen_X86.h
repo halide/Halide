@@ -41,6 +41,8 @@ protected:
     llvm::Value *call_intrin(Type t, const std::string &name, std::vector<llvm::Value *>);    
     // @}
 
+    using CodeGen_Posix::visit;
+
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     // @{
     void visit(const Cast *);

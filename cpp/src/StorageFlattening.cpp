@@ -24,6 +24,8 @@ class FlattenDimensions : public IRMutator {
         return idx;            
     }
 
+    using IRMutator::visit;
+
     void visit(const Realize *realize) {
         Stmt body = mutate(realize->body);
 
