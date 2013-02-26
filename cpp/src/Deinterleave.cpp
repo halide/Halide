@@ -4,6 +4,7 @@
 #include "IROperator.h"
 #include "IREquality.h"
 #include "IRPrinter.h"
+#include "ModulusRemainder.h"
 #include "Log.h"
 #include "Scope.h"
 
@@ -78,6 +79,77 @@ Expr extract_even_lanes(Expr e) {
     e = d.mutate(e);
     if (d.failed) return Expr();
     else return simplify(e);
+}
+
+class Interleaver : public IRMutator {
+    Scope<ModulusRemainder> alignment_info;
+
+    void visit(const Let *op) {
+        Expr value = mutate(op->value);
+        if (value.type() == Int(32)) alignment_info.push(op->name, modulus_remainder(value));
+        Expr body = mutate(op->body);
+        if (value.type() == Int(32)) alignment_info.pop(op->name);        
+        if (value.same_as(op->value) && body.same_as(op->body)) {
+            expr = op;
+        } else {
+            expr = new Let(op->name, value, body);
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        Expr value = mutate(op->value);
+        if (value.type() == Int(32)) alignment_info.push(op->name, modulus_remainder(value));
+        Stmt body = mutate(op->body);
+        if (value.type() == Int(32)) alignment_info.pop(op->name);        
+        if (value.same_as(op->value) && body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = new LetStmt(op->name, value, body);
+        }
+    }
+
+    void visit(const Select *op) {
+        Expr condition = mutate(op->condition);
+        Expr true_value = mutate(op->true_value);
+        Expr false_value = mutate(op->false_value);
+        const EQ *eq = condition.as<EQ>();
+        const Mod *mod = eq ? eq->a.as<Mod>() : NULL;
+        const Ramp *ramp = mod ? mod->a.as<Ramp>() : NULL;
+        if (ramp && ramp->width > 2 && is_one(ramp->stride) && is_const(eq->b) && is_two(mod->b)) {
+            log(3) << "Detected interleave vector pattern. Deinterleaving.\n";
+            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+            log(3) << "Base is congruent to " << mod_rem.remainder << " modulo " << mod_rem.modulus << "\n";
+            Expr a, b;
+            bool base_is_even = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 0);
+            bool base_is_odd  = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 1);
+            if ((is_zero(eq->b) && base_is_even) || 
+                (is_one(eq->b) && base_is_odd)) {
+                a = extract_even_lanes(true_value);
+                b = extract_odd_lanes(false_value);
+            } else if ((is_one(eq->b) && base_is_even) || 
+                       (is_zero(eq->b) && base_is_odd)) {
+                a = extract_even_lanes(false_value);
+                b = extract_odd_lanes(true_value);
+            }   
+
+            if (a.defined() && b.defined()) {
+                expr = new Call(op->type, "interleave vectors", vec(a, b));
+                return;
+            }
+        }
+
+        if (condition.same_as(op->condition) && 
+            true_value.same_as(op->true_value) && 
+            false_value.same_as(op->false_value)) {
+            expr = op;
+        } else {
+            expr = new Select(condition, true_value, false_value);
+        }
+    }        
+};
+
+Stmt rewrite_interleavings(Stmt s) {
+    return Interleaver().mutate(s);
 }
 
 namespace {

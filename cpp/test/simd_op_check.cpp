@@ -78,13 +78,13 @@ void do_job(job &j) {
     char cmd[1024];
     snprintf(cmd, 1024, 
 	     "cat %s | "
-	     "sed -n '/%s.v1_loop/,/%s.v0_afterloop/p' | "
+	     "sed -n '/.v1_loop/,/.v0_afterloop/p' | "
 	     "grep -v 'v1_loop' | "
 	     "grep -v 'Loop' | "
 	     "grep -v 'v0_afterloop' | "
 	     "sed 's/@.*//' > %s.s && "
 	     "grep \"\tv\\{0,1\\}%s\" %s.s > /dev/null", 
-	     module, f.name().c_str(), f.name().c_str(), module, op, module);
+	     module, module, op, module);
 
     if (system(cmd) != 0) {
 	j.result = new char[4096];
@@ -829,8 +829,6 @@ void check_neon_all() {
     check_neon("vld1.32", 2, in_f32(y));
 
     // VLD2	X	-	Load Two-Element Structures
-    // Strided loads with unknown alignments  (currently crashes ocaml layer)
-    /*
     check_neon("vld2.8", 16, in_i8(x*2+y));
     check_neon("vld2.8", 16, in_u8(x*2+y));
     check_neon("vld2.16", 8, in_i16(x*2+y));
@@ -842,7 +840,7 @@ void check_neon_all() {
     check_neon("vld2.8",  8, in_u8(x*2+y));
     check_neon("vld2.16", 4, in_i16(x*2+y));
     check_neon("vld2.16", 4, in_u16(x*2+y));
-    */
+    
 
     // VLD3	X	-	Load Three-Element Structures
     check_neon("vld3.8", 16, in_i8(x*3+y));
@@ -1300,12 +1298,22 @@ void check_neon_all() {
     check_neon("vst1.8", 16, i8_1);
 
     // VST2	X	-	Store two-element structures
-    Func tmp1, tmp2;
-    tmp1(x) = i8(x);
-    tmp1.compute_root();
-    tmp2(x) = select(x%2 == 0, tmp1(x/2), tmp1(x/2 + 16));
-    tmp2.compute_root().vectorize(x, 32);
-    check_neon("vst2.8", 32, tmp2(0) + tmp2(63));
+    for (int sign = 0; sign <= 1; sign++) {
+        for (int width = 128; width <= 256; width *= 2) {
+            for (int bits = 8; bits < 64; bits *= 2) {
+                printf("%d %d\n", width, bits);
+                if (width <= bits*2) continue;
+                Func tmp1, tmp2;
+                tmp1(x) = cast(sign ? Int(bits) : UInt(bits), x);
+                tmp1.compute_root();
+                tmp2(x, y) = select(x%2 == 0, tmp1(x/2), tmp1(x/2 + 16));
+                tmp2.compute_root().vectorize(x, width/bits);
+                char *op = (char *)malloc(32);
+                snprintf(op, 32, "vst2.%d", bits);
+                check_neon(op, width/bits, tmp2(0, 0) + tmp2(63, 3));
+            }
+        }
+    }
 
     // VST3	X	-	Store three-element structures
     // VST4	X	-	Store four-element structures

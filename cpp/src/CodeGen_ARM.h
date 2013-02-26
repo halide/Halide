@@ -37,6 +37,8 @@ protected:
     // @{
     llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);    
     llvm::Value *call_intrin(Type t, const std::string &name, std::vector<llvm::Value *>);    
+    void call_void_intrin(const std::string &name, std::vector<Expr>);
+    void call_void_intrin(const std::string &name, std::vector<llvm::Value *>);
     // @}
 
     /** Nodes for which we want to emit specific neon intrinsics */
@@ -51,6 +53,8 @@ protected:
     void visit(const LT *);
     void visit(const LE *);
     void visit(const Select *);
+    void visit(const Store *);
+    void visit(const Load *);
     // @}
 
     std::string mcpu() const;

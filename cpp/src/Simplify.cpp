@@ -876,10 +876,24 @@ class Simplify : public IRMutator {
             scope.push(op->name, value);
         } else if (ramp && is_simple_const(ramp->stride)) {
             // Make a new name to refer to the base instead, and push the ramp inside
-            scope.push(op->name, new Ramp(new Variable(ramp->base.type(), op->name + ".base"), 
-                                          ramp->stride, ramp->width));
+
+            Expr val = new Variable(ramp->base.type(), op->name + ".base");
+            Expr base = ramp->base;
+
+            // If it's a multiply, move the multiply part inwards
+            const Mul *mul = base.as<Mul>();
+            const IntImm *mul_b = mul ? mul->b.as<IntImm>() : NULL;
+            if (mul_b) {
+                base = mul->a;
+                val = new Ramp(val * mul->b, ramp->stride, ramp->width);
+            } else {
+                val = new Ramp(val, ramp->stride, ramp->width);
+            }
+
+            scope.push(op->name, val);
+
             wrapper_name = op->name + ".base";
-            wrapper_value = ramp->base;
+            wrapper_value = base;
         } else if (broadcast) {
             // Make a new name refer to the scalar version, and push the broadcast inside            
             scope.push(op->name, new Broadcast(new Variable(broadcast->value.type(), op->name + ".value"), 
@@ -1148,9 +1162,9 @@ void simplify_test() {
     check(new Let("x", 3, x+4), new Let("x", 3, 7));
 
     // Check ramps in lets get pushed inwards
-    check(new Let("vec", new Ramp(x*2, 3, 4), vec + Expr(new Broadcast(2, 4))), 
-          new Let("vec.base", x*2, 
-                  new Let("vec", new Ramp(x*2, 3, 4), 
+    check(new Let("vec", new Ramp(x*2+7, 3, 4), vec + Expr(new Broadcast(2, 4))), 
+          new Let("vec.base", x*2+7, 
+                  new Let("vec", new Ramp(x*2+7, 3, 4), 
                           new Ramp(Expr(new Variable(Int(32), "vec.base")) + 2, 3, 4))));
 
     // Check broadcasts in lets get pushed inwards

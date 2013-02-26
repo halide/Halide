@@ -438,10 +438,11 @@ void CodeGen_X86::test() {
     typedef void (*fn_type)(::buffer_t *, float, int);
     fn_type fn = (fn_type)m.function;
 
-    int scratch[16];
+    int scratch[64];
     ::buffer_t buf;
     memset(&buf, 0, sizeof(buf));
     buf.host = (uint8_t *)(&scratch[0]);
+    while (((size_t)buf.host) & 0x1f) buf.host++;
 
     fn(&buf, -32, 0);
     assert(scratch[0] == 5);
