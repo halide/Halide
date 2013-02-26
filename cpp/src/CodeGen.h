@@ -82,6 +82,9 @@ protected:
     llvm::Value *value;
     //@}
 
+    /** Run all of llvm's optimization passes on the module */
+    void optimize_module();
+
     /** Add an entry to the symbol table, hiding previous entries with
      * the same name. Call this when new values come into scope. */
     void sym_push(const std::string &name, llvm::Value *value);

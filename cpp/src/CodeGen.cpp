@@ -133,6 +133,16 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
 
+    // Mark the buffer args as no alias
+    // TODO: This may not be true, leave it out for now
+    /*
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer) {
+            function->setDoesNotAlias(i+1);
+        }
+    }
+    */
+
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(context, "entry", function);
     builder->SetInsertPoint(block);
@@ -237,30 +247,15 @@ void destroy<JITModuleHolder>(const JITModuleHolder *f) {delete f;}
 JITCompiledModule CodeGen::compile_to_function_pointers() {
     assert(module && "No module defined. Must call compile before calling compile_to_function_pointer");
                
-    FunctionPassManager function_pass_manager(module);
-    PassManager module_pass_manager;
+    optimize_module();
 
     log(1) << "JIT compiling...\n";
 
     IntrusivePtr<JITModuleHolder> module_holder(new JITModuleHolder(module));
     ExecutionEngine *execution_engine = module_holder.ptr->execution_engine;
 
-    // Make sure things marked as always-inline get inlined
-    module_pass_manager.add(createAlwaysInlinerPass());
-        
-    PassManagerBuilder b;
-    b.OptLevel = 3;
-    b.populateFunctionPassManager(function_pass_manager);
-    b.populateModulePassManager(module_pass_manager);
-                
     llvm::Function *fn = module->getFunction(function_name);
     assert(fn && "Could not find function inside llvm module");
-        
-    // Run optimization passes
-    module_pass_manager.run(*module);        
-    function_pass_manager.doInitialization();
-    function_pass_manager.run(*fn);
-    function_pass_manager.doFinalization();
 
     JITCompiledModule m;
     void *f = execution_engine->getPointerToFunction(fn);
@@ -299,8 +294,35 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     return m;
 }
 
+void CodeGen::optimize_module() {
+    FunctionPassManager function_pass_manager(module);
+    PassManager module_pass_manager;
+
+    // Make sure things marked as always-inline get inlined
+    module_pass_manager.add(createAlwaysInlinerPass());
+        
+    PassManagerBuilder b;
+    b.OptLevel = 3;
+    b.populateFunctionPassManager(function_pass_manager);
+    b.populateModulePassManager(module_pass_manager);
+                
+    llvm::Function *fn = module->getFunction(function_name);
+    assert(fn && "Could not find function inside llvm module");
+        
+    // Run optimization passes
+    module_pass_manager.run(*module);        
+    function_pass_manager.doInitialization();
+    function_pass_manager.run(*fn);
+    function_pass_manager.doFinalization();
+
+    if (log::debug_level >= 3) {
+        module->dump();
+    }
+}
+
 void CodeGen::compile_to_bitcode(const string &filename) {
     assert(module && "No module defined. Must call compile before calling compile_to_bitcode");        
+
     string error_string;
     raw_fd_ostream out(filename.c_str(), error_string);
     WriteBitcodeToFile(module, out);
@@ -308,6 +330,9 @@ void CodeGen::compile_to_bitcode(const string &filename) {
 
 void CodeGen::compile_to_native(const string &filename, bool assembly) {
     assert(module && "No module defined. Must call compile before calling compile_to_native");
+
+    optimize_module();
+    
     // Get the target specific parser.
     string error_string;
     log(1) << "Compiling to native code...\n";
