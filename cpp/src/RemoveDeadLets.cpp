@@ -8,6 +8,8 @@ namespace Internal {
 class RemoveDeadLets : public IRMutator {
     Scope<int> references;
 
+    using IRMutator::visit;
+
     void visit(const Variable *op) {
         if (references.contains(op->name)) references.ref(op->name)++;
         expr = op;

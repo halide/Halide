@@ -49,6 +49,8 @@ public:
     IRMatch(Expr e, vector<Expr> &m) : result(true), matches(m), expr(e) {
     }
 
+    using IRVisitor::visit;
+
     void visit(const IntImm *op) {
         const IntImm *e = expr.as<IntImm>();
         if (!e || e->value != op->value) {

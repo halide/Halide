@@ -17,6 +17,8 @@ class FiniteDifference : public IRMutator {
         return substitute(var, (new Variable(Int(32), var)) + 1, e) - e;
     }
 
+    using IRMutator::visit;
+
     void visit(const IntImm *) {
         expr = 0;
     }

@@ -22,6 +22,8 @@ public:
 private:
     Scope<int> internal;
 
+    using IRMutator::visit;
+
     void visit(const Broadcast *op) {
         expr = new Broadcast(op->value, new_width);
     }

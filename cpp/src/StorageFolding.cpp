@@ -23,6 +23,8 @@ class FoldStorageOfFunction : public IRMutator {
     int dim;
     Expr factor;
 
+    using IRMutator::visit;
+
     void visit(const Call *op) {
         IRMutator::visit(op);
         op = expr.as<Call>();
@@ -53,6 +55,8 @@ public:
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
     string func;
+
+    using IRMutator::visit;
 
     void visit(const Pipeline *op) {
         if (op->name == func) {
@@ -138,6 +142,8 @@ public:
 
 // Look for opportunities for storage folding in a statement
 class StorageFolding : public IRMutator {
+    using IRMutator::visit;
+
     void visit(const Realize *op) {
         AttemptStorageFoldingOfFunction folder(op->name);
         Stmt new_body = folder.mutate(op->body);

@@ -15,6 +15,8 @@ protected:
     string var;
     Expr replacement;
 
+    using IRMutator::visit;
+
     void visit(const Variable *v) {
         if (v->name == var) expr = replacement;
         else expr = v;

@@ -47,6 +47,8 @@ private:
         }        
     }
 
+    using IRVisitor::visit;
+
     void visit(const IntImm *op) {
         min = op;
         max = op;
@@ -374,6 +376,8 @@ public:
     bool consider_provides;
     Scope<int> inside_update;
 private:
+    using IRVisitor::visit;
+
     void visit(const LetStmt *op) {
         op->value.accept(this);
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);

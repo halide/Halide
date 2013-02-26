@@ -1117,6 +1117,8 @@ private:
     Scope<int> ignore;
     CodeGen *gen;
 
+    using IRVisitor::visit;
+
     void visit(const Let *op) {
         op->value.accept(this);
         ignore.push(op->name, 0);

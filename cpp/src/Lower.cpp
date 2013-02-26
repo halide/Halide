@@ -59,6 +59,9 @@ void lower_test() {
 // Prefix all names in an expression with some string.
 class QualifyExpr : public IRMutator {
     string prefix;
+
+    using IRMutator::visit;
+
     void visit(const Variable *v) {
         if (v->param.defined()) {
             expr = v;
@@ -230,7 +233,9 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
 
 class IsCalledInStmt : public IRVisitor {
     string func;
-    
+
+    using IRVisitor::visit;
+
     void visit(const Call *op) {
         IRVisitor::visit(op);
         if (op->name == func) result = true;
@@ -285,6 +290,8 @@ private:
         
         return inject_explicit_bounds(s, func);        
     }
+
+    using IRMutator::visit;
 
     virtual void visit(const For *for_loop) {            
         log(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
@@ -361,6 +368,7 @@ public:
         assert(!f.is_reduction());
     }
 private:
+    using IRMutator::visit;
 
     void visit(const Call *op) {        
         // std::cout << "Found call to " << op->name << endl;
@@ -391,6 +399,9 @@ class FindCalls : public IRVisitor {
 public:
     FindCalls(Expr e) {e.accept(this);}
     map<string, Function> calls;
+
+    using IRVisitor::visit;
+
     void visit(const Call *call) {                
         IRVisitor::visit(call);
         if (call->call_type == Call::Halide) {
@@ -417,6 +428,8 @@ public:
         }
         buffers.push_back(name);        
     }
+
+    using IRVisitor::visit;
 
     void visit(const Call *op) {
         IRVisitor::visit(op);
