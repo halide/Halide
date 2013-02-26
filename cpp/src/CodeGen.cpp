@@ -406,6 +406,7 @@ void CodeGen::sym_pop(const string &name) {
 // and populate the symbol table with its constituent parts
 void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
     sym_push(name + ".host", buffer_host(buffer));
+    // TODO: assert that the buffer is 32-byte aligned
     sym_push(name + ".dev", buffer_dev(buffer));
     sym_push(name + ".host_dirty", buffer_host_dirty(buffer));
     sym_push(name + ".dev_dirty", buffer_dev_dirty(buffer));
@@ -760,50 +761,11 @@ void CodeGen::visit(const Not *op) {
     value = builder->CreateNot(codegen(op->a));
 }
 
+
 void CodeGen::visit(const Select *op) {
-    // Interleaving two shorter vectors should be done using shufflevector, not select:
-    // select(ramp % 2 == 0, a, b)
-    const EQ *eq = op->condition.as<EQ>();
-    const Mod *mod = eq ? eq->a.as<Mod>() : NULL;
-    const Ramp *ramp = mod ? mod->a.as<Ramp>() : NULL;
-    if (ramp && is_one(ramp->stride) && is_const(eq->b) && is_two(mod->b)) {
-        log(3) << "Detected interleave vector pattern. Deinterleaving.\n";
-        // TODO: modulus remainder analysis can make this test much more powerful:
-        const Mul *base_mul = ramp->base.as<Mul>();
-        const Add *base_add = ramp->base.as<Add>();
-        const Mul *base_add_mul = base_add ? base_add->a.as<Mul>() : NULL;
-        bool base_is_even = base_mul && is_two(base_mul->b);
-        bool base_is_odd = base_add_mul && is_one(base_add->b) && is_two(base_add_mul->b);
-        Expr a, b;
-        if ((is_zero(eq->b) && base_is_even) || 
-            (is_one(eq->b) && base_is_odd)) {
-            a = extract_even_lanes(op->true_value);
-            b = extract_odd_lanes(op->false_value);
-        } else if ((is_one(eq->b) && base_is_even) || 
-                   (is_zero(eq->b) && base_is_odd)) {
-            a = extract_even_lanes(op->false_value);
-            b = extract_odd_lanes(op->true_value);
-        }        
-
-        if (a.defined() && b.defined()) {
-            log(3) << "Resulting vectors to interleave: " << a << ", " << b << "\n";
-            
-            vector<Constant *> indices(ramp->width);
-            for (int i = 0; i < ramp->width; i++) {
-                int idx = i/2;
-                if (i % 2 == 1) idx += a.type().width;
-                indices[i] = ConstantInt::get(i32, idx);
-            }
-
-            value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
-            return;
-        }
-    }
-
     value = builder->CreateSelect(codegen(op->condition), 
-                                 codegen(op->true_value), 
-                                 codegen(op->false_value));
-
+                                  codegen(op->true_value), 
+                                  codegen(op->false_value));
 }
 
 Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
@@ -826,36 +788,36 @@ void CodeGen::visit(const Load *op) {
     // There are several cases. Different architectures may wish to override some
 
     if (op->type.is_scalar()) {
-        // 1) Scalar loads
+        // Scalar loads
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, op->type, index);
         value = builder->CreateLoad(ptr);
     } else {            
+        int alignment = op->type.bits / 8;
         const Ramp *ramp = op->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+
+        if (ramp) {
+            ModulusRemainder mod_rem = modulus_remainder(ramp->base);
+            // Boost the alignment using the results of the modulus remainder analysis
+            alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32); 
+        }
+                    
         if (ramp && stride && stride->value == 1) {
-            /* TODO:
-               ModulusRemainder mod_rem(op);
-               mod_rem.modulus;
-               mod_rem.remainder;
-               // 2) Aligned dense vector loads 
-                   
-               // 3) Unaligned dense vector loads with known alignment
-               */
-                
-            // 4) Unaligned dense vector loads with unknown alignment
             Value *base = codegen(ramp->base);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            value = builder->CreateAlignedLoad(ptr, 1);                
+            value = builder->CreateAlignedLoad(ptr, alignment);                
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
             Value *base = codegen(ramp->base);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            Value *a = builder->CreateAlignedLoad(ptr, 1);
+            Value *a = builder->CreateAlignedLoad(ptr, alignment);
             ptr = builder->CreateConstGEP1_32(ptr, 1);
-            Value *b = builder->CreateAlignedLoad(ptr, 1);
+            int bytes = (op->type.bits * op->type.width)/8;
+            log(1) << "Alignment of second load = " << gcd(alignment, bytes) << "\n";
+            Value *b = builder->CreateAlignedLoad(ptr, gcd(alignment, bytes));
             vector<Constant *> indices(ramp->width);
             for (int i = 0; i < ramp->width; i++) {
                 indices[i] = ConstantInt::get(i32, i*2);
@@ -864,9 +826,15 @@ void CodeGen::visit(const Load *op) {
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Value *base = codegen(ramp->base - ramp->width + 1);
+
+            // Re-do alignment analysis for the flipped index
+            alignment = op->type.bits / 8;
+            ModulusRemainder mod_rem = modulus_remainder(ramp->base - ramp->width + 1);
+            alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);             
+
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            Value *vec = builder->CreateAlignedLoad(ptr, 1);            
+            Value *vec = builder->CreateAlignedLoad(ptr, alignment);
             Value *undef = UndefValue::get(vec->getType());
 
             vector<Constant *> indices(ramp->width);
@@ -948,6 +916,22 @@ void CodeGen::visit(const Call *op) {
         }
         value = builder->CreateShuffleVector(args[0], args[0], ConstantVector::get(indices));
         return;
+    } 
+
+    if (op->name == "interleave vectors") {
+        assert(op->args.size() == 2);
+        Expr a = op->args[0], b = op->args[1];
+        log(3) << "Vectors to interleave: " << a << ", " << b << "\n";
+        
+        vector<Constant *> indices(op->type.width);
+        for (int i = 0; i < op->type.width; i++) {
+            int idx = i/2;
+            if (i % 2 == 1) idx += a.type().width;
+            indices[i] = ConstantInt::get(i32, idx);
+        }
+        
+        value = builder->CreateShuffleVector(args[0], args[1], ConstantVector::get(indices));
+        return;
     }
 
     llvm::Function *fn = module->getFunction(op->name);
@@ -998,13 +982,25 @@ void CodeGen::visit(const Call *op) {
 
 void CodeGen::visit(const Let *op) {
     sym_push(op->name, codegen(op->value));
+    if (op->value.type() == Int(32)) {
+        alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
+    }
     value = codegen(op->body);
+    if (op->value.type() == Int(32)) {
+        alignment_info.pop(op->name);
+    }
     sym_pop(op->name);
 }
 
 void CodeGen::visit(const LetStmt *op) {
     sym_push(op->name, codegen(op->value));
+    if (op->value.type() == Int(32)) {
+        alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
+    }
     codegen(op->body);
+    if (op->value.type() == Int(32)) {
+        alignment_info.pop(op->name);
+    }
     sym_pop(op->name);
 }
 
@@ -1340,22 +1336,28 @@ void CodeGen::visit(const Store *op) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, index);
         builder->CreateStore(val, ptr);
     } else {
+        int alignment = op->value.type().bits / 8;
         const Ramp *ramp;
         const IntImm *stride;
         if ((ramp = op->index.as<Ramp>()) &&
             (stride = ramp->stride.as<IntImm>()) &&               
             (stride->value == 1)) {
-            bool aligned = false;
-            if (aligned) {
-                // Aligned dense vector store
-                // TODO
-            } else {
-                // Unaligned dense store
-                Value *base = codegen(ramp->base);
-                Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), base);
-                ptr = builder->CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
-                builder->CreateAlignedStore(val, ptr, 1);                    
+
+            // Boost the alignment if possible
+            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
+            while ((mod_rem.remainder & 1) == 0 && 
+                   (mod_rem.modulus & 1) == 0 &&
+                   alignment < 256) {
+                mod_rem.modulus /= 2;
+                mod_rem.remainder /= 2;
+                alignment *= 2;
             }
+
+            Value *base = codegen(ramp->base);
+            Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), base);
+            ptr = builder->CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
+            builder->CreateAlignedStore(val, ptr, alignment);                    
+
         } else {
             // Scatter
             Value *index = codegen(op->index);

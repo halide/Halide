@@ -19,6 +19,7 @@
 #include "SlidingWindow.h"
 #include "StorageFolding.h"
 #include "RemoveTrivialForLoops.h"
+#include "Deinterleave.h"
 
 using std::set;
 using std::ostringstream;
@@ -662,7 +663,11 @@ Stmt lower(Function f) {
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     s = remove_dead_lets(s);
-    log(1) << "Lowered statement: \n" << s << "\n\n";
+    log(2) << "Simplified: \n" << s << "\n\n";
+
+    log(1) << "Detecting vector interleavings...\n";
+    s = rewrite_interleavings(s);
+    log(1) << "Rewrote vector interleavings: \n" << s << "\n\n";
 
     return s;
 } 

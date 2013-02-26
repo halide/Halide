@@ -11,9 +11,8 @@ class ComputeModulusRemainder : public IRVisitor {
 public:
     ModulusRemainder analyze(Expr e);
 
-protected:
     int modulus, remainder;
-    Scope<ModulusRemainder > scope;
+    Scope<ModulusRemainder> scope;
 
     void visit(const IntImm *);
     void visit(const FloatImm *);
@@ -57,6 +56,14 @@ ModulusRemainder modulus_remainder(Expr e) {
     ComputeModulusRemainder mr;
     return mr.analyze(e);        
 }
+
+ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope) {
+    ComputeModulusRemainder mr;
+    mr.scope = scope;
+    return mr.analyze(e);        
+}
+
+
 
 bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
     ModulusRemainder result = modulus_remainder(expr);

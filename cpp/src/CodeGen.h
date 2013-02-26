@@ -29,6 +29,7 @@ class StructType;
 #include "IR.h"
 #include "Scope.h"
 #include "JITCompiledModule.h"
+#include "ModulusRemainder.h"
 
 namespace Halide { 
 namespace Internal {
@@ -203,6 +204,9 @@ private:
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
 
+    /** Alignment info for Int(32) variables in scope */
+    Scope<ModulusRemainder> alignment_info;
+        
 
 };
 

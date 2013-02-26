@@ -174,6 +174,35 @@ Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Val
     return builder->CreateCall(fn, arg_values);
 }
  
+void CodeGen_ARM::call_void_intrin(const string &name, vector<Expr> args) {    
+    vector<Value *> arg_values(args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        arg_values[i] = codegen(args[i]);
+    }
+
+    call_void_intrin(name, arg_values);
+}
+
+
+void CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> arg_values) {
+    vector<llvm::Type *> arg_types(arg_values.size());
+    for (size_t i = 0; i < arg_values.size(); i++) {
+        arg_types[i] = arg_values[i]->getType();
+    }
+
+    llvm::Function *fn = module->getFunction("llvm.arm.neon." + name);
+
+    if (!fn) {
+        FunctionType *func_t = FunctionType::get(void_t, arg_types, false);    
+        fn = llvm::Function::Create(func_t, 
+                                    llvm::Function::ExternalLinkage, 
+                                    "llvm.arm.neon." + name, module);
+        fn->setCallingConv(CallingConv::C);
+    }
+
+    builder->CreateCall(fn, arg_values);    
+}
+
 void CodeGen_ARM::visit(const Cast *op) {
 
     vector<Expr> matches;
@@ -571,6 +600,56 @@ void CodeGen_ARM::visit(const Select *op) {
         return;
     }
 
+    CodeGen::visit(op);
+}
+
+void CodeGen_ARM::visit(const Store *op) {
+    // A dense store of an interleaving can be done using a vst2 intrinsic
+    const Call *call = op->value.as<Call>();
+    const Ramp *ramp = op->index.as<Ramp>();
+    if (ramp && is_one(ramp->stride) && 
+        call && call->name == "interleave vectors") {
+        assert(call->args.size() == 2 && "Wrong number of args to interleave vectors");
+        vector<Value *> args(call->args.size() + 2);
+
+        Type t = call->args[0].type();
+        int alignment = t.bits / 8;
+
+        Value *index = codegen(ramp->base);
+        Value *ptr = codegen_buffer_pointer(op->name, call->type.element_of(), index);
+        ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());  
+
+        args[0] = ptr; // The pointer
+        args[1] = codegen(call->args[0]);
+        args[2] = codegen(call->args[1]);
+        args[3] = ConstantInt::get(i32, alignment);
+
+        if (t == Int(8, 8) || t == UInt(8, 8)) {
+            call_void_intrin("vst2.v8i8", args);  
+        } else if (t == Int(8, 16) || t == UInt(8, 16)) {
+            call_void_intrin("vst2.v16i8", args);  
+        } else if (t == Int(16, 4) || t == UInt(16, 4)) {
+            call_void_intrin("vst2.v4i16", args);  
+        } else if (t == Int(16, 8) || t == UInt(16, 8)) {
+            call_void_intrin("vst2.v8i16", args);  
+        } else if (t == Int(32, 2) || t == UInt(32, 2)) {
+            call_void_intrin("vst2.v2i32", args);  
+        } else if (t == Int(32, 4) || t == UInt(32, 4)) {
+            call_void_intrin("vst2.v4i32", args); 
+        } else if (t == Float(32, 2)) {
+            call_void_intrin("vst2.v2f32", args); 
+        } else if (t == Float(32, 4)) {
+            call_void_intrin("vst2.v4f32", args); 
+        } else {
+            CodeGen::visit(op);
+        }
+        return;
+    } else {
+        CodeGen::visit(op);
+    }
+}
+
+void CodeGen_ARM::visit(const Load *op) {
     CodeGen::visit(op);
 }
 
