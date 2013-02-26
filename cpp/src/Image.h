@@ -66,7 +66,7 @@ public:
 
     /** Wrap a buffer_t in an Image object, so that we can access its
      * pixels. */
-    Image(const buffer_t *b) : buffer(type_of<T>, b) {
+    Image(const buffer_t *b) : buffer(type_of<T>(), b) {
         prepare_for_direct_pixel_access();
     }
 
