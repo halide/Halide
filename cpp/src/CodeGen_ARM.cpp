@@ -105,6 +105,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
 }
 
 namespace {
+// cast operators
 Expr _i64(Expr e) {
     return cast(Int(64, e.type().width), e);
 }
@@ -143,6 +144,34 @@ Expr _f32(Expr e) {
 Expr _f64(Expr e) {
     return cast(Float(64, e.type().width), e);
 }
+
+// saturating cast operators
+Expr _i8q(Expr e) {
+    return cast(Int(8, e.type().width), clamp(e, -128, 127));
+}
+
+Expr _u8q(Expr e) {
+    if (e.type().is_uint()) {
+        return cast(UInt(8, e.type().width), min(e, 255));
+    } else {
+        return cast(UInt(8, e.type().width), clamp(e, 0, 255));
+    }
+}
+
+Expr _i16q(Expr e) {
+    return cast(Int(16, e.type().width), clamp(e, -32768, 32767));
+}
+
+Expr _u16q(Expr e) {
+    if (e.type().is_uint()) {
+        return cast(UInt(16, e.type().width), min(e, 65535));
+    } else {
+        return cast(UInt(16, e.type().width), clamp(e, 0, 65535));
+    }
+}
+
+
+
 }
 
 Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Expr> args) {    
@@ -211,14 +240,76 @@ void CodeGen_ARM::visit(const Cast *op) {
     struct Pattern {
         string intrin;
         Expr pattern;
-        int shift;
+        bool shift;
     };
 
     Pattern patterns[] = {
+        {"vaddhn.v8i8", _i8((wild_i16x8 + wild_i16x8)/256), false},
+        {"vaddhn.v4i16", _i16((wild_i32x4 + wild_i32x4)/65536), false},
+        {"vaddhn.v8i8", _u8((wild_u16x8 + wild_u16x8)/256), false},
+        {"vaddhn.v4i16", _u16((wild_u32x4 + wild_u32x4)/65536), false},
         {"vsubhn.v8i8", _i8((wild_i16x8 - wild_i16x8)/256), false},
         {"vsubhn.v4i16", _i16((wild_i32x4 - wild_i32x4)/65536), false},
         {"vsubhn.v8i8", _u8((wild_u16x8 - wild_u16x8)/256), false},
         {"vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536), false},
+        {"vrhadds.v8i8", _i8((_i16(wild_i8x8) + _i16(wild_i8x8) + 1)/2), false},
+        {"vrhaddu.v8i8", _u8((_u16(wild_u8x8) + _u16(wild_u8x8) + 1)/2), false},
+        {"vrhadds.v4i16", _i16((_i32(wild_i16x4) + _i32(wild_i16x4) + 1)/2), false},
+        {"vrhaddu.v4i16", _u16((_u32(wild_u16x4) + _u32(wild_u16x4) + 1)/2), false},
+        {"vrhadds.v2i32", _i32((_i64(wild_i32x2) + _i64(wild_i32x2) + 1)/2), false},
+        {"vrhaddu.v2i32", _u32((_u64(wild_u32x2) + _u64(wild_u32x2) + 1)/2), false},
+        {"vrhadds.v16i8",   _i8((_i16(wild_i8x16) + _i16(wild_i8x16) + 1)/2), false},
+        {"vrhaddu.v16i8",   _u8((_u16(wild_u8x16) + _u16(wild_u8x16) + 1)/2), false},
+        {"vrhadds.v8i16", _i16((_i32(wild_i16x8) + _i32(wild_i16x8) + 1)/2), false},
+        {"vrhaddu.v8i16", _u16((_u32(wild_u16x8) + _u32(wild_u16x8) + 1)/2), false},
+        {"vrhadds.v4i32", _i32((_i64(wild_i32x4) + _i64(wild_i32x4) + 1)/2), false},
+        {"vrhaddu.v4i32", _u32((_u64(wild_u32x4) + _u64(wild_u32x4) + 1)/2), false},
+
+        {"vhadds.v8i8", _i8((_i16(wild_i8x8) + _i16(wild_i8x8))/2), false},
+        {"vhaddu.v8i8", _u8((_u16(wild_u8x8) + _u16(wild_u8x8))/2), false},
+        {"vhadds.v4i16", _i16((_i32(wild_i16x4) + _i32(wild_i16x4))/2), false},
+        {"vhaddu.v4i16", _u16((_u32(wild_u16x4) + _u32(wild_u16x4))/2), false},
+        {"vhadds.v2i32", _i32((_i64(wild_i32x2) + _i64(wild_i32x2))/2), false},
+        {"vhaddu.v2i32", _u32((_u64(wild_u32x2) + _u64(wild_u32x2))/2), false},
+        {"vhadds.v16i8", _i8((_i16(wild_i8x16) + _i16(wild_i8x16))/2), false},
+        {"vhaddu.v16i8", _u8((_u16(wild_u8x16) + _u16(wild_u8x16))/2), false},
+        {"vhadds.v8i16", _i16((_i32(wild_i16x8) + _i32(wild_i16x8))/2), false},
+        {"vhaddu.v8i16", _u16((_u32(wild_u16x8) + _u32(wild_u16x8))/2), false},
+        {"vhadds.v4i32", _i32((_i64(wild_i32x4) + _i64(wild_i32x4))/2), false},
+        {"vhaddu.v4i32", _u32((_u64(wild_u32x4) + _u64(wild_u32x4))/2), false},
+        {"vhsubs.v8i8", _i8((_i16(wild_i8x8) - _i16(wild_i8x8))/2), false},
+        {"vhsubu.v8i8", _u8((_u16(wild_u8x8) - _u16(wild_u8x8))/2), false},
+        {"vhsubs.v4i16", _i16((_i32(wild_i16x4) - _i32(wild_i16x4))/2), false},
+        {"vhsubu.v4i16", _u16((_u32(wild_u16x4) - _u32(wild_u16x4))/2), false},
+        {"vhsubs.v2i32", _i32((_i64(wild_i32x2) - _i64(wild_i32x2))/2), false},
+        {"vhsubu.v2i32", _u32((_u64(wild_u32x2) - _u64(wild_u32x2))/2), false},
+        {"vhsubs.v16i8", _i8((_i16(wild_i8x16) - _i16(wild_i8x16))/2), false},
+        {"vhsubu.v16i8", _u8((_u16(wild_u8x16) - _u16(wild_u8x16))/2), false},
+        {"vhsubs.v8i16", _i16((_i32(wild_i16x8) - _i32(wild_i16x8))/2), false},
+        {"vhsubu.v8i16", _u16((_u32(wild_u16x8) - _u32(wild_u16x8))/2), false},
+        {"vhsubs.v4i32", _i32((_i64(wild_i32x4) - _i64(wild_i32x4))/2), false},
+        {"vhsubu.v4i32", _u32((_u64(wild_u32x4) - _u64(wild_u32x4))/2), false},
+
+        {"vqadds.v8i8", _i8q(_i16(wild_i8x8) + _i16(wild_i8x8)), false},
+        {"vqaddu.v8i8", _u8q(_u16(wild_u8x8) + _u16(wild_u8x8)), false},
+        {"vqadds.v4i16", _i16q(_i32(wild_i16x4) + _i32(wild_i16x4)), false},
+        {"vqaddu.v4i16", _u16q(_u32(wild_u16x4) + _u32(wild_u16x4)), false},
+        {"vqadds.v16i8", _i8q(_i16(wild_i8x16) + _i16(wild_i8x16)), false},
+        {"vqaddu.v16i8", _u8q(_u16(wild_u8x16) + _u16(wild_u8x16)), false},
+        {"vqadds.v8i16", _i16q(_i32(wild_i16x8) + _i32(wild_i16x8)), false},
+        {"vqaddu.v8i16", _u16q(_u32(wild_u16x8) + _u32(wild_u16x8)), false},
+
+        // N.B. Saturating subtracts of unsigned types are expressed
+        // by widening to a *signed* type
+        {"vqsubs.v8i8", _i8q(_i16(wild_i8x8) - _i16(wild_i8x8)), false},
+        {"vqsubu.v8i8", _u8q(_i16(wild_u8x8) - _i16(wild_u8x8)), false},
+        {"vqsubs.v4i16", _i16q(_i32(wild_i16x4) - _i32(wild_i16x4)), false},
+        {"vqsubu.v4i16", _u16q(_i32(wild_u16x4) - _i32(wild_u16x4)), false},
+        {"vqsubs.v16i8", _i8q(_i16(wild_i8x16) - _i16(wild_i8x16)), false},
+        {"vqsubu.v16i8", _u8q(_i16(wild_u8x16) - _i16(wild_u8x16)), false},
+        {"vqsubs.v8i16", _i16q(_i32(wild_i16x8) - _i32(wild_i16x8)), false},
+        {"vqsubu.v8i16", _u16q(_i32(wild_u16x8) - _i32(wild_u16x8)), false},
+
         {"vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), true},
         {"vshiftn.v4i16", _i16(wild_i32x4/wild_i32x4), true},
         {"vshiftn.v2i32", _i32(wild_i64x2/wild_i64x2), true},
@@ -342,7 +433,46 @@ void CodeGen_ARM::visit(const Mul *op) {
 
 void CodeGen_ARM::visit(const Div *op) {    
 
+    // First check if it's an averaging op
+    struct Pattern {
+        string op;
+        Expr pattern;
+    };
+    Pattern averagings[] = {
+        {"vhadds.v8i8", (wild_i8x8 + wild_i8x8)/2},
+        {"vhaddu.v8i8", (wild_u8x8 + wild_u8x8)/2},
+        {"vhadds.v4i16", (wild_i16x4 + wild_i16x4)/2},
+        {"vhaddu.v4i16", (wild_u16x4 + wild_u16x4)/2},
+        {"vhadds.v2i32", (wild_i32x2 + wild_i32x2)/2},
+        {"vhaddu.v2i32", (wild_u32x2 + wild_u32x2)/2},
+        {"vhadds.v16i8", (wild_i8x16 + wild_i8x16)/2},
+        {"vhaddu.v16i8", (wild_u8x16 + wild_u8x16)/2},
+        {"vhadds.v8i16", (wild_i16x8 + wild_i16x8)/2},
+        {"vhaddu.v8i16", (wild_u16x8 + wild_u16x8)/2},
+        {"vhadds.v4i32", (wild_i32x4 + wild_i32x4)/2},
+        {"vhaddu.v4i32", (wild_u32x4 + wild_u32x4)/2},
+        {"vhsubs.v8i8", (wild_i8x8 - wild_i8x8)/2},
+        {"vhsubu.v8i8", (wild_u8x8 - wild_u8x8)/2},
+        {"vhsubs.v4i16", (wild_i16x4 - wild_i16x4)/2},
+        {"vhsubu.v4i16", (wild_u16x4 - wild_u16x4)/2},
+        {"vhsubs.v2i32", (wild_i32x2 - wild_i32x2)/2},
+        {"vhsubu.v2i32", (wild_u32x2 - wild_u32x2)/2},
+        {"vhsubs.v16i8", (wild_i8x16 - wild_i8x16)/2},
+        {"vhsubu.v16i8", (wild_u8x16 - wild_u8x16)/2},
+        {"vhsubs.v8i16", (wild_i16x8 - wild_i16x8)/2},
+        {"vhsubu.v8i16", (wild_u16x8 - wild_u16x8)/2},
+        {"vhsubs.v4i32", (wild_i32x4 - wild_i32x4)/2},
+        {"vhsubu.v4i32", (wild_u32x4 - wild_u32x4)/2}};
     
+    if (is_two(op->b) && (op->a.as<Add>() || op->a.as<Sub>())) {
+        vector<Expr> matches;
+        for (size_t i = 0; i < sizeof(averagings)/sizeof(averagings[0]); i++) {
+            if (expr_match(averagings[i].pattern, op, matches)) {
+                value = call_intrin(matches[0].type(), averagings[i].op, matches);
+                return;
+            }
+        }
+    }
 
     // Detect if it's a small int division
     const Broadcast *broadcast = op->b.as<Broadcast>();
@@ -362,6 +492,13 @@ void CodeGen_ARM::visit(const Div *op) {
             value = call_intrin(Float(32, 4), "vrsqrte.v4f32", matches);
         } else {
             value = call_intrin(Float(32, 4), "vrecpe.v4f32", vec(op->b));
+        }
+    } else if (op->type == Float(32, 2) && is_one(op->a)) {
+        // Reciprocal and reciprocal square root
+        if (expr_match(new Call(Float(32, 2), "sqrt_f32", vec(wild_f32x2)), op->b, matches)) {
+            value = call_intrin(Float(32, 2), "vrsqrte.v2f32", matches);
+        } else {
+            value = call_intrin(Float(32, 2), "vrecpe.v2f32", vec(op->b));
         }
     } else if (power_of_two && op->type.is_int()) {
         Value *numerator = codegen(op->a);

@@ -79,6 +79,7 @@ CodeGen_Posix::CodeGen_Posix() : CodeGen() {
     wild_u64x2 = new Variable(UInt(64, 2), "*");
     wild_i64x2 = new Variable(Int(64, 2), "*");
 
+    wild_f32x2 = new Variable(Float(32, 2), "*");
     wild_f32x4 = new Variable(Float(32, 4), "*");
     wild_f32x8 = new Variable(Float(32, 8), "*");
     wild_f64x2 = new Variable(Float(64, 2), "*");
