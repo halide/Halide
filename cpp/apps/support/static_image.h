@@ -59,12 +59,12 @@ class Image {
         buf.min[3] = 0;
         buf.elem_size = sizeof(T);
 
-        uint8_t *ptr = new uint8_t[sizeof(T)*w*h*c+16];
+        uint8_t *ptr = new uint8_t[sizeof(T)*w*h*c+32];
         buf.host = ptr;
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.dev = 0;
-        while ((size_t)buf.host & 0xf) buf.host++; 
+        while ((size_t)buf.host & 0x1f) buf.host++; 
         contents.reset(new Contents(buf, ptr));
     }
 
