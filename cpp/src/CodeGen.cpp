@@ -454,13 +454,19 @@ void CodeGen::sym_pop(const string &name) {
 void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
     Value *host_ptr = buffer_host(buffer);
 
+    /*
     // Check it's 32-byte aligned
+
+    // Andrew: There's no point. External buffers come in with unknown
+    // mins, so accesses to them are never aligned anyway.
+
     Value *base = builder->CreatePtrToInt(host_ptr, i64);
     Value *check_alignment = builder->CreateAnd(base, 0x1f);
     check_alignment = builder->CreateIsNull(check_alignment);
                                             
     string error_message = "Buffer " + name + " is not 32-byte aligned";
     create_assertion(check_alignment, error_message);
+    */
 
     sym_push(name + ".host", host_ptr);
     sym_push(name + ".dev", buffer_dev(buffer));
@@ -853,9 +859,13 @@ void CodeGen::visit(const Load *op) {
         const Ramp *ramp = op->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
 
-        if (ramp) {
+        bool internal = !op->image.defined() && !op->param.defined();
+
+        if (ramp && internal) {            
+            // If it's an internal allocation, we can boost the
+            // alignment using the results of the modulus remainder
+            // analysis
             ModulusRemainder mod_rem = modulus_remainder(ramp->base);
-            // Boost the alignment using the results of the modulus remainder analysis
             alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32); 
         }
                     
@@ -884,9 +894,11 @@ void CodeGen::visit(const Load *op) {
             Value *base = codegen(ramp->base - ramp->width + 1);
 
             // Re-do alignment analysis for the flipped index
-            alignment = op->type.bits / 8;
-            ModulusRemainder mod_rem = modulus_remainder(ramp->base - ramp->width + 1);
-            alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);             
+            if (internal) {
+                alignment = op->type.bits / 8;
+                ModulusRemainder mod_rem = modulus_remainder(ramp->base - ramp->width + 1);
+                alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);             
+            }
 
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
