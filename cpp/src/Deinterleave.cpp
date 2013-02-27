@@ -102,7 +102,8 @@ class Interleaver : public IRMutator {
 
     void visit(const LetStmt *op) {
         Expr value = mutate(op->value);
-        if (value.type() == Int(32)) alignment_info.push(op->name, modulus_remainder(value));
+        if (value.type() == Int(32)) alignment_info.push(op->name, 
+                                                         modulus_remainder(value, alignment_info));
         Stmt body = mutate(op->body);
         if (value.type() == Int(32)) alignment_info.pop(op->name);        
         if (value.same_as(op->value) && body.same_as(op->body)) {
