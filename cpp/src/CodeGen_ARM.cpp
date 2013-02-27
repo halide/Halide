@@ -313,12 +313,26 @@ void CodeGen_ARM::visit(const Cast *op) {
         {"vqsubs.v8i16", _i16q(_i32(wild_i16x8) - _i32(wild_i16x8)), false},
         {"vqsubu.v8i16", _u16q(_i32(wild_u16x8) - _i32(wild_u16x8)), false},
 
+        {"vqmovns.v8i8", _i8q(wild_i16x8), false},
+        {"vqmovns.v4i16", _i16q(wild_i32x4), false},
+        {"vqmovnu.v8i8", _u8q(wild_u16x8), false},
+        {"vqmovnu.v4i16", _u16q(wild_u32x4), false},
+        {"vqmovnsu.v8i8", _u8q(wild_i16x8), false},
+        {"vqmovnsu.v4i16", _u16q(wild_i32x4), false},
+
         {"vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), true},
         {"vshiftn.v4i16", _i16(wild_i32x4/wild_i32x4), true},
         {"vshiftn.v2i32", _i32(wild_i64x2/wild_i64x2), true},
         {"vshiftn.v8i8", _u8(wild_u16x8/wild_u16x8), true},
         {"vshiftn.v4i16", _u16(wild_u32x4/wild_u32x4), true},
         {"vshiftn.v2i32", _u32(wild_u64x2/wild_u64x2), true},
+
+        {"vqshiftns.v8i8", _i8q(wild_i16x8/wild_i16x8), true},
+        {"vqshiftns.v4i16", _i16q(wild_i32x4/wild_i32x4), true},
+        {"vqshiftnu.v8i8", _u8q(wild_u16x8/wild_u16x8), true},
+        {"vqshiftnu.v4i16", _u16q(wild_u32x4/wild_u32x4), true},
+        {"vqshiftnsu.v8i8", _u8q(wild_i16x8/wild_i16x8), true},
+        {"vqshiftnsu.v4i16", _u16q(wild_i32x4/wild_i32x4), true},
         {"sentinel", 0}
 
     };
