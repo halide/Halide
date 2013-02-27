@@ -395,7 +395,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
         target->createTargetMachine(module->getTargetTriple(), 
                                     mcpu(), mattrs(),
                                     options, 
-                                    Reloc::Default, 
+                                    Reloc::PIC_, 
                                     CodeModel::Default, 
                                     CodeGenOpt::Aggressive);
                                 
