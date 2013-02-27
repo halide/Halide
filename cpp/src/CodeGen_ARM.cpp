@@ -14,7 +14,9 @@
 
 #include <llvm/Config/config.h>
 
-#if LLVM_VERSION_MINOR < 3
+// Temporary affordance to compile with both llvm 3.2 and 3.3.
+// Protected as at least one installation of llvm elides version macros.
+#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
 #include <llvm/Value.h>
 #include <llvm/Module.h>
 #include <llvm/Function.h>
@@ -72,6 +74,7 @@ bool is_const_power_of_two(Expr e, int *bits) {
 using namespace llvm;
 
 CodeGen_ARM::CodeGen_ARM(bool android) : CodeGen_Posix(), use_android(android) {
+    assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
 }
 
 void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) {

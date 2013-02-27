@@ -74,6 +74,10 @@ protected:
      * generated llvm value. */
     //@{
     static bool llvm_initialized;
+    static bool llvm_X86_enabled;
+    static bool llvm_ARM_enabled;
+    static bool llvm_NVPTX_enabled;
+
     llvm::Module *module;
     bool owns_module;
     llvm::Function *function;

@@ -12,7 +12,9 @@
 
 #include <llvm/Config/config.h>
 
-#if LLVM_VERSION_MINOR < 3
+// Temporary affordance to compile with both llvm 3.2 and 3.3.
+// Protected as at least one installation of llvm elides version macros.
+#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
 #include <llvm/Value.h>
 #include <llvm/Module.h>
 #include <llvm/Function.h>
@@ -45,6 +47,7 @@ using std::string;
 using namespace llvm;
 
 CodeGen_X86::CodeGen_X86(bool sse_41, bool avx) : CodeGen_Posix(), use_sse_41(sse_41), use_avx(avx) {
+    assert(llvm_X86_enabled && "llvm build not configured with X86 target enabled.");
 }
 
 void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) {
