@@ -24,7 +24,9 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
 
-#if LLVM_VERSION_MINOR < 3
+// Temporary affordance to compile with both llvm 3.2 and 3.3.
+// Protected as at least one installation of llvm elides version macros.
+#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
 #include <llvm/Value.h>
 #include <llvm/Module.h>
 #include <llvm/Function.h>
@@ -61,8 +63,30 @@ LLVMContext &get_global_context() {
     if (!c) c = new LLVMContext;
     return *c;    
 }
+
+// Define a local empty inline function for each target
+// to disable initialization.
+#define LLVM_TARGET(target)             \
+    void inline Initialize##target##Target() { \
+    }
+
+#include <llvm/Config/Targets.def>
+
+#undef LLVM_TARGET
+
 }
 
+#define InitializeTarget(target)              \
+        LLVMInitialize##target##Target();     \
+        LLVMInitialize##target##TargetInfo(); \
+        LLVMInitialize##target##AsmPrinter(); \
+        LLVMInitialize##target##TargetMC();   \
+        llvm_##target##_enabled = true;
+
+// Override above empty init function with macro for supported targets.
+#define InitializeX86Target()   InitializeTarget(X86)
+#define InitializeARMTarget()   InitializeTarget(ARM)
+#define InitializeNVPTXTarget() InitializeTarget(NVPTX)
 
 CodeGen::CodeGen() : 
     module(NULL), function(NULL), context(get_global_context()), 
@@ -78,23 +102,18 @@ CodeGen::CodeGen() :
     f32 = llvm::Type::getFloatTy(context);
     f64 = llvm::Type::getDoubleTy(context);
 
-    // Initialize the targets we want to generate code for
+    // Initialize the targets we want to generate code for which are enabled
+    // in llvm configuration
     if (!llvm_initialized) {            
         InitializeNativeTarget();
-        LLVMInitializeX86Target();
-        LLVMInitializeX86TargetInfo();
-        LLVMInitializeX86AsmPrinter();
-        LLVMInitializeX86TargetMC();
-        
-        LLVMInitializeARMTarget();
-        LLVMInitializeARMTargetInfo();
-        LLVMInitializeARMAsmPrinter();
-        LLVMInitializeARMTargetMC();
 
-        LLVMInitializeNVPTXTarget();
-        LLVMInitializeNVPTXTargetInfo();
-        LLVMInitializeNVPTXAsmPrinter();
-        LLVMInitializeNVPTXTargetMC();
+        #define LLVM_TARGET(target)         \
+            Initialize##target##Target();   \
+
+        #include <llvm/Config/Targets.def>
+
+        #undef LLVM_TARGET
+
         llvm_initialized = true;
     }
 }
@@ -110,6 +129,9 @@ CodeGen::~CodeGen() {
 }
 
 bool CodeGen::llvm_initialized = false;
+bool CodeGen::llvm_X86_enabled = false;
+bool CodeGen::llvm_ARM_enabled = false;
+bool CodeGen::llvm_NVPTX_enabled = false;
 
 void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     assert(module && "The CodeGen subclass should have made an initial module before calling CodeGen::compile");
@@ -393,7 +415,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
     pass_manager.add(new TargetLibraryInfo(Triple(module->getTargetTriple())));       
 
-    #if LLVM_VERSION_MINOR < 3
+    #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
     pass_manager.add(new TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
                                              target_machine->getVectorTargetTransformInfo()));
     #else
