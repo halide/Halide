@@ -6,6 +6,7 @@
 #include "Scope.h"
 #include "Var.h"
 #include "Log.h"
+#include "ModulusRemainder.h"
 #include <iostream>
 
 namespace Halide { 
@@ -44,6 +45,8 @@ int do_indirect_int_cast(Type t, int x) {
 class Simplify : public IRMutator {
 
     Scope<Expr> scope;
+
+    Scope<ModulusRemainder> alignment_info;
 
     using IRMutator::visit;
 
@@ -448,7 +451,13 @@ class Simplify : public IRMutator {
         const Add *add_a = a.as<Add>();
         const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : NULL;
         const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : NULL;
-        
+
+        // If the RHS is a constant, do modulus remainder analysis on the LHS
+        ModulusRemainder mod_rem(0, 1);
+        if (const_int(b, &ib) && a.type() == Int(32)) {
+            mod_rem = modulus_remainder(a, alignment_info);
+        }
+
         if (const_int(a, &ia) && const_int(b, &ib)) {
             int i = ia % ib;
             if (i < 0) i += ib;
@@ -468,8 +477,9 @@ class Simplify : public IRMutator {
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> y
             expr = add_a->a;
-        } else if (const_int(b, &ib) && false /*TODO: Something about modulus remainder analysis*/) {
-            
+        } else if (const_int(b, &ib) && a.type() == Int(32) && mod_rem.modulus % ib == 0) {
+            // ((a*b)*x + c) % a -> c
+            expr = mod_rem.remainder;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -493,6 +503,7 @@ class Simplify : public IRMutator {
         const Add *add_b = b.as<Add>();
         const Min *min_a = a.as<Min>();
         const Min *min_b = b.as<Min>();
+        const Min *min_a_a = min_a ? min_a->a.as<Min>() : NULL;
 
         if (equal(a, b)) {
             expr = a;
@@ -533,7 +544,10 @@ class Simplify : public IRMutator {
             expr = a;
         } else if (min_b && (equal(min_b->b, a) || equal(min_b->a, a))) {
             // min(y, min(x, y)) -> min(x, y)
-            expr = b;
+            expr = b;            
+        } else if (min_a_a && equal(min_a_a->b, b)) {
+            // min(min(min(x, y), z), y) -> min(min(x, y), z)
+            expr = a;            
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -557,6 +571,7 @@ class Simplify : public IRMutator {
         const Add *add_b = b.as<Add>();
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
+        const Max *max_a_a = max_a ? max_a->a.as<Max>() : NULL;
 
         if (equal(a, b)) {
             expr = a;
@@ -595,7 +610,10 @@ class Simplify : public IRMutator {
             expr = a;
         } else if (max_b && (equal(max_b->b, a) || equal(max_b->a, a))) {
             // max(y, max(x, y)) -> max(x, y)
-            expr = b;
+            expr = b;            
+        } else if (max_a_a && equal(max_a_a->b, b)) {
+            // max(max(max(x, y), z), y) -> max(max(x, y), z)
+            expr = a;            
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -913,7 +931,29 @@ class Simplify : public IRMutator {
             scope.push(op->name, Expr());
         }
 
+        // Before we enter the body, track the alignment info 
+        bool wrapper_tracked = false;
+        if (wrapper_value.defined() && wrapper_value.type() == Int(32)) {
+            ModulusRemainder mod_rem = modulus_remainder(wrapper_value, alignment_info);
+            alignment_info.push(wrapper_name, mod_rem);
+            wrapper_tracked = true;
+        }
+
+        bool value_tracked = false;
+        if (value.type() == Int(32)) {
+            ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
+            alignment_info.push(op->name, mod_rem);
+            value_tracked = true;
+        }
+
         body = mutator->mutate(body);
+
+        if (value_tracked) {
+            alignment_info.pop(op->name);
+        }
+        if (wrapper_tracked) {
+            alignment_info.pop(wrapper_name);
+        }
 
         scope.pop(op->name);
 

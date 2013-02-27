@@ -380,13 +380,27 @@ private:
             }
             // Grab the body
             Expr body = qualify_expr(func.name() + ".", func.value());
-            // Bind the args
+
+            
+            // Bind the args using Let nodes
+
+            /*
             assert(args.size() == func.args().size());
             for (size_t i = 0; i < args.size(); i++) {
                 body = new Let(func.name() + "." + func.args()[i], 
                                args[i], 
                                body);
             }
+            */
+            
+            // Paste in the args directly - introducing too many let
+            // statements messes up all our peephole matching
+            for (size_t i = 0; i < args.size(); i++) {
+                body = substitute(func.name() + "." + func.args()[i], 
+                                  args[i], body);
+            
+            }
+            
             expr = body;
         } else {
             IRMutator::visit(op);
@@ -673,14 +687,17 @@ Stmt lower(Function f) {
 
     log(1) << "Simplifying...\n";
     s = simplify(s);
-    s = remove_trivial_for_loops(s);
-    s = simplify(s);
-    s = remove_dead_lets(s);
     log(2) << "Simplified: \n" << s << "\n\n";
 
     log(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);
-    log(1) << "Rewrote vector interleavings: \n" << s << "\n\n";
+    log(2) << "Rewrote vector interleavings: \n" << s << "\n\n";
+
+    log(1) << "Simplifying...\n";
+    s = simplify(s);
+    s = remove_trivial_for_loops(s);
+    s = remove_dead_lets(s);
+    log(2) << "Simplified: \n" << s << "\n\n";
 
     return s;
 } 
