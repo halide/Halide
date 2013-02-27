@@ -5,8 +5,8 @@ using namespace Halide;
 
 int schedule;
 
-Var x, y, tx, ty, c;
-Func processed;
+Var x, y, tx("tx"), ty("ty"), c("c");
+Func processed("processed");
 
 Func hot_pixel_suppression(Func input) {
     Expr a = max(max(input(x-2, y), input(x+2, y)),
@@ -268,7 +268,7 @@ Func process(Func raw, Type result_type,
         deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).bound(c, 0, 4).unroll(c);
         corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).bound(c, 0, 3).unroll(c);
         processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
-        processed.bound(tx, 0, 80).bound(ty, 0, 60); // Statically promise the output dimensions
+        processed.bound(tx, 0, 2560-32).bound(ty, 0, 1920); // Statically promise the output dimensions
         processed.parallel(ty);
     } else if (schedule == 1) {
         // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
