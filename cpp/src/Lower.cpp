@@ -697,7 +697,7 @@ Stmt lower(Function f) {
     s = simplify(s);
     s = remove_trivial_for_loops(s);
     s = remove_dead_lets(s);
-    log(2) << "Simplified: \n" << s << "\n\n";
+    log(1) << "Simplified: \n" << s << "\n\n";
 
     return s;
 } 
