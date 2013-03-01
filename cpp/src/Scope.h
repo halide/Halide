@@ -34,7 +34,7 @@ public:
     /** Retrive the value referred to by a name */
     T get(const std::string &name) const {
         typename std::map<std::string, std::stack<std::pair<T, int> > >::const_iterator iter = table.find(name);
-        if (iter == table.end()) {
+        if (iter == table.end() || iter->second.empty()) {
             std::cerr << "Symbol '" << name << "' not found" << std::endl;
             assert(false);
         }
@@ -44,7 +44,7 @@ public:
     /** Return a reference to an entry */
     T &ref(const std::string &name) {
         typename std::map<std::string, std::stack<std::pair<T, int> > >::iterator iter = table.find(name);
-        if (iter == table.end()) {
+        if (iter == table.end() || iter->second.empty()) {
             std::cerr << "Symbol '" << name << "' not found" << std::endl;
             assert(false);
         }
@@ -55,7 +55,7 @@ public:
      * depth of B if A was pushed before B. */
     int depth(const std::string &name) {
         typename std::map<std::string, std::stack<std::pair<T, int> > >::const_iterator iter = table.find(name);
-        if (iter == table.end()) {
+        if (iter == table.end() || iter->second.empty()) {
             std::cerr << "Symbol '" << name << "' not found" << std::endl;
             assert(false);
         }
