@@ -117,7 +117,17 @@ WEAK void safe_free(void *ptr) {
 
 static void (*halide_error_handler)(char *) = NULL;
 
+#include <stdarg.h>
 extern void __android_log_print(int, const char *, const char *, ...);
+extern void __android_log_vprint(int, const char *, const char *, va_list);
+
+WEAK int hlprintf(const char * fmt, ...) {
+    va_list args;
+    va_start(args,fmt);
+    __android_log_vprint(7, "halide", fmt, args);
+    va_end(args);
+    return 0;
+}
 
 WEAK void halide_error(char *msg) {
     if (halide_error_handler) (*halide_error_handler)(msg);
