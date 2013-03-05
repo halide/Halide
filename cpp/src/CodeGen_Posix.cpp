@@ -116,9 +116,10 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     } else {
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("fast_malloc");
+        assert(malloc_fn && "Could not find fast_malloc in module");
         Value *sz = builder->CreateIntCast(size, malloc_fn->arg_begin()->getType(), false);
         ptr = builder->CreateCall(malloc_fn, sz);
-        heap_allocations.push(ptr);
+        heap_allocations.push_back(ptr);
     }
 
     sym_push(allocation_name, ptr);
@@ -126,18 +127,19 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     sym_pop(allocation_name);
 
     if (!on_stack) {
-        heap_allocations.pop();
+        heap_allocations.pop_back();
         // call free
         llvm::Function *free_fn = module->getFunction("fast_free");
+        assert(free_fn && "Could not find fast_free in module");
         builder->CreateCall(free_fn, ptr);
     }
 }
 
 void CodeGen_Posix::prepare_for_early_exit() {
     llvm::Function *free_fn = module->getFunction("fast_free");
-    while (!heap_allocations.empty()) {
-        builder->CreateCall(free_fn, heap_allocations.top());        
-        heap_allocations.pop();
+    assert(free_fn && "Could not find fast_free in module");
+    for (size_t i = 0; i < heap_allocations.size(); i++) {
+        builder->CreateCall(free_fn, heap_allocations[i]);        
     }
 }
 

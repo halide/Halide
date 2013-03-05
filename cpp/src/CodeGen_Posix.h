@@ -52,7 +52,7 @@ protected:
     void visit(const Allocate *);        
 
     /** The heap allocations currently in scope */
-    std::stack<llvm::Value *> heap_allocations;
+    std::vector<llvm::Value *> heap_allocations;
 
     /** Free all heap allocations in scope */
     void prepare_for_early_exit();
