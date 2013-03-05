@@ -737,7 +737,7 @@ void CodeGen::visit(const Max *op) {
     value = codegen(equiv);
 }
 
-void CodeGen::visit(const EQ *op) {
+void CodeGen::visit(const EQ *op) {    
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
@@ -965,12 +965,6 @@ void CodeGen::visit(const Broadcast *op) {
 void CodeGen::visit(const Call *op) {
     assert(op->call_type == Call::Extern && "Can only codegen extern calls");
 
-    // First, codegen the args
-    vector<Value *> args(op->args.size());
-    for (size_t i = 0; i < op->args.size(); i++) {
-        args[i] = codegen(op->args[i]);
-    }
-
     // Some call nodes are actually injected at various stages as a
     // cue for llvm to generate particular ops. In general these are
     // handled in the standard library, but ones with e.g. varying
@@ -982,7 +976,8 @@ void CodeGen::visit(const Call *op) {
         for (size_t i = 0; i < indices.size(); i++) {
             indices[i] = ConstantInt::get(i32, even ? (i*2) : (i*2 + 1));
         }
-        value = builder->CreateShuffleVector(args[0], args[0], ConstantVector::get(indices));
+        Value *arg = codegen(op->args[0]);
+        value = builder->CreateShuffleVector(arg, arg, ConstantVector::get(indices));
         return;
     } 
 
@@ -998,8 +993,40 @@ void CodeGen::visit(const Call *op) {
             indices[i] = ConstantInt::get(i32, idx);
         }
         
-        value = builder->CreateShuffleVector(args[0], args[1], ConstantVector::get(indices));
+        value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
         return;
+    }
+
+    if (op->name == "debug to file") {
+        assert(op->args.size() == 8);
+        const Call *func = op->args[0].as<Call>();
+        const Call *filename = op->args[1].as<Call>();
+        assert(func && filename && "Malformed debug_to_file node");
+        // Grab the function from the initial module
+        llvm::Function *debug_to_file = module->getFunction("debug_to_file");
+        assert(debug_to_file && "Could not find debug_to_file function in initial module");
+
+        // Make the filename a global string constant
+        llvm::Type *filename_type = ArrayType::get(i8, filename->name.size()+1);
+        GlobalVariable *filename_global = new GlobalVariable(*module, filename_type, 
+                                                             true, GlobalValue::PrivateLinkage, 0);
+        filename_global->setInitializer(ConstantDataArray::getString(context, filename->name));
+        Value *char_ptr = builder->CreateConstGEP2_32(filename_global, 0, 0);
+        Value *data_ptr = symbol_table.get(func->name + ".host");
+        data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
+        vector<Value *> args = vec(char_ptr, data_ptr);
+        for (size_t i = 2; i < 8; i++) {
+            args.push_back(codegen(op->args[i]));
+        }
+
+        value = builder->CreateCall(debug_to_file, args);
+        return;
+    }
+
+    // Now, codegen the args
+    vector<Value *> args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        args[i] = codegen(op->args[i]);
     }
 
     llvm::Function *fn = module->getFunction(op->name);

@@ -364,6 +364,10 @@ Func &Func::compute_inline() {
     return *this;
 }
 
+void Func::debug_to_file(const string &filename) {
+    func.debug_file() = filename;    
+}
+
 ScheduleHandle Func::update() {
     return ScheduleHandle(func.reduction_schedule());
 }
