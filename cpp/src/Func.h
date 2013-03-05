@@ -354,6 +354,22 @@ public:
      * it is only read, not written. Only relevant when jitting. */
     void set_custom_allocator(void *(*malloc)(size_t), void (*free)(void *));
 
+    /** When this function is compiled, include code that dumps it to
+     * a file after it is realized, for the purpose of debugging. The
+     * file format is as follows: 
+     * 
+     * First, a 20 byte-header containing four little-endian 32-bit
+     * ints giving the extents of the first four
+     * dimensions. Dimensions beyond four are folded into the
+     * fourth. Then, a fifth 32-bit int giving the data type of the
+     * function. The typecodes are given by: float = 0, double = 1,
+     * uint8_t = 2, int8_t = 3, uint16_t = 4, uint32_t = 5, int32_t =
+     * 6, uint64_t = 7, int64_t = 8. The data follows the header, as a
+     * densely packed array of the given size and the given type. If
+     * given the extension .tmp, this file format can be natively read
+     * by the program ImageStack. */
+    void debug_to_file(const std::string &filename);
+
     /** The name of this function, either given during construction,
      * or automatically generated. */
     const std::string &name() const;
