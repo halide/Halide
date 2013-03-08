@@ -24,7 +24,8 @@ private:
 
     void visit(const Provide *op) {       
         IRMutator::visit(op);
-        if (level >= 2) {
+        // We print every provide at tracing level 3 or higher
+        if (level >= 3) {
             const Provide *op = stmt.as<Provide>();
             vector<Expr> args = op->args;
             args.push_back(op->value);
@@ -42,10 +43,39 @@ private:
                 args.push_back(op->bounds[i].min);
                 args.push_back(op->bounds[i].extent);
             }
+            Expr time = new Call(Int(32), "current_time", std::vector<Expr>());
             Stmt print = new PrintStmt("Realizing " + op->name + " over ", args);
-            Stmt body = new Block(print, op->body);
+            Stmt start_time = new PrintStmt("Starting realization of " + op->name + " at time ", vec(time));
+            Stmt body = new Block(new Block(start_time, print), op->body);
             stmt = new Realize(op->name, op->type, op->bounds, body);
         }        
+    }
+
+    void visit(const Pipeline *op) {
+        if (level >= 1) {
+            Expr time = new Call(Int(32), "current_time", std::vector<Expr>());
+            Stmt print_produce = new PrintStmt("Producing " + op->name + " at time ", vec(time));
+            Stmt print_update = new PrintStmt("Updating " + op->name + " at time ", vec(time));
+            Stmt print_consume = new PrintStmt("Consuming " + op->name + " at time ", vec(time));
+            Stmt produce = mutate(op->produce);
+            Stmt update = op->update.defined() ? mutate(op->update) : Stmt();
+            Stmt consume = mutate(op->consume);
+            produce = new Block(print_produce, produce);
+            update = update.defined() ? new Block(print_update, update) : Stmt();
+            consume = new Block(print_consume, consume);
+            stmt = new Pipeline(op->name, produce, update, consume);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const For *op) {
+        // We only enter for loops at tracing level 2 or higher
+        if (level >= 2) {
+            IRMutator::visit(op);
+        } else {
+            stmt = op;
+        }
     }
 };
 

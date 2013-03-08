@@ -336,7 +336,7 @@ INLINE double abs_f64(double a) {return a >= 0 ? a : -a;}
 #ifndef current_time_defined
 #define current_time_defined
 #include <sys/time.h>
-WEAK int currentTime() {
+WEAK int current_time() {
     static bool initialized = false;
     static timeval start;
     if (!initialized) {
