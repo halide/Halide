@@ -54,6 +54,27 @@ private:
         }
     }
 
+    void visit(const Cast *op) {
+        Type t = op->type;
+        t.width = new_width;
+        expr = new Cast(t, mutate(op->value));
+    }
+
+    void visit(const Call *op) {
+        Type t = op->type;
+        t.width = new_width;
+
+        // Vector calls are always parallel across the lanes, so we
+        // can just deinterleave the args.
+        std::vector<Expr> args(op->args.size());
+        for (size_t i = 0; i < args.size(); i++) {
+            args[i] = mutate(op->args[i]);
+        }
+
+        expr = new Call(t, op->name, args, op->call_type, 
+                        op->func, op->image, op->param);
+    }
+
     void visit(const Let *op) {
         Expr value = mutate(op->value);
         internal.push(op->name, 0);
