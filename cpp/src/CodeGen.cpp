@@ -383,8 +383,8 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;
-    options.StackAlignmentOverride = 0;
-    options.RealignStack = false;
+    options.StackAlignmentOverride = 32;
+    options.RealignStack = true;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
     options.EnableSegmentedStacks = false;
