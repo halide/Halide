@@ -368,10 +368,12 @@ void CodeGen_ARM::visit(const Mul *op) {
     bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
     const Cast *cast_a = op->a.as<Cast>();
 
-    Value *shift = NULL;
-    if (cast_a) {
-        shift = ConstantInt::get(llvm_type_of(cast_a->value.type()), shift_amount);
-    } else {
+    const Broadcast *broadcast_b = op->b.as<Broadcast>();
+    Value *shift = NULL, *wide_shift = NULL;
+    if (power_of_two) {
+        if (cast_a) {
+            wide_shift = ConstantInt::get(llvm_type_of(cast_a->value.type()), shift_amount);
+        }        
         shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
     }
 
@@ -379,27 +381,27 @@ void CodeGen_ARM::visit(const Mul *op) {
     if (power_of_two && cast_a && 
         cast_a->type == Int(16, 8) && cast_a->value.type() == Int(8, 8)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i16x8, "vshiftls.v8i16", vec(lhs, shift));
+        value = call_intrin(i16x8, "vshiftls.v8i16", vec(lhs, wide_shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == Int(32, 4) && cast_a->value.type() == Int(16, 4)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i32x4, "vshiftls.v4i32", vec(lhs, shift));
+        value = call_intrin(i32x4, "vshiftls.v4i32", vec(lhs, wide_shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == Int(64, 2) && cast_a->value.type() == Int(32, 2)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i64x2, "vshiftls.v2i64", vec(lhs, shift));
+        value = call_intrin(i64x2, "vshiftls.v2i64", vec(lhs, wide_shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == UInt(16, 8) && cast_a->value.type() == UInt(8, 8)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i16x8, "vshiftlu.v8i16", vec(lhs, shift));
+        value = call_intrin(i16x8, "vshiftlu.v8i16", vec(lhs, wide_shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == UInt(32, 4) && cast_a->value.type() == UInt(16, 4)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i32x4, "vshiftlu.v4i32", vec(lhs, shift));
+        value = call_intrin(i32x4, "vshiftlu.v4i32", vec(lhs, wide_shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == UInt(64, 2) && cast_a->value.type() == UInt(32, 2)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i64x2, "vshiftlu.v2i64", vec(lhs, shift));
+        value = call_intrin(i64x2, "vshiftlu.v2i64", vec(lhs, wide_shift));
     } else if (power_of_two && op->a.type() == Int(8, 8)) {
         // Non-widening left shifts
         Value *lhs = codegen(op->a);
@@ -443,6 +445,17 @@ void CodeGen_ARM::visit(const Mul *op) {
     } else if (power_of_two && op->a.type() == UInt(64, 2)) {
         Value *lhs = codegen(op->a);
         value = call_intrin(i64x2, "vshiftu.v2i64", vec(lhs, shift));
+    } else if (broadcast_b && is_const(broadcast_b->value, 3)) {        
+        // Vector multiplies by 3, 5, 7, 9 should do shift-and-add or
+        // shift-and-sub instead to reduce register pressure (the
+        // shift is an immediate)
+        value = codegen(op->a * 2 + op->a);        
+    } else if (broadcast_b && is_const(broadcast_b->value, 5)) {
+        value = codegen(op->a * 4 + op->a);
+    } else if (broadcast_b && is_const(broadcast_b->value, 7)) {
+        value = codegen(op->a * 8 - op->a);
+    } else if (broadcast_b && is_const(broadcast_b->value, 9)) {
+        value = codegen(op->a * 8 + op->a);
     } else {
         CodeGen::visit(op);
     }
@@ -807,13 +820,16 @@ void CodeGen_ARM::visit(const Store *op) {
 
 void CodeGen_ARM::visit(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
+    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
 
     // strided loads (vld2)
-    if (ramp && is_two(ramp->stride)) {
+    /*
+    if (ramp && stride && stride->value == 2) {
         // Check alignment on the base. 
         Expr base = ramp->base;
         bool odd = false;
         ModulusRemainder mod_rem = modulus_remainder(ramp->base);
+
         if ((mod_rem.remainder & 1) && !(mod_rem.modulus & 1)) {
             // If we can guarantee it's odd-aligned, we should round
             // down by one in order to possibly share this vld2 with
@@ -824,7 +840,7 @@ void CodeGen_ARM::visit(const Load *op) {
             odd = true;
         }
         const Add *add = base.as<Add>();
-        if (!odd && add && is_one(add->b) && (mod_rem.modulus & 1)) {
+        if (!odd && add && is_one(add->b) && (mod_rem.modulus == 1)) {
             // If it just ends in +1, but we can't analyze the base,
             // it's probably still worth removing that +1 to encourage
             // sharing.
@@ -833,7 +849,7 @@ void CodeGen_ARM::visit(const Load *op) {
         }
 
         int alignment = op->type.bits / 8;
-        alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
+        //alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
         Value *align = ConstantInt::get(i32, alignment);
 
         Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(base));
@@ -865,6 +881,70 @@ void CodeGen_ARM::visit(const Load *op) {
         if (pair) {            
             unsigned int idx = odd ? 1 : 0;
             value = builder->CreateExtractValue(pair, vec(idx));
+            return;
+        }
+    }
+    */
+
+    if (stride && stride->value >= 2 && stride->value <= 4) {
+        // Check alignment on the base. 
+        Expr base = ramp->base;
+        int offset = 0;
+        ModulusRemainder mod_rem = modulus_remainder(ramp->base);
+
+        if ((mod_rem.modulus % stride->value) == 0) {
+            offset = mod_rem.remainder % stride->value;
+            base = simplify(base - offset);
+            mod_rem.remainder -= offset;
+        }
+
+        const Add *add = base.as<Add>();
+        const IntImm *add_b = add ? add->b.as<IntImm>() : NULL;
+        if ((mod_rem.modulus == 1) && add_b) {
+            int rounded_down = (add_b->value / stride->value) * stride->value;
+            base = add->a;
+            offset = add_b->value - rounded_down;
+        }
+
+        int alignment = op->type.bits / 8;
+        //alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
+        Value *align = ConstantInt::get(i32, alignment);
+
+        Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(base));
+        ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
+
+        vector<llvm::Type *> type_vec(stride->value);
+        llvm::Type *elem_type = llvm_type_of(op->type);
+        for (int i = 0; i < stride->value; i++) {
+            type_vec[i] = elem_type;
+        }
+        llvm::StructType *result_type = StructType::get(context, type_vec);
+
+        ostringstream prefix;
+        prefix << "vld" << stride->value << ".";
+        string pre = prefix.str();
+
+        Value *group = NULL;
+        if (op->type == Int(8, 8) || op->type == UInt(8, 8)) {
+            group = call_intrin(result_type, pre+"v8i8", vec(ptr, align));
+        } else if (op->type == Int(16, 4) || op->type == UInt(16, 4)) {
+            group = call_intrin(result_type, pre+"v4i16", vec(ptr, align));
+        } else if (op->type == Int(32, 2) || op->type == UInt(32, 2)) {
+            group = call_intrin(result_type, pre+"v2i32", vec(ptr, align));
+        } else if (op->type == Float(32, 2)) {
+            group = call_intrin(result_type, pre+"v2f32", vec(ptr, align));
+        } else if (op->type == Int(8, 16) || op->type == UInt(8, 16)) {
+            group = call_intrin(result_type, pre+"v16i8", vec(ptr, align));
+        } else if (op->type == Int(16, 8) || op->type == UInt(16, 8)) {
+            group = call_intrin(result_type, pre+"v8i16", vec(ptr, align));
+        } else if (op->type == Int(32, 4) || op->type == UInt(32, 4)) {
+            group = call_intrin(result_type, pre+"v4i32", vec(ptr, align));
+        } else if (op->type == Float(32, 4)) {
+            group = call_intrin(result_type, pre+"v4f32", vec(ptr, align));
+        }
+
+        if (group) {            
+            value = builder->CreateExtractValue(group, vec((unsigned int)offset));
             return;
         }
     }
