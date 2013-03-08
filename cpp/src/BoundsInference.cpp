@@ -27,7 +27,7 @@ public:
     virtual void visit(const For *for_loop) {
         
         // Compute the region required of each function within this loop body
-        map<string, Region> regions = regions_required(for_loop->body);
+        map<string, Region> regions = regions_called(for_loop->body);
         
         Stmt body = mutate(for_loop->body);
 

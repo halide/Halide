@@ -182,8 +182,7 @@ pair<Stmt, Stmt> build_realization(Function func) {
         // using the bounds read in the update step. This is
         // necessary because later bounds inference does not
         // consider the bounds read during an update step
-        map<string, Region> regions = regions_required(update);
-        Region bounds = regions[func.name()];
+        Region bounds = region_called(update, func.name());
         if (bounds.size() > 0) {
             assert(bounds.size() == func.args().size());
             // Expand the region to be computed using the region read in the update step
@@ -269,9 +268,8 @@ private:
     }
 
     Stmt build_realize(Stmt s) {
-        // The allocate should cover everything touched below this point
-        map<string, Region> regions = regions_touched(s);
-        Region bounds = regions[func.name()];
+        // The allocate should cover everything touched below this point        
+        Region bounds = region_touched(s, func.name());
         
         for (size_t i = 0; i < bounds.size(); i++) {
             if (!bounds[i].min.defined()) {
