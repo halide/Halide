@@ -776,6 +776,13 @@ void CodeGen_ARM::visit(const Store *op) {
     // A dense store of an interleaving can be done using a vst2 intrinsic
     const Call *call = op->value.as<Call>();
     const Ramp *ramp = op->index.as<Ramp>();
+    
+    // We only deal with ramps here
+    if (!ramp) {
+        CodeGen::visit(op);
+        return;
+    }
+
     if (ramp && is_one(ramp->stride) && 
         call && call->name == "interleave vectors") {
         assert(call->args.size() == 2 && "Wrong number of args to interleave vectors");
@@ -813,79 +820,49 @@ void CodeGen_ARM::visit(const Store *op) {
             CodeGen::visit(op);
         }
         return;
-    } else {
-        CodeGen::visit(op);
+    } 
+
+    // More general strided stores
+
+
+    // We have builtins for strided loads with fixed but unknown stride
+    ostringstream builtin;
+    builtin << "strided_store_"
+            << (op->value.type().is_float() ? 'f' : 'i')
+            << op->value.type().bits 
+            << 'x' << op->value.type().width;
+
+    llvm::Function *fn = module->getFunction(builtin.str());
+    if (fn) {
+        Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), codegen(ramp->base));
+        Value *stride = codegen(ramp->stride);
+        Value *val = codegen(op->value);
+        builder->CreateCall(fn, vec(base, stride, val));
+        return;
     }
+
+    CodeGen::visit(op);
+
 }
 
 void CodeGen_ARM::visit(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
+
+    // We only deal with ramps here
+    if (!ramp) {
+        CodeGen::visit(op);
+        return;
+    }
+
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
 
-    // strided loads (vld2)
-    /*
-    if (ramp && stride && stride->value == 2) {
-        // Check alignment on the base. 
-        Expr base = ramp->base;
-        bool odd = false;
-        ModulusRemainder mod_rem = modulus_remainder(ramp->base);
-
-        if ((mod_rem.remainder & 1) && !(mod_rem.modulus & 1)) {
-            // If we can guarantee it's odd-aligned, we should round
-            // down by one in order to possibly share this vld2 with
-            // an adjacent one. (e.g. averaging down patterns like
-            // f(2*x) + f(2*x+1))
-            base = simplify(base - 1);
-            mod_rem.remainder--;
-            odd = true;
-        }
-        const Add *add = base.as<Add>();
-        if (!odd && add && is_one(add->b) && (mod_rem.modulus == 1)) {
-            // If it just ends in +1, but we can't analyze the base,
-            // it's probably still worth removing that +1 to encourage
-            // sharing.
-            base = add->a;
-            odd = true;
-        }
-
-        int alignment = op->type.bits / 8;
-        //alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
-        Value *align = ConstantInt::get(i32, alignment);
-
-        Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(base));
-        ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-
-        llvm::StructType *result_type = 
-            StructType::get(context, vec(llvm_type_of(op->type),
-                                         llvm_type_of(op->type)));
-       
-        Value *pair = NULL;
-        if (op->type == Int(8, 8) || op->type == UInt(8, 8)) {
-            pair = call_intrin(result_type, "vld2.v8i8", vec(ptr, align));
-        } else if (op->type == Int(16, 4) || op->type == UInt(16, 4)) {
-            pair = call_intrin(result_type, "vld2.v4i16", vec(ptr, align));
-        } else if (op->type == Int(32, 2) || op->type == UInt(32, 2)) {
-            pair = call_intrin(result_type, "vld2.v2i32", vec(ptr, align));
-        } else if (op->type == Float(32, 2)) {
-            pair = call_intrin(result_type, "vld2.v2f32", vec(ptr, align));
-        } else if (op->type == Int(8, 16) || op->type == UInt(8, 16)) {
-            pair = call_intrin(result_type, "vld2.v16i8", vec(ptr, align));
-        } else if (op->type == Int(16, 8) || op->type == UInt(16, 8)) {
-            pair = call_intrin(result_type, "vld2.v8i16", vec(ptr, align));
-        } else if (op->type == Int(32, 4) || op->type == UInt(32, 4)) {
-            pair = call_intrin(result_type, "vld2.v4i32", vec(ptr, align));
-        } else if (op->type == Float(32, 4)) {
-            pair = call_intrin(result_type, "vld2.v4f32", vec(ptr, align));
-        }
-
-        if (pair) {            
-            unsigned int idx = odd ? 1 : 0;
-            value = builder->CreateExtractValue(pair, vec(idx));
-            return;
-        }
+    // If the stride is one or minus one, we can deal with that using vanilla codegen
+    if (stride && (stride->value == 1 || stride->value == -1)) {
+        CodeGen::visit(op);
+        return;
     }
-    */
 
+    // Strided loads with known stride
     if (stride && stride->value >= 2 && stride->value <= 4) {
         // Check alignment on the base. 
         Expr base = ramp->base;
@@ -902,8 +879,8 @@ void CodeGen_ARM::visit(const Load *op) {
         const IntImm *add_b = add ? add->b.as<IntImm>() : NULL;
         if ((mod_rem.modulus == 1) && add_b) {
             int rounded_down = (add_b->value / stride->value) * stride->value;
-            base = add->a;
             offset = add_b->value - rounded_down;
+            base = simplify(base - offset);
         }
 
         int alignment = op->type.bits / 8;
@@ -947,6 +924,61 @@ void CodeGen_ARM::visit(const Load *op) {
             value = builder->CreateExtractValue(group, vec((unsigned int)offset));
             return;
         }
+    }
+
+    // For strides of 6 and 8, we can do two loads of size 3, or 4, and then shuffle the results
+    if (stride && (stride->value == 6 || stride->value == 8)) {
+        int half_stride = stride->value/2;
+        
+        Expr base = ramp->base;
+        int offset = 0;
+        ModulusRemainder mod_rem = modulus_remainder(ramp->base);
+
+        if ((mod_rem.modulus % 2) == 0) {
+            offset = mod_rem.remainder % 2;
+            base = simplify(base - offset);
+            mod_rem.remainder -= offset;
+        }
+
+        const Add *add = base.as<Add>();
+        const IntImm *add_b = add ? add->b.as<IntImm>() : NULL;
+        if ((mod_rem.modulus == 1) && add_b) {
+            int rounded_down = (add_b->value / 2) * 2;
+            offset = add_b->value - rounded_down;
+            base = simplify(base - offset);
+        }               
+
+        Expr first = new Load(op->type, op->name, 
+                              new Ramp(base, half_stride, ramp->width),
+                              op->image, op->param);
+        Expr second = new Load(op->type, op->name, 
+                               new Ramp(simplify(base + (stride->value*ramp->width)/2), 
+                                        half_stride, ramp->width),
+                               op->image, op->param);
+
+        vector<Constant *> indices(op->type.width);
+        for (size_t i = 0; i < indices.size(); i++) {
+            indices[i] = ConstantInt::get(i32, i*2 + offset);
+        }
+
+        // Now take every other element
+        value = builder->CreateShuffleVector(codegen(first), codegen(second), ConstantVector::get(indices));
+        return;
+    }
+
+    // We have builtins for strided loads with fixed but unknown stride
+    ostringstream builtin;
+    builtin << "strided_load_"
+            << (op->type.is_float() ? 'f' : 'i')
+            << op->type.bits 
+            << 'x' << op->type.width;
+
+    llvm::Function *fn = module->getFunction(builtin.str());
+    if (fn) {
+        Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
+        Value *stride = codegen(ramp->stride);
+        value = builder->CreateCall(fn, vec(base, stride), builtin.str());
+        return;
     }
 
     CodeGen::visit(op);
