@@ -451,6 +451,7 @@ class Simplify : public IRMutator {
         const Add *add_a = a.as<Add>();
         const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : NULL;
         const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : NULL;
+        const Ramp *ramp_a = a.as<Ramp>();
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
@@ -480,10 +481,15 @@ class Simplify : public IRMutator {
         } else if (const_int(b, &ib) && a.type() == Int(32) && mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c
             expr = mod_rem.remainder;
+        } else if (ramp_a && const_int(ramp_a->stride, &ia) && 
+                   broadcast_b && const_int(broadcast_b->value, &ib) &&
+                   ia % ib == 0) {
+            // ramp(x, 4, w) % broadcast(2, w)
+            expr = mutate(new Broadcast(ramp_a->base % ib, ramp_a->width));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
-            expr = new Mod(a, b);
+            expr = new Mod(a, b);            
         }
     }
 
@@ -504,7 +510,12 @@ class Simplify : public IRMutator {
         const Min *min_a = a.as<Min>();
         const Min *min_b = b.as<Min>();
         const Min *min_a_a = min_a ? min_a->a.as<Min>() : NULL;
+        const Min *min_a_a_a = min_a_a ? min_a_a->a.as<Min>() : NULL;
+        const Min *min_a_a_a_a = min_a_a_a ? min_a_a_a->a.as<Min>() : NULL;
 
+        // Sometimes we can do bounds analysis to simplify
+        // things. Only worth doing for ints
+        
         if (equal(a, b)) {
             expr = a;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
@@ -548,6 +559,12 @@ class Simplify : public IRMutator {
         } else if (min_a_a && equal(min_a_a->b, b)) {
             // min(min(min(x, y), z), y) -> min(min(x, y), z)
             expr = a;            
+        } else if (min_a_a_a && equal(min_a_a_a->b, b)) {
+            // min(min(min(min(x, y), z), w), y) -> min(min(min(x, y), z), w)
+            expr = a;            
+        } else if (min_a_a_a_a && equal(min_a_a_a_a->b, b)) {
+            // min(min(min(min(min(x, y), z), w), l), y) -> min(min(min(min(x, y), z), w), l)
+            expr = a;            
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -572,6 +589,8 @@ class Simplify : public IRMutator {
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
         const Max *max_a_a = max_a ? max_a->a.as<Max>() : NULL;
+        const Max *max_a_a_a = max_a_a ? max_a_a->a.as<Max>() : NULL;
+        const Max *max_a_a_a_a = max_a_a_a ? max_a_a_a->a.as<Max>() : NULL;
 
         if (equal(a, b)) {
             expr = a;
@@ -613,6 +632,12 @@ class Simplify : public IRMutator {
             expr = b;            
         } else if (max_a_a && equal(max_a_a->b, b)) {
             // max(max(max(x, y), z), y) -> max(max(x, y), z)
+            expr = a;            
+        } else if (max_a_a_a && equal(max_a_a_a->b, b)) {
+            // max(max(max(max(x, y), z), w), y) -> max(max(max(x, y), z), w)
+            expr = a;            
+        } else if (max_a_a_a_a && equal(max_a_a_a_a->b, b)) {
+            // max(max(max(max(max(x, y), z), w), l), y) -> max(max(max(max(x, y), z), w), l)
             expr = a;            
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -1121,6 +1146,10 @@ void simplify_test() {
     check((x*8) % 4, 0);
     check((x*8 + y) % 4, y);
     check((y + x*8) % 4, y);
+    check(Expr(new Ramp(x, 2, 4)) % (new Broadcast(2, 4)), 
+          new Broadcast(x % 2, 4));
+    check(Expr(new Ramp(2*x+1, 4, 4)) % (new Broadcast(2, 4)), 
+          new Broadcast(1, 4));
 
     check(new Min(7, 3), 3);
     check(new Min(4.25f, 1.25f), 1.25f);

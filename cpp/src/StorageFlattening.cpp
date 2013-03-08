@@ -13,6 +13,9 @@ using std::vector;
 class FlattenDimensions : public IRMutator {
     Expr flatten_args(const string &name, const vector<Expr> &args) {
         Expr idx = 0;
+        /*
+        // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride]        
+        // This strategy makes sense when we expect x to cancel with something in xmin
         for (size_t i = 0; i < args.size(); i++) {
             ostringstream stride_name, min_name;
             stride_name << name << ".stride." << i;
@@ -21,6 +24,22 @@ class FlattenDimensions : public IRMutator {
             Expr min = new Variable(Int(32), min_name.str());
             idx += (args[i] - min) * stride;
         }
+        */
+        
+        // f(x, y) -> f[x*stride + y*ystride - (xstride*xmin + ystride*ymin)]
+        // The idea here is that the last term will be pulled outside the inner loop
+        Expr base = 0;
+        for (size_t i = 0; i < args.size(); i++) {
+            ostringstream stride_name, min_name;
+            stride_name << name << ".stride." << i;
+            min_name << name << ".min." << i;
+            Expr stride = new Variable(Int(32), stride_name.str());
+            Expr min = new Variable(Int(32), min_name.str());
+            idx += args[i] * stride;            
+            base += min * stride;
+        }
+        idx -= base;
+
         return idx;            
     }
 
