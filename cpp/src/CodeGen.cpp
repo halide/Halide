@@ -230,6 +230,9 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     verifyModule(*module);
     log(2) << "Done generating llvm bitcode\n";
 
+    // Optimize it
+    optimize_module();
+
     if (log::debug_level >= 2) {
         module->dump();
     }
@@ -270,8 +273,6 @@ void destroy<JITModuleHolder>(const JITModuleHolder *f) {delete f;}
 JITCompiledModule CodeGen::compile_to_function_pointers() {
     assert(module && "No module defined. Must call compile before calling compile_to_function_pointer");
                
-    optimize_module();
-
     log(1) << "JIT compiling...\n";
 
     IntrusivePtr<JITModuleHolder> module_holder(new JITModuleHolder(module));
@@ -354,8 +355,6 @@ void CodeGen::compile_to_bitcode(const string &filename) {
 void CodeGen::compile_to_native(const string &filename, bool assembly) {
     assert(module && "No module defined. Must call compile before calling compile_to_native");
 
-    optimize_module();
-    
     // Get the target specific parser.
     string error_string;
     log(1) << "Compiling to native code...\n";
