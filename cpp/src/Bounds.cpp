@@ -217,7 +217,7 @@ private:
         }
 
         if (max_a.defined() && max_b.defined()) {
-            max = new Max(max_a, max_a);
+            max = new Max(max_a, max_b);
         } else {
             max = Expr();
         }
