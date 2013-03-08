@@ -17,6 +17,7 @@ template<bool, typename, typename> class IRBuilder;
 class LLVMContext;
 class Type;
 class StructType;
+class Instruction;
 }
 
 #include <map>

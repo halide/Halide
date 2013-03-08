@@ -90,7 +90,8 @@ LLVMContext &get_global_context() {
 
 CodeGen::CodeGen() : 
     module(NULL), function(NULL), context(get_global_context()), 
-    builder(new IRBuilder<>(context)), value(NULL), buffer_t(NULL) {
+    builder(new IRBuilder<>(context)), 
+    value(NULL), buffer_t(NULL) {
     // Define some types
     void_t = llvm::Type::getVoidTy(context);
     i1 = llvm::Type::getInt1Ty(context);
@@ -204,7 +205,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
     block = BasicBlock::Create(context, "entry", wrapper);
     builder->SetInsertPoint(block);
-    
+
     Value *arg_array = wrapper->arg_begin();
 
     vector<Value *> wrapper_args(args.size());
@@ -229,7 +230,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     verifyModule(*module);
     log(2) << "Done generating llvm bitcode\n";
 
-    if (log::debug_level >= 3) {
+    if (log::debug_level >= 2) {
         module->dump();
     }
 }
@@ -861,7 +862,7 @@ void CodeGen::visit(const Load *op) {
 
         bool internal = !op->image.defined() && !op->param.defined();
 
-        if (ramp && internal) {            
+        if (ramp && internal) {
             // If it's an internal allocation, we can boost the
             // alignment using the results of the modulus remainder
             // analysis
@@ -910,6 +911,17 @@ void CodeGen::visit(const Load *op) {
                 indices[i] = ConstantInt::get(i32, ramp->width-1-i);
             }
             value = builder->CreateShuffleVector(vec, undef, ConstantVector::get(indices));
+        } else if (ramp) {
+            // Gather without generating the indices as a vector
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
+            Value *stride = codegen(ramp->stride);
+            value = UndefValue::get(llvm_type_of(op->type));
+            for (int i = 0; i < ramp->width; i++) {                
+                Value *lane = ConstantInt::get(i32, i);
+                Value *val = builder->CreateLoad(ptr);
+                value = builder->CreateInsertElement(value, val, lane);
+                ptr = builder->CreateGEP(ptr, stride);
+            }
         } else {                
             // 5) General gathers
             Value *index = codegen(op->index);
@@ -1307,7 +1319,7 @@ public:
             Value *ptr = builder->CreateConstGEP2_32(dst, 0, idx++);
             if (val->getType() != iter->second) {
                 val = builder->CreateBitCast(val, iter->second);
-            }
+            }            
             builder->CreateStore(val, ptr);
         }
     }
@@ -1342,7 +1354,7 @@ void CodeGen::visit(const For *op) {
         // If min < max, fall through to the loop bb
         Value *enter_condition = builder->CreateICmpSLT(min, max);
         builder->CreateCondBr(enter_condition, loop_bb, after_bb);
-        builder->SetInsertPoint(loop_bb);
+        builder->SetInsertPoint(loop_bb);        
 
         // Make our phi node
         PHINode *phi = builder->CreatePHI(i32, 2);
@@ -1363,6 +1375,7 @@ void CodeGen::visit(const For *op) {
         // Maybe exit the loop
         Value *end_condition = builder->CreateICmpNE(next_var, max);
         builder->CreateCondBr(end_condition, loop_bb, after_bb);
+
         builder->SetInsertPoint(after_bb);
 
         // Pop the loop variable from the scope
@@ -1408,9 +1421,10 @@ void CodeGen::visit(const For *op) {
         Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
         // Load everything from the closure into the new scope
         closure.unpack_struct(symbol_table, closure_handle, builder);
-            
+
         // Generate the new function body
         codegen(op->body);
+        
         builder->CreateRetVoid();
 
         // Move the builder back to the main function and call do_par_for
@@ -1437,15 +1451,12 @@ void CodeGen::visit(const Store *op) {
     // Scalar
     if (value_type.is_scalar()) {
         Value *index = codegen(op->index);
-        Value *ptr = codegen_buffer_pointer(op->name, value_type, index);
+        Value *ptr = codegen_buffer_pointer(op->name, value_type, index);        
         builder->CreateStore(val, ptr);
     } else {
         int alignment = op->value.type().bits / 8;
-        const Ramp *ramp;
-        const IntImm *stride;
-        if ((ramp = op->index.as<Ramp>()) &&
-            (stride = ramp->stride.as<IntImm>()) &&               
-            (stride->value == 1)) {
+        const Ramp *ramp = op->index.as<Ramp>();
+        if (ramp && is_one(ramp->stride)) {
 
             // Boost the alignment if possible
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
@@ -1459,9 +1470,18 @@ void CodeGen::visit(const Store *op) {
 
             Value *base = codegen(ramp->base);
             Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), base);
-            ptr = builder->CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
-            builder->CreateAlignedStore(val, ptr, alignment);                    
-
+            Value *ptr2 = builder->CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
+            builder->CreateAlignedStore(val, ptr2, alignment);
+        } else if (ramp) {
+            Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), codegen(ramp->base));
+            Value *stride = codegen(ramp->stride);
+            // Scatter without generating the indices as a vector
+            for (int i = 0; i < ramp->width; i++) {                
+                Value *lane = ConstantInt::get(i32, i);
+                Value *v = builder->CreateExtractElement(val, lane);
+                builder->CreateAlignedStore(v, ptr, op->value.type().bits/8);
+                ptr = builder->CreateGEP(ptr, stride);
+            }
         } else {
             // Scatter
             Value *index = codegen(op->index);
@@ -1470,7 +1490,7 @@ void CodeGen::visit(const Store *op) {
                 Value *idx = builder->CreateExtractElement(index, lane);
                 Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
-                builder->CreateStore(v, ptr);
+                builder->CreateStore(v, ptr); 
             }
         }
         
