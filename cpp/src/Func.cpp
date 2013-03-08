@@ -547,24 +547,24 @@ Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name) {
     assert(value().defined() && "Can't compile undefined function");    
 
-    Stmt stmt = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
     StmtCompiler cg;
-    cg.compile(stmt, fn_name.empty() ? name() : fn_name, args);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_bitcode(filename);
 }
 
 void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name) {
     assert(value().defined() && "Can't compile undefined function");    
 
-    Stmt stmt = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
     StmtCompiler cg;
-    cg.compile(stmt, fn_name.empty() ? name() : fn_name, args);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_native(filename, false);
 }
 
@@ -609,12 +609,12 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name) {
     assert(value().defined() && "Can't compile undefined function");    
 
-    Stmt stmt = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
     StmtCompiler cg;
-    cg.compile(stmt, fn_name.empty() ? name() : fn_name, args);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_native(filename, true);
 }
 
@@ -745,11 +745,11 @@ void Func::realize(Buffer dst) {
 void Func::compile_jit() {
     assert(value().defined() && "Can't realize undefined function");
     
-    Stmt stmt = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
     
     // Infer arguments
     InferArguments infer_args;
-    stmt.accept(&infer_args);
+    lowered.accept(&infer_args);
     
     Argument me(name(), true, Int(1));
     infer_args.arg_types.push_back(me);
@@ -765,13 +765,13 @@ void Func::compile_jit() {
     }
     
     StmtCompiler cg;
-    cg.compile(stmt, name(), infer_args.arg_types);
+    cg.compile(lowered, name(), infer_args.arg_types);
     
     if (log::debug_level >= 3) {
         cg.compile_to_native(name() + ".s", true);
         cg.compile_to_bitcode(name() + ".bc");
         ofstream stmt_debug((name() + ".stmt").c_str());
-        stmt_debug << stmt;
+        stmt_debug << lowered;
     }
     
     compiled_module = cg.compile_to_function_pointers();    

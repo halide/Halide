@@ -229,6 +229,11 @@ class Func {
     void add_implicit_vars(std::vector<Expr> &);
     // @}
 
+    /** The lowered imperative form of this function. Cached here so
+     * that recompilation for different targets doesn't require
+     * re-lowering */
+    Internal::Stmt lowered;
+
     /** A JIT-compiled version of this function that we save so that
      * we don't have to rejit every time we want to evaluated it. */
     Internal::JITCompiledModule compiled_module;
