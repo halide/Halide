@@ -84,6 +84,12 @@ struct Schedule {
      * used, what the splits are, and any optional bounds in the list below. */
     std::vector<Dim> dims;
 
+    /** The list and order of dimensions used to store this
+     * function. The first dimension in the vector corresponds to the
+     * innermost dimension for storage (i.e. which dimension is
+     * tightly packed in memory) */
+    std::vector<std::string> storage_dims;
+
     struct Bound {
         std::string var;
         Expr min, extent;

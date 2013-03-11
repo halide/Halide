@@ -435,6 +435,15 @@ public:
     Func &reorder(Var x, Var y, Var z, Var w, Var t);
     // @}
 
+    /** Scheduling calls that control how the storage for the function
+     * is laid out. Right now you can only reorder the dimensions. */
+    // @{
+    Func &reorder_storage(Var x, Var y);
+    Func &reorder_storage(Var x, Var y, Var z);
+    Func &reorder_storage(Var x, Var y, Var z, Var w);
+    Func &reorder_storage(Var x, Var y, Var z, Var w, Var t);
+    // @}
+
     /** Compute this function as needed for each unique value of the
      * given var for the given calling function f.
      * 
