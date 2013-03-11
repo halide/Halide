@@ -12,7 +12,6 @@
 #include "Type.h"
 #include "IntrusivePtr.h"
 #include "Buffer.h"
-#include "Parameter.h"
 #include "Util.h"
 
 namespace Halide {
@@ -146,6 +145,12 @@ struct Expr : public Internal::IRHandle {
     }
 };    
 
+}
+
+// Now that we've defined an Expr, we can include Parameter.h
+#include "Parameter.h"
+
+namespace Halide {
 namespace Internal {
 
 /** A reference-counted handle to a statement node. */
