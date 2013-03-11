@@ -726,7 +726,7 @@ Stmt lower(Function f) {
     log(2) << "Injected debug_to_file calls:\n" << s << '\n';
 
     log(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s);
+    s = storage_flattening(s, env);
     log(2) << "Storage flattening: " << '\n' << s << "\n\n";
 
     log(1) << "Simplifying...\n";

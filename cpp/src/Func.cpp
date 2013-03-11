@@ -325,6 +325,47 @@ Func &Func::reorder(Var x, Var y, Var z, Var w, Var t) {
     return *this;
 }
 
+Func &Func::reorder_storage(Var x, Var y) {
+    vector<string> &dims = func.schedule().storage_dims;
+    bool found_y = false;
+    size_t y_loc = 0;
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i], y.name())) {
+            found_y = true;
+            y_loc = i;
+        } else if (var_name_match(dims[i], x.name())) {
+            if (found_y) std::swap(dims[i], dims[y_loc]);
+            return *this;
+        }
+    }
+    assert(false && "Could not find these variables to reorder in schedule");
+    return *this;    
+}
+
+Func &Func::reorder_storage(Var x, Var y, Var z) {
+    reorder_storage(x, y);
+    reorder_storage(x, z);
+    reorder_storage(y, z);
+    return *this;
+}
+
+Func &Func::reorder_storage(Var x, Var y, Var z, Var w) {
+    reorder_storage(x, y);
+    reorder_storage(x, z);
+    reorder_storage(x, w);
+    reorder_storage(y, z, w);
+    return *this;
+}
+
+Func &Func::reorder_storage(Var x, Var y, Var z, Var w, Var t) {
+    reorder_storage(x, y);
+    reorder_storage(x, z);
+    reorder_storage(x, w);
+    reorder_storage(x, t);
+    reorder_storage(y, z, w, t);
+    return *this;
+}
+
 Func &Func::compute_at(Func f, RVar var) {
     return compute_at(f, Var(var.name()));
 }
