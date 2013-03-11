@@ -17,7 +17,14 @@ struct ParameterContents {
     std::string name;
     Buffer buffer;
     uint64_t data;
+    Expr min_constraint[4];
+    Expr extent_constraint[4];
+    Expr stride_constraint[4];
     ParameterContents(Type t, bool b, const std::string &n) : type(t), is_buffer(b), name(n), buffer(Buffer()), data(0) {
+        // stride_constraint[0] defaults to 1. This is important for
+        // dense vectorization. You can unset it by setting it to a
+        // null expression. (param.set_stride(0, Expr());)
+        stride_constraint[0] = 1;        
     }
 
     template<typename T>
@@ -112,6 +119,35 @@ public:
     bool defined() const {
         return contents.defined();
     }
+
+    /** Get and set constraints for the min, extent, and stride (see
+     * ImageParam::set_extent) */
+    //@{
+    void set_min_constraint(int dim, Expr e) {
+        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        contents.ptr->min_constraint[dim] = e;
+    }
+    void set_extent_constraint(int dim, Expr e) {
+        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        contents.ptr->extent_constraint[dim] = e;
+    }
+    void set_stride_constraint(int dim, Expr e) {
+        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        contents.ptr->stride_constraint[dim] = e;
+    }
+    Expr min_constraint(int dim) {
+        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        return contents.ptr->min_constraint[dim];
+    }
+    Expr extent_constraint(int dim) {
+        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        return contents.ptr->extent_constraint[dim];
+    }
+    Expr stride_constraint(int dim) {
+        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        return contents.ptr->stride_constraint[dim];
+    }
+    //@}
 };
 
 }

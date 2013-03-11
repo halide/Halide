@@ -119,6 +119,54 @@ public:
         return new Internal::Variable(Int(32), s.str(), param);
     }
 
+    /** Set the extent in a given dimension to equal the given
+     * expression. Images passed in that fail this check will generate
+     * a runtime error. Returns a reference to the ImageParam so that
+     * these calls may be chained.  
+     * 
+     * This may help the compiler generate better
+     * code. E.g:
+     \code
+     im.set_extent(0, 100);
+     \endcode
+     * tells the compiler that dimension zero must be of extent 100,
+     * which may result in simplification of boundary checks. The
+     * value can be an arbitrary expression:
+     \code
+     im.set_extent(0, im.extent(1));
+     \endcode
+     * declares that im is a square image (of unknown size), whereas:
+     \code
+     im.set_extent(0, (im.extent(0)/32)*32);
+     \endcode
+     * tells the compiler that the extent is a multiple of 32. */
+    ImageParam &set_extent(int dim, Expr extent) {
+        param.set_extent_constraint(dim, extent);
+        return *this;
+    }
+
+    /** Set the min in a given dimension to equal the given
+     * expression. Setting the mins to zero may simplify some
+     * addressing math. */
+    ImageParam &set_min(int dim, Expr min) {
+        param.set_min_constraint(dim, min);
+        return *this;
+    }
+
+    /** Set the stride in a given dimension to equal the given
+     * value. This is particularly helpful to set when
+     * vectorizing. Known strides for the vectorized dimension
+     * generate better code. */
+    ImageParam &set_stride(int dim, Expr stride) {
+        param.set_stride_constraint(dim, stride);
+        return *this;
+    }
+
+    /** Set the min and extent in one call. */
+    ImageParam &set_bounds(int dim, Expr min, Expr extent) {
+        return set_min(dim, min).set_extent(dim, extent);
+    }
+
     /** Get the dimensionality of this image parameter */
     int dimensions() const {
         return dims;
