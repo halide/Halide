@@ -333,20 +333,17 @@ extern void gettimeofday(timeval *, void *);
 
 #ifndef current_time_defined
 #define current_time_defined
+static timeval reference_clock;
+WEAK int start_clock() {
+    gettimeofday(&reference_clock, NULL);
+    return 0;
+}
 WEAK int current_time() {
-    static bool initialized = false;
-    static timeval start;
-    if (!initialized) {
-        gettimeofday(&start, NULL);
-        initialized = true;
-        return 0;
-    } else {
-        timeval now;
-        gettimeofday(&now, NULL);
-        return
-            (now.tv_sec - start.tv_sec)*1000 + 
-            (now.tv_usec - start.tv_usec)/1000;
-    }
+    timeval now;
+    gettimeofday(&now, NULL);
+    return
+        (now.tv_sec - reference_clock.tv_sec)*1000 + 
+        (now.tv_usec - reference_clock.tv_usec)/1000;
 }
 #endif
 
