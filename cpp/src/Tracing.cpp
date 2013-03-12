@@ -1,5 +1,6 @@
 #include "Tracing.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -80,7 +81,16 @@ private:
 };
 
 Stmt inject_tracing(Stmt s) {
-    return InjectTracing().mutate(s);
+    InjectTracing tracing;
+    s = tracing.mutate(s);
+    if (tracing.level >= 1) {
+        Expr time = new Call(Int(32), "current_time", std::vector<Expr>());
+        Expr start_clock_call = new Call(Int(32), "start_clock", std::vector<Expr>());
+        Stmt start_clock = new AssertStmt(start_clock_call == 0, "Failed to start clock");
+        Stmt print_final_time = new PrintStmt("Total time: ", vec(time));
+        s = new Block(new Block(start_clock, s), print_final_time);
+    }
+    return s;
 }
 
 }
