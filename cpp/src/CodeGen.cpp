@@ -980,12 +980,13 @@ void CodeGen::visit(const Call *op) {
     // cue for llvm to generate particular ops. In general these are
     // handled in the standard library, but ones with e.g. varying
     // types are handled here.
-    if (op->name == "extract odd lanes" || op->name == "extract even lanes") {
-        bool even = (op->name == "extract even lanes");
-        assert(op->args.size() == 1);
+    if (op->name == "shuffle vector") {
+        assert(op->args.size() == 1 + op->type.width);
         vector<Constant *> indices(op->type.width);
         for (size_t i = 0; i < indices.size(); i++) {
-            indices[i] = ConstantInt::get(i32, even ? (i*2) : (i*2 + 1));
+            const IntImm *idx = op->args[i+1].as<IntImm>();
+            assert(idx);
+            indices[i] = ConstantInt::get(i32, idx->value);
         }
         Value *arg = codegen(op->args[0]);
         value = builder->CreateShuffleVector(arg, arg, ConstantVector::get(indices));
