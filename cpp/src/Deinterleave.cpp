@@ -16,16 +16,20 @@ using std::make_pair;
 
 class Deinterleaver : public IRMutator {
 public:
-    bool even_lanes;
+    int starting_lane;
     int new_width;
-    bool failed;
+    int lane_stride;
 private:
     Scope<int> internal;
 
     using IRMutator::visit;
 
     void visit(const Broadcast *op) {
-        expr = new Broadcast(op->value, new_width);
+        if (new_width == 1) {
+            expr = op->value;
+        } else {
+            expr = new Broadcast(op->value, new_width);
+        }
     }
 
     void visit(const Load *op) {
@@ -35,10 +39,9 @@ private:
     }
 
     void visit(const Ramp *op) {
-        if (even_lanes) {
-            expr = new Ramp(op->base, op->stride * 2, new_width);
-        } else {
-            expr = new Ramp(op->base + op->stride, op->stride * 2, new_width);
+        expr = op->base + starting_lane * op->stride;
+        if (new_width > 1) {
+            expr = new Ramp(expr, op->stride * lane_stride, new_width);
         }
     }
     
@@ -50,7 +53,12 @@ private:
         } else {
             // Uh-oh, we don't know how to deinterleave this vector expression
             // Make llvm do it
-            expr = new Call(t, even_lanes ? "extract even lanes" : "extract odd lanes", vec<Expr>(op));
+            std::vector<Expr> args;
+            args.push_back(op);
+            for (int i = 0; i < new_width; i++) {
+                args.push_back(starting_lane + lane_stride * i);
+            }
+            expr = new Call(t, "shuffle vector", args);
         }
     }
 
@@ -86,22 +94,29 @@ private:
 
 Expr extract_odd_lanes(Expr e) {
     Deinterleaver d;
-    d.even_lanes = false;
+    d.starting_lane = 1;
+    d.lane_stride = 2;
     d.new_width = e.type().width/2;
-    d.failed = false;
     e = d.mutate(e);
-    if (d.failed) return Expr();
-    else return simplify(e);
+    return simplify(e);
 }
 
 Expr extract_even_lanes(Expr e) {
     Deinterleaver d;
-    d.even_lanes = true;
+    d.starting_lane = 0;
+    d.lane_stride = 2;
     d.new_width = (e.type().width+1)/2;
-    d.failed = false;
     e = d.mutate(e);
-    if (d.failed) return Expr();
-    else return simplify(e);
+    return simplify(e);
+}
+
+Expr extract_lane(Expr e, int lane) {
+    Deinterleaver d;
+    d.starting_lane = lane;
+    d.lane_stride = 0;
+    d.new_width = 1;
+    e = d.mutate(e);
+    return simplify(e);
 }
 
 class Interleaver : public IRMutator {
@@ -184,9 +199,11 @@ void check(Expr a, Expr even, Expr odd) {
     Expr correct_even = extract_even_lanes(a);
     Expr correct_odd = extract_odd_lanes(a);
     if (!equal(correct_even, even)) {
+        std::cerr << correct_even << " != " << even << "\n";
         assert(false);
     }
     if (!equal(correct_odd, odd)) {
+        std::cerr << correct_odd << " != " << odd << "\n";
         assert(false);
     }
 }
