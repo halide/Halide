@@ -835,7 +835,7 @@ void CodeGen_ARM::visit(const Store *op) {
     llvm::Function *fn = module->getFunction(builtin.str());
     if (fn) {
         Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), codegen(ramp->base));
-        Value *stride = codegen(ramp->stride);
+        Value *stride = codegen(ramp->stride * (op->value.type().bits / 8));
         Value *val = codegen(op->value);
         builder->CreateCall(fn, vec(base, stride, val));
         return;
@@ -869,6 +869,7 @@ void CodeGen_ARM::visit(const Load *op) {
         int offset = 0;
         ModulusRemainder mod_rem = modulus_remainder(ramp->base);
 
+        
         if ((mod_rem.modulus % stride->value) == 0) {
             offset = mod_rem.remainder % stride->value;
             base = simplify(base - offset);
@@ -882,6 +883,7 @@ void CodeGen_ARM::visit(const Load *op) {
             offset = add_b->value - rounded_down;
             base = simplify(base - offset);
         }
+        
 
         int alignment = op->type.bits / 8;
         //alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
@@ -926,46 +928,6 @@ void CodeGen_ARM::visit(const Load *op) {
         }
     }
 
-    // For strides of 6 and 8, we can do two loads of size 3, or 4, and then shuffle the results
-    if (stride && (stride->value == 6 || stride->value == 8)) {
-        int half_stride = stride->value/2;
-        
-        Expr base = ramp->base;
-        int offset = 0;
-        ModulusRemainder mod_rem = modulus_remainder(ramp->base);
-
-        if ((mod_rem.modulus % 2) == 0) {
-            offset = mod_rem.remainder % 2;
-            base = simplify(base - offset);
-            mod_rem.remainder -= offset;
-        }
-
-        const Add *add = base.as<Add>();
-        const IntImm *add_b = add ? add->b.as<IntImm>() : NULL;
-        if ((mod_rem.modulus == 1) && add_b) {
-            int rounded_down = (add_b->value / 2) * 2;
-            offset = add_b->value - rounded_down;
-            base = simplify(base - offset);
-        }               
-
-        Expr first = new Load(op->type, op->name, 
-                              new Ramp(base, half_stride, ramp->width),
-                              op->image, op->param);
-        Expr second = new Load(op->type, op->name, 
-                               new Ramp(simplify(base + (stride->value*ramp->width)/2), 
-                                        half_stride, ramp->width),
-                               op->image, op->param);
-
-        vector<Constant *> indices(op->type.width);
-        for (size_t i = 0; i < indices.size(); i++) {
-            indices[i] = ConstantInt::get(i32, i*2 + offset);
-        }
-
-        // Now take every other element
-        value = builder->CreateShuffleVector(codegen(first), codegen(second), ConstantVector::get(indices));
-        return;
-    }
-
     // We have builtins for strided loads with fixed but unknown stride
     ostringstream builtin;
     builtin << "strided_load_"
@@ -976,7 +938,7 @@ void CodeGen_ARM::visit(const Load *op) {
     llvm::Function *fn = module->getFunction(builtin.str());
     if (fn) {
         Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
-        Value *stride = codegen(ramp->stride);
+        Value *stride = codegen(ramp->stride * (op->type.bits / 8));
         value = builder->CreateCall(fn, vec(base, stride), builtin.str());
         return;
     }
