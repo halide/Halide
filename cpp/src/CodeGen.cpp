@@ -825,9 +825,36 @@ void CodeGen::visit(const Not *op) {
 
 
 void CodeGen::visit(const Select *op) {
-    value = builder->CreateSelect(codegen(op->condition), 
-                                  codegen(op->true_value), 
-                                  codegen(op->false_value));
+    // For now we always generate select nodes, but the code is here
+    // for if then elses if we need it
+    if (false && op->condition.type().is_scalar()) {
+        // Codegen an if-then-else so we don't go to the expense of
+        // generating both vectors
+
+        BasicBlock *true_bb = BasicBlock::Create(context, "true_bb", function);
+        BasicBlock *false_bb = BasicBlock::Create(context, "false_bb", function);
+        BasicBlock *after_bb = BasicBlock::Create(context, "after_bb", function);
+        builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
+
+        builder->SetInsertPoint(true_bb);
+        Value *true_value = codegen(op->true_value);
+        builder->CreateBr(after_bb);
+
+        builder->SetInsertPoint(false_bb);
+        Value *false_value = codegen(op->false_value);
+        builder->CreateBr(after_bb);        
+
+        builder->SetInsertPoint(after_bb);
+        PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
+        phi->addIncoming(true_value, true_bb);
+        phi->addIncoming(false_value, false_bb);
+
+        value = phi;
+    } else {
+        value = builder->CreateSelect(codegen(op->condition), 
+                                      codegen(op->true_value), 
+                                      codegen(op->false_value));
+    }
 }
 
 Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
@@ -882,7 +909,6 @@ void CodeGen::visit(const Load *op) {
             Value *a = builder->CreateAlignedLoad(ptr, alignment);
             ptr = builder->CreateConstGEP1_32(ptr, 1);
             int bytes = (op->type.bits * op->type.width)/8;
-            log(1) << "Alignment of second load = " << gcd(alignment, bytes) << "\n";
             Value *b = builder->CreateAlignedLoad(ptr, gcd(alignment, bytes));
             vector<Constant *> indices(ramp->width);
             for (int i = 0; i < ramp->width; i++) {
@@ -921,16 +947,31 @@ void CodeGen::visit(const Load *op) {
                 value = builder->CreateInsertElement(value, val, lane);
                 ptr = builder->CreateGEP(ptr, stride);
             }
+        } else if (false /* should_scalarize(op->index) */) {
+            // TODO: put something sensible in for
+            // should_scalarize. Probably a good idea if there are no
+            // loads in it, and it's all int32.
+
+            // Compute the index as scalars, and then do a gather
+            Value *vec = UndefValue::get(llvm_type_of(op->type));
+            for (int i = 0; i < op->type.width; i++) {
+                Value *idx = codegen(extract_lane(op->index, i));
+                Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
+                Value *val = builder->CreateLoad(ptr);
+                vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
+            }
+            value = vec;
         } else {                
-            // 5) General gathers
+            // General gathers
             Value *index = codegen(op->index);
-            value = UndefValue::get(llvm_type_of(op->type));
+            Value *vec = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.width; i++) {
                 Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 Value *val = builder->CreateLoad(ptr);
-                value = builder->CreateInsertElement(value, val, ConstantInt::get(i32, i));
+                vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
             }
+            value = vec;
         }            
     }
 }
