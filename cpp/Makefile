@@ -23,10 +23,6 @@ HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
 STDLIB_ARCHS = x86 x86_avx ptx ptx_dev arm arm_android
 
-STDLIB_SOURCES = \
-	$(STDLIB_ARCHS:%=src/architecture.%.stdlib.cpp) \
-	$(STDLIB_ARCHS:%=src/architecture.%.stdlib.ll) \
-	src/architecture.posix.stdlib.cpp
 INITIAL_MODULES = $(STDLIB_ARCHS:%=build/architecture.%.initmod.o)
 
 .PHONY: all
