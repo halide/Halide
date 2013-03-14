@@ -92,6 +92,10 @@ bool starts_with(const std::string &str, const std::string &prefix);
 /** Test if the first string ends with the second string */
 bool ends_with(const std::string &str, const std::string &suffix);
 
+/** Make sure that a programmer-specified function name is unique.
+ * Not thread-safe. */
+std::string unique_name(const std::string &name);
+
 }
 }
 
