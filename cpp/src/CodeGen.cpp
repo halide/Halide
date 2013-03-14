@@ -2,7 +2,6 @@
 #include "IRPrinter.h"
 #include "CodeGen.h"
 #include "IROperator.h"
-#include "Util.h"
 #include "Log.h"
 #include "CodeGen_C.h"
 #include "Function.h"
@@ -118,6 +117,10 @@ CodeGen::CodeGen() :
         llvm_initialized = true;
     }
 }
+
+// llvm includes above disable assert.  Include Util.h here
+// to reenable assert.
+#include "Util.h"
 
 CodeGen::~CodeGen() {
     if (module && owns_module) {
@@ -1022,7 +1025,7 @@ void CodeGen::visit(const Call *op) {
     // handled in the standard library, but ones with e.g. varying
     // types are handled here.
     if (op->name == "shuffle vector") {
-        assert(op->args.size() == 1 + op->type.width);
+        assert((int) op->args.size() == 1 + op->type.width);
         vector<Constant *> indices(op->type.width);
         for (size_t i = 0; i < indices.size(); i++) {
             const IntImm *idx = op->args[i+1].as<IntImm>();
