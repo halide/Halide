@@ -1,12 +1,3 @@
-#ifndef HALIDE_UTIL_H
-#define HALIDE_UTIL_H
-
-/** \file
- * Various utility functions used internally Halide. */
-
-#include <vector>
-#include <string>
-
 // Always use assert, even if llvm-config defines NDEBUG
 #ifdef NDEBUG
 #undef NDEBUG
@@ -15,6 +6,15 @@
 #else
 #include <assert.h>
 #endif
+
+#ifndef HALIDE_UTIL_H
+#define HALIDE_UTIL_H
+
+/** \file
+ * Various utility functions used internally Halide. */
+
+#include <vector>
+#include <string>
 
 namespace Halide { 
 namespace Internal {
