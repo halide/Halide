@@ -86,15 +86,15 @@ std::vector<T> vec(T a, T b, T c, T d, T e, T f) {
  * process. Not thread-safe. */
 std::string unique_name(char prefix);
 
+/** Generate a unique name starting with the given string.  Not
+ * thread-safe. */
+std::string unique_name(const std::string &name);
+
 /** Test if the first string starts with the second string */
 bool starts_with(const std::string &str, const std::string &prefix);
 
 /** Test if the first string ends with the second string */
 bool ends_with(const std::string &str, const std::string &suffix);
-
-/** Make sure that a programmer-specified function name is unique.
- * Not thread-safe. */
-std::string unique_name(const std::string &name);
 
 }
 }

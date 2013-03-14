@@ -1,13 +1,13 @@
 #include "Util.h"
 #include <sstream>
-// In C++ 11: #include <unordered_set>
-#include <set>
+#include <map>
 
 namespace Halide { 
 namespace Internal {
 
 using std::string;
 using std::ostringstream;
+using std::map;
 
 string unique_name(char prefix) {
     // arrays with static storage duration should be initialized to zero automatically
@@ -34,46 +34,39 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
-// [LH] Unique_name for programmer specified names.
-// C++ 11: static std::unordered_set<std::string> known_names;
-static std::set<std::string> known_names;
+static map<string, int> known_names;
     
-std::string unique_name(const std::string &name)
-{
-    std::string thename;
-    
+string unique_name(const string &name) {
     // If the programmer specified a single character name then use the
     // pre-existing Halide unique name generator.
-    if (name.length() == 1)
+    if (name.length() == 1) {
         return unique_name(name[0]);
-    
+    }    
+
     // An empty string really does not make sense, but use 'z' as prefix.
-    if (name.length() == 0)
+    if (name.length() == 0) {
         return unique_name('z');
-    
-    // Use the programmer-specified name but append a number to make it unique.
-    for (int i = 1; i < 1000000; i++)
-    {
-        if (i > 1)
-        {
-            std::ostringstream oss;
-            oss << name << i;
-            thename = oss.str();
-        }
-        else
-        {
-            // The very first unique name is the original function name itself.
-            thename = name;
-        }
-        if (known_names.count(thename) <= 0)
-        {
-            // This generated name is not known already, so mark it used and return it.
-            known_names.insert(thename);
-            break;
-        }
+    }    
+
+    // Check the '.' character doesn't appear in the prefix. This lets
+    // us separate the name from the number using '.' as a delimiter,
+    // which guarantees uniqueness of the generated name, without
+    // having to track all name generated so far.
+    for (size_t i = 0; i < name.length(); i++) {
+        assert(name[i] != '.' && "names passed to unique_name may not contain the character '.'");
     }
-    
-    return thename;
+
+    int &count = known_names[name];
+    count++;
+    if (count == 1) {
+        // The very first unique name is the original function name itself.
+        return name;
+    } else {
+        // Use the programmer-specified name but append a number to make it unique.
+        ostringstream oss;        
+        oss << name << "." << count;
+        return oss.str();
+    }
 }
 
 }
