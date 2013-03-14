@@ -21,11 +21,15 @@ StmtCompiler::StmtCompiler(string arch) {
         contents = new CodeGen_X86(true, false);
     } else if (arch == "x86-avx") {
         contents = new CodeGen_X86(true, true);
-    } else if (arch == "arm") {
+    }
+#ifndef _WINDOWS // I've temporarily disabled ARM on Windows since it leads to a linking error on halide_internal_initmod_arm stuff (kwampler@adobe.com)
+    else if (arch == "arm") {
         contents = new CodeGen_ARM(false);
     } else if (arch == "arm-android") {
         contents = new CodeGen_ARM(true);
-    } else {
+    } 
+#endif // _WINDOWS
+    else {
         std::cerr << "Unknown target " << arch << std::endl;
         std::cerr << "Known targets are: x86 x86-avx arm arm-android" << std::endl;
         assert(false);
