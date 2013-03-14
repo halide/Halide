@@ -66,7 +66,9 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
     // Parse it    
-    module = ParseBitcodeFile(bitcode_buffer, context);
+    std::string errstr;
+    module = ParseBitcodeFile(bitcode_buffer, context, &errstr);
+    assert(module && "llvm encountered an error in parsing a bitcode file.");
 
     // Fix the target triple
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
