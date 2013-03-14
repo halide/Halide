@@ -26,7 +26,7 @@ using std::ofstream;
 
 using namespace Internal;
 
-Func::Func(const string &name) : func(name), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
+Func::Func(const string &name) : func(unique_name(name)), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
 }
 
 Func::Func() : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {

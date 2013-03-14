@@ -14,6 +14,8 @@
 #include "Argument.h"
 #include "RDom.h"
 #include "JITCompiledModule.h"
+#include "Image.h"
+#include "Util.h"
 
 namespace Halide {
         
@@ -725,6 +727,14 @@ public:
         (*this)() = e;
     }
 
+    // [LH] 
+    /** Allow to use Image<T> as a Func object without explicit conversion. */
+    template <typename T>
+    Func(Image<T> image) : func(Internal::unique_name("image")), error_handler(NULL), custom_malloc(NULL), custom_free(NULL)
+    {
+        (*this)() = image;
+        return;
+    }
 };
 
 
