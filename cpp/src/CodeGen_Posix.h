@@ -47,8 +47,8 @@ protected:
     using CodeGen::visit;
 
     /** Posix implementation of Allocate. Small constant-sized ones go
-     * on the stack. The rest go on the heap by calling "fast_malloc"
-     * and "fast_free" in the standard library */
+     * on the stack. The rest go on the heap by calling "hl_malloc"
+     * and "hl_free" in the standard library */
     void visit(const Allocate *);        
 
     /** The heap allocations currently in scope */

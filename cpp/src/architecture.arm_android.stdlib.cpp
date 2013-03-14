@@ -87,7 +87,7 @@ WEAK void set_custom_allocator(void *(*cust_malloc)(size_t), void (*cust_free)(v
     halide_custom_free = cust_free;
 }
 
-WEAK void *fast_malloc(size_t x) {
+WEAK void *hl_malloc(size_t x) {
     if (halide_custom_malloc) {
         return halide_custom_malloc(x);
     } else {
@@ -99,20 +99,12 @@ WEAK void *fast_malloc(size_t x) {
     }
 }
 
-WEAK void fast_free(void *ptr) {
+WEAK void hl_free(void *ptr) {
     if (halide_custom_free) {
         halide_custom_free(ptr);
     } else {
         free(((void**)ptr)[-1]);
     }
-}
-
-WEAK void *safe_malloc(size_t x) {
-    return fast_malloc(x);
-}
-
-WEAK void safe_free(void *ptr) {
-    return fast_free(ptr);
 }
 
 static void (*halide_error_handler)(char *) = NULL;
