@@ -279,6 +279,16 @@ public:
      * not contain free variables). */
     Func(Expr e);
 
+    /** Generate a new uniquely-named function that returns the given
+     * buffer. Has the same dimensionality as the buffer. Useful for
+     * passing Images to c++ functions that expect Funcs */
+    //@{
+    Func(Buffer image);
+    template<typename T> Func(Image<T> image) {
+        (*this) = Func(Buffer(image));
+    }
+    //@}
+
     /** Evaluate this function over some rectangular domain and return
      * the resulting buffer. The buffer should probably be instantly
      * wrapped in an Image class of the appropriate type. That is, do
@@ -727,14 +737,6 @@ public:
         (*this)() = e;
     }
 
-    // [LH] 
-    /** Allow to use Image<T> as a Func object without explicit conversion. */
-    template <typename T>
-    Func(Image<T> image) : func(Internal::unique_name("image")), error_handler(NULL), custom_malloc(NULL), custom_free(NULL)
-    {
-        (*this)() = image;
-        return;
-    }
 };
 
 
