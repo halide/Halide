@@ -35,7 +35,7 @@ WEAK void set_custom_allocator(void *(*cust_malloc)(size_t), void (*cust_free)(v
     halide_custom_free = cust_free;
 }
 
-WEAK void *fast_malloc(size_t x) {
+WEAK void *hl_malloc(size_t x) {
     if (halide_custom_malloc) {
         return halide_custom_malloc(x);
     } else {
@@ -47,7 +47,7 @@ WEAK void *fast_malloc(size_t x) {
     }
 }
 
-WEAK void fast_free(void *ptr) {
+WEAK void hl_free(void *ptr) {
     if (halide_custom_free) {
         halide_custom_free(ptr);
     } else {
@@ -336,20 +336,20 @@ INLINE double abs_f64(double a) {return a >= 0 ? a : -a;}
 #ifndef current_time_defined
 #define current_time_defined
 #include <sys/time.h>
-WEAK int currentTime() {
-    static bool initialized = false;
-    static timeval start;
-    if (!initialized) {
-        gettimeofday(&start, NULL);
-        initialized = true;
-        return 0;
-    } else {
-        timeval now;
-        gettimeofday(&now, NULL);
-        return
-            (now.tv_sec - start.tv_sec)*1000 + 
-            (now.tv_usec - start.tv_usec)/1000;
-    }
+
+static timeval reference_clock;
+
+WEAK int start_clock() {
+    gettimeofday(&reference_clock, NULL);
+    return 0;
+}
+
+WEAK int current_time() {
+    timeval now;
+    gettimeofday(&now, NULL);
+    return
+        (now.tv_sec - reference_clock.tv_sec)*1000 + 
+        (now.tv_usec - reference_clock.tv_usec)/1000;
 }
 #endif
 

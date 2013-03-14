@@ -17,6 +17,10 @@ namespace Internal {
  * folding. */
 bool is_const(Expr e);
 
+/** Is the expression an IntImm, FloatImm of a particular value, or a
+ * Cast, or Broadcast of the same. */
+bool is_const(Expr e, int v);
+
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */
 bool is_positive_const(Expr e);

@@ -217,7 +217,7 @@ private:
         }
 
         if (max_a.defined() && max_b.defined()) {
-            max = new Max(max_a, max_a);
+            max = new Max(max_a, max_b);
         } else {
             max = Expr();
         }
@@ -370,10 +370,28 @@ Region region_union(const Region &a, const Region &b) {
 
 class RegionTouched : public IRVisitor {
 public:
+    // The bounds of things in scope
     Scope<Interval> scope;
-    map<string, vector<Interval> > regions; // Min, Max per dimension
+
+    // If this is non-empty, we only care about this one function
+    string func;
+
+    // Min, Max per dimension of each function found. Used if func is empty
+    map<string, vector<Interval> > regions;
+
+    // Min, Max per dimension of func, if it is non-empty
+    vector<Interval> region; 
+
+    // Take into account call nodes
     bool consider_calls;
+
+    // Take into account provide nodes
     bool consider_provides;
+
+    // Which buffers are we inside the update step of? We ignore
+    // recursive calls from a function to itself to avoid recursive
+    // bounds expressions. These bounds are handled during lowering
+    // instead.
     Scope<int> inside_update;
 private:
     using IRVisitor::visit;
@@ -414,17 +432,19 @@ private:
         // as much as f requires!). We make sure we cover the bounds
         // required by the update step of a reduction elsewhere (in
         // InjectRealization in Lower.cpp)
-        if (consider_calls && !inside_update.contains(op->name)) {
+        if (consider_calls && !inside_update.contains(op->name) && 
+            (func.empty() || func == op->name)) {
             log(3) << "Found call to " << op->name << ": " << Expr(op) << "\n";
-            vector<Interval> &region = regions[op->name];
+
+            vector<Interval> &r = func.empty() ? regions[op->name] : region;
             for (size_t i = 0; i < op->args.size(); i++) {
                 Interval bounds = bounds_of_expr_in_scope(op->args[i], scope);
                 log(3) << "Bounds of call to " << op->name << " in dimension " << i << ": " 
                        << bounds.min << ", " << bounds.max << "\n";
-                if (region.size() > i) {
-                    region[i] = interval_union(region[i], bounds);
+                if (r.size() > i) {
+                    r[i] = interval_union(r[i], bounds);
                 } else {
-                    region.push_back(bounds);
+                    r.push_back(bounds);
                 }
             }
         }
@@ -432,14 +452,14 @@ private:
 
     void visit(const Provide *op) {        
         IRVisitor::visit(op);
-        if (consider_provides) {
-            vector<Interval> &region = regions[op->name];
+        if (consider_provides && (func.empty() || func == op->name)) {
+            vector<Interval> &r = func.empty() ? regions[op->name] : region;
             for (size_t i = 0; i < op->args.size(); i++) {
                 Interval bounds = bounds_of_expr_in_scope(op->args[i], scope);
-                if (region.size() > i) {
-                    region[i] = interval_union(region[i], bounds);
+                if (r.size() > i) {
+                    r[i] = interval_union(r[i], bounds);
                 } else {
-                    region.push_back(bounds);
+                    r.push_back(bounds);
                 }
             }
         }
@@ -456,26 +476,43 @@ private:
     }
 };
 
+// Convert from (min, max) to (min, extent)
+Range interval_to_range(const Interval &i) {
+    if (!i.min.defined() || !i.max.defined()) {
+        return Range();
+    } else {
+        return Range(simplify(i.min), 
+                     simplify((i.max + 1) - i.min));
+    }
+}
+
+Region compute_region_touched(Stmt s, bool consider_calls, bool consider_provides, const string &func) {
+    RegionTouched r;
+    r.consider_calls = consider_calls;
+    r.consider_provides = consider_provides;
+    r.func = func;
+    s.accept(&r);
+    const vector<Interval> &box = r.region;    
+    Region region;
+    for (size_t i = 0; i < box.size(); i++) {
+        region.push_back(interval_to_range(box[i]));
+    }
+    return region;
+}
+
 map<string, Region> compute_regions_touched(Stmt s, bool consider_calls, bool consider_provides) {
     RegionTouched r;
     r.consider_calls = consider_calls;
     r.consider_provides = consider_provides;
+    r.func = "";
     s.accept(&r);
     map<string, Region> regions;
-    // Convert from (min, max) to (min, extent)
     for (map<string, vector<Interval> >::iterator iter = r.regions.begin(); 
          iter != r.regions.end(); iter++) {
         Region region;
         const vector<Interval> &box = iter->second;
         for (size_t i = 0; i < box.size(); i++) {
-            if (!box[i].min.defined() || 
-                !box[i].max.defined()) {
-                region.push_back(Range());
-            } else {
-                // the max is likely to be of the form foo-1
-                region.push_back(Range(simplify(box[i].min), 
-                                       simplify((box[i].max + 1) - box[i].min)));
-            }
+            region.push_back(interval_to_range(box[i]));
         }
         regions[iter->first] = region;
     }
@@ -486,7 +523,7 @@ map<string, Region> regions_provided(Stmt s) {
     return compute_regions_touched(s, false, true);
 }
 
-map<string, Region> regions_required(Stmt s) {
+map<string, Region> regions_called(Stmt s) {
     return compute_regions_touched(s, true, false);
 }
 
@@ -494,6 +531,17 @@ map<string, Region> regions_touched(Stmt s) {
     return compute_regions_touched(s, true, true);
 }
 
+Region region_provided(Stmt s, const string &func) {
+    return compute_region_touched(s, false, true, func);
+}
+
+Region region_called(Stmt s, const string &func) {
+    return compute_region_touched(s, true, false, func);
+}
+
+Region region_touched(Stmt s, const string &func) {
+    return compute_region_touched(s, true, true, func);
+}
 
 
 void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_max) {
@@ -546,7 +594,7 @@ void bounds_test() {
                                     output_site));
 
     map<string, Region> r;
-    r = regions_required(loop);
+    r = regions_called(loop);
     assert(r.find("output") == r.end());
     assert(r.find("input") != r.end());
     assert(equal(r["input"][0].min, 6));
