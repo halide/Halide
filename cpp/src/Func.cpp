@@ -26,7 +26,7 @@ using std::ofstream;
 
 using namespace Internal;
 
-Func::Func(const string &name) : func(name), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
+Func::Func(const string &name) : func(unique_name(name)), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
 }
 
 Func::Func() : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
@@ -34,6 +34,14 @@ Func::Func() : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL),
 
 Func::Func(Expr e) : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
     (*this)() = e;
+}
+
+Func::Func(Buffer b) : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {    
+    vector<Expr> args;
+    for (int i = 0; i < b.dimensions(); i++) {
+        args.push_back(Var::implicit(i));
+    }
+    (*this)() = new Internal::Call(b, args);
 }
         
 const string &Func::name() const {
@@ -325,6 +333,47 @@ Func &Func::reorder(Var x, Var y, Var z, Var w, Var t) {
     return *this;
 }
 
+Func &Func::reorder_storage(Var x, Var y) {
+    vector<string> &dims = func.schedule().storage_dims;
+    bool found_y = false;
+    size_t y_loc = 0;
+    for (size_t i = 0; i < dims.size(); i++) {
+        if (var_name_match(dims[i], y.name())) {
+            found_y = true;
+            y_loc = i;
+        } else if (var_name_match(dims[i], x.name())) {
+            if (found_y) std::swap(dims[i], dims[y_loc]);
+            return *this;
+        }
+    }
+    assert(false && "Could not find these variables to reorder in schedule");
+    return *this;    
+}
+
+Func &Func::reorder_storage(Var x, Var y, Var z) {
+    reorder_storage(x, y);
+    reorder_storage(x, z);
+    reorder_storage(y, z);
+    return *this;
+}
+
+Func &Func::reorder_storage(Var x, Var y, Var z, Var w) {
+    reorder_storage(x, y);
+    reorder_storage(x, z);
+    reorder_storage(x, w);
+    reorder_storage(y, z, w);
+    return *this;
+}
+
+Func &Func::reorder_storage(Var x, Var y, Var z, Var w, Var t) {
+    reorder_storage(x, y);
+    reorder_storage(x, z);
+    reorder_storage(x, w);
+    reorder_storage(x, t);
+    reorder_storage(y, z, w, t);
+    return *this;
+}
+
 Func &Func::compute_at(Func f, RVar var) {
     return compute_at(f, Var(var.name()));
 }
@@ -547,24 +596,24 @@ Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name) {
     assert(value().defined() && "Can't compile undefined function");    
 
-    Stmt stmt = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
     StmtCompiler cg;
-    cg.compile(stmt, fn_name.empty() ? name() : fn_name, args);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_bitcode(filename);
 }
 
 void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name) {
     assert(value().defined() && "Can't compile undefined function");    
 
-    Stmt stmt = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
     StmtCompiler cg;
-    cg.compile(stmt, fn_name.empty() ? name() : fn_name, args);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_native(filename, false);
 }
 
@@ -609,12 +658,12 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name) {
     assert(value().defined() && "Can't compile undefined function");    
 
-    Stmt stmt = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
     Argument me(name(), true, Int(1));
     args.push_back(me);
 
     StmtCompiler cg;
-    cg.compile(stmt, fn_name.empty() ? name() : fn_name, args);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_native(filename, true);
 }
 
@@ -745,11 +794,11 @@ void Func::realize(Buffer dst) {
 void Func::compile_jit() {
     assert(value().defined() && "Can't realize undefined function");
     
-    Stmt stmt = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
     
     // Infer arguments
     InferArguments infer_args;
-    stmt.accept(&infer_args);
+    lowered.accept(&infer_args);
     
     Argument me(name(), true, Int(1));
     infer_args.arg_types.push_back(me);
@@ -765,13 +814,13 @@ void Func::compile_jit() {
     }
     
     StmtCompiler cg;
-    cg.compile(stmt, name(), infer_args.arg_types);
+    cg.compile(lowered, name(), infer_args.arg_types);
     
     if (log::debug_level >= 3) {
         cg.compile_to_native(name() + ".s", true);
         cg.compile_to_bitcode(name() + ".bc");
         ofstream stmt_debug((name() + ".stmt").c_str());
-        stmt_debug << stmt;
+        stmt_debug << lowered;
     }
     
     compiled_module = cg.compile_to_function_pointers();    

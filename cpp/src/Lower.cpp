@@ -182,8 +182,7 @@ pair<Stmt, Stmt> build_realization(Function func) {
         // using the bounds read in the update step. This is
         // necessary because later bounds inference does not
         // consider the bounds read during an update step
-        map<string, Region> regions = regions_required(update);
-        Region bounds = regions[func.name()];
+        Region bounds = region_called(update, func.name());
         if (bounds.size() > 0) {
             assert(bounds.size() == func.args().size());
             // Expand the region to be computed using the region read in the update step
@@ -269,9 +268,8 @@ private:
     }
 
     Stmt build_realize(Stmt s) {
-        // The allocate should cover everything touched below this point
-        map<string, Region> regions = regions_touched(s);
-        Region bounds = regions[func.name()];
+        // The allocate should cover everything touched below this point        
+        Region bounds = region_touched(s, func.name());
         
         for (size_t i = 0; i < bounds.size(); i++) {
             if (!bounds[i].min.defined()) {
@@ -434,21 +432,27 @@ public:
 /* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRVisitor {
 public:
-    FindBuffers(Stmt s) {s.accept(this);}
-    vector<string> buffers;
+    struct Result {
+        Buffer image;
+        Parameter param;
+    };
 
-    void include(const string &name) {
-        for (size_t i = 0; i < buffers.size(); i++) {
-            if (buffers[i] == name) return;
-        }
-        buffers.push_back(name);        
-    }
+    FindBuffers(Stmt s) {s.accept(this);}
+    map<string, Result> buffers;
 
     using IRVisitor::visit;
 
     void visit(const Call *op) {
         IRVisitor::visit(op);
-        if (op->call_type == Call::Image) include(op->name);
+        if (op->image.defined()) {
+            Result r;
+            r.image = op->image;
+            buffers[op->name] = r;
+        } else if (op->param.defined()) {
+            Result r;
+            r.param = op->param;
+            buffers[op->name] = r;
+        }
     }
 };
 
@@ -580,44 +584,41 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 // on inputs or outputs, and that the inputs and outputs conform to
 // the format required (e.g. stride.0 must be 1).
 Stmt add_image_checks(Stmt s, Function f) {
-    vector<string> bufs = FindBuffers(s).buffers;    
+    map<string, FindBuffers::Result> bufs = FindBuffers(s).buffers;    
 
-    bufs.push_back(f.name());
+    bufs[f.name()];
 
     map<string, Region> regions = regions_touched(s);
-    for (size_t i = 0; i < bufs.size(); i++) {
-        // Validate the buffer arguments
-        string var_name = bufs[i] + ".stride.0";
-        Expr var = new Variable(Int(32), var_name);
-        string error_msg = "stride on innermost dimension of " + bufs[i] + " must be one";
-        s = new Block(new AssertStmt(var == 1, error_msg), 
-                      new LetStmt(var_name, 1, s));
-
+    for (map<string, FindBuffers::Result>::iterator iter = bufs.begin();
+         iter != bufs.end(); ++iter) {
+        const string &name = iter->first;
+        Buffer &image = iter->second.image;
+        Parameter &param = iter->second.param;
 
         // Bounds checking can be disabled via HL_DISABLE_BOUNDS_CHECKING
         const char *disable = getenv("HL_DISABLE_BOUNDS_CHECKING");
         if (!disable || atoi(disable) == 0) {
 
             // Figure out the region touched
-            const Region &region = regions[bufs[i]];
+            const Region &region = regions[name];
             if (region.size()) {
-                log(3) << "In image " << bufs[i] << " region touched is:\n";
+                log(3) << "In image " << name << " region touched is:\n";
                 for (size_t j = 0; j < region.size(); j++) {
                     log(3) << region[j].min << ", " << region[j].extent << "\n";
                     ostringstream min_name, extent_name;
-                    min_name << bufs[i] << ".min." << j;
-                    extent_name << bufs[i] << ".extent." << j;
+                    min_name << name << ".min." << j;
+                    extent_name << name << ".extent." << j;
                     Expr actual_min = new Variable(Int(32), min_name.str());
                     Expr actual_extent = new Variable(Int(32), extent_name.str());
                     Expr min_used = region[j].min;
                     Expr extent_used = region[j].extent;
                     if (!min_used.defined() || !extent_used.defined()) {
-                        std::cerr << "Region used of buffer " << bufs[i] 
-                                  << " is unbounded in dimension " << i << std::endl;
+                        std::cerr << "Region used of buffer " << name 
+                                  << " is unbounded in dimension " << j << std::endl;
                         assert(false);
                     }
                     ostringstream error_msg;
-                    error_msg << bufs[i] << " is accessed out of bounds in dimension " << j;
+                    error_msg << name << " is accessed out of bounds in dimension " << j;
                     Stmt check = new AssertStmt((actual_min <= min_used) &&
                                                 (actual_min + actual_extent >= min_used + extent_used), 
                                                 error_msg.str());
@@ -627,6 +628,56 @@ Stmt add_image_checks(Stmt s, Function f) {
         } else {
             log(2) << "Bounds checking disabled via HL_DISABLE_BOUNDS_CHECKING\n";
         }
+
+
+        // Validate the buffer arguments
+        vector<pair<string, Expr> > lets;
+        for (int i = 0; i < 4; i++) {
+            char dim = '0' + i;
+            if (image.defined() && i < image.dimensions()) {
+                lets.push_back(make_pair(name + ".stride." + dim, image.stride(i)));
+                lets.push_back(make_pair(name + ".extent." + dim, image.extent(i)));
+                lets.push_back(make_pair(name + ".min." + dim, image.min(i)));                
+            } else if (param.defined()) {
+                Expr stride = param.stride_constraint(i);
+                Expr extent = param.extent_constraint(i);
+                Expr min = param.min_constraint(i);
+                if (stride.defined()) {
+                    lets.push_back(make_pair(name + ".stride." + dim, stride));
+                }
+                if (extent.defined()) {
+                    lets.push_back(make_pair(name + ".extent." + dim, extent));
+                }
+                if (min.defined()) {
+                    lets.push_back(make_pair(name + ".min." + dim, min));
+                }
+            }
+        }
+
+        // The stride of the output buffer in dimension 0 should also be 1
+        lets.push_back(make_pair(f.name() + ".stride.0", 1));
+
+        // Copy the new values to the old names
+        for (size_t i = 0; i < lets.size(); i++) {
+            s = new LetStmt(lets[i].first, new Variable(Int(32), lets[i].first + ".constrained"), s);
+        }
+
+        // Assert all the conditions, and set the new values
+        vector<Stmt> asserts;
+        for (size_t i = 0; i < lets.size(); i++) {
+            Expr var = new Variable(Int(32), lets[i].first);
+            Expr value = lets[i].second;
+            ostringstream error;
+            error << "Static constraint violated: " << lets[i].first << " == " << value << "\n";
+            asserts.push_back(new AssertStmt(var == value, error.str()));
+            s = new LetStmt(lets[i].first + ".constrained", value, s);
+        }
+
+        for (size_t i = asserts.size(); i > 0; i--) {
+            s = new Block(asserts[i-1], s);
+        }
+
+ 
     }    
 
     return s;
@@ -675,7 +726,7 @@ Stmt lower(Function f) {
     log(2) << "Injected debug_to_file calls:\n" << s << '\n';
 
     log(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s);
+    s = storage_flattening(s, env);
     log(2) << "Storage flattening: " << '\n' << s << "\n\n";
 
     log(1) << "Simplifying...\n";

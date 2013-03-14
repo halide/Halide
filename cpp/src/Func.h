@@ -14,6 +14,8 @@
 #include "Argument.h"
 #include "RDom.h"
 #include "JITCompiledModule.h"
+#include "Image.h"
+#include "Util.h"
 
 namespace Halide {
         
@@ -229,6 +231,11 @@ class Func {
     void add_implicit_vars(std::vector<Expr> &);
     // @}
 
+    /** The lowered imperative form of this function. Cached here so
+     * that recompilation for different targets doesn't require
+     * re-lowering */
+    Internal::Stmt lowered;
+
     /** A JIT-compiled version of this function that we save so that
      * we don't have to rejit every time we want to evaluated it. */
     Internal::JITCompiledModule compiled_module;
@@ -271,6 +278,16 @@ public:
      * name, and define it to return the given expression (which may
      * not contain free variables). */
     Func(Expr e);
+
+    /** Generate a new uniquely-named function that returns the given
+     * buffer. Has the same dimensionality as the buffer. Useful for
+     * passing Images to c++ functions that expect Funcs */
+    //@{
+    Func(Buffer image);
+    template<typename T> Func(Image<T> image) {
+        (*this) = Func(Buffer(image));
+    }
+    //@}
 
     /** Evaluate this function over some rectangular domain and return
      * the resulting buffer. The buffer should probably be instantly
@@ -428,6 +445,15 @@ public:
     Func &reorder(Var x, Var y, Var z);
     Func &reorder(Var x, Var y, Var z, Var w);
     Func &reorder(Var x, Var y, Var z, Var w, Var t);
+    // @}
+
+    /** Scheduling calls that control how the storage for the function
+     * is laid out. Right now you can only reorder the dimensions. */
+    // @{
+    Func &reorder_storage(Var x, Var y);
+    Func &reorder_storage(Var x, Var y, Var z);
+    Func &reorder_storage(Var x, Var y, Var z, Var w);
+    Func &reorder_storage(Var x, Var y, Var z, Var w, Var t);
     // @}
 
     /** Compute this function as needed for each unique value of the

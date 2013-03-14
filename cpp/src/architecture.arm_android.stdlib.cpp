@@ -87,7 +87,7 @@ WEAK void set_custom_allocator(void *(*cust_malloc)(size_t), void (*cust_free)(v
     halide_custom_free = cust_free;
 }
 
-WEAK void *fast_malloc(size_t x) {
+WEAK void *hl_malloc(size_t x) {
     if (halide_custom_malloc) {
         return halide_custom_malloc(x);
     } else {
@@ -99,20 +99,12 @@ WEAK void *fast_malloc(size_t x) {
     }
 }
 
-WEAK void fast_free(void *ptr) {
+WEAK void hl_free(void *ptr) {
     if (halide_custom_free) {
         halide_custom_free(ptr);
     } else {
         free(((void**)ptr)[-1]);
     }
-}
-
-WEAK void *safe_malloc(size_t x) {
-    return fast_malloc(x);
-}
-
-WEAK void safe_free(void *ptr) {
-    return fast_free(ptr);
 }
 
 static void (*halide_error_handler)(char *) = NULL;
@@ -333,21 +325,38 @@ extern void gettimeofday(timeval *, void *);
 
 #ifndef current_time_defined
 #define current_time_defined
-WEAK int currentTime() {
-    static bool initialized = false;
-    static timeval start;
-    if (!initialized) {
-        gettimeofday(&start, NULL);
-        initialized = true;
-        return 0;
-    } else {
-        timeval now;
-        gettimeofday(&now, NULL);
-        return
-            (now.tv_sec - start.tv_sec)*1000 + 
-            (now.tv_usec - start.tv_usec)/1000;
-    }
+static timeval reference_clock;
+WEAK int start_clock() {
+    gettimeofday(&reference_clock, NULL);
+    return 0;
+}
+WEAK int current_time() {
+    timeval now;
+    gettimeofday(&now, NULL);
+    return
+        (now.tv_sec - reference_clock.tv_sec)*1000 + 
+        (now.tv_usec - reference_clock.tv_usec)/1000;
 }
 #endif
+
+    extern "C" void *fopen(const char *, const char *);
+    extern "C" size_t fwrite(void *, size_t, size_t, void *);
+    extern "C" void fclose(void *);
+
+WEAK int32_t debug_to_file(const char *filename, uint8_t *data, 
+                           int32_t s0, int32_t s1, int32_t s2, int32_t s3, 
+                           int32_t type_code, int32_t bytes_per_element) {
+    void *f = fopen(filename, "wb");
+    if (!f) return -1;
+    size_t elts = s0;
+    elts *= s1*s2*s3;
+    int32_t header[] = {s0, s1, s2, s3, type_code};
+    size_t written = fwrite((void *)(&header[0]), 4, 5, f);
+    if (written != 5) return -2;
+    written = fwrite((void *)data, bytes_per_element, elts, f);  
+    fclose(f);
+    if (written == elts) return 0;
+    else return int(written)+1;
+}
 
 }

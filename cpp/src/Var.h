@@ -30,11 +30,8 @@ public:
     const std::string &name() const {return _name;}
 
     /** Test if two Vars are the same. This simply compares the names. */
-    bool operator==(const Var &other) {return _name == other._name;}
+    bool same_as(const Var &other) {return _name == other._name;}
 
-    /** Test if two Vars are different. This simply compares the names. */
-    bool operator!=(const Var &other) {return _name != other._name;}
-    
     /** Implicit var constructor. Implicit variables are injected
      * automatically into a function call if the number of arguments
      * to the function are fewer than its dimensionality. Defining a

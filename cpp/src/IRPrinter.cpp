@@ -305,9 +305,9 @@ void IRPrinter::visit(const Ramp *op) {
 }
 
 void IRPrinter::visit(const Broadcast *op) {
-    stream << "broadcast(";
+    stream << "x" << op->width << "(";
     print(op->value);
-    stream << ", " << op->width << ")";
+    stream << ")";
 }
 
 void IRPrinter::visit(const Call *op) {

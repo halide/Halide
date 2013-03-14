@@ -368,10 +368,12 @@ void CodeGen_ARM::visit(const Mul *op) {
     bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
     const Cast *cast_a = op->a.as<Cast>();
 
-    Value *shift = NULL;
-    if (cast_a) {
-        shift = ConstantInt::get(llvm_type_of(cast_a->value.type()), shift_amount);
-    } else {
+    const Broadcast *broadcast_b = op->b.as<Broadcast>();
+    Value *shift = NULL, *wide_shift = NULL;
+    if (power_of_two) {
+        if (cast_a) {
+            wide_shift = ConstantInt::get(llvm_type_of(cast_a->value.type()), shift_amount);
+        }        
         shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
     }
 
@@ -379,27 +381,27 @@ void CodeGen_ARM::visit(const Mul *op) {
     if (power_of_two && cast_a && 
         cast_a->type == Int(16, 8) && cast_a->value.type() == Int(8, 8)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i16x8, "vshiftls.v8i16", vec(lhs, shift));
+        value = call_intrin(i16x8, "vshiftls.v8i16", vec(lhs, wide_shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == Int(32, 4) && cast_a->value.type() == Int(16, 4)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i32x4, "vshiftls.v4i32", vec(lhs, shift));
+        value = call_intrin(i32x4, "vshiftls.v4i32", vec(lhs, wide_shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == Int(64, 2) && cast_a->value.type() == Int(32, 2)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i64x2, "vshiftls.v2i64", vec(lhs, shift));
+        value = call_intrin(i64x2, "vshiftls.v2i64", vec(lhs, wide_shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == UInt(16, 8) && cast_a->value.type() == UInt(8, 8)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i16x8, "vshiftlu.v8i16", vec(lhs, shift));
+        value = call_intrin(i16x8, "vshiftlu.v8i16", vec(lhs, wide_shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == UInt(32, 4) && cast_a->value.type() == UInt(16, 4)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i32x4, "vshiftlu.v4i32", vec(lhs, shift));
+        value = call_intrin(i32x4, "vshiftlu.v4i32", vec(lhs, wide_shift));
     } else if (power_of_two && cast_a && 
                cast_a->type == UInt(64, 2) && cast_a->value.type() == UInt(32, 2)) {
         Value *lhs = codegen(cast_a->value);
-        value = call_intrin(i64x2, "vshiftlu.v2i64", vec(lhs, shift));
+        value = call_intrin(i64x2, "vshiftlu.v2i64", vec(lhs, wide_shift));
     } else if (power_of_two && op->a.type() == Int(8, 8)) {
         // Non-widening left shifts
         Value *lhs = codegen(op->a);
@@ -443,6 +445,17 @@ void CodeGen_ARM::visit(const Mul *op) {
     } else if (power_of_two && op->a.type() == UInt(64, 2)) {
         Value *lhs = codegen(op->a);
         value = call_intrin(i64x2, "vshiftu.v2i64", vec(lhs, shift));
+    } else if (broadcast_b && is_const(broadcast_b->value, 3)) {        
+        // Vector multiplies by 3, 5, 7, 9 should do shift-and-add or
+        // shift-and-sub instead to reduce register pressure (the
+        // shift is an immediate)
+        value = codegen(op->a * 2 + op->a);        
+    } else if (broadcast_b && is_const(broadcast_b->value, 5)) {
+        value = codegen(op->a * 4 + op->a);
+    } else if (broadcast_b && is_const(broadcast_b->value, 7)) {
+        value = codegen(op->a * 8 - op->a);
+    } else if (broadcast_b && is_const(broadcast_b->value, 9)) {
+        value = codegen(op->a * 8 + op->a);
     } else {
         CodeGen::visit(op);
     }
@@ -763,6 +776,13 @@ void CodeGen_ARM::visit(const Store *op) {
     // A dense store of an interleaving can be done using a vst2 intrinsic
     const Call *call = op->value.as<Call>();
     const Ramp *ramp = op->index.as<Ramp>();
+    
+    // We only deal with ramps here
+    if (!ramp) {
+        CodeGen::visit(op);
+        return;
+    }
+
     if (ramp && is_one(ramp->stride) && 
         call && call->name == "interleave vectors") {
         assert(call->args.size() == 2 && "Wrong number of args to interleave vectors");
@@ -800,73 +820,127 @@ void CodeGen_ARM::visit(const Store *op) {
             CodeGen::visit(op);
         }
         return;
-    } else {
-        CodeGen::visit(op);
+    } 
+
+    // More general strided stores
+
+
+    // We have builtins for strided loads with fixed but unknown stride
+    ostringstream builtin;
+    builtin << "strided_store_"
+            << (op->value.type().is_float() ? 'f' : 'i')
+            << op->value.type().bits 
+            << 'x' << op->value.type().width;
+
+    llvm::Function *fn = module->getFunction(builtin.str());
+    if (fn) {
+        Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), codegen(ramp->base));
+        Value *stride = codegen(ramp->stride * (op->value.type().bits / 8));
+        Value *val = codegen(op->value);
+        builder->CreateCall(fn, vec(base, stride, val));
+        return;
     }
+
+    CodeGen::visit(op);
+
 }
 
 void CodeGen_ARM::visit(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
 
-    // strided loads (vld2)
-    if (ramp && is_two(ramp->stride)) {
+    // We only deal with ramps here
+    if (!ramp) {
+        CodeGen::visit(op);
+        return;
+    }
+
+    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+
+    // If the stride is one or minus one, we can deal with that using vanilla codegen
+    if (stride && (stride->value == 1 || stride->value == -1)) {
+        CodeGen::visit(op);
+        return;
+    }
+
+    // Strided loads with known stride
+    if (stride && stride->value >= 2 && stride->value <= 4) {
         // Check alignment on the base. 
         Expr base = ramp->base;
-        bool odd = false;
+        int offset = 0;
         ModulusRemainder mod_rem = modulus_remainder(ramp->base);
-        if ((mod_rem.remainder & 1) && !(mod_rem.modulus & 1)) {
-            // If we can guarantee it's odd-aligned, we should round
-            // down by one in order to possibly share this vld2 with
-            // an adjacent one. (e.g. averaging down patterns like
-            // f(2*x) + f(2*x+1))
-            base = simplify(base - 1);
-            mod_rem.remainder--;
-            odd = true;
-        }
-        const Add *add = base.as<Add>();
-        if (!odd && add && is_one(add->b) && (mod_rem.modulus & 1)) {
-            // If it just ends in +1, but we can't analyze the base,
-            // it's probably still worth removing that +1 to encourage
-            // sharing.
-            base = add->a;
-            odd = true;
+
+        
+        if ((mod_rem.modulus % stride->value) == 0) {
+            offset = mod_rem.remainder % stride->value;
+            base = simplify(base - offset);
+            mod_rem.remainder -= offset;
         }
 
+        const Add *add = base.as<Add>();
+        const IntImm *add_b = add ? add->b.as<IntImm>() : NULL;
+        if ((mod_rem.modulus == 1) && add_b) {
+            int rounded_down = (add_b->value / stride->value) * stride->value;
+            offset = add_b->value - rounded_down;
+            base = simplify(base - offset);
+        }
+        
+
         int alignment = op->type.bits / 8;
-        alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
+        //alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
         Value *align = ConstantInt::get(i32, alignment);
 
         Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(base));
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
 
-        llvm::StructType *result_type = 
-            StructType::get(context, vec(llvm_type_of(op->type),
-                                         llvm_type_of(op->type)));
-       
-        Value *pair = NULL;
+        vector<llvm::Type *> type_vec(stride->value);
+        llvm::Type *elem_type = llvm_type_of(op->type);
+        for (int i = 0; i < stride->value; i++) {
+            type_vec[i] = elem_type;
+        }
+        llvm::StructType *result_type = StructType::get(context, type_vec);
+
+        ostringstream prefix;
+        prefix << "vld" << stride->value << ".";
+        string pre = prefix.str();
+
+        Value *group = NULL;
         if (op->type == Int(8, 8) || op->type == UInt(8, 8)) {
-            pair = call_intrin(result_type, "vld2.v8i8", vec(ptr, align));
+            group = call_intrin(result_type, pre+"v8i8", vec(ptr, align));
         } else if (op->type == Int(16, 4) || op->type == UInt(16, 4)) {
-            pair = call_intrin(result_type, "vld2.v4i16", vec(ptr, align));
+            group = call_intrin(result_type, pre+"v4i16", vec(ptr, align));
         } else if (op->type == Int(32, 2) || op->type == UInt(32, 2)) {
-            pair = call_intrin(result_type, "vld2.v2i32", vec(ptr, align));
+            group = call_intrin(result_type, pre+"v2i32", vec(ptr, align));
         } else if (op->type == Float(32, 2)) {
-            pair = call_intrin(result_type, "vld2.v2f32", vec(ptr, align));
+            group = call_intrin(result_type, pre+"v2f32", vec(ptr, align));
         } else if (op->type == Int(8, 16) || op->type == UInt(8, 16)) {
-            pair = call_intrin(result_type, "vld2.v16i8", vec(ptr, align));
+            group = call_intrin(result_type, pre+"v16i8", vec(ptr, align));
         } else if (op->type == Int(16, 8) || op->type == UInt(16, 8)) {
-            pair = call_intrin(result_type, "vld2.v8i16", vec(ptr, align));
+            group = call_intrin(result_type, pre+"v8i16", vec(ptr, align));
         } else if (op->type == Int(32, 4) || op->type == UInt(32, 4)) {
-            pair = call_intrin(result_type, "vld2.v4i32", vec(ptr, align));
+            group = call_intrin(result_type, pre+"v4i32", vec(ptr, align));
         } else if (op->type == Float(32, 4)) {
-            pair = call_intrin(result_type, "vld2.v4f32", vec(ptr, align));
+            group = call_intrin(result_type, pre+"v4f32", vec(ptr, align));
         }
 
-        if (pair) {            
-            unsigned int idx = odd ? 1 : 0;
-            value = builder->CreateExtractValue(pair, vec(idx));
+        if (group) {            
+            value = builder->CreateExtractValue(group, vec((unsigned int)offset));
             return;
         }
+    }
+
+    // We have builtins for strided loads with fixed but unknown stride
+    ostringstream builtin;
+    builtin << "strided_load_"
+            << (op->type.is_float() ? 'f' : 'i')
+            << op->type.bits 
+            << 'x' << op->type.width;
+
+    llvm::Function *fn = module->getFunction(builtin.str());
+    if (fn) {
+        Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
+        Value *stride = codegen(ramp->stride * (op->type.bits / 8));
+        value = builder->CreateCall(fn, vec(base, stride), builtin.str());
+        return;
     }
 
     CodeGen::visit(op);
