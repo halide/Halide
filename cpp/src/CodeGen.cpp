@@ -971,7 +971,7 @@ void CodeGen::visit(const Call *op) {
     // types are handled here.
     if (op->name == "extract odd lanes" || op->name == "extract even lanes") {
         bool even = (op->name == "extract even lanes");
-        assert(args.size() == 1);
+        assert(op->args.size() == 1);
         vector<Constant *> indices(op->type.width);
         for (size_t i = 0; i < indices.size(); i++) {
             indices[i] = ConstantInt::get(i32, even ? (i*2) : (i*2 + 1));

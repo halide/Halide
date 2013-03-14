@@ -1,6 +1,10 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug-Static|Win32">
+      <Configuration>Debug-Static</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
       <Platform>Win32</Platform>
@@ -24,6 +28,11 @@
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -33,13 +42,16 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -64,7 +76,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <TargetName>halide_initial_modules</TargetName>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">
+    <TargetName>halide_initial_modules</TargetName>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">
     <TargetExt>.lib</TargetExt>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -76,6 +94,28 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>architecture.x86.stdlib.obj;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <CustomBuildStep>
+      <Message>Performing Custom Build Step for initial_modules</Message>
+    </CustomBuildStep>
+    <CustomBuild>
+      <Message>Performing Custom Build Tools for initial_modules</Message>
+    </CustomBuild>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>architecture.x86.stdlib.obj;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <CustomBuildStep>
+      <Message>Performing Custom Build Step for initial_modules</Message>
+    </CustomBuildStep>
+    <CustomBuild>
+      <Message>Performing Custom Build Tools for initial_modules</Message>
+    </CustomBuild>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -108,50 +148,64 @@
   <ItemGroup>
     <ClInclude Include="..\..\src\architecture.posix.stdlib.cpp" />
     <CustomBuild Include="..\..\src\architecture.x86.stdlib.cpp">
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86.stdlib.cpp -o tmp.ll
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86.stdlib.cpp -o tmp.ll
 copy /b tmp.ll + ..\..\src\architecture.x86.stdlib.ll architecture.x86.initmod.ll
-..\llvm\build\bin\Release\llvm-as.exe architecture.x86.initmod.ll -o architecture.x86.initmod.bc
-..\Release\bitcode2cpp.exe x86 &lt; architecture.x86.initmod.bc &gt; architecture.x86.initmod.cpp
-..\llvm\build\bin\Release\clang.exe -c architecture.x86.initmod.cpp -o architecture.x86.stdlib.obj</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86.stdlib.cpp -o tmp.ll
+..\..\..\llvm\build\bin\Release\llvm-as.exe architecture.x86.initmod.ll -o architecture.x86.initmod.bc
+..\$(IntDir)\bitcode2cpp.exe x86 &lt; architecture.x86.initmod.bc &gt; architecture.x86.initmod.cpp
+..\..\..\llvm\build\bin\Release\clang.exe -c architecture.x86.initmod.cpp -o architecture.x86.stdlib.obj</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">..\..\..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86.stdlib.cpp -o tmp.ll
 copy /b tmp.ll + ..\..\src\architecture.x86.stdlib.ll architecture.x86.initmod.ll
-..\llvm\build\bin\Release\llvm-as.exe architecture.x86.initmod.ll -o architecture.x86.initmod.bc
-..\Release\bitcode2cpp.exe x86 &lt; architecture.x86.initmod.bc &gt; architecture.x86.initmod.cpp
-..\llvm\build\bin\Release\clang.exe -c architecture.x86.initmod.cpp -o architecture.x86.stdlib.obj</Command>
+..\..\..\llvm\build\bin\Release\llvm-as.exe architecture.x86.initmod.ll -o architecture.x86.initmod.bc
+..\$(IntDir)\bitcode2cpp.exe x86 &lt; architecture.x86.initmod.bc &gt; architecture.x86.initmod.cpp
+..\..\..\llvm\build\bin\Release\clang.exe -c architecture.x86.initmod.cpp -o architecture.x86.stdlib.obj</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">architecture.x86.stdlib.obj</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">architecture.x86.stdlib.obj</Outputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">architecture.x86.stdlib.ll</AdditionalInputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">architecture.x86.stdlib.ll</AdditionalInputs>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86.stdlib.cpp -o tmp.ll
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86.stdlib.cpp -o tmp.ll
 copy /b tmp.ll + ..\..\src\architecture.x86.stdlib.ll architecture.x86.initmod.ll
-..\llvm\build\bin\Release\llvm-as.exe architecture.x86.initmod.ll -o architecture.x86.initmod.bc
-..\Release\bitcode2cpp.exe x86 &lt; architecture.x86.initmod.bc &gt; architecture.x86.initmod.cpp
-..\llvm\build\bin\Release\clang.exe -c architecture.x86.initmod.cpp -o architecture.x86.stdlib.obj</Command>
+..\..\..\llvm\build\bin\Release\llvm-as.exe architecture.x86.initmod.ll -o architecture.x86.initmod.bc
+..\$(IntDir)\bitcode2cpp.exe x86 &lt; architecture.x86.initmod.bc &gt; architecture.x86.initmod.cpp
+..\..\..\llvm\build\bin\Release\clang.exe -c architecture.x86.initmod.cpp -o architecture.x86.stdlib.obj</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">..\..\..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86.stdlib.cpp -o tmp.ll
+copy /b tmp.ll + ..\..\src\architecture.x86.stdlib.ll architecture.x86.initmod.ll
+..\..\..\llvm\build\bin\Release\llvm-as.exe architecture.x86.initmod.ll -o architecture.x86.initmod.bc
+$(SolutionDir)$(Configuration)\bitcode2cpp.exe x86 &lt; architecture.x86.initmod.bc &gt; architecture.x86.initmod.cpp
+..\..\..\llvm\build\bin\Release\clang.exe -c architecture.x86.initmod.cpp -o architecture.x86.stdlib.obj</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">architecture.x86.stdlib.obj</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">architecture.x86.stdlib.obj</Outputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">architecture.x86.stdlib.ll</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">architecture.x86.stdlib.ll</AdditionalInputs>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="..\..\src\architecture.x86_avx.stdlib.cpp">
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86_avx.stdlib.cpp -o tmp.ll
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86_avx.stdlib.cpp -o tmp.ll
 copy /b tmp.ll + ..\..\src\architecture.x86_avx.stdlib.ll architecture.x86_avx.initmod.ll
-..\llvm\build\bin\Release\llvm-as.exe architecture.x86_avx.initmod.ll -o architecture.x86_avx.initmod.bc
-..\Release\bitcode2cpp.exe x86_avx &lt; architecture.x86_avx.initmod.bc &gt; architecture.x86_avx.initmod.cpp
-..\llvm\build\bin\Release\clang.exe -c architecture.x86_avx.initmod.cpp -o architecture.x86_avx.stdlib.obj</Command>
+..\..\..\llvm\build\bin\Release\llvm-as.exe architecture.x86_avx.initmod.ll -o architecture.x86_avx.initmod.bc
+..\$(IntDir)\bitcode2cpp.exe x86_avx &lt; architecture.x86_avx.initmod.bc &gt; architecture.x86_avx.initmod.cpp
+..\..\..\llvm\build\bin\Release\clang.exe -c architecture.x86_avx.initmod.cpp -o architecture.x86_avx.stdlib.obj</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">..\..\..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86_avx.stdlib.cpp -o tmp.ll
+copy /b tmp.ll + ..\..\src\architecture.x86_avx.stdlib.ll architecture.x86_avx.initmod.ll
+..\..\..\llvm\build\bin\Release\llvm-as.exe architecture.x86_avx.initmod.ll -o architecture.x86_avx.initmod.bc
+$(SolutionDir)$(Configuration)\bitcode2cpp.exe x86_avx &lt; architecture.x86_avx.initmod.bc &gt; architecture.x86_avx.initmod.cpp
+..\..\..\llvm\build\bin\Release\clang.exe -c architecture.x86_avx.initmod.cpp -o architecture.x86_avx.stdlib.obj</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">architecture.x86_avx.stdlib.obj</Outputs>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86_avx.stdlib.cpp -o tmp.ll
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">architecture.x86_avx.stdlib.obj</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86_avx.stdlib.cpp -o tmp.ll
 copy /b tmp.ll + ..\..\src\architecture.x86_avx.stdlib.ll architecture.x86_avx.initmod.ll
-..\llvm\build\bin\Release\llvm-as.exe architecture.x86_avx.initmod.ll -o architecture.x86_avx.initmod.bc
-..\Release\bitcode2cpp.exe x86_avx &lt; architecture.x86_avx.initmod.bc &gt; architecture.x86_avx.initmod.cpp
-..\llvm\build\bin\Release\clang.exe -c architecture.x86_avx.initmod.cpp -o architecture.x86_avx.stdlib.obj</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86_avx.stdlib.cpp -o tmp.ll
+..\..\..\llvm\build\bin\Release\llvm-as.exe architecture.x86_avx.initmod.ll -o architecture.x86_avx.initmod.bc
+..\$(IntDir)\bitcode2cpp.exe x86_avx &lt; architecture.x86_avx.initmod.bc &gt; architecture.x86_avx.initmod.cpp
+..\..\..\llvm\build\bin\Release\clang.exe -c architecture.x86_avx.initmod.cpp -o architecture.x86_avx.stdlib.obj</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">..\..\..\llvm\build\bin\Release\clang.exe -march=corei7 -emit-llvm -O3 -I ..\pthread -S ..\..\src\architecture.x86_avx.stdlib.cpp -o tmp.ll
 copy /b tmp.ll + ..\..\src\architecture.x86_avx.stdlib.ll architecture.x86_avx.initmod.ll
-..\llvm\build\bin\Release\llvm-as.exe architecture.x86_avx.initmod.ll -o architecture.x86_avx.initmod.bc
-..\Release\bitcode2cpp.exe x86_avx &lt; architecture.x86_avx.initmod.bc &gt; architecture.x86_avx.initmod.cpp
-..\llvm\build\bin\Release\clang.exe -c architecture.x86_avx.initmod.cpp -o architecture.x86_avx.stdlib.obj</Command>
+..\..\..\llvm\build\bin\Release\llvm-as.exe architecture.x86_avx.initmod.ll -o architecture.x86_avx.initmod.bc
+..\$(IntDir)\bitcode2cpp.exe x86_avx &lt; architecture.x86_avx.initmod.bc &gt; architecture.x86_avx.initmod.cpp
+..\..\..\llvm\build\bin\Release\clang.exe -c architecture.x86_avx.initmod.cpp -o architecture.x86_avx.stdlib.obj</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">architecture.x86_avx.stdlib.obj</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">architecture.x86_avx.stdlib.obj</Outputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">architecture.x86_avx.stdlib.ll</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">architecture.x86_avx.stdlib.ll</AdditionalInputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">architecture.x86_avx.stdlib.ll</AdditionalInputs>
       <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">architecture.x86_avx.stdlib.ll</AdditionalInputs>
     </CustomBuild>
