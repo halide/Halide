@@ -35,6 +35,14 @@ Func::Func() : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL),
 Func::Func(Expr e) : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {
     (*this)() = e;
 }
+
+Func::Func(Buffer b) : func(unique_name('f')), error_handler(NULL), custom_malloc(NULL), custom_free(NULL) {    
+    vector<Expr> args;
+    for (int i = 0; i < b.dimensions(); i++) {
+        args.push_back(Var::implicit(i));
+    }
+    (*this)() = new Internal::Call(b, args);
+}
         
 const string &Func::name() const {
     return func.name();
