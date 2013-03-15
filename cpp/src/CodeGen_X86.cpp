@@ -451,7 +451,7 @@ void CodeGen_X86::test() {
         if (read == 0) putenv("HL_NUMTHREADS=4");
     }    
     #else
-    if (!getenv("HL_NUMTHREADS") {
+    if (!getenv("HL_NUMTHREADS")) {
         setenv("HL_NUMTHREADS", "4", 1);
     }
     #endif

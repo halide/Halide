@@ -1,8 +1,11 @@
 #include <stdint.h>
+
+#ifndef __APPLE__
 #ifdef _LP64
 typedef uint64_t size_t;
 #else
 typedef uint32_t size_t;
+#endif
 #endif
 #define WEAK __attribute__((weak))
 
