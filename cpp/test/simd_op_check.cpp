@@ -115,6 +115,7 @@ void *worker(void *arg) {
     for (size_t i = n; i < jobs.size(); i += nThreads) {
 	do_job(jobs[i]);
     }
+    return NULL;
 }
 
 void do_all_jobs() {
