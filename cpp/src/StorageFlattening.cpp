@@ -110,7 +110,7 @@ private:
         stmt = new LetStmt(stride_0_name.str(), 1, stmt);           
 
         // Assign the mins and extents stored
-        for (int i = realize->bounds.size(); i > 0; i--) { 
+        for (size_t i = realize->bounds.size(); i > 0; i--) { 
             ostringstream min_name, extent_name;
             min_name << realize->name << ".min." << (i-1);
             extent_name << realize->name << ".extent." << (i-1);

@@ -10,6 +10,11 @@
 #include "Param.h"
 #include "integer_division_table.h"
 
+// No msvc warnings from llvm headers please
+#ifdef _WIN32
+#pragma warning(push, 0)
+#endif
+
 #include <llvm/Config/config.h>
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3.
@@ -32,6 +37,12 @@
 
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/IRReader.h>
+
+
+// No msvc warnings from llvm headers please
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
 extern "C" unsigned char halide_internal_initmod_x86[];
 extern "C" int halide_internal_initmod_x86_length;
@@ -68,6 +79,9 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     // Parse it    
     std::string errstr;
     module = ParseBitcodeFile(bitcode_buffer, context, &errstr);
+	if (!module) {
+        std::cerr << "Error parsing initial module: " << errstr << "\n";
+	}
     assert(module && "llvm encountered an error in parsing a bitcode file.");
 
     // Fix the target triple
@@ -429,13 +443,19 @@ void CodeGen_X86::test() {
     //cg.compile_to_native("test1.o", false);
     //cg.compile_to_native("test1.s", true);
 
-    if (!getenv("HL_NUMTHREADS")) {
-        #ifdef _WIN32
-        putenv("HL_NUMTHREADS=4");
-        #else
+    #ifdef _WIN32
+    {
+        char buf[32];
+        size_t read;
+        getenv_s(&read, buf, "HL_NUMTHREADS");
+        if (read == 0) putenv("HL_NUMTHREADS=4");
+    }    
+    #else
+    if (!getenv("HL_NUMTHREADS") {
         setenv("HL_NUMTHREADS", "4", 1);
-        #endif
     }
+    #endif
+
     JITCompiledModule m = cg.compile_to_function_pointers();
     typedef void (*fn_type)(::buffer_t *, float, int);
     fn_type fn = (fn_type)m.function;

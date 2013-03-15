@@ -1,6 +1,23 @@
 #include <stdio.h>
 #include <Halide.h>
+
+#ifdef _WIN32
+extern "C" bool QueryPerformanceCounter(uint64_t *);
+extern "C" bool QueryPerformanceFrequency(uint64_t *);
+double currentTime() {
+    uint64_t t, freq;
+    QueryPerformanceCounter(&t);
+    QueryPerformanceFrequency(&freq);
+    return (t * 1000.0) / freq;
+}
+#else
 #include <sys/time.h>
+double currentTime() {
+    timeval t;
+    gettimeofday(&t, NULL);
+    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
+}
+#endif
 
 using namespace Halide;
 
@@ -14,8 +31,8 @@ int main(int argc, char **argv) {
     a.set(c);
 
 
-    timeval t1, t2;
-    gettimeofday(&t1, NULL);
+    double t1, t2;
+    t1 = currentTime();
 
     for (int i = 0; i < 100; i++) {
         Func f;
@@ -24,11 +41,10 @@ int main(int argc, char **argv) {
         assert(c(0) == (i+1)*17);
     }    
 
-    gettimeofday(&t2, NULL);
-    int elapsed = int(t2.tv_sec - t1.tv_sec);
-    elapsed = 1000000*elapsed + int(t2.tv_usec - t1.tv_usec);
+    t2 = currentTime();
+    int elapsed = (int)(10.0 * (t2-t1));
 
-    printf("%d us per jit compilation\n", elapsed/100);
+    printf("%d us per jit compilation\n", elapsed);
 
     printf("Success!\n");
     return 0;

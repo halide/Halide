@@ -31,10 +31,10 @@ namespace Halide {
  * scheduled innermost within g.
  */
 //@{
-Expr sum(Expr);
-Expr product(Expr);
-Expr maximum(Expr);
-Expr minimum(Expr);
+EXPORT Expr sum(Expr);
+EXPORT Expr product(Expr);
+EXPORT Expr maximum(Expr);
+EXPORT Expr minimum(Expr);
 //@}
 
 }

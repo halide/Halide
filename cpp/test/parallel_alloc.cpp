@@ -5,8 +5,6 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    setenv("HL_NUMTHREADS", "8", 0);
-
     for (int i = 0; i < 20; i++) {
         Var x, y, z;
         Func f, g;
