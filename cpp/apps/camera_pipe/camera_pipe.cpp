@@ -261,12 +261,11 @@ Func process(Func raw, Type result_type,
 
     // Schedule
     processed.bound(c, 0, 3); // bound color loop 0-3, properly
-
     if (schedule == 0) {
         // Compute in chunks over tiles, vectorized by 8
         denoised.compute_at(processed, tx).vectorize(x, 8);
-        deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).bound(c, 0, 4).unroll(c);
-        corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).bound(c, 0, 3).unroll(c);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).unroll(c);
         processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
         processed.bound(tx, 0, 2560-32).bound(ty, 0, 1920); // Statically promise the output dimensions
         processed.parallel(ty);

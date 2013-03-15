@@ -295,21 +295,21 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     m.wrapped_function = (void (*)(const void **))f;
     assert(f && "Compiling wrapped function returned NULL");
 
-    llvm::Function *set_error_handler = module->getFunction("set_error_handler");
+    llvm::Function *set_error_handler = module->getFunction("halide_set_error_handler");
     assert(set_error_handler && "Could not find set_error_handler function inside llvm module");
     f = execution_engine->getPointerToFunction(set_error_handler);
     m.set_error_handler = (void (*)(JITCompiledModule::ErrorHandler))f;
     assert(f && "Compiling set_error_handler function returned NULL");
 
 
-    llvm::Function *set_custom_allocator = module->getFunction("set_custom_allocator");
+    llvm::Function *set_custom_allocator = module->getFunction("halide_set_custom_allocator");
     assert(set_custom_allocator && "Could not find set_custom_allocator function inside llvm module");
     f = execution_engine->getPointerToFunction(set_custom_allocator);
     m.set_custom_allocator = (void (*)(void *(*)(size_t), void (*)(void *)))f;
     assert(f && "Compiling set_custom_allocator function returned NULL");
 
     m.module = module_holder;
-    llvm::Function *shutdown_thread_pool = module->getFunction("shutdown_thread_pool");
+    llvm::Function *shutdown_thread_pool = module->getFunction("halide_shutdown_thread_pool");
     assert(shutdown_thread_pool && "Could not find shutdown_thread_pool function inside llvm module");    
     f = execution_engine->getPointerToFunction(shutdown_thread_pool);
     m.module.ptr->shutdown_thread_pool = (void (*)())f;
@@ -1059,8 +1059,8 @@ void CodeGen::visit(const Call *op) {
         const Call *filename = op->args[1].as<Call>();
         assert(func && filename && "Malformed debug_to_file node");
         // Grab the function from the initial module
-        llvm::Function *debug_to_file = module->getFunction("debug_to_file");
-        assert(debug_to_file && "Could not find debug_to_file function in initial module");
+        llvm::Function *debug_to_file = module->getFunction("halide_debug_to_file");
+        assert(debug_to_file && "Could not find halide_debug_to_file function in initial module");
 
         // Make the filename a global string constant
         llvm::Type *filename_type = ArrayType::get(i8, filename->name.size()+1);
@@ -1473,8 +1473,8 @@ void CodeGen::visit(const For *op) {
 
         // Move the builder back to the main function and call do_par_for
         builder->SetInsertPoint(call_site);
-        llvm::Function *do_par_for = module->getFunction("do_par_for");
-        assert(do_par_for && "Could not find do_par_for in initial module");
+        llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
+        assert(do_par_for && "Could not find halide_do_par_for in initial module");
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
         vector<Value *> args = vec((Value *)function, min, extent, ptr);
         builder->CreateCall(do_par_for, args);
