@@ -1,0 +1,35 @@
+Here's the procedure I followed to compile Halide on Windows from scratch:
+
+Download and install github app
+
+Download and install cmake for windows
+
+Download and install python 2.7 (python 3.3 will not work)
+
+Download and install tortoise svn
+
+Download and install visual studio express 2010
+
+Download and install grep for windows. Add the directory grep.exe is in (e.g. gnuwin32/bin) to your PATH environment variable.
+
+Uninstall any existing Visual studio 10 redistributables (from add/remove programs). There are probably two of them (x86 and x64).
+
+Download and install Windows 7 sdk to get the 64-bit compiler
+
+git clone Halide
+
+svn checkout llvm into Halide/llvm
+
+svn checkout clang into Halide/llvm/tools/clang
+
+run cmake configure on Halide/llvm, build into Halide/llvm/build
+  set PYTHON_EXECUTABLE to python.exe (from python 2.7)
+  set LLVM_BUILD_TARGETS to X86;ARM
+  use Win64 compiler
+
+Open Halide/build/LLVM.sln solution and compile in debug and release mode for x64 (if no x64, then you didn't select the 64-bit compiler target in cmake)
+
+Open Halide/msvc/Halide.sln, and compile the run_all_tests target in Release. 
+Debug will be slow, and the static variants produce huge binaries, but they should all work for x64.
+
+You may also try compiling both llvm and halide in win32 mode, but this is untested.

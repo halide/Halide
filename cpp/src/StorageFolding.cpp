@@ -121,9 +121,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 int factor = 1;
                 while (factor < extent) factor *= 2;
 
-                dim_folded = i-1;
+                dim_folded = (int)i-1;
                 fold_factor = factor;
-                stmt = FoldStorageOfFunction(func, (int)(i-1), factor).mutate(op);
+                stmt = FoldStorageOfFunction(func, (int)i-1, factor).mutate(op);
 
                 return;
             }

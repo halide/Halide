@@ -10,6 +10,11 @@
 #include "Param.h"
 #include "integer_division_table.h"
 
+// No msvc warnings from llvm headers please
+#ifdef _WIN32
+#pragma warning(push, 0)
+#endif
+
 #include <llvm/Config/config.h>
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3.
@@ -32,6 +37,11 @@
 
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/IRReader.h>
+
+// No msvc warnings from llvm headers please
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
 namespace Halide { 
 namespace Internal {

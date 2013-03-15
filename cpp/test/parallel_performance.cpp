@@ -1,6 +1,23 @@
 #include <stdio.h>
 #include <Halide.h>
+
+#ifdef _WIN32
+extern "C" bool QueryPerformanceCounter(uint64_t *);
+extern "C" bool QueryPerformanceFrequency(uint64_t *);
+double currentTime() {
+    uint64_t t, freq;
+    QueryPerformanceCounter(&t);
+    QueryPerformanceFrequency(&freq);
+    return (t * 1000.0) / freq;
+}
+#else
 #include <sys/time.h>
+double currentTime() {
+    timeval t;
+    gettimeofday(&t, NULL);
+    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
+}
+#endif
 
 using namespace Halide;
 
@@ -20,22 +37,22 @@ int main(int argc, char **argv) {
 
     Image<float> imf = f.realize(W, H);
 
-    timeval t1, t2;
+    double t1, t2;
 
-    gettimeofday(&t1, NULL);
+    t1 = currentTime();
     f.realize(imf);
-    gettimeofday(&t2, NULL);
+    t2 = currentTime();
 
-    double parallelTime = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;
+    double parallelTime = t2 - t1;
 
     printf("Realizing g\n");
     Image<float> img = g.realize(W, H);
     printf("Done realizing g\n");
 
-    gettimeofday(&t1, NULL);
+    t1 = currentTime();
     g.realize(img);
-    gettimeofday(&t2, NULL);
-    double serialTime = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;
+    t2 = currentTime();
+    double serialTime = t2 - t1;
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {

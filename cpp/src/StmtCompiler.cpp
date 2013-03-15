@@ -12,23 +12,32 @@ using std::vector;
 
 StmtCompiler::StmtCompiler(string arch) {
     if (arch.empty()) {
+        #ifdef _WIN32
+        char target[128];
+        size_t read = 0;
+        getenv_s(&read, target, "HL_TARGET");
+        if (read) arch = target;
+        else arch = "x86";
+        #else
         char *target = getenv("HL_TARGET");
         if (target) arch = target;        
         else arch = "x86"; // default to x86 for now. In the future
                            // this should detect the native target.
+        #endif
     }
+
     if (arch == "x86") {
         contents = new CodeGen_X86(true, false);
     } else if (arch == "x86-avx") {
         contents = new CodeGen_X86(true, true);
     }
-#ifndef _WINDOWS // I've temporarily disabled ARM on Windows since it leads to a linking error on halide_internal_initmod_arm stuff (kwampler@adobe.com)
+#ifndef _WIN32 // I've temporarily disabled ARM on Windows since it leads to a linking error on halide_internal_initmod_arm stuff (kwampler@adobe.com)
     else if (arch == "arm") {
         contents = new CodeGen_ARM(false);
     } else if (arch == "arm-android") {
         contents = new CodeGen_ARM(true);
     } 
-#endif // _WINDOWS
+#endif // _WIN32
     else {
         std::cerr << "Unknown target " << arch << std::endl;
         std::cerr << "Known targets are: x86 x86-avx arm arm-android" << std::endl;

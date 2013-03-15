@@ -21,9 +21,6 @@
     <ClCompile Include="..\src\BoundsInference.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\build_halide_h.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\CodeGen.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

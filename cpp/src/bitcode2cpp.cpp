@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#ifdef _WINDOWS
+#ifdef _WIN32
 #include <fcntl.h> // O_BINARY
 #include <io.h> // setmode
 #endif
@@ -10,7 +10,7 @@
 
 int main(int argc, const char **argv) {
     assert(argc == 2 && "Requires target name as an argument (e.g. x86)");
-#ifdef _WINDOWS
+#ifdef _WIN32
     setmode(fileno(stdin), O_BINARY); // On windows bad things will happen unless we read stdin in binary mode
 #endif
     const char *target = argv[1];

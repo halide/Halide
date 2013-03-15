@@ -15,51 +15,51 @@ namespace Internal {
 /** Is the expression either an IntImm, a FloatImm, or a Cast of the
  * same, or a Ramp or Broadcast of the same. Doesn't do any constant
  * folding. */
-bool is_const(Expr e);
+bool EXPORT is_const(Expr e);
 
 /** Is the expression an IntImm, FloatImm of a particular value, or a
  * Cast, or Broadcast of the same. */
-bool is_const(Expr e, int v);
+bool EXPORT is_const(Expr e, int v);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */
-bool is_positive_const(Expr e);
+bool EXPORT is_positive_const(Expr e);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly less than zero (in all lanes, if a vector expression) */
-bool is_negative_const(Expr e);
+bool EXPORT is_negative_const(Expr e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
-bool is_zero(Expr e);
+bool EXPORT is_zero(Expr e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to one (in all lanes, if a vector expression) */
-bool is_one(Expr e);
+bool EXPORT is_one(Expr e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to two (in all lanes, if a vector expression) */
-bool is_two(Expr e);
+bool EXPORT is_two(Expr e);
 
 /** Construct a const of the given type */
-Expr make_const(Type t, int val);
+Expr EXPORT make_const(Type t, int val);
 
 /** Construct the representation of zero in the given type */
-Expr make_zero(Type t);
+Expr EXPORT make_zero(Type t);
 
 /** Construct the representation of one in the given type */
-Expr make_one(Type t);
+Expr EXPORT make_one(Type t);
 
 /** Construct the representation of two in the given type */
-Expr make_two(Type t);
+Expr EXPORT make_two(Type t);
 
 /** Construct the constant boolean true. May also be a vector of
  * trues, if a width argument is given. */
-Expr const_true(int width = 1);
+Expr EXPORT const_true(int width = 1);
 
 /** Construct the constant boolean false. May also be a vector of
  * falses, if a width argument is given. */
-Expr const_false(int width = 1);
+Expr EXPORT const_false(int width = 1);
 
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is
@@ -92,7 +92,7 @@ Expr const_false(int width = 1);
  * in an Int(16).
  * 
  */
-void match_types(Expr &a, Expr &b);
+void EXPORT match_types(Expr &a, Expr &b);
 }
 
 /** Cast an expression to the halide type corresponding to the C++ type T */

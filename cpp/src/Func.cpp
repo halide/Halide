@@ -830,8 +830,8 @@ void Func::compile_jit() {
 void Func::test() {
 
     Image<int> input(7, 5);
-    for (size_t y = 0; y < 5; y++) {
-        for (size_t x = 0; x < 5; x++) {
+    for (int y = 0; y < 5; y++) {
+        for (int x = 0; x < 5; x++) {
             input(x, y) = x*y + 10/(y+3);
         }
     }
@@ -847,8 +847,8 @@ void Func::test() {
 
     Image<int> result = g.realize(5, 5);
 
-    for (size_t y = 0; y < 5; y++) {
-        for (size_t x = 0; x < 5; x++) {
+    for (int y = 0; y < 5; y++) {
+        for (int x = 0; x < 5; x++) {
             int correct = (4*input(x, y)+1) + 2*(4*input(x+2, y)+1);
             assert(result(x, y) == correct);
         }
