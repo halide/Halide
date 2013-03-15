@@ -1,12 +1,18 @@
 #include <stdint.h>
 
+#ifdef __APPLE__
+typedef unsigned long size_t;
+#else
 #ifdef _LP64
 typedef uint64_t size_t;
 #else
 typedef uint32_t size_t;
 #endif
+#endif
 #define WEAK __attribute__((weak))
+#ifndef NULL
 #define NULL 0
+#endif
 
 extern "C" {
 
