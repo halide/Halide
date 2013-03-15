@@ -28,7 +28,7 @@ typedef struct buffer_t {
 } buffer_t;
 #endif
 
-extern "C" void __copy_to_host(buffer_t* buf);
+extern "C" void halide_copy_to_host(buffer_t* buf);
 
 template<typename T>
 class Image {
@@ -86,7 +86,7 @@ public:
 
     void copyToHost() {
         if (contents->buf.dev_dirty) {
-            __copy_to_host(&contents->buf);
+            halide_copy_to_host(&contents->buf);
             contents->buf.dev_dirty = false;
         }
     }

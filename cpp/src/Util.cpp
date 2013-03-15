@@ -34,9 +34,9 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
-static map<string, int> known_names;
-    
 string unique_name(const string &name) {
+    static map<string, int> known_names;
+
     // If the programmer specified a single character name then use the
     // pre-existing Halide unique name generator.
     if (name.length() == 1) {

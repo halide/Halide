@@ -21,9 +21,9 @@ SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=build/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-STDLIB_ARCHS = x86 x86_avx ptx ptx_dev arm arm_android
+STDLIB_ARCHS = x86 x86_avx arm arm_android
 
-INITIAL_MODULES = $(STDLIB_ARCHS:%=build/architecture.%.initmod.o)
+INITIAL_MODULES = $(STDLIB_ARCHS:%=build/initmod.%.o)
 
 .PHONY: all
 all: bin/libHalide.a bin/libHalide.so include/Halide.h test_internal
@@ -45,25 +45,21 @@ include/Halide.h: $(HEADERS) bin/build_halide_h
 bin/build_halide_h: src/build_halide_h.cpp
 	g++ $< -o $@
 
-INITMOD_OPTS_x86 = -march=corei7 -mattr=-avx
-INITMOD_OPTS_ptx = -march=corei7 
-INITMOD_OPTS_x86_avx = -march=corei7-avx -mattr=+avx
-INITMOD_OPTS_arm = -m32 
-INITMOD_OPTS_arm_android = -m32 
-INITMOD_OPTS_ptx_dev = ""
-INITMOD_LL_STUB_x86 = architecture.x86.stdlib.ll
-INITMOD_LL_STUB_ptx = architecture.ptx.stdlib.ll
-INITMOD_LL_STUB_x86_avx = architecture.x86_avx.stdlib.ll
-INITMOD_LL_STUB_arm = architecture.arm.stdlib.ll
-INITMOD_LL_STUB_arm_android = architecture.arm.stdlib.ll
-INITMOD_LL_STUB_ptx_dev = architecture.ptx.stdlib.ll
+RUNTIME_OPTS_x86 = -march=corei7 
+RUNTIME_OPTS_x86_avx = -march=corei7-avx 
+RUNTIME_OPTS_arm = -m32 
+RUNTIME_OPTS_arm_android = -m32 
+RUNTIME_LL_STUBS_x86 = x86.ll
+RUNTIME_LL_STUBS_x86_avx = x86.ll x86_avx.ll
+RUNTIME_LL_STUBS_arm = arm.ll
+RUNTIME_LL_STUBS_arm_android = arm.ll
 
 -include $(OBJECTS:.o=.d)
 
-build/architecture.%.initmod.cpp: bin/bitcode2cpp src/architecture.%.stdlib.cpp src/$(INITMOD_LL_STUB_%) src/architecture.posix.stdlib.cpp build/llvm_ok build/clang_ok
+build/initmod.%.cpp: bin/bitcode2cpp src/runtime/*.cpp $(RUNTIME_LL_STUBS_%) build/llvm_ok build/clang_ok
 	@-mkdir -p build
-	$(CLANG) $(INITMOD_OPTS_$*) -emit-llvm -O3 -S src/architecture.$*.stdlib.cpp -o - | \
-	cat - src/$(INITMOD_LL_STUB_$*) | \
+	$(CLANG) $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o - | \
+	cat - $(addprefix src/runtime/,$(RUNTIME_LL_STUBS_$*)) | \
 	$(LLVM_AS) -o - | \
 	./bin/bitcode2cpp $* > $@
 
@@ -71,7 +67,7 @@ bin/bitcode2cpp: src/bitcode2cpp.cpp
 	@-mkdir -p bin
 	$(CXX) $< -o $@
 
-build/architecture.%.initmod.o: build/architecture.%.initmod.cpp
+build/initmod.%.o: build/initmod.%.cpp
 	$(CXX) -c $< -o $@ 
 
 build/%.o: src/%.cpp src/%.h build/llvm_ok
