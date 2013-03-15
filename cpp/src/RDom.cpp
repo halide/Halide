@@ -145,7 +145,7 @@ RDom::RDom(ImageParam p) {
 
 
 int RDom::dimensions() const {
-    return domain.domain().size();
+    return (int)domain.domain().size();
 }
 
 RVar RDom::operator[](int i) {
@@ -154,6 +154,7 @@ RVar RDom::operator[](int i) {
     if (i == 2) return z;
     if (i == 3) return w;
     assert(false && "Reduction domain index out of bounds");
+	return x; // Keep the compiler happy
 }
 
 RDom::operator Expr() const {

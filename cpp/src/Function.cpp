@@ -9,10 +9,10 @@ using std::vector;
 using std::string;
 
 template<>
-RefCount &ref_count<FunctionContents>(const FunctionContents *f) {return f->ref_count;}
+EXPORT RefCount &ref_count<FunctionContents>(const FunctionContents *f) {return f->ref_count;}
 
 template<>
-void destroy<FunctionContents>(const FunctionContents *f) {delete f;}
+EXPORT void destroy<FunctionContents>(const FunctionContents *f) {delete f;}
 
 // All variables present in any part of a function definition must
 // either be pure args, elements of the reduction domain, parameters

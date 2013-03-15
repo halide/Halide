@@ -1,6 +1,5 @@
 #include <Halide.h>
 #include <math.h>
-#include <sys/time.h>
 #include <stdio.h>
 
 using namespace Halide;
@@ -21,12 +20,6 @@ DECL_SOT(uint32_t);
 DECL_SOT(int32_t);    
 DECL_SOT(float);    
 DECL_SOT(double);    
-
-double currentTime() {
-    timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
-}
 
 template<typename A>
 A mod(A x, A y);

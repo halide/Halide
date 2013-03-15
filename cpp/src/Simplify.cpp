@@ -33,9 +33,9 @@ int do_indirect_int_cast(Type t, int x) {
     } else if (t.is_int()) {
         return x;
     } else if (t == Float(32)) {
-        return (float)x;
+        return (int)((float)x);
     } else if (t == Float(64)) {
-        return (double)x;
+        return (int)((double)x);
     } else {
         assert(false && "Can't do an indirect int cast via this type");
         return 0;

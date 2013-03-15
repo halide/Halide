@@ -41,7 +41,7 @@ public:
     const std::string &name() const {return _name;}
 
     /** Reduction variables can be used as expressions. */
-    operator Expr() const;
+    EXPORT operator Expr() const;
 };
 
 /** A multi-dimensional domain over which to iterate. Used when
@@ -167,28 +167,28 @@ public:
     /** Construct a single-dimensional reduction domain with the given
      * name. If the name is left blank, a unique one is
      * auto-generated. */
-    RDom(Expr min, Expr extent, std::string name = "");
+    EXPORT RDom(Expr min, Expr extent, std::string name = "");
 
     /** Construct a two-dimensional reduction domain with the given
      * name. If the name is left blank, a unique one is
      * auto-generated. */
-    RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, std::string name = "");
+    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, std::string name = "");
 
     /** Construct a three-dimensional reduction domain with the given
      * name. If the name is left blank, a unique one is
      * auto-generated. */
-    RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, std::string name = "");
+    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, std::string name = "");
 
     /** Construct a four-dimensional reduction domain with the given
      * name. If the name is left blank, a unique one is
      * auto-generated. */
-    RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, std::string name = "");
+    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, std::string name = "");
     /** Construct a reduction domain that iterates over all points in
      * a given Buffer, Image, or ImageParam. Has the same
      * dimensionality as the argument. */
     // @{
-    RDom(Buffer);
-    RDom(ImageParam);
+    EXPORT RDom(Buffer);
+    EXPORT RDom(ImageParam);
     // @}
 
     /** Check if this reduction domain is non-NULL */
@@ -198,16 +198,16 @@ public:
     bool same_as(const RDom &other) const {return domain.same_as(other.domain);}
 
     /** Get the dimensionality of a reduction domain */
-    int dimensions() const;
+    EXPORT int dimensions() const;
 
     /** Get at one of the dimensions of the reduction domain */
-    RVar operator[](int);
+    EXPORT RVar operator[](int);
 
     /** Single-dimensional reduction domains can be used as RVars directly. */
-    operator RVar() const;
+    EXPORT operator RVar() const;
 
     /** Single-dimensional reduction domains can be also be used as Exprs directly. */
-    operator Expr() const;
+    EXPORT operator Expr() const;
 
     /** Direct access to the four dimensions of the reduction
      * domain. Some of these dimensions may be undefined if the

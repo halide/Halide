@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <Halide.h>
-#include <dlfcn.h>
 
 using namespace Halide;
 

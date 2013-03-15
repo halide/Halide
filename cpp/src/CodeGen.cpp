@@ -7,6 +7,10 @@
 #include "Function.h"
 #include "Deinterleave.h"
 
+// No msvc warnings from llvm headers please
+#ifdef _WIN32
+#pragma warning(push, 0)
+#endif
 #include <llvm/Config/config.h>
 
 #include <llvm/Analysis/Verifier.h>
@@ -39,6 +43,11 @@
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/IRBuilder.h>
+#endif
+
+// No msvc warnings from llvm headers please
+#ifdef _WIN32
+#pragma warning(pop)
 #endif
 
 #include <sstream>
@@ -214,7 +223,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     vector<Value *> wrapper_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         // Get the address of the nth argument
-        Value *ptr = builder->CreateConstGEP1_32(arg_array, i);
+        Value *ptr = builder->CreateConstGEP1_32(arg_array, (int)i);
         ptr = builder->CreateLoad(ptr);
         if (args[i].is_buffer) {
             // Cast the argument to a buffer_t * 
@@ -267,10 +276,10 @@ public:
 };
 
 template<>
-RefCount &ref_count<JITModuleHolder>(const JITModuleHolder *f) {return f->ref_count;}
+EXPORT RefCount &ref_count<JITModuleHolder>(const JITModuleHolder *f) {return f->ref_count;}
 
 template<>
-void destroy<JITModuleHolder>(const JITModuleHolder *f) {delete f;}
+EXPORT void destroy<JITModuleHolder>(const JITModuleHolder *f) {delete f;}
 
 
 JITCompiledModule CodeGen::compile_to_function_pointers() {
@@ -1558,9 +1567,9 @@ void CodeGen::visit(const Provide *op) {
 }
 
 template<>
-RefCount &ref_count<CodeGen>(const CodeGen *p) {return p->ref_count;}
+EXPORT RefCount &ref_count<CodeGen>(const CodeGen *p) {return p->ref_count;}
 
 template<>
-void destroy<CodeGen>(const CodeGen *p) {delete p;}
+EXPORT void destroy<CodeGen>(const CodeGen *p) {delete p;}
 
 }}

@@ -29,10 +29,10 @@ int main(int argc, char **argv) {
 
     Image<float> im = g.realize(32, 32);
 
-    for (size_t i = 0; i < 32; i++) {
-        for (size_t j = 0; j < 32; j++) {
+    for (int i = 0; i < 32; i++) {
+        for (int j = 0; j < 32; j++) {
             if (im(i,j) != 4.0) {
-                printf("im[%d, %d] = %f\n", (int)i, (int)j, im(i,j));
+                printf("im[%d, %d] = %f\n", i, j, im(i,j));
                 return -1;
             }
         }
