@@ -14,7 +14,7 @@
 #include <llvm/Config/config.h>
 
 #include <llvm/Analysis/Verifier.h>
-#include <llvm/ExecutionEngine/JIT.h>
+#include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetLibraryInfo.h>
 #include <llvm/Support/raw_ostream.h>
@@ -26,6 +26,7 @@
 #include <llvm/PassManager.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3.
 // Protected as at least one installation of llvm elides version macros.
@@ -114,7 +115,9 @@ CodeGen::CodeGen() :
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
     if (!llvm_initialized) {            
-        InitializeNativeTarget();
+	InitializeNativeTarget();
+        InitializeNativeTargetAsmPrinter();
+        InitializeNativeTargetAsmParser();
 
         #define LLVM_TARGET(target)         \
             Initialize##target##Target();   \
@@ -234,6 +237,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
             wrapper_args[i] = builder->CreateLoad(ptr);
         }
     }
+    log(4) << "Creating call from wrapper to actual function\n";
     builder->CreateCall(function, wrapper_args);
     builder->CreateRetVoid();
     verifyFunction(*wrapper);
@@ -255,17 +259,47 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 class JITModuleHolder {
 public:
 	mutable RefCount ref_count;    
-    JITModuleHolder(Module *module) {
+    JITModuleHolder(Module *module, CodeGen *cg) {
         log(2) << "Creating new execution engine\n";
         string error_string;
+
+	TargetOptions options;
+	options.LessPreciseFPMADOption = true;
+	options.NoFramePointerElim = false;
+	options.NoFramePointerElimNonLeaf = false;
+	options.AllowFPOpFusion = FPOpFusion::Fast;
+	options.UnsafeFPMath = true;
+	options.NoInfsFPMath = true;
+	options.NoNaNsFPMath = true;
+	options.HonorSignDependentRoundingFPMathOption = false;
+	options.UseSoftFloat = false;
+	options.FloatABIType = FloatABI::Hard;
+	options.NoZerosInBSS = false;
+	options.GuaranteedTailCallOpt = false;
+	options.DisableTailCalls = false;
+	options.StackAlignmentOverride = 32;
+	options.RealignStack = true;
+	options.TrapFuncName = "";
+	options.PositionIndependentExecutable = true;
+	options.EnableSegmentedStacks = false;
+	options.UseInitArray = false;
+	options.SSPBufferSize = 0;
+	
         EngineBuilder engine_builder(module);
+	engine_builder.setTargetOptions(options);
         engine_builder.setErrorStr(&error_string);
         engine_builder.setEngineKind(EngineKind::JIT);
         engine_builder.setUseMCJIT(true);
-        //engine_builder.setOptLevel(CodeGenOpt::Aggressive);
+	engine_builder.setJITMemoryManager(new SectionMemoryManager());
+        engine_builder.setOptLevel(CodeGenOpt::Aggressive);
+        engine_builder.setMCPU(cg->mcpu());
+        engine_builder.setMAttrs(vec<string>(cg->mattrs()));
         execution_engine = engine_builder.create();
         if (!execution_engine) cout << error_string << endl;
         assert(execution_engine && "Couldn't create execution engine");        
+	execution_engine->finalizeObject();	
+	// TODO: I don't think this is necessary, we shouldn't have any static constructors
+	// execution_engine->runStaticConstructorsDestructors(...);
     }
     ~JITModuleHolder() {
         shutdown_thread_pool();
@@ -287,11 +321,13 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
                
     log(1) << "JIT compiling...\n";
 
-    IntrusivePtr<JITModuleHolder> module_holder(new JITModuleHolder(module));
+    IntrusivePtr<JITModuleHolder> module_holder(new JITModuleHolder(module, this));
     ExecutionEngine *execution_engine = module_holder.ptr->execution_engine;
 
     llvm::Function *fn = module->getFunction(function_name);
     assert(fn && "Could not find function inside llvm module");
+
+    compile_to_bitcode("jit.bc");
 
     JITCompiledModule m;
     void *f = execution_engine->getPointerToFunction(fn);
@@ -391,7 +427,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
     options.UseSoftFloat = false;
-    options.FloatABIType = FloatABI::Default;
+    options.FloatABIType = FloatABI::Hard;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;
@@ -1084,6 +1120,7 @@ void CodeGen::visit(const Call *op) {
             args.push_back(codegen(op->args[i]));
         }
 
+	log(4) << "Creating call to debug_to_file\n";
         value = builder->CreateCall(debug_to_file, args);
         return;
     }
@@ -1112,6 +1149,7 @@ void CodeGen::visit(const Call *op) {
     }
 
     if (op->type.is_scalar()) {
+        log(4) << "Creating call to " << op->name << "\n";
         value = builder->CreateCall(fn, args);
     } else {
         // Check if a vector version of the function already
@@ -1121,6 +1159,7 @@ void CodeGen::visit(const Call *op) {
         ss << op->name << 'x' << op->type.width;
         llvm::Function *vec_fn = module->getFunction(ss.str());
         if (vec_fn) {
+            log(4) << "Creating call to " << ss.str() << "\n";
             value = builder->CreateCall(vec_fn, args);
             fn = vec_fn;
         } else {
@@ -1133,6 +1172,7 @@ void CodeGen::visit(const Call *op) {
                 for (size_t j = 0; j < args.size(); j++) {
                     arg_lane[j] = builder->CreateExtractElement(args[j], idx);
                 }
+                log(4) << "Creating call to " << op->name << "\n";
                 Value *result_lane = builder->CreateCall(fn, arg_lane);
                 value = builder->CreateInsertElement(value, result_lane, idx);
             }
@@ -1223,11 +1263,12 @@ void CodeGen::visit(const PrintStmt *op) {
     args.insert(args.begin(), char_ptr);
 
     // Grab the print function from the initial module
-    llvm::Function *hlprintf = module->getFunction("hlprintf");
-    assert(hlprintf && "Could not find hlprintf in initial module");
+    llvm::Function *halide_printf = module->getFunction("halide_printf");
+    assert(halide_printf && "Could not find halide_printf in initial module");
 
     // Call it
-    builder->CreateCall(hlprintf, args);
+    log(4) << "Creating call to halide_printf\n";
+    builder->CreateCall(halide_printf, args);
 }
 
 void CodeGen::visit(const AssertStmt *op) {
@@ -1256,9 +1297,11 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
     // Call the error handler
     llvm::Function *error_handler = module->getFunction("halide_error");
     assert(error_handler && "Could not find halide_error in initial module");
+    log(4) << "Creating call to error handlers\n";
     builder->CreateCall(error_handler, vec(char_ptr));
 
     // Do any architecture-specific cleanup necessary
+    log(4) << "Creating cleanup code\n";
     prepare_for_early_exit();
 
     // Bail out
@@ -1486,6 +1529,7 @@ void CodeGen::visit(const For *op) {
         assert(do_par_for && "Could not find halide_do_par_for in initial module");
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
         vector<Value *> args = vec((Value *)function, min, extent, ptr);
+	log(4) << "Creating call to do_par_for\n";
         builder->CreateCall(do_par_for, args);
 
         log(3) << "Leaving parallel for loop over " << op->name << "\n";

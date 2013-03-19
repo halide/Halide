@@ -1119,27 +1119,32 @@ void check_neon_all() {
     // We use the non-rounding form of these (at worst we do an extra add)
 
     // VQSHL	I	-	Saturating Shift Left
+    // We skip the versions that we don't have constants large enough for
     check_neon("vqshl.s8", 16,  i8(clamp(i16(i8_1)*16,  min_i8,  max_i8)));
     check_neon("vqshl.s16", 8, i16(clamp(i32(i16_1)*16, min_i16, max_i16)));
-    //check_neon("vqshl.s32", 4, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
     check_neon("vqshl.s8",  8,  i8(clamp(i16(i8_1)*16,  min_i8,  max_i8)));
     check_neon("vqshl.s16", 4, i16(clamp(i32(i16_1)*16, min_i16, max_i16)));
-    //check_neon("vqshl.s32", 2, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
-    // skip the versions that we don't have constants for
+    check_neon("vqshl.u8", 16,  u8(min(u16(u8_1 )*16, max_u8)));
+    check_neon("vqshl.u16", 8, u16(min(u32(u16_1)*16, max_u16)));
+    check_neon("vqshl.u8",  8,  u8(min(u16(u8_1 )*16, max_u8)));
+    check_neon("vqshl.u16", 4, u16(min(u32(u16_1)*16, max_u16)));
 
     // VQSHLU	I	-	Saturating Shift Left Unsigned
-    check_neon("vqshlu.u8", 16,  u8(min(u16(u8_1 )*16, max_u8)));
-    check_neon("vqshlu.u16", 8, u16(min(u32(u16_1)*16, max_u16)));
-    check_neon("vqshlu.u8",  8,  u8(min(u16(u8_1 )*16, max_u8)));
-    check_neon("vqshlu.u16", 4, u16(min(u32(u16_1)*16, max_u16)));
+    check_neon("vqshlu.s8", 16,  u8(clamp(i16(i8_1)*16,  0,  max_u8)));
+    check_neon("vqshlu.s16", 8, u16(clamp(i32(i16_1)*16, 0, max_u16)));
+    check_neon("vqshlu.s8",  8,  u8(clamp(i16(i8_1)*16,  0,  max_u8)));
+    check_neon("vqshlu.s16", 4, u16(clamp(i32(i16_1)*16, 0, max_u16)));
 
     // VQSHRN	I	-	Saturating Shift Right Narrow
     // VQSHRUN	I	-	Saturating Shift Right Unsigned Narrow
     check_neon("vqshrn.s16", 8,  i8(clamp(i16_1/16, min_i8,  max_i8)));
     check_neon("vqshrn.s32", 4, i16(clamp(i32_1/16, min_i16, max_i16)));
+    check_neon("vqshrun.s16", 8,  u8(clamp(i16_1/16, 0, max_u8)));
+    check_neon("vqshrun.s32", 4, u16(clamp(i32_1/16, 0, max_u16)));
     //check_neon("vqshrn.s64", 2, i32(clamp(i64_1/16, min_i32, max_i32)));
-    check_neon("vqshrun.u16", 8,  u8(min(u16_1/16, max_u8)));
-    check_neon("vqshrun.u32", 4, u16(min(u32_1/16, max_u16)));
+    check_neon("vqshrn.u16", 8,  u8(min(u16_1/16, max_u8)));
+    check_neon("vqshrn.u32", 4, u16(min(u32_1/16, max_u16)));
+
 
     // VQSUB	I	-	Saturating Subtract
     check_neon("vqsub.s8", 16,  i8(clamp(i16(i8_1)  - i16(i8_2),  min_i8,  max_i8)));
@@ -1386,7 +1391,12 @@ int main(int argc, char **argv) {
     if (argc > 1) filter = argv[1];
     else filter = NULL;
 
-    char *target = getenv("HL_TARGET");
+    const char *target = getenv("HL_TARGET");
+
+    #ifdef __arm__
+    if (!target) target = "arm";
+    #endif
+
     use_avx = target && strstr(target, "avx");
     use_avx2 = target && strstr(target, "avx2");
     if (!target || strncasecmp(target, "x86", 3) == 0) {
