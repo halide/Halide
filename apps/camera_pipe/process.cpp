@@ -42,18 +42,7 @@ int main(int argc, char **argv) {
     float contrast = atof(argv[4]);
 
     timeval t1, t2;
-    unsigned int bestT = 0xffffffff;
-    for (int i = 0; i < 5; i++) {
-        gettimeofday(&t1, NULL);
-        curved(color_temp, gamma, contrast,
-               input, matrix_3200, matrix_7000, output);
-        gettimeofday(&t2, NULL);
-        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
-        if (t < bestT) bestT = t;
-        if (i % 5 == 0) sleep(1);
-    }
-    printf("Halide:\t%u\n", bestT);
-    save(output, argv[5]);
+    unsigned int bestT;
 
     bestT = 0xffffffff;
     for (int i = 0; i < 5; i++) {
@@ -66,6 +55,19 @@ int main(int argc, char **argv) {
     }
     printf("C++:\t%u\n", bestT);
     save(output, "fcam_c.png");
+
+    bestT = 0xffffffff;
+    for (int i = 0; i < 5; i++) {
+        gettimeofday(&t1, NULL);
+        curved(color_temp, gamma, contrast,
+               input, matrix_3200, matrix_7000, output);
+        gettimeofday(&t2, NULL);
+        unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
+        if (t < bestT) bestT = t;
+        if (i % 5 == 0) sleep(1);
+    }
+    printf("Halide:\t%u\n", bestT);
+    save(output, argv[5]);
 
     bestT = 0xffffffff;
     for (int i = 0; i < 5; i++) {
