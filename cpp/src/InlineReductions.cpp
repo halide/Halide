@@ -4,11 +4,12 @@
 #include "IRPrinter.h"
 #include "IROperator.h"
 
+namespace Halide {
+
 using std::string;
 using std::vector;
 using std::ostringstream;
 
-namespace Halide {
 namespace Internal {
 
 class FindFreeVars : public IRVisitor {
@@ -19,6 +20,9 @@ public:
     }
 private:
     Scope<int> internal;
+
+    using IRVisitor::visit;
+
     void visit(const Let *op) {
         op->value.accept(this);
         internal.push(op->name, 0);
@@ -88,7 +92,6 @@ Expr minimum(Expr e) {
     f(v.free_vars) = new Internal::Call(e.type(), ss.str(), vector<Expr>());
     f(v.free_vars) = min(f(v.free_vars), e);
     return f(v.free_vars);
-    
 }
 
 }

@@ -10,9 +10,16 @@
 #include "Param.h"
 #include "integer_division_table.h"
 
+// No msvc warnings from llvm headers please
+#ifdef _WIN32
+#pragma warning(push, 0)
+#endif
+
 #include <llvm/Config/config.h>
 
-#if LLVM_VERSION_MINOR < 3
+// Temporary affordance to compile with both llvm 3.2 and 3.3.
+// Protected as at least one installation of llvm elides version macros.
+#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
 #include <llvm/Value.h>
 #include <llvm/Module.h>
 #include <llvm/Function.h>
@@ -32,9 +39,10 @@
 #include <llvm/Support/IRReader.h>
 
 
-using std::vector;
-using std::string;
-
+// No msvc warnings from llvm headers please
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
 extern "C" unsigned char halide_internal_initmod_x86[];
 extern "C" int halide_internal_initmod_x86_length;
@@ -44,24 +52,13 @@ extern "C" int halide_internal_initmod_x86_avx_length;
 namespace Halide { 
 namespace Internal {
 
+using std::vector;
+using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(bool sse_41, bool avx) : CodeGen(), use_sse_41(sse_41), use_avx(avx) {
-    i32x4 = VectorType::get(i32, 4);
-    i32x8 = VectorType::get(i32, 8);
- 
-    wild_i8x16 = new Variable(Int(8, 16), "*");
-    wild_i16x8 = new Variable(Int(16, 8), "*");
-    wild_i16x16 = new Variable(Int(16, 16), "*");
-    wild_i32x4 = new Variable(Int(32, 4), "*");
-    wild_i32x8 = new Variable(Int(32, 8), "*");
-    wild_u8x16 = new Variable(UInt(8, 16), "*");
-    wild_u16x8 = new Variable(UInt(16, 8), "*");
-    wild_u32x4 = new Variable(UInt(32, 4), "*");
-    wild_f32x4 = new Variable(Float(32, 4), "*");
-    wild_f32x8 = new Variable(Float(32, 8), "*");
-    wild_f64x2 = new Variable(Float(64, 2), "*");
+CodeGen_X86::CodeGen_X86(bool sse_41, bool avx) : CodeGen_Posix(), use_sse_41(sse_41), use_avx(avx) {
+    assert(llvm_X86_enabled && "llvm build not configured with X86 target enabled.");
 }
 
 void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) {
@@ -80,7 +77,12 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
     // Parse it    
-    module = ParseBitcodeFile(bitcode_buffer, context);
+    std::string errstr;
+    module = ParseBitcodeFile(bitcode_buffer, context, &errstr);
+	if (!module) {
+        std::cerr << "Error parsing initial module: " << errstr << "\n";
+	}
+    assert(module && "llvm encountered an error in parsing a bitcode file.");
 
     // Fix the target triple
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -135,23 +137,12 @@ Expr _f64(Expr e) {
 }
 
 Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Expr> args) {
-    vector<llvm::Type *> arg_types(args.size());
     vector<Value *> arg_values(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        assert(args[i].defined());
-        arg_types[i] = llvm_type_of(args[i].type());
         arg_values[i] = codegen(args[i]);
     }
 
-    llvm::Function *fn = module->getFunction("llvm.x86." + name);
-
-    if (!fn) {
-        FunctionType *func_t = FunctionType::get(llvm_type_of(result_type), arg_types, false);    
-        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.x86." + name, module);
-        fn->setCallingConv(CallingConv::C);
-    }
-
-    return builder->CreateCall(fn, arg_values);
+    return call_intrin(result_type, name, arg_values);
 }
 
 Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Value *> arg_values) {
@@ -386,60 +377,6 @@ void CodeGen_X86::visit(const Max *op) {
     }    
 }
 
-void CodeGen_X86::visit(const Allocate *alloc) {
-
-    // Allocate anything less than 32k on the stack
-    int bytes_per_element = alloc->type.bits / 8;
-    int stack_size = 0;
-    bool on_stack = false;
-    if (const IntImm *size = alloc->size.as<IntImm>()) {            
-        stack_size = size->value;
-        on_stack = stack_size < 32*1024;
-    }
-
-    Value *size = codegen(alloc->size * bytes_per_element);
-    llvm::Type *llvm_type = llvm_type_of(alloc->type);
-    Value *ptr;                
-
-    // In the future, we may want to construct an entire buffer_t here
-    string allocation_name = alloc->name + ".host";
-    log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
-
-    if (on_stack) {
-        // Do a 32-byte aligned alloca
-        int total_bytes = stack_size * bytes_per_element;            
-        int chunks = (total_bytes + 31)/32;
-        ptr = builder->CreateAlloca(i32x8, ConstantInt::get(i32, chunks)); 
-        ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
-    } else {
-        // call malloc
-        llvm::Function *malloc_fn = module->getFunction("fast_malloc");
-        Value *sz = builder->CreateIntCast(size, i64, false);
-        ptr = builder->CreateCall(malloc_fn, sz);
-        heap_allocations.push(ptr);
-    }
-
-    sym_push(allocation_name, ptr);
-    codegen(alloc->body);
-    sym_pop(allocation_name);
-
-    if (!on_stack) {
-        heap_allocations.pop();
-        // call free
-        llvm::Function *free_fn = module->getFunction("fast_free");
-        builder->CreateCall(free_fn, ptr);
-    }
-}
-
-void CodeGen_X86::prepare_for_early_exit() {
-    
-    llvm::Function *free_fn = module->getFunction("fast_free");
-    while (!heap_allocations.empty()) {
-        builder->CreateCall(free_fn, heap_allocations.top());        
-        heap_allocations.pop();
-    }
-}
-
 static bool extern_function_1_was_called = false;
 extern "C" int extern_function_1(float x) {
     extern_function_1_was_called = true;
@@ -506,21 +443,29 @@ void CodeGen_X86::test() {
     //cg.compile_to_native("test1.o", false);
     //cg.compile_to_native("test1.s", true);
 
+    #ifdef _WIN32
+    {
+        char buf[32];
+        size_t read;
+        getenv_s(&read, buf, "HL_NUMTHREADS");
+        if (read == 0) putenv("HL_NUMTHREADS=4");
+    }    
+    #else
     if (!getenv("HL_NUMTHREADS")) {
-        #ifdef _WIN32
-        putenv("HL_NUMTHREADS=4");
-        #else
         setenv("HL_NUMTHREADS", "4", 1);
-        #endif
     }
+    #endif
+
     JITCompiledModule m = cg.compile_to_function_pointers();
     typedef void (*fn_type)(::buffer_t *, float, int);
     fn_type fn = (fn_type)m.function;
 
-    int scratch[16];
+    int scratch_buf[64];
+    int *scratch = &scratch_buf[0];
+    while (((size_t)scratch) & 0x1f) scratch++;
     ::buffer_t buf;
     memset(&buf, 0, sizeof(buf));
-    buf.host = (uint8_t *)(&scratch[0]);
+    buf.host = (uint8_t *)scratch;
 
     fn(&buf, -32, 0);
     assert(scratch[0] == 5);

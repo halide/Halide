@@ -1,0 +1,1557 @@
+	.syntax unified
+	.cpu cortex-a8
+	.eabi_attribute 6, 10
+	.eabi_attribute 7, 65
+	.eabi_attribute 8, 1
+	.eabi_attribute 9, 2
+	.fpu neon
+	.eabi_attribute 10, 3
+	.eabi_attribute 12, 1
+	.eabi_attribute 23, 1
+	.eabi_attribute 24, 1
+	.eabi_attribute 25, 1
+	.file	"halide_f3"
+	.section	.text.force_include_buffer_t,"axG",%progbits,force_include_buffer_t,comdat
+	.weak	force_include_buffer_t
+	.align	2
+	.type	force_include_buffer_t,%function
+force_include_buffer_t:                 @ @force_include_buffer_t
+@ BB#0:
+	bx	lr
+.Ltmp0:
+	.size	force_include_buffer_t, .Ltmp0-force_include_buffer_t
+
+	.section	.text.__copy_to_host,"axG",%progbits,__copy_to_host,comdat
+	.weak	__copy_to_host
+	.align	2
+	.type	__copy_to_host,%function
+__copy_to_host:                         @ @__copy_to_host
+@ BB#0:
+	bx	lr
+.Ltmp1:
+	.size	__copy_to_host, .Ltmp1-__copy_to_host
+
+	.section	.text.set_custom_allocator,"axG",%progbits,set_custom_allocator,comdat
+	.weak	set_custom_allocator
+	.align	2
+	.type	set_custom_allocator,%function
+set_custom_allocator:                   @ @set_custom_allocator
+@ BB#0:
+	movw	r2, :lower16:_MergedGlobals
+	movt	r2, :upper16:_MergedGlobals
+	strd	r0, r1, [r2]
+	bx	lr
+.Ltmp2:
+	.size	set_custom_allocator, .Ltmp2-set_custom_allocator
+
+	.section	.text.fast_malloc,"axG",%progbits,fast_malloc,comdat
+	.weak	fast_malloc
+	.align	2
+	.type	fast_malloc,%function
+fast_malloc:                            @ @fast_malloc
+@ BB#0:
+	push	{r11, lr}
+	movw	r1, :lower16:_MergedGlobals
+	movt	r1, :upper16:_MergedGlobals
+	ldr	r1, [r1]
+	cmp	r1, #0
+	beq	.LBB3_2
+@ BB#1:
+	blx	r1
+	pop	{r11, pc}
+.LBB3_2:
+	add	r0, r0, #32
+	bl	malloc
+	mov	r1, r0
+	add	r0, r1, #32
+	bfc	r0, #0, #5
+	sub	r2, r0, #4
+	str	r1, [r2]
+	pop	{r11, pc}
+.Ltmp3:
+	.size	fast_malloc, .Ltmp3-fast_malloc
+
+	.section	.text.fast_free,"axG",%progbits,fast_free,comdat
+	.weak	fast_free
+	.align	2
+	.type	fast_free,%function
+fast_free:                              @ @fast_free
+@ BB#0:
+	push	{r11, lr}
+	movw	r1, :lower16:_MergedGlobals
+	movt	r1, :upper16:_MergedGlobals
+	ldr	r1, [r1, #4]
+	cmp	r1, #0
+	beq	.LBB4_2
+@ BB#1:
+	blx	r1
+	pop	{r11, pc}
+.LBB4_2:
+	sub	r0, r0, #4
+	ldr	r0, [r0]
+	bl	free
+	pop	{r11, pc}
+.Ltmp4:
+	.size	fast_free, .Ltmp4-fast_free
+
+	.section	.text.safe_malloc,"axG",%progbits,safe_malloc,comdat
+	.weak	safe_malloc
+	.align	2
+	.type	safe_malloc,%function
+safe_malloc:                            @ @safe_malloc
+@ BB#0:
+	push	{r11, lr}
+	bl	fast_malloc
+	pop	{r11, pc}
+.Ltmp5:
+	.size	safe_malloc, .Ltmp5-safe_malloc
+
+	.section	.text.safe_free,"axG",%progbits,safe_free,comdat
+	.weak	safe_free
+	.align	2
+	.type	safe_free,%function
+safe_free:                              @ @safe_free
+@ BB#0:
+	push	{r11, lr}
+	bl	fast_free
+	pop	{r11, pc}
+.Ltmp6:
+	.size	safe_free, .Ltmp6-safe_free
+
+	.section	.text.halide_error,"axG",%progbits,halide_error,comdat
+	.weak	halide_error
+	.align	2
+	.type	halide_error,%function
+halide_error:                           @ @halide_error
+@ BB#0:
+	push	{r11, lr}
+	mov	r3, r0
+	movw	r0, :lower16:_MergedGlobals
+	movt	r0, :upper16:_MergedGlobals
+	ldr	r1, [r0, #8]
+	cmp	r1, #0
+	beq	.LBB7_2
+@ BB#1:
+	mov	r0, r3
+	blx	r1
+	pop	{r11, pc}
+.LBB7_2:
+	movw	r1, :lower16:.L.str
+	movw	r2, :lower16:.L.str1
+	movt	r1, :upper16:.L.str
+	movt	r2, :upper16:.L.str1
+	mov	r0, #7
+	bl	__android_log_print
+	mov	r0, #1
+	bl	exit
+	pop	{r11, pc}
+.Ltmp7:
+	.size	halide_error, .Ltmp7-halide_error
+
+	.section	.text.set_error_handler,"axG",%progbits,set_error_handler,comdat
+	.weak	set_error_handler
+	.align	2
+	.type	set_error_handler,%function
+set_error_handler:                      @ @set_error_handler
+@ BB#0:
+	movw	r1, :lower16:_MergedGlobals
+	movt	r1, :upper16:_MergedGlobals
+	str	r0, [r1, #8]
+	bx	lr
+.Ltmp8:
+	.size	set_error_handler, .Ltmp8-set_error_handler
+
+	.section	.text.worker,"axG",%progbits,worker,comdat
+	.weak	worker
+	.align	2
+	.type	worker,%function
+worker:                                 @ @worker
+@ BB#0:
+	push	{r4, r5, r6, r7, r8, r9, r10, r11, lr}
+	sub	sp, sp, #4
+	mov	r8, r0
+	cmp	r8, #0
+	beq	.LBB9_12
+@ BB#1:                                 @ %.backedge.preheader
+	movw	r11, :lower16:work_queue
+	movt	r11, :upper16:work_queue
+	add	r0, r11, #8
+	add	r5, r0, #1572864
+	mov	r0, r5
+	bl	pthread_mutex_lock
+	ldr	r0, [r8, #4]
+	ldr	r1, [r8]
+	ldr	r2, [r0, #16]
+	cmp	r2, r1
+	bne	.LBB9_10
+@ BB#2:
+	add	r0, r11, #12
+	mov	r4, #1572864
+	add	r0, r0, #1572864
+	str	r0, [sp]                @ 4-byte Spill
+.LBB9_3:                                @ %.lr.ph1
+                                        @ =>This Inner Loop Header: Depth=1
+	movw	r1, #4
+	ldr	r0, [r11, r4]
+	movt	r1, #24
+	ldr	r1, [r11, r1]
+	cmp	r0, r1
+	bne	.LBB9_5
+@ BB#4:                                 @   in Loop: Header=BB9_3 Depth=1
+	ldr	r0, [sp]                @ 4-byte Reload
+	mov	r1, r5
+	bl	pthread_cond_wait
+	b	.LBB9_8
+.LBB9_5:                                @   in Loop: Header=BB9_3 Depth=1
+	add	r3, r0, r0, lsl #1
+	add	r1, r11, r3, lsl #3
+	mov	r2, r1
+	ldr	r7, [r2, #4]!
+	ldr	r6, [r1, #8]
+	cmp	r7, r6
+	bne	.LBB9_7
+@ BB#6:                                 @   in Loop: Header=BB9_3 Depth=1
+	add	r0, r0, #1
+	asr	r2, r0, #31
+	add	r2, r0, r2, lsr #16
+	bfc	r2, #0, #16
+	sub	r0, r0, r2
+	str	r0, [r11, r4]
+	mov	r0, #0
+	str	r0, [r1, #16]
+	b	.LBB9_8
+.LBB9_7:                                @   in Loop: Header=BB9_3 Depth=1
+	mov	r9, r11
+	add	r0, r7, #1
+	ldr	r10, [r9, r3, lsl #3]!
+	ldr	r6, [r9, #12]
+	str	r0, [r2]
+	ldr	r0, [r9, #20]
+	add	r0, r0, #1
+	str	r0, [r9, #20]
+	mov	r0, r5
+	bl	pthread_mutex_unlock
+	mov	r0, r7
+	mov	r1, r6
+	blx	r10
+	mov	r0, r5
+	bl	pthread_mutex_lock
+	ldr	r0, [r9, #20]
+	mov	r4, #1572864
+	sub	r0, r0, #1
+	str	r0, [r9, #20]
+.LBB9_8:                                @   in Loop: Header=BB9_3 Depth=1
+	mov	r0, r5
+	bl	pthread_mutex_unlock
+	mov	r0, r5
+	bl	pthread_mutex_lock
+	ldr	r0, [r8, #4]
+	ldr	r1, [r8]
+	ldr	r2, [r0, #16]
+	cmp	r2, r1
+	beq	.LBB9_3
+	b	.LBB9_10
+.LBB9_9:                                @ %.lr.ph
+                                        @   in Loop: Header=BB9_10 Depth=1
+	mov	r0, r5
+	bl	pthread_mutex_unlock
+	mov	r0, r5
+	bl	pthread_mutex_lock
+	ldr	r0, [r8, #4]
+.LBB9_10:                               @ %.lr.ph
+                                        @ =>This Inner Loop Header: Depth=1
+	ldr	r0, [r0, #20]
+	cmp	r0, #0
+	bne	.LBB9_9
+@ BB#11:                                @ %.loopexit
+	mov	r0, r5
+	bl	pthread_mutex_unlock
+	mov	r0, #0
+	add	sp, sp, #4
+	pop	{r4, r5, r6, r7, r8, r9, r10, r11, pc}
+.LBB9_12:
+	movw	r10, :lower16:work_queue
+	mov	r9, #1572864
+	movt	r10, :upper16:work_queue
+	add	r0, r10, #8
+	add	r1, r10, #12
+	add	r4, r0, #1572864
+	add	r8, r1, #1572864
+	b	.LBB9_14
+.LBB9_13:                               @   in Loop: Header=BB9_14 Depth=1
+	mov	r0, r4
+	bl	pthread_mutex_unlock
+.LBB9_14:                               @ %.backedge.us
+                                        @ =>This Inner Loop Header: Depth=1
+	mov	r0, r4
+	bl	pthread_mutex_lock
+	movw	r1, #4
+	ldr	r0, [r10, r9]
+	movt	r1, #24
+	ldr	r1, [r10, r1]
+	cmp	r0, r1
+	bne	.LBB9_16
+@ BB#15:                                @   in Loop: Header=BB9_14 Depth=1
+	mov	r0, r8
+	mov	r1, r4
+	bl	pthread_cond_wait
+	b	.LBB9_13
+.LBB9_16:                               @   in Loop: Header=BB9_14 Depth=1
+	add	r3, r0, r0, lsl #1
+	add	r1, r10, r3, lsl #3
+	mov	r2, r1
+	ldr	r6, [r2, #4]!
+	ldr	r7, [r1, #8]
+	cmp	r6, r7
+	bne	.LBB9_18
+@ BB#17:                                @   in Loop: Header=BB9_14 Depth=1
+	add	r0, r0, #1
+	asr	r2, r0, #31
+	add	r2, r0, r2, lsr #16
+	bfc	r2, #0, #16
+	sub	r0, r0, r2
+	str	r0, [r10, r9]
+	mov	r0, #0
+	str	r0, [r1, #16]
+	b	.LBB9_13
+.LBB9_18:                               @   in Loop: Header=BB9_14 Depth=1
+	mov	r5, r10
+	add	r0, r6, #1
+	ldr	r11, [r5, r3, lsl #3]!
+	ldr	r7, [r5, #12]
+	str	r0, [r2]
+	ldr	r0, [r5, #20]
+	add	r0, r0, #1
+	str	r0, [r5, #20]
+	mov	r0, r4
+	bl	pthread_mutex_unlock
+	mov	r0, r6
+	mov	r1, r7
+	blx	r11
+	mov	r0, r4
+	bl	pthread_mutex_lock
+	ldr	r0, [r5, #20]
+	sub	r0, r0, #1
+	str	r0, [r5, #20]
+	b	.LBB9_13
+.Ltmp9:
+	.size	worker, .Ltmp9-worker
+
+	.section	.text.do_par_for,"axG",%progbits,do_par_for,comdat
+	.weak	do_par_for
+	.align	2
+	.type	do_par_for,%function
+do_par_for:                             @ @do_par_for
+@ BB#0:
+	push	{r4, r5, r6, r7, r8, r9, r10, r11, lr}
+	sub	sp, sp, #12
+	movw	r9, :lower16:thread_pool_initialized
+	mov	r11, r0
+	movt	r9, :upper16:thread_pool_initialized
+	mov	r8, r3
+	ldrb	r0, [r9]
+	mov	r10, r2
+	mov	r5, r1
+	cmp	r0, #0
+	bne	.LBB10_7
+@ BB#1:
+	movw	r4, :lower16:work_queue
+	mov	r1, #0
+	movt	r4, :upper16:work_queue
+	add	r0, r4, #8
+	add	r0, r0, #1572864
+	mov	r6, #0
+	bl	pthread_mutex_init
+	add	r0, r4, #12
+	mov	r1, #0
+	add	r0, r0, #1572864
+	bl	pthread_cond_init
+	vmov.i32	d16, #0x0
+	add	r0, r4, #1572864
+	mov	r1, #1
+	vstr	d16, [r0]
+	movw	r0, #272
+	movt	r0, #24
+	str	r1, [r4, r0]
+	movw	r0, :lower16:.L.str2
+	movt	r0, :upper16:.L.str2
+	bl	getenv
+	movw	r7, :lower16:_MergedGlobals
+	mov	r1, #2
+	movt	r7, :upper16:_MergedGlobals
+	cmp	r0, #0
+	str	r1, [r7, #12]
+	add	r1, r4, #16
+	add	r4, r1, #1572864
+	beq	.LBB10_5
+@ BB#2:
+	bl	atoi
+	str	r0, [r7, #12]
+	cmp	r0, #65
+	blt	.LBB10_4
+@ BB#3:
+	mov	r0, #64
+	str	r0, [r7, #12]
+	b	.LBB10_5
+.LBB10_4:                               @ %.thread.preheader
+	sub	r0, r0, #1
+	cmp	r0, #1
+	blt	.LBB10_6
+.LBB10_5:                               @ %.thread
+                                        @ =>This Inner Loop Header: Depth=1
+	movw	r2, :lower16:worker
+	mov	r0, r4
+	movt	r2, :upper16:worker
+	mov	r1, #0
+	mov	r3, #0
+	bl	pthread_create
+	ldr	r0, [r7, #12]
+	add	r4, r4, #4
+	add	r6, r6, #1
+	sub	r0, r0, #1
+	cmp	r6, r0
+	blt	.LBB10_5
+.LBB10_6:                               @ %.thread._crit_edge
+	mov	r0, #1
+	strb	r0, [r9]
+.LBB10_7:
+	movw	r6, :lower16:work_queue
+	movt	r6, :upper16:work_queue
+	add	r0, r6, #8
+	add	r4, r0, #1572864
+	mov	r0, r4
+	bl	pthread_mutex_lock
+	movw	r1, #272
+	mov	r0, r6
+	movt	r1, #24
+	ldr	r1, [r0, r1]!
+	add	r2, r1, #1
+	cmp	r1, #0
+	mov	r3, r2
+	addeq	r3, r1, #2
+	str	r3, [r0]
+	movw	r3, #4
+	mov	r0, r6
+	movt	r3, #24
+	cmp	r1, #0
+	ldr	r3, [r0, r3]!
+	moveq	r1, r2
+	mov	r2, #0
+	add	r7, r3, r3, lsl #1
+	mov	r3, r6
+	str	r11, [r3, r7, lsl #3]!
+	add	r7, r10, r5
+	stmib	r3, {r5, r7, r8}
+	str	r1, [r3, #16]
+	str	r2, [r3, #20]
+	ldr	r2, [r0]
+	str	r1, [sp]
+	add	r1, r2, r2, lsl #1
+	add	r1, r6, r1, lsl #3
+	str	r1, [sp, #4]
+	add	r1, r2, #1
+	asr	r2, r1, #31
+	add	r2, r1, r2, lsr #16
+	bfc	r2, #0, #16
+	sub	r1, r1, r2
+	str	r1, [r0]
+	mov	r0, r4
+	bl	pthread_mutex_unlock
+	add	r0, r6, #12
+	add	r0, r0, #1572864
+	bl	pthread_cond_broadcast
+	mov	r0, sp
+	bl	worker
+	add	sp, sp, #12
+	pop	{r4, r5, r6, r7, r8, r9, r10, r11, pc}
+.Ltmp10:
+	.size	do_par_for, .Ltmp10-do_par_for
+
+	.section	.text.sqrt_f32,"axG",%progbits,sqrt_f32,comdat
+	.weak	sqrt_f32
+	.align	2
+	.type	sqrt_f32,%function
+sqrt_f32:                               @ @sqrt_f32
+@ BB#0:
+	push	{r11, lr}
+	bl	sqrtf
+	pop	{r11, pc}
+.Ltmp11:
+	.size	sqrt_f32, .Ltmp11-sqrt_f32
+
+	.section	.text.sin_f32,"axG",%progbits,sin_f32,comdat
+	.weak	sin_f32
+	.align	2
+	.type	sin_f32,%function
+sin_f32:                                @ @sin_f32
+@ BB#0:
+	push	{r11, lr}
+	bl	sinf
+	pop	{r11, pc}
+.Ltmp12:
+	.size	sin_f32, .Ltmp12-sin_f32
+
+	.section	.text.cos_f32,"axG",%progbits,cos_f32,comdat
+	.weak	cos_f32
+	.align	2
+	.type	cos_f32,%function
+cos_f32:                                @ @cos_f32
+@ BB#0:
+	push	{r11, lr}
+	bl	cosf
+	pop	{r11, pc}
+.Ltmp13:
+	.size	cos_f32, .Ltmp13-cos_f32
+
+	.section	.text.exp_f32,"axG",%progbits,exp_f32,comdat
+	.weak	exp_f32
+	.align	2
+	.type	exp_f32,%function
+exp_f32:                                @ @exp_f32
+@ BB#0:
+	push	{r11, lr}
+	bl	expf
+	pop	{r11, pc}
+.Ltmp14:
+	.size	exp_f32, .Ltmp14-exp_f32
+
+	.section	.text.log_f32,"axG",%progbits,log_f32,comdat
+	.weak	log_f32
+	.align	2
+	.type	log_f32,%function
+log_f32:                                @ @log_f32
+@ BB#0:
+	push	{r11, lr}
+	bl	logf
+	pop	{r11, pc}
+.Ltmp15:
+	.size	log_f32, .Ltmp15-log_f32
+
+	.section	.text.pow_f32,"axG",%progbits,pow_f32,comdat
+	.weak	pow_f32
+	.align	2
+	.type	pow_f32,%function
+pow_f32:                                @ @pow_f32
+@ BB#0:
+	push	{r11, lr}
+	bl	powf
+	pop	{r11, pc}
+.Ltmp16:
+	.size	pow_f32, .Ltmp16-pow_f32
+
+	.section	.text.floor_f32,"axG",%progbits,floor_f32,comdat
+	.weak	floor_f32
+	.align	2
+	.type	floor_f32,%function
+floor_f32:                              @ @floor_f32
+@ BB#0:
+	push	{r11, lr}
+	bl	floorf
+	pop	{r11, pc}
+.Ltmp17:
+	.size	floor_f32, .Ltmp17-floor_f32
+
+	.section	.text.ceil_f32,"axG",%progbits,ceil_f32,comdat
+	.weak	ceil_f32
+	.align	2
+	.type	ceil_f32,%function
+ceil_f32:                               @ @ceil_f32
+@ BB#0:
+	push	{r11, lr}
+	bl	ceilf
+	pop	{r11, pc}
+.Ltmp18:
+	.size	ceil_f32, .Ltmp18-ceil_f32
+
+	.section	.text.round_f32,"axG",%progbits,round_f32,comdat
+	.weak	round_f32
+	.align	2
+	.type	round_f32,%function
+round_f32:                              @ @round_f32
+@ BB#0:
+	push	{r11, lr}
+	bl	roundf
+	pop	{r11, pc}
+.Ltmp19:
+	.size	round_f32, .Ltmp19-round_f32
+
+	.section	.text.sqrt_f64,"axG",%progbits,sqrt_f64,comdat
+	.weak	sqrt_f64
+	.align	2
+	.type	sqrt_f64,%function
+sqrt_f64:                               @ @sqrt_f64
+@ BB#0:
+	push	{r11, lr}
+	bl	sqrt
+	pop	{r11, pc}
+.Ltmp20:
+	.size	sqrt_f64, .Ltmp20-sqrt_f64
+
+	.section	.text.sin_f64,"axG",%progbits,sin_f64,comdat
+	.weak	sin_f64
+	.align	2
+	.type	sin_f64,%function
+sin_f64:                                @ @sin_f64
+@ BB#0:
+	push	{r11, lr}
+	bl	sin
+	pop	{r11, pc}
+.Ltmp21:
+	.size	sin_f64, .Ltmp21-sin_f64
+
+	.section	.text.cos_f64,"axG",%progbits,cos_f64,comdat
+	.weak	cos_f64
+	.align	2
+	.type	cos_f64,%function
+cos_f64:                                @ @cos_f64
+@ BB#0:
+	push	{r11, lr}
+	bl	cos
+	pop	{r11, pc}
+.Ltmp22:
+	.size	cos_f64, .Ltmp22-cos_f64
+
+	.section	.text.exp_f64,"axG",%progbits,exp_f64,comdat
+	.weak	exp_f64
+	.align	2
+	.type	exp_f64,%function
+exp_f64:                                @ @exp_f64
+@ BB#0:
+	push	{r11, lr}
+	bl	exp
+	pop	{r11, pc}
+.Ltmp23:
+	.size	exp_f64, .Ltmp23-exp_f64
+
+	.section	.text.log_f64,"axG",%progbits,log_f64,comdat
+	.weak	log_f64
+	.align	2
+	.type	log_f64,%function
+log_f64:                                @ @log_f64
+@ BB#0:
+	push	{r11, lr}
+	bl	log
+	pop	{r11, pc}
+.Ltmp24:
+	.size	log_f64, .Ltmp24-log_f64
+
+	.section	.text.pow_f64,"axG",%progbits,pow_f64,comdat
+	.weak	pow_f64
+	.align	2
+	.type	pow_f64,%function
+pow_f64:                                @ @pow_f64
+@ BB#0:
+	push	{r11, lr}
+	bl	pow
+	pop	{r11, pc}
+.Ltmp25:
+	.size	pow_f64, .Ltmp25-pow_f64
+
+	.section	.text.floor_f64,"axG",%progbits,floor_f64,comdat
+	.weak	floor_f64
+	.align	2
+	.type	floor_f64,%function
+floor_f64:                              @ @floor_f64
+@ BB#0:
+	push	{r11, lr}
+	bl	floor
+	pop	{r11, pc}
+.Ltmp26:
+	.size	floor_f64, .Ltmp26-floor_f64
+
+	.section	.text.ceil_f64,"axG",%progbits,ceil_f64,comdat
+	.weak	ceil_f64
+	.align	2
+	.type	ceil_f64,%function
+ceil_f64:                               @ @ceil_f64
+@ BB#0:
+	push	{r11, lr}
+	bl	ceil
+	pop	{r11, pc}
+.Ltmp27:
+	.size	ceil_f64, .Ltmp27-ceil_f64
+
+	.section	.text.round_f64,"axG",%progbits,round_f64,comdat
+	.weak	round_f64
+	.align	2
+	.type	round_f64,%function
+round_f64:                              @ @round_f64
+@ BB#0:
+	push	{r11, lr}
+	bl	round
+	pop	{r11, pc}
+.Ltmp28:
+	.size	round_f64, .Ltmp28-round_f64
+
+	.section	.text.maxval_f32,"axG",%progbits,maxval_f32,comdat
+	.weak	maxval_f32
+	.align	2
+	.type	maxval_f32,%function
+maxval_f32:                             @ @maxval_f32
+@ BB#0:
+	movw	r0, #65535
+	movt	r0, #32639
+	bx	lr
+.Ltmp29:
+	.size	maxval_f32, .Ltmp29-maxval_f32
+
+	.section	.text.minval_f32,"axG",%progbits,minval_f32,comdat
+	.weak	minval_f32
+	.align	2
+	.type	minval_f32,%function
+minval_f32:                             @ @minval_f32
+@ BB#0:
+	mvn	r0, #8388608
+	bx	lr
+.Ltmp30:
+	.size	minval_f32, .Ltmp30-minval_f32
+
+	.section	.text.maxval_f64,"axG",%progbits,maxval_f64,comdat
+	.weak	maxval_f64
+	.align	3
+	.type	maxval_f64,%function
+maxval_f64:                             @ @maxval_f64
+@ BB#0:
+	vldr	d16, .LCPI31_0
+	vmov	r0, r1, d16
+	bx	lr
+	.align	3
+@ BB#1:
+.LCPI31_0:
+	.long	4294967295              @ double 1.797693e+308
+                                        @  (0x7fefffffffffffff)
+	.long	2146435071
+.Ltmp31:
+	.size	maxval_f64, .Ltmp31-maxval_f64
+
+	.section	.text.minval_f64,"axG",%progbits,minval_f64,comdat
+	.weak	minval_f64
+	.align	3
+	.type	minval_f64,%function
+minval_f64:                             @ @minval_f64
+@ BB#0:
+	vldr	d16, .LCPI32_0
+	vmov	r0, r1, d16
+	bx	lr
+	.align	3
+@ BB#1:
+.LCPI32_0:
+	.long	4294967295              @ double -1.797693e+308
+                                        @  (0xffefffffffffffff)
+	.long	4293918719
+.Ltmp32:
+	.size	minval_f64, .Ltmp32-minval_f64
+
+	.section	.text.maxval_u8,"axG",%progbits,maxval_u8,comdat
+	.weak	maxval_u8
+	.align	2
+	.type	maxval_u8,%function
+maxval_u8:                              @ @maxval_u8
+@ BB#0:
+	mov	r0, #255
+	bx	lr
+.Ltmp33:
+	.size	maxval_u8, .Ltmp33-maxval_u8
+
+	.section	.text.minval_u8,"axG",%progbits,minval_u8,comdat
+	.weak	minval_u8
+	.align	2
+	.type	minval_u8,%function
+minval_u8:                              @ @minval_u8
+@ BB#0:
+	mov	r0, #0
+	bx	lr
+.Ltmp34:
+	.size	minval_u8, .Ltmp34-minval_u8
+
+	.section	.text.maxval_u16,"axG",%progbits,maxval_u16,comdat
+	.weak	maxval_u16
+	.align	2
+	.type	maxval_u16,%function
+maxval_u16:                             @ @maxval_u16
+@ BB#0:
+	movw	r0, #65535
+	bx	lr
+.Ltmp35:
+	.size	maxval_u16, .Ltmp35-maxval_u16
+
+	.section	.text.minval_u16,"axG",%progbits,minval_u16,comdat
+	.weak	minval_u16
+	.align	2
+	.type	minval_u16,%function
+minval_u16:                             @ @minval_u16
+@ BB#0:
+	mov	r0, #0
+	bx	lr
+.Ltmp36:
+	.size	minval_u16, .Ltmp36-minval_u16
+
+	.section	.text.maxval_u32,"axG",%progbits,maxval_u32,comdat
+	.weak	maxval_u32
+	.align	2
+	.type	maxval_u32,%function
+maxval_u32:                             @ @maxval_u32
+@ BB#0:
+	mvn	r0, #0
+	bx	lr
+.Ltmp37:
+	.size	maxval_u32, .Ltmp37-maxval_u32
+
+	.section	.text.minval_u32,"axG",%progbits,minval_u32,comdat
+	.weak	minval_u32
+	.align	2
+	.type	minval_u32,%function
+minval_u32:                             @ @minval_u32
+@ BB#0:
+	mov	r0, #0
+	bx	lr
+.Ltmp38:
+	.size	minval_u32, .Ltmp38-minval_u32
+
+	.section	.text.maxval_u64,"axG",%progbits,maxval_u64,comdat
+	.weak	maxval_u64
+	.align	2
+	.type	maxval_u64,%function
+maxval_u64:                             @ @maxval_u64
+@ BB#0:
+	mvn	r0, #0
+	mvn	r1, #0
+	bx	lr
+.Ltmp39:
+	.size	maxval_u64, .Ltmp39-maxval_u64
+
+	.section	.text.minval_u64,"axG",%progbits,minval_u64,comdat
+	.weak	minval_u64
+	.align	2
+	.type	minval_u64,%function
+minval_u64:                             @ @minval_u64
+@ BB#0:
+	mov	r0, #0
+	mov	r1, #0
+	bx	lr
+.Ltmp40:
+	.size	minval_u64, .Ltmp40-minval_u64
+
+	.section	.text.maxval_s8,"axG",%progbits,maxval_s8,comdat
+	.weak	maxval_s8
+	.align	2
+	.type	maxval_s8,%function
+maxval_s8:                              @ @maxval_s8
+@ BB#0:
+	mov	r0, #127
+	bx	lr
+.Ltmp41:
+	.size	maxval_s8, .Ltmp41-maxval_s8
+
+	.section	.text.minval_s8,"axG",%progbits,minval_s8,comdat
+	.weak	minval_s8
+	.align	2
+	.type	minval_s8,%function
+minval_s8:                              @ @minval_s8
+@ BB#0:
+	mvn	r0, #127
+	bx	lr
+.Ltmp42:
+	.size	minval_s8, .Ltmp42-minval_s8
+
+	.section	.text.maxval_s16,"axG",%progbits,maxval_s16,comdat
+	.weak	maxval_s16
+	.align	2
+	.type	maxval_s16,%function
+maxval_s16:                             @ @maxval_s16
+@ BB#0:
+	movw	r0, #32767
+	bx	lr
+.Ltmp43:
+	.size	maxval_s16, .Ltmp43-maxval_s16
+
+	.section	.text.minval_s16,"axG",%progbits,minval_s16,comdat
+	.weak	minval_s16
+	.align	2
+	.type	minval_s16,%function
+minval_s16:                             @ @minval_s16
+@ BB#0:
+	movw	r0, #32768
+	movt	r0, #65535
+	bx	lr
+.Ltmp44:
+	.size	minval_s16, .Ltmp44-minval_s16
+
+	.section	.text.maxval_s32,"axG",%progbits,maxval_s32,comdat
+	.weak	maxval_s32
+	.align	2
+	.type	maxval_s32,%function
+maxval_s32:                             @ @maxval_s32
+@ BB#0:
+	mvn	r0, #-2147483648
+	bx	lr
+.Ltmp45:
+	.size	maxval_s32, .Ltmp45-maxval_s32
+
+	.section	.text.minval_s32,"axG",%progbits,minval_s32,comdat
+	.weak	minval_s32
+	.align	2
+	.type	minval_s32,%function
+minval_s32:                             @ @minval_s32
+@ BB#0:
+	mov	r0, #-2147483648
+	bx	lr
+.Ltmp46:
+	.size	minval_s32, .Ltmp46-minval_s32
+
+	.section	.text.maxval_s64,"axG",%progbits,maxval_s64,comdat
+	.weak	maxval_s64
+	.align	2
+	.type	maxval_s64,%function
+maxval_s64:                             @ @maxval_s64
+@ BB#0:
+	mvn	r0, #0
+	mvn	r1, #-2147483648
+	bx	lr
+.Ltmp47:
+	.size	maxval_s64, .Ltmp47-maxval_s64
+
+	.section	.text.minval_s64,"axG",%progbits,minval_s64,comdat
+	.weak	minval_s64
+	.align	2
+	.type	minval_s64,%function
+minval_s64:                             @ @minval_s64
+@ BB#0:
+	mov	r0, #0
+	mov	r1, #-2147483648
+	bx	lr
+.Ltmp48:
+	.size	minval_s64, .Ltmp48-minval_s64
+
+	.section	.text.abs_i8,"axG",%progbits,abs_i8,comdat
+	.weak	abs_i8
+	.align	2
+	.type	abs_i8,%function
+abs_i8:                                 @ @abs_i8
+@ BB#0:
+	add	r1, r0, r0, asr #7
+	eor	r0, r1, r0, asr #7
+	sxtb	r0, r0
+	bx	lr
+.Ltmp49:
+	.size	abs_i8, .Ltmp49-abs_i8
+
+	.section	.text.abs_i16,"axG",%progbits,abs_i16,comdat
+	.weak	abs_i16
+	.align	2
+	.type	abs_i16,%function
+abs_i16:                                @ @abs_i16
+@ BB#0:
+	add	r1, r0, r0, asr #15
+	eor	r0, r1, r0, asr #15
+	sxth	r0, r0
+	bx	lr
+.Ltmp50:
+	.size	abs_i16, .Ltmp50-abs_i16
+
+	.section	.text.abs_i32,"axG",%progbits,abs_i32,comdat
+	.weak	abs_i32
+	.align	2
+	.type	abs_i32,%function
+abs_i32:                                @ @abs_i32
+@ BB#0:
+	cmp	r0, #0
+	rsbmi	r0, r0, #0
+	bx	lr
+.Ltmp51:
+	.size	abs_i32, .Ltmp51-abs_i32
+
+	.section	.text.abs_i64,"axG",%progbits,abs_i64,comdat
+	.weak	abs_i64
+	.align	2
+	.type	abs_i64,%function
+abs_i64:                                @ @abs_i64
+@ BB#0:
+	adds	r0, r0, r1, asr #31
+	adc	r2, r1, r1, asr #31
+	eor	r0, r0, r1, asr #31
+	eor	r1, r2, r1, asr #31
+	bx	lr
+.Ltmp52:
+	.size	abs_i64, .Ltmp52-abs_i64
+
+	.section	.text.abs_f32,"axG",%progbits,abs_f32,comdat
+	.weak	abs_f32
+	.align	2
+	.type	abs_f32,%function
+abs_f32:                                @ @abs_f32
+@ BB#0:
+	vmov	d0, r0, r0
+	vcmpe.f32	s0, #0
+	vmrs	APSR_nzcv, fpscr
+	bge	.LBB53_2
+@ BB#1:
+	vneg.f32	d0, d0
+.LBB53_2:
+	vmov	r0, s0
+	bx	lr
+.Ltmp53:
+	.size	abs_f32, .Ltmp53-abs_f32
+
+	.section	.text.abs_f64,"axG",%progbits,abs_f64,comdat
+	.weak	abs_f64
+	.align	2
+	.type	abs_f64,%function
+abs_f64:                                @ @abs_f64
+@ BB#0:
+	vmov	d16, r0, r1
+	vcmpe.f64	d16, #0
+	vmrs	APSR_nzcv, fpscr
+	vneglt.f64	d16, d16
+	vmov	r0, r1, d16
+	bx	lr
+.Ltmp54:
+	.size	abs_f64, .Ltmp54-abs_f64
+
+	.section	.text.currentTime,"axG",%progbits,currentTime,comdat
+	.weak	currentTime
+	.align	2
+	.type	currentTime,%function
+currentTime:                            @ @currentTime
+@ BB#0:
+	push	{r4, r5, r11, lr}
+	sub	sp, sp, #8
+	movw	r5, :lower16:initialized
+	movt	r5, :upper16:initialized
+	ldrb	r0, [r5]
+	cmp	r0, #0
+	beq	.LBB55_2
+@ BB#1:
+	mov	r0, sp
+	mov	r1, #0
+	bl	gettimeofday
+	movw	r1, :lower16:start
+	movt	r1, :upper16:start
+	ldm	r1, {r0, r2}
+	ldm	sp, {r1, r3}
+	sub	r2, r3, r2
+	movw	r3, #19923
+	movt	r3, #4194
+	sub	r0, r1, r0
+	smmul	r2, r2, r3
+	mov	r1, #1000
+	asr	r3, r2, #6
+	add	r2, r3, r2, lsr #31
+	mla	r4, r0, r1, r2
+	b	.LBB55_3
+.LBB55_2:
+	movw	r0, :lower16:start
+	mov	r1, #0
+	movt	r0, :upper16:start
+	mov	r4, #0
+	bl	gettimeofday
+	mov	r0, #1
+	strb	r0, [r5]
+.LBB55_3:
+	mov	r0, r4
+	add	sp, sp, #8
+	pop	{r4, r5, r11, pc}
+.Ltmp55:
+	.size	currentTime, .Ltmp55-currentTime
+
+	.text
+	.globl	f3
+	.align	2
+	.type	f3,%function
+f3:                                     @ @f3
+@ BB#0:                                 @ %entry
+	push	{r4, r5, r6, r7, r8, r9, r10, r11, lr}
+	add	r11, sp, #28
+	vpush	{d8, d9}
+	sub	sp, sp, #44
+	ldr	r5, [r0]
+	tst	r5, #31
+	beq	.LBB56_2
+@ BB#1:                                 @ %assert_failed
+	movw	r0, :lower16:__unnamed_1
+	movt	r0, :upper16:__unnamed_1
+	b	.LBB56_11
+.LBB56_2:                               @ %after_assert
+	ldr	r7, [r1]
+	tst	r7, #31
+	beq	.LBB56_4
+@ BB#3:                                 @ %assert_failed1
+	movw	r0, :lower16:__unnamed_2
+	movt	r0, :upper16:__unnamed_2
+	b	.LBB56_11
+.LBB56_4:                               @ %after_assert2
+	ldr	r2, [r1, #36]
+	cmp	r2, #1
+	bne	.LBB56_9
+@ BB#5:                                 @ %after_assert4
+	ldr	r2, [r0, #36]
+	cmp	r2, #1
+	bne	.LBB56_10
+@ BB#6:                                 @ %after_assert6
+	ldr	r2, [r0, #40]
+	ldr	r3, [r0, #52]
+	ldr	r0, [r0, #56]
+	str	r0, [r11, #-64]         @ 4-byte Spill
+	ldr	r0, [r1, #20]
+	str	r0, [r11, #-72]         @ 4-byte Spill
+	ldr	r0, [r1, #40]
+	str	r0, [r11, #-76]         @ 4-byte Spill
+	ldr	r0, [r1, #52]
+	str	r0, [r11, #-84]         @ 4-byte Spill
+	ldr	r0, [r1, #56]
+	ldr	r6, [r1, #24]
+	mov	r1, sp
+	bfc	r1, #0, #5
+	str	r2, [r11, #-60]         @ 4-byte Spill
+	sub	r10, r1, #512
+	str	r3, [r11, #-68]         @ 4-byte Spill
+	str	r0, [r11, #-80]         @ 4-byte Spill
+	mov	sp, r10
+	movw	r4, #26214
+	vldr	s16, .LCPI56_0
+	vldr	s18, .LCPI56_1
+	mov	r9, #0
+	movt	r4, #16358
+	mov	r8, r10
+.LBB56_7:                               @ %f0.v0_loop
+                                        @ =>This Inner Loop Header: Depth=1
+	vmov	d16, r9, r9
+	mov	r1, r4
+	vcvt.f32.s32	d16, d16
+	vmul.f32	d0, d16, d8
+	vmov	r0, s0
+	bl	powf
+	vmov	d16, r0, r0
+	add	r9, r9, #1
+	vmul.f32	d16, d16, d9
+	cmp	r9, #256
+	vcvt.s32.f32	d0, d16
+	vmov	r0, s0
+	strh	r0, [r8], #2
+	bne	.LBB56_7
+@ BB#8:                                 @ %f0.v0_after_loop
+	movw	r2, #34953
+	add	r1, r6, #59
+	movt	r2, #34952
+	mov	r0, sp
+	sub	r3, r0, #40
+	smmla	r1, r1, r2, r1
+	mov	sp, r3
+	sub	r2, r0, #36
+	str	r10, [r3]
+	str	r7, [r2]
+	sub	r2, r0, #32
+	ldr	r7, [r11, #-84]         @ 4-byte Reload
+	str	r7, [r2]
+	sub	r2, r0, #28
+	ldr	r7, [r11, #-80]         @ 4-byte Reload
+	str	r7, [r2]
+	sub	r2, r0, #24
+	ldr	r7, [r11, #-76]         @ 4-byte Reload
+	str	r7, [r2]
+	sub	r2, r0, #20
+	ldr	r7, [r11, #-72]         @ 4-byte Reload
+	add	r7, r7, #7
+	asr	r7, r7, #3
+	str	r7, [r2]
+	sub	r2, r0, #16
+	ldr	r7, [r11, #-68]         @ 4-byte Reload
+	str	r5, [r2]
+	sub	r2, r0, #12
+	str	r7, [r2]
+	sub	r2, r0, #8
+	ldr	r7, [r11, #-64]         @ 4-byte Reload
+	sub	r0, r0, #4
+	str	r7, [r2]
+	ldr	r2, [r11, #-60]         @ 4-byte Reload
+	str	r2, [r0]
+	asr	r0, r1, #5
+	add	r2, r0, r1, lsr #31
+	movw	r0, :lower16:par_for_f3.v1.v1
+	movt	r0, :upper16:par_for_f3.v1.v1
+	mov	r1, #0
+	bl	do_par_for
+	b	.LBB56_12
+.LBB56_9:                               @ %assert_failed3
+	movw	r0, :lower16:__unnamed_3
+	movt	r0, :upper16:__unnamed_3
+	b	.LBB56_11
+.LBB56_10:                              @ %assert_failed5
+	movw	r0, :lower16:__unnamed_4
+	movt	r0, :upper16:__unnamed_4
+.LBB56_11:                              @ %assert_failed
+	bl	halide_error
+.LBB56_12:                              @ %assert_failed
+	sub	sp, r11, #44
+	vpop	{d8, d9}
+	pop	{r4, r5, r6, r7, r8, r9, r10, r11, pc}
+	.align	2
+@ BB#13:
+.LCPI56_0:
+	.long	998244352               @ float 3.906250e-03
+                                        @  (0x3b800000)
+.LCPI56_1:
+	.long	1132462080              @ float 2.560000e+02
+                                        @  (0x43800000)
+.Ltmp56:
+	.size	f3, .Ltmp56-f3
+
+	.align	2
+	.type	par_for_f3.v1.v1,%function
+par_for_f3.v1.v1:                       @ @par_for_f3.v1.v1
+@ BB#0:                                 @ %entry
+	push	{r4, r5, r6, r7, r8, r9, r10, r11, lr}
+	sub	sp, sp, #76
+	ldr	r2, [r1, #4]
+	str	r0, [sp, #56]           @ 4-byte Spill
+	rsb	r0, r0, r0, lsl #4
+	str	r2, [sp, #60]           @ 4-byte Spill
+	ldr	r2, [r1, #12]
+	str	r2, [sp, #52]           @ 4-byte Spill
+	add	r8, r2, r0, lsl #2
+	str	r0, [sp, #8]            @ 4-byte Spill
+	add	r0, r8, #59
+	add	r2, r8, #60
+	cmp	r2, r0
+	add	r3, r8, #58
+	movgt	r0, r2
+	cmp	r0, r3
+	movle	r0, r3
+	cmp	r0, r2
+	movle	r0, r2
+	sub	r2, r8, #1
+	cmp	r2, r8
+	add	r3, r8, #1
+	movge	r2, r8
+	cmp	r2, r3
+	movge	r2, r3
+	ldr	r3, [r1, #20]
+	ldr	r10, [r1, #8]
+	rsb	r2, r2, #1
+	add	r0, r2, r0
+	mov	r2, #2
+	add	r11, r10, r3, lsl #3
+	str	r3, [sp, #36]           @ 4-byte Spill
+	orr	r9, r2, r3, lsl #3
+	sub	r3, r10, #1
+	add	r2, r9, r3
+	str	r2, [sp, #32]           @ 4-byte Spill
+	sub	r7, r11, #1
+	sub	r2, r2, #1
+	cmp	r2, r7
+	sub	r4, r11, #2
+	movle	r2, r7
+	cmp	r2, r4
+	movle	r2, r4
+	cmp	r2, r11
+	movle	r2, r11
+	cmp	r2, r7
+	str	r3, [sp, #48]           @ 4-byte Spill
+	mov	r6, r3
+	movle	r2, r7
+	cmp	r6, r10
+	mov	r3, r10
+	ldr	r5, [r1]
+	movlt	r3, r6
+	add	r6, r10, #1
+	cmp	r3, r6
+	movge	r3, r6
+	cmp	r3, r10
+	movge	r3, r10
+	sub	r2, r2, r3
+	add	r2, r2, #1
+	mul	r0, r0, r2
+	ldr	r2, [r1, #32]
+	str	r2, [sp, #64]           @ 4-byte Spill
+	ldr	r2, [r1, #36]
+	str	r2, [sp, #72]           @ 4-byte Spill
+	ldr	r2, [r1, #24]
+	str	r2, [sp, #12]           @ 4-byte Spill
+	ldr	r2, [r1, #16]
+	lsl	r0, r0, #1
+	ldr	r1, [r1, #28]
+	str	r2, [sp, #44]           @ 4-byte Spill
+	str	r1, [sp, #4]            @ 4-byte Spill
+	bl	fast_malloc
+	rsb	r1, r10, #0
+	mvn	r6, r10
+	cmp	r1, r6
+	mvn	lr, #1
+	sub	r2, lr, r10
+	movgt	r6, r1
+	cmp	r6, r2
+	vmov.i16	q8, #0x9
+	movle	r6, r2
+	cmp	r11, r7
+	movgt	r7, r11
+	cmp	r7, r4
+	movle	r7, r4
+	add	r2, r6, r7
+	add	r4, r2, #2
+	lsl	r2, r10, #1
+	add	r12, r2, r6, lsl #1
+	ldr	r7, [sp, #52]           @ 4-byte Reload
+	ldr	r2, [sp, #8]            @ 4-byte Reload
+	vmov.i16	q9, #0xff
+	rsb	r3, r7, #0
+	vmov.i32	q10, #0x0
+	str	r0, [sp, #40]           @ 4-byte Spill
+	sub	r1, r3, r2, lsl #2
+	mvn	r3, r8
+	cmp	r1, r3
+	str	r4, [sp, #28]           @ 4-byte Spill
+	movgt	r3, r1
+	sub	r1, lr, r7
+	sub	r1, r1, r2, lsl #2
+	cmp	r3, r1
+	movle	r3, r1
+	add	r1, r7, r3
+	add	r7, r1, r2, lsl #2
+	mov	r3, r2
+	add	r1, r7, #1
+	str	r1, [sp, #68]           @ 4-byte Spill
+	add	r2, r10, r6
+	str	r2, [sp, #20]           @ 4-byte Spill
+	mul	r1, r4, r1
+	add	r1, r12, r1, lsl #1
+	str	r1, [sp, #24]           @ 4-byte Spill
+	mla	r1, r7, r4, r2
+	mov	r12, #0
+	lsl	r1, r1, #1
+	str	r1, [sp, #16]           @ 4-byte Spill
+	add	r1, r7, #2
+	mla	r1, r4, r1, r2
+	ldr	r2, [sp, #4]            @ 4-byte Reload
+	lsl	r10, r1, #1
+	ldr	r1, [sp, #64]           @ 4-byte Reload
+	sub	r1, r8, r1
+	str	r1, [sp, #64]           @ 4-byte Spill
+	ldr	r1, [sp, #48]           @ 4-byte Reload
+	lsl	r8, r4, #1
+	sub	r1, r1, r2
+	ldr	r2, [sp, #12]           @ 4-byte Reload
+	add	r1, r2, r1
+	str	r1, [sp, #12]           @ 4-byte Spill
+	ldr	r1, [sp, #56]           @ 4-byte Reload
+	ldr	r2, [sp, #44]           @ 4-byte Reload
+	mul	r1, r2, r1
+	ldr	r2, [sp, #60]           @ 4-byte Reload
+	str	r0, [sp, #60]           @ 4-byte Spill
+	rsb	r1, r1, r1, lsl #4
+	add	r11, r2, r1, lsl #2
+	lsl	r2, r3, #2
+	str	r2, [sp, #8]            @ 4-byte Spill
+.LBB57_1:                               @ %f3.v1.v8_loop
+                                        @ =>This Loop Header: Depth=1
+                                        @     Child Loop BB57_4 Depth 2
+                                        @       Child Loop BB57_5 Depth 3
+                                        @     Child Loop BB57_8 Depth 2
+	ldr	r0, [sp, #8]            @ 4-byte Reload
+	cmp	r12, #0
+	ldr	r3, [sp, #52]           @ 4-byte Reload
+	mvn	r2, #0
+	add	r1, r12, r0
+	mov	r0, #3
+	add	r1, r1, r3
+	movgt	r2, #1
+	add	r7, r1, r2
+	movgt	r0, #1
+	add	lr, r7, r0
+	mov	r3, r9
+	str	r11, [sp, #56]          @ 4-byte Spill
+	cmp	r7, lr
+	bge	.LBB57_7
+@ BB#2:                                 @ %f3.v1.v8_loop
+                                        @   in Loop: Header=BB57_1 Depth=1
+	ldr	r1, [sp, #48]           @ 4-byte Reload
+	ldr	r4, [sp, #32]           @ 4-byte Reload
+	cmp	r1, r4
+	bge	.LBB57_7
+@ BB#3:                                 @ %f1.v0_loop.preheader.us.preheader
+                                        @   in Loop: Header=BB57_1 Depth=1
+	ldr	r0, [sp, #68]           @ 4-byte Reload
+	ldr	r4, [sp, #20]           @ 4-byte Reload
+	add	r1, r2, r0
+	ldr	r0, [sp, #28]           @ 4-byte Reload
+	mla	r1, r0, r1, r4
+	ldr	r0, [sp, #64]           @ 4-byte Reload
+	ldr	r4, [sp, #72]           @ 4-byte Reload
+	add	r2, r2, r0
+	ldr	r0, [sp, #12]           @ 4-byte Reload
+	mla	r9, r4, r2, r0
+	ldr	r2, [sp, #40]           @ 4-byte Reload
+	add	r11, r2, r1, lsl #1
+.LBB57_4:                               @ %f1.v0_loop.preheader.us
+                                        @   Parent Loop BB57_1 Depth=1
+                                        @ =>  This Loop Header: Depth=2
+                                        @       Child Loop BB57_5 Depth 3
+	mov	r4, r9
+	mov	r2, r11
+	mov	r6, r3
+.LBB57_5:                               @ %f1.v0_loop.us
+                                        @   Parent Loop BB57_1 Depth=1
+                                        @     Parent Loop BB57_4 Depth=2
+                                        @ =>    This Inner Loop Header: Depth=3
+	ldrb	r1, [r4], #1
+	subs	r6, r6, #1
+	add	r1, r5, r1, lsl #1
+	ldrh	r1, [r1]
+	strh	r1, [r2], #2
+	bne	.LBB57_5
+@ BB#6:                                 @ %f1.v0_after_loop.us
+                                        @   in Loop: Header=BB57_4 Depth=2
+	ldr	r1, [sp, #72]           @ 4-byte Reload
+	add	r7, r7, #1
+	add	r11, r11, r8
+	cmp	r7, lr
+	add	r9, r9, r1
+	bne	.LBB57_4
+.LBB57_7:                               @ %f1.v1_after_loop
+                                        @   in Loop: Header=BB57_1 Depth=1
+	ldr	r1, [sp, #36]           @ 4-byte Reload
+	mov	r9, r3
+	ldr	r11, [sp, #56]          @ 4-byte Reload
+	ldr	r4, [sp, #60]           @ 4-byte Reload
+	cmp	r1, #1
+	ldr	lr, [sp, #24]           @ 4-byte Reload
+	mov	r2, r1
+	ldr	r0, [sp, #16]           @ 4-byte Reload
+	mov	r7, r11
+	blt	.LBB57_9
+.LBB57_8:                               @ %f3.v0.v0_loop
+                                        @   Parent Loop BB57_1 Depth=1
+                                        @ =>  This Inner Loop Header: Depth=2
+	add	r3, r4, lr
+	add	r6, r4, r10
+	add	r1, r3, #2
+	vld1.16	{d24, d25}, [r3]
+	add	r3, r3, #4
+	subs	r2, r2, #1
+	vld1.16	{d22, d23}, [r1]
+	add	r1, r4, r0
+	add	r1, r1, #2
+	vmul.i16	q11, q11, q8
+	vld1.16	{d26, d27}, [r3]
+	add	r4, r4, #16
+	vadd.i16	q12, q12, q13
+	vld1.16	{d26, d27}, [r1]
+	add	r1, r6, #2
+	vadd.i16	q12, q12, q13
+	vld1.16	{d26, d27}, [r1]
+	vadd.i16	q12, q12, q13
+	vshl.i16	q12, q12, #1
+	vsub.i16	q11, q11, q12
+	vmin.s16	q11, q11, q9
+	vmax.s16	q11, q11, q10
+	vmovn.i16	d22, q11
+	vst1.8	{d22}, [r7]
+	add	r7, r7, #8
+	bne	.LBB57_8
+.LBB57_9:                               @ %f3.v0.v0_after_loop
+                                        @   in Loop: Header=BB57_1 Depth=1
+	ldr	r0, [sp, #60]           @ 4-byte Reload
+	add	r12, r12, #1
+	ldr	r1, [sp, #44]           @ 4-byte Reload
+	cmp	r12, #60
+	add	r0, r0, r8
+	str	r0, [sp, #60]           @ 4-byte Spill
+	ldr	r0, [sp, #64]           @ 4-byte Reload
+	add	r11, r11, r1
+	add	r0, r0, #1
+	str	r0, [sp, #64]           @ 4-byte Spill
+	ldr	r0, [sp, #68]           @ 4-byte Reload
+	add	r0, r0, #1
+	str	r0, [sp, #68]           @ 4-byte Spill
+	bne	.LBB57_1
+@ BB#10:                                @ %f3.v1.v8_after_loop
+	ldr	r0, [sp, #40]           @ 4-byte Reload
+	bl	fast_free
+	add	sp, sp, #76
+	pop	{r4, r5, r6, r7, r8, r9, r10, r11, pc}
+.Ltmp57:
+	.size	par_for_f3.v1.v1, .Ltmp57-par_for_f3.v1.v1
+
+	.globl	f3_jit_wrapper
+	.align	2
+	.type	f3_jit_wrapper,%function
+f3_jit_wrapper:                         @ @f3_jit_wrapper
+@ BB#0:                                 @ %entry
+	push	{r11, lr}
+	mov	r1, r0
+	ldm	r1, {r0, r1}
+	bl	f3
+	pop	{r11, pc}
+.Ltmp58:
+	.size	f3_jit_wrapper, .Ltmp58-f3_jit_wrapper
+
+	.type	.L.str,%object          @ @.str
+	.section	.rodata.str1.1,"aMS",%progbits,1
+.L.str:
+	.asciz	 "halide"
+	.size	.L.str, 7
+
+	.type	.L.str1,%object         @ @.str1
+.L.str1:
+	.asciz	 "Error: %s\n"
+	.size	.L.str1, 11
+
+	.type	work_queue,%object      @ @work_queue
+	.local	work_queue
+	.comm	work_queue,1573140,4
+	.type	thread_pool_initialized,%object @ @thread_pool_initialized
+	.section	.bss.thread_pool_initialized,"aGw",%nobits,thread_pool_initialized,comdat
+	.weak	thread_pool_initialized
+thread_pool_initialized:
+	.byte	0                       @ 0x0
+	.size	thread_pool_initialized, 1
+
+	.type	.L.str2,%object         @ @.str2
+	.section	.rodata.str1.1,"aMS",%progbits,1
+.L.str2:
+	.asciz	 "HL_NUMTHREADS"
+	.size	.L.str2, 14
+
+	.type	initialized,%object     @ @initialized
+	.section	.bss.initialized,"aGw",%nobits,initialized,comdat
+	.weak	initialized
+initialized:
+	.byte	0                       @ 0x0
+	.size	initialized, 1
+
+	.type	start,%object           @ @start
+	.section	.bss.start,"aGw",%nobits,start,comdat
+	.weak	start
+	.align	2
+start:
+	.zero	8
+	.size	start, 8
+
+	.type	__unnamed_1,%object     @ @0
+	.section	.rodata,"a",%progbits
+	.align	4
+__unnamed_1:
+	.asciz	 "Buffer p0 is not 32-byte aligned"
+	.size	__unnamed_1, 33
+
+	.type	__unnamed_2,%object     @ @1
+	.align	4
+__unnamed_2:
+	.asciz	 "Buffer f3 is not 32-byte aligned"
+	.size	__unnamed_2, 33
+
+	.type	__unnamed_3,%object     @ @2
+	.align	4
+__unnamed_3:
+	.asciz	 "stride on innermost dimension of f3 must be one"
+	.size	__unnamed_3, 48
+
+	.type	__unnamed_4,%object     @ @3
+	.align	4
+__unnamed_4:
+	.asciz	 "stride on innermost dimension of p0 must be one"
+	.size	__unnamed_4, 48
+
+	.type	_MergedGlobals,%object  @ @_MergedGlobals
+	.local	_MergedGlobals
+	.comm	_MergedGlobals,16,8
+

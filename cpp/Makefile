@@ -3,32 +3,27 @@
 # 'make test_foo' builds and runs test/foo.cpp for any cpp file in the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
-CXX = g++
+CXX ?= g++
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version)
 CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
-CLANG = clang
-CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Os
-LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs jit bitwriter bitreader x86 arm linker nvptx ipo)
+CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -Os
+LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker nvptx ipo mcjit jit)
 
-SOURCE_FILES = CodeGen.cpp CodeGen_X86.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Log.cpp Parameter.cpp Reduction.cpp RDom.cpp Tracing.cpp RemoveDeadLets.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp
+SOURCE_FILES = CodeGen.cpp CodeGen_X86.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Log.cpp Parameter.cpp Reduction.cpp RDom.cpp Tracing.cpp RemoveDeadLets.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp
 
-HEADER_FILES = Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h
+HEADER_FILES = Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h
 
 SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=build/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-STDLIB_ARCHS = x86 x86_avx ptx ptx_dev arm arm_android
+STDLIB_ARCHS = x86 x86_avx arm arm_android
 
-STDLIB_SOURCES = \
-	$(STDLIB_ARCHS:%=src/architecture.%.stdlib.cpp) \
-	$(STDLIB_ARCHS:%=src/architecture.%.stdlib.ll) \
-	src/architecture.posix.stdlib.cpp
-INITIAL_MODULES = $(STDLIB_ARCHS:%=build/architecture.%.initmod.o)
+INITIAL_MODULES = $(STDLIB_ARCHS:%=build/initmod.%.o)
 
 .PHONY: all
 all: bin/libHalide.a bin/libHalide.so include/Halide.h test_internal
@@ -50,19 +45,21 @@ include/Halide.h: $(HEADERS) bin/build_halide_h
 bin/build_halide_h: src/build_halide_h.cpp
 	g++ $< -o $@
 
-INITMOD_OPTS_x86 = -march=corei7 -mattr=-avx
-INITMOD_OPTS_ptx = -march=corei7 
-INITMOD_OPTS_x86_avx = -march=corei7-avx -mattr=+avx
-INITMOD_OPTS_arm = -m32
-INITMOD_OPTS_arm_android = -m32
-INITMOD_OPTS_ptx_dev = ""
+RUNTIME_OPTS_x86 = -march=corei7 
+RUNTIME_OPTS_x86_avx = -march=corei7-avx 
+RUNTIME_OPTS_arm = -m32 
+RUNTIME_OPTS_arm_android = -m32 
+RUNTIME_LL_STUBS_x86 = src/runtime/x86.ll
+RUNTIME_LL_STUBS_x86_avx = src/runtime/x86.ll src/runtime/x86_avx.ll
+RUNTIME_LL_STUBS_arm = src/runtime/arm.ll
+RUNTIME_LL_STUBS_arm_android = src/runtime/arm.ll
 
 -include $(OBJECTS:.o=.d)
 
-build/architecture.%.initmod.cpp: bin/bitcode2cpp src/architecture.%.stdlib.cpp src/architecture.%.stdlib.ll src/architecture.posix.stdlib.cpp build/llvm_ok build/clang_ok
+build/initmod.%.cpp: bin/bitcode2cpp src/runtime/*.cpp src/runtime/*.ll build/llvm_ok build/clang_ok
 	@-mkdir -p build
-	$(CLANG) $(INITMOD_OPTS_$*) -emit-llvm -O3 -S src/architecture.$*.stdlib.cpp -o - | \
-	cat - src/architecture.$*.stdlib.ll | \
+	$(CLANG) $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o - | \
+	cat - $(RUNTIME_LL_STUBS_$*) | \
 	$(LLVM_AS) -o - | \
 	./bin/bitcode2cpp $* > $@
 
@@ -70,8 +67,8 @@ bin/bitcode2cpp: src/bitcode2cpp.cpp
 	@-mkdir -p bin
 	$(CXX) $< -o $@
 
-build/architecture.%.initmod.o: build/architecture.%.initmod.cpp
-	$(CXX) -c $< -o $@ 
+build/initmod.%.o: build/initmod.%.cpp
+	$(CXX) -c $< -o $@ -MMD -MP -MF build/$*.d -MT build/$*.o
 
 build/%.o: src/%.cpp src/%.h build/llvm_ok
 	@-mkdir -p build

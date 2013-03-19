@@ -4,7 +4,6 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-
     const int K = 8;
 
     Func f[K]; Var x, y;

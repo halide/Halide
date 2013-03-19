@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     Image<float> im = f.realize(32);
 
     for (int i = 0; i < 32; i++) {
-        float correct = sqrtf(i);
+        float correct = sqrtf((float)i);
         if (fabs(im(i) - correct) > 0.001) {
             printf("im(%d) = %f instead of %f\n", i, im(i), correct);
             return -1;

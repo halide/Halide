@@ -16,6 +16,8 @@ public:
     IREquals(Stmt s) : result(true), stmt(s) {
     }
 
+    using IRVisitor::visit;
+
     void visit(const IntImm *op) {
         const IntImm *e = expr.as<IntImm>();
         if (!e || e->value != op->value) {

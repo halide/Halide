@@ -5,12 +5,17 @@
  * Routines for statically determining what expressions are divisible by.
  */
 
-#include <utility>
 #include "IRVisitor.h"
 #include "Scope.h"
 
 namespace Halide { 
 namespace Internal {
+
+/** The result of modulus_remainder analysis */
+struct ModulusRemainder {    
+    ModulusRemainder(int m, int r) : modulus(m), remainder(r) {}
+    int modulus, remainder;
+};
 
 /** For things like alignment analysis, often it's helpful to know
  * if an integer expression is some multiple of a constant plus
@@ -24,11 +29,21 @@ namespace Internal {
  * aligned load. If all else fails, we can just say that an integer is
  * congruent to zero modulo one.
  */   
-std::pair<int, int> modulus_remainder(Expr e);
+ModulusRemainder modulus_remainder(Expr e);
+
+/** If we have alignment information about external variables, we can
+ * let the analysis know about that using this version of
+ * modulus_remainder: */
+ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope);
 
 /** Reduce an expression modulo some integer. Returns true and assigns
  * to remainder if an answer could be found. */
 bool reduce_expr_modulo(Expr e, int modulus, int *remainder);
+
+void modulus_remainder_test();
+
+/** The greatest common divisor of two integers */
+int gcd(int, int);
 
 }
 }

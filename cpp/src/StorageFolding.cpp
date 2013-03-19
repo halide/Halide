@@ -10,18 +10,20 @@
 #include "Log.h"
 #include "Derivative.h"
 
+namespace Halide {
+namespace Internal {
+
 using std::string;
 using std::vector;
 using std::map;
-
-namespace Halide {
-namespace Internal {
 
 // Fold the storage of a function in a particular dimension by a particular factor
 class FoldStorageOfFunction : public IRMutator {
     string func;
     int dim;
     Expr factor;
+
+    using IRMutator::visit;
 
     void visit(const Call *op) {
         IRMutator::visit(op);
@@ -53,6 +55,8 @@ public:
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
     string func;
+
+    using IRMutator::visit;
 
     void visit(const Pipeline *op) {
         if (op->name == func) {
@@ -117,9 +121,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 int factor = 1;
                 while (factor < extent) factor *= 2;
 
-                dim_folded = i-1;
+                dim_folded = (int)i-1;
                 fold_factor = factor;
-                stmt = FoldStorageOfFunction(func, (int)(i-1), factor).mutate(op);
+                stmt = FoldStorageOfFunction(func, (int)i-1, factor).mutate(op);
 
                 return;
             }
@@ -138,6 +142,8 @@ public:
 
 // Look for opportunities for storage folding in a statement
 class StorageFolding : public IRMutator {
+    using IRMutator::visit;
+
     void visit(const Realize *op) {
         AttemptStorageFoldingOfFunction folder(op->name);
         Stmt new_body = folder.mutate(op->body);

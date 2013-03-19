@@ -11,9 +11,9 @@ int main(int argc, char **argv) {
     Image<uint8_t> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            unsigned r1 = rand() & 0xffff;
-            unsigned r2 = rand() & 0xffff;
-            in(x, y) = ((r1*r2) >> 25) + 64;
+            unsigned r1 = rand();
+            r1 = r1 & 0xff;
+            in(x, y) = r1/2 + 64;
         }
     }
 
@@ -53,7 +53,6 @@ int main(int argc, char **argv) {
         }
     }
     for (int i = 0; i < 16; i++) {
-        //printf("%d %d\n", in_hist[i], out_hist[i]);
         // There should be roughly 1000*1000/16 pixels per bucket = 62500
         int correct = (in.width()*in.height())/16;
         if (out_hist[i] < correct/2 || out_hist[i] > 2*correct) {

@@ -44,6 +44,8 @@ protected:
     /** Emit a version of a stride that is a valid identifier in C (. is replaced with _) */
     void print_c_name(const std::string &);    
 
+    using IRPrinter::visit;
+
     void visit(const Variable *);
     void visit(const Cast *);
     void visit(const Select *);

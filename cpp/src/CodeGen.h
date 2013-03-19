@@ -17,6 +17,7 @@ template<bool, typename, typename> class IRBuilder;
 class LLVMContext;
 class Type;
 class StructType;
+class Instruction;
 }
 
 #include <map>
@@ -29,6 +30,7 @@ class StructType;
 #include "IR.h"
 #include "Scope.h"
 #include "JITCompiledModule.h"
+#include "ModulusRemainder.h"
 
 namespace Halide { 
 namespace Internal {
@@ -64,6 +66,14 @@ public:
      * functions pointers into that machine code. */
     JITCompiledModule compile_to_function_pointers();
 
+    /** What should be passed as -mcpu and -mattrs for
+     * compilation. The architecture-specific code generator should
+     * define these. */
+    // @{
+    virtual std::string mcpu() const = 0;
+    virtual std::string mattrs() const = 0;
+    // @}
+
 protected:
 
     class Closure;
@@ -73,6 +83,10 @@ protected:
      * generated llvm value. */
     //@{
     static bool llvm_initialized;
+    static bool llvm_X86_enabled;
+    static bool llvm_ARM_enabled;
+    static bool llvm_NVPTX_enabled;
+
     llvm::Module *module;
     bool owns_module;
     llvm::Function *function;
@@ -80,6 +94,9 @@ protected:
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
     llvm::Value *value;
     //@}
+
+    /** Run all of llvm's optimization passes on the module */
+    void optimize_module();
 
     /** Add an entry to the symbol table, hiding previous entries with
      * the same name. Call this when new values come into scope. */
@@ -113,6 +130,9 @@ protected:
 
     /** Add a definition of buffer_t to the module if it isn't already there */
     void define_buffer_t();
+
+    /** Codegen an assertion. If false, it bails out and calls the error handler. */
+    void create_assertion(llvm::Value *condition, const std::string &message);
        
     /** Given an llvm value representing a pointer to a buffer_t, extract various subfields */
     // @{
@@ -133,6 +153,8 @@ protected:
 
     /** Return the llvm version of a halide type */
     llvm::Type *llvm_type_of(Type type);
+
+    using IRVisitor::visit;
 
     /** Generate code for various IR nodes. These can be overridden by
      * architecture-specific code to perform peephole
@@ -186,14 +208,6 @@ protected:
     // @}
 
 
-    /** What should be passed as -mcpu and -mattrs for
-     * compilation. The architecture-specific code generator should
-     * define these. */
-    // @{
-    virtual std::string mcpu() const = 0;
-    virtual std::string mattrs() const = 0;
-    // @}
-
     /** If we have to bail out of a pipeline midway, this should
      * inject the appropriate cleanup code. */
     virtual void prepare_for_early_exit() {}
@@ -203,6 +217,9 @@ private:
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
 
+    /** Alignment info for Int(32) variables in scope */
+    Scope<ModulusRemainder> alignment_info;
+        
 
 };
 

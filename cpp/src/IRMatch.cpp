@@ -4,10 +4,10 @@
 #include "IROperator.h"
 #include <iostream>
 
-using std::vector;
-
 namespace Halide { 
 namespace Internal {
+
+using std::vector;
 
 void expr_match_test() {
     vector<Expr> matches;
@@ -48,6 +48,8 @@ public:
 
     IRMatch(Expr e, vector<Expr> &m) : result(true), matches(m), expr(e) {
     }
+
+    using IRVisitor::visit;
 
     void visit(const IntImm *op) {
         const IntImm *e = expr.as<IntImm>();

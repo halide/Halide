@@ -77,22 +77,18 @@ void do_job(job &j) {
     
     char cmd[1024];
     snprintf(cmd, 1024, 
-	     "cat %s | "
-	     "sed -n '/%s.v1_loop/,/%s.v0_afterloop/p' | "
-	     "grep -v 'v1_loop' | "
-	     "grep -v 'Loop' | "
-	     "grep -v 'v0_afterloop' | "
-	     "sed 's/@.*//' > %s.s && "
+	     "sed -n '/v._loop/,/v._after_loop/p' < %s | "
+             "sed 's/@.*//' > %s.s && "
 	     "grep \"\tv\\{0,1\\}%s\" %s.s > /dev/null", 
-	     module, f.name().c_str(), f.name().c_str(), module, op, module);
+	     module, module, op, module);
 
     if (system(cmd) != 0) {
-	j.result = new char[4096];
+	j.result = new char[4099*2];
 	snprintf(j.result, 1024, "%s did not generate. Instead we got:\n", op);
 	char asmfile[1024];
 	snprintf(asmfile, 1024, "%s.s", module);
 	FILE *f = fopen(asmfile, "r");
-	const int max_size = 1024;
+	const int max_size = 4096;
 	char *buf = j.result + strlen(j.result);
 	memset(buf, 0, max_size);
 	size_t bytes_in = fread(buf, 1, max_size, f);	
@@ -119,6 +115,7 @@ void *worker(void *arg) {
     for (size_t i = n; i < jobs.size(); i += nThreads) {
 	do_job(jobs[i]);
     }
+    return NULL;
 }
 
 void do_all_jobs() {
@@ -406,12 +403,12 @@ void check_sse_all() {
 	check_sse("vroundpd", 4, round(f64_1));
 	
 	check_sse("vcmpeqpd", 4, select(f64_1 == f64_2, 1.0f, 2.0f));
-	check_sse("vcmpneqpd", 4, select(f64_1 != f64_2, 1.0f, 2.0f));
-	check_sse("vcmplepd", 4, select(f64_1 <= f64_2, 1.0f, 2.0f));
+	//check_sse("vcmpneqpd", 4, select(f64_1 != f64_2, 1.0f, 2.0f));
+	//check_sse("vcmplepd", 4, select(f64_1 <= f64_2, 1.0f, 2.0f));
 	check_sse("vcmpltpd", 4, select(f64_1 < f64_2, 1.0f, 2.0f));
 	check_sse("vcmpeqps", 8, select(f32_1 == f32_2, 1.0f, 2.0f));
-	check_sse("vcmpneqps", 8, select(f32_1 != f32_2, 1.0f, 2.0f));
-	check_sse("vcmpleps", 8, select(f32_1 <= f32_2, 1.0f, 2.0f));
+	//check_sse("vcmpneqps", 8, select(f32_1 != f32_2, 1.0f, 2.0f));
+	//check_sse("vcmpleps", 8, select(f32_1 <= f32_2, 1.0f, 2.0f));
 	check_sse("vcmpltps", 8, select(f32_1 < f32_2, 1.0f, 2.0f));
 	
 	check_sse("vblendvps", 8, select(f32_1 > 0.7f, f32_1, f32_2));
@@ -581,7 +578,6 @@ void check_neon_all() {
     check_neon("vabs.s32", 2, abs(i32_1));
     check_neon("vabs.s16", 4, abs(i16_1));
     check_neon("vabs.s8", 8, abs(i8_1));
-    check_neon("vabs.f64", 2, abs(f32_1));
     check_neon("vabs.f32", 4, abs(f32_1));
     check_neon("vabs.s32", 4, abs(i32_1));
     check_neon("vabs.s16", 8, abs(i16_1));
@@ -591,8 +587,13 @@ void check_neon_all() {
     // VACGT	F	-	Absolute Compare Greater Than
     // VACLE	F	-	Absolute Compare Less Than or Equal
     // VACLT	F	-	Absolute Compare Less Than
-    check_neon("vacge.f32", 2, select(abs(f32_1) >= abs(f32_2), 1.0f, 2.0f));
-    check_neon("vacge.f32", 4, select(abs(f32_1) >= abs(f32_2), 1.0f, 2.0f));
+
+    // We add a bogus first term to prevent the select from
+    // simplifying the >= to a < with the 1 and 2 switched. The
+    // pattern to use is just abs(f32_1) >= abs(f32_2).
+    check_neon("vacge.f32", 2, select((f32_1 == f32_2) || (abs(f32_1) >= abs(f32_2)), 1.0f, 2.0f));
+    check_neon("vacge.f32", 4, select((f32_1 == f32_2) || (abs(f32_1) >= abs(f32_2)), 1.0f, 2.0f));
+
     check_neon("vacgt.f32", 2, select(abs(f32_1) > abs(f32_2), 1.0f, 2.0f));
     check_neon("vacgt.f32", 4, select(abs(f32_1) > abs(f32_2), 1.0f, 2.0f));
 
@@ -619,11 +620,6 @@ void check_neon_all() {
     check_neon("vaddhn.i16", 8, u8((u16_1 + u16_2)/256));
     check_neon("vaddhn.i32", 4, i16((i32_1 + i32_2)/65536));
     check_neon("vaddhn.i32", 4, u16((u32_1 + u32_2)/65536));
-    check_neon("vaddhn.i16", 4, i8((i16_1 + i16_2)/256));
-    check_neon("vaddhn.i16", 4, u8((u16_1 + u16_2)/256));
-    check_neon("vaddhn.i32", 2, i16((i32_1 + i32_2)/65536));
-    check_neon("vaddhn.i32", 2, u16((u32_1 + u32_2)/65536));
-    // can't do 64-bit version because we don't pass through 64-bit int constants
 
     // VADDL	I	-	Add Long
     check_neon("vaddl.s8", 8, i16(i8_1) + i16(i8_2));
@@ -681,6 +677,7 @@ void check_neon_all() {
 
 
     // VCGE	I, F	-	Compare Greater Than or Equal
+    /* Halide flips these to less than instead 
     check_neon("vcge.s8", 16, select(i8_1 >= i8_2, i8(1), i8(2)));
     check_neon("vcge.u8", 16, select(u8_1 >= u8_2, u8(1), u8(2)));
     check_neon("vcge.s16", 8, select(i16_1 >= i16_2, i16(1), i16(2)));
@@ -695,6 +692,7 @@ void check_neon_all() {
     check_neon("vcge.s32", 2, select(i32_1 >= i32_2, i32(1), i32(2)));
     check_neon("vcge.u32", 2, select(u32_1 >= u32_2, u32(1), u32(2)));
     check_neon("vcge.f32", 2, select(f32_1 >= f32_2, 1.0f, 2.0f));
+    */
 
     // VCGT	I, F	-	Compare Greater Than
     check_neon("vcgt.s8", 16, select(i8_1 > i8_2, i8(1), i8(2)));
@@ -754,58 +752,58 @@ void check_neon_all() {
     check_neon("vext.32", 4, in_i32(x+1));
 
     // VHADD	I	-	Halving Add
-    check_neon("vhadd.s8", 16, i8((i16(i8_1) + i16(i8_2))/i16(2)));
-    check_neon("vhadd.u8", 16, u8((u16(u8_1) + u16(u8_2))/u16(2)));
-    check_neon("vhadd.s16", 8, i16((i32(i16_1) + i32(i16_2))/i32(2)));
-    check_neon("vhadd.u16", 8, u16((u32(u16_1) + u32(u16_2))/u32(2)));
-    check_neon("vhadd.s32", 4, i32((i64(i32_1) + i64(i32_2))/i64(2)));
-    check_neon("vhadd.u32", 4, u32((u64(u32_1) + u64(u32_2))/u64(2)));
-    check_neon("vhadd.s8", 8, i8((i16(i8_1) + i16(i8_2))/i16(2)));
-    check_neon("vhadd.u8", 8, u8((u16(u8_1) + u16(u8_2))/u16(2)));
-    check_neon("vhadd.s16", 4, i16((i32(i16_1) + i32(i16_2))/i32(2)));
-    check_neon("vhadd.u16", 4, u16((u32(u16_1) + u32(u16_2))/u32(2)));
-    check_neon("vhadd.s32", 2, i32((i64(i32_1) + i64(i32_2))/i64(2)));
-    check_neon("vhadd.u32", 2, u32((u64(u32_1) + u64(u32_2))/u64(2)));
+    check_neon("vhadd.s8", 16, i8((i16(i8_1) + i16(i8_2))/2));
+    check_neon("vhadd.u8", 16, u8((u16(u8_1) + u16(u8_2))/2));
+    check_neon("vhadd.s16", 8, i16((i32(i16_1) + i32(i16_2))/2));
+    check_neon("vhadd.u16", 8, u16((u32(u16_1) + u32(u16_2))/2));
+    check_neon("vhadd.s32", 4, i32((i64(i32_1) + i64(i32_2))/2));
+    check_neon("vhadd.u32", 4, u32((u64(u32_1) + u64(u32_2))/2));
+    check_neon("vhadd.s8", 8, i8((i16(i8_1) + i16(i8_2))/2));
+    check_neon("vhadd.u8", 8, u8((u16(u8_1) + u16(u8_2))/2));
+    check_neon("vhadd.s16", 4, i16((i32(i16_1) + i32(i16_2))/2));
+    check_neon("vhadd.u16", 4, u16((u32(u16_1) + u32(u16_2))/2));
+    check_neon("vhadd.s32", 2, i32((i64(i32_1) + i64(i32_2))/2));
+    check_neon("vhadd.u32", 2, u32((u64(u32_1) + u64(u32_2))/2));
     // This is common enough that we also allow a version that ignores overflow issues
     check_neon("vhadd.s8", 16, (i8_1 + i8_2)/i8(2));
-    check_neon("vhadd.u8", 16, (u8_1 + u8_2)/u8(2));
-    check_neon("vhadd.s16", 8, (i16_1 + i16_2)/i16(2));
-    check_neon("vhadd.u16", 8, (u16_1 + u16_2)/u16(2));
-    check_neon("vhadd.s32", 4, (i32_1 + i32_2)/i32(2));
-    check_neon("vhadd.u32", 4, (u32_1 + u32_2)/u32(2));
+    check_neon("vhadd.u8", 16, (u8_1 + u8_2)/2);
+    check_neon("vhadd.s16", 8, (i16_1 + i16_2)/2);
+    check_neon("vhadd.u16", 8, (u16_1 + u16_2)/2);
+    check_neon("vhadd.s32", 4, (i32_1 + i32_2)/2);
+    check_neon("vhadd.u32", 4, (u32_1 + u32_2)/2);
     check_neon("vhadd.s8", 8, (i8_1 + i8_2)/i8(2));
-    check_neon("vhadd.u8", 8, (u8_1 + u8_2)/u8(2));
-    check_neon("vhadd.s16", 4, (i16_1 + i16_2)/i16(2));
-    check_neon("vhadd.u16", 4, (u16_1 + u16_2)/u16(2));
-    check_neon("vhadd.s32", 2, (i32_1 + i32_2)/i32(2));
-    check_neon("vhadd.u32", 2, (u32_1 + u32_2)/u32(2));
+    check_neon("vhadd.u8", 8, (u8_1 + u8_2)/2);
+    check_neon("vhadd.s16", 4, (i16_1 + i16_2)/2);
+    check_neon("vhadd.u16", 4, (u16_1 + u16_2)/2);
+    check_neon("vhadd.s32", 2, (i32_1 + i32_2)/2);
+    check_neon("vhadd.u32", 2, (u32_1 + u32_2)/2);
 
     // VHSUB	I	-	Halving Subtract
-    check_neon("vhsub.s8", 16, i8((i16(i8_1) - i16(i8_2))/i16(2)));
-    check_neon("vhsub.u8", 16, u8((u16(u8_1) - u16(u8_2))/u16(2)));
-    check_neon("vhsub.s16", 8, i16((i32(i16_1) - i32(i16_2))/i32(2)));
-    check_neon("vhsub.u16", 8, u16((u32(u16_1) - u32(u16_2))/u32(2)));
-    check_neon("vhsub.s32", 4, i32((i64(i32_1) - i64(i32_2))/i64(2)));
-    check_neon("vhsub.u32", 4, u32((u64(u32_1) - u64(u32_2))/u64(2)));
-    check_neon("vhsub.s8", 8, i8((i16(i8_1) - i16(i8_2))/i16(2)));
-    check_neon("vhsub.u8", 8, u8((u16(u8_1) - u16(u8_2))/u16(2)));
-    check_neon("vhsub.s16", 4, i16((i32(i16_1) - i32(i16_2))/i32(2)));
-    check_neon("vhsub.u16", 4, u16((u32(u16_1) - u32(u16_2))/u32(2)));
-    check_neon("vhsub.s32", 2, i32((i64(i32_1) - i64(i32_2))/i64(2)));
-    check_neon("vhsub.u32", 2, u32((u64(u32_1) - u64(u32_2))/u64(2)));
+    check_neon("vhsub.s8", 16, i8((i16(i8_1) - i16(i8_2))/2));
+    check_neon("vhsub.u8", 16, u8((u16(u8_1) - u16(u8_2))/2));
+    check_neon("vhsub.s16", 8, i16((i32(i16_1) - i32(i16_2))/2));
+    check_neon("vhsub.u16", 8, u16((u32(u16_1) - u32(u16_2))/2));
+    check_neon("vhsub.s32", 4, i32((i64(i32_1) - i64(i32_2))/2));
+    check_neon("vhsub.u32", 4, u32((u64(u32_1) - u64(u32_2))/2));
+    check_neon("vhsub.s8", 8, i8((i16(i8_1) - i16(i8_2))/2));
+    check_neon("vhsub.u8", 8, u8((u16(u8_1) - u16(u8_2))/2));
+    check_neon("vhsub.s16", 4, i16((i32(i16_1) - i32(i16_2))/2));
+    check_neon("vhsub.u16", 4, u16((u32(u16_1) - u32(u16_2))/2));
+    check_neon("vhsub.s32", 2, i32((i64(i32_1) - i64(i32_2))/2));
+    check_neon("vhsub.u32", 2, u32((u64(u32_1) - u64(u32_2))/2));
     // This is common enough that we also allow a version that ignores overflow issues
     check_neon("vhsub.s8", 16, (i8_1 - i8_2)/i8(2));
-    check_neon("vhsub.u8", 16, (u8_1 - u8_2)/u8(2));
-    check_neon("vhsub.s16", 8, (i16_1 - i16_2)/i16(2));
-    check_neon("vhsub.u16", 8, (u16_1 - u16_2)/u16(2));
-    check_neon("vhsub.s32", 4, (i32_1 - i32_2)/i32(2));
-    check_neon("vhsub.u32", 4, (u32_1 - u32_2)/u32(2));
+    check_neon("vhsub.u8", 16, (u8_1 - u8_2)/2);
+    check_neon("vhsub.s16", 8, (i16_1 - i16_2)/2);
+    check_neon("vhsub.u16", 8, (u16_1 - u16_2)/2);
+    check_neon("vhsub.s32", 4, (i32_1 - i32_2)/2);
+    check_neon("vhsub.u32", 4, (u32_1 - u32_2)/2);
     check_neon("vhsub.s8", 8, (i8_1 - i8_2)/i8(2));
-    check_neon("vhsub.u8", 8, (u8_1 - u8_2)/u8(2));
-    check_neon("vhsub.s16", 4, (i16_1 - i16_2)/i16(2));
-    check_neon("vhsub.u16", 4, (u16_1 - u16_2)/u16(2));
-    check_neon("vhsub.s32", 2, (i32_1 - i32_2)/i32(2));
-    check_neon("vhsub.u32", 2, (u32_1 - u32_2)/u32(2));
+    check_neon("vhsub.u8", 8, (u8_1 - u8_2)/2);
+    check_neon("vhsub.s16", 4, (i16_1 - i16_2)/2);
+    check_neon("vhsub.u16", 4, (u16_1 - u16_2)/2);
+    check_neon("vhsub.s32", 2, (i32_1 - i32_2)/2);
+    check_neon("vhsub.u32", 2, (u32_1 - u32_2)/2);
 
     // VLD1	X	-	Load Single-Element Structures
     // dense loads with unknown alignments should use vld1 variants
@@ -825,20 +823,18 @@ void check_neon_all() {
     check_neon("vld1.32", 2, in_f32(y));
 
     // VLD2	X	-	Load Two-Element Structures
-    // Strided loads with unknown alignments  (currently crashes ocaml layer)
-    /*
-    check_neon("vld2.8", 16, in_i8(x*2+y));
-    check_neon("vld2.8", 16, in_u8(x*2+y));
-    check_neon("vld2.16", 8, in_i16(x*2+y));
-    check_neon("vld2.16", 8, in_u16(x*2+y));
-    check_neon("vld2.32", 4, in_i32(x*2+y));
-    check_neon("vld2.32", 4, in_u32(x*2+y));
-    check_neon("vld2.32", 4, in_f32(x*2+y));
-    check_neon("vld2.8",  8, in_i8(x*2+y));
-    check_neon("vld2.8",  8, in_u8(x*2+y));
-    check_neon("vld2.16", 4, in_i16(x*2+y));
-    check_neon("vld2.16", 4, in_u16(x*2+y));
-    */
+    check_neon("vld2.8", 16, in_i8(x*2) + in_i8(x*2+1));
+    check_neon("vld2.8", 16, in_u8(x*2) + in_u8(x*2+1));
+    check_neon("vld2.16", 8, in_i16(x*2) + in_i16(x*2+1));
+    check_neon("vld2.16", 8, in_u16(x*2) + in_u16(x*2+1));
+    check_neon("vld2.32", 4, in_i32(x*2) + in_i32(x*2+1));
+    check_neon("vld2.32", 4, in_u32(x*2) + in_u32(x*2+1));
+    check_neon("vld2.32", 4, in_f32(x*2) + in_f32(x*2+1));
+    check_neon("vld2.8",  8, in_i8(x*2) + in_i8(x*2+1));
+    check_neon("vld2.8",  8, in_u8(x*2) + in_u8(x*2+1));
+    check_neon("vld2.16", 4, in_i16(x*2) + in_i16(x*2+1));
+    check_neon("vld2.16", 4, in_u16(x*2) + in_u16(x*2+1));
+    
 
     // VLD3	X	-	Load Three-Element Structures
     check_neon("vld3.8", 16, in_i8(x*3+y));
@@ -1093,15 +1089,7 @@ void check_neon_all() {
     // VQDMLSL	I	-	Saturating Double Multiply Subtract Long
     // VQDMULH	I	-	Saturating Doubling Multiply Returning High Half
     // VQDMULL	I	-	Saturating Doubling Multiply Long
-
-    // These ops are largely useful for fixed-point multiplication,
-    // accumulation, and division. The only one we access through
-    // halide is the one we can directly use for integer division by a
-    // constant.
-    check_neon("vqdmulh.s16", 8, i16_1 / 7);
-    check_neon("vqdmulh.s32", 4, i32_1 / 7);
-    check_neon("vqdmulh.s16", 4, i16_1 / 7);
-    check_neon("vqdmulh.s32", 2, i32_1 / 7);
+    // Not sure why I'd use these
 
     // VQMOVN	I	-	Saturating Move and Narrow
     check_neon("vqmovn.s16", 8,  i8(clamp(i16_1, min_i8,  max_i8)));
@@ -1131,27 +1119,32 @@ void check_neon_all() {
     // We use the non-rounding form of these (at worst we do an extra add)
 
     // VQSHL	I	-	Saturating Shift Left
+    // We skip the versions that we don't have constants large enough for
     check_neon("vqshl.s8", 16,  i8(clamp(i16(i8_1)*16,  min_i8,  max_i8)));
     check_neon("vqshl.s16", 8, i16(clamp(i32(i16_1)*16, min_i16, max_i16)));
-    //check_neon("vqshl.s32", 4, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
     check_neon("vqshl.s8",  8,  i8(clamp(i16(i8_1)*16,  min_i8,  max_i8)));
     check_neon("vqshl.s16", 4, i16(clamp(i32(i16_1)*16, min_i16, max_i16)));
-    //check_neon("vqshl.s32", 2, i32(clamp(i64(i32_1)*16, min_i32, max_i32)));
-    // skip the versions that we don't have constants for
+    check_neon("vqshl.u8", 16,  u8(min(u16(u8_1 )*16, max_u8)));
+    check_neon("vqshl.u16", 8, u16(min(u32(u16_1)*16, max_u16)));
+    check_neon("vqshl.u8",  8,  u8(min(u16(u8_1 )*16, max_u8)));
+    check_neon("vqshl.u16", 4, u16(min(u32(u16_1)*16, max_u16)));
 
     // VQSHLU	I	-	Saturating Shift Left Unsigned
-    check_neon("vqshlu.u8", 16,  u8(min(u16(u8_1 )*16, max_u8)));
-    check_neon("vqshlu.u16", 8, u16(min(u32(u16_1)*16, max_u16)));
-    check_neon("vqshlu.u8",  8,  u8(min(u16(u8_1 )*16, max_u8)));
-    check_neon("vqshlu.u16", 4, u16(min(u32(u16_1)*16, max_u16)));
+    check_neon("vqshlu.s8", 16,  u8(clamp(i16(i8_1)*16,  0,  max_u8)));
+    check_neon("vqshlu.s16", 8, u16(clamp(i32(i16_1)*16, 0, max_u16)));
+    check_neon("vqshlu.s8",  8,  u8(clamp(i16(i8_1)*16,  0,  max_u8)));
+    check_neon("vqshlu.s16", 4, u16(clamp(i32(i16_1)*16, 0, max_u16)));
 
     // VQSHRN	I	-	Saturating Shift Right Narrow
     // VQSHRUN	I	-	Saturating Shift Right Unsigned Narrow
     check_neon("vqshrn.s16", 8,  i8(clamp(i16_1/16, min_i8,  max_i8)));
     check_neon("vqshrn.s32", 4, i16(clamp(i32_1/16, min_i16, max_i16)));
+    check_neon("vqshrun.s16", 8,  u8(clamp(i16_1/16, 0, max_u8)));
+    check_neon("vqshrun.s32", 4, u16(clamp(i32_1/16, 0, max_u16)));
     //check_neon("vqshrn.s64", 2, i32(clamp(i64_1/16, min_i32, max_i32)));
-    check_neon("vqshrun.u16", 8,  u8(min(u16_1/16, max_u8)));
-    check_neon("vqshrun.u32", 4, u16(min(u32_1/16, max_u16)));
+    check_neon("vqshrn.u16", 8,  u8(min(u16_1/16, max_u8)));
+    check_neon("vqshrn.u32", 4, u16(min(u32_1/16, max_u16)));
+
 
     // VQSUB	I	-	Saturating Subtract
     check_neon("vqsub.s8", 16,  i8(clamp(i16(i8_1)  - i16(i8_2),  min_i8,  max_i8)));
@@ -1161,20 +1154,19 @@ void check_neon_all() {
     check_neon("vqsub.s16", 4, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
     //check_neon("vqsub.s32", 4, i32(clamp(i64(i32_1) - i64(i32_2), min_i32, max_i32)));
 
+    // N.B. Saturating subtracts are expressed by widening to a *signed* type
     check_neon("vqsub.u8", 16,  u8(clamp(i16(u8_1)  - i16(u8_2),  0, max_u8)));
     check_neon("vqsub.u16", 8, u16(clamp(i32(u16_1) - i32(u16_2), 0, max_u16)));
     check_neon("vqsub.u8",  8,  u8(clamp(i16(u8_1)  - i16(u8_2),  0, max_u8)));
     check_neon("vqsub.u16", 4, u16(clamp(i32(u16_1) - i32(u16_2), 0, max_u16)));    
 
     // VRADDHN	I	-	Rounding Add and Narrow Returning High Half
-    check_neon("vaddhn.i16", 8, i8((i16_1 + i16_2 + 128)/256));
-    check_neon("vaddhn.i16", 8, u8((u16_1 + u16_2 + 128)/256));
-    check_neon("vaddhn.i32", 4, i16((i32_1 + i32_2 + 32768)/65536));
-    check_neon("vaddhn.i32", 4, u16((u32_1 + u32_2 + 32768)/65536));
-    check_neon("vaddhn.i16", 4, i8((i16_1 + i16_2 + 128)/256));
-    check_neon("vaddhn.i16", 4, u8((u16_1 + u16_2 + 128)/256));
-    check_neon("vaddhn.i32", 2, i16((i32_1 + i32_2 + 32768)/65536));
-    check_neon("vaddhn.i32", 2, u16((u32_1 + u32_2 + 32768)/65536));
+    /* No rounding ops
+    check_neon("vraddhn.i16", 8, i8((i16_1 + i16_2 + 128)/256));
+    check_neon("vraddhn.i16", 8, u8((u16_1 + u16_2 + 128)/256));
+    check_neon("vraddhn.i32", 4, i16((i32_1 + i32_2 + 32768)/65536));
+    check_neon("vraddhn.i32", 4, u16((u32_1 + u32_2 + 32768)/65536));
+    */
 
     // VRECPE	I, F	-	Reciprocal Estimate
     check_neon("vrecpe.f32", 4, 1.0f/f32_1);
@@ -1215,9 +1207,6 @@ void check_neon_all() {
 
     // VRSQRTE	I, F	-	Reciprocal Square Root Estimate
     check_neon("vrsqrte.f32", 4, 1.0f/sqrt(f32_1));
-    check_neon("vrsqrte.f32", 2, 1.0f/sqrt(f32_1));    
-    check_neon("vrsqrte.f32", 4, f32_2/sqrt(f32_1));
-    check_neon("vrsqrte.f32", 2, f32_2/sqrt(f32_1));    
 
     // VRSQRTS	F	-	Reciprocal Square Root Step
     // One newtown rhapson iteration of 1/sqrt(x). Skip it.
@@ -1227,20 +1216,20 @@ void check_neon_all() {
     // Boo rounding ops
 
     // VSHL	I	-	Shift Left
-    check_neon("vshl.s8", 16,  i8_1*16);
-    check_neon("vshl.s16", 8, i16_1*16);
-    check_neon("vshl.s32", 4, i32_1*16);
-    check_neon("vshl.s64", 2, i64_1*16);
-    check_neon("vshl.s8",  8,  i8_1*16);
-    check_neon("vshl.s16", 4, i16_1*16);
-    check_neon("vshl.s32", 2, i32_1*16);
-    check_neon("vshl.u8", 16,  u8_1*16);
-    check_neon("vshl.u16", 8, u16_1*16);
-    check_neon("vshl.u32", 4, u32_1*16);
-    check_neon("vshl.u64", 2, u64_1*16);
-    check_neon("vshl.u8",  8,  u8_1*16);
-    check_neon("vshl.u16", 4, u16_1*16);
-    check_neon("vshl.u32", 2, u32_1*16);
+    check_neon("vshl.i8", 16,  i8_1*16);
+    check_neon("vshl.i16", 8, i16_1*16);
+    check_neon("vshl.i32", 4, i32_1*16);
+    check_neon("vshl.i64", 2, i64_1*16);
+    check_neon("vshl.i8",  8,  i8_1*16);
+    check_neon("vshl.i16", 4, i16_1*16);
+    check_neon("vshl.i32", 2, i32_1*16);
+    check_neon("vshl.i8", 16,  u8_1*16);
+    check_neon("vshl.i16", 8, u16_1*16);
+    check_neon("vshl.i32", 4, u32_1*16);
+    check_neon("vshl.i64", 2, u64_1*16);
+    check_neon("vshl.i8",  8,  u8_1*16);
+    check_neon("vshl.i16", 4, u16_1*16);
+    check_neon("vshl.i32", 2, u32_1*16);
 
     
     // VSHLL	I	-	Shift Left Long
@@ -1268,12 +1257,14 @@ void check_neon_all() {
     check_neon("vshr.u32", 2, u32_1/16);    
 
     // VSHRN	I	-	Shift Right Narrow
+    check_neon("vshrn.i16", 8,  i8(i16_1/256));
+    check_neon("vshrn.i32", 4, i16(i32_1/65536));
+    check_neon("vshrn.i16",  8,  u8(u16_1/256));
+    check_neon("vshrn.i32",  4, u16(u32_1/65536));
     check_neon("vshrn.i16", 8,  i8(i16_1/16));
     check_neon("vshrn.i32", 4, i16(i32_1/16));
-    check_neon("vshrn.i64", 2, i32(i64_1/16));
-    check_neon("vshr.i16",  8,  u8(u16_1/16));
-    check_neon("vshr.i32",  4, u16(u32_1/16));
-    check_neon("vshr.i64",  2, u32(u64_1/16));
+    check_neon("vshrn.i16",  8,  u8(u16_1/16));
+    check_neon("vshrn.i32",  4, u16(u32_1/16));
 
     // VSLI	X	-	Shift Left and Insert
     // I guess this could be used for (x*256) | (y & 255)? We don't do bitwise ops on integers, so skip it.
@@ -1305,7 +1296,21 @@ void check_neon_all() {
     check_neon("vst1.8", 16, i8_1);
 
     // VST2	X	-	Store two-element structures
-    check_neon("vst2.8", 32, select(x%2 == 0, in_i8(x/2), in_i8(x/2 + 16)));
+    for (int sign = 0; sign <= 1; sign++) {
+        for (int width = 128; width <= 256; width *= 2) {
+            for (int bits = 8; bits < 64; bits *= 2) {
+                if (width <= bits*2) continue;
+                Func tmp1, tmp2;
+                tmp1(x) = cast(sign ? Int(bits) : UInt(bits), x);
+                tmp1.compute_root();
+                tmp2(x, y) = select(x%2 == 0, tmp1(x/2), tmp1(x/2 + 16));
+                tmp2.compute_root().vectorize(x, width/bits);
+                char *op = (char *)malloc(32);
+                snprintf(op, 32, "vst2.%d", bits);
+                check_neon(op, width/bits, tmp2(0, 0) + tmp2(0, 63));
+            }
+        }
+    }
 
     // VST3	X	-	Store three-element structures
     // VST4	X	-	Store four-element structures
@@ -1338,10 +1343,6 @@ void check_neon_all() {
     check_neon("vsubhn.i16", 8,  u8((u16_1 - u16_2)/256));
     check_neon("vsubhn.i32", 4, i16((i32_1 - i32_2)/65536));
     check_neon("vsubhn.i32", 4, u16((u32_1 - u32_2)/65536));
-    check_neon("vsubhn.i16", 4,  i8((i16_1 - i16_2)/256));
-    check_neon("vsubhn.i16", 4,  u8((u16_1 - u16_2)/256));
-    check_neon("vsubhn.i32", 2, i16((i32_1 - i32_2)/65536));
-    check_neon("vsubhn.i32", 2, u16((u32_1 - u32_2)/65536));
 
     // VSUBL	I	-	Subtract Long
     check_neon("vsubl.s8",  8, i16(i8_1)  - i16(i8_2));
@@ -1350,10 +1351,6 @@ void check_neon_all() {
     check_neon("vsubl.u16", 4, u32(u16_1) - u32(u16_2));
     check_neon("vsubl.s32", 2, i64(i32_1) - i64(i32_2));
     check_neon("vsubl.u32", 2, u64(u32_1) - u64(u32_2));
-    check_neon("vsubl.s8",  4, i16(i8_1)  - i16(i8_2));
-    check_neon("vsubl.u8",  4, u16(u8_1)  - u16(u8_2));
-    check_neon("vsubl.s16", 2, i32(i16_1) - i32(i16_2));
-    check_neon("vsubl.u16", 2, u32(u16_1) - u32(u16_2));    
 
     // VSUBW	I	-	Subtract Wide
     check_neon("vsubw.s8",  8, i16_1 - i8_1);
@@ -1362,10 +1359,6 @@ void check_neon_all() {
     check_neon("vsubw.u16", 4, u32_1 - u16_1);
     check_neon("vsubw.s32", 2, i64_1 - i32_1);
     check_neon("vsubw.u32", 2, u64_1 - u32_1);
-    check_neon("vsubw.s8",  4, i16_1 - i8_1);
-    check_neon("vsubw.u8",  4, u16_1 - u8_1);
-    check_neon("vsubw.s16", 2, i32_1 - i16_1);
-    check_neon("vsubw.u16", 2, u32_1 - u16_1);    
 
     // VSWP	I	-	Swap Contents
     // Swaps the contents of two registers. Not sure why this would be useful.
@@ -1398,7 +1391,12 @@ int main(int argc, char **argv) {
     if (argc > 1) filter = argv[1];
     else filter = NULL;
 
-    char *target = getenv("HL_TARGET");
+    const char *target = getenv("HL_TARGET");
+
+    #ifdef __arm__
+    if (!target) target = "arm";
+    #endif
+
     use_avx = target && strstr(target, "avx");
     use_avx2 = target && strstr(target, "avx2");
     if (!target || strncasecmp(target, "x86", 3) == 0) {

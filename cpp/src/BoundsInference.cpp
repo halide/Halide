@@ -5,13 +5,13 @@
 #include "Log.h"
 #include <sstream>
 
+namespace Halide {
+namespace Internal {
+
 using std::string;
 using std::ostringstream;
 using std::vector;
 using std::map;
-
-namespace Halide {
-namespace Internal {
 
 // Inject let stmts defining the bounds of a function required at each loop level
 class BoundsInference : public IRMutator {
@@ -22,10 +22,12 @@ public:
 
     BoundsInference(const vector<string> &f, const map<string, Function> &e) : funcs(f), env(e) {}    
 
+    using IRMutator::visit;
+
     virtual void visit(const For *for_loop) {
         
         // Compute the region required of each function within this loop body
-        map<string, Region> regions = regions_required(for_loop->body);
+        map<string, Region> regions = regions_called(for_loop->body);
         
         Stmt body = mutate(for_loop->body);
 

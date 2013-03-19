@@ -28,7 +28,7 @@ typedef struct buffer_t {
 } buffer_t;
 #endif
 
-extern "C" void __copy_to_host(buffer_t* buf);
+extern "C" void halide_copy_to_host(buffer_t* buf);
 
 template<typename T>
 class Image {
@@ -59,12 +59,12 @@ class Image {
         buf.min[3] = 0;
         buf.elem_size = sizeof(T);
 
-        uint8_t *ptr = new uint8_t[sizeof(T)*w*h*c+16];
+        uint8_t *ptr = new uint8_t[sizeof(T)*w*h*c+32];
         buf.host = ptr;
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.dev = 0;
-        while ((size_t)buf.host & 0xf) buf.host++; 
+        while ((size_t)buf.host & 0x1f) buf.host++; 
         contents.reset(new Contents(buf, ptr));
     }
 
@@ -86,7 +86,7 @@ public:
 
     void copyToHost() {
         if (contents->buf.dev_dirty) {
-            __copy_to_host(&contents->buf);
+            halide_copy_to_host(&contents->buf);
             contents->buf.dev_dirty = false;
         }
     }
