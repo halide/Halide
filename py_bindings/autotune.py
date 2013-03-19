@@ -105,6 +105,7 @@ import json
 import socket
 import datetime
 import autotune_bounds
+import tarfile
 from valid_schedules import *
 
 sys.path += ['../util']
@@ -119,6 +120,21 @@ CHECK_REFERENCE = False #True
 AUTOTUNE_CMD_INFO = '# autotune '       # Info at the top of summary file
 SPECULATIVE_INTERPOLATE = True          # Disable this in general (just a test for interpolate code)
 
+#_update_funcs = []
+#_is_tune_update = [False]
+def set_tune_update(root_func, b):
+#    print 'set_tune_update', b
+#    _is_tune_update[0] = b
+#    print is_tune_update()
+    root_func.tune_update = b
+    
+def is_tune_update(root_func):
+#    print 'is_tune_update', _is_tune_update[0]
+#    return _is_tune_update[0]
+    if hasattr(root_func, 'tune_update'):
+        return root_func.tune_update
+    return False
+    
 # --------------------------------------------------------------------------------------------------------------
 # Autotuning via Genetic Algorithm (follows same ideas as PetaBricks)
 # --------------------------------------------------------------------------------------------------------------
@@ -189,6 +205,7 @@ class AutotuneParams:
       -prob_reasonable         p Probability to sample reasonable schedule when sampling random schedule
       -cuda                    b Whether to use Cuda schedules (0 or 1, default 0)
       -aggressive              b Use strategies hoped to more likely find global minimum (0 or 1, default 0)
+      -tune_update             b Whether to tune .update() functions (0 or 1, default 0)
     """
     
     #pop_elitism_pct = 0.2
@@ -263,8 +280,10 @@ class AutotuneParams:
     in_images = []                  # List of input images to test (can pass multiple images using -in_images a.png:b.png)
                                     # First image is run many times to yield a best timing
     
-    seed_reasonable = False          # Whether to seed with reasonable schedules
+    seed_reasonable = False         # Whether to seed with reasonable schedules
     prob_reasonable = 0.0           # Probability to sample reasonable schedule when sampling random schedule
+    
+    tune_update = True
     
     runner_file = 'default_runner.cpp'
     summary_file = 'summary.txt'
@@ -319,7 +338,7 @@ class AutotuneParams:
 
     def set_globals(self):
         set_cuda(self.cuda)
-
+        
     @staticmethod
     def loads(s):
         def deunicode(x):
@@ -1411,7 +1430,12 @@ def autotune(filter_func_name, p, tester=default_tester, constraints=Constraints
         p.image_ext = scope['tune_image_ext']
     if 'tune_runner' in scope:
         p.runner_file = scope['tune_runner']
+
+    set_tune_update(out_func, p.tune_update)
+
     bounds = autotune_bounds.get_bounds(out_func, scope)
+#    print 'halide all funcs:', halide.all_funcs(out_func)
+#    raise SystemExit
     
     test_func = tester(input, out_func, p, filter_func_name)
     
@@ -1574,6 +1598,8 @@ def autotune_child(args, timeout=None):
     #os.kill(parent_pid, signal.SIGCONT)
     
     (input, out_func, evaluate_func, scope) = call_filter_func(filter_func_name)
+    set_tune_update(out_func, p.tune_update)
+
     schedule = Schedule.fromstring(out_func, schedule_str.replace('\\n', '\n'))
     constraints = Constraints()         # FIXME: Deal with Constraints() mess
     schedule.apply(constraints, scope=scope)
@@ -1789,7 +1815,7 @@ def main():
         print '  Supplies reasonable arguments for the example.'
         print
         print 'autotune time tune_dir [log_timefile.txt]'
-        print '  Tuner timings are biased. Run this to get unbiased comparison of ref schedules against best tuned schedule.'
+        print '  Tuner timings are biased. Run this to get unbiased comparison (done by default).'
         print
         print 'autotune run examplename schedule.txt [imagename] [w] [h] [channels]'
         print '  Run and get a single timing -- optionally override imagename and w h channels'
@@ -1797,10 +1823,42 @@ def main():
         print 'autotune html [tune_dir1|wildcards]'
         print '  Create index.html (created by default)'
         print
+        print 'autotune archive dirspec1 [dirspec2] [...]'
+        print '  Create an archive .tar.gz containing all subdirectories of dirname (binaries are excluded to reduce size)'
+        print 
         print '\n'.join(x[4:] for x in AutotuneParams.__doc__.split('\n'))
         sys.exit(0)
     if args[0] == 'test':
         test()
+    elif args[0] == 'archive':
+        if len(args) < 2:
+            print >> sys.stderr, 'autotune archive dirspec1 [dirspec2] [...]'
+            sys.exit(1)
+        dirnames = []
+        for dirspec in args[1:]:
+            dirnames.extend(glob.glob(dirspec))
+            
+        archive_ext = '.tar.gz'
+        archive_name = datetime.datetime.now().strftime('autotune-%s-%%Y-%%m-%%d%s'%(socket.gethostname(),archive_ext))
+        if os.path.exists(archive_name):
+            for i in range(1,10000):
+                archive_name = datetime.datetime.now().strftime('autotune-%s-%%Y-%%m-%%d_%d%s'%(socket.gethostname(),i,archive_ext))
+                if not os.path.exists(archive_name):
+                    break
+        print 'Creating', archive_name
+        
+        names = []
+        for dirname in dirnames:
+            names.extend(subprocess.check_output('find %s -name "*.sh" -o -name "*.txt" -o -name "*.html" -o -name "*.png"' % dirname, shell=True).strip().split('\n'))
+        #print names
+        filelist = '_filelist.txt'
+        with open(filelist, 'wt') as f:
+            f.write('\n'.join(names))
+        os.system('tar cvz -T %s -f %s' % (filelist, archive_name))
+        os.remove(filelist)
+        
+        print 'Finished archiving to', archive_name
+        
     elif args[0] == 'run':
         if len(args) < 3:
             print >> sys.stderr, 'Expected >= 3 arguments'
@@ -1897,6 +1955,8 @@ def main():
                 rest = '-generations 200'.split() + rest
             elif examplename == 'bilateral_grid':
                 rest = '-generations 150'.split() + rest
+            elif examplename == 'blur':
+                rest = '-run_timeout_bias 20'.split() + rest
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'time':
         if len(args) < 2:

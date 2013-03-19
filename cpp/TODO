@@ -1,0 +1,6 @@
+ptx
+
+what if an assertion fails inside a parallel for loop?
+
+test custom do_par_for and custom do_task
+
