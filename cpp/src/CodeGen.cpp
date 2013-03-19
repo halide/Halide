@@ -26,7 +26,6 @@
 #include <llvm/PassManager.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
-#include <llvm/ExecutionEngine/JITMemoryManager.h>
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3.
 // Protected as at least one installation of llvm elides version macros.
@@ -37,6 +36,7 @@
 #include <llvm/TargetTransformInfo.h>
 #include <llvm/DataLayout.h>
 #include <llvm/IRBuilder.h>
+#include <llvm/ExecutionEngine/JITMemoryManager.h>
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
@@ -44,6 +44,7 @@
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #endif
 
 // No msvc warnings from llvm headers please
@@ -290,7 +291,11 @@ public:
         engine_builder.setErrorStr(&error_string);
         engine_builder.setEngineKind(EngineKind::JIT);
         engine_builder.setUseMCJIT(true);
+        #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
         engine_builder.setJITMemoryManager(JITMemoryManager::CreateDefaultMemManager());
+        #else
+        engine_builder.setJITMemoryManager(new SectionMemoryManager());
+        #endif
         engine_builder.setOptLevel(CodeGenOpt::Aggressive);
         engine_builder.setMCPU(cg->mcpu());
         engine_builder.setMAttrs(vec<string>(cg->mattrs()));
