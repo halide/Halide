@@ -12,6 +12,7 @@
 // #include <FCam/Sensor.h>
 // #include <FCam/Time.h>
 
+static unsigned char o[3*1024*2*1024*3];
 
 namespace FCam {
 
@@ -132,6 +133,8 @@ void demosaic(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, float 
     outWidth *= BLOCK_WIDTH;
     outHeight /= BLOCK_HEIGHT;
     outHeight *= BLOCK_HEIGHT;
+
+    int WIDTH = outWidth, HEIGHT = outHeight;
     //fprintf(stderr, "Got outWidth=%d, outHeight=%d\n", outWidth, outHeight);
 
 #if 0
@@ -175,6 +178,7 @@ void demosaic(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, float 
     for (int by = 0; by < rawHeight-8-BLOCK_HEIGHT+1; by += BLOCK_HEIGHT) {
         for (int bx = 0; bx < rawWidth-8-BLOCK_WIDTH+1; bx += BLOCK_WIDTH) {
 #else
+    //#pragma omp parallel for
     for (int by = 0; by < outHeight; by += BLOCK_HEIGHT) {
         for (int bx = 0; bx < outWidth; bx += BLOCK_WIDTH) {
 #endif
@@ -416,9 +420,15 @@ void demosaic(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, float 
                     out(bx+(x-2)*2, by+(y-2)*2)[1] = lut[gi];
                     out(bx+(x-2)*2, by+(y-2)*2)[2] = lut[bi];
 #else
-                    out(bx+(x-2)*2, by+(y-2)*2) = lut[ri];
-                    out(bx+(x-2)*2, by+(y-2)*2) = lut[gi];
-                    out(bx+(x-2)*2, by+(y-2)*2) = lut[bi];
+#if 0 // halide image
+                    out(bx+(x-2)*2, by+(y-2)*2, 0) = lut[ri];
+                    out(bx+(x-2)*2, by+(y-2)*2, 1) = lut[gi];
+                    out(bx+(x-2)*2, by+(y-2)*2, 2) = lut[bi];
+#else // static out
+                    o[bx+(x-2)*2 + WIDTH*(by+(y-2)*2) +WIDTH*HEIGHT*0] = lut[ri];
+                    o[bx+(x-2)*2 + WIDTH*(by+(y-2)*2) +WIDTH*HEIGHT*1] = lut[gi];
+                    o[bx+(x-2)*2 + WIDTH*(by+(y-2)*2) +WIDTH*HEIGHT*2] = lut[bi];
+#endif
 #endif
 
                     // Convert from sensor rgb to srgb
@@ -448,9 +458,15 @@ void demosaic(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, float 
                     out(bx+(x-2)*2+1, by+(y-2)*2)[1] = lut[gi];
                     out(bx+(x-2)*2+1, by+(y-2)*2)[2] = lut[bi];
 #else
-                    out(bx+(x-2)*2+1, by+(y-2)*2) = lut[ri];
-                    out(bx+(x-2)*2+1, by+(y-2)*2) = lut[gi];
-                    out(bx+(x-2)*2+1, by+(y-2)*2) = lut[bi];
+#if 0 // halide image
+                    out(bx+(x-2)*2+1, by+(y-2)*2, 0) = lut[ri];
+                    out(bx+(x-2)*2+1, by+(y-2)*2, 1) = lut[gi];
+                    out(bx+(x-2)*2+1, by+(y-2)*2, 2) = lut[bi];
+#else // static out
+                    o[bx+(x-2)*2+1 + WIDTH*(by+(y-2)*2) +WIDTH*HEIGHT*0] = lut[ri];
+                    o[bx+(x-2)*2+1 + WIDTH*(by+(y-2)*2) +WIDTH*HEIGHT*1] = lut[gi];
+                    o[bx+(x-2)*2+1 + WIDTH*(by+(y-2)*2) +WIDTH*HEIGHT*2] = lut[bi];
+#endif
 #endif
                     // Convert from sensor rgb to srgb
                     r = colorMatrix[0]*linear[R][B][y][x] +
@@ -479,9 +495,15 @@ void demosaic(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, float 
                     out(bx+(x-2)*2, by+(y-2)*2+1)[1] = lut[gi];
                     out(bx+(x-2)*2, by+(y-2)*2+1)[2] = lut[bi];
                     #else
-                    out(bx+(x-2)*2, by+(y-2)*2+1) = lut[ri];
-                    out(bx+(x-2)*2, by+(y-2)*2+1) = lut[gi];
-                    out(bx+(x-2)*2, by+(y-2)*2+1) = lut[bi];
+#if 0 // halide image
+                    out(bx+(x-2)*2, by+(y-2)*2+1, 0) = lut[ri];
+                    out(bx+(x-2)*2, by+(y-2)*2+1, 1) = lut[gi];
+                    out(bx+(x-2)*2, by+(y-2)*2+1, 2) = lut[bi];
+#else // static out
+                    o[bx+(x-2)*2 + WIDTH*(by+(y-2)*2+1) +WIDTH*HEIGHT*0] = lut[ri];
+                    o[bx+(x-2)*2 + WIDTH*(by+(y-2)*2+1) +WIDTH*HEIGHT*1] = lut[gi];
+                    o[bx+(x-2)*2 + WIDTH*(by+(y-2)*2+1) +WIDTH*HEIGHT*2] = lut[bi];
+#endif
                     #endif
 
                     // Convert from sensor rgb to srgb
@@ -511,9 +533,15 @@ void demosaic(Image<uint16_t> input, Image<uint8_t> out, float colorTemp, float 
                     out(bx+(x-2)*2+1, by+(y-2)*2+1)[1] = lut[gi];
                     out(bx+(x-2)*2+1, by+(y-2)*2+1)[2] = lut[bi];
 #else
+#if 0 // halide image
                     out(bx+(x-2)*2+1, by+(y-2)*2+1, 0) = lut[ri];
                     out(bx+(x-2)*2+1, by+(y-2)*2+1, 1) = lut[gi];
                     out(bx+(x-2)*2+1, by+(y-2)*2+1, 2) = lut[bi];
+#else // static buffer
+                    o[bx+(x-2)*2+1 + WIDTH*(by+(y-2)*2+1) +WIDTH*HEIGHT*0] = lut[ri];
+                    o[bx+(x-2)*2+1 + WIDTH*(by+(y-2)*2+1) +WIDTH*HEIGHT*1] = lut[gi];
+                    o[bx+(x-2)*2+1 + WIDTH*(by+(y-2)*2+1) +WIDTH*HEIGHT*2] = lut[bi];
+#endif
 #endif
                 }
             }
