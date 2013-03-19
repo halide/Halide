@@ -1,6 +1,5 @@
 #include <Halide.h>
 #include <math.h>
-#include <sys/time.h>
 #include <stdio.h>
 
 using namespace Halide;
@@ -21,12 +20,6 @@ DECL_SOT(uint32_t);
 DECL_SOT(int32_t);    
 DECL_SOT(float);    
 DECL_SOT(double);    
-
-double currentTime() {
-    timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
-}
 
 template<typename A>
 A mod(A x, A y);
@@ -169,6 +162,22 @@ bool test(int vec_width) {
 
             if (im5(x, y) != correct) {
                 printf("im5(%d, %d) = %f instead of %f\n", x, y, (double)(im5(x, y)), (double)(correct));
+                return false;
+            }
+        }
+    }
+
+    // Gather and scatter with constant but unknown stride
+    Func f5a;
+    f5a(x, y) = input(x, y)*cast<A>(2);
+    f5a.vectorize(y, vec_width);
+    Image<A> im5a = f5a.realize(W, H);
+    
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            A correct = input(x, y) * ((A)(2));
+            if (im5a(x, y) != correct) {
+                printf("im5a(%d, %d) = %f instead of %f\n", x, y, (double)(im5a(x, y)), (double)(correct));
                 return false;
             }
         }

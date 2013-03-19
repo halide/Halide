@@ -7,6 +7,8 @@
  * pointers.
  */ 
 
+#include "Util.h"
+
 #include <stdlib.h>
 #include <iostream>
 namespace Halide { 
@@ -37,8 +39,8 @@ public:
  * template<> void destroy<MyClass>(const MyClass *c) {delete c;}
  */
 // @{
-template<typename T> RefCount &ref_count(const T *);
-template<typename T> void destroy(const T *);
+template<typename T> EXPORT RefCount &ref_count(const T *);
+template<typename T> EXPORT void destroy(const T *);
 // @}
 
 /** Intrusive shared pointers have a reference count (a
@@ -92,15 +94,17 @@ public:
     }
 
     IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {        
-        incref(other.ptr);
+        // other can be inside of something owned by this
+        T *temp = other.ptr;
+        incref(temp);
         decref(ptr);
-        ptr = other.ptr;
+        ptr = temp;
         return *this;
     }
 
     /* Handles can be null. This checks that. */
     bool defined() const {
-        return ptr;
+        return ptr != NULL;
     }
 
     /* Check if two handles point to the same ptr. This is

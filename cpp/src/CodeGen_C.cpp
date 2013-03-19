@@ -6,14 +6,14 @@
 #include <sstream>
 #include <iostream>
 
+namespace Halide { 
+namespace Internal {
+
 using std::ostream;
 using std::endl;
 using std::string;
 using std::vector;
 using std::ostringstream;
-
-namespace Halide { 
-namespace Internal {
 
 CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s) {}
 

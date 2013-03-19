@@ -1,9 +1,9 @@
 #include "Substitute.h"
 
-using std::string;
-
 namespace Halide { 
 namespace Internal {
+
+using std::string;
 
 class Substitute : public IRMutator {
 public:
@@ -14,6 +14,8 @@ public:
 protected:
     string var;
     Expr replacement;
+
+    using IRMutator::visit;
 
     void visit(const Variable *v) {
         if (v->name == var) expr = replacement;

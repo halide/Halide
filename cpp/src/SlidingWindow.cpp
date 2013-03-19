@@ -5,14 +5,16 @@
 #include "Log.h"
 #include "Substitute.h"
 
-using std::string;
-using std::map;
-
 namespace Halide {
 namespace Internal {
 
+using std::string;
+using std::map;
+
 // Does an expression depend on a particular variable?
 class ExprDependsOnVar : public IRVisitor {    
+    using IRVisitor::visit;
+
     void visit(const Variable *op) {
         if (op->name == var) result = true;
     }
@@ -42,6 +44,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     string loop_var;
     Expr loop_min;
     Scope<Expr> scope;
+
+    using IRMutator::visit;
 
     void visit(const Pipeline *op) {
         if (op->name != func.name()) {
@@ -125,7 +129,9 @@ public:
 // Perform sliding window optimization for a particular function
 class SlidingWindowOnFunction : public IRMutator {
     Function func;
-    
+
+    using IRMutator::visit;
+
     void visit(const For *op) {
         Stmt new_body = mutate(op->body);
 
@@ -147,6 +153,8 @@ public:
 // Perform sliding window optimization for all functions
 class SlidingWindow : public IRMutator {
     const map<string, Function> &env;
+
+    using IRMutator::visit;
 
     void visit(const Realize *op) {
         // Find the args for this function

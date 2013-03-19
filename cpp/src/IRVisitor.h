@@ -55,6 +55,7 @@ struct Block;
  */
 class IRVisitor {
 public:
+    virtual ~IRVisitor();
     virtual void visit(const IntImm *);
     virtual void visit(const FloatImm *);
     virtual void visit(const Cast *);

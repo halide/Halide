@@ -4,10 +4,10 @@
 #include "Scope.h"
 #include "IROperator.h"
 
-using std::string;
-
 namespace Halide { 
 namespace Internal {
+
+using std::string;
 
 class FiniteDifference : public IRMutator {
     Scope<Expr> scope;
@@ -16,6 +16,8 @@ class FiniteDifference : public IRMutator {
     Expr brute_force(Expr e) {
         return substitute(var, (new Variable(Int(32), var)) + 1, e) - e;
     }
+
+    using IRMutator::visit;
 
     void visit(const IntImm *) {
         expr = 0;

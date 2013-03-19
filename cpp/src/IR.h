@@ -12,7 +12,6 @@
 #include "Type.h"
 #include "IntrusivePtr.h"
 #include "Buffer.h"
-#include "Parameter.h"
 #include "Util.h"
 
 namespace Halide {
@@ -81,7 +80,7 @@ struct ExprNode : public BaseExprNode {
         v->visit((const T *)this);
     }
     virtual IRNodeType *type_info() const {return &_type_info;}
-    static IRNodeType _type_info;
+    static EXPORT IRNodeType _type_info;
 };
 
 template<typename T>
@@ -90,7 +89,7 @@ struct StmtNode : public BaseStmtNode {
         v->visit((const T *)this);
     }
     virtual IRNodeType *type_info() const {return &_type_info;}
-    static IRNodeType _type_info;
+    static EXPORT IRNodeType _type_info;
 };
     
 /** IR nodes are passed around opaque handles to them. This is a
@@ -135,10 +134,10 @@ struct Expr : public Internal::IRHandle {
     Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
 
     /** Make an expression representing a const 32-bit int (i.e. an IntImm) */
-    Expr(int);
+    EXPORT Expr(int);
 
     /** Make an expression representing a const 32-bit float (i.e. a FloatImm) */
-    Expr(float);
+    EXPORT Expr(float);
 
     /** Get the type of this expression node */
     Type type() const {
@@ -146,6 +145,12 @@ struct Expr : public Internal::IRHandle {
     }
 };    
 
+}
+
+// Now that we've defined an Expr, we can include Parameter.h
+#include "Parameter.h"
+
+namespace Halide {
 namespace Internal {
 
 /** A reference-counted handle to a statement node. */

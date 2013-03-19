@@ -6,6 +6,8 @@ namespace Halide {
 namespace Internal {
 
 class UnrollLoops : public IRMutator {
+    using IRMutator::visit;
+
     void visit(const For *for_loop) {
         if (for_loop->for_type == For::Unrolled) {
             const IntImm *extent = for_loop->extent.as<IntImm>();

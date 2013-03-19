@@ -39,7 +39,7 @@ Interval bounds_of_expr(Expr expr);
 /** Compute rectangular domains large enough to cover all the 'Call's
  * to each function that occurs within a given statement. This is
  * useful for figuring out what regions of things to evaluate. */
-std::map<std::string, Region> regions_required(Stmt s);
+std::map<std::string, Region> regions_called(Stmt s);
 
 /** Compute rectangular domains large enough to cover all the
  * 'Provide's to each function that occur within a given
@@ -50,6 +50,18 @@ std::map<std::string, Region> regions_provided(Stmt s);
 /** Compute rectangular domains large enough to cover all Calls and
  * Provides to each function that occurs within a given statement */
 std::map<std::string, Region> regions_touched(Stmt s);;
+
+/** Compute a rectangular domain large enough to cover all Calls and
+ * Provides to a given function */
+Region region_touched(Stmt s, const std::string &func);
+
+/** Compute a rectangular domain large enough to cover all Provides to
+ * a given function */
+Region region_provided(Stmt s, const std::string &func);
+
+/** Compute a rectangular domain large enough to cover all Calls
+ * to a given function */
+Region region_called(Stmt s, const std::string &func);
 
 /** Compute the smallest bounding box that contains two regions */
 Region region_union(const Region &, const Region &);

@@ -1,20 +1,22 @@
+#include <cstdlib>
 #include <stdio.h>
 #include <string.h>
 #include <set>
 #include <string>
 #include <assert.h>
 
-using namespace std;
+std::set<std::string> done;
 
-set<string> done;
-
-void dump_header(string header) {
+void dump_header(std::string header) {
     if (done.find(header) != done.end()) return;
     done.insert(header);
 
     FILE *f = fopen(header.c_str(), "r");
 
-    assert(f);
+    if (f == NULL) {
+      fprintf(stderr, "Could not open header %s.\n", header.c_str());
+      exit(1);
+    }
 
     char line[1024];
 
@@ -24,7 +26,11 @@ void dump_header(string header) {
             for (int i = 0; i < 1014; i++) {
                 if (sub_header[i] == '"') sub_header[i] = 0;
             }
-            dump_header(sub_header);
+            size_t slash_pos = header.rfind('/');
+            std::string path;
+            if (slash_pos != std::string::npos)
+                path = header.substr(0, slash_pos + 1);
+            dump_header(path + sub_header);
         } else {
             fputs(line, stdout);
         }

@@ -20,6 +20,14 @@ Expr extract_odd_lanes(Expr a);
 /** Extract the even-numbered lanes in a vector */
 Expr extract_even_lanes(Expr a);
 
+/** Extract the nth lane of a vector */
+Expr extract_lane(Expr vec, int lane);
+
+/** Look through a statement for expressions of the form select(ramp %
+ * 2 == 0, a, b) and replace them with calls to an interleave
+ * intrinsic */
+Stmt rewrite_interleavings(Stmt s);
+
 void deinterleave_vector_test();
 
 }

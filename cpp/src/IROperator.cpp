@@ -22,6 +22,14 @@ bool is_const(Expr e) {
             
 }
 
+bool is_const(Expr e, int value) {
+    if (const IntImm *i = e.as<IntImm>()) return i->value == value;
+    if (const FloatImm *i = e.as<FloatImm>()) return i->value == value;
+    if (const Cast *c = e.as<Cast>()) return is_const(c->value, value);
+    if (const Broadcast *b = e.as<Broadcast>()) return is_const(b->value, value);
+    return false;
+}
+
 bool is_positive_const(Expr e) {
     if (const IntImm *i = e.as<IntImm>()) return i->value > 0;
     if (const FloatImm *f = e.as<FloatImm>()) return f->value > 0.0f;

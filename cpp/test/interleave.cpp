@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     for (int x = 0; x < 16; x++) {
         float correct = ((x % 2) == 0) ? (1.0f/(sinf(x/2))) : (cosf(x/2)*17.0f);
         float delta = result(x) - correct;
-        if (delta > 0.001 || delta < -0.001) {
+        if (delta > 0.01 || delta < -0.01) {
             printf("result(%d) = %f instead of %f\n", x, result(x), correct);
             return -1;
         }

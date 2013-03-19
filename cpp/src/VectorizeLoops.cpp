@@ -2,11 +2,11 @@
 #include "IRMutator.h"
 #include "Scope.h"
 
-using std::string;
-using std::vector;
-
 namespace Halide {
 namespace Internal {
+
+using std::string;
+using std::vector;
 
 class VectorizeLoops : public IRMutator {
     class VectorSubs : public IRMutator {
@@ -20,6 +20,8 @@ class VectorizeLoops : public IRMutator {
             else assert(false && "Mismatched vector widths in VectorSubs");
             return Expr();
         }
+
+        using IRMutator::visit;
             
         virtual void visit(const Cast *op) {
             Expr value = mutate(op->value);
@@ -207,6 +209,8 @@ class VectorizeLoops : public IRMutator {
         }
     };
         
+    using IRMutator::visit;
+
     void visit(const For *for_loop) {
         if (for_loop->for_type == For::Vectorized) {
             const IntImm *extent = for_loop->extent.as<IntImm>();
