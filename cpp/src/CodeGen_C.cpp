@@ -51,24 +51,24 @@ void CodeGen_C::print_c_name(const string &name) {
 }
 
 void CodeGen_C::compile_header(const string &name, const vector<Argument> &args) {
-    stream << "#ifndef HALIDE_" << name << endl
-           << "#define HALIDE_" << name << endl;
+    stream << "#ifndef HALIDE_" << name << '\n'
+           << "#define HALIDE_" << name << '\n';
 
     // Throw in a definition of a buffer_t
-    stream << "#ifndef BUFFER_T_DEFINED" << endl
-           << "#define BUFFER_T_DEFINED" << endl
-           << "#include <stdint.h>" << endl
-           << "typedef struct buffer_t {" << endl
-           << "    uint8_t* host;" << endl
-           << "    uint64_t dev;" << endl
-           << "    bool host_dirty;" << endl
-           << "    bool dev_dirty;" << endl
-           << "    int32_t extent[4];" << endl
-           << "    int32_t stride[4];" << endl
-           << "    int32_t min[4];" << endl
-           << "    int32_t elem_size;" << endl
-           << "} buffer_t;" << endl
-           << "#endif" << endl;
+    stream << "#ifndef BUFFER_T_DEFINED\n"
+           << "#define BUFFER_T_DEFINED\n"
+           << "#include <stdint.h>\n"
+           << "typedef struct buffer_t {\n"
+           << "    uint8_t* host;\n"
+           << "    uint64_t dev;\n"
+           << "    bool host_dirty;\n"
+           << "    bool dev_dirty;\n"
+           << "    int32_t extent[4];\n"
+           << "    int32_t stride[4];\n"
+           << "    int32_t min[4];\n"
+           << "    int32_t elem_size;\n"
+           << "} buffer_t;\n"
+           << "#endif\n";
 
     // Now the function prototype
     stream << "extern \"C\" void " << name << "(";
@@ -77,28 +77,48 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
         if (args[i].is_buffer) {
             stream << "const buffer_t *" << args[i].name;
         } else {
+            stream << "const ";
             print_c_type(args[i].type);
             stream << " " << args[i].name;
         }
     }
-    stream << ");" << endl;
+    stream << ");\n";
 
-    stream << "#endif" << endl;    
+    stream << "#endif\n";    
 }
 
 void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args) {
-    stream << "#include <iostream>" << endl;
-    stream << "#include <assert.h>" << endl;
-    stream << "#include \"buffer_t.h\"" << endl;
-
-
+    stream << "#include <iostream>\n"
+           << "#include <assert.h>\n"
+           << "#ifndef BUFFER_T_DEFINED\n"
+           << "#define BUFFER_T_DEFINED\n"
+           << "#include <stdint.h>\n"
+           << "typedef struct buffer_t {\n"
+           << "    uint8_t* host;\n"
+           << "    uint64_t dev;\n"
+           << "    bool host_dirty;\n"
+           << "    bool dev_dirty;\n"
+           << "    int32_t extent[4];\n"
+           << "    int32_t stride[4];\n"
+           << "    int32_t min[4];\n"
+           << "    int32_t elem_size;\n"
+           << "} buffer_t;\n"
+           << "#endif\n"
+           << "\n"
+           << "extern \"C\" void *halide_malloc(size_t);\n"
+           << "extern \"C\" void halide_free(void *);\n"
+           << "\n"
+           << "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
+           << "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
+           << "\n";
     // Emit the function prototype
     stream << "void " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << "buffer_t *_";
+            stream << "const buffer_t *_";
             print_c_name(args[i].name);
         } else {
+            stream << "const ";
             print_c_type(args[i].type);
             stream << " ";
             print_c_name(args[i].name);
@@ -107,7 +127,7 @@ void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args
         if (i < args.size()-1) stream << ", ";
     }
 
-    stream << ") {" << endl;
+    stream << ") {\n";
 
     // Unpack the buffer_t's
     for (size_t i = 0; i < args.size(); i++) {
@@ -116,35 +136,35 @@ void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args
             print_c_name(args[i].name);
             stream << " = _";
             print_c_name(args[i].name);
-            stream << "->host;" << endl;
+            stream << "->host;\n";
 
             for (int j = 0; j < 4; j++) {
-                stream << "int32_t ";
+                stream << "const int32_t ";
                 print_c_name(args[i].name);
                 stream << "_min_" << j << " = _";
                 print_c_name(args[i].name);
-                stream << "->min[" << j << "];" << endl;
+                stream << "->min[" << j << "];\n";
             }
             for (int j = 0; j < 4; j++) {
-                stream << "int32_t ";
+                stream << "const int32_t ";
                 print_c_name(args[i].name);
                 stream << "_extent_" << j << " = _";
                 print_c_name(args[i].name);
-                stream << "->extent[" << j << "];" << endl;
+                stream << "->extent[" << j << "];\n";
             }
             for (int j = 0; j < 4; j++) {
-                stream << "int32_t ";
+                stream << "const int32_t ";
                 print_c_name(args[i].name);
                 stream << "_stride_" << j << " = _";
                 print_c_name(args[i].name);
-                stream << "->stride[" << j << "];" << endl;
+                stream << "->stride[" << j << "];\n";
             }
         }
     }        
 
     print(s);
 
-    stream << "}" << endl;
+    stream << "}\n";
 }
 
 void CodeGen_C::visit(const Variable *op) {
@@ -180,7 +200,7 @@ void CodeGen_C::visit(const Store *op) {
     print(op->index);
     stream << "] = ";
     print(op->value);
-    stream << ";" << endl;
+    stream << ";\n";
 }
 
 void CodeGen_C::visit(const Let *op) {
@@ -202,21 +222,22 @@ void CodeGen_C::visit(const Select *op) {
 
 void CodeGen_C::visit(const LetStmt *op) {
     do_indent();
-    stream << "{" << endl;
+    stream << "{\n";
     indent += 2;
 
     do_indent();
+    stream << "const ";
     print_c_type(op->value.type());
     stream << " ";
     print_c_name(op->name);
     stream << " = ";
     op->value.accept(this);
-    stream << ";" << endl;
+    stream << ";\n";
 
     op->body.accept(this);
 
     do_indent();
-    stream << "}" << endl;
+    stream << "}\n";
 
     indent -= 2;
 }
@@ -231,37 +252,37 @@ void CodeGen_C::visit(const PrintStmt *op) {
         stream << " << ";
         op->args[i].accept(this);
     }
-    stream << ";" << endl;
+    stream << ";\n";
 }
 
 void CodeGen_C::visit(const AssertStmt *op) {
     do_indent();
     stream << "assert(";
     op->condition.accept(this);
-    stream << " && \"" << op->message << "\");" << endl;
+    stream << " && \"" << op->message << "\");\n";
 }
 
 void CodeGen_C::visit(const Pipeline *op) {
 
     do_indent();
-    stream << "// produce " << op->name << endl;
+    stream << "// produce " << op->name << '\n';
     op->produce.accept(this);
 
     if (op->update.defined()) {
         do_indent();
-        stream << "// update " << op->name << endl;
+        stream << "// update " << op->name << '\n';
         op->update.accept(this);            
     }
         
     do_indent();
-    stream << "// consume " << op->name << endl;
+    stream << "// consume " << op->name << '\n';
     op->consume.accept(this);
 }
 
 void CodeGen_C::visit(const For *op) {
     if (op->for_type == For::Parallel) {
         do_indent();
-        stream << "#pragma omp parallel for" << endl;
+        stream << "#pragma omp parallel for\n";
     } else {
         assert(op->for_type == For::Serial && "Can only emit serial or parallel for loops to C");
     }       
@@ -279,14 +300,14 @@ void CodeGen_C::visit(const For *op) {
     op->extent.accept(this);
     stream << "; ";
     print_c_name(op->name);
-    stream << "++) {" << endl;
+    stream << "++) {\n";
         
     indent += 2;
     op->body.accept(this);
     indent -= 2;
 
     do_indent();
-    stream << "}" << endl;
+    stream << "}\n";
 }
 
 void CodeGen_C::visit(const Provide *op) {
@@ -295,7 +316,7 @@ void CodeGen_C::visit(const Provide *op) {
 
 void CodeGen_C::visit(const Allocate *op) {
     do_indent();
-    stream << "{" << endl;
+    stream << "{\n";
     indent += 2;
 
     do_indent();
@@ -312,29 +333,31 @@ void CodeGen_C::visit(const Allocate *op) {
 
     if (on_stack) {
         print_c_name(op->name);
-        stream << "[" << stack_size << "];" << endl;
+        stream << "[" << stack_size << "];\n";
     } else {        
         stream << "*";
         print_c_name(op->name);
-        stream << " = new ";
+        stream << " = (";
         print_c_type(op->type);
-        stream << "[";
+        stream << " *)halide_malloc(sizeof(";        
+        print_c_type(op->type);
+        stream << ")*";
         op->size.accept(this);
-        stream << "];" << endl;
+        stream << ");\n";
     }
 
     op->body.accept(this);            
 
     if (!on_stack) {
         do_indent();
-        stream << "delete[] ";
+        stream << "halide_free(";
         print_c_name(op->name);
-        stream << ";" << endl;
+        stream << ");\n";
     }
 
     indent -= 2;
     do_indent();
-    stream << "}" << endl;
+    stream << "}\n";
 }
 
 void CodeGen_C::visit(const Realize *op) {
@@ -364,31 +387,51 @@ void CodeGen_C::test() {
     string correct_source = \
         "#include <iostream>\n"
         "#include <assert.h>\n"
-        "#include \"buffer_t.h\"\n"
-        "void test1(buffer_t *_buf, float alpha, int32_t beta) {\n"
+        "#ifndef BUFFER_T_DEFINED\n"
+        "#define BUFFER_T_DEFINED\n"
+        "#include <stdint.h>\n"
+        "typedef struct buffer_t {\n"
+        "    uint8_t* host;\n"
+        "    uint64_t dev;\n"
+        "    bool host_dirty;\n"
+        "    bool dev_dirty;\n"
+        "    int32_t extent[4];\n"
+        "    int32_t stride[4];\n"
+        "    int32_t min[4];\n"
+        "    int32_t elem_size;\n"
+        "} buffer_t;\n"
+        "#endif\n"
+        "\n"
+        "extern \"C\" void *halide_malloc(size_t);\n"
+        "extern \"C\" void halide_free(void *);\n"
+        "\n"
+        "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
+        "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
+        "\n"
+        "void test1(const buffer_t *_buf, const float alpha, const int32_t beta) {\n"
         "uint8_t *buf = _buf->host;\n"
-        "int32_t buf_min_0 = _buf->min[0];\n"
-        "int32_t buf_min_1 = _buf->min[1];\n"
-        "int32_t buf_min_2 = _buf->min[2];\n"
-        "int32_t buf_min_3 = _buf->min[3];\n"
-        "int32_t buf_extent_0 = _buf->extent[0];\n"
-        "int32_t buf_extent_1 = _buf->extent[1];\n"
-        "int32_t buf_extent_2 = _buf->extent[2];\n"
-        "int32_t buf_extent_3 = _buf->extent[3];\n"
-        "int32_t buf_stride_0 = _buf->stride[0];\n"
-        "int32_t buf_stride_1 = _buf->stride[1];\n"
-        "int32_t buf_stride_2 = _buf->stride[2];\n"
-        "int32_t buf_stride_3 = _buf->stride[3];\n"
+        "const int32_t buf_min_0 = _buf->min[0];\n"
+        "const int32_t buf_min_1 = _buf->min[1];\n"
+        "const int32_t buf_min_2 = _buf->min[2];\n"
+        "const int32_t buf_min_3 = _buf->min[3];\n"
+        "const int32_t buf_extent_0 = _buf->extent[0];\n"
+        "const int32_t buf_extent_1 = _buf->extent[1];\n"
+        "const int32_t buf_extent_2 = _buf->extent[2];\n"
+        "const int32_t buf_extent_3 = _buf->extent[3];\n"
+        "const int32_t buf_stride_0 = _buf->stride[0];\n"
+        "const int32_t buf_stride_1 = _buf->stride[1];\n"
+        "const int32_t buf_stride_2 = _buf->stride[2];\n"
+        "const int32_t buf_stride_3 = _buf->stride[3];\n"
         "{\n"
-        "  int32_t *tmp_heap = new int32_t[(43*beta)];\n"
+        "  int32_t *tmp_heap = (int32_t *)halide_malloc(sizeof(int32_t)*(43*beta));\n"
         "  {\n"
         "    int32_t tmp_stack[127];\n"
         "    {\n"
-        "      int32_t x = (beta + 1);\n"
-        "      ((int32_t *)buf)[x] = ((alpha > 4) ? 3 : 2);\n" 
+        "      const int32_t x = (beta + 1);\n"
+        "      ((int32_t *)buf)[x] = ((alpha > 4.000000f) ? 3 : 2);\n" 
         "      }\n" 
         "  }\n"
-        "  delete[] tmp_heap;\n" 
+        "  halide_free(tmp_heap);\n" 
         "}\n"
         "}\n";
     if (source.str() != correct_source) {
