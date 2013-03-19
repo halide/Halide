@@ -26,7 +26,7 @@
 #include <llvm/PassManager.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
-#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include <llvm/ExecutionEngine/JITMemoryManager.h>
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3.
 // Protected as at least one installation of llvm elides version macros.
@@ -290,7 +290,7 @@ public:
         engine_builder.setErrorStr(&error_string);
         engine_builder.setEngineKind(EngineKind::JIT);
         engine_builder.setUseMCJIT(true);
-	engine_builder.setJITMemoryManager(new SectionMemoryManager());
+        engine_builder.setJITMemoryManager(JITMemoryManager::CreateDefaultMemManager());
         engine_builder.setOptLevel(CodeGenOpt::Aggressive);
         engine_builder.setMCPU(cg->mcpu());
         engine_builder.setMAttrs(vec<string>(cg->mattrs()));
