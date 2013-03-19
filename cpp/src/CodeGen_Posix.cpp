@@ -128,6 +128,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
         llvm::Function *malloc_fn = module->getFunction("halide_malloc");
         assert(malloc_fn && "Could not find halide_malloc in module");
         Value *sz = builder->CreateIntCast(size, malloc_fn->arg_begin()->getType(), false);
+	log(4) << "Creating call to halide_malloc\n";
         ptr = builder->CreateCall(malloc_fn, sz);
         heap_allocations.push_back(ptr);
     }
@@ -141,6 +142,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
         // call free
         llvm::Function *free_fn = module->getFunction("halide_free");
         assert(free_fn && "Could not find halide_free in module");
+	log(4) << "Creating call to halide_free\n";
         builder->CreateCall(free_fn, ptr);
     }
 }
