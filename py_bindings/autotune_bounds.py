@@ -24,6 +24,7 @@ def get_bounds(root_func, scope):
                 except IndexError:
                     raise ValueError('could not find var %s to bound in func %s (varlist is %r)' % (x.var, name, varlist[name]))
                 bounds[name][i] = x.size
+    print 'bounds is:', bounds
     
     return bounds
 
