@@ -668,7 +668,7 @@ Stmt add_image_checks(Stmt s, Function f) {
             Expr var = new Variable(Int(32), lets[i].first);
             Expr value = lets[i].second;
             ostringstream error;
-            error << "Static constraint violated: " << lets[i].first << " == " << value << "\n";
+            error << "Static constraint violated: " << lets[i].first << " == " << value;
             asserts.push_back(new AssertStmt(var == value, error.str()));
             s = new LetStmt(lets[i].first + ".constrained", value, s);
         }

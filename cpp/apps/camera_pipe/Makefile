@@ -19,7 +19,7 @@ fcam/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
 	$(CXX) -c -I../support -Wall -fopenmp -O3 $< -o $@
 
 fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
-	$(CXX) -c -I../support -Wall -fopenmp -O3 $< -o $@
+	$(CXX) -c -mfpu=neon -I../support -Wall -fopenmp -O3 $< -o $@
 
 process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
 	$(CXX) -I../support -Wall -O3 $^ -o $@ -lpthread -ldl -fopenmp $(CUDA_LFLAGS) $(PNGFLAGS)

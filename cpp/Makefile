@@ -11,7 +11,7 @@ CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -Os
-LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs jit bitwriter bitreader x86 arm linker nvptx ipo)
+LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker nvptx ipo mcjit jit)
 
 SOURCE_FILES = CodeGen.cpp CodeGen_X86.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Log.cpp Parameter.cpp Reduction.cpp RDom.cpp Tracing.cpp RemoveDeadLets.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp
 
@@ -49,17 +49,17 @@ RUNTIME_OPTS_x86 = -march=corei7
 RUNTIME_OPTS_x86_avx = -march=corei7-avx 
 RUNTIME_OPTS_arm = -m32 
 RUNTIME_OPTS_arm_android = -m32 
-RUNTIME_LL_STUBS_x86 = x86.ll
-RUNTIME_LL_STUBS_x86_avx = x86.ll x86_avx.ll
-RUNTIME_LL_STUBS_arm = arm.ll
-RUNTIME_LL_STUBS_arm_android = arm.ll
+RUNTIME_LL_STUBS_x86 = src/runtime/x86.ll
+RUNTIME_LL_STUBS_x86_avx = src/runtime/x86.ll src/runtime/x86_avx.ll
+RUNTIME_LL_STUBS_arm = src/runtime/arm.ll
+RUNTIME_LL_STUBS_arm_android = src/runtime/arm.ll
 
 -include $(OBJECTS:.o=.d)
 
-build/initmod.%.cpp: bin/bitcode2cpp src/runtime/*.cpp $(RUNTIME_LL_STUBS_%) build/llvm_ok build/clang_ok
+build/initmod.%.cpp: bin/bitcode2cpp src/runtime/*.cpp src/runtime/*.ll build/llvm_ok build/clang_ok
 	@-mkdir -p build
 	$(CLANG) $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o - | \
-	cat - $(addprefix src/runtime/,$(RUNTIME_LL_STUBS_$*)) | \
+	cat - $(RUNTIME_LL_STUBS_$*) | \
 	$(LLVM_AS) -o - | \
 	./bin/bitcode2cpp $* > $@
 
@@ -68,7 +68,7 @@ bin/bitcode2cpp: src/bitcode2cpp.cpp
 	$(CXX) $< -o $@
 
 build/initmod.%.o: build/initmod.%.cpp
-	$(CXX) -c $< -o $@ 
+	$(CXX) -c $< -o $@ -MMD -MP -MF build/$*.d -MT build/$*.o
 
 build/%.o: src/%.cpp src/%.h build/llvm_ok
 	@-mkdir -p build

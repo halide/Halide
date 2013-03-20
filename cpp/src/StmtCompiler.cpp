@@ -11,18 +11,22 @@ using std::string;
 using std::vector;
 
 StmtCompiler::StmtCompiler(string arch) {
+    #ifdef __arm__
+    const char *native = "arm";
+    #else
+    const char *native = "x86";
+    #endif
     if (arch.empty()) {
         #ifdef _WIN32
         char target[128];
         size_t read = 0;
         getenv_s(&read, target, "HL_TARGET");
         if (read) arch = target;
-        else arch = "x86";
+        else arch = native;
         #else
         char *target = getenv("HL_TARGET");
         if (target) arch = target;        
-        else arch = "x86"; // default to x86 for now. In the future
-                           // this should detect the native target.
+        else arch = native;
         #endif
     }
 
