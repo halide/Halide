@@ -87,10 +87,10 @@ TESTS = $(shell ls test/*.cpp)
 tests: $(TESTS:test/%.cpp=test_%)
 
 bin/test_internal: test/internal.cpp bin/libHalide.so
-	$(CXX) $(CXX_FLAGS) -rdynamic $< -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
+	$(CXX) $(CXX_FLAGS)  $< -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
 
 bin/test_%: test/%.cpp bin/libHalide.so include/Halide.h
-	$(CXX) -g $< -rdynamic -Iinclude -Lbin -lHalide -lpthread -ldl -o $@	
+	$(CXX) -g $<  -Iinclude -Lbin -lHalide -lpthread -ldl -o $@	
 
 test_%: bin/test_%
 	@-mkdir -p tmp
