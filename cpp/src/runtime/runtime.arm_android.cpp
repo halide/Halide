@@ -1,6 +1,7 @@
 #include "posix_allocator.cpp"
 #include "posix_clock.cpp"
 #include "posix_error_handler.cpp"
+#include "write_debug_image.cpp"
 #include "android_io.cpp"
 #include "posix_math.cpp"
 #include "posix_thread_pool.cpp"
