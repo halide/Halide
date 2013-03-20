@@ -336,7 +336,12 @@ public:
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
     EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");    
-    
+    /** Statically compile this function to C source code. This is
+     * useful for providing fallback code paths that will compile on
+     * many platforms. Vectorization will fail, and parallelization
+     * will produce serial code. */
+    EXPORT void compile_to_c(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
      * argument. 
