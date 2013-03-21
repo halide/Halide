@@ -12,6 +12,11 @@ LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -Os
 LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker nvptx ipo mcjit jit)
+TEST_CXX_FLAGS=
+UNAME = $(shell uname)
+ifeq ($(UNAME), Linux)
+TEST_CXX_FLAGS += -rdynamic
+endif
 
 SOURCE_FILES = CodeGen.cpp CodeGen_X86.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Log.cpp Parameter.cpp Reduction.cpp RDom.cpp Tracing.cpp RemoveDeadLets.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp
 
@@ -90,7 +95,7 @@ bin/test_internal: test/internal.cpp bin/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
 
 bin/test_%: test/%.cpp bin/libHalide.so include/Halide.h
-	$(CXX) -g $<  -Iinclude -Lbin -lHalide -lpthread -ldl -o $@	
+	$(CXX) $(TEST_CXX_FLAGS) -g $<  -Iinclude -Lbin -lHalide -lpthread -ldl -o $@	
 
 test_%: bin/test_%
 	@-mkdir -p tmp
