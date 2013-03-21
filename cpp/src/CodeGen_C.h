@@ -48,6 +48,11 @@ protected:
 
     void visit(const Variable *);
     void visit(const Cast *);
+    void visit(const Add *);
+    void visit(const Sub *);
+    void visit(const Mul *);
+    void visit(const Div *);
+    void visit(const Mod *);
     void visit(const Select *);
     void visit(const Load *);
     void visit(const Store *);

@@ -5,6 +5,7 @@
 #include "Var.h"
 #include <sstream>
 #include <iostream>
+#include "Log.h"
 
 namespace Halide { 
 namespace Internal {
@@ -172,11 +173,62 @@ void CodeGen_C::visit(const Variable *op) {
 }
 
 void CodeGen_C::visit(const Cast *op) { 
-    stream << '(';
+    stream << "((";
     print_c_type(op->type);
     stream << ")(";
     print(op->value);
-    stream << ')';
+    stream << "))";
+}
+
+// C likes to promote narrow types to wider ones when you do binary ops
+void CodeGen_C::visit(const Add *op) {
+    stream << "((";
+    print_c_type(op->type);
+    stream << ")(";
+    print(op->a);
+    stream << " + ";
+    print(op->b);
+    stream << "))";
+}
+
+void CodeGen_C::visit(const Sub *op) {
+    stream << "((";
+    print_c_type(op->type);
+    stream << ")(";
+    print(op->a);
+    stream << " - ";
+    print(op->b);
+    stream << "))";
+}
+
+void CodeGen_C::visit(const Mul *op) {
+    stream << "((";
+    print_c_type(op->type);
+    stream << ")(";
+    print(op->a);
+    stream << "*";
+    print(op->b);
+    stream << "))";
+}
+
+void CodeGen_C::visit(const Div *op) {
+    stream << "((";
+    print_c_type(op->type);
+    stream << ")(";
+    print(op->a);
+    stream << "/";
+    print(op->b);
+    stream << "))";
+}
+
+void CodeGen_C::visit(const Mod *op) {
+    stream << "((";
+    print_c_type(op->type);
+    stream << ")(";
+    print(op->a);
+    stream << " + ";
+    print(op->b);
+    stream << "))";
 }
 
 void CodeGen_C::visit(const Load *op) {
@@ -423,11 +475,11 @@ void CodeGen_C::test() {
         "const int32_t buf_stride_2 = _buf->stride[2];\n"
         "const int32_t buf_stride_3 = _buf->stride[3];\n"
         "{\n"
-        "  int32_t *tmp_heap = (int32_t *)halide_malloc(sizeof(int32_t)*(43*beta));\n"
+        "  int32_t *tmp_heap = (int32_t *)halide_malloc(sizeof(int32_t)*((int32_t)(43*beta)));\n"
         "  {\n"
         "    int32_t tmp_stack[127];\n"
         "    {\n"
-        "      const int32_t x = (beta + 1);\n"
+        "      const int32_t x = ((int32_t)(beta + 1));\n"
         "      ((int32_t *)buf)[x] = ((alpha > 4.000000f) ? 3 : 2);\n" 
         "      }\n" 
         "  }\n"
