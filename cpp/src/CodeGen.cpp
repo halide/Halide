@@ -332,8 +332,6 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     llvm::Function *fn = module->getFunction(function_name);
     assert(fn && "Could not find function inside llvm module");
 
-    compile_to_bitcode("jit.bc");
-
     JITCompiledModule m;
     void *f = execution_engine->getPointerToFunction(fn);
     m.function = f;    
