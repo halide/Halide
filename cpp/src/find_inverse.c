@@ -3,12 +3,16 @@
 #include <stdint.h>
 #include <assert.h>
 
+int sdiv(int a, int b) {
+  return (a - ((a % b) + b) % b) / b;
+}
+
 bool u_method_0(int den, int sh_post, int bits) {
     int max = (1 << bits) - 1;
     for (int num = 0; num <= max; num++) {	
 	uint64_t result = num;
 	result >>= sh_post;
-	if (num / den != result) return false;
+	if (sdiv(num, den) != result) return false;
     }
     return true;
 }
@@ -21,7 +25,7 @@ bool u_method_1(int den, int mul, int sh_post, int bits) {
 	result >>= bits;
 	if (result > max) return false;
 	result >>= sh_post;
-	if (num / den != result) return false;
+	if (sdiv(num, den) != result) return false;
     }
     return true;
 }
@@ -33,43 +37,69 @@ bool u_method_2(int den, int mul, int sh_post, int bits) {
 	result *= mul;
 	result >>= bits;
 	if (result > max) return false;
-	result += (num - result)/2;
+	result += (num - result)>>1;
 	if (result > max) return false;
 	result >>= sh_post;
-	if (num / den != result) return false;
+	if (sdiv(num, den) != result) return false;
     }
     return true;    
 }
 
-
-bool s_method_0(int den, int mul, int sh_post, int bits) {
+//These are not useful when you want signed division to always round to negative infinity 
+bool s_method_0(int den, int sh_post, int bits) {
     int min = -(1 << (bits-1)), max = (1 << (bits-1))-1;
     for (int num = min; num <= max; num++) {
-	int64_t result = num;
-	result *= mul;
-	result >>= bits;
-	if (result > max || result < min) return false;
+        int64_t result = num;
 	result >>= sh_post;
-	result += (num < 0 ? 1 : 0);
-	if (num / den != result) return false;
+	if (sdiv(num, den) != result) return false;
     }
     return true;
 }
 
+/*
 bool s_method_1(int den, int mul, int sh_post, int bits) {
+    int min = -(1 << (bits-1)), max = (1 << (bits-1))-1;
+    for (int num = min; num <= max; num++) {    
+	int64_t result = num;
+        if (num < -1) result++;
+	result *= mul;
+	result >>= bits;
+	if (result > max || result < min) return false;
+        //if (num < 0) result += num;
+	if (result > max || result < min) return false;
+	result >>= sh_post;
+	if (sdiv(num, den) != result) return false;
+    }
+    return true;    
+}
+*/
+
+bool s_method_1(int den, int mul, int sh_post, int bits) {
+    int min = -(1 << (bits-1)), max = (1 << (bits-1))-1;
+    for (int num = min; num <= max; num++) {    
+	int64_t result = num;
+        uint64_t xsign = result >> (bits-1);
+        uint64_t q0 = (mul * (xsign ^ result)) >> bits;
+        result = xsign ^ (q0 >> sh_post);
+	if (sdiv(num, den) != result) return false;
+    }
+    return true;    
+}
+
+bool s_method_2(int den, int mul, int sh_post, int bits) {
     int min = -(1 << (bits-1)), max = (1 << (bits-1))-1;
     for (int num = min; num <= max; num++) {
 	int64_t result = num;
 	result *= mul;
 	result >>= bits;
 	if (result > max || result < min) return false;
-	result += num;
+	result += (num - result+1)>>1;
 	if (result > max || result < min) return false;
 	result >>= sh_post;
-	result += (num < 0 ? 1 : 0);
-	if (num / den != result) return false;
+        int64_t correct = sdiv(num, den);
+	if (correct != result) return false;
     }
-    return true;    
+    return true;
 }
 
 
@@ -129,6 +159,32 @@ int main(int argc, char **argv) {
 	for (int den = 2; den <= 64; den++) {
 
 	    for (int shift = 0; shift < 8; shift++) {
+		if (s_method_0(den, shift, bits)) {
+		    printf("    {0, 0, %d},\n", shift);
+		    goto next_signed;
+		}
+	    }
+	    
+	    for (int shift = 0; shift < 8; shift++) {
+		for (int mul = 0; mul <= u_max; mul++) {
+		    if (s_method_1(den, mul, shift, bits)) {
+			printf("    {1, %d, %d},\n", mul, shift);
+			goto next_signed;
+		    }
+		}
+	    }
+	    
+	    for (int shift = 0; shift < 8; shift++) {
+		for (int mul = s_min; mul <= s_max; mul++) {
+		    if (s_method_2(den, mul, shift, bits)) {
+			printf("    {2, %d, %d},\n", mul, shift);
+			goto next_signed;
+		    }
+		}
+	    }
+
+          /*
+	    for (int shift = 0; shift < 8; shift++) {
 		for (int mul = s_min; mul <= s_max; mul++) {
 		    if (s_method_0(den, mul, shift, bits)) {
 			printf("    {0, %d, %d},\n", mul, shift);
@@ -145,6 +201,7 @@ int main(int argc, char **argv) {
 		    }
 		}
 	    }
+          */
 	    printf("ERROR! No solution found for signed %d\n", den);
 	  next_signed:;
 	}

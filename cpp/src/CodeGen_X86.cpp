@@ -286,31 +286,26 @@ void CodeGen_X86::visit(const Div *op) {
 
         Value *val = codegen(op->a);
         
-        // Start with multiply and keep high half
-        Value *mult;
-        if (multiplier != 0) {
-            mult = codegen(cast(op->type, multiplier));
-            mult = call_intrin(Int(16, 8), "sse2.pmulh.w", vec(val, mult));
-
-            // Possibly add a correcting factor
-            if (method == 1) {
-                mult = builder->CreateAdd(mult, val);
-            }
+        // Start with unsigned multiply and keep high half
+        if (method == 0) {
+            // We can just shift
+            value = builder->CreateAShr(val, codegen(make_const(op->type, shift)));            
         } else {
-            mult = val;
+            // Make an all-ones mask if the numerator is negative
+            Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits-1)));            
+            // Flip the numerator bits if the mask is high
+            Value *flipped = builder->CreateXor(sign, val);
+            // Grab the multiplier
+            Value *mult = codegen(make_const(op->type, multiplier));
+            // Do the multiply-keep-high-half
+            val = call_intrin(Int(16, 8), "sse2.pmulhu.w", vec(flipped, mult));
+            // Do the shift
+            if (shift) {
+                val = builder->CreateAShr(val, codegen(make_const(op->type, shift)));
+            }
+            // Maybe flip the bits again
+            value = builder->CreateXor(val, sign);
         }
-
-        // Do the shift
-        Value *sh;
-        if (shift) {
-            sh = codegen(cast(op->type, shift));
-            mult = builder->CreateAShr(mult, sh);
-        }
-
-        // Add one for negative numbers
-        sh = codegen(cast(op->type, op->type.bits - 1));
-        Value *sign_bit = builder->CreateLShr(val, sh);
-        value = builder->CreateAdd(mult, sign_bit);
     } else if (op->type == UInt(16, 8) && const_divisor > 1 && const_divisor < 64) {
         int method     = IntegerDivision::table_u16[const_divisor-2][0];
         int multiplier = IntegerDivision::table_u16[const_divisor-2][1];
