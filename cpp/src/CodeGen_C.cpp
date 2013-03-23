@@ -94,33 +94,39 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     stream << "#endif\n";    
 }
 
+namespace {
+const string preamble = 
+    "#include <iostream>\n"
+    "#include <assert.h>\n"
+    "#ifndef BUFFER_T_DEFINED\n"
+    "#define BUFFER_T_DEFINED\n"
+    "#include <stdint.h>\n"
+    "typedef struct buffer_t {\n"
+    "    uint8_t* host;\n"
+    "    uint64_t dev;\n"
+    "    bool host_dirty;\n"
+    "    bool dev_dirty;\n"
+    "    int32_t extent[4];\n"
+    "    int32_t stride[4];\n"
+    "    int32_t min[4];\n"
+    "    int32_t elem_size;\n"
+    "} buffer_t;\n"
+    "#endif\n"
+    "\n"
+    "extern \"C\" void *halide_malloc(size_t);\n"
+    "extern \"C\" void halide_free(void *);\n"
+    "extern \"C\" int halide_debug_to_file(const char *filename, void *data, int, int, int, int, int, int);\n"
+    "\n"
+    "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
+    "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
+    "template<typename T> T mod(T a, T b) {T result = a % b; if (result < 0) result += b; return result;}\n"
+    "template<typename T> T sdiv(T a, T b) {return (a - mod(a, b))/b;}\n"
+    "\n";
+}
+
+
 void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args) {
-    stream << "#include <iostream>\n"
-           << "#include <assert.h>\n"
-           << "#ifndef BUFFER_T_DEFINED\n"
-           << "#define BUFFER_T_DEFINED\n"
-           << "#include <stdint.h>\n"
-           << "typedef struct buffer_t {\n"
-           << "    uint8_t* host;\n"
-           << "    uint64_t dev;\n"
-           << "    bool host_dirty;\n"
-           << "    bool dev_dirty;\n"
-           << "    int32_t extent[4];\n"
-           << "    int32_t stride[4];\n"
-           << "    int32_t min[4];\n"
-           << "    int32_t elem_size;\n"
-           << "} buffer_t;\n"
-           << "#endif\n"
-           << "\n"
-           << "extern \"C\" void *halide_malloc(size_t);\n"
-           << "extern \"C\" void halide_free(void *);\n"
-           << "extern \"C\" int halide_debug_to_file(const char *filename, void *data, int, int, int, int, int, int);\n"
-           << "\n"
-           << "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
-           << "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
-           << "template<typename T> T mod(T a, T b) {T result = a % b; if (result < 0) result += b; return result;}\n"
-           << "template<typename T> T sdiv(T a, T b) {return (a - mod(a, b))/b;}\n"
-           << "\n";
+    stream << preamble;
 
     // Emit the function prototype
     stream << "extern \"C\" void " << name << "(";
@@ -212,8 +218,8 @@ void CodeGen_C::open_scope() {
 
 void CodeGen_C::close_scope() {
     cache.clear();
-    do_indent();
     indent--;
+    do_indent();
     stream << "}\n";
 }
 
@@ -553,30 +559,8 @@ void CodeGen_C::test() {
     ostringstream source;
     CodeGen_C cg(source);
     cg.compile(s, "test1", args);
-    string correct_source = \
-        "#include <iostream>\n"
-        "#include <assert.h>\n"
-        "#ifndef BUFFER_T_DEFINED\n"
-        "#define BUFFER_T_DEFINED\n"
-        "#include <stdint.h>\n"
-        "typedef struct buffer_t {\n"
-        "    uint8_t* host;\n"
-        "    uint64_t dev;\n"
-        "    bool host_dirty;\n"
-        "    bool dev_dirty;\n"
-        "    int32_t extent[4];\n"
-        "    int32_t stride[4];\n"
-        "    int32_t min[4];\n"
-        "    int32_t elem_size;\n"
-        "} buffer_t;\n"
-        "#endif\n"
-        "\n"
-        "extern \"C\" void *halide_malloc(size_t);\n"
-        "extern \"C\" void halide_free(void *);\n"
-        "\n"
-        "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
-        "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
-        "\n"
+    
+    string correct_source = preamble + 
         "extern \"C\" void test1(const buffer_t *_buf, const float alpha, const int32_t beta) {\n"
         "uint8_t *buf = _buf->host;\n"
         "const int32_t buf_min_0 = _buf->min[0];\n"
@@ -592,15 +576,19 @@ void CodeGen_C::test() {
         "const int32_t buf_stride_2 = _buf->stride[2];\n"
         "const int32_t buf_stride_3 = _buf->stride[3];\n"
         "{\n"
-        "  int32_t *tmp_heap = (int32_t *)halide_malloc(sizeof(int32_t)*((int32_t)(43*beta)));\n"
+        " int32_t V0 = 43 * beta;\n"
+        " int32_t *tmp_heap = (int32_t *)halide_malloc(sizeof(int32_t)*V0);\n"
+        " {\n"
+        "  int32_t tmp_stack[127];\n"
+        "  int32_t V1 = beta + 1;\n"
         "  {\n"
-        "    int32_t tmp_stack[127];\n"
-        "    {\n"
-        "      const int32_t x = ((int32_t)(beta + 1));\n"
-        "      ((int32_t *)buf)[x] = ((alpha > 4.000000f) ? 3 : 2);\n" 
-        "      }\n" 
-        "  }\n"
-        "  halide_free(tmp_heap);\n" 
+        "   int32_t x = V1;\n"
+        "   bool V2 = alpha > 4.000000f;\n"
+        "   int32_t V3 = int32_t(V2 ? 3 : 2);\n"
+        "   ((int32_t *)buf)[x] = V3;\n"
+        "  }\n" 
+        " }\n"
+        " halide_free(tmp_heap);\n" 
         "}\n"
         "}\n";
     if (source.str() != correct_source) {
