@@ -99,7 +99,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
 
     // Fix the target triple. The initial module was probably compiled for x86
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-    module->setTargetTriple("arm-linux-gnueabihf");
+    module->setTargetTriple("arm-linux-eabi");
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";        
 
     // Pass to the generic codegen

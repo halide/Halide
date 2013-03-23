@@ -274,7 +274,7 @@ public:
 	options.NoNaNsFPMath = true;
 	options.HonorSignDependentRoundingFPMathOption = false;
 	options.UseSoftFloat = false;
-	options.FloatABIType = FloatABI::Hard;
+	options.FloatABIType = FloatABI::Soft;
 	options.NoZerosInBSS = false;
 	options.GuaranteedTailCallOpt = false;
 	options.DisableTailCalls = false;
@@ -430,7 +430,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
     options.UseSoftFloat = false;
-    options.FloatABIType = FloatABI::Hard;
+    options.FloatABIType = FloatABI::Soft;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;
