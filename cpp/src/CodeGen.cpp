@@ -1127,8 +1127,8 @@ void CodeGen::visit(const Call *op) {
 
     if (op->name == "debug to file") {
         assert(op->args.size() == 8);
-        const Call *func = op->args[0].as<Call>();
-        const Call *filename = op->args[1].as<Call>();
+        const Call *filename = op->args[0].as<Call>();
+        const Call *func = op->args[1].as<Call>();
         assert(func && filename && "Malformed debug_to_file node");
         // Grab the function from the initial module
         llvm::Function *debug_to_file = module->getFunction("halide_debug_to_file");
