@@ -13,8 +13,18 @@
 #endif
 #include <llvm/Config/config.h>
 
-#include <llvm/Analysis/Verifier.h>
+// MCJIT doesn't seem to work right on os x yet
+#ifdef __APPLE__
+#else
+#define USE_MCJIT
+#endif
+
+#ifdef USE_MCJIT
 #include <llvm/ExecutionEngine/MCJIT.h>
+#else
+#include <llvm/ExecutionEngine/JIT.h>
+#endif
+#include <llvm/Analysis/Verifier.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetLibraryInfo.h>
 #include <llvm/Support/raw_ostream.h>
@@ -290,11 +300,15 @@ public:
 	engine_builder.setTargetOptions(options);
         engine_builder.setErrorStr(&error_string);
         engine_builder.setEngineKind(EngineKind::JIT);
-        engine_builder.setUseMCJIT(true);
+        #ifdef USE_MCJIT
+        engine_builder.setUseMCJIT(true);        
         #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
         engine_builder.setJITMemoryManager(JITMemoryManager::CreateDefaultMemManager());
         #else
         engine_builder.setJITMemoryManager(new SectionMemoryManager());
+        #endif
+        #else
+        engine_builder.setUseMCJIT(false);
         #endif
         engine_builder.setOptLevel(CodeGenOpt::Aggressive);
         engine_builder.setMCPU(cg->mcpu());
