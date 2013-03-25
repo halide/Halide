@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include <ostream>
+#include <map>
 
 namespace Halide { 
 namespace Internal {
@@ -37,17 +38,57 @@ public:
     static void test();
     
 protected:
-    
-    /** Emit the C name for a halide type */
-    void print_c_type(Type);
+    /** An for the most recently generated ssa variable */
+    std::string id;
 
-    /** Emit a version of a stride that is a valid identifier in C (. is replaced with _) */
-    void print_c_name(const std::string &);    
+    /** A cache of generated values in scope */
+    std::map<std::string, std::string> cache;
+
+    /** Emit an expression as an assignment, then return the id of the
+     * resulting var */
+    std::string print_expr(Expr);
+    
+    /** Emit a statement */
+    void print_stmt(Stmt);
+
+    /** Emit the C name for a halide type */
+    std::string print_type(Type);
+
+    /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
+    std::string print_name(const std::string &);    
+
+    /** Emit an SSA-style assignment, and set id to the freshly generated name */
+    void print_assignment(Type t, const std::string &rhs);
+
+    /** Open a new C scope (i.e. throw in a brace, increase the indent) */
+    void open_scope();
+
+    /** Close a C scope (i.e. throw in an end brace, decrease the indent) */
+    void close_scope();
 
     using IRPrinter::visit;
 
     void visit(const Variable *);
+    void visit(const IntImm *);
+    void visit(const FloatImm *);
     void visit(const Cast *);
+    void visit(const Add *);
+    void visit(const Sub *);
+    void visit(const Mul *);
+    void visit(const Div *);
+    void visit(const Mod *);
+    void visit(const Max *);
+    void visit(const Min *);
+    void visit(const EQ *);
+    void visit(const NE *);
+    void visit(const LT *);
+    void visit(const LE *);
+    void visit(const GT *);
+    void visit(const GE *);
+    void visit(const And *);
+    void visit(const Or *);
+    void visit(const Not *);
+    void visit(const Call *);
     void visit(const Select *);
     void visit(const Load *);
     void visit(const Store *);
@@ -61,6 +102,7 @@ protected:
     void visit(const Allocate *);
     void visit(const Realize *);
     
+    void visit_binop(Type t, Expr a, Expr b, const char *op);
 };
 
 }

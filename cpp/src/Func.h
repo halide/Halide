@@ -336,7 +336,12 @@ public:
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
     EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");    
-    
+    /** Statically compile this function to C source code. This is
+     * useful for providing fallback code paths that will compile on
+     * many platforms. Vectorization will fail, and parallelization
+     * will produce serial code. */
+    EXPORT void compile_to_c(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
      * argument. 
@@ -371,14 +376,20 @@ public:
      * it is only read, not written. Only relevant when jitting. */
     EXPORT void set_custom_allocator(void *(*malloc)(size_t), void (*free)(void *));
 
-    /** When this function is compiled, include code that dumps it to
-     * a file after it is realized, for the purpose of debugging. The
+    /** When this function is compiled, include code that dumps its values
+     * to a file after it is realized, for the purpose of debugging. 
+     * The file covers the realized extent at the point in the schedule that
+     * debug_to_file appears.
+     * 
+     * If filename ends in ".tif" or ".tiff" (case insensitive) the file
+     * is in TIFF format and can be read by standard tools. Oherwise, the
      * file format is as follows: 
      * 
-     * First, a 20 byte-header containing four little-endian 32-bit
-     * ints giving the extents of the first four
-     * dimensions. Dimensions beyond four are folded into the
-     * fourth. Then, a fifth 32-bit int giving the data type of the
+     * All data is in the byte-order of the target platform.
+     * First, a 20 byte-header containing four 32-bit ints,
+     * giving the extents of the first four dimensions.
+     * Dimensions beyond four are folded into the fourth.
+     * Then, a fifth 32-bit int giving the data type of the
      * function. The typecodes are given by: float = 0, double = 1,
      * uint8_t = 2, int8_t = 3, uint16_t = 4, uint32_t = 5, int32_t =
      * 6, uint64_t = 7, int64_t = 8. The data follows the header, as a

@@ -27,11 +27,11 @@ class DebugToFile : public IRMutator {
             Function f = iter->second;
             vector<Expr> args;
 
-            // The name of the function
-            args.push_back(new Call(Int(32), f.name(), vector<Expr>()));
-
             // The name of the file
             args.push_back(new Call(Int(32), f.debug_file(), vector<Expr>()));
+
+            // The name of the function
+            args.push_back(new Call(Int(32), f.name(), vector<Expr>()));
 
             // The header           
             for (size_t i = 0; i < op->bounds.size(); i++) {

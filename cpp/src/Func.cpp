@@ -626,6 +626,16 @@ void Func::compile_to_header(const string &filename, vector<Argument> args, cons
     cg.compile_header(fn_name.empty() ? name() : fn_name, args);
 }
 
+void Func::compile_to_c(const string &filename, vector<Argument> args, const string &fn_name) {    
+    Argument me(name(), true, Int(1));
+    args.push_back(me);
+
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
+    ofstream header(filename.c_str());
+    CodeGen_C cg(header);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
+}
+
 void Func::compile_to_file(const string &filename_prefix, vector<Argument> args) {
     compile_to_header(filename_prefix + ".h", args, filename_prefix);
     compile_to_object(filename_prefix + ".o", args, filename_prefix);

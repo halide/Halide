@@ -116,6 +116,14 @@ WEAK void set_halide_custom_do_par_for(void (*f)(void (*)(int, uint8_t *), int, 
     halide_custom_do_par_for = f;
 }
 
+WEAK void halide_do_task(void (*f)(int, uint8_t *), int idx, uint8_t *closure) {
+    if (halide_custom_do_task) {
+        (*halide_custom_do_task)(f, idx, closure);
+    } else {
+        f(idx, closure);
+    }
+}
+
 WEAK void *halide_worker_thread(void *void_arg) {
     /*
     int id = -1;
@@ -184,11 +192,7 @@ WEAK void *halide_worker_thread(void *void_arg) {
             pthread_mutex_unlock(&halide_work_queue.mutex);
             for (; myjob.next < myjob.max; myjob.next++) {
                 //fprintf(stderr, "Worker %d: Doing job %d\n", id, myjob.next);
-                if (halide_custom_do_task) {
-                    halide_custom_do_task(myjob.f, myjob.next, myjob.closure);
-                } else {
-                    myjob.f(myjob.next, myjob.closure);
-                }
+                halide_do_task(myjob.f, myjob.next, myjob.closure);
                 //fprintf(stderr, "Worker %d: Done with job %d\n", id, myjob.next);
             }
             pthread_mutex_lock(&halide_work_queue.mutex);
