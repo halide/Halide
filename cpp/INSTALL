@@ -7,7 +7,7 @@ clang. llvm-config and clang must be somewhere in the path. If your OS
 does not have packages for llvm-3.2, you can find binaries for it at
 http://llvm.org/releases/download.html. Download an appropriate
 package and then either install it, or at least put the bin
-subdirectory in your path.
+subdirectory in your path. (This works well on OS X and Ubuntu.)
 
 If you want to build it yourself, first check it out from subversions:
 
