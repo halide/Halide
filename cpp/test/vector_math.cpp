@@ -53,7 +53,21 @@ template<>
 bool close_enough<double>(double x, double y) {
     return fabs(x-y) < 1e-5;
 }
-    
+
+template<typename T> 
+T divide(T x, T y) {
+    return (x - (((x % y) + y) % y)) / y;
+}
+
+template<>
+float divide(float x, float y) {
+    return x/y;
+}
+
+template<>
+double divide(double x, double y) {
+    return x/y;
+}
 
 template<typename A>
 bool test(int vec_width) {
@@ -66,6 +80,9 @@ bool test(int vec_width) {
     for (int y = 0; y < H+16; y++) {
         for (int x = 0; x < W+16; x++) {
             input(x, y) = (A)((rand() % 1024)*0.125 + 1.0);
+            if ((A)(-1) < 0) {
+                input(x, y) -= 10;
+            }
         }
     }
     Var x, y;
@@ -254,10 +271,13 @@ bool test(int vec_width) {
             A clamped = input(x+1, y);
             if (clamped < (A)1) clamped = (A)1;
             if (clamped > (A)3) clamped = (A)3;
-            A correct = input(x, y) / clamped;
+            A correct = divide(input(x, y), clamped);
             // We allow floating point division to take some liberties with accuracy
             if (!close_enough(im9(x, y), correct)) {
-                printf("im9(%d, %d) = %f instead of %f\n", x, y, (double)(im9(x, y)), (double)(correct));
+                printf("im9(%d, %d) = %f/%f = %f instead of %f\n", 
+                       x, y, 
+                       (double)input(x, y), (double)clamped,
+                       (double)(im9(x, y)), (double)(correct));
                 return false;
             }
         }
@@ -267,13 +287,14 @@ bool test(int vec_width) {
     //printf("Dividing by small constants\n");
     for (int c = 2; c < 16; c++) {
 	Func f10;
-	f10(x, y) = input(x, y) / cast<A>(Expr(c));
+	f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
 	f10.vectorize(x, vec_width);
 	Image<A> im10 = f10.realize(W, H);
 	
 	for (int y = 0; y < H; y++) {
 	    for (int x = 0; x < W; x++) {	  
-		A correct = input(x, y) / c;
+                A correct = divide(input(x, y), (A)c);
+
                 if (!close_enough(im10(x, y), correct)) {
 		    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y, 
 			   (double)(input(x, y)), c,

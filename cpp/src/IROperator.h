@@ -337,6 +337,17 @@ inline Expr sin(Expr x) {
     }
 }
 
+/** Return the arcsine of a floating-point expression. If the argument is
+ * not floating-point, is it cast to Float(32). */
+inline Expr asin(Expr x) {
+    assert(x.defined() && "asin of undefined");
+    if (x.type() == Float(64)) {
+        return new Internal::Call(Float(64), "asin_f64", vec(x));
+    } else {
+        return new Internal::Call(Float(32), "asin_f32", vec(cast<float>(x)));
+    }
+}
+
 /** Return the cosine of a floating-point expression. If the argument
  * is not floating-point, is it cast to Float(32). */
 inline Expr cos(Expr x) {
@@ -348,6 +359,105 @@ inline Expr cos(Expr x) {
     }
 }
 
+/** Return the arccosine of a floating-point expression. If the argument
+ * is not floating-point, is it cast to Float(32). */
+inline Expr acos(Expr x) {
+    assert(x.defined() && "acos of undefined");
+    if (x.type() == Float(64)) {
+        return new Internal::Call(Float(64), "acos_f64", vec(x));
+    } else {
+        return new Internal::Call(Float(32), "acos_f32", vec(cast<float>(x)));
+    }
+}
+
+/** Return the tangent of a floating-point expression. If the argument is
+ * not floating-point, is it cast to Float(32). */
+inline Expr tan(Expr x) {
+    assert(x.defined() && "tan of undefined");
+    if (x.type() == Float(64)) {
+        return new Internal::Call(Float(64), "tan_f64", vec(x));
+    } else {
+        return new Internal::Call(Float(32), "tan_f32", vec(cast<float>(x)));
+    }
+}
+
+/** Return the arctangent of a floating-point expression. If the argument is
+ * not floating-point, is it cast to Float(32). */
+inline Expr atan(Expr x) {
+    assert(x.defined() && "atan of undefined");
+    if (x.type() == Float(64)) {
+        return new Internal::Call(Float(64), "atan_f64", vec(x));
+    } else {
+        return new Internal::Call(Float(32), "atan_f32", vec(cast<float>(x)));
+    }
+}
+
+/** Return the hyperbolic sine of a floating-point expression.
+ *  If the argument is not floating-point, is it cast to Float(32). */
+inline Expr sinh(Expr x) {
+    assert(x.defined() && "sinh of undefined");
+    if (x.type() == Float(64)) {
+        return new Internal::Call(Float(64), "sinh_f64", vec(x));
+    } else {
+        return new Internal::Call(Float(32), "sinh_f32", vec(cast<float>(x)));
+    }
+}
+
+/** Return the hyperbolic arcsinhe of a floating-point expression.
+ * If the argument is not floating-point, is it cast to Float(32). */
+inline Expr asinh(Expr x) {
+    assert(x.defined() && "asinh of undefined");
+    if (x.type() == Float(64)) {
+        return new Internal::Call(Float(64), "asinh_f64", vec(x));
+    } else {
+        return new Internal::Call(Float(32), "asinh_f32", vec(cast<float>(x)));
+    }
+}
+
+/** Return the hyperbolic cosine of a floating-point expression.
+ * If the argument is not floating-point, is it cast to Float(32). */
+inline Expr cosh(Expr x) {
+    assert(x.defined() && "cosh of undefined");
+    if (x.type() == Float(64)) {
+        return new Internal::Call(Float(64), "cosh_f64", vec(x));
+    } else {
+        return new Internal::Call(Float(32), "cosh_f32", vec(cast<float>(x)));
+    }
+}
+
+/** Return the hyperbolic arccosine of a floating-point expression.
+ * If the argument is not floating-point, is it cast to Float(32). */
+inline Expr acosh(Expr x) {
+    assert(x.defined() && "acosh of undefined");
+    if (x.type() == Float(64)) {
+        return new Internal::Call(Float(64), "acosh_f64", vec(x));
+    } else {
+        return new Internal::Call(Float(32), "acosh_f32", vec(cast<float>(x)));
+    }
+}
+
+/** Return the hyperbolic tangent of a floating-point expression.
+ * If the argument is not floating-point, is it cast to Float(32). */
+inline Expr tanh(Expr x) {
+    assert(x.defined() && "tanh of undefined");
+    if (x.type() == Float(64)) {
+        return new Internal::Call(Float(64), "tanh_f64", vec(x));
+    } else {
+        return new Internal::Call(Float(32), "tanh_f32", vec(cast<float>(x)));
+    }
+}
+
+/** Return the hyperbolic arctangent of a floating-point expression.
+ * If the argument is not floating-point, is it cast to Float(32). */
+inline Expr atanh(Expr x) {
+    assert(x.defined() && "atanh of undefined");
+    if (x.type() == Float(64)) {
+        return new Internal::Call(Float(64), "atanh_f64", vec(x));
+    } else {
+        return new Internal::Call(Float(32), "atanh_f32", vec(cast<float>(x)));
+    }
+}
+
 /** Return the square root of a floating-point expression. If the
  * argument is not floating-point, is it cast to Float(32). */
 inline Expr sqrt(Expr x) {
@@ -356,6 +466,20 @@ inline Expr sqrt(Expr x) {
         return new Internal::Call(Float(64), "sqrt_f64", vec(x));
     } else {
         return new Internal::Call(Float(32), "sqrt_f32", vec(cast<float>(x)));
+    }
+}
+
+/** Return the square root of a floating-point expression. If the
+ * argument is not floating-point, is it cast to Float(32). */
+inline Expr hypot(Expr x, Expr y) {
+    assert(x.defined() && y.defined() && "hypot of undefined");
+    if (x.type() == Float(64)) {
+        y = cast<double>(y);
+        return new Internal::Call(Float(64), "hypot_f64", vec(x, y));
+    } else {
+        x = cast<float>(x);
+        y = cast<float>(y);
+        return new Internal::Call(Float(32), "hypot_f32", vec(x, y));
     }
 }
 

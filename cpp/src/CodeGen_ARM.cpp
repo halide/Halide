@@ -99,7 +99,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
 
     // Fix the target triple. The initial module was probably compiled for x86
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-    module->setTargetTriple("arm-linux-gnueabihf");
+    module->setTargetTriple("arm-linux-eabi");
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";        
 
     // Pass to the generic codegen
@@ -575,13 +575,13 @@ void CodeGen_ARM::visit(const Div *op) {
         Expr e = op->a;
 
         // Start with multiply and keep high half
-        if (multiplier != 0) {
+        if (method > 0) {
             Type wider = Int(32, op->type.width);
             e = cast(op->type, (cast(wider, e) * multiplier)/65536);
 
             // Possibly add a correcting factor
-            if (method == 1) {
-                e += op->a;
+            if (method == 2) {
+                e += (op->a - e) / 2;
             }
         }
 
@@ -590,11 +590,7 @@ void CodeGen_ARM::visit(const Div *op) {
             e /= (1 << shift);
         }
 
-        // Add one for negative numbers
-        Value *val = codegen(e);
-        Value *sh = codegen(cast(op->type, op->type.bits - 1));
-        Value *sign_bit = builder->CreateLShr(val, sh);
-        value = builder->CreateAdd(val, sign_bit);
+        value = codegen(e);
     } else if (op->type.element_of() == UInt(16) && 
                const_divisor > 1 && const_divisor < 64) {
         int method     = IntegerDivision::table_u16[const_divisor-2][0];
