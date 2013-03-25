@@ -6,7 +6,6 @@
 
 extern "C" {
 WEAK int halide_printf(const char * fmt, ...) {
-    return 0;
     va_list args;
     va_start(args,fmt);
     int ret = vfprintf(stderr, fmt, args);

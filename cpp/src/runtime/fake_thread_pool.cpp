@@ -21,6 +21,14 @@ WEAK void set_halide_custom_do_par_for(void (*f)(void (*)(int, uint8_t *), int, 
     halide_custom_do_par_for = f;
 }
 
+WEAK void halide_do_task(void (*f)(int, uint8_t *), int idx, uint8_t *closure) {
+    if (halide_custom_do_task) {
+        (*halide_custom_do_task)(f, idx, closure);
+    } else {
+        f(idx, closure);
+    }
+}
+
 WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {
     if (halide_custom_do_par_for) {
         (*halide_custom_do_par_for)(f, min, size, closure);
@@ -28,11 +36,7 @@ WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_
     }
 
     for (int x = min; x < min + size; x++) {
-        if (halide_custom_do_task) {
-            halide_custom_do_task(f, x, closure);
-        } else {
-            f(x, closure);
-        }
+        halide_do_task(f, x, closure);
     }
 }
 

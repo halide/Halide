@@ -274,7 +274,7 @@ public:
 	options.NoNaNsFPMath = true;
 	options.HonorSignDependentRoundingFPMathOption = false;
 	options.UseSoftFloat = false;
-	options.FloatABIType = FloatABI::Hard;
+	options.FloatABIType = FloatABI::Soft;
 	options.NoZerosInBSS = false;
 	options.GuaranteedTailCallOpt = false;
 	options.DisableTailCalls = false;
@@ -432,7 +432,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
     options.UseSoftFloat = false;
-    options.FloatABIType = FloatABI::Hard;
+    options.FloatABIType = FloatABI::Soft;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;
@@ -739,9 +739,33 @@ void CodeGen::visit(const Div *op) {
     if (op->type.is_float()) {
         value = builder->CreateFDiv(codegen(op->a), codegen(op->b));
     } else if (op->type.is_uint()) {
-        value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
+        value = builder->CreateUDiv(codegen(op->a), codegen(op->b));        
     } else {
-        value = builder->CreateSDiv(codegen(op->a), codegen(op->b));
+        // Signed integer division sucks. It should round down (to
+        // make upsampling kernels work across the zero boundary), but
+        // it doesn't.
+
+        // If it's a small const power of two, then we can just
+        // arithmetic right shift. This rounds towards negative
+        // infinity.
+        for (int bits = 1; bits < 30; bits++) {
+            if (is_const(op->b, 1 << bits)) {
+                Value *shift = codegen(make_const(op->a.type(), bits));
+                value = builder->CreateAShr(codegen(op->a), shift);
+                return;
+            }
+        }
+
+        // Otherwise, we have to codegen a monster expression to do it right
+        Value *num = codegen(op->a), *den = codegen(op->b);
+        // First we compute the remainder
+        value = builder->CreateSRem(num, den);
+        value = builder->CreateAdd(value, den);
+        value = builder->CreateSRem(value, den);
+        // Subtract from the numerator
+        value = builder->CreateSub(num, value);
+        // Then do the divide
+        value = builder->CreateSDiv(value, den);
     }
 }
 
@@ -1106,8 +1130,8 @@ void CodeGen::visit(const Call *op) {
 
     if (op->name == "debug to file") {
         assert(op->args.size() == 8);
-        const Call *func = op->args[0].as<Call>();
-        const Call *filename = op->args[1].as<Call>();
+        const Call *filename = op->args[0].as<Call>();
+        const Call *func = op->args[1].as<Call>();
         assert(func && filename && "Malformed debug_to_file node");
         // Grab the function from the initial module
         llvm::Function *debug_to_file = module->getFunction("halide_debug_to_file");
