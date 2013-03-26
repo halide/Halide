@@ -119,6 +119,14 @@ public:
         return new Internal::Variable(Int(32), s.str(), param);
     }
 
+    /** Get an expression representing the stride of this image in the
+     * given dimension */
+    Expr stride(int x) const {
+        std::ostringstream s;
+        s << name() << ".stride." << x;
+        return new Internal::Variable(Int(32), s.str(), param);        
+    }
+
     /** Set the extent in a given dimension to equal the given
      * expression. Images passed in that fail this check will generate
      * a runtime error. Returns a reference to the ImageParam so that
