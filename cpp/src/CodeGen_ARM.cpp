@@ -635,6 +635,17 @@ void CodeGen_ARM::visit(const Sub *op) {
 
 void CodeGen_ARM::visit(const Min *op) {    
 
+    if (op->type == Float(32)) {
+        // Use a 2-wide vector instead
+        Value *undef = UndefValue::get(f32x2);
+        Constant *zero = ConstantInt::get(i32, 0);
+        Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
+        Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
+        Value *wide_result = call_intrin(f32x2, "vmins.v2f32", vec(a_wide, b_wide));
+        value = builder->CreateExtractElement(wide_result, zero);
+        return;
+    }
+
     struct {
         Type t;
         const char *op;
@@ -666,6 +677,17 @@ void CodeGen_ARM::visit(const Min *op) {
 }
 
 void CodeGen_ARM::visit(const Max *op) {    
+
+    if (op->type == Float(32)) {
+        // Use a 2-wide vector instead
+        Value *undef = UndefValue::get(f32x2);
+        Constant *zero = ConstantInt::get(i32, 0);
+        Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
+        Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
+        Value *wide_result = call_intrin(f32x2, "vmaxs.v2f32", vec(a_wide, b_wide));
+        value = builder->CreateExtractElement(wide_result, zero);
+        return;
+    }
 
     struct {
         Type t;
