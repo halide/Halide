@@ -7,6 +7,10 @@
 #ifdef _WIN32
 #include "fake_thread_pool.cpp"
 #else
+#ifdef __APPLE__
+#include "gcd_thread_pool.cpp"
+#else
 #include "posix_thread_pool.cpp"
+#endif
 #endif
 #include "copy_to_host_noop.cpp"

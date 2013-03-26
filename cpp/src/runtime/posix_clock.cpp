@@ -2,6 +2,8 @@
 
 extern "C" {
 
+#ifndef _STRUCT_TIMEVAL
+#define _STRUCT_TIMEVAL
 #ifdef _LP64
 struct timeval {
     int64_t tv_sec, tv_usec;
@@ -10,6 +12,7 @@ struct timeval {
 struct timeval {
     int32_t tv_sec, tv_usec;
 };
+#endif
 #endif
     
 extern int gettimeofday(timeval *tv, void *);
