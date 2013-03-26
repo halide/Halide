@@ -89,6 +89,7 @@ clean:
 
 TESTS = $(shell ls test/*.cpp)
 
+# TODO: move this implementation into Makefile.tests which contains a .NOTPARALLEL rule?
 tests: $(TESTS:test/%.cpp=test_%)
 
 bin/test_internal: test/internal.cpp bin/libHalide.so
