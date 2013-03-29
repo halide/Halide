@@ -30,6 +30,28 @@ bool is_const(Expr e, int value) {
     return false;
 }
 
+bool is_const_power_of_two(Expr e, int *bits) {
+    const Broadcast *b = e.as<Broadcast>();
+    if (b) return is_const_power_of_two(b->value, bits);
+    
+    const Cast *c = e.as<Cast>();
+    if (c) return is_const_power_of_two(c->value, bits);
+
+    const IntImm *int_imm = e.as<IntImm>();
+    if (int_imm) {
+        int bit_count = 0;
+        int tmp;
+        for (tmp = 1; tmp < int_imm->value; tmp *= 2) {
+            bit_count++;
+        }
+        if (tmp == int_imm->value) {
+            *bits = bit_count;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool is_positive_const(Expr e) {
     if (const IntImm *i = e.as<IntImm>()) return i->value > 0;
     if (const FloatImm *f = e.as<FloatImm>()) return f->value > 0.0f;
