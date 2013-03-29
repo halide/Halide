@@ -178,6 +178,15 @@ Value *CodeGen_ARM::call_intrin(llvm::Type *result_type,
                                     llvm::Function::ExternalLinkage, 
                                     "llvm.arm.neon." + name, module);
         fn->setCallingConv(CallingConv::C);
+
+        if (starts_with(name, "vld")) {
+            fn->setOnlyReadsMemory();
+            fn->setDoesNotCapture(1);
+        } else {
+            fn->setDoesNotAccessMemory();
+        }
+        fn->setDoesNotThrow();
+
     }
 
     log(4) << "Creating call to " << name << "\n";
@@ -208,6 +217,11 @@ void CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> arg_value
                                     llvm::Function::ExternalLinkage, 
                                     "llvm.arm.neon." + name, module);
         fn->setCallingConv(CallingConv::C);
+
+        if (starts_with(name, "vst")) {
+            fn->setDoesNotCapture(1);
+        }
+        fn->setDoesNotThrow();
     }
 
     log(4) << "Creating call to " << name << "\n";

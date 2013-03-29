@@ -47,6 +47,8 @@
 #include <llvm/DataLayout.h>
 #include <llvm/IRBuilder.h>
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
+// They renamed this type in 3.3
+typedef Attributes Attribute
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
@@ -183,14 +185,12 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
 
     // Mark the buffer args as no alias
-    // TODO: This may not be true, leave it out for now
-    /*
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
             function->setDoesNotAlias(i+1);
         }
     }
-    */
+    
 
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(context, "entry", function);
@@ -555,8 +555,12 @@ void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
 // Add a definition of buffer_t to the module if it isn't already there
 void CodeGen::define_buffer_t() {
     buffer_t = module->getTypeByName("struct.buffer_t");
+
     if (!buffer_t) {
         buffer_t = StructType::create(context, "struct.buffer_t");
+        log(2) << "Did not find buffer_t in initial module\n";
+    } else {
+        log(2) << "Found buffer_t in initial module\n";
     }
 
     vector<llvm::Type *> fields;
@@ -578,22 +582,30 @@ void CodeGen::define_buffer_t() {
        
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
 Value *CodeGen::buffer_host(Value *buffer) {
-    Value *ptr = builder->CreateConstGEP2_32(buffer, 0, 0);
-    return builder->CreateLoad(ptr);
+    Value *ptr = builder->CreateConstInBoundsGEP2_32(buffer, 0, 0);
+    ptr = builder->CreateLoad(ptr);
+    
+    llvm::Function *fn = module->getFunction("force_no_alias");
+    assert(fn && "Did not find force_no_alias in initial module");
+    CallInst *call = builder->CreateCall(fn, vec(ptr));
+    call->addAttribute(0, Attribute::get(context, Attribute::NoAlias));
+    ptr = call;
+
+    return ptr;    
 }
 
 Value *CodeGen::buffer_dev(Value *buffer) {
-    Value *ptr = builder->CreateConstGEP2_32(buffer, 0, 1);
+    Value *ptr = builder->CreateConstInBoundsGEP2_32(buffer, 0, 1);
     return builder->CreateLoad(ptr);
 }
 
 Value *CodeGen::buffer_host_dirty(Value *buffer) {
-    Value *ptr = builder->CreateConstGEP2_32(buffer, 0, 2);
+    Value *ptr = builder->CreateConstInBoundsGEP2_32(buffer, 0, 2);
     return builder->CreateLoad(ptr);
 }
 
 Value *CodeGen::buffer_dev_dirty(Value *buffer) {
-    Value *ptr = builder->CreateConstGEP2_32(buffer, 0, 3);
+    Value *ptr = builder->CreateConstInBoundsGEP2_32(buffer, 0, 3);
     return builder->CreateLoad(ptr);
 }
 
@@ -602,7 +614,7 @@ Value *CodeGen::buffer_extent(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 4);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    Value *ptr = builder->CreateGEP(buffer, args);
+    Value *ptr = builder->CreateInBoundsGEP(buffer, args);
     return builder->CreateLoad(ptr);
 }
 
@@ -611,7 +623,7 @@ Value *CodeGen::buffer_stride(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 5);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    Value *ptr = builder->CreateGEP(buffer, args);
+    Value *ptr = builder->CreateInBoundsGEP(buffer, args);
     return builder->CreateLoad(ptr);
 }
 
@@ -620,12 +632,12 @@ Value *CodeGen::buffer_min(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 6);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    Value *ptr = builder->CreateGEP(buffer, args);
+    Value *ptr = builder->CreateInBoundsGEP(buffer, args);
     return builder->CreateLoad(ptr);
 }
 
 Value *CodeGen::buffer_elem_size(Value *buffer) {
-    Value *ptr = builder->CreateConstGEP2_32(buffer, 0, 7);
+    Value *ptr = builder->CreateConstInBoundsGEP2_32(buffer, 0, 7);
     return builder->CreateLoad(ptr);
 }
 
@@ -959,7 +971,7 @@ Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *
         base_address = builder->CreatePointerCast(base_address, load_type);            
     }
 
-    return builder->CreateGEP(base_address, index);
+    return builder->CreateInBoundsGEP(base_address, index);
 }
 
 void CodeGen::visit(const Load *op) {
@@ -969,7 +981,10 @@ void CodeGen::visit(const Load *op) {
         // Scalar loads
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, op->type, index);
-        value = builder->CreateLoad(ptr);
+        LoadInst *load = builder->CreateLoad(ptr);
+        load->setMetadata("tbaa", MDNode::get(context, vec<Value *>(MDString::get(context, op->name))));
+        value = load;
+        
     } else {            
         int alignment = op->type.bits / 8;
         const Ramp *ramp = op->index.as<Ramp>();
@@ -996,7 +1011,7 @@ void CodeGen::visit(const Load *op) {
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             Value *a = builder->CreateAlignedLoad(ptr, alignment);
-            ptr = builder->CreateConstGEP1_32(ptr, 1);
+            ptr = builder->CreateConstInBoundsGEP1_32(ptr, 1);
             int bytes = (op->type.bits * op->type.width)/8;
             Value *b = builder->CreateAlignedLoad(ptr, gcd(alignment, bytes));
             vector<Constant *> indices(ramp->width);
@@ -1034,7 +1049,7 @@ void CodeGen::visit(const Load *op) {
                 Value *lane = ConstantInt::get(i32, i);
                 Value *val = builder->CreateLoad(ptr);
                 value = builder->CreateInsertElement(value, val, lane);
-                ptr = builder->CreateGEP(ptr, stride);
+                ptr = builder->CreateInBoundsGEP(ptr, stride);
             }
         } else if (false /* should_scalarize(op->index) */) {
             // TODO: put something sensible in for
@@ -1153,7 +1168,7 @@ void CodeGen::visit(const Call *op) {
         GlobalVariable *filename_global = new GlobalVariable(*module, filename_type, 
                                                              true, GlobalValue::PrivateLinkage, 0);
         filename_global->setInitializer(ConstantDataArray::getString(context, filename->name));
-        Value *char_ptr = builder->CreateConstGEP2_32(filename_global, 0, 0);
+        Value *char_ptr = builder->CreateConstInBoundsGEP2_32(filename_global, 0, 0);
         Value *data_ptr = symbol_table.get(func->name + ".host");
         data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
         vector<Value *> args = vec(char_ptr, data_ptr);
@@ -1298,7 +1313,7 @@ void CodeGen::visit(const PrintStmt *op) {
     llvm::Type *fmt_type = ArrayType::get(i8, fmt_string.size()+1);
     GlobalVariable *fmt_global = new GlobalVariable(*module, fmt_type, true, GlobalValue::PrivateLinkage, 0);
     fmt_global->setInitializer(ConstantDataArray::getString(context, fmt_string));
-    Value *char_ptr = builder->CreateConstGEP2_32(fmt_global, 0, 0);
+    Value *char_ptr = builder->CreateConstInBoundsGEP2_32(fmt_global, 0, 0);
 
     // The format string is the first argument
     args.insert(args.begin(), char_ptr);
@@ -1333,7 +1348,7 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
     GlobalVariable *msg_global = new GlobalVariable(*module, msg_type, 
                                                     true, GlobalValue::PrivateLinkage, 0);
     msg_global->setInitializer(ConstantDataArray::getString(context, message));
-    Value *char_ptr = builder->CreateConstGEP2_32(msg_global, 0, 0);
+    Value *char_ptr = builder->CreateConstInBoundsGEP2_32(msg_global, 0, 0);
 
     // Call the error handler
     llvm::Function *error_handler = module->getFunction("halide_error");
@@ -1453,7 +1468,7 @@ public:
              iter != result.end(); ++iter) {
             // cout << "Putting " << iter->first << " in closure" << endl;
             Value *val = src.get(iter->first);
-            Value *ptr = builder->CreateConstGEP2_32(dst, 0, idx++);
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx++);
             if (val->getType() != iter->second) {
                 val = builder->CreateBitCast(val, iter->second);
             }            
@@ -1461,13 +1476,26 @@ public:
         }
     }
 
-    void unpack_struct(Scope<Value *> &dst, Value *src, IRBuilder<> *builder) {
+    void unpack_struct(Scope<Value *> &dst, Value *src, IRBuilder<> *builder, Module *module, LLVMContext &context) {
         // src should be a pointer to a struct of the type returned by build_type
         int idx = 0;
         for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
              iter != result.end(); ++iter) {
-            Value *ptr = builder->CreateConstGEP2_32(src, 0, idx++);
-            Value *val = builder->CreateLoad(ptr);
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(src, 0, idx++);
+            LoadInst *load = builder->CreateLoad(ptr);
+            Value *val = load;
+            if (load->getType()->isPointerTy()) {
+                // Give it a unique type so that tbaa tells llvm that this can't alias anything
+                load->setMetadata("tbaa", MDNode::get(context, vec<Value *>(MDString::get(context, iter->first))));
+                
+                llvm::Function *fn = module->getFunction("force_no_alias");
+                assert(fn && "Did not find force_no_alias in initial module");
+                Value *arg = builder->CreatePointerCast(load, llvm::Type::getInt8Ty(context)->getPointerTo());
+                CallInst *call = builder->CreateCall(fn, vec(arg));
+                call->addAttribute(0, Attribute::get(context, Attribute::NoAlias));
+                val = builder->CreatePointerCast(call, val->getType());
+                
+            }
             dst.push(iter->first, val);
             val->setName(iter->first);
         }
@@ -1536,6 +1564,7 @@ void CodeGen::visit(const For *op) {
         FunctionType *func_t = FunctionType::get(void_t, vec(i32, (llvm::Type *)(i8->getPointerTo())), false);
         llvm::Function *containing_function = function;
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, "par_for_" + op->name, module);
+        function->setDoesNotAlias(2);
 
         // Make the initial basic block and jump the builder into the new function
         BasicBlock *call_site = builder->GetInsertBlock();
@@ -1557,7 +1586,7 @@ void CodeGen::visit(const For *op) {
         iter->setName("closure");
         Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
         // Load everything from the closure into the new scope
-        closure.unpack_struct(symbol_table, closure_handle, builder);
+        closure.unpack_struct(symbol_table, closure_handle, builder, module, context);
 
         // Generate the new function body
         codegen(op->body);
@@ -1568,6 +1597,8 @@ void CodeGen::visit(const For *op) {
         builder->SetInsertPoint(call_site);
         llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
         assert(do_par_for && "Could not find halide_do_par_for in initial module");
+        do_par_for->setDoesNotAlias(4);
+        //do_par_for->setDoesNotCapture(4);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
         vector<Value *> args = vec((Value *)function, min, extent, ptr);
 	log(4) << "Creating call to do_par_for\n";
@@ -1590,7 +1621,8 @@ void CodeGen::visit(const Store *op) {
     if (value_type.is_scalar()) {
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, value_type, index);        
-        builder->CreateStore(val, ptr);
+        StoreInst *store = builder->CreateStore(val, ptr);
+        store->setMetadata("tbaa", MDNode::get(context, vec<Value *>(MDString::get(context, op->name))));
     } else {
         int alignment = op->value.type().bits / 8;
         const Ramp *ramp = op->index.as<Ramp>();
@@ -1618,7 +1650,7 @@ void CodeGen::visit(const Store *op) {
                 Value *lane = ConstantInt::get(i32, i);
                 Value *v = builder->CreateExtractElement(val, lane);
                 builder->CreateAlignedStore(v, ptr, op->value.type().bits/8);
-                ptr = builder->CreateGEP(ptr, stride);
+                ptr = builder->CreateInBoundsGEP(ptr, stride);
             }
         } else {
             // Scatter

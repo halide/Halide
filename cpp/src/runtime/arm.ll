@@ -1,4 +1,8 @@
 
+define internal noalias i8 *@force_no_alias(i8 * nocapture noalias %ptr) noinline {
+       ret i8 *%ptr
+}
+
 declare <4 x float> @llvm.arm.neon.vabs.v4f32(<4 x float>)
 
 define weak_odr <4 x float> @abs_f32x4(<4 x float> %x) nounwind alwaysinline {
