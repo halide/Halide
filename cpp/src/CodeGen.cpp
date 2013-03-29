@@ -351,6 +351,8 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     m.function = f;    
     assert(f && "Compiling function returned NULL");
 
+    log(1) << "JIT compiled function pointer 0x" << std::hex << (unsigned long)f << std::dec << "\n";
+
     llvm::Function *wrapper = module->getFunction(function_name + "_jit_wrapper");
     assert(wrapper && "Could not find wrapped function inside llvm module");
     f = execution_engine->getPointerToFunction(wrapper);
