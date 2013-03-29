@@ -12,9 +12,9 @@ cHalide_wrap.cxx: cHalide.i ../cpp_bindings/*.cpp ../cpp_bindings/*.h ../src/*.m
 	
 clean:
 	rm -rf build
-	rm cHalide_wrap.cxx
-	rm halide.so
-	rm _cHalide.so
+	rm -f cHalide_wrap.cxx
+	rm -f halide.so
+	rm -f _cHalide.so
 
 test:
 	python -c "import halide, autotune; halide.test(); autotune.test()"
