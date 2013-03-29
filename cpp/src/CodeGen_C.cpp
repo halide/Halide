@@ -204,6 +204,7 @@ void CodeGen_C::print_assignment(Type t, const std::string &rhs) {
         stream << print_type(t)
                << " " << id 
                << " = " << rhs << ";\n";    
+        cache[rhs] = id;
     } else {
         id = cached->second;
     }
