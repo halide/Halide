@@ -26,6 +26,9 @@
 #include <llvm/TargetTransformInfo.h>
 #include <llvm/DataLayout.h>
 #include <llvm/IRBuilder.h>
+#include <llvm/Attributes.h>
+// They renamed this type in 3.3
+typedef Attributes Attribute
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
@@ -33,7 +36,9 @@
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Attributes.h>
 #endif
+
 
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/IRReader.h>
@@ -126,10 +131,14 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     } else {
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("halide_malloc");
+        // Make the return value as noalias
+        malloc_fn->setDoesNotAlias(0);
         assert(malloc_fn && "Could not find halide_malloc in module");
         Value *sz = builder->CreateIntCast(size, malloc_fn->arg_begin()->getType(), false);
 	log(4) << "Creating call to halide_malloc\n";
-        ptr = builder->CreateCall(malloc_fn, sz);
+        CallInst *call = builder->CreateCall(malloc_fn, sz);
+        call->addAttribute(0, Attribute::get(context, Attribute::NoAlias));
+        ptr = call;
         heap_allocations.push_back(ptr);
     }
 
@@ -143,7 +152,8 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
         llvm::Function *free_fn = module->getFunction("halide_free");
         assert(free_fn && "Could not find halide_free in module");
 	log(4) << "Creating call to halide_free\n";
-        builder->CreateCall(free_fn, ptr);
+        CallInst *call = builder->CreateCall(free_fn, ptr);
+        call->addAttribute(1, Attribute::get(context, Attribute::NoCapture));
     }
 }
 

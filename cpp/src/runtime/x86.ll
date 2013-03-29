@@ -1,4 +1,8 @@
 
+define internal noalias i8 *@force_no_alias(i8 * nocapture noalias %ptr) noinline {
+       ret i8 *%ptr
+}
+
 declare <16 x i8> @llvm.x86.sse2.packsswb.128(<8 x i16>, <8 x i16>)
 declare <16 x i8> @llvm.x86.sse2.packuswb.128(<8 x i16>, <8 x i16>)
 declare <8 x i16> @llvm.x86.sse2.packssdw.128(<4 x i32>, <4 x i32>)
