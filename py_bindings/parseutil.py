@@ -1,3 +1,5 @@
+import re
+
 def split_doublequote(s):
     L = re.compile(r'''((?:"[^"]*")+)''').split(s)
     ans = []
