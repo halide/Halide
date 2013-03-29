@@ -1858,7 +1858,7 @@ def main():
         examplename = args[1]
         filter_func_name = 'examples.%s.filter_func'%examplename
         schedule = open(args[2], 'rt').read()
-        #schedule = Schedule.fromstring(schedule)
+        schedule = schedule_str_from_cmdline(schedule) #str(Schedule.fromstring(schedule))
         schedule_str = schedule.strip().replace('\n', '\\n')
         
         p = AutotuneParams(argd)
