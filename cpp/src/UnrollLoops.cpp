@@ -1,6 +1,7 @@
 #include "UnrollLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -17,7 +18,7 @@ class UnrollLoops : public IRMutator {
             Block *block = NULL;
             // Make n copies of the body, each wrapped in a let that defines the loop var for that body
             for (int i = extent->value-1; i >= 0; i--) {
-                Stmt iter = new LetStmt(for_loop->name, for_loop->min + i, body);
+                Stmt iter = substitute(for_loop->name, for_loop->min + i, body);
                 block = new Block(iter, block);
             }
             stmt = block;
