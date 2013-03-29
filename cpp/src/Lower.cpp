@@ -411,13 +411,16 @@ private:
             }
             */
             
+            
             // Paste in the args directly - introducing too many let
             // statements messes up all our peephole matching
+            
             for (size_t i = 0; i < args.size(); i++) {
                 body = substitute(func.name() + "." + func.args()[i], 
                                   args[i], body);
             
             }
+            
             
             expr = body;
         } else {
@@ -772,6 +775,7 @@ Stmt lower(Function f) {
     s = simplify(s);
     s = remove_trivial_for_loops(s);
     s = remove_dead_lets(s);
+    s = simplify(s);
     log(1) << "Simplified: \n" << s << "\n\n";
 
     return s;
