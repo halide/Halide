@@ -258,7 +258,12 @@ void CodeGen_C::visit(const Mul *op) {
 }
 
 void CodeGen_C::visit(const Div *op) {
-    if (op->type.is_int()) {
+    int bits;
+    if (is_const_power_of_two(op->b, &bits)) {
+        ostringstream oss;
+        oss << print_expr(op->a) << " >> " << bits;
+        print_assignment(op->type, oss.str());
+    } else if (op->type.is_int()) {
         print_expr(new Call(op->type, "sdiv", vec(op->a, op->b)));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
@@ -266,7 +271,14 @@ void CodeGen_C::visit(const Div *op) {
 }
 
 void CodeGen_C::visit(const Mod *op) {
-    print_expr(new Call(op->type, "mod", vec(op->a, op->b)));
+    int bits;
+    if (is_const_power_of_two(op->b, &bits)) {
+        ostringstream oss;
+        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
+        print_assignment(op->type, oss.str());
+    } else {
+        print_expr(new Call(op->type, "mod", vec(op->a, op->b)));
+    }
 }
 
 void CodeGen_C::visit(const Max *op) {
@@ -408,19 +420,10 @@ void CodeGen_C::visit(const Select *op) {
 }
 
 void CodeGen_C::visit(const LetStmt *op) {
-    string id_val = print_expr(op->value);
-    
-    open_scope();
-
-    do_indent();
-    stream << print_type(op->value.type())
-           << " "
-           << print_name(op->name)
-           << " = " << id_val << ";\n";
-
-    op->body.accept(this);
-
-    close_scope();
+    string id_value = print_expr(op->value);
+    Expr new_var = new Variable(op->value.type(), id_value);
+    Stmt body = substitute(op->name, new_var, op->body);   
+    body.accept(this);
 }
 
 void CodeGen_C::visit(const PrintStmt *op) {
@@ -429,15 +432,23 @@ void CodeGen_C::visit(const PrintStmt *op) {
     for (size_t i = 0; i < op->args.size(); i++) {        
         args.push_back(print_expr(op->args[i]));
     }
-
+    
     do_indent();
     string format_string;
-    stream << "std::cout << " << op->prefix;
+    stream << "halide_printf(\"" << op->prefix;
     for (size_t i = 0; i < op->args.size(); i++) {
-        stream << " << " << op->args[i];
+        if (op->args[i].type().is_int() || 
+            op->args[i].type().is_uint()) {
+            stream << " %d";
+        } else {
+            stream << " %f";
+        }
     }
-
-    stream << ";\n";
+    stream << "\"";
+    for (size_t i = 0; i < op->args.size(); i++) {
+        stream << ", " << op->args[i];
+    }
+    stream << ");\n";
 }
 
 void CodeGen_C::visit(const AssertStmt *op) {
@@ -585,12 +596,9 @@ void CodeGen_C::test() {
         " {\n"
         "  int32_t tmp_stack[127];\n"
         "  int32_t V1 = beta + 1;\n"
-        "  {\n"
-        "   int32_t x = V1;\n"
-        "   bool V2 = alpha > 4.000000f;\n"
-        "   int32_t V3 = int32_t(V2 ? 3 : 2);\n"
-        "   ((int32_t *)buf)[x] = V3;\n"
-        "  }\n" 
+        "  bool V2 = alpha > 4.000000f;\n"
+        "  int32_t V3 = int32_t(V2 ? 3 : 2);\n"
+        "  ((int32_t *)buf)[V1] = V3;\n"
         " }\n"
         " halide_free(tmp_heap);\n" 
         "}\n"
