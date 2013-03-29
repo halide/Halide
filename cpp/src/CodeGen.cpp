@@ -590,7 +590,11 @@ Value *CodeGen::buffer_host(Value *buffer) {
     llvm::Function *fn = module->getFunction("force_no_alias");
     assert(fn && "Did not find force_no_alias in initial module");
     CallInst *call = builder->CreateCall(fn, vec(ptr));
+#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
     call->addAttribute(0, Attribute::get(context, Attribute::NoAlias));
+#else
+    call->addAttribute(0, Attribute::NoAlias);
+#endif
     ptr = call;
 
     return ptr;    
@@ -1494,7 +1498,11 @@ public:
                 assert(fn && "Did not find force_no_alias in initial module");
                 Value *arg = builder->CreatePointerCast(load, llvm::Type::getInt8Ty(context)->getPointerTo());
                 CallInst *call = builder->CreateCall(fn, vec(arg));
+#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
                 call->addAttribute(0, Attribute::get(context, Attribute::NoAlias));
+#else
+                call->addAttribute(0, Attribute::NoAlias);
+#endif
                 val = builder->CreatePointerCast(call, val->getType());
                 
             }
