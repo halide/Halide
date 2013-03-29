@@ -48,7 +48,7 @@
 #include <llvm/IRBuilder.h>
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
 // They renamed this type in 3.3
-typedef Attributes Attribute
+typedef llvm::Attributes Attribute;
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
