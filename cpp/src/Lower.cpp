@@ -98,7 +98,8 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
         Expr inner = new Variable(Int(32), prefix + split.inner);
         Expr outer = new Variable(Int(32), prefix + split.outer);
         Expr old_min = new Variable(Int(32), prefix + split.old_var + ".min");
-        stmt = new LetStmt(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
+        // stmt = new LetStmt(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
+        stmt = substitute(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
     }
             
     // Build the loop nest
