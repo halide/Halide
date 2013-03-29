@@ -886,7 +886,14 @@ def cuda_global_check(schedule):
         return False
     
     return True
-    
+
+def schedule_str_from_cmdline(s):
+    L = parseutil.split_doublequote(s)
+    for x in s:
+        if x.startswith('"') and x.endswith('"'):
+            return x[1:-1]
+    raise ValueError('bad .sh file')
+
 class Schedule:
     """
     Schedule applying (recursively) to all Funcs called by root_func.
@@ -1063,6 +1070,8 @@ class Schedule:
          - Reduction functions rf to be scheduled explicitly as either rf.root()|rf.chunk().
          - Output func g to be scheduled for its call schedule explicitly as g.root()...
         """
+        if 'python autotune.py' in s:
+            s = schedule_str_from_cmdline(s)
         if '\\n' in s:
             raise ValueError('Bad newline character in %r'%s)
         #print 'Schedule.fromstring', root_func, s
