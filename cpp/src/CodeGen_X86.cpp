@@ -26,6 +26,7 @@
 #include <llvm/TargetTransformInfo.h>
 #include <llvm/DataLayout.h>
 #include <llvm/IRBuilder.h>
+#include <llvm/Support/IRReader.h>
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
@@ -33,11 +34,10 @@
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/Bitcode/ReaderWriter.h>
 #endif
 
 #include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Support/IRReader.h>
-
 
 // No msvc warnings from llvm headers please
 #ifdef _WIN32
