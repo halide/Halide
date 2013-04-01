@@ -109,7 +109,7 @@ test_%: bin/test_%
 
 error_%: bin/error_%
 	@-mkdir -p tmp
-	cd tmp ; DYLD_LIBRARY_PATH=../bin LD_LIBRARY_PATH=../bin ../$< 2>&1 | egrep --q "Assertion failed"
+	cd tmp ; DYLD_LIBRARY_PATH=../bin LD_LIBRARY_PATH=../bin ../$< 2>&1 | egrep --q "Assertion.*failed"
 	@-echo
 
 .PHONY: test_apps
