@@ -99,6 +99,12 @@ void Function::define_reduction(const vector<Expr> &args, Expr value) {
     assert(args.size() == contents.ptr->args.size() && 
            "Dimensionality of reduction definition must match dimensionality of pure definition");
 
+    // Check that pure value and the reduction value have the same type.
+    // Without this check, allocations may be the wrong size relative to what
+    // update code expects.
+    assert(contents.ptr->value.type() == value.type() &&
+	   "Reduction definition does not match type of pure function definition.");
+
     // The pure args are those naked vars in the args that are not in
     // a reduction domain and are not parameters
     vector<string> pure_args;
