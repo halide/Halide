@@ -98,7 +98,8 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
         Expr inner = new Variable(Int(32), prefix + split.inner);
         Expr outer = new Variable(Int(32), prefix + split.outer);
         Expr old_min = new Variable(Int(32), prefix + split.old_var + ".min");
-        stmt = new LetStmt(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
+        // stmt = new LetStmt(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
+        stmt = substitute(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
     }
             
     // Build the loop nest
@@ -269,8 +270,26 @@ private:
 
     Stmt build_realize(Stmt s) {
         // The allocate should cover everything touched below this point        
-        Region bounds = region_touched(s, func.name());
+        //Region bounds = region_touched(s, func.name());
         
+        /* The following works if the provide steps of a realization
+         * always covers the region that will be used */
+        Region bounds = region_provided(s, func.name());
+
+        /* The following would work if things were only ever computed
+         * exactly to cover the region read. Loop splitting (which
+         * rounds things up, and reductions spraying writes
+         * everywhere, both break this assumption */
+
+        /*
+        Region bounds;
+        for (size_t i = 0; i < func.args().size(); i++) {
+            Expr min = new Variable(Int(32), func.name() + "." + func.args()[i] + ".min");
+            Expr extent = new Variable(Int(32), func.name() + "." + func.args()[i] + ".extent");
+            bounds.push_back(Range(min, extent));
+        }
+        */
+
         for (size_t i = 0; i < bounds.size(); i++) {
             if (!bounds[i].min.defined()) {
                 std::cerr << "Use of " << func.name() << " is unbounded below in dimension " 
@@ -392,13 +411,16 @@ private:
             }
             */
             
+            
             // Paste in the args directly - introducing too many let
             // statements messes up all our peephole matching
+            
             for (size_t i = 0; i < args.size(); i++) {
                 body = substitute(func.name() + "." + func.args()[i], 
                                   args[i], body);
             
             }
+            
             
             expr = body;
         } else {
@@ -753,6 +775,7 @@ Stmt lower(Function f) {
     s = simplify(s);
     s = remove_trivial_for_loops(s);
     s = remove_dead_lets(s);
+    s = simplify(s);
     log(1) << "Simplified: \n" << s << "\n\n";
 
     return s;

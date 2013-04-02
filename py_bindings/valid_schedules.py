@@ -11,6 +11,7 @@ import numpy
 import itertools
 import sys
 import os
+import parseutil
 random_module = random
 
 DEFAULT_MAX_DEPTH = 4
@@ -886,7 +887,16 @@ def cuda_global_check(schedule):
         return False
     
     return True
-    
+
+def schedule_str_from_cmdline(s):
+    if not 'python autotune.py' in s:
+        return s
+    L = parseutil.split_doublequote(s)
+    for x in L:
+        if x.startswith('"') and x.endswith('"'):
+            return x[1:-1]
+    raise ValueError('bad .sh file')
+
 class Schedule:
     """
     Schedule applying (recursively) to all Funcs called by root_func.
@@ -1063,6 +1073,7 @@ class Schedule:
          - Reduction functions rf to be scheduled explicitly as either rf.root()|rf.chunk().
          - Output func g to be scheduled for its call schedule explicitly as g.root()...
         """
+        s = schedule_str_from_cmdline(s)
         if '\\n' in s:
             raise ValueError('Bad newline character in %r'%s)
         #print 'Schedule.fromstring', root_func, s

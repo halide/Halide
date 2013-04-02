@@ -678,6 +678,7 @@ struct Call : public ExprNode<Call> {
         }
         if (call_type == Halide) {
             assert(func.value().defined() && "Call nodes to undefined halide function");
+            assert(args.size() <= func.args().size() && "Call node with too many arguments.");
         } else if (call_type == Image) {
             assert((param.defined() || image.defined()) && "Call node to undefined image");
         }
@@ -709,7 +710,6 @@ struct Call : public ExprNode<Call> {
         ExprNode<Call>(f.value().type()), name(f.name()), args(a), call_type(Halide), 
         func(f), image(Buffer()), param(Parameter()) {
     }
-    
 };
 
 /** A named variable. Might be a loop variable, function argument,

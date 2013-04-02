@@ -107,6 +107,7 @@ import datetime
 import autotune_bounds
 import tarfile
 from valid_schedules import *
+import parseutil
 
 sys.path += ['../util']
 
@@ -1074,7 +1075,10 @@ RUN_LIMIT_ERRCODES = [RUN_LIMIT_TIMEOUT, RUN_LIMIT_MEMLIMIT]
 
 def get_mem_recurse(pid):
     "Get memory in bytes used by pid."
-    proc = psutil.Process(pid)
+    try:
+        proc = psutil.Process(pid)
+    except psutil.error.Error:
+        return
     #ans = proc.get_memory_info()[0]
     #print 'Memory used:', ans
     #return ans
@@ -1091,7 +1095,10 @@ def get_mem_recurse(pid):
     #return sum(x.get_memory_info()[0] for x in L)
 
 def kill_recursive(pid, timeout=1.0):
-    proc = psutil.Process(pid)
+    try:
+        proc = psutil.Process(pid)
+    except psutil.error.Error:
+        return
     T0 = time.time()
     L = [proc] + proc.get_children()
     while len(L):
@@ -1790,16 +1797,7 @@ def test():
     autotune_test.test()
     test_valid_schedules()
 
-def split_doublequote(s):
-    L = re.compile(r'''((?:"[^"]*")+)''').split(s)
-    ans = []
-    for x in L:
-        if x.startswith('"'):
-            ans.append(x)
-        else:
-            ans.extend(x.split())
-    return ans
-    
+
 def main():
     (args, argd) = parse_args()
     all_examples = 'blur dilate boxblur_cumsum boxblur_sat erode snake interpolate bilateral_grid camera_pipe local_laplacian'.split() # local_laplacian'.split()
@@ -1866,7 +1864,7 @@ def main():
         examplename = args[1]
         filter_func_name = 'examples.%s.filter_func'%examplename
         schedule = open(args[2], 'rt').read()
-        #schedule = Schedule.fromstring(schedule)
+        schedule = schedule_str_from_cmdline(schedule) #str(Schedule.fromstring(schedule))
         schedule_str = schedule.strip().replace('\n', '\\n')
         
         p = AutotuneParams(argd)
@@ -1949,13 +1947,13 @@ def main():
                 if multiprocessing.cpu_count() >= 32:
                     compile_threads = 8
                 rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest
-            elif examplename == 'interpolate':
+            elif examplename in ['interpolate', 'interpolate_lores']:
                 rest = '-generations 150 -compile_timeout 120.0'.split() + rest
             elif examplename == 'camera_pipe':
                 rest = '-generations 200'.split() + rest
             elif examplename == 'bilateral_grid':
                 rest = '-generations 150'.split() + rest
-            elif examplename == 'blur':
+            elif examplename in ['blur', 'blur_lores']:
                 rest = '-run_timeout_bias 20'.split() + rest
             system('python autotune.py autotune examples.%s.filter_func -tune_dir "%s" %s' % (examplename, tune_dir, ' '.join(rest)))
     elif args[0] == 'time':
@@ -2006,7 +2004,7 @@ def main():
             sh = open(os.path.join(tune_dir, indiv + '_compile.sh'), 'rt').read().strip()
             #print sh
             #L = shlex.split(sh.replace('"', '\x255'))
-            L = split_doublequote(sh)
+            L = parseutil.split_doublequote(sh)
             #print L
             #sys.exit(1)
             L_orig = L[10].strip('"')
@@ -2204,7 +2202,7 @@ def main():
             genL = [get_gen(x) for x in compileL]
             last_gen = max(genL)-1
             for sh in [x for x in compileL if get_gen(x) == last_gen]:
-                L = split_doublequote(open(sh,'rt').read())
+                L = parseutil.split_doublequote(open(sh,'rt').read())
                 schedule_str = L[5]
                 assert schedule_str[0] == '"' and schedule_str[-1] == '"'
                 schedule_str = schedule_str[1:-1]

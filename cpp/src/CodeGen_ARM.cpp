@@ -23,6 +23,7 @@
 #include <llvm/TargetTransformInfo.h>
 #include <llvm/DataLayout.h>
 #include <llvm/IRBuilder.h>
+#include <llvm/Support/IRReader.h>
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
@@ -30,10 +31,10 @@
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/Bitcode/ReaderWriter.h>
 #endif
 
 #include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Support/IRReader.h>
 
 extern "C" unsigned char halide_internal_initmod_arm[];
 extern "C" int halide_internal_initmod_arm_length;
@@ -46,30 +47,6 @@ namespace Internal {
 using std::vector;
 using std::string;
 using std::ostringstream;
-
-namespace {
-bool is_const_power_of_two(Expr e, int *bits) {
-    const Broadcast *b = e.as<Broadcast>();
-    if (b) return is_const_power_of_two(b->value, bits);
-    
-    const Cast *c = e.as<Cast>();
-    if (c) return is_const_power_of_two(c->value, bits);
-
-    const IntImm *int_imm = e.as<IntImm>();
-    if (int_imm) {
-        int bit_count = 0;
-        int tmp;
-        for (tmp = 1; tmp < int_imm->value; tmp *= 2) {
-            bit_count++;
-        }
-        if (tmp == int_imm->value) {
-            *bits = bit_count;
-            return true;
-        }
-    }
-    return false;
-}
-}
 
 using namespace llvm;
 
@@ -202,6 +179,15 @@ Value *CodeGen_ARM::call_intrin(llvm::Type *result_type,
                                     llvm::Function::ExternalLinkage, 
                                     "llvm.arm.neon." + name, module);
         fn->setCallingConv(CallingConv::C);
+
+        if (starts_with(name, "vld")) {
+            fn->setOnlyReadsMemory();
+            fn->setDoesNotCapture(1);
+        } else {
+            fn->setDoesNotAccessMemory();
+        }
+        fn->setDoesNotThrow();
+
     }
 
     log(4) << "Creating call to " << name << "\n";
@@ -232,6 +218,11 @@ void CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> arg_value
                                     llvm::Function::ExternalLinkage, 
                                     "llvm.arm.neon." + name, module);
         fn->setCallingConv(CallingConv::C);
+
+        if (starts_with(name, "vst")) {
+            fn->setDoesNotCapture(1);
+        }
+        fn->setDoesNotThrow();
     }
 
     log(4) << "Creating call to " << name << "\n";
@@ -635,6 +626,17 @@ void CodeGen_ARM::visit(const Sub *op) {
 
 void CodeGen_ARM::visit(const Min *op) {    
 
+    if (op->type == Float(32)) {
+        // Use a 2-wide vector instead
+        Value *undef = UndefValue::get(f32x2);
+        Constant *zero = ConstantInt::get(i32, 0);
+        Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
+        Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
+        Value *wide_result = call_intrin(f32x2, "vmins.v2f32", vec(a_wide, b_wide));
+        value = builder->CreateExtractElement(wide_result, zero);
+        return;
+    }
+
     struct {
         Type t;
         const char *op;
@@ -666,6 +668,17 @@ void CodeGen_ARM::visit(const Min *op) {
 }
 
 void CodeGen_ARM::visit(const Max *op) {    
+
+    if (op->type == Float(32)) {
+        // Use a 2-wide vector instead
+        Value *undef = UndefValue::get(f32x2);
+        Constant *zero = ConstantInt::get(i32, 0);
+        Value *a_wide = builder->CreateInsertElement(undef, codegen(op->a), zero);
+        Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
+        Value *wide_result = call_intrin(f32x2, "vmaxs.v2f32", vec(a_wide, b_wide));
+        value = builder->CreateExtractElement(wide_result, zero);
+        return;
+    }
 
     struct {
         Type t;
