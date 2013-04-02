@@ -346,8 +346,6 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     llvm::Function *fn = module->getFunction(function_name);
     assert(fn && "Could not find function inside llvm module");
 
-    compile_to_bitcode("jit.bc");
-
     JITCompiledModule m;
     void *f = execution_engine->getPointerToFunction(fn);
     m.function = f;    
@@ -1133,9 +1131,8 @@ void CodeGen::visit(const Call *op) {
     // cue for llvm to generate particular ops. In general these are
     // handled in the standard library, but ones with e.g. varying
     // types are handled here.
-    if (op->name == "extract odd lanes" || op->name == "extract even lanes") {
-        bool even = (op->name == "extract even lanes");
-        assert(op->args.size() == 1);
+    if (op->name == "shuffle vector") {
+        assert((int) op->args.size() == 1 + op->type.width);
         vector<Constant *> indices(op->type.width);
         for (size_t i = 0; i < indices.size(); i++) {
             const IntImm *idx = op->args[i+1].as<IntImm>();
