@@ -1075,7 +1075,10 @@ RUN_LIMIT_ERRCODES = [RUN_LIMIT_TIMEOUT, RUN_LIMIT_MEMLIMIT]
 
 def get_mem_recurse(pid):
     "Get memory in bytes used by pid."
-    proc = psutil.Process(pid)
+    try:
+        proc = psutil.Process(pid)
+    except psutil.error.Error:
+        return
     #ans = proc.get_memory_info()[0]
     #print 'Memory used:', ans
     #return ans
@@ -1092,7 +1095,10 @@ def get_mem_recurse(pid):
     #return sum(x.get_memory_info()[0] for x in L)
 
 def kill_recursive(pid, timeout=1.0):
-    proc = psutil.Process(pid)
+    try:
+        proc = psutil.Process(pid)
+    except psutil.error.Error:
+        return
     T0 = time.time()
     L = [proc] + proc.get_children()
     while len(L):
@@ -1941,7 +1947,7 @@ def main():
                 if multiprocessing.cpu_count() >= 32:
                     compile_threads = 8
                 rest = ('-compile_threads %d -compile_timeout 120.0 -generations 200'%compile_threads).split() + rest
-            elif examplename == 'interpolate':
+            elif examplename in ['interpolate', 'interpolate_lores']:
                 rest = '-generations 150 -compile_timeout 120.0'.split() + rest
             elif examplename == 'camera_pipe':
                 rest = '-generations 200'.split() + rest
