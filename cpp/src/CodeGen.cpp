@@ -284,7 +284,8 @@ public:
 	options.NoNaNsFPMath = true;
 	options.HonorSignDependentRoundingFPMathOption = false;
 	options.UseSoftFloat = false;
-	options.FloatABIType = FloatABI::Soft;
+	options.FloatABIType = 
+            cg->use_soft_float_abi() ? FloatABI::Soft : FloatABI::Hard;
 	options.NoZerosInBSS = false;
 	options.GuaranteedTailCallOpt = false;
 	options.DisableTailCalls = false;
@@ -444,7 +445,8 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
     options.UseSoftFloat = false;
-    options.FloatABIType = FloatABI::Soft;
+    options.FloatABIType =
+        use_soft_float_abi() ? FloatABI::Soft : FloatABI::Hard;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;

@@ -66,12 +66,13 @@ public:
      * functions pointers into that machine code. */
     JITCompiledModule compile_to_function_pointers();
 
-    /** What should be passed as -mcpu and -mattrs for
+    /** What should be passed as -mcpu, -mattrs, and related for
      * compilation. The architecture-specific code generator should
      * define these. */
     // @{
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
+    virtual bool use_soft_float_abi() const = 0;
     // @}
 
 protected:

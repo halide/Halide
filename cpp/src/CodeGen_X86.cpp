@@ -520,4 +520,8 @@ string CodeGen_X86::mattrs() const {
     return "";
 }
 
+bool CodeGen_X86::use_soft_float_abi() const {
+    return false;
+}
+
 }}
