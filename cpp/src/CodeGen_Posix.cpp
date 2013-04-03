@@ -29,6 +29,7 @@
 #include <llvm/Attributes.h>
 // They renamed this type in 3.3
 typedef llvm::Attributes Attribute;
+#include <llvm/Support/IRReader.h>
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
@@ -37,11 +38,12 @@ typedef llvm::Attributes Attribute;
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Attributes.h>
+#include <llvm/IRReader/IRReader.h>
 #endif
 
 
 #include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Support/IRReader.h>
+
 
 // No msvc warnings from llvm headers please
 #ifdef _WIN32
