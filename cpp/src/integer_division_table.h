@@ -8,10 +8,12 @@ namespace Halide {
 namespace Internal {
 namespace IntegerDivision {
 
-extern int table_u8[64][3];
-extern int table_s8[64][3];
-extern int table_u16[64][3];
-extern int table_s16[64][3];
+extern int64_t table_u8[254][3];
+extern int64_t table_s8[254][3];
+extern int64_t table_u16[254][3];
+extern int64_t table_s16[254][3];
+extern int64_t table_u32[254][3];
+extern int64_t table_s32[254][3];
 
 }
 }

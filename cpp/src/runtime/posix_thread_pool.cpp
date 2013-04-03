@@ -214,11 +214,17 @@ WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_
         halide_work_queue.head = halide_work_queue.tail = 0;
         halide_work_queue.ids = 1;
         char *threadStr = getenv("HL_NUMTHREADS");
+        #ifdef _LP64
+        // On 64-bit systems we use 8 threads by default
         halide_threads = 8;
+        #else
+        // On 32-bit systems we use 2 threads by default
+        halide_threads = 2;
+        #endif
         if (threadStr) {
             halide_threads = atoi(threadStr);
         } else {
-            halide_printf("HL_NUMTHREADS not defined. Defaulting to 8 threads.\n");
+            halide_printf("HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
         }
         if (halide_threads > MAX_THREADS) halide_threads = MAX_THREADS;
         for (int i = 0; i < halide_threads-1; i++) {

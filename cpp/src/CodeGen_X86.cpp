@@ -26,6 +26,7 @@
 #include <llvm/TargetTransformInfo.h>
 #include <llvm/DataLayout.h>
 #include <llvm/IRBuilder.h>
+#include <llvm/Support/IRReader.h>
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
@@ -33,10 +34,11 @@
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/Bitcode/ReaderWriter.h>
 #endif
 
 #include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Support/IRReader.h>
+
 
 
 // No msvc warnings from llvm headers please
@@ -142,10 +144,10 @@ Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Exp
         arg_values[i] = codegen(args[i]);
     }
 
-    return call_intrin(result_type, name, arg_values);
+    return call_intrin(llvm_type_of(result_type), name, arg_values);
 }
 
-Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Value *> arg_values) {
+Value *CodeGen_X86::call_intrin(llvm::Type *result_type, const string &name, vector<Value *> arg_values) {
     vector<llvm::Type *> arg_types(arg_values.size());
     for (size_t i = 0; i < arg_values.size(); i++) {
         arg_types[i] = arg_values[i]->getType();
@@ -154,7 +156,7 @@ Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Val
     llvm::Function *fn = module->getFunction("llvm.x86." + name);
 
     if (!fn) {
-        FunctionType *func_t = FunctionType::get(llvm_type_of(result_type), arg_types, false);    
+        FunctionType *func_t = FunctionType::get(result_type, arg_types, false);    
         fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.x86." + name, module);
         fn->setCallingConv(CallingConv::C);
     }
@@ -258,11 +260,17 @@ void CodeGen_X86::visit(const Cast *op) {
 
 void CodeGen_X86::visit(const Div *op) {    
 
+    assert(!is_zero(op->b) && "Division by constant zero");
+
     // Detect if it's a small int division
     const Broadcast *broadcast = op->b.as<Broadcast>();
     const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;    
     const IntImm *int_imm = cast_b ? cast_b->value.as<IntImm>() : NULL;
+    if (broadcast && !int_imm) int_imm = broadcast->value.as<IntImm>();
+    if (!int_imm) int_imm = op->b.as<IntImm>();
     int const_divisor = int_imm ? int_imm->value : 0;
+    int shift_amount;
+    bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
 
     vector<Expr> matches;    
     if (op->type == Float(32, 4) && is_one(op->a)) {
@@ -279,57 +287,135 @@ void CodeGen_X86::visit(const Div *op) {
         } else {
             value = call_intrin(Float(32, 8), "avx.rcp.ps.256", vec(op->b));
         }
-    } else if (op->type == Int(16, 8) && const_divisor > 1 && const_divisor < 64) {
-        int method     = IntegerDivision::table_s16[const_divisor-2][0];
-        int multiplier = IntegerDivision::table_s16[const_divisor-2][1];
-        int shift      = IntegerDivision::table_s16[const_divisor-2][2];        
+    } else if (power_of_two && op->type.is_int()) {
+        Value *numerator = codegen(op->a);
+        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
+        value = builder->CreateAShr(numerator, shift);
+    } else if (power_of_two && op->type.is_uint()) {
+        Value *numerator = codegen(op->a);
+        Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
+        value = builder->CreateLShr(numerator, shift);
+    } else if (op->type.is_int() && 
+               op->type.bits == 16 && 
+               const_divisor > 1 && 
+               ((op->type.bits > 8 && const_divisor < 256) || const_divisor < 128)) {
 
-        Value *val = codegen(op->a);
-        
-        // Start with unsigned multiply and keep high half
-        if (method == 0) {
-            // We can just shift
-            value = builder->CreateAShr(val, codegen(make_const(op->type, shift)));            
+        int64_t multiplier, shift;
+        if (op->type.bits == 32) {
+            multiplier = IntegerDivision::table_s32[const_divisor-2][1];
+            shift      = IntegerDivision::table_s32[const_divisor-2][2];
+        } else if (op->type.bits == 16) {
+            multiplier = IntegerDivision::table_s16[const_divisor-2][1];
+            shift      = IntegerDivision::table_s16[const_divisor-2][2];
         } else {
-            // Make an all-ones mask if the numerator is negative
-            Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits-1)));            
-            // Flip the numerator bits if the mask is high
-            Value *flipped = builder->CreateXor(sign, val);
-            // Grab the multiplier
-            Value *mult = codegen(make_const(op->type, multiplier));
-            // Do the multiply-keep-high-half
-            val = call_intrin(Int(16, 8), "sse2.pmulhu.w", vec(flipped, mult));
-            // Do the shift
-            if (shift) {
-                val = builder->CreateAShr(val, codegen(make_const(op->type, shift)));
-            }
-            // Maybe flip the bits again
-            value = builder->CreateXor(val, sign);
+            // 8 bit
+            multiplier = IntegerDivision::table_s8[const_divisor-2][1];
+            shift      = IntegerDivision::table_s8[const_divisor-2][2];    
         }
-    } else if (op->type == UInt(16, 8) && const_divisor > 1 && const_divisor < 64) {
-        int method     = IntegerDivision::table_u16[const_divisor-2][0];
-        int multiplier = IntegerDivision::table_u16[const_divisor-2][1];
-        int shift      = IntegerDivision::table_u16[const_divisor-2][2];        
 
         Value *val = codegen(op->a);
         
-        // Start with multiply and keep high half
-        Value *mult = val;
-        if (method > 0) {
-            mult = codegen(cast(op->type, multiplier));
-            mult = call_intrin(UInt(16, 8), "sse2.pmulhu.w", vec(val, mult));
+        // Make an all-ones mask if the numerator is negative
+        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits-1)));            
+        // Flip the numerator bits if the mask is high. 
+        Value *flipped = builder->CreateXor(sign, val);
 
-            // Possibly add a correcting factor
-            if (method == 2) {
-                Value *correction = builder->CreateSub(val, mult);
-                correction = builder->CreateLShr(correction, codegen(make_one(op->type)));
-                mult = builder->CreateAdd(mult, correction);
+        llvm::Type *narrower = llvm_type_of(op->type);
+        llvm::Type *wider = llvm_type_of(Int(op->type.bits*2, op->type.width));
+
+        // Grab the multiplier. 
+        Value *mult = ConstantInt::get(narrower, multiplier);
+
+        // Widening multiply, keep high half, shift
+        if (op->type == Int(16, 8)) {
+            val = call_intrin(narrower, "sse2.pmulhu.w", vec(flipped, mult));
+            if (shift) {
+                Constant *shift_amount = ConstantInt::get(narrower, shift);
+                val = builder->CreateLShr(val, shift_amount);
+            }
+        } else {
+            Value *flipped_wide = builder->CreateIntCast(flipped, wider, true);
+            Value *mult_wide = builder->CreateIntCast(mult, wider, false);
+            Value *wide_val = builder->CreateMul(flipped_wide, mult_wide);
+            // Do the shift (add 8 or 16 or 32 to narrow back down)
+            Constant *shift_amount = ConstantInt::get(wider, (shift + op->type.bits));
+            val = builder->CreateLShr(wide_val, shift_amount);
+            val = builder->CreateIntCast(val, narrower, true);
+        }
+        
+        // Maybe flip the bits again
+        value = builder->CreateXor(val, sign);
+    
+    } else if (op->type.is_uint() && 
+               op->type.bits == 16 && 
+               const_divisor > 1 && const_divisor < 256) {
+
+        int64_t method, multiplier, shift;
+        if (op->type.bits == 32) {
+            method     = IntegerDivision::table_u32[const_divisor-2][0];
+            multiplier = IntegerDivision::table_u32[const_divisor-2][1];
+            shift      = IntegerDivision::table_u32[const_divisor-2][2];
+        } else if (op->type.bits == 16) {        
+            method     = IntegerDivision::table_u16[const_divisor-2][0];
+            multiplier = IntegerDivision::table_u16[const_divisor-2][1];
+            shift      = IntegerDivision::table_u16[const_divisor-2][2];
+        } else {
+            method     = IntegerDivision::table_u8[const_divisor-2][0];
+            multiplier = IntegerDivision::table_u8[const_divisor-2][1];
+            shift      = IntegerDivision::table_u8[const_divisor-2][2];
+        }
+
+        Value *num = codegen(op->a);
+
+        // Widen, multiply, narrow
+        llvm::Type *narrower = llvm_type_of(op->type);
+        llvm::Type *wider = llvm_type_of(UInt(op->type.bits*2, op->type.width));
+
+        Value *mult = ConstantInt::get (narrower, multiplier);
+        Value *val = num;
+
+        if (op->type == UInt(16, 8)) {
+            val = call_intrin(narrower, "sse2.pmulhu.w", vec(val, mult));
+            if (shift && method != 2) {
+                Constant *shift_amount = ConstantInt::get(narrower, shift);
+                val = builder->CreateLShr(val, shift_amount);
+            }
+        } else {
+            
+            // Widen
+            mult = builder->CreateIntCast(mult, wider, false);
+            val = builder->CreateIntCast(val, wider, false);
+
+            // Multiply
+            val = builder->CreateMul(val, mult);
+
+            // Keep high half
+            int shift_bits = op->type.bits;
+            // For methods 0 and 1, we can do the final shift here too
+            if (method != 2) {
+                shift_bits += shift;
+            }
+            Constant *shift_amount = ConstantInt::get(wider, shift_bits);
+            val = builder->CreateLShr(val, shift_amount);
+            val = builder->CreateIntCast(val, narrower, false);
+        }
+
+        // Average with original numerator. Can't use sse rounding ops
+        // because they round up.
+        if (method == 2) {
+            // num > val, so the following works without widening:
+            // val += (num - val)/2
+            Value *diff = builder->CreateSub(num, val);
+            diff = builder->CreateLShr(diff, ConstantInt::get(diff->getType(), 1));
+            val = builder->CreateAdd(val, diff);
+        
+            // Do the final shift
+            if (shift) {
+                val = builder->CreateLShr(val, ConstantInt::get(narrower, shift));
             }
         }
 
-        // Do the shift
-        Value *sh = codegen(cast(op->type, shift));
-        value = builder->CreateLShr(mult, sh);
+        value = val;
 
     } else {    
         CodeGen::visit(op);

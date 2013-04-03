@@ -21,6 +21,10 @@ bool EXPORT is_const(Expr e);
  * Cast, or Broadcast of the same. */
 bool EXPORT is_const(Expr e, int v);
 
+/** Is the expression a constant integer power of two. Also returns
+ * log base two of the expression if it is. */
+bool EXPORT is_const_power_of_two(Expr e, int *bits);
+
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */
 bool EXPORT is_positive_const(Expr e);
