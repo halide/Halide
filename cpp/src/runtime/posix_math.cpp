@@ -77,7 +77,7 @@ INLINE int8_t abs_i8(int8_t a) {return a >= 0 ? a : -a;}
 INLINE int16_t abs_i16(int16_t a) {return a >= 0 ? a : -a;}
 INLINE int32_t abs_i32(int32_t a) {return a >= 0 ? a : -a;}
 INLINE int64_t abs_i64(int64_t a) {return a >= 0 ? a : -a;}
-INLINE float abs_f32(float a) {return a >= 0 ? a : -a;}
-INLINE double abs_f64(double a) {return a >= 0 ? a : -a;}
+INLINE float abs_f32(float a) {return fabsf(a);}
+INLINE double abs_f64(double a) {return fabs(a);}
 
 }

@@ -20,7 +20,9 @@ bool is_simple_const(Expr e) {
 
 // Is a constant representable as a certain type
 int do_indirect_int_cast(Type t, int x) {
-    if (t == Int(8)) {
+    if (t == UInt(1)) {
+        return x ? 1 : 0;
+    } else if (t == Int(8)) {
         return (int8_t)x;
     } else if (t == UInt(8)) {
         return (uint8_t)x;
@@ -32,6 +34,8 @@ int do_indirect_int_cast(Type t, int x) {
         return (uint32_t)x;
     } else if (t.is_int()) {
         return x;
+    } else if (t.is_uint()) {
+        return x < 0 ? x + (1L << t.bits) : x;
     } else if (t == Float(32)) {
         return (int)((float)x);
     } else if (t == Float(64)) {
@@ -92,6 +96,11 @@ class Simplify : public IRMutator {
         } else if (op->type == Int(32) && cast && const_int(cast->value, &i)) {
             // Cast to something then back to int
             expr = do_indirect_int_cast(cast->type, i);
+        } else if (!op->type.is_float() && 
+                   op->type.bits <= 32 && 
+                   const_int(value, &i) && 
+                   do_indirect_int_cast(op->type, i) != i) {
+            expr = new Cast(op->type, do_indirect_int_cast(op->type, i));
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
