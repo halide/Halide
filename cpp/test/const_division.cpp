@@ -2,6 +2,25 @@
 #include <stdio.h>
 #include <stdint.h>
 
+
+#ifdef _WIN32
+extern "C" bool QueryPerformanceCounter(uint64_t *);
+extern "C" bool QueryPerformanceFrequency(uint64_t *);
+double currentTime() {
+    uint64_t t, freq;
+    QueryPerformanceCounter(&t);
+    QueryPerformanceFrequency(&freq);
+    return (t * 1000.0) / freq;
+}
+#else
+#include <sys/time.h>
+double currentTime() {
+    timeval t;
+    gettimeofday(&t, NULL);
+    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
+}
+#endif
+
 using namespace Halide;
 
 template<typename T>
@@ -48,8 +67,14 @@ bool test(int w) {
     f.compile_jit();
     g.compile_jit();
 
+    double t1 = currentTime();
     Image<T> correct = g.realize(input.width(), num_vals);
+    for (int i = 0; i < 10; i++) g.realize(correct);
+    double t2 = currentTime();
     Image<T> fast = f.realize(input.width(), num_vals);
+    for (int i = 0; i < 10; i++) f.realize(correct);
+    double t3 = currentTime();
+    printf("Fast division path is %1.3f x faster \n", (t2-t1)/(t3-t2));
 
     for (int y = 0; y < num_vals; y++) {
         for (int x = 0; x < input.width(); x++) {
