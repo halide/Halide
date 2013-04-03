@@ -99,7 +99,11 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
 
     // Fix the target triple. The initial module was probably compiled for x86
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-    module->setTargetTriple("arm-linux-eabi");
+    if (use_android) {
+        module->setTargetTriple("arm-linux-eabi");
+    } else {
+        module->setTargetTriple("arm-linux-gnueabihf");
+    }
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";        
 
     // Pass to the generic codegen
@@ -978,6 +982,10 @@ string CodeGen_ARM::mcpu() const {
 
 string CodeGen_ARM::mattrs() const {
     return "+neon";
+}
+
+bool CodeGen_ARM::use_soft_float_abi() const {
+    return use_android;
 }
 
 }}
