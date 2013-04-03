@@ -296,7 +296,7 @@ void CodeGen_X86::visit(const Div *op) {
         Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
         value = builder->CreateLShr(numerator, shift);
     } else if (op->type.is_int() && 
-               op->type.bits == 16 && 
+               (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) && 
                const_divisor > 1 && 
                ((op->type.bits > 8 && const_divisor < 256) || const_divisor < 128)) {
 
@@ -334,7 +334,8 @@ void CodeGen_X86::visit(const Div *op) {
                 val = builder->CreateLShr(val, shift_amount);
             }
         } else {
-            Value *flipped_wide = builder->CreateIntCast(flipped, wider, true);
+            // flipped's high bit is zero, so it's ok to zero-extend it
+            Value *flipped_wide = builder->CreateIntCast(flipped, wider, false);
             Value *mult_wide = builder->CreateIntCast(mult, wider, false);
             Value *wide_val = builder->CreateMul(flipped_wide, mult_wide);
             // Do the shift (add 8 or 16 or 32 to narrow back down)
@@ -347,7 +348,7 @@ void CodeGen_X86::visit(const Div *op) {
         value = builder->CreateXor(val, sign);
     
     } else if (op->type.is_uint() && 
-               op->type.bits == 16 && 
+               (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) && 
                const_divisor > 1 && const_divisor < 256) {
 
         int64_t method, multiplier, shift;
