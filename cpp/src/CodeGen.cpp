@@ -786,16 +786,15 @@ void CodeGen::visit(const Div *op) {
             }
         }
 
-        // Otherwise, we have to codegen a monster expression to do it right
         Value *num = codegen(op->a), *den = codegen(op->b);
-        // First we compute the remainder
-        value = builder->CreateSRem(num, den);
-        value = builder->CreateAdd(value, den);
-        value = builder->CreateSRem(value, den);
-        // Subtract from the numerator
-        value = builder->CreateSub(num, value);
-        // Then do the divide
-        value = builder->CreateSDiv(value, den);
+        Value *ratio = builder->CreateSDiv(num, den);
+        // Make sure we didn't round up
+        // if (ratio*den > num) ratio--;
+        Value *mul = builder->CreateMul(ratio, den);
+        Value *cmp = builder->CreateICmpSGT(mul, num);
+        Value *one = ConstantInt::get(ratio->getType(), 1);
+        Value *ratio_less_one = builder->CreateSub(ratio, one);
+        value = builder->CreateSelect(cmp, ratio_less_one, ratio);
     }
 }
 

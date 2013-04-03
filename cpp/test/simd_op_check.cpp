@@ -1004,22 +1004,28 @@ void check_neon_all() {
     check_neon("vmul.f32", 2, f32_2*f32_1);
 
     // VMULL	I, F, P	-	Multiply Long
-    check_neon("vmull.s8",  8, i16(i8_1)*i16(i8_2));
-    check_neon("vmull.u8",  8, u16(u8_1)*u16(u8_2));
-    check_neon("vmull.s16", 4, i32(i16_1)*i32(i16_2));
-    check_neon("vmull.u16", 4, u32(u16_1)*u32(u16_2));
-    check_neon("vmull.s32", 2, i64(i32_1)*i64(i32_2));
-    check_neon("vmull.u32", 2, u64(u32_1)*u64(u32_2));
+    check_neon("vmull.s8",  8, i16(i8_1)*i8_2);
+    check_neon("vmull.u8",  8, u16(u8_1)*u8_2);
+    check_neon("vmull.s16", 4, i32(i16_1)*i16_2);
+    check_neon("vmull.u16", 4, u32(u16_1)*u16_2);
+    check_neon("vmull.s32", 2, i64(i32_1)*i32_2);
+    check_neon("vmull.u32", 2, u64(u32_1)*u32_2);
 
     // integer division by a constant should use fixed point
     // multiplication, which is done by using a widening multiply
     // followed by a narrowing
     check_neon("vmull.s8",  8, i8_1/37);
-    check_neon("vmull.u8",  8, u8_1/201);
-    check_neon("vmull.s16", 4, i16_1/84);
-    check_neon("vmull.u16", 4, u16_1/723);
-    check_neon("vmull.s32", 2, i32_1/3214);
-    check_neon("vmull.u32", 2, u32_1/45623);
+    check_neon("vmull.u8",  8, u8_1/37);
+    check_neon("vmull.s8",  16, i8_1/37);
+    check_neon("vmull.u8",  16, u8_1/37);
+    check_neon("vmull.s16", 4, i16_1/37);
+    check_neon("vmull.s16", 8, i16_1/37);
+    check_neon("vmull.u16", 4, u16_1/37);
+    check_neon("vmull.u16", 8, u16_1/37);
+    check_neon("vmull.s32", 2, i32_1/37);
+    check_neon("vmull.u32", 2, u32_1/37);
+    check_neon("vmull.s32", 4, i32_1/37);
+    check_neon("vmull.u32", 4, u32_1/37);
 
     // VMVN	X	-	Bitwise NOT
     // check_neon("vmvn", ~bool1);
