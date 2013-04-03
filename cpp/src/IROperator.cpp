@@ -86,7 +86,7 @@ bool is_negative_const(Expr e) {
 
 bool is_zero(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 0;
-    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 0;
+    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 0.0f;
     if (const Cast *c = e.as<Cast>()) return is_zero(c->value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_zero(b->value);
     return false;
