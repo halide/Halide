@@ -558,7 +558,8 @@ void CodeGen_ARM::visit(const Div *op) {
         // Widening multiply 
         llvm::Type *narrower = llvm_type_of(op->type);
         llvm::Type *wider = llvm_type_of(Int(op->type.bits*2, op->type.width));
-        Value *flipped_wide = builder->CreateIntCast(flipped, wider, true);
+        // flipped's high bit is zero, so it's ok to zero-extend it
+        Value *flipped_wide = builder->CreateIntCast(flipped, wider, false);
         Value *mult_wide = builder->CreateIntCast(mult, wider, false);
         Value *wide_val = builder->CreateMul(flipped_wide, mult_wide);
         // Do the shift (add 8 or 16 to narrow back down)
