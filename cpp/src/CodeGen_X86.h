@@ -38,7 +38,7 @@ protected:
     /** Generate a call to an sse or avx intrinsic */
     // @{
     llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);    
-    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<llvm::Value *>);    
+    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);    
     // @}
 
     using CodeGen_Posix::visit;

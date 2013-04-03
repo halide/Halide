@@ -2,37 +2,63 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <assert.h>
+#include <algorithm>
 
-int sdiv(int a, int b) {
+int64_t r(int64_t min, int64_t max) {
+    int64_t n1 = rand();
+    int64_t n2 = rand();
+    int64_t n3 = rand();
+    n1 = n1 ^ (n2 << 16) ^ (n3 << 16);
+    n1 = n1 % (max - min);
+    n1 = n1 + min;
+    return n1;
+}
+
+int64_t sdiv(int64_t a, int64_t b) {
   return (a - ((a % b) + b) % b) / b;
 }
 
 bool u_method_0(int den, int sh_post, int bits) {
-    int max = (1 << bits) - 1;
-    for (int num = 0; num <= max; num++) {	
+    uint64_t max = (1L << bits) - 1;
+    //for (int64_t num = 0; num <= max; num++) {	
+    for (unsigned iter = 0; iter < 100000UL; iter++) {
+        uint64_t num = r(0, max);
+        // Make sure we hit the extremes
+        if (iter == 0) num = 0;
+        if (iter == 1) num = max;
 	uint64_t result = num;
 	result >>= sh_post;
-	if (sdiv(num, den) != result) return false;
+	if (num / den != result) return false;
     }
     return true;
 }
 
-bool u_method_1(int den, int mul, int sh_post, int bits) {
-    int max = (1 << bits) - 1;
-    for (int num = 0; num <= max; num++) {
+bool u_method_1(int den, int64_t mul, int sh_post, int bits) {
+    uint64_t max = (1L << bits) - 1;
+    //for (uint64_t num = 0; num <= max; num++) {
+    for (unsigned iter = 0; iter < 100000UL; iter++) {
+        uint64_t num = r(0, max);
+        // Make sure we hit the extremes
+        if (iter == 0) num = 0;
+        if (iter == 1) num = max;
 	uint64_t result = num;
 	result *= mul;
 	result >>= bits;
 	if (result > max) return false;
-	result >>= sh_post;
-	if (sdiv(num, den) != result) return false;
+	result >>= sh_post;                               
+	if (num / den != result) return false;
     }
     return true;
 }
 
-bool u_method_2(int den, int mul, int sh_post, int bits) {
-    int max = (1 << bits) - 1;
-    for (int num = 0; num <= max; num++) {
+bool u_method_2(int den, int64_t mul, int sh_post, int bits) {
+    uint64_t max = (1UL << bits) - 1;
+    //for (uint64_t num = 0; num <= max; num++) {
+    for (unsigned iter = 0; iter < 100000UL; iter++) {
+        uint64_t num = r(0, max);
+        // Make sure we hit the extremes
+        if (iter == 0) num = 0;
+        if (iter == 1) num = max;
 	uint64_t result = num;
 	result *= mul;
 	result >>= bits;
@@ -40,15 +66,19 @@ bool u_method_2(int den, int mul, int sh_post, int bits) {
 	result += (num - result)>>1;
 	if (result > max) return false;
 	result >>= sh_post;
-	if (sdiv(num, den) != result) return false;
+	if (num / den != result) return false;
     }
     return true;    
 }
 
-//These are not useful when you want signed division to always round to negative infinity 
 bool s_method_0(int den, int sh_post, int bits) {
-    int min = -(1 << (bits-1)), max = (1 << (bits-1))-1;
-    for (int num = min; num <= max; num++) {
+    int64_t min = -(1L << (bits-1)), max = (1L << (bits-1))-1;
+    //for (int64_t num = min; num <= max; num++) {    
+    for (int iter = 0; iter < 100000L; iter++) {
+        int64_t num = r(min, max);
+        // Make sure we hit the extremes
+        if (iter == 0) num = min;
+        if (iter == 1) num = max;
         int64_t result = num;
 	result >>= sh_post;
 	if (sdiv(num, den) != result) return false;
@@ -56,27 +86,15 @@ bool s_method_0(int den, int sh_post, int bits) {
     return true;
 }
 
-/*
-bool s_method_1(int den, int mul, int sh_post, int bits) {
-    int min = -(1 << (bits-1)), max = (1 << (bits-1))-1;
-    for (int num = min; num <= max; num++) {    
-	int64_t result = num;
-        if (num < -1) result++;
-	result *= mul;
-	result >>= bits;
-	if (result > max || result < min) return false;
-        //if (num < 0) result += num;
-	if (result > max || result < min) return false;
-	result >>= sh_post;
-	if (sdiv(num, den) != result) return false;
-    }
-    return true;    
-}
-*/
+bool s_method_1(int den, int64_t mul, int sh_post, int bits) {
+    int64_t min = -(1 << (bits-1)), max = (1 << (bits-1))-1;
 
-bool s_method_1(int den, int mul, int sh_post, int bits) {
-    int min = -(1 << (bits-1)), max = (1 << (bits-1))-1;
-    for (int num = min; num <= max; num++) {    
+    //for (int64_t num = min; num <= max; num++) {    
+    for (int iter = 0; iter < 100000L; iter++) {
+        int64_t num = r(min, max);
+        // Make sure we hit the extremes
+        if (iter == 0) num = min;
+        if (iter == 1) num = max;
 	int64_t result = num;
         uint64_t xsign = result >> (bits-1);
         uint64_t q0 = (mul * (xsign ^ result)) >> bits;
@@ -85,23 +103,6 @@ bool s_method_1(int den, int mul, int sh_post, int bits) {
     }
     return true;    
 }
-
-bool s_method_2(int den, int mul, int sh_post, int bits) {
-    int min = -(1 << (bits-1)), max = (1 << (bits-1))-1;
-    for (int num = min; num <= max; num++) {
-	int64_t result = num;
-	result *= mul;
-	result >>= bits;
-	if (result > max || result < min) return false;
-	result += (num - result+1)>>1;
-	if (result > max || result < min) return false;
-	result >>= sh_post;
-        int64_t correct = sdiv(num, den);
-	if (correct != result) return false;
-    }
-    return true;
-}
-
 
 int main(int argc, char **argv) {
     /* This program computes a table to help us do cheap integer
@@ -116,18 +117,15 @@ int main(int argc, char **argv) {
            " * constants. This file is automatically generated\n"
            " * by find_inverse.c\n"
            " */\n"
+           "#include <stdint.h>\n"
            "namespace Halide {\n"
            "namespace Internal {\n"
            "namespace IntegerDivision {\n\n");
     
-    for (int bits = 8; bits <= 16; bits += 8) {
-	int s_min = -(1 << (bits-1));
-	int s_max = (1 << (bits-1))-1;
-	int u_max = (1 << bits)-1;
-   	
-	printf("int table_u%d[][3] = {\n", bits);
-	for (int den = 2; den <= 64; den++) {
-	    for (int shift = 0; shift < 8; shift++) {
+    for (int bits = 8; bits <= 32; bits *= 2) {
+	printf("int64_t table_u%d[][3] = {\n", bits);
+	for (int den = 2; den <= 256; den++) {
+	    for (int shift = 0; shift < 16; shift++) {
 		if (u_method_0(den, shift, bits)) {
 		    printf("    {0, 0, %d},\n", shift);
 		    goto next_unsigned;
@@ -135,28 +133,26 @@ int main(int argc, char **argv) {
 	    }
 	    
 	    for (int shift = 0; shift < 8; shift++) {
-		for (int mul = 0; mul <= u_max; mul++) {
-		    if (u_method_1(den, mul, shift, bits)) {
-			printf("    {1, %d, %d},\n", mul, shift);
-			goto next_unsigned;
-		    }
+                int64_t mul = (1L << (bits+shift)) / den + 1;
+                if (u_method_1(den, mul, shift, bits)) {
+                    printf("    {1, %ldL, %d},\n", mul, shift);
+                    goto next_unsigned;
 		}
 	    }
 	    
 	    for (int shift = 0; shift < 8; shift++) {
-		for (int mul = 0; mul <= u_max; mul++) {
-		    if (u_method_2(den, mul, shift, bits)) {
-			printf("    {2, %d, %d},\n", mul, shift);
-			goto next_unsigned;
-		    }
+                int64_t mul = (1L << (bits+shift+1)) / den - (1L << bits) + 1;
+                if (u_method_2(den, mul, shift, bits)) {
+                    printf("    {2, %ldL, %d},\n", mul, shift);
+                    goto next_unsigned;
 		}
 	    }
 	    printf("ERROR! No solution found for unsigned %d\n", den);
 	  next_unsigned:;
 	}
 	printf("};\n");
-	printf("int table_s%d[][3] = {\n", bits);
-	for (int den = 2; den <= 64; den++) {
+	printf("int64_t table_s%d[][3] = {\n", bits);
+	for (int den = 2; den <= 256; den++) {
 
 	    for (int shift = 0; shift < 8; shift++) {
 		if (s_method_0(den, shift, bits)) {
@@ -165,43 +161,13 @@ int main(int argc, char **argv) {
 		}
 	    }
 	    
-	    for (int shift = 0; shift < 8; shift++) {
-		for (int mul = 0; mul <= u_max; mul++) {
-		    if (s_method_1(den, mul, shift, bits)) {
-			printf("    {1, %d, %d},\n", mul, shift);
-			goto next_signed;
-		    }
+	    for (int shift = 0; shift < 8; shift++) {                
+                int64_t mul = (1L << (shift + bits)) / den + 1;
+                if (s_method_1(den, mul, shift, bits)) {
+                    printf("    {1, %ldL, %d},\n", mul, shift);
+                    goto next_signed;
 		}
 	    }
-	    
-	    for (int shift = 0; shift < 8; shift++) {
-		for (int mul = s_min; mul <= s_max; mul++) {
-		    if (s_method_2(den, mul, shift, bits)) {
-			printf("    {2, %d, %d},\n", mul, shift);
-			goto next_signed;
-		    }
-		}
-	    }
-
-          /*
-	    for (int shift = 0; shift < 8; shift++) {
-		for (int mul = s_min; mul <= s_max; mul++) {
-		    if (s_method_0(den, mul, shift, bits)) {
-			printf("    {0, %d, %d},\n", mul, shift);
-			goto next_signed;
-		    }
-		}
-	    }
-	    
-	    for (int shift = 0; shift < 8; shift++) {
-		for (int mul = s_min; mul <= s_max; mul++) {
-		    if (s_method_1(den, mul, shift, bits)) {
-			printf("    {1, %d, %d},\n", mul, shift);
-			goto next_signed;
-		    }
-		}
-	    }
-          */
 	    printf("ERROR! No solution found for signed %d\n", den);
 	  next_signed:;
 	}
