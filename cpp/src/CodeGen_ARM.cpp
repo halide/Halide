@@ -562,7 +562,8 @@ void CodeGen_ARM::visit(const Div *op) {
         // Widening multiply 
         llvm::Type *narrower = llvm_type_of(op->type);
         llvm::Type *wider = llvm_type_of(Int(op->type.bits*2, op->type.width));
-        Value *flipped_wide = builder->CreateIntCast(flipped, wider, true);
+        // flipped's high bit is zero, so it's ok to zero-extend it
+        Value *flipped_wide = builder->CreateIntCast(flipped, wider, false);
         Value *mult_wide = builder->CreateIntCast(mult, wider, false);
         Value *wide_val = builder->CreateMul(flipped_wide, mult_wide);
         // Do the shift (add 8 or 16 to narrow back down)
@@ -670,6 +671,47 @@ void CodeGen_ARM::visit(const Add *op) {
 }
 
 void CodeGen_ARM::visit(const Sub *op) {
+    // Saturating negate
+    struct Pattern {
+        string op;
+        Expr pattern;
+    };
+    Pattern patterns[] = {
+        {"vqneg.v8i8", -max(wild_i8x8, -127)},
+        {"vqneg.v16i8", -max(wild_i8x16, -127)},
+        {"vqneg.v4i16", -max(wild_i16x4, -32767)},
+        {"vqneg.v8i16", -max(wild_i16x8, -32767)},
+        {"vqneg.v2i32", -max(wild_i32x4, -(0x7fffffff))},
+        {"vqneg.v4i32", -max(wild_i32x8, -(0x7fffffff))}        
+    };
+
+    vector<Expr> matches;
+    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+        if (expr_match(patterns[i].pattern, op, matches)) {
+            value = call_intrin(matches[0].type(), patterns[i].op, matches);
+            return;
+        }
+    }
+
+    // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
+    if (op->type.is_float() && is_zero(op->a)) {
+        Constant *a;
+        if (op->type.bits == 32) {
+            a = ConstantFP::getNegativeZero(f32);
+        } else if (op->type.bits == 64) {
+            a = ConstantFP::getNegativeZero(f64);
+        } else {
+            assert(false && "Unknown bit width for floating point type");
+        }
+
+        Value *b = codegen(op->b);
+
+        if (op->type.width > 1) {
+            a = ConstantVector::getSplat(op->type.width, a);
+        }
+        value = builder->CreateFSub(a, b);
+        return;
+    }
 
     CodeGen::visit(op);
 }
@@ -1036,7 +1078,7 @@ void CodeGen_ARM::visit(const Load *op) {
 }
 
 string CodeGen_ARM::mcpu() const {
-    return "cortex-a8";
+    return "cortex-a9";
 }
 
 string CodeGen_ARM::mattrs() const {
