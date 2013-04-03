@@ -1033,7 +1033,7 @@ void CodeGen_ARM::visit(const Load *op) {
 }
 
 string CodeGen_ARM::mcpu() const {
-    return "cortex-a8";
+    return "cortex-a9";
 }
 
 string CodeGen_ARM::mattrs() const {
