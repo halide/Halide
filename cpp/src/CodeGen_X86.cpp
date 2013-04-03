@@ -334,7 +334,8 @@ void CodeGen_X86::visit(const Div *op) {
                 val = builder->CreateLShr(val, shift_amount);
             }
         } else {
-            Value *flipped_wide = builder->CreateIntCast(flipped, wider, true);
+            // flipped's high bit is zero, so it's ok to zero-extend it
+            Value *flipped_wide = builder->CreateIntCast(flipped, wider, false);
             Value *mult_wide = builder->CreateIntCast(mult, wider, false);
             Value *wide_val = builder->CreateMul(flipped_wide, mult_wide);
             // Do the shift (add 8 or 16 or 32 to narrow back down)
