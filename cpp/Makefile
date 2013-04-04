@@ -97,10 +97,10 @@ bin/test_internal: test/internal.cpp bin/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -Lbin -lHalide -lpthread -ldl -o $@	
 
 bin/test_%: test/%.cpp bin/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) -g $<  -Iinclude -Lbin -lHalide -lpthread -ldl -o $@	
+	$(CXX) $(TEST_CXX_FLAGS) -O3 $<  -Iinclude -Lbin -lHalide -lpthread -ldl -o $@	
 
 bin/error_%: test/error/%.cpp bin/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) -g $<  -Iinclude -Lbin -lHalide -lpthread -ldl -o $@	
+	$(CXX) $(TEST_CXX_FLAGS) -O3 $<  -Iinclude -Lbin -lHalide -lpthread -ldl -o $@	
 
 test_%: bin/test_%
 	@-mkdir -p tmp
