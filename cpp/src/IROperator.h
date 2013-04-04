@@ -53,7 +53,7 @@ bool EXPORT is_two(Expr e);
  * For example, int_cast_constant(UInt(16), -1) returns 65535
  * int_cast_constant(Int(8), 128) returns -128
  */
-int int_cast_constant(Type t, int val);
+int EXPORT int_cast_constant(Type t, int val);
 
 /** Construct a const of the given type */
 Expr EXPORT make_const(Type t, int val);
