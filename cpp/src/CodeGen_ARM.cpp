@@ -697,6 +697,7 @@ void CodeGen_ARM::visit(const Sub *op) {
         } else if (op->type.bits == 64) {
             a = ConstantFP::getNegativeZero(f64);
         } else {
+            a = NULL;
             assert(false && "Unknown bit width for floating point type");
         }
 
