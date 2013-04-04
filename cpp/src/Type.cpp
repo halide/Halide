@@ -1,11 +1,14 @@
 #include "IR.h"
 #include "Util.h"
+#include <sstream>
 
 /** \file
  * Utilities on halide types
  */
 
 namespace Halide {
+
+using std::ostringstream;
 
 /** Return an integer which is the maximum value of this type. */
 int Type::imax() const {
@@ -34,11 +37,18 @@ int Type::imax() const {
 Halide::Expr Type::max() const {
     if (is_int() && bits == 32) {
         return imax(); // No explicit cast of i32.
-    }
-    else if (is_int() || is_uint()) {
+    } else if ((is_int() || is_uint()) && bits <= 32) {
         return new Internal::Cast(*this, imax());
+    } else {
+        // Use a run-time call to a math intrinsic (see posix_math.cpp)
+        ostringstream ss;
+        ss << "maxval_";
+        if (is_int()) ss << "s";
+        else if (is_uint()) ss << "u";
+        else ss << "f";
+        ss << bits;
+        return new Internal::Call(*this, ss.str(), std::vector<Expr>());
     }
-    return Expr(); // Unknown maximum for floating types
 }
 
 /** Return an integer which is the minimum value of this type */
@@ -53,6 +63,7 @@ int Type::imin() const {
             return 0;
         }
     } else {
+        // Use a run-time call to a math intrinsic
         assert(0 && "min of Type: Not available for floating point types");
         return 0;
     }        
@@ -62,11 +73,19 @@ int Type::imin() const {
 Expr Type::min() const {
     if (is_int() && bits == 32) {
         return imin(); // No explicit cast of i32.
-    }
-    else if (is_int() || is_uint()) {
+    } else if ((is_int() || is_uint()) && bits <= 32) {
         return new Internal::Cast(*this, imin());
+    } else {
+        // Use a run-time call to a math intrinsic (see posix_math.cpp)
+        ostringstream ss;
+        ss << "minval_";
+        if (is_int()) ss << "s";
+        else if (is_uint()) ss << "u";
+        else ss << "f";
+        ss << bits;
+        return new Internal::Call(*this, ss.str(), std::vector<Expr>());
     }
-    return Expr(); // Unknown minimum for floating types
+
 }
 
 }
