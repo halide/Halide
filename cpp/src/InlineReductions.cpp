@@ -62,34 +62,30 @@ private:
 
 Expr sum(Expr e) {
     Internal::FindFreeVars v(e);
-    Func f("sum" + Internal::unique_name('_'));
+    Func f("sum");
     f(v.free_vars) += e;
     return f(v.free_vars);
 }
 
 Expr product(Expr e) {
     Internal::FindFreeVars v(e);
-    Func f("product" + Internal::unique_name('_'));
+    Func f("product");
     f(v.free_vars) *= e;
     return f(v.free_vars);
 }
 
 Expr maximum(Expr e) {
     Internal::FindFreeVars v(e);
-    Func f("maximum" + Internal::unique_name('_'));
-    ostringstream ss;
-    ss << "minval_" << e.type();
-    f(v.free_vars) = new Internal::Call(e.type(), ss.str(), vector<Expr>());
+    Func f("maximum");
+    f(v.free_vars) = e.type().min();
     f(v.free_vars) = max(f(v.free_vars), e);
     return f(v.free_vars);
 }
 
 Expr minimum(Expr e) {
     Internal::FindFreeVars v(e);
-    Func f("minimum" + Internal::unique_name('_'));
-    ostringstream ss;
-    ss << "maxval_" << e.type();
-    f(v.free_vars) = new Internal::Call(e.type(), ss.str(), vector<Expr>());
+    Func f("minimum");
+    f(v.free_vars) = e.type().max();
     f(v.free_vars) = min(f(v.free_vars), e);
     return f(v.free_vars);
 }

@@ -17,6 +17,9 @@ using namespace Halide;
 #define WIDTH 2048
 #define HEIGHT 2048
 #define SALTRATE 50
+// Portion of the test data to use for testing the simplifier
+# define SWIDTH 32
+# define SHEIGHT 2048
 
 // Generate poor quality pseudo random numbers.
 // For reproducibility, the array indices are used as the seed for each
@@ -171,7 +174,7 @@ Image<T> init(Type t, int unique, int width, int height) {
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
                 uv = ubits(unique,i,j);
-                v = ((double) uv) / ((double) (max));
+                v = (((double) uv) / ((double) (max))) * 2.0 - 1.0;
                 // Salting with extreme values
                 vsalt = (int64_t) (ubits(unique|0x100,i,j));
                 if (vsalt % SALTRATE == 0) {
@@ -264,7 +267,7 @@ BIG halide_mod(BIG a, BIG b) {
         return a % b;
     }
     if (t.is_float()) {
-        return (fmod((double) a, (double) b));
+        return ((double)a - double(b)*floor(double(a)/double(b)));
     }
     BIG rem = (a % b + b) % b; // Halide definition of remainder
     return rem;
@@ -281,7 +284,7 @@ T new_mod(T a, T b) {
         return a % b;
     }
     if (t.is_float()) {
-        return (fmod((double) a, (double) b));
+        return ((double)a - double(b)*floor(double(a)/double(b)));
     }
     T rem = a % b;
     // Correction.  Ensures that remainder has the same sign as b.
@@ -359,6 +362,23 @@ bool division() {
         }
     }
     
+    // Explicit checks of the simplifier
+    ecount = 0;
+    for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {
+        for (j = 0; j < std::min(SHEIGHT,HEIGHT); j++) {
+            T arg_a = a(i,j);
+            T arg_b = b(i,j);
+            T v = halide_div<T,BIG>(arg_a, arg_b);
+            Expr in_e = cast<T>((int) arg_a) / cast<T>((int) arg_b);
+            Expr e = simplify(in_e);
+            Expr eout = cast<T>((int) v);
+            if (! Internal::equal(e, eout) && (ecount++) < 10) {
+                std::cout << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
+                success = false;
+            }
+        }
+    }
+    
     /* Test alternative C implementation to match Halide definition. */
     ecount = 0;
     for (i = 0; i < WIDTH; i++) {
@@ -375,7 +395,7 @@ bool division() {
 }
 
 // mod tests mod operations.
-// BIG should be uint64_t, int64_t or double as appropriate.
+// BIG should be uint64_t or int64_t as appropriate.
 // T should be a type known to Halide.
 template<typename T,typename BIG,int bits>
 bool mod() {
@@ -422,6 +442,23 @@ bool mod() {
         }
     }
     
+    // Explicit checks of the simplifier
+    ecount = 0;
+    for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {
+        for (j = 0; j < std::min(SHEIGHT,HEIGHT); j++) {
+            T arg_a = a(i,j);
+            T arg_b = b(i,j);
+            T v = halide_mod<T,BIG>(arg_a, arg_b);
+            Expr in_e = cast<T>((int) arg_a) % cast<T>((int) arg_b);
+            Expr e = simplify(in_e);
+            Expr eout = cast<T>((int) v);
+            if (! Internal::equal(e, eout) && (ecount++) < 10) {
+                std::cout << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
+                success = false;
+            }
+        }
+    }
+    
     /* Test alternative C implementation to match Halide definition. */
     ecount = 0;
     for (i = 0; i < WIDTH; i++) {
@@ -437,9 +474,69 @@ bool mod() {
     return success;
 }
 
+// f_mod tests floating mod operations.
+// BIG should be double.
+// T should be a type known to Halide.
+template<typename T,typename BIG,int bits>
+bool f_mod() {
+    int i, j;
+    Type t = type_of<T>();
+    BIG minval = 0.0;
+    BIG maxval = 1.0;
+    bool success = true;
+    
+    std::cout << "Test mod of " << t << '\n';
+    t.bits = bits; // Override the bits
+    
+    // The parameter bits can be used to control the maximum data value.
+    Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
+    Image<T> b = init<T,BIG,bits>(t, 2, WIDTH, HEIGHT);
+    Image<T> out(WIDTH,HEIGHT);
+    
+    // Filter the input values for the operation to be tested.
+    // Cannot divide by zero, so remove zeroes from b.
+    for (i = 0; i < WIDTH; i++) {
+        for (j = 0; j < HEIGHT; j++) {
+            if (b(i,j) == 0.0) {
+                b(i,j) = 1.0; // Replace zero with one.
+            }
+        }
+    }
+    
+    // Compute modulus result and check it.
+    Func f;
+    f = a % b;  // Using Halide mod operation.
+    f.realize(out);
+    
+    // Explicit checks of the simplifier for consistency with runtime computation
+    int ecount = 0;
+    for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {
+        for (j = 0; j < std::min(SHEIGHT,HEIGHT); j++) {
+            T arg_a = a(i,j);
+            T arg_b = b(i,j);
+            T v = out(i,j);
+            Expr in_e = cast<T>((float) arg_a) % cast<T>((float) arg_b);
+            Expr e = simplify(in_e);
+            Expr eout = cast<T>((float) v);
+            if (! Internal::equal(e, eout) && (ecount++) < 10) {
+                Expr diff = simplify(e - eout);
+                Expr smalldiff = simplify(diff < (float) (0.000001) && diff > (float) (-0.000001));
+                if (! Internal::is_one(smalldiff)) {
+                    std::cout << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
+                    std::cout << "          difference=" << diff << "\n";
+                    success = false;
+                }
+            }
+        }
+    }
+
+    return success;
+}
+
 
 int main(int argc, char **argv) {
     bool success = true;
+    success &= f_mod<float,double,32>();
     success &= division<uint8_t,uint64_t,8>();
     success &= mod<uint8_t,uint64_t,8>();
     success &= division<uint16_t,uint64_t,16>();

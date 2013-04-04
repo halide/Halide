@@ -96,12 +96,31 @@ CodeGen_Posix::CodeGen_Posix() : CodeGen() {
 
     wild_u64x2 = new Variable(UInt(64, 2), "*");
     wild_i64x2 = new Variable(Int(64, 2), "*");
+    wild_u64x4 = new Variable(UInt(64, 4), "*");
+    wild_i64x4 = new Variable(Int(64, 4), "*");
 
     wild_f32x2 = new Variable(Float(32, 2), "*");
     wild_f32x4 = new Variable(Float(32, 4), "*");
     wild_f32x8 = new Variable(Float(32, 8), "*");
     wild_f64x2 = new Variable(Float(64, 2), "*");
     wild_f64x4 = new Variable(Float(64, 4), "*");
+
+    max_i8 = Int(8).max();
+    min_i8 = Int(8).min();
+    max_i16 = Int(16).max();
+    min_i16 = Int(16).min();
+    max_i32 = Int(32).max();
+    min_i32 = Int(32).min();
+    max_i64 = Int(64).max();
+    min_i64 = Int(64).min();
+    max_u8 = UInt(8).max();
+    max_u16 = UInt(16).max();
+    max_u32 = UInt(32).max();
+    max_u64 = UInt(64).max();
+    max_f32 = Float(32).max();
+    min_f32 = Float(32).min();
+    max_f64 = Float(64).max();
+    min_f64 = Float(64).min();
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
