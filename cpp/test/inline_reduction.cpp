@@ -47,10 +47,19 @@ int main(int argc, char **argv) {
     local_product(x, y) = product(input_val);
     local_max(x, y) = maximum(input_val);
     local_min(x, y) = minimum(input_val);
+
+    // Try a separable form of minimum too, so we test two reductions
+    // in one pipeline
+    Func min_x, min_y;
+    RDom kx(-1, 3), ky(-1, 3);
+    min_x(x, y) = minimum(input(x+kx, y));
+    min_y(x, y) = minimum(min_x(x, y+ky));
+
     
     Image<float> prod_im = local_product.realize(10, 10);
     Image<float> max_im = local_max.realize(10, 10);
     Image<float> min_im = local_min.realize(10, 10);
+    Image<float> min_im_separable = min_y.realize(10, 10);
 
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
@@ -79,6 +88,12 @@ int main(int argc, char **argv) {
                 return -1;
             }
 
+            delta = correct_min - min_im_separable(x, y);
+            if (delta < -0.001 || delta > 0.001) {
+                printf("min_im(%d, %d) = %f instead of %f\n", x, y, min_im_separable(x, y), correct_min);
+                return -1;
+            }
+
             delta = correct_max - max_im(x, y);
             if (delta < -0.001 || delta > 0.001) {
                 printf("max_im(%d, %d) = %f instead of %f\n", x, y, max_im(x, y), correct_max);
@@ -86,6 +101,7 @@ int main(int argc, char **argv) {
             }
         }
     }
+
 
     printf("Success!\n");
     return 0;
