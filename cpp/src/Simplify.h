@@ -34,15 +34,12 @@ inline T mod_imp(T a, T b) {
 }
 // Special cases for float, double.
 template<> inline float mod_imp<float>(float a, float b) { 
-    float f = a - b * ((int)(a / b));
-    // Consistent with LLVM FRem instruction. The remainder has the
-    // same sign as a.
-    if ((f < 0) ^ (a < 0)) f += b;
+    float f = a - b * (floorf(a / b));
+    // The remainder has the same sign as b.
     return f; 
 }
 template<> inline double mod_imp<double>(double a, double b) {
-    double f = a - b * ((int)(a / b));
-    if ((f < 0) ^ (a < 0)) f += b;
+    double f = a - b * (std::floor(a / b));
     return f; 
 }
 
