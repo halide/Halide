@@ -36,7 +36,7 @@ inline T mod_imp(T a, T b) {
 template<> inline float mod_imp<float>(float a, float b) { 
     float f = a - b * ((int)(a / b));
     // Consistent with LLVM FRem instruction. The remainder has the
-    // same sign as b.
+    // same sign as a.
     if ((f < 0) ^ (a < 0)) f += b;
     return f; 
 }
