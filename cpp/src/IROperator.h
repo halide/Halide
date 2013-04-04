@@ -45,8 +45,28 @@ bool EXPORT is_one(Expr e);
  * to two (in all lanes, if a vector expression) */
 bool EXPORT is_two(Expr e);
 
+/** Given an integer value, cast it into a designated integer type
+ * and return the bits as int. Unsigned types are returned as bits in the int
+ * and should be cast to unsigned int for comparison.
+ * int_cast_constant implements bit manipulations to wrap val into the
+ * value range of the Type t. 
+ * For example, int_cast_constant(UInt(16), -1) returns 65535
+ * int_cast_constant(Int(8), 128) returns -128
+ */
+int int_cast_constant(Type t, int val);
+
 /** Construct a const of the given type */
 Expr EXPORT make_const(Type t, int val);
+
+/** Construct a boolean constant from a C++ boolean value.
+ * May also be a vector if width is given.
+ * It is not possible to coerce a C++ boolean to Expr because
+ * if we provide such a path then char objects can ambiguously
+ * be converted to Halide Expr or to std::string.  The problem
+ * is that C++ does not have a real bool type - it is in fact
+ * close enough to char that C++ does not know how to distinguish them.
+ * make_bool is the explicit coercion. */
+Expr make_bool(bool val, int width = 1);
 
 /** Construct the representation of zero in the given type */
 Expr EXPORT make_zero(Type t);
