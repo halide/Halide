@@ -1289,7 +1289,7 @@ void simplify_test() {
 
     check(Expr(7) % 2, 1);
     check(Expr(7.25f) % 2.0f, 1.25f);
-    check(Expr(-7.25f) % 2.0f, 0.75f);
+    check(Expr(-7.25f) % 2.0f, -1.25f); // For now we'll go with llvm's FRem
     check(Expr(new Broadcast(x, 4)) % Expr(new Broadcast(y, 4)), 
           Expr(new Broadcast(x % y, 4)));
     check((x*8) % 4, 0);
