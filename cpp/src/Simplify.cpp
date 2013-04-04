@@ -1195,15 +1195,15 @@ void simplify_test() {
     check(cast(UInt(16), 65) < cast(UInt(16), 66), const_true());
     // Specific checks for 32 bit unsigned expressions - ensure simplifications are actually unsigned.
     // 4000000000 (4 billion) is less than 2^32 but more than 2^31.  As an int, it is negative.
-    check(cast(UInt(32), (int) 4000000000) + cast(UInt(32), 5), cast(UInt(32), (int) 4000000005));
-    check(cast(UInt(32), (int) 4000000000) - cast(UInt(32), 5), cast(UInt(32), (int) 3999999995));
-    check(cast(UInt(32), (int) 4000000000) / cast(UInt(32), 5), cast(UInt(32), 800000000));
-    check(cast(UInt(32), 800000000) * cast(UInt(32), 5), cast(UInt(32), (int) 4000000000));
-    check(cast(UInt(32), (int) 4000000023) % cast(UInt(32), 100), cast(UInt(32), 23));
-    check(min(cast(UInt(32), (int) 4000000023) , cast(UInt(32), 1000)), cast(UInt(32), (int) 1000));
-    check(max(cast(UInt(32), (int) 4000000023) , cast(UInt(32), 1000)), cast(UInt(32), (int) 4000000023));
-    check(cast(UInt(32), (int) 4000000023) < cast(UInt(32), 1000), const_false());
-    check(cast(UInt(32), (int) 4000000023) == cast(UInt(32), 1000), const_false());
+    check(cast(UInt(32), (int) 4000000000UL) + cast(UInt(32), 5), cast(UInt(32), (int) 4000000005UL));
+    check(cast(UInt(32), (int) 4000000000UL) - cast(UInt(32), 5), cast(UInt(32), (int) 3999999995UL));
+    check(cast(UInt(32), (int) 4000000000UL) / cast(UInt(32), 5), cast(UInt(32), 800000000));
+    check(cast(UInt(32), 800000000) * cast(UInt(32), 5), cast(UInt(32), (int) 4000000000UL));
+    check(cast(UInt(32), (int) 4000000023UL) % cast(UInt(32), 100), cast(UInt(32), 23));
+    check(min(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), cast(UInt(32), (int) 1000));
+    check(max(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), cast(UInt(32), (int) 4000000023UL));
+    check(cast(UInt(32), (int) 4000000023UL) < cast(UInt(32), 1000), const_false());
+    check(cast(UInt(32), (int) 4000000023UL) == cast(UInt(32), 1000), const_false());
     
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));

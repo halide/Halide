@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
 	    for (int shift = 0; shift < 8; shift++) {
                 int64_t mul = (1L << (bits+shift)) / den + 1;
                 if (u_method_1(den, mul, shift, bits)) {
-                    printf("    {1, %ldL, %d},\n", mul, shift);
+                    printf("    {1, %lldLL, %d},\n", mul, shift);
                     goto next_unsigned;
 		}
 	    }

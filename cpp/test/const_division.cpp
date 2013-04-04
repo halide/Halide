@@ -31,9 +31,9 @@ bool test(int w) {
     size_t bits = sizeof(T)*8;
     bool is_signed = (T)(-1) < (T)(0);
 
-    printf("Testing %sint%lu_t x %d\n", 
+    printf("Testing %sint%d_t x %d\n", 
            is_signed ? "" : "u", 
-           bits, w);
+           (int)bits, w);
 
     int min_val = 2, num_vals = 254;    
 
@@ -79,7 +79,7 @@ bool test(int w) {
     for (int y = 0; y < num_vals; y++) {
         for (int x = 0; x < input.width(); x++) {
             if (fast(x, y) != correct(x, y)) {
-                printf("fast(%d, %d) = %ld instead of %ld (%ld/%d)\n", 
+                printf("fast(%d, %d) = %lld instead of %lld (%lld/%d)\n", 
                        x, y,
                        (int64_t)fast(x, y), 
                        (int64_t)correct(x, y), 
