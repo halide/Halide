@@ -22,20 +22,8 @@ bool is_simple_const(Expr e) {
 int do_indirect_int_cast(Type t, int x) {
     if (t == UInt(1)) {
         return x ? 1 : 0;
-    } else if (t == Int(8)) {
-        return (int8_t)x;
-    } else if (t == UInt(8)) {
-        return (uint8_t)x;
-    } else if (t == Int(16)) {
-        return (int16_t)x;
-    } else if (t == UInt(16)) {
-        return (uint16_t)x;
-    } else if (t == UInt(32)) {
-        return (uint32_t)x;
-    } else if (t.is_int()) {
-        return x;
-    } else if (t.is_uint()) {
-        return x < 0 ? x + (1L << t.bits) : x;
+    } else if (t.is_int() || t.is_uint()) {
+        return int_cast_constant(t, x);
     } else if (t == Float(32)) {
         return (int)((float)x);
     } else if (t == Float(64)) {
@@ -45,6 +33,8 @@ int do_indirect_int_cast(Type t, int x) {
         return 0;
     }
 }
+
+// Implementation of Halide div and mod operators
 
 class Simplify : public IRMutator {
 
@@ -82,6 +72,32 @@ class Simplify : public IRMutator {
         }
     }
 
+    /* Recognise an integer or cast integer and fetch its value.
+     * Only matches if the number of bits of the cast integer does not exceed
+     * the number of bits of an int in the compiler, because simplification
+     * uses type int for its calculations. */
+    bool const_castint(Expr e, int *i) {
+        const IntImm *intimm = e.as<IntImm>();
+        const Cast *cast = e.as<Cast>();
+        if (intimm) {
+            *i = intimm->value;
+            return true;
+        } else if (cast && (cast->type.is_int() || cast->type.is_uint()) && 
+                   cast->type.bits <= (int) (sizeof(int) * 8)) {
+            const IntImm *imm = cast->value.as<IntImm>();
+            if (imm) {
+                // When fetching a cast integer, ensure that the return
+                // value is in the correct range (i.e. the canonical value) for the cast type.
+                *i = int_cast_constant(cast->type, imm->value);
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
     void visit(const Cast *op) {
         Expr value = mutate(op->value);        
         const Cast *cast = value.as<Cast>();
@@ -100,6 +116,9 @@ class Simplify : public IRMutator {
                    op->type.bits <= 32 && 
                    const_int(value, &i) && 
                    do_indirect_int_cast(op->type, i) != i) {
+            // Rewrite things like cast(UInt(8), 256) to cast(UInt(8),
+            // 0), so any later peephole matching that ignores casts
+            // doesn't get confused.
             expr = new Cast(op->type, do_indirect_int_cast(op->type, i));
         } else if (value.same_as(op->value)) {
             expr = op;
@@ -191,6 +210,12 @@ class Simplify : public IRMutator {
             expr = a;
         } else if (is_zero(a)) {
             expr = b;
+        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
+            if (op->type.is_uint()) {
+                expr = make_const(op->type, ((unsigned int) ia) + ((unsigned int) ib));
+            } else {
+                expr = make_const(op->type, ia + ib);
+            }
         } else if (ramp_a && ramp_b) {
             // Ramp + Ramp
             expr = mutate(new Ramp(ramp_a->base + ramp_b->base,
@@ -268,6 +293,12 @@ class Simplify : public IRMutator {
             expr = mutate(a + (-ib));
         } else if (const_float(b, &fb)) {
             expr = mutate(a + (-fb));
+        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
+            if (op->type.is_uint()) {
+                expr = make_const(op->type, ((unsigned int) ia) - ((unsigned int) ib));
+            } else {
+                expr = make_const(op->type, ia - ib);
+            }
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
             expr = mutate(new Ramp(ramp_a->base - ramp_b->base,
@@ -336,10 +367,6 @@ class Simplify : public IRMutator {
         const Add *add_a = a.as<Add>();
         const Mul *mul_a = a.as<Mul>();
 
-        // TODO: broadcast * broadcast, ramp * broadcast, broadcast * ramp
-        // (a * const) * const
-        // (a + const) * const
-
         if (is_zero(b)) {
             expr = b;
         } else if (is_one(b)) {
@@ -348,6 +375,12 @@ class Simplify : public IRMutator {
             expr = ia*ib;
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = fa*fb;
+        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
+            if (op->type.is_uint()) {
+                expr = make_const(op->type, ((unsigned int) ia) * ((unsigned int) ib));
+            } else {
+                expr = make_const(op->type, ia * ib);
+            }
         } else if (broadcast_a && broadcast_b) {
             expr = new Broadcast(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->width);
         } else if (ramp_a && broadcast_b) {
@@ -398,9 +431,15 @@ class Simplify : public IRMutator {
         } else if (equal(a, b)) {
             expr = make_one(a.type());
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
-            expr = ia/ib;
+            expr = div_imp(ia,ib);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = fa/fb;
+        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
+            if (op->type.is_uint()) {
+                expr = make_const(op->type, div_imp(((unsigned int) ia), ((unsigned int) ib)));
+            } else {
+                expr = make_const(op->type, div_imp(ia,ib)); //Use the new definition of division
+            }
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(new Broadcast(broadcast_a->value / broadcast_b->value, broadcast_a->width));
         } else if (ramp_a && broadcast_b && 
@@ -469,13 +508,15 @@ class Simplify : public IRMutator {
         }
 
         if (const_int(a, &ia) && const_int(b, &ib)) {
-            int i = ia % ib;
-            if (i < 0) i += ib;
-            expr = i;
+            expr = mod_imp(ia, ib);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
-            float f = fa - fb * ((int)(fa / fb));
-            if (f < 0) f += fb;
-            expr = f;
+            expr = mod_imp(fa, fb);
+        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
+            if (op->type.is_uint()) {
+                expr = make_const(op->type, mod_imp(((unsigned int) ia), ((unsigned int) ib)));
+            } else {
+                expr = new Cast(op->type, mod_imp(ia, ib));
+            }
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(new Broadcast(broadcast_a->value % broadcast_b->value, broadcast_a->width));
         } else if (mul_a && const_int(b, &ib) && const_int(mul_a->b, &ia) && (ia % ib == 0)) {
@@ -531,6 +572,18 @@ class Simplify : public IRMutator {
             expr = std::min(ia, ib);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = std::min(fa, fb);
+        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
+            if (op->type.is_uint()) {
+                expr = make_const(op->type, std::min(((unsigned int) ia), ((unsigned int) ib)));
+            } else {
+                expr = make_const(op->type, std::min(ia,ib));
+            }
+        } else if (const_castint(b, &ib) && ib == b.type().imax()) {
+            // Compute minimum of expression of type and maximum of type --> expression
+            expr = a;
+        } else if (const_castint(b, &ib) && ib == b.type().imin()) {
+            // Compute minimum of expression of type and minimum of type --> min of type
+            expr = b;
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(new Broadcast(new Min(broadcast_a->value, broadcast_b->value), broadcast_a->width));
         } else if (add_a && const_int(add_a->b, &ia) && 
@@ -607,6 +660,18 @@ class Simplify : public IRMutator {
             expr = std::max(ia, ib);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = std::max(fa, fb);
+        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
+            if (op->type.is_uint()) {
+                expr = make_const(op->type, std::max(((unsigned int) ia), ((unsigned int) ib)));
+            } else {
+                expr = make_const(op->type, std::max(ia, ib));
+            }
+        } else if (const_castint(b, &ib) && ib == b.type().imin()) {
+            // Compute maximum of expression of type and minimum of type --> expression
+            expr = a;
+        } else if (const_castint(b, &ib) && ib == b.type().imax()) {
+            // Compute maximum of expression of type and maximum of type --> max of type
+            expr = b;
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(new Broadcast(new Max(broadcast_a->value, broadcast_b->value), broadcast_a->width));
         } else if (add_a && const_int(add_a->b, &ia) && add_b && const_int(add_b->b, &ib) && equal(add_a->a, add_b->a)) {
@@ -669,8 +734,16 @@ class Simplify : public IRMutator {
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        
+        int ia, ib;
 
-        if (is_zero(delta)) {
+        if (const_castint(a, &ia) && const_castint(b, &ib)) {
+            if (a.type().is_uint()) {
+                expr = make_bool(((unsigned int) ia) == ((unsigned int) ib), op->type.width);
+            } else {
+                expr = make_bool(ia == ib, op->type.width);
+            }
+        } else if (is_zero(delta)) {
             expr = const_true(op->type.width);
         } else if (is_simple_const(delta)) {
             expr = const_false(op->type.width);
@@ -741,7 +814,25 @@ class Simplify : public IRMutator {
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
-        if (is_zero(delta) || is_positive_const(delta)) {
+        int ia, ib;
+        
+        // Note that the computation of delta could be incorrect if 
+        // ia and/or ib are large unsigned integer constants, especially when
+        // int is 32 bits on the machine.  
+        // Explicit comparison is preferred.
+        if (const_castint(a, &ia) && const_castint(b, &ib)) {
+            if (a.type().is_uint()) {
+                expr = make_bool(((unsigned int) ia) < ((unsigned int) ib), op->type.width);
+            } else {
+                expr = make_bool(ia < ib, op->type.width);
+            }
+        } else if (const_castint(a, &ia) && ia == a.type().imax()) {
+            // Comparing maximum of type < expression of type.  This can never be true.
+            expr = const_false(op->type.width);
+        } else if (const_castint(b, &ib) && ib == b.type().imin()) {
+            // Comparing expression of type < minimum of type.  This can never be true.
+            expr = const_false(op->type.width);
+        } else if (is_zero(delta) || is_positive_const(delta)) {
             expr = const_false(op->type.width);
         } else if (is_negative_const(delta)) {
             expr = const_true(op->type.width);
@@ -806,14 +897,14 @@ class Simplify : public IRMutator {
     void visit(const And *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
-        if (is_one(op->a)) {
-            expr = op->b;
-        } else if (is_one(op->b)) {
-            expr = op->a;
-        } else if (is_zero(op->a)) {
-            expr = op->a;
-        } else if (is_zero(op->b)) {
-            expr = op->b;
+        if (is_one(a)) {
+            expr = b;
+        } else if (is_one(b)) {
+            expr = a;
+        } else if (is_zero(a)) {
+            expr = a;
+        } else if (is_zero(b)) {
+            expr = b;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -824,14 +915,14 @@ class Simplify : public IRMutator {
     void visit(const Or *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
-        if (is_one(op->a)) {
-            expr = op->a;
-        } else if (is_one(op->b)) {
-            expr = op->b;
-        } else if (is_zero(op->a)) {
-            expr = op->b;
-        } else if (is_zero(op->b)) {
-            expr = op->a;
+        if (is_one(a)) {
+            expr = a;
+        } else if (is_one(b)) {
+            expr = b;
+        } else if (is_zero(a)) {
+            expr = b;
+        } else if (is_zero(b)) {
+            expr = a;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1072,6 +1163,15 @@ void simplify_test() {
     Expr x = Var("x"), y = Var("y"), z = Var("z");
     Expr xf = cast<float>(x);
     Expr yf = cast<float>(y);
+    
+    // Check the type casting operations.
+    assert((int_cast_constant(Int(8), 128) == (int8_t) 128) && "Simplify test failed: int_cast_constant");
+    assert((int_cast_constant(UInt(8), -1) == (uint8_t) -1) && "Simplify test failed: int_cast_constant");
+    assert((int_cast_constant(Int(16), 65000) == (int16_t) 65000) && "Simplify test failed: int_cast_constant");
+    assert((int_cast_constant(UInt(16), 128000) == (uint16_t) 128000) && "Simplify test failed: int_cast_constant");
+    assert((int_cast_constant(UInt(16), -53) == (uint16_t) -53) && "Simplify test failed: int_cast_constant");
+    assert((int_cast_constant(UInt(32), -53) == (int)((uint32_t) -53)) && "Simplify test failed: int_cast_constant");
+    assert((int_cast_constant(Int(32), -53) == -53) && "Simplify test failed: int_cast_constant");
 
     check(new Cast(Int(32), new Cast(Int(32), x)), x);
     check(new Cast(Float(32), 3), 3.0f);
@@ -1079,6 +1179,43 @@ void simplify_test() {
 
     check(new Cast(Int(32), new Cast(Int(8), 3)), 3);
     check(new Cast(Int(32), new Cast(Int(8), 1232)), -48);
+    
+    // Check evaluation of constant expressions involving casts
+    check(cast(UInt(16), 53) + cast(UInt(16), 87), cast(UInt(16), 140));
+    check(cast(Int(8), 127) + cast(Int(8), 1), cast(Int(8), -128));
+    check(cast(UInt(16), -1) - cast(UInt(16), 1), cast(UInt(16), 65534));
+    check(cast(Int(16), 4) * cast(Int(16), -5), cast(Int(16), -20));
+    check(cast(Int(16), 16) / cast(Int(16), 4), cast(Int(16), 4));
+    check(cast(Int(16), 23) % cast(Int(16), 5), cast(Int(16), 3));
+    check(min(cast(Int(16), 30000), cast(Int(16), -123)), cast(Int(16), -123));
+    check(max(cast(Int(16), 30000), cast(Int(16), 65000)), cast(Int(16), 30000));
+    check(cast(UInt(16), -1) == cast(UInt(16), 65535), const_true());
+    check(cast(UInt(16), 65) == cast(UInt(16), 66), const_false());
+    check(cast(UInt(16), -1) < cast(UInt(16), 65535), const_false());
+    check(cast(UInt(16), 65) < cast(UInt(16), 66), const_true());
+    // Specific checks for 32 bit unsigned expressions - ensure simplifications are actually unsigned.
+    // 4000000000 (4 billion) is less than 2^32 but more than 2^31.  As an int, it is negative.
+    check(cast(UInt(32), (int) 4000000000) + cast(UInt(32), 5), cast(UInt(32), (int) 4000000005));
+    check(cast(UInt(32), (int) 4000000000) - cast(UInt(32), 5), cast(UInt(32), (int) 3999999995));
+    check(cast(UInt(32), (int) 4000000000) / cast(UInt(32), 5), cast(UInt(32), 800000000));
+    check(cast(UInt(32), 800000000) * cast(UInt(32), 5), cast(UInt(32), (int) 4000000000));
+    check(cast(UInt(32), (int) 4000000023) % cast(UInt(32), 100), cast(UInt(32), 23));
+    check(min(cast(UInt(32), (int) 4000000023) , cast(UInt(32), 1000)), cast(UInt(32), (int) 1000));
+    check(max(cast(UInt(32), (int) 4000000023) , cast(UInt(32), 1000)), cast(UInt(32), (int) 4000000023));
+    check(cast(UInt(32), (int) 4000000023) < cast(UInt(32), 1000), const_false());
+    check(cast(UInt(32), (int) 4000000023) == cast(UInt(32), 1000), const_false());
+    
+    // Check some specific expressions involving div and mod
+    check(Expr(23) / 4, Expr(5));
+    check(Expr(-23) / 4, Expr(-6));
+    check(Expr(-23) / -4, Expr(5));
+    check(Expr(23) / -4, Expr(-6));
+    check(Expr(-2000000000) / 1000000001, Expr(-2));
+    check(Expr(23) % 4, Expr(3));
+    check(Expr(-23) % 4, Expr(1));
+    check(Expr(-23) % -4, Expr(-3));
+    check(Expr(23) % -4, Expr(-1));
+    check(Expr(-2000000000) % 1000000001, Expr(2));
 
     check(3 + x, x + 3);
     check(Expr(3) + Expr(8), 11);
@@ -1153,6 +1290,8 @@ void simplify_test() {
     check(Expr(7) % 2, 1);
     check(Expr(7.25f) % 2.0f, 1.25f);
     check(Expr(-7.25f) % 2.0f, 0.75f);
+    check(Expr(-7.25f) % -2.0f, -1.25f);
+    check(Expr(7.25f) % -2.0f, -0.75f);
     check(Expr(new Broadcast(x, 4)) % Expr(new Broadcast(y, 4)), 
           Expr(new Broadcast(x % y, 4)));
     check((x*8) % 4, 0);
@@ -1223,6 +1362,22 @@ void simplify_test() {
     check(select(x >= 5, 2, 3), select(x < 5, 3, 2));    
     check(select(x <= 5, 2, 3), select(5 < x, 3, 2));    
     check(select(x > 5, 2, 3), select(5 < x, 2, 3));    
+
+    // Check that simplifier can recognise instances where the extremes of the
+    // datatype appear as constants in comparisons, Min and Max expressions.
+    // The result of min/max with extreme is known to be either the extreme or
+    // the other expression.  The result of < or > comparison is known to be true or false.
+    check(x <= Int(32).max(), const_true());
+    check(new Cast(Int(16), x) >= Int(16).min(), const_true());
+    check(x < Int(32).min(), const_false());
+    check(new Min(new Cast(UInt(16), x), new Cast(UInt(16), 65535)), new Cast(UInt(16), x));
+    check(new Min(x, Int(32).max()), x);
+    check(new Min(Int(32).min(), x), Int(32).min());
+    check(new Max(new Cast(Int(8), x), new Cast(Int(8), -128)), new Cast(Int(8), x));
+    check(new Max(x, Int(32).min()), x);
+    check(new Max(x, Int(32).max()), Int(32).max());
+    // Check that non-extremes do not lead to incorrect simplification
+    check(new Max(new Cast(Int(8), x), new Cast(Int(8), -127)), new Max(new Cast(Int(8), x), new Cast(Int(8), -127)));
 
     check(!f, t);
     check(!t, f);
