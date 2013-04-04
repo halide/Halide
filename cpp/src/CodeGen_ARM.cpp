@@ -151,6 +151,18 @@ Expr _u16q(Expr e) {
     }
 }
 
+Expr _i32q(Expr e) {
+    return cast(Int(32, e.type().width), clamp(e, Int(32).min(), Int(32).max()));
+}
+
+Expr _u32q(Expr e) {
+    if (e.type().is_uint()) {
+        return cast(UInt(32, e.type().width), min(e, UInt(32).max()));
+    } else {
+        return cast(UInt(32, e.type().width), clamp(e, 0, UInt(32).max()));
+    }
+}
+
 
 
 }
@@ -293,21 +305,29 @@ void CodeGen_ARM::visit(const Cast *op) {
         {"vqaddu.v8i8", _u8q(_u16(wild_u8x8) + _u16(wild_u8x8)), Simple},
         {"vqadds.v4i16", _i16q(_i32(wild_i16x4) + _i32(wild_i16x4)), Simple},
         {"vqaddu.v4i16", _u16q(_u32(wild_u16x4) + _u32(wild_u16x4)), Simple},
+        {"vqadds.v2i32", _i32q(_i64(wild_i32x2) + _i64(wild_i32x2)), Simple},
+        {"vqaddu.v2i32", _u32q(_u64(wild_u32x2) + _u64(wild_u32x2)), Simple},
         {"vqadds.v16i8", _i8q(_i16(wild_i8x16) + _i16(wild_i8x16)), Simple},
         {"vqaddu.v16i8", _u8q(_u16(wild_u8x16) + _u16(wild_u8x16)), Simple},
         {"vqadds.v8i16", _i16q(_i32(wild_i16x8) + _i32(wild_i16x8)), Simple},
         {"vqaddu.v8i16", _u16q(_u32(wild_u16x8) + _u32(wild_u16x8)), Simple},
-        
+        {"vqadds.v4i32", _i32q(_i64(wild_i32x4) + _i64(wild_i32x4)), Simple},
+        {"vqaddu.v4i32", _u32q(_u64(wild_u32x4) + _u64(wild_u32x4)), Simple},        
+
         // N.B. Saturating subtracts of unsigned types are expressed
         // by widening to a *signed* type
         {"vqsubs.v8i8", _i8q(_i16(wild_i8x8) - _i16(wild_i8x8)), Simple},
         {"vqsubu.v8i8", _u8q(_i16(wild_u8x8) - _i16(wild_u8x8)), Simple},
         {"vqsubs.v4i16", _i16q(_i32(wild_i16x4) - _i32(wild_i16x4)), Simple},
         {"vqsubu.v4i16", _u16q(_i32(wild_u16x4) - _i32(wild_u16x4)), Simple},
+        {"vqsubs.v2i32", _i32q(_i64(wild_i32x2) - _i64(wild_i32x2)), Simple},
+        {"vqsubu.v2i32", _u32q(_i64(wild_u32x2) - _i64(wild_u32x2)), Simple},
         {"vqsubs.v16i8", _i8q(_i16(wild_i8x16) - _i16(wild_i8x16)), Simple},
         {"vqsubu.v16i8", _u8q(_i16(wild_u8x16) - _i16(wild_u8x16)), Simple},
         {"vqsubs.v8i16", _i16q(_i32(wild_i16x8) - _i32(wild_i16x8)), Simple},
         {"vqsubu.v8i16", _u16q(_i32(wild_u16x8) - _i32(wild_u16x8)), Simple},
+        {"vqsubs.v4i32", _i32q(_i64(wild_i32x4) - _i64(wild_i32x4)), Simple},        
+        {"vqsubu.v4i32", _u32q(_i64(wild_u32x4) - _i64(wild_u32x4)), Simple},
 
         {"vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), RightShift},
         {"vshiftn.v4i16", _i16(wild_i32x4/wild_i32x4), RightShift},
@@ -318,30 +338,42 @@ void CodeGen_ARM::visit(const Cast *op) {
 
         {"vqshiftns.v8i8", _i8q(wild_i16x8/wild_i16x8), RightShift},
         {"vqshiftns.v4i16", _i16q(wild_i32x4/wild_i32x4), RightShift},
+        {"vqshiftns.v2i32", _i32q(wild_i64x2/wild_i64x2), RightShift},
         {"vqshiftnu.v8i8", _u8q(wild_u16x8/wild_u16x8), RightShift},
         {"vqshiftnu.v4i16", _u16q(wild_u32x4/wild_u32x4), RightShift},
+        {"vqshiftnu.v2i32", _u32q(wild_u64x2/wild_u64x2), RightShift},
         {"vqshiftnsu.v8i8", _u8q(wild_i16x8/wild_i16x8), RightShift},
         {"vqshiftnsu.v4i16", _u16q(wild_i32x4/wild_i32x4), RightShift},
+        {"vqshiftnsu.v2i32", _u32q(wild_i64x2/wild_i64x2), RightShift},
 
         {"vqshifts.v8i8", _i8q(_i16(wild_i8x8)*wild_i16x8), LeftShift},
         {"vqshifts.v4i16", _i16q(_i32(wild_i16x4)*wild_i32x4), LeftShift},
+        {"vqshifts.v2i32", _i32q(_i64(wild_i32x2)*wild_i64x2), LeftShift},
         {"vqshiftu.v8i8", _u8q(_u16(wild_u8x8)*wild_u16x8), LeftShift},
         {"vqshiftu.v4i16", _u16q(_u32(wild_u16x4)*wild_u32x4), LeftShift},
+        {"vqshiftu.v2i32", _u32q(_u64(wild_u32x2)*wild_u64x2), LeftShift},
         {"vqshiftsu.v8i8", _u8q(_i16(wild_i8x8)*wild_i16x8), LeftShift},
         {"vqshiftsu.v4i16", _u16q(_i32(wild_i16x4)*wild_i32x4), LeftShift},
+        {"vqshiftsu.v2i32", _u32q(_i64(wild_i32x2)*wild_i64x2), LeftShift},
         {"vqshifts.v16i8", _i8q(_i16(wild_i8x16)*wild_i16x16), LeftShift},
         {"vqshifts.v8i16", _i16q(_i32(wild_i16x8)*wild_i32x8), LeftShift},
+        {"vqshifts.v4i32", _i32q(_i64(wild_i32x4)*wild_i64x4), LeftShift},
         {"vqshiftu.v16i8", _u8q(_u16(wild_u8x16)*wild_u16x16), LeftShift},
         {"vqshiftu.v8i16", _u16q(_u32(wild_u16x8)*wild_u32x8), LeftShift},
+        {"vqshiftu.v4i32", _u32q(_u64(wild_u32x4)*wild_u64x4), LeftShift},
         {"vqshiftsu.v16i8", _u8q(_i16(wild_i8x16)*wild_i16x16), LeftShift},
         {"vqshiftsu.v8i16", _u16q(_i32(wild_i16x8)*wild_i32x8), LeftShift},
+        {"vqshiftsu.v4i32", _u32q(_i64(wild_i32x4)*wild_i64x4), LeftShift},
 
         {"vqmovns.v8i8", _i8q(wild_i16x8), Simple},
         {"vqmovns.v4i16", _i16q(wild_i32x4), Simple},
+        {"vqmovns.v2i32", _i32q(wild_i64x2), Simple},
         {"vqmovnu.v8i8", _u8q(wild_u16x8), Simple},
         {"vqmovnu.v4i16", _u16q(wild_u32x4), Simple},
+        {"vqmovnu.v2i32", _u32q(wild_u64x2), Simple},
         {"vqmovnsu.v8i8", _u8q(wild_i16x8), Simple},
         {"vqmovnsu.v4i16", _u16q(wild_i32x4), Simple},
+        {"vqmovnsu.v2i32", _u32q(wild_i64x2), Simple},
 
         {"sentinel", 0}
 
@@ -349,7 +381,9 @@ void CodeGen_ARM::visit(const Cast *op) {
         
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
+        //log(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
+            //log(4) << "Match!\n";
             if (pattern.type == Simple) {
                 value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
                 return;
@@ -677,8 +711,8 @@ void CodeGen_ARM::visit(const Sub *op) {
         {"vqneg.v16i8", -max(wild_i8x16, -127)},
         {"vqneg.v4i16", -max(wild_i16x4, -32767)},
         {"vqneg.v8i16", -max(wild_i16x8, -32767)},
-        {"vqneg.v2i32", -max(wild_i32x4, -(0x7fffffff))},
-        {"vqneg.v4i32", -max(wild_i32x8, -(0x7fffffff))}        
+        {"vqneg.v2i32", -max(wild_i32x2, -(0x7fffffff))},
+        {"vqneg.v4i32", -max(wild_i32x4, -(0x7fffffff))}        
     };
 
     vector<Expr> matches;
