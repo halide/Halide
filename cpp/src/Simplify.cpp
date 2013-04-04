@@ -116,6 +116,9 @@ class Simplify : public IRMutator {
                    op->type.bits <= 32 && 
                    const_int(value, &i) && 
                    do_indirect_int_cast(op->type, i) != i) {
+            // Rewrite things like cast(UInt(8), 256) to cast(UInt(8),
+            // 0), so any later peephole matching that ignores casts
+            // doesn't get confused.
             expr = new Cast(op->type, do_indirect_int_cast(op->type, i));
         } else if (value.same_as(op->value)) {
             expr = op;
@@ -363,10 +366,6 @@ class Simplify : public IRMutator {
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
         const Mul *mul_a = a.as<Mul>();
-
-        // TODO: broadcast * broadcast, ramp * broadcast, broadcast * ramp
-        // (a * const) * const
-        // (a + const) * const
 
         if (is_zero(b)) {
             expr = b;
