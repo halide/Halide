@@ -267,7 +267,7 @@ BIG halide_mod(BIG a, BIG b) {
         return a % b;
     }
     if (t.is_float()) {
-        return (fmod((double) a, (double) b));
+        return ((double)a - double(b)*floor(double(a)/double(b)));
     }
     BIG rem = (a % b + b) % b; // Halide definition of remainder
     return rem;
@@ -284,7 +284,7 @@ T new_mod(T a, T b) {
         return a % b;
     }
     if (t.is_float()) {
-        return (fmod((double) a, (double) b));
+        return ((double)a - double(b)*floor(double(a)/double(b)));
     }
     T rem = a % b;
     // Correction.  Ensures that remainder has the same sign as b.
