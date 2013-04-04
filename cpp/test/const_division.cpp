@@ -81,9 +81,9 @@ bool test(int w) {
             if (fast(x, y) != correct(x, y)) {
                 printf("fast(%d, %d) = %lld instead of %lld (%lld/%d)\n", 
                        x, y,
-                       (int64_t)fast(x, y), 
-                       (int64_t)correct(x, y), 
-                       (int64_t)input(x, y),
+                       (long long int)fast(x, y), 
+                       (long long int)correct(x, y), 
+                       (long long int)input(x, y),
                        (T)(y + min_val));
                 return false;
             }
