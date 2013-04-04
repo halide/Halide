@@ -252,8 +252,9 @@ bool test(int vec_width) {
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             float correct = powf(1.1f, (float)input(x, y));
-            if (im8(x, y) != correct) {
-                printf("im8(%d, %d) = %f\n", x, y, (double)im8(x, y));
+            if (!close_enough(im8(x, y), correct)) {
+                printf("im8(%d, %d) = %f instead of %f\n", 
+                       x, y, (double)im8(x, y), correct);
                 return false;
             }
         }
