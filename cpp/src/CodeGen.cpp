@@ -367,12 +367,23 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     m.set_error_handler = (void (*)(JITCompiledModule::ErrorHandler))f;
     assert(f && "Compiling set_error_handler function returned NULL");
 
-
     llvm::Function *set_custom_allocator = module->getFunction("halide_set_custom_allocator");
     assert(set_custom_allocator && "Could not find set_custom_allocator function inside llvm module");
     f = execution_engine->getPointerToFunction(set_custom_allocator);
     m.set_custom_allocator = (void (*)(void *(*)(size_t), void (*)(void *)))f;
     assert(f && "Compiling set_custom_allocator function returned NULL");
+
+    llvm::Function *set_custom_do_par_for = module->getFunction("halide_set_custom_do_par_for");
+    assert(set_custom_do_par_for && "Could not find set_custom_do_par_for function inside llvm module");
+    f = execution_engine->getPointerToFunction(set_custom_do_par_for);
+    m.set_custom_do_par_for = (void (*)(void (*)(void (*)(int, uint8_t *), int, int, uint8_t *)))f;
+    assert(f && "Compiling set_custom_do_par_for function returned NULL");
+
+    llvm::Function *set_custom_do_task = module->getFunction("halide_set_custom_do_task");
+    assert(set_custom_do_task && "Could not find set_custom_do_task function inside llvm module");
+    f = execution_engine->getPointerToFunction(set_custom_do_task);
+    m.set_custom_do_task = (void (*)(void (*)(void (*)(int, uint8_t *), int, uint8_t *)))f;
+    assert(f && "Compiling set_custom_do_task function returned NULL");
 
     m.module = module_holder;
     llvm::Function *shutdown_thread_pool = module->getFunction("halide_shutdown_thread_pool");
