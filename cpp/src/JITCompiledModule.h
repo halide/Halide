@@ -32,18 +32,28 @@ struct JITCompiledModule {
     /** Set the runtime error handler for this module */
     void (*set_error_handler)(ErrorHandler);
 
-    /** Set a custom malloc and free for this module to use. Malloc
-     * should return 32-byte aligned chunks of memory, with 32-bytes
-     * extra allocated on the start and end so that vector loads can
-     * spill off the end slightly. Metadata (e.g. the base address of
-     * the region allocated) can go in this margin - it is only read,
-     * not written. */
+    /** Set a custom malloc and free for this module to use. See 
+     * \ref Func::set_custom_allocator */
     void (*set_custom_allocator)(void *(*malloc)(size_t), void (*free)(void *));
+
+    /** Set a custom parallel for loop launcher. See 
+     * \ref Func::set_custom_do_par_for */
+    void (*set_custom_do_par_for)(void (*custom_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *));
+
+    /** Set a custom do parallel task. See
+     * \ref Func::set_custom_do_task */
+    void (*set_custom_do_task)(void (*custom_do_task)(void (*)(int, uint8_t *), int, uint8_t *));
 
     // The JIT Module Allocator holds onto the memory storing the functions above.
     IntrusivePtr<JITModuleHolder> module;
 
-    JITCompiledModule() : function(NULL), wrapped_function(NULL), set_error_handler(NULL), set_custom_allocator(NULL), module(NULL) {}
+    JITCompiledModule() : function(NULL), 
+                          wrapped_function(NULL), 
+                          set_error_handler(NULL), 
+                          set_custom_allocator(NULL), 
+                          set_custom_do_par_for(NULL), 
+                          set_custom_do_task(NULL), 
+                          module(NULL) {}
 };
         
 }

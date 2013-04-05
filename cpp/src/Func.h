@@ -251,6 +251,13 @@ class Func {
     void (*custom_free)(void *);
     // @}
 
+    /** The current custom parallel task launcher and handler for
+     * realizing this function. May be NULL. */
+    // @{
+    void (*custom_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *);
+    void (*custom_do_task)(void (*)(int, uint8_t *), int, uint8_t *);
+    // @}
+
     /** Pointers to current values of the automatically inferred
      * arguments (buffers and scalars) used to realize this
      * function. Only relevant when jitting. We can hold these things
@@ -364,17 +371,64 @@ public:
     EXPORT void compile_jit();
 
     /** Set the error handler function that be called in the case of
-     * runtime errors during subsequent calls to realize. Only
-     * relevant when jitting. */
+     * runtime errors during halide pipelines. If you are compiling
+     * statically, you can also just define your own function with
+     * signature 
+     \code
+     extern "C" halide_error(char *)
+     \endcode
+     * This will clobber Halide's version. 
+     */
     EXPORT void set_error_handler(void (*handler)(char *));
 
-    /** Set a custom malloc and free to use for subsequent calls to
-     * realize. Malloc should return 32-byte aligned chunks of memory,
-     * with 32-bytes extra allocated on the start and end so that
-     * vector loads can spill off the end slightly. Metadata (e.g. the
-     * base address of the region allocated) can go in this margin -
-     * it is only read, not written. Only relevant when jitting. */
+    /** Set a custom malloc and free for halide to use. Malloc should
+     * return 32-byte aligned chunks of memory, with 32-bytes extra
+     * allocated on the start and end so that vector loads can spill
+     * off the end slightly. Metadata (e.g. the base address of the
+     * region allocated) can go in this margin - it is only read, not
+     * written. If you are compiling statically, you can also just
+     * define your own functions with signatures 
+     \code
+     extern "C" void *malloc(size_t) 
+     extern "C" void halide_free(void *)
+     \endcode 
+     * These will clobber Halide's versions.
+     */
     EXPORT void set_custom_allocator(void *(*malloc)(size_t), void (*free)(void *));
+
+    /** Set a custom task handler to be called by the parallel for
+     * loop. It is useful to set this if you want to do some
+     * additional bookkeeping at the granularity of parallel
+     * tasks. The default implementation does this:
+     \code
+     extern "C" void halide_do_task(void (*f)(int, uint8_t *), int idx, uint8_t *state) {
+         f(idx, state);
+     }
+     \endcode
+     * If you are statically compiling, you can also just define your
+     * own version of the above function, and it will clobber Halide's
+     * version.
+     * 
+     * If you're trying to use a custom parallel runtime, you probably
+     * don't want to call this. See instead \ref Func::set_custom_do_par_for .
+    */
+    EXPORT void set_custom_do_task(void (*custom_do_task)(void (*)(int, uint8_t *), int, uint8_t *));
+
+    /** Set a custom parallel for loop launcher. Useful if your app
+     * already manages a thread pool. The default implementation is
+     * equivalent to this:
+     \code
+     extern "C" void halide_do_par_for(void (*f)(int uint8_t *), int min, int extent, uint8_t *state) {
+         parallel for (int idx = min; idx < min+extent; idx++) {
+             halide_do_task(f, idx, state);
+         }
+     }
+     \endcode
+     * If you are statically compiling, you can also just define your
+     * own version of the above function, and it will clobber Halide's
+     * version.
+     */
+    EXPORT void set_custom_do_par_for(void (*custom_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *));
 
     /** When this function is compiled, include code that dumps its values
      * to a file after it is realized, for the purpose of debugging. 
