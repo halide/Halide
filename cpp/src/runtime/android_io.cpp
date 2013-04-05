@@ -20,7 +20,7 @@ WEAK int halide_printf(const char * fmt, ...) {
 }
 
 static bool write_stub(const void *bytes, size_t size, void *f) {
-  return fwrite(const_cast<void *>(bytes), size, 1, f) == 1;
+    return fwrite(const_cast<void *>(bytes), size, 1, f) == 1;
 }
 
 WEAK int32_t halide_debug_to_file(const char *filename, uint8_t *data, 
