@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     assert(f && g);
 
     int header[5];
-    fread((void *)(&header[0]), 4, 5, f);
+    assert(fread((void *)(&header[0]), 4, 5, f) == 5);
     assert(header[0] == 11);
     assert(header[1] == 10);
     assert(header[2] == 1);
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     assert(header[4] == 7);
     
     int32_t f_data[11*10];
-    fread((void *)(&f_data[0]), 4, 11*10, f);
+    assert(fread((void *)(&f_data[0]), 4, 11*10, f) == 11*10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 11; x++) {
             int32_t val = f_data[y*11+x];
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     }
     fclose(f);
 
-    fread((void *)(&header[0]), 4, 5, g);
+    assert(fread((void *)(&header[0]), 4, 5, g) == 5);
     assert(header[0] == 10);
     assert(header[1] == 10);
     assert(header[2] == 1);
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
     assert(header[4] == 0);
     
     float g_data[10*10];
-    fread((void *)(&g_data[0]), 4, 10*10, g);
+    assert(fread((void *)(&g_data[0]), 4, 10*10, g) == 10*10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 11; x++) {
             int32_t val = f_data[y*11+x];
