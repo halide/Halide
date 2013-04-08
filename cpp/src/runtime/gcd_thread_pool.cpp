@@ -9,12 +9,12 @@ WEAK void halide_shutdown_thread_pool() {
 }
 
 WEAK void (*halide_custom_do_task)(void (*)(int, uint8_t *), int, uint8_t *);
-WEAK void set_halide_custom_do_task(void (*f)(void (*)(int, uint8_t *), int, uint8_t *)) {
+WEAK void halide_set_custom_do_task(void (*f)(void (*)(int, uint8_t *), int, uint8_t *)) {
     halide_custom_do_task = f;
 }
 
 WEAK void (*halide_custom_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *);
-WEAK void set_halide_custom_do_par_for(void (*f)(void (*)(int, uint8_t *), int, int, uint8_t *)) {
+WEAK void halide_set_custom_do_par_for(void (*f)(void (*)(int, uint8_t *), int, int, uint8_t *)) {
     halide_custom_do_par_for = f;
 }
 
