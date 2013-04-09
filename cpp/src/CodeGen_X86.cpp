@@ -48,6 +48,8 @@
 
 extern "C" unsigned char halide_internal_initmod_x86[];
 extern "C" int halide_internal_initmod_x86_length;
+extern "C" unsigned char halide_internal_initmod_x86_32[];
+extern "C" int halide_internal_initmod_x86_32_length;
 extern "C" unsigned char halide_internal_initmod_x86_avx[];
 extern "C" int halide_internal_initmod_x86_avx_length;
 
@@ -59,7 +61,10 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(bool sse_41, bool avx) : CodeGen_Posix(), use_sse_41(sse_41), use_avx(avx) {
+CodeGen_X86::CodeGen_X86(bool _64_bit, bool sse_41, bool avx) : CodeGen_Posix(), 
+                                                                use_64_bit(_64_bit), 
+                                                                use_sse_41(sse_41), 
+                                                                use_avx(avx) {
     assert(llvm_X86_enabled && "llvm build not configured with X86 target enabled.");
 }
 
@@ -72,6 +77,9 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     if (use_avx) {
         assert(halide_internal_initmod_x86_avx_length && "initial module for x86_avx is empty");
         sb = StringRef((char *)halide_internal_initmod_x86_avx, halide_internal_initmod_x86_avx_length);
+    } else if (!use_64_bit) {
+        assert(halide_internal_initmod_x86_32_length && "initial module for x86_32 is empty");
+        sb = StringRef((char *)halide_internal_initmod_x86_32, halide_internal_initmod_x86_32_length);        
     } else {
         assert(halide_internal_initmod_x86_length && "initial module for x86 is empty");
         sb = StringRef((char *)halide_internal_initmod_x86, halide_internal_initmod_x86_length);

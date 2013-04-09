@@ -31,9 +31,11 @@ StmtCompiler::StmtCompiler(string arch) {
     }
 
     if (arch == "x86") {
-        contents = new CodeGen_X86(true, false);
+        contents = new CodeGen_X86(true, true, false);
+    } else if (arch == "x86-32") {
+        contents = new CodeGen_X86(false, false, false);
     } else if (arch == "x86-avx") {
-        contents = new CodeGen_X86(true, true);
+        contents = new CodeGen_X86(true, true, true);
     }
 #ifndef _WIN32 // I've temporarily disabled ARM on Windows since it leads to a linking error on halide_internal_initmod_arm stuff (kwampler@adobe.com)
     else if (arch == "arm") {

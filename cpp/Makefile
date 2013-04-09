@@ -26,7 +26,7 @@ SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=build/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-STDLIB_ARCHS = x86 x86_avx arm arm_android
+STDLIB_ARCHS = x86 x86_avx x86_32 arm arm_android
 
 INITIAL_MODULES = $(STDLIB_ARCHS:%=build/initmod.%.o)
 
@@ -52,10 +52,12 @@ bin/build_halide_h: src/build_halide_h.cpp
 
 RUNTIME_OPTS_x86 = -march=corei7 
 RUNTIME_OPTS_x86_avx = -march=corei7-avx 
+RUNTIME_OPTS_x86_32 = -m32 -march=atom
 RUNTIME_OPTS_arm = -m32 
 RUNTIME_OPTS_arm_android = -m32 
-RUNTIME_LL_STUBS_x86 = src/runtime/x86.ll
-RUNTIME_LL_STUBS_x86_avx = src/runtime/x86.ll src/runtime/x86_avx.ll
+RUNTIME_LL_STUBS_x86 = src/runtime/x86.ll src/runtime/x86_sse41.ll
+RUNTIME_LL_STUBS_x86_32 = src/runtime/x86.ll
+RUNTIME_LL_STUBS_x86_avx = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll
 RUNTIME_LL_STUBS_arm = src/runtime/arm.ll
 RUNTIME_LL_STUBS_arm_android = src/runtime/arm.ll
 
