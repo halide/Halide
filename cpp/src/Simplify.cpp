@@ -436,7 +436,7 @@ class Simplify : public IRMutator {
             expr = fa/fb;
         } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
             if (op->type.is_uint()) {
-                expr = make_const(op->type, div_imp(((unsigned int) ia), ((unsigned int) ib)));
+                expr = make_const(op->type, ((unsigned int)ia)/((unsigned int)ib));
             } else {
                 expr = make_const(op->type, div_imp(ia,ib)); //Use the new definition of division
             }
@@ -513,7 +513,7 @@ class Simplify : public IRMutator {
             expr = mod_imp(fa, fb);
         } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
             if (op->type.is_uint()) {
-                expr = make_const(op->type, mod_imp(((unsigned int) ia), ((unsigned int) ib)));
+                expr = make_const(op->type, ((unsigned int)ia) % ((unsigned int)ib));
             } else {
                 expr = new Cast(op->type, mod_imp(ia, ib));
             }
