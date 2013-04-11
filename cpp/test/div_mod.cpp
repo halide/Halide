@@ -50,6 +50,37 @@ uint64_t ubits(int unique, int i, int j) {
     return bits;
 }
 
+// Template to avoid autological comparison errors when comparing unsigned values for < 0
+template <typename T>
+bool less_than_zero(T val) {
+    return (val < 0);
+}
+
+template <>
+bool less_than_zero<unsigned long long>(unsigned long long val) {
+    return false;
+}
+
+template <>
+bool less_than_zero<unsigned long>(unsigned long val) {
+    return false;
+}
+
+template <>
+bool less_than_zero<unsigned int>(unsigned int val) {
+    return false;
+}
+
+template <>
+bool less_than_zero<unsigned short>(unsigned short val) {
+    return false;
+}
+
+template <>
+bool less_than_zero<unsigned char>(unsigned char val) {
+    return false;
+}
+
 template<typename T,typename BIG,int bits>
 BIG maximum() {
     Type t = type_of<T>();
@@ -209,7 +240,7 @@ BIG halide_div(BIG a, BIG b) {
     }
     BIG q = a/b;
     if (b > 0 && q*b > a) q--;
-    if (b < 0 && q*b < a) q--;
+    if (less_than_zero(b) && q*b < a) q--;
     return q;
 }
 
@@ -250,7 +281,7 @@ T new_div(T a, T b) {
 #if DIV_METHOD==4
     T axorb = a ^ b;
     post = a != 0 ? ((axorb) >> (t.bits-1)) : 0;
-    pre = a < 0 ? -post : post;
+    pre = less_than_zero(a) ? -post : post;
 #endif
     T num = a + pre;
     T quo = num / b;
@@ -308,11 +339,10 @@ T new_mod(T a, T b) {
 #endif
     // Method 4.  Using bit manipulations and select.
 #if MOD_METHOD==4
-    rem = rem + (rem != 0 && (rem ^ b) < 0 ? b : 0);
+    rem = rem + (rem != 0 && less_than_zero(rem ^ b) ? b : 0);
 #endif
     return rem;
 }
-
 
 // division tests division operations.
 // BIG should be uint64_t, int64_t or double as appropriate.
@@ -340,7 +370,7 @@ bool division() {
             if (b(i,j) == 0) {
                 b(i,j) = 1; // Replace zero with one
             }
-            if (a(i,j) == minval && minval < 0 && b(i,j) == -1) {
+            if (a(i,j) == minval && less_than_zero(minval) && b(i,j) == -1) {
                 a(i,j) = a(i,j) + 1; // Fix it into range.
             }
         }
@@ -420,7 +450,7 @@ bool mod() {
             if (b(i,j) == 0) {
                 b(i,j) = 1; // Replace zero with one
             }
-            if (a(i,j) == minval && minval < 0 && b(i,j) == -1) {
+            if (a(i,j) == minval && less_than_zero(minval) && b(i,j) == -1) {
                 a(i,j) = a(i,j) + 1; // Fix it into range.
             }
         }
