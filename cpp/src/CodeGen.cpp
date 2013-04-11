@@ -143,7 +143,7 @@ CodeGen::CodeGen() :
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
     if (!llvm_initialized) {            
-	InitializeNativeTarget();
+        InitializeNativeTarget();
         InitializeNativeTargetAsmPrinter();
         InitializeNativeTargetAsmParser();
 
@@ -284,36 +284,36 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 // the memory for jit compiled code.
 class JITModuleHolder {
 public:
-	mutable RefCount ref_count;    
+        mutable RefCount ref_count;    
     JITModuleHolder(Module *module, CodeGen *cg) {
         log(2) << "Creating new execution engine\n";
         string error_string;
 
-	TargetOptions options;
-	options.LessPreciseFPMADOption = true;
-	options.NoFramePointerElim = false;
-	options.NoFramePointerElimNonLeaf = false;
-	options.AllowFPOpFusion = FPOpFusion::Fast;
-	options.UnsafeFPMath = true;
-	options.NoInfsFPMath = true;
-	options.NoNaNsFPMath = true;
-	options.HonorSignDependentRoundingFPMathOption = false;
-	options.UseSoftFloat = false;
-	options.FloatABIType = 
+        TargetOptions options;
+        options.LessPreciseFPMADOption = true;
+        options.NoFramePointerElim = false;
+        options.NoFramePointerElimNonLeaf = false;
+        options.AllowFPOpFusion = FPOpFusion::Fast;
+        options.UnsafeFPMath = true;
+        options.NoInfsFPMath = true;
+        options.NoNaNsFPMath = true;
+        options.HonorSignDependentRoundingFPMathOption = false;
+        options.UseSoftFloat = false;
+        options.FloatABIType = 
             cg->use_soft_float_abi() ? FloatABI::Soft : FloatABI::Hard;
-	options.NoZerosInBSS = false;
-	options.GuaranteedTailCallOpt = false;
-	options.DisableTailCalls = false;
-	options.StackAlignmentOverride = 32;
-	options.RealignStack = true;
-	options.TrapFuncName = "";
-	options.PositionIndependentExecutable = true;
-	options.EnableSegmentedStacks = false;
-	options.UseInitArray = false;
-	options.SSPBufferSize = 0;
-	
+        options.NoZerosInBSS = false;
+        options.GuaranteedTailCallOpt = false;
+        options.DisableTailCalls = false;
+        options.StackAlignmentOverride = 32;
+        options.RealignStack = true;
+        options.TrapFuncName = "";
+        options.PositionIndependentExecutable = true;
+        options.EnableSegmentedStacks = false;
+        options.UseInitArray = false;
+        options.SSPBufferSize = 0;
+        
         EngineBuilder engine_builder(module);
-	engine_builder.setTargetOptions(options);
+        engine_builder.setTargetOptions(options);
         engine_builder.setErrorStr(&error_string);
         engine_builder.setEngineKind(EngineKind::JIT);
         #ifdef USE_MCJIT
@@ -332,9 +332,9 @@ public:
         execution_engine = engine_builder.create();
         if (!execution_engine) cout << error_string << endl;
         assert(execution_engine && "Couldn't create execution engine");        
-	execution_engine->finalizeObject();	
-	// TODO: I don't think this is necessary, we shouldn't have any static constructors
-	// execution_engine->runStaticConstructorsDestructors(...);
+        execution_engine->finalizeObject();     
+        // TODO: I don't think this is necessary, we shouldn't have any static constructors
+        // execution_engine->runStaticConstructorsDestructors(...);
     }
     ~JITModuleHolder() {
         shutdown_thread_pool();
@@ -1247,7 +1247,7 @@ void CodeGen::visit(const Call *op) {
             args.push_back(codegen(op->args[i]));
         }
 
-	log(4) << "Creating call to debug_to_file\n";
+        log(4) << "Creating call to debug_to_file\n";
         value = builder->CreateCall(debug_to_file, args);
         return;
     }
@@ -1563,7 +1563,7 @@ public:
                 assert(fn && "Did not find force_no_alias in initial module");
                 Value *arg = builder->CreatePointerCast(load, llvm::Type::getInt8Ty(context)->getPointerTo());
                 CallInst *call = builder->CreateCall(fn, vec(arg));
-		mark_call_return_no_alias(call, context);
+                mark_call_return_no_alias(call, context);
                 val = builder->CreatePointerCast(call, val->getType());
                 
             }
@@ -1672,7 +1672,7 @@ void CodeGen::visit(const For *op) {
         //do_par_for->setDoesNotCapture(4);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
         vector<Value *> args = vec((Value *)function, min, extent, ptr);
-	log(4) << "Creating call to do_par_for\n";
+        log(4) << "Creating call to do_par_for\n";
         builder->CreateCall(do_par_for, args);
 
         log(3) << "Leaving parallel for loop over " << op->name << "\n";
