@@ -81,6 +81,20 @@ using std::map;
 using std::stack;
 
 namespace {
+class LLVMAPIAttributeAdapter {
+    LLVMContext &llvm_context;
+    Attribute::AttrKind kind;
+
+public:
+    LLVMAPIAttributeAdapter(LLVMContext &context, Attribute::AttrKind kind_arg) :
+        llvm_context(context), kind(kind_arg)
+    {
+    }
+
+    operator Attribute::AttrKind() { return kind; }
+    operator Attribute() { return Attribute::get(llvm_context, kind); }
+};
+
 LLVMContext &get_global_context() {
     static LLVMContext *c = NULL;
     if (!c) c = new LLVMContext;
@@ -604,11 +618,7 @@ Value *CodeGen::buffer_host(Value *buffer) {
     llvm::Function *fn = module->getFunction("force_no_alias");
     assert(fn && "Did not find force_no_alias in initial module");
     CallInst *call = builder->CreateCall(fn, vec(ptr));
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-    call->addAttribute(0, Attribute::get(context, Attribute::NoAlias));
-#else
-    call->addAttribute(0, Attribute::NoAlias);
-#endif
+    mark_call_return_no_alias(call, context);
     ptr = call;
 
     return ptr;    
@@ -682,6 +692,14 @@ llvm::Type *CodeGen::llvm_type_of(Halide::Type t) {
         llvm::Type *element_type = llvm_type_of(t.element_of());
         return VectorType::get(element_type, t.width);
     }
+}
+
+void CodeGen::mark_call_return_no_alias(CallInst *inst, llvm::LLVMContext &context) {
+    inst->addAttribute(0, LLVMAPIAttributeAdapter(context, Attribute::NoAlias));
+}
+
+void CodeGen::mark_call_parameter_no_capture(CallInst *inst, unsigned i, llvm::LLVMContext &context) {
+    inst->addAttribute(i, LLVMAPIAttributeAdapter(context, Attribute::NoCapture));
 }
 
 Value *CodeGen::codegen(Expr e) {
@@ -1545,11 +1563,7 @@ public:
                 assert(fn && "Did not find force_no_alias in initial module");
                 Value *arg = builder->CreatePointerCast(load, llvm::Type::getInt8Ty(context)->getPointerTo());
                 CallInst *call = builder->CreateCall(fn, vec(arg));
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-                call->addAttribute(0, Attribute::get(context, Attribute::NoAlias));
-#else
-                call->addAttribute(0, Attribute::NoAlias);
-#endif
+		mark_call_return_no_alias(call, context);
                 val = builder->CreatePointerCast(call, val->getType());
                 
             }

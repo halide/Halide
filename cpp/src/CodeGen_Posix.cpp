@@ -57,6 +57,20 @@ using std::string;
 
 using namespace llvm;
 
+class LLVMAPIAttributeAdapter {
+    LLVMContext &llvm_context;
+    Attribute::AttrKind kind;
+
+public:
+    LLVMAPIAttributeAdapter(LLVMContext &context, Attribute::AttrKind kind_arg) :
+        llvm_context(context), kind(kind_arg)
+    {
+    }
+
+    operator Attribute::AttrKind() { return kind; }
+    operator Attribute() { return Attribute::get(llvm_context, kind); }
+};
+
 CodeGen_Posix::CodeGen_Posix() : CodeGen() {
     i8x8 = VectorType::get(i8, 8);
     i8x16 = VectorType::get(i8, 16);
@@ -157,11 +171,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
         Value *sz = builder->CreateIntCast(size, malloc_fn->arg_begin()->getType(), false);
 	log(4) << "Creating call to halide_malloc\n";
         CallInst *call = builder->CreateCall(malloc_fn, sz);
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-        call->addAttribute(0, Attribute::get(context, Attribute::NoAlias));
-#else
-        call->addAttribute(0, Attribute::NoAlias);
-#endif
+	mark_call_return_no_alias(call, context);
         ptr = call;
         heap_allocations.push_back(ptr);
     }
@@ -177,11 +187,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
         assert(free_fn && "Could not find halide_free in module");
 	log(4) << "Creating call to halide_free\n";
         CallInst *call = builder->CreateCall(free_fn, ptr);
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-        call->addAttribute(1, Attribute::get(context, Attribute::NoCapture));
-#else
-        call->addAttribute(1, Attribute::NoCapture);
-#endif
+	mark_call_parameter_no_capture(call, 1, context);
     }
 }
 
