@@ -18,6 +18,7 @@ class LLVMContext;
 class Type;
 class StructType;
 class Instruction;
+class CallInst;
 }
 
 #include <map>
@@ -154,6 +155,15 @@ protected:
 
     /** Return the llvm version of a halide type */
     llvm::Type *llvm_type_of(Type type);
+
+    /** Add NoAlias attribute to return value of call instruction.
+     * Provided temporarily for API compatability across llvm versions. */
+    static void mark_call_return_no_alias(llvm::CallInst *inst, llvm::LLVMContext &context);
+
+    /** Add NoCapture attribute to parameter of call instruction.
+     * Parameter 0 is return value, 1 is first argument, etc.
+     * Provided temporarily for API compatability across llvm versions. */
+    static void mark_call_parameter_no_capture(llvm::CallInst *inst, unsigned i, llvm::LLVMContext &context);
 
     using IRVisitor::visit;
 
