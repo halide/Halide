@@ -70,14 +70,14 @@ int main(int argc, char **argv) {
 
     // Get its laplacian pyramid
     Func lPyramid[J];
-    lPyramid[J-1] = gPyramid[J-1];
+    lPyramid[J-1](x, y, k) = gPyramid[J-1](x, y, k);
     for (int j = J-2; j >= 0; j--) {
         lPyramid[j](x, y, k) = gPyramid[j](x, y, k) - upsample(gPyramid[j+1])(x, y, k);
     }
 
     // Make the Gaussian pyramid of the input
     Func inGPyramid[J];
-    inGPyramid[0] = gray;
+    inGPyramid[0](x, y) = gray(x, y);
     for (int j = 1; j < J; j++) {
         inGPyramid[j](x, y) = downsample(inGPyramid[j-1])(x, y);
     }        
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
     
     // Make the Gaussian pyramid of the output
     Func outGPyramid[J];
-    outGPyramid[J-1] = outLPyramid[J-1];
+    outGPyramid[J-1](x, y) = outLPyramid[J-1](x, y);
     for (int j = J-2; j >= 0; j--) {
         outGPyramid[j](x, y) = upsample(outGPyramid[j+1])(x, y) + outLPyramid[j](x, y);
     }    

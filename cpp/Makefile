@@ -12,7 +12,7 @@ LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -Os
 LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker nvptx ipo mcjit jit)
-TEST_CXX_FLAGS=
+TEST_CXX_FLAGS ?=
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
