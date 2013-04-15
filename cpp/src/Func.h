@@ -27,7 +27,7 @@ namespace Halide {
 class FuncRefVar {
     Internal::Function func;
     std::vector<std::string> args;
-    void add_implicit_vars(std::vector<std::string> &args, Expr e);
+    void add_implicit_vars(std::vector<std::string> &args, Expr e) const;
 public:
     FuncRefVar(Internal::Function, const std::vector<Var> &);
         
@@ -81,7 +81,7 @@ public:
 class FuncRefExpr {
     Internal::Function func;
     std::vector<Expr> args;
-    void add_implicit_vars(std::vector<Expr> &args, Expr e);
+    void add_implicit_vars(std::vector<Expr> &args, Expr e) const;
 public:
     FuncRefExpr(Internal::Function, const std::vector<Expr> &);
     FuncRefExpr(Internal::Function, const std::vector<std::string> &);
@@ -227,8 +227,8 @@ class Func {
      * up with 'implicit' vars with canonical names. This lets you
      * pass around partially-applied halide functions. */
     // @{
-    void add_implicit_vars(std::vector<Var> &);
-    void add_implicit_vars(std::vector<Expr> &);
+    void add_implicit_vars(std::vector<Var> &) const;
+    void add_implicit_vars(std::vector<Expr> &) const;
     // @}
 
     /** The lowered imperative form of this function. Cached here so
@@ -290,10 +290,12 @@ public:
      * buffer. Has the same dimensionality as the buffer. Useful for
      * passing Images to c++ functions that expect Funcs */
     //@{
-    EXPORT Func(Buffer image);
+    //EXPORT Func(Buffer image);
+    /*
     template<typename T> Func(Image<T> image) {
         (*this) = Func(Buffer(image));
     }
+    */
     //@}
 
     /** Evaluate this function over some rectangular domain and return
@@ -472,12 +474,12 @@ public:
      * enough implicit vars are added to the end of the argument list
      * to make up the difference (see \ref Var::implicit) */
     // @{
-    EXPORT FuncRefVar operator()();
-    EXPORT FuncRefVar operator()(Var x);
-    EXPORT FuncRefVar operator()(Var x, Var y);
-    EXPORT FuncRefVar operator()(Var x, Var y, Var z);
-    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w);
-    EXPORT FuncRefVar operator()(std::vector<Var>);
+    EXPORT FuncRefVar operator()() const;
+    EXPORT FuncRefVar operator()(Var x) const;
+    EXPORT FuncRefVar operator()(Var x, Var y) const;
+    EXPORT FuncRefVar operator()(Var x, Var y, Var z) const;
+    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w) const;
+    EXPORT FuncRefVar operator()(std::vector<Var>) const;
     // @}
 
     /** Either calls to the function, or the left-hand-side of a
@@ -487,11 +489,11 @@ public:
      * the end of the argument list to make up the difference. (see
      * \ref Var::implicit)*/
     // @{
-    EXPORT FuncRefExpr operator()(Expr x);
-    EXPORT FuncRefExpr operator()(Expr x, Expr y);
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z);
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w);
-    EXPORT FuncRefExpr operator()(std::vector<Expr>);
+    EXPORT FuncRefExpr operator()(Expr x) const;
+    EXPORT FuncRefExpr operator()(Expr x, Expr y) const;
+    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z) const;
+    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w) const;
+    EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
     // @}
 
     /** Scheduling calls that control how the domain of this function
@@ -790,7 +792,7 @@ public:
      \endcode
      *
      */
-    operator Expr() {
+    operator Expr() const {
         return (*this)();
     }
 
@@ -802,6 +804,13 @@ public:
         (*this)() = e;
     }
 
+    /** Define a function to simply call another function. Note that
+     * this is not equivalent to the standard c++ operator=. We opt
+     * instead for consistency with Halide function definition, of
+     * which this is a degenerate case. */
+    void operator=(const Func &f) {
+        (*this)() = f();
+    }
 };
 
 

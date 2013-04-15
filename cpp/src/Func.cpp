@@ -51,6 +51,7 @@ Func::Func(Expr e) : func(unique_name('f')),
     (*this)() = e;
 }
 
+/*
 Func::Func(Buffer b) : func(unique_name('f')),
                        error_handler(NULL), 
                        custom_malloc(NULL), 
@@ -63,6 +64,7 @@ Func::Func(Buffer b) : func(unique_name('f')),
     }
     (*this)() = new Internal::Call(b, args);
 }
+*/
         
 const string &Func::name() const {
     return func.name();
@@ -77,73 +79,73 @@ int Func::dimensions() const {
     return (int)func.args().size();
 }
 
-FuncRefVar Func::operator()() {
+FuncRefVar Func::operator()() const {
     // Bulk up the argument list using implicit vars
     vector<Var> args;
     add_implicit_vars(args);
     return FuncRefVar(func, args);
 }
 
-FuncRefVar Func::operator()(Var x) {
+FuncRefVar Func::operator()(Var x) const {
     // Bulk up the argument list using implicit vars
     vector<Var> args = vec(x);
     add_implicit_vars(args);
     return FuncRefVar(func, args);
 }
 
-FuncRefVar Func::operator()(Var x, Var y) {
+FuncRefVar Func::operator()(Var x, Var y) const {
     vector<Var> args = vec(x, y);
     add_implicit_vars(args);
     return FuncRefVar(func, args);
 }
 
-FuncRefVar Func::operator()(Var x, Var y, Var z) {
+FuncRefVar Func::operator()(Var x, Var y, Var z) const{
     vector<Var> args = vec(x, y, z);
     add_implicit_vars(args);
     return FuncRefVar(func, args);
 }
 
-FuncRefVar Func::operator()(Var x, Var y, Var z, Var w) {
+FuncRefVar Func::operator()(Var x, Var y, Var z, Var w) const {
     vector<Var> args = vec(x, y, z, w);
     add_implicit_vars(args);
     return FuncRefVar(func, args);
 }
 
-FuncRefVar Func::operator()(vector<Var> args) {
+FuncRefVar Func::operator()(vector<Var> args) const {
     add_implicit_vars(args);
     return FuncRefVar(func, args);
 }
  
-FuncRefExpr Func::operator()(Expr x) {
+FuncRefExpr Func::operator()(Expr x) const {
     vector<Expr> args = vec(x);
     add_implicit_vars(args);
     return FuncRefExpr(func, args);
 }
 
-FuncRefExpr Func::operator()(Expr x, Expr y) {
+FuncRefExpr Func::operator()(Expr x, Expr y) const {
     vector<Expr> args = vec(x, y);
     add_implicit_vars(args);
     return FuncRefExpr(func, args);
 }
 
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z) {
+FuncRefExpr Func::operator()(Expr x, Expr y, Expr z) const {
     vector<Expr> args = vec(x, y, z);
     add_implicit_vars(args);
     return FuncRefExpr(func, args);
 }
 
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) {
+FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) const {
     vector<Expr> args = vec(x, y, z, w);
     add_implicit_vars(args);
     return FuncRefExpr(func, args);
 }  
 
-FuncRefExpr Func::operator()(vector<Expr> args) {
+FuncRefExpr Func::operator()(vector<Expr> args) const {
     add_implicit_vars(args);
     return FuncRefExpr(func, args);
 }
 
-void Func::add_implicit_vars(vector<Var> &args) {
+void Func::add_implicit_vars(vector<Var> &args) const {
     int i = 0;    
     while ((int)args.size() < dimensions()) {        
         Internal::log(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
@@ -151,7 +153,7 @@ void Func::add_implicit_vars(vector<Var> &args) {
     }
 }
     
-void Func::add_implicit_vars(vector<Expr> &args) {
+void Func::add_implicit_vars(vector<Expr> &args) const {
     int i = 0;
     while ((int)args.size() < dimensions()) {
         Internal::log(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
@@ -467,7 +469,7 @@ public:
 };
 }
 
-void FuncRefVar::add_implicit_vars(vector<string> &a, Expr e) {
+void FuncRefVar::add_implicit_vars(vector<string> &a, Expr e) const {
     CountImplicitVars count(e);
     Internal::log(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
     for (int i = 0; i < count.count; i++) {
@@ -530,7 +532,7 @@ FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a) : func(f
     }
 }
     
-void FuncRefExpr::add_implicit_vars(vector<Expr> &a, Expr e) {
+void FuncRefExpr::add_implicit_vars(vector<Expr> &a, Expr e) const {
     CountImplicitVars f(e);
     // Implicit vars are also allowed in the lhs of a reduction. E.g.:
     // f(x, y) = x+y
