@@ -117,8 +117,9 @@ int main(int argc, char **argv) {
 
     Var yi;
     output.split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+    gray.compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
     for (int j = 0; j < 4; j++) {
-        inGPyramid[j].compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+        if (j > 0) inGPyramid[j].compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
         if (j > 0) gPyramid[j].compute_root().parallel(k).vectorize(x, 4);
         outGPyramid[j].compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
     }
