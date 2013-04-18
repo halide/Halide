@@ -1,12 +1,14 @@
 #include "IR.h"
 #include "Function.h"
 #include "Scope.h"
+#include <set>
 
 namespace Halide {
 namespace Internal {
 
 using std::vector;
 using std::string;
+using std::set;
 
 template<>
 EXPORT RefCount &ref_count<FunctionContents>(const FunctionContents *f) {return f->ref_count;}
@@ -61,6 +63,19 @@ struct CheckVars : public IRVisitor {
     }
 };
 
+struct CountSelfReferences : public IRVisitor {
+    set<const Call *> calls;
+    const Function *func;
+
+    using IRVisitor::visit;
+    
+    void visit(const Call *c) {
+        if (c->func.same_as(*func)) {
+            calls.insert(c);
+        }
+    }
+};
+
 void Function::define(const vector<string> &args, Expr value) {
     assert(!name().empty() && "A function needs a name");
     assert(value.defined() && "Undefined expression in right-hand-side of function definition\n");
@@ -99,9 +114,9 @@ void Function::define_reduction(const vector<Expr> &args, Expr value) {
     assert(args.size() == contents.ptr->args.size() && 
            "Dimensionality of reduction definition must match dimensionality of pure definition");
 
-    // Check that pure value and the reduction value have the same type.
-    // Without this check, allocations may be the wrong size relative to what
-    // update code expects.
+    // Check that pure value and the reduction value have the same
+    // type.  Without this check, allocations may be the wrong size
+    // relative to what update code expects.
     assert(contents.ptr->value.type() == value.type() &&
 	   "Reduction definition does not match type of pure function definition.");
 
@@ -134,6 +149,23 @@ void Function::define_reduction(const vector<Expr> &args, Expr value) {
     contents.ptr->reduction_args = args;
     contents.ptr->reduction_value = value;
     contents.ptr->reduction_domain = check.reduction_domain;
+
+    // The reduction value and args probably refer back to the
+    // function itself, introducing circular references and hence
+    // memory leaks. We need to count the number of unique call nodes
+    // that point back to this function in order to break the cycles.
+    CountSelfReferences counter;
+    counter.func = this;
+    for (size_t i = 0; i < args.size(); i++) {
+        args[i].accept(&counter);
+    }
+    value.accept(&counter);
+
+    for (size_t i = 0; i < counter.calls.size(); i++) {
+        contents.ptr->ref_count.decrement();
+        assert(!contents.ptr->ref_count.is_zero() && 
+               "Bug: removed too many circular references when defining reduction\n");
+    }
 
     // First add the pure args in order
     for (size_t i = 0; i < pure_args.size(); i++) {
