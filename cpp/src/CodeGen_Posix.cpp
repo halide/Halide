@@ -30,6 +30,7 @@
 #include <llvm/Support/IRReader.h>
 // They renamed this type in 3.3
 typedef llvm::Attributes Attribute;
+typedef llvm::Attributes::AttrVal AttrKind;
 #include <llvm/Support/IRReader.h>
 #else
 #include <llvm/IR/Value.h>
@@ -40,6 +41,7 @@ typedef llvm::Attributes Attribute;
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Attributes.h>
 #include <llvm/Bitcode/ReaderWriter.h>
+typedef llvm::Attribute::AttrKind AttrKind;
 #endif
 
 #include <llvm/Support/MemoryBuffer.h>
@@ -59,15 +61,15 @@ using namespace llvm;
 
 class LLVMAPIAttributeAdapter {
     LLVMContext &llvm_context;
-    Attribute::AttrKind kind;
+    AttrKind kind;
 
 public:
-    LLVMAPIAttributeAdapter(LLVMContext &context, Attribute::AttrKind kind_arg) :
+    LLVMAPIAttributeAdapter(LLVMContext &context, AttrKind kind_arg) :
         llvm_context(context), kind(kind_arg)
     {
     }
 
-    operator Attribute::AttrKind() { return kind; }
+    operator AttrKind() { return kind; }
     operator Attribute() { return Attribute::get(llvm_context, kind); }
 };
 
