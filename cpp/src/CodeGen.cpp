@@ -50,6 +50,7 @@
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
 // They renamed this type in 3.3
 typedef llvm::Attributes Attribute;
+typedef llvm::Attributes::AttrVal AttrKind;
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
@@ -58,6 +59,7 @@ typedef llvm::Attributes Attribute;
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
+typedef llvm::Attribute::AttrKind AttrKind;
 #endif
 
 // No msvc warnings from llvm headers please
@@ -82,16 +84,16 @@ using std::stack;
 
 namespace {
 class LLVMAPIAttributeAdapter {
-    LLVMContext &llvm_context;
-    Attribute::AttrKind kind;
+    LLVMContext &llvm_context;    
+    AttrKind kind;
 
 public:
-    LLVMAPIAttributeAdapter(LLVMContext &context, Attribute::AttrKind kind_arg) :
+    LLVMAPIAttributeAdapter(LLVMContext &context, AttrKind kind_arg) :
         llvm_context(context), kind(kind_arg)
     {
     }
 
-    operator Attribute::AttrKind() { return kind; }
+    operator AttrKind() { return kind; }
     operator Attribute() { return Attribute::get(llvm_context, kind); }
 };
 
