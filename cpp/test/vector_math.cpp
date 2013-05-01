@@ -359,6 +359,24 @@ bool test(int vec_width) {
             }
         }
     }
+    
+    // Absolute value
+    if (!type_of<A>().is_uint()) {
+        if (verbose) printf("Absolute value\n");
+        Func f14;
+        f14(x, y) = abs(input(x, y));
+        Image<A> im14 = f14.realize(W, H);
+
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                A correct = input(x, y);
+                if (correct < 0) correct = -correct;
+                if (im14(x, y) != correct) {
+                    printf("im14(%d, %d) = %f instead of %f\n", x, y, (double)(im14(x, y)), (double)(correct));
+                }
+            }
+        }
+    }
 
     return true;
 }
