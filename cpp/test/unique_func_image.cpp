@@ -22,22 +22,22 @@ int main(int argc, char **argv) {
     Image<int> out1 = ext1.realize(10);
     Image<int> out2 = ext2.realize(10);
 
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 10; i++) {
         assert(out1(i) == i + 1 && "Incorrect result from call to ext1");
+    }
 
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 10; i++) {
         assert(out2(i) == i + 2 && "Incorrect result from call to ext2");
+    }
 
-    printf("a\n");
     Func out1_as_func(out1);
-    printf("a\n");
     Func ext3 = add2(out1_as_func);
-    printf("a\n");
 
     Image<int> out3 = ext3.realize(10);
     
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 10; i++) {
         assert(out3(i) == i + 3 && "Incorrect result from call to add2");
+    }
 
     printf("Success!\n");
 
