@@ -111,6 +111,18 @@ FuncRefVar Func::operator()(Var x, Var y, Var z, Var w) const {
     return FuncRefVar(func, args);
 }
 
+FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u) const {
+    vector<Var> args = vec(x, y, z, w, u);
+    add_implicit_vars(args);
+    return FuncRefVar(func, args);
+}
+
+FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u, Var v) const {
+  vector<Var> args = vec(x, y, z, w, u, v);
+    add_implicit_vars(args);
+    return FuncRefVar(func, args);
+}
+
 FuncRefVar Func::operator()(vector<Var> args) const {
     add_implicit_vars(args);
     return FuncRefVar(func, args);
@@ -136,6 +148,18 @@ FuncRefExpr Func::operator()(Expr x, Expr y, Expr z) const {
 
 FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) const {
     vector<Expr> args = vec(x, y, z, w);
+    add_implicit_vars(args);
+    return FuncRefExpr(func, args);
+}  
+
+FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const {
+  vector<Expr> args = vec(x, y, z, w, u);
+    add_implicit_vars(args);
+    return FuncRefExpr(func, args);
+}  
+
+FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const {
+    vector<Expr> args = vec(x, y, z, w, u, v);
     add_implicit_vars(args);
     return FuncRefExpr(func, args);
 }  

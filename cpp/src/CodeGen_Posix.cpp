@@ -153,12 +153,19 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     Value *size = codegen(alloc->size * bytes_per_element);
     llvm::Type *llvm_type = llvm_type_of(alloc->type);
     Value *ptr;                
+    Value *saved_stack = NULL;
 
     // In the future, we may want to construct an entire buffer_t here
     string allocation_name = alloc->name + ".host";
     log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
     if (on_stack) {
+        // TODO: Optimize to do only one stack pointer save per loop scope.
+        llvm::Function *stacksave =
+          llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stacksave,
+                                          ArrayRef<llvm::Type*>());
+        saved_stack = builder->CreateCall(stacksave);
+
         // Do a 32-byte aligned alloca
         int total_bytes = stack_size * bytes_per_element;            
         int chunks = (total_bytes + 31)/32;
@@ -190,6 +197,11 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
         log(4) << "Creating call to halide_free\n";
         CallInst *call = builder->CreateCall(free_fn, ptr);
         mark_call_parameter_no_capture(call, 1, context);
+    } else {
+        llvm::Function *stackrestore =
+          llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore,
+                                          ArrayRef<llvm::Type*>());
+        builder->CreateCall(stackrestore, saved_stack);
     }
 }
 
