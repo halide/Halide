@@ -421,7 +421,8 @@ void check_sse_all() {
 	check_sse("vcvtps2pd", 8, f64(f32_1));
 	check_sse("vcvtpd2ps", 8, f32(f64_1));
 
-        check_sse("vperm", 4, in_f32(100-x));
+        // Newer llvms will just vpshufd straight from memory for reversed loads
+        // check_sse("vperm", 8, in_f32(100-x));
     }
 
     // AVX 2
