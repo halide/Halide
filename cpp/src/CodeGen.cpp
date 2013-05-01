@@ -306,7 +306,7 @@ public:
         options.NoZerosInBSS = false;
         options.GuaranteedTailCallOpt = false;
         options.DisableTailCalls = false;
-        options.StackAlignmentOverride = 32;
+        options.StackAlignmentOverride = 0;
         options.RealignStack = true;
         options.TrapFuncName = "";
         options.PositionIndependentExecutable = true;
@@ -467,7 +467,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
 
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
-    options.NoFramePointerElim = false;
+    options.NoFramePointerElim = false; 
     options.NoFramePointerElimNonLeaf = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
@@ -480,7 +480,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;
-    options.StackAlignmentOverride = 32;
+    options.StackAlignmentOverride = 0;
     options.RealignStack = true;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
