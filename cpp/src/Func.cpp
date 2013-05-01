@@ -196,10 +196,13 @@ bool var_name_match(string candidate, string var) {
 void ScheduleHandle::set_dim_type(Var var, For::ForType t) {
     bool found = false;
     vector<Schedule::Dim> &dims = schedule.dims;
-    for (size_t i = 0; (!found) && i < dims.size(); i++) {
+    for (size_t i = 0; i < dims.size(); i++) {
         if (var_name_match(dims[i].var, var.name())) {
             found = true;
             dims[i].for_type = t;
+        } else if (t == For::Vectorized) {
+            assert(dims[i].for_type != For::Vectorized && 
+                   "Can't vectorize across more than one variable");
         }
     }
         
