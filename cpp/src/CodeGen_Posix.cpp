@@ -28,10 +28,13 @@
 #include <llvm/IRBuilder.h>
 #include <llvm/Attributes.h>
 #include <llvm/Support/IRReader.h>
+#include <llvm/Support/IRReader.h>
+#include <llvm/Intrinsics.h>
+
 // They renamed this type in 3.3
 typedef llvm::Attributes Attribute;
 typedef llvm::Attributes::AttrVal AttrKind;
-#include <llvm/Support/IRReader.h>
+
 #else
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
@@ -41,10 +44,14 @@ typedef llvm::Attributes::AttrVal AttrKind;
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Attributes.h>
 #include <llvm/Bitcode/ReaderWriter.h>
+#include <llvm/IR/Intrinsics.h>
+
 typedef llvm::Attribute::AttrKind AttrKind;
+
 #endif
 
 #include <llvm/Support/MemoryBuffer.h>
+
 
 // No msvc warnings from llvm headers please
 #ifdef _WIN32
