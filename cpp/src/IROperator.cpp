@@ -191,7 +191,7 @@ void match_types(Expr &a, Expr &b) {
         if (ta.bits > tb.bits) b = cast(ta, b);
         else a = cast(tb, a); 
     } else if (!ta.is_float() && !tb.is_float() && is_const(b)) {
-        // (u)int(a) * (u)intImm(b) -> int(a)
+        // (u)int(a) * (u)intImm(b) -> (u)int(a)
         b = cast(ta, b); 
     } else if (!tb.is_float() && !ta.is_float() && is_const(a)) {
         a = cast(tb, a); 
