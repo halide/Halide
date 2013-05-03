@@ -2,6 +2,7 @@
 #include "IRPrinter.h"
 #include "CodeGen.h"
 #include "IROperator.h"
+#include "CodeGen_Internal.h"
 #include "Log.h"
 #include "CodeGen_C.h"
 #include "Function.h"
@@ -1445,132 +1446,6 @@ void CodeGen::visit(const Pipeline *op) {
     codegen(op->consume);
 }
 
-/* A helper class to manage closures - used for parallel for loops */
-class CodeGen::Closure : public IRVisitor {
-private:
-    map<string, llvm::Type *> result;
-    Scope<int> ignore;
-    CodeGen *gen;
-
-    using IRVisitor::visit;
-
-    void visit(const Let *op) {
-        op->value.accept(this);
-        ignore.push(op->name, 0);
-        op->body.accept(this);
-        ignore.pop(op->name);
-    }
-
-    void visit(const LetStmt *op) {
-        op->value.accept(this);
-        ignore.push(op->name, 0);
-        op->body.accept(this);
-        ignore.pop(op->name);
-    }
-
-    void visit(const For *op) {
-        ignore.push(op->name, 0);
-        op->min.accept(this);
-        op->extent.accept(this);
-        op->body.accept(this);
-        ignore.pop(op->name);
-    }
-
-    void visit(const Load *op) {
-        op->index.accept(this);
-        if (!ignore.contains(op->name)) {
-            log(3) << "Adding " << op->name << " to closure\n";
-            result[op->name + ".host"] = gen->llvm_type_of(op->type)->getPointerTo();
-        } else {
-            log(3) << "Not adding " << op->name << " to closure\n";
-        }
-    }
-
-    void visit(const Store *op) {
-        op->index.accept(this);
-        op->value.accept(this);
-        if (!ignore.contains(op->name)) {
-            log(3) << "Adding " << op->name << " to closure\n";
-            result[op->name + ".host"] = gen->llvm_type_of(op->value.type())->getPointerTo();
-        } else {
-            log(3) << "Not adding " << op->name << " to closure\n";
-        }
-    }
-
-    void visit(const Allocate *op) {
-        ignore.push(op->name, 0);
-        op->size.accept(this);
-        op->body.accept(this);
-        ignore.pop(op->name);
-    }
-
-    void visit(const Variable *op) {            
-        if (ignore.contains(op->name)) {
-            log(3) << "Not adding " << op->name << " to closure\n";
-        } else {
-            log(3) << "Adding " << op->name << " to closure\n";
-            result[op->name] = gen->llvm_type_of(op->type);
-        }
-    }
-
-public:
-    Closure(Stmt s, CodeGen *g, const string &loop_variable) : gen(g) {
-        ignore.push(loop_variable, 0);
-        s.accept(this);
-    }
-
-    StructType *build_type() {
-        StructType *struct_t = StructType::create(gen->context, "closure_t");
-        vector<llvm::Type *> fields;
-        for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
-             iter != result.end(); ++iter) {
-            fields.push_back(iter->second);
-        }
-        struct_t->setBody(fields, false);
-        return struct_t;
-    }
-
-    void pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> *builder) {
-        // dst should be a pointer to a struct of the type returned by build_type
-        int idx = 0;
-        for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
-             iter != result.end(); ++iter) {
-            // cout << "Putting " << iter->first << " in closure" << endl;
-            Value *val = src.get(iter->first);
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx++);
-            if (val->getType() != iter->second) {
-                val = builder->CreateBitCast(val, iter->second);
-            }            
-            builder->CreateStore(val, ptr);
-        }
-    }
-
-    void unpack_struct(Scope<Value *> &dst, Value *src, IRBuilder<> *builder, Module *module, LLVMContext &context) {
-        // src should be a pointer to a struct of the type returned by build_type
-        int idx = 0;
-        for (map<string, llvm::Type *>::const_iterator iter = result.begin(); 
-             iter != result.end(); ++iter) {
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr);
-            Value *val = load;
-            if (load->getType()->isPointerTy()) {
-                // Give it a unique type so that tbaa tells llvm that this can't alias anything
-                load->setMetadata("tbaa", MDNode::get(context, vec<Value *>(MDString::get(context, iter->first))));
-                
-                llvm::Function *fn = module->getFunction("force_no_alias");
-                assert(fn && "Did not find force_no_alias in initial module");
-                Value *arg = builder->CreatePointerCast(load, llvm::Type::getInt8Ty(context)->getPointerTo());
-                CallInst *call = builder->CreateCall(fn, vec(arg));
-                mark_call_return_no_alias(call, context);
-                val = builder->CreatePointerCast(call, val->getType());
-                
-            }
-            dst.push(iter->first, val);
-            val->setName(iter->first);
-        }
-    }
-};
-
 void CodeGen::visit(const For *op) {
     Value *min = codegen(op->min);
     Value *extent = codegen(op->extent);
@@ -1620,14 +1495,14 @@ void CodeGen::visit(const For *op) {
 
         // Find every symbol that the body of this loop refers to
         // and dump it into a closure
-        Closure closure(op->body, this, op->name);
+        Closure closure(op->body, op->name);
 
         // Allocate a closure
-        StructType *closure_t = closure.build_type();
+        StructType *closure_t = closure.build_type(this);
         Value *ptr = builder->CreateAlloca(closure_t, ConstantInt::get(i32, 1)); 
 
         // Fill in the closure
-        closure.pack_struct(ptr, symbol_table, builder);
+        closure.pack_struct(this, ptr, symbol_table, builder);
 
         // Make a new function that does one iteration of the body of the loop
         FunctionType *func_t = FunctionType::get(void_t, vec(i32, (llvm::Type *)(i8->getPointerTo())), false);
@@ -1655,7 +1530,7 @@ void CodeGen::visit(const For *op) {
         iter->setName("closure");
         Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
         // Load everything from the closure into the new scope
-        closure.unpack_struct(symbol_table, closure_handle, builder, module, context);
+        closure.unpack_struct(this, symbol_table, closure_handle, builder, module, context);
 
         // Generate the new function body
         codegen(op->body);
