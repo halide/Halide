@@ -137,7 +137,7 @@ void CodeGen::Closure::pack_struct(CodeGen *gen, Value *dst, const Scope<Value *
     int idx = 0;
     vector<string> nm = names();
     vector<llvm::Type*> ty = llvm_types(gen);
-    for (int i = 0; i < nm.size(); i++) {
+    for (size_t i = 0; i < nm.size(); i++) {
         Value *val = src.get(nm[i]);
         Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx++);
         if (val->getType() != ty[i]) {
@@ -151,7 +151,7 @@ void CodeGen::Closure::unpack_struct(CodeGen *gen, Scope<Value *> &dst, Value *s
     // src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
     vector<string> nm = names();
-    for (int i = 0; i < nm.size(); i++) {
+    for (size_t i = 0; i < nm.size(); i++) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(src, 0, idx++);
         LoadInst *load = builder->CreateLoad(ptr);
         Value *val = load;
