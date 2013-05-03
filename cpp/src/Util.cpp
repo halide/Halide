@@ -6,6 +6,7 @@ namespace Halide {
 namespace Internal {
 
 using std::string;
+using std::vector;
 using std::ostringstream;
 using std::map;
 
@@ -67,6 +68,14 @@ string unique_name(const string &name) {
         oss << name << '$' << count;
         return oss.str();
     }
+}
+
+string base_name(const string &name) {
+    size_t off = name.rfind('.');
+    if (off == string::npos) {
+        return "";
+    }
+    return name.substr(off+1);
 }
 
 }

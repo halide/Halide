@@ -146,7 +146,7 @@ CodeGen_Posix::CodeGen_Posix() : CodeGen() {
     min_f64 = Float(64).min();
 }
 
-void CodeGen_Posix::visit(const Allocate *alloc) {
+Value* CodeGen_Posix::malloc_buffer(const Allocate *alloc, Value *&saved_stack) {
 
     // Allocate anything less than 32k on the stack
     int bytes_per_element = alloc->type.bits / 8;
@@ -160,11 +160,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     Value *size = codegen(alloc->size * bytes_per_element);
     llvm::Type *llvm_type = llvm_type_of(alloc->type);
     Value *ptr;                
-    Value *saved_stack = NULL;
-
-    // In the future, we may want to construct an entire buffer_t here
-    string allocation_name = alloc->name + ".host";
-    log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
+    saved_stack = NULL;
 
     if (on_stack) {
         // TODO: Optimize to do only one stack pointer save per loop scope.
@@ -192,11 +188,11 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
         heap_allocations.push_back(ptr);
     }
 
-    sym_push(allocation_name, ptr);
-    codegen(alloc->body);
-    sym_pop(allocation_name);
+    return ptr;
+}
 
-    if (!on_stack) {
+void CodeGen_Posix::free_buffer(Value *ptr, Value *saved_stack) {
+    if (!saved_stack) {
         heap_allocations.pop_back();
         // call free
         llvm::Function *free_fn = module->getFunction("halide_free");
@@ -210,6 +206,21 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
                                           ArrayRef<llvm::Type*>());
         builder->CreateCall(stackrestore, saved_stack);
     }
+}
+
+void CodeGen_Posix::visit(const Allocate *alloc) {
+    Value *saved_stack;
+    Value *ptr = malloc_buffer(alloc, saved_stack);
+
+    // In the future, we may want to construct an entire buffer_t here
+    string allocation_name = alloc->name + ".host";
+    log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
+
+    sym_push(allocation_name, ptr);
+    codegen(alloc->body);
+    sym_pop(allocation_name);
+
+    free_buffer(ptr, saved_stack);
 }
 
 void CodeGen_Posix::prepare_for_early_exit() {
