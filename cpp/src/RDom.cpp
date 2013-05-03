@@ -39,15 +39,16 @@ Internal::ReductionDomain build_domain(string name0, Expr min0, Expr extent0,
     return dom;
 }
 
+// We suffix all RVars with $r to prevent unintentional name matches with pure vars called x, y, z, w.
 RDom::RDom(Expr min, Expr extent, string name) {
     min = cast<int>(min);
     extent = cast<int>(extent);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x", min, extent, 
+    domain = build_domain(name + ".x$r", min, extent, 
                           "", Expr(), Expr(), 
                           "", Expr(), Expr(), 
                           "", Expr(), Expr());
-    x = RVar(name + ".x", min, extent, domain);
+    x = RVar(name + ".x$r", min, extent, domain);
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
@@ -56,12 +57,12 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
     min1 = cast<int>(min1);
     extent1 = cast<int>(extent1);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x", min0, extent0, 
-                          name + ".y", min1, extent1,
+    domain = build_domain(name + ".x$r", min0, extent0, 
+                          name + ".y$r", min1, extent1,
                           "", Expr(), Expr(), 
                           "", Expr(), Expr());
-    x = RVar(name + ".x", min0, extent0, domain);
-    y = RVar(name + ".y", min1, extent1, domain);
+    x = RVar(name + ".x$r", min0, extent0, domain);
+    y = RVar(name + ".y$r", min1, extent1, domain);
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, string name) {
@@ -72,13 +73,13 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     min2 = cast<int>(min2);
     extent2 = cast<int>(extent2);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x", min0, extent0, 
-                          name + ".y", min1, extent1,
-                          name + ".z", min2, extent2,
+    domain = build_domain(name + ".x$r", min0, extent0, 
+                          name + ".y$r", min1, extent1,
+                          name + ".z$r", min2, extent2,
                           "", Expr(), Expr());
-    x = RVar(name + ".x", min0, extent1, domain);
-    y = RVar(name + ".y", min1, extent1, domain);
-    z = RVar(name + ".z", min2, extent2, domain);
+    x = RVar(name + ".x$r", min0, extent1, domain);
+    y = RVar(name + ".y$r", min1, extent1, domain);
+    z = RVar(name + ".z$r", min2, extent2, domain);
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, string name) {
@@ -91,14 +92,14 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     min3 = cast<int>(min3);
     extent3 = cast<int>(extent3);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x", min0, extent0, 
-                          name + ".y", min1, extent1, 
-                          name + ".z", min2, extent2, 
-                          name + ".w", min3, extent3);
-    x = RVar(name + ".x", min0, extent1, domain);
-    y = RVar(name + ".y", min1, extent1, domain);
-    z = RVar(name + ".z", min2, extent2, domain);
-    w = RVar(name + ".w", min3, extent3, domain);
+    domain = build_domain(name + ".x$r", min0, extent0, 
+                          name + ".y$r", min1, extent1, 
+                          name + ".z$r", min2, extent2, 
+                          name + ".w$r", min3, extent3);
+    x = RVar(name + ".x$r", min0, extent1, domain);
+    y = RVar(name + ".y$r", min1, extent1, domain);
+    z = RVar(name + ".z$r", min2, extent2, domain);
+    w = RVar(name + ".w$r", min3, extent3, domain);
 }
 
 RDom::RDom(Buffer b) {   
@@ -109,7 +110,7 @@ RDom::RDom(Buffer b) {
             extent[i] = b.extent(i);
         }    
     }
-    string names[] = {b.name() + ".x", b.name() + ".y", b.name() + ".z", b.name() + ".w"};
+    string names[] = {b.name() + ".x$r", b.name() + ".y$r", b.name() + ".z$r", b.name() + ".w$r"};
     domain = build_domain(names[0], min[0], extent[0],
                           names[1], min[1], extent[1],
                           names[2], min[2], extent[2],
@@ -130,7 +131,7 @@ RDom::RDom(ImageParam p) {
             extent[i] = p.extent(i);
         }    
     }
-    string names[] = {p.name() + ".x", p.name() + ".y", p.name() + ".z", p.name() + ".w"};
+    string names[] = {p.name() + ".x$r", p.name() + ".y$r", p.name() + ".z$r", p.name() + ".w$r"};
     domain = build_domain(names[0], min[0], extent[0],
                           names[1], min[1], extent[1],
                           names[2], min[2], extent[2],
