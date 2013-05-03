@@ -341,6 +341,7 @@ inline Expr abs(Expr a) {
     if (a.type() == Float(64)) 
         return new Internal::Call(Float(64), "abs_f64", vec(a));
     assert(false && "Invalid type for abs");
+    return 0; // prevent "control reaches end of non-void function" error
 }
 
 /** Returns an expression equivalent to the ternary operator in C. If
