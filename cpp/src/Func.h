@@ -479,6 +479,8 @@ public:
     EXPORT FuncRefVar operator()(Var x, Var y) const;
     EXPORT FuncRefVar operator()(Var x, Var y, Var z) const;
     EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w) const;
+    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, Var u) const;
+    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, Var u, Var v) const;
     EXPORT FuncRefVar operator()(std::vector<Var>) const;
     // @}
 
@@ -493,6 +495,8 @@ public:
     EXPORT FuncRefExpr operator()(Expr x, Expr y) const;
     EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z) const;
     EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w) const;
+    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const;
+    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const;
     EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
     // @}
 
