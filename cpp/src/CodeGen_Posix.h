@@ -59,6 +59,9 @@ protected:
     /** The heap allocations currently in scope */
     std::vector<llvm::Value *> heap_allocations;
 
+    llvm::Value* malloc_buffer(const Allocate *alloc, llvm::Value *&saved_stack);
+    void free_buffer(llvm::Value *ptr, llvm::Value *saved_stack);
+
     /** Free all heap allocations in scope */
     void prepare_for_early_exit();
 };
