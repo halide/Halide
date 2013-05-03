@@ -763,11 +763,7 @@ void CodeGen::visit(const Variable *op) {
 
         if (log::debug_level > 0) {
             std::cerr << "The following names are in scope:\n";
-            const map<string, stack<pair<Value *, int> > > &table = symbol_table.get_table();
-            map<string, stack<pair<Value *, int> > >::const_iterator iter;
-            for (iter = table.begin(); iter != table.end(); iter++) {
-                std::cerr << iter->first << "\n";
-            }
+            std::cerr << symbol_table << "\n";
         }
 
         assert(false);
