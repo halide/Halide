@@ -642,118 +642,7 @@ Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
     return buf;
 }
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name) {
-    assert(value().defined() && "Can't compile undefined function");    
-
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
-    Argument me(name(), true, Int(1));
-    args.push_back(me);
-
-    StmtCompiler cg;
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
-    cg.compile_to_bitcode(filename);
-}
-
-void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name) {
-    assert(value().defined() && "Can't compile undefined function");    
-
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
-    Argument me(name(), true, Int(1));
-    args.push_back(me);
-
-    StmtCompiler cg;
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
-    cg.compile_to_native(filename, false);
-}
-
-void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name) {    
-    Argument me(name(), true, Int(1));
-    args.push_back(me);
-
-    ofstream header(filename.c_str());
-    CodeGen_C cg(header);
-    cg.compile_header(fn_name.empty() ? name() : fn_name, args);
-}
-
-void Func::compile_to_c(const string &filename, vector<Argument> args, const string &fn_name) {    
-    Argument me(name(), true, Int(1));
-    args.push_back(me);
-
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
-    ofstream header(filename.c_str());
-    CodeGen_C cg(header);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
-}
-
-void Func::compile_to_file(const string &filename_prefix, vector<Argument> args) {
-    compile_to_header(filename_prefix + ".h", args, filename_prefix);
-    compile_to_object(filename_prefix + ".o", args, filename_prefix);
-}
-
-void Func::compile_to_file(const string &filename_prefix) {
-    compile_to_file(filename_prefix, vector<Argument>());
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a) {
-    compile_to_file(filename_prefix, Internal::vec(a));    
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b) {
-    compile_to_file(filename_prefix, Internal::vec(a, b));    
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c));    
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c, d));    
-}
-
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e));    
-}
-
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name) {
-    assert(value().defined() && "Can't compile undefined function");    
-
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
-    Argument me(name(), true, Int(1));
-    args.push_back(me);
-
-    StmtCompiler cg;
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
-    cg.compile_to_native(filename, true);
-}
-
-void Func::set_error_handler(void (*handler)(char *)) {
-    error_handler = handler;
-    if (compiled_module.set_error_handler) {
-        compiled_module.set_error_handler(handler);
-    }
-}
-
-void Func::set_custom_allocator(void *(*cust_malloc)(size_t), void (*cust_free)(void *)) {
-    custom_malloc = cust_malloc;
-    custom_free = cust_free;
-    if (compiled_module.set_custom_allocator) {
-        compiled_module.set_custom_allocator(cust_malloc, cust_free);
-    }
-}
-
-void Func::set_custom_do_par_for(void (*cust_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *)) {
-    custom_do_par_for = cust_do_par_for;
-    if (compiled_module.set_custom_do_par_for) {
-        compiled_module.set_custom_do_par_for(cust_do_par_for);
-    }
-}
-
-void Func::set_custom_do_task(void (*cust_do_task)(void (*)(int, uint8_t *), int, uint8_t *)) {
-    custom_do_task = cust_do_task;
-    if (compiled_module.set_custom_do_task) {
-        compiled_module.set_custom_do_task(cust_do_task);
-    }
-}
+namespace {
 
 class InferArguments : public IRVisitor {
 public:
@@ -828,6 +717,170 @@ private:
         }
     }
 };
+
+/** Check that all the necessary arguments are in an args vector */
+void validate_arguments(const vector<Argument> &args, Stmt lowered) {
+    InferArguments infer_args;
+    lowered.accept(&infer_args);
+    const vector<Argument> &required_args = infer_args.arg_types;
+
+    for (size_t i = 0; i < required_args.size(); i++) {
+        const Argument &arg = required_args[i];
+        bool found = false;
+        for (size_t j = 0; !found && j < args.size(); j++) {
+            if (args[j].name == arg.name) {
+                found = true;
+            }
+        }
+        if (!found) {
+            std::cerr << "Generated code refers to ";
+            if (arg.is_buffer) std::cerr << "image ";
+            std::cerr << "parameter " << arg.name 
+                      << ", which was not found in the argument list\n";
+
+            std::cerr << "\nArgument list specified: ";
+            for (size_t i = 0; i < args.size(); i++) {
+                std::cerr << args[i].name << " ";
+            }
+            std::cerr << "\n\nParameters referenced in generated code: ";
+            for (size_t i = 0; i < required_args.size(); i++) {
+                std::cerr << required_args[i].name << " ";
+            }
+            std::cerr << "\n\n";
+            assert(false);
+        }
+    }
+}
+};
+
+
+void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name) {
+    assert(value().defined() && "Can't compile undefined function");    
+
+    if (!lowered.defined()) {
+        lowered = Halide::Internal::lower(func);
+    }
+
+    validate_arguments(args, lowered);
+
+    Argument me(name(), true, Int(1));
+    args.push_back(me);
+
+    StmtCompiler cg;
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
+    cg.compile_to_bitcode(filename);
+}
+
+void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name) {
+    assert(value().defined() && "Can't compile undefined function");    
+
+    if (!lowered.defined()) {
+        lowered = Halide::Internal::lower(func);
+    }
+
+    validate_arguments(args, lowered);
+
+    Argument me(name(), true, Int(1));
+    args.push_back(me);
+
+    StmtCompiler cg;
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
+    cg.compile_to_native(filename, false);
+}
+
+void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name) {    
+    Argument me(name(), true, Int(1));
+    args.push_back(me);
+
+    ofstream header(filename.c_str());
+    CodeGen_C cg(header);
+    cg.compile_header(fn_name.empty() ? name() : fn_name, args);
+}
+
+void Func::compile_to_c(const string &filename, vector<Argument> args, const string &fn_name) {    
+    if (!lowered.defined()) {
+        lowered = Halide::Internal::lower(func);
+    }
+
+    validate_arguments(args, lowered);
+
+    Argument me(name(), true, Int(1));
+    args.push_back(me);
+
+    ofstream header(filename.c_str());
+    CodeGen_C cg(header);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
+}
+
+void Func::compile_to_file(const string &filename_prefix, vector<Argument> args) {
+    compile_to_header(filename_prefix + ".h", args, filename_prefix);
+    compile_to_object(filename_prefix + ".o", args, filename_prefix);
+}
+
+void Func::compile_to_file(const string &filename_prefix) {
+    compile_to_file(filename_prefix, vector<Argument>());
+}
+
+void Func::compile_to_file(const string &filename_prefix, Argument a) {
+    compile_to_file(filename_prefix, Internal::vec(a));    
+}
+
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b) {
+    compile_to_file(filename_prefix, Internal::vec(a, b));    
+}
+
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c) {
+    compile_to_file(filename_prefix, Internal::vec(a, b, c));    
+}
+
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d) {
+    compile_to_file(filename_prefix, Internal::vec(a, b, c, d));    
+}
+
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e) {
+    compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e));    
+}
+
+void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name) {
+    assert(value().defined() && "Can't compile undefined function");    
+
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
+    Argument me(name(), true, Int(1));
+    args.push_back(me);
+
+    StmtCompiler cg;
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
+    cg.compile_to_native(filename, true);
+}
+
+void Func::set_error_handler(void (*handler)(char *)) {
+    error_handler = handler;
+    if (compiled_module.set_error_handler) {
+        compiled_module.set_error_handler(handler);
+    }
+}
+
+void Func::set_custom_allocator(void *(*cust_malloc)(size_t), void (*cust_free)(void *)) {
+    custom_malloc = cust_malloc;
+    custom_free = cust_free;
+    if (compiled_module.set_custom_allocator) {
+        compiled_module.set_custom_allocator(cust_malloc, cust_free);
+    }
+}
+
+void Func::set_custom_do_par_for(void (*cust_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *)) {
+    custom_do_par_for = cust_do_par_for;
+    if (compiled_module.set_custom_do_par_for) {
+        compiled_module.set_custom_do_par_for(cust_do_par_for);
+    }
+}
+
+void Func::set_custom_do_task(void (*cust_do_task)(void (*)(int, uint8_t *), int, uint8_t *)) {
+    custom_do_task = cust_do_task;
+    if (compiled_module.set_custom_do_task) {
+        compiled_module.set_custom_do_task(cust_do_task);
+    }
+}
 
 void Func::realize(Buffer dst) {
     if (!compiled_module.wrapped_function) compile_jit();
