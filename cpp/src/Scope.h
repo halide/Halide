@@ -85,6 +85,18 @@ public:
         count--;
     }
 };
+
+template<typename T>
+std::ostream &operator<<(std::ostream &stream, Scope<T>& s) {
+    stream << "{\n";
+    const std::map<std::string, std::stack<std::pair<T, int> > > &table = s.get_table();
+    typename std::map<std::string, std::stack<std::pair<T, int> > >::const_iterator iter;
+    for (iter = table.begin(); iter != table.end(); iter++) {
+        stream << "  " << iter->first << "\n";
+    }
+    stream << "}";
+    return stream;
+}
     
 }
 }

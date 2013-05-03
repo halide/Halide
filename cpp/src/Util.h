@@ -107,6 +107,10 @@ EXPORT bool starts_with(const std::string &str, const std::string &prefix);
 /** Test if the first string ends with the second string */
 EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 
+/** Return the final token of the name string, assuming a fully qualified name
+ * delimited by '.' */
+EXPORT std::string base_name(const std::string &name);
+
 }
 }
 
