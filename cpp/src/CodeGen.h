@@ -139,7 +139,9 @@ protected:
     /** Codegen an assertion. If false, it bails out and calls the error handler. */
     void create_assertion(llvm::Value *condition, const std::string &message);
        
-    /** Given an llvm value representing a pointer to a buffer_t, extract various subfields */
+    /** Given an llvm value representing a pointer to a buffer_t, extract various subfields.
+     * The *_ptr variants return a pointer to the struct element, while the basic variants 
+     * load the actual value. */
     // @{
     llvm::Value *buffer_host(llvm::Value *);
     llvm::Value *buffer_dev(llvm::Value *);
@@ -149,6 +151,14 @@ protected:
     llvm::Value *buffer_extent(llvm::Value *, int);
     llvm::Value *buffer_stride(llvm::Value *, int);
     llvm::Value *buffer_elem_size(llvm::Value *);
+    llvm::Value *buffer_host_ptr(llvm::Value *);
+    llvm::Value *buffer_dev_ptr(llvm::Value *);
+    llvm::Value *buffer_host_dirty_ptr(llvm::Value *);
+    llvm::Value *buffer_dev_dirty_ptr(llvm::Value *);
+    llvm::Value *buffer_min_ptr(llvm::Value *, int);
+    llvm::Value *buffer_extent_ptr(llvm::Value *, int);
+    llvm::Value *buffer_stride_ptr(llvm::Value *, int);
+    llvm::Value *buffer_elem_size_ptr(llvm::Value *);
     // @}
 
     /** Generate a pointer into a named buffer at a given index, of a
