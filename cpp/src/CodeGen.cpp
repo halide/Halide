@@ -223,9 +223,10 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
             if (args[i].is_buffer) {
                 unpack_buffer(args[i].name, iter);
-            } else {
-                sym_push(args[i].name, iter);
             }
+            // always push name -> arg, even for buffers - some backends
+            // will use buffer_t handles directly.
+            sym_push(args[i].name, iter);
             i++;
         }
     }
