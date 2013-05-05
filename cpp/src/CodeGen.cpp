@@ -628,11 +628,10 @@ void CodeGen::define_buffer_t() {
         buffer_t->setBody(fields, false);
     }
 }
-       
+
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
 Value *CodeGen::buffer_host(Value *buffer) {
-    Value *ptr = builder->CreateConstInBoundsGEP2_32(buffer, 0, 0);
-    ptr = builder->CreateLoad(ptr);
+    Value *ptr = ptr = builder->CreateLoad(buffer_host_ptr(buffer));
     
     llvm::Function *fn = module->getFunction("force_no_alias");
     assert(fn && "Did not find force_no_alias in initial module");
@@ -644,50 +643,75 @@ Value *CodeGen::buffer_host(Value *buffer) {
 }
 
 Value *CodeGen::buffer_dev(Value *buffer) {
-    Value *ptr = builder->CreateConstInBoundsGEP2_32(buffer, 0, 1);
-    return builder->CreateLoad(ptr);
+    return builder->CreateLoad(buffer_dev_ptr(buffer));
 }
 
 Value *CodeGen::buffer_host_dirty(Value *buffer) {
-    Value *ptr = builder->CreateConstInBoundsGEP2_32(buffer, 0, 2);
-    return builder->CreateLoad(ptr);
+    return builder->CreateLoad(buffer_host_dirty_ptr(buffer));
 }
 
 Value *CodeGen::buffer_dev_dirty(Value *buffer) {
-    Value *ptr = builder->CreateConstInBoundsGEP2_32(buffer, 0, 3);
-    return builder->CreateLoad(ptr);
+    return builder->CreateLoad(buffer_dev_dirty_ptr(buffer));
 }
 
 Value *CodeGen::buffer_extent(Value *buffer, int i) {
+    return builder->CreateLoad(buffer_extent_ptr(buffer, i));
+}
+
+Value *CodeGen::buffer_stride(Value *buffer, int i) {
+    return builder->CreateLoad(buffer_stride_ptr(buffer, i));
+}
+
+Value *CodeGen::buffer_min(Value *buffer, int i) {
+    return builder->CreateLoad(buffer_min_ptr(buffer, i));
+}
+
+Value *CodeGen::buffer_elem_size(Value *buffer) {
+    return builder->CreateLoad(buffer_elem_size_ptr(buffer));
+}
+
+Value *CodeGen::buffer_host_ptr(Value *buffer) {
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 0);
+}
+
+Value *CodeGen::buffer_dev_ptr(Value *buffer) {
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 1);
+}
+
+Value *CodeGen::buffer_host_dirty_ptr(Value *buffer) {
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 2);
+}
+
+Value *CodeGen::buffer_dev_dirty_ptr(Value *buffer) {
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 3);
+}
+
+Value *CodeGen::buffer_extent_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
     llvm::Value *field = ConstantInt::get(i32, 4);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    Value *ptr = builder->CreateInBoundsGEP(buffer, args);
-    return builder->CreateLoad(ptr);
+    return builder->CreateInBoundsGEP(buffer, args);
 }
 
-Value *CodeGen::buffer_stride(Value *buffer, int i) {
+Value *CodeGen::buffer_stride_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
     llvm::Value *field = ConstantInt::get(i32, 5);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    Value *ptr = builder->CreateInBoundsGEP(buffer, args);
-    return builder->CreateLoad(ptr);
+    return builder->CreateInBoundsGEP(buffer, args);
 }
 
-Value *CodeGen::buffer_min(Value *buffer, int i) {
+Value *CodeGen::buffer_min_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
     llvm::Value *field = ConstantInt::get(i32, 6);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    Value *ptr = builder->CreateInBoundsGEP(buffer, args);
-    return builder->CreateLoad(ptr);
+    return builder->CreateInBoundsGEP(buffer, args);
 }
 
-Value *CodeGen::buffer_elem_size(Value *buffer) {
-    Value *ptr = builder->CreateConstInBoundsGEP2_32(buffer, 0, 7);
-    return builder->CreateLoad(ptr);
+Value *CodeGen::buffer_elem_size_ptr(Value *buffer) {
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 7);
 }
 
 llvm::Type *CodeGen::llvm_type_of(Halide::Type t) {
