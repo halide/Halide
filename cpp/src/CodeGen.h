@@ -109,6 +109,9 @@ protected:
      * scope. */
     void sym_pop(const std::string &name);
 
+    /** Fetch an entry from the symbol table. */
+    llvm::Value* sym_get(const std::string &name);
+
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
