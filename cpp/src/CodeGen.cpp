@@ -98,12 +98,6 @@ public:
     operator Attribute() { return Attribute::get(llvm_context, kind); }
 };
 
-LLVMContext &get_global_context() {
-    static LLVMContext *c = NULL;
-    if (!c) c = new LLVMContext;
-    return *c;    
-}
-
 // Define a local empty inline function for each target
 // to disable initialization.
 #define LLVM_TARGET(target)             \
@@ -129,19 +123,9 @@ LLVMContext &get_global_context() {
 #define InitializeNVPTXTarget() InitializeTarget(NVPTX)
 
 CodeGen::CodeGen() : 
-    module(NULL), function(NULL), context(get_global_context()), 
-    builder(new IRBuilder<>(context)), 
+    module(NULL), function(NULL), context(NULL), 
+    builder(NULL), 
     value(NULL), buffer_t(NULL) {
-    // Define some types
-    void_t = llvm::Type::getVoidTy(context);
-    i1 = llvm::Type::getInt1Ty(context);
-    i8 = llvm::Type::getInt8Ty(context);
-    i16 = llvm::Type::getInt16Ty(context);
-    i32 = llvm::Type::getInt32Ty(context);
-    i64 = llvm::Type::getInt64Ty(context);
-    f16 = llvm::Type::getHalfTy(context);
-    f32 = llvm::Type::getFloatTy(context);
-    f64 = llvm::Type::getDoubleTy(context);
 
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
@@ -161,6 +145,28 @@ CodeGen::CodeGen() :
     }
 }
 
+void CodeGen::init_module() {
+    if (module && owns_module) {
+        delete module;
+        delete context;
+    }
+    if (builder) delete builder;
+
+    context = new LLVMContext();
+    builder = new IRBuilder<>(*context);
+
+    // Define some types
+    void_t = llvm::Type::getVoidTy(*context);
+    i1 = llvm::Type::getInt1Ty(*context);
+    i8 = llvm::Type::getInt8Ty(*context);
+    i16 = llvm::Type::getInt16Ty(*context);
+    i32 = llvm::Type::getInt32Ty(*context);
+    i64 = llvm::Type::getInt64Ty(*context);
+    f16 = llvm::Type::getHalfTy(*context);
+    f32 = llvm::Type::getFloatTy(*context);
+    f64 = llvm::Type::getDoubleTy(*context);
+}
+
 // llvm includes above disable assert.  Include Util.h here
 // to reenable assert.
 #include "Util.h"
@@ -169,6 +175,8 @@ CodeGen::~CodeGen() {
     if (module && owns_module) {
         delete module;
         module = NULL;
+        delete context;
+        context = NULL;
         owns_module = false;
     }
     delete builder;
@@ -181,7 +189,7 @@ bool CodeGen::llvm_ARM_enabled = false;
 bool CodeGen::llvm_NVPTX_enabled = false;
 
 void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
-    assert(module && "The CodeGen subclass should have made an initial module before calling CodeGen::compile");
+    assert(module && context && builder && "The CodeGen subclass should have made an initial module before calling CodeGen::compile");
     owns_module = true;
 
     // Start the module off with a definition of a buffer_t
@@ -211,7 +219,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     
 
     // Make the initial basic block
-    BasicBlock *block = BasicBlock::Create(context, "entry", function);
+    BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
 
     // Put the arguments in the symbol table
@@ -240,6 +248,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     builder->CreateRetVoid();
 
     module->setModuleIdentifier("halide_" + name);
+    log(2) << module << "\n";
 
     // Now verify the function is ok
     verifyFunction(*function);
@@ -248,7 +257,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     string wrapper_name = name + "_jit_wrapper";
     func_t = FunctionType::get(void_t, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
-    block = BasicBlock::Create(context, "entry", wrapper);
+    block = BasicBlock::Create(*context, "entry", wrapper);
     builder->SetInsertPoint(block);
 
     Value *arg_array = wrapper->arg_begin();
@@ -289,7 +298,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 class JITModuleHolder {
 public:
         mutable RefCount ref_count;    
-    JITModuleHolder(Module *module, CodeGen *cg) {
+    JITModuleHolder(Module *module, CodeGen *cg) : context(&module->getContext()) {
         log(2) << "Creating new execution engine\n";
         string error_string;
 
@@ -343,9 +352,11 @@ public:
     ~JITModuleHolder() {
         shutdown_thread_pool();
         delete execution_engine;
+        delete context;
     }
     void (*shutdown_thread_pool)();
-    llvm::ExecutionEngine *execution_engine;    
+    llvm::ExecutionEngine *execution_engine;
+    LLVMContext *context;
 };
 
 template<>
@@ -606,7 +617,7 @@ void CodeGen::define_buffer_t() {
     buffer_t = module->getTypeByName("struct.buffer_t");
 
     if (!buffer_t) {
-        buffer_t = StructType::create(context, "struct.buffer_t");
+        buffer_t = StructType::create(*context, "struct.buffer_t");
         log(2) << "Did not find buffer_t in initial module\n";
     } else {
         log(2) << "Found buffer_t in initial module\n";
@@ -636,7 +647,7 @@ Value *CodeGen::buffer_host(Value *buffer) {
     llvm::Function *fn = module->getFunction("force_no_alias");
     assert(fn && "Did not find force_no_alias in initial module");
     CallInst *call = builder->CreateCall(fn, vec(ptr));
-    mark_call_return_no_alias(call, context);
+    mark_call_return_no_alias(call, *context);
     ptr = call;
 
     return ptr;    
@@ -671,19 +682,19 @@ Value *CodeGen::buffer_elem_size(Value *buffer) {
 }
 
 Value *CodeGen::buffer_host_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 0);
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 0, "buf_host");
 }
 
 Value *CodeGen::buffer_dev_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 1);
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 1, "buf_dev");
 }
 
 Value *CodeGen::buffer_host_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 2);
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 2, "buffer_host_dirty");
 }
 
 Value *CodeGen::buffer_dev_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 3);
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 3, "buffer_dev_dirty");
 }
 
 Value *CodeGen::buffer_extent_ptr(Value *buffer, int i) {
@@ -691,7 +702,7 @@ Value *CodeGen::buffer_extent_ptr(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 4);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    return builder->CreateInBoundsGEP(buffer, args);
+    return builder->CreateInBoundsGEP(buffer, args, "buf_extent");
 }
 
 Value *CodeGen::buffer_stride_ptr(Value *buffer, int i) {
@@ -699,7 +710,7 @@ Value *CodeGen::buffer_stride_ptr(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 5);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    return builder->CreateInBoundsGEP(buffer, args);
+    return builder->CreateInBoundsGEP(buffer, args, "buf_stride");
 }
 
 Value *CodeGen::buffer_min_ptr(Value *buffer, int i) {
@@ -707,11 +718,11 @@ Value *CodeGen::buffer_min_ptr(Value *buffer, int i) {
     llvm::Value *field = ConstantInt::get(i32, 6);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
-    return builder->CreateInBoundsGEP(buffer, args);
+    return builder->CreateInBoundsGEP(buffer, args, "buf_min");
 }
 
 Value *CodeGen::buffer_elem_size_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 7);
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 7, "buf_elem_size");
 }
 
 llvm::Type *CodeGen::llvm_type_of(Halide::Type t) {
@@ -729,7 +740,7 @@ llvm::Type *CodeGen::llvm_type_of(Halide::Type t) {
                 return NULL;
             }
         } else {
-            return llvm::Type::getIntNTy(context, t.bits);
+            return llvm::Type::getIntNTy(*context, t.bits);
         }
     } else {
         llvm::Type *element_type = llvm_type_of(t.element_of());
@@ -766,7 +777,7 @@ void CodeGen::visit(const IntImm *op) {
 }
 
 void CodeGen::visit(const FloatImm *op) {
-    value = ConstantFP::get(context, APFloat(op->value));
+    value = ConstantFP::get(*context, APFloat(op->value));
 }
 
 void CodeGen::visit(const Cast *op) {
@@ -1031,9 +1042,9 @@ void CodeGen::visit(const Select *op) {
         // Codegen an if-then-else so we don't go to the expense of
         // generating both vectors
 
-        BasicBlock *true_bb = BasicBlock::Create(context, "true_bb", function);
-        BasicBlock *false_bb = BasicBlock::Create(context, "false_bb", function);
-        BasicBlock *after_bb = BasicBlock::Create(context, "after_bb", function);
+        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+        BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
         builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
 
         builder->SetInsertPoint(true_bb);
@@ -1081,7 +1092,7 @@ void CodeGen::visit(const Load *op) {
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, op->type, index);
         LoadInst *load = builder->CreateLoad(ptr);
-        load->setMetadata("tbaa", MDNode::get(context, vec<Value *>(MDString::get(context, op->name))));
+        load->setMetadata("tbaa", MDNode::get(*context, vec<Value *>(MDString::get(*context, op->name))));
         value = load;
         
     } else {            
@@ -1266,7 +1277,7 @@ void CodeGen::visit(const Call *op) {
         llvm::Type *filename_type = ArrayType::get(i8, filename->name.size()+1);
         GlobalVariable *filename_global = new GlobalVariable(*module, filename_type, 
                                                              true, GlobalValue::PrivateLinkage, 0);
-        filename_global->setInitializer(ConstantDataArray::getString(context, filename->name));
+        filename_global->setInitializer(ConstantDataArray::getString(*context, filename->name));
         Value *char_ptr = builder->CreateConstInBoundsGEP2_32(filename_global, 0, 0);
         Value *data_ptr = symbol_table.get(func->name + ".host");
         data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
@@ -1411,7 +1422,7 @@ void CodeGen::visit(const PrintStmt *op) {
     string fmt_string = format_string.str();
     llvm::Type *fmt_type = ArrayType::get(i8, fmt_string.size()+1);
     GlobalVariable *fmt_global = new GlobalVariable(*module, fmt_type, true, GlobalValue::PrivateLinkage, 0);
-    fmt_global->setInitializer(ConstantDataArray::getString(context, fmt_string));
+    fmt_global->setInitializer(ConstantDataArray::getString(*context, fmt_string));
     Value *char_ptr = builder->CreateConstInBoundsGEP2_32(fmt_global, 0, 0);
 
     // The format string is the first argument
@@ -1433,8 +1444,8 @@ void CodeGen::visit(const AssertStmt *op) {
 void CodeGen::create_assertion(Value *cond, const string &message) {
 
     // Make a new basic block for the assert
-    BasicBlock *assert_fails_bb = BasicBlock::Create(context, "assert_failed", function);
-    BasicBlock *assert_succeeds_bb = BasicBlock::Create(context, "after_assert", function);
+    BasicBlock *assert_fails_bb = BasicBlock::Create(*context, "assert_failed", function);
+    BasicBlock *assert_succeeds_bb = BasicBlock::Create(*context, "after_assert", function);
 
     // If the condition fails, enter the assert body, otherwise, enter the block after
     builder->CreateCondBr(cond, assert_succeeds_bb, assert_fails_bb);
@@ -1446,7 +1457,7 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
     llvm::Type *msg_type = ArrayType::get(i8, message.size()+1);
     GlobalVariable *msg_global = new GlobalVariable(*module, msg_type, 
                                                     true, GlobalValue::PrivateLinkage, 0);
-    msg_global->setInitializer(ConstantDataArray::getString(context, message));
+    msg_global->setInitializer(ConstantDataArray::getString(*context, message));
     Value *char_ptr = builder->CreateConstInBoundsGEP2_32(msg_global, 0, 0);
 
     // Call the error handler
@@ -1485,9 +1496,9 @@ void CodeGen::visit(const For *op) {
         BasicBlock *preheader_bb = builder->GetInsertBlock();
 
         // Make a new basic block for the loop
-        BasicBlock *loop_bb = BasicBlock::Create(context, op->name + "_loop", function);
+        BasicBlock *loop_bb = BasicBlock::Create(*context, op->name + "_loop", function);
         // Create the block that comes after the loop
-        BasicBlock *after_bb = BasicBlock::Create(context, op->name + "_after_loop", function);
+        BasicBlock *after_bb = BasicBlock::Create(*context, op->name + "_after_loop", function);
 
         // If min < max, fall through to the loop bb
         Value *enter_condition = builder->CreateICmpSLT(min, max);
@@ -1541,7 +1552,7 @@ void CodeGen::visit(const For *op) {
 
         // Make the initial basic block and jump the builder into the new function
         BasicBlock *call_site = builder->GetInsertBlock();
-        BasicBlock *block = BasicBlock::Create(context, "entry", function);
+        BasicBlock *block = BasicBlock::Create(*context, "entry", function);
         builder->SetInsertPoint(block);
 
         // Make a new scope to use
@@ -1559,7 +1570,7 @@ void CodeGen::visit(const For *op) {
         iter->setName("closure");
         Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
         // Load everything from the closure into the new scope
-        closure.unpack_struct(this, symbol_table, closure_handle, builder, module, context);
+        closure.unpack_struct(this, symbol_table, closure_handle, builder, module, *context);
 
         // Generate the new function body
         codegen(op->body);
@@ -1595,7 +1606,7 @@ void CodeGen::visit(const Store *op) {
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, value_type, index);        
         StoreInst *store = builder->CreateStore(val, ptr);
-        store->setMetadata("tbaa", MDNode::get(context, vec<Value *>(MDString::get(context, op->name))));
+        store->setMetadata("tbaa", MDNode::get(*context, vec<Value *>(MDString::get(*context, op->name))));
     } else {
         int alignment = op->value.type().bits / 8;
         const Ramp *ramp = op->index.as<Ramp>();

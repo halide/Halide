@@ -72,6 +72,10 @@ protected:
 
     /** Free all heap allocations in scope */
     void prepare_for_early_exit();
+
+    /** Initialize the CodeGen internal state to compile a fresh module */
+    void init_module();
+
 };
 
 }}

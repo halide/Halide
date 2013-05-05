@@ -92,10 +92,13 @@ protected:
     llvm::Module *module;
     bool owns_module;
     llvm::Function *function;
-    llvm::LLVMContext &context;
+    llvm::LLVMContext *context;
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
     llvm::Value *value;
     //@}
+
+    /** Initialize the CodeGen internal state to compile a fresh module */
+    void init_module();
 
     /** Run all of llvm's optimization passes on the module */
     void optimize_module();

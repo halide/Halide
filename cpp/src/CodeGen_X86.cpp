@@ -70,7 +70,7 @@ CodeGen_X86::CodeGen_X86(bool _64_bit, bool sse_41, bool avx) : CodeGen_Posix(),
 
 void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
-    if (module && owns_module) delete module;
+    init_module();
 
     StringRef sb;
 
@@ -88,7 +88,7 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
 
     // Parse it    
     std::string errstr;
-    module = ParseBitcodeFile(bitcode_buffer, context, &errstr);
+    module = ParseBitcodeFile(bitcode_buffer, *context, &errstr);
 	if (!module) {
         std::cerr << "Error parsing initial module: " << errstr << "\n";
 	}

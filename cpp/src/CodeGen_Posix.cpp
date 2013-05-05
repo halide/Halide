@@ -81,23 +81,6 @@ public:
 };
 
 CodeGen_Posix::CodeGen_Posix() : CodeGen() {
-    i8x8 = VectorType::get(i8, 8);
-    i8x16 = VectorType::get(i8, 16);
-    i8x32 = VectorType::get(i8, 32);
-    i16x4 = VectorType::get(i16, 4);
-    i16x8 = VectorType::get(i16, 8);
-    i16x16 = VectorType::get(i16, 16);
-    i32x2 = VectorType::get(i32, 2);
-    i32x4 = VectorType::get(i32, 4);
-    i32x8 = VectorType::get(i32, 8);
-    i64x2 = VectorType::get(i64, 2);
-    i64x4 = VectorType::get(i64, 4);    
-    f32x2 = VectorType::get(f32, 2);
-    f32x4 = VectorType::get(f32, 4);
-    f32x8 = VectorType::get(f32, 8);
-    f64x2 = VectorType::get(f64, 2);
-    f64x4 = VectorType::get(f64, 4);    
-
     wild_i8x8 = new Variable(Int(8, 8), "*");
     wild_i8x16 = new Variable(Int(8, 16), "*");
     wild_i8x32 = new Variable(Int(8, 32), "*");
@@ -146,6 +129,27 @@ CodeGen_Posix::CodeGen_Posix() : CodeGen() {
     min_f64 = Float(64).min();
 }
 
+void CodeGen_Posix::init_module() {
+    CodeGen::init_module();
+
+    i8x8 = VectorType::get(i8, 8);
+    i8x16 = VectorType::get(i8, 16);
+    i8x32 = VectorType::get(i8, 32);
+    i16x4 = VectorType::get(i16, 4);
+    i16x8 = VectorType::get(i16, 8);
+    i16x16 = VectorType::get(i16, 16);
+    i32x2 = VectorType::get(i32, 2);
+    i32x4 = VectorType::get(i32, 4);
+    i32x8 = VectorType::get(i32, 8);
+    i64x2 = VectorType::get(i64, 2);
+    i64x4 = VectorType::get(i64, 4);    
+    f32x2 = VectorType::get(f32, 2);
+    f32x4 = VectorType::get(f32, 4);
+    f32x8 = VectorType::get(f32, 8);
+    f64x2 = VectorType::get(f64, 2);
+    f64x4 = VectorType::get(f64, 4);
+}
+
 Value* CodeGen_Posix::malloc_buffer(const Allocate *alloc, Value *&saved_stack) {
 
     // Allocate anything less than 32k on the stack
@@ -183,7 +187,7 @@ Value* CodeGen_Posix::malloc_buffer(const Allocate *alloc, Value *&saved_stack) 
         Value *sz = builder->CreateIntCast(size, malloc_fn->arg_begin()->getType(), false);
         log(4) << "Creating call to halide_malloc\n";
         CallInst *call = builder->CreateCall(malloc_fn, sz);
-        mark_call_return_no_alias(call, context);
+        mark_call_return_no_alias(call, *context);
         ptr = call;
         heap_allocations.push_back(ptr);
     }
@@ -199,7 +203,7 @@ void CodeGen_Posix::free_buffer(Value *ptr, Value *saved_stack) {
         assert(free_fn && "Could not find halide_free in module");
         log(4) << "Creating call to halide_free\n";
         CallInst *call = builder->CreateCall(free_fn, ptr);
-        mark_call_parameter_no_capture(call, 1, context);
+        mark_call_parameter_no_capture(call, 1, *context);
     } else {
         llvm::Function *stackrestore =
           llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore,
