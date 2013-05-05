@@ -57,7 +57,7 @@ CodeGen_ARM::CodeGen_ARM(bool android) : CodeGen_Posix(), use_android(android) {
 
 void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
-    if (module && owns_module) delete module;
+    init_module();
 
     StringRef sb;
 
@@ -73,7 +73,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
     // Parse it    
-    module = ParseBitcodeFile(bitcode_buffer, context);
+    module = ParseBitcodeFile(bitcode_buffer, *context);
 
     // Fix the target triple. The initial module was probably compiled for x86
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -1061,7 +1061,7 @@ void CodeGen_ARM::visit(const Load *op) {
         for (int i = 0; i < stride->value; i++) {
             type_vec[i] = elem_type;
         }
-        llvm::StructType *result_type = StructType::get(context, type_vec);
+        llvm::StructType *result_type = StructType::get(*context, type_vec);
 
         ostringstream prefix;
         prefix << "vld" << stride->value << ".";

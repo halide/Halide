@@ -127,7 +127,7 @@ vector<string> CodeGen::Closure::names() {
 }
 
 StructType *CodeGen::Closure::build_type(CodeGen *gen) {
-    StructType *struct_t = StructType::create(gen->context, "closure_t");
+    StructType *struct_t = StructType::create(*gen->context, "closure_t");
     struct_t->setBody(llvm_types(gen), false);
     return struct_t;
 }
