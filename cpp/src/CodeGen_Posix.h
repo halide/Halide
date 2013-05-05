@@ -51,16 +51,24 @@ protected:
 
     using CodeGen::visit;
 
-    /** Posix implementation of Allocate. Small constant-sized ones go
+    /** Posix implementation of Allocate. Small constant-sized allocations go
      * on the stack. The rest go on the heap by calling "hl_malloc"
-     * and "hl_free" in the standard library */
+     * and "hl_free" in the standard library. */
     void visit(const Allocate *);        
+
+    /** Direct implementation of Posix allocation logic. The returned `Value`
+     * is a pointer to the allocated memory. If heap allocation is performed,
+     * `saved_stack` is set to `NULL`; otherwise, it holds the saved stack
+     * pointer for later use with the `stackrestore` intrinsic. */
+    llvm::Value* malloc_buffer(const Allocate *alloc, llvm::Value *&saved_stack);
+
+    /** If `saved_stack` is non-`NULL`, this assumes the `ptr` was stack-allocated,
+     * and frees it only by restoring the stack pointer; otherwise, it calls
+     * `hl_free` in the standard library. */
+    void free_buffer(llvm::Value *ptr, llvm::Value *saved_stack);
 
     /** The heap allocations currently in scope */
     std::vector<llvm::Value *> heap_allocations;
-
-    llvm::Value* malloc_buffer(const Allocate *alloc, llvm::Value *&saved_stack);
-    void free_buffer(llvm::Value *ptr, llvm::Value *saved_stack);
 
     /** Free all heap allocations in scope */
     void prepare_for_early_exit();
