@@ -547,6 +547,21 @@ void CodeGen::sym_pop(const string &name) {
     symbol_table.pop(name);
 }
 
+llvm::Value *CodeGen::sym_get(const string &name) {
+    // look in the symbol table
+    if (!symbol_table.contains(name)) {
+        std::cerr << "Symbol not found: " << name << "\n";
+
+        if (log::debug_level > 0) {
+            std::cerr << "The following names are in scope:\n";
+            std::cerr << symbol_table << "\n";
+        }
+
+        assert(false);
+    }
+    return symbol_table.get(name);
+}
+
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
 void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
@@ -758,18 +773,7 @@ void CodeGen::visit(const Cast *op) {
 }
 
 void CodeGen::visit(const Variable *op) {
-    // look in the symbol table
-    if (!symbol_table.contains(op->name)) {
-        std::cerr << "Symbol not found: " << op->name << std::endl;
-
-        if (log::debug_level > 0) {
-            std::cerr << "The following names are in scope:\n";
-            std::cerr << symbol_table << "\n";
-        }
-
-        assert(false);
-    }
-    value = symbol_table.get(op->name);
+    value = sym_get(op->name);
 }
 
 void CodeGen::visit(const Add *op) {
