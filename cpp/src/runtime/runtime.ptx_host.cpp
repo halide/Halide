@@ -8,7 +8,7 @@
 #include <stdlib.h>
 //#include <cuda.h>
 #include <assert.h>
-#include "../buffer.h"
+#include "../buffer_t.h"
 
 // The PTX host extends the x86 target
 #include "posix_allocator.cpp"
