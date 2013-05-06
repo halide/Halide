@@ -27,7 +27,6 @@
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/Target/TargetLibraryInfo.h>
-#include <llvm/DataLayout.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Support/FormattedStream.h>
@@ -372,8 +371,12 @@ string CodeGen_PTX_Dev::compile_to_ptx() {
     PM.add(TLI);
 
     if (target.get()) {
-    PM.add(new TargetTransformInfo(target->getScalarTargetTransformInfo(),
-                                   target->getVectorTargetTransformInfo()));
+        #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
+        PM.add(new TargetTransformInfo(target->getScalarTargetTransformInfo(),
+                                       target->getVectorTargetTransformInfo()));
+        #else
+        target->addAnalysisPasses(PM);
+        #endif
     }
 
     // Add the target data from the target machine, if it exists, or the module.
