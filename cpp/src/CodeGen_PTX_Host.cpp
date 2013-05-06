@@ -190,7 +190,10 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
 }
 
 JITCompiledModule CodeGen_PTX_Host::jit_init() {
+
     JITCompiledModule m = CodeGen::jit_init();
+
+    log(0) << "jit_init\n";
 
     ExecutionEngine *ee = m.module.ptr->execution_engine;
 
@@ -214,14 +217,14 @@ JITCompiledModule CodeGen_PTX_Host::jit_init() {
             // TODO: Andrew: This code path not tested yet,
             // because I can't get linking to libcuda working
             // right on my machine.
-            std::cerr << "This program was linked to libcuda already\n";
+            log(0) << "This program was linked to libcuda already\n";
             CodeGen_PTX_Host::libCudaLinked = true;
         } else {
-            std::cerr << "Looking for libcuda.so...\n";
+            log(0) << "Looking for libcuda.so...\n";
             CodeGen_PTX_Host::libCuda = dlopen("libcuda.so", RTLD_LAZY);
             if (!CodeGen_PTX_Host::libCuda) {
                 // TODO: check this works on OS X
-                std::cerr << "Looking for libcuda.dylib...\n";
+                log(0) << "Looking for libcuda.dylib...\n";
                 CodeGen_PTX_Host::libCuda = dlopen("libcuda.dylib", RTLD_LAZY);
             }
             // TODO: look for cuda.dll or some such thing on windows
@@ -241,10 +244,13 @@ JITCompiledModule CodeGen_PTX_Host::jit_init() {
             if (GlobalValue::isExternalLinkage(f->getLinkage()) &&
                 name[0] == 'c' && name[1] == 'u') {
                 // Starts with "cu" and has extern linkage. Might be a cuda function.
-                log(0) << "Linking " << name << "\n";
+                log(0) << "Linking " << name << "...";
                 void *ptr = dlsym(CodeGen_PTX_Host::libCuda, name.c_str());
                 if (ptr) {
+                    log(0) << "success\n";
                     ee->addGlobalMapping(f, ptr);
+                } else {
+                    log(0) << "failed\n";
                 }
             }
         }
