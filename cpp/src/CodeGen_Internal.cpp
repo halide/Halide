@@ -155,4 +155,5 @@ void CodeGen::Closure::unpack_struct(CodeGen *gen, Scope<Value *> &dst, Value *s
     }
 }
 
-}}
+}
+}

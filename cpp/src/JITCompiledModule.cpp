@@ -155,6 +155,8 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     hook_up_function_pointer(this, "halide_set_custom_do_task", true, &set_custom_do_task);
     hook_up_function_pointer(this, "halide_shutdown_thread_pool", true, &shutdown_thread_pool);
     module.ptr->shutdown_thread_pool = shutdown_thread_pool;
+
+    module.ptr->execution_engine->finalizeObject();
 }
 
 }
