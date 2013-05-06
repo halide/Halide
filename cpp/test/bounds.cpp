@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <Halide.h>
+#include <iostream>
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Var x, y;
-    Func f, g, h;
+    Var x("x"), y("y");
+    Func f("f"), g("g"), h("h");
 
     printf("Defining function...\n");
 
@@ -13,13 +14,14 @@ int main(int argc, char **argv) {
     g(x, y) = min(x, y);
     h(x, y) = clamp(x+y, 20, 100);
 
-    /*
-    if (use_gpu()) {
-        f.cudaTile(x, y, 16, 16);
-        g.cudaTile(x, y, 16, 16);
-        h.cudaTile(x, y, 16, 16);
+    char *target = getenv("HL_TARGET");
+    if (target && std::string(target) == "ptx") {
+        // f.cudaTile(x, y, 16, 16);
+        // g.cudaTile(x, y, 16, 16);
+        // h.cudaTile(x, y, 16, 16);
+        Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
+        h.tile(x, y, bx, by, tx, ty, 16, 16);
     }
-    */
  
     printf("Realizing function...\n");
 
