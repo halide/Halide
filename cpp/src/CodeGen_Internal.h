@@ -20,7 +20,7 @@ namespace Internal {
 
 /** A helper class to manage closures - used for parallel for loops */
 class CodeGen::Closure : public IRVisitor {
-private:
+protected:
     Scope<int> ignore;
 
     using IRVisitor::visit;

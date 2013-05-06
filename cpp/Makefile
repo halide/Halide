@@ -18,15 +18,15 @@ ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
 endif
 
-SOURCE_FILES = CodeGen.cpp CodeGen_Internal.cpp CodeGen_X86.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Log.cpp Parameter.cpp Reduction.cpp RDom.cpp Tracing.cpp RemoveDeadLets.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp Type.cpp
+SOURCE_FILES = CodeGen.cpp CodeGen_Internal.cpp CodeGen_X86.cpp CodeGen_PTX_Host.cpp CodeGen_PTX_Dev.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Log.cpp Parameter.cpp Reduction.cpp RDom.cpp Tracing.cpp RemoveDeadLets.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp Type.cpp
 
-HEADER_FILES = Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h
+HEADER_FILES = Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_PTX_Host.h CodeGen_PTX_Dev.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h
 
 SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=build/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-STDLIB_ARCHS = x86 x86_avx x86_32 arm arm_android
+STDLIB_ARCHS = x86 x86_avx x86_32 arm arm_android ptx_host ptx_dev
 
 INITIAL_MODULES = $(STDLIB_ARCHS:%=build/initmod.%.o)
 
@@ -55,11 +55,15 @@ RUNTIME_OPTS_x86_avx = -march=corei7-avx
 RUNTIME_OPTS_x86_32 = -m32 -march=atom
 RUNTIME_OPTS_arm = -m32 
 RUNTIME_OPTS_arm_android = -m32 
+RUNTIME_OPTS_ptx_host = $(RUNTIME_OPTS_x86) 
+RUNTIME_OPTS_ptx_dev = 
 RUNTIME_LL_STUBS_x86 = src/runtime/x86.ll src/runtime/x86_sse41.ll
 RUNTIME_LL_STUBS_x86_32 = src/runtime/x86.ll
 RUNTIME_LL_STUBS_x86_avx = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll
 RUNTIME_LL_STUBS_arm = src/runtime/arm.ll
 RUNTIME_LL_STUBS_arm_android = src/runtime/arm.ll
+RUNTIME_LL_STUBS_ptx_host = $(RUNTIME_LL_STUBS_x86)
+RUNTIME_LL_STUBS_ptx_dev = src/runtime/ptx_dev.ll
 
 -include $(OBJECTS:.o=.d)
 

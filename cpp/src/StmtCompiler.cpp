@@ -1,6 +1,7 @@
 #include "StmtCompiler.h"
 #include "CodeGen.h"
 #include "CodeGen_X86.h"
+#include "CodeGen_PTX_Host.h"
 #include "CodeGen_ARM.h"
 #include <iostream>
 
@@ -42,7 +43,12 @@ StmtCompiler::StmtCompiler(string arch) {
         contents = new CodeGen_ARM(false);
     } else if (arch == "arm-android") {
         contents = new CodeGen_ARM(true);
-    } 
+    }
+    // GPU backends are disabled on Windows until I'm sure it links, too (@jrk)
+    else if (arch == "ptx") {
+        // equivalent to "x86" on the host side, i.e. x86_64, no AVX
+        contents = new CodeGen_PTX_Host(true, true, false);
+    }
 #endif // _WIN32
     else {
         std::cerr << "Unknown target " << arch << std::endl;
