@@ -68,7 +68,6 @@ public:
         execution_engine = engine_builder.create();
         if (!execution_engine) std::cerr << error_string << "\n";
         assert(execution_engine && "Couldn't create execution engine");        
-        execution_engine->finalizeObject();     
 
         // TODO: I don't think this is necessary, we shouldn't have any static constructors
         // execution_engine->runStaticConstructorsDestructors(...);
@@ -134,11 +133,14 @@ void hook_up_function_pointer(JITCompiledModule *m, const string &name, bool mus
 
 void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name) {
 
+    // Make the execution engine
     module = new JITModuleHolder(cg, m);
 
     // Do any target-specific initialization
     cg->jit_init(module.ptr->execution_engine, m);
 
+    // Retrieve function pointers from the compiled module (which also
+    // triggers compilation)
     log(1) << "JIT compiling...\n";
 
     hook_up_function_pointer(this, function_name, true, &function);
