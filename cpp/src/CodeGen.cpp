@@ -666,7 +666,7 @@ void CodeGen::define_buffer_t() {
 
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
 Value *CodeGen::buffer_host(Value *buffer) {
-    Value *ptr = ptr = builder->CreateLoad(buffer_host_ptr(buffer));
+    Value *ptr = builder->CreateLoad(buffer_host_ptr(buffer));
     
     llvm::Function *fn = module->getFunction("force_no_alias");
     assert(fn && "Did not find force_no_alias in initial module");
