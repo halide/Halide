@@ -27,7 +27,7 @@ public:
 
     static void test();
 
-    static bool is_simt_var(std::string name);
+    static bool is_simt_var(const std::string &name);
 
 protected:
     using CodeGen::visit;
@@ -45,6 +45,10 @@ protected:
     bool use_soft_float_abi() const;
 
     std::string compile_to_ptx();
+
+    std::string simt_intrinsic(const std::string &name);
+
+    std::map<std::string, std::string> simt_intrinsics;
 };
 
 }}

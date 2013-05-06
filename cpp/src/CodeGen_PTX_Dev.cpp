@@ -153,12 +153,6 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
 
     // Optimize it - this really only optimizes the current function
     optimize_module();
-
-    #if 0
-    if (log::debug_level >= 2) {
-        module->dump();
-    }
-    #endif
 }
 
 void CodeGen_PTX_Dev::init_module() {
@@ -185,10 +179,28 @@ void CodeGen_PTX_Dev::init_module() {
 
     module->setModuleIdentifier("<halide_ptx>");
 
+    simt_intrinsics["threadidx"] = "llvm.nvvm.read.ptx.sreg.tid.x";
+    simt_intrinsics["threadidy"] = "llvm.nvvm.read.ptx.sreg.tid.y";
+    simt_intrinsics["threadidz"] = "llvm.nvvm.read.ptx.sreg.tid.z";
+    simt_intrinsics["threadidw"] = "llvm.nvvm.read.ptx.sreg.tid.w";
+    simt_intrinsics["blockidx"] = "llvm.nvvm.read.ptx.sreg.ctaid.x";
+    simt_intrinsics["blockidy"] = "llvm.nvvm.read.ptx.sreg.ctaid.y";
+    simt_intrinsics["blockidz"] = "llvm.nvvm.read.ptx.sreg.ctaid.z";
+    simt_intrinsics["blockidw"] = "llvm.nvvm.read.ptx.sreg.ctaid.w";
+
     delete bitcode_buffer;
 }
 
-bool CodeGen_PTX_Dev::is_simt_var(std::string name) {
+string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
+    string n = base_name(name);
+    if (simt_intrinsics.count(n)) {
+        return simt_intrinsics[n];
+    } else {
+        return NULL;
+    }
+}
+
+bool CodeGen_PTX_Dev::is_simt_var(const string &name) {
     string n = base_name(name);
 
     log(0) << "is_simt_var " << name << " (" << n << ")? ";
@@ -211,13 +223,27 @@ bool CodeGen_PTX_Dev::is_simt_var(std::string name) {
 }
 
 void CodeGen_PTX_Dev::visit(const For *loop) {
-    if (CodeGen_PTX_Dev::is_simt_var(loop->name)) {
+    if (is_simt_var(loop->name)) {
         log(2) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
         assert(loop->for_type == For::Parallel && "kernel loop must be parallel");
 
-        sym_push(loop->name, codegen(loop->min));
+        Expr simt_idx = new Call(Int(32), simt_intrinsic(loop->name), std::vector<Expr>());
+        Expr loop_var = loop->min + simt_idx;
+        Expr cond = new LT(simt_idx, loop->extent);
+        log(3) << "for -> if (" << cond << ")\n";
+
+        BasicBlock *loop_bb = BasicBlock::Create(*context, loop->name + "_loop", function);
+        BasicBlock *after_bb = BasicBlock::Create(*context, loop->name + "_after_loop", function);
+
+        builder->CreateCondBr(codegen(cond), loop_bb, after_bb);
+        builder->SetInsertPoint(loop_bb);
+
+        sym_push(loop->name, codegen(loop_var));
         codegen(loop->body);
         sym_pop(loop->name);
+
+        builder->CreateBr(after_bb);
+        builder->SetInsertPoint(after_bb);
     } else {
         CodeGen::visit(loop);
     }
@@ -265,7 +291,7 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    return "sm_10";
+    return "sm_11";
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
