@@ -5,7 +5,7 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
+//#include <stdlib.h>
 //#include <cuda.h>
 #include <assert.h>
 #include "../buffer_t.h"
