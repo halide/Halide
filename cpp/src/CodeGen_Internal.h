@@ -91,7 +91,6 @@ public:
     std::vector<std::string> names();
 };
 
-
 // Wraps an execution engine. Takes ownership of the given module and
 // the memory for jit compiled code.
 class JITModuleHolder {
