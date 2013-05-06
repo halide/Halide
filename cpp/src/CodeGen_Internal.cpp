@@ -1,23 +1,6 @@
 #include "CodeGen_Internal.h"
 #include "Log.h"
-
-// Temporary affordance to compile with both llvm 3.2 and 3.3.
-// Protected as at least one installation of llvm elides version macros.
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-#include <llvm/Value.h>
-#include <llvm/Module.h>
-#include <llvm/Function.h>
-#include <llvm/IRBuilder.h>
-// They renamed this type in 3.3
-typedef llvm::Attributes Attribute;
-typedef llvm::Attributes::AttrVal AttrKind;
-#else
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/IRBuilder.h>
-typedef llvm::Attribute::AttrKind AttrKind;
-#endif
+#include "LLVM_Headers.h"
 
 using std::string;
 using std::map;

@@ -1,11 +1,12 @@
 #ifndef HALIDE_BUFFER_H
 #define HALIDE_BUFFER_H
 
+#include "buffer_t.h"
 #include "IntrusivePtr.h"
 #include "Type.h"
 #include "Argument.h"
 #include "Util.h"
-#include "buffer_t.h"
+
 #include <stdint.h>
 
 /** \file 
@@ -13,8 +14,8 @@
  */
 
 namespace Halide {
-
 namespace Internal {
+
 struct BufferContents {
     buffer_t buf;
     Type type;

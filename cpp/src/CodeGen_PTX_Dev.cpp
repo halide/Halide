@@ -9,59 +9,7 @@
 #include "Var.h"
 #include "Param.h"
 #include "integer_division_table.h"
-
-// No msvc warnings from llvm headers please
-#ifdef _WIN32
-#pragma warning(push, 0)
-#endif
-
-#include <iostream>
-#include <sstream>
-
-#include <llvm/Config/config.h>
-
-#include <llvm/Analysis/Verifier.h>
-#include <llvm/ADT/Triple.h>
-
-#include <llvm/PassManager.h>
-#include <llvm/Target/TargetMachine.h>
-#include <llvm/Support/TargetRegistry.h>
-#include <llvm/Target/TargetLibraryInfo.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Transforms/IPO.h>
-#include <llvm/Support/FormattedStream.h>
-
-// Temporary affordance to compile with both llvm 3.2 and 3.3.
-// Protected as at least one installation of llvm elides version macros.
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-#include <llvm/Value.h>
-#include <llvm/Module.h>
-#include <llvm/Function.h>
-#include <llvm/TargetTransformInfo.h>
-#include <llvm/DataLayout.h>
-#include <llvm/IRBuilder.h>
-#include <llvm/Support/IRReader.h>
-typedef llvm::Attributes Attribute;
-typedef llvm::Attributes::AttrVal AttrKind;
-#else
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Function.h>
-#include <llvm/Analysis/TargetTransformInfo.h>
-#include <llvm/IR/DataLayout.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/Bitcode/ReaderWriter.h>
-typedef llvm::Attribute::AttrKind AttrKind;
-#endif
-
-#include <llvm/Support/MemoryBuffer.h>
-
-
-
-// No msvc warnings from llvm headers please
-#ifdef _WIN32
-#pragma warning(pop)
-#endif
+#include "LLVM_Headers.h"
 
 extern "C" unsigned char halide_internal_initmod_ptx_dev[];
 extern "C" int halide_internal_initmod_ptx_dev_length;
