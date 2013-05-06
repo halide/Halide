@@ -252,6 +252,10 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     JITCompiledModule m = jit_init();
 
     ExecutionEngine *execution_engine = m.module.ptr->execution_engine;
+    
+    execution_engine->finalizeObject();     
+    // TODO: I don't think this is necessary, we shouldn't have any static constructors
+    // execution_engine->runStaticConstructorsDestructors(...);
 
     llvm::Function *fn = module->getFunction(function_name);
     assert(fn && "Could not find function inside llvm module");

@@ -219,9 +219,6 @@ JITModuleHolder::JITModuleHolder(llvm::Module *module, class CodeGen *cg) : cont
     execution_engine = engine_builder.create();
     if (!execution_engine) std::cout << error_string << std::endl;
     assert(execution_engine && "Couldn't create execution engine");        
-    execution_engine->finalizeObject();     
-    // TODO: I don't think this is necessary, we shouldn't have any static constructors
-    // execution_engine->runStaticConstructorsDestructors(...);
 }
 
 JITModuleHolder::~JITModuleHolder() {
