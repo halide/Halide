@@ -3,17 +3,7 @@
 
 #include "CodeGen.h"
 #include "IRVisitor.h"
-
-#include <llvm/Config/config.h>
-
-// Temporary affordance to compile with both llvm 3.2 and 3.3.
-// Protected as at least one installation of llvm elides version macros.
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-#include <llvm/IRBuilder.h>
-// They renamed this type in 3.3
-#else
-#include <llvm/IR/IRBuilder.h>
-#endif
+#include "LLVM_Headers.h"
 
 namespace Halide { 
 namespace Internal {

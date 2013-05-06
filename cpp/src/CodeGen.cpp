@@ -2,7 +2,6 @@
 #include "IRPrinter.h"
 #include "CodeGen.h"
 #include "IROperator.h"
-#include "CodeGen_Internal.h"
 #include "Log.h"
 #include "CodeGen_C.h"
 #include "Function.h"
@@ -10,7 +9,7 @@
 #include "Simplify.h"
 #include "JITCompiledModule.h"
 
-#include "LLVM_Headers.h"
+#include "CodeGen_Internal.h"
 
 #include <sstream>
 
@@ -224,6 +223,7 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     assert(module && "No module defined. Must call compile before calling compile_to_function_pointer");
 
     JITCompiledModule m;
+
     m.compile_module(this, module, function_name);
 
     // We now relinquish ownership of the module, and give it to the

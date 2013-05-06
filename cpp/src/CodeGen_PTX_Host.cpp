@@ -1,5 +1,4 @@
 #include "CodeGen_PTX_Host.h"
-#include "CodeGen_Internal.h"
 #include "IROperator.h"
 #include <iostream>
 #include "buffer_t.h"
@@ -10,7 +9,10 @@
 #include "Var.h"
 #include "Param.h"
 #include "integer_division_table.h"
-#include "LLVM_Headers.h"
+#include "CodeGen_Internal.h"
+
+#include <dlfcn.h>
+#include <unistd.h>
 
 extern "C" unsigned char halide_internal_initmod_ptx_host[];
 extern "C" int halide_internal_initmod_ptx_host_length;
@@ -18,11 +20,17 @@ extern "C" int halide_internal_initmod_ptx_host_length;
 namespace Halide { 
 namespace Internal {
 
+extern "C" { typedef struct CUctx_st *CUcontext; }
+CUcontext cuda_ctx = 0;
+
 using std::vector;
 using std::string;
 using std::map;
 
 using namespace llvm;
+
+void *CodeGen_PTX_Host::libCuda = NULL;
+bool CodeGen_PTX_Host::libCudaLinked = false;
 
 class CodeGen_PTX_Host::Closure : public CodeGen::Closure {
 public:
@@ -131,9 +139,9 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     // Parse it
     std::string errstr;
     module = ParseBitcodeFile(bitcode_buffer, *context, &errstr);
-	if (!module) {
+    if (!module) {
         std::cerr << "Error parsing initial module: " << errstr << "\n";
-	}
+    }
     assert(module && "llvm encountered an error in parsing a bitcode file.");
 
     // grab runtime helper functions
@@ -178,6 +186,66 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     builder->CreateCall(init, ptx_src_ptr);
 
     delete bitcode_buffer;
+}
+
+void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
+
+    // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
+    // CUDA behaves much better when you don't initialize >2 contexts.
+    GlobalValue *cu_ctx = module->getNamedGlobal("cuda_ctx");
+    if (cu_ctx) {
+        ee->addGlobalMapping(cu_ctx, (void*)&cuda_ctx);
+    }
+
+    // Make sure extern cuda calls inside the module point to
+    // the right things. This is done manually instead of
+    // relying on llvm calling dlsym because that solution
+    // doesn't seem to work on linux with cuda 4.2. It also
+    // means that if the user forgets to link to libcuda at
+    // compile time then this code will go look for it.
+    if (!CodeGen_PTX_Host::libCuda && !CodeGen_PTX_Host::libCudaLinked) {
+        // First check if libCuda has already been linked
+        // in. If so we shouldn't need to set any mappings.
+        if (dlsym(NULL, "cuInit")) {
+            // TODO: Andrew: This code path not tested yet,
+            // because I can't get linking to libcuda working
+            // right on my machine.
+            std::cerr << "This program was linked to libcuda already\n";
+            CodeGen_PTX_Host::libCudaLinked = true;
+        } else {
+            std::cerr << "Looking for libcuda.so...\n";
+            CodeGen_PTX_Host::libCuda = dlopen("libcuda.so", RTLD_LAZY);
+            if (!CodeGen_PTX_Host::libCuda) {
+                // TODO: check this works on OS X
+                std::cerr << "Looking for libcuda.dylib...\n";
+                CodeGen_PTX_Host::libCuda = dlopen("libcuda.dylib", RTLD_LAZY);
+            }
+            // TODO: look for cuda.dll or some such thing on windows
+        }
+    }
+    
+    if (!CodeGen_PTX_Host::libCuda && !CodeGen_PTX_Host::libCudaLinked) {
+        std::cerr << 
+                "Error opening libcuda. Attempting to continue anyway."
+                "Might get missing symbols.\n";
+    } else if (CodeGen_PTX_Host::libCudaLinked) {
+        // Shouldn't need to do anything. llvm will call dlsym
+        // on the current process for us.
+    } else {
+        for (Module::iterator f = module->begin(); f != module->end(); ++f) {
+            string name = f->getName();
+            if (GlobalValue::isExternalLinkage(f->getLinkage()) &&
+                name[0] == 'c' && name[1] == 'u') {
+                // Starts with "cu" and has extern linkage. Might be a cuda function.
+                log(0) << "Linking " << name << "\n";
+                void *ptr = dlsym(CodeGen_PTX_Host::libCuda, name.c_str());
+                if (ptr) {
+                    ee->addGlobalMapping(f, ptr);
+                }
+            }
+        }
+    }
+
 }
 
 void CodeGen_PTX_Host::visit(const For *loop) {

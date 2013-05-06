@@ -136,6 +136,9 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
 
     module = new JITModuleHolder(cg, m);
 
+    // Do any target-specific initialization
+    cg->jit_init(module.ptr->execution_engine, m);
+
     log(1) << "JIT compiling...\n";
 
     hook_up_function_pointer(this, function_name, true, &function);

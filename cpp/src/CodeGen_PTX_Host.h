@@ -49,6 +49,12 @@ protected:
     llvm::Function *dev_run_fn;
     // @}
 
+    /** Finds and links in the CUDA runtime symbols during jitting */
+    void jit_init(llvm::ExecutionEngine *ee, llvm::Module *mod);
+
+    static void *libCuda;
+    static bool libCudaLinked;
+
 private:
     /** Child code generator for device kernels. */
     CodeGen_PTX_Dev cgdev;
