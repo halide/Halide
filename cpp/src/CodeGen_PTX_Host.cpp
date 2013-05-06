@@ -214,14 +214,14 @@ JITCompiledModule CodeGen_PTX_Host::jit_init() {
             // TODO: Andrew: This code path not tested yet,
             // because I can't get linking to libcuda working
             // right on my machine.
-            fprintf(stderr, "This program was linked to libcuda already\n");
+            std::cerr << "This program was linked to libcuda already\n";
             CodeGen_PTX_Host::libCudaLinked = true;
         } else {
-            fprintf(stderr, "Looking for libcuda.so...\n");
+            std::cerr << "Looking for libcuda.so...\n";
             CodeGen_PTX_Host::libCuda = dlopen("libcuda.so", RTLD_LAZY);
             if (!CodeGen_PTX_Host::libCuda) {
                 // TODO: check this works on OS X
-                fprintf(stderr, "Looking for libcuda.dylib...\n");
+                std::cerr << "Looking for libcuda.dylib...\n";
                 CodeGen_PTX_Host::libCuda = dlopen("libcuda.dylib", RTLD_LAZY);
             }
             // TODO: look for cuda.dll or some such thing on windows
@@ -229,9 +229,9 @@ JITCompiledModule CodeGen_PTX_Host::jit_init() {
     }
     
     if (!CodeGen_PTX_Host::libCuda && !CodeGen_PTX_Host::libCudaLinked) {
-        fprintf(stderr, 
+        std::cerr << 
                 "Error opening libcuda. Attempting to continue anyway."
-                "Might get missing symbols.\n");
+                "Might get missing symbols.\n";
     } else if (CodeGen_PTX_Host::libCudaLinked) {
         // Shouldn't need to do anything. llvm will call dlsym
         // on the current process for us.
