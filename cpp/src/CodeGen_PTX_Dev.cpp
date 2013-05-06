@@ -239,6 +239,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
     log(1) << "Allocate " << alloc->name << " on device\n";
     assert(on_stack && "PTX device malloc with non-const size");
+    if (!on_stack) return; // HACK: Linux build is unhappy if on_stack is unused outside assert
 
     llvm::Type *llvm_type = llvm_type_of(alloc->type);
     Value *ptr;
