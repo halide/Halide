@@ -8,10 +8,10 @@
 #include <string>
 #include <vector>
 
+#include "Buffer.h"
 #include "IRVisitor.h"
 #include "Type.h"
 #include "IntrusivePtr.h"
-#include "Buffer.h"
 #include "Util.h"
 
 namespace Halide {

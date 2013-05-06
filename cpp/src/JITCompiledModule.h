@@ -7,10 +7,15 @@
 
 #include "IntrusivePtr.h"
 
+namespace llvm {
+class Module;
+}
+
 namespace Halide {
 namespace Internal {
 
 class JITModuleHolder;
+class CodeGen;
 
 /** Function pointers into a compiled halide module. */
 struct JITCompiledModule {
@@ -26,7 +31,9 @@ struct JITCompiledModule {
      * correspond to the arguments to \ref function */
     void (*wrapped_function)(const void **);
 
-    /** JITed helpers to interact with device-mapped buffer_t objects */
+    /** JITed helpers to interact with device-mapped buffer_t
+     * objects. These pointers may be NULL if not compiling for a
+     * gpu-like target. */
     // @{
     void (*copy_to_host)(struct buffer_t*);
     void (*copy_to_dev)(struct buffer_t*);
@@ -45,22 +52,36 @@ struct JITCompiledModule {
 
     /** Set a custom parallel for loop launcher. See 
      * \ref Func::set_custom_do_par_for */
-    void (*set_custom_do_par_for)(void (*custom_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *));
+    void (*set_custom_do_par_for)(void (*custom_do_par_for)(void (*)(int, unsigned char *), int, int, unsigned char *));
 
     /** Set a custom do parallel task. See
      * \ref Func::set_custom_do_task */
-    void (*set_custom_do_task)(void (*custom_do_task)(void (*)(int, uint8_t *), int, uint8_t *));
+    void (*set_custom_do_task)(void (*custom_do_task)(void (*)(int, unsigned char *), int, unsigned char *));
+
+    /** Shutdown the thread pool maintained by this JIT module. This
+     * is also done automatically when the last reference to this
+     * module is destroyed. */
+    void (*shutdown_thread_pool)();
 
     // The JIT Module Allocator holds onto the memory storing the functions above.
     IntrusivePtr<JITModuleHolder> module;
 
-    JITCompiledModule() : function(NULL), 
-                          wrapped_function(NULL), 
-                          set_error_handler(NULL), 
-                          set_custom_allocator(NULL), 
-                          set_custom_do_par_for(NULL), 
-                          set_custom_do_task(NULL), 
-                          module(NULL) {}
+    JITCompiledModule() : 
+        function(NULL), 
+        wrapped_function(NULL),
+        copy_to_host(NULL), 
+        copy_to_dev(NULL), 
+        free_buffer(NULL), 
+        set_error_handler(NULL), 
+        set_custom_allocator(NULL), 
+        set_custom_do_par_for(NULL), 
+        set_custom_do_task(NULL), 
+        shutdown_thread_pool(NULL) {}
+                
+    /** Take an llvm module and compile it. Populates the function
+     * pointer members above with the result. */
+    void compile_module(CodeGen *cg, llvm::Module *mod, const std::string &function_name);
+
 };
         
 }

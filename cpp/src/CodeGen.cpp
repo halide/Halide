@@ -8,65 +8,9 @@
 #include "Function.h"
 #include "Deinterleave.h"
 #include "Simplify.h"
+#include "JITCompiledModule.h"
 
-// No msvc warnings from llvm headers please
-#ifdef _WIN32
-#pragma warning(push, 0)
-#endif
-#include <llvm/Config/config.h>
-
-// MCJIT doesn't seem to work right on os x yet
-#ifdef __APPLE__
-#else
-#define USE_MCJIT
-#endif
-
-#ifdef USE_MCJIT
-#include <llvm/ExecutionEngine/MCJIT.h>
-#else
-#include <llvm/ExecutionEngine/JIT.h>
-#endif
-#include <llvm/Analysis/Verifier.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Target/TargetLibraryInfo.h>
-#include <llvm/Support/raw_ostream.h>
-#include <llvm/Support/FormattedStream.h>
-#include <llvm/Bitcode/ReaderWriter.h>
-#include <llvm/Support/TargetRegistry.h>
-#include <llvm/CodeGen/CommandFlags.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/PassManager.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
-#include <llvm/Transforms/IPO.h>
-
-// Temporary affordance to compile with both llvm 3.2 and 3.3.
-// Protected as at least one installation of llvm elides version macros.
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-#include <llvm/Value.h>
-#include <llvm/Module.h>
-#include <llvm/Function.h>
-#include <llvm/TargetTransformInfo.h>
-#include <llvm/DataLayout.h>
-#include <llvm/IRBuilder.h>
-#include <llvm/ExecutionEngine/JITMemoryManager.h>
-// They renamed this type in 3.3
-typedef llvm::Attributes Attribute;
-typedef llvm::Attributes::AttrVal AttrKind;
-#else
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Function.h>
-#include <llvm/Analysis/TargetTransformInfo.h>
-#include <llvm/IR/DataLayout.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/ExecutionEngine/SectionMemoryManager.h>
-typedef llvm::Attribute::AttrKind AttrKind;
-#endif
-
-// No msvc warnings from llvm headers please
-#ifdef _WIN32
-#pragma warning(pop)
-#endif
+#include "LLVM_Headers.h"
 
 #include <sstream>
 
@@ -83,21 +27,6 @@ using std::pair;
 using std::map;
 using std::stack;
 
-namespace {
-class LLVMAPIAttributeAdapter {
-    LLVMContext &llvm_context;    
-    AttrKind kind;
-
-public:
-    LLVMAPIAttributeAdapter(LLVMContext &context, AttrKind kind_arg) :
-        llvm_context(context), kind(kind_arg)
-    {
-    }
-
-    operator AttrKind() { return kind; }
-    operator Attribute() { return Attribute::get(llvm_context, kind); }
-};
-
 // Define a local empty inline function for each target
 // to disable initialization.
 #define LLVM_TARGET(target)             \
@@ -107,8 +36,6 @@ public:
 #include <llvm/Config/Targets.def>
 
 #undef LLVM_TARGET
-
-}
 
 #define InitializeTarget(target)              \
         LLVMInitialize##target##Target();     \
@@ -293,161 +220,16 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     }
 }
 
-// Wraps an execution engine. Takes ownership of the given module and
-// the memory for jit compiled code.
-class JITModuleHolder {
-public:
-        mutable RefCount ref_count;    
-    JITModuleHolder(Module *module, CodeGen *cg) : context(&module->getContext()) {
-        log(2) << "Creating new execution engine\n";
-        string error_string;
-
-        TargetOptions options;
-        options.LessPreciseFPMADOption = true;
-        options.NoFramePointerElim = false;
-        options.NoFramePointerElimNonLeaf = false;
-        options.AllowFPOpFusion = FPOpFusion::Fast;
-        options.UnsafeFPMath = true;
-        options.NoInfsFPMath = true;
-        options.NoNaNsFPMath = true;
-        options.HonorSignDependentRoundingFPMathOption = false;
-        options.UseSoftFloat = false;
-        options.FloatABIType = 
-            cg->use_soft_float_abi() ? FloatABI::Soft : FloatABI::Hard;
-        options.NoZerosInBSS = false;
-        options.GuaranteedTailCallOpt = false;
-        options.DisableTailCalls = false;
-        options.StackAlignmentOverride = 0;
-        options.RealignStack = true;
-        options.TrapFuncName = "";
-        options.PositionIndependentExecutable = true;
-        options.EnableSegmentedStacks = false;
-        options.UseInitArray = false;
-        options.SSPBufferSize = 0;
-        
-        EngineBuilder engine_builder(module);
-        engine_builder.setTargetOptions(options);
-        engine_builder.setErrorStr(&error_string);
-        engine_builder.setEngineKind(EngineKind::JIT);
-        #ifdef USE_MCJIT
-        engine_builder.setUseMCJIT(true);        
-        #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-        engine_builder.setJITMemoryManager(JITMemoryManager::CreateDefaultMemManager());
-        #else
-        engine_builder.setJITMemoryManager(new SectionMemoryManager());
-        #endif
-        #else
-        engine_builder.setUseMCJIT(false);
-        #endif
-        engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-        engine_builder.setMCPU(cg->mcpu());
-        engine_builder.setMAttrs(vec<string>(cg->mattrs()));
-        execution_engine = engine_builder.create();
-        if (!execution_engine) cout << error_string << endl;
-        assert(execution_engine && "Couldn't create execution engine");        
-        execution_engine->finalizeObject();     
-        // TODO: I don't think this is necessary, we shouldn't have any static constructors
-        // execution_engine->runStaticConstructorsDestructors(...);
-    }
-    ~JITModuleHolder() {
-        shutdown_thread_pool();
-        delete execution_engine;
-        delete context;
-    }
-    void (*shutdown_thread_pool)();
-    llvm::ExecutionEngine *execution_engine;
-    LLVMContext *context;
-};
-
-template<>
-EXPORT RefCount &ref_count<JITModuleHolder>(const JITModuleHolder *f) {return f->ref_count;}
-
-template<>
-EXPORT void destroy<JITModuleHolder>(const JITModuleHolder *f) {delete f;}
-
-
 JITCompiledModule CodeGen::compile_to_function_pointers() {
     assert(module && "No module defined. Must call compile before calling compile_to_function_pointer");
-               
-    log(1) << "JIT compiling...\n";
-
-    IntrusivePtr<JITModuleHolder> module_holder(new JITModuleHolder(module, this));
-    ExecutionEngine *execution_engine = module_holder.ptr->execution_engine;
-
-    llvm::Function *fn = module->getFunction(function_name);
-    assert(fn && "Could not find function inside llvm module");
 
     JITCompiledModule m;
-    void *f = execution_engine->getPointerToFunction(fn);
-    m.function = f;    
-    assert(f && "Compiling function returned NULL");
+    m.compile_module(this, module, function_name);
 
-    log(1) << "JIT compiled function pointer 0x" << std::hex << (unsigned long)f << std::dec << "\n";
-
-    llvm::Function *wrapper = module->getFunction(function_name + "_jit_wrapper");
-    assert(wrapper && "Could not find wrapped function inside llvm module");
-    f = execution_engine->getPointerToFunction(wrapper);
-    m.wrapped_function = (void (*)(const void **))f;
-    assert(f && "Compiling wrapped function returned NULL");
-
-    llvm::Function *copy_to_host = module->getFunction("halide_copy_to_host");
-    if (copy_to_host) {
-        f = execution_engine->getPointerToFunction(copy_to_host);
-        m.copy_to_host = (void (*)(struct buffer_t*))f;
-    } else {
-        m.copy_to_host = NULL;
-    }
-
-    llvm::Function *copy_to_dev = module->getFunction("halide_copy_to_dev");
-    if (copy_to_dev) {
-        f = execution_engine->getPointerToFunction(copy_to_dev);
-        m.copy_to_dev = (void (*)(struct buffer_t*))f;
-    } else {
-        m.copy_to_dev = NULL;
-    }
-
-    llvm::Function *free_buffer = module->getFunction("halide_free_buffer");
-    if (free_buffer) {
-        f = execution_engine->getPointerToFunction(free_buffer);
-        m.free_buffer = (void (*)(struct buffer_t*))f;
-    } else {
-        m.free_buffer = NULL;
-    }
-
-    llvm::Function *set_error_handler = module->getFunction("halide_set_error_handler");
-    assert(set_error_handler && "Could not find set_error_handler function inside llvm module");
-    f = execution_engine->getPointerToFunction(set_error_handler);
-    m.set_error_handler = (void (*)(JITCompiledModule::ErrorHandler))f;
-    assert(f && "Compiling set_error_handler function returned NULL");
-
-    llvm::Function *set_custom_allocator = module->getFunction("halide_set_custom_allocator");
-    assert(set_custom_allocator && "Could not find set_custom_allocator function inside llvm module");
-    f = execution_engine->getPointerToFunction(set_custom_allocator);
-    m.set_custom_allocator = (void (*)(void *(*)(size_t), void (*)(void *)))f;
-    assert(f && "Compiling set_custom_allocator function returned NULL");
-
-    llvm::Function *set_custom_do_par_for = module->getFunction("halide_set_custom_do_par_for");
-    assert(set_custom_do_par_for && "Could not find set_custom_do_par_for function inside llvm module");
-    f = execution_engine->getPointerToFunction(set_custom_do_par_for);
-    m.set_custom_do_par_for = (void (*)(void (*)(void (*)(int, uint8_t *), int, int, uint8_t *)))f;
-    assert(f && "Compiling set_custom_do_par_for function returned NULL");
-
-    llvm::Function *set_custom_do_task = module->getFunction("halide_set_custom_do_task");
-    assert(set_custom_do_task && "Could not find set_custom_do_task function inside llvm module");
-    f = execution_engine->getPointerToFunction(set_custom_do_task);
-    m.set_custom_do_task = (void (*)(void (*)(void (*)(int, uint8_t *), int, uint8_t *)))f;
-    assert(f && "Compiling set_custom_do_task function returned NULL");
-
-    m.module = module_holder;
-    llvm::Function *shutdown_thread_pool = module->getFunction("halide_shutdown_thread_pool");
-    assert(shutdown_thread_pool && "Could not find shutdown_thread_pool function inside llvm module");    
-    f = execution_engine->getPointerToFunction(shutdown_thread_pool);
-    m.module.ptr->shutdown_thread_pool = (void (*)())f;
-    assert(f && "Compiling shutdown_thread_pool function returned NULL");
-
-    // We now relinquish ownership of the module
+    // We now relinquish ownership of the module, and give it to the
+    // JITCompiledModule object that we're returning.
     owns_module = false;
-    
+
     return m;
 }
 

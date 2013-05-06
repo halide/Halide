@@ -1,3 +1,4 @@
+#include "LLVM_Headers.h"
 #include "CodeGen_X86.h"
 #include "IROperator.h"
 #include <iostream>
@@ -10,53 +11,7 @@
 #include "Param.h"
 #include "integer_division_table.h"
 
-// No msvc warnings from llvm headers please
-#ifdef _WIN32
-#pragma warning(push, 0)
-#endif
 
-#include <llvm/Config/config.h>
-
-// Temporary affordance to compile with both llvm 3.2 and 3.3.
-// Protected as at least one installation of llvm elides version macros.
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-#include <llvm/Value.h>
-#include <llvm/Module.h>
-#include <llvm/Function.h>
-#include <llvm/TargetTransformInfo.h>
-#include <llvm/DataLayout.h>
-#include <llvm/IRBuilder.h>
-#include <llvm/Attributes.h>
-#include <llvm/Support/IRReader.h>
-#include <llvm/Support/IRReader.h>
-#include <llvm/Intrinsics.h>
-
-// They renamed this type in 3.3
-typedef llvm::Attributes Attribute;
-typedef llvm::Attributes::AttrVal AttrKind;
-
-#else
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Function.h>
-#include <llvm/Analysis/TargetTransformInfo.h>
-#include <llvm/IR/DataLayout.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Attributes.h>
-#include <llvm/Bitcode/ReaderWriter.h>
-#include <llvm/IR/Intrinsics.h>
-
-typedef llvm::Attribute::AttrKind AttrKind;
-
-#endif
-
-#include <llvm/Support/MemoryBuffer.h>
-
-
-// No msvc warnings from llvm headers please
-#ifdef _WIN32
-#pragma warning(pop)
-#endif
 
 namespace Halide { 
 namespace Internal {
@@ -65,20 +20,6 @@ using std::vector;
 using std::string;
 
 using namespace llvm;
-
-class LLVMAPIAttributeAdapter {
-    LLVMContext &llvm_context;
-    AttrKind kind;
-
-public:
-    LLVMAPIAttributeAdapter(LLVMContext &context, AttrKind kind_arg) :
-        llvm_context(context), kind(kind_arg)
-    {
-    }
-
-    operator AttrKind() { return kind; }
-    operator Attribute() { return Attribute::get(llvm_context, kind); }
-};
 
 CodeGen_Posix::CodeGen_Posix() : CodeGen() {
     wild_i8x8 = new Variable(Int(8, 8), "*");
