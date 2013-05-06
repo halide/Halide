@@ -35,7 +35,11 @@ private:
      * cached strides are correct, and that the image data is on the
      * host. */
     void prepare_for_direct_pixel_access() {
-        // TODO: make sure buffer has been copied to host
+        // make sure buffer has been copied to host
+        if (buffer.copy_to_host()) {
+            buffer.copy_to_host()(const_cast<buffer_t*>(buffer.raw_buffer()));
+        }
+
         if (buffer.defined()) {
             base = (T *)buffer.host_ptr();
             stride_1 = buffer.stride(1);

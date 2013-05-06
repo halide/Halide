@@ -26,6 +26,13 @@ struct JITCompiledModule {
      * correspond to the arguments to \ref function */
     void (*wrapped_function)(const void **);
 
+    /** JITed helpers to interact with device-mapped buffer_t objects */
+    // @{
+    void (*copy_to_host)(struct buffer_t*);
+    void (*copy_to_dev)(struct buffer_t*);
+    void (*free_buffer)(struct buffer_t*);
+    // @}
+
     /** The type of a halide runtime error handler function */
     typedef void (*ErrorHandler)(char *);
 

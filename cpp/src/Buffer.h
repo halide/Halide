@@ -24,7 +24,9 @@ struct BufferContents {
 
     BufferContents(Type t, int x_size, int y_size, int z_size, int w_size,
                    uint8_t* data = NULL) :
-        type(t), allocation(NULL), name(unique_name('b')) {
+        type(t), allocation(NULL), name(unique_name('b')),
+        copy_to_host(NULL), copy_to_dev(NULL), free_buffer(NULL)
+    {
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
         buf.elem_size = t.bits / 8;        
         size_t size = 1;
@@ -60,6 +62,10 @@ struct BufferContents {
         buf = *b;
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
     }
+
+    void (*copy_to_host)(struct buffer_t*);
+    void (*copy_to_dev)(struct buffer_t*);
+    void (*free_buffer)(struct buffer_t*);
 };
 }
 
@@ -158,6 +164,15 @@ public:
         return Argument(name(), true, type());
     }
 
+    // TODO: UGLY hacks around const-ness of internal buffer - why is this all const?
+    typedef void(*buffer_fn_t)(struct buffer_t*);
+    void set_copy_to_host_fn(buffer_fn_t f) { const_cast<Internal::BufferContents*>(contents.ptr)->copy_to_host = f; }
+    void set_copy_to_dev_fn(buffer_fn_t f) { const_cast<Internal::BufferContents*>(contents.ptr)->copy_to_dev = f; }
+    void set_free_buffer_fn(buffer_fn_t f) { const_cast<Internal::BufferContents*>(contents.ptr)->free_buffer = f; }
+
+    buffer_fn_t copy_to_host() { return contents.ptr->copy_to_host; }
+    buffer_fn_t copy_to_dev() { return contents.ptr->copy_to_dev; }
+    buffer_fn_t free_buffer() { return contents.ptr->free_buffer; }
 };
 
 namespace Internal {
@@ -167,7 +182,8 @@ inline RefCount &ref_count<BufferContents>(const BufferContents *p) {
 }
 
 template<>
-inline void destroy<BufferContents>(const BufferContents *p) {    
+inline void destroy<BufferContents>(const BufferContents *p) {
+    if (p->free_buffer) p->free_buffer(const_cast<buffer_t*>(&p->buf));
     if (p->allocation) free(p->allocation);
     delete p;
 }

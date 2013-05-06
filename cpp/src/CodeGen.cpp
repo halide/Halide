@@ -390,6 +390,30 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
     m.wrapped_function = (void (*)(const void **))f;
     assert(f && "Compiling wrapped function returned NULL");
 
+    llvm::Function *copy_to_host = module->getFunction("halide_copy_to_host");
+    if (copy_to_host) {
+        f = execution_engine->getPointerToFunction(copy_to_host);
+        m.copy_to_host = (void (*)(struct buffer_t*))f;
+    } else {
+        m.copy_to_host = NULL;
+    }
+
+    llvm::Function *copy_to_dev = module->getFunction("halide_copy_to_dev");
+    if (copy_to_dev) {
+        f = execution_engine->getPointerToFunction(copy_to_dev);
+        m.copy_to_dev = (void (*)(struct buffer_t*))f;
+    } else {
+        m.copy_to_dev = NULL;
+    }
+
+    llvm::Function *free_buffer = module->getFunction("halide_free_buffer");
+    if (free_buffer) {
+        f = execution_engine->getPointerToFunction(free_buffer);
+        m.free_buffer = (void (*)(struct buffer_t*))f;
+    } else {
+        m.free_buffer = NULL;
+    }
+
     llvm::Function *set_error_handler = module->getFunction("halide_set_error_handler");
     assert(set_error_handler && "Could not find set_error_handler function inside llvm module");
     f = execution_engine->getPointerToFunction(set_error_handler);
