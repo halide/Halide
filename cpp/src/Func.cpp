@@ -917,6 +917,10 @@ void Func::realize(Buffer dst) {
     Internal::log(2) << "Calling jitted function\n";
     compiled_module.wrapped_function(&(arg_values[0]));    
     Internal::log(2) << "Back from jitted function\n";
+
+    dst.set_copy_to_host_fn(compiled_module.copy_to_host);
+    dst.set_copy_to_dev_fn(compiled_module.copy_to_dev);
+    dst.set_free_buffer_fn(compiled_module.free_buffer);
 }
 
 void Func::compile_jit() {
