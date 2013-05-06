@@ -19,6 +19,7 @@ class Type;
 class StructType;
 class Instruction;
 class CallInst;
+class ExecutionEngine;
 }
 
 #include <map>
@@ -75,6 +76,11 @@ public:
     virtual std::string mattrs() const = 0;
     virtual bool use_soft_float_abi() const = 0;
     // @}
+
+    /** Do any required target-specific things to the execution engine
+     * and the module prior to jitting. Called by JITCompiledModule
+     * just before it jits. Does nothing by default. */
+    virtual void jit_init(llvm::ExecutionEngine *ee, llvm::Module *module) {}
 
 protected:
 
@@ -233,7 +239,6 @@ protected:
     virtual void visit(const Provide *);
     virtual void visit(const Realize *);
     // @}
-
 
     /** If we have to bail out of a pipeline midway, this should
      * inject the appropriate cleanup code. */
