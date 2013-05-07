@@ -152,31 +152,37 @@ void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args
     // Unpack the buffer_t's
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << "uint8_t *"
-                   << print_name(args[i].name)
-                   << " = _"
-                   << print_name(args[i].name)
-                   << "->host;\n";
+            string name = print_name(args[i].name);
+            string type = print_type(args[i].type);
+            stream << type
+                   << " *"
+                   << name
+                   << " = ("
+                   << type
+                   << " *)(_"
+                   << name
+                   << "->host);\n";
+            allocation_types.push(args[i].name, args[i].type);
 
             for (int j = 0; j < 4; j++) {
                 stream << "const int32_t "
-                       << print_name(args[i].name)
+                       << name
                        << "_min_" << j << " = _"
-                       << print_name(args[i].name)
+                       << name
                        << "->min[" << j << "];\n";
             }
             for (int j = 0; j < 4; j++) {
                 stream << "const int32_t "
-                       << print_name(args[i].name)
+                       << name
                        << "_extent_" << j << " = _"
-                       << print_name(args[i].name)
+                       << name
                        << "->extent[" << j << "];\n";
             }
             for (int j = 0; j < 4; j++) {
                 stream << "const int32_t "
-                       << print_name(args[i].name)
+                       << name
                        << "_stride_" << j << " = _"
-                       << print_name(args[i].name)
+                       << name
                        << "->stride[" << j << "];\n";
             }
         }
@@ -377,28 +383,51 @@ void CodeGen_C::visit(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
+    bool type_cast_needed = !((allocation_types.contains(op->name) && 
+                               allocation_types.get(op->name) == op->type) ||
+                              op->type == UInt(8));
     ostringstream rhs;
-    rhs << "(("
-        << print_type(op->type)
-        << " *)"
-        << print_name(op->name)
-        << ")[" 
+    if (type_cast_needed) {
+        rhs << "(("
+            << print_type(op->type)
+            << " *)"
+            << print_name(op->name)
+            << ")";
+    } else {
+        rhs << print_name(op->name);
+    }
+    rhs << "[" 
         << print_expr(op->index) 
         << "]";
+
     print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_C::visit(const Store *op) {
+
+    Type t = op->value.type();
+
+    bool type_cast_needed = !((allocation_types.contains(op->name) && 
+                               allocation_types.get(op->name) == t) || 
+                              t == UInt(8));
+
     string id_index = print_expr(op->index);
     string id_value = print_expr(op->value);
     do_indent();    
-    Type t = op->value.type();
-    stream << "(("
-           << print_type(t)
-           << " *)"
-           << print_name(op->name)
-           << ")[" << id_index
-           << "] = " << id_value
+
+    if (type_cast_needed) {
+        stream << "(("
+               << print_type(t)
+               << " *)"
+               << print_name(op->name)
+               << ")";
+    } else {
+        stream << print_name(op->name);
+    }
+    stream << "[" 
+           << id_index
+           << "] = " 
+           << id_value
            << ";\n";
 }
 
@@ -514,6 +543,8 @@ void CodeGen_C::visit(const Allocate *op) {
 
     string size_id = print_expr(op->size);
 
+    allocation_types.push(op->name, op->type);
+
     do_indent();
     stream << print_type(op->type) << ' ';
 
@@ -547,6 +578,8 @@ void CodeGen_C::visit(const Allocate *op) {
                << ");\n";
     }
 
+    allocation_types.pop(op->name);
+
     close_scope();
 }
 
@@ -555,7 +588,7 @@ void CodeGen_C::visit(const Realize *op) {
 }
 
 void CodeGen_C::test() {
-    Argument buffer_arg("buf", true, Int(0));
+    Argument buffer_arg("buf", true, Int(32));
     Argument float_arg("alpha", false, Float(32));
     Argument int_arg("beta", false, Int(32));
     vector<Argument> args(3);
@@ -577,7 +610,7 @@ void CodeGen_C::test() {
     
     string correct_source = preamble + 
         "extern \"C\" void test1(const buffer_t *_buf, const float alpha, const int32_t beta) {\n"
-        "uint8_t *buf = _buf->host;\n"
+        "int32_t *buf = (int32_t *)(_buf->host);\n"
         "const int32_t buf_min_0 = _buf->min[0];\n"
         "const int32_t buf_min_1 = _buf->min[1];\n"
         "const int32_t buf_min_2 = _buf->min[2];\n"
@@ -598,7 +631,7 @@ void CodeGen_C::test() {
         "  int32_t V1 = beta + 1;\n"
         "  bool V2 = alpha > 4.000000f;\n"
         "  int32_t V3 = int32_t(V2 ? 3 : 2);\n"
-        "  ((int32_t *)buf)[V1] = V3;\n"
+        "  buf[V1] = V3;\n"
         " }\n"
         " halide_free(tmp_heap);\n" 
         "}\n"

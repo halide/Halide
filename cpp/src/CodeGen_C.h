@@ -8,6 +8,7 @@
 
 #include "IRPrinter.h"
 #include "Argument.h"
+#include "Scope.h"
 #include <string>
 #include <vector>
 #include <ostream>
@@ -65,6 +66,9 @@ protected:
 
     /** Close a C scope (i.e. throw in an end brace, decrease the indent) */
     void close_scope();
+
+    /** Track the types of allocations to avoid unnecessary casts */
+    Scope<Type> allocation_types;
 
     using IRPrinter::visit;
 
