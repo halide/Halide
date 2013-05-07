@@ -1,6 +1,13 @@
 #ifndef HALIDE_CODEGEN_INTERNAL_H
 #define HALIDE_CODEGEN_INTERNAL_H
 
+/** \file
+ * 
+ * Defines functionality that's useful to multiple target-specific
+ * CodeGen paths, but shouldn't live in CodeGen.h (because that's the
+ * front-end-facing interface to CodeGen).
+ */
+
 #include "CodeGen.h"
 #include "IRVisitor.h"
 #include "LLVM_Headers.h"
