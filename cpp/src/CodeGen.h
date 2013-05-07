@@ -103,10 +103,12 @@ protected:
     llvm::Value *value;
     //@}
 
-    /** Initialize the CodeGen internal state to compile a fresh module */
+    /** Initialize the CodeGen internal state to compile a fresh
+     * module. This allows reuse of one CodeGen object to compiled
+     * multiple related modules (e.g. multiple device kernels). */
     void init_module();
 
-    /** Run all of llvm's optimization passes on the module */
+    /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
 
     /** Add an entry to the symbol table, hiding previous entries with
@@ -127,22 +129,22 @@ protected:
     llvm::StructType *buffer_t;
     // @}
 
-    /** The name of the function being generated */
+    /** The name of the function being generated. */
     std::string function_name;
 
     /** Emit code that evaluates an expression, and return the llvm
      * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
     
-    /** Emit code that runs a statement */
+    /** Emit code that runs a statement. */
     void codegen(Stmt);
 
     /** Take an llvm Value representing a pointer to a buffer_t,
-     * and populate the symbol table with its constituent parts
+     * and populate the symbol table with its constituent parts.
      */
     void unpack_buffer(std::string name, llvm::Value *buffer);
 
-    /** Add a definition of buffer_t to the module if it isn't already there */
+    /** Add a definition of buffer_t to the module if it isn't already there. */
     void define_buffer_t();
 
     /** Codegen an assertion. If false, it bails out and calls the error handler. */
@@ -175,7 +177,7 @@ protected:
      * the type passed in. */
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
 
-    /** Return the llvm version of a halide type */
+    /** Return the llvm version of a halide type. */
     llvm::Type *llvm_type_of(Type type);
 
     /** Add NoAlias attribute to return value of call instruction.
@@ -241,7 +243,7 @@ protected:
     // @}
 
     /** If we have to bail out of a pipeline midway, this should
-     * inject the appropriate cleanup code. */
+     * inject the appropriate target-specific cleanup code. */
     virtual void prepare_for_early_exit() {}
 
 private:
@@ -249,10 +251,9 @@ private:
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
 
-    /** Alignment info for Int(32) variables in scope */
+    /** Alignment info for Int(32) variables in scope. */
     Scope<ModulusRemainder> alignment_info;
         
-
 };
 
 }}
