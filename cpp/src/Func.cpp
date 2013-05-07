@@ -670,7 +670,7 @@ private:
             return;
         }
 
-        Argument arg(arg_name, true, Int(1));
+        Argument arg(arg_name, true, op->type);
         bool already_included = false;
         for (size_t i = 0; i < arg_types.size(); i++) {
             if (arg_types[i].name == op->name) {
@@ -763,7 +763,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 
     validate_arguments(args, lowered);
 
-    Argument me(name(), true, Int(1));
+    Argument me(name(), true, value().type());
     args.push_back(me);
 
     StmtCompiler cg;
@@ -780,7 +780,7 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
 
     validate_arguments(args, lowered);
 
-    Argument me(name(), true, Int(1));
+    Argument me(name(), true, value().type());
     args.push_back(me);
 
     StmtCompiler cg;
@@ -789,7 +789,7 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
 }
 
 void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name) {    
-    Argument me(name(), true, Int(1));
+    Argument me(name(), true, value().type());
     args.push_back(me);
 
     ofstream header(filename.c_str());
@@ -804,7 +804,7 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
 
     validate_arguments(args, lowered);
 
-    Argument me(name(), true, Int(1));
+    Argument me(name(), true, value().type());
     args.push_back(me);
 
     ofstream header(filename.c_str());
@@ -845,7 +845,7 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
     assert(value().defined() && "Can't compile undefined function");    
 
     if (!lowered.defined()) lowered = Halide::Internal::lower(func);
-    Argument me(name(), true, Int(1));
+    Argument me(name(), true, value().type());
     args.push_back(me);
 
     StmtCompiler cg;
@@ -932,7 +932,7 @@ void Func::compile_jit() {
     InferArguments infer_args;
     lowered.accept(&infer_args);
     
-    Argument me(name(), true, Int(1));
+    Argument me(name(), true, value().type());
     infer_args.arg_types.push_back(me);
     arg_values = infer_args.arg_values;
     arg_values.push_back(NULL); // A spot to put the address of the output buffer
