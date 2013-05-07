@@ -17,7 +17,9 @@ namespace Internal {
 class JITModuleHolder;
 class CodeGen;
 
-/** Function pointers into a compiled halide module. */
+/** Function pointers into a compiled halide module. These function
+ * pointers are meaningless once the last copy of a JITCompiledModule
+ * is deleted, so don't cache them. */
 struct JITCompiledModule {
     /** A pointer to the raw halide function. It's true type depends
      * on the Argument vector passed to CodeGen::compile. Image
@@ -37,7 +39,7 @@ struct JITCompiledModule {
     // @{
     void (*copy_to_host)(struct buffer_t*);
     void (*copy_to_dev)(struct buffer_t*);
-    void (*free_buffer)(struct buffer_t*);
+    void (*free_dev_buffer)(struct buffer_t*);
     // @}
 
     /** The type of a halide runtime error handler function */
@@ -71,7 +73,7 @@ struct JITCompiledModule {
         wrapped_function(NULL),
         copy_to_host(NULL), 
         copy_to_dev(NULL), 
-        free_buffer(NULL), 
+        free_dev_buffer(NULL), 
         set_error_handler(NULL), 
         set_custom_allocator(NULL), 
         set_custom_do_par_for(NULL), 

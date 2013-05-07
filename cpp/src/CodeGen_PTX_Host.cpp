@@ -394,10 +394,10 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
     sym_pop(alloc->name + ".host");
     sym_pop(alloc->name);
 
-    // Call halide_free_buffer to free device memory, if needed
-    llvm::Function *free_buf_fn = module->getFunction("halide_free_buffer");
-    assert(free_buf_fn && "Could not find halide_free_buffer in module");
-    log(4) << "Creating call to halide_free_buffer\n";
+    // Call halide_free_dev_buffer to free device memory, if needed
+    llvm::Function *free_buf_fn = module->getFunction("halide_free_dev_buffer");
+    assert(free_buf_fn && "Could not find halide_free_dev_buffer in module");
+    log(4) << "Creating call to halide_free_dev_buffer\n";
     CallInst *call = builder->CreateCall(free_buf_fn, buf);
     mark_call_parameter_no_capture(call, 1, *context);
 

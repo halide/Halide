@@ -1,5 +1,5 @@
-#ifndef HALIDE_BUFFER_T
-#define HALIDE_BUFFER_T
+#ifndef HALIDE_BUFFER_T_H
+#define HALIDE_BUFFER_T_H
 
 #include <stdint.h>
 
