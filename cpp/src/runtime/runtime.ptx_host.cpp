@@ -201,11 +201,11 @@ static buffer_t* __malloc_buffer(int32_t size)
     return __make_buffer((uint8_t*)malloc(size), sizeof(uint8_t), size, 1, 1, 1);
 }
 
-WEAK void halide_free_buffer(buffer_t* buf)
+WEAK void halide_free_dev_buffer(buffer_t* buf)
 {
     #if 0 // temp disable
     #ifndef NDEBUG
-    fprintf(stderr, "In free_buffer of %p - dev: 0x%zx\n", buf, buf->dev);
+    fprintf(stderr, "In free_dev_buffer of %p - dev: 0x%zx\n", buf, buf->dev);
     #endif
     //assert(buf->host);
     //free(buf->host);
@@ -217,7 +217,7 @@ WEAK void halide_free_buffer(buffer_t* buf)
     // __release_buffer(buf);
     #else
     #ifndef NDEBUG
-    fprintf(stderr, "Would have run free_buffer, but skipping (#if disabled)\n");
+    fprintf(stderr, "Would have run free_dev_buffer, but skipping (#if disabled)\n");
     #endif
     #endif
 }
