@@ -383,9 +383,8 @@ void CodeGen_C::visit(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
-    bool type_cast_needed = !((allocation_types.contains(op->name) && 
-                               allocation_types.get(op->name) == op->type) ||
-                              op->type == UInt(8));
+    bool type_cast_needed = !(allocation_types.contains(op->name) && 
+                              allocation_types.get(op->name) == op->type);
     ostringstream rhs;
     if (type_cast_needed) {
         rhs << "(("
@@ -407,9 +406,8 @@ void CodeGen_C::visit(const Store *op) {
 
     Type t = op->value.type();
 
-    bool type_cast_needed = !((allocation_types.contains(op->name) && 
-                               allocation_types.get(op->name) == t) || 
-                              t == UInt(8));
+    bool type_cast_needed = !(allocation_types.contains(op->name) && 
+                              allocation_types.get(op->name) == t);
 
     string id_index = print_expr(op->index);
     string id_value = print_expr(op->value);
