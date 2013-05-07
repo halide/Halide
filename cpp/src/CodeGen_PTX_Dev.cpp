@@ -290,7 +290,9 @@ string CodeGen_PTX_Dev::compile_to_ptx() {
     /* if (FloatABIForCalls != FloatABI::Default) */
         /* Options.FloatABIType = FloatABIForCalls; */
     Options.NoZerosInBSS = false;
+    #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
     Options.JITExceptionHandling = false;
+    #endif
     Options.JITEmitDebugInfo = false;
     Options.JITEmitDebugInfoToDisk = false;
     Options.GuaranteedTailCallOpt = false;

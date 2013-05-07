@@ -62,6 +62,7 @@ typedef llvm::Attributes::AttrVal AttrKind;
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 
+typedef llvm::Attribute Attribute;
 typedef llvm::Attribute::AttrKind AttrKind;
 
 #endif
