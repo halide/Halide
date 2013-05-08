@@ -8,7 +8,6 @@
 #include "Deinterleave.h"
 #include "Simplify.h"
 #include "JITCompiledModule.h"
-
 #include "CodeGen_Internal.h"
 
 #include <sstream>
@@ -217,6 +216,10 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     if (log::debug_level >= 2) {
         module->dump();
     }
+}
+
+llvm::Type *CodeGen::llvm_type_of(Type t) {
+    return Internal::llvm_type_of(context, t);
 }
 
 JITCompiledModule CodeGen::compile_to_function_pointers() {
@@ -448,15 +451,7 @@ void CodeGen::define_buffer_t() {
 
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
 Value *CodeGen::buffer_host(Value *buffer) {
-    Value *ptr = builder->CreateLoad(buffer_host_ptr(buffer));
-    
-    llvm::Function *fn = module->getFunction("force_no_alias");
-    assert(fn && "Did not find force_no_alias in initial module");
-    CallInst *call = builder->CreateCall(fn, vec(ptr));
-    mark_call_return_no_alias(call, *context);
-    ptr = call;
-
-    return ptr;    
+    return builder->CreateLoad(buffer_host_ptr(buffer));
 }
 
 Value *CodeGen::buffer_dev(Value *buffer) {
@@ -529,37 +524,6 @@ Value *CodeGen::buffer_min_ptr(Value *buffer, int i) {
 
 Value *CodeGen::buffer_elem_size_ptr(Value *buffer) {
     return builder->CreateConstInBoundsGEP2_32(buffer, 0, 7, "buf_elem_size");
-}
-
-llvm::Type *CodeGen::llvm_type_of(Halide::Type t) {
-    if (t.width == 1) {
-        if (t.is_float()) {
-            switch (t.bits) {
-            case 16:
-                return f16;
-            case 32:
-                return f32;
-            case 64:
-                return f64;
-            default:
-                assert(false && "There is no llvm type matching this floating-point bit width");
-                return NULL;
-            }
-        } else {
-            return llvm::Type::getIntNTy(*context, t.bits);
-        }
-    } else {
-        llvm::Type *element_type = llvm_type_of(t.element_of());
-        return VectorType::get(element_type, t.width);
-    }
-}
-
-void CodeGen::mark_call_return_no_alias(CallInst *inst, llvm::LLVMContext &context) {
-    inst->addAttribute(0, LLVMAPIAttributeAdapter(context, Attribute::NoAlias));
-}
-
-void CodeGen::mark_call_parameter_no_capture(CallInst *inst, unsigned i, llvm::LLVMContext &context) {
-    inst->addAttribute(i, LLVMAPIAttributeAdapter(context, Attribute::NoCapture));
 }
 
 Value *CodeGen::codegen(Expr e) {
@@ -1344,11 +1308,11 @@ void CodeGen::visit(const For *op) {
         Closure closure(op->body, op->name);
 
         // Allocate a closure
-        StructType *closure_t = closure.build_type(this);
+        StructType *closure_t = closure.build_type(context);
         Value *ptr = builder->CreateAlloca(closure_t, ConstantInt::get(i32, 1)); 
 
         // Fill in the closure
-        closure.pack_struct(this, ptr, symbol_table, builder);
+        closure.pack_struct(ptr, symbol_table, builder);
 
         // Make a new function that does one iteration of the body of the loop
         FunctionType *func_t = FunctionType::get(void_t, vec(i32, (llvm::Type *)(i8->getPointerTo())), false);
@@ -1376,7 +1340,7 @@ void CodeGen::visit(const For *op) {
         iter->setName("closure");
         Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
         // Load everything from the closure into the new scope
-        closure.unpack_struct(this, symbol_table, closure_handle, builder, module, *context);
+        closure.unpack_struct(symbol_table, closure_handle, builder);
 
         // Generate the new function body
         codegen(op->body);
