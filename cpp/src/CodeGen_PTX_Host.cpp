@@ -207,9 +207,6 @@ void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (dlsym(NULL, "cuInit")) {
-            // TODO: Andrew: This code path not tested yet,
-            // because I can't get linking to libcuda working
-            // right on my machine.
             log(0) << "This program was linked to libcuda already\n";
             CodeGen_PTX_Host::libCudaLinked = true;
         } else {
@@ -241,7 +238,11 @@ void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
                 void *ptr = dlsym(CodeGen_PTX_Host::libCuda, name.c_str());
                 if (ptr) {
                     log(0) << "success\n";
-                    ee->addGlobalMapping(f, ptr);
+                    // dlsym on the calling process isn't going to
+                    // find these, but fortunately, all llvm symbol
+                    // lookups go through a level of indirection that
+                    // allows for explicit overrides.
+                    llvm::sys::DynamicLibrary::AddSymbol(name, ptr);
                 } else {
                     log(0) << "failed\n";
                 }
