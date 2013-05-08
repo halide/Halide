@@ -32,13 +32,13 @@ using namespace llvm;
 void *CodeGen_PTX_Host::libCuda = NULL;
 bool CodeGen_PTX_Host::libCudaLinked = false;
 
-class CodeGen_PTX_Host::Closure : public CodeGen::Closure {
+class CodeGen_PTX_Host::Closure : public Internal::Closure {
 public:
-    Closure(Stmt s, const std::string &lv, bool skip_gpu_loops=false) : CodeGen::Closure(s, lv), skip_gpu_loops(skip_gpu_loops) {}
+    Closure(Stmt s, const std::string &lv, bool skip_gpu_loops=false) : Internal::Closure(s, lv), skip_gpu_loops(skip_gpu_loops) {}
     vector<Argument> arguments();
 
 protected:
-    using CodeGen::Closure::visit;
+    using Internal::Closure::visit;
 
     void visit(const For *op);
 
@@ -110,7 +110,7 @@ void CodeGen_PTX_Host::Closure::visit(const For *loop) {
     if (skip_gpu_loops && CodeGen_PTX_Dev::is_simt_var(loop->name)) {
         return;
     }
-    CodeGen::Closure::visit(loop);
+    Closure::visit(loop);
 }
 
 
@@ -398,8 +398,7 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
     llvm::Function *free_buf_fn = module->getFunction("halide_free_dev_buffer");
     assert(free_buf_fn && "Could not find halide_free_dev_buffer in module");
     log(4) << "Creating call to halide_free_dev_buffer\n";
-    CallInst *call = builder->CreateCall(free_buf_fn, buf);
-    mark_call_parameter_no_capture(call, 1, *context);
+    builder->CreateCall(free_buf_fn, buf);
 
     // free the underlying host buffer
     // TODO: at some point, we should also be able to lazily allocate

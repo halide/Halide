@@ -84,8 +84,6 @@ public:
 
 protected:
 
-    class Closure;
-
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently
      * generated llvm value. */
@@ -177,18 +175,6 @@ protected:
      * the type passed in. */
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
 
-    /** Return the llvm version of a halide type. */
-    llvm::Type *llvm_type_of(Type type);
-
-    /** Add NoAlias attribute to return value of call instruction.
-     * Provided temporarily for API compatability across llvm versions. */
-    static void mark_call_return_no_alias(llvm::CallInst *inst, llvm::LLVMContext &context);
-
-    /** Add NoCapture attribute to parameter of call instruction.
-     * Parameter 0 is return value, 1 is first argument, etc.
-     * Provided temporarily for API compatability across llvm versions. */
-    static void mark_call_parameter_no_capture(llvm::CallInst *inst, unsigned i, llvm::LLVMContext &context);
-
     using IRVisitor::visit;
 
     /** Generate code for various IR nodes. These can be overridden by
@@ -245,6 +231,10 @@ protected:
     /** If we have to bail out of a pipeline midway, this should
      * inject the appropriate target-specific cleanup code. */
     virtual void prepare_for_early_exit() {}
+
+    /** Get the llvm type equivalent to the given halide type in the
+     * current context. */
+    llvm::Type *llvm_type_of(Type);
 
 private:
     /** All the values in scope at the current code location during

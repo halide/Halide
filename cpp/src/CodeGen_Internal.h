@@ -8,15 +8,21 @@
  * front-end-facing interface to CodeGen).
  */
 
-#include "CodeGen.h"
 #include "IRVisitor.h"
 #include "LLVM_Headers.h"
+#include "Scope.h"
+#include "IR.h"
 
 namespace Halide { 
 namespace Internal {
 
-/** A helper class to manage closures - used for parallel for loops */
-class CodeGen::Closure : public IRVisitor {
+/** A helper class to manage closures. Walks over a statement and
+ * retrieves all the references within it to external symbols
+ * (variables and allocations). It then helps you build a struct
+ * containing the current values of these symbols that you can use as
+ * a closure if you want to migrate the body of the statement to its
+ * own function (e.g. because it's the body of a parallel for loop. */
+class Closure : public IRVisitor {
 protected:
     Scope<int> ignore;
 
@@ -31,15 +37,43 @@ protected:
     void visit(const Variable *op);
 
 public:
+    /** Traverse a statement and find all references to external symbols. */
     Closure(Stmt s, const std::string &loop_variable);
-    std::map<std::string, Type> vars, reads, writes;
 
-    llvm::StructType *build_type(CodeGen *gen);
-    void pack_struct(CodeGen *gen, llvm::Value *dst, const Scope<llvm::Value *> &src, llvm::IRBuilder<> *builder);
-    void unpack_struct(CodeGen *gen, Scope<llvm::Value *> &dst, llvm::Value *src, llvm::IRBuilder<> *builder, llvm::Module *module, llvm::LLVMContext &context);
-    std::vector<llvm::Type*> llvm_types(CodeGen *gen);
+    /** External variables referenced. */
+    std::map<std::string, Type> vars;
+    
+    /** External allocations read from. */
+    std::map<std::string, Type> reads;
+
+    /** External allocations written to. */
+    std::map<std::string, Type> writes;
+
+    /** The llvm types of the external symbols. */
+    std::vector<llvm::Type*> llvm_types(llvm::LLVMContext *context);
+
+    /** The Halide names of the external symbols (in the same order as llvm_types). */
     std::vector<std::string> names();
+
+    /** The llvm type of a struct containing all of the externally referenced state. */
+    llvm::StructType *build_type(llvm::LLVMContext *context);
+
+    /** Emit code that builds a struct containing all the externally
+     * referenced state. Requires you to pass it a struct to fill in,
+     * a scope to retrieve the llvm values from and a builder to place
+     * the packing code. */
+    void pack_struct(llvm::Value *dst, const Scope<llvm::Value *> &src, llvm::IRBuilder<> *builder);
+
+    /** Emit code that unpacks a struct containing all the externally
+     * referenced state into a symbol table. Requires you to pass it a
+     * state struct value, a scope to fill, and a builder to place the
+     * unpacking code. */
+    void unpack_struct(Scope<llvm::Value *> &dst, llvm::Value *src, llvm::IRBuilder<> *builder);
+
 };
+
+/** Get the llvm type equivalent to a given halide type */
+llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
 
 }}
 

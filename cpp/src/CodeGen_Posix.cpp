@@ -128,7 +128,6 @@ Value* CodeGen_Posix::malloc_buffer(const Allocate *alloc, Value *&saved_stack) 
         Value *sz = builder->CreateIntCast(size, malloc_fn->arg_begin()->getType(), false);
         log(4) << "Creating call to halide_malloc\n";
         CallInst *call = builder->CreateCall(malloc_fn, sz);
-        mark_call_return_no_alias(call, *context);
         ptr = call;
         heap_allocations.push_back(ptr);
     }
@@ -143,8 +142,7 @@ void CodeGen_Posix::free_buffer(Value *ptr, Value *saved_stack) {
         llvm::Function *free_fn = module->getFunction("halide_free");
         assert(free_fn && "Could not find halide_free in module");
         log(4) << "Creating call to halide_free\n";
-        CallInst *call = builder->CreateCall(free_fn, ptr);
-        mark_call_parameter_no_capture(call, 1, *context);
+        builder->CreateCall(free_fn, ptr);
     } else {
         llvm::Function *stackrestore =
           llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore,

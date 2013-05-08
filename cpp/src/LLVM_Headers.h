@@ -46,10 +46,6 @@
 #include <llvm/TargetTransformInfo.h>
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
 
-// They renamed this type in 3.3
-typedef llvm::Attributes Attribute;
-typedef llvm::Attributes::AttrVal AttrKind;
-
 #else
 
 // Equivalent LLVM 3.3 includes
@@ -62,32 +58,11 @@ typedef llvm::Attributes::AttrVal AttrKind;
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 
-typedef llvm::Attribute Attribute;
-typedef llvm::Attribute::AttrKind AttrKind;
-
 #endif
 
 // No msvc warnings from llvm headers please
 #ifdef _WIN32
 #pragma warning(pop)
 #endif
-
-// An adapter object to paper over the differences between Attrs in
-// various versions of llvm.
-//namespace {
-
-class LLVMAPIAttributeAdapter {
-    llvm::LLVMContext &llvm_context;    
-    AttrKind kind;
-
-public:
-    LLVMAPIAttributeAdapter(llvm::LLVMContext &context, AttrKind kind_arg) :
-        llvm_context(context), kind(kind_arg) {}
-    
-    operator AttrKind() { return kind; }
-    operator Attribute() { return Attribute::get(llvm_context, kind); }
-};
-
-//}
 
 #endif

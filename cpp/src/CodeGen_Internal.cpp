@@ -9,21 +9,21 @@ using namespace llvm;
 namespace Halide {
 namespace Internal {
 
-void CodeGen::Closure::visit(const Let *op) {
+void Closure::visit(const Let *op) {
     op->value.accept(this);
     ignore.push(op->name, 0);
     op->body.accept(this);
     ignore.pop(op->name);
 }
 
-void CodeGen::Closure::visit(const LetStmt *op) {
+void Closure::visit(const LetStmt *op) {
     op->value.accept(this);
     ignore.push(op->name, 0);
     op->body.accept(this);
     ignore.pop(op->name);
 }
 
-void CodeGen::Closure::visit(const For *op) {
+void Closure::visit(const For *op) {
     ignore.push(op->name, 0);
     op->min.accept(this);
     op->extent.accept(this);
@@ -31,37 +31,35 @@ void CodeGen::Closure::visit(const For *op) {
     ignore.pop(op->name);
 }
 
-void CodeGen::Closure::visit(const Load *op) {
+void Closure::visit(const Load *op) {
     op->index.accept(this);
     if (!ignore.contains(op->name)) {
         log(3) << "Adding " << op->name << " to closure\n";
-        // result[op->name + ".host"] = gen->llvm_type_of(op->type)->getPointerTo();
         reads[op->name] = op->type;
     } else {
         log(3) << "Not adding " << op->name << " to closure\n";
     }
 }
 
-void CodeGen::Closure::visit(const Store *op) {
+void Closure::visit(const Store *op) {
     op->index.accept(this);
     op->value.accept(this);
     if (!ignore.contains(op->name)) {
         log(3) << "Adding " << op->name << " to closure\n";
-        // result[op->name + ".host"] = gen->llvm_type_of(op->value.type())->getPointerTo();
         writes[op->name] = op->value.type();
     } else {
         log(3) << "Not adding " << op->name << " to closure\n";
     }
 }
 
-void CodeGen::Closure::visit(const Allocate *op) {
+void Closure::visit(const Allocate *op) {
     ignore.push(op->name, 0);
     op->size.accept(this);
     op->body.accept(this);
     ignore.pop(op->name);
 }
 
-void CodeGen::Closure::visit(const Variable *op) {            
+void Closure::visit(const Variable *op) {            
     if (ignore.contains(op->name)) {
         log(3) << "Not adding " << op->name << " to closure\n";
     } else {
@@ -70,27 +68,27 @@ void CodeGen::Closure::visit(const Variable *op) {
     }
 }
 
-CodeGen::Closure::Closure(Stmt s, const string &loop_variable) {
+Closure::Closure(Stmt s, const string &loop_variable) {
     ignore.push(loop_variable, 0);
     s.accept(this);
 }
 
-vector<llvm::Type*> CodeGen::Closure::llvm_types(CodeGen *gen) {
+vector<llvm::Type*> Closure::llvm_types(LLVMContext *context) {
     vector<llvm::Type *> res;
     map<string, Type>::const_iterator iter;
     for (iter = vars.begin(); iter != vars.end(); ++iter) {
-        res.push_back(gen->llvm_type_of(iter->second));
+        res.push_back(llvm_type_of(context, iter->second));
     }
     for (iter = reads.begin(); iter != reads.end(); ++iter) {
-        res.push_back(gen->llvm_type_of(iter->second)->getPointerTo());
+        res.push_back(llvm_type_of(context, iter->second)->getPointerTo());
     }
     for (iter = writes.begin(); iter != writes.end(); ++iter) {
-        res.push_back(gen->llvm_type_of(iter->second)->getPointerTo());
+        res.push_back(llvm_type_of(context, iter->second)->getPointerTo());
     }
     return res;
 }
 
-vector<string> CodeGen::Closure::names() {
+vector<string> Closure::names() {
     vector<string> res;
     map<string, Type>::const_iterator iter;
     for (iter = vars.begin(); iter != vars.end(); ++iter) {
@@ -108,17 +106,18 @@ vector<string> CodeGen::Closure::names() {
     return res;
 }
 
-StructType *CodeGen::Closure::build_type(CodeGen *gen) {
-    StructType *struct_t = StructType::create(*gen->context, "closure_t");
-    struct_t->setBody(llvm_types(gen), false);
+StructType *Closure::build_type(LLVMContext *context) {
+    StructType *struct_t = StructType::create(*context, "closure_t");
+    struct_t->setBody(llvm_types(context), false);
     return struct_t;
 }
 
-void CodeGen::Closure::pack_struct(CodeGen *gen, Value *dst, const Scope<Value *> &src, IRBuilder<> *builder) {
+void Closure::pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> *builder) {
     // dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
+    LLVMContext &context = builder->getContext();
     vector<string> nm = names();
-    vector<llvm::Type*> ty = llvm_types(gen);
+    vector<llvm::Type*> ty = llvm_types(&context);
     for (size_t i = 0; i < nm.size(); i++) {
         Value *val = src.get(nm[i]);
         Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx++);
@@ -129,28 +128,47 @@ void CodeGen::Closure::pack_struct(CodeGen *gen, Value *dst, const Scope<Value *
     }
 }
 
-void CodeGen::Closure::unpack_struct(CodeGen *gen, Scope<Value *> &dst, Value *src, IRBuilder<> *builder, Module *module, LLVMContext &context) {
+void Closure::unpack_struct(Scope<Value *> &dst, 
+                                     Value *src, 
+                                     IRBuilder<> *builder) {
     // src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
+    LLVMContext &context = builder->getContext();
     vector<string> nm = names();
     for (size_t i = 0; i < nm.size(); i++) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(src, 0, idx++);
         LoadInst *load = builder->CreateLoad(ptr);
-        Value *val = load;
         if (load->getType()->isPointerTy()) {
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            load->setMetadata("tbaa", MDNode::get(context, vec<Value *>(MDString::get(context, nm[i]))));
-            
-            llvm::Function *fn = module->getFunction("force_no_alias");
-            assert(fn && "Did not find force_no_alias in initial module");
-            Value *arg = builder->CreatePointerCast(load, llvm::Type::getInt8Ty(context)->getPointerTo());
-            CallInst *call = builder->CreateCall(fn, vec(arg));
-            mark_call_return_no_alias(call, context);
-            val = builder->CreatePointerCast(call, val->getType());
-            
+            load->setMetadata("tbaa", MDNode::get(context, 
+                                                  vec<Value *>(MDString::get(context, nm[i]))));
         }
-        dst.push(nm[i], val);
-        val->setName(nm[i]);
+        dst.push(nm[i], load);
+        load->setName(nm[i]);
+    }
+}
+
+llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
+
+    if (t.width == 1) {
+        if (t.is_float()) {
+            switch (t.bits) {
+            case 16:
+                return llvm::Type::getHalfTy(*c);
+            case 32:
+                return llvm::Type::getFloatTy(*c);
+            case 64:
+                return llvm::Type::getDoubleTy(*c);
+            default:
+                assert(false && "There is no llvm type matching this floating-point bit width");
+                return NULL;
+            }
+        } else {
+            return llvm::Type::getIntNTy(*c, t.bits);
+        }
+    } else {
+        llvm::Type *element_type = llvm_type_of(c, t.element_of());
+        return VectorType::get(element_type, t.width);
     }
 }
 
