@@ -28,6 +28,7 @@
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Target/TargetLibraryInfo.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
