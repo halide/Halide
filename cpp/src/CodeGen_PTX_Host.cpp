@@ -5,11 +5,11 @@
 #include "IRPrinter.h"
 #include "IRMatch.h"
 #include "Log.h"
-#include "Util.h"
 #include "Var.h"
 #include "Param.h"
 #include "integer_division_table.h"
 #include "CodeGen_Internal.h"
+#include "Util.h"
 
 #include <dlfcn.h>
 #include <unistd.h>
@@ -29,8 +29,7 @@ using std::map;
 
 using namespace llvm;
 
-void *CodeGen_PTX_Host::libCuda = NULL;
-bool CodeGen_PTX_Host::libCudaLinked = false;
+bool CodeGen_PTX_Host::lib_cuda_linked = false;
 
 class CodeGen_PTX_Host::Closure : public Internal::Closure {
 public:
@@ -149,7 +148,7 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     assert(dev_malloc_if_missing_fn && "Could not find halide_dev_malloc_if_missing in module");
 
     copy_to_host_fn = module->getFunction("halide_copy_to_host");
-    assert(copy_to_dev_fn && "Could not find halide_copy_to_host in module");
+    assert(copy_to_host_fn && "Could not find halide_copy_to_host in module");
 
     copy_to_dev_fn = module->getFunction("halide_copy_to_dev");
     assert(copy_to_dev_fn && "Could not find halide_copy_to_dev in module");
@@ -197,59 +196,29 @@ void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
         ee->addGlobalMapping(cu_ctx, (void*)&cuda_ctx);
     }
 
-    // Make sure extern cuda calls inside the module point to
-    // the right things. This is done manually instead of
-    // relying on llvm calling dlsym because that solution
-    // doesn't seem to work on linux with cuda 4.2. It also
-    // means that if the user forgets to link to libcuda at
-    // compile time then this code will go look for it.
-    if (!CodeGen_PTX_Host::libCuda && !CodeGen_PTX_Host::libCudaLinked) {
+    // Make sure extern cuda calls inside the module point to the
+    // right things. If cuda is already linked in we should be
+    // fine. If not we need to tell llvm to load it.
+    if (!lib_cuda_linked) {
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (dlsym(NULL, "cuInit")) {
-            log(0) << "This program was linked to libcuda already\n";
-            CodeGen_PTX_Host::libCudaLinked = true;
+            log(0) << "This program was linked to cuda already\n";
         } else {
-            log(0) << "Looking for libcuda.so...\n";
-            CodeGen_PTX_Host::libCuda = dlopen("libcuda.so", RTLD_LAZY);
-            if (!CodeGen_PTX_Host::libCuda) {
-                // TODO: check this works on OS X
-                log(0) << "Looking for libcuda.dylib...\n";
-                CodeGen_PTX_Host::libCuda = dlopen("libcuda.dylib", RTLD_LAZY);
+            log(0) << "Looking for cuda shared library...\n";
+            string error;
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
+            if (!error.empty()) {
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.dylib", &error);
             }
-            // TODO: look for cuda.dll or some such thing on windows
+            if (!error.empty()) {
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
+            }
+            assert(error.empty() && "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll");
         }
+        lib_cuda_linked = true;
     }
     
-    if (!CodeGen_PTX_Host::libCuda && !CodeGen_PTX_Host::libCudaLinked) {
-        std::cerr << 
-                "Error opening libcuda. Attempting to continue anyway."
-                "Might get missing symbols.\n";
-    } else if (CodeGen_PTX_Host::libCudaLinked) {
-        // Shouldn't need to do anything. llvm will call dlsym
-        // on the current process for us.
-    } else {
-        for (Module::iterator f = module->begin(); f != module->end(); ++f) {
-            string name = f->getName();
-            if (GlobalValue::isExternalLinkage(f->getLinkage()) &&
-                name[0] == 'c' && name[1] == 'u') {
-                // Starts with "cu" and has extern linkage. Might be a cuda function.
-                log(0) << "Linking " << name << "...";
-                void *ptr = dlsym(CodeGen_PTX_Host::libCuda, name.c_str());
-                if (ptr) {
-                    log(0) << "success\n";
-                    // dlsym on the calling process isn't going to
-                    // find these, but fortunately, all llvm symbol
-                    // lookups go through a level of indirection that
-                    // allows for explicit overrides.
-                    llvm::sys::DynamicLibrary::AddSymbol(name, ptr);
-                } else {
-                    log(0) << "failed\n";
-                }
-            }
-        }
-    }
-
 }
 
 void CodeGen_PTX_Host::visit(const For *loop) {
