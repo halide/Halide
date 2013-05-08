@@ -115,9 +115,9 @@ void CodeGen_PTX_Dev::init_module() {
     // Parse it
     std::string errstr;
     module = ParseBitcodeFile(bitcode_buffer, *context, &errstr);
-	if (!module) {
+    if (!module) {
         std::cerr << "Error parsing initial module: " << errstr << "\n";
-	}
+    }
     assert(module && "llvm encountered an error in parsing a bitcode file.");
     module->setTargetTriple(Triple::normalize(march()+"--"));
 
@@ -152,21 +152,18 @@ bool CodeGen_PTX_Dev::is_simt_var(const string &name) {
 
     log(0) << "is_simt_var " << name << " (" << n << ")? ";
 
-    const string vars[] = {
-        "threadidx",
-        "threadidy",
-        "threadidz",
-        "threadidw",
-        "blockidx",
-        "blockidy",
-        "blockidz",
-        "blockidw"
-    };
-    const int num_vars = sizeof(vars)/sizeof(string);
+    bool result = (n == "threadidx" ||
+                   n == "threadidy" ||
+                   n == "threadidz" ||
+                   n == "threadidw" ||
+                   n == "blockidx" ||
+                   n == "blockidy" ||
+                   n == "blockidz" ||
+                   n == "blockidw");
 
-    log(0) << (std::find(vars, vars+sizeof(vars), n) < vars+num_vars)  << "\n";
+    log(0) << result << "\n";
 
-    return (std::find(vars, vars+sizeof(vars), n) < vars+num_vars);
+    return result;
 }
 
 void CodeGen_PTX_Dev::visit(const For *loop) {
@@ -212,7 +209,6 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
     log(1) << "Allocate " << alloc->name << " on device\n";
     assert(on_stack && "PTX device malloc with non-const size");
-    if (!on_stack) return; // HACK: Linux build is unhappy if on_stack is unused outside assert
 
     llvm::Type *llvm_type = llvm_type_of(alloc->type);
     Value *ptr;
