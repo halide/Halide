@@ -66,4 +66,9 @@
 #pragma warning(pop)
 #endif
 
+// llvm may sometimes define NDEBUG, which is annoying, because we always want asserts
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+
 #endif
