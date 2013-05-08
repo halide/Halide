@@ -473,7 +473,7 @@ void CodeGen_C::visit(const PrintStmt *op) {
     }
     stream << "\"";
     for (size_t i = 0; i < op->args.size(); i++) {
-        stream << ", " << op->args[i];
+        stream << ", " << args[i];
     }
     stream << ");\n";
 }
