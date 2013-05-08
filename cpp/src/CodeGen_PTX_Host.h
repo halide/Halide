@@ -52,8 +52,7 @@ protected:
     /** Finds and links in the CUDA runtime symbols during jitting */
     void jit_init(llvm::ExecutionEngine *ee, llvm::Module *mod);
 
-    static void *libCuda;
-    static bool libCudaLinked;
+    static bool lib_cuda_linked;
 
 private:
     /** Child code generator for device kernels. */
