@@ -16,11 +16,9 @@ int main(int argc, char **argv) {
 
     char *target = getenv("HL_TARGET");
     if (target && std::string(target) == "ptx") {
-        // f.cudaTile(x, y, 16, 16);
-        // g.cudaTile(x, y, 16, 16);
-        // h.cudaTile(x, y, 16, 16);
-        Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
-        h.tile(x, y, bx, by, tx, ty, 16, 16);
+        f.cuda_tile(x, y, 8, 8);
+        g.cuda_tile(x, y, 8, 8);
+        h.cuda_tile(x, y, 8, 8);
     }
  
     printf("Realizing function...\n");

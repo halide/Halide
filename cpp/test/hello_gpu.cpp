@@ -14,9 +14,7 @@ int main(int argc, char **argv) {
 
     char *target = getenv("HL_TARGET");
     if (target && std::string(target) == "ptx") {
-        Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
-        f.tile(x, y, bx, by, tx, ty, 8, 8);
-	f.parallel(bx).parallel(by).parallel(tx).parallel(ty);
+        f.cuda_tile(x, y, 8, 8);
     }
  
     printf("Realizing function...\n");

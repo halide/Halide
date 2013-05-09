@@ -65,12 +65,19 @@ struct Schedule {
     struct Split {
         std::string old_var, outer, inner;
         Expr factor;
+
+        // If is_rename is true, then this is just a renaming of the
+        // old_var to the outer and not a split. The inner var should
+        // be ignored, and factor should be one. Renames are kept in
+        // the same list as splits so that ordering between them is
+        // respected.
+        bool is_rename;
     };
     /** The traversal of the domain of a function can have some of its
      * dimensions split into sub-dimensions. See 
      * \ref ScheduleHandle::split */
     std::vector<Split> splits;
-        
+
     struct Dim {
         std::string var;
         For::ForType for_type;
