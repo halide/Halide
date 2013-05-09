@@ -230,7 +230,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 }
 
 string CodeGen_PTX_Dev::march() const {
-    return "nvptx";
+    return "nvptx64";
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
