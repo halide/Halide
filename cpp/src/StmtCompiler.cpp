@@ -62,7 +62,7 @@ StmtCompiler::StmtCompiler(string arch) {
     // GPU backends are disabled on Windows until I'm sure it links, too (@jrk)
     else if (arch == "ptx") {
         // equivalent to "x86" on the host side, i.e. x86_64, no AVX
-        contents = new CodeGen_PTX_Host(true, true, false);
+        contents = new CodeGen_PTX_Host(X86_64Bit | X86_SSE41);
     }
 #endif // _WIN32
     else {
