@@ -15,9 +15,9 @@ namespace Internal {
 class CodeGen_PTX_Host : public CodeGen_X86 {
 public:
 
-    /** Create GPU code generator. Host processor features can be
-     * enabled using the appropriate arguments. */
-    CodeGen_PTX_Host(bool use_64_bits = true, bool use_sse_41 = true, bool use_avx = true);
+    /** Create an x86 code generator. Processor features can be
+     * enabled using the appropriate flags from CodeGen_X86_Options */
+    CodeGen_PTX_Host(uint32_t options = 0);
         
     /** Compile to an internally-held llvm module. Takes a halide
      * statement, the name of the function produced, and the arguments

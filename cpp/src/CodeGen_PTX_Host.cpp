@@ -113,10 +113,9 @@ void CodeGen_PTX_Host::Closure::visit(const For *loop) {
 }
 
 
-CodeGen_PTX_Host::CodeGen_PTX_Host(bool _64_bit, bool sse_41, bool avx)
-    : CodeGen_X86(_64_bit, sse_41, avx)
+CodeGen_PTX_Host::CodeGen_PTX_Host(uint32_t options)
+    : CodeGen_X86(options)
 {
-    assert(llvm_X86_enabled && "llvm build not configured with X86 target enabled.");
 }
 
 void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &args) {
@@ -431,7 +430,7 @@ void CodeGen_PTX_Host::test() {
     Stmt s = new Store("buf", e, bx);
     s = new For(bx.name(), 0, 16, For::Parallel, s);
 
-    CodeGen_PTX_Host cg(true, true, false);
+    CodeGen_PTX_Host cg(X86_64Bit | X86_SSE41);
     cg.compile(s, "test1", args);
 }
 
