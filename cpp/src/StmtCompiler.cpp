@@ -32,18 +32,33 @@ StmtCompiler::StmtCompiler(string arch) {
     }
 
     if (arch == "x86") {
-        contents = new CodeGen_X86(true, true, false);
+        contents = new CodeGen_X86(X86_64Bit | X86_SSE41);
     } else if (arch == "x86-32") {
-        contents = new CodeGen_X86(false, false, false);
+        contents = new CodeGen_X86();
     } else if (arch == "x86-avx") {
-        contents = new CodeGen_X86(true, true, true);
+        contents = new CodeGen_X86(X86_64Bit | X86_SSE41 | X86_AVX);
     }
+#if WITH_NATIVE_CLIENT
+    else if (arch == "x86-nacl") {
+        contents = new CodeGen_X86(X86_64Bit | X86_SSE41 | X86_NaCl);
+    } else if (arch == "x86-32-nacl") {
+        contents = new CodeGen_X86(X86_NaCl);
+    } else if (arch == "x86-32-SSE-nacl") {
+        contents = new CodeGen_X86(X86_SSE41 | X86_NaCl);
+    }
+#endif
+
 #ifndef _WIN32 // I've temporarily disabled ARM on Windows since it leads to a linking error on halide_internal_initmod_arm stuff (kwampler@adobe.com)
     else if (arch == "arm") {
-        contents = new CodeGen_ARM(false);
+        contents = new CodeGen_ARM(0);
     } else if (arch == "arm-android") {
-        contents = new CodeGen_ARM(true);
+        contents = new CodeGen_ARM(ARM_Android);
     }
+#if WITH_NATIVE_CLIENT
+    else if (arch == "arm-nacl") {
+        contents = new CodeGen_ARM(ARM_NaCl);
+    }
+#endif
     // GPU backends are disabled on Windows until I'm sure it links, too (@jrk)
     else if (arch == "ptx") {
         // equivalent to "x86" on the host side, i.e. x86_64, no AVX
@@ -52,7 +67,11 @@ StmtCompiler::StmtCompiler(string arch) {
 #endif // _WIN32
     else {
         std::cerr << "Unknown target " << arch << std::endl;
-        std::cerr << "Known targets are: x86 x86-avx arm arm-android" << std::endl;
+        std::cerr << "Known targets are: x86 x86-avx x86-32 arm arm-android" 
+#if WITH_NATIVE_CLIENT
+	  " x86-nacl x86-32-nacl arm-nacl"
+#endif
+		  << std::endl;
         assert(false);
     }
 } 

@@ -17,6 +17,10 @@ extern "C" unsigned char halide_internal_initmod_arm[];
 extern "C" int halide_internal_initmod_arm_length;
 extern "C" unsigned char halide_internal_initmod_arm_android[];
 extern "C" int halide_internal_initmod_arm_android_length;
+#if WITH_NATIVE_CLIENT
+extern "C" unsigned char halide_internal_initmod_arm_nacl[];
+extern "C" int halide_internal_initmod_arm_nacl_length;
+#endif
 
 namespace Halide { 
 namespace Internal {
@@ -27,7 +31,12 @@ using std::ostringstream;
 
 using namespace llvm;
 
-CodeGen_ARM::CodeGen_ARM(bool android) : CodeGen_Posix(), use_android(android) {
+CodeGen_ARM::CodeGen_ARM(uint32_t options) : CodeGen_Posix(),
+					     use_android(options & ARM_Android)
+#if WITH_NATIVE_CLIENT
+					   , use_nacl(options & ARM_NaCl)
+#endif
+{
     assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
 }
 
@@ -43,8 +52,16 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
         sb = StringRef((char *)halide_internal_initmod_arm_android, 
                        halide_internal_initmod_arm_android_length);
     } else {
-        assert(halide_internal_initmod_arm_length && "initial module for arm is empty");
-        sb = StringRef((char *)halide_internal_initmod_arm, halide_internal_initmod_arm_length);
+#if WITH_NATIVE_CLIENT
+	if (use_nacl) {
+            assert(halide_internal_initmod_arm_nacl_length && "initial module for ARM_nacl is empty");
+            sb = StringRef((char *)halide_internal_initmod_arm_nacl, halide_internal_initmod_arm_nacl_length);
+	} else
+#endif
+        {
+	    assert(halide_internal_initmod_arm_length && "initial module for arm is empty");
+	    sb = StringRef((char *)halide_internal_initmod_arm, halide_internal_initmod_arm_length);
+	}
     }
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
@@ -52,6 +69,11 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
     module = ParseBitcodeFile(bitcode_buffer, *context);
 
     // Fix the target triple. The initial module was probably compiled for x86
+#if WITH_NATIVE_CLIENT
+    if (use_nacl) {
+        module->setTargetTriple("arm-nacl");
+    }
+#endif
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
     if (use_android) {
         module->setTargetTriple("arm-linux-eabi");
