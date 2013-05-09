@@ -10,13 +10,23 @@
 namespace Halide { 
 namespace Internal {
 
+/** Bitmask flags for specifying code generation options to CodeGen_X86. */
+enum CodeGen_X86_Options {
+    X86_64Bit = 1,  /// Compile for x86_64
+    X86_SSE41 = 2,  /// Compile for SSE 4.1
+    X86_AVX   = 4,  /// Compile for AVX (v1)
+#if WITH_NATIVE_CLIENT
+    X86_NaCl  = 8,  /// Compile for Native Client
+#endif
+};
+
+
 /** A code generator that emits x86 code from a given Halide stmt. */
 class CodeGen_X86 : public CodeGen_Posix {
 public:
-
     /** Create an x86 code generator. Processor features can be
-     * enabled using the appropriate arguments */
-    CodeGen_X86(bool use_64_bits = true, bool use_sse_41 = true, bool use_avx = true);
+     * enabled using the appropriate flags from CodeGen_X86_Options */
+    CodeGen_X86(uint32_t options = 0);
         
     /** Compile to an internally-held llvm module. Takes a halide
      * statement, the name of the function produced, and the arguments
@@ -37,6 +47,11 @@ protected:
 
     /** Should the emitted code use avx 1 operations */
     bool use_avx;
+
+#if WITH_NATIVE_CLIENT
+    /** Should the emitted code target native client */
+    bool use_nacl;
+#endif
 
     /** Generate a call to an sse or avx intrinsic */
     // @{

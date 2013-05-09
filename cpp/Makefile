@@ -3,6 +3,12 @@
 # 'make test_foo' builds and runs test/foo.cpp for any cpp file in the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
+WITH_NATIVE_CLIENT=
+CXX_FLAGS_NACL=$(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", "")
+NATIVE_CLIENT_ARCHS=$(if $(WITH_NATIVE_CLIENT), x86_nacl x86_32_nacl arm_nacl, )
+NATIVE_CLIENT_LLVM_CONFIG_LIB=$(if $(WITH_NATIVE_CLIENT), nacltransforms, )
+NATIVE_CLIENT_ROOT=
+
 CXX ?= g++
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version)
@@ -10,8 +16,8 @@ CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
-CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -Os
-LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker nvptx ipo mcjit jit)
+CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -Os $(CXX_FLAGS_NACL)
+LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker nvptx ipo mcjit jit $(NATIVE_CLIENT_LLVM_CONFIG_LIB))
 TEST_CXX_FLAGS ?=
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
@@ -30,7 +36,7 @@ SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-STDLIB_ARCHS = x86 x86_avx x86_32 arm arm_android ptx_host ptx_dev
+STDLIB_ARCHS = x86 x86_avx x86_32 arm arm_android ptx_host ptx_dev $(NATIVE_CLIENT_ARCHS)
 
 INITIAL_MODULES = $(STDLIB_ARCHS:%=$(BUILD_DIR)/initmod.%.o)
 
@@ -61,6 +67,9 @@ RUNTIME_OPTS_arm = -m32
 RUNTIME_OPTS_arm_android = -m32 
 RUNTIME_OPTS_ptx_host = $(RUNTIME_OPTS_x86) 
 RUNTIME_OPTS_ptx_dev = 
+RUNTIME_OPTS_x86_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=corei7 -isystem $(NATIVE_CLIENT_ROOT)/toolchain/mac_x86/x86_64-nacl/include/
+RUNTIME_OPTS_x86_32_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=atom -isystem $(NATIVE_CLIENT_ROOT)/toolchain/mac_x86/x86_64-nacl/include/
+RUNTIME_OPTS_arm_nacl = -Xclang -Xclang -target-cpu -Xclang "" -Xclang -triple -Xclang arm-unknown-nacl -m32 -isystem $(NATIVE_CLIENT_ROOT)/toolchain/mac_arm_newlib/arm-nacl/include/
 RUNTIME_LL_STUBS_x86 = src/runtime/x86.ll src/runtime/x86_sse41.ll
 RUNTIME_LL_STUBS_x86_32 = src/runtime/x86.ll
 RUNTIME_LL_STUBS_x86_avx = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll
@@ -68,6 +77,9 @@ RUNTIME_LL_STUBS_arm = src/runtime/arm.ll
 RUNTIME_LL_STUBS_arm_android = src/runtime/arm.ll
 RUNTIME_LL_STUBS_ptx_host = $(RUNTIME_LL_STUBS_x86)
 RUNTIME_LL_STUBS_ptx_dev = src/runtime/ptx_dev.ll
+RUNTIME_LL_STUBS_x86_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll
+RUNTIME_LL_STUBS_x86_32_nacl = src/runtime/x86.ll
+RUNTIME_LL_STUBS_arm_nacl = src/runtime/arm.ll
 
 -include $(OBJECTS:.o=.d)
 
