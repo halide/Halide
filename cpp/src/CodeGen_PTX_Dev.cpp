@@ -234,7 +234,7 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    return "sm_11";
+    return "sm_20";
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
