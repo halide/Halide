@@ -210,6 +210,23 @@ public:
     /** Reorder five dimensions to have the given nesting order, from
      * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t);
+
+    /** Rename a dimension. Equivalent to split with a inner size of one. */
+    EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
+
+    /** Tell Halide that the following dimensions correspond to cuda
+     * block indices and thread indices. If the selected target is not
+     * ptx, these just mark the given dimensions as parallel. The
+     * dimensions are consumed by this call, so do all other
+     * unrolling, reordering, etc first. */
+    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var thread_x, Var thread_y);
+
+    /** Short-hand for tiling a 2D domain and mapping the tile indices
+     * to cuda block indices and the coordinates within each tile to
+     * cuda thread indices. Consumes the variables given, so do all
+     * other scheduling first. */
+    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int tile_width, int tile_height);
+
 };
 
 /** A halide function. This class represents one stage in a Halide
@@ -501,7 +518,8 @@ public:
     // @}
 
     /** Scheduling calls that control how the domain of this function
-     * is traversed. See the documentation for ScheduleHandle for the meanings */
+     * is traversed. See the documentation for ScheduleHandle for the
+     * meanings. */
     // @{
     EXPORT Func &split(Var old, Var outer, Var inner, Expr factor);
     EXPORT Func &parallel(Var var);
@@ -516,6 +534,9 @@ public:
     EXPORT Func &reorder(Var x, Var y, Var z);
     EXPORT Func &reorder(Var x, Var y, Var z, Var w);
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t);
+    EXPORT Func &rename(Var old_name, Var new_name);
+    EXPORT Func &cuda(Var block_x, Var block_y, Var thread_x, Var thread_y);
+    EXPORT Func &cuda_tile(Var x, Var y, int tile_width, int tile_height);
     // @}
 
     /** Scheduling calls that control how the storage for the function

@@ -229,10 +229,29 @@ ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor
         }
     }
         
-    assert(found && "Could not find dimension in argument list for function");
+    assert(found && "Could not find split dimension in argument list for function");
         
     // Add the split to the splits list
-    Schedule::Split split = {old_name, outer_name, inner_name, factor};
+    Schedule::Split split = {old_name, outer_name, inner_name, factor, false};
+    schedule.splits.push_back(split);
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
+    // Replace the old dimension with the new dimensions in the dims list
+    bool found = false;
+    vector<Schedule::Dim> &dims = schedule.dims;
+    for (size_t i = 0; (!found) && i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, old_var.name())) {
+            found = true;
+            dims[i].var += "." + new_var.name();
+        }
+    }
+        
+    assert(found && "Could not find rename dimension in argument list for function");
+        
+    // Add the rename to the splits list
+    Schedule::Split split = {old_var.name(), new_var.name(), "", 1, true};
     schedule.splits.push_back(split);
     return *this;
 }
@@ -316,9 +335,35 @@ ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t) {
     return reorder(x, y).reorder(x, z).reorder(x, w).reorder(x, t).reorder(y, z, w, t);
 }
 
+ScheduleHandle &ScheduleHandle::cuda(Var bx, Var by, Var tx, Var ty) {
+    parallel(bx);
+    parallel(by);
+    parallel(tx);
+    parallel(ty);
+    rename(bx, Var("blockidx"));
+    rename(by, Var("blockidy"));
+    rename(tx, Var("threadidx"));
+    rename(ty, Var("threadidy"));
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::cuda_tile(Var x, Var y, int tile_width, int tile_height) {
+    Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
+    tile(x, y, bx, by, tx, ty, tile_width, tile_height);
+    parallel(bx);
+    parallel(by);
+    parallel(tx);
+    parallel(ty);
+    return *this;
+}
 
 Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
     ScheduleHandle(func.schedule()).split(old, outer, inner, factor);
+    return *this;
+}
+
+Func &Func::rename(Var old_name, Var new_name) {
+    ScheduleHandle(func.schedule()).rename(old_name, new_name);
     return *this;
 }
 
@@ -379,6 +424,16 @@ Func &Func::reorder(Var x, Var y, Var z, Var w) {
 
 Func &Func::reorder(Var x, Var y, Var z, Var w, Var t) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t);
+    return *this;
+}
+
+Func &Func::cuda(Var bx, Var by, Var tx, Var ty) {
+    ScheduleHandle(func.schedule()).cuda(bx, by, tx, ty);
+    return *this;
+}
+
+Func &Func::cuda_tile(Var x, Var y, int tile_width, int tile_height) {
+    ScheduleHandle(func.schedule()).cuda_tile(x, y, tile_width, tile_height);
     return *this;
 }
 

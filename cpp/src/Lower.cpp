@@ -95,13 +95,17 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
     // Define the function args in terms of the loop variables using the splits
     for (size_t i = 0; i < s.splits.size(); i++) {
         const Schedule::Split &split = s.splits[i];
-        Expr inner = new Variable(Int(32), prefix + split.inner);
         Expr outer = new Variable(Int(32), prefix + split.outer);
-        Expr old_min = new Variable(Int(32), prefix + split.old_var + ".min");
-        // stmt = new LetStmt(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
-        stmt = substitute(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
+        if (!split.is_rename) {
+            Expr inner = new Variable(Int(32), prefix + split.inner);
+            Expr old_min = new Variable(Int(32), prefix + split.old_var + ".min");
+            // stmt = new LetStmt(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
+            stmt = substitute(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
+        } else {
+            stmt = substitute(prefix + split.old_var, outer, stmt);
+        }
     }
-            
+       
     // Build the loop nest
     for (size_t i = 0; i < s.dims.size(); i++) {
         const Schedule::Dim &dim = s.dims[i];
@@ -115,12 +119,18 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
     for (size_t i = s.splits.size(); i > 0; i--) {
         const Schedule::Split &split = s.splits[i-1];
         Expr old_var_extent = new Variable(Int(32), prefix + split.old_var + ".extent");
-        Expr inner_extent = split.factor;
-        Expr outer_extent = (old_var_extent + split.factor - 1)/split.factor;
-        stmt = new LetStmt(prefix + split.inner + ".min", 0, stmt);
-        stmt = new LetStmt(prefix + split.inner + ".extent", inner_extent, stmt);
-        stmt = new LetStmt(prefix + split.outer + ".min", 0, stmt);
-        stmt = new LetStmt(prefix + split.outer + ".extent", outer_extent, stmt);            
+        Expr old_var_min = new Variable(Int(32), prefix + split.old_var + ".min");
+        if (!split.is_rename) {
+            Expr inner_extent = split.factor;
+            Expr outer_extent = (old_var_extent + split.factor - 1)/split.factor;
+            stmt = new LetStmt(prefix + split.inner + ".min", 0, stmt);
+            stmt = new LetStmt(prefix + split.inner + ".extent", inner_extent, stmt);
+            stmt = new LetStmt(prefix + split.outer + ".min", 0, stmt);
+            stmt = new LetStmt(prefix + split.outer + ".extent", outer_extent, stmt);            
+        } else {
+            stmt = new LetStmt(prefix + split.outer + ".min", old_var_min, stmt);
+            stmt = new LetStmt(prefix + split.outer + ".extent", old_var_extent, stmt);
+        }
     }
 
     return stmt;
