@@ -4,7 +4,7 @@
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
 WITH_NATIVE_CLIENT=
-CXX_FLAGS_NACL=$(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", "")
+CXX_FLAGS_NACL=$(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", )
 NATIVE_CLIENT_ARCHS=$(if $(WITH_NATIVE_CLIENT), x86_nacl x86_32_nacl arm_nacl, )
 NATIVE_CLIENT_LLVM_CONFIG_LIB=$(if $(WITH_NATIVE_CLIENT), nacltransforms, )
 NATIVE_CLIENT_ROOT=
