@@ -74,13 +74,12 @@ changes to the top-level Makefile:
    start of the PATH. (Where NATIVE_CLIENT_ROOT is as decribed in the
    previous Makefile modification item. This presumes the entire PNaCl
    toolchain has been built and installed. There are likely other approaches.)
- - It will likely be required to remove "nvptx" from the LIBS setup as well.
+ - It will likely be required to remove CodeGen_PTX* from the build and "nvptx"
+   from the LIBS setup as well unless one reconfigures the PNaCl llvm build to
+   include the nvptx target.
 
 After these changes, run make. This will build a Halide lib capable of
 generating native client objects. Niether the tests nor the apps
 Makefile shave been updated to work with cross compilation however.
 
 ARM native client has not been tested yet.
-
-
-
