@@ -97,6 +97,7 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
 namespace {
 const string preamble = 
     "#include <iostream>\n"
+    "#include <math.h>\n"
     "#include <assert.h>\n"
     "#ifndef BUFFER_T_DEFINED\n"
     "#define BUFFER_T_DEFINED\n"
@@ -119,6 +120,8 @@ const string preamble =
     "extern \"C\" int halide_start_clock();\n"
     "extern \"C\" int halide_current_time();\n"
     "extern \"C\" int halide_printf(const char *fmt, ...);\n"
+    "extern \"C\" inline float pow_f32(float x, float y) {return powf(x, y);}\n"
+    "extern \"C\" inline float round_f32(float x) {return roundf(x);}\n"
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
