@@ -308,13 +308,23 @@ static CUdeviceptr __dev_malloc(size_t bytes) {
     return p;
 }
 
+static inline size_t buf_size(buffer_t* buf) {
+    size_t sz = buf->elem_size;
+    if (buf->extent[0]) sz *= buf->extent[0];
+    if (buf->extent[1]) sz *= buf->extent[1];
+    if (buf->extent[2]) sz *= buf->extent[2];
+    if (buf->extent[3]) sz *= buf->extent[3];
+    assert(sz);
+    return sz;
+}
+
 WEAK void halide_dev_malloc_if_missing(buffer_t* buf) {
     #ifndef NDEBUG
     fprintf(stderr, "dev_malloc_if_missing of %zdx%zdx%zdx%zd (%zd bytes) (buf->dev = %p) buffer\n",
             buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
     #endif
     if (buf->dev) return;
-    size_t size = buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->extent[3] * buf->elem_size;
+    size_t size = buf_size(buf);
     buf->dev = __dev_malloc(size);
     assert(buf->dev);
 }
@@ -322,7 +332,7 @@ WEAK void halide_dev_malloc_if_missing(buffer_t* buf) {
 WEAK void halide_copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         assert(buf->host && buf->dev);
-        size_t size = buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->extent[3] * buf->elem_size;
+        size_t size = buf_size(buf);
         #ifdef NDEBUG
         // char msg[1];
         #else
@@ -337,7 +347,7 @@ WEAK void halide_copy_to_dev(buffer_t* buf) {
 WEAK void halide_copy_to_host(buffer_t* buf) {
     if (buf->dev_dirty) {
         assert(buf->host && buf->dev);
-        size_t size = buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->extent[3] * buf->elem_size;
+        size_t size = buf_size(buf);
         #ifdef NDEBUG
         // char msg[1];
         #else
