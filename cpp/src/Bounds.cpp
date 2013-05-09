@@ -145,7 +145,11 @@ private:
 
             Expr min_a = min, max_a = max;
             op->b.accept(this);
-            
+
+            if (!min.defined() || !max.defined()) {
+                min = Expr(); max = Expr(); return;
+            }
+
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
             Expr min_is_positive = simplify(min > make_zero(min.type()));
             Expr max_is_negative = simplify(max < make_zero(max.type()));
