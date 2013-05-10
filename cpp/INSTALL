@@ -2,12 +2,12 @@
 Dependencies
 ------------------------------------------------------------------
 
-Building halide requires llvm 3.2, along with the matching version of
-clang. llvm-config and clang must be somewhere in the path. If your OS
-does not have packages for llvm-3.2, you can find binaries for it at
-http://llvm.org/releases/download.html. Download an appropriate
-package and then either install it, or at least put the bin
-subdirectory in your path. (This works well on OS X and Ubuntu.)
+Building halide requires at least llvm 3.2, along with the matching
+version of clang. llvm-config and clang must be somewhere in the
+path. If your OS does not have packages for llvm-3.2, you can find
+binaries for it at http://llvm.org/releases/download.html. Download an
+appropriate package and then either install it, or at least put the
+bin subdirectory in your path. (This works well on OS X and Ubuntu.)
 
 If you want to build it yourself, first check it out from subversions:
 
@@ -17,28 +17,29 @@ svn co https://llvm.org/svn/llvm-project/cfe/branches/release_32 llvm3.2/tools/c
 Then build it like so:
 
 cd llvm3.2
-./configure --enable-optimized --with-clang
+./configure --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx
 make -j8
 
-Then finally put it in the path like so:
+Then finally tell Halide's Makefile about it like so:
 
-export PATH=<path to llvm3.2>/Release+Asserts/bin:$PATH
+export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm_config
+export CLANG=<path to llvm>/Release+Asserts/bin/clang
 
-Newer versions of llvm may also work. Support for these is
-experimental.
+If you want a newer llvm, then trunk llvm should also work.
 
 ------------------------------------------------------------------
 Building Halide
 ------------------------------------------------------------------
 
-With llvm-config and clang in your path, you should be able to just
-run 'make' in this directory. 'make tests' will run the JIT test
-suite, and 'make test_apps' will make sure all the apps compile and
-run (but won't check their output).
+With LLVM_CONFIG and CLANG set (or the appropriate llvm-config and
+clang in your path), you should be able to just run 'make' in this
+directory. 'make tests' will run the JIT test suite, and 'make
+test_apps' will make sure all the apps compile and run (but won't
+check their output).
 
 There is no 'make install' or 'make distrib' yet. If you want to make
-an install package, grab bin/libHalide.a and bin/libHalide.so, and all
-the header files in src.
+an install package, grab bin/libHalide.a, bin/libHalide.so, and
+include/Halide.h.
 
 ------------------------------------------------------------------
 Building Halide with Native Client support
@@ -54,7 +55,10 @@ In order to build Halide with Native Client support, one will need the
 PNaCl llvm tree from:
     http://git.chromium.org/native_client/pnacl-llvm.git
 
-It will likely be required to get the entire dev tree for
+To enable all Halide targets, configure it like so:
+    ./configure --enable-assertions --enable-optimized --enable-targets=arm,x86,nvptx
+
+It will possibly be helpful to get the entire dev tree for
 PNaCl. Documentation for this is here:
     http://www.chromium.org/nativeclient/pnacl/developing-pnacl
 
@@ -64,22 +68,27 @@ tried, not newlib.) Likely the easiest way to get this is to download
 the Native Client SDK from here:
     https://developers.google.com/native-client/sdk/
 
-Once The Native Client prerequesites are in place, make the following
-changes to the top-level Makefile:
- - Change WITH_NATIVE_CLIENT to "true" (or any non-empty value)
- - Set NATIVE_CLIENT_ROOT to the top-level directory of your Native Client
-   SDK install. There should be a directory called "toolchain" inside the
-   root directory.
- - Add $NATIVE_CLIENT_ROOT/toolchain/pnacl_mac_x86/host_x86_64/bin/ to the
-   start of the PATH. (Where NATIVE_CLIENT_ROOT is as decribed in the
-   previous Makefile modification item. This presumes the entire PNaCl
-   toolchain has been built and installed. There are likely other approaches.)
- - It will likely be required to remove CodeGen_PTX* from the build and "nvptx"
-   from the LIBS setup as well unless one reconfigures the PNaCl llvm build to
-   include the nvptx target.
+Once The Native Client prerequisites are in place, set the following
+variables (on the command line or by editing the Makefile):
 
-After these changes, run make. This will build a Halide lib capable of
-generating native client objects. Niether the tests nor the apps
-Makefile shave been updated to work with cross compilation however.
+ Point LLVM_CONFIG to the llvm-config that lives in your pnacl llvm
+ build. E.g:
+
+  % export LLVM_CONFIG=<path-to-Halide>/llvm/pnacl-llvm/Release+Asserts/bin/llvm-config
+
+ Change WITH_NATIVE_CLIENT to "true" (or any non-empty value):
+ 
+  % export WITH_NATIVE_CLIENT=true
+
+ Point NATIVE_CLIENT_X86_INCLUDE and NATIVE_CLIENT_ARM_INCLUDE to the
+ appropriate include directories within the native client SDK. E.g.:
+
+  % export NATIVE_CLIENT_X86_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_x86_glibc/x86_64-nacl/include/
+
+With these variables set, run make. This will build a Halide lib
+capable of generating native client objects. Neither the tests nor
+most of the apps Makefiles have been updated to work with cross
+compilation however. Try the app HelloNacl for a theoretically-working
+example.
 
 ARM native client has not been tested yet.
