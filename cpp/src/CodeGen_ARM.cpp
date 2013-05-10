@@ -17,9 +17,13 @@ extern "C" unsigned char halide_internal_initmod_arm[];
 extern "C" int halide_internal_initmod_arm_length;
 extern "C" unsigned char halide_internal_initmod_arm_android[];
 extern "C" int halide_internal_initmod_arm_android_length;
+
 #if WITH_NATIVE_CLIENT
 extern "C" unsigned char halide_internal_initmod_arm_nacl[];
 extern "C" int halide_internal_initmod_arm_nacl_length;
+#else
+static void *halide_internal_initmod_arm_nacl = 0;
+static int halide_internal_initmod_arm_nacl_length = 0;
 #endif
 
 namespace Halide { 
@@ -32,12 +36,12 @@ using std::ostringstream;
 using namespace llvm;
 
 CodeGen_ARM::CodeGen_ARM(uint32_t options) : CodeGen_Posix(),
-					     use_android(options & ARM_Android)
-#if WITH_NATIVE_CLIENT
-					   , use_nacl(options & ARM_NaCl)
-#endif
-{
+					     use_android(options & ARM_Android),
+                                             use_nacl(options & ARM_NaCl) {
     assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
+    #if !(WITH_NATIVE_CLIENT)
+    assert(!use_nacl && "llvm build not configured with native client enabled.");
+    #endif
 }
 
 void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) {
@@ -52,13 +56,10 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
         sb = StringRef((char *)halide_internal_initmod_arm_android, 
                        halide_internal_initmod_arm_android_length);
     } else {
-#if WITH_NATIVE_CLIENT
 	if (use_nacl) {
             assert(halide_internal_initmod_arm_nacl_length && "initial module for ARM_nacl is empty");
             sb = StringRef((char *)halide_internal_initmod_arm_nacl, halide_internal_initmod_arm_nacl_length);
-	} else
-#endif
-        {
+	} else {
 	    assert(halide_internal_initmod_arm_length && "initial module for arm is empty");
 	    sb = StringRef((char *)halide_internal_initmod_arm, halide_internal_initmod_arm_length);
 	}
@@ -69,14 +70,12 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
     module = ParseBitcodeFile(bitcode_buffer, *context);
 
     // Fix the target triple. The initial module was probably compiled for x86
-#if WITH_NATIVE_CLIENT
-    if (use_nacl) {
-        module->setTargetTriple("arm-nacl");
-    }
-#endif
+
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
     if (use_android) {
         module->setTargetTriple("arm-linux-eabi");
+    } else if (use_nacl) {
+        module->setTargetTriple("arm-nacl");        
     } else {
         module->setTargetTriple("arm-linux-gnueabihf");
     }

@@ -3,11 +3,11 @@
 # 'make test_foo' builds and runs test/foo.cpp for any cpp file in the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
-WITH_NATIVE_CLIENT=
+WITH_NATIVE_CLIENT ?=
 CXX_FLAGS_NACL=$(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", )
 NATIVE_CLIENT_ARCHS=$(if $(WITH_NATIVE_CLIENT), x86_nacl x86_32_nacl arm_nacl, )
 NATIVE_CLIENT_LLVM_CONFIG_LIB=$(if $(WITH_NATIVE_CLIENT), nacltransforms, )
-NATIVE_CLIENT_ROOT=
+NATIVE_CLIENT_ROOT ?=
 
 CXX ?= g++
 LLVM_CONFIG ?= llvm-config
@@ -67,9 +67,9 @@ RUNTIME_OPTS_arm = -m32
 RUNTIME_OPTS_arm_android = -m32 
 RUNTIME_OPTS_ptx_host = $(RUNTIME_OPTS_x86) 
 RUNTIME_OPTS_ptx_dev = 
-RUNTIME_OPTS_x86_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=corei7 -isystem $(NATIVE_CLIENT_ROOT)/toolchain/mac_x86/x86_64-nacl/include/
-RUNTIME_OPTS_x86_32_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=atom -isystem $(NATIVE_CLIENT_ROOT)/toolchain/mac_x86/x86_64-nacl/include/
-RUNTIME_OPTS_arm_nacl = -Xclang -Xclang -target-cpu -Xclang "" -Xclang -triple -Xclang arm-unknown-nacl -m32 -isystem $(NATIVE_CLIENT_ROOT)/toolchain/mac_arm_newlib/arm-nacl/include/
+RUNTIME_OPTS_x86_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=corei7 -isystem $(NATIVE_CLIENT_X86_INCLUDE)
+RUNTIME_OPTS_x86_32_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=atom -isystem $(NATIVE_CLIENT_X86_INCLUDE)
+RUNTIME_OPTS_arm_nacl = -Xclang -target-cpu -Xclang "" -Xclang -triple -Xclang arm-unknown-nacl -m32 -isystem $(NATIVE_CLIENT_ARM_INCLUDE)
 RUNTIME_LL_STUBS_x86 = src/runtime/x86.ll src/runtime/x86_sse41.ll
 RUNTIME_LL_STUBS_x86_32 = src/runtime/x86.ll
 RUNTIME_LL_STUBS_x86_avx = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll

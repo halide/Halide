@@ -15,11 +15,8 @@ enum CodeGen_X86_Options {
     X86_64Bit = 1,  /// Compile for x86_64
     X86_SSE41 = 2,  /// Compile for SSE 4.1
     X86_AVX   = 4,  /// Compile for AVX (v1)
-#if WITH_NATIVE_CLIENT
-    X86_NaCl  = 8,  /// Compile for Native Client
-#endif
+    X86_NaCl  = 8,  /// Compile for Native Client (Must be using the Native Client llvm tree)
 };
-
 
 /** A code generator that emits x86 code from a given Halide stmt. */
 class CodeGen_X86 : public CodeGen_Posix {
@@ -48,10 +45,8 @@ protected:
     /** Should the emitted code use avx 1 operations */
     bool use_avx;
 
-#if WITH_NATIVE_CLIENT
     /** Should the emitted code target native client */
     bool use_nacl;
-#endif
 
     /** Generate a call to an sse or avx intrinsic */
     // @{

@@ -10,13 +10,12 @@
 namespace Halide { 
 namespace Internal {
 
-/** Bitmask flags for specifying code generation options to CodeGen_X86. */
+/** Bitmask flags for specifying code generation options to CodeGen_ARM. */
 enum CodeGen_ARM_Options {
-    ARM_Android = 1,  /// Compile for Android
-#if WITH_NATIVE_CLIENT
-    ARM_NaCl    = 2,  /// Compile for Native Client
-#endif
+    ARM_Android = 1,  /// Compile targetting the Android standard library
+    ARM_NaCl    = 2,  /// Compile for Native Client (must be using the Native Client llvm tree)
 };
+
 /** A code generator that emits ARM code from a given Halide stmt. */
 class CodeGen_ARM : public CodeGen_Posix {
 public:
@@ -38,10 +37,9 @@ protected:
 
     /** Use the android-specific standard library */
     bool use_android;
-#if WITH_NATIVE_CLIENT
+
     /** Compile for Native Client. */
     bool use_nacl;
-#endif
 
     /** Generate a call to a neon intrinsic */
     // @{
