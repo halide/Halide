@@ -18,7 +18,7 @@ hello_nacl.nexe: $(OBJECTS) .lib64_linked
 	ln -fs $(NACL_SDK_ROOT)/toolchain/linux_x86_glibc/x86_64-nacl/lib
 	touch .lib64_linked
 
-hello_nacl.o: hello_nacl.cpp
+hello_nacl.o: hello_nacl.cpp halide_game_of_life.o
 	$(CXX) -o $@ -m64 -c $< $(CXXFLAGS)
 
 halide_game_of_life.o: halide_game_of_life
