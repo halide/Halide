@@ -491,16 +491,16 @@ Value *CodeGen::buffer_dev_ptr(Value *buffer) {
 }
 
 Value *CodeGen::buffer_host_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 2, "buffer_host_dirty");
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 6, "buffer_host_dirty");
 }
 
 Value *CodeGen::buffer_dev_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 3, "buffer_dev_dirty");
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 7, "buffer_dev_dirty");
 }
 
 Value *CodeGen::buffer_extent_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
-    llvm::Value *field = ConstantInt::get(i32, 4);
+    llvm::Value *field = ConstantInt::get(i32, 2);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
     return builder->CreateInBoundsGEP(buffer, args, "buf_extent");
@@ -508,7 +508,7 @@ Value *CodeGen::buffer_extent_ptr(Value *buffer, int i) {
 
 Value *CodeGen::buffer_stride_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
-    llvm::Value *field = ConstantInt::get(i32, 5);
+    llvm::Value *field = ConstantInt::get(i32, 3);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
     return builder->CreateInBoundsGEP(buffer, args, "buf_stride");
@@ -516,14 +516,14 @@ Value *CodeGen::buffer_stride_ptr(Value *buffer, int i) {
 
 Value *CodeGen::buffer_min_ptr(Value *buffer, int i) {
     llvm::Value *zero = ConstantInt::get(i32, 0);
-    llvm::Value *field = ConstantInt::get(i32, 6);
+    llvm::Value *field = ConstantInt::get(i32, 4);
     llvm::Value *idx = ConstantInt::get(i32, i);
     vector<llvm::Value *> args = vec(zero, field, idx);
     return builder->CreateInBoundsGEP(buffer, args, "buf_min");
 }
 
 Value *CodeGen::buffer_elem_size_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 7, "buf_elem_size");
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 5, "buf_elem_size");
 }
 
 Value *CodeGen::codegen(Expr e) {

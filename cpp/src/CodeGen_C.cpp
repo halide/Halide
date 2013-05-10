@@ -68,12 +68,12 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
            << "typedef struct buffer_t {\n"
            << "    uint8_t* host;\n"
            << "    uint64_t dev;\n"
-           << "    bool host_dirty;\n"
-           << "    bool dev_dirty;\n"
            << "    int32_t extent[4];\n"
            << "    int32_t stride[4];\n"
            << "    int32_t min[4];\n"
            << "    int32_t elem_size;\n"
+           << "    bool host_dirty;\n"
+           << "    bool dev_dirty;\n"
            << "} buffer_t;\n"
            << "#endif\n";
 
