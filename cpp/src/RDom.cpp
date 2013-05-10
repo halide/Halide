@@ -77,7 +77,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
                           name + ".y$r", min1, extent1,
                           name + ".z$r", min2, extent2,
                           "", Expr(), Expr());
-    x = RVar(name + ".x$r", min0, extent1, domain);
+    x = RVar(name + ".x$r", min0, extent0, domain);
     y = RVar(name + ".y$r", min1, extent1, domain);
     z = RVar(name + ".z$r", min2, extent2, domain);
 }
@@ -96,7 +96,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
                           name + ".y$r", min1, extent1, 
                           name + ".z$r", min2, extent2, 
                           name + ".w$r", min3, extent3);
-    x = RVar(name + ".x$r", min0, extent1, domain);
+    x = RVar(name + ".x$r", min0, extent0, domain);
     y = RVar(name + ".y$r", min1, extent1, domain);
     z = RVar(name + ".z$r", min2, extent2, domain);
     w = RVar(name + ".w$r", min3, extent3, domain);
