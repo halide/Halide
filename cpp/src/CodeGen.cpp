@@ -483,11 +483,11 @@ Value *CodeGen::buffer_elem_size(Value *buffer) {
 }
 
 Value *CodeGen::buffer_host_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 0, "buf_host");
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 1, "buf_host");
 }
 
 Value *CodeGen::buffer_dev_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 1, "buf_dev");
+    return builder->CreateConstInBoundsGEP2_32(buffer, 0, 0, "buf_dev");
 }
 
 Value *CodeGen::buffer_host_dirty_ptr(Value *buffer) {
