@@ -214,7 +214,10 @@ protected:
     virtual void visit(const For *);
     virtual void visit(const Store *);
     virtual void visit(const Block *);        
-    // @}
+    // @}    
+
+    /** Recursive code for generating a gather using a binary tree. */
+    llvm::Value *codegen_gather(llvm::Value *indices, const Load *op);
 
     /** Generate code for an allocate node. It has no default
      * implementation - it must be handled in an architecture-specific
