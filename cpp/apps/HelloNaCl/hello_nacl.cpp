@@ -33,6 +33,7 @@
 #include "ppapi/cpp/image_data.h"
 #include "ppapi/cpp/completion_callback.h"
 #include <sys/time.h>
+#include <string.h>
 
 #include "halide_game_of_life.h"
 
@@ -63,7 +64,7 @@ buffer_t ImageToBuffer(const ImageData &im) {
     return buf;
 }
 
-
+extern "C" void halide_shutdown_thread_pool();
 
 /// The Instance class.  One of these exists for each instance of your NaCl
 /// module on the web page.  The browser will ask the Module object to create
@@ -105,6 +106,26 @@ public:
     /// @param[in] var_message The message posted by the browser.
     virtual void HandleMessage(const Var& var_message) {
 
+        static int thread_pool_size = 8;
+        static int last_t = 0;
+        static int time_weight = 0;
+
+        if (var_message.is_string()) {
+            std::string msg = var_message.AsString();
+            int threads = atoi(msg.c_str());
+            if (threads < 1) threads = 1;
+            if (threads > 32) threads = 32;
+            if (threads > 0 && threads <= 32 && thread_pool_size != threads) {
+                halide_shutdown_thread_pool();
+                thread_pool_size = threads;
+                char buf[256];
+                snprintf(buf, 256, "%d", threads);
+                setenv("HL_NUMTHREADS", buf, 1);
+                last_t = 0;
+                time_weight = 0;
+            }
+        }
+
         if (busy) return;
         busy = true;
 
@@ -117,7 +138,7 @@ public:
             first_run = false; 
 
             // Override the number of threads to use
-            setenv("HL_NUMTHREADS", "16", 0);
+            setenv("HL_NUMTHREADS", "8", 0);
             
             for (int y = 0; y < im1.size().height(); y++) {
                 uint8_t *ptr = ((uint8_t *)im1.data()) + im1.stride() * y;
@@ -135,20 +156,20 @@ public:
         halide_game_of_life(&input, &output);
         gettimeofday(&t2, NULL);        
 
-        static int last_t = 0;
         int t = t2.tv_usec - t1.tv_usec;
         t += (t2.tv_sec - t1.tv_sec)*1000000;
 
         // Smooth it out so we can see a rolling average
-        if (last_t == 0) {
-            last_t = t;
-        } else {
-            t = (last_t * 99 + t)/100;
-            last_t = t;
+        t = (last_t * time_weight + t) / (time_weight + 1);
+        last_t = t;
+        if (time_weight < 100) {
+            time_weight++;
         }
 
         char buf[1024];
-        snprintf(buf, 1024, "Halide routine takes %d us\n", t);
+        snprintf(buf, 1024, 
+                 "Halide routine takes %d us<br>"
+                 "Currently using %d threads\n", time_weight > 10 ? t : 0, thread_pool_size);
         PostMessage(buf);
 
         graphics.PaintImageData(im2, Point(0, 0));
