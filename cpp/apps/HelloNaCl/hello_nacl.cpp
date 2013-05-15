@@ -32,6 +32,7 @@
 #include "ppapi/cpp/graphics_2d.h"
 #include "ppapi/cpp/image_data.h"
 #include "ppapi/cpp/completion_callback.h"
+#include "ppapi/cpp/input_event.h"
 #include <sys/time.h>
 #include <string.h>
 
@@ -90,9 +91,49 @@ public:
         im2(this, PP_IMAGEDATAFORMAT_BGRA_PREMUL, Size(1280, 960), false),
         callback(completion_callback, this) {
         BindGraphics(graphics);
+        int32_t ret = RequestInputEvents(PP_INPUTEVENT_CLASS_MOUSE);
     }
     virtual ~HelloTutorialInstance() {}
     
+    virtual bool HandleInputEvent(const pp::InputEvent &event) {
+        if (event.GetType() == PP_INPUTEVENT_TYPE_MOUSEMOVE) {
+            pp::MouseInputEvent ev(event);
+            Point p = ev.GetPosition();
+            for (int dy = -4; dy <= 4; dy++) {
+                int y = p.y() + dy;
+                if (y < 0) y = 0;
+                if (y >= 960) y = 959;
+                for (int dx = -4; dx <= 4; dx++) {
+                    int x = p.x() + dx;
+                    if (x < 0) x = 0;
+                    if (x >= 1280) x = 1279;
+                    if (dx*dx + dy*dy < 4*4) {                        
+                        uint32_t col;
+                        switch (rand() & 3) {
+                        case 0:
+                            col = 0x000000ff;
+                            break;
+                        case 1:
+                            col = 0x0000ffff;
+                            break;
+                        case 2:
+                            col = 0x00ff00ff;
+                            break;
+                        case 3:
+                            col = 0xff0000ff;
+                        }
+                        Point q(x, y);
+                        *(im1.GetAddr32(q)) = col;
+                        *(im2.GetAddr32(q)) = col;
+                    }
+                }
+            }
+
+            return true;
+        }
+        return false;
+    }
+
     /// Handler for messages coming in from the browser via postMessage().  The
     /// @a var_message can contain anything: a JSON string; a string that encodes
     /// method names and arguments; etc.  For example, you could use
@@ -105,7 +146,6 @@ public:
     /// with the parameter.
     /// @param[in] var_message The message posted by the browser.
     virtual void HandleMessage(const Var& var_message) {
-
         static int thread_pool_size = 8;
         static int last_t = 0;
         static int time_weight = 0;
@@ -140,15 +180,17 @@ public:
             // Override the number of threads to use
             setenv("HL_NUMTHREADS", "8", 0);
             
+            
             for (int y = 0; y < im1.size().height(); y++) {
                 uint8_t *ptr = ((uint8_t *)im1.data()) + im1.stride() * y;
                 for (int x = 0; x < im1.size().width(); x++) {
-                    ptr[x*4] = ((rand() & 3) == 0) ? 0xff : 0;
-                    ptr[x*4+1] = ((rand() & 3) == 0) ? 0xff : 0;
-                    ptr[x*4+2] = ((rand() & 3) == 0) ? 0xff : 0;                
+                    ptr[x*4] = ((rand() & 31) == 0) ? 0xff : 0;
+                    ptr[x*4+1] = ((rand() & 31) == 0) ? 0xff : 0;
+                    ptr[x*4+2] = ((rand() & 31) == 0) ? 0xff : 0;                
                     ptr[x*4+3] = 0xff;
                 }                
             }
+            
         }
         
         timeval t1, t2;
