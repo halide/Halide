@@ -166,7 +166,7 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
 
-    if (log::debug_level >= 0) {
+    if (log::debug_level >= 2) {
         cgdev.module->dump();
         module->dump();
     }
