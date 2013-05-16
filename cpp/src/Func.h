@@ -219,13 +219,28 @@ public:
      * ptx, these just mark the given dimensions as parallel. The
      * dimensions are consumed by this call, so do all other
      * unrolling, reordering, etc first. */
-    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var thread_x, Var thread_y);
+    // @{
+    EXPORT ScheduleHandle &cuda(Var block_x, Var thread_x);
+    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, 
+                                Var thread_x, Var thread_y);
+    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z, 
+                                Var thread_x, Var thread_y, Var thread_z);
+    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z, Var block_w, 
+                                Var thread_x, Var thread_y, Var thread_z, Var thread_w);
+    // @}
 
-    /** Short-hand for tiling a 2D domain and mapping the tile indices
+    /** Short-hand for tiling a domain and mapping the tile indices
      * to cuda block indices and the coordinates within each tile to
      * cuda thread indices. Consumes the variables given, so do all
      * other scheduling first. */
-    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int tile_width, int tile_height);
+    // @{
+    EXPORT ScheduleHandle &cuda_tile(Var x, int x_size);
+    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int x_size, int y_size);
+    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,  
+                                     int x_size, int y_size, int z_size);
+    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z, Var w, 
+                                     int x_size, int y_size, int z_size, int w_size);
+    // @}
 
 };
 
@@ -535,8 +550,20 @@ public:
     EXPORT Func &reorder(Var x, Var y, Var z, Var w);
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t);
     EXPORT Func &rename(Var old_name, Var new_name);
-    EXPORT Func &cuda(Var block_x, Var block_y, Var thread_x, Var thread_y);
-    EXPORT Func &cuda_tile(Var x, Var y, int tile_width, int tile_height);
+    EXPORT Func &cuda(Var block_x, Var thread_x);
+    EXPORT Func &cuda(Var block_x, Var block_y, 
+                      Var thread_x, Var thread_y);
+    EXPORT Func &cuda(Var block_x, Var block_y, Var block_z, 
+                      Var thread_x, Var thread_y, Var thread_z);
+    EXPORT Func &cuda(Var block_x, Var block_y, Var block_z, Var block_w,
+                      Var thread_x, Var thread_y, Var thread_z, Var thread_w);
+    EXPORT Func &cuda_tile(Var x, int x_size);
+    EXPORT Func &cuda_tile(Var x, Var y, 
+                           int x_size, int y_size);
+    EXPORT Func &cuda_tile(Var x, Var y, Var z, 
+                           int x_size, int y_size, int z_size);
+    EXPORT Func &cuda_tile(Var x, Var y, Var z, Var w, 
+                           int x_size, int y_size, int z_size, int w_size);
     // @}
 
     /** Scheduling calls that control how the storage for the function

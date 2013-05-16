@@ -16,13 +16,12 @@ int main(int argc, char **argv) {
     f(x, y) = max(x, y);
     g(x, y) = clamp(f(x, y), 20, 100);
 
-    printf("TODO: NO GPU BACKEND YET\n");
-    /*
-    if (use_gpu()) {
-        f.root().cudaTile(x, y, 16, 16);
-        g.cudaTile(x, y, 16, 16);
+
+    char *target = getenv("HL_TARGET");
+    if (target && std::string(target) == "ptx") {
+        f.compute_root().cuda_tile(x, y, 16, 16);
+        g.compute_root().cuda_tile(x, y, 16, 16);
     }
-    */
 
     printf("Realizing function...\n");
 

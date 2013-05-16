@@ -22,21 +22,27 @@ int main(int argc, char **argv) {
     }
 
     Func hist("hist");
+    Var x;
 
     RDom r(in);
-    hist(clamp(cast<int>(in(r.x, r.y)), 0, 255))+=1;
+    hist(x) = 0;
+    hist(clamp(cast<int>(in(r.x, r.y)), 0, 255)) += 1;
 
     hist.compute_root();
 
     Func g;
-    Var x;
+
     g(x) = hist(x+10);
 
-    /*if (use_gpu()) {
-	hist.cudaTile(hist.arg(0), 64);
-	hist.update().cudaTile(r.x, r.y, 16, 16);
-        } else { */
-    
+    // No parallel reductions
+    /*
+    char *target = getenv("HL_TARGET");
+    if (target && std::string(target) == "ptx") {
+	hist.cuda_tile(x, 64);
+	hist.update().cuda_tile(r.x, r.y, 16, 16);
+    }
+    */
+
     Image<int32_t> histogram = g.realize(10); // buckets 10-20 only
 
     for (int i = 10; i < 20; i++) {

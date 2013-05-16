@@ -64,16 +64,24 @@ int main(int argc, char **argv) {
     Func blur2("blur2");
     blur2(x, y) = sum(tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1));
 
-    //if (use_gpu() && false) { // TODO: broken
-    //blur1.cudaTile(x, y, 16, 16);
-    //} else {
+    char *target = getenv("HL_TARGET");
+    if (target && std::string(target) == "ptx") {
+        // Initialization (basically memset) done in a cuda kernel
+        blur1.cuda_tile(x, y, 16, 16);
 
-    // Take this opportunity to test scheduling the pure dimensions in a reduction
-    Var xi("xi"), yi("yi");
-    blur1.tile(x, y, xi, yi, 6, 6);
-    blur1.update().tile(x, y, xi, yi, 4, 4).vectorize(xi).parallel(y);
+        // Summation is done as an outermost loop is done on the cpu
+        blur1.update().cuda_tile(x, y, 16, 16);        
 
-    blur2.vectorize(x, 4).parallel(y);
+        // Summation is done as a sequential loop within each gpu thread
+        blur2.cuda_tile(x, y, 16, 16);
+    } else {
+        // Take this opportunity to test scheduling the pure dimensions in a reduction
+        Var xi("xi"), yi("yi");
+        blur1.tile(x, y, xi, yi, 6, 6);
+        blur1.update().tile(x, y, xi, yi, 4, 4).vectorize(xi).parallel(y);
+        
+        blur2.vectorize(x, 4).parallel(y);
+    }
 
     Image<uint16_t> out1 = blur1.realize(W, H);
     Image<uint16_t> out2 = blur2.realize(W, H);

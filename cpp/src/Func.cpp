@@ -335,7 +335,16 @@ ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t) {
     return reorder(x, y).reorder(x, z).reorder(x, w).reorder(x, t).reorder(y, z, w, t);
 }
 
-ScheduleHandle &ScheduleHandle::cuda(Var bx, Var by, Var tx, Var ty) {
+ScheduleHandle &ScheduleHandle::cuda(Var bx, Var tx) {
+    parallel(bx);
+    parallel(tx);
+    rename(bx, Var("blockidx"));
+    rename(tx, Var("threadidx"));
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::cuda(Var bx, Var by, 
+                                     Var tx, Var ty) {
     parallel(bx);
     parallel(by);
     parallel(tx);
@@ -347,13 +356,115 @@ ScheduleHandle &ScheduleHandle::cuda(Var bx, Var by, Var tx, Var ty) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::cuda_tile(Var x, Var y, int tile_width, int tile_height) {
+ScheduleHandle &ScheduleHandle::cuda(Var bx, Var by, Var bz, 
+                                     Var tx, Var ty, Var tz) {
+    parallel(bx);
+    parallel(by);
+    parallel(bz);
+    parallel(tx);
+    parallel(ty);
+    parallel(tz);
+    rename(bx, Var("blockidx"));
+    rename(by, Var("blockidy"));
+    rename(bz, Var("blockidz"));
+    rename(tx, Var("threadidx"));
+    rename(ty, Var("threadidy"));
+    rename(tz, Var("threadidz"));
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::cuda(Var bx, Var by, Var bz, Var bw, 
+                                     Var tx, Var ty, Var tz, Var tw) {
+    parallel(bx);
+    parallel(by);
+    parallel(bz);
+    parallel(bw);
+    parallel(tx);
+    parallel(ty);
+    parallel(tz);
+    parallel(tw);
+    rename(bx, Var("blockidx"));
+    rename(by, Var("blockidy"));
+    rename(bz, Var("blockidz"));
+    rename(bw, Var("blockidw"));
+    rename(tx, Var("threadidx"));
+    rename(ty, Var("threadidy"));
+    rename(tz, Var("threadidz"));
+    rename(tw, Var("threadidw"));
+    return *this;
+}
+
+
+ScheduleHandle &ScheduleHandle::cuda_tile(Var x, int x_size) {
+    Var bx("blockidx"), tx("threadidx");
+    split(x, bx, tx, x_size);
+    parallel(bx);
+    parallel(tx);
+    return *this;
+}
+
+
+ScheduleHandle &ScheduleHandle::cuda_tile(Var x, Var y, 
+                                          int x_size, int y_size) {
     Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
-    tile(x, y, bx, by, tx, ty, tile_width, tile_height);
+    tile(x, y, bx, by, tx, ty, x_size, y_size);
     parallel(bx);
     parallel(by);
     parallel(tx);
     parallel(ty);
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::cuda_tile(Var x, Var y, Var z, 
+                                          int x_size, int y_size, int z_size) {
+    Var bx("blockidx"), by("blockidy"), bz("blockidz"),
+        tx("threadidx"), ty("threadidy"), tz("threadidz");
+    split(x, bx, tx, x_size);
+    split(y, by, ty, y_size);
+    split(z, bz, tz, z_size);
+    // current order is:
+    // tx bx ty by tz bz
+    reorder(ty, bx);
+    // tx ty bx by tz bz
+    reorder(tz, bx);
+    // tx ty tz by bx bz
+    reorder(bx, by);
+    // tx ty tz bx by bz
+    parallel(bx);
+    parallel(by);
+    parallel(bz);
+    parallel(tx);
+    parallel(ty);
+    parallel(tz);
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::cuda_tile(Var x, Var y, Var z, Var w, 
+                                          int x_size, int y_size, int z_size, int w_size) {
+    Var bx("blockidx"), by("blockidy"), bz("blockidz"), bw("blockidw"),
+        tx("threadidx"), ty("threadidy"), tz("threadidz"), tw("threadidw");
+    split(x, bx, tx, x_size);
+    split(y, by, ty, y_size);
+    split(z, bz, tz, z_size);
+    split(w, bw, tw, w_size);
+    // current order is:
+    // tx bx ty by tz bz tw bw
+    reorder(ty, bx);
+    // tx ty bx by tz bz tw bw
+    reorder(tz, bx);
+    // tx ty tz by bx bz tw bw
+    reorder(tw, by);
+    // tx ty tz tw bx bz by bw
+    reorder(by, bz);
+    // tx ty tz tw bx by bz bw
+    parallel(bx);
+    parallel(by);
+    parallel(bz);
+    parallel(bw);
+    parallel(tx);
+    parallel(ty);
+    parallel(tz);
+    parallel(tw);
     return *this;
 }
 
@@ -427,13 +538,43 @@ Func &Func::reorder(Var x, Var y, Var z, Var w, Var t) {
     return *this;
 }
 
+Func &Func::cuda(Var bx, Var tx) {
+    ScheduleHandle(func.schedule()).cuda(bx, tx);
+    return *this;
+}
+
 Func &Func::cuda(Var bx, Var by, Var tx, Var ty) {
     ScheduleHandle(func.schedule()).cuda(bx, by, tx, ty);
     return *this;
 }
 
-Func &Func::cuda_tile(Var x, Var y, int tile_width, int tile_height) {
-    ScheduleHandle(func.schedule()).cuda_tile(x, y, tile_width, tile_height);
+Func &Func::cuda(Var bx, Var by, Var bz, Var tx, Var ty, Var tz) {
+    ScheduleHandle(func.schedule()).cuda(bx, by, bz, tx, ty, tz);
+    return *this;
+}
+
+Func &Func::cuda(Var bx, Var by, Var bz, Var bw, Var tx, Var ty, Var tz, Var tw) {
+    ScheduleHandle(func.schedule()).cuda(bx, by, bz, bw, tx, ty, tz, tw);
+    return *this;
+}
+
+Func &Func::cuda_tile(Var x, int x_size) {
+    ScheduleHandle(func.schedule()).cuda_tile(x, x_size);
+    return *this;
+}
+
+Func &Func::cuda_tile(Var x, Var y, int x_size, int y_size) {
+    ScheduleHandle(func.schedule()).cuda_tile(x, y, x_size, y_size);
+    return *this;
+}
+
+Func &Func::cuda_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size) {
+    ScheduleHandle(func.schedule()).cuda_tile(x, y, z, x_size, y_size, z_size);
+    return *this;
+}
+
+Func &Func::cuda_tile(Var x, Var y, Var z, Var w, int x_size, int y_size, int z_size, int w_size) {
+    ScheduleHandle(func.schedule()).cuda_tile(x, y, z, w, x_size, y_size, z_size, w_size);
     return *this;
 }
 
