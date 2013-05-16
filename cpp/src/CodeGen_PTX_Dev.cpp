@@ -150,7 +150,7 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
 bool CodeGen_PTX_Dev::is_simt_var(const string &name) {
     string n = base_name(name);
 
-    log(0) << "is_simt_var " << name << " (" << n << ")? ";
+    log(2) << "is_simt_var " << name << " (" << n << ")? ";
 
     bool result = (n == "threadidx" ||
                    n == "threadidy" ||
@@ -161,7 +161,7 @@ bool CodeGen_PTX_Dev::is_simt_var(const string &name) {
                    n == "blockidz" ||
                    n == "blockidw");
 
-    log(0) << result << "\n";
+    log(2) << result << "\n";
 
     return result;
 }

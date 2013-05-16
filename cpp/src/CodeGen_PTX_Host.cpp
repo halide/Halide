@@ -170,8 +170,9 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
         cgdev.module->dump();
         module->dump();
     }
+
     string ptx_src = cgdev.compile_to_ptx();
-    log(0) << ptx_src;
+    log(2) << ptx_src;
     llvm::Type *ptx_src_type = ArrayType::get(i8, ptx_src.size()+1);
     GlobalVariable *ptx_src_global = new GlobalVariable(*module, ptx_src_type, 
                                                          true, GlobalValue::PrivateLinkage, 0,
