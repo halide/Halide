@@ -1398,13 +1398,21 @@ void CodeGen::visit(const Store *op) {
             builder->CreateAlignedStore(val, ptr2, alignment);
         } else if (ramp) {
             Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), codegen(ramp->base));
+            const IntImm *const_stride = ramp->stride.as<IntImm>();
             Value *stride = codegen(ramp->stride);
             // Scatter without generating the indices as a vector
             for (int i = 0; i < ramp->width; i++) {                
-                Value *lane = ConstantInt::get(i32, i);
+                Constant *lane = ConstantInt::get(i32, i);                
                 Value *v = builder->CreateExtractElement(val, lane);
-                builder->CreateAlignedStore(v, ptr, op->value.type().bits/8);
-                ptr = builder->CreateInBoundsGEP(ptr, stride);
+                if (const_stride) {
+                    // Use a constant offset from the base pointer
+                    Value *p = builder->CreateConstInBoundsGEP1_32(ptr, const_stride->value * i);
+                    builder->CreateAlignedStore(v, p, op->value.type().bits/8);
+                } else {
+                    // Increment the pointer by the stride for each element
+                    builder->CreateAlignedStore(v, ptr, op->value.type().bits/8);
+                    ptr = builder->CreateInBoundsGEP(ptr, stride);
+                }
             }
         } else {
             // Scatter
