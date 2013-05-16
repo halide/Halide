@@ -35,8 +35,16 @@
 #include "ppapi/cpp/input_event.h"
 #include <sys/time.h>
 #include <string.h>
+#include <sstream>
 
 #include "halide_game_of_life.h"
+
+#define WIDTH 1024
+#define HEIGHT 1024
+#define MARGIN 8
+
+// A low-level scalar C version to use for timing comparisons
+extern "C" void c_game_of_life(buffer_t *in, buffer_t *out);
 
 using namespace pp;
 
@@ -47,25 +55,27 @@ void completion_callback(void *data, int32_t flags) {
 }
 
 buffer_t ImageToBuffer(const ImageData &im) {
-    buffer_t buf = {0};
+    buffer_t buf;
+    memset(&buf, 0, sizeof(buffer_t));
     buf.host = (uint8_t *)im.data();
-    buf.extent[0] = 4;
+    buf.extent[0] = im.size().width();
     buf.stride[0] = 1;
-    buf.min[0] = 0;
-    buf.extent[1] = im.size().width();
-    buf.stride[1] = 4;
-    buf.min[1] = 0;
-    buf.extent[2] = im.size().height();
-    buf.stride[2] = im.stride();
-    buf.min[2] = 0;
-    buf.extent[3] = 0;
-    buf.stride[3] = 0;
-    buf.min[3] = 0;
-    buf.elem_size = 1;
+    buf.extent[1] = im.size().height();
+    buf.stride[1] = im.stride()/4;
+    buf.elem_size = 4;
     return buf;
 }
 
 extern "C" void halide_shutdown_thread_pool();
+
+bool pipeline_barfed = false;
+static Instance *inst = NULL;
+extern "C" void halide_error(char *msg) {
+    if (inst) {
+        inst->PostMessage(msg);
+        pipeline_barfed = true;
+    }
+}
 
 /// The Instance class.  One of these exists for each instance of your NaCl
 /// module on the web page.  The browser will ask the Module object to create
@@ -76,7 +86,7 @@ extern "C" void halide_shutdown_thread_pool();
 /// To communicate with the browser, you must override HandleMessage() for
 /// receiving messages from the browser, and use PostMessage() to send messages
 /// back to the browser.  Note that this interface is asynchronous.
-class HelloTutorialInstance : public Instance {
+class HelloHalideInstance : public Instance {
 public:
     Graphics2D::Graphics2D graphics;
     ImageData im1, im2;
@@ -84,16 +94,17 @@ public:
 
     /// The constructor creates the plugin-side instance.
     /// @param[in] instance the handle to the browser-side plugin instance.
-    explicit HelloTutorialInstance(PP_Instance instance) : 
+    explicit HelloHalideInstance(PP_Instance instance) : 
         Instance(instance),
-        graphics(this, Size(1280, 960), false),
-        im1(this, PP_IMAGEDATAFORMAT_BGRA_PREMUL, Size(1280, 960), false),
-        im2(this, PP_IMAGEDATAFORMAT_BGRA_PREMUL, Size(1280, 960), false),
+        graphics(this, Size(WIDTH, HEIGHT), false),
+        im1(this, PP_IMAGEDATAFORMAT_BGRA_PREMUL, Size(WIDTH, HEIGHT), false),
+        im2(this, PP_IMAGEDATAFORMAT_BGRA_PREMUL, Size(WIDTH, HEIGHT), false),
         callback(completion_callback, this) {
         BindGraphics(graphics);
-        int32_t ret = RequestInputEvents(PP_INPUTEVENT_CLASS_MOUSE);
+        RequestInputEvents(PP_INPUTEVENT_CLASS_MOUSE);
+        inst = this;
     }
-    virtual ~HelloTutorialInstance() {}
+    virtual ~HelloHalideInstance() {}
     
     virtual bool HandleInputEvent(const pp::InputEvent &event) {
         if (event.GetType() == PP_INPUTEVENT_TYPE_MOUSEMOVE) {
@@ -101,12 +112,12 @@ public:
             Point p = ev.GetPosition();
             for (int dy = -4; dy <= 4; dy++) {
                 int y = p.y() + dy;
-                if (y < 0) y = 0;
-                if (y >= 960) y = 959;
+                if (y < MARGIN) y = MARGIN;
+                if (y > HEIGHT - MARGIN - 1) y = HEIGHT - MARGIN - 1;
                 for (int dx = -4; dx <= 4; dx++) {
                     int x = p.x() + dx;
-                    if (x < 0) x = 0;
-                    if (x >= 1280) x = 1279;
+                    if (x < MARGIN) x = MARGIN;
+                    if (x > WIDTH - MARGIN - 1) x = WIDTH - MARGIN - 1;
                     if (dx*dx + dy*dy < 4*4) {                        
                         uint32_t col;
                         switch (rand() & 3) {
@@ -146,13 +157,20 @@ public:
     /// with the parameter.
     /// @param[in] var_message The message posted by the browser.
     virtual void HandleMessage(const Var& var_message) {
-        static int thread_pool_size = 8;
-        static int last_t = 0;
-        static int time_weight = 0;
 
-        if (var_message.is_string()) {
+        if (busy) return;
+        busy = true;
+
+        static int thread_pool_size = 8;
+        static int halide_last_t = 0;
+        static int halide_time_weight = 0;
+        static int c_last_t = 0;
+        static int c_time_weight = 0;
+        static bool use_halide = true;
+
+        if (var_message.is_string()) {            
             std::string msg = var_message.AsString();
-            int threads = atoi(msg.c_str());
+            int threads = atoi(msg.c_str()+2);
             if (threads < 1) threads = 1;
             if (threads > 32) threads = 32;
             if (threads > 0 && threads <= 32 && thread_pool_size != threads) {
@@ -161,58 +179,101 @@ public:
                 char buf[256];
                 snprintf(buf, 256, "%d", threads);
                 setenv("HL_NUMTHREADS", buf, 1);
-                last_t = 0;
-                time_weight = 0;
+                halide_last_t = 0;
+                halide_time_weight = 0;
+            }
+
+            bool new_use_halide = (msg[0] == '0');
+            if (new_use_halide != use_halide) {
+                use_halide = new_use_halide;
             }
         }
 
-        if (busy) return;
-        busy = true;
-
         buffer_t input = ImageToBuffer(im1);
         buffer_t output = ImageToBuffer(im2);
+
+        // Only compute the inner part of output so that we don't have
+        // to worry about boundary conditions.
+        output.min[0] = output.min[1] = MARGIN;
+        output.extent[0] -= MARGIN*2;
+        output.extent[1] -= MARGIN*2;
+        output.host += (output.stride[1] + output.stride[0]) * MARGIN * 4;
 
         // Initialize the input with noise
         static bool first_run = true;
         if (first_run) {
             first_run = false; 
 
-            // Override the number of threads to use
-            setenv("HL_NUMTHREADS", "8", 0);
-            
-            
-            for (int y = 0; y < im1.size().height(); y++) {
+            // Start with 8 threads
+            setenv("HL_NUMTHREADS", "8", 1);
+
+            //  Initialize the buffers                        
+            memset(im2.data(), 0, im2.stride() * im2.size().height());
+
+            for (int y = 0; y < HEIGHT; y++) {
                 uint8_t *ptr = ((uint8_t *)im1.data()) + im1.stride() * y;
-                for (int x = 0; x < im1.size().width(); x++) {
-                    ptr[x*4] = ((rand() & 31) == 0) ? 0xff : 0;
-                    ptr[x*4+1] = ((rand() & 31) == 0) ? 0xff : 0;
-                    ptr[x*4+2] = ((rand() & 31) == 0) ? 0xff : 0;                
-                    ptr[x*4+3] = 0xff;
-                }                
-            }
-            
+                for (int x = 0; x < WIDTH; x++) {
+                    ptr[x*4] = ((rand() & 31) == 0) ? 255 : 0;
+                    ptr[x*4+1] = ((rand() & 31) == 0) ? 255 : 0;
+                    ptr[x*4+2] = ((rand() & 31) == 0) ? 255 : 0;                
+                    ptr[x*4+3] = (x >= MARGIN && 
+                                  (x < (WIDTH - MARGIN)) && 
+                                   y >= MARGIN && 
+                                   y < (HEIGHT - MARGIN)) ? 255 : 0;
+                }
+            }            
+                
         }
         
         timeval t1, t2;
         gettimeofday(&t1, NULL);
-        halide_game_of_life(&input, &output);
+        if (use_halide) {
+            halide_game_of_life(&input, &output);
+        } else {
+            c_game_of_life(&input, &output);
+        }
         gettimeofday(&t2, NULL);        
+
+        if (pipeline_barfed) return;
 
         int t = t2.tv_usec - t1.tv_usec;
         t += (t2.tv_sec - t1.tv_sec)*1000000;
 
         // Smooth it out so we can see a rolling average
-        t = (last_t * time_weight + t) / (time_weight + 1);
-        last_t = t;
-        if (time_weight < 100) {
-            time_weight++;
+        if (use_halide) {
+            t = (halide_last_t * halide_time_weight + t) / (halide_time_weight + 1);
+            halide_last_t = t;
+            if (halide_time_weight < 100) {
+                halide_time_weight++;
+            }
+        } else {
+            t = (c_last_t * c_time_weight + t) / (c_time_weight + 1);
+            c_last_t = t;
+            if (c_time_weight < 100) {
+                c_time_weight++;
+            }
         }
 
-        char buf[1024];
-        snprintf(buf, 1024, 
-                 "Halide routine takes %d us<br>"
-                 "Currently using %d threads\n", time_weight > 10 ? t : 0, thread_pool_size);
-        PostMessage(buf);
+        std::ostringstream oss;
+        oss << "<table cellspacing=8><tr><td width=200 height=30>Halide routine takes:</td><td>";
+        if (halide_time_weight < 10) {
+            oss << "?";
+        } else {
+            if (use_halide) oss << "<b>";
+            oss << halide_last_t;
+            if (use_halide) oss << "</b>";
+        }
+        oss << " us</td></tr><tr><td width=200 height=30>Scalar C routine takes:</td><td>";
+        if (c_time_weight < 10) {
+            oss << "?";
+        } else {
+            if (!use_halide) oss << "<b>";
+            oss << c_last_t;
+            if (!use_halide) oss << "</b>";
+        }
+        oss << " us</td></tr></table>";
+
+        PostMessage(oss.str());
 
         graphics.PaintImageData(im2, Point(0, 0));
 
@@ -225,16 +286,16 @@ public:
 /// The Module class.  The browser calls the CreateInstance() method to create
 /// an instance of your NaCl module on the web page.  The browser creates a new
 /// instance for each <embed> tag with type="application/x-nacl".
-class HelloTutorialModule : public Module {
+class HelloHalideModule : public Module {
 public:
-    HelloTutorialModule() : Module() {}
-    virtual ~HelloTutorialModule() {}
+    HelloHalideModule() : Module() {}
+    virtual ~HelloHalideModule() {}
     
-    /// Create and return a HelloTutorialInstance object.
+    /// Create and return a HelloHalideInstance object.
     /// @param[in] instance The browser-side instance.
     /// @return the plugin-side instance.
     virtual Instance* CreateInstance(PP_Instance instance) {
-        return new HelloTutorialInstance(instance);
+        return new HelloHalideInstance(instance);
     }
 };
 
@@ -245,6 +306,6 @@ namespace pp {
 /// is one instance per <embed> tag on the page.  This is the main binding
 /// point for your NaCl module with the browser.
 Module* CreateModule() {
-    return new HelloTutorialModule();
+    return new HelloHalideModule();
 }
 }  // namespace pp
