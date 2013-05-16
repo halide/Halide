@@ -12,15 +12,16 @@
   <title>hello_nacl</title>
 
   <script type="text/javascript">
-    HelloTutorialModule = null;  // Global application object.
+    HelloHalideModule = null;  // Global application object.
     statusText = 'NO-STATUS';
     threads = '8';
+    implementation = '0';
 
     // Indicate load success.
     function moduleDidLoad() {
-      HelloTutorialModule = document.getElementById('hello_nacl');
+      HelloHalideModule = document.getElementById('hello_nacl');
       updateStatus('SUCCESS');
-      window.setInterval(function(){HelloTutorialModule.postMessage(threads)},30);
+      window.setInterval(function(){HelloHalideModule.postMessage(implementation + ',' + threads)},30);
     }
 
     // The 'message' event handler.  This handler is fired when the NaCl module
@@ -35,7 +36,7 @@
     // status message indicating that the module is still loading.  Otherwise,
     // do not change the status message.
     function pageDidLoad() {
-      if (HelloTutorialModule == null) {
+      if (HelloHalideModule == null) {
         updateStatus('LOADING...');
       } else {
         // It's possible that the Native Client module onload event fired
@@ -62,19 +63,51 @@
 
     function setThreadPoolSize(size) {
        threads = size;
+       document.getElementById('thread_pool_size_label').innerHTML = size;
+    }
+
+    function setImplementation(imp) {
+       implementation = imp;
     }
 
   </script>
 </head>
 <body onload="pageDidLoad()">
 
-<h1>Halide NaCl game of life</h1>
+
+<center>
+<table cellspacing=32><tr><td colspan=2>
+<center><h1>Halide + Native Client game of life</h1></center>
+
+</td></tr><tr><td>
+
+<table cellspacing=8><tr>
+<td width=200 height=30>
+Implementation 
+</td><td>
+<select id="implementation" onchange="setImplementation(this.value)">
+<option value="0">Halide</option>
+<option value="1">C</option></select>
+</td></tr>
+
+<tr><td width=200 height=30>
+Halide thread pool size:
+</td><td>
+<input type="range" min="1" max="32" step="1" value="8" id="threads" onchange="setThreadPoolSize(this.value)"/> <a id="thread_pool_size_label">8</a>
+</td></tr>
+</table>
+
+<div id="status_field">NO-STATUS</div>
+
+</td><td width=600>
+
+<p>This demo is running a <a href="http://github.com/halide/halide">Halide</a> image processing routine compiled for x86-64 native client. The source code is <a href="halide_game_of_life.cpp">here</a>, and it compiles to <a href="halide_game_of_life.s">this assembly</a>. It's vectorized and parallelized, and on my machine is close to 10 times faster than <a href="c_game_of_life.cpp">this low-level C</a> compiled with -O3 (3ms vs 28ms). You can try it yourself below. </p>
 
 <p>This may take a while to load (it downloads native client versions of glibc and pthreads if you don't have them already). You will probably also need to enable NaCl for non-chrome-web-store sources in about://flags and restart chrome.</p>
 
-<p>This demo is running a <a href="http://github.com/halide/halide">Halide</a> image processing routine compiled for x86-64 native client. The source code is <a href="halide_game_of_life.cpp">here</a>. It's heavily vectorized and parallelized, and on my machine is about 15 times faster than unoptimized C (5ms vs 80ms). </p>
-
 <p>Move your mouse over the app to create life.</p>
+
+</td></tr><tr><td colspan=2><center>
 
 <p>
   <div id="listener">
@@ -86,15 +119,13 @@
 
     <embed name="nacl_module"
        id="hello_nacl"
-       width=1280 height=960
+       width=1024 height=1024
        src="hello_nacl.nmf"
        type="application/x-nacl" />
   </div>
 </p>
 
-<h2>Status</h2>
-<div id="status_field">NO-STATUS</div>
+</td></tr></table>
 
-<p>Thread pool size: <input type="range" min="1" max="32" step="1" value="8" id="threads" onchange="setThreadPoolSize(this.value)"/></p>
 </body>
 </html>
