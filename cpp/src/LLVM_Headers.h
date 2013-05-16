@@ -23,6 +23,7 @@
 #include <llvm/Analysis/Verifier.h>
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/JITMemoryManager.h>
 #include <llvm/PassManager.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/FormattedStream.h>
@@ -45,7 +46,6 @@
 #include <llvm/IRBuilder.h>
 #include <llvm/Intrinsics.h>
 #include <llvm/TargetTransformInfo.h>
-#include <llvm/ExecutionEngine/JITMemoryManager.h>
 
 #else
 
@@ -57,7 +57,6 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
-#include <llvm/ExecutionEngine/SectionMemoryManager.h>
 
 #endif
 

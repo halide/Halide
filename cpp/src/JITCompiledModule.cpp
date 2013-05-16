@@ -115,11 +115,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     engine_builder.setEngineKind(EngineKind::JIT);
     #ifdef USE_MCJIT
     engine_builder.setUseMCJIT(true);        
-    #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
     engine_builder.setJITMemoryManager(JITMemoryManager::CreateDefaultMemManager());
-    #else
-    engine_builder.setJITMemoryManager(new SectionMemoryManager());
-    #endif
     #else
     engine_builder.setUseMCJIT(false);
     #endif
