@@ -202,8 +202,18 @@ static buffer_t* __malloc_buffer(int32_t size) {
     return __make_buffer((uint8_t*)malloc(size), sizeof(uint8_t), size, 1, 1, 1);
 }
 
+WEAK bool halide_validate_dev_pointer(CUdeviceptr ptr) {
+    CUcontext ctx;
+    CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, ptr);
+    if (result) {
+        fprintf(stderr, "Bad device pointer %p: cuPointerGetAttribute returned %d\n", (void *)ptr, result);
+        return false;        
+    }
+    return true;
+}
+
 WEAK void halide_free_dev_buffer(buffer_t* buf) {
-    #if 0 // temp disable
+    #if 1 // temp disable
     #ifndef NDEBUG
     fprintf(stderr, "In free_dev_buffer of %p - dev: 0x%zx\n", buf, buf->dev);
     #endif
@@ -306,16 +316,6 @@ static CUdeviceptr __dev_malloc(size_t bytes) {
     fprintf(stderr, "    returned: %p\n", (void*)p);
     #endif
     return p;
-}
-
-WEAK bool halide_validate_dev_pointer(CUdeviceptr ptr) {
-    CUcontext ctx;
-    CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, ptr);
-    if (result) {
-        fprintf(stderr, "Bad device pointer %p: cuPointerGetAttribute returned %d\n", (void *)ptr, result);
-        return false;        
-    }
-    return true;
 }
 
 static inline size_t buf_size(buffer_t* buf) {
