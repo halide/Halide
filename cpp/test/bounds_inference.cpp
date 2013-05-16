@@ -13,13 +13,13 @@ int main(int argc, char **argv) {
     h.compute_root();
     g.compute_root();
 
-    /*
-    if (use_gpu()) {
-        f.cudaTile(x, y, 16, 16);
-        g.cudaTile(x, 128);
-        h.cudaTile(x, 128);
+    char *target = getenv("HL_TARGET");
+    if (target && std::string(target) == "ptx") {
+        f.cuda_tile(x, y, 16, 16);
+        g.cuda_tile(x, 128);
+        h.cuda_tile(x, 128);
     }
-    */
+    
 
     Image<int> out = f.realize(32, 32);
 

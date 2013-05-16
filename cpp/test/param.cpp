@@ -12,11 +12,10 @@ int main(int argc, char **argv) {
 
     f(x) = u;
     
-    /*
-    if (use_gpu()) {
-        f.cudaTile(x, 256);
+    char *target = getenv("HL_TARGET");
+    if (target && std::string(target) == "ptx") {
+        f.cuda_tile(x, 256);
     }
-    */
 
     u.set(17.0f);
     Image<float> out_17 = f.realize(1024);
