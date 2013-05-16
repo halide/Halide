@@ -63,6 +63,7 @@ struct BufferContents {
         } else {
             buf.host = data;
         }
+        buf.dev = 0;
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.extent[0] = x_size;
