@@ -127,6 +127,7 @@ typedef enum {
     CUDA_ERROR_UNKNOWN                        = 999
 } CUresult;
 
+#define CU_POINTER_ATTRIBUTE_CONTEXT 1
 
 CUresult CUDAAPI cuInit(unsigned int Flags);
 CUresult CUDAAPI cuDeviceGetCount(int *count);
@@ -158,6 +159,7 @@ CUresult CUDAAPI cuEventRecord(CUevent hEvent, CUstream hStream);
 CUresult CUDAAPI cuEventCreate(CUevent *phEvent, unsigned int Flags);
 CUresult CUDAAPI cuEventSynchronize(CUevent hEvent);
 CUresult CUDAAPI cuEventElapsedTime(float *pMilliseconds, CUevent hStart, CUevent hEnd);
+CUresult CUDAAPI cuPointerGetAttribute(void *result, int query, CUdeviceptr ptr);
 
 #endif //__cuda_cuda_h__
 
@@ -192,17 +194,15 @@ static buffer_t* __make_buffer(uint8_t* host, size_t elem_size,
     return buf;
 }
 
-static void __release_buffer(buffer_t* buf)
-{
+static void __release_buffer(buffer_t* buf) {
     free(buf);
 }
-static buffer_t* __malloc_buffer(int32_t size)
-{
+
+static buffer_t* __malloc_buffer(int32_t size) {
     return __make_buffer((uint8_t*)malloc(size), sizeof(uint8_t), size, 1, 1, 1);
 }
 
-WEAK void halide_free_dev_buffer(buffer_t* buf)
-{
+WEAK void halide_free_dev_buffer(buffer_t* buf) {
     #if 0 // temp disable
     #ifndef NDEBUG
     fprintf(stderr, "In free_dev_buffer of %p - dev: 0x%zx\n", buf, buf->dev);
@@ -211,6 +211,7 @@ WEAK void halide_free_dev_buffer(buffer_t* buf)
     //free(buf->host);
     //buf->host = NULL;
     if (buf->dev) {
+        assert(halide_validate_dev_pointer(buf->dev));
         CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
         buf->dev = 0;
     }
@@ -222,8 +223,7 @@ WEAK void halide_free_dev_buffer(buffer_t* buf)
     #endif
 }
 
-WEAK void halide_init_kernels(const char* ptx_src)
-{
+WEAK void halide_init_kernels(const char* ptx_src) {
     // Initialize one shared context for all Halide compiled instances
     if (!cuda_ctx) {
         // Initialize CUDA
@@ -308,6 +308,16 @@ static CUdeviceptr __dev_malloc(size_t bytes) {
     return p;
 }
 
+WEAK bool halide_validate_dev_pointer(CUdeviceptr ptr) {
+    CUcontext ctx;
+    CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, ptr);
+    if (result) {
+        fprintf(stderr, "Bad device pointer %p: cuPointerGetAttribute returned %d\n", (void *)ptr, result);
+        return false;        
+    }
+    return true;
+}
+
 static inline size_t buf_size(buffer_t* buf) {
     size_t sz = buf->elem_size;
     if (buf->extent[0]) sz *= buf->extent[0];
@@ -320,13 +330,21 @@ static inline size_t buf_size(buffer_t* buf) {
 
 WEAK void halide_dev_malloc_if_missing(buffer_t* buf) {
     #ifndef NDEBUG
-    fprintf(stderr, "dev_malloc_if_missing of %zdx%zdx%zdx%zd (%zd bytes) (buf->dev = %p) buffer\n",
+    fprintf(stderr, "dev_malloc_if_missing of %zdx%zdx%zdx%zd (%zd bytes per element) (buf->dev = %p) buffer\n",
             buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
     #endif
-    if (buf->dev) return;
+    if (buf->dev) {
+        #ifndef NDEBUG
+        assert(halide_validate_dev_pointer(buf->dev));
+        #endif
+        return;
+    }
     size_t size = buf_size(buf);
     buf->dev = __dev_malloc(size);
     assert(buf->dev);
+    #ifndef NDEBUG
+    assert(halide_validate_dev_pointer(buf->dev));
+    #endif
 }
 
 WEAK void halide_copy_to_dev(buffer_t* buf) {
@@ -336,6 +354,7 @@ WEAK void halide_copy_to_dev(buffer_t* buf) {
         #ifdef NDEBUG
         // char msg[1];
         #else
+        assert(halide_validate_dev_pointer(buf->dev));
         char msg[256];
         snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, halide_current_time() );
         #endif
@@ -353,6 +372,7 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
         #else
         char msg[256];
         snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
+        assert(halide_validate_dev_pointer(buf->dev));
         #endif
         TIME_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
     }
