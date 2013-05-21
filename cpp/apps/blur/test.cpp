@@ -181,11 +181,12 @@ extern "C" {
 
 // Convert a CIMG image to a buffer_t for halide
 buffer_t halideBufferOfImage(Image &im) {
-    buffer_t buf = {(uint8_t *)im.data(), 0, false, false, 
+    buffer_t buf = {0, (uint8_t *)im.data(), 
                     {im.width(), im.height(), 1, 1}, 
                     {1, im.width(), 0, 0}, 
                     {0, 0, 0, 0}, 
-                    sizeof(int16_t)};
+                    sizeof(int16_t), 
+                    false, false};
     return buf;
 }
 
