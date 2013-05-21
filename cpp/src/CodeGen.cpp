@@ -368,17 +368,21 @@ void CodeGen::sym_pop(const string &name) {
     symbol_table.pop(name);
 }
 
-llvm::Value *CodeGen::sym_get(const string &name) {
+llvm::Value *CodeGen::sym_get(const string &name, bool must_succeed) {
     // look in the symbol table
     if (!symbol_table.contains(name)) {
-        std::cerr << "Symbol not found: " << name << "\n";
-
-        if (log::debug_level > 0) {
-            std::cerr << "The following names are in scope:\n";
-            std::cerr << symbol_table << "\n";
+        if (must_succeed) {
+            std::cerr << "Symbol not found: " << name << "\n";
+            
+            if (log::debug_level > 0) {
+                std::cerr << "The following names are in scope:\n";
+                std::cerr << symbol_table << "\n";
+            }
+            
+            assert(false);
+        } else {
+            return NULL;
         }
-
-        assert(false);
     }
     return symbol_table.get(name);
 }
@@ -1305,7 +1309,7 @@ void CodeGen::visit(const For *op) {
 
         // Find every symbol that the body of this loop refers to
         // and dump it into a closure
-        Closure closure(op->body, op->name);
+        Closure closure = Closure::make(op->body, op->name);
 
         // Allocate a closure
         StructType *closure_t = closure.build_type(context);

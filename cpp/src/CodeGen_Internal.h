@@ -37,8 +37,10 @@ protected:
     void visit(const Variable *op);
 
 public:
-    /** Traverse a statement and find all references to external symbols. */
-    Closure(Stmt s, const std::string &loop_variable);
+    /** Traverse a statement and find all references to external
+     * symbols. Note that this can't be the constructor, because
+     * virtual function dispatch from a constructor is wonky. */
+    static Closure make(Stmt s, const std::string &loop_variable);
 
     /** External variables referenced. */
     std::map<std::string, Type> vars;

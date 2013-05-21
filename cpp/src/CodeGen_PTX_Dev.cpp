@@ -55,8 +55,8 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
     
 
     // Make the initial basic block
-    BasicBlock *block = BasicBlock::Create(*context, "entry", function);
-    builder->SetInsertPoint(block);
+    entry_block = BasicBlock::Create(*context, "entry", function);
+    builder->SetInsertPoint(entry_block);
 
     // Put the arguments in the symbol table
     {
@@ -76,6 +76,12 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
         }
     }
 
+    // We won't end the entry block yet, because we'll want to add
+    // some allocas to it later if there are local allocations. Start
+    // a new block to put all the code.
+    BasicBlock *body_block = BasicBlock::Create(*context, "body", function);
+    builder->SetInsertPoint(body_block);
+
     log(1) << "Generating llvm bitcode...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
@@ -83,6 +89,10 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
 
     // Now we need to end the function
     builder->CreateRetVoid();
+
+    // Make the entry block point to the body block
+    builder->SetInsertPoint(entry_block);
+    builder->CreateBr(body_block);
 
     // Add the nvvm annotation that it is a kernel function. 
     MDNode *mdNode = MDNode::get(*context, vec((Value*)function,
@@ -126,25 +136,28 @@ void CodeGen_PTX_Dev::init_module() {
 
     module->setModuleIdentifier("<halide_ptx>");
 
-    simt_intrinsics["threadidx"] = "llvm.nvvm.read.ptx.sreg.tid.x";
-    simt_intrinsics["threadidy"] = "llvm.nvvm.read.ptx.sreg.tid.y";
-    simt_intrinsics["threadidz"] = "llvm.nvvm.read.ptx.sreg.tid.z";
-    simt_intrinsics["threadidw"] = "llvm.nvvm.read.ptx.sreg.tid.w";
-    simt_intrinsics["blockidx"] = "llvm.nvvm.read.ptx.sreg.ctaid.x";
-    simt_intrinsics["blockidy"] = "llvm.nvvm.read.ptx.sreg.ctaid.y";
-    simt_intrinsics["blockidz"] = "llvm.nvvm.read.ptx.sreg.ctaid.z";
-    simt_intrinsics["blockidw"] = "llvm.nvvm.read.ptx.sreg.ctaid.w";
-
     delete bitcode_buffer;
 }
 
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
-    string n = base_name(name);
-    if (simt_intrinsics.count(n)) {
-        return simt_intrinsics[n];
-    } else {
-        return NULL;
+    if (ends_with(name, ".threadidx")) {
+        return "llvm.nvvm.read.ptx.sreg.tid.x";
+    } else if (ends_with(name, ".threadidy")) {
+        return "llvm.nvvm.read.ptx.sreg.tid.y";        
+    } else if (ends_with(name, ".threadidz")) {
+        return "llvm.nvvm.read.ptx.sreg.tid.z";
+    } else if (ends_with(name, ".threadidw")) {
+        return "llvm.nvvm.read.ptx.sreg.tid.w";
+    } else if (ends_with(name, ".blockidx")) {
+        return "llvm.nvvm.read.ptx.sreg.ctaid.x";
+    } else if (ends_with(name, ".blockidy")) {
+        return "llvm.nvvm.read.ptx.sreg.ctaid.y";
+    } else if (ends_with(name, ".blockidz")) {
+        return "llvm.nvvm.read.ptx.sreg.ctaid.z";
+    } else if (ends_with(name, ".blockidw")) {
+        return "llvm.nvvm.read.ptx.sreg.ctaid.w";
     }
+    assert(false && "simt_intrinsic called on bad variable name");
 }
 
 bool CodeGen_PTX_Dev::is_simt_var(const string &name) {
@@ -194,39 +207,65 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 }
 
 void CodeGen_PTX_Dev::visit(const Pipeline *n) {
-    CodeGen::visit(n);
+    n->produce.accept(this);
+
+    // Grab the syncthreads intrinsic, or declare it if it doesn't exist yet
+    llvm::Function *syncthreads = module->getFunction("llvm.nvvm.barrier0");
+    if (!syncthreads) {
+        FunctionType *func_t = FunctionType::get(llvm::Type::getVoidTy(*context), vector<llvm::Type *>(), false);    
+        syncthreads = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.nvvm.barrier0", module);
+        syncthreads->setCallingConv(CallingConv::C);
+        log(2) << "Declaring syncthreads intrinsic\n";
+    }
+
+    if (n->update.defined()) {
+        // If we're producing into shared or global memory we need a
+        // syncthreads before continuing.
+        builder->CreateCall(syncthreads, std::vector<Value *>());
+        n->update.accept(this);
+    }
+
+    builder->CreateCall(syncthreads, std::vector<Value *>());
+    n->consume.accept(this);
 }
 
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
-    int bytes_per_element = alloc->type.bits / 8;
-    int stack_size = 0;
-    bool on_stack = false;
-    if (const IntImm *size = alloc->size.as<IntImm>()) {            
-        stack_size = size->value;
-        on_stack = true;
-    }
-
     log(1) << "Allocate " << alloc->name << " on device\n";
-    assert(on_stack && "PTX device malloc with non-const size");
 
     llvm::Type *llvm_type = llvm_type_of(alloc->type);
-    Value *ptr;
 
-    // In the future, we may want to construct an entire buffer_t here
     string allocation_name = alloc->name + ".host";
     log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
-    assert(false && "Device allocation not yet implemented");
+    // If this is a shared allocation, there should already be a
+    // pointer into shared memory in the symbol table.    
+    Value *ptr;
+    Value *offset = sym_get(alloc->name + ".shared_mem", false);
 
-    // Do a 32-byte aligned alloca
-    int total_bytes = stack_size * bytes_per_element;
-    ptr = builder->CreateAlloca(i32, ConstantInt::get(i32, total_bytes)); 
-    ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
+    if (offset) {
+        // Bit-cast it to a shared memory pointer (address-space 3 is shared memory)
+        ptr = builder->CreateIntToPtr(offset, PointerType::get(llvm_type, 3));
+    } else {
+        // Otherwise jump back to the entry and generate an
+        // alloca. Note that by jumping back we're rendering any
+        // expression we carry back meaningless, so we had better only
+        // be dealing with constants here.
+        const IntImm *size = alloc->size.as<IntImm>();
+        assert(size && "Only fixed-size allocations are supported on the gpu. Try storing into shared memory instead.");
+
+        BasicBlock *here = builder->GetInsertBlock();
+
+        builder->SetInsertPoint(entry_block);
+        ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size->value));
+        builder->SetInsertPoint(here);
+    }
+
 
     sym_push(allocation_name, ptr);
     codegen(alloc->body);
     sym_pop(allocation_name);
+
 }
 
 string CodeGen_PTX_Dev::march() const {

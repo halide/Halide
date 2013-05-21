@@ -7,6 +7,10 @@
 
 #include "CodeGen.h"
 
+namespace llvm {
+class BasicBlock;
+}
+
 namespace Halide { 
 namespace Internal {
 
@@ -32,6 +36,10 @@ public:
 protected:
     using CodeGen::visit;
 
+    /** We hold onto the basic block at the start of the device
+     * function in order to inject allocas */
+    llvm::BasicBlock *entry_block;
+
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const For *);
@@ -46,9 +54,9 @@ protected:
 
     std::string compile_to_ptx();
 
+    /** Map from simt variable names (e.g. foo.blockidx) to the llvm
+     * ptx intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
-
-    std::map<std::string, std::string> simt_intrinsics;
 };
 
 }}

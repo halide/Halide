@@ -29,7 +29,7 @@
 
 extern "C" {
 
-//#define NDEBUG // disable logging/asserts for performance
+#define NDEBUG // disable logging/asserts for performance
 
 #ifdef NDEBUG
 #define CHECK_CALL(c,str) (c)
@@ -174,6 +174,7 @@ CUcontext WEAK cuda_ctx = 0;
 static CUmodule __mod;
 static CUevent __start, __end;
 
+/*
 // Used to create buffer_ts to track internal allocations caused by our runtime
 // TODO: look into cuMemAllocHost for page-locked host memory, allowing easy transfer?
 // TODO: make Buffer args typed, so elem_size can be statically inferred?
@@ -202,6 +203,8 @@ static buffer_t* __malloc_buffer(int32_t size) {
     return __make_buffer((uint8_t*)malloc(size), sizeof(uint8_t), size, 1, 1, 1);
 }
 
+*/
+
 WEAK bool halide_validate_dev_pointer(CUdeviceptr ptr) {
     CUcontext ctx;
     CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, ptr);
@@ -213,13 +216,11 @@ WEAK bool halide_validate_dev_pointer(CUdeviceptr ptr) {
 }
 
 WEAK void halide_free_dev_buffer(buffer_t* buf) {
-    #if 1 // temp disable
+    #if 1 // Switch this to zero to temporarily disable freeing
+
     #ifndef NDEBUG
     fprintf(stderr, "In free_dev_buffer of %p - dev: 0x%zx\n", buf, buf->dev);
     #endif
-    //assert(buf->host);
-    //free(buf->host);
-    //buf->host = NULL;
     if (buf->dev) {
         assert(halide_validate_dev_pointer(buf->dev));
         CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
