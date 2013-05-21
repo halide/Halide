@@ -32,10 +32,15 @@ public:
     bool result;
     string var;
 
-    ExprDependsOnVar(Expr e, string v) : result(false), var(v) {        
-        if (e.defined()) e.accept(this);
+    ExprDependsOnVar(string v) : result(false), var(v) {        
     }
 };
+
+bool expr_depends_on_var(Expr e, string v) {
+    ExprDependsOnVar depends(v);
+    e.accept(&depends);
+    return depends.result;
+}
 
 // Perform sliding window optimization for a function over a
 // particular serial for loop
@@ -65,13 +70,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 Expr this_min = scope.get(min_name);
                 Expr this_extent = scope.get(extent_name);
 
-                if (ExprDependsOnVar(this_extent, loop_var).result) {
+                if (expr_depends_on_var(this_extent, loop_var)) {
                     min = Expr();
                     extent = Expr();
                     break;
                 }
 
-                if (ExprDependsOnVar(this_min, loop_var).result) {
+                if (expr_depends_on_var(this_min, loop_var)) {
                     if (min.defined()) {
                         min = Expr();
                         extent = Expr();
