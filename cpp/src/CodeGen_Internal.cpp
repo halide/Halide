@@ -68,8 +68,10 @@ void Closure::visit(const Variable *op) {
     }
 }
 
-Closure Closure::make(Stmt s, const string &loop_variable) {
+Closure Closure::make(Stmt s, const string &loop_variable, bool track_buffers, llvm::StructType *buffer_t) {
     Closure c;
+    c.buffer_t = buffer_t;
+    c.track_buffers = track_buffers;
     c.ignore.push(loop_variable, 0);
     s.accept(&c);
     return c;
@@ -83,9 +85,16 @@ vector<llvm::Type*> Closure::llvm_types(LLVMContext *context) {
     }
     for (iter = reads.begin(); iter != reads.end(); ++iter) {
         res.push_back(llvm_type_of(context, iter->second)->getPointerTo());
+        // Some backends (ptx) track more than a host pointer
+        if (track_buffers) {
+            res.push_back(buffer_t->getPointerTo());
+        }
     }
     for (iter = writes.begin(); iter != writes.end(); ++iter) {
         res.push_back(llvm_type_of(context, iter->second)->getPointerTo());
+        if (track_buffers) {
+            res.push_back(buffer_t->getPointerTo());
+        }
     }
     return res;
 }
@@ -100,10 +109,13 @@ vector<string> Closure::names() {
     for (iter = reads.begin(); iter != reads.end(); ++iter) {
         log(2) << "reads: " << iter->first << "\n";
         res.push_back(iter->first + ".host");
+        // Some backends (ptx) track a whole buffer as well as a host pointer
+        if (track_buffers) res.push_back(iter->first + ".buffer");
     }
     for (iter = writes.begin(); iter != writes.end(); ++iter) {
         log(2) << "writes: " << iter->first << "\n";
         res.push_back(iter->first + ".host");
+        if (track_buffers) res.push_back(iter->first + ".buffer");
     }
     return res;
 }
@@ -121,18 +133,21 @@ void Closure::pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> *bu
     vector<string> nm = names();
     vector<llvm::Type*> ty = llvm_types(&context);
     for (size_t i = 0; i < nm.size(); i++) {
-        Value *val = src.get(nm[i]);
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx++);
-        if (val->getType() != ty[i]) {
-            val = builder->CreateBitCast(val, ty[i]);
-        }            
-        builder->CreateStore(val, ptr);
+        if (!ends_with(nm[i], ".buffer") || src.contains(nm[i])) {
+            Value *val = src.get(nm[i]);
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx);
+            if (val->getType() != ty[i]) {
+                val = builder->CreateBitCast(val, ty[i]);
+            }            
+            builder->CreateStore(val, ptr);
+        }
+        idx++;
     }
 }
 
 void Closure::unpack_struct(Scope<Value *> &dst, 
-                                     Value *src, 
-                                     IRBuilder<> *builder) {
+                            Value *src, 
+                            IRBuilder<> *builder) {
     // src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
     LLVMContext &context = builder->getContext();

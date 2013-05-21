@@ -353,13 +353,13 @@ void CodeGen_PTX_Host::visit(const For *loop) {
         for (it = c.reads.begin(); it != c.reads.end(); ++it) {
             log(4) << "halide_dev_malloc_if_missing " << it->first << " (read)\n";
             log(4) << "halide_copy_to_dev " << it->first << "\n";
-            Value *buf = sym_get(it->first);
+            Value *buf = sym_get(it->first + ".buffer");
             builder->CreateCall(dev_malloc_if_missing_fn, buf);
             builder->CreateCall(copy_to_dev_fn, buf);
         }
         for (it = c.writes.begin(); it != c.writes.end(); ++it) {
             log(4) << "halide_dev_malloc_if_missing " << it->first << " (write)\n";
-            Value *buf = sym_get(it->first);
+            Value *buf = sym_get(it->first + ".buffer");
             builder->CreateCall(dev_malloc_if_missing_fn, buf);
         }
 
@@ -380,11 +380,14 @@ void CodeGen_PTX_Host::visit(const For *loop) {
         for (int i = 0; i < num_args; i++) {
             // get the closure argument
             string name = closure_args[i].name;
-            Value *val = sym_get(name);
+            Value *val;
 
-            // if it's a buffer, dereference the dev handle
             if (closure_args[i].is_buffer) {
-                val = buffer_dev(val);
+                // If it's a buffer, dereference the dev handle                
+                val = buffer_dev(sym_get(name + ".buffer"));
+            } else {
+                // Otherwise just look up the symbol
+                val = sym_get(name);
             }
 
             // allocate stack space to mirror the closure element
@@ -417,7 +420,7 @@ void CodeGen_PTX_Host::visit(const For *loop) {
         // mark written buffers dirty
         for (it = c.writes.begin(); it != c.writes.end(); ++it) {
             log(4) << "setting dev_dirty " << it->first << " (write)\n";
-            Value *buf = sym_get(it->first);
+            Value *buf = sym_get(it->first + ".buffer");
             builder->CreateStore(ConstantInt::get(i8, 1), buffer_dev_dirty_ptr(buf));
         }
 
@@ -475,11 +478,11 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
 
     log(3) << "Pushing allocation called " << alloc->name << " onto the symbol table\n";
 
-    sym_push(alloc->name, buf);
+    sym_push(alloc->name + ".buffer", buf);
     sym_push(alloc->name + ".host", ptr);
     codegen(alloc->body);
     sym_pop(alloc->name + ".host");
-    sym_pop(alloc->name);
+    sym_pop(alloc->name + ".buffer");
 
     // Call halide_free_dev_buffer to free device memory, if needed
     llvm::Function *free_buf_fn = module->getFunction("halide_free_dev_buffer");
@@ -495,7 +498,7 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
 }
 
 void CodeGen_PTX_Host::visit(const Pipeline *n) {
-    Value *buf = sym_get(n->name);
+    Value *buf = sym_get(n->name + ".buffer");
 
     Closure produce = Closure::make(n->produce, "", true);
     Closure consume = Closure::make(n->consume, "", true);

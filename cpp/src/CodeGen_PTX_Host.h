@@ -40,6 +40,9 @@ protected:
     void visit(const Allocate *);
     void visit(const Pipeline *);
     // @}
+
+    // We track buffer_t's for each allocation in order to manage dirty bits
+    bool track_buffers() {return true;}
     
     //** Runtime function handles */
     // @{
