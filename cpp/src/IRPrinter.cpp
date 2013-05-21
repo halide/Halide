@@ -90,7 +90,7 @@ void IRPrinter::test() {
     std::cout << "IRPrinter test passed" << std::endl;
 }
 
-ostream &operator<<(ostream &out, For::ForType type) {
+ostream &operator<<(ostream &out, const For::ForType &type) {
     switch (type) {
     case For::Serial:
         out << "for";

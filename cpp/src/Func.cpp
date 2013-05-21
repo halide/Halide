@@ -206,7 +206,22 @@ void ScheduleHandle::set_dim_type(Var var, For::ForType t) {
         }
     }
         
-    assert(found && "Could not find dimension in argument list for function");
+    if (!found) {
+        std::cerr << "Could not find dimension " 
+                  << var.name() 
+                  << " to mark as " << t
+                  << " in argument list for function\n";
+        dump_argument_list();
+        assert(false);
+    }
+}
+
+void ScheduleHandle::dump_argument_list() {
+    std::cerr << "Argument list:";
+    for (size_t i = 0; i < schedule.dims.size(); i++) {
+        std::cerr << " " << schedule.dims[i].var;
+    }
+    std::cerr << "\n";
 }
 
 ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor) {
@@ -229,7 +244,14 @@ ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor
         }
     }
         
-    assert(found && "Could not find split dimension in argument list for function");
+    if (!found) {
+        std::cerr << "Could not find split dimension in argument list: " 
+                  << old.name() 
+                  << "\n";
+        dump_argument_list();
+        assert(false);
+    }
+
         
     // Add the split to the splits list
     Schedule::Split split = {old_name, outer_name, inner_name, factor, false};
@@ -247,8 +269,14 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
             dims[i].var += "." + new_var.name();
         }
     }
-        
-    assert(found && "Could not find rename dimension in argument list for function");
+     
+    if (!found) {
+        std::cerr << "Could not find rename dimension in argument list: " 
+                  << old_var.name() 
+                  << "\n";
+        dump_argument_list();
+        assert(false);
+    }
         
     // Add the rename to the splits list
     Schedule::Split split = {old_var.name(), old_var.name() + "." + new_var.name(), "", 1, true};

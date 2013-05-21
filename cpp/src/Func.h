@@ -133,6 +133,7 @@ public:
 class ScheduleHandle {
     Internal::Schedule &schedule;
     void set_dim_type(Var var, Internal::For::ForType t);
+    void dump_argument_list();
 public:
     ScheduleHandle(Internal::Schedule &s) : schedule(s) {}
 
