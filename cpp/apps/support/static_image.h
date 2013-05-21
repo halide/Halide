@@ -78,10 +78,10 @@ public:
 
     T *data() {return (T*)contents->buf.host;}
 
-    void mark_host_dirty() {
+    void set_host_dirty(bool dirty = true) {
         // If you use data directly, you must also call this so that
         // gpu-side code knows that it needs to copy stuff over.
-        contents->buf.host_dirty = true;
+        contents->buf.host_dirty = dirty;
     }
 
     void copy_to_host() {
@@ -105,20 +105,18 @@ public:
         }
     }
 
-    // Warning. This is slower than you might expect
+    /** Make sure you've called copy_to_host before you start
+     * accessing pixels directly. */
     T &operator()(int x, int y = 0, int c = 0) {
-        copy_to_host();
-        mark_host_dirty();
-
         T *ptr = (T *)contents->buf.host;
         int w = contents->buf.extent[0];
         int h = contents->buf.extent[1];
         return ptr[(c*h + y)*w + x];
     }
 
+    /** Make sure you've called copy_to_host before you start
+     * accessing pixels directly */
     const T &operator()(int x, int y = 0, int c = 0) const {
-        copy_to_host();
-
         const T *ptr = (const T *)contents->buf.host;
         return ptr[c*contents->buf.stride[2] + y*contents->buf.stride[1] + x*contents->buf.stride[0]];
     }
