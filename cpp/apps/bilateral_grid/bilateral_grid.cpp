@@ -30,8 +30,11 @@ int main(int argc, char **argv) {
     Expr val = clamped(x * s_sigma + r.x - s_sigma/2, y * s_sigma + r.y - s_sigma/2);
     val = clamp(val, 0.0f, 1.0f);
     Expr zi = cast<int>(val * (1.0f/r_sigma) + 0.5f);
-    Func grid("grid");
-    grid(x, y, zi, c) += select(c == 0, val, 1.0f);
+    Func grid("grid"), histogram("histogram");    
+    histogram(x, y, zi, c) += select(c == 0, val, 1.0f);
+
+    // Introduce a dummy function, so we can schedule the histogram within it
+    grid(x, y, z, c) = histogram(x, y, z, c);
 
     // Blur the grid using a five-tap filter
     Func blurx("blurx"), blury("blury"), blurz("blurz");
@@ -59,12 +62,29 @@ int main(int argc, char **argv) {
     Func bilateral_grid("bilateral_grid");
     bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
-    grid.compute_root();
-    grid.update().reorder(c, x, y).parallel(y);
-    blurx.compute_root().parallel(z).vectorize(x, 4);
-    blury.compute_root().parallel(z).vectorize(x, 4);
-    blurz.compute_root().parallel(z).vectorize(x, 4);
-    bilateral_grid.compute_root().parallel(y).vectorize(x, 4);
+    char *target = getenv("HL_TARGET");
+    if (target && std::string(target) == "ptx") {
+
+        // GPU schedule
+        grid.compute_root().reorder(z, c, x, y).cuda_tile(x, y, 8, 8);
+
+        // Compute the histogram into shared memory before spilling it to global memory
+        histogram.store_at(grid, Var("blockidx")).compute_at(grid, Var("threadidx"));
+
+        blurx.compute_root().cuda_tile(x, y, z, 16, 16, 1);
+        blury.compute_root().cuda_tile(x, y, z, 16, 16, 1);
+        blurz.compute_root().cuda_tile(x, y, z, 8, 8, 4);
+        bilateral_grid.compute_root().cuda_tile(x, y, s_sigma, s_sigma);
+    } else {
+
+        // CPU schedule
+        grid.compute_root().reorder(c, z, x, y).parallel(y);
+        histogram.compute_at(grid, x).unroll(c);
+        blurx.compute_root().parallel(z).vectorize(x, 4);
+        blury.compute_root().parallel(z).vectorize(x, 4);
+        blurz.compute_root().parallel(z).vectorize(x, 4);
+        bilateral_grid.compute_root().parallel(y).vectorize(x, 4);
+    }
 
     bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input);
 
