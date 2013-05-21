@@ -64,7 +64,8 @@ StmtCompiler::StmtCompiler(string arch) {
         std::cerr << "Unknown target " << arch << '\n';
         std::cerr << "Known targets are: "
                   << "x86 x86-avx x86-32 arm arm-android " 
-                  << "x86-nacl x86-32-nacl x86-32-sse41-nacl arm-nacl"
+                  << "x86-nacl x86-32-nacl x86-32-sse41-nacl arm-nacl "
+                  << "ptx"
 		  << std::endl;
         assert(false);
     }

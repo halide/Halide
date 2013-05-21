@@ -10,6 +10,8 @@
 #include "integer_division_table.h"
 #include "CodeGen_Internal.h"
 #include "Util.h"
+#include "Bounds.h"
+#include "Simplify.h"
 
 #include <dlfcn.h>
 #include <unistd.h>
@@ -31,9 +33,16 @@ using namespace llvm;
 
 bool CodeGen_PTX_Host::lib_cuda_linked = false;
 
-class CodeGen_PTX_Host::Closure : public Internal::Closure {
+class CodeGen_PTX_Host::Closure : public Halide::Internal::Closure {
 public:
-    Closure(Stmt s, const std::string &lv, bool skip_gpu_loops=false) : Internal::Closure(s, lv), skip_gpu_loops(skip_gpu_loops) {}
+    static Closure make(Stmt s, const std::string &lv, bool skip_gpu_loops=false) {
+        Closure c;
+        c.skip_gpu_loops = skip_gpu_loops;
+        c.ignore.push(lv, 0);
+        s.accept(&c);
+        return c;
+    }
+
     vector<Argument> arguments();
 
 protected:
@@ -44,48 +53,111 @@ protected:
     bool skip_gpu_loops;
 };
 
+// Sniff the contents of a kernel to extracts the bounds of all the
+// thread indices (so we know how many threads to launch), and the max
+// size of each allocation (so we know how much local and shared
+// memory to allocate).
 class ExtractBounds : public IRVisitor {
 public:
-    Expr width;
-    ExtractBounds(string name) : width(new IntImm(1)), name(name) {}
+    
+    Expr thread_extent[4];
+    Expr block_extent[4];
+    map<string, Expr> shared_allocations;
+    map<string, Expr> local_allocations;
 
-private:
-    string name;
-    using IRVisitor::visit;
-
-    bool is_identity(Expr e) {
-        if (const IntImm *i = e.as<IntImm>()) {
-            if  (i->value == 1) {
-                return true;
+    ExtractBounds(Stmt s) : inside_thread(false) {
+        s.accept(this);
+        for (int i = 0; i < 4; i++) {
+            if (!thread_extent[i].defined()) {
+                thread_extent[i] = 1;
+            } else {
+                thread_extent[i] = simplify(thread_extent[i]);
+            }
+            if (!block_extent[i].defined()) {
+                block_extent[i] = 1;
+            } else {
+                block_extent[i] = simplify(block_extent[i]);
             }
         }
-        return false;
     }
 
+private:
+
+    bool inside_thread;
+    Scope<Interval> scope;
+
+    using IRVisitor::visit;
+
     Expr unify(Expr a, Expr b) {
-        log(3) << "unify " << a << " <> " << b << "\n";
-        if (is_identity(a)) return b;
-        if (is_identity(b)) return a;
-        return new Max(a, b);
+        if (!a.defined()) return b;
+        if (!b.defined()) return a;
+        return max(a, b);
     }
 
     void visit(const For *loop) {
-        log(3) << "ExtractBounds(" << name << ") on " << loop->name << "\n";
-        if (base_name(loop->name) == name) {
-            // fold in width of this loop
-            width = unify(width, loop->extent);
-        } else {
-            // recurse
-            IRVisitor::visit(loop);
+        // What's the largest the extent could be?
+        Expr max_extent = bounds_of_expr_in_scope(loop->extent, scope).max;
+
+        bool old_inside_thread = inside_thread;
+
+        if (ends_with(loop->name, ".threadidx")) {
+            thread_extent[0] = unify(thread_extent[0], max_extent);            
+            inside_thread = true;
+        } else if (ends_with(loop->name, ".threadidy")) {
+            thread_extent[1] = unify(thread_extent[1], max_extent);
+            inside_thread = true;
+        } else if (ends_with(loop->name, ".threadidz")) {
+            thread_extent[2] = unify(thread_extent[2], max_extent);
+            inside_thread = true;
+        } else if (ends_with(loop->name, ".threadidw")) {
+            thread_extent[3] = unify(thread_extent[3], max_extent);
+            inside_thread = true;
+        } else if (ends_with(loop->name, ".blockidx")) {
+            block_extent[0] = unify(block_extent[0], max_extent);
+        } else if (ends_with(loop->name, ".blockidy")) {
+            block_extent[1] = unify(block_extent[1], max_extent);
+        } else if (ends_with(loop->name, ".blockidz")) {
+            block_extent[2] = unify(block_extent[2], max_extent);
+        } else if (ends_with(loop->name, ".blockidw")) {
+            block_extent[3] = unify(block_extent[3], max_extent);
         }
+        
+        // What's the largest the loop variable could be?
+        Expr max_loop = bounds_of_expr_in_scope(loop->min + loop->extent - 1, scope).max;
+        Expr min_loop = bounds_of_expr_in_scope(loop->min, scope).min;
+
+        scope.push(loop->name, Interval(min_loop, max_loop));
+
+        // Recurse into the loop body
+        loop->body.accept(this);
+
+        scope.pop(loop->name);
+
+        inside_thread = old_inside_thread;
+    }
+
+    void visit(const LetStmt *let) {
+        Interval bounds = bounds_of_expr_in_scope(let->value, scope);
+        scope.push(let->name, bounds);
+        let->body.accept(this);
+        scope.pop(let->name);
+    }
+
+    void visit(const Allocate *allocate) {
+        map<string, Expr> &table = inside_thread ? local_allocations : shared_allocations;
+
+        // We should only encounter each allocate once
+        assert(table.find(allocate->name) == table.end());
+
+        // What's the largest this allocation could be (in bytes)?
+        Expr elements = bounds_of_expr_in_scope(allocate->size, scope).max;
+        int bytes_per_element = allocate->type.bits/8;
+        table[allocate->name] = simplify(elements * bytes_per_element);
+
+        allocate->body.accept(this);
+
     }
 };
-
-Expr extract_bounds(string name, Stmt s) {
-    ExtractBounds eb(name);
-    s.accept(&eb);
-    return eb.width;
-}
 
 vector<Argument> CodeGen_PTX_Host::Closure::arguments() {
     vector<Argument> res;
@@ -105,17 +177,18 @@ vector<Argument> CodeGen_PTX_Host::Closure::arguments() {
     return res;
 }
 
+
 void CodeGen_PTX_Host::Closure::visit(const For *loop) {
-    if (skip_gpu_loops && CodeGen_PTX_Dev::is_simt_var(loop->name)) {
+    if (skip_gpu_loops && 
+        CodeGen_PTX_Dev::is_simt_var(loop->name)) {
         return;
     }
-    Closure::visit(loop);
+    Internal::Closure::visit(loop);
 }
 
 
-CodeGen_PTX_Host::CodeGen_PTX_Host(uint32_t options)
-    : CodeGen_X86(options)
-{
+CodeGen_PTX_Host::CodeGen_PTX_Host(uint32_t options) :
+    CodeGen_X86(options) {
 }
 
 void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &args) {
@@ -203,9 +276,9 @@ void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (dlsym(NULL, "cuInit")) {
-            log(0) << "This program was linked to cuda already\n";
+            log(1) << "This program was linked to cuda already\n";
         } else {
-            log(0) << "Looking for cuda shared library...\n";
+            log(1) << "Looking for cuda shared library...\n";
             string error;
             llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
             if (!error.empty()) {
@@ -223,26 +296,57 @@ void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
 
 void CodeGen_PTX_Host::visit(const For *loop) {
     if (CodeGen_PTX_Dev::is_simt_var(loop->name)) {
-        log(0) << "Kernel launch: " << loop->name << "\n";
+        log(2) << "Kernel launch: " << loop->name << "\n";
 
         // compute kernel launch bounds
-        Expr n_tid_x   = extract_bounds("threadidx", loop);
-        Expr n_tid_y   = extract_bounds("threadidy", loop);
-        Expr n_tid_z   = extract_bounds("threadidz", loop);
-        Expr n_tid_w   = extract_bounds("threadidw", loop);
-        Expr n_blkid_x = extract_bounds("blockidx", loop);
-        Expr n_blkid_y = extract_bounds("blockidy", loop);
-        Expr n_blkid_z = extract_bounds("blockidz", loop);
-        Expr n_blkid_w = extract_bounds("blockidw", loop);
-        log(0) << "Kernel bounds: ("
-            << n_tid_x << ", " << n_tid_y << ", " << n_tid_z << ", " << n_tid_w << ") threads, ("
-            << n_blkid_x << ", " << n_blkid_y << ", " << n_blkid_z << ", " << n_blkid_w << ") blocks\n";
+        ExtractBounds bounds(loop);
+
+        Expr n_tid_x   = bounds.thread_extent[0];
+        Expr n_tid_y   = bounds.thread_extent[1];
+        Expr n_tid_z   = bounds.thread_extent[2];
+        Expr n_tid_w   = bounds.thread_extent[3];
+        Expr n_blkid_x = bounds.block_extent[0];
+        Expr n_blkid_y = bounds.block_extent[1];
+        Expr n_blkid_z = bounds.block_extent[2];
+        Expr n_blkid_w = bounds.block_extent[3];
+        log(2) << "Kernel bounds: ("
+               << n_tid_x << ", " << n_tid_y << ", " << n_tid_z << ", " << n_tid_w << ") threads, ("
+               << n_blkid_x << ", " << n_blkid_y << ", " << n_blkid_z << ", " << n_blkid_w << ") blocks\n";
 
         // compute a closure over the state passed into the kernel
-        Closure c(loop, loop->name);
+        Closure c = Closure::make(loop, loop->name);
+
+        // Note that we currently do nothing with the thread-local
+        // allocations found. Currently we only handle const-sized
+        // ones, and we handle those by generating allocas at the top
+        // of the device kernel.
+
+        // Compute and pass in offsets into shared memory for all the internal allocations
+        Expr n_threads = n_tid_x * n_tid_y * n_tid_z * n_tid_w;
+        Value *shared_mem_size = ConstantInt::get(i32, 0);
+        vector<string> shared_mem_allocations;
+        for (map<string, Expr>::iterator iter = bounds.shared_allocations.begin(); 
+             iter != bounds.shared_allocations.end(); iter++) {
+
+            log(2) << "Internal shared allocation" << iter->first 
+                   << " has max size " << iter->second << "\n";
+            
+            Value *size = codegen(iter->second);
+
+            string name = iter->first + ".shared_mem";
+            shared_mem_allocations.push_back(name);
+            sym_push(name, shared_mem_size);
+            c.vars[name] = Int(32);
+            
+            shared_mem_size = builder->CreateAdd(shared_mem_size, size);
+        }        
 
         // compile the kernel
-        cgdev.compile(loop, "kernel", c.arguments());
+        string kernel_name = "kernel_" + loop->name;
+        for (size_t i = 0; i < kernel_name.size(); i++) {
+            if (kernel_name[i] == '.') kernel_name[i] = '_';
+        }
+        cgdev.compile(loop, kernel_name, c.arguments());
 
         // set up the buffer arguments for the device
         map<string, Type>::iterator it;
@@ -260,14 +364,15 @@ void CodeGen_PTX_Host::visit(const For *loop) {
         }
 
         // get the actual name of the generated kernel for this loop
-        string kernel_name = cgdev.function->getName();
-        log(0) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
+        kernel_name = cgdev.function->getName();
+        log(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
         Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
 
         // build the kernel arguments array
         vector<Argument> closure_args = c.arguments();
         llvm::Type *arg_t = i8->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
+        // TODO: save the stack?
         Value *gpu_args_arr = builder->CreateAlloca(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
                                                     NULL,
                                                     kernel_name + "_args");
@@ -284,6 +389,7 @@ void CodeGen_PTX_Host::visit(const For *loop) {
 
             // allocate stack space to mirror the closure element
             // TODO: this should be unnecessary!
+            // TODO: save the stack?
             Value *ptr = builder->CreateAlloca(val->getType(), NULL, name+".stack");
             // store the closure value into the stack space
             builder->CreateStore(val, ptr);
@@ -294,11 +400,16 @@ void CodeGen_PTX_Host::visit(const For *loop) {
                                  builder->CreateConstGEP2_32(gpu_args_arr, 0, i));
         }
 
+        // Figure out how much shared memory we need to allocate, and
+        // build offsets into it for the internal allocations
+
+        // TODO: only three dimensions can be passed to
+        // cuLaunchKernel. How should we handle blkid_w?
         Value *launch_args[] = {
             entry_name_str,
             codegen(n_blkid_x), codegen(n_blkid_y), codegen(n_blkid_z),
             codegen(n_tid_x), codegen(n_tid_y), codegen(n_tid_z),
-            ConstantInt::get(i32, 0), // TODO: shared memory bytes
+            shared_mem_size, 
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref")
         };
         builder->CreateCall(dev_run_fn, launch_args);
@@ -308,6 +419,11 @@ void CodeGen_PTX_Host::visit(const For *loop) {
             log(4) << "setting dev_dirty " << it->first << " (write)\n";
             Value *buf = sym_get(it->first);
             builder->CreateStore(ConstantInt::get(i8, 1), buffer_dev_dirty_ptr(buf));
+        }
+
+        // Pop the shared memory allocations from the symbol table
+        for (size_t i = 0; i < shared_mem_allocations.size(); i++) {
+            sym_pop(shared_mem_allocations[i]);
         }
     } else {
         CodeGen_X86::visit(loop);
@@ -327,8 +443,9 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
           *null64 = ConstantInt::get(i64, 0, "null"),
           *zero8  = ConstantInt::get( i8, 0, "zero");
 
-    builder->CreateStore(ptr,   buffer_host_ptr(buf), "set_host");
-    builder->CreateStore(null64,  buffer_dev_ptr(buf), "set_dev");
+    Value *host_ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
+    builder->CreateStore(host_ptr, buffer_host_ptr(buf), "set_host");
+    builder->CreateStore(null64,   buffer_dev_ptr(buf), "set_dev");
 
     builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf), "set_host_dirty");
     builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf), "set_dev_dirty");
@@ -380,8 +497,8 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
 void CodeGen_PTX_Host::visit(const Pipeline *n) {
     Value *buf = sym_get(n->name);
 
-    Closure produce(n->produce, "", true),
-            consume(n->consume, "", true);
+    Closure produce = Closure::make(n->produce, "", true);
+    Closure consume = Closure::make(n->consume, "", true);
 
     codegen(n->produce);
 
@@ -392,7 +509,7 @@ void CodeGen_PTX_Host::visit(const Pipeline *n) {
     }
 
     if (n->update.defined()) {
-        Closure update(n->update, "", true);
+        Closure update = Closure::make(n->update, "", true);
 
         // Copy back host update reads
         if (update.reads.count(n->name)) {

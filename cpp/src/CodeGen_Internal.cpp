@@ -68,9 +68,11 @@ void Closure::visit(const Variable *op) {
     }
 }
 
-Closure::Closure(Stmt s, const string &loop_variable) {
-    ignore.push(loop_variable, 0);
-    s.accept(this);
+Closure Closure::make(Stmt s, const string &loop_variable) {
+    Closure c;
+    c.ignore.push(loop_variable, 0);
+    s.accept(&c);
+    return c;
 }
 
 vector<llvm::Type*> Closure::llvm_types(LLVMContext *context) {

@@ -215,6 +215,28 @@ public:
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
 
     /** Tell Halide that the following dimensions correspond to cuda
+     * thread indices. This is useful if you compute a producer
+     * function within the block indices of a consumer function, and
+     * want to control how that function's dimensions map to cuda
+     * threads. If the selected target is not ptx, this just marks
+     * those dimensions as parallel. */
+    // @{
+    EXPORT ScheduleHandle &cuda_threads(Var thread_x);
+    EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y);
+    EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y, Var thread_z);
+    // @}
+
+    /** Tell Halide that the following dimensions correspond to cuda
+     * block indices. This is useful for scheduling stages that will
+     * run serially within each cuda block. If the selected target is
+     * not ptx, this just marks those dimensions as parallel. */
+    // @{
+    EXPORT ScheduleHandle &cuda_blocks(Var block_x);
+    EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y);
+    EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y, Var block_z);
+    // @}
+
+    /** Tell Halide that the following dimensions correspond to cuda
      * block indices and thread indices. If the selected target is not
      * ptx, these just mark the given dimensions as parallel. The
      * dimensions are consumed by this call, so do all other
@@ -225,8 +247,6 @@ public:
                                 Var thread_x, Var thread_y);
     EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z, 
                                 Var thread_x, Var thread_y, Var thread_z);
-    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z, Var block_w, 
-                                Var thread_x, Var thread_y, Var thread_z, Var thread_w);
     // @}
 
     /** Short-hand for tiling a domain and mapping the tile indices
@@ -238,8 +258,6 @@ public:
     EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int x_size, int y_size);
     EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,  
                                      int x_size, int y_size, int z_size);
-    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z, Var w, 
-                                     int x_size, int y_size, int z_size, int w_size);
     // @}
 
 };
@@ -550,20 +568,22 @@ public:
     EXPORT Func &reorder(Var x, Var y, Var z, Var w);
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t);
     EXPORT Func &rename(Var old_name, Var new_name);
+    EXPORT Func &cuda_threads(Var thread_x);
+    EXPORT Func &cuda_threads(Var thread_x, Var thread_y);
+    EXPORT Func &cuda_threads(Var thread_x, Var thread_y, Var thread_z);
+    EXPORT Func &cuda_blocks(Var block_x);
+    EXPORT Func &cuda_blocks(Var block_x, Var block_y);
+    EXPORT Func &cuda_blocks(Var block_x, Var block_y, Var block_z);
     EXPORT Func &cuda(Var block_x, Var thread_x);
     EXPORT Func &cuda(Var block_x, Var block_y, 
                       Var thread_x, Var thread_y);
     EXPORT Func &cuda(Var block_x, Var block_y, Var block_z, 
                       Var thread_x, Var thread_y, Var thread_z);
-    EXPORT Func &cuda(Var block_x, Var block_y, Var block_z, Var block_w,
-                      Var thread_x, Var thread_y, Var thread_z, Var thread_w);
     EXPORT Func &cuda_tile(Var x, int x_size);
     EXPORT Func &cuda_tile(Var x, Var y, 
                            int x_size, int y_size);
     EXPORT Func &cuda_tile(Var x, Var y, Var z, 
                            int x_size, int y_size, int z_size);
-    EXPORT Func &cuda_tile(Var x, Var y, Var z, Var w, 
-                           int x_size, int y_size, int z_size, int w_size);
     // @}
 
     /** Scheduling calls that control how the storage for the function
