@@ -80,6 +80,22 @@ public:
         prepare_for_direct_pixel_access();
     }
 
+    /** Manually copy-back data to the host, if it's on a device. This
+     * is done for you if you construct an image from a buffer, but
+     * you might need to call this if you realize a gpu kernel into an
+     * existing image */
+    void copy_to_host() {
+        buffer.copy_to_host();
+    }
+
+    /** Mark the buffer as dirty-on-host.  is done for you if you
+     * construct an image from a buffer, but you might need to call
+     * this if you realize a gpu kernel into an existing image, or
+     * modify the data via some other back-door. */
+    void set_host_dirty(bool dirty = true) {
+        buffer.set_host_dirty(dirty);
+    }    
+
     /** Check if this image handle points to actual data */
     bool defined() const {
         return buffer.defined();
