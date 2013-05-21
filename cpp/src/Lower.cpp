@@ -254,14 +254,15 @@ class IsCalledInStmt : public IRVisitor {
 
 public:
     bool result;
-    IsCalledInStmt(Function f, Stmt s) : func(f.name()), result(false) {
-        s.accept(this);
+    IsCalledInStmt(Function f) : func(f.name()), result(false) {
     }
     
 };
 
 bool function_is_called_in_stmt(Function f, Stmt s) {
-    return IsCalledInStmt(f, s).result;
+    IsCalledInStmt is_called(f);
+    s.accept(&is_called);
+    return is_called.result;
 }
 
 // Inject the allocation and realization of a function into an
@@ -442,7 +443,6 @@ private:
 /* Find all the internal halide calls in an expr */
 class FindCalls : public IRVisitor {
 public:
-    FindCalls(Expr e) {e.accept(this);}
     map<string, Function> calls;
 
     using IRVisitor::visit;
@@ -469,7 +469,6 @@ public:
         Parameter param;
     };
 
-    FindBuffers(Stmt s) {s.accept(this);}
     map<string, Result> buffers;
 
     using IRVisitor::visit;
@@ -496,7 +495,8 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
         return;
     }
             
-    FindCalls calls(f.value());
+    FindCalls calls;
+    f.value().accept(&calls);
 
     // Consider reductions
     if (f.is_reduction()) {
@@ -616,7 +616,9 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 // on inputs or outputs, and that the inputs and outputs conform to
 // the format required (e.g. stride.0 must be 1).
 Stmt add_image_checks(Stmt s, Function f) {
-    map<string, FindBuffers::Result> bufs = FindBuffers(s).buffers;    
+    FindBuffers finder;
+    s.accept(&finder);
+    map<string, FindBuffers::Result> bufs = finder.buffers;    
 
     bufs[f.name()];
 
