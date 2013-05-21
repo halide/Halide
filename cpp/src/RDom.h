@@ -217,6 +217,11 @@ public:
     // @}
 };
 
+/** Emit an RVar in a human-readable form */
+std::ostream &operator<<(std::ostream &stream, RVar);
+
+/** Emit an RDom in a human-readable form. */
+std::ostream &operator<<(std::ostream &stream, RDom);
 }
 
 #endif

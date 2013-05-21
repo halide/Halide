@@ -2,6 +2,7 @@
 #include "Util.h"
 #include "IROperator.h"
 #include "Scope.h"
+#include "IRPrinter.h"
 
 namespace Halide {
 
@@ -159,13 +160,39 @@ RVar RDom::operator[](int i) {
 }
 
 RDom::operator Expr() const {
-    assert(dimensions() == 1 && "Can only treat single-dimensional RDoms as expressions");
+    if (dimensions() != 1) {
+        std::cerr << "Error: Can't treat this multidimensional RDom as an Expr:\n"
+                  << (*this) << "\n"
+                  << "Only single-dimensional RDoms can be cast to Expr.\n";
+        assert(false);            
+    }
     return Expr(x);
 }
 
 RDom::operator RVar() const {
-    assert(dimensions() == 1 && "Can only treat single-dimensional RDoms as RVars");
+    if (dimensions() != 1) {
+        std::cerr << "Error: Can't treat this multidimensional RDom as an RVar:\n"
+                  << (*this) << "\n"
+                  << "Only single-dimensional RDoms can be cast to RVar.\n";
+        assert(false);
+    }
     return x;
+}
+
+/** Emit an RVar in a human-readable form */
+std::ostream &operator<<(std::ostream &stream, RVar v) {
+    stream << v.name() << "(" << v.min() << ", " << v.extent() << ")";
+    return stream;
+}
+
+/** Emit an RDom in a human-readable form. */
+std::ostream &operator<<(std::ostream &stream, RDom dom) {
+    stream << "RDom(\n";
+    for (int i = 0; i < dom.dimensions(); i++) {        
+        stream << "  " << dom[i] << "\n";
+    }
+    stream << ")\n";        
+    return stream;
 }
 
 }
