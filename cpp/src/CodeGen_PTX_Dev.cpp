@@ -11,8 +11,13 @@
 #include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
+#if WITH_PTX
 extern "C" unsigned char halide_internal_initmod_ptx_dev[];
 extern "C" int halide_internal_initmod_ptx_dev_length;
+#else
+static void *halide_internal_initmod_ptx_dev = 0;
+static int halide_internal_initmod_ptx_dev_length = 0;
+#endif
 
 namespace Halide { 
 namespace Internal {
@@ -25,7 +30,7 @@ using namespace llvm;
 CodeGen_PTX_Dev::CodeGen_PTX_Dev()
     : CodeGen()
 {
-    assert(llvm_X86_enabled && "llvm build not configured with X86 target enabled.");
+    assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
 }
 
 void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Argument> &args) {
@@ -288,12 +293,6 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 }
 
 string CodeGen_PTX_Dev::compile_to_ptx() {
-#ifndef __arm__
-    // TODO: streamline this - don't initialize anything but PTX
-    LLVMInitializeNVPTXTargetInfo();
-    LLVMInitializeNVPTXTarget();
-    LLVMInitializeNVPTXTargetMC();
-    LLVMInitializeNVPTXAsmPrinter();
 
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/
@@ -397,9 +396,6 @@ string CodeGen_PTX_Dev::compile_to_ptx() {
 
     ostream.flush();
     return outs.str();
-#else
-    return "NOT IMPLEMENTED ON ARM: CodeGen_PTX_Dev::compile_to_ptx()";
-#endif //disable on ARM
 }
 
 }}

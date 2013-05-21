@@ -3,21 +3,28 @@
 # 'make test_foo' builds and runs test/foo.cpp for any cpp file in the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
-WITH_NATIVE_CLIENT ?=
-CXX_FLAGS_NACL=$(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", )
-NATIVE_CLIENT_ARCHS=$(if $(WITH_NATIVE_CLIENT), x86_nacl x86_32_nacl arm_nacl, )
-NATIVE_CLIENT_LLVM_CONFIG_LIB=$(if $(WITH_NATIVE_CLIENT), nacltransforms, )
-NATIVE_CLIENT_ROOT ?=
-
 CXX ?= g++
 LLVM_CONFIG ?= llvm-config
+LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version)
 CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
-CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -Os $(CXX_FLAGS_NACL)
-LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker nvptx ipo mcjit jit $(NATIVE_CLIENT_LLVM_CONFIG_LIB))
+
+WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
+CXX_FLAGS_NACL=$(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", )
+NATIVE_CLIENT_ARCHS=$(if $(WITH_NATIVE_CLIENT), x86_nacl x86_32_nacl arm_nacl, )
+NATIVE_CLIENT_LLVM_CONFIG_LIB=$(if $(WITH_NATIVE_CLIENT), nacltransforms, )
+NATIVE_CLIENT_ROOT ?=
+
+WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
+CXX_FLAGS_PTX=$(if $(WITH_PTX), "-DWITH_PTX=1", )
+PTX_ARCHS=$(if $(WITH_PTX), ptx_host ptx_dev, )
+PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
+
+CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -Os $(CXX_FLAGS_NACL) $(CXX_FLAGS_PTX)
+LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker ipo mcjit jit $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB))
 TEST_CXX_FLAGS ?=
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
@@ -36,7 +43,7 @@ SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-STDLIB_ARCHS = x86 x86_avx x86_32 arm arm_android ptx_host ptx_dev $(NATIVE_CLIENT_ARCHS)
+STDLIB_ARCHS = x86 x86_avx x86_32 arm arm_android $(PTX_ARCHS) $(NATIVE_CLIENT_ARCHS)
 
 INITIAL_MODULES = $(STDLIB_ARCHS:%=$(BUILD_DIR)/initmod.%.o)
 
