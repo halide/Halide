@@ -3,6 +3,7 @@
 
 #include "IRVisitor.h"
 #include "Type.h"
+#include "IR.h"
 #include <ostream>
 
 namespace Halide { 
@@ -33,6 +34,10 @@ namespace Internal {
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */
 std::ostream &operator<<(std::ostream &stream, Stmt);
+
+/** Emit a halide for loop type (vectorized, serial, etc) in a human
+ * readable form */
+std::ostream &operator<<(std::ostream &stream, const For::ForType &);
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
