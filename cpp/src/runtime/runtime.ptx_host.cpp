@@ -245,14 +245,21 @@ WEAK void halide_init_kernels(const char* ptx_src) {
         CHECK_CALL( cuDeviceGetCount(&deviceCount), "cuDeviceGetCount" );
         assert(deviceCount > 0);
         
+        char *device_str = getenv("HL_GPU_DEVICE");
+
         CUdevice dev;
         // Get device
         CUresult status;
-        for (int id = 2; id >= 0; id--) {
-            // Try to get a device >0 first, since 0 should be our display device
-            status = cuDeviceGet(&dev, id);
-            if ( status == CUDA_SUCCESS ) break;
+        if (device_str) {
+            status = cuDeviceGet(&dev, atoi(device_str));
+        } else {
+            for (int id = 2; id >= 0; id--) {
+                // Try to get a device >0 first, since 0 should be our display device
+                status = cuDeviceGet(&dev, id);
+                if (status == CUDA_SUCCESS) break;
+            }
         }
+
         if (status != CUDA_SUCCESS) {
             fprintf(stderr, "Failed to get device\n");
             exit(-1);
