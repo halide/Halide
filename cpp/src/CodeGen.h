@@ -226,6 +226,13 @@ protected:
      * way. */
     virtual void visit(const Allocate *) = 0; 
 
+    /** Some backends may wish to track entire buffer_t's for each
+     * allocation instead of just a host pointer. Those backends
+     * should override this method to return true, and when allocating
+     * should also place a pointer to the buffer_t in the symbol table
+     * under '<allocation name>.buffer'. */
+    virtual bool track_buffers() {return false;}
+
     /** These IR nodes should have been removed during
      * lowering. CodeGen will error out if they are present */
     // @{

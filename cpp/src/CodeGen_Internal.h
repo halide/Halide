@@ -36,11 +36,22 @@ protected:
     void visit(const Allocate *op);
     void visit(const Variable *op);
 
+    bool track_buffers;
+    llvm::StructType *buffer_t;
+
 public:
+
     /** Traverse a statement and find all references to external
-     * symbols. Note that this can't be the constructor, because
-     * virtual function dispatch from a constructor is wonky. */
-    static Closure make(Stmt s, const std::string &loop_variable);
+     * symbols. 
+     * 
+     * Simple backends just create a pointer for internal
+     * allocations. If the backend creates a whole buffer_t (e.g. in
+     * order to track dirty bits), then the third argument should be
+     * set to true. When the closure encounters a read or write to
+     * 'foo', it assumes that the host pointer is found in the symbol
+     * table as 'foo.host', and any buffer_t pointer is found under
+     * 'foo.buffer'. */
+    static Closure make(Stmt s, const std::string &loop_variable, bool track_buffers, llvm::StructType *buffer_t);
 
     /** External variables referenced. */
     std::map<std::string, Type> vars;
@@ -52,7 +63,7 @@ public:
     std::map<std::string, Type> writes;
 
     /** The llvm types of the external symbols. */
-    std::vector<llvm::Type*> llvm_types(llvm::LLVMContext *context);
+    std::vector<llvm::Type *> llvm_types(llvm::LLVMContext *context);
 
     /** The Halide names of the external symbols (in the same order as llvm_types). */
     std::vector<std::string> names();

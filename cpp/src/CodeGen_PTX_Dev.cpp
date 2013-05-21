@@ -66,7 +66,10 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
              iter++) {                        
 
             if (args[i].is_buffer) {
-                sym_push(args[i].name + ".host", iter); // HACK
+                // HACK: codegen expects a load from foo to use base
+                // address 'foo.host', so we store the device pointer
+                // as foo.host in this scope.
+                sym_push(args[i].name + ".host", iter); 
             } else {
                 sym_push(args[i].name, iter);
             }

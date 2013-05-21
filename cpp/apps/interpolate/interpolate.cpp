@@ -39,40 +39,50 @@ int main(int argc, char **argv) {
     Func interpolated[levels];
     Func upsampled[levels];
     Func upsampledx[levels];
-    Var x,y,c;
+    Var x("x"), y("y"), c("c");
 
     Func clamped;
-    clamped(c, x, y) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
+    clamped(x, y, c) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
 
-    downsampled[0](c,x,y) = select(c < 3, clamped(c, x, y) * clamped(3, x, y), clamped(3, x, y));
+    downsampled[0](x, y, c) = select(c < 3, clamped(x, y, c) * clamped(x, y, 3), clamped(x, y, 3));
 
     for (unsigned int l = 1; l < levels; ++l) {
-        downx[l](c, x, y) = (downsampled[l-1](c, x*2-1, y) + 
-                             2.0f * downsampled[l-1](c, x*2, y) + 
-                             downsampled[l-1](c, x*2+1, y)) * 0.25f;
-        downsampled[l](c, x, y) = (downx[l](c, x, y*2-1) + 
-                                   2.0f * downx[l](c, x, y*2) + 
-                                   downx[l](c, x, y*2+1)) * 0.25f;
+        downx[l](x, y, c) = (downsampled[l-1](x*2-1, y, c) + 
+                             2.0f * downsampled[l-1](x*2, y, c) + 
+                             downsampled[l-1](x*2+1, y, c)) * 0.25f;
+        downsampled[l](x, y, c) = (downx[l](x, y*2-1, c) + 
+                                   2.0f * downx[l](x, y*2, c) + 
+                                   downx[l](x, y*2+1, c)) * 0.25f;
     }
-    interpolated[levels-1] = downsampled[levels-1];
+    interpolated[levels-1](x, y, c) = downsampled[levels-1](x, y, c);
     for (unsigned int l = levels-2; l < levels; --l) {
-        upsampledx[l](c, x, y) = select((x % 2) == 0, 
-                                        interpolated[l+1](c, x/2, y), 
-                                        0.5f * (interpolated[l+1](c, x/2, y) + 
-                                                interpolated[l+1](c, x/2+1, y)));
-        upsampled[l](c, x, y) = select((y % 2) == 0,
-                                       upsampledx[l](c, x, y/2), 
-                                       0.5f * (upsampledx[l](c, x, y/2) + 
-                                               upsampledx[l](c, x, y/2+1)));
-        interpolated[l](c, x, y) = downsampled[l](c, x, y) + (1.0f - downsampled[l](3, x, y)) * upsampled[l](c, x, y);
+        upsampledx[l](x, y, c) = select((x % 2) == 0, 
+                                        interpolated[l+1](x/2, y, c), 
+                                        0.5f * (interpolated[l+1](x/2, y, c) + 
+                                                interpolated[l+1](x/2+1, y, c)));
+        upsampled[l](x, y, c) = select((y % 2) == 0,
+                                       upsampledx[l](x, y/2, c), 
+                                       0.5f * (upsampledx[l](x, y/2, c) + 
+                                               upsampledx[l](x, y/2+1, c)));
+        interpolated[l](x, y, c) = downsampled[l](x, y, c) + (1.0f - downsampled[l](x, y, 3)) * upsampled[l](x, y, c);
     }
 
-    Func final;
-    final(x, y, c) = interpolated[0](c, x, y) / interpolated[0](3, x, y);
+    Func normalize("normalize");
+    normalize(x, y, c) = interpolated[0](x, y, c) / interpolated[0](x, y, 3);
+
+    Func final("final");
+    final(x, y, c) = normalize(x, y, c);
 	
     std::cout << "Finished function setup." << std::endl;
 
-    int sched = 2;
+    int sched;
+    char *target = getenv("HL_TARGET");
+    if (target && std::string(target) == "ptx") {
+        sched = 4;
+    } else {
+        sched = 2;
+    }
+
     switch (sched) {
     case 0:
     {
@@ -98,10 +108,10 @@ int main(int argc, char **argv) {
     {
         Var yi;
         std::cout << "Flat schedule with parallelization + vectorization." << std::endl;                
-        clamped.compute_root().parallel(y).bound(c, 0, 4).vectorize(c, 4);
+        clamped.compute_root().parallel(y).bound(c, 0, 4).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
         for (unsigned int l = 1; l < levels-1; ++l) {
-            downsampled[l].compute_root().parallel(y).vectorize(c, 4);
-            interpolated[l].compute_root().parallel(y).vectorize(c, 4);
+            downsampled[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
+            interpolated[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
         }
         final.parallel(y).reorder(c, x, y).bound(c, 0, 3);
         break;
@@ -122,6 +132,28 @@ int main(int argc, char **argv) {
         final.compute_root();
         break;
     }        
+    case 4:
+    {
+        std::cout << "GPU schedule." << std::endl;
+
+        // Some gpus don't have enough memory to process the entire
+        // image, so we process the image in tiles.
+        Var yo, yi, xo, xi;
+        final.reorder(c, x, y).bound(c, 0, 3).vectorize(x, 4);
+        final.tile(x, y, xo, yo, xi, yi, input.width()/4, input.height()/4);
+        normalize.compute_at(final, xo).reorder(c, x, y).cuda_tile(x, y, 16, 16).unroll(c);
+
+        // Start from level 1 to save memory - level zero will be computed on demand
+        for (unsigned int l = 1; l < levels; ++l) {
+            int tile_size = 32 >> l;
+            if (tile_size < 1) tile_size = 1;
+            if (tile_size > 16) tile_size = 16;
+            downsampled[l].compute_root().cuda_tile(x, y, c, tile_size, tile_size, 4);
+            interpolated[l].compute_at(final, xo).cuda_tile(x, y, c, tile_size, tile_size, 4);
+        }
+
+        break;
+    }
     default:
         assert(0 && "No schedule with this number.");
     }

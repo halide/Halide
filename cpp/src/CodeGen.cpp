@@ -156,10 +156,10 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
             if (args[i].is_buffer) {
                 unpack_buffer(args[i].name, iter);
+            } else {
+                sym_push(args[i].name, iter);
             }
-            // always push name -> arg, even for buffers - some backends
-            // will use buffer_t handles directly.
-            sym_push(args[i].name, iter);
+
             i++;
         }
     }
@@ -406,6 +406,11 @@ void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
     create_assertion(check_alignment, error_message);
     */
 
+    // Push the buffer pointer as well, for backends that care.
+    if (track_buffers()) {
+        sym_push(name + ".buffer", buffer);
+    }
+
     sym_push(name + ".host", host_ptr);
     sym_push(name + ".dev", buffer_dev(buffer));
     sym_push(name + ".host_dirty", buffer_host_dirty(buffer));
@@ -428,29 +433,7 @@ void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
 // Add a definition of buffer_t to the module if it isn't already there
 void CodeGen::define_buffer_t() {
     buffer_t = module->getTypeByName("struct.buffer_t");
-
-    if (!buffer_t) {
-        buffer_t = StructType::create(*context, "struct.buffer_t");
-        log(2) << "Did not find buffer_t in initial module\n";
-    } else {
-        log(2) << "Found buffer_t in initial module\n";
-    }
-
-    vector<llvm::Type *> fields;
-    fields.push_back(i8->getPointerTo());
-    fields.push_back(i64);
-    fields.push_back(i8);
-    fields.push_back(i8);
-
-    ArrayType* i32x4 = ArrayType::get(i32, 4);        
-    fields.push_back(i32x4); // extent
-    fields.push_back(i32x4); // stride
-    fields.push_back(i32x4); // min
-    fields.push_back(i32); // elem_size
-
-    if (buffer_t->isOpaque()) {
-        buffer_t->setBody(fields, false);
-    }
+    assert(buffer_t && "Did not find buffer_t in initial module");
 }
 
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
@@ -1309,7 +1292,7 @@ void CodeGen::visit(const For *op) {
 
         // Find every symbol that the body of this loop refers to
         // and dump it into a closure
-        Closure closure = Closure::make(op->body, op->name);
+        Closure closure = Closure::make(op->body, op->name, track_buffers(), buffer_t);
 
         // Allocate a closure
         StructType *closure_t = closure.build_type(context);
