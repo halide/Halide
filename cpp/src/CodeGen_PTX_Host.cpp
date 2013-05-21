@@ -16,8 +16,13 @@
 #include <dlfcn.h>
 #include <unistd.h>
 
+#if WITH_PTX
 extern "C" unsigned char halide_internal_initmod_ptx_host[];
 extern "C" int halide_internal_initmod_ptx_host_length;
+#else
+static void *halide_internal_initmod_ptx_host = 0;
+static int halide_internal_initmod_ptx_host_length = 0;
+#endif
 
 namespace Halide { 
 namespace Internal {
@@ -189,6 +194,7 @@ void CodeGen_PTX_Host::Closure::visit(const For *loop) {
 
 CodeGen_PTX_Host::CodeGen_PTX_Host(uint32_t options) :
     CodeGen_X86(options) {
+    assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
 }
 
 void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &args) {
