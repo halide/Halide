@@ -112,21 +112,37 @@ int main(int argc, char **argv) {
 
 
     /* THE SCHEDULE */
-
     remap.compute_root();
 
-    Var yi;
-    output.split(y, y, yi, 4).parallel(y).vectorize(x, 4);
-    gray.compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
-    for (int j = 0; j < 4; j++) {
-        if (j > 0) inGPyramid[j].compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
-        if (j > 0) gPyramid[j].compute_root().parallel(k).vectorize(x, 4);
-        outGPyramid[j].compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
-    }
-    for (int j = 4; j < J; j++) {
-        inGPyramid[j].compute_root().parallel(y);
-        gPyramid[j].compute_root().parallel(k);
-        outGPyramid[j].compute_root().parallel(y);
+    char *target = getenv("HL_TARGET");
+    if (target && std::string(target) == "ptx") {
+        // gpu schedule
+        output.compute_root().cuda_tile(x, y, 32, 32);
+        for (int j = 0; j < J; j++) {
+            int blockw = 32, blockh = 16;
+            if (j > 3) {
+                blockw = 2;
+                blockh = 2;
+            }
+            inGPyramid[j].compute_root().cuda_tile(x, y, blockw, blockh);
+            gPyramid[j].compute_root().reorder(k, x, y).cuda_tile(x, y, blockw, blockh);
+            outGPyramid[j].compute_root().cuda_tile(x, y, blockw, blockh);
+        }
+    } else {
+        // cpu schedule
+        Var yi;
+        output.split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+        gray.compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+        for (int j = 0; j < 4; j++) {
+            if (j > 0) inGPyramid[j].compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+            if (j > 0) gPyramid[j].compute_root().parallel(k).vectorize(x, 4);
+            outGPyramid[j].compute_root().split(y, y, yi, 4).parallel(y).vectorize(x, 4);
+        }
+        for (int j = 4; j < J; j++) {
+            inGPyramid[j].compute_root().parallel(y);
+            gPyramid[j].compute_root().parallel(k);
+            outGPyramid[j].compute_root().parallel(y);
+        }
     }
 
     output.compile_to_file("local_laplacian", levels, alpha, beta, input);

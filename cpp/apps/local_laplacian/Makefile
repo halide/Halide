@@ -1,11 +1,9 @@
 GXX ?= g++
 
 PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
+
 ifeq ($(HL_TARGET),ptx)
-  SCHEDULE=103
-  CUDA_LFLAGS=-L/usr/local/cuda/lib -lcuda
-else
-  SCHEDULE=12
+  CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
 
 all: process
@@ -18,7 +16,7 @@ local_laplacian.o: local_laplacian
 	./local_laplacian
 
 process: process.cpp local_laplacian.o
-	$(GXX) -I../support -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LFLAGS)
+	$(GXX) -I../support -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS)
 
 out.png: process
 	./process input.png 8 1 1 out.png
