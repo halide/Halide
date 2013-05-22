@@ -1022,7 +1022,7 @@ void CodeGen::visit(const Call *op) {
     }
 
     if (op->name == "debug to file") {
-        assert(op->args.size() == 8);
+        assert(op->args.size() == 9);
         const Call *filename = op->args[0].as<Call>();
         const Call *func = op->args[1].as<Call>();
         assert(func && filename && "Malformed debug_to_file node");
@@ -1039,11 +1039,13 @@ void CodeGen::visit(const Call *op) {
         Value *data_ptr = symbol_table.get(func->name + ".host");
         data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
         vector<Value *> args = vec(char_ptr, data_ptr);
-        for (size_t i = 2; i < 8; i++) {
+        for (size_t i = 3; i < 9; i++) {
+            log(4) << op->args[i];
             args.push_back(codegen(op->args[i]));
         }
 
         log(4) << "Creating call to debug_to_file\n";
+
         value = builder->CreateCall(debug_to_file, args);
         return;
     }

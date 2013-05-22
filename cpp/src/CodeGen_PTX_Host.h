@@ -39,6 +39,7 @@ protected:
     void visit(const For *);
     void visit(const Allocate *);
     void visit(const Pipeline *);
+    void visit(const Call *);
     // @}
 
     // We track buffer_t's for each allocation in order to manage dirty bits

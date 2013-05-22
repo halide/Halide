@@ -542,6 +542,20 @@ void CodeGen_PTX_Host::visit(const Pipeline *n) {
     codegen(n->consume);
 }
 
+void CodeGen_PTX_Host::visit(const Call *call) {
+    // The other way in which buffers might be read by the host is in
+    // calls to whole-buffer builtins like debug_to_file.
+    if (call->name == "debug to file") {
+        assert(call->args.size() == 9 && "malformed debug to file node");
+        const Call *func = call->args[1].as<Call>();
+        assert(func && "malformed debug to file node");
+        Value *buf = sym_get(func->name + ".buffer");
+        builder->CreateCall(copy_to_host_fn, buf);
+    } 
+
+    CodeGen::visit(call);
+}
+
 void CodeGen_PTX_Host::test() {
     Argument buffer_arg("buf", true, Int(0));
     Argument float_arg("alpha", false, Float(32));
