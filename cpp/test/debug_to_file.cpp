@@ -13,9 +13,16 @@ int main(int argc, char **argv) {
         h(x, y) = f(x, y) + g(x, y);
         j(x, y) = h(x, y) * 2;
 
-        f.compute_root().debug_to_file("f.tmp");
-        g.compute_root().debug_to_file("g.tmp");        
-        h.compute_root();
+        char *target = getenv("HL_TARGET");
+        if (target && std::string(target) == "ptx") {        
+            f.compute_root().cuda_tile(x, y, 1, 1).debug_to_file("f.tmp");
+            g.compute_root().cuda_tile(x, y, 1, 1).debug_to_file("g.tmp");        
+            h.compute_root().cuda_tile(x, y, 1, 1);
+        } else {
+            f.compute_root().debug_to_file("f.tmp");
+            g.compute_root().debug_to_file("g.tmp");        
+            h.compute_root();
+        }
 
         Image<float> im = j.realize(10, 10);
     }
