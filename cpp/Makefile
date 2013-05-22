@@ -113,6 +113,7 @@ clean:
 	rm -rf $(BIN_DIR)/*
 	rm -rf $(BUILD_DIR)/*
 	rm -rf include/*
+	rm -rf doc
 
 .SECONDARY:
 
@@ -203,3 +204,7 @@ $(BUILD_DIR)/llvm_ok:
 	@exit 1
 endif
 
+.PHONY: doc
+docs: doc
+doc: src test
+	doxygen

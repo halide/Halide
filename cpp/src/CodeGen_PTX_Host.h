@@ -27,8 +27,6 @@ public:
      * code. */
     void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
 
-    static void test();
-
 protected:
     using CodeGen_X86::visit;
 
