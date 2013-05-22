@@ -542,23 +542,4 @@ void CodeGen_PTX_Host::visit(const Pipeline *n) {
     codegen(n->consume);
 }
 
-void CodeGen_PTX_Host::test() {
-    Argument buffer_arg("buf", true, Int(0));
-    Argument float_arg("alpha", false, Float(32));
-    Argument int_arg("beta", false, Int(32));
-    vector<Argument> args(3);
-    args[0] = buffer_arg;
-    args[1] = float_arg;
-    args[2] = int_arg;
-    Var bx("blockidx");
-    Param<float> alpha("alpha");
-    Param<int> beta("beta");
-    Expr e = new Select(alpha > 4.0f, 3, 2);
-    Stmt s = new Store("buf", e, bx);
-    s = new For(bx.name(), 0, 16, For::Parallel, s);
-
-    CodeGen_PTX_Host cg(X86_64Bit | X86_SSE41);
-    cg.compile(s, "test1", args);
-}
-
 }}
