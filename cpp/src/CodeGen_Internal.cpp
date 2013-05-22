@@ -1,13 +1,14 @@
 #include "CodeGen_Internal.h"
 #include "Log.h"
 
+namespace Halide {
+namespace Internal {
+
 using std::string;
 using std::map;
 using std::vector;
-using namespace llvm;
 
-namespace Halide {
-namespace Internal {
+using namespace llvm;
 
 void Closure::visit(const Let *op) {
     op->value.accept(this);

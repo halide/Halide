@@ -447,17 +447,17 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
     // TODO: we need to reset the stack pointer, regardless of whether the
     //       main allocation was on the stack or heap.
     Value *buf = builder->CreateAlloca(buffer_t);
-    Value *zero32 = ConstantInt::get(i32, 0, "zero"),
-          *one32  = ConstantInt::get(i32, 1, "one"),
-          *null64 = ConstantInt::get(i64, 0, "null"),
-          *zero8  = ConstantInt::get( i8, 0, "zero");
+    Value *zero32 = ConstantInt::get(i32, 0),
+          *one32  = ConstantInt::get(i32, 1),
+          *null64 = ConstantInt::get(i64, 0),
+          *zero8  = ConstantInt::get( i8, 0);
 
     Value *host_ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-    builder->CreateStore(host_ptr, buffer_host_ptr(buf), "set_host");
-    builder->CreateStore(null64,   buffer_dev_ptr(buf), "set_dev");
+    builder->CreateStore(host_ptr, buffer_host_ptr(buf));
+    builder->CreateStore(null64,   buffer_dev_ptr(buf));
 
-    builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf), "set_host_dirty");
-    builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf), "set_dev_dirty");
+    builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
+    builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
 
     // For now, we just track the allocation as a single 1D buffer of the
     // required size. If we break this into multiple dimensions, this will
