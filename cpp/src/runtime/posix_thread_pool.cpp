@@ -58,7 +58,7 @@ struct work {
     uint8_t *closure;
     int active_workers;
 
-    bool Running() { return next < max || active_workers > 0; }
+    bool running() { return next < max || active_workers > 0; }
 };
 
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
@@ -67,9 +67,8 @@ WEAK struct {
     // all fields are protected by this mutex.
     pthread_mutex_t mutex;
 
-    // Singly linked list for FIFO queue.
-    work *jobs_head;
-    work *jobs_tail;
+    // Singly linked list for job stack
+    work *jobs;
 
     // Broadcast whenever items are added to the queue or a job completes.
     pthread_cond_t state_change;
@@ -79,7 +78,10 @@ WEAK struct {
     // Global flag indicating 
     bool shutdown;
 
-    bool Running() { return !shutdown; }
+    bool running() { 
+        return !shutdown; 
+    }    
+
 } halide_work_queue;
 
 WEAK int halide_threads;
@@ -130,39 +132,54 @@ WEAK void halide_do_task(void (*f)(int, uint8_t *), int idx, uint8_t *closure) {
 WEAK void *halide_worker_thread(void *void_arg) {
     work *owned_job = (work *)void_arg;
 
+    // Grab the lock
     pthread_mutex_lock(&halide_work_queue.mutex);
-    while (owned_job != NULL ? owned_job->Running()
-                             : halide_work_queue.Running()) {
-        if (halide_work_queue.jobs_head == NULL) {
+
+    // If I'm a job owner, then I was the thread that called
+    // do_par_for, and I should only stay in this function until my
+    // job is complete. If I'm a lowly worker thread, I should stay in
+    // this function as long as the work queue is running.
+    while (owned_job != NULL ? owned_job->running()
+           : halide_work_queue.running()) {
+
+        if (halide_work_queue.jobs == NULL) {
+            // There are no jobs pending, though some tasks may still
+            // be in flight from the last job. Release the lock and
+            // wait for something new to happen.
             pthread_cond_wait(&halide_work_queue.state_change, &halide_work_queue.mutex);
         } else {
-            work *job = halide_work_queue.jobs_head;
-	    // Claim some tasks
-	    //int claimed = (remaining + threads - 1)/threads;
-	    int claimed = 1;
-	    //fprintf(stderr, "Worker %d: Claiming %d tasks\n", id, claimed);
-	    work myjob = *job;
-	    job->next += claimed;            
-	    if (job->next == job->max) {
-		halide_work_queue.jobs_head = job->next_job;
-		if (halide_work_queue.jobs_head == NULL) {
-		    halide_work_queue.jobs_tail = NULL;
-		}
-	    } 
-	    myjob.max = job->next;
-	    job->active_workers++;
-	    pthread_mutex_unlock(&halide_work_queue.mutex);
-	    for (; myjob.next < myjob.max; myjob.next++) {
-		//fprintf(stderr, "Worker %d: Doing job %d\n", id, myjob.next);
-		halide_do_task(myjob.f, myjob.next, myjob.closure);
-		//fprintf(stderr, "Worker %d: Done with job %d\n", id, myjob.next);
-	    }
-	    pthread_mutex_lock(&halide_work_queue.mutex);
-	    job->active_workers--;
-            if (job->next == job->max && job->active_workers == 0 && job != owned_job) {
+            // There are jobs still to do. Grab the next one.
+            work *job = halide_work_queue.jobs;
+
+            // Claim a task from it.
+            work myjob = *job;
+            job->next++;
+
+            // If there were no more tasks pending for this job,
+            // remove it from the stack.
+            if (job->next == job->max) {
+                halide_work_queue.jobs = job->next_job;
+            } 
+
+            // Increment the active_worker count so that other threads
+            // are aware that this job is still in progress even
+            // though there are no outstanding tasks for it.
+            job->active_workers++;
+
+            // Release the lock and do the task.
+            pthread_mutex_unlock(&halide_work_queue.mutex);
+            halide_do_task(myjob.f, myjob.next, myjob.closure);
+            pthread_mutex_lock(&halide_work_queue.mutex);
+            
+            // We are no longer active on this job
+            job->active_workers--;
+
+            // If the job is done and I'm not the owner of it, wake up
+            // the owner.
+            if (!job->running() && job != owned_job) {
                 pthread_cond_broadcast(&halide_work_queue.state_change);
             }
-	}        
+        }        
     }
     pthread_mutex_unlock(&halide_work_queue.mutex);
     return NULL;
@@ -177,7 +194,8 @@ WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_
         halide_work_queue.shutdown = false;
         pthread_mutex_init(&halide_work_queue.mutex, NULL);
         pthread_cond_init(&halide_work_queue.state_change, NULL);
-        halide_work_queue.jobs_head = halide_work_queue.jobs_tail = NULL;
+        halide_work_queue.jobs = NULL;
+
         char *threadStr = getenv("HL_NUMTHREADS");
         #ifdef _LP64
         // On 64-bit systems we use 8 threads by default
@@ -191,7 +209,9 @@ WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_
         } else {
             halide_printf("HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
         }
-        if (halide_threads > MAX_THREADS) halide_threads = MAX_THREADS;
+        if (halide_threads > MAX_THREADS) {
+            halide_threads = MAX_THREADS;
+        }
         for (int i = 0; i < halide_threads-1; i++) {
             //fprintf(stderr, "Creating thread %d\n", i);
             pthread_create(halide_work_queue.threads + i, NULL, halide_worker_thread, NULL);
@@ -200,28 +220,25 @@ WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_
         halide_thread_pool_initialized = true;
     }
 
-    // Enqueue the job
-    pthread_mutex_lock(&halide_work_queue.mutex);
-    //fprintf(stderr, "Enqueuing some work\n");
-    work job = {NULL, f, min, min + size, closure, 0};
-    if (halide_work_queue.jobs_head == NULL) {
-        halide_work_queue.jobs_head = &job;
-    } else {
-        //assert(halide_work_queue.jobs_tail != NULL);
-	halide_work_queue.jobs_tail->next_job = &job;
-    }
-    halide_work_queue.jobs_tail = &job;
+    // Make the job.
+    work job; 
+    job.f = f;               // The job should call this function. It takes an index and a closure.
+    job.next = min;          // Start at this index.
+    job.max  = min + size;   // Keep going until one less than this index.
+    job.closure = closure;   // Use this closure.
+    job.active_workers = 0;
 
+    // Push the job onto the stack.
+    pthread_mutex_lock(&halide_work_queue.mutex);
+    job.next_job = halide_work_queue.jobs;
+    halide_work_queue.jobs = &job;
     pthread_mutex_unlock(&halide_work_queue.mutex);
     
-    //fprintf(stderr, "Waking up workers\n");
-    // Wake up everyone
+    // Wake up any idle worker threads.
     pthread_cond_broadcast(&halide_work_queue.state_change);
 
-    // Do some work myself
-    //fprintf(stderr, "Doing some work on job %d\n", arg.id);
+    // Do some work myself.
     halide_worker_thread((void *)(&job));    
-    //fprintf(stderr, "Parallel for done\n");
 }
 
 }
