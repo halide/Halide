@@ -21,15 +21,15 @@ double currentTime() {
 
 using namespace Halide;
 
-#define W 10240
-#define H 16
+#define W 1024
+#define H 160
 
 int main(int argc, char **argv) {
     Var x, y;
     Func f, g;
 
     Expr math = cast<float>(x+y);
-    for (int i = 0; i < 10; i++) math = sqrt(cos(sin(math)));
+    for (int i = 0; i < 50; i++) math = sqrt(cos(sin(math)));
     f(x, y) = math;
     g(x, y) = math;
 
