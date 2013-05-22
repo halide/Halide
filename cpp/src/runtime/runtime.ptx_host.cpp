@@ -29,7 +29,7 @@
 
 extern "C" {
 
-#define NDEBUG // disable logging/asserts for performance
+// #define NDEBUG // disable logging/asserts for performance
 
 #ifdef NDEBUG
 #define CHECK_CALL(c,str) (c)
@@ -205,11 +205,11 @@ static buffer_t* __malloc_buffer(int32_t size) {
 
 */
 
-WEAK bool halide_validate_dev_pointer(CUdeviceptr ptr) {
+WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
     CUcontext ctx;
-    CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, ptr);
+    CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, buf->dev);
     if (result) {
-        fprintf(stderr, "Bad device pointer %p: cuPointerGetAttribute returned %d\n", (void *)ptr, result);
+        fprintf(stderr, "Bad device pointer %p: cuPointerGetAttribute returned %d\n", (void *)buf->dev, result);
         return false;        
     }
     return true;
@@ -222,7 +222,7 @@ WEAK void halide_free_dev_buffer(buffer_t* buf) {
     fprintf(stderr, "In free_dev_buffer of %p - dev: 0x%zx\n", buf, buf->dev);
     #endif
     if (buf->dev) {
-        assert(halide_validate_dev_pointer(buf->dev));
+        assert(halide_validate_dev_pointer(buf));
         CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
         buf->dev = 0;
     }
@@ -343,7 +343,7 @@ WEAK void halide_dev_malloc_if_missing(buffer_t* buf) {
     #endif
     if (buf->dev) {
         #ifndef NDEBUG
-        assert(halide_validate_dev_pointer(buf->dev));
+        assert(halide_validate_dev_pointer(buf));
         #endif
         return;
     }
@@ -351,7 +351,7 @@ WEAK void halide_dev_malloc_if_missing(buffer_t* buf) {
     buf->dev = __dev_malloc(size);
     assert(buf->dev);
     #ifndef NDEBUG
-    assert(halide_validate_dev_pointer(buf->dev));
+    assert(halide_validate_dev_pointer(buf));
     #endif
 }
 
@@ -362,7 +362,7 @@ WEAK void halide_copy_to_dev(buffer_t* buf) {
         #ifdef NDEBUG
         // char msg[1];
         #else
-        assert(halide_validate_dev_pointer(buf->dev));
+        assert(halide_validate_dev_pointer(buf));
         char msg[256];
         snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, halide_current_time() );
         #endif
@@ -380,7 +380,7 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
         #else
         char msg[256];
         snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
-        assert(halide_validate_dev_pointer(buf->dev));
+        assert(halide_validate_dev_pointer(buf));
         #endif
         TIME_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
     }

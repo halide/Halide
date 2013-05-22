@@ -447,17 +447,17 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
     // TODO: we need to reset the stack pointer, regardless of whether the
     //       main allocation was on the stack or heap.
     Value *buf = builder->CreateAlloca(buffer_t);
-    Value *zero32 = ConstantInt::get(i32, 0, "zero"),
-          *one32  = ConstantInt::get(i32, 1, "one"),
-          *null64 = ConstantInt::get(i64, 0, "null"),
-          *zero8  = ConstantInt::get( i8, 0, "zero");
+    Value *zero32 = ConstantInt::get(i32, 0),
+          *one32  = ConstantInt::get(i32, 1),
+          *null64 = ConstantInt::get(i64, 0),
+          *zero8  = ConstantInt::get( i8, 0);
 
     Value *host_ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-    builder->CreateStore(host_ptr, buffer_host_ptr(buf), "set_host");
-    builder->CreateStore(null64,   buffer_dev_ptr(buf), "set_dev");
+    builder->CreateStore(host_ptr, buffer_host_ptr(buf));
+    builder->CreateStore(null64,   buffer_dev_ptr(buf));
 
-    builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf), "set_host_dirty");
-    builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf), "set_dev_dirty");
+    builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
+    builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
 
     // For now, we just track the allocation as a single 1D buffer of the
     // required size. If we break this into multiple dimensions, this will
@@ -554,25 +554,6 @@ void CodeGen_PTX_Host::visit(const Call *call) {
     } 
 
     CodeGen::visit(call);
-}
-
-void CodeGen_PTX_Host::test() {
-    Argument buffer_arg("buf", true, Int(0));
-    Argument float_arg("alpha", false, Float(32));
-    Argument int_arg("beta", false, Int(32));
-    vector<Argument> args(3);
-    args[0] = buffer_arg;
-    args[1] = float_arg;
-    args[2] = int_arg;
-    Var bx("blockidx");
-    Param<float> alpha("alpha");
-    Param<int> beta("beta");
-    Expr e = new Select(alpha > 4.0f, 3, 2);
-    Stmt s = new Store("buf", e, bx);
-    s = new For(bx.name(), 0, 16, For::Parallel, s);
-
-    CodeGen_PTX_Host cg(X86_64Bit | X86_SSE41);
-    cg.compile(s, "test1", args);
 }
 
 }}
