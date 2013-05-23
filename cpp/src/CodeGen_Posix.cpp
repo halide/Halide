@@ -91,28 +91,39 @@ void CodeGen_Posix::init_module() {
     f64x4 = VectorType::get(f64, 4);
 }
 
-Value* CodeGen_Posix::malloc_buffer(const Allocate *alloc, Value *&saved_stack) {
+Value *CodeGen_Posix::save_stack() {
+    llvm::Function *stacksave =
+        llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stacksave,
+                                        ArrayRef<llvm::Type*>());
+    return builder->CreateCall(stacksave);    
+}
 
-    // Allocate anything less than 32k on the stack
+void CodeGen_Posix::restore_stack(llvm::Value *saved_stack) {
+    llvm::Function *stackrestore =
+        llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore,
+                                        ArrayRef<llvm::Type*>());
+    builder->CreateCall(stackrestore, saved_stack);
+}
+
+Value *CodeGen_Posix::malloc_buffer(const Allocate *alloc, Value **saved_stack) {
+
+    // Allocate anything less than 8k on the stack
     int bytes_per_element = alloc->type.bits / 8;
     int stack_size = 0;
     bool on_stack = false;
     if (const IntImm *size = alloc->size.as<IntImm>()) {            
         stack_size = size->value;
-        on_stack = stack_size < 32*1024;
+        on_stack = (saved_stack != NULL) && stack_size < 8*1024;
     }
 
     Value *size = codegen(alloc->size * bytes_per_element);
     llvm::Type *llvm_type = llvm_type_of(alloc->type);
     Value *ptr;                
-    saved_stack = NULL;
+    *saved_stack = NULL;
 
     if (on_stack) {
         // TODO: Optimize to do only one stack pointer save per loop scope.
-        llvm::Function *stacksave =
-          llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stacksave,
-                                          ArrayRef<llvm::Type*>());
-        saved_stack = builder->CreateCall(stacksave);
+        *saved_stack = save_stack();
 
         // Do a 32-byte aligned alloca
         int total_bytes = stack_size * bytes_per_element;            
@@ -144,16 +155,13 @@ void CodeGen_Posix::free_buffer(Value *ptr, Value *saved_stack) {
         log(4) << "Creating call to halide_free\n";
         builder->CreateCall(free_fn, ptr);
     } else {
-        llvm::Function *stackrestore =
-          llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore,
-                                          ArrayRef<llvm::Type*>());
-        builder->CreateCall(stackrestore, saved_stack);
+        restore_stack(saved_stack);
     }
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
     Value *saved_stack;
-    Value *ptr = malloc_buffer(alloc, saved_stack);
+    Value *ptr = malloc_buffer(alloc, &saved_stack);
 
     // In the future, we may want to construct an entire buffer_t here
     string allocation_name = alloc->name + ".host";
