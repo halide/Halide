@@ -467,6 +467,7 @@ public:
     struct Result {
         Buffer image;
         Parameter param;
+        Type type;
     };
 
     map<string, Result> buffers;
@@ -474,14 +475,16 @@ public:
     using IRVisitor::visit;
 
     void visit(const Call *op) {
-        IRVisitor::visit(op);
+        IRVisitor::visit(op);        
         if (op->image.defined()) {
             Result r;
             r.image = op->image;
+            r.type = op->type.element_of();
             buffers[op->name] = r;
         } else if (op->param.defined()) {
             Result r;
             r.param = op->param;
+            r.type = op->type.element_of();
             buffers[op->name] = r;
         }
     }
@@ -620,7 +623,7 @@ Stmt add_image_checks(Stmt s, Function f) {
     s.accept(&finder);
     map<string, FindBuffers::Result> bufs = finder.buffers;    
 
-    bufs[f.name()];
+    bufs[f.name()].type = f.value().type();
 
     map<string, Region> regions = regions_touched(s);
     for (map<string, FindBuffers::Result>::iterator iter = bufs.begin();
@@ -628,6 +631,17 @@ Stmt add_image_checks(Stmt s, Function f) {
         const string &name = iter->first;
         Buffer &image = iter->second.image;
         Parameter &param = iter->second.param;
+        Type type = iter->second.type;
+
+        // Check the elem size matches the internally-understood type
+        {
+            Expr elem_size = new Variable(Int(32), name + ".elem_size");
+            int correct_size = type.bits / 8;
+            ostringstream error_msg;
+            error_msg << "Element size for " << name << " should be " << correct_size;
+            Stmt check = new AssertStmt(elem_size == type.bits / 8, error_msg.str()); 
+            s = new Block(check, s);
+        }
 
         // Bounds checking can be disabled via HL_DISABLE_BOUNDS_CHECKING
         const char *disable = getenv("HL_DISABLE_BOUNDS_CHECKING");
