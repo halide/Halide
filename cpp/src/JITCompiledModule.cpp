@@ -120,7 +120,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     engine_builder.setUseMCJIT(false);
     #endif
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-    engine_builder.setMCPU(cg->mcpu());
+    engine_builder.setMCPU(cg->mcpu());    
     engine_builder.setMAttrs(vec<string>(cg->mattrs()));
     ExecutionEngine *ee = engine_builder.create();
     if (!ee) std::cerr << error_string << "\n";
@@ -150,6 +150,9 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     hook_up_function_pointer(ee, m, "halide_shutdown_thread_pool", true, &shutdown_thread_pool);
 
     ee->finalizeObject();
+
+    // Do any target-specific post-compilation module meddling
+    cg->jit_finalize(ee, m);
 
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     module = new JITModuleHolder(ee, m, shutdown_thread_pool);

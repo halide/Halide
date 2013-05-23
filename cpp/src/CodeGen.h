@@ -82,6 +82,11 @@ public:
      * just before it jits. Does nothing by default. */
     virtual void jit_init(llvm::ExecutionEngine *ee, llvm::Module *module) {}
 
+    /** Do any required target-specific things to the execution engine
+     * and the module after jitting. Called by JITCompiledModule just
+     * after it jits. Does nothing by default. */
+    virtual void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module) {}
+
 protected:
 
     /** State needed by llvm for code generation, including the
