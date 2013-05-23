@@ -169,7 +169,15 @@ CUresult CUDAAPI cuPointerGetAttribute(void *result, int query, CUdeviceptr ptr)
 // static vector<CUfunction> __f;
 }
 extern "C" {
-CUcontext WEAK cuda_ctx = 0;
+// A cuda context defined in this module with weak linkage
+CUcontext WEAK weak_cuda_ctx = 0;
+
+// A pointer to the cuda context to use, which may not be the one above. This pointer is followed at init_kernels time.
+CUcontext WEAK *cuda_ctx_ptr = NULL;
+
+WEAK void halide_set_cuda_context(CUcontext *ctx_ptr) {
+    cuda_ctx_ptr = ctx_ptr;
+}
 
 static CUmodule __mod;
 static CUevent __start, __end;
@@ -235,8 +243,13 @@ WEAK void halide_free_dev_buffer(buffer_t* buf) {
 }
 
 WEAK void halide_init_kernels(const char* ptx_src) {
+    // If the context pointer isn't hooked up yet, point it at this module's weak-linkage context.
+    if (cuda_ctx_ptr == NULL) {
+        cuda_ctx_ptr = &weak_cuda_ctx;
+    }
+
     // Initialize one shared context for all Halide compiled instances
-    if (!cuda_ctx) {
+    if (*cuda_ctx_ptr == 0) {
         // Initialize CUDA
         CHECK_CALL( cuInit(0), "cuInit" );
 
@@ -271,11 +284,12 @@ WEAK void halide_init_kernels(const char* ptx_src) {
 
 
         // Create context
-        CHECK_CALL( cuCtxCreate(&cuda_ctx, 0, dev), "cuCtxCreate" );
+        CHECK_CALL( cuCtxCreate(cuda_ctx_ptr, 0, dev), "cuCtxCreate" );
         cuEventCreate(&__start, 0);
         cuEventCreate(&__end, 0);
+
     } else {
-        //CHECK_CALL( cuCtxPushCurrent(cuda_ctx), "cuCtxPushCurrent" );
+        //CHECK_CALL( cuCtxPushCurrent(*cuda_ctx_ptr), "cuCtxPushCurrent" );
     }
     
     // Initialize a module for just this Halide module

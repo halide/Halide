@@ -268,13 +268,6 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
 
 void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
 
-    // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
-    // CUDA behaves much better when you don't initialize >2 contexts.
-    GlobalValue *cu_ctx = module->getNamedGlobal("cuda_ctx");
-    if (cu_ctx) {
-        ee->addGlobalMapping(cu_ctx, (void*)&cuda_ctx);
-    }
-
     // Make sure extern cuda calls inside the module point to the
     // right things. If cuda is already linked in we should be
     // fine. If not we need to tell llvm to load it.
@@ -297,7 +290,17 @@ void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
         }
         lib_cuda_linked = true;
     }
-    
+}
+
+void CodeGen_PTX_Host::jit_finalize(ExecutionEngine *ee, Module *module) {
+    // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
+    // CUDA behaves much better when you don't initialize >2 contexts.
+    llvm::Function *fn = module->getFunction("halide_set_cuda_context");
+    assert(fn && "Could not find halide_set_cuda_context in module");
+    void *f = ee->getPointerToFunction(fn);
+    assert(f && "Could not find compiled form of halide_set_cuda_context in module");
+    void (*set_cuda_context)(CUcontext *) = (void (*)(CUcontext *))f;
+    set_cuda_context(&cuda_ctx);
 }
 
 void CodeGen_PTX_Host::visit(const For *loop) {
