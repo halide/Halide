@@ -1,7 +1,7 @@
 /*
- * Build standalone test with:
+ * Build standalone test (on Mac) with:
  *
- *   clang -framework OpenCL -DTEST_STUB architecture.opencl.stdlib.cpp architecture.posix.stdlib.cpp
+ *   clang -framework OpenCL -DTEST_STUB runtime.opencl_host.cpp
  */
 
 #include <stdio.h>
