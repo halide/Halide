@@ -75,7 +75,7 @@ class ImageParam {
 public:
 
     /** Construct a NULL image parameter handle. */
-    ImageParam() {}
+    ImageParam() : dims(0) {}
 
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */

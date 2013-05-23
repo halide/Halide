@@ -247,7 +247,13 @@ void CodeGen_PTX_Host::Closure::visit(const For *loop) {
 
 
 CodeGen_PTX_Host::CodeGen_PTX_Host(uint32_t options) :
-    CodeGen_X86(options) {
+    CodeGen_X86(options),
+    dev_malloc_fn(NULL), 
+    dev_free_fn(NULL),
+    copy_to_dev_fn(NULL), 
+    copy_to_host_fn(NULL), 
+    dev_run_fn(NULL), 
+    dev_sync_fn(NULL) {
     assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
 }
 
@@ -395,7 +401,7 @@ void CodeGen_PTX_Host::visit(const For *loop) {
         Value *shared_mem_size = ConstantInt::get(i32, 0);
         vector<string> shared_mem_allocations;
         for (map<string, Expr>::iterator iter = bounds.shared_allocations.begin(); 
-             iter != bounds.shared_allocations.end(); iter++) {
+             iter != bounds.shared_allocations.end(); ++iter) {
 
             log(2) << "Internal shared allocation" << iter->first 
                    << " has max size " << iter->second << "\n";

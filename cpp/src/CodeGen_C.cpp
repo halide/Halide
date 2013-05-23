@@ -549,12 +549,10 @@ void CodeGen_C::visit(const Allocate *op) {
     do_indent();
     stream << print_type(op->type) << ' ';
 
-    // For sizes less than 32k, do a stack allocation
+    // For sizes less than 8k, do a stack allocation
     bool on_stack = false;
-    int stack_size = 0;
     if (const IntImm *sz = op->size.as<IntImm>()) {
-        stack_size = sz->value;
-        on_stack = stack_size <= 32*1024;
+        on_stack = sz->value <= 8*1024;
     }
 
     if (on_stack) {

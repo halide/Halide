@@ -48,9 +48,13 @@ using std::stack;
 #define InitializeNVPTXTarget() InitializeTarget(NVPTX)
 
 CodeGen::CodeGen() : 
-    module(NULL), function(NULL), context(NULL), 
+    module(NULL), owns_module(false), 
+    function(NULL), context(NULL), 
     builder(NULL), 
-    value(NULL), buffer_t(NULL) {
+    value(NULL), 
+    void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
+    f16(NULL), f32(NULL), f64(NULL),
+    buffer_t(NULL) {
 
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
@@ -1343,7 +1347,7 @@ void CodeGen::visit(const For *op) {
         do_par_for->setDoesNotAlias(4);
         //do_par_for->setDoesNotCapture(4);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-        vector<Value *> args = vec((Value *)function, min, extent, ptr);
+        vector<Value *> args = vec<Value *>(function, min, extent, ptr);
         log(4) << "Creating call to do_par_for\n";
         builder->CreateCall(do_par_for, args);
 
