@@ -235,7 +235,7 @@ protected:
      * allocation instead of just a host pointer. Those backends
      * should override this method to return true, and when allocating
      * should also place a pointer to the buffer_t in the symbol table
-     * under '<allocation name>.buffer'. */
+     * under 'allocation_name.buffer'. */
     virtual bool track_buffers() {return false;}
 
     /** These IR nodes should have been removed during
