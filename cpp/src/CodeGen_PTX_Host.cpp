@@ -164,6 +164,59 @@ private:
     }
 };
 
+// Is a buffer ever used on the host? Used on the device? Determines
+// whether we need to allocate memory for each. (TODO: consider
+// debug_to_file on host of a buffer only used on device)
+class WhereIsBufferUsed : public IRVisitor {
+public:
+    string buf;
+    bool used_on_host, used_on_device;
+    WhereIsBufferUsed(string b) : buf(b),
+                                  used_on_host(false), 
+                                  used_on_device(false), 
+                                  in_device_code(false) {}
+
+private:    
+    bool in_device_code;
+
+    using IRVisitor::visit;
+
+    void visit(const For *op) {
+        if (CodeGen_PTX_Dev::is_simt_var(op->name)) {
+            op->min.accept(this);
+            op->extent.accept(this);
+            bool old_in_device = in_device_code;
+            in_device_code = true;
+            op->body.accept(this);
+            in_device_code = old_in_device;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        if (op->name == buf) {
+            if (in_device_code) {
+                used_on_device = true;
+            } else {
+                used_on_host = true;
+            }
+        }
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) {
+        if (op->name == buf) {
+            if (in_device_code) {
+                used_on_device = true;
+            } else {
+                used_on_host = true;
+            }
+        }        
+        IRVisitor::visit(op);
+    }
+};
+
 vector<Argument> CodeGen_PTX_Host::Closure::arguments() {
     vector<Argument> res;
     map<string, Type>::const_iterator iter;
@@ -222,8 +275,11 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     assert(module && "llvm encountered an error in parsing a bitcode file.");
 
     // grab runtime helper functions
-    dev_malloc_if_missing_fn = module->getFunction("halide_dev_malloc_if_missing");
-    assert(dev_malloc_if_missing_fn && "Could not find halide_dev_malloc_if_missing in module");
+    dev_malloc_fn = module->getFunction("halide_dev_malloc");
+    assert(dev_malloc_fn && "Could not find halide_dev_malloc in module");
+
+    dev_free_fn = module->getFunction("halide_dev_free");
+    assert(dev_free_fn && "Could not find halide_dev_free in module");
 
     copy_to_host_fn = module->getFunction("halide_copy_to_host");
     assert(copy_to_host_fn && "Could not find halide_copy_to_host in module");
@@ -357,19 +413,25 @@ void CodeGen_PTX_Host::visit(const For *loop) {
         }
         cgdev.compile(loop, kernel_name, c.arguments());
 
-        // set up the buffer arguments for the device
         map<string, Type>::iterator it;
         for (it = c.reads.begin(); it != c.reads.end(); ++it) {
-            log(4) << "halide_dev_malloc_if_missing " << it->first << " (read)\n";
+            // While internal buffers have all had their device
+            // allocations done via static analysis, external ones
+            // need to be dynamically checked
+            Value *buf = sym_get(it->first + ".buffer");            
+            log(4) << "halide_dev_malloc " << it->first << "\n";
+            builder->CreateCall(dev_malloc_fn, buf);
+
+            // Anything dirty on the cpu that gets read on the gpu
+            // needs to be copied over
             log(4) << "halide_copy_to_dev " << it->first << "\n";
-            Value *buf = sym_get(it->first + ".buffer");
-            builder->CreateCall(dev_malloc_if_missing_fn, buf);
             builder->CreateCall(copy_to_dev_fn, buf);
         }
+
         for (it = c.writes.begin(); it != c.writes.end(); ++it) {
-            log(4) << "halide_dev_malloc_if_missing " << it->first << " (write)\n";
-            Value *buf = sym_get(it->first + ".buffer");
-            builder->CreateCall(dev_malloc_if_missing_fn, buf);
+            Value *buf = sym_get(it->first + ".buffer");            
+            log(4) << "halide_dev_malloc " << it->first << "\n";
+            builder->CreateCall(dev_malloc_fn, buf);
         }
 
         // get the actual name of the generated kernel for this loop
@@ -381,7 +443,7 @@ void CodeGen_PTX_Host::visit(const For *loop) {
         vector<Argument> closure_args = c.arguments();
         llvm::Type *arg_t = i8->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
-        // TODO: save the stack?
+        Value *saved_stack = save_stack();
         Value *gpu_args_arr = builder->CreateAlloca(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
                                                     NULL,
                                                     kernel_name + "_args");
@@ -399,9 +461,9 @@ void CodeGen_PTX_Host::visit(const For *loop) {
                 val = sym_get(name);
             }
 
-            // allocate stack space to mirror the closure element
-            // TODO: this should be unnecessary!
-            // TODO: save the stack?
+            // allocate stack space to mirror the closure element. It
+            // might be in a register and we need a pointer to it for
+            // the gpu args array.
             Value *ptr = builder->CreateAlloca(val->getType(), NULL, name+".stack");
             // store the closure value into the stack space
             builder->CreateStore(val, ptr);
@@ -437,77 +499,107 @@ void CodeGen_PTX_Host::visit(const For *loop) {
         for (size_t i = 0; i < shared_mem_allocations.size(); i++) {
             sym_pop(shared_mem_allocations[i]);
         }
+
+        // We did a bunch of allocas, so we need to restore the stack.
+        restore_stack(saved_stack);
     } else {
         CodeGen_X86::visit(loop);
     }
 }
 
 void CodeGen_PTX_Host::visit(const Allocate *alloc) {
-    Value *saved_stack;
-    Value *ptr = malloc_buffer(alloc, saved_stack);
+    WhereIsBufferUsed usage(alloc->name);
+    alloc->accept(&usage);
 
-    // create a buffer_t to track this allocation
-    // TODO: we need to reset the stack pointer, regardless of whether the
-    //       main allocation was on the stack or heap.
-    Value *buf = builder->CreateAlloca(buffer_t);
-    Value *zero32 = ConstantInt::get(i32, 0),
-          *one32  = ConstantInt::get(i32, 1),
-          *null64 = ConstantInt::get(i64, 0),
-          *zero8  = ConstantInt::get( i8, 0);
+    Value *saved_stack = NULL, *gpu_saved_stack = NULL, *host;
 
-    Value *host_ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-    builder->CreateStore(host_ptr, buffer_host_ptr(buf));
-    builder->CreateStore(null64,   buffer_dev_ptr(buf));
+    if (usage.used_on_host) {
+        log(2) << alloc->name << " is used on the host\n";
+        host = malloc_buffer(alloc, &saved_stack);
+        sym_push(alloc->name + ".host", host);
+    } else {
+        host = ConstantPointerNull::get(llvm_type_of(alloc->type)->getPointerTo());
+    }
 
-    builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
-    builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
+    Value *buf = NULL;
+    if (usage.used_on_device) {
+        log(2) << alloc->name << " is used on the device\n";
+        // create a buffer_t to track this allocation
+        if (!saved_stack) {
+            // Save the stack pointer if we haven't also done a stack allocation on host
+            gpu_saved_stack = save_stack();
+        }
+        buf = builder->CreateAlloca(buffer_t);
+        Value *zero32 = ConstantInt::get(i32, 0),
+            *one32  = ConstantInt::get(i32, 1),
+            *null64 = ConstantInt::get(i64, 0),
+            *zero8  = ConstantInt::get( i8, 0);
+        
+        Value *host_ptr = builder->CreatePointerCast(host, i8->getPointerTo());
+        builder->CreateStore(host_ptr, buffer_host_ptr(buf));
+        builder->CreateStore(null64,   buffer_dev_ptr(buf));
+        
+        builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
+        builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
+        
+        // For now, we just track the allocation as a single 1D buffer of the
+        // required size. If we break this into multiple dimensions, this will
+        // fail to account for expansion for alignment.
+        builder->CreateStore(codegen(alloc->size),
+                             buffer_extent_ptr(buf, 0));
+        builder->CreateStore(zero32,  buffer_extent_ptr(buf, 1));
+        builder->CreateStore(zero32,  buffer_extent_ptr(buf, 2));
+        builder->CreateStore(zero32,  buffer_extent_ptr(buf, 3));
+        
+        builder->CreateStore(one32,   buffer_stride_ptr(buf, 0));
+        builder->CreateStore(zero32,  buffer_stride_ptr(buf, 1));
+        builder->CreateStore(zero32,  buffer_stride_ptr(buf, 2));
+        builder->CreateStore(zero32,  buffer_stride_ptr(buf, 3));
+        
+        builder->CreateStore(zero32,  buffer_min_ptr(buf, 0));
+        builder->CreateStore(zero32,  buffer_min_ptr(buf, 1));
+        builder->CreateStore(zero32,  buffer_min_ptr(buf, 2));
+        builder->CreateStore(zero32,  buffer_min_ptr(buf, 3));
 
-    // For now, we just track the allocation as a single 1D buffer of the
-    // required size. If we break this into multiple dimensions, this will
-    // fail to account for expansion for alignment.
-    builder->CreateStore(codegen(alloc->size),
-                                buffer_extent_ptr(buf, 0));
-    builder->CreateStore(one32,   buffer_extent_ptr(buf, 1));
-    builder->CreateStore(one32,   buffer_extent_ptr(buf, 2));
-    builder->CreateStore(one32,   buffer_extent_ptr(buf, 3));
+        int bytes = alloc->type.width * alloc->type.bits / 8;
+        builder->CreateStore(ConstantInt::get(i32, bytes),
+                             buffer_elem_size_ptr(buf));
 
-    builder->CreateStore(one32,   buffer_stride_ptr(buf, 0));
-    builder->CreateStore(one32,   buffer_stride_ptr(buf, 1));
-    builder->CreateStore(one32,   buffer_stride_ptr(buf, 2));
-    builder->CreateStore(one32,   buffer_stride_ptr(buf, 3));
+        builder->CreateCall(dev_malloc_fn, buf);
 
-    builder->CreateStore(zero32,  buffer_min_ptr(buf, 0));
-    builder->CreateStore(zero32,  buffer_min_ptr(buf, 1));
-    builder->CreateStore(zero32,  buffer_min_ptr(buf, 2));
-    builder->CreateStore(zero32,  buffer_min_ptr(buf, 3));
-
-    int bytes = alloc->type.width * alloc->type.bits / 8;
-    builder->CreateStore(ConstantInt::get(i32, bytes),
-                                buffer_elem_size_ptr(buf));
+        sym_push(alloc->name + ".buffer", buf);
+    }
 
     log(3) << "Pushing allocation called " << alloc->name << " onto the symbol table\n";
 
-    sym_push(alloc->name + ".buffer", buf);
-    sym_push(alloc->name + ".host", ptr);
     codegen(alloc->body);
-    sym_pop(alloc->name + ".host");
-    sym_pop(alloc->name + ".buffer");
+   
+    if (usage.used_on_device) {
+        builder->CreateCall(dev_free_fn, buf);
+        sym_pop(alloc->name + ".buffer");
+        if (gpu_saved_stack) {
+            restore_stack(gpu_saved_stack);
+        }
+    }
 
-    // Call halide_free_dev_buffer to free device memory, if needed
-    llvm::Function *free_buf_fn = module->getFunction("halide_free_dev_buffer");
-    assert(free_buf_fn && "Could not find halide_free_dev_buffer in module");
-    log(4) << "Creating call to halide_free_dev_buffer\n";
-    builder->CreateCall(free_buf_fn, buf);
+    if (usage.used_on_host) {
+        free_buffer(host, saved_stack);
+        sym_pop(alloc->name + ".host");
+    } 
 
-    // free the underlying host buffer
-    // TODO: at some point, we should also be able to lazily allocate
-    //       intermediate *host* memory, in case it never gets used outside
-    //       the device.
-    free_buffer(ptr, saved_stack);
+
+
 }
 
 void CodeGen_PTX_Host::visit(const Pipeline *n) {
-    Value *buf = sym_get(n->name + ".buffer");
+    
+    Value *buf = sym_get(n->name + ".buffer", false);
+    Value *host = sym_get(n->name + ".host", false);
+
+    if (!(buf && host)) {
+        CodeGen_X86::visit(n);
+        return;
+    }
 
     Closure produce = Closure::make(n->produce, "", true);
     Closure consume = Closure::make(n->consume, "", true);
@@ -550,10 +642,14 @@ void CodeGen_PTX_Host::visit(const Call *call) {
     // calls to whole-buffer builtins like debug_to_file.
     if (call->name == "debug to file") {
         assert(call->args.size() == 9 && "malformed debug to file node");
-        const Call *func = call->args[1].as<Call>();
+        const Load *func = call->args[1].as<Load>();
         assert(func && "malformed debug to file node");
-        Value *buf = sym_get(func->name + ".buffer");
-        builder->CreateCall(copy_to_host_fn, buf);
+        
+        Value *buf = sym_get(func->name + ".buffer", false);
+        if (buf) {
+            // This buffer may have been last-touched on device
+            builder->CreateCall(copy_to_host_fn, buf);
+        }
     } 
 
     CodeGen::visit(call);

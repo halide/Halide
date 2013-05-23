@@ -223,23 +223,16 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
     return true;
 }
 
-WEAK void halide_free_dev_buffer(buffer_t* buf) {
-    #if 1 // Switch this to zero to temporarily disable freeing
+WEAK void halide_dev_free(buffer_t* buf) {
 
     #ifndef NDEBUG
-    fprintf(stderr, "In free_dev_buffer of %p - dev: 0x%zx\n", buf, buf->dev);
+    fprintf(stderr, "In dev_free of %p - dev: 0x%zx\n", buf, buf->dev);
     #endif
-    if (buf->dev) {
-        assert(halide_validate_dev_pointer(buf));
-        CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
-        buf->dev = 0;
-    }
-    // __release_buffer(buf);
-    #else
-    #ifndef NDEBUG
-    fprintf(stderr, "Would have run free_dev_buffer, but skipping (#if disabled)\n");
-    #endif
-    #endif
+
+    assert(halide_validate_dev_pointer(buf));
+    CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
+    buf->dev = 0;
+
 }
 
 WEAK void halide_init_kernels(const char* ptx_src) {
@@ -313,31 +306,16 @@ WEAK void halide_release() {
 static CUfunction __get_kernel(const char* entry_name)
 {
     CUfunction f;
-    #ifdef NDEBUG
-    // char msg[1];
-    #else
+
+    #ifndef NDEBUG
     char msg[256];
     snprintf(msg, 256, "get_kernel %s (t=%d)", entry_name, halide_current_time() );
     #endif
+
     // Get kernel function ptr
     TIME_CALL( cuModuleGetFunction(&f, __mod, entry_name), msg );
-    return f;
-}
 
-static CUdeviceptr __dev_malloc(size_t bytes) {
-    CUdeviceptr p;
-    #ifdef NDEBUG
-    // char msg[1];
-    #else
-    char msg[256];
-    snprintf(msg, 256, "dev_malloc (%zu bytes) (t=%d)", bytes, halide_current_time() );
-    #endif
-    TIME_CALL( cuMemAlloc(&p, bytes), msg );
-    assert(p);
-    #ifndef NDEBUG
-    fprintf(stderr, "    returned: %p\n", (void*)p);
-    #endif
-    return p;
+    return f;
 }
 
 static inline size_t buf_size(buffer_t* buf) {
@@ -350,20 +328,22 @@ static inline size_t buf_size(buffer_t* buf) {
     return sz;
 }
 
-WEAK void halide_dev_malloc_if_missing(buffer_t* buf) {
-    #ifndef NDEBUG
-    fprintf(stderr, "dev_malloc_if_missing of %zdx%zdx%zdx%zd (%zd bytes per element) (buf->dev = %p) buffer\n",
-            buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
-    #endif
+WEAK void halide_dev_malloc(buffer_t* buf) {
     if (buf->dev) {
-        #ifndef NDEBUG
-        assert(halide_validate_dev_pointer(buf));
-        #endif
+        // This buffer already has a device allocation
         return;
     }
-    size_t size = buf_size(buf);
-    buf->dev = __dev_malloc(size);
+
+    #ifndef NDEBUG
+    fprintf(stderr, "dev_malloc of %zdx%zdx%zdx%zd (%zd bytes per element) (buf->dev = %p) buffer\n",
+            buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
+    #endif    
+
+    CUdeviceptr p;
+    TIME_CALL( cuMemAlloc(&p, buf_size(buf)), "dev_malloc");
+    buf->dev = (uint64_t)p;
     assert(buf->dev);
+
     #ifndef NDEBUG
     assert(halide_validate_dev_pointer(buf));
     #endif
@@ -387,7 +367,8 @@ WEAK void halide_copy_to_dev(buffer_t* buf) {
 
 WEAK void halide_copy_to_host(buffer_t* buf) {
     if (buf->dev_dirty) {
-        assert(buf->host && buf->dev);
+        assert(buf->dev);
+        assert(buf->host);
         size_t size = buf_size(buf);
         #ifdef NDEBUG
         // char msg[1];
@@ -410,9 +391,8 @@ WEAK void halide_dev_run(
     void* args[])
 {
     CUfunction f = __get_kernel(entry_name);
-    #ifdef NDEBUG
-    // char msg[1];
-    #else
+
+    #ifndef NDEBUG
     char msg[256];
     snprintf(
         msg, 256,
@@ -421,6 +401,7 @@ WEAK void halide_dev_run(
         halide_current_time()
     );
     #endif
+
     TIME_CALL(
         cuLaunchKernel(
             f,
@@ -524,10 +505,7 @@ int f( buffer_t *input, buffer_t *result, int N )
     int blocksY = 1;
     int blocksZ = 1;
 
-    // __dev_malloc_if_missing(input);
-    halide_dev_malloc_if_missing(result);
-
-    // __copy_to_dev(input);
+    halide_dev_malloc(result);
 
     // Invoke
     // void* cuArgs[] = { &N, &result->dev };
