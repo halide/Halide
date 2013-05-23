@@ -12,6 +12,7 @@
 #include "Util.h"
 #include "Bounds.h"
 #include "Simplify.h"
+#include "Tracing.h"
 
 #include <dlfcn.h>
 #include <unistd.h>
@@ -290,6 +291,9 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     dev_run_fn = module->getFunction("halide_dev_run");
     assert(dev_run_fn && "Could not find halide_dev_run in module");
 
+    dev_sync_fn = module->getFunction("halide_dev_sync");
+    assert(dev_sync_fn && "Could not find halide_dev_sync in module");
+
     // Fix the target triple
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
@@ -487,6 +491,11 @@ void CodeGen_PTX_Host::visit(const For *loop) {
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref")
         };
         builder->CreateCall(dev_run_fn, launch_args);
+        
+        // Sync so that timing will be correct
+        if (tracing_level() > 0) {
+            builder->CreateCall(dev_sync_fn);
+        }
 
         // mark written buffers dirty
         for (it = c.writes.begin(); it != c.writes.end(); ++it) {

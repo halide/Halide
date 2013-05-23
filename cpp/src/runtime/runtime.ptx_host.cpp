@@ -383,6 +383,11 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
 }
 #define _COPY_TO_HOST
 
+// Used to generate correct timings when tracing
+WEAK void halide_dev_sync() {
+    cuCtxSynchronize();
+}
+
 WEAK void halide_dev_run(
     const char* entry_name,
     int blocksX, int blocksY, int blocksZ,
