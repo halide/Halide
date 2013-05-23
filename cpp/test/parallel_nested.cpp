@@ -16,18 +16,18 @@ int main(int argc, char **argv) {
     f.parallel(y);
     f.parallel(z);
 
-    Image<int> im = f.realize(8, 8, 8);
+    Image<int> im = f.realize(64, 64, 64);
 
-    for (int x = 0; x < 8; x++) {
-        for (int y = 0; y < 8; y++) {
-            for (int z = 0; z < 8; z++) {
+    for (int x = 0; x < 64; x++) {
+        for (int y = 0; y < 64; y++) {
+            for (int z = 0; z < 64; z++) {
                 if (im(x, y, z) != x*y+z*3+1) {
                     printf("im(%d, %d, %d) = %d\n", x, y, z, im(x, y, z));
                     return -1;
                 }
             }
         }
-    }
+    } 
     
     printf("Success!\n");
     return 0;
