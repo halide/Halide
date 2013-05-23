@@ -50,6 +50,7 @@ protected:
     llvm::Function *copy_to_dev_fn;
     llvm::Function *copy_to_host_fn;
     llvm::Function *dev_run_fn;
+    llvm::Function *dev_sync_fn;
     // @}
 
     /** Finds and links in the CUDA runtime symbols prior to jitting */
