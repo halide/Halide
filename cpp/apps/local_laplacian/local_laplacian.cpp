@@ -124,8 +124,8 @@ int main(int argc, char **argv) {
                 blockw = 2;
                 blockh = 2;
             }
-            inGPyramid[j].compute_root().cuda_tile(x, y, blockw, blockh);
-            gPyramid[j].compute_root().reorder(k, x, y).cuda_tile(x, y, blockw, blockh);
+            if (j > 0) inGPyramid[j].compute_root().cuda_tile(x, y, blockw, blockh);
+            if (j > 0) gPyramid[j].compute_root().reorder(k, x, y).cuda_tile(x, y, blockw, blockh);
             outGPyramid[j].compute_root().cuda_tile(x, y, blockw, blockh);
         }
     } else {
