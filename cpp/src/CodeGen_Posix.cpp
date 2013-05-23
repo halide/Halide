@@ -21,53 +21,87 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_Posix::CodeGen_Posix() : CodeGen() {
-    wild_i8x8 = new Variable(Int(8, 8), "*");
-    wild_i8x16 = new Variable(Int(8, 16), "*");
-    wild_i8x32 = new Variable(Int(8, 32), "*");
-    wild_u8x8 = new Variable(UInt(8, 8), "*");
-    wild_u8x16 = new Variable(UInt(8, 16), "*");
-    wild_u8x32 = new Variable(UInt(8, 32), "*");
-    wild_i16x4 = new Variable(Int(16, 4), "*");
-    wild_i16x8 = new Variable(Int(16, 8), "*");
-    wild_i16x16 = new Variable(Int(16, 16), "*");
-    wild_u16x4 = new Variable(UInt(16, 4), "*");
-    wild_u16x8 = new Variable(UInt(16, 8), "*");
-    wild_u16x16 = new Variable(UInt(16, 16), "*");
-    wild_i32x2 = new Variable(Int(32, 2), "*");
-    wild_i32x4 = new Variable(Int(32, 4), "*");
-    wild_i32x8 = new Variable(Int(32, 8), "*");
-    wild_u32x2 = new Variable(UInt(32, 2), "*");
-    wild_u32x4 = new Variable(UInt(32, 4), "*");
-    wild_u32x8 = new Variable(UInt(32, 8), "*");
+CodeGen_Posix::CodeGen_Posix() : 
+    CodeGen(),
 
-    wild_u64x2 = new Variable(UInt(64, 2), "*");
-    wild_i64x2 = new Variable(Int(64, 2), "*");
-    wild_u64x4 = new Variable(UInt(64, 4), "*");
-    wild_i64x4 = new Variable(Int(64, 4), "*");
+    // Vector types. These need an LLVMContext before they can be initialized.
+    i8x8(NULL), 
+    i8x16(NULL),
+    i8x32(NULL),
+    i16x4(NULL), 
+    i16x8(NULL),
+    i16x16(NULL),
+    i32x2(NULL),
+    i32x4(NULL),
+    i32x8(NULL),
+    i64x2(NULL),
+    i64x4(NULL),
+    f32x2(NULL),
+    f32x4(NULL),
+    f32x8(NULL),
+    f64x2(NULL),
+    f64x4(NULL),
 
-    wild_f32x2 = new Variable(Float(32, 2), "*");
-    wild_f32x4 = new Variable(Float(32, 4), "*");
-    wild_f32x8 = new Variable(Float(32, 8), "*");
-    wild_f64x2 = new Variable(Float(64, 2), "*");
-    wild_f64x4 = new Variable(Float(64, 4), "*");
+    // Wildcards for pattern matching
+    wild_i8x8(new Variable(Int(8, 8), "*")),
+    wild_i16x4(new Variable(Int(16, 4), "*")),
+    wild_i32x2(new Variable(Int(32, 2), "*")),
 
-    max_i8 = Int(8).max();
-    min_i8 = Int(8).min();
-    max_i16 = Int(16).max();
-    min_i16 = Int(16).min();
-    max_i32 = Int(32).max();
-    min_i32 = Int(32).min();
-    max_i64 = Int(64).max();
-    min_i64 = Int(64).min();
-    max_u8 = UInt(8).max();
-    max_u16 = UInt(16).max();
-    max_u32 = UInt(32).max();
-    max_u64 = UInt(64).max();
-    max_f32 = Float(32).max();
-    min_f32 = Float(32).min();
-    max_f64 = Float(64).max();
-    min_f64 = Float(64).min();
+    wild_u8x8(new Variable(UInt(8, 8), "*")),
+    wild_u16x4(new Variable(UInt(16, 4), "*")),
+    wild_u32x2(new Variable(UInt(32, 2), "*")),
+
+    wild_i8x16(new Variable(Int(8, 16), "*")),
+    wild_i16x8(new Variable(Int(16, 8), "*")),
+    wild_i32x4(new Variable(Int(32, 4), "*")),
+    wild_i64x2(new Variable(Int(64, 2), "*")),
+
+    wild_u8x16(new Variable(UInt(8, 16), "*")),
+    wild_u16x8(new Variable(UInt(16, 8), "*")),
+    wild_u32x4(new Variable(UInt(32, 4), "*")),
+    wild_u64x2(new Variable(UInt(64, 2), "*")),
+
+    wild_i8x32(new Variable(Int(8, 32), "*")),
+    wild_i16x16(new Variable(Int(16, 16), "*")),
+    wild_i32x8(new Variable(Int(32, 8), "*")),
+    wild_i64x4(new Variable(Int(64, 4), "*")),
+
+    wild_u8x32(new Variable(UInt(8, 32), "*")),
+    wild_u16x16(new Variable(UInt(16, 16), "*")),
+    wild_u32x8(new Variable(UInt(32, 8), "*")),
+    wild_u64x4(new Variable(UInt(64, 4), "*")),
+
+    wild_f32x2(new Variable(Float(32, 2), "*")),
+
+    wild_f32x4(new Variable(Float(32, 4), "*")),
+    wild_f64x2(new Variable(Float(64, 2), "*")),
+
+    wild_f32x8(new Variable(Float(32, 8), "*")),
+    wild_f64x4(new Variable(Float(64, 4), "*")),
+
+    // Bounds of types
+    min_i8(Int(8).min()),
+    max_i8(Int(8).max()),
+    max_u8(UInt(8).max()),
+
+    min_i16(Int(16).min()),
+    max_i16(Int(16).max()),
+    max_u16(UInt(16).max()),
+
+    min_i32(Int(32).min()),
+    max_i32(Int(32).max()),
+    max_u32(UInt(32).max()),
+
+    min_i64(Int(64).min()),
+    max_i64(Int(64).max()),
+    max_u64(UInt(64).max()),
+
+    min_f32(Float(32).min()),
+    max_f32(Float(32).max()),
+
+    min_f64(Float(64).min()),
+    max_f64(Float(64).max()) {
+
 }
 
 void CodeGen_Posix::init_module() {

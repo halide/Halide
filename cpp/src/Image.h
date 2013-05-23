@@ -61,7 +61,7 @@ private:
 
 public:
     /** Construct an undefined image handle */
-    Image() {}
+    Image() : base(NULL), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
 
     /** Allocate an image with the given dimensions. */
     Image(int x, int y = 0, int z = 0, int w = 0) : buffer(Buffer(type_of<T>(), x, y, z, w)) {

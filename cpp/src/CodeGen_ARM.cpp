@@ -600,13 +600,13 @@ void CodeGen_ARM::visit(const Div *op) {
         // Do the shift (add 8 or 16 to narrow back down)
         if (op->type == Int(32, 2) && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
-            val = call_intrin(narrower, "vshiftn.v2i32", vec(wide_val, (Value *)shift_amount));
+            val = call_intrin(narrower, "vshiftn.v2i32", vec<Value *>(wide_val, shift_amount));
         } else if (op->type == Int(16, 4) && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -16);
-            val = call_intrin(narrower, "vshiftn.v4i16", vec(wide_val, (Value *)shift_amount));
+            val = call_intrin(narrower, "vshiftn.v4i16", vec<Value *>(wide_val, shift_amount));
         } else if (op->type == Int(8, 8) && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -8);
-            val = call_intrin(narrower, "vshiftn.v8i8", vec(wide_val, (Value *)shift_amount));
+            val = call_intrin(narrower, "vshiftn.v8i8", vec<Value *>(wide_val, shift_amount));
         } else {
             Constant *shift_amount = ConstantInt::get(wider, (shift + op->type.bits));
             val = builder->CreateLShr(wide_val, shift_amount);
@@ -649,13 +649,13 @@ void CodeGen_ARM::visit(const Div *op) {
         // Narrow 
         if (op->type == UInt(32, 2) && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
-            val = call_intrin(narrower, "vshiftn.v2i32", vec(val, (Value *)shift_amount));
+            val = call_intrin(narrower, "vshiftn.v2i32", vec<Value *>(val, shift_amount));
         } else if (op->type == UInt(16, 4) && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -16);
-            val = call_intrin(narrower, "vshiftn.v4i16", vec(val, (Value *)shift_amount));
+            val = call_intrin(narrower, "vshiftn.v4i16", vec<Value *>(val, shift_amount));
         } else if (op->type == UInt(8, 8) && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -8);
-            val = call_intrin(narrower, "vshiftn.v8i8", vec(val, (Value *)shift_amount));
+            val = call_intrin(narrower, "vshiftn.v8i8", vec<Value *>(val, shift_amount));
         } else {
             int shift_bits = op->type.bits;
             // For methods 0 and 1, we can do the final shift here too
@@ -939,7 +939,7 @@ void CodeGen_ARM::visit(const Store *op) {
         return;
     }
 
-    if (ramp && is_one(ramp->stride) && 
+    if (is_one(ramp->stride) && 
         call && call->name == "interleave vectors") {
         assert(call->args.size() == 2 && "Wrong number of args to interleave vectors");
         vector<Value *> args(call->args.size() + 2);

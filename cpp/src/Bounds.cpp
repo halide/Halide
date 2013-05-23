@@ -512,7 +512,7 @@ map<string, Region> compute_regions_touched(Stmt s, bool consider_calls, bool co
     s.accept(&r);
     map<string, Region> regions;
     for (map<string, vector<Interval> >::iterator iter = r.regions.begin(); 
-         iter != r.regions.end(); iter++) {
+         iter != r.regions.end(); ++iter) {
         Region region;
         const vector<Interval> &box = iter->second;
         for (size_t i = 0; i < box.size(); i++) {

@@ -29,7 +29,7 @@ struct Argument {
     /** If this is a scalar parameter, then this is its type */
     Type type;
 
-    Argument() {}
+    Argument() : is_buffer(false) {}
     Argument(const std::string &_name, bool _is_buffer, Type _type) : 
         name(_name), is_buffer(_is_buffer), type(_type) {}
 };
