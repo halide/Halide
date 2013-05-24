@@ -50,7 +50,7 @@ RM	= rm -f
 
 # General rules
 default: $(OBJECTS)
-	$(LINK) $(OBJECTS) $(LIBS) -o $(TARGET)
+	$(LINK) -fopenmp $(OBJECTS) $(LIBS) -o $(TARGET)
 
 clean:
 	$(RM) $(OBJECTS)
@@ -58,4 +58,4 @@ clean:
 
 # File rules
 truncated_kernel_bf.o: truncated_kernel_bf.cpp
-	$(CC) truncated_kernel_bf.cpp -c -o truncated_kernel_bf.o $(INCDIR) $(DEFINES)
+	$(CC) -fopenmp truncated_kernel_bf.cpp -c -o truncated_kernel_bf.o $(INCDIR) $(DEFINES)
