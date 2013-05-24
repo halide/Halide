@@ -4,27 +4,12 @@ using namespace Halide;
 
 Var x, y, c;
 
-/*
-class Lambda {
-public:
-    Lambda(Var x, Var y) : x(x), y(y) {
-    }
-
-    Func operator=(Expr rhs) {
-        f(x, y) = rhs;
-        return f;
-    }
-
-private:
-    Var x, y;
-    Func f;
-};
-*/
-
 Func haar_x(Func in) {
     Func out;
-    out(x, y) = (in(2*x, y) + in(2*x+1, y),
-                 in(2*x, y) - in(2*x+1, y))/2;
+    out(x, y, c) = select(c == 0, 
+                          (in(2*x, y) + in(2*x+1, y)),
+                          (in(2*x, y) - in(2*x+1, y)))/2;
+    out.unroll(c, 2);
     return out;
 }
 
@@ -37,15 +22,25 @@ Func inverse_haar_x(Func in) {
     return out;
 }
 
+
 const float D0 = 0.4829629131445341f;
 const float D1 = 0.83651630373780772f;
 const float D2 = 0.22414386804201339f;
 const float D3 = -0.12940952255126034f;
 
+/*
+const float D0 = 0.34150635f;
+const float D1 = 0.59150635f;
+const float D2 = 0.15849365f;
+const float D3 = -0.1830127f;
+*/
+
 Func daubechies_x(Func in) {
     Func out;
-    out(x, y) = (D0*in(2*x-1, y) + D1*in(2*x, y) + D2*in(2*x+1, y) + D3*in(2*x+2, y),
-                 D3*in(2*x-1, y) - D2*in(2*x, y) + D1*in(2*x+1, y) - D0*in(2*x+2, y));
+    out(x, y, c) = select(c == 0, 
+                          D0*in(2*x-1, y) + D1*in(2*x, y) + D2*in(2*x+1, y) + D3*in(2*x+2, y),
+                          D3*in(2*x-1, y) - D2*in(2*x, y) + D1*in(2*x+1, y) - D0*in(2*x+2, y));
+    out.unroll(c, 2);
     return out;
 }
 
@@ -60,8 +55,8 @@ Func inverse_daubechies_x(Func in) {
 
 int main(int argc, char **argv) {
 
-    UniformImage image(Float(32), 2);    
-    UniformImage wavelet(Float(32), 3);
+    ImageParam image(Float(32), 2);    
+    ImageParam wavelet(Float(32), 3);
 
     // Add a boundary condition for daubechies
     Func clamped;
@@ -71,21 +66,18 @@ int main(int argc, char **argv) {
     wavelet_clamped(x, y, c) = wavelet(clamp(x, 0, wavelet.width()-1),
                                        clamp(y, 0, wavelet.height()-1), c);
 
+
     Func inv_haar_x = inverse_haar_x(wavelet_clamped);
-    if (use_gpu()) inv_haar_x.cudaTile(x, y, 8, 8);
-    inv_haar_x.compileToFile("inverse_haar_x");
+    inv_haar_x.compile_to_file("inverse_haar_x", wavelet);
 
     Func for_haar_x = haar_x(clamped);
-    if (use_gpu()) for_haar_x.cudaTile(x, y, 8, 8);
-    for_haar_x.compileToFile("haar_x");
+    for_haar_x.compile_to_file("haar_x", image);
 
     Func inv_daub_x = inverse_daubechies_x(wavelet_clamped);
-    if (use_gpu()) inv_daub_x.cudaTile(x, y, 8, 8);
-    inv_daub_x.compileToFile("inverse_daubechies_x");
+    inv_daub_x.compile_to_file("inverse_daubechies_x", wavelet);
 
     Func for_daub_x = daubechies_x(clamped);
-    if (use_gpu()) for_daub_x.cudaTile(x, y, 8, 8);
-    for_daub_x.compileToFile("daubechies_x");
+    for_daub_x.compile_to_file("daubechies_x", image);
 
     return 0;
 }

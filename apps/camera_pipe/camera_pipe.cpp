@@ -5,7 +5,8 @@ using namespace Halide;
 
 int schedule;
 
-Var x, y, tx, ty, c;
+Var x, y, tx("tx"), ty("ty"), c("c");
+Func processed("processed");
 
 Func hot_pixel_suppression(Func input) {
     Expr a = max(max(input(x-2, y), input(x+2, y)),
@@ -148,52 +149,52 @@ Func demosaic(Func deinterleaved) {
     if (schedule == 0) {
         // optimized for ARM
         // Compute these in chunks over tiles, vectorized by 8
-        g_r.chunk(tx).vectorize(x, 8);
-        g_b.chunk(tx).vectorize(x, 8);
-        r_gr.chunk(tx).vectorize(x, 8);
-        b_gr.chunk(tx).vectorize(x, 8);
-        r_gb.chunk(tx).vectorize(x, 8);
-        b_gb.chunk(tx).vectorize(x, 8);
-        r_b.chunk(tx).vectorize(x, 8);
-        b_r.chunk(tx).vectorize(x, 8);
+        g_r.compute_at(processed, tx).vectorize(x, 8);
+        g_b.compute_at(processed, tx).vectorize(x, 8);
+        r_gr.compute_at(processed, tx).vectorize(x, 8);
+        b_gr.compute_at(processed, tx).vectorize(x, 8);
+        r_gb.compute_at(processed, tx).vectorize(x, 8);
+        b_gb.compute_at(processed, tx).vectorize(x, 8);
+        r_b.compute_at(processed, tx).vectorize(x, 8);
+        b_r.compute_at(processed, tx).vectorize(x, 8);
         // These interleave in y, so unrolling them in y helps
-        r.chunk(tx).vectorize(x, 8).unroll(y, 2);
-        g.chunk(tx).vectorize(x, 8).unroll(y, 2);
-        b.chunk(tx).vectorize(x, 8).unroll(y, 2);
+        r.compute_at(processed, tx).vectorize(x, 8).unroll(y, 2);
+        g.compute_at(processed, tx).vectorize(x, 8).unroll(y, 2);
+        b.compute_at(processed, tx).vectorize(x, 8).unroll(y, 2);
     } else if (schedule == 1) {
         // optimized for X86
         // Don't vectorize, because sse is bad at 16-bit interleaving
-        g_r.chunk(tx);
-        g_b.chunk(tx);
-        r_gr.chunk(tx);
-        b_gr.chunk(tx);
-        r_gb.chunk(tx);
-        b_gb.chunk(tx);
-        r_b.chunk(tx);
-        b_r.chunk(tx);
+        g_r.compute_at(processed, tx);
+        g_b.compute_at(processed, tx);
+        r_gr.compute_at(processed, tx);
+        b_gr.compute_at(processed, tx);
+        r_gb.compute_at(processed, tx);
+        b_gb.compute_at(processed, tx);
+        r_b.compute_at(processed, tx);
+        b_r.compute_at(processed, tx);
         // These interleave in x and y, so unrolling them helps
-        r.chunk(tx).unroll(x, 2).unroll(y, 2);
-        g.chunk(tx).unroll(x, 2).unroll(y, 2);
-        b.chunk(tx).unroll(x, 2).unroll(y, 2);
+        r.compute_at(processed, tx).unroll(x, 2).unroll(y, 2);
+        g.compute_at(processed, tx).unroll(x, 2).unroll(y, 2);
+        b.compute_at(processed, tx).unroll(x, 2).unroll(y, 2);
     } else {
         // Basic naive schedule
-        g_r.root();
-        g_b.root();
-        r_gr.root();
-        b_gr.root();
-        r_gb.root();
-        b_gb.root();
-        r_b.root();
-        b_r.root();
-        r.root();
-        g.root();
-        b.root();
+        g_r.compute_root();
+        g_b.compute_root();
+        r_gr.compute_root();
+        b_gr.compute_root();
+        r_gb.compute_root();
+        b_gb.compute_root();
+        r_b.compute_root();
+        b_r.compute_root();
+        r.compute_root();
+        g.compute_root();
+        b.compute_root();
     }
     return output;
 }
 
 
-Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_7000, Uniform<float> kelvin) {
+Func color_correct(Func input, ImageParam matrix_3200, ImageParam matrix_7000, Param<float> kelvin) {
     // Get a color matrix by linearly interpolating between two
     // calibrated matrices using inverse kelvin.
 
@@ -201,7 +202,7 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
     Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
     matrix(x, y) = cast<int32_t>(val * 256.0f); // Q8.8 fixed point
-    matrix.root();
+    matrix.compute_root();
 
     Func corrected;
     Expr ir = cast<int32_t>(input(x, y, 0));
@@ -222,7 +223,7 @@ Func color_correct(Func input, UniformImage matrix_3200, UniformImage matrix_700
 }
 
 
-Func apply_curve(Func input, Type result_type, Uniform<float> gamma, Uniform<float> contrast) {
+Func apply_curve(Func input, Type result_type, Param<float> gamma, Param<float> contrast) {
     // copied from FCam
     Func curve("curved");
 
@@ -236,7 +237,7 @@ Func apply_curve(Func input, Type result_type, Uniform<float> gamma, Uniform<flo
 
     Expr val = cast(result_type, clamp(z*256.0f, 0.0f, 255.0f));
     curve(x) = val;
-    curve.root(); // It's a LUT, compute it once ahead of time.
+    curve.compute_root(); // It's a LUT, compute it once ahead of time.
 
     Func curved;
     curved(x, y, c) = curve(input(x, y, c));
@@ -245,8 +246,8 @@ Func apply_curve(Func input, Type result_type, Uniform<float> gamma, Uniform<flo
 }
 
 Func process(Func raw, Type result_type,
-             UniformImage matrix_3200, UniformImage matrix_7000, Uniform<float> color_temp, 
-             Uniform<float> gamma, Uniform<float> contrast) {
+             ImageParam matrix_3200, ImageParam matrix_7000, Param<float> color_temp, 
+             Param<float> gamma, Param<float> contrast) {
 
     Var xi, yi;
 
@@ -256,31 +257,30 @@ Func process(Func raw, Type result_type,
     Func corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp);
     Func curved = apply_curve(corrected, result_type, gamma, contrast);
 
-    Func processed("processed");
     processed(tx, ty, c) = curved(tx, ty, c);
 
     // Schedule
     processed.bound(c, 0, 3); // bound color loop 0-3, properly
-
     if (schedule == 0) {
         // Compute in chunks over tiles, vectorized by 8
-        denoised.chunk(tx).vectorize(x, 8);
-        deinterleaved.chunk(tx).vectorize(x, 8).reorder(c, x, y).unroll(c, 4);
-        corrected.chunk(tx).vectorize(x, 4).reorder(c, x, y).unroll(c, 3);
+        denoised.compute_at(processed, tx).vectorize(x, 8);
+        deinterleaved.compute_at(processed, tx).vectorize(x, 8).reorder(c, x, y).unroll(c);
+        corrected.compute_at(processed, tx).vectorize(x, 4).reorder(c, x, y).unroll(c);
         processed.tile(tx, ty, xi, yi, 32, 32).reorder(xi, yi, c, tx, ty);
+        processed.bound(tx, 0, 2560-32).bound(ty, 0, 1920); // Statically promise the output dimensions
         processed.parallel(ty);
     } else if (schedule == 1) {
         // Same as above, but don't vectorize (sse is bad at interleaved 16-bit ops)
-        denoised.chunk(tx);
-        deinterleaved.chunk(tx);
-        corrected.chunk(tx);
+        denoised.compute_at(processed, tx);
+        deinterleaved.compute_at(processed, tx);
+        corrected.compute_at(processed, tx);
         processed.tile(tx, ty, xi, yi, 128, 128).reorder(xi, yi, c, tx, ty);
         processed.parallel(ty);
     } else {
-        denoised.root();
-        deinterleaved.root();
-        corrected.root();
-        processed.root();
+        denoised.compute_root();
+        deinterleaved.compute_root();
+        corrected.compute_root();
+        processed.compute_root();
     }
 
     return processed;
@@ -290,10 +290,10 @@ int main(int argc, char **argv) {
     // The camera pipe is specialized on the 2592x1968 images that
     // come in, so we'll just use an image instead of a uniform image.
     Image<int16_t> input(2592, 1968);
-    UniformImage matrix_3200(Float(32), 2, "m3200"), matrix_7000(Float(32), 2, "m7000");
-    Uniform<float> color_temp("color_temp", 3200.0f);
-    Uniform<float> gamma("gamma", 1.8f);
-    Uniform<float> contrast("contrast", 10.0f);
+    ImageParam matrix_3200(Float(32), 2, "m3200"), matrix_7000(Float(32), 2, "m7000");
+    Param<float> color_temp("color_temp"); //, 3200.0f);
+    Param<float> gamma("gamma"); //, 1.8f);
+    Param<float> contrast("contrast"); //, 10.0f);
 
     // shift things inwards to give us enough padding on the
     // boundaries so that we don't need to check bounds. We're going
@@ -317,8 +317,9 @@ int main(int argc, char **argv) {
     //printf("%s\n", s.c_str());
 
     // In C++-11, this can be done as a simple initializer_list {color_temp,gamma,etc.} in place.
-    Arg args[] = {color_temp, gamma, contrast, input, matrix_3200, matrix_7000};
-    processed.compileToFile("curved", std::vector<Arg>(args, args+6));
+    Argument args[] = {color_temp, gamma, contrast, Buffer(input), matrix_3200, matrix_7000};
+    processed.compile_to_file("curved", std::vector<Argument>(args, args+6));
+    processed.compile_to_assembly("curved.s", std::vector<Argument>(args, args+6));
 
     return 0;
 }

@@ -1,5 +1,0 @@
-#!/bin/sh
-BASEDIR=`dirname $0`
-cd $BASEDIR
-UTIL=util
-python ${UTIL}/bootstrap.py "$@"

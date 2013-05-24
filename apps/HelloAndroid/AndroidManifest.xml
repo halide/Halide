@@ -19,6 +19,6 @@
   </application>
 
   <uses-permission android:name="android.permission.CAMERA" />
-
+  <uses-sdk android:minSdkVersion="3" />
 
 </manifest>

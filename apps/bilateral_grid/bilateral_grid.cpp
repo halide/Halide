@@ -8,15 +8,15 @@ Expr lerp(Expr a, Expr b, Expr alpha) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
-        printf("Usage: bilateral_grid <s_sigma> <schedule>\n");
+    if (argc < 2) {
+        printf("Usage: bilateral_grid <s_sigma>\n");
         // printf("Spatial sigma is a compile-time parameter, please provide it as an argument.\n"
         //        "(llvm's ptx backend doesn't handle integer mods by non-consts yet)\n");
         return 0;
     }
 
-    UniformImage input(Float(32), 2);
-    Uniform<float> r_sigma;
+    ImageParam input(Float(32), 2);
+    Param<float> r_sigma;
     int s_sigma = atoi(argv[1]);
     Var x("x"), y("y"), z("z"), c("c");
 
@@ -30,8 +30,11 @@ int main(int argc, char **argv) {
     Expr val = clamped(x * s_sigma + r.x - s_sigma/2, y * s_sigma + r.y - s_sigma/2);
     val = clamp(val, 0.0f, 1.0f);
     Expr zi = cast<int>(val * (1.0f/r_sigma) + 0.5f);
-    Func grid("grid");
-    grid(x, y, zi, c) += select(c == 0, val, 1.0f);
+    Func grid("grid"), histogram("histogram");    
+    histogram(x, y, zi, c) += select(c == 0, val, 1.0f);
+
+    // Introduce a dummy function, so we can schedule the histogram within it
+    grid(x, y, z, c) = histogram(x, y, z, c);
 
     // Blur the grid using a five-tap filter
     Func blurx("blurx"), blury("blury"), blurz("blurz");
@@ -42,7 +45,7 @@ int main(int argc, char **argv) {
     // Take trilinear samples to compute the output
     val = clamp(clamped(x, y), 0.0f, 1.0f);
     Expr zv = val * (1.0f/r_sigma);
-    zi = cast<int>(zv), 0, 10;
+    zi = cast<int>(zv);
     Expr zf = zv - zi;
     Expr xf = cast<float>(x % s_sigma) / s_sigma;
     Expr yf = cast<float>(y % s_sigma) / s_sigma;
@@ -56,91 +59,34 @@ int main(int argc, char **argv) {
                   lerp(blurz(xi, yi+1, zi+1), blurz(xi+1, yi+1, zi+1), xf), yf), zf);
 
     // Normalize
-    Func smoothed("smoothed");
-    smoothed(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
+    Func bilateral_grid("bilateral_grid");
+    bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
-    Var _c0, _c1, iv0, gridz, blockidx("blockidx");
-    int sched = atoi(argv[2]);
-    switch(sched) {
-    case 0:
-    // SIGGRAPH hand-tuned
-    // Best schedule for CPU
-    printf("Compiling for CPU\n");
-    grid.root().parallel(z);
-    grid.update().reorder(c, x, y).parallel(y);
-    blurx.root().parallel(z).vectorize(x, 4);
-    blury.root().parallel(z).vectorize(x, 4);
-    blurz.root().parallel(z).vectorize(x, 4);
-    smoothed.root().parallel(y).vectorize(x, 4);
-    break;
+    char *target = getenv("HL_TARGET");
+    if (target && std::string(target) == "ptx") {
 
-    case 1:
-    // PLDI autotuned - adobe1 - WTF!?
-    iv0 = blurx.arg(3);
-    fprintf(stderr, "iv0: %s\n", iv0.name().c_str());
-    blurx.root().split(iv0,iv0,_c0,8).vectorize(_c0,4).parallel(z);
-    blury.root();
-    blurz.chunk(iv0);
-    grid.root();
-    interpolated.root().parallel(y).vectorize(x,4);
-    smoothed.root().vectorize(x,16).tile(x,y,_c0,_c1,2,8).unroll(_c1,4);
-    break;
+        // GPU schedule
+        grid.compute_root().reorder(z, c, x, y).cuda_tile(x, y, 8, 8);
 
-    case 2:
-    // SIGGRAPH hand-tuned GPU
-    printf("Compiling for GPU");
-    gridz = grid.arg(2);
-    grid.root().cudaTile(x, y, 16, 16);
-    //grid.update().root().cudaTile(x, y, 16, 16);
-    blurx.root().cudaTile(x, y, 8, 8);
-    blury.root().cudaTile(x, y, 8, 8);
-    blurz.root().cudaTile(x, y, 8, 8);
-    smoothed.root().cudaTile(x, y, s_sigma, s_sigma);
-    break;
+        // Compute the histogram into shared memory before spilling it to global memory
+        histogram.store_at(grid, Var("blockidx")).compute_at(grid, Var("threadidx"));
 
-    case 3:
-    // PLDI autotuned GPU
-    iv0 = blurz.arg(3);
-    fprintf(stderr, "%s\n", iv0.name().c_str());
-    blurx.cudaChunk(blockidx,blockidx,x,y);
-    // blurz.root().reorder(z,iv0,x,y).cudaTile(x,y,8,8);
-    blurz.root().cudaTile(x,y,8,8); // -- this in place of the line with reorder above fixes non-const cudaChunk allocation bug
-    grid.root().cudaTile(x,y,2,2);
-    interpolated.root().unroll(x,4).cudaTile(x,y,16,16);
-    smoothed.root().cudaTile(x,y,16,16);
+        blurx.compute_root().cuda_tile(x, y, z, 16, 16, 1);
+        blury.compute_root().cuda_tile(x, y, z, 16, 16, 1);
+        blurz.compute_root().cuda_tile(x, y, z, 8, 8, 4);
+        bilateral_grid.compute_root().cuda_tile(x, y, s_sigma, s_sigma);
+    } else {
 
-    grid.bound(c,0,3);
-    smoothed.bound(c,0,3);
-    break;
-
-    default:
-    printf("No schedule given\n");
-    exit(1);
-    break;
+        // CPU schedule
+        grid.compute_root().reorder(c, z, x, y).parallel(y);
+        histogram.compute_at(grid, x).unroll(c);
+        blurx.compute_root().parallel(z).vectorize(x, 4);
+        blury.compute_root().parallel(z).vectorize(x, 4);
+        blurz.compute_root().parallel(z).vectorize(x, 4);
+        bilateral_grid.compute_root().parallel(y).vectorize(x, 4);
     }
 
-    std::vector<Arg> args;
-    args.push_back(r_sigma);
-    args.push_back(input);
-    smoothed.compileToFile("bilateral_grid", args);
-
-    // Compared to Sylvain Paris' implementation from his webpage (on
-    // which this is based), for filter params s_sigma 0.1, on a 4 megapixel
-    // input, on a four core x86 (2 socket core2 mac pro)
-    // Filter s_sigma: 2      4       8       16      32
-    // Paris (ms):     5350   1345    472     245     184
-    // Us (ms):        383    142     77      62      65
-    // Speedup:        14     9.5     6.1     3.9     2.8
-
-    // Our schedule and inlining are roughly the same as his, so the
-    // gain is all down to vectorizing and parallelizing. In general
-    // for larger blurs our win shrinks to roughly the number of
-    // cores, as the stages we don't vectorize as well dominate (we
-    // don't vectorize them well because they do gathers and scatters,
-    // which don't work well on x86).  For smaller blurs, our win
-    // grows, because the stages that we vectorize take up all the
-    // time.
-    
+    bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input);
 
     return 0;
 }

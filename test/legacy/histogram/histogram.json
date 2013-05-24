@@ -1,8 +1,0 @@
-{
-    "name": "histogram",
-    "num_popped": 1,
-    "helpstr": "input, width, height, channels",
-    "before_run": ["-load", "../test.png"],
-    "args": ["/im", "0", "/width", "0", "/height", "0", "/channels", "0"],
-    "validation": ["-load", "../test.png", "-histogram", "256", "-scale", "width*height", "-colormatrix", "1", "1", "1", "-subtract", "-printf", "%f", "mean()"]
-}

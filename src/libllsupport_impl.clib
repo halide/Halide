@@ -1,8 +1,0 @@
-cstdlib.o
-cllutil.o
-architecture.ptx.initmod.o
-architecture.ptx_dev.initmod.o
-architecture.arm.initmod.o
-architecture.arm_android.initmod.o
-architecture.x86.initmod.o
-architecture.x86_avx.initmod.o
