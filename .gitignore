@@ -1,3 +1,9 @@
+bin/*
+build/*
+tmp/*
+doc/*
+include/*
+
 \#*\#
 .\#*
 *~

@@ -1,18 +1,19 @@
-ifneq ($(shell env -i command -v g++-4.7),)
-GXX ?= g++-4.7
-endif
-GXX ?= g++-4.6
+GXX ?= g++
 
 PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
+
 ifeq ($(HL_TARGET),ptx)
-  SCHEDULE=103
-  CUDA_LFLAGS=-L/usr/local/cuda/lib -lcuda
-else
-  SCHEDULE=12
+  CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
 
 all: interpolate
 
-interpolate: ../../cpp_bindings/ interpolate.cpp
-	$(MAKE) -C ../../cpp_bindings libHalide.a
-	$(GXX) -g interpolate.cpp -I../../support -I ../../cpp_bindings/ ../../cpp_bindings/libHalide.a  -std=c++0x -lpng -o interpolate -lpthread -ldl $(PNGFLAGS)
+interpolate: ../../ interpolate.cpp
+	$(MAKE) -C ../../ bin/libHalide.a
+	$(GXX) $(CPPFLAGS) interpolate.cpp -I ../../include/ -I ../support ../../bin/libHalide.a -o interpolate  -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS)
+
+out.png: interpolate
+	./interpolate in.png out.png
+
+clean:
+	rm -f interpolate interpolate.h out.png

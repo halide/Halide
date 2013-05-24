@@ -1,9 +1,0 @@
-*.def
-*.lowered
-*.sexp
-*.bak
-*.so
-apollo2.png
-cHalide.py
-cHalide_wrap.cxx
-tune*

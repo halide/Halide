@@ -3,6 +3,7 @@
 #include <android/bitmap.h>
 #include <android/native_window_jni.h>
 #include <time.h>
+#include <string.h>
 
 #include "halide.h"
 
@@ -43,18 +44,20 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
 
     uint8_t *dst = (uint8_t *)buf.bits;
     buffer_t srcBuf = {0}, dstBuf = {0};
-    srcBuf.host = (uint8_t *)src + 640 + 1;
-    srcBuf.extent[0] = 640;
-    srcBuf.extent[1] = 360;
+    srcBuf.host = (uint8_t *)src;
+    srcBuf.extent[0] = 642;
+    srcBuf.extent[1] = 362;
     srcBuf.extent[2] = 1;
     srcBuf.extent[3] = 1;
-    srcBuf.stride[0] = 1;
+    srcBuf.stride[0] = 1;    
     srcBuf.stride[1] = 640;
+    srcBuf.min[0] = -1;
+    srcBuf.min[1] = -1;
     srcBuf.elem_size = 1;
 
     dstBuf.host = dst;
-    dstBuf.extent[0] = 638;
-    dstBuf.extent[1] = 358;
+    dstBuf.extent[0] = 640;
+    dstBuf.extent[1] = 360;
     dstBuf.extent[2] = 1;
     dstBuf.extent[3] = 1;
     dstBuf.stride[0] = 1;

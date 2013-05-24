@@ -2,6 +2,7 @@
 
 using namespace Halide;
 
+
 Expr u8(Expr x) {
     return cast(UInt(8), x);
 }
@@ -16,7 +17,7 @@ Expr f32(Expr x) {
 
 int main(int argc, char **argv) {
 
-    UniformImage input(UInt(8), 2);
+    ImageParam input(UInt(8), 2, "input");
 
     Var x, y;
 
@@ -29,15 +30,18 @@ int main(int argc, char **argv) {
     Func sharper;
     sharper(x, y) = 9*curved(x, y) - 2*(curved(x-1, y) + curved(x+1, y) + curved(x, y-1) + curved(x, y+1));
 
-    Func result;
+    Func result("result");
     result(x, y) = u8(clamp(sharper(x, y), 0, 255));
 
-    tone_curve.root();
+    tone_curve.compute_root();
     Var yi;
-    curved.chunk(y, yi);
     result.split(y, y, yi, 60).parallel(y).vectorize(x, 8);
+    curved.store_at(result, y).compute_at(result, yi);
 
-    result.compileToFile("halide", "arm.android");    
+    std::vector<Argument> args;
+    args.push_back(input);
+    result.compile_to_assembly("halide.s", args, "halide");    
+    result.compile_to_header("halide.h", args, "halide");    
 
     return 0;
 }
