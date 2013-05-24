@@ -32,6 +32,8 @@ a.out
 tags
 src/*.top
 llvm_svn
+llvm/*
+cpp/*
 *.h.gch
 src/test_*.ll
 src/test_*.s
