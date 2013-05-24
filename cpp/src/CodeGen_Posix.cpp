@@ -21,53 +21,87 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_Posix::CodeGen_Posix() : CodeGen() {
-    wild_i8x8 = new Variable(Int(8, 8), "*");
-    wild_i8x16 = new Variable(Int(8, 16), "*");
-    wild_i8x32 = new Variable(Int(8, 32), "*");
-    wild_u8x8 = new Variable(UInt(8, 8), "*");
-    wild_u8x16 = new Variable(UInt(8, 16), "*");
-    wild_u8x32 = new Variable(UInt(8, 32), "*");
-    wild_i16x4 = new Variable(Int(16, 4), "*");
-    wild_i16x8 = new Variable(Int(16, 8), "*");
-    wild_i16x16 = new Variable(Int(16, 16), "*");
-    wild_u16x4 = new Variable(UInt(16, 4), "*");
-    wild_u16x8 = new Variable(UInt(16, 8), "*");
-    wild_u16x16 = new Variable(UInt(16, 16), "*");
-    wild_i32x2 = new Variable(Int(32, 2), "*");
-    wild_i32x4 = new Variable(Int(32, 4), "*");
-    wild_i32x8 = new Variable(Int(32, 8), "*");
-    wild_u32x2 = new Variable(UInt(32, 2), "*");
-    wild_u32x4 = new Variable(UInt(32, 4), "*");
-    wild_u32x8 = new Variable(UInt(32, 8), "*");
+CodeGen_Posix::CodeGen_Posix() : 
+    CodeGen(),
 
-    wild_u64x2 = new Variable(UInt(64, 2), "*");
-    wild_i64x2 = new Variable(Int(64, 2), "*");
-    wild_u64x4 = new Variable(UInt(64, 4), "*");
-    wild_i64x4 = new Variable(Int(64, 4), "*");
+    // Vector types. These need an LLVMContext before they can be initialized.
+    i8x8(NULL), 
+    i8x16(NULL),
+    i8x32(NULL),
+    i16x4(NULL), 
+    i16x8(NULL),
+    i16x16(NULL),
+    i32x2(NULL),
+    i32x4(NULL),
+    i32x8(NULL),
+    i64x2(NULL),
+    i64x4(NULL),
+    f32x2(NULL),
+    f32x4(NULL),
+    f32x8(NULL),
+    f64x2(NULL),
+    f64x4(NULL),
 
-    wild_f32x2 = new Variable(Float(32, 2), "*");
-    wild_f32x4 = new Variable(Float(32, 4), "*");
-    wild_f32x8 = new Variable(Float(32, 8), "*");
-    wild_f64x2 = new Variable(Float(64, 2), "*");
-    wild_f64x4 = new Variable(Float(64, 4), "*");
+    // Wildcards for pattern matching
+    wild_i8x8(new Variable(Int(8, 8), "*")),
+    wild_i16x4(new Variable(Int(16, 4), "*")),
+    wild_i32x2(new Variable(Int(32, 2), "*")),
 
-    max_i8 = Int(8).max();
-    min_i8 = Int(8).min();
-    max_i16 = Int(16).max();
-    min_i16 = Int(16).min();
-    max_i32 = Int(32).max();
-    min_i32 = Int(32).min();
-    max_i64 = Int(64).max();
-    min_i64 = Int(64).min();
-    max_u8 = UInt(8).max();
-    max_u16 = UInt(16).max();
-    max_u32 = UInt(32).max();
-    max_u64 = UInt(64).max();
-    max_f32 = Float(32).max();
-    min_f32 = Float(32).min();
-    max_f64 = Float(64).max();
-    min_f64 = Float(64).min();
+    wild_u8x8(new Variable(UInt(8, 8), "*")),
+    wild_u16x4(new Variable(UInt(16, 4), "*")),
+    wild_u32x2(new Variable(UInt(32, 2), "*")),
+
+    wild_i8x16(new Variable(Int(8, 16), "*")),
+    wild_i16x8(new Variable(Int(16, 8), "*")),
+    wild_i32x4(new Variable(Int(32, 4), "*")),
+    wild_i64x2(new Variable(Int(64, 2), "*")),
+
+    wild_u8x16(new Variable(UInt(8, 16), "*")),
+    wild_u16x8(new Variable(UInt(16, 8), "*")),
+    wild_u32x4(new Variable(UInt(32, 4), "*")),
+    wild_u64x2(new Variable(UInt(64, 2), "*")),
+
+    wild_i8x32(new Variable(Int(8, 32), "*")),
+    wild_i16x16(new Variable(Int(16, 16), "*")),
+    wild_i32x8(new Variable(Int(32, 8), "*")),
+    wild_i64x4(new Variable(Int(64, 4), "*")),
+
+    wild_u8x32(new Variable(UInt(8, 32), "*")),
+    wild_u16x16(new Variable(UInt(16, 16), "*")),
+    wild_u32x8(new Variable(UInt(32, 8), "*")),
+    wild_u64x4(new Variable(UInt(64, 4), "*")),
+
+    wild_f32x2(new Variable(Float(32, 2), "*")),
+
+    wild_f32x4(new Variable(Float(32, 4), "*")),
+    wild_f64x2(new Variable(Float(64, 2), "*")),
+
+    wild_f32x8(new Variable(Float(32, 8), "*")),
+    wild_f64x4(new Variable(Float(64, 4), "*")),
+
+    // Bounds of types
+    min_i8(Int(8).min()),
+    max_i8(Int(8).max()),
+    max_u8(UInt(8).max()),
+
+    min_i16(Int(16).min()),
+    max_i16(Int(16).max()),
+    max_u16(UInt(16).max()),
+
+    min_i32(Int(32).min()),
+    max_i32(Int(32).max()),
+    max_u32(UInt(32).max()),
+
+    min_i64(Int(64).min()),
+    max_i64(Int(64).max()),
+    max_u64(UInt(64).max()),
+
+    min_f32(Float(32).min()),
+    max_f32(Float(32).max()),
+
+    min_f64(Float(64).min()),
+    max_f64(Float(64).max()) {
+
 }
 
 void CodeGen_Posix::init_module() {
@@ -91,28 +125,39 @@ void CodeGen_Posix::init_module() {
     f64x4 = VectorType::get(f64, 4);
 }
 
-Value* CodeGen_Posix::malloc_buffer(const Allocate *alloc, Value *&saved_stack) {
+Value *CodeGen_Posix::save_stack() {
+    llvm::Function *stacksave =
+        llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stacksave,
+                                        ArrayRef<llvm::Type*>());
+    return builder->CreateCall(stacksave);    
+}
 
-    // Allocate anything less than 32k on the stack
+void CodeGen_Posix::restore_stack(llvm::Value *saved_stack) {
+    llvm::Function *stackrestore =
+        llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore,
+                                        ArrayRef<llvm::Type*>());
+    builder->CreateCall(stackrestore, saved_stack);
+}
+
+Value *CodeGen_Posix::malloc_buffer(const Allocate *alloc, Value **saved_stack) {
+
+    // Allocate anything less than 8k on the stack
     int bytes_per_element = alloc->type.bits / 8;
     int stack_size = 0;
     bool on_stack = false;
     if (const IntImm *size = alloc->size.as<IntImm>()) {            
         stack_size = size->value;
-        on_stack = stack_size < 32*1024;
+        on_stack = (saved_stack != NULL) && stack_size < 8*1024;
     }
 
     Value *size = codegen(alloc->size * bytes_per_element);
     llvm::Type *llvm_type = llvm_type_of(alloc->type);
     Value *ptr;                
-    saved_stack = NULL;
+    *saved_stack = NULL;
 
     if (on_stack) {
         // TODO: Optimize to do only one stack pointer save per loop scope.
-        llvm::Function *stacksave =
-          llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stacksave,
-                                          ArrayRef<llvm::Type*>());
-        saved_stack = builder->CreateCall(stacksave);
+        *saved_stack = save_stack();
 
         // Do a 32-byte aligned alloca
         int total_bytes = stack_size * bytes_per_element;            
@@ -144,16 +189,13 @@ void CodeGen_Posix::free_buffer(Value *ptr, Value *saved_stack) {
         log(4) << "Creating call to halide_free\n";
         builder->CreateCall(free_fn, ptr);
     } else {
-        llvm::Function *stackrestore =
-          llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore,
-                                          ArrayRef<llvm::Type*>());
-        builder->CreateCall(stackrestore, saved_stack);
+        restore_stack(saved_stack);
     }
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
     Value *saved_stack;
-    Value *ptr = malloc_buffer(alloc, saved_stack);
+    Value *ptr = malloc_buffer(alloc, &saved_stack);
 
     // In the future, we may want to construct an entire buffer_t here
     string allocation_name = alloc->name + ".host";

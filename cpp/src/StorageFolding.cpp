@@ -137,7 +137,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 public:    
     int dim_folded;
     Expr fold_factor;
-    AttemptStorageFoldingOfFunction(string f) : func(f) {}
+    AttemptStorageFoldingOfFunction(string f) : func(f), dim_folded(-1) {}
 };
 
 // Look for opportunities for storage folding in a statement
@@ -152,6 +152,9 @@ class StorageFolding : public IRMutator {
             stmt = op;
         } else {
             Region bounds = op->bounds;
+
+            assert(folder.dim_folded >= 0 && 
+                   folder.dim_folded < (int)bounds.size());
 
             bounds[folder.dim_folded] = Range(0, folder.fold_factor);
             

@@ -1138,7 +1138,7 @@ void Func::realize(Buffer dst) {
     dst.set_source_module(compiled_module);
 }
 
-void Func::compile_jit() {
+void *Func::compile_jit() {
     assert(value().defined() && "Can't realize undefined function");
     
     if (!lowered.defined()) lowered = Halide::Internal::lower(func);
@@ -1172,6 +1172,7 @@ void Func::compile_jit() {
     
     compiled_module = cg.compile_to_function_pointers();    
 
+    return compiled_module.function;
 }
 
 void Func::test() {

@@ -56,16 +56,26 @@ protected:
      * and "hl_free" in the standard library. */
     void visit(const Allocate *);        
 
-    /** Direct implementation of Posix allocation logic. The returned `Value`
-     * is a pointer to the allocated memory. If heap allocation is performed,
-     * `saved_stack` is set to `NULL`; otherwise, it holds the saved stack
-     * pointer for later use with the `stackrestore` intrinsic. */
-    llvm::Value* malloc_buffer(const Allocate *alloc, llvm::Value *&saved_stack);
+    /** Direct implementation of Posix allocation logic. The returned
+     * `Value` is a pointer to the allocated memory. If you wish to
+     * allow stack allocation, also pass in a pointer to the
+     * llvm::Value you wish to store the saved stack in. If heap
+     * allocation is performed, `*saved_stack` is set to `NULL`;
+     * otherwise, it holds the saved stack pointer for later use with
+     * the `stackrestore` intrinsic. */
+    llvm::Value* malloc_buffer(const Allocate *alloc, llvm::Value **saved_stack = NULL);
 
     /** If `saved_stack` is non-`NULL`, this assumes the `ptr` was stack-allocated,
      * and frees it only by restoring the stack pointer; otherwise, it calls
      * `hl_free` in the standard library. */
     void free_buffer(llvm::Value *ptr, llvm::Value *saved_stack);
+
+    /** Save and restore the stack directly. You only need to call
+     * these if you're doing your own allocas. */
+    // @{
+    llvm::Value *save_stack();
+    void restore_stack(llvm::Value *saved_stack);
+    // @}
 
     /** The heap allocations currently in scope */
     std::vector<llvm::Value *> heap_allocations;
