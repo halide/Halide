@@ -105,6 +105,7 @@ namespace Image_filter{
 			     small_height,
 			     small_depth,mixed_type());
 
+    #pragma omp parallel for
     for(size_type x = 0,x_end = width;x < x_end;++x){
 
       const size_type small_x = static_cast<size_type>(x / space_sigma + 0.5) + padding_xy;
@@ -138,6 +139,7 @@ namespace Image_filter{
     
     mixed_array_3D_type buffer(small_width,small_height,small_depth);
 
+    #pragma omp parallel for
     for(size_type dim = 0;dim < 3;++dim){
 
       const int off = offset[dim];
@@ -193,6 +195,7 @@ namespace Image_filter{
 	*d /= (d->second != 0) ? d->second : 1;
       }
       
+      #pragma omp parallel for
       for(size_type x=0,x_end=width;x<x_end;x++){
 	for(size_type y=0,y_end=height;y<y_end;y++){
       
@@ -214,7 +217,9 @@ namespace Image_filter{
 
       weight->resize(width,height);
       
+      #pragma omp parallel for
       for(size_type x = 0,x_end = width;x < x_end;++x){
+        #pragma omp parallel for
 	for(size_type y = 0,y_end = height;y < y_end;++y){
       
 	  const base_type z = base(x,y) - base_min;
