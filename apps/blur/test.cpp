@@ -42,6 +42,24 @@ Image blur(const Image &in) {
     return out;
 }
 
+Image blur_columns(const Image &in) {
+    Image tmp(in.width(), in.height());
+    Image out(in.width(), in.height());
+
+    begin_timing;
+
+    for (int x = 0; x < in.width(); x++) 
+        for (int y = 0; y < in.height(); y++) 
+            tmp(x, y) = (in(x-1, y) + in(x, y) + in(x+1, y))/3;
+
+    for (int x = 0; x < in.width(); x++)
+        for (int y = 0; y < in.height(); y++) 
+            out(x, y) = (tmp(x, y-1) + tmp(x, y) + tmp(x, y+1))/3;
+
+    end_timing;
+
+    return out;
+}
 
 Image blur_fast(const Image &in) {
     Image out(in.width(), in.height());
@@ -176,7 +194,10 @@ Image blur_fast2(const Image &in) {
 }
 
 extern "C" {
-#include "halide_blur.h"
+#include "halide_blur_sliding_scanlines.h"
+#include "halide_blur_breadth_first.h"
+
+typedef void (*halide_blur_fn)(buffer_t *, buffer_t *);
 }
 
 // Convert a CIMG image to a buffer_t for halide
@@ -189,20 +210,20 @@ buffer_t halideBufferOfImage(Image &im) {
     return buf;
 }
 
-Image blur_halide(Image &in) {
+Image blur_halide(Image &in, halide_blur_fn f) {
     Image out(in.width(), in.height());
 
     buffer_t inbuf = halideBufferOfImage(in);
     buffer_t outbuf = halideBufferOfImage(out);
 
     // Call it once to initialize the halide runtime stuff
-    halide_blur(&inbuf, &outbuf);
+    f(&inbuf, &outbuf);
 
     begin_timing;
     
     // Compute the same region of the output as blur_fast (i.e., we're
     // still being sloppy with boundary conditions)
-    halide_blur(&inbuf, &outbuf);
+    f(&inbuf, &outbuf);
 
     end_timing;
 
@@ -223,17 +244,20 @@ int main(int argc, char **argv) {
     Image blurry = blur(input);
     float slow_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
 
+    Image blurry2 = blur_columns(input);
+    float slow_column_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
+
     Image speedy = blur_fast(input);
     float fast_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
 
     //Image speedy2 = blur_fast2(input);
     //float fast_time2 = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
     
-    Image halide = blur_halide(input);
+    Image halide = blur_halide(input, halide_blur_sliding_scanlines);
     float halide_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
 
     // fast_time2 is always slower than fast_time, so skip printing it
-    printf("times: %f %f %f\n", slow_time, fast_time, halide_time);
+    printf("times: %f %f %f %f\n", slow_time, slow_column_time, fast_time, halide_time);
 
     for (int y = 64; y < input.height() - 64; y++) {
         for (int x = 64; x < input.width() - 64; x++) {
