@@ -20,9 +20,12 @@ int main(int argc, char **argv) {
   blur_x.vectorize(x, 8);
   */
 
-  blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
-  blur_x.chunk(y, yi).vectorize(x, 8);
+  blur_y.reset().split(y, y, yi, 8).parallel(y).vectorize(x, 8);
+  blur_x.reset().chunk(y, yi).vectorize(x, 8);
+  blur_y.compileToFile("halide_blur_sliding_scanlines");
 
-  blur_y.compileToFile("halide_blur"); 
+  blur_y.reset().root().vectorize(x, 8).parallel(y);
+  blur_x.reset().root().vectorize(x, 8).parallel(y);
+  blur_y.compileToFile("halide_blur_breadth_first"); 
   return 0;
 }
