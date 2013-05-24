@@ -5,14 +5,18 @@
 namespace Halide {
 namespace Internal {
 
+int tracing_level() {
+    char *trace = getenv("HL_TRACE");
+    return trace ? atoi(trace) : 0;
+}
+
 using std::vector;
 
 class InjectTracing : public IRMutator {
 public:
     int level;
     InjectTracing() {
-        char *trace = getenv("HL_TRACE");
-        level = trace ? atoi(trace) : 0;
+        level = tracing_level();
     }
 
 

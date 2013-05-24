@@ -103,9 +103,9 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
     builder->CreateBr(body_block);
 
     // Add the nvvm annotation that it is a kernel function. 
-    MDNode *mdNode = MDNode::get(*context, vec((Value*)function,
-                                              (Value*)MDString::get(*context, "kernel"),
-                                              (Value*)ConstantInt::get(i32, 1)));
+    MDNode *mdNode = MDNode::get(*context, vec<Value *>(function,
+                                                        MDString::get(*context, "kernel"),
+                                                        ConstantInt::get(i32, 1)));
     module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(mdNode);
 
 

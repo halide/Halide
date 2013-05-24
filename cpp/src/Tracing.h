@@ -16,6 +16,9 @@ namespace Internal {
  * storage flattening, but after all bounds inference. */
 Stmt inject_tracing(Stmt);
 
+/** Gets the current tracing level (by reading HL_TRACE) */
+int tracing_level();
+
 }
 }
 

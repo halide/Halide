@@ -30,18 +30,16 @@ class DebugToFile : public IRMutator {
             // The name of the file
             args.push_back(new Call(Int(32), f.debug_file(), vector<Expr>()));
 
-            // Inject calls to the corners of the function so that any
+            // Inject loads to the corners of the function so that any
             // passes doing further analysis of buffer use understand
             // what we're doing (e.g. so we trigger a copy-back from a
             // device pointer).
-            vector<Expr> top_left, bottom_right;
+            Expr num_elements = 1;
             for (size_t i = 0; i < op->bounds.size(); i++) {
-                top_left.push_back(op->bounds[i].min);
-                bottom_right.push_back(op->bounds[i].min + op->bounds[i].extent - 1);
+                num_elements *= op->bounds[i].extent;
             }
-
-            args.push_back(new Call(op->type, f.name(), top_left));
-            args.push_back(new Call(op->type, f.name(), bottom_right));
+            args.push_back(new Load(op->type, f.name(), 0, Buffer(), Parameter()));
+            args.push_back(new Load(op->type, f.name(), num_elements-1, Buffer(), Parameter()));
 
             // The header           
             for (size_t i = 0; i < op->bounds.size(); i++) {
@@ -52,7 +50,7 @@ class DebugToFile : public IRMutator {
                                            op->bounds[i].extent);
                 }
             }
-            while (args.size() < 7) args.push_back(1);
+            while (args.size() < 7) args.push_back(1);            
 
             int type_code = 0;
             Type t = f.value().type();
