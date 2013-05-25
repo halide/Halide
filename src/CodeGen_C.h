@@ -67,8 +67,11 @@ protected:
     /** Close a C scope (i.e. throw in an end brace, decrease the indent) */
     void close_scope();
 
-    /** Track the types of allocations to avoid unnecessary casts */
-    Scope<Type> allocation_types;
+    /** Track the types of allocations to avoid unnecessary casts. */
+    Scope<Type> allocations;
+
+    /** Track which allocations actually went on the heap. */
+    Scope<int> heap_allocations;
 
     using IRPrinter::visit;
 
@@ -104,6 +107,7 @@ protected:
     void visit(const For *);
     void visit(const Provide *);
     void visit(const Allocate *);
+    void visit(const Free *);
     void visit(const Realize *);
     
     void visit_binop(Type t, Expr a, Expr b, const char *op);

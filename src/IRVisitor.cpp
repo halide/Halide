@@ -173,6 +173,9 @@ void IRVisitor::visit(const Allocate *op) {
     op->body.accept(this);
 }
 
+void IRVisitor::visit(const Free *op) {
+}
+
 void IRVisitor::visit(const Realize *op) {
     for (size_t i = 0; i < op->bounds.size(); i++) {
         op->bounds[i].min.accept(this);

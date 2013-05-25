@@ -572,8 +572,9 @@ struct Provide : public StmtNode<Provide> {
 };
 
 /** Allocate a scratch area called with the given name, type, and
- * size. The buffer lives for the duration of the 'body statement,
- * after which it is freed. */
+ * size. The buffer lives for at most the duration of the body
+ * statement, within which it is freed. It is an error for an allocate
+ * node not to contain a free node of the same buffer. */
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
@@ -586,6 +587,12 @@ struct Allocate : public StmtNode<Allocate> {
         assert(body.defined() && "Allocate of undefined");
         assert(size.type().is_scalar() == 1 && "Allocate of vector size");
     }
+};
+
+/** Free the resources associated with the given buffer. */
+struct Free : public StmtNode<Free> {
+    std::string name;
+    Free(std::string buf) : name(buf) {}
 };
 
 /** A single-dimensional span. Includes all numbers between min and

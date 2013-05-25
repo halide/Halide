@@ -18,6 +18,9 @@ namespace Internal {
 
 using std::vector;
 using std::string;
+using std::map;
+using std::pair;
+using std::stack;
 
 using namespace llvm;
 
@@ -174,23 +177,17 @@ Value *CodeGen_Posix::malloc_buffer(const Allocate *alloc, Value **saved_stack) 
         log(4) << "Creating call to halide_malloc\n";
         CallInst *call = builder->CreateCall(malloc_fn, sz);
         ptr = call;
-        heap_allocations.push_back(ptr);
     }
 
     return ptr;
 }
 
-void CodeGen_Posix::free_buffer(Value *ptr, Value *saved_stack) {
-    if (!saved_stack) {
-        heap_allocations.pop_back();
-        // call free
-        llvm::Function *free_fn = module->getFunction("halide_free");
-        assert(free_fn && "Could not find halide_free in module");
-        log(4) << "Creating call to halide_free\n";
-        builder->CreateCall(free_fn, ptr);
-    } else {
-        restore_stack(saved_stack);
-    }
+void CodeGen_Posix::free_buffer(Value *ptr) {
+    // call free
+    llvm::Function *free_fn = module->getFunction("halide_free");
+    assert(free_fn && "Could not find halide_free in module");
+    log(4) << "Creating call to halide_free\n";
+    builder->CreateCall(free_fn, ptr);
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
@@ -202,18 +199,46 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
     sym_push(allocation_name, ptr);
-    codegen(alloc->body);
-    sym_pop(allocation_name);
+    if (!saved_stack) {
+        heap_allocations.push(alloc->name, ptr);
+    }
 
-    free_buffer(ptr, saved_stack);
+    codegen(alloc->body);
+
+    // Should have been freed
+    assert(!heap_allocations.contains(alloc->name));
+    assert(!sym_exists(allocation_name));
+
+    if (saved_stack) {
+        restore_stack(saved_stack);
+    }
+}
+
+void CodeGen_Posix::visit(const Free *stmt) {
+    const string &buffer = stmt->name;
+
+    if (heap_allocations.contains(buffer)) {
+        // Pop it and free it
+        Value *ptr = sym_get(buffer + ".host");
+        free_buffer(ptr);
+        heap_allocations.pop(buffer);
+    } else {
+        // TODO: Tell llvm that the lifetime of this stack allocation is done
+    }
+
+    sym_pop(buffer + ".host");
+
 }
 
 void CodeGen_Posix::prepare_for_early_exit() {
-    llvm::Function *free_fn = module->getFunction("halide_free");
-    assert(free_fn && "Could not find halide_free in module");
-    for (size_t i = 0; i < heap_allocations.size(); i++) {
-        // TODO: What if I'm inside a parallel for loop?
-        builder->CreateCall(free_fn, heap_allocations[i]);        
+    for (map<string, stack<pair<Value *, int> > >::const_iterator iter = heap_allocations.get_table().begin();
+         iter != heap_allocations.get_table().end(); ++iter) {
+        string name = iter->first;
+        while (heap_allocations.contains(name)) {
+            Value *buf = heap_allocations.get(name);
+            free_buffer(buf);
+            heap_allocations.pop(name);
+        }
     }
 }
 

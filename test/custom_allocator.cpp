@@ -33,7 +33,8 @@ int main(int argc, char **argv) {
 
     Image<int> im = g.realize(100000);
 
-    assert(custom_malloc_called && custom_free_called);
+    assert(custom_malloc_called);
+    assert(custom_free_called);
 
     printf("Success!\n");
     return 0;

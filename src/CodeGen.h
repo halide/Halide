@@ -128,6 +128,9 @@ protected:
      * returns NULL. */
     llvm::Value* sym_get(const std::string &name, bool must_succeed = true);
 
+    /** Test if an item exists in the symbol table. */
+    bool sym_exists(const std::string &name);
+
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
@@ -230,6 +233,11 @@ protected:
      * implementation - it must be handled in an architecture-specific
      * way. */
     virtual void visit(const Allocate *) = 0; 
+
+    /** Generate code for a free node. It has no default
+     * implementation and must be handled in an architecture-specific
+     * way. */
+    virtual void visit(const Free *) = 0; 
 
     /** Some backends may wish to track entire buffer_t's for each
      * allocation instead of just a host pointer. Those backends

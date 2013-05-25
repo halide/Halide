@@ -171,10 +171,16 @@ private:
 class WhereIsBufferUsed : public IRVisitor {
 public:
     string buf;
-    bool used_on_host, used_on_device;
+    bool used_on_host, used_on_device,
+        written_on_host, read_on_host, 
+        written_on_device, read_on_device;
     WhereIsBufferUsed(string b) : buf(b),
                                   used_on_host(false), 
                                   used_on_device(false), 
+                                  written_on_host(false), 
+                                  read_on_host(false), 
+                                  written_on_device(false),
+                                  read_on_device(false),
                                   in_device_code(false) {}
 
 private:    
@@ -199,8 +205,10 @@ private:
         if (op->name == buf) {
             if (in_device_code) {
                 used_on_device = true;
+                read_on_device = true;
             } else {
                 used_on_host = true;
+                read_on_host = true;
             }
         }
         IRVisitor::visit(op);
@@ -210,8 +218,10 @@ private:
         if (op->name == buf) {
             if (in_device_code) {
                 used_on_device = true;
+                written_on_device = true;
             } else {
                 used_on_host = true;
+                written_on_host = true;
             }
         }        
         IRVisitor::visit(op);
@@ -526,12 +536,15 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
     WhereIsBufferUsed usage(alloc->name);
     alloc->accept(&usage);
 
-    Value *saved_stack = NULL, *gpu_saved_stack = NULL, *host;
+    Value *saved_stack = NULL, *host;
 
     if (usage.used_on_host) {
         log(2) << alloc->name << " is used on the host\n";
         host = malloc_buffer(alloc, &saved_stack);
         sym_push(alloc->name + ".host", host);
+        if (!saved_stack) {
+            heap_allocations.push(alloc->name, host);
+        }
     } else {
         host = ConstantPointerNull::get(llvm_type_of(alloc->type)->getPointerTo());
     }
@@ -541,8 +554,8 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
         log(2) << alloc->name << " is used on the device\n";
         // create a buffer_t to track this allocation
         if (!saved_stack) {
-            // Save the stack pointer if we haven't also done a stack allocation on host
-            gpu_saved_stack = save_stack();
+            // Save the stack pointer if we haven't already
+            saved_stack = save_stack();
         }
         buf = builder->CreateAlloca(buffer_t);
         Value *zero32 = ConstantInt::get(i32, 0),
@@ -589,21 +602,23 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
 
     codegen(alloc->body);
    
-    if (usage.used_on_device) {
-        builder->CreateCall(dev_free_fn, buf);
-        sym_pop(alloc->name + ".buffer");
-        if (gpu_saved_stack) {
-            restore_stack(gpu_saved_stack);
-        }
+    if (saved_stack) {
+        restore_stack(saved_stack);
+    }
+}
+
+void CodeGen_PTX_Host::visit(const Free *f) {
+    if (heap_allocations.contains(f->name)) {
+        Value *ptr = sym_get(f->name + ".host");
+        free_buffer(ptr);
+        heap_allocations.pop(f->name);
+        sym_pop(f->name + ".host");
     }
 
-    if (usage.used_on_host) {
-        free_buffer(host, saved_stack);
-        sym_pop(alloc->name + ".host");
-    } 
-
-
-
+    if (sym_exists(f->name + ".buffer")) {
+        builder->CreateCall(dev_free_fn, sym_get(f->name + ".buffer"));
+        sym_pop(f->name + ".buffer");
+    }
 }
 
 void CodeGen_PTX_Host::visit(const Pipeline *n) {
@@ -616,36 +631,41 @@ void CodeGen_PTX_Host::visit(const Pipeline *n) {
         return;
     }
 
-    Closure produce = Closure::make(n->produce, "", true);
-    Closure consume = Closure::make(n->consume, "", true);
+    WhereIsBufferUsed produce_usage(n->name);
+    n->produce.accept(&produce_usage);
+
+    WhereIsBufferUsed consume_usage(n->name);
+    n->consume.accept(&consume_usage);
 
     codegen(n->produce);
 
     // Track host writes
-    if (produce.writes.count(n->name)) {
+    if (produce_usage.written_on_host) {
         builder->CreateStore(ConstantInt::get(i8, 1),
                              buffer_host_dirty_ptr(buf));
     }
 
     if (n->update.defined()) {
-        Closure update = Closure::make(n->update, "", true);
+        WhereIsBufferUsed update_usage(n->name);
+        n->update.accept(&update_usage);
 
         // Copy back host update reads
-        if (update.reads.count(n->name)) {
+        if (update_usage.read_on_host) {
             builder->CreateCall(copy_to_host_fn, buf);
         }
 
         codegen(n->update);
 
-        // Track host update writes
-        if (update.writes.count(n->name)) {
+        // Track host update writes 
+        if (update_usage.written_on_host) {
             builder->CreateStore(ConstantInt::get(i8, 1),
                                  buffer_host_dirty_ptr(buf));
         }
+
     }
 
     // Copy back host reads
-    if (consume.reads.count(n->name)) {
+    if (consume_usage.read_on_host) {
         builder->CreateCall(copy_to_host_fn, buf);
     }
 

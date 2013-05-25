@@ -44,6 +44,7 @@ template<> EXPORT IRNodeType StmtNode<For>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Store>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Provide>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Allocate>::_type_info = {};
+template<> EXPORT IRNodeType StmtNode<Free>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Realize>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Block>::_type_info = {};
 

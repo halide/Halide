@@ -75,12 +75,10 @@ void IRPrinter::test() {
         "  parallel (x, -2, (y + 2)) {\n"
         "    buf[(y - 1)] = ((x*17)/(x - 3))\n"
         "  }\n"
-        "} consume {\n"
-        "  vectorized (x, 0, y) {\n"
-        "    out[x] = (buf((x % 3)) + 1)\n"
-        "  }\n"
         "}\n"
-        "free buf\n";
+        "vectorized (x, 0, y) {\n"
+        "  out[x] = (buf((x % 3)) + 1)\n"
+        "}\n";
 
     if (source.str() != correct_source) {
         std::cout << "Correct output:" << std::endl << correct_source;
@@ -359,7 +357,6 @@ void IRPrinter::visit(const AssertStmt *op) {
 
 void IRPrinter::visit(const Pipeline *op) {
 
-
     do_indent();
     stream << "produce " << op->name << " {" << endl;
     indent += 2;
@@ -368,20 +365,17 @@ void IRPrinter::visit(const Pipeline *op) {
 
     if (op->update.defined()) {
         do_indent();
-        stream << "} update {" << endl;
+        stream << "} update " << op->name << " {" << endl;
         indent += 2;
         print(op->update);
         indent -= 2;
     }
         
     do_indent();
-    stream << "} consume {" << endl;
-    indent += 2;
-    print(op->consume);
-    indent -= 2;
+    stream << "}\n";
 
-    do_indent();
-    stream << "}" << endl;
+    print(op->consume);
+
 }
 
 void IRPrinter::visit(const For *op) {
@@ -428,7 +422,9 @@ void IRPrinter::visit(const Allocate *op) {
     print(op->size);
     stream << "]" << endl;
     print(op->body);
+}
 
+void IRPrinter::visit(const Free *op) {
     do_indent();
     stream << "free " << op->name << endl;
 }

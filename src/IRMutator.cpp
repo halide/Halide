@@ -209,6 +209,10 @@ void IRMutator::visit(const Allocate *op) {
     if (size.same_as(op->size) && body.same_as(op->body)) stmt = op;
     else stmt = new Allocate(op->name, op->type, size, body);
 }
+
+void IRMutator::visit(const Free *op) {
+    stmt = op;
+}
         
 void IRMutator::visit(const Realize *op) {
     Region new_bounds(op->bounds.size());
