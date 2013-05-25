@@ -44,6 +44,7 @@ protected:
     // @{
     void visit(const For *);
     void visit(const Allocate *);
+    void visit(const Free *);
     void visit(const Pipeline *);
     // @}
 

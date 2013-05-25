@@ -165,7 +165,7 @@ void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args
                    << " *)(_"
                    << name
                    << "->host);\n";
-            allocation_types.push(args[i].name, args[i].type);
+            allocations.push(args[i].name, args[i].type);
 
             for (int j = 0; j < 4; j++) {
                 stream << "const int32_t "
@@ -386,8 +386,8 @@ void CodeGen_C::visit(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
-    bool type_cast_needed = !(allocation_types.contains(op->name) && 
-                              allocation_types.get(op->name) == op->type);
+    bool type_cast_needed = !(allocations.contains(op->name) && 
+                              allocations.get(op->name) == op->type);
     ostringstream rhs;
     if (type_cast_needed) {
         rhs << "(("
@@ -409,8 +409,8 @@ void CodeGen_C::visit(const Store *op) {
 
     Type t = op->value.type();
 
-    bool type_cast_needed = !(allocation_types.contains(op->name) && 
-                              allocation_types.get(op->name) == t);
+    bool type_cast_needed = !(allocations.contains(op->name) && 
+                              allocations.get(op->name) == t);
 
     string id_index = print_expr(op->index);
     string id_value = print_expr(op->value);
@@ -544,7 +544,7 @@ void CodeGen_C::visit(const Allocate *op) {
 
     string size_id = print_expr(op->size);
 
-    allocation_types.push(op->name, op->type);
+    allocations.push(op->name, op->type);
 
     do_indent();
     stream << print_type(op->type) << ' ';
@@ -566,20 +566,26 @@ void CodeGen_C::visit(const Allocate *op) {
                << " *)halide_malloc(sizeof("
                << print_type(op->type)
                << ")*" << size_id << ");\n";
+        heap_allocations.push(op->name, 0);
     }
 
-    op->body.accept(this);            
+    op->body.accept(this);     
 
-    if (!on_stack) {
+    // Should have been freed internally
+    assert(!allocations.contains(op->name));
+
+    close_scope();
+}
+
+void CodeGen_C::visit(const Free *op) {
+    if (heap_allocations.contains(op->name)) {
         do_indent();
         stream << "halide_free("
                << print_name(op->name)
-               << ");\n";
+               << ");\n";    
+        heap_allocations.pop(op->name);
     }
-
-    allocation_types.pop(op->name);
-
-    close_scope();
+    allocations.pop(op->name);
 }
 
 void CodeGen_C::visit(const Realize *op) {
@@ -600,7 +606,9 @@ void CodeGen_C::test() {
     Expr e = new Select(alpha > 4.0f, 3, 2);
     Stmt s = new Store("buf", e, x);
     s = new LetStmt("x", beta+1, s);
+    s = new Block(s, new Free("tmp.stack"));
     s = new Allocate("tmp.stack", Int(32), 127, s);
+    s = new Block(s, new Free("tmp.heap"));
     s = new Allocate("tmp.heap", Int(32), 43 * beta, s);
 
     ostringstream source;

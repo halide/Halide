@@ -21,6 +21,7 @@
 #include "RemoveTrivialForLoops.h"
 #include "Deinterleave.h"
 #include "DebugToFile.h"
+#include "EarlyFree.h"
 
 namespace Halide {
 namespace Internal {
@@ -799,6 +800,10 @@ Stmt lower(Function f) {
     log(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);
     log(2) << "Rewrote vector interleavings: \n" << s << "\n\n";
+
+    log(1) << "Injecting early frees...\n";
+    s = inject_early_frees(s);
+    log(2) << "Injected early frees: \n" << s << "\n\n";
 
     log(1) << "Simplifying...\n";
     s = simplify(s);

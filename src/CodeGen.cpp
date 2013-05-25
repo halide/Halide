@@ -391,6 +391,10 @@ llvm::Value *CodeGen::sym_get(const string &name, bool must_succeed) {
     return symbol_table.get(name);
 }
 
+bool CodeGen::sym_exists(const string &name) {
+    return symbol_table.contains(name);
+}
+
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
 void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {

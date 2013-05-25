@@ -52,9 +52,12 @@ protected:
     using CodeGen::visit;
 
     /** Posix implementation of Allocate. Small constant-sized allocations go
-     * on the stack. The rest go on the heap by calling "hl_malloc"
-     * and "hl_free" in the standard library. */
+     * on the stack. The rest go on the heap by calling "halide_malloc"
+     * and "halide_free" in the standard library. */
+    // @{
     void visit(const Allocate *);        
+    void visit(const Free *);
+    // @}
 
     /** Direct implementation of Posix allocation logic. The returned
      * `Value` is a pointer to the allocated memory. If you wish to
@@ -65,20 +68,21 @@ protected:
      * the `stackrestore` intrinsic. */
     llvm::Value* malloc_buffer(const Allocate *alloc, llvm::Value **saved_stack = NULL);
 
-    /** If `saved_stack` is non-`NULL`, this assumes the `ptr` was stack-allocated,
-     * and frees it only by restoring the stack pointer; otherwise, it calls
-     * `hl_free` in the standard library. */
-    void free_buffer(llvm::Value *ptr, llvm::Value *saved_stack);
+    /** Calls `halide_free` in the standard library. You should only
+     * call this if saved_stack was NULL when you allocated this
+     * buffer. */
+    void free_buffer(llvm::Value *ptr);
 
-    /** Save and restore the stack directly. You only need to call
-     * these if you're doing your own allocas. */
-    // @{
-    llvm::Value *save_stack();
+    /** Restores the stack pointer to the given value. Call this to
+     * free a stack variable. */
     void restore_stack(llvm::Value *saved_stack);
-    // @}
 
-    /** The heap allocations currently in scope */
-    std::vector<llvm::Value *> heap_allocations;
+    /** Save the stack directly. You only need to call this if you're
+     * doing your own allocas. */
+    llvm::Value *save_stack();
+
+    /** The allocations currently in scope */
+    Scope<llvm::Value *> heap_allocations;
 
     /** Free all heap allocations in scope */
     void prepare_for_early_exit();

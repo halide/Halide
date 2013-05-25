@@ -102,6 +102,7 @@ protected:
     void visit(const Store *);
     void visit(const Provide *);
     void visit(const Allocate *);
+    void visit(const Free *);
     void visit(const Realize *);
     void visit(const Block *);
 

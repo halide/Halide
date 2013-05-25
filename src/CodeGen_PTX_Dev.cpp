@@ -269,11 +269,13 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         builder->SetInsertPoint(here);
     }
 
-
     sym_push(allocation_name, ptr);
     codegen(alloc->body);
-    sym_pop(allocation_name);
 
+}
+
+void CodeGen_PTX_Dev::visit(const Free *f) {
+    sym_pop(f->name + ".host");
 }
 
 string CodeGen_PTX_Dev::march() const {
