@@ -700,16 +700,16 @@ void CodeGen::visit(const Mod *op) {
 }
 
 void CodeGen::visit(const Min *op) {
-    Expr a = new Variable(op->a.type(), "a");
-    Expr b = new Variable(op->a.type(), "b");
-    Expr equiv = new Let("a", op->a, new Let("b", op->b, new Select(a < b, a, b)));
+    Expr a = Variable::make(op->a.type(), "a");
+    Expr b = Variable::make(op->a.type(), "b");
+    Expr equiv = Let::make("a", op->a, Let::make("b", op->b, Select::make(a < b, a, b)));
     value = codegen(equiv);
 }
 
 void CodeGen::visit(const Max *op) {
-    Expr a = new Variable(op->a.type(), "a");
-    Expr b = new Variable(op->a.type(), "b");
-    Expr equiv = new Let("a", op->a, new Let("b", op->b, new Select(a > b, a, b)));
+    Expr a = Variable::make(op->a.type(), "a");
+    Expr b = Variable::make(op->a.type(), "b");
+    Expr equiv = Let::make("a", op->a, Let::make("b", op->b, Select::make(a > b, a, b)));
     value = codegen(equiv);
 }
 
@@ -961,8 +961,8 @@ void CodeGen::visit(const Ramp *op) {
         // 4)), we can lift out the stride and broadcast the base so
         // we can do a single vector broadcast and add instead of
         // repeated insertion
-        Expr broadcast = new Broadcast(op->base, op->width);
-        Expr ramp = new Ramp(make_zero(op->base.type()), op->stride, op->width);
+        Expr broadcast = Broadcast::make(op->base, op->width);
+        Expr ramp = Ramp::make(make_zero(op->base.type()), op->stride, op->width);
         value = codegen(broadcast + ramp);
     } else {
         // Otherwise we generate element by element by adding the stride to the base repeatedly        

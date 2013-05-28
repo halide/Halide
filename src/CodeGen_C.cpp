@@ -273,7 +273,7 @@ void CodeGen_C::visit(const Div *op) {
         oss << print_expr(op->a) << " >> " << bits;
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
-        print_expr(new Call(op->type, "sdiv", vec(op->a, op->b)));
+        print_expr(Call::make(op->type, "sdiv", vec(op->a, op->b)));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
@@ -286,16 +286,16 @@ void CodeGen_C::visit(const Mod *op) {
         oss << print_expr(op->a) << " & " << ((1 << bits)-1);
         print_assignment(op->type, oss.str());
     } else {
-        print_expr(new Call(op->type, "mod", vec(op->a, op->b)));
+        print_expr(Call::make(op->type, "mod", vec(op->a, op->b)));
     }
 }
 
 void CodeGen_C::visit(const Max *op) {
-    print_expr(new Call(op->type, "max", vec(op->a, op->b)));
+    print_expr(Call::make(op->type, "max", vec(op->a, op->b)));
 }
 
 void CodeGen_C::visit(const Min *op) {
-    print_expr(new Call(op->type, "min", vec(op->a, op->b)));
+    print_expr(Call::make(op->type, "min", vec(op->a, op->b)));
 }
 
 void CodeGen_C::visit(const EQ *op) {
@@ -434,7 +434,7 @@ void CodeGen_C::visit(const Store *op) {
 
 void CodeGen_C::visit(const Let *op) {
     string id_value = print_expr(op->value);
-    Expr new_var = new Variable(op->value.type(), id_value);
+    Expr new_var = Variable::make(op->value.type(), id_value);
     Expr body = substitute(op->name, new_var, op->body);   
     print_expr(body);
 }
@@ -451,7 +451,7 @@ void CodeGen_C::visit(const Select *op) {
 
 void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
-    Expr new_var = new Variable(op->value.type(), id_value);
+    Expr new_var = Variable::make(op->value.type(), id_value);
     Stmt body = substitute(op->name, new_var, op->body);   
     body.accept(this);
 }
@@ -603,13 +603,13 @@ void CodeGen_C::test() {
     Var x("x");
     Param<float> alpha("alpha");
     Param<int> beta("beta");
-    Expr e = new Select(alpha > 4.0f, 3, 2);
-    Stmt s = new Store("buf", e, x);
-    s = new LetStmt("x", beta+1, s);
-    s = new Block(s, new Free("tmp.stack"));
-    s = new Allocate("tmp.stack", Int(32), 127, s);
-    s = new Block(s, new Free("tmp.heap"));
-    s = new Allocate("tmp.heap", Int(32), 43 * beta, s);
+    Expr e = Select::make(alpha > 4.0f, 3, 2);
+    Stmt s = Store::make("buf", e, x);
+    s = LetStmt::make("x", beta+1, s);
+    s = Block::make(s, Free::make("tmp.stack"));
+    s = Allocate::make("tmp.stack", Int(32), 127, s);
+    s = Block::make(s, Free::make("tmp.heap"));
+    s = Allocate::make("tmp.heap", Int(32), 43 * beta, s);
 
     ostringstream source;
     CodeGen_C cg(source);

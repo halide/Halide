@@ -131,13 +131,13 @@ Expr make_const(Type t, int val) {
     if (t == Int(32)) return val;
     if (t == Float(32)) return (float)val;
     if (t.is_vector()) {
-        return new Broadcast(make_const(t.element_of(), val), t.width);
+        return Broadcast::make(make_const(t.element_of(), val), t.width);
     }
     // When constructing cast integer constants, use the canonical representation.
     if (t.is_int() || t.is_uint()) {
         val = int_cast_constant(t, val);
     }
-    return new Cast(t, val);
+    return Cast::make(t, val);
 }
         
 Expr make_bool(bool val, int w) {
@@ -171,9 +171,9 @@ void match_types(Expr &a, Expr &b) {
 
     // First widen to match
     if (a.type().is_scalar() && b.type().is_vector()) {
-        a = new Broadcast(a, b.type().width);
+        a = Broadcast::make(a, b.type().width);
     } else if (a.type().is_vector() && b.type().is_scalar()) {
-        b = new Broadcast(b, a.type().width);
+        b = Broadcast::make(b, a.type().width);
     } else {
         assert(a.type().width == b.type().width && "Can't match types of differing widths");
     }

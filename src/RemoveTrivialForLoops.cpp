@@ -11,11 +11,11 @@ class RemoveTrivialForLoops : public IRMutator {
         Stmt body = mutate(for_loop->body);
         const IntImm *extent = for_loop->extent.as<IntImm>();
         if (extent && extent->value == 1) {
-            stmt = new LetStmt(for_loop->name, for_loop->min, body);
+            stmt = LetStmt::make(for_loop->name, for_loop->min, body);
         } else if (body.same_as(for_loop->body)) {
             stmt = for_loop;
         } else {
-            stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, body);
+            stmt = For::make(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, body);
         }
     }
 };

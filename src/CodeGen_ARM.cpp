@@ -544,14 +544,14 @@ void CodeGen_ARM::visit(const Div *op) {
     vector<Expr> matches;    
     if (op->type == Float(32, 4) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
-        if (expr_match(new Call(Float(32, 4), "sqrt_f32", vec(wild_f32x4)), op->b, matches)) {
+        if (expr_match(Call::make(Float(32, 4), "sqrt_f32", vec(wild_f32x4)), op->b, matches)) {
             value = call_intrin(Float(32, 4), "vrsqrte.v4f32", matches);
         } else {
             value = call_intrin(Float(32, 4), "vrecpe.v4f32", vec(op->b));
         }
     } else if (op->type == Float(32, 2) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
-        if (expr_match(new Call(Float(32, 2), "sqrt_f32", vec(wild_f32x2)), op->b, matches)) {
+        if (expr_match(Call::make(Float(32, 2), "sqrt_f32", vec(wild_f32x2)), op->b, matches)) {
             value = call_intrin(Float(32, 2), "vrsqrte.v2f32", matches);
         } else {
             value = call_intrin(Float(32, 2), "vrecpe.v2f32", vec(op->b));

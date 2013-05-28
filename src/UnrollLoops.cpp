@@ -15,11 +15,11 @@ class UnrollLoops : public IRMutator {
             assert(extent && "Can only unroll for loops over a constant extent");
             Stmt body = mutate(for_loop->body);
                 
-            Block *block = NULL;
+            Stmt block;
             // Make n copies of the body, each wrapped in a let that defines the loop var for that body
             for (int i = extent->value-1; i >= 0; i--) {
                 Stmt iter = substitute(for_loop->name, for_loop->min + i, body);
-                block = new Block(iter, block);
+                block = Block::make(iter, block);
             }
             stmt = block;
 
