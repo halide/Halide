@@ -44,15 +44,15 @@ public:
             assert(region.size() == f.args().size() && "Dimensionality mismatch between function and region required");
             for (size_t j = 0; j < region.size(); j++) {
                 const string &arg_name = f.args()[j];
-                body = new LetStmt(f.name() + "." + arg_name + ".min", region[j].min, body);
-                body = new LetStmt(f.name() + "." + arg_name + ".extent", region[j].extent, body);
+                body = LetStmt::make(f.name() + "." + arg_name + ".min", region[j].min, body);
+                body = LetStmt::make(f.name() + "." + arg_name + ".extent", region[j].extent, body);
             }
         }
 
         if (body.same_as(for_loop->body)) {
             stmt = for_loop;
         } else {
-            stmt = new For(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, body);
+            stmt = For::make(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, body);
         }
     }    
 
@@ -72,13 +72,13 @@ public:
             in_update.pop(pipeline->name);
         }
         Stmt consume = mutate(pipeline->consume);
-        stmt = new Pipeline(pipeline->name, produce, update, consume);
+        stmt = Pipeline::make(pipeline->name, produce, update, consume);
     }
 };
 
 Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Function> &env) {
-    // Add a new outermost loop to make sure we get outermost bounds definitions too
-    s = new For("outermost", 0, 1, For::Serial, s);
+    // Add a outermost::make loop to make sure we get outermost bounds definitions too
+    s = For::make("outermost", 0, 1, For::Serial, s);
 
     s = BoundsInference(order, env).mutate(s);
 
@@ -94,10 +94,10 @@ Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Fun
         ostringstream buf_min_name, buf_extent_name;
         buf_min_name << f.name() << ".min." << i;
         buf_extent_name << f.name() << ".extent." << i;
-        Expr buf_min = new Variable(Int(32), buf_min_name.str());
-        Expr buf_extent = new Variable(Int(32), buf_extent_name.str());
-        s = new LetStmt(f.name() + "." + f.args()[i] + ".min", buf_min, s);
-        s = new LetStmt(f.name() + "." + f.args()[i] + ".extent", buf_extent, s);
+        Expr buf_min = Variable::make(Int(32), buf_min_name.str());
+        Expr buf_extent = Variable::make(Int(32), buf_extent_name.str());
+        s = LetStmt::make(f.name() + "." + f.args()[i] + ".min", buf_min, s);
+        s = LetStmt::make(f.name() + "." + f.args()[i] + ".extent", buf_extent, s);
     }   
 
     return s;

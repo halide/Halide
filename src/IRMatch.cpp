@@ -11,12 +11,12 @@ using std::vector;
 
 void expr_match_test() {
     vector<Expr> matches;
-    Expr w = new Variable(Int(32), "*");
-    Expr fw = new Variable(Float(32), "*");
-    Expr x = new Variable(Int(32), "x");
-    Expr y = new Variable(Int(32), "y");
-    Expr fx = new Variable(Float(32), "fx");
-    Expr fy = new Variable(Float(32), "fy");
+    Expr w = Variable::make(Int(32), "*");
+    Expr fw = Variable::make(Float(32), "*");
+    Expr x = Variable::make(Int(32), "x");
+    Expr y = Variable::make(Int(32), "y");
+    Expr fx = Variable::make(Float(32), "fx");
+    Expr fy = Variable::make(Float(32), "fy");
 
     assert(expr_match(w, 3, matches) && 
            equal(matches[0], 3));

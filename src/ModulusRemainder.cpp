@@ -106,8 +106,8 @@ void check(Expr e, int m, int r) {
 }
 
 void modulus_remainder_test() {
-    Expr x = new Variable(Int(32), "x");
-    Expr y = new Variable(Int(32), "y");
+    Expr x = Variable::make(Int(32), "x");
+    Expr y = Variable::make(Int(32), "y");
     
     check((30*x + 3) + (40*y + 2), 10, 5);   
     check((6*x + 3) * (4*y + 1), 2, 1); 
@@ -115,7 +115,7 @@ void modulus_remainder_test() {
     check(10*x - 33*y, 1, 0);
     check(10*x - 35*y, 5, 0);
     check(123, 0, 123);
-    check(new Let("y", x*3 + 4, y*3 + 4), 9, 7);
+    check(Let::make("y", x*3 + 4, y*3 + 4), 9, 7);
 
     std::cerr << "modulus_remainder test passed\n";
 }

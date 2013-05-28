@@ -52,7 +52,7 @@ public:
     /** You can use this parameter as an expression in a halide
      * function definition */
     operator Expr() const {
-        return new Internal::Variable(type_of<T>(), name(), param);
+        return Internal::Variable::make(type_of<T>(), name(), param);
     }
 
     /** Construct the appropriate argument matching this parameter,
@@ -116,7 +116,7 @@ public:
     Expr extent(int x) const {
         std::ostringstream s;
         s << name() << ".extent." << x;
-        return new Internal::Variable(Int(32), s.str(), param);
+        return Internal::Variable::make(Int(32), s.str(), param);
     }
 
     /** Get an expression representing the stride of this image in the
@@ -124,7 +124,7 @@ public:
     Expr stride(int x) const {
         std::ostringstream s;
         s << name() << ".stride." << x;
-        return new Internal::Variable(Int(32), s.str(), param);        
+        return Internal::Variable::make(Int(32), s.str(), param);        
     }
 
     /** Set the extent in a given dimension to equal the given
@@ -213,7 +213,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Internal::Call(param, args);
+        return Internal::Call::make(param, args);
     }
 
     Expr operator()(Expr x) const {
@@ -223,7 +223,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Internal::Call(param, args);
+        return Internal::Call::make(param, args);
     }
 
     Expr operator()(Expr x, Expr y) const {
@@ -234,7 +234,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Internal::Call(param, args);
+        return Internal::Call::make(param, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z) const {
@@ -246,7 +246,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Internal::Call(param, args);
+        return Internal::Call::make(param, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
@@ -259,7 +259,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Internal::Call(param, args);
+        return Internal::Call::make(param, args);
     }
     // @}
 

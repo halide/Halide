@@ -38,7 +38,7 @@ Halide::Expr Type::max() const {
     if (is_int() && bits == 32) {
         return imax(); // No explicit cast of i32.
     } else if ((is_int() || is_uint()) && bits <= 32) {
-        return new Internal::Cast(*this, imax());
+        return Internal::Cast::make(*this, imax());
     } else {
         // Use a run-time call to a math intrinsic (see posix_math.cpp)
         ostringstream ss;
@@ -47,7 +47,7 @@ Halide::Expr Type::max() const {
         else if (is_uint()) ss << "u";
         else ss << "f";
         ss << bits;
-        return new Internal::Call(*this, ss.str(), std::vector<Expr>());
+        return Internal::Call::make(*this, ss.str(), std::vector<Expr>());
     }
 }
 
@@ -74,7 +74,7 @@ Expr Type::min() const {
     if (is_int() && bits == 32) {
         return imin(); // No explicit cast of i32.
     } else if ((is_int() || is_uint()) && bits <= 32) {
-        return new Internal::Cast(*this, imin());
+        return Internal::Cast::make(*this, imin());
     } else {
         // Use a run-time call to a math intrinsic (see posix_math.cpp)
         ostringstream ss;
@@ -83,7 +83,7 @@ Expr Type::min() const {
         else if (is_uint()) ss << "u";
         else ss << "f";
         ss << bits;
-        return new Internal::Call(*this, ss.str(), std::vector<Expr>());
+        return Internal::Call::make(*this, ss.str(), std::vector<Expr>());
     }
 
 }

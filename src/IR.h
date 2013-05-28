@@ -64,7 +64,6 @@ struct BaseStmtNode : public IRNode {
  * (e.g. Int(32), Float(32)) */
 struct BaseExprNode : public IRNode {
     Type type;
-    BaseExprNode(Type t) : type(t) {}
 };
 
 /** We use the "curiously recurring template pattern" to avoid
@@ -75,7 +74,6 @@ struct BaseExprNode : public IRNode {
    a concrete instantiation of a unique IRNodeType per class. */
 template<typename T>
 struct ExprNode : public BaseExprNode {
-    ExprNode(Type t) : BaseExprNode(t) {}
     void accept(IRVisitor *v) const {
         v->visit((const T *)this);
     }
@@ -166,22 +164,37 @@ struct Stmt : public IRHandle {
 struct IntImm : public ExprNode<IntImm> {
     int value;
 
-    IntImm(int v) : ExprNode<IntImm>(Int(32)), value(v) {}
+    static const IntImm *make(int value) {
+        IntImm *node = new IntImm;
+        node->type = Int(32);
+        node->value = value;
+        return node;
+    }
 };
 
 /** Floating point constants */
 struct FloatImm : public ExprNode<FloatImm> {
     float value;
 
-    FloatImm(float v) : ExprNode<FloatImm>(Float(32)), value(v) {}
+    static const FloatImm *make(float value) {
+        FloatImm *node = new FloatImm;
+        node->type = Float(32);
+        node->value = value;
+        return node;
+    }
 };
 
 /** Cast a node from one type to another */
 struct Cast : public ExprNode<Cast> {
     Expr value;
 
-    Cast(Type t, Expr v) : ExprNode<Cast>(t), value(v) {
+    static const Cast *make(Type t, Expr v) {
         assert(v.defined() && "Cast of undefined");
+
+        Cast *node = new Cast;
+        node->type = t;
+        node->value = v;
+        return node;
     }
 };
 
@@ -189,10 +202,16 @@ struct Cast : public ExprNode<Cast> {
 struct Add : public ExprNode<Add> {
     Expr a, b;
 
-    Add(Expr _a, Expr _b) : ExprNode<Add>(_a.type()), a(_a), b(_b) {
+    static const Add *make(Expr a, Expr b) {
         assert(a.defined() && "Add of undefined");
         assert(b.defined() && "Add of undefined");
-        assert(b.type() == type && "Add of mismatched types");
+        assert(a.type() == b.type() && "Add of mismatched types");
+
+        Add *node = new Add;
+        node->type = a.type();
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -200,10 +219,16 @@ struct Add : public ExprNode<Add> {
 struct Sub : public ExprNode<Sub> {
     Expr a, b;
 
-    Sub(Expr _a, Expr _b) : ExprNode<Sub>(_a.type()), a(_a), b(_b) {
+    static const Sub *make(Expr a, Expr b) {
         assert(a.defined() && "Sub of undefined");
         assert(b.defined() && "Sub of undefined");
-        assert(b.type() == type && "Sub of mismatched types");
+        assert(a.type() == b.type() && "Sub of mismatched types");
+
+        Sub *node = new Sub;
+        node->type = a.type();
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -211,10 +236,16 @@ struct Sub : public ExprNode<Sub> {
 struct Mul : public ExprNode<Mul> {
     Expr a, b;
 
-    Mul(Expr _a, Expr _b) : ExprNode<Mul>(_a.type()), a(_a), b(_b) {
+    static const Mul *make(Expr a, Expr b) {
         assert(a.defined() && "Mul of undefined");
         assert(b.defined() && "Mul of undefined");
-        assert(b.type() == type && "Mul of mismatched types");
+        assert(a.type() == b.type() && "Mul of mismatched types");
+
+        Mul *node = new Mul;
+        node->type = a.type();
+        node->a = a;
+        node->b = b;
+        return node;
     }        
 };
 
@@ -222,10 +253,16 @@ struct Mul : public ExprNode<Mul> {
 struct Div : public ExprNode<Div> {
     Expr a, b;
 
-    Div(Expr _a, Expr _b) : ExprNode<Div>(_a.type()), a(_a), b(_b) {
+    static const Div *make(Expr a, Expr b) {
         assert(a.defined() && "Div of undefined");
         assert(b.defined() && "Div of undefined");
-        assert(b.type() == type && "Div of mismatched types");
+        assert(a.type() == b.type() && "Div of mismatched types");
+
+        Div *node = new Div;
+        node->type = a.type();
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -235,10 +272,16 @@ struct Div : public ExprNode<Div> {
 struct Mod : public ExprNode<Mod> { 
     Expr a, b;
 
-    Mod(Expr _a, Expr _b) : ExprNode<Mod>(_a.type()), a(_a), b(_b) {
+    static const Mod *make(Expr a, Expr b) {
         assert(a.defined() && "Mod of undefined");
         assert(b.defined() && "Mod of undefined");
-        assert(b.type() == type && "Mod of mismatched types");
+        assert(a.type() == b.type() && "Mod of mismatched types");
+
+        Mod *node = new Mod;
+        node->type = a.type();
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -246,10 +289,16 @@ struct Mod : public ExprNode<Mod> {
 struct Min : public ExprNode<Min> {
     Expr a, b;
 
-    Min(Expr _a, Expr _b) : ExprNode<Min>(_a.type()), a(_a), b(_b) {
+    static const Min *make(Expr a, Expr b) {
         assert(a.defined() && "Min of undefined");
         assert(b.defined() && "Min of undefined");
-        assert(b.type() == type && "Min of mismatched types");
+        assert(a.type() == b.type() && "Min of mismatched types");
+
+        Min *node = new Min;
+        node->type = a.type();
+        node->a = a;
+        node->b = b;
+        return node;        
     }
 };
 
@@ -257,10 +306,16 @@ struct Min : public ExprNode<Min> {
 struct Max : public ExprNode<Max> {
     Expr a, b;
 
-    Max(Expr _a, Expr _b) : ExprNode<Max>(_a.type()), a(_a), b(_b) {
+    static const Max *make(Expr a, Expr b) {
         assert(a.defined() && "Max of undefined");
         assert(b.defined() && "Max of undefined");
-        assert(b.type() == type && "Max of mismatched types");
+        assert(a.type() == b.type() && "Max of mismatched types");
+
+        Max *node = new Max;
+        node->type = a.type();
+        node->a = a;
+        node->b = b;
+        return node;        
     }
 };
 
@@ -268,9 +323,16 @@ struct Max : public ExprNode<Max> {
 struct EQ : public ExprNode<EQ> {
     Expr a, b;
 
-    EQ(Expr _a, Expr _b) : ExprNode<EQ>(Bool(_a.type().width)), a(_a), b(_b) {
+    static const EQ *make(Expr a, Expr b) {
         assert(a.defined() && "EQ of undefined");
         assert(b.defined() && "EQ of undefined");
+        assert(a.type() == b.type() && "EQ of mismatched types");
+
+        EQ *node = new EQ;
+        node->type = Bool(a.type().width);
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -278,9 +340,16 @@ struct EQ : public ExprNode<EQ> {
 struct NE : public ExprNode<NE> {
     Expr a, b;
 
-    NE(Expr _a, Expr _b) : ExprNode<NE>(Bool(_a.type().width)), a(_a), b(_b) {
+    static const NE *make(Expr a, Expr b) {
         assert(a.defined() && "NE of undefined");
         assert(b.defined() && "NE of undefined");
+        assert(a.type() == b.type() && "NE of mismatched types");
+
+        NE *node = new NE;
+        node->type = Bool(a.type().width);
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -288,9 +357,16 @@ struct NE : public ExprNode<NE> {
 struct LT : public ExprNode<LT> {
     Expr a, b;
 
-    LT(Expr _a, Expr _b) : ExprNode<LT>(Bool(_a.type().width)), a(_a), b(_b) {
+    static const LT *make(Expr a, Expr b) {
         assert(a.defined() && "LT of undefined");
         assert(b.defined() && "LT of undefined");
+        assert(a.type() == b.type() && "LT of mismatched types");
+
+        LT *node = new LT;
+        node->type = Bool(a.type().width);
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -298,9 +374,16 @@ struct LT : public ExprNode<LT> {
 struct LE : public ExprNode<LE> {
     Expr a, b;
 
-    LE(Expr _a, Expr _b) : ExprNode<LE>(Bool(_a.type().width)), a(_a), b(_b) {
+    static const LE *make(Expr a, Expr b) {
         assert(a.defined() && "LE of undefined");
         assert(b.defined() && "LE of undefined");
+        assert(a.type() == b.type() && "LE of mismatched types");
+
+        LE *node = new LE;
+        node->type = Bool(a.type().width);
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -308,9 +391,16 @@ struct LE : public ExprNode<LE> {
 struct GT : public ExprNode<GT> {
     Expr a, b;
 
-    GT(Expr _a, Expr _b) : ExprNode<GT>(Bool(_a.type().width)), a(_a), b(_b) {
+    static const GT *make(Expr a, Expr b) {
         assert(a.defined() && "GT of undefined");
         assert(b.defined() && "GT of undefined");
+        assert(a.type() == b.type() && "GT of mismatched types");
+
+        GT *node = new GT;
+        node->type = Bool(a.type().width);
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -318,9 +408,16 @@ struct GT : public ExprNode<GT> {
 struct GE : public ExprNode<GE> {
     Expr a, b;
 
-    GE(Expr _a, Expr _b) : ExprNode<GE>(Bool(_a.type().width)), a(_a), b(_b) {
+    static const GE *make(Expr a, Expr b) {
         assert(a.defined() && "GE of undefined");
         assert(b.defined() && "GE of undefined");
+        assert(a.type() == b.type() && "GE of mismatched types");
+
+        GE *node = new GE;
+        node->type = Bool(a.type().width);
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -328,11 +425,17 @@ struct GE : public ExprNode<GE> {
 struct And : public ExprNode<And> {
     Expr a, b;
 
-    And(Expr _a, Expr _b) : ExprNode<And>(Bool(_a.type().width)), a(_a), b(_b) {
+    static const And *make(Expr a, Expr b) {
         assert(a.defined() && "And of undefined");
         assert(b.defined() && "And of undefined");
         assert(a.type().is_bool() && "lhs of And is not a bool");
         assert(b.type().is_bool() && "rhs of And is not a bool");
+
+        And *node = new And;
+        node->type = Bool(a.type().width);
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -340,11 +443,17 @@ struct And : public ExprNode<And> {
 struct Or : public ExprNode<Or> {
     Expr a, b;
 
-    Or(Expr _a, Expr _b) : ExprNode<Or>(Bool(_a.type().width)), a(_a), b(_b) {
+    static const Or *make(Expr a, Expr b) {
         assert(a.defined() && "Or of undefined");
         assert(b.defined() && "Or of undefined");
         assert(a.type().is_bool() && "lhs of Or is not a bool");
         assert(b.type().is_bool() && "rhs of Or is not a bool");
+
+        Or *node = new Or;
+        node->type = Bool(a.type().width);
+        node->a = a;
+        node->b = b;
+        return node;
     }
 };
 
@@ -352,9 +461,14 @@ struct Or : public ExprNode<Or> {
 struct Not : public ExprNode<Not> {
     Expr a;
 
-    Not(Expr _a) : ExprNode<Not>(Bool(_a.type().width)), a(_a) {
+    static const Not *make(Expr a) {
         assert(a.defined() && "Not of undefined");
         assert(a.type().is_bool() && "argument of Not is not a bool");
+
+        Not *node = new Not;
+        node->type = Bool(a.type().width);
+        node->a = a;
+        return node;
     }
 };
 
@@ -364,17 +478,22 @@ struct Not : public ExprNode<Not> {
 struct Select : public ExprNode<Select> {
     Expr condition, true_value, false_value;
 
-    Select(Expr c, Expr t, Expr f) : 
-        ExprNode<Select>(t.type()), 
-        condition(c), true_value(t), false_value(f) {
+    static const Select *make(Expr condition, Expr true_value, Expr false_value) {
         assert(condition.defined() && "Select of undefined");
         assert(true_value.defined() && "Select of undefined");
         assert(false_value.defined() && "Select of undefined");
         assert(condition.type().is_bool() && "First argument to Select is not a bool");
-        assert(false_value.type() == type && "Select of mismatched types");
+        assert(false_value.type() == true_value.type() && "Select of mismatched types");
         assert((condition.type().is_scalar() ||
-                condition.type().width == type.width) &&
+                condition.type().width == true_value.type().width) &&
                "In Select, vector width of condition must either be 1, or equal to vector width of arguments");
+
+        Select *node = new Select;
+        node->type = true_value.type();
+        node->condition = condition;
+        node->true_value = true_value;
+        node->false_value = false_value;
+        return node;
     }
 };
 
@@ -392,10 +511,17 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    Load(Type t, std::string b, Expr i, Buffer m, Parameter p) : 
-        ExprNode<Load>(t), name(b), index(i), image(m), param(p) {
+    static const Load *make(Type type, std::string name, Expr index, Buffer image, Parameter param) {
         assert(index.defined() && "Load of undefined");
-        assert(type.width == i.type().width && "Vector width of Load must match vector width of index");
+        assert(type.width == index.type().width && "Vector width of Load must match vector width of index");
+
+        Load *node = new Load;
+        node->type = type;
+        node->name = name;
+        node->index = index;
+        node->image = image;
+        node->param = param;
+        return node;
     }
 };
 
@@ -408,15 +534,20 @@ struct Ramp : public ExprNode<Ramp> {
     Expr base, stride;
     int width;
 
-    Ramp(Expr base, Expr stride, int width) : 
-        ExprNode<Ramp>(base.type().vector_of(width)),
-        base(base), stride(stride), width(width) {
+    static const Ramp *make(Expr base, Expr stride, int width) {
         assert(base.defined() && "Ramp of undefined");
         assert(stride.defined() && "Ramp of undefined");
         assert(base.type().is_scalar() && "Ramp with vector base");
         assert(stride.type().is_scalar() && "Ramp with vector stride");
         assert(width > 1 && "Ramp of width <= 1");
         assert(stride.type() == base.type() && "Ramp of mismatched types");
+        
+        Ramp *node = new Ramp;
+        node->type = base.type().vector_of(width);
+        node->base = base;
+        node->stride = stride;
+        node->width = width;
+        return node;
     }
 };
 
@@ -427,12 +558,16 @@ struct Broadcast : public ExprNode<Broadcast> {
     Expr value;
     int width;
         
-    Broadcast(Expr value, int width) :
-        ExprNode<Broadcast>(value.type().vector_of(width)), 
-        value(value), width(width) {
+    static const Broadcast *make(Expr value, int width) {
         assert(value.defined() && "Broadcast of undefined");
         assert(value.type().is_scalar() && "Broadcast of vector");
         assert(width > 1 && "Broadcast of width <= 1");            
+
+        Broadcast *node = new Broadcast;
+        node->type = value.type().vector_of(width);
+        node->value = value;
+        node->width = width;
+        return node;
     }
 };
 
@@ -443,10 +578,16 @@ struct Let : public ExprNode<Let> {
     std::string name;
     Expr value, body;
 
-    Let(std::string n, Expr v, Expr b) : 
-        ExprNode<Let>(b.type()), name(n), value(v), body(b) {
+    static const Let *make(std::string name, Expr value, Expr body) {
         assert(value.defined() && "Let of undefined");
         assert(body.defined() && "Let of undefined");
+
+        Let *node = new Let;
+        node->type = value.type();
+        node->name = name;
+        node->value = value;
+        node->body = body;        
+        return node;
     }
 };
 
@@ -457,10 +598,15 @@ struct LetStmt : public StmtNode<LetStmt> {
     Expr value;
     Stmt body;
 
-    LetStmt(std::string n, Expr v, Stmt b) : 
-        name(n), value(v), body(b) {
-        assert(value.defined() && "LetStmt of undefined");
-        assert(body.defined() && "LetStmt of undefined");
+    static const LetStmt *make(std::string name, Expr value, Stmt body) {
+        assert(value.defined() && "Let of undefined");
+        assert(body.defined() && "Let of undefined");
+
+        LetStmt *node = new LetStmt;
+        node->name = name;
+        node->value = value;
+        node->body = body;        
+        return node;
     }
 };
 
@@ -470,11 +616,15 @@ struct PrintStmt : public StmtNode<PrintStmt> {
     std::string prefix;
     std::vector<Expr> args;
 
-    PrintStmt(std::string p, const std::vector<Expr> &a) :
-        prefix(p), args(a) {
+    static const PrintStmt *make(std::string prefix, const std::vector<Expr> &args) {
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "PrintStmt of undefined");
         }
+        
+        PrintStmt *node = new PrintStmt;
+        node->prefix = prefix;
+        node->args = args;
+        return node;
     }
 };
 
@@ -485,10 +635,14 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     Expr condition;
     std::string message;
 
-    AssertStmt(Expr c, std::string m) :
-        condition(c), message(m) {
+    static const AssertStmt *make(Expr condition, std::string message) {
         assert(condition.defined() && "AssertStmt of undefined");
         assert(condition.type().is_scalar() && "AssertStmt of vector");
+
+        AssertStmt *node = new AssertStmt;
+        node->condition = condition;
+        node->message = message;
+        return node;
     }
 };
 
@@ -503,11 +657,17 @@ struct Pipeline : public StmtNode<Pipeline> {
     std::string name;
     Stmt produce, update, consume;
 
-    Pipeline(std::string b, Stmt p, Stmt u, Stmt c) : 
-        name(b), produce(p), update(u), consume(c) {
+    static const Pipeline *make(std::string name, Stmt produce, Stmt update, Stmt consume) {
         assert(produce.defined() && "Pipeline of undefined");
         // update is allowed to be null
         assert(consume.defined() && "Pipeline of undefined");
+
+        Pipeline *node = new Pipeline;
+        node->name = name;
+        node->produce = produce;
+        node->update = update;
+        node->consume = consume;
+        return node;
     }
 };
     
@@ -530,26 +690,39 @@ struct For : public StmtNode<For> {
     ForType for_type;
     Stmt body;
 
-    For(std::string n, Expr m, Expr e, ForType f, Stmt b) :
-        name(n), min(m), extent(e), for_type(f), body(b) {
+    static const For *make(std::string name, Expr min, Expr extent, ForType for_type, Stmt body) {
         assert(min.defined() && "For of undefined");
         assert(extent.defined() && "For of undefined");
         assert(min.type().is_scalar() && "For with vector min");
         assert(extent.type().is_scalar() && "For with vector extent");
         assert(body.defined() && "For of undefined");
+
+        For *node = new For;
+        node->name = name;
+        node->min = min;
+        node->extent = extent;
+        node->for_type = for_type;
+        node->body = body;
+        return node;
     }
 };
 
-/** Store a 'value' to a 'buffer' at a given 'index'. The buffer is
- * interpreted as an array of the same type as 'value'. */
+/** Store a 'value' to the buffer called 'name' at a given
+ * 'index'. The buffer is interpreted as an array of the same type as
+ * 'value'. */
 struct Store : public StmtNode<Store> {
     std::string name;
     Expr value, index;
 
-    Store(std::string b, Expr v, Expr i) :
-        name(b), value(v), index(i) {
+    static const Store *make(std::string name, Expr value, Expr index) {
         assert(value.defined() && "Store of undefined");
         assert(index.defined() && "Store of undefined");
+
+        Store *node = new Store;
+        node->name = name;
+        node->value = value;
+        node->index = index;
+        return node;
     }
 };
 
@@ -562,12 +735,17 @@ struct Provide : public StmtNode<Provide> {
     Expr value;
     std::vector<Expr> args;
 
-    Provide(std::string b, Expr v, const std::vector<Expr> &a) : 
-        name(b), value(v), args(a) {
+    static const Provide *make(std::string name, Expr value, const std::vector<Expr> &args) {
         assert(value.defined() && "Provide of undefined");
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Provide of undefined");
         }
+
+        Provide *node = new Provide;
+        node->name = name;
+        node->value = value;
+        node->args = args;
+        return node;
     }
 };
 
@@ -581,18 +759,29 @@ struct Allocate : public StmtNode<Allocate> {
     Expr size;
     Stmt body;
 
-    Allocate(std::string buf, Type t, Expr s, Stmt bod) : 
-        name(buf), type(t), size(s), body(bod) {
+    static const Allocate *make(std::string name, Type type, Expr size, Stmt body) {
         assert(size.defined() && "Allocate of undefined");
         assert(body.defined() && "Allocate of undefined");
         assert(size.type().is_scalar() == 1 && "Allocate of vector size");
+
+        Allocate *node = new Allocate;
+        node->name = name;
+        node->type = type;
+        node->size = size;
+        node->body = body;
+        return node;
     }
 };
 
 /** Free the resources associated with the given buffer. */
 struct Free : public StmtNode<Free> {
     std::string name;
-    Free(std::string buf) : name(buf) {}
+    
+    static const Free *make(std::string name) {
+        Free *node = new Free;
+        node->name = name;
+        return node;
+    }
 };
 
 /** A single-dimensional span. Includes all numbers between min and
@@ -618,8 +807,7 @@ struct Realize : public StmtNode<Realize> {
     Region bounds;
     Stmt body;
 
-    Realize(std::string buf, Type t, const Region &bou, Stmt bod) : 
-        name(buf), type(t), bounds(bou), body(bod) {
+    static const Realize *make(std::string name, Type type, const Region &bounds, Stmt body) {
         for (size_t i = 0; i < bounds.size(); i++) {
             assert(bounds[i].min.defined() && "Realize of undefined");
             assert(bounds[i].extent.defined() && "Realize of undefined");
@@ -627,6 +815,13 @@ struct Realize : public StmtNode<Realize> {
             assert(bounds[i].extent.type().is_scalar() && "Realize of vector size");
         }
         assert(body.defined() && "Realize of undefined");
+
+        Realize *node = new Realize;
+        node->name = name;
+        node->type = type;
+        node->bounds = bounds;
+        node->body = body;
+        return node;
     }
 };
 
@@ -635,10 +830,14 @@ struct Realize : public StmtNode<Realize> {
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
         
-    Block(Stmt f, Stmt r) : 
-        first(f), rest(r) {
+    static const Block *make(Stmt first, Stmt rest) {
         assert(first.defined() && "Block of undefined");
         // rest is allowed to be null
+
+        Block *node = new Block;
+        node->first = first;
+        node->rest = rest;
+        return node;
     }
 };
 
@@ -677,45 +876,48 @@ struct Call : public ExprNode<Call> {
     // pointer to that
     Parameter param;
 
-    Call(Type t, std::string n, const std::vector<Expr> &a, CallType ct, 
-         Function f, Buffer m, Parameter p) : 
-        ExprNode<Call>(t), name(n), args(a), call_type(ct), func(f), image(m), param(p) {
+    static const Call *make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type, 
+                            Function func, Buffer image, Parameter param) { 
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Call of undefined");
         }
         if (call_type == Halide) {
-            assert(func.value().defined() && "Call nodes to undefined halide function");
+            assert(func.value().defined() && "Call to undefined halide function");
             assert(args.size() <= func.args().size() && "Call node with too many arguments.");
         } else if (call_type == Image) {
             assert((param.defined() || image.defined()) && "Call node to undefined image");
         }
+
+        Call *node = new Call;
+        node->type = type;
+        node->name = name;
+        node->args = args;
+        node->call_type = call_type;
+        node->func = func;
+        node->image = image;
+        node->param = param;
+        return node;
     }
 
     /** Convenience constructor for calls to externally defined functions */
-    Call(Type t, std::string n, const std::vector<Expr> &a) : 
-        ExprNode<Call>(t), name(n), args(a), call_type(Extern), 
-        func(Function()), image(Buffer()), param(Parameter()) {
-        for (size_t i = 0; i < args.size(); i++) {
-            assert(args[i].defined() && "Call of undefined");
-        }
-    }
-
-    /** Convenience constructor for loads from concrete images */
-    Call(Buffer b, const std::vector<Expr> &a) :
-        ExprNode<Call>(b.type()), name(b.name()), args(a), call_type(Image), 
-        func(Function()), image(b), param(Parameter()) {
-    }
-
-    /** Convenience constructor for loads from images parameters */
-    Call(Parameter p, const std::vector<Expr> &a) :
-        ExprNode<Call>(p.type()), name(p.name()), args(a), call_type(Image), 
-        func(Function()), image(Buffer()), param(p) {
+    static const Call *make(Type type, std::string name, const std::vector<Expr> &args) {
+        return make(type, name, args, Extern, Function(), Buffer(), Parameter());
     }
 
     /** Convenience constructor for calls to other halide functions */
-    Call(Function f, const std::vector<Expr> &a) :
-        ExprNode<Call>(f.value().type()), name(f.name()), args(a), call_type(Halide), 
-        func(f), image(Buffer()), param(Parameter()) {
+    static const Call *make(Function func, const std::vector<Expr> &args) {
+        assert(func.value().defined() && "Call to undefined halide function");
+        return make(func.value().type(), func.name(), args, Halide, func, Buffer(), Parameter());
+    }
+
+    /** Convenience constructor for loads from concrete images */
+    static const Call *make(Buffer image, const std::vector<Expr> &args) {
+        return make(image.type(), image.name(), args, Image, Function(), image, Parameter());
+    }
+
+    /** Convenience constructor for loads from images parameters */
+    static const Call *make(Parameter param, const std::vector<Expr> &args) {
+        return make(param.type(), param.name(), args, Image, Function(), Buffer(), param);
     }
 };
 
@@ -732,14 +934,27 @@ struct Variable : public ExprNode<Variable> {
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
-    Variable(Type t, std::string n, Parameter p) : 
-        ExprNode<Variable>(t), name(n), param(p) {}
-    Variable(Type t, std::string n, ReductionDomain d) : 
-        ExprNode<Variable>(t), name(n), reduction_domain(d) {}
-    Variable(Type t, std::string n, Parameter p, ReductionDomain d) : 
-        ExprNode<Variable>(t), name(n), param(p), reduction_domain(d) {}
+    static const Variable *make(Type type, std::string name) {
+        return make(type, name, Parameter(), ReductionDomain());
+    }
 
-    Variable(Type t, std::string n) : ExprNode<Variable>(t), name(n) {}
+    static const Variable *make(Type type, std::string name, Parameter param) {
+        return make(type, name, param, ReductionDomain());
+    }
+
+    static const Variable *make(Type type, std::string name, ReductionDomain reduction_domain) {
+        return make(type, name, Parameter(), reduction_domain);
+    }
+
+    static const Variable *make(Type type, std::string name, Parameter param, ReductionDomain reduction_domain) {
+        Variable *node = new Variable;
+        node->type = type;
+        node->name = name;
+        node->param = param;
+        node->reduction_domain = reduction_domain;
+        return node;
+    }
+
 };
 
 }

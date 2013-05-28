@@ -62,7 +62,7 @@ Func::Func(Buffer b) : func(unique_name('f')),
     for (int i = 0; i < b.dimensions(); i++) {
         args.push_back(Var::implicit(i));
     }
-    (*this)() = new Internal::Call(b, args);
+    (*this)() = Internal::Call::make(b, args);
 }
 */
         
@@ -760,7 +760,7 @@ FuncRefVar::operator Expr() const {
     for (size_t i = 0; i < expr_args.size(); i++) {
         expr_args[i] = Var(args[i]);
     }
-    return new Call(func, expr_args);
+    return Call::make(func, expr_args);
 }
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
@@ -848,7 +848,7 @@ void FuncRefExpr::operator/=(Expr e) {
 
 FuncRefExpr::operator Expr() const {
     assert(func.value().defined() && "Can't call function with undefined value");
-    return new Call(func, args);
+    return Call::make(func, args);
 }
 
 Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {

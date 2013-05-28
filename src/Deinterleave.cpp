@@ -28,20 +28,20 @@ private:
         if (new_width == 1) {
             expr = op->value;
         } else {
-            expr = new Broadcast(op->value, new_width);
+            expr = Broadcast::make(op->value, new_width);
         }
     }
 
     void visit(const Load *op) {
         Type t = op->type;
         t.width = new_width;
-        expr = new Load(t, op->name, mutate(op->index), op->image, op->param);
+        expr = Load::make(t, op->name, mutate(op->index), op->image, op->param);
     }
 
     void visit(const Ramp *op) {
         expr = op->base + starting_lane * op->stride;
         if (new_width > 1) {
-            expr = new Ramp(expr, op->stride * lane_stride, new_width);
+            expr = Ramp::make(expr, op->stride * lane_stride, new_width);
         }
     }
     
@@ -49,7 +49,7 @@ private:
         Type t = op->type;
         t.width = new_width;
         if (internal.contains(op->name)) {
-            expr = new Variable(t, op->name, op->param, op->reduction_domain);
+            expr = Variable::make(t, op->name, op->param, op->reduction_domain);
         } else {
             // Uh-oh, we don't know how to deinterleave this vector expression
             // Make llvm do it
@@ -58,14 +58,14 @@ private:
             for (int i = 0; i < new_width; i++) {
                 args.push_back(starting_lane + lane_stride * i);
             }
-            expr = new Call(t, "shuffle vector", args);
+            expr = Call::make(t, "shuffle vector", args);
         }
     }
 
     void visit(const Cast *op) {
         Type t = op->type;
         t.width = new_width;
-        expr = new Cast(t, mutate(op->value));
+        expr = Cast::make(t, mutate(op->value));
     }
 
     void visit(const Call *op) {
@@ -79,7 +79,7 @@ private:
             args[i] = mutate(op->args[i]);
         }
 
-        expr = new Call(t, op->name, args, op->call_type, 
+        expr = Call::make(t, op->name, args, op->call_type, 
                         op->func, op->image, op->param);
     }
 
@@ -88,7 +88,7 @@ private:
         internal.push(op->name, 0);
         Expr body = mutate(op->body);
         internal.pop(op->name);
-        expr = new Let(op->name, value, body);
+        expr = Let::make(op->name, value, body);
     }
 };
 
@@ -132,7 +132,7 @@ class Interleaver : public IRMutator {
         if (value.same_as(op->value) && body.same_as(op->body)) {
             expr = op;
         } else {
-            expr = new Let(op->name, value, body);
+            expr = Let::make(op->name, value, body);
         }
     }
 
@@ -145,7 +145,7 @@ class Interleaver : public IRMutator {
         if (value.same_as(op->value) && body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = new LetStmt(op->name, value, body);
+            stmt = LetStmt::make(op->name, value, body);
         }
     }
 
@@ -174,7 +174,7 @@ class Interleaver : public IRMutator {
             }   
 
             if (a.defined() && b.defined()) {
-                expr = new Call(op->type, "interleave vectors", vec(a, b));
+                expr = Call::make(op->type, "interleave vectors", vec(a, b));
                 return;
             }
         }
@@ -184,7 +184,7 @@ class Interleaver : public IRMutator {
             false_value.same_as(op->false_value)) {
             expr = op;
         } else {
-            expr = new Select(condition, true_value, false_value);
+            expr = Select::make(condition, true_value, false_value);
         }
     }        
 };
@@ -211,20 +211,20 @@ void check(Expr a, Expr even, Expr odd) {
 
 void deinterleave_vector_test() {
     std::pair<Expr, Expr> result;
-    Expr x = new Variable(Int(32), "x");
-    Expr ramp = new Ramp(x + 4, 3, 7);
-    Expr ramp_a = new Ramp(x + 4, 6, 4);
-    Expr ramp_b = new Ramp(x + 7, 6, 3);
-    Expr broadcast = new Broadcast(x + 4, 16);
-    Expr broadcast_a = new Broadcast(x + 4, 8);
+    Expr x = Variable::make(Int(32), "x");
+    Expr ramp = Ramp::make(x + 4, 3, 7);
+    Expr ramp_a = Ramp::make(x + 4, 6, 4);
+    Expr ramp_b = Ramp::make(x + 7, 6, 3);
+    Expr broadcast = Broadcast::make(x + 4, 16);
+    Expr broadcast_a = Broadcast::make(x + 4, 8);
     Expr broadcast_b = broadcast_a;
 
     check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
     
-    check(new Load(ramp.type(), "buf", ramp, Buffer(), Parameter()), 
-          new Load(ramp_a.type(), "buf", ramp_a, Buffer(), Parameter()), 
-          new Load(ramp_b.type(), "buf", ramp_b, Buffer(), Parameter()));
+    check(Load::make(ramp.type(), "buf", ramp, Buffer(), Parameter()), 
+          Load::make(ramp_a.type(), "buf", ramp_a, Buffer(), Parameter()), 
+          Load::make(ramp_b.type(), "buf", ramp_b, Buffer(), Parameter()));
 
     std::cout << "deinterleave_vector test passed" << std::endl;
 }

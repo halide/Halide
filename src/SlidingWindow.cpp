@@ -93,19 +93,19 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 // Ok, we've isolated a function, a dimension to slide along, and loop variable to slide over
                 log(2) << "Sliding " << func.name() << " over dimension " << dim << " along loop variable " << loop_var << "\n";
                 
-                Expr loop_var_expr = new Variable(Int(32), loop_var);
+                Expr loop_var_expr = Variable::make(Int(32), loop_var);
                 Expr steady_state = loop_var_expr > loop_min;
 
-                // The new min is one beyond the max we reached on the last loop iteration
+                // The min::make is one beyond the max we reached on the last loop iteration
                 Expr new_min = substitute(loop_var, loop_var_expr - 1, min + extent);
-                // The new extent is the old extent shrunk by how much we trimmed off the min
+                // The extent::make is the old extent shrunk by how much we trimmed off the min
                 Expr new_extent = extent + min - new_min;
 
-                new_min = new Select(steady_state, new_min, min);
-                new_extent = new Select(steady_state, new_extent, extent);
+                new_min = Select::make(steady_state, new_min, min);
+                new_extent = Select::make(steady_state, new_extent, extent);
 
-                stmt = new LetStmt(func.name() + "." + dim + ".extent", new_extent, op);
-                stmt = new LetStmt(func.name() + "." + dim + ".min", new_min, stmt);
+                stmt = LetStmt::make(func.name() + "." + dim + ".extent", new_extent, op);
+                stmt = LetStmt::make(func.name() + "." + dim + ".min", new_min, stmt);
 
             } else {
                 log(2) << "Could not perform sliding window optimization of " << func.name() << " over " << loop_var << "\n";
@@ -122,7 +122,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         if (new_body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = new LetStmt(op->name, op->value, new_body);
+            stmt = LetStmt::make(op->name, op->value, new_body);
         }
         scope.pop(op->name);
     }
@@ -147,7 +147,7 @@ class SlidingWindowOnFunction : public IRMutator {
         if (new_body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = new For(op->name, op->min, op->extent, op->for_type, new_body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, new_body);
         }
     }
 
@@ -174,7 +174,7 @@ class SlidingWindow : public IRMutator {
         if (new_body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = new Realize(op->name, op->type, op->bounds, new_body);
+            stmt = Realize::make(op->name, op->type, op->bounds, new_body);
         }
     }
 public:

@@ -100,7 +100,7 @@ private:
 
     Stmt inject_marker(Stmt s) {
         if (s.same_as(last_use)) {
-            return new Block(s, new Free(func));
+            return Block::make(s, Free::make(func));
         } else {
             return mutate(s);
         }
@@ -118,7 +118,7 @@ private:
             new_consume.same_as(pipe->consume)) {
             stmt = pipe;
         } else {
-            stmt = new Pipeline(pipe->name, new_produce, new_update, new_consume);
+            stmt = Pipeline::make(pipe->name, new_produce, new_update, new_consume);
         }
     }
 
@@ -129,7 +129,7 @@ private:
             new_rest.same_as(block->rest)) {
             stmt = block;
         } else {
-            stmt = new Block(new_first, new_rest);
+            stmt = Block::make(new_first, new_rest);
         }        
     }    
 
@@ -154,8 +154,8 @@ class InjectEarlyFrees : public IRMutator {
             inject_marker.last_use = last_use.last_use;
             stmt = inject_marker.mutate(stmt);
         } else {            
-            stmt = new Allocate(alloc->name, alloc->type, alloc->size, 
-                                new Block(alloc->body, new Free(alloc->name)));
+            stmt = Allocate::make(alloc->name, alloc->type, alloc->size, 
+                                Block::make(alloc->body, Free::make(alloc->name)));
         }
 
     }
@@ -165,6 +165,8 @@ Stmt inject_early_frees(Stmt s) {
     InjectEarlyFrees early_frees;
     return early_frees.mutate(s);    
 }
+
+// TODO: test
 
 }
 }

@@ -12,14 +12,14 @@
 #define HalideExtern_1(rt, name, t1)                                    \
     Halide::Expr name(Halide::Expr a1) {                                \
         assert(a1.type() == Halide::type_of<t1>() && "Type mismatch for argument 1 of " #name); \
-        return new Halide::Internal::Call(Halide::type_of<rt>(), #name, vec(a1));  \
+        return Halide::Internal::Call::make(Halide::type_of<rt>(), #name, vec(a1)); \
     }
 
 #define HalideExtern_2(rt, name, t1, t2)                                \
     Halide::Expr name(Halide::Expr a1, Halide::Expr a2) {               \
         assert(a1.type() == Halide::type_of<t1>() && "Type mismatch for argument 1 of " #name); \
         assert(a2.type() == Halide::type_of<t2>() && "Type mismatch for argument 2 of " #name); \
-        return new Halide::Internal::Call(Halide::type_of<rt>(), #name, vec(a1, a2)); \
+        return Halide::Internal::Call::make(Halide::type_of<rt>(), #name, vec(a1, a2)); \
     }
 
 #define HalideExtern_3(rt, name, t1, t2, t3)                            \
@@ -27,7 +27,7 @@
         assert(a1.type() == Halide::type_of<t1>() && "Type mismatch for argument 1 of " #name); \
         assert(a2.type() == Halide::type_of<t2>() && "Type mismatch for argument 2 of " #name); \
         assert(a3.type() == Halide::type_of<t3>() && "Type mismatch for argument 3 of " #name); \
-        return new Halide::Internal::Call(Halide::type_of<rt>(), #name, vec(a1, a2, a3)); \
+        return Halide::Internal::Call::make(Halide::type_of<rt>(), #name, vec(a1, a2, a3)); \
     }
 
 #define HalideExtern_4(rt, name, t1, t2, t3, t4)                        \
@@ -36,7 +36,7 @@
         assert(a2.type() == Halide::type_of<t2>() && "Type mismatch for argument 2 of " #name); \
         assert(a3.type() == Halide::type_of<t3>() && "Type mismatch for argument 3 of " #name); \
         assert(a4.type() == Halide::type_of<t4>() && "Type mismatch for argument 4 of " #name); \
-        return new Halide::Internal::Call(Halide::type_of<rt>(), #name, vec(a1, a2, a3, a4)); \
+        return Halide::Internal::Call::make(Halide::type_of<rt>(), #name, vec(a1, a2, a3, a4)); \
   }
 
 #endif

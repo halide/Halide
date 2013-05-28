@@ -14,7 +14,7 @@ class FiniteDifference : public IRMutator {
     string var;
 
     Expr brute_force(Expr e) {
-        return substitute(var, (new Variable(Int(32), var)) + 1, e) - e;
+        return substitute(var, (Variable::make(Int(32), var)) + 1, e) - e;
     }
 
     using IRMutator::visit;

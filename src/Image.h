@@ -204,7 +204,7 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Internal::Call(buffer, args);
+        return Internal::Call::make(buffer, args);
     }    
 
     /** Construct an expression which loads from this image. The
@@ -218,7 +218,7 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Internal::Call(buffer, args);
+        return Internal::Call::make(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y) const {
@@ -229,7 +229,7 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Internal::Call(buffer, args);
+        return Internal::Call::make(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z) const {
@@ -241,7 +241,7 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Internal::Call(buffer, args);
+        return Internal::Call::make(buffer, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
@@ -254,7 +254,7 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
-        return new Internal::Call(buffer, args);
+        return Internal::Call::make(buffer, args);
     }
     // @}
 
