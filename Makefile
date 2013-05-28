@@ -10,29 +10,44 @@ LLVM_VERSION = $(shell $(LLVM_CONFIG) --version)
 CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
+LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
+LLVM_CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags)
+
+# llvm_config doesn't always point to the correct include
+# directory. We haven't figured out why yet.
+LLVM_CXX_FLAGS += -I$(shell $(LLVM_CONFIG) --src-root)/include
 
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
-CXX_FLAGS_NACL=$(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", )
-NATIVE_CLIENT_ARCHS=$(if $(WITH_NATIVE_CLIENT), x86_nacl x86_32_nacl arm_nacl, )
-NATIVE_CLIENT_LLVM_CONFIG_LIB=$(if $(WITH_NATIVE_CLIENT), nacltransforms, )
+NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", )
+NATIVE_CLIENT_ARCHS = $(if $(WITH_NATIVE_CLIENT), x86_nacl x86_32_nacl arm_nacl, )
+NATIVE_CLIENT_LLVM_CONFIG_LIB = $(if $(WITH_NATIVE_CLIENT), nacltransforms, )
 NATIVE_CLIENT_ROOT ?=
 
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
-CXX_FLAGS_PTX=$(if $(WITH_PTX), "-DWITH_PTX=1", )
+PTX_CXX_FLAGS=$(if $(WITH_PTX), "-DWITH_PTX=1", )
 PTX_ARCHS=$(if $(WITH_PTX), ptx_host ptx_dev, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
 
-CXX_FLAGS = $(shell $(LLVM_CONFIG) --cflags) -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -Os $(CXX_FLAGS_NACL) $(CXX_FLAGS_PTX)
-LIBS = -L $(shell $(LLVM_CONFIG) --libdir) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker ipo mcjit jit $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB))
+CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -Os
+CXX_FLAGS += $(LLVM_CXX_FLAGS)
+CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
+CXX_FLAGS += $(PTX_CXX_FLAGS)
+LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker ipo mcjit jit $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB))
+
 TEST_CXX_FLAGS ?=
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
 endif
-BUILD_PREFIX ?= .
-BUILD_DIR=build/$(BUILD_PREFIX)
-BIN_DIR=bin/$(BUILD_PREFIX)
+
+ifdef BUILD_PREFIX
+BUILD_DIR = build/$(BUILD_PREFIX)
+BIN_DIR = bin/$(BUILD_PREFIX)
+else
+BUILD_DIR = build
+BIN_DIR = bin
+endif
 
 SOURCE_FILES = CodeGen.cpp CodeGen_Internal.cpp CodeGen_X86.cpp CodeGen_PTX_Host.cpp CodeGen_PTX_Dev.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Log.cpp Parameter.cpp Reduction.cpp RDom.cpp Tracing.cpp RemoveDeadLets.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp Type.cpp JITCompiledModule.cpp EarlyFree.cpp
 
