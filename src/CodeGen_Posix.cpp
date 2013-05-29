@@ -302,21 +302,24 @@ void CodeGen_Posix::visit(const Free *stmt) {
 }
 
 void CodeGen_Posix::prepare_for_early_exit() {
-    // TODO: 
-    // As is, this function pops allocations, which is bad. We need a better way to iterate through all allocations
-    /*
+    // We've jumped to a code path that will be called just before
+    // bailing out. Free everything outstanding.
     for (map<string, stack<pair<Allocation, int> > >::const_iterator iter = allocations.get_table().begin();
          iter != allocations.get_table().end(); ++iter) {
         string name = iter->first;
+        std::vector<Allocation> stash;
         while (allocations.contains(name)) {
-            Allocation alloc = allocations.get(name);
-            if (alloc.on_heap) {
-                free_buffer(alloc.ptr);
-            }
-            allocations.pop(name);
+            stash.push_back(allocations.get(name));            
+            free_allocation(name);
+        }
+
+        // Restore all the allocations before we jump back to the main
+        // code path.
+        for (size_t i = stash.size(); i > 0; i--) {
+            allocations.push(name, stash[i-1]);
+            sym_push(name + ".host", stash[i-1].ptr);
         }
     }
-    */
 }
 
 }}
