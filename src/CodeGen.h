@@ -84,8 +84,10 @@ public:
 
     /** Do any required target-specific things to the execution engine
      * and the module after jitting. Called by JITCompiledModule just
-     * after it jits. Does nothing by default. */
-    virtual void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module) {}
+     * after it jits. Does nothing by default. The third argument
+     * gives the target a chance to inject calls to target-specific
+     * module cleanup routines. */
+    virtual void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module, std::vector<void (*)()> *cleanup_routines) {}
 
 protected:
 
