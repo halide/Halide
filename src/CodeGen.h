@@ -20,6 +20,7 @@ class StructType;
 class Instruction;
 class CallInst;
 class ExecutionEngine;
+class AllocaInst;
 }
 
 #include <map>
