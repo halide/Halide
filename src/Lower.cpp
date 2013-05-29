@@ -68,13 +68,13 @@ class QualifyExpr : public IRMutator {
         if (v->param.defined()) {
             expr = v;
         } else {
-            expr = new Variable(v->type, prefix + v->name, v->reduction_domain);
+            expr = Variable::make(v->type, prefix + v->name, v->reduction_domain);
         }
     }
     void visit(const Let *op) {
         Expr value = mutate(op->value);
         Expr body = mutate(op->body);
-        expr = new Let(prefix + op->name, value, body);
+        expr = Let::make(prefix + op->name, value, body);
     }
 public:
     QualifyExpr(string p) : prefix(p) {}
@@ -91,16 +91,16 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
     // then wrapping it in for loops.
             
     // Make the (multi-dimensional) store node
-    Stmt stmt = new Provide(buffer, value, site);
+    Stmt stmt = Provide::make(buffer, value, site);
             
     // Define the function args in terms of the loop variables using the splits
     for (size_t i = 0; i < s.splits.size(); i++) {
         const Schedule::Split &split = s.splits[i];
-        Expr outer = new Variable(Int(32), prefix + split.outer);
+        Expr outer = Variable::make(Int(32), prefix + split.outer);
         if (!split.is_rename) {
-            Expr inner = new Variable(Int(32), prefix + split.inner);
-            Expr old_min = new Variable(Int(32), prefix + split.old_var + ".min");
-            // stmt = new LetStmt(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
+            Expr inner = Variable::make(Int(32), prefix + split.inner);
+            Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".min");
+            // stmt = LetStmt::make(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
             stmt = substitute(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
         } else {
             stmt = substitute(prefix + split.old_var, outer, stmt);
@@ -110,27 +110,27 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
     // Build the loop nest
     for (size_t i = 0; i < s.dims.size(); i++) {
         const Schedule::Dim &dim = s.dims[i];
-        Expr min = new Variable(Int(32), prefix + dim.var + ".min");
-        Expr extent = new Variable(Int(32), prefix + dim.var + ".extent");
-        stmt = new For(prefix + dim.var, min, extent, dim.for_type, stmt);
+        Expr min = Variable::make(Int(32), prefix + dim.var + ".min");
+        Expr extent = Variable::make(Int(32), prefix + dim.var + ".extent");
+        stmt = For::make(prefix + dim.var, min, extent, dim.for_type, stmt);
     }
 
     // Define the bounds on the split dimensions using the bounds
     // on the function args
     for (size_t i = s.splits.size(); i > 0; i--) {
         const Schedule::Split &split = s.splits[i-1];
-        Expr old_var_extent = new Variable(Int(32), prefix + split.old_var + ".extent");
-        Expr old_var_min = new Variable(Int(32), prefix + split.old_var + ".min");
+        Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".extent");
+        Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".min");
         if (!split.is_rename) {
             Expr inner_extent = split.factor;
             Expr outer_extent = (old_var_extent + split.factor - 1)/split.factor;
-            stmt = new LetStmt(prefix + split.inner + ".min", 0, stmt);
-            stmt = new LetStmt(prefix + split.inner + ".extent", inner_extent, stmt);
-            stmt = new LetStmt(prefix + split.outer + ".min", 0, stmt);
-            stmt = new LetStmt(prefix + split.outer + ".extent", outer_extent, stmt);            
+            stmt = LetStmt::make(prefix + split.inner + ".min", 0, stmt);
+            stmt = LetStmt::make(prefix + split.inner + ".extent", inner_extent, stmt);
+            stmt = LetStmt::make(prefix + split.outer + ".min", 0, stmt);
+            stmt = LetStmt::make(prefix + split.outer + ".extent", outer_extent, stmt);            
         } else {
-            stmt = new LetStmt(prefix + split.outer + ".min", old_var_min, stmt);
-            stmt = new LetStmt(prefix + split.outer + ".extent", old_var_extent, stmt);
+            stmt = LetStmt::make(prefix + split.outer + ".min", old_var_min, stmt);
+            stmt = LetStmt::make(prefix + split.outer + ".extent", old_var_extent, stmt);
         }
     }
 
@@ -152,7 +152,7 @@ Stmt build_produce(Function f) {
     Expr value = qualify_expr(prefix, f.value());   
 
     for (size_t i = 0; i < f.args().size(); i++) {
-        site.push_back(new Variable(Int(32), f.name() + "." + f.args()[i]));
+        site.push_back(Variable::make(Int(32), f.name() + "." + f.args()[i]));
     }
 
     return build_provide_loop_nest(f.name(), prefix, site, value, f.schedule());
@@ -178,8 +178,8 @@ Stmt build_update(Function f) {
     const vector<ReductionVariable> &dom = f.reduction_domain().domain();
     for (size_t i = 0; i < dom.size(); i++) {
         string p = prefix + dom[i].var;
-        loop = new LetStmt(p + ".min", dom[i].min, loop);
-        loop = new LetStmt(p + ".extent", dom[i].extent, loop);
+        loop = LetStmt::make(p + ".min", dom[i].min, loop);
+        loop = LetStmt::make(p + ".extent", dom[i].extent, loop);
     }
 
     return loop;
@@ -200,22 +200,22 @@ pair<Stmt, Stmt> build_realization(Function func) {
             // Expand the region to be computed using the region read in the update step
             for (size_t i = 0; i < bounds.size(); i++) {                        
                 string var = func.name() + "." + func.args()[i];
-                Expr update_min = new Variable(Int(32), var + ".update_min");
-                Expr update_extent = new Variable(Int(32), var + ".update_extent");
-                Expr consume_min = new Variable(Int(32), var + ".min");
-                Expr consume_extent = new Variable(Int(32), var + ".extent");
-                Expr init_min = new Min(update_min, consume_min);
-                Expr init_max_plus_one = new Max(update_min + update_extent, consume_min + consume_extent);
+                Expr update_min = Variable::make(Int(32), var + ".update_min");
+                Expr update_extent = Variable::make(Int(32), var + ".update_extent");
+                Expr consume_min = Variable::make(Int(32), var + ".min");
+                Expr consume_extent = Variable::make(Int(32), var + ".extent");
+                Expr init_min = Min::make(update_min, consume_min);
+                Expr init_max_plus_one = Max::make(update_min + update_extent, consume_min + consume_extent);
                 Expr init_extent = init_max_plus_one - init_min;
-                produce = new LetStmt(var + ".min", init_min, produce);
-                produce = new LetStmt(var + ".extent", init_extent, produce);
+                produce = LetStmt::make(var + ".min", init_min, produce);
+                produce = LetStmt::make(var + ".extent", init_extent, produce);
             }
             
             // Define the region read during the update step
             for (size_t i = 0; i < bounds.size(); i++) {
                 string var = func.name() + "." + func.args()[i];
-                produce = new LetStmt(var + ".update_min", bounds[i].min, produce);
-                produce = new LetStmt(var + ".update_extent", bounds[i].extent, produce);
+                produce = LetStmt::make(var + ".update_min", bounds[i].min, produce);
+                produce = LetStmt::make(var + ".update_extent", bounds[i].extent, produce);
             }
         }
     }    
@@ -232,13 +232,13 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
         Schedule::Bound b = func.schedule().bounds[i];
         string min_name = func.name() + "." + b.var + ".min";
         string extent_name = func.name() + "." + b.var + ".extent";
-        Expr min_var = new Variable(Int(32), min_name);
-        Expr extent_var = new Variable(Int(32), extent_name);
+        Expr min_var = Variable::make(Int(32), min_name);
+        Expr extent_var = Variable::make(Int(32), extent_name);
         Expr check = (b.min <= min_var) && ((b.min + b.extent) >= (min_var + extent_var)); 
         string error_msg = "Bounds given for " + b.var + " in " + func.name() + " don't cover required region";
-        body = new Block(new AssertStmt(check, error_msg),
-                         new LetStmt(min_name, b.min, 
-                                     new LetStmt(extent_name, b.extent, body)));
+        body = Block::make(AssertStmt::make(check, error_msg),
+                         LetStmt::make(min_name, b.min, 
+                                     LetStmt::make(extent_name, b.extent, body)));
     }            
     return body;
 }
@@ -277,7 +277,7 @@ public:
 private:
     Stmt build_pipeline(Stmt s) {
         pair<Stmt, Stmt> realization = build_realization(func);
-        return new Pipeline(func.name(), realization.first, realization.second, s);
+        return Pipeline::make(func.name(), realization.first, realization.second, s);
     }
 
     Stmt build_realize(Stmt s) {
@@ -296,8 +296,8 @@ private:
         /*
         Region bounds;
         for (size_t i = 0; i < func.args().size(); i++) {
-            Expr min = new Variable(Int(32), func.name() + "." + func.args()[i] + ".min");
-            Expr extent = new Variable(Int(32), func.name() + "." + func.args()[i] + ".extent");
+            Expr min = Variable::make(Int(32), func.name() + "." + func.args()[i] + ".min");
+            Expr extent = Variable::make(Int(32), func.name() + "." + func.args()[i] + ".extent");
             bounds.push_back(Range(min, extent));
         }
         */
@@ -316,7 +316,7 @@ private:
         }
 
         // Change the body of the for loop to do an allocation
-        s = new Realize(func.name(), func.value().type(), bounds, s);
+        s = Realize::make(func.name(), func.value().type(), bounds, s);
         
         return inject_explicit_bounds(s, func);        
     }
@@ -367,7 +367,7 @@ private:
         if (body.same_as(for_loop->body)) {
             stmt = for_loop;
         } else {
-            stmt = new For(for_loop->name, 
+            stmt = For::make(for_loop->name, 
                            for_loop->min, 
                            for_loop->extent, 
                            for_loop->for_type, 
@@ -417,7 +417,7 @@ private:
             /*
             assert(args.size() == func.args().size());
             for (size_t i = 0; i < args.size(); i++) {
-                body = new Let(func.name() + "." + func.args()[i], 
+                body = Let::make(func.name() + "." + func.args()[i], 
                                args[i], 
                                body);
             }
@@ -576,7 +576,7 @@ Stmt create_initial_loop_nest(Function f) {
     Stmt s = r.first;
     if (r.second.defined()) {
         // This must be in a pipeline so that bounds inference understands the update step
-        s = new Pipeline(f.name(), r.first, r.second, new AssertStmt(const_true(), "Dummy consume step"));
+        s = Pipeline::make(f.name(), r.first, r.second, AssertStmt::make(const_true(), "Dummy consume step"));
     }
     return inject_explicit_bounds(s, f);
 }
@@ -587,7 +587,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
     // Inject a loop over root to give us a scheduling point
     string root_var = Schedule::LoopLevel::root().func + "." + Schedule::LoopLevel::root().var;
-    s = new For(root_var, 0, 1, For::Serial, s);
+    s = For::make(root_var, 0, 1, For::Serial, s);
 
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
@@ -639,12 +639,12 @@ Stmt add_image_checks(Stmt s, Function f) {
 
         // Check the elem size matches the internally-understood type
         {
-            Expr elem_size = new Variable(Int(32), name + ".elem_size");
+            Expr elem_size = Variable::make(Int(32), name + ".elem_size");
             int correct_size = type.bits / 8;
             ostringstream error_msg;
             error_msg << "Element size for " << name << " should be " << correct_size;
-            Stmt check = new AssertStmt(elem_size == type.bits / 8, error_msg.str()); 
-            s = new Block(check, s);
+            Stmt check = AssertStmt::make(elem_size == type.bits / 8, error_msg.str()); 
+            s = Block::make(check, s);
         }
 
         // Bounds checking can be disabled via HL_DISABLE_BOUNDS_CHECKING
@@ -660,8 +660,8 @@ Stmt add_image_checks(Stmt s, Function f) {
                     ostringstream min_name, extent_name;
                     min_name << name << ".min." << j;
                     extent_name << name << ".extent." << j;
-                    Expr actual_min = new Variable(Int(32), min_name.str());
-                    Expr actual_extent = new Variable(Int(32), extent_name.str());
+                    Expr actual_min = Variable::make(Int(32), min_name.str());
+                    Expr actual_extent = Variable::make(Int(32), extent_name.str());
                     Expr min_used = region[j].min;
                     Expr extent_used = region[j].extent;
                     if (!min_used.defined() || !extent_used.defined()) {
@@ -671,10 +671,10 @@ Stmt add_image_checks(Stmt s, Function f) {
                     }
                     ostringstream error_msg;
                     error_msg << name << " is accessed out of bounds in dimension " << j;
-                    Stmt check = new AssertStmt((actual_min <= min_used) &&
+                    Stmt check = AssertStmt::make((actual_min <= min_used) &&
                                                 (actual_min + actual_extent >= min_used + extent_used), 
                                                 error_msg.str());
-                    s = new Block(check, s);
+                    s = Block::make(check, s);
                 }
             }
         } else {
@@ -709,24 +709,24 @@ Stmt add_image_checks(Stmt s, Function f) {
         // The stride of the output buffer in dimension 0 should also be 1
         lets.push_back(make_pair(f.name() + ".stride.0", 1));
 
-        // Copy the new values to the old names
+        // Copy the values::make to the old names
         for (size_t i = 0; i < lets.size(); i++) {
-            s = new LetStmt(lets[i].first, new Variable(Int(32), lets[i].first + ".constrained"), s);
+            s = LetStmt::make(lets[i].first, Variable::make(Int(32), lets[i].first + ".constrained"), s);
         }
 
-        // Assert all the conditions, and set the new values
+        // Assert all the conditions, and set the values::make
         vector<Stmt> asserts;
         for (size_t i = 0; i < lets.size(); i++) {
-            Expr var = new Variable(Int(32), lets[i].first);
+            Expr var = Variable::make(Int(32), lets[i].first);
             Expr value = lets[i].second;
             ostringstream error;
             error << "Static constraint violated: " << lets[i].first << " == " << value;
-            asserts.push_back(new AssertStmt(var == value, error.str()));
-            s = new LetStmt(lets[i].first + ".constrained", value, s);
+            asserts.push_back(AssertStmt::make(var == value, error.str()));
+            s = LetStmt::make(lets[i].first + ".constrained", value, s);
         }
 
         for (size_t i = asserts.size(); i > 0; i--) {
-            s = new Block(asserts[i-1], s);
+            s = Block::make(asserts[i-1], s);
         }
 
  

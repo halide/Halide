@@ -62,8 +62,8 @@ private:
     void visit(const Cast *op) {
         // Assume no overflow
         op->value.accept(this);
-        min = min.defined() ? new Cast(op->type, min) : Expr();
-        max = max.defined() ? new Cast(op->type, max) : Expr();
+        min = min.defined() ? Cast::make(op->type, min) : Expr();
+        max = max.defined() ? Cast::make(op->type, max) : Expr();
     }
 
     void visit(const Variable *op) {
@@ -82,8 +82,8 @@ private:
         Expr min_a = min, max_a = max;
         op->b.accept(this);
 
-        min = (min.defined() && min_a.defined()) ? new Add(min_a, min) : Expr();
-        max = (max.defined() && max_a.defined()) ? new Add(max_a, max) : Expr();
+        min = (min.defined() && min_a.defined()) ? Add::make(min_a, min) : Expr();
+        max = (max.defined() && max_a.defined()) ? Add::make(max_a, max) : Expr();
     }
 
     void visit(const Sub *op) {
@@ -91,8 +91,8 @@ private:
         Expr min_a = min, max_a = max;
         op->b.accept(this);
         Expr min_b = min, max_b = max;
-        min = (max_b.defined() && min_a.defined()) ? new Sub(min_a, max_b) : Expr();
-        max = (min_b.defined() && max_a.defined()) ? new Sub(max_a, min_b) : Expr();
+        min = (max_b.defined() && min_a.defined()) ? Sub::make(min_a, max_b) : Expr();
+        max = (min_b.defined() && max_a.defined()) ? Sub::make(max_a, min_b) : Expr();
     }
 
     void visit(const Mul *op) {
@@ -125,8 +125,8 @@ private:
             Expr c = max_a * min;
             Expr d = max_a * max;
             
-            min = new Min(new Min(a, b), new Min(c, d));
-            max = new Max(new Max(a, b), new Max(c, d));
+            min = Min::make(Min::make(a, b), Min::make(c, d));
+            max = Max::make(Max::make(a, b), Max::make(c, d));
         }
     }
 
@@ -168,8 +168,8 @@ private:
             Expr c = max_a / min;
             Expr d = max_a / max;
             
-            min = new Min(new Min(a, b), new Min(c, d));
-            max = new Max(new Max(a, b), new Max(c, d));
+            min = Min::make(Min::make(a, b), Min::make(c, d));
+            max = Max::make(Max::make(a, b), Max::make(c, d));
         }
     }
 
@@ -191,13 +191,13 @@ private:
         log(3) << "Bounds of " << Expr(op) << "\n";
 
         if (min_a.defined() && min_b.defined()) {
-            min = new Min(min_a, min_b);
+            min = Min::make(min_a, min_b);
         } else {
             min = Expr();
         }
 
         if (max_a.defined() && max_b.defined()) {
-            max = new Min(max_a, max_b);
+            max = Min::make(max_a, max_b);
         } else {
             max = max_a.defined() ? max_a : max_b;
         }
@@ -215,13 +215,13 @@ private:
         log(3) << "Bounds of " << Expr(op) << "\n";
 
         if (min_a.defined() && min_b.defined()) {
-            min = new Max(min_a, min_b);
+            min = Max::make(min_a, min_b);
         } else {
             min = min_a.defined() ? min_a : min_b;
         }
 
         if (max_a.defined() && max_b.defined()) {
-            max = new Max(max_a, max_b);
+            max = Max::make(max_a, max_b);
         } else {
             max = Expr();
         }
@@ -275,8 +275,8 @@ private:
         Expr min_a = min, max_a = max;
         op->false_value.accept(this);
         
-        min = (min.defined() && min_a.defined()) ? new Min(min, min_a) : Expr();
-        max = (max.defined() && max_a.defined()) ? new Max(max, max_a) : Expr();
+        min = (min.defined() && min_a.defined()) ? Min::make(min, min_a) : Expr();
+        max = (max.defined() && max_a.defined()) ? Max::make(max, max_a) : Expr();
     }
 
     void visit(const Load *op) {
@@ -353,8 +353,8 @@ Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope) {
 Interval interval_union(const Interval &a, const Interval &b) {    
     Expr max, min;
     log(3) << "Interval union of " << a.min << ", " << a.max << ",  " << b.min << ", " << b.max << "\n";
-    if (a.max.defined() && b.max.defined()) max = new Max(a.max, b.max);
-    if (a.min.defined() && b.min.defined()) min = new Min(a.min, b.min);
+    if (a.max.defined() && b.max.defined()) max = Max::make(a.max, b.max);
+    if (a.min.defined() && b.min.defined()) min = Min::make(a.min, b.min);
     return Interval(min, max);
 }
 
@@ -362,10 +362,10 @@ Region region_union(const Region &a, const Region &b) {
     assert(a.size() == b.size() && "Mismatched dimensionality in region union");
     Region result;
     for (size_t i = 0; i < a.size(); i++) {
-        Expr min = new Min(a[i].min, b[i].min);
+        Expr min = Min::make(a[i].min, b[i].min);
         Expr max_a = a[i].min + a[i].extent;
         Expr max_b = b[i].min + b[i].extent;
-        Expr max_plus_one = new Max(max_a, max_b);
+        Expr max_plus_one = Max::make(max_a, max_b);
         Expr extent = max_plus_one - min;
         result.push_back(Range(simplify(min), simplify(extent)));
     }
@@ -577,24 +577,24 @@ void bounds_test() {
     check(scope, x*x, 0, 100);
     check(scope, 5-x, -5, 5);
     check(scope, x*(5-x), -50, 50); // We don't expect bounds analysis to understand correlated terms
-    check(scope, new Select(x < 4, x, x+100), 0, 110);
+    check(scope, Select::make(x < 4, x, x+100), 0, 110);
     check(scope, x+y, y, y+10);
-    check(scope, x*y, new Min(y*10, 0), new Max(y*10, 0));
+    check(scope, x*y, Min::make(y*10, 0), Max::make(y*10, 0));
     check(scope, x/(x+y), Expr(), Expr());
     check(scope, 11/(x+1), 1, 11);
-    check(scope, new Load(Int(8), "buf", x, Buffer(), Parameter()), cast(Int(8), -128), cast(Int(8), 127));
-    check(scope, y + (new Let("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
+    check(scope, Load::make(Int(8), "buf", x, Buffer(), Parameter()), cast(Int(8), -128), cast(Int(8), 127));
+    check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
 
     vector<Expr> input_site_1 = vec(2*x);
     vector<Expr> input_site_2 = vec(2*x+1);
     vector<Expr> output_site = vec(x+1);
 
-    Stmt loop = new For("x", 3, 10, For::Serial, 
-                        new Provide("output", 
-                                    new Add(
-                                        new Call(Int(32), "input", input_site_1),
-                                        new Call(Int(32), "input", input_site_2)),
+    Stmt loop = For::make("x", 3, 10, For::Serial, 
+                        Provide::make("output", 
+                                    Add::make(
+                                        Call::make(Int(32), "input", input_site_1),
+                                        Call::make(Int(32), "input", input_site_2)),
                                     output_site));
 
     map<string, Region> r;

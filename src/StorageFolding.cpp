@@ -32,7 +32,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = args[dim] % factor;
-            expr = new Call(op->type, op->name, args, op->call_type, 
+            expr = Call::make(op->type, op->name, args, op->call_type, 
                             op->func, op->image, op->param);
         }
     }
@@ -44,7 +44,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = args[dim] % factor;
-            stmt = new Provide(op->name, op->value, args);
+            stmt = Provide::make(op->name, op->value, args);
         }
     }
 
@@ -87,7 +87,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         for (size_t i = region.size(); i > 0; i--) {
             Expr min = region[i-1].min;
             Expr extent = region[i-1].extent;
-            Expr loop_var = new Variable(Int(32), op->name);
+            Expr loop_var = Variable::make(Int(32), op->name);
 
             // The min has to be monotonic with the loop variable            
             Expr prev_min = substitute(op->name, loop_var - 1, min);
@@ -158,7 +158,7 @@ class StorageFolding : public IRMutator {
 
             bounds[folder.dim_folded] = Range(0, folder.fold_factor);
             
-            stmt = new Realize(op->name, op->type, bounds, new_body);
+            stmt = Realize::make(op->name, op->type, bounds, new_body);
         }
     }
 };

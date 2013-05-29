@@ -28,7 +28,7 @@ class DebugToFile : public IRMutator {
             vector<Expr> args;
 
             // The name of the file
-            args.push_back(new Call(Int(32), f.debug_file(), vector<Expr>()));
+            args.push_back(Call::make(Int(32), f.debug_file(), vector<Expr>()));
 
             // Inject loads to the corners of the function so that any
             // passes doing further analysis of buffer use understand
@@ -38,8 +38,8 @@ class DebugToFile : public IRMutator {
             for (size_t i = 0; i < op->bounds.size(); i++) {
                 num_elements *= op->bounds[i].extent;
             }
-            args.push_back(new Load(op->type, f.name(), 0, Buffer(), Parameter()));
-            args.push_back(new Load(op->type, f.name(), num_elements-1, Buffer(), Parameter()));
+            args.push_back(Load::make(op->type, f.name(), 0, Buffer(), Parameter()));
+            args.push_back(Load::make(op->type, f.name(), num_elements-1, Buffer(), Parameter()));
 
             // The header           
             for (size_t i = 0; i < op->bounds.size(); i++) {
@@ -80,14 +80,14 @@ class DebugToFile : public IRMutator {
             args.push_back(type_code);
             args.push_back(t.bits / 8);
 
-            Expr call = new Call(Int(32), "debug to file", args);
+            Expr call = Call::make(Int(32), "debug to file", args);
 
-            Stmt body = new AssertStmt(call == 0, 
+            Stmt body = AssertStmt::make(call == 0, 
                                        "Failed to dump function " + 
                                        f.name() + " to file " + f.debug_file());
-            body = new Block(mutate(op->body), body);
+            body = Block::make(mutate(op->body), body);
         
-            stmt = new Realize(op->name, op->type, op->bounds, body);
+            stmt = Realize::make(op->name, op->type, op->bounds, body);
 
         } else {
             IRMutator::visit(op);

@@ -225,7 +225,7 @@ void CodeGen_X86::visit(const Cast *op) {
         if (!use_sse_41 && pattern.needs_sse_41) continue;
         if (expr_match(pattern.pattern, op, matches)) {
             if (pattern.extern_call) {
-                value = codegen(new Call(pattern.type, pattern.intrin, matches));
+                value = codegen(Call::make(pattern.type, pattern.intrin, matches));
             } else {
                 value = call_intrin(pattern.type, pattern.intrin, matches);
             }
@@ -284,14 +284,14 @@ void CodeGen_X86::visit(const Div *op) {
     vector<Expr> matches;    
     if (op->type == Float(32, 4) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
-        if (expr_match(new Call(Float(32, 4), "sqrt_f32", vec(wild_f32x4)), op->b, matches)) {            
+        if (expr_match(Call::make(Float(32, 4), "sqrt_f32", vec(wild_f32x4)), op->b, matches)) {            
             value = call_intrin(Float(32, 4), "sse.rsqrt.ps", matches);
         } else {
             value = call_intrin(Float(32, 4), "sse.rcp.ps", vec(op->b));
         }
     } else if (use_avx && op->type == Float(32, 8) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
-        if (expr_match(new Call(Float(32, 8), "sqrt_f32", vec(wild_f32x8)), op->b, matches)) {            
+        if (expr_match(Call::make(Float(32, 8), "sqrt_f32", vec(wild_f32x8)), op->b, matches)) {            
             value = call_intrin(Float(32, 8), "avx.rsqrt.ps.256", matches);
         } else {
             value = call_intrin(Float(32, 8), "avx.rcp.ps.256", vec(op->b));
@@ -493,39 +493,40 @@ void CodeGen_X86::test() {
 
     // We'll clear out the initial buffer except for the first and
     // last two elements using dense unaligned vectors
-    Stmt init = new For("i", 0, 3, For::Serial, 
-                        new Store("buf", 
-                                  new Ramp(i*4+2, 1, 4),
-                                  new Ramp(i*4+2, 1, 4)));
-
+    Stmt init = For::make("i", 0, 3, For::Serial, 
+                          Store::make("buf", 
+                                      Ramp::make(i*4+2, 1, 4),
+                                      Ramp::make(i*4+2, 1, 4)));
+    
     // Now set the first two elements using scalars, and last four elements using a dense aligned vector
-    init = new Block(init, new Store("buf", 0, 0));
-    init = new Block(init, new Store("buf", 1, 1));
-    init = new Block(init, new Store("buf", new Ramp(12, 1, 4), new Ramp(12, 1, 4)));
-
+    init = Block::make(init, Store::make("buf", 0, 0));
+    init = Block::make(init, Store::make("buf", 1, 1));
+    init = Block::make(init, Store::make("buf", Ramp::make(12, 1, 4), Ramp::make(12, 1, 4)));
+    
     // Then multiply the even terms by 17 using sparse vectors
-    init = new Block(init, 
-                     new For("i", 0, 2, For::Serial, 
-                             new Store("buf", 
-                                       new Mul(new Broadcast(17, 4), 
-                                               new Load(Int(32, 4), "buf", new Ramp(i*8, 2, 4), Buffer(), Parameter())),
-                                       new Ramp(i*8, 2, 4))));
+    init = Block::make(init, 
+                       For::make("i", 0, 2, For::Serial, 
+                                 Store::make("buf", 
+                                             Mul::make(Broadcast::make(17, 4), 
+                                                       Load::make(Int(32, 4), "buf", 
+                                                                  Ramp::make(i*8, 2, 4), Buffer(), Parameter())),
+                                             Ramp::make(i*8, 2, 4))));
 
     // Then print some stuff (disabled to prevent debugging spew)
-    // vector<Expr> print_args = vec<Expr>(3, 4.5f, new Cast(Int(8), 2), new Ramp(alpha, 3.2f, 4));
-    // init = new Block(init, new PrintStmt("Test print: ", print_args));
+    // vector<Expr> print_args = vec<Expr>(3, 4.5f, Cast::make(Int(8), 2), Ramp::make(alpha, 3.2f, 4));
+    // init = Block::make(init, PrintStmt::make("Test print: ", print_args));
 
     // Then run a parallel for loop that clobbers three elements of buf
-    Expr e = new Select(alpha > 4.0f, 3, 2);
-    e += (new Call(Int(32), "extern_function_1", vec<Expr>(alpha)));
-    Stmt loop = new Store("buf", e, x + i);
-    loop = new LetStmt("x", beta+1, loop);
+    Expr e = Select::make(alpha > 4.0f, 3, 2);
+    e += (Call::make(Int(32), "extern_function_1", vec<Expr>(alpha)));
+    Stmt loop = Store::make("buf", e, x + i);
+    loop = LetStmt::make("x", beta+1, loop);
     // Do some local allocations within the loop
-    loop = new Allocate("tmp_stack", Int(32), 127, loop);
-    loop = new Allocate("tmp_heap", Int(32), 43 * beta, loop);
-    loop = new For("i", -1, 3, For::Parallel, loop);        
+    loop = Allocate::make("tmp_stack", Int(32), 127, loop);
+    loop = Allocate::make("tmp_heap", Int(32), 43 * beta, loop);
+    loop = For::make("i", -1, 3, For::Parallel, loop);        
 
-    Stmt s = new Block(init, loop);
+    Stmt s = Block::make(init, loop);
 
     CodeGen_X86 cg;
     cg.compile(s, "test1", args);

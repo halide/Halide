@@ -47,23 +47,23 @@ namespace Internal {
 void IRPrinter::test() {
     Type i32 = Int(32);
     Type f32 = Float(32);
-    Expr x = new Variable(Int(32), "x");
-    Expr y = new Variable(Int(32), "y");
+    Expr x = Variable::make(Int(32), "x");
+    Expr y = Variable::make(Int(32), "y");
     ostringstream expr_source;
     expr_source << (x + 3) * (y / 2 + 17);
     assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
-    Stmt store = new Store("buf", (x * 17) / (x - 3), y - 1);
-    Stmt for_loop = new For("x", -2, y + 2, For::Parallel, store);
+    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1);
+    Stmt for_loop = For::make("x", -2, y + 2, For::Parallel, store);
     vector<Expr> args(1); args[0] = x % 3;
-    Expr call = new Call(i32, "buf", args);
-    Stmt store2 = new Store("out", call + 1, x);
-    Stmt for_loop2 = new For("x", 0, y, For::Vectorized , store2);
-    Stmt pipeline = new Pipeline("buf", for_loop, Stmt(), for_loop2);
-    Stmt assertion = new AssertStmt(y > 3, "y is greater than 3");
-    Stmt block = new Block(assertion, pipeline);
-    Stmt let_stmt = new LetStmt("y", 17, block);
-    Stmt allocate = new Allocate("buf", f32, 1023, let_stmt);
+    Expr call = Call::make(i32, "buf", args);
+    Stmt store2 = Store::make("out", call + 1, x);
+    Stmt for_loop2 = For::make("x", 0, y, For::Vectorized , store2);
+    Stmt pipeline = Pipeline::make("buf", for_loop, Stmt(), for_loop2);
+    Stmt assertion = AssertStmt::make(y > 3, "y is greater than 3");
+    Stmt block = Block::make(assertion, pipeline);
+    Stmt let_stmt = LetStmt::make("y", 17, block);
+    Stmt allocate = Allocate::make("buf", f32, 1023, let_stmt);
 
     ostringstream source;
     source << allocate;

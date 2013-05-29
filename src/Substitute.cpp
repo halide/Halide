@@ -28,7 +28,7 @@ protected:
             if (new_value.same_as(op->value)) {
                 expr = op;
             } else {
-                expr = new Let(op->name, new_value, op->body);
+                expr = Let::make(op->name, new_value, op->body);
             }
         } else {
             IRMutator::visit(op);
@@ -41,7 +41,7 @@ protected:
             if (new_value.same_as(op->value)) {
                 stmt = op;
             } else {
-                stmt = new LetStmt(op->name, new_value, op->body);
+                stmt = LetStmt::make(op->name, new_value, op->body);
             }
         } else {
             IRMutator::visit(op);
@@ -55,7 +55,7 @@ protected:
             if (new_min.same_as(op->min) && new_extent.same_as(op->extent)) {
                 stmt = op;
             } else {
-                stmt = new For(op->name, new_min, new_extent, op->for_type, op->body);
+                stmt = For::make(op->name, new_min, new_extent, op->for_type, op->body);
             }
         } else {
             IRMutator::visit(op);

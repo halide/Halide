@@ -27,8 +27,8 @@ private:
                 ostringstream stride_name, min_name;
                 stride_name << name << ".stride." << i;
                 min_name << name << ".min." << i;
-                Expr stride = new Variable(Int(32), stride_name.str());
-                Expr min = new Variable(Int(32), min_name.str());
+                Expr stride = Variable::make(Int(32), stride_name.str());
+                Expr min = Variable::make(Int(32), min_name.str());
                 idx += (args[i] - min) * stride;
             }
         } else {
@@ -42,8 +42,8 @@ private:
                 ostringstream stride_name, min_name;
                 stride_name << name << ".stride." << i;
                 min_name << name << ".min." << i;
-                Expr stride = new Variable(Int(32), stride_name.str());
-                Expr min = new Variable(Int(32), min_name.str());
+                Expr stride = Variable::make(Int(32), stride_name.str());
+                Expr min = Variable::make(Int(32), min_name.str());
                 idx += args[i] * stride;            
                 base += min * stride;
             }
@@ -84,7 +84,7 @@ private:
 
         size = mutate(size);
 
-        stmt = new Allocate(realize->name, realize->type, size, body);
+        stmt = Allocate::make(realize->name, realize->type, size, body);
 
         // Compute the strides 
         for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
@@ -96,9 +96,9 @@ private:
             prev_stride_name << realize->name << ".stride." << prev_j;
             ostringstream prev_extent_name;
             prev_extent_name << realize->name << ".extent." << prev_j;
-            Expr prev_stride = new Variable(Int(32), prev_stride_name.str());
-            Expr prev_extent = new Variable(Int(32), prev_extent_name.str());
-            stmt = new LetStmt(stride_name.str(), prev_stride * prev_extent, stmt);
+            Expr prev_stride = Variable::make(Int(32), prev_stride_name.str());
+            Expr prev_extent = Variable::make(Int(32), prev_extent_name.str());
+            stmt = LetStmt::make(stride_name.str(), prev_stride * prev_extent, stmt);
         }
         // Innermost stride is one
         ostringstream stride_0_name;
@@ -107,22 +107,22 @@ private:
         } else {
             stride_0_name << realize->name << ".stride.0";
         }
-        stmt = new LetStmt(stride_0_name.str(), 1, stmt);           
+        stmt = LetStmt::make(stride_0_name.str(), 1, stmt);           
 
         // Assign the mins and extents stored
         for (size_t i = realize->bounds.size(); i > 0; i--) { 
             ostringstream min_name, extent_name;
             min_name << realize->name << ".min." << (i-1);
             extent_name << realize->name << ".extent." << (i-1);
-            stmt = new LetStmt(min_name.str(), realize->bounds[i-1].min, stmt);
-            stmt = new LetStmt(extent_name.str(), realize->bounds[i-1].extent, stmt);
+            stmt = LetStmt::make(min_name.str(), realize->bounds[i-1].min, stmt);
+            stmt = LetStmt::make(extent_name.str(), realize->bounds[i-1].extent, stmt);
         }
     }
 
     void visit(const Provide *provide) {
         Expr idx = mutate(flatten_args(provide->name, provide->args));
         Expr val = mutate(provide->value);
-        stmt = new Store(provide->name, val, idx); 
+        stmt = Store::make(provide->name, val, idx); 
     }
 
     void visit(const Call *call) {            
@@ -136,11 +136,11 @@ private:
             if (!changed) {
                 expr = call;
             } else {
-                expr = new Call(call->type, call->name, args);
+                expr = Call::make(call->type, call->name, args);
             }
         } else {
             Expr idx = mutate(flatten_args(call->name, call->args));
-            expr = new Load(call->type, call->name, idx, call->image, call->param);
+            expr = Load::make(call->type, call->name, idx, call->image, call->param);
         }
     }
 

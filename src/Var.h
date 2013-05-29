@@ -112,7 +112,7 @@ public:
     
     /** A Var can be treated as an Expr of type Int(32) */
     operator Expr() {
-        return new Internal::Variable(Int(32), name());
+        return Internal::Variable::make(Int(32), name());
     }
 };
 
