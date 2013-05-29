@@ -2,10 +2,10 @@
 
 namespace Halide {
 
-Expr::Expr(int x) : Internal::IRHandle(new Internal::IntImm(x)) {
+Expr::Expr(int x) : Internal::IRHandle(Internal::IntImm::make(x)) {
 }
 
-Expr::Expr(float x) : Internal::IRHandle(new Internal::FloatImm(x)) {
+Expr::Expr(float x) : Internal::IRHandle(Internal::FloatImm::make(x)) {
 }
 
 namespace Internal {

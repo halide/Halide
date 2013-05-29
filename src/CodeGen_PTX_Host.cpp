@@ -29,7 +29,26 @@ namespace Halide {
 namespace Internal {
 
 extern "C" { typedef struct CUctx_st *CUcontext; }
-CUcontext cuda_ctx = 0;
+
+// A single global cuda context to share between jitted functions
+int (*cuCtxDestroy)(CUctx_st *) = 0;
+struct SharedCudaContext {
+    CUctx_st *ptr;
+
+    // Will be created on first use by a jitted kernel that uses it
+    SharedCudaContext() : ptr(0) {
+    }
+    
+    // Freed on program exit
+    ~SharedCudaContext() {
+        log(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
+        if (ptr && cuCtxDestroy) {
+            (*cuCtxDestroy)(ptr);
+            ptr = 0;
+        }
+    }
+} cuda_ctx;
+
 
 using std::vector;
 using std::string;
@@ -334,6 +353,7 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
                                                          "halide_ptx_src");
     ptx_src_global->setInitializer(ConstantDataArray::getString(*context, ptx_src));
 
+    // Jump to the start of the function and insert a call to halide_init_kernels
     builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
     Value *ptx_src_ptr = builder->CreateConstInBoundsGEP2_32(ptx_src_global, 0, 0);
     Value *init = module->getFunction("halide_init_kernels");
@@ -365,10 +385,16 @@ void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
             assert(error.empty() && "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll");
         }
         lib_cuda_linked = true;
+
+        // Now dig out cuCtxDestroy_v2 so that we can clean up the
+        // shared context at termination
+        void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("cuCtxDestroy_v2");
+        assert(ptr && "Could not find cuCtxDestroy_v2 in cuda library");
+        cuCtxDestroy = (int (*)(CUctx_st *))(ptr);
     }
 }
 
-void CodeGen_PTX_Host::jit_finalize(ExecutionEngine *ee, Module *module) {
+void CodeGen_PTX_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<void (*)()> *cleanup_routines) {
     // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
     // CUDA behaves much better when you don't initialize >2 contexts.
     llvm::Function *fn = module->getFunction("halide_set_cuda_context");
@@ -376,7 +402,14 @@ void CodeGen_PTX_Host::jit_finalize(ExecutionEngine *ee, Module *module) {
     void *f = ee->getPointerToFunction(fn);
     assert(f && "Could not find compiled form of halide_set_cuda_context in module");
     void (*set_cuda_context)(CUcontext *) = (void (*)(CUcontext *))f;
-    set_cuda_context(&cuda_ctx);
+    set_cuda_context(&cuda_ctx.ptr);
+
+    // When the module dies, we need to call halide_release
+    fn = module->getFunction("halide_release");
+    assert(fn && "Could not find halide_release in module");
+    f = ee->getPointerToFunction(fn);
+    assert(f && "Could not find compiled form of halide_release in module");
+    (*cleanup_routines).push_back((void (*)())f);
 }
 
 void CodeGen_PTX_Host::visit(const For *loop) {

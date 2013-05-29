@@ -131,13 +131,13 @@ inline Expr cast(Type t, Expr a) {
     if (a.type() == t) return a;
     if (t.is_vector()) {
         if (a.type().is_scalar()) {
-            return new Internal::Broadcast(cast(t.element_of(), a), t.width);
+            return Internal::Broadcast::make(cast(t.element_of(), a), t.width);
         } else if (const Internal::Broadcast *b = a.as<Internal::Broadcast>()) {
             assert(b->width == t.width);
-            return new Internal::Broadcast(cast(t.element_of(), b->value), t.width);
+            return Internal::Broadcast::make(cast(t.element_of(), b->value), t.width);
         }
     }
-    return new Internal::Cast(t, a);
+    return Internal::Cast::make(t, a);
 }
 
 /** Return the sum of two expressions, doing any necessary type
@@ -145,7 +145,7 @@ inline Expr cast(Type t, Expr a) {
 inline Expr operator+(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator+ of undefined");
     Internal::match_types(a, b);
-    return new Internal::Add(a, b);
+    return Internal::Add::make(a, b);
 }
     
 /** Modify the first expression to be the sum of two expressions,
@@ -153,7 +153,7 @@ inline Expr operator+(Expr a, Expr b) {
  * the type of the first. */
 inline Expr &operator+=(Expr &a, Expr b) {
     assert(a.defined() && b.defined() && "operator+= of undefined");
-    a = new Internal::Add(a, cast(a.type(), b));
+    a = Internal::Add::make(a, cast(a.type(), b));
     return a;
 }
 
@@ -162,7 +162,7 @@ inline Expr &operator+=(Expr &a, Expr b) {
 inline Expr operator-(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator- of undefined");
     Internal::match_types(a, b);
-    return new Internal::Sub(a, b);
+    return Internal::Sub::make(a, b);
 }
 
 /** Return the negative of the argument. Does no type casting, so more
@@ -172,7 +172,7 @@ inline Expr operator-(Expr a, Expr b) {
  * 200, because 56 + 200 == 0 */
 inline Expr operator-(Expr a) {
     assert(a.defined() && "operator- of undefined");
-    return new Internal::Sub(Internal::make_zero(a.type()), a);
+    return Internal::Sub::make(Internal::make_zero(a.type()), a);
 }
 
 /** Modify the first expression to be the difference of two expressions,
@@ -180,7 +180,7 @@ inline Expr operator-(Expr a) {
  * the type of the first. */
 inline Expr &operator-=(Expr &a, Expr b) {
     assert(a.defined() && b.defined() && "operator-= of undefined");
-    a = new Internal::Sub(a, cast(a.type(), b));
+    a = Internal::Sub::make(a, cast(a.type(), b));
     return a;
 }
 
@@ -189,7 +189,7 @@ inline Expr &operator-=(Expr &a, Expr b) {
 inline Expr operator*(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator* of undefined");
     Internal::match_types(a, b);
-    return new Internal::Mul(a, b);
+    return Internal::Mul::make(a, b);
 }
     
 /** Modify the first expression to be the product of two expressions,
@@ -197,7 +197,7 @@ inline Expr operator*(Expr a, Expr b) {
  * the type of the first. */
 inline Expr &operator*=(Expr &a, Expr b) {
     assert(a.defined() && b.defined() && "operator*= of undefined");
-    a = new Internal::Mul(a, cast(a.type(), b));
+    a = Internal::Mul::make(a, cast(a.type(), b));
     return a;
 }
 
@@ -206,7 +206,7 @@ inline Expr &operator*=(Expr &a, Expr b) {
 inline Expr operator/(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator/ of undefined");
     Internal::match_types(a, b);
-    return new Internal::Div(a, b);
+    return Internal::Div::make(a, b);
 }
 
 /** Modify the first expression to be the ratio of two expressions,
@@ -214,7 +214,7 @@ inline Expr operator/(Expr a, Expr b) {
  * the type of the first. */
 inline Expr &operator/=(Expr &a, Expr b) {
     assert(a.defined() && b.defined() && "operator/= of undefined");
-    a = new Internal::Div(a, cast(a.type(), b));
+    a = Internal::Div::make(a, cast(a.type(), b));
     return a;
 }
 
@@ -223,7 +223,7 @@ inline Expr &operator/=(Expr &a, Expr b) {
 inline Expr operator%(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator% of undefined");
     Internal::match_types(a, b);
-    return new Internal::Mod(a, b);
+    return Internal::Mod::make(a, b);
 }
 
 /** Return a boolean expression that tests whether the first argument
@@ -232,7 +232,7 @@ inline Expr operator%(Expr a, Expr b) {
 inline Expr operator>(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator> of undefined");
     Internal::match_types(a, b);
-    return new Internal::GT(a, b);
+    return Internal::GT::make(a, b);
 }
 
 /** Return a boolean expression that tests whether the first argument
@@ -241,7 +241,7 @@ inline Expr operator>(Expr a, Expr b) {
 inline Expr operator<(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator< of undefined");
     Internal::match_types(a, b);
-    return new Internal::LT(a, b);
+    return Internal::LT::make(a, b);
 }
 
 /** Return a boolean expression that tests whether the first argument
@@ -250,7 +250,7 @@ inline Expr operator<(Expr a, Expr b) {
 inline Expr operator<=(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator<= of undefined");
     Internal::match_types(a, b);
-    return new Internal::LE(a, b);
+    return Internal::LE::make(a, b);
 }
 
 /** Return a boolean expression that tests whether the first argument
@@ -260,7 +260,7 @@ inline Expr operator<=(Expr a, Expr b) {
 inline Expr operator>=(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator>= of undefined");
     Internal::match_types(a, b);
-    return new Internal::GE(a, b);
+    return Internal::GE::make(a, b);
 }
 
 /** Return a boolean expression that tests whether the first argument
@@ -269,7 +269,7 @@ inline Expr operator>=(Expr a, Expr b) {
 inline Expr operator==(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator== of undefined");
     Internal::match_types(a, b);
-    return new Internal::EQ(a, b);
+    return Internal::EQ::make(a, b);
 }
 
 /** Return a boolean expression that tests whether the first argument
@@ -278,22 +278,22 @@ inline Expr operator==(Expr a, Expr b) {
 inline Expr operator!=(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator!= of undefined");
     Internal::match_types(a, b);
-    return new Internal::NE(a, b);
+    return Internal::NE::make(a, b);
 }
 
 /** Returns the logical and of the two arguments */
 inline Expr operator&&(Expr a, Expr b) {
-    return new Internal::And(a, b);
+    return Internal::And::make(a, b);
 }
 
 /** Returns the logical or of the two arguments */
 inline Expr operator||(Expr a, Expr b) {
-    return new Internal::Or(a, b);
+    return Internal::Or::make(a, b);
 }
 
 /** Returns the logical not the argument */
 inline Expr operator!(Expr a) {
-    return new Internal::Not(a);
+    return Internal::Not::make(a);
 }
 
 /** Returns an expression representing the greater of the two
@@ -302,7 +302,7 @@ inline Expr operator!(Expr a) {
 inline Expr max(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "max of undefined");
     Internal::match_types(a, b);
-    return new Internal::Max(a, b);
+    return Internal::Max::make(a, b);
 }
 
 /** Returns an expression representing the lesser of the two
@@ -311,7 +311,7 @@ inline Expr max(Expr a, Expr b) {
 inline Expr min(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "min of undefined");
     Internal::match_types(a, b);
-    return new Internal::Min(a, b);
+    return Internal::Min::make(a, b);
 }
 
 /** Clamps an expression to lie within the given bounds. The bounds
@@ -321,7 +321,7 @@ inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
            "clamp of undefined");
     min_val = cast(a.type(), min_val);
     max_val = cast(a.type(), max_val);
-    return new Internal::Max(new Internal::Min(a, max_val), min_val);
+    return Internal::Max::make(Internal::Min::make(a, max_val), min_val);
 }
 
 /** Returns the absolute value of a signed integer or floating-point
@@ -329,17 +329,17 @@ inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
 inline Expr abs(Expr a) {
     assert(a.defined() && "abs of undefined");
     if (a.type() == Int(8))
-        return new Internal::Call(Int(8), "abs_i8", vec(a));
+        return Internal::Call::make(Int(8), "abs_i8", vec(a));
     if (a.type() == Int(16)) 
-        return new Internal::Call(Int(16), "abs_i16", vec(a));
+        return Internal::Call::make(Int(16), "abs_i16", vec(a));
     if (a.type() == Int(32)) 
-        return new Internal::Call(Int(32), "abs_i32", vec(a));
+        return Internal::Call::make(Int(32), "abs_i32", vec(a));
     if (a.type() == Int(64)) 
-        return new Internal::Call(Int(64), "abs_i64", vec(a));
+        return Internal::Call::make(Int(64), "abs_i64", vec(a));
     if (a.type() == Float(32)) 
-        return new Internal::Call(Float(32), "abs_f32", vec(a));
+        return Internal::Call::make(Float(32), "abs_f32", vec(a));
     if (a.type() == Float(64)) 
-        return new Internal::Call(Float(64), "abs_f64", vec(a));
+        return Internal::Call::make(Float(64), "abs_f64", vec(a));
     assert(false && "Invalid type for abs");
     return 0; // prevent "control reaches end of non-void function" error
 }
@@ -348,7 +348,7 @@ inline Expr abs(Expr a) {
  * the first argument is true, then return the second, else return the
  * third. */
 inline Expr select(Expr a, Expr b, Expr c) {
-    return new Internal::Select(a, b, c);
+    return Internal::Select::make(a, b, c);
 }
 
 /** Return the sine of a floating-point expression. If the argument is
@@ -356,9 +356,9 @@ inline Expr select(Expr a, Expr b, Expr c) {
 inline Expr sin(Expr x) {
     assert(x.defined() && "sin of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "sin_f64", vec(x));
+        return Internal::Call::make(Float(64), "sin_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "sin_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "sin_f32", vec(cast<float>(x)));
     }
 }
 
@@ -367,9 +367,9 @@ inline Expr sin(Expr x) {
 inline Expr asin(Expr x) {
     assert(x.defined() && "asin of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "asin_f64", vec(x));
+        return Internal::Call::make(Float(64), "asin_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "asin_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "asin_f32", vec(cast<float>(x)));
     }
 }
 
@@ -378,9 +378,9 @@ inline Expr asin(Expr x) {
 inline Expr cos(Expr x) {
     assert(x.defined() && "cos of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "cos_f64", vec(x));
+        return Internal::Call::make(Float(64), "cos_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "cos_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "cos_f32", vec(cast<float>(x)));
     }
 }
 
@@ -389,9 +389,9 @@ inline Expr cos(Expr x) {
 inline Expr acos(Expr x) {
     assert(x.defined() && "acos of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "acos_f64", vec(x));
+        return Internal::Call::make(Float(64), "acos_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "acos_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "acos_f32", vec(cast<float>(x)));
     }
 }
 
@@ -400,9 +400,9 @@ inline Expr acos(Expr x) {
 inline Expr tan(Expr x) {
     assert(x.defined() && "tan of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "tan_f64", vec(x));
+        return Internal::Call::make(Float(64), "tan_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "tan_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "tan_f32", vec(cast<float>(x)));
     }
 }
 
@@ -411,9 +411,9 @@ inline Expr tan(Expr x) {
 inline Expr atan(Expr x) {
     assert(x.defined() && "atan of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "atan_f64", vec(x));
+        return Internal::Call::make(Float(64), "atan_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "atan_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "atan_f32", vec(cast<float>(x)));
     }
 }
 
@@ -422,9 +422,9 @@ inline Expr atan(Expr x) {
 inline Expr sinh(Expr x) {
     assert(x.defined() && "sinh of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "sinh_f64", vec(x));
+        return Internal::Call::make(Float(64), "sinh_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "sinh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "sinh_f32", vec(cast<float>(x)));
     }
 }
 
@@ -433,9 +433,9 @@ inline Expr sinh(Expr x) {
 inline Expr asinh(Expr x) {
     assert(x.defined() && "asinh of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "asinh_f64", vec(x));
+        return Internal::Call::make(Float(64), "asinh_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "asinh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "asinh_f32", vec(cast<float>(x)));
     }
 }
 
@@ -444,9 +444,9 @@ inline Expr asinh(Expr x) {
 inline Expr cosh(Expr x) {
     assert(x.defined() && "cosh of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "cosh_f64", vec(x));
+        return Internal::Call::make(Float(64), "cosh_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "cosh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "cosh_f32", vec(cast<float>(x)));
     }
 }
 
@@ -455,9 +455,9 @@ inline Expr cosh(Expr x) {
 inline Expr acosh(Expr x) {
     assert(x.defined() && "acosh of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "acosh_f64", vec(x));
+        return Internal::Call::make(Float(64), "acosh_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "acosh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "acosh_f32", vec(cast<float>(x)));
     }
 }
 
@@ -466,9 +466,9 @@ inline Expr acosh(Expr x) {
 inline Expr tanh(Expr x) {
     assert(x.defined() && "tanh of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "tanh_f64", vec(x));
+        return Internal::Call::make(Float(64), "tanh_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "tanh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "tanh_f32", vec(cast<float>(x)));
     }
 }
 
@@ -477,9 +477,9 @@ inline Expr tanh(Expr x) {
 inline Expr atanh(Expr x) {
     assert(x.defined() && "atanh of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "atanh_f64", vec(x));
+        return Internal::Call::make(Float(64), "atanh_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "atanh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "atanh_f32", vec(cast<float>(x)));
     }
 }
 
@@ -488,9 +488,9 @@ inline Expr atanh(Expr x) {
 inline Expr sqrt(Expr x) {
     assert(x.defined() && "sqrt of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "sqrt_f64", vec(x));
+        return Internal::Call::make(Float(64), "sqrt_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "sqrt_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "sqrt_f32", vec(cast<float>(x)));
     }
 }
 
@@ -500,11 +500,11 @@ inline Expr hypot(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "hypot of undefined");
     if (x.type() == Float(64)) {
         y = cast<double>(y);
-        return new Internal::Call(Float(64), "hypot_f64", vec(x, y));
+        return Internal::Call::make(Float(64), "hypot_f64", vec(x, y));
     } else {
         x = cast<float>(x);
         y = cast<float>(y);
-        return new Internal::Call(Float(32), "hypot_f32", vec(x, y));
+        return Internal::Call::make(Float(32), "hypot_f32", vec(x, y));
     }
 }
 
@@ -513,9 +513,9 @@ inline Expr hypot(Expr x, Expr y) {
 inline Expr exp(Expr x) {
     assert(x.defined() && "exp of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "exp_f64", vec(x));
+        return Internal::Call::make(Float(64), "exp_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "exp_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "exp_f32", vec(cast<float>(x)));
     }
 }
 
@@ -524,9 +524,9 @@ inline Expr exp(Expr x) {
 inline Expr log(Expr x) {
     assert(x.defined() && "log of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "log_f64", vec(x));
+        return Internal::Call::make(Float(64), "log_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "log_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "log_f32", vec(cast<float>(x)));
     }
 }
 
@@ -537,9 +537,9 @@ inline Expr log(Expr x) {
 inline Expr floor(Expr x) {
     assert(x.defined() && "floor of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "floor_f64", vec(x));
+        return Internal::Call::make(Float(64), "floor_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "floor_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "floor_f32", vec(cast<float>(x)));
     }
 }
 
@@ -550,9 +550,9 @@ inline Expr floor(Expr x) {
 inline Expr ceil(Expr x) {
     assert(x.defined() && "ceil of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "ceil_f64", vec(x));
+        return Internal::Call::make(Float(64), "ceil_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "ceil_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "ceil_f32", vec(cast<float>(x)));
     }
 }
 
@@ -563,9 +563,9 @@ inline Expr ceil(Expr x) {
 inline Expr round(Expr x) {
     assert(x.defined() && "round of undefined");
     if (x.type() == Float(64)) {
-        return new Internal::Call(Float(64), "round_f64", vec(x));
+        return Internal::Call::make(Float(64), "round_f64", vec(x));
     } else {
-        return new Internal::Call(Float(32), "round_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "round_f32", vec(cast<float>(x)));
     }
 }
 
@@ -577,11 +577,11 @@ inline Expr pow(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "pow of undefined");
     if (x.type() == Float(64)) {
         y = cast<double>(y);
-        return new Internal::Call(Float(64), "pow_f64", vec(x, y));
+        return Internal::Call::make(Float(64), "pow_f64", vec(x, y));
     } else {
         x = cast<float>(x);
         y = cast<float>(y);
-        return new Internal::Call(Float(32), "pow_f32", vec(x, y));
+        return Internal::Call::make(Float(32), "pow_f32", vec(x, y));
     }
 }
 

@@ -24,7 +24,7 @@ class RemoveDeadLets : public IRMutator {
         if (min.same_as(op->min) && extent.same_as(op->extent) && body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = new For(op->name, min, extent, op->for_type, body);
+            stmt = For::make(op->name, min, extent, op->for_type, body);
         }
     }
 
@@ -36,7 +36,7 @@ class RemoveDeadLets : public IRMutator {
             if (body.same_as(op->body) && value.same_as(op->value)) {
                 stmt = op;
             } else {
-                stmt = new LetStmt(op->name, value, body);
+                stmt = LetStmt::make(op->name, value, body);
             }
         } else {
             stmt = body;
@@ -52,7 +52,7 @@ class RemoveDeadLets : public IRMutator {
             if (body.same_as(op->body) && value.same_as(op->value)) {
                 expr = op;
             } else {
-                expr = new Let(op->name, value, body);
+                expr = Let::make(op->name, value, body);
             }
         } else {
             expr = body;

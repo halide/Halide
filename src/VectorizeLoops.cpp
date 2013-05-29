@@ -16,7 +16,7 @@ class VectorizeLoops : public IRMutator {
 
         Expr widen(Expr e, int width) {
             if (e.type().width == width) return e;
-            else if (e.type().width == 1) return new Broadcast(e, width);
+            else if (e.type().width == 1) return Broadcast::make(e, width);
             else assert(false && "Mismatched vector widths in VectorSubs");
             return Expr();
         }
@@ -29,7 +29,7 @@ class VectorizeLoops : public IRMutator {
                 expr = op;
             } else {
                 Type t = op->type.vector_of(value.type().width);
-                expr = new Cast(t, value);
+                expr = Cast::make(t, value);
             }
         }
 
@@ -41,7 +41,7 @@ class VectorizeLoops : public IRMutator {
                 // we're vectorizing across x we need to know the
                 // type of y has changed in the following example:
                 // let y = x + 1 in y*3
-                expr = new Variable(scope.get(op->name), op->name);
+                expr = Variable::make(scope.get(op->name), op->name);
             } else {
                 expr = op;
             }
@@ -54,7 +54,7 @@ class VectorizeLoops : public IRMutator {
                 expr = op;
             } else {
                 int w = std::max(a.type().width, b.type().width);
-                expr = new T(widen(a, w), widen(b, w));
+                expr = T::make(widen(a, w), widen(b, w));
             }
         }
 
@@ -88,7 +88,7 @@ class VectorizeLoops : public IRMutator {
                 // Widen the true and false values, but we don't have to widen the condition
                 true_value = widen(true_value, width);
                 false_value = widen(false_value, width);
-                expr = new Select(condition, true_value, false_value);
+                expr = Select::make(condition, true_value, false_value);
             }
         }
 
@@ -98,7 +98,7 @@ class VectorizeLoops : public IRMutator {
                 expr = op;
             } else {
                 int w = index.type().width;
-                expr = new Load(op->type.vector_of(w), op->name, index, op->image, op->param);
+                expr = Load::make(op->type.vector_of(w), op->name, index, op->image, op->param);
             }
         }
 
@@ -122,7 +122,7 @@ class VectorizeLoops : public IRMutator {
                 for (size_t i = 0; i < new_args.size(); i++) {
                     new_args[i] = widen(new_args[i], max_width);
                 }
-                expr = new Call(op->type.vector_of(max_width), op->name, new_args, 
+                expr = Call::make(op->type.vector_of(max_width), op->name, new_args, 
                                 op->call_type, op->func, op->image, op->param);
             }
         }
@@ -142,7 +142,7 @@ class VectorizeLoops : public IRMutator {
             if (value.same_as(op->value) && body.same_as(op->body)) {
                 expr = op;
             } else {
-                expr = new Let(op->name, value, body);
+                expr = Let::make(op->name, value, body);
             }                
         }
 
@@ -161,7 +161,7 @@ class VectorizeLoops : public IRMutator {
             if (value.same_as(op->value) && body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = new LetStmt(op->name, value, body);
+                stmt = LetStmt::make(op->name, value, body);
             }                
         }
 
@@ -189,7 +189,7 @@ class VectorizeLoops : public IRMutator {
                     new_args[i] = widen(new_args[i], max_width);
                 }
                 value = widen(value, max_width);
-                stmt = new Provide(op->name, value, new_args);
+                stmt = Provide::make(op->name, value, new_args);
             }                
         }
 
@@ -200,7 +200,7 @@ class VectorizeLoops : public IRMutator {
                 stmt = op;
             } else {
                 int width = std::max(value.type().width, index.type().width);
-                stmt = new Store(op->name, widen(value, width), widen(index, width));
+                stmt = Store::make(op->name, widen(value, width), widen(index, width));
             }
         }
 
@@ -217,12 +217,12 @@ class VectorizeLoops : public IRMutator {
             assert(extent && "Can only vectorize for loops over a constant extent");    
 
             // Replace the var with a ramp within the body
-            Expr for_var = new Variable(Int(32), for_loop->name);                
-            Expr replacement = new Ramp(for_var, 1, extent->value);
+            Expr for_var = Variable::make(Int(32), for_loop->name);                
+            Expr replacement = Ramp::make(for_var, 1, extent->value);
             Stmt body = VectorSubs(for_loop->name, replacement).mutate(for_loop->body);
                 
             // The for loop becomes a simple let statement
-            stmt = new LetStmt(for_loop->name, for_loop->min, body);
+            stmt = LetStmt::make(for_loop->name, for_loop->min, body);
 
         } else {
             IRMutator::visit(for_loop);

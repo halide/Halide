@@ -46,41 +46,41 @@ CodeGen_Posix::CodeGen_Posix() :
     f64x4(NULL),
 
     // Wildcards for pattern matching
-    wild_i8x8(new Variable(Int(8, 8), "*")),
-    wild_i16x4(new Variable(Int(16, 4), "*")),
-    wild_i32x2(new Variable(Int(32, 2), "*")),
+    wild_i8x8(Variable::make(Int(8, 8), "*")),
+    wild_i16x4(Variable::make(Int(16, 4), "*")),
+    wild_i32x2(Variable::make(Int(32, 2), "*")),
 
-    wild_u8x8(new Variable(UInt(8, 8), "*")),
-    wild_u16x4(new Variable(UInt(16, 4), "*")),
-    wild_u32x2(new Variable(UInt(32, 2), "*")),
+    wild_u8x8(Variable::make(UInt(8, 8), "*")),
+    wild_u16x4(Variable::make(UInt(16, 4), "*")),
+    wild_u32x2(Variable::make(UInt(32, 2), "*")),
 
-    wild_i8x16(new Variable(Int(8, 16), "*")),
-    wild_i16x8(new Variable(Int(16, 8), "*")),
-    wild_i32x4(new Variable(Int(32, 4), "*")),
-    wild_i64x2(new Variable(Int(64, 2), "*")),
+    wild_i8x16(Variable::make(Int(8, 16), "*")),
+    wild_i16x8(Variable::make(Int(16, 8), "*")),
+    wild_i32x4(Variable::make(Int(32, 4), "*")),
+    wild_i64x2(Variable::make(Int(64, 2), "*")),
 
-    wild_u8x16(new Variable(UInt(8, 16), "*")),
-    wild_u16x8(new Variable(UInt(16, 8), "*")),
-    wild_u32x4(new Variable(UInt(32, 4), "*")),
-    wild_u64x2(new Variable(UInt(64, 2), "*")),
+    wild_u8x16(Variable::make(UInt(8, 16), "*")),
+    wild_u16x8(Variable::make(UInt(16, 8), "*")),
+    wild_u32x4(Variable::make(UInt(32, 4), "*")),
+    wild_u64x2(Variable::make(UInt(64, 2), "*")),
 
-    wild_i8x32(new Variable(Int(8, 32), "*")),
-    wild_i16x16(new Variable(Int(16, 16), "*")),
-    wild_i32x8(new Variable(Int(32, 8), "*")),
-    wild_i64x4(new Variable(Int(64, 4), "*")),
+    wild_i8x32(Variable::make(Int(8, 32), "*")),
+    wild_i16x16(Variable::make(Int(16, 16), "*")),
+    wild_i32x8(Variable::make(Int(32, 8), "*")),
+    wild_i64x4(Variable::make(Int(64, 4), "*")),
 
-    wild_u8x32(new Variable(UInt(8, 32), "*")),
-    wild_u16x16(new Variable(UInt(16, 16), "*")),
-    wild_u32x8(new Variable(UInt(32, 8), "*")),
-    wild_u64x4(new Variable(UInt(64, 4), "*")),
+    wild_u8x32(Variable::make(UInt(8, 32), "*")),
+    wild_u16x16(Variable::make(UInt(16, 16), "*")),
+    wild_u32x8(Variable::make(UInt(32, 8), "*")),
+    wild_u64x4(Variable::make(UInt(64, 4), "*")),
 
-    wild_f32x2(new Variable(Float(32, 2), "*")),
+    wild_f32x2(Variable::make(Float(32, 2), "*")),
 
-    wild_f32x4(new Variable(Float(32, 4), "*")),
-    wild_f64x2(new Variable(Float(64, 2), "*")),
+    wild_f32x4(Variable::make(Float(32, 4), "*")),
+    wild_f64x2(Variable::make(Float(64, 2), "*")),
 
-    wild_f32x8(new Variable(Float(32, 8), "*")),
-    wild_f64x4(new Variable(Float(64, 4), "*")),
+    wild_f32x8(Variable::make(Float(32, 8), "*")),
+    wild_f64x4(Variable::make(Float(64, 4), "*")),
 
     // Bounds of types
     min_i8(Int(8).min()),
