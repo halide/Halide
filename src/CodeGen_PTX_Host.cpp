@@ -569,24 +569,20 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
     WhereIsBufferUsed usage(alloc->name);
     alloc->accept(&usage);
 
-    Value *saved_stack = NULL, *host;
-
+    Allocation host_allocation = {NULL, 0, NULL};
+    Value *saved_stack = NULL;
     if (usage.used_on_host) {
         log(2) << alloc->name << " is used on the host\n";
-        host = malloc_buffer(alloc, &saved_stack);
-        sym_push(alloc->name + ".host", host);
-        if (!saved_stack) {
-            heap_allocations.push(alloc->name, host);
-        }
+        host_allocation = create_allocation(alloc->name, alloc->type, alloc->size);
     } else {
-        host = ConstantPointerNull::get(llvm_type_of(alloc->type)->getPointerTo());
+        host_allocation.ptr = ConstantPointerNull::get(llvm_type_of(alloc->type)->getPointerTo());
     }
 
     Value *buf = NULL;
     if (usage.used_on_device) {
         log(2) << alloc->name << " is used on the device\n";
         // create a buffer_t to track this allocation
-        if (!saved_stack) {
+        if (!host_allocation.saved_stack) {
             // Save the stack pointer if we haven't already
             saved_stack = save_stack();
         }
@@ -596,7 +592,7 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
             *null64 = ConstantInt::get(i64, 0),
             *zero8  = ConstantInt::get( i8, 0);
         
-        Value *host_ptr = builder->CreatePointerCast(host, i8->getPointerTo());
+        Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
         builder->CreateStore(host_ptr, buffer_host_ptr(buf));
         builder->CreateStore(null64,   buffer_dev_ptr(buf));
         
@@ -631,21 +627,22 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
         sym_push(alloc->name + ".buffer", buf);
     }
 
-    log(3) << "Pushing allocation called " << alloc->name << " onto the symbol table\n";
-
     codegen(alloc->body);
-   
+
     if (saved_stack) {
         restore_stack(saved_stack);
     }
+
+    if (usage.used_on_host) {
+        destroy_allocation(host_allocation);
+    }
+
 }
 
 void CodeGen_PTX_Host::visit(const Free *f) {
-    if (heap_allocations.contains(f->name)) {
-        Value *ptr = sym_get(f->name + ".host");
-        free_buffer(ptr);
-        heap_allocations.pop(f->name);
-        sym_pop(f->name + ".host");
+    // Free any host allocation
+    if (sym_exists(f->name + ".host")) {
+        CodeGen_Posix::visit(f);
     }
 
     if (sym_exists(f->name + ".buffer")) {

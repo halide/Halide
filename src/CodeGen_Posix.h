@@ -59,19 +59,57 @@ protected:
     void visit(const Free *);
     // @}
 
-    /** Direct implementation of Posix allocation logic. The returned
-     * `Value` is a pointer to the allocated memory. If you wish to
-     * allow stack allocation, also pass in a pointer to the
-     * llvm::Value you wish to store the saved stack in. If heap
-     * allocation is performed, `*saved_stack` is set to `NULL`;
-     * otherwise, it holds the saved stack pointer for later use with
-     * the `stackrestore` intrinsic. */
-    llvm::Value* malloc_buffer(const Allocate *alloc, llvm::Value **saved_stack = NULL);
+    /** A struct describing heap or stack allocations. */
+    struct Allocation {
+        llvm::Value *ptr;
 
-    /** Calls `halide_free` in the standard library. You should only
-     * call this if saved_stack was NULL when you allocated this
-     * buffer. */
-    void free_buffer(llvm::Value *ptr);
+        /** How many bytes of stack space used. 0 implies it was a
+         * heap allocation. */
+        int stack_size; 
+
+        /** The stack pointer before the allocation was created. NULL
+         * for heap allocations, or for stack allocations which reuse
+         * existing stack blocks. */
+        llvm::Value *saved_stack; 
+
+        /** The actual instruction that did the alloca. Used so we can
+         * rewrite it if we want to expand it later. NULL for heap
+         * allocations. */
+        llvm::AllocaInst *alloca_inst;
+
+    };
+
+    /** The allocations currently in scope */
+    Scope<Allocation> allocations;
+
+    /** Free stack space blocks to reuse. */
+    std::vector<Allocation> free_stack_blocks;
+
+    /** Allocates some memory on either the stack or the heap, and
+     * returns an Allocation object describing it. For heap
+     * allocations this calls halide_malloc in the runtime, and for
+     * stack allocations it either reuses an existing block from the
+     * free_stack_blocks list, or it saves the stack pointer and calls
+     * alloca. 
+     * 
+     * This call returns the allocation, pushes it onto the
+     * 'allocations' map, and adds an entry to the symbol table called
+     * name.host that provides the base pointer.
+     * 
+     * When the allocation can be freed call 'free_allocation', and
+     * when it goes out of scope call 'finalize_allocation'. */
+    Allocation create_allocation(const std::string &name, Type type, Expr size);
+
+    /** Free the memory backing an allocation and pop it from the
+     * symbol table and the allocations map. For heap allocations it
+     * calls halide_free in the runtime, for stack allocations it
+     * marks the block as free so it can be reused. */
+    void free_allocation(const std::string &name);
+
+    /** Call this when an allocation goes out of scope. Does nothing
+     * for heap allocations. For stack allocations, it restores the
+     * stack removes the entry from the free_stack_blocks list. */
+    void destroy_allocation(Allocation alloc);
 
     /** Restores the stack pointer to the given value. Call this to
      * free a stack variable. */
@@ -80,9 +118,6 @@ protected:
     /** Save the stack directly. You only need to call this if you're
      * doing your own allocas. */
     llvm::Value *save_stack();
-
-    /** The allocations currently in scope */
-    Scope<llvm::Value *> heap_allocations;
 
     /** Free all heap allocations in scope */
     void prepare_for_early_exit();
