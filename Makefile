@@ -44,9 +44,11 @@ endif
 ifdef BUILD_PREFIX
 BUILD_DIR = build/$(BUILD_PREFIX)
 BIN_DIR = bin/$(BUILD_PREFIX)
+DISTRIB_DIR=distrib/$(BUILD_PREFIX)
 else
 BUILD_DIR = build
 BIN_DIR = bin
+DISTRIB_DIR=distrib
 endif
 
 SOURCE_FILES = CodeGen.cpp CodeGen_Internal.cpp CodeGen_X86.cpp CodeGen_PTX_Host.cpp CodeGen_PTX_Dev.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Log.cpp Parameter.cpp Reduction.cpp RDom.cpp Tracing.cpp RemoveDeadLets.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp Type.cpp JITCompiledModule.cpp EarlyFree.cpp
@@ -127,6 +129,7 @@ $(BUILD_DIR)/%.o: src/%.cpp src/%.h $(BUILD_DIR)/llvm_ok
 clean:
 	rm -rf $(BIN_DIR)/*
 	rm -rf $(BUILD_DIR)/*
+	rm -rf $(DISTRIB_DIR)/*
 	rm -rf include/*
 	rm -rf doc
 
@@ -226,3 +229,11 @@ endif
 docs: doc
 doc: src test
 	doxygen
+
+$(DISTRIB_DIR)/halide.tgz: all
+	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/lib
+	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/lib
+	cp include/Halide.h $(DISTRIB_DIR)/include
+	tar -czf $(DISTRIB_DIR)/halide.tgz -C $(DISTRIB_DIR) lib include
+
+distrib: $(DISTRIB_DIR)/halide.tgz
