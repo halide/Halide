@@ -133,7 +133,9 @@ CUresult CUDAAPI cuInit(unsigned int Flags);
 CUresult CUDAAPI cuDeviceGetCount(int *count);
 CUresult CUDAAPI cuDeviceGet(CUdevice *device, int ordinal);
 CUresult CUDAAPI cuCtxCreate(CUcontext *pctx, unsigned int flags, CUdevice dev);
+CUresult CUDAAPI cuCtxDestroy(CUcontext pctx);
 CUresult CUDAAPI cuModuleLoadData(CUmodule *module, const void *image);
+CUresult CUDAAPI cuModuleUnload(CUmodule module);
 CUresult CUDAAPI cuModuleGetFunction(CUfunction *hfunc, CUmodule hmod, const char *name);
 CUresult CUDAAPI cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
 CUresult CUDAAPI cuMemFree(CUdeviceptr dptr);
@@ -157,6 +159,7 @@ CUresult CUDAAPI cuCtxPopCurrent(CUcontext *pctx);
 
 CUresult CUDAAPI cuEventRecord(CUevent hEvent, CUstream hStream);
 CUresult CUDAAPI cuEventCreate(CUevent *phEvent, unsigned int Flags);
+CUresult CUDAAPI cuEventDestroy(CUevent phEvent);
 CUresult CUDAAPI cuEventSynchronize(CUevent hEvent);
 CUresult CUDAAPI cuEventElapsedTime(float *pMilliseconds, CUevent hStart, CUevent hEnd);
 CUresult CUDAAPI cuPointerGetAttribute(void *result, int query, CUdeviceptr ptr);
@@ -278,8 +281,6 @@ WEAK void halide_init_kernels(const char* ptx_src) {
 
         // Create context
         CHECK_CALL( cuCtxCreate(cuda_ctx_ptr, 0, dev), "cuCtxCreate" );
-        cuEventCreate(&__start, 0);
-        cuEventCreate(&__end, 0);
 
     } else {
         //CHECK_CALL( cuCtxPushCurrent(*cuda_ctx_ptr), "cuCtxPushCurrent" );
@@ -294,12 +295,38 @@ WEAK void halide_init_kernels(const char* ptx_src) {
         fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
         #endif
     }
+
+    // Create two events for timing
+    if (!__start) {
+        cuEventCreate(&__start, 0);
+        cuEventCreate(&__end, 0);
+    }
 }
 
 WEAK void halide_release() {
     // CUcontext ignore;
     // TODO: this is for timing; bad for release-mode performance
     CHECK_CALL( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
+
+    // Only destroy the context if we own it
+    if (weak_cuda_ctx) {
+        CHECK_CALL( cuCtxDestroy(weak_cuda_ctx), "cuCtxDestroy on exit" );    
+        weak_cuda_ctx = 0;
+    }
+
+    // Destroy the events
+    if (__start) {
+        cuEventDestroy(__start);
+        cuEventDestroy(__end);
+        __start = __end = 0;
+    }
+
+    // Unload the module
+    if (__mod) {
+        CHECK_CALL( cuModuleUnload(__mod), "cuModuleUnload" );
+        __mod = 0;
+    }
+
     //CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
 }
 

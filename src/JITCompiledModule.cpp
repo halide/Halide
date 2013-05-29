@@ -27,6 +27,11 @@ public:
     }
 
     ~JITModuleHolder() {
+        for (size_t i = 0; i < cleanup_routines.size(); i++) {
+            log(2) << "Calling target specific cleanup routine at " << cleanup_routines[i] << "\n";
+            (*cleanup_routines[i])();
+        }
+
         shutdown_thread_pool();
         delete execution_engine;
         delete context;
@@ -37,6 +42,9 @@ public:
     Module *module;
     LLVMContext *context;
     void (*shutdown_thread_pool)();
+
+    /** Do any target-specific module cleanup. */
+    std::vector<void (*)()> cleanup_routines;
 };
 
 template<>
@@ -151,11 +159,12 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
 
     ee->finalizeObject();
 
-    // Do any target-specific post-compilation module meddling
-    cg->jit_finalize(ee, m);
-
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     module = new JITModuleHolder(ee, m, shutdown_thread_pool);
+
+    // Do any target-specific post-compilation module meddling
+    cg->jit_finalize(ee, m, &module.ptr->cleanup_routines);
+
 }
 
 }

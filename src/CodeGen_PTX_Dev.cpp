@@ -34,7 +34,6 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev()
 }
 
 void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Argument> &args) {
-    owns_module = true;
 
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
@@ -143,6 +142,8 @@ void CodeGen_PTX_Dev::init_module() {
     log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     module->setModuleIdentifier("<halide_ptx>");
+
+    owns_module = true;
 
     delete bitcode_buffer;
 }
