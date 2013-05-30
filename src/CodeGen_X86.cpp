@@ -5,11 +5,15 @@
 #include "IRPrinter.h"
 #include "IRMatch.h"
 #include "Log.h"
+#include "Deinterleave.h"
+#include "Simplify.h"
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
 #include "integer_division_table.h"
 #include "LLVM_Headers.h"
+
+// #include <cstdio>
 
 extern "C" unsigned char halide_internal_initmod_x86[];
 extern "C" int halide_internal_initmod_x86_length;
@@ -466,6 +470,308 @@ void CodeGen_X86::visit(const Max *op) {
     } else {
         CodeGen::visit(op);
     }    
+}
+
+Expr extract_ramp_helper(const Expr op, int *n_ramps) {
+    const Add *asAdd = op.as<Add>();
+    const Sub *asSub = op.as<Sub>();
+    const Mul *asMul = op.as<Mul>();
+    const Max *asMax = op.as<Max>();
+    const Min *asMin = op.as<Min>();
+    const Ramp *asRamp = op.as<Ramp>();
+    Expr ret, a, b;
+    int n_ramps_a = 0, n_ramps_b = 0;
+    if (asAdd) {
+        // add
+        ret = new Add(extract_ramp_helper(asAdd->a, &n_ramps_a),
+                      extract_ramp_helper(asAdd->b, &n_ramps_b));
+    } else if (asSub) {
+        // subtract
+        ret = new Sub(extract_ramp_helper(asSub->a, &n_ramps_a),
+                      extract_ramp_helper(asSub->b, &n_ramps_b));
+    } else if (asMul) {
+        // multiply
+        ret = new Mul(extract_ramp_helper(asMul->a, &n_ramps_a),
+                      extract_ramp_helper(asMul->b, &n_ramps_b));        
+    } else if (asMax) {
+        // max - if a or b has ramp, replace
+        a = extract_ramp_helper(asMax->a, &n_ramps_a);
+        b = extract_ramp_helper(asMax->b, &n_ramps_b);
+        if ((n_ramps_a == 1) && (n_ramps_b==0)) ret = a;
+        else if ((n_ramps_b == 1) && (n_ramps_b==1)) ret = b;
+        else ret = new Max(a, b);
+    } else if (asMin) {
+        // min - if a or b has ramp, replace
+        a = extract_ramp_helper(asMin->a, &n_ramps_a);
+        b = extract_ramp_helper(asMin->b, &n_ramps_b);
+        if ((n_ramps_a == 1) && (n_ramps_b==0)) ret = a;
+        else if ((n_ramps_b == 1) && (n_ramps_b==1)) ret = b;
+        else ret = new Min(a, b);
+    } else if (asRamp) {
+        // return ramp
+        ret = op;
+        n_ramps_a = 1;
+    } else {
+        ret = op;
+    }
+    if (n_ramps) *n_ramps = *n_ramps + n_ramps_a + n_ramps_b;
+    return ret;
+}
+
+Expr extract_ramp(const Expr index) {
+    int n_ramps = 0;
+    Expr extracted = extract_ramp_helper(index, &n_ramps);
+    //printf("num ramps is %d\n", n_ramps);
+    if (n_ramps==1) return extracted;
+    else return index;
+}
+
+Expr extract_ramp_condition(const Expr op, int *n_ramps, bool replace_max) {
+    // TODO: doesn't check for nested min/maxes around ramp
+    const Add *asAdd = op.as<Add>();
+    const Sub *asSub = op.as<Sub>();
+    const Mul *asMul = op.as<Mul>();
+    const Max *asMax = op.as<Max>();
+    const Min *asMin = op.as<Min>();
+    const Ramp *asRamp = op.as<Ramp>();
+    const Broadcast *asBroadcast = op.as<Broadcast>();
+    Expr ret, a, b;
+    int n_ramps_a = 0, n_ramps_b = 0;
+    if (asAdd) {
+        // add
+	a = extract_ramp_condition(asAdd->a, &n_ramps_a, replace_max);
+	b = extract_ramp_condition(asAdd->b, &n_ramps_b, replace_max);
+	if (n_ramps_a==1 && n_ramps_b==0) ret = a;
+	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
+	else ret = op;
+    } else if (asSub) {
+        // subtract
+	a = extract_ramp_condition(asSub->a, &n_ramps_a, replace_max);
+	b = extract_ramp_condition(asSub->b, &n_ramps_b, replace_max);
+	if (n_ramps_a==1 && n_ramps_b==0) ret = a;
+	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
+	else ret = op;
+    } else if (asMul) {
+        // multiply
+	a = extract_ramp_condition(asMul->a, &n_ramps_a, replace_max);
+	b = extract_ramp_condition(asMul->b, &n_ramps_b, replace_max);
+	if (n_ramps_a==1 && n_ramps_b==0) ret = a;
+	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
+	else ret = op;
+    } else if (asMax) {
+        a = extract_ramp_condition(asMax->a, &n_ramps_a, replace_max);
+        b = extract_ramp_condition(asMax->b, &n_ramps_b, replace_max);
+	// if replacing max, replace with appropriate GE
+	if (replace_max && n_ramps_a==1 && n_ramps_b==0) ret = new GE(a, b);
+	else if (replace_max && n_ramps_a==0 && n_ramps_b==1) ret = new GE(b, a);
+	else if (n_ramps_a==1 && n_ramps_b==0) ret = a;
+	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
+	else ret = op;
+    } else if (asMin) {
+        // min - if a or b has ramp, replace
+        a = extract_ramp_condition(asMin->a, &n_ramps_a, replace_max);
+        b = extract_ramp_condition(asMin->b, &n_ramps_b, replace_max);
+	// if replacing max, replace with appropriate LE
+	if (!replace_max && n_ramps_a==1 && n_ramps_b==0) ret = new LE(a, b);
+	else if (!replace_max && n_ramps_a==0 && n_ramps_b==1) ret = new LE(b, a);
+	else if (n_ramps_a==1 && n_ramps_b==0) ret = a;
+	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
+	else ret = op;
+    } else if (asRamp) {
+	// TODO fix this for different kinds of ramps
+	n_ramps_a = 1;
+        int stride = asRamp->stride.as<IntImm>()->value;
+	// if stride is positive and replacing max, use base (or negative and not replacing max)
+	if ((replace_max && stride > 0) || (!replace_max && stride < 0)) {
+	    ret = asRamp->base;
+	} else {
+	    ret = asRamp->base + (asRamp->width*asRamp->stride);
+	}
+    } else if (asBroadcast) {
+	ret = asBroadcast->value;
+    } else {
+        ret = op;
+    }
+    if (n_ramps) *n_ramps = *n_ramps + n_ramps_a + n_ramps_b;
+    return ret;
+}
+
+
+void CodeGen_X86::visit(const Load *op) {
+    create_load(op, true);
+}
+
+void CodeGen_X86::create_load(const Load *op, bool recurse) {
+    // There are several cases. Different architectures may wish to override some
+    if (op->type.is_scalar()) {
+        // Scalar loads
+        Value *index = codegen(op->index);
+        Value *ptr = codegen_buffer_pointer(op->name, op->type, index);
+        LoadInst *load = builder->CreateLoad(ptr);
+        load->setMetadata("tbaa", MDNode::get(*context, vec<Value *>(MDString::get(*context, op->name))));
+        value = load;
+        
+    } else {            
+        int alignment = op->type.bits / 8;
+        const Ramp *ramp = op->index.as<Ramp>();
+        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+
+        bool internal = !op->image.defined() && !op->param.defined();
+
+        if (ramp && internal) {
+            // If it's an internal allocation, we can boost the
+            // alignment using the results of the modulus remainder
+            // analysis
+            ModulusRemainder mod_rem = modulus_remainder(ramp->base);
+            alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32); 
+        }
+                    
+        if (ramp && stride && stride->value == 1) {
+            Value *base = codegen(ramp->base);
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
+            ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
+            value = builder->CreateAlignedLoad(ptr, alignment);                
+        } else if (ramp && stride && stride->value == 2) {
+            // Load two vectors worth and then shuffle
+            Value *base = codegen(ramp->base);
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
+            ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
+            Value *a = builder->CreateAlignedLoad(ptr, alignment);
+            ptr = builder->CreateConstInBoundsGEP1_32(ptr, 1);
+            int bytes = (op->type.bits * op->type.width)/8;
+            Value *b = builder->CreateAlignedLoad(ptr, gcd(alignment, bytes));
+            vector<Constant *> indices(ramp->width);
+            for (int i = 0; i < ramp->width; i++) {
+                indices[i] = ConstantInt::get(i32, i*2);
+            }
+            value = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+        } else if (ramp && stride && stride->value == -1) {
+            // Load the vector and then flip it in-place
+            Value *base = codegen(ramp->base - ramp->width + 1);
+
+            // Re-do alignment analysis for the flipped index
+            if (internal) {
+                alignment = op->type.bits / 8;
+                ModulusRemainder mod_rem = modulus_remainder(ramp->base - ramp->width + 1);
+                alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);             
+            }
+
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
+            ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
+            Value *vec = builder->CreateAlignedLoad(ptr, alignment);
+            Value *undef = UndefValue::get(vec->getType());
+
+            vector<Constant *> indices(ramp->width);
+            for (int i = 0; i < ramp->width; i++) {
+                indices[i] = ConstantInt::get(i32, ramp->width-1-i);
+            }
+            value = builder->CreateShuffleVector(vec, undef, ConstantVector::get(indices));
+        } else if (ramp) {
+            // Gather without generating the indices as a vector
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
+            Value *stride = codegen(ramp->stride);
+            value = UndefValue::get(llvm_type_of(op->type));
+            for (int i = 0; i < ramp->width; i++) {                
+                Value *lane = ConstantInt::get(i32, i);
+                Value *val = builder->CreateLoad(ptr);
+                value = builder->CreateInsertElement(value, val, lane);
+                ptr = builder->CreateInBoundsGEP(ptr, stride);
+            }
+        } else if (false /* should_scalarize(op->index) */) {
+            // TODO: put something sensible in for
+            // should_scalarize. Probably a good idea if there are no
+            // loads in it, and it's all int32.
+
+            // Compute the index as scalars, and then do a gather
+            Value *vec = UndefValue::get(llvm_type_of(op->type));
+            for (int i = 0; i < op->type.width; i++) {
+                Value *idx = codegen(extract_lane(op->index, i));
+                Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
+                Value *val = builder->CreateLoad(ptr);
+                vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
+            }
+            value = vec;
+        } else {                
+	    // check for clamped vector load
+	    IRPrinter irp = IRPrinter(std::cout);
+	    //printf("initial index: "); irp.print(op->index); printf("\n");
+	    Expr new_index = extract_ramp(op->index);
+	    //printf("with conditions met: "); irp.print(new_index); printf("\n");
+	    new_index = simplify(new_index);
+	    //printf("simplified: "); irp.print(new_index); printf("\n");
+	    char *enabled = getenv("HL_ENABLE_CLAMPED_VECTOR_LOAD");
+	    bool is_enabled = enabled == NULL ? 0 : atoi(enabled);
+	    if (is_enabled && recurse && new_index.as<Ramp>()) {
+		//printf("creating clamped vector load\n");
+		Expr check_min = extract_ramp_condition(op->index, NULL, false);
+		//printf("min check: "); irp.print(check_min); printf("\n");
+		check_min = simplify(check_min);
+		//printf("simplified min check: "); irp.print(check_min); printf("\n");
+
+		Expr check_max = extract_ramp_condition(op->index, NULL, true);
+		//printf("max check: "); irp.print(check_max); printf("\n");
+		check_max = simplify(check_max);
+		//printf("simplified max check: "); irp.print(check_max); printf("\n");
+
+		Expr condition = new And(check_min, check_max);
+		//printf("condition: "); irp.print(condition); printf("\n");
+		condition = simplify(condition);
+		//printf("simplified condition: "); irp.print(condition); printf("\n");
+		Load simplified_load = Load(op->type, op->name, new_index,
+					    op->image, op->param);
+		
+		// Make condition
+		Value *condition_val = codegen(condition);
+		
+		// Create the block for the bounded case
+		BasicBlock *bounded_bb = BasicBlock::Create(*context, op->name + "_bounded_load",
+							    function);
+		// Create the block for the unbounded case
+		BasicBlock *unbounded_bb = BasicBlock::Create(*context, op->name + "_unbounded_load",
+							      function);
+		// Create the block that comes after
+		BasicBlock *after_bb = BasicBlock::Create(*context, op->name + "_after_load",
+							  function);
+
+		// Check the bounds, branch accordingly
+		builder->CreateCondBr(condition_val, bounded_bb, unbounded_bb);
+
+		// For bounded case, use ramp
+		builder->SetInsertPoint(bounded_bb);
+		value = NULL;
+		CodeGen_X86::create_load(&simplified_load, false);
+		Value *bounded = value;
+		builder->CreateBr(after_bb);
+
+		// For unbounded case, create_load will fall through to general gather
+		// (with recurse set to false)
+		builder->SetInsertPoint(unbounded_bb);
+		value = NULL;
+		create_load(op, false);
+		Value *unbounded = value;
+		builder->CreateBr(after_bb);
+
+		// Make a phi node
+		builder->SetInsertPoint(after_bb);
+		PHINode *phi = builder->CreatePHI(unbounded->getType(),2);
+		phi->addIncoming(bounded, bounded_bb);
+		phi->addIncoming(unbounded, unbounded_bb);
+		value = phi;
+	    } else {
+	      // printf("falling back on general gather\n");
+	      // General gathers
+	      Value *index = codegen(op->index);
+	      Value *vec = UndefValue::get(llvm_type_of(op->type));
+	      for (int i = 0; i < op->type.width; i++) {
+		  Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32, i));
+		  Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
+		  Value *val = builder->CreateLoad(ptr);
+		  vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
+	      }
+	      value = vec;
+	    }
+	}
+    }
 }
 
 static bool extern_function_1_was_called = false;
