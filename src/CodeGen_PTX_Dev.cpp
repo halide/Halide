@@ -295,7 +295,7 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
     return false;
 }
 
-string CodeGen_PTX_Dev::compile_to_ptx() {
+string CodeGen_PTX_Dev::compile_to_src() {
 
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/
