@@ -345,7 +345,7 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
         module->dump();
     }
 
-    string ptx_src = cgdev.compile_to_ptx();
+    string ptx_src = cgdev.compile_to_src();
     log(2) << ptx_src;
     llvm::Type *ptx_src_type = ArrayType::get(i8, ptx_src.size()+1);
     GlobalVariable *ptx_src_global = new GlobalVariable(*module, ptx_src_type, 

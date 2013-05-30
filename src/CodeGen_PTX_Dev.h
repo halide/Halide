@@ -6,6 +6,7 @@
  */
 
 #include "CodeGen.h"
+#include "CodeGen_GPU_Dev.h"
 
 namespace llvm {
 class BasicBlock;
@@ -15,7 +16,7 @@ namespace Halide {
 namespace Internal {
 
 /** A code generator that emits GPU code from a given Halide stmt. */
-class CodeGen_PTX_Dev : public CodeGen {
+class CodeGen_PTX_Dev : public CodeGen, public CodeGen_GPU_Dev {
 public:
     friend class CodeGen_PTX_Host;
 
@@ -32,6 +33,8 @@ public:
     static void test();
 
     static bool is_simt_var(const std::string &name);
+
+    std::string compile_to_src();
 
 protected:
     using CodeGen::visit;
@@ -52,8 +55,6 @@ protected:
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
-
-    std::string compile_to_ptx();
 
     /** Map from simt variable names (e.g. foo.blockidx) to the llvm
      * ptx intrinsic functions to call to get them. */
