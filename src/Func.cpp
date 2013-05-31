@@ -1024,8 +1024,8 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
     Argument me(name(), true, value().type());
     args.push_back(me);
 
-    ofstream header(filename.c_str());
-    CodeGen_C cg(header);
+    ofstream src(filename.c_str());
+    CodeGen_C cg(src);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
 }
 
