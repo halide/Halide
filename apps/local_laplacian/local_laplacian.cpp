@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     /* THE ALGORITHM */
 
     // Number of pyramid levels 
-    int J = 8;
+    const int J = 8;
 
     // number of intensity levels
     Param<int> levels;

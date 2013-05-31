@@ -24,47 +24,36 @@ template<typename T>
 class Scope {
 private:
     int count;
-    std::map<std::string, std::stack<std::pair<T, int> > > table;
+    std::map<std::string, std::stack<T> > table;
 public:
     Scope() : count(0) {}
 
     /** Raw read-only access to the scope table. */
-    const std::map<std::string, std::stack<std::pair<T, int> > > &get_table() {return table;}
+    const std::map<std::string, std::stack<T> > &get_table() {return table;}
 
     /** Retrive the value referred to by a name */
     T get(const std::string &name) const {
-        typename std::map<std::string, std::stack<std::pair<T, int> > >::const_iterator iter = table.find(name);
+        typename std::map<std::string, std::stack<T> >::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             std::cerr << "Symbol '" << name << "' not found" << std::endl;
             assert(false);
         }
-        return iter->second.top().first;
+        return iter->second.top();
     }
         
     /** Return a reference to an entry */
     T &ref(const std::string &name) {
-        typename std::map<std::string, std::stack<std::pair<T, int> > >::iterator iter = table.find(name);
+        typename std::map<std::string, std::stack<T> >::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
             std::cerr << "Symbol '" << name << "' not found" << std::endl;
             assert(false);
         }
-        return iter->second.top().first;
-    }
-
-    /** Get the depth of an entry. The depth of A is less than the
-     * depth of B if A was pushed before B. */
-    int depth(const std::string &name) {
-        typename std::map<std::string, std::stack<std::pair<T, int> > >::const_iterator iter = table.find(name);
-        if (iter == table.end() || iter->second.empty()) {
-            std::cerr << "Symbol '" << name << "' not found" << std::endl;
-            assert(false);
-        }
-        return iter->second.top().second;
+        return iter->second.top();
     }
 
     /** Tests if a name is in scope */
     bool contains(const std::string &name) const {
-        typename std::map<std::string, std::stack<std::pair<T, int> > >::const_iterator iter = table.find(name);
+        typename std::map<std::string, std::stack<T> >::const_iterator iter = table.find(name);
         return iter != table.end() && !iter->second.empty();
     }
 
@@ -72,7 +61,7 @@ public:
      * values that have this name until we pop this name.
      */
     void push(const std::string &name, T value) {
-        table[name].push(std::make_pair(value, count));
+        table[name].push(value);
         count++;
     }
 
@@ -89,8 +78,8 @@ public:
 template<typename T>
 std::ostream &operator<<(std::ostream &stream, Scope<T>& s) {
     stream << "{\n";
-    const std::map<std::string, std::stack<std::pair<T, int> > > &table = s.get_table();
-    typename std::map<std::string, std::stack<std::pair<T, int> > >::const_iterator iter;
+    const std::map<std::string, std::stack<T> > &table = s.get_table();
+    typename std::map<std::string, std::stack<T> >::const_iterator iter;
     for (iter = table.begin(); iter != table.end(); iter++) {
         stream << "  " << iter->first << "\n";
     }
