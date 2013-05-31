@@ -23,7 +23,13 @@ struct CodeGen_GPU_Dev {
      * for a single pipeline. */
     virtual void init_module() = 0;
 
-    static bool is_simt_var(const std::string &name);
+    virtual std::string compile_to_src() = 0;
+
+    virtual std::string get_current_kernel_name() = 0;
+
+    virtual void dump() = 0;
+
+    static bool is_gpu_var(const std::string &name);
 };
 
 }}
