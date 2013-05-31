@@ -169,27 +169,8 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
     assert(false && "simt_intrinsic called on bad variable name");
 }
 
-bool CodeGen_PTX_Dev::is_simt_var(const string &name) {
-    string n = base_name(name);
-
-    log(2) << "is_simt_var " << name << " (" << n << ")? ";
-
-    bool result = (n == "threadidx" ||
-                   n == "threadidy" ||
-                   n == "threadidz" ||
-                   n == "threadidw" ||
-                   n == "blockidx" ||
-                   n == "blockidy" ||
-                   n == "blockidz" ||
-                   n == "blockidw");
-
-    log(2) << result << "\n";
-
-    return result;
-}
-
 void CodeGen_PTX_Dev::visit(const For *loop) {
-    if (is_simt_var(loop->name)) {
+    if (is_gpu_var(loop->name)) {
         log(2) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
         assert(loop->for_type == For::Parallel && "kernel loop must be parallel");
 
@@ -295,7 +276,7 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
     return false;
 }
 
-string CodeGen_PTX_Dev::compile_to_ptx() {
+string CodeGen_PTX_Dev::compile_to_src() {
 
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/
@@ -399,6 +380,15 @@ string CodeGen_PTX_Dev::compile_to_ptx() {
 
     ostream.flush();
     return outs.str();
+}
+
+
+string CodeGen_PTX_Dev::get_current_kernel_name() {
+    return function->getName();
+}
+
+void CodeGen_PTX_Dev::dump() {
+    module->dump();
 }
 
 }}

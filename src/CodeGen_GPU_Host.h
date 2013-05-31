@@ -1,23 +1,32 @@
-#ifndef HALIDE_CODEGEN_PTX_HOST_H
-#define HALIDE_CODEGEN_PTX_HOST_H
+#ifndef HALIDE_CODEGEN_GPU_HOST_H
+#define HALIDE_CODEGEN_GPU_HOST_H
 
 /** \file
- * Defines the code-generator for producing CUDA host code
+ * Defines the code-generator for producing GPU host code
  */
 
 #include "CodeGen_X86.h"
-#include "CodeGen_PTX_Dev.h"
+#include "CodeGen_GPU_Dev.h"
 
 namespace Halide { 
 namespace Internal {
 
+/** Bitmask flags for specifying code generation options to CodeGen_GPU. */
+enum CodeGen_GPU_Options {
+    GPU_PTX     = 0x1000000,  /// Compile for PTX
+    GPU_OpenCL  = 0x2000000,  /// Compile for OpenCL
+    GPU_OpenGL  = 0x4000000,  /// Compile for OpenGL
+};
+
+
 /** A code generator that emits GPU code from a given Halide stmt. */
-class CodeGen_PTX_Host : public CodeGen_X86 {
+class CodeGen_GPU_Host : public CodeGen_X86 {
 public:
 
-    /** Create an x86 code generator. Processor features can be
-     * enabled using the appropriate flags from CodeGen_X86_Options */
-    CodeGen_PTX_Host(uint32_t options = 0);
+    /** Create a GPU code generator. GPU target is selected via
+     * CodeGen_GPU_Options. Processor features can be enabled using the
+     * appropriate flags from CodeGen_X86_Options */
+    CodeGen_GPU_Host(uint32_t options = 0);
         
     /** Compile to an internally-held llvm module. Takes a halide
      * statement, the name of the function produced, and the arguments
@@ -63,9 +72,14 @@ protected:
 
     static bool lib_cuda_linked;
 
+    static CodeGen_GPU_Dev* make_dev(uint32_t options);
+
 private:
     /** Child code generator for device kernels. */
-    CodeGen_PTX_Dev cgdev;
+    CodeGen_GPU_Dev *cgdev;
+
+    const void *initmod;
+    int initmod_length;
 };
 
 }}
