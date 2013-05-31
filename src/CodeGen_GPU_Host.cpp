@@ -1,4 +1,5 @@
-#include "CodeGen_PTX_Host.h"
+#include "CodeGen_GPU_Host.h"
+#include "CodeGen_PTX_Dev.h"
 #include "IROperator.h"
 #include <iostream>
 #include "buffer_t.h"
@@ -56,9 +57,9 @@ using std::map;
 
 using namespace llvm;
 
-bool CodeGen_PTX_Host::lib_cuda_linked = false;
+bool CodeGen_GPU_Host::lib_cuda_linked = false;
 
-class CodeGen_PTX_Host::Closure : public Halide::Internal::Closure {
+class CodeGen_GPU_Host::Closure : public Halide::Internal::Closure {
 public:
     static Closure make(Stmt s, const std::string &lv, bool skip_gpu_loops=false) {
         Closure c;
@@ -208,7 +209,7 @@ private:
     using IRVisitor::visit;
 
     void visit(const For *op) {
-        if (CodeGen_PTX_Dev::is_simt_var(op->name)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             op->min.accept(this);
             op->extent.accept(this);
             bool old_in_device = in_device_code;
@@ -247,7 +248,7 @@ private:
     }
 };
 
-vector<Argument> CodeGen_PTX_Host::Closure::arguments() {
+vector<Argument> CodeGen_GPU_Host::Closure::arguments() {
     vector<Argument> res;
     map<string, Type>::const_iterator iter;
     for (iter = vars.begin(); iter != vars.end(); ++iter) {
@@ -266,40 +267,52 @@ vector<Argument> CodeGen_PTX_Host::Closure::arguments() {
 }
 
 
-void CodeGen_PTX_Host::Closure::visit(const For *loop) {
+void CodeGen_GPU_Host::Closure::visit(const For *loop) {
     if (skip_gpu_loops && 
-        CodeGen_PTX_Dev::is_simt_var(loop->name)) {
+        CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         return;
     }
     Internal::Closure::visit(loop);
 }
 
 
-CodeGen_PTX_Host::CodeGen_PTX_Host(uint32_t options) :
+CodeGen_GPU_Host::CodeGen_GPU_Host(uint32_t options) :
     CodeGen_X86(options),
     dev_malloc_fn(NULL), 
     dev_free_fn(NULL),
     copy_to_dev_fn(NULL), 
     copy_to_host_fn(NULL), 
     dev_run_fn(NULL), 
-    dev_sync_fn(NULL) {
-    assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
+    dev_sync_fn(NULL),
+    cgdev(make_dev(options)) {
+
+    if (options & GPU_PTX) {
+        assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
+        initmod = halide_internal_initmod_ptx_host;
+        initmod_length = halide_internal_initmod_ptx_host_length;
+    }
 }
 
-void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &args) {
+CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(uint32_t options)
+{
+    assert(options & GPU_PTX);
+    return new CodeGen_PTX_Dev();
+}
+
+
+void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &args) {
     
     init_module();
 
     // also set up the child codegenerator - this is set up once per
     // PTX_Host::compile, and reused across multiple PTX_Dev::compile
     // invocations for different kernels.
-    cgdev.init_module();
+    cgdev->init_module();
 
     StringRef sb;
 
     assert(use_64_bit && !use_avx && "PTX Host only built for simple x86_64 for now");
-    sb = StringRef((char *)halide_internal_initmod_ptx_host,
-                           halide_internal_initmod_ptx_host_length);
+    sb = StringRef((char *)initmod, initmod_length);
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
     // Parse it
@@ -341,11 +354,11 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     CodeGen::compile(stmt, name, args);
 
     if (log::debug_level >= 2) {
-        cgdev.module->dump();
+        cgdev->dump();
         module->dump();
     }
 
-    string ptx_src = cgdev.compile_to_ptx();
+    string ptx_src = cgdev->compile_to_src();
     log(2) << ptx_src;
     llvm::Type *ptx_src_type = ArrayType::get(i8, ptx_src.size()+1);
     GlobalVariable *ptx_src_global = new GlobalVariable(*module, ptx_src_type, 
@@ -362,7 +375,7 @@ void CodeGen_PTX_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     delete bitcode_buffer;
 }
 
-void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
+void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
 
     // Make sure extern cuda calls inside the module point to the
     // right things. If cuda is already linked in we should be
@@ -394,7 +407,7 @@ void CodeGen_PTX_Host::jit_init(ExecutionEngine *ee, Module *module) {
     }
 }
 
-void CodeGen_PTX_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<void (*)()> *cleanup_routines) {
+void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<void (*)()> *cleanup_routines) {
     // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
     // CUDA behaves much better when you don't initialize >2 contexts.
     llvm::Function *fn = module->getFunction("halide_set_cuda_context");
@@ -412,8 +425,8 @@ void CodeGen_PTX_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
     (*cleanup_routines).push_back((void (*)())f);
 }
 
-void CodeGen_PTX_Host::visit(const For *loop) {
-    if (CodeGen_PTX_Dev::is_simt_var(loop->name)) {
+void CodeGen_GPU_Host::visit(const For *loop) {
+    if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         log(2) << "Kernel launch: " << loop->name << "\n";
 
         // compute kernel launch bounds
@@ -464,7 +477,7 @@ void CodeGen_PTX_Host::visit(const For *loop) {
         for (size_t i = 0; i < kernel_name.size(); i++) {
             if (kernel_name[i] == '.') kernel_name[i] = '_';
         }
-        cgdev.compile(loop, kernel_name, c.arguments());
+        cgdev->compile(loop, kernel_name, c.arguments());
 
         map<string, Type>::iterator it;
         for (it = c.reads.begin(); it != c.reads.end(); ++it) {
@@ -488,7 +501,7 @@ void CodeGen_PTX_Host::visit(const For *loop) {
         }
 
         // get the actual name of the generated kernel for this loop
-        kernel_name = cgdev.function->getName();
+        kernel_name = cgdev->get_current_kernel_name();
         log(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
         Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
 
@@ -565,7 +578,7 @@ void CodeGen_PTX_Host::visit(const For *loop) {
     }
 }
 
-void CodeGen_PTX_Host::visit(const Allocate *alloc) {
+void CodeGen_GPU_Host::visit(const Allocate *alloc) {
     WhereIsBufferUsed usage(alloc->name);
     alloc->accept(&usage);
 
@@ -639,7 +652,7 @@ void CodeGen_PTX_Host::visit(const Allocate *alloc) {
 
 }
 
-void CodeGen_PTX_Host::visit(const Free *f) {
+void CodeGen_GPU_Host::visit(const Free *f) {
     // Free any host allocation
     if (sym_exists(f->name + ".host")) {
         CodeGen_Posix::visit(f);
@@ -651,7 +664,7 @@ void CodeGen_PTX_Host::visit(const Free *f) {
     }
 }
 
-void CodeGen_PTX_Host::visit(const Pipeline *n) {
+void CodeGen_GPU_Host::visit(const Pipeline *n) {
     
     Value *buf = sym_get(n->name + ".buffer", false);
     Value *host = sym_get(n->name + ".host", false);
@@ -702,7 +715,7 @@ void CodeGen_PTX_Host::visit(const Pipeline *n) {
     codegen(n->consume);
 }
 
-void CodeGen_PTX_Host::visit(const Call *call) {
+void CodeGen_GPU_Host::visit(const Call *call) {
     // The other way in which buffers might be read by the host is in
     // calls to whole-buffer builtins like debug_to_file.
     if (call->name == "debug to file") {

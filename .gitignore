@@ -3,6 +3,7 @@ build/*
 tmp/*
 doc/*
 include/*
+distrib/*
 
 \#*\#
 .\#*
