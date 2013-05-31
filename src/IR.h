@@ -130,11 +130,16 @@ struct IntImm : public ExprNode<IntImm> {
     int value;
 
     static IntImm *make(int value) {
+        if (value >= -8 && value <= 8) return small_int_cache + value + 8;
         IntImm *node = new IntImm;
         node->type = Int(32);
         node->value = value;
         return node;
     }
+
+private:
+    /** ints from -8 to 8 */
+    static IntImm small_int_cache[17];
 };
 
 /** Floating point constants */

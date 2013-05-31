@@ -3,6 +3,38 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
+IntImm make_immortal_int(int x) {
+    IntImm i;
+    i.ref_count.increment();
+    i.type = Int(32);
+    i.value = x;
+    return i;
+}
+
+}
+
+IntImm IntImm::small_int_cache[] = {make_immortal_int(-8), 
+                                    make_immortal_int(-7), 
+                                    make_immortal_int(-6), 
+                                    make_immortal_int(-5), 
+                                    make_immortal_int(-4), 
+                                    make_immortal_int(-3), 
+                                    make_immortal_int(-2), 
+                                    make_immortal_int(-1), 
+                                    make_immortal_int(0), 
+                                    make_immortal_int(1), 
+                                    make_immortal_int(2), 
+                                    make_immortal_int(3), 
+                                    make_immortal_int(4), 
+                                    make_immortal_int(5), 
+                                    make_immortal_int(6), 
+                                    make_immortal_int(7), 
+                                    make_immortal_int(8)};
+                            
+
+
 template<> EXPORT IRNodeType ExprNode<IntImm>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<FloatImm>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<Cast>::_type_info = {};
