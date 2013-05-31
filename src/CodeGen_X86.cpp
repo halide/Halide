@@ -483,30 +483,30 @@ Expr extract_ramp_helper(const Expr op, int *n_ramps) {
     int n_ramps_a = 0, n_ramps_b = 0;
     if (asAdd) {
         // add
-        ret = new Add(extract_ramp_helper(asAdd->a, &n_ramps_a),
-                      extract_ramp_helper(asAdd->b, &n_ramps_b));
+        ret = Add::make(extract_ramp_helper(asAdd->a, &n_ramps_a),
+			extract_ramp_helper(asAdd->b, &n_ramps_b));
     } else if (asSub) {
         // subtract
-        ret = new Sub(extract_ramp_helper(asSub->a, &n_ramps_a),
-                      extract_ramp_helper(asSub->b, &n_ramps_b));
+        ret = Sub::make(extract_ramp_helper(asSub->a, &n_ramps_a),
+			extract_ramp_helper(asSub->b, &n_ramps_b));
     } else if (asMul) {
         // multiply
-        ret = new Mul(extract_ramp_helper(asMul->a, &n_ramps_a),
-                      extract_ramp_helper(asMul->b, &n_ramps_b));        
+        ret = Mul::make(extract_ramp_helper(asMul->a, &n_ramps_a),
+			extract_ramp_helper(asMul->b, &n_ramps_b));        
     } else if (asMax) {
         // max - if a or b has ramp, replace
         a = extract_ramp_helper(asMax->a, &n_ramps_a);
         b = extract_ramp_helper(asMax->b, &n_ramps_b);
         if ((n_ramps_a == 1) && (n_ramps_b==0)) ret = a;
         else if ((n_ramps_b == 1) && (n_ramps_b==1)) ret = b;
-        else ret = new Max(a, b);
+        else ret = Max::make(a, b);
     } else if (asMin) {
         // min - if a or b has ramp, replace
         a = extract_ramp_helper(asMin->a, &n_ramps_a);
         b = extract_ramp_helper(asMin->b, &n_ramps_b);
         if ((n_ramps_a == 1) && (n_ramps_b==0)) ret = a;
         else if ((n_ramps_b == 1) && (n_ramps_b==1)) ret = b;
-        else ret = new Min(a, b);
+        else ret = Min::make(a, b);
     } else if (asRamp) {
         // return ramp
         ret = op;
@@ -562,8 +562,8 @@ Expr extract_ramp_condition(const Expr op, int *n_ramps, bool replace_max) {
         a = extract_ramp_condition(asMax->a, &n_ramps_a, replace_max);
         b = extract_ramp_condition(asMax->b, &n_ramps_b, replace_max);
 	// if replacing max, replace with appropriate GE
-	if (replace_max && n_ramps_a==1 && n_ramps_b==0) ret = new GE(a, b);
-	else if (replace_max && n_ramps_a==0 && n_ramps_b==1) ret = new GE(b, a);
+	if (replace_max && n_ramps_a==1 && n_ramps_b==0) ret = GE::make(a, b);
+	else if (replace_max && n_ramps_a==0 && n_ramps_b==1) ret = GE::make(b, a);
 	else if (n_ramps_a==1 && n_ramps_b==0) ret = a;
 	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
 	else ret = op;
@@ -572,8 +572,8 @@ Expr extract_ramp_condition(const Expr op, int *n_ramps, bool replace_max) {
         a = extract_ramp_condition(asMin->a, &n_ramps_a, replace_max);
         b = extract_ramp_condition(asMin->b, &n_ramps_b, replace_max);
 	// if replacing max, replace with appropriate LE
-	if (!replace_max && n_ramps_a==1 && n_ramps_b==0) ret = new LE(a, b);
-	else if (!replace_max && n_ramps_a==0 && n_ramps_b==1) ret = new LE(b, a);
+	if (!replace_max && n_ramps_a==1 && n_ramps_b==0) ret = LE::make(a, b);
+	else if (!replace_max && n_ramps_a==0 && n_ramps_b==1) ret = LE::make(b, a);
 	else if (n_ramps_a==1 && n_ramps_b==0) ret = a;
 	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
 	else ret = op;
@@ -713,12 +713,12 @@ void CodeGen_X86::create_load(const Load *op, bool recurse) {
 		check_max = simplify(check_max);
 		//printf("simplified max check: "); irp.print(check_max); printf("\n");
 
-		Expr condition = new And(check_min, check_max);
+		Expr condition = And::make(check_min, check_max);
 		//printf("condition: "); irp.print(condition); printf("\n");
 		condition = simplify(condition);
 		//printf("simplified condition: "); irp.print(condition); printf("\n");
-		Load simplified_load = Load(op->type, op->name, new_index,
-					    op->image, op->param);
+		Load simplified_load = *(Load::make(op->type, op->name, new_index,
+						    op->image, op->param).as<Load>());
 		
 		// Make condition
 		Value *condition_val = codegen(condition);
