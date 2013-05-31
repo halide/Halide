@@ -13,8 +13,6 @@
 #include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
-// #include <cstdio>
-
 extern "C" unsigned char halide_internal_initmod_x86[];
 extern "C" int halide_internal_initmod_x86_length;
 extern "C" unsigned char halide_internal_initmod_x86_32[];
@@ -521,13 +519,13 @@ Expr extract_ramp_helper(const Expr op, int *n_ramps) {
 Expr extract_ramp(const Expr index) {
     int n_ramps = 0;
     Expr extracted = extract_ramp_helper(index, &n_ramps);
-    //printf("num ramps is %d\n", n_ramps);
     if (n_ramps==1) return extracted;
     else return index;
 }
 
 Expr extract_ramp_condition(const Expr op, int *n_ramps, bool replace_max) {
-    // TODO: doesn't check for nested min/maxes around ramp
+    // get condition from clamped index
+    // (convert min/max to GE/LE on bounds of ramp indices)
     const Add *asAdd = op.as<Add>();
     const Sub *asSub = op.as<Sub>();
     const Mul *asMul = op.as<Mul>();
@@ -578,7 +576,7 @@ Expr extract_ramp_condition(const Expr op, int *n_ramps, bool replace_max) {
 	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
 	else ret = op;
     } else if (asRamp) {
-	// TODO fix this for different kinds of ramps
+	// we found a ramp
 	n_ramps_a = 1;
         int stride = asRamp->stride.as<IntImm>()->value;
 	// if stride is positive and replacing max, use base (or negative and not replacing max)
@@ -602,6 +600,7 @@ void CodeGen_X86::visit(const Load *op) {
 }
 
 void CodeGen_X86::create_load(const Load *op, bool recurse) {
+    // Nick - code here is mostly same as in CodeGen.cpp except for clamped vector load check
     // There are several cases. Different architectures may wish to override some
     if (op->type.is_scalar()) {
         // Scalar loads
@@ -693,30 +692,19 @@ void CodeGen_X86::create_load(const Load *op, bool recurse) {
             value = vec;
         } else {                
 	    // check for clamped vector load
-	    IRPrinter irp = IRPrinter(std::cout);
-	    //printf("initial index: "); irp.print(op->index); printf("\n");
 	    Expr new_index = extract_ramp(op->index);
-	    //printf("with conditions met: "); irp.print(new_index); printf("\n");
 	    new_index = simplify(new_index);
-	    //printf("simplified: "); irp.print(new_index); printf("\n");
 	    char *enabled = getenv("HL_ENABLE_CLAMPED_VECTOR_LOAD");
 	    bool is_enabled = enabled == NULL ? 0 : atoi(enabled);
 	    if (is_enabled && recurse && new_index.as<Ramp>()) {
-		//printf("creating clamped vector load\n");
 		Expr check_min = extract_ramp_condition(op->index, NULL, false);
-		//printf("min check: "); irp.print(check_min); printf("\n");
 		check_min = simplify(check_min);
-		//printf("simplified min check: "); irp.print(check_min); printf("\n");
 
 		Expr check_max = extract_ramp_condition(op->index, NULL, true);
-		//printf("max check: "); irp.print(check_max); printf("\n");
 		check_max = simplify(check_max);
-		//printf("simplified max check: "); irp.print(check_max); printf("\n");
 
 		Expr condition = And::make(check_min, check_max);
-		//printf("condition: "); irp.print(condition); printf("\n");
 		condition = simplify(condition);
-		//printf("simplified condition: "); irp.print(condition); printf("\n");
 		Load simplified_load = *(Load::make(op->type, op->name, new_index,
 						    op->image, op->param).as<Load>());
 		
@@ -758,7 +746,6 @@ void CodeGen_X86::create_load(const Load *op, bool recurse) {
 		phi->addIncoming(unbounded, unbounded_bb);
 		value = phi;
 	    } else {
-	      // printf("falling back on general gather\n");
 	      // General gathers
 	      Value *index = codegen(op->index);
 	      Value *vec = UndefValue::get(llvm_type_of(op->type));
