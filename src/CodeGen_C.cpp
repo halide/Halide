@@ -188,6 +188,11 @@ void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args
                        << name
                        << "->stride[" << j << "];\n";
             }
+            stream << "const int32_t "
+                   << name
+                   << "_elem_size = _"
+                   << name
+                   << "->elem_size;\n";
         }
     }        
 
@@ -630,6 +635,7 @@ void CodeGen_C::test() {
         "const int32_t buf_stride_1 = _buf->stride[1];\n"
         "const int32_t buf_stride_2 = _buf->stride[2];\n"
         "const int32_t buf_stride_3 = _buf->stride[3];\n"
+        "const int32_t buf_elem_size = _buf->elem_size;\n"
         "{\n"
         " int32_t V0 = 43 * beta;\n"
         " int32_t *tmp_heap = (int32_t *)halide_malloc(sizeof(int32_t)*V0);\n"
