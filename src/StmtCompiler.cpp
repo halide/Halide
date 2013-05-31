@@ -1,7 +1,7 @@
 #include "StmtCompiler.h"
 #include "CodeGen.h"
 #include "CodeGen_X86.h"
-#include "CodeGen_PTX_Host.h"
+#include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
 #include <iostream>
 
@@ -57,7 +57,7 @@ StmtCompiler::StmtCompiler(string arch) {
     // GPU backends are disabled on Windows until I'm sure it links, too (@jrk)
     else if (arch == "ptx") {
         // equivalent to "x86" on the host side, i.e. x86_64, no AVX
-        contents = new CodeGen_PTX_Host(X86_64Bit | X86_SSE41);
+        contents = new CodeGen_GPU_Host(X86_64Bit | X86_SSE41 | GPU_PTX);
     }
 #endif // _WIN32
     else {
