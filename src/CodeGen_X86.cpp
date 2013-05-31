@@ -694,9 +694,7 @@ void CodeGen_X86::create_load(const Load *op, bool recurse) {
 	    // check for clamped vector load
 	    Expr new_index = extract_ramp(op->index);
 	    new_index = simplify(new_index);
-	    char *enabled = getenv("HL_ENABLE_CLAMPED_VECTOR_LOAD");
-	    bool is_enabled = enabled == NULL ? 0 : atoi(enabled);
-	    if (is_enabled && recurse && new_index.as<Ramp>()) {
+	    if (recurse && new_index.as<Ramp>()) {
 		Expr check_min = extract_ramp_condition(op->index, NULL, false);
 		check_min = simplify(check_min);
 
