@@ -1,65 +1,119 @@
 
 #include "IR.h"
+#include "IRPrinter.h"
+#include "Log.h"
 
 namespace Halide { 
 namespace Internal {
 
+using std::string;
+
 class IREquals : public IRVisitor {
 public:
-    bool result;
+    int result;
     Expr expr;
     Stmt stmt;
 
-    IREquals(Expr e) : result(true), expr(e) {
+    IREquals(Expr e) : result(0), expr(e) {
     }
 
-    IREquals(Stmt s) : result(true), stmt(s) {
+    IREquals(Stmt s) : result(0), stmt(s) {
     }
 
     using IRVisitor::visit;
 
     void visit(const IntImm *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
         const IntImm *e = expr.as<IntImm>();
-        if (!e || e->value != op->value) {
-            result = false;
+        if (e->value < op->value) {
+            result = -1;
+        } else if (e->value > op->value) {
+            result = 1;
         }
     }
 
     void visit(const FloatImm *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
         const FloatImm *e = expr.as<FloatImm>();
-        if (!e || e->value != op->value) {
-            result = false;
+        if (e->value < op->value) {
+            result = -1;
+        } else if (e->value > op->value) {
+            result = 1;
         }
+    }
+
+    int compare_types(Type a, Type b) {
+        if (a.t < b.t) {
+            result = -1;
+        } else if (a.t > b.t) {
+            result = 1;
+        } else if (a.bits < b.bits) {
+            result = -1;
+        } else if (a.bits > b.bits) {
+            result = 1;
+        } else if (a.width < b.width) {
+            result = -1;
+        } else if (a.width > b.width) {
+            result = 1;        
+        }
+        return result;
+    }
+
+    int compare_node_types(Expr a, Expr b) {
+        const void *ta = a.ptr->type_info();
+        const void *tb = b.ptr->type_info();
+        if (ta < tb) {
+            result = -1;
+        } else if (ta > tb) {
+            result = 1;
+        }
+        return compare_types(a.type(), b.type());
+    }
+
+    int compare_node_types(Stmt a, Stmt b) {
+        const void *ta = a.ptr->type_info();
+        const void *tb = b.ptr->type_info();
+        if (ta < tb) {
+            result = -1;
+        } else if (ta > tb) {
+            result = 1;
+        }
+        return result;
+    }
+
+    int compare_names(const string &a, const string &b) {
+        result = a.compare(b);
+        if (result < 0) result = -1;
+        if (result > 0) result = 1;
+        return result;
     }
 
     void visit(const Cast *op) {
-        const Cast *e = expr.as<Cast>();
-        if (result && e && e->type == op->type) {
-            expr = e->value;
-            op->value.accept(this);
-        } else {
-            result = false;
-        }
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+
+        expr = expr.as<Cast>()->value;
+        op->value.accept(this);
     }
 
     void visit(const Variable *op) {
-        const Variable *e = expr.as<Variable>();
-        if (!e || e->name != op->name || e->type != op->type) {
-            result = false;
-        }
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+
+        const Variable *e = expr.as<Variable>();        
+
+        compare_names(e->name, op->name);
     }
 
     template<typename T>
     void visit_binary_operator(const T *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+
         const T *e = expr.as<T>();
-        if (result && e) {
-            expr = e->a;
-            op->a.accept(this);
-            expr = e->b;
-            op->b.accept(this);
-        } else {
-            result = false;
-        }
+
+        expr = e->a;
+        op->a.accept(this);
+
+        expr = e->b;
+        op->b.accept(this);
     }
 
     void visit(const Add *op) {visit_binary_operator(op);}
@@ -79,234 +133,300 @@ public:
     void visit(const Or *op) {visit_binary_operator(op);}
 
     void visit(const Not *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+
         const Not *e = expr.as<Not>();
-        if (result && e) {
-            expr = e->a;
-            op->a.accept(this);
-        } else {
-            result = false;
-        }
+        
+        expr = e->a;
+        op->a.accept(this);
     }
 
     void visit(const Select *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+
         const Select *e = expr.as<Select>();
-        if (result && e) {
-            expr = e->condition;
-            op->condition.accept(this);
-            expr = e->true_value;
-            op->true_value.accept(this);
-            expr = e->false_value;
-            op->false_value.accept(this);
-        } else {
-            result = false;
-        }            
+
+        expr = e->condition;
+        op->condition.accept(this);
+
+        expr = e->true_value;
+        op->true_value.accept(this);
+
+        expr = e->false_value;
+        op->false_value.accept(this);
     }
 
     void visit(const Load *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+
         const Load *e = expr.as<Load>();
-        if (result && e && e->type == op->type && e->name == op->name) {
-            expr = e->index;
-            op->index.accept(this);
-        } else {
-            result = false;
-        }
+
+        if (compare_names(op->name, e->name)) return;
+        
+        expr = e->index;
+        op->index.accept(this);
     }
 
     void visit(const Ramp *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+
         const Ramp *e = expr.as<Ramp>();
-        if (result && e && e->width == op->width) {
-            expr = e->base;
-            op->base.accept(this);
-            expr = e->stride;
-            op->stride.accept(this);
-        } else {
-            result = false;
-        }
+
+        // No need to compare width because we already compared types
+
+        expr = e->base;
+        op->base.accept(this);
+
+        expr = e->stride;
+        op->stride.accept(this);
     }
 
     void visit(const Broadcast *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+
         const Broadcast *e = expr.as<Broadcast>();
-        if (result && e && e->width == op->width) {
-            expr = e->value;
-            op->value.accept(this);
-        } else {
-            result = false;
-        }
+
+        expr = e->value;
+        op->value.accept(this);
     }
 
     void visit(const Call *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+
         const Call *e = expr.as<Call>();
-        if (result && e && 
-            e->type == op->type && 
-            e->name == op->name && 
-            e->call_type == op->call_type &&
-            e->args.size() == op->args.size()) {
-            for (size_t i = 0; result && (i < e->args.size()); i++) {
+        
+        if (compare_names(e->name, op->name)) return;
+
+        if (e->call_type < op->call_type) {
+            result = -1;
+        } else if (e->call_type > op->call_type) {
+            result = 1;
+        } else if (e->args.size() < op->args.size()) {
+            result = -1;
+        } else if (e->args.size() > op->args.size()) {
+            result = 1;
+        } else {
+            for (size_t i = 0; (result == 0) && (i < e->args.size()); i++) {
                 expr = e->args[i];
                 op->args[i].accept(this);
             }
-        } else {
-            result = false;
         }
     }
 
     void visit(const Let *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+
         const Let *e = expr.as<Let>();
-        if (result && e && e->name == op->name) {
-            expr = e->value;
-            op->value.accept(this);
-            expr = e->body;
-            op->body.accept(this);
-        } else {
-            result = false;
-        }
+
+        if (compare_names(e->name, op->name)) return;
+
+        expr = e->value;
+        op->value.accept(this);
+
+        expr = e->body;
+        op->body.accept(this);
     }
 
     void visit(const LetStmt *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
         const LetStmt *s = stmt.as<LetStmt>();
-        if (result && s && s->name == op->name) {
-            expr = s->value;
-            op->value.accept(this);
-            stmt = s->body;
-            op->body.accept(this);
-        } else {
-            result = false;
-        }
+
+        if (compare_names(s->name, op->name)) return;
+
+        expr = s->value;
+        op->value.accept(this);
+
+        stmt = s->body;
+        op->body.accept(this);
     }
 
     void visit(const PrintStmt *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
         const PrintStmt *s = stmt.as<PrintStmt>();
-        if (result && s && s->prefix == op->prefix) {
-            for (size_t i = 0; result && (i < s->args.size()); i++) {
-                expr = s->args[i];
-                op->args[i].accept(this);
-            }                
-        } else {
-            result = false;
-        }
+
+        if (compare_names(s->prefix, op->prefix)) return;
+
+        for (size_t i = 0; (result == 0) && (i < s->args.size()); i++) {
+            expr = s->args[i];
+            op->args[i].accept(this);
+        }                
     }
 
     void visit(const AssertStmt *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
         const AssertStmt *s = stmt.as<AssertStmt>();
-        if (result && s && s->message == op->message) {
-            expr = s->condition;
-            op->condition.accept(this);                
-        } else {
-            result = false;
-        }
+
+        if (compare_names(s->message, op->message)) return;
+
+        expr = s->condition;
+        op->condition.accept(this);                
     }
 
     void visit(const Pipeline *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
         const Pipeline *s = stmt.as<Pipeline>();
-        if (result && s && s->name == op->name && 
-            (s->update.defined() == op->update.defined())) {
+
+        if (compare_names(s->name, op->name)) return;
+
+        if (s->update.defined() && !op->update.defined()) {
+            result = -1;
+        } else if (!s->update.defined() && op->update.defined()) {
+            result = 1;
+        } else {            
             stmt = s->produce;
             op->produce.accept(this);
+
             if (s->update.defined()) {
                 stmt = s->update;
                 op->update.accept(this);
             }
+
             stmt = s->consume;
             op->consume.accept(this);
-        } else {
-            result = false;
         }
     }
 
     void visit(const For *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
         const For *s = stmt.as<For>();
-        if (result && s && s->name == op->name && s->for_type == op->for_type) {
+
+        if (compare_names(s->name, op->name)) return;
+
+        if (s->for_type < op->for_type) {
+            result = -1;
+        } else if (s->for_type > op->for_type) {
+            result = 1;
+        } else {
             expr = s->min;
             op->min.accept(this);
+
             expr = s->extent;
             op->extent.accept(this);
+
             stmt = s->body;
             op->body.accept(this);
-        } else {
-            result = false;
         }
     }
 
     void visit(const Store *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
         const Store *s = stmt.as<Store>();
-        if (result && s && s->name == op->name) {
-            expr = s->value;
-            op->value.accept(this);
-            expr = s->index;
-            op->index.accept(this);
-        } else {
-            result = false;
-        }
+
+        if (compare_names(s->name, op->name)) return;        
+
+        expr = s->value;
+        op->value.accept(this);
+
+        expr = s->index;
+        op->index.accept(this);
     }
 
     void visit(const Provide *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
         const Provide *s = stmt.as<Provide>();
-        if (result && s && s->name == op->name) {
-            expr = s->value;
-            op->value.accept(this);
-            for (size_t i = 0; result && (i < s->args.size()); i++) {
+
+        if (compare_names(s->name, op->name)) return;        
+
+        if (s->args.size() < op->args.size()) {
+            result = -1;
+        } else if (s->args.size() > op->args.size()) {
+            result = 1;
+        } else {
+            for (size_t i = 0; (result == 0) && (i < s->args.size()); i++) {
                 expr = s->args[i];
                 op->args[i].accept(this);
-            }                      
-        } else {
-            result = false;
+            }
         }
     }
 
     void visit(const Allocate *op) {
-        const Allocate *s = stmt.as<Allocate>();
-        if (result && s && s->name == op->name && s->type == op->type) {
-            expr = s->size;
-            op->size.accept(this);
-        } else {
-            result = false;
-        }
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
 
+        const Allocate *s = stmt.as<Allocate>();
+
+        if (compare_names(s->name, op->name)) return;
+
+        expr = s->size;
+        op->size.accept(this);
     }
 
     void visit(const Realize *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
         const Realize *s = stmt.as<Realize>();
-        if (result && s && s->name == op->name && s->type == op->type) {
-            for (size_t i = 0; result && (i < s->bounds.size()); i++) {
+
+        if (compare_names(s->name, op->name)) return;
+
+        if (s->bounds.size() < op->bounds.size()) {
+            result = -1;
+        } else if (s->bounds.size() > op->bounds.size()) {
+            result = 1;
+        } else {
+            for (size_t i = 0; (result == 0) && (i < s->bounds.size()); i++) {
                 expr = s->bounds[i].min;
                 op->bounds[i].min.accept(this);
+
                 expr = s->bounds[i].extent;
                 op->bounds[i].extent.accept(this);
             }                                      
-        } else {
-            result = false;
         }
     }
 
     void visit(const Block *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
         const Block *s = stmt.as<Block>();
-        if (result && s && (s->rest.defined() == op->rest.defined())) {
+
+        if (!s->rest.defined() && op->rest.defined()) {
+            result = -1;
+        } else if (s->rest.defined() && op->rest.defined()) {
+            result = 1;
+        } else {
             stmt = s->first;
             op->first.accept(this);
-            if (s->rest.defined()) {
+
+            if (result == 0 && s->rest.defined()) {
                 stmt = s->rest;
                 op->rest.accept(this);
             }
-        } else {
-            result = false;
         }
     }
 };
 
-bool equal(Expr a, Expr b) {
-    if (!a.defined() && !b.defined()) return true;
-    if (!a.defined() || !b.defined()) return false;
-    IREquals eq(a);
-    b.accept(&eq);
-    return eq.result;            
-}
-
-bool equal(Stmt a, Stmt b) {
-    if (!a.defined() && !b.defined()) return true;
-    if (!a.defined() || !b.defined()) return false;
+int deep_compare(Expr a, Expr b) {
+    // Undefined exprs come first
+    // log(0) << "deep comparison of " << a << " and " << b << "\n";
+    if (!a.defined() && b.defined()) return -1;
+    if (a.defined() && !b.defined()) return 1;
+    if (!a.defined() && !b.defined()) return 0;
     IREquals eq(a);
     b.accept(&eq);
     return eq.result;
+}
+
+int deep_compare(Stmt a, Stmt b) {
+    // Undefined stmts come first
+    if (!a.defined() && b.defined()) return -1;
+    if (a.defined() && !b.defined()) return 1;
+    if (!a.defined() && !b.defined()) return 0;
+    IREquals eq(a);
+    b.accept(&eq);
+    return eq.result;
+}
+
+bool equal(Expr a, Expr b) {
+    return deep_compare(a, b) == 0;
+}
+
+bool equal(Stmt a, Stmt b) {
+    return deep_compare(a, b) == 0;
 }
 
 }}
