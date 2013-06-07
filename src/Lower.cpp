@@ -23,7 +23,6 @@
 #include "EarlyFree.h"
 #include "UniquifyVariableNames.h"
 #include "CSE.h"
-#include "Letify.h"
 
 namespace Halide {
 namespace Internal {
