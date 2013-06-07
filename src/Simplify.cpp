@@ -13,6 +13,10 @@ namespace Halide {
 namespace Internal {
 
 using std::string;
+using std::map;
+using std::pair;
+using std::make_pair;
+using std::ostringstream;
 
 bool is_simple_const(Expr e) {
     return is_const(e) && (!e.as<Cast>());
@@ -34,12 +38,14 @@ int do_indirect_int_cast(Type t, int x) {
     }
 }
 
-// Implementation of Halide div and mod operators
-
 class Simplify : public IRMutator {
 
-    Scope<Expr> scope;
+    struct VarInfo {
+        Expr replacement;
+        int old_uses, new_uses;
+    };
 
+    Scope<VarInfo> var_info;
     Scope<ModulusRemainder> alignment_info;
 
     using IRMutator::visit;
@@ -128,45 +134,20 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Variable *op) {
-        if (scope.contains(op->name)) {
-            Expr replacement = scope.get(op->name);
+        if (var_info.contains(op->name)) {
+            VarInfo &info = var_info.ref(op->name);
 
-            //std::cout << "Pondering replacing " << op->name << " with " << replacement << std::endl;
-
-            // if expr is defined, we should substitute it in (unless
+            // if replacement is defined, we should substitute it in (unless
             // it's a var that has been hidden by a nested scope).
-            if (replacement.defined()) {
-                //std::cout << "Replacing " << op->name << " of type " << op->type << " with " << replacement << std::endl;
-                assert(replacement.type() == op->type);
-                // If it's a naked var, and the var it refers to
-                // hasn't gone out of scope, just replace it with that
-                // var
-                if (const Variable *v = replacement.as<Variable>()) {
-                    if (scope.contains(v->name)) {
-                        if (scope.depth(v->name) < scope.depth(op->name)) {
-                            expr = replacement;
-                        } else {
-                            // Uh oh, the variable we were going to
-                            // subs in has been hidden by another
-                            // variable of the same name, better not
-                            // do anything.
-                            expr = op;
-                        }
-                    } else {
-                        // It is a variable, but the variable this
-                        // refers to hasn't been encountered. It must
-                        // be a uniform, so it's safe to substitute it
-                        // in.
-                        expr = replacement;
-                    }
-                } else {
-                    // It's not a variable, and a replacement is defined
-                    expr = replacement;
-                }
+            if (info.replacement.defined()) {
+                assert(info.replacement.type() == op->type);
+                expr = info.replacement;
+                info.new_uses++;
             } else {
                 // This expression was not something deemed
                 // substitutable - no replacement is defined.
                 expr = op;
+                info.old_uses++;
             }
         } else {
             // We never encountered a let that defines this var. Must
@@ -1000,30 +981,59 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Call *op) {
+        // Calls implicitly depend on mins and strides of the buffer referenced
+        if (op->call_type == Call::Image || op->call_type == Call::Halide) {
+            for (size_t i = 0; i < op->args.size(); i++) {
+                {
+                    ostringstream oss;
+                    oss << op->name << ".stride." << i;
+                    string stride = oss.str();
+                    if (var_info.contains(stride)) {
+                        var_info.ref(stride).old_uses++;
+                    }
+                }
+                {
+                    ostringstream oss;
+                    oss << op->name << ".min." << i;
+                    string min = oss.str();
+                    if (var_info.contains(min)) {
+                        var_info.ref(min).old_uses++;
+                    }
+                }
+            }
+        }
         IRMutator::visit(op);
     }
 
     template<typename T, typename Body> 
-    Body simplify_let(const T *op, Scope<Expr> &scope, IRMutator *mutator) {
+    Body simplify_let(const T *op) {
+        assert(!var_info.contains(op->name) && "Simplify only works on code where every name is unique\n");
+        
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
-        Expr value = mutator->mutate(op->value);
+        Expr value = mutate(op->value);
         Body body = op->body;
         assert(value.defined());
         assert(body.defined());
         const Ramp *ramp = value.as<Ramp>();
         const Broadcast *broadcast = value.as<Broadcast>();        
         const Variable *var = value.as<Variable>();
-        string wrapper_name;
-        Expr wrapper_value;
-        if (is_simple_const(value)) {
-            // Substitute the value wherever we see it
-            scope.push(op->name, value);
-        } else if (ramp && is_simple_const(ramp->stride)) {
-            wrapper_name = op->name + ".base" + unique_name('.');
 
-            // Make a name::make to refer to the base instead, and push the ramp inside
-            Expr val = Variable::make(ramp->base.type(), wrapper_name);
+        Expr new_value;
+        string new_name;
+
+        VarInfo info;
+        info.old_uses = 0;
+        info.new_uses = 0;
+
+        if (is_simple_const(value)) {
+            // Substitute the value wherever we see it and remove this let statement
+            info.replacement = value;
+        } else if (ramp && is_simple_const(ramp->stride)) {
+
+            // Make a new name to refer to the base instead, and push the ramp inside
+            new_name = op->name + ".base";
+            Expr val = Variable::make(ramp->base.type(), new_name);
             Expr base = ramp->base;
 
             // If it's a multiply, move the multiply part inwards
@@ -1036,71 +1046,73 @@ class Simplify : public IRMutator {
                 val = Ramp::make(val, ramp->stride, ramp->width);
             }
 
-            scope.push(op->name, val);
+            info.replacement = val;
 
-            wrapper_value = base;
+            new_value = base;
+
         } else if (broadcast) {
-            wrapper_name = op->name + ".value" + unique_name('.');
+            // Make a new name to refer to the scalar version, and push the broadcast inside            
+            new_name = op->name + ".base";
+            info.replacement =                 
+                Broadcast::make(Variable::make(broadcast->value.type(), 
+                                               new_name),
+                                broadcast->width);
+            new_value = broadcast->value;
 
-            // Make a name::make refer to the scalar version, and push the broadcast inside            
-            scope.push(op->name, 
-                       Broadcast::make(Variable::make(broadcast->value.type(), 
-                                                  wrapper_name), 
-                                     broadcast->width));
-            wrapper_value = broadcast->value;
         } else if (var) {
             // This var is just equal to another var. We should subs
-            // it in only if the second var is still in scope at the
-            // usage site (this is checked in the visit(Variable*) method.
-            scope.push(op->name, var);
-        } else {
-            // Push a empty expr on, to make sure we hide anything
-            // else with the same name until this goes out of scope
-            scope.push(op->name, Expr());
+            // it in.
+            info.replacement = var;
         }
+
+        var_info.push(op->name, info);
 
         // Before we enter the body, track the alignment info 
-        bool wrapper_tracked = false;
-        if (wrapper_value.defined() && wrapper_value.type() == Int(32)) {
-            ModulusRemainder mod_rem = modulus_remainder(wrapper_value, alignment_info);
-            alignment_info.push(wrapper_name, mod_rem);
-            wrapper_tracked = true;
-        }
-
         bool value_tracked = false;
-        if (value.type() == Int(32)) {
-            ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
+        if (new_value.defined() && new_value.type() == Int(32)) {
+            ModulusRemainder mod_rem = modulus_remainder(new_value, alignment_info);
             alignment_info.push(op->name, mod_rem);
             value_tracked = true;
         }
 
-        body = mutator->mutate(body);
+        body = mutate(body);
 
         if (value_tracked) {
             alignment_info.pop(op->name);
         }
-        if (wrapper_tracked) {
-            alignment_info.pop(wrapper_name);
+
+        info = var_info.get(op->name);
+        var_info.pop(op->name);
+
+        if (body.same_as(op->body) && 
+            value.same_as(op->value) && 
+            !new_value.defined()) {
+            return op;
+        }
+        
+        Body result = body;
+
+        if (new_value.defined() && info.new_uses > 0) {
+            // The new name/value may be used
+            result = T::make(new_name, new_value, result);
         }
 
-        scope.pop(op->name);
+        if (info.old_uses > 0) {
+            // The old name is still in use. We'd better keep it as well.
+            result = T::make(op->name, value, result);
+        }
 
-        if (wrapper_value.defined()) {
-            return T::make(wrapper_name, wrapper_value, T::make(op->name, value, body));
-        } else if (body.same_as(op->body) && value.same_as(op->value)) {
-            return op;
-        } else {
-            return T::make(op->name, value, body);
-        }        
+        return result;
+
     }
 
 
     void visit(const Let *op) {
-        expr = simplify_let<Let, Expr>(op, scope, this);
+        expr = simplify_let<Let, Expr>(op);
     }
 
     void visit(const LetStmt *op) {
-        stmt = simplify_let<LetStmt, Stmt>(op, scope, this);
+        stmt = simplify_let<LetStmt, Stmt>(op);
     }
 
     void visit(const PrintStmt *op) {
@@ -1124,6 +1136,26 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Provide *op) {
+        // Provides implicitly depend on mins and strides of the buffer referenced
+        for (size_t i = 0; i < op->args.size(); i++) {
+            {
+                ostringstream oss;
+                oss << op->name << ".stride." << i;
+                string stride = oss.str();
+                if (var_info.contains(stride)) {
+                    var_info.ref(stride).old_uses++;
+                }
+            }
+            {
+                ostringstream oss;
+                oss << op->name << ".min." << i;
+                string min = oss.str();
+                if (var_info.contains(min)) {
+                    var_info.ref(min).old_uses++;
+                }
+            }
+        }
+
         IRMutator::visit(op);
     }
 
@@ -1398,25 +1430,20 @@ void simplify_test() {
 
     Expr vec = Variable::make(Int(32, 4), "vec");
     // Check constants get pushed inwards
-    check(Let::make("x", 3, x+4), Let::make("x", 3, 7));
+    check(Let::make("x", 3, x+4), 7);
 
     // Check ramps in lets get pushed inwards
     check(Let::make("vec", Ramp::make(x*2+7, 3, 4), vec + Expr(Broadcast::make(2, 4))), 
-          Let::make("vec.base.0", x*2+7, 
-                  Let::make("vec", Ramp::make(x*2+7, 3, 4), 
-                          Ramp::make(Expr(Variable::make(Int(32), "vec.base.0")) + 2, 3, 4))));
+          Let::make("vec.base", x*2+7, 
+                    Ramp::make(Expr(Variable::make(Int(32), "vec.base")) + 2, 3, 4)));
 
     // Check broadcasts in lets get pushed inwards
     check(Let::make("vec", Broadcast::make(x, 4), vec + Expr(Broadcast::make(2, 4))),
-          Let::make("vec.value.1", x, 
-                  Let::make("vec", Broadcast::make(x, 4), 
-                          Broadcast::make(Expr(Variable::make(Int(32), "vec.value.1")) + 2, 4))));
-    // Check values don't jump inside lets that share the same name
-    check(Let::make("x", 3, Expr(Let::make("x", y, x+4)) + x), 
-          Let::make("x", 3, Expr(Let::make("x", y, y+4)) + 3));
+          Let::make("vec.base", x, 
+                    Broadcast::make(Expr(Variable::make(Int(32), "vec.base")) + 2, 4)));
 
-    check(Let::make("x", y, Expr(Let::make("x", y*17, x+4)) + x), 
-          Let::make("x", y, Expr(Let::make("x", y*17, x+4)) + y));
+    // Check that dead lets get stripped
+    check(Let::make("x", 3*y*y*y, 4), 4);
 
     std::cout << "Simplify test passed" << std::endl;
 }

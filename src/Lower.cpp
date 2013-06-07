@@ -10,7 +10,6 @@
 #include <iostream>
 #include <set>
 #include <sstream>
-#include "RemoveDeadLets.h"
 #include "Tracing.h"
 #include "StorageFlattening.h"
 #include "BoundsInference.h"
@@ -22,6 +21,7 @@
 #include "Deinterleave.h"
 #include "DebugToFile.h"
 #include "EarlyFree.h"
+#include "UniquifyVariableNames.h"
 
 namespace Halide {
 namespace Internal {
@@ -709,12 +709,12 @@ Stmt add_image_checks(Stmt s, Function f) {
         // The stride of the output buffer in dimension 0 should also be 1
         lets.push_back(make_pair(f.name() + ".stride.0", 1));
 
-        // Copy the values::make to the old names
+        // Copy the new values to the old names
         for (size_t i = 0; i < lets.size(); i++) {
             s = LetStmt::make(lets[i].first, Variable::make(Int(32), lets[i].first + ".constrained"), s);
         }
 
-        // Assert all the conditions, and set the values::make
+        // Assert all the conditions, and set the new values
         vector<Stmt> asserts;
         for (size_t i = 0; i < lets.size(); i++) {
             Expr var = Variable::make(Int(32), lets[i].first);
@@ -757,6 +757,8 @@ Stmt lower(Function f) {
     s = add_image_checks(s, f);    
     log(2) << "Image checks injected:\n" << s << '\n';
 
+    // This pass injects nested definitions of variable names, so we
+    // can't simplify from here until we fix them up
     log(1) << "Performing bounds inference...\n";
     s = bounds_inference(s, order, env);
     log(2) << "Bounds inference:\n" << s << '\n';
@@ -764,6 +766,13 @@ Stmt lower(Function f) {
     log(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
     log(2) << "Sliding window:\n" << s << '\n';
+
+    // This uniquifies the variable names, so we're good to simplify
+    // after this point. This lets later passes assume syntactic
+    // equivalence means semantic equivalence.
+    log(1) << "Uniquifying variable names...\n";
+    s = uniquify_variable_names(s);
+    log(2) << "Uniquified variable names: \n" << s << "\n\n";
 
     log(1) << "Simplifying...\n";
     s = simplify(s);
@@ -804,11 +813,9 @@ Stmt lower(Function f) {
     log(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     log(2) << "Injected early frees: \n" << s << "\n\n";
-
+    
     log(1) << "Simplifying...\n";
-    s = simplify(s);
     s = remove_trivial_for_loops(s);
-    s = remove_dead_lets(s);
     s = simplify(s);
     log(1) << "Simplified: \n" << s << "\n\n";
 
