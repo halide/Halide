@@ -80,6 +80,8 @@ private:
 
     const void *initmod;
     int initmod_length;
+
+    uint32_t options;
 };
 
 }}
