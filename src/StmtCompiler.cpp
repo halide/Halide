@@ -58,6 +58,9 @@ StmtCompiler::StmtCompiler(string arch) {
     else if (arch == "ptx") {
         // equivalent to "x86" on the host side, i.e. x86_64, no AVX
         contents = new CodeGen_GPU_Host(X86_64Bit | X86_SSE41 | GPU_PTX);
+    } else if (arch == "opencl") {
+        // equivalent to "x86" on the host side, i.e. x86_64, no AVX
+        contents = new CodeGen_GPU_Host(X86_64Bit | X86_SSE41 | GPU_OpenCL);
     }
 #endif // _WIN32
     else {

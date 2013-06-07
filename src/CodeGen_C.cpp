@@ -131,7 +131,7 @@ const string preamble =
 }
 
 
-void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args) {
+void CodeGen_C::compile(Stmt s, string name, const vector<Argument> &args) {
     stream << preamble;
 
     // Emit the function prototype

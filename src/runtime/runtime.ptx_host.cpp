@@ -420,6 +420,7 @@ WEAK void halide_dev_run(
     int blocksX, int blocksY, int blocksZ,
     int threadsX, int threadsY, int threadsZ,
     int shared_mem_bytes,
+    size_t arg_sizes[],
     void* args[])
 {
     CUfunction f = __get_kernel(entry_name);
