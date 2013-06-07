@@ -28,7 +28,7 @@ private:
      */
     // @{
     T *base;
-    int stride_1, stride_2, stride_3, dims;
+    int stride_0, stride_1, stride_2, stride_3, dims;
     // @}
 
     /** Prepare the buffer to be used as an image. Makes sure that the
@@ -48,20 +48,21 @@ private:
 
         if (buffer.defined()) {
             base = (T *)buffer.host_ptr();
+            stride_0 = buffer.stride(0);
             stride_1 = buffer.stride(1);
             stride_2 = buffer.stride(2);
             stride_3 = buffer.stride(3);
             dims = buffer.dimensions();
         } else {
             base = NULL;
-            stride_1 = stride_2 = stride_3 = 0;
+            stride_0 = stride_1 = stride_2 = stride_3 = 0;
             dims = 0;
         }
     }
 
 public:
     /** Construct an undefined image handle */
-    Image() : base(NULL), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
+    Image() : base(NULL), stride_0(0), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
 
     /** Allocate an image with the given dimensions. */
     Image(int x, int y = 0, int z = 0, int w = 0) : buffer(Buffer(type_of<T>(), x, y, z, w)) {
@@ -156,43 +157,43 @@ public:
     /** Assuming this image is two-dimensional, get the value of the
      * element at position (x, y) */
     T operator()(int x, int y) const {
-        return base[x + y*stride_1];
+        return base[x*stride_0 + y*stride_1];
     }
 
     /** Assuming this image is three-dimensional, get the value of the
      * element at position (x, y, z) */
     T operator()(int x, int y, int z) const {
-        return base[x + y*stride_1 + z*stride_2];
+        return base[x*stride_0 + y*stride_1 + z*stride_2];
     }
 
     /** Assuming this image is four-dimensional, get the value of the
      * element at position (x, y, z, w) */
     T operator()(int x, int y, int z, int w) const {
-        return base[x + y*stride_1 + z*stride_2 + w*stride_3];
+        return base[x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3];
     }
 
     /** Assuming this image is one-dimensional, get a reference to the
      * element at position x */
     T &operator()(int x) {
-        return base[x];
+        return base[x*stride_0];
     }
 
     /** Assuming this image is two-dimensional, get a reference to the
      * element at position (x, y) */
     T &operator()(int x, int y) {
-        return base[x + y*stride_1];
+        return base[x*stride_0 + y*stride_1];
     }
 
     /** Assuming this image is three-dimensional, get a reference to the
      * element at position (x, y, z) */
     T &operator()(int x, int y, int z) {
-        return base[x + y*stride_1 + z*stride_2];
+        return base[x*stride_0 + y*stride_1 + z*stride_2];
     }
 
     /** Assuming this image is four-dimensional, get a reference to the
      * element at position (x, y, z, w) */
     T &operator()(int x, int y, int z, int w) {
-        return base[x + y*stride_1 + z*stride_2 + w*stride_3];
+        return base[x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3];
     }
 
     /** Construct an expression which loads from this image. The
