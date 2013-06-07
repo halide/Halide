@@ -1,0 +1,38 @@
+#include <Halide.h>
+#include <stdio.h>
+
+using namespace Halide;
+
+int main(int argc, char **argv) {
+    Var x;
+    const int size = 100;
+
+    // Try a nest of highly connection funcs all marked inline.
+    std::vector<Func> funcs;
+    funcs.push_back(lambda(x, x));
+    funcs.push_back(lambda(x, x));
+    for (size_t i = 2; i < size; i++) {
+        funcs.push_back(lambda(x, funcs[i-1](x) + funcs[i-2](x)));
+    }    
+    Func g;
+    g(x) = funcs[funcs.size()-1](x);
+    g.realize(10);
+
+    // Test a nest of highly connected exprs. Compilation will barf if
+    // this gets expanded into a tree.
+    Func f;
+    std::vector<Expr> e(size);
+
+    e[0] = x;
+    e[1] = x;
+    for (size_t i = 2; i < e.size(); i++) {
+        e[i] = e[i-1] + e[i-2];
+    }
+
+    f(x) = e[e.size()-1];
+
+    f.realize(10);
+
+    printf("Success!\n");
+    return 0;
+}

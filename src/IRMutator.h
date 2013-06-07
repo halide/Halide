@@ -32,8 +32,8 @@ public:
      * these in your subclass to mutate sub-expressions and
      * sub-statements.
      */
-    Expr mutate(Expr expr);
-    Stmt mutate(Stmt stmt);
+    virtual Expr mutate(Expr expr);
+    virtual Stmt mutate(Stmt stmt);
 
 protected:
 
