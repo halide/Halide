@@ -304,7 +304,7 @@ void CodeGen_Posix::visit(const Free *stmt) {
 void CodeGen_Posix::prepare_for_early_exit() {
     // We've jumped to a code path that will be called just before
     // bailing out. Free everything outstanding.
-    for (map<string, stack<pair<Allocation, int> > >::const_iterator iter = allocations.get_table().begin();
+    for (map<string, stack<Allocation> >::const_iterator iter = allocations.get_table().begin();
          iter != allocations.get_table().end(); ++iter) {
         string name = iter->first;
         std::vector<Allocation> stash;
