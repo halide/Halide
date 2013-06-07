@@ -882,7 +882,24 @@ void CodeGen::visit(const Load *op) {
             value = builder->CreateAlignedLoad(ptr, alignment);                
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
-            Value *base = codegen(ramp->base);
+
+            // If the base ends in an odd constant, then subtract one
+            // and do a different shuffle. This helps expressions like
+            // (f(2*x) + f(2*x+1) share loads.
+            Expr new_base;
+            const Add *add = ramp->base.as<Add>();
+            const IntImm *offset = add ? add->b.as<IntImm>() : NULL;
+            if (offset) {
+                if (offset->value == 1) {
+                    new_base = add->a;
+                } else {
+                    new_base = add->a + (offset->value - 1);
+                }
+            } else {
+                new_base = ramp->base;
+            }
+
+            Value *base = codegen(new_base);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             Value *a = builder->CreateAlignedLoad(ptr, alignment);
@@ -891,7 +908,7 @@ void CodeGen::visit(const Load *op) {
             Value *b = builder->CreateAlignedLoad(ptr, gcd(alignment, bytes));
             vector<Constant *> indices(ramp->width);
             for (int i = 0; i < ramp->width; i++) {
-                indices[i] = ConstantInt::get(i32, i*2);
+                indices[i] = ConstantInt::get(i32, i*2 + (offset ? 1 : 0));
             }
             value = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
         } else if (ramp && stride && stride->value == -1) {
