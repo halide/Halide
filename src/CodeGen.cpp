@@ -1096,11 +1096,15 @@ void CodeGen::visit(const Call *op) {
             
         fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module);
         fn->setCallingConv(CallingConv::C);            
+
     }
 
     if (op->type.is_scalar()) {
         log(4) << "Creating call to " << op->name << "\n";
-        value = builder->CreateCall(fn, args);
+        CallInst *call = builder->CreateCall(fn, args);
+        call->setDoesNotAccessMemory();
+        call->setDoesNotThrow();
+        value = call;
     } else {
         // Check if a vector version of the function already
         // exists. We use the naming convention that a N-wide
@@ -1110,7 +1114,10 @@ void CodeGen::visit(const Call *op) {
         llvm::Function *vec_fn = module->getFunction(ss.str());
         if (vec_fn) {
             log(4) << "Creating call to " << ss.str() << "\n";
-            value = builder->CreateCall(vec_fn, args);
+            CallInst *call = builder->CreateCall(vec_fn, args);
+            call->setDoesNotAccessMemory();
+            call->setDoesNotThrow();
+            value = call;
             fn = vec_fn;
         } else {
             // Scalarize. Extract each simd lane in turn and do
@@ -1123,8 +1130,10 @@ void CodeGen::visit(const Call *op) {
                     arg_lane[j] = builder->CreateExtractElement(args[j], idx);
                 }
                 log(4) << "Creating call to " << op->name << "\n";
-                Value *result_lane = builder->CreateCall(fn, arg_lane);
-                value = builder->CreateInsertElement(value, result_lane, idx);
+                CallInst *call = builder->CreateCall(fn, arg_lane);
+                call->setDoesNotAccessMemory();
+                call->setDoesNotThrow();
+                value = builder->CreateInsertElement(value, call, idx);
             }
         }            
     }
