@@ -1,6 +1,10 @@
 #include "IR.h"
+#include "IRMutator.h"
 #include "Function.h"
 #include "Scope.h"
+#include "IRPrinter.h"
+#include "Log.h"
+#include "CSE.h"
 #include <set>
 
 namespace Halide {
@@ -20,7 +24,7 @@ EXPORT void destroy<FunctionContents>(const FunctionContents *f) {delete f;}
 // either be pure args, elements of the reduction domain, parameters
 // (i.e. attached to some Parameter object), or part of a let node
 // internal to the expression
-struct CheckVars : public IRVisitor {
+struct CheckVars : public IRGraphVisitor {
     vector<string> pure_args;
     ReductionDomain reduction_domain;
     Scope<int> defined_internally;
@@ -63,7 +67,7 @@ struct CheckVars : public IRVisitor {
     }
 };
 
-struct CountSelfReferences : public IRVisitor {
+struct CountSelfReferences : public IRGraphVisitor {
     set<const Call *> calls;
     const Function *func;
 
@@ -86,6 +90,8 @@ void Function::define(const vector<string> &args, Expr value) {
     check.pure_args = args;
     value.accept(&check);
 
+    value = common_subexpression_elimination(value);
+
     assert(!check.reduction_domain.defined() && "Reduction domain referenced in pure function definition");
 
     if (!contents.defined()) {
@@ -104,15 +110,21 @@ void Function::define(const vector<string> &args, Expr value) {
     }        
 }
 
-void Function::define_reduction(const vector<Expr> &args, Expr value) {
+void Function::define_reduction(const vector<Expr> &_args, Expr value) {
     assert(!name().empty() && "A function needs a name");
     assert(contents.ptr->value.defined() && "Can't add a reduction definition without a regular definition first");
     assert(!is_reduction() && "Function already has a reduction definition");
     assert(value.defined() && "Undefined expression in right-hand-side of reduction");
 
     // Check the dimensionality matches
-    assert(args.size() == contents.ptr->args.size() && 
+    assert(_args.size() == contents.ptr->args.size() && 
            "Dimensionality of reduction definition must match dimensionality of pure definition");
+
+    value = common_subexpression_elimination(value);
+    vector<Expr> args(_args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        args[i] = common_subexpression_elimination(_args[i]);
+    }
 
     // Check that pure value and the reduction value have the same
     // type.  Without this check, allocations may be the wrong size

@@ -189,6 +189,210 @@ void IRVisitor::visit(const Block *op) {
     if (op->rest.defined()) op->rest.accept(this);
 }
 
+
+
+void IRGraphVisitor::include(const Expr &e) {
+    if (visited.count(e.ptr)) {
+        return;
+    } else {
+        visited.insert(e.ptr);
+        e.accept(this);
+        return;
+    }
+}
+
+void IRGraphVisitor::include(const Stmt &s) {
+    if (visited.count(s.ptr)) {
+        return;
+    } else {
+        visited.insert(s.ptr);
+        s.accept(this);
+        return;
+    }
+}
+    
+void IRGraphVisitor::visit(const IntImm *) {
+}
+    
+void IRGraphVisitor::visit(const FloatImm *) {
+}
+    
+void IRGraphVisitor::visit(const Cast *op) {
+    include(op->value);
+}
+    
+void IRGraphVisitor::visit(const Variable *op) {
+}
+
+void IRGraphVisitor::visit(const Add *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const Sub *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const Mul *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const Div *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const Mod *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const Min *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const Max *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const EQ *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const NE *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const LT *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const LE *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const GT *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const GE *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const And *op) {
+    include(op->a);
+    include(op->b);
+}        
+
+void IRGraphVisitor::visit(const Or *op) {
+    include(op->a);
+    include(op->b);
+}
+
+void IRGraphVisitor::visit(const Not *op) {
+    include(op->a);
+}
+    
+void IRGraphVisitor::visit(const Select *op) {
+    include(op->condition);
+    include(op->true_value);
+    include(op->false_value);
+}
+
+void IRGraphVisitor::visit(const Load *op) {
+    include(op->index);
+}
+
+void IRGraphVisitor::visit(const Ramp *op) {
+    include(op->base);
+    include(op->stride);
+}
+
+void IRGraphVisitor::visit(const Broadcast *op) {
+    include(op->value);
+}
+
+void IRGraphVisitor::visit(const Call *op) {
+    for (size_t i = 0; i < op->args.size(); i++) {
+        include(op->args[i]);
+    }
+}
+
+void IRGraphVisitor::visit(const Let *op) {
+    include(op->value);
+    include(op->body);
+}
+
+void IRGraphVisitor::visit(const LetStmt *op) {
+    include(op->value);
+    include(op->body);
+}
+
+void IRGraphVisitor::visit(const PrintStmt *op) {
+    for (size_t i = 0; i < op->args.size(); i++) {
+        include(op->args[i]);
+    }
+}
+
+void IRGraphVisitor::visit(const AssertStmt *op) {
+    include(op->condition);
+}
+
+void IRGraphVisitor::visit(const Pipeline *op) {
+    include(op->produce);
+    if (op->update.defined()) include(op->update);
+    include(op->consume);
+}
+
+void IRGraphVisitor::visit(const For *op) {
+    include(op->min);
+    include(op->extent);
+    include(op->body);
+}
+
+void IRGraphVisitor::visit(const Store *op) {
+    include(op->value);
+    include(op->index);
+}
+
+void IRGraphVisitor::visit(const Provide *op) {
+    include(op->value);
+    for (size_t i = 0; i < op->args.size(); i++) {
+        include(op->args[i]);
+    }
+}
+
+void IRGraphVisitor::visit(const Allocate *op) {
+    include(op->size);
+    include(op->body);
+}
+
+void IRGraphVisitor::visit(const Free *op) {
+}
+
+void IRGraphVisitor::visit(const Realize *op) {
+    for (size_t i = 0; i < op->bounds.size(); i++) {
+        include(op->bounds[i].min);
+        include(op->bounds[i].extent);
+    }
+    include(op->body);
+}
+
+void IRGraphVisitor::visit(const Block *op) {
+    include(op->first);
+    if (op->rest.defined()) include(op->rest);
+}
+
 }
 }
 

@@ -177,7 +177,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             }
         }
         
-        if (best_fit >= 0) {
+        // Seems to be buggy. Disabled for now.
+        if (best_fit >= 0 && false) {
 
             // Grab the old allocation and remove it from the free blocks list
             Allocation old_alloc = free_stack_blocks[best_fit];

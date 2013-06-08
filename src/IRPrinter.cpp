@@ -151,7 +151,7 @@ void IRPrinter::visit(const Cast *op) {
     
 void IRPrinter::visit(const Variable *op) {
     // omit the type
-    //stream << op->name << "." << op->type;
+    // stream << op->name << "." << op->type;
     stream << op->name;
 }
     

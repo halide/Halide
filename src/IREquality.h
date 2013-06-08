@@ -10,13 +10,36 @@
 namespace Halide { 
 namespace Internal {
 
-/** Compare expressions for equality of value. Traverses entire
- * expression tree. For equality of reference, use Expr::same_as */
+/** Compare IR nodes for equality of value. Traverses entire IR
+ * tree. For equality of reference, use Expr::same_as */
+// @{
 bool equal(Expr a, Expr b);
-
-/** Compare two statements for equality of value. Traverses entire
- * statement tree. For equality of reference, use Stmt::same_as */
 bool equal(Stmt a, Stmt b);
+// @}
+
+/** Computes a lexical ordering on IR nodes. Returns -1 if the first
+ * expression is before the second, 0 if they're equal, and 1 if the
+ * first expression is after the second. */
+// @{
+int deep_compare(Expr a, Expr b);
+int deep_compare(Stmt a, Stmt b);
+// @}
+
+/** A compare struct suitable for use in std::map and std::set that
+ * uses the ordering defined by deep_compare. */
+struct ExprDeepCompare {
+    bool operator()(const Expr &a, const Expr &b) {
+        return deep_compare(a, b) < 0;
+    }
+};
+
+/** A compare struct suitable for use in std::map and std::set that
+ * uses the ordering defined by deep_compare. */
+struct StmtDeepCompare {
+    bool operator()(const Stmt &a, const Stmt &b) {
+        return deep_compare(a, b) < 0;
+    }
+};
 
 }
 }
