@@ -4,17 +4,17 @@
 using namespace Halide;
 
 int count = 0;
-extern "C" int call_counter(int x) {
+extern "C" int call_counter(int x, int y) {
     count++;
     return 0;
 }
-HalideExtern_1(int, call_counter, int);
+HalideExtern_2(int, call_counter, int, int);
 
 int main(int argc, char **argv) {
     Func f1, g1;
     Var x;
 
-    f1(x) = call_counter(x);
+    f1(x) = call_counter(x, 0);
     g1(x) = f1(x) + f1(x-1);
 
     f1.store_root().compute_at(g1, x);
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     Func f2, g2;
 
     f2(x, y) = 0;
-    f2(r, y) = call_counter(r);
+    f2(r, y) = call_counter(r, y);
     f2.store_root().compute_at(g2, y);
 
     g2(x, y) = f2(x, y) + f2(x, y-1);
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     Func f3, g3;
     
     count = 0;
-    f3(x, y) = call_counter(x);
+    f3(x, y) = call_counter(x, y);
     g3(x, y) = f3(x-1, y) + f3(x, y) + f3(x, y-1);
     f3.store_root().compute_at(g3, x);
 
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 
     // Now a trickier example. In order for this to work, Halide would have to slide diagonally. We don't handle this.
     count = 0;
-    f4(x, y) = call_counter(x);    
+    f4(x, y) = call_counter(x, y);    
     // When x was two smaller the second term was computed. When y was two smaller the third term was computed.
     g4(x, y) = f4(x+y, x-y) + f4((x-2)+y, (x-2)-y) + f4(x+(y-2), x-(y-2)); 
     f4.store_root().compute_at(g4, x);

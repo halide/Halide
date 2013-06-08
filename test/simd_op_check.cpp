@@ -279,7 +279,7 @@ void check_sse_all() {
     check_sse("pmulhuw", 8, u16_1 / 15);
 
     /* Not implemented yet in the front-end
-    check_sse("andnps", 4, bool1 & (!bool2));
+    check_sse("andnps", 4, bool1 & (~bool2));
     check_sse("andps", 4, bool1 & bool2);
     check_sse("orps", 4, bool1 | bool2);    
     check_sse("xorps", 4, bool1 ^ bool2);    

@@ -22,6 +22,7 @@
 #include "DebugToFile.h"
 #include "EarlyFree.h"
 #include "UniquifyVariableNames.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -286,7 +287,9 @@ private:
         
         /* The following works if the provide steps of a realization
          * always covers the region that will be used */
+        log(4) << "Computing region provided of " << func.name() << " by " << s << "\n";
         Region bounds = region_provided(s, func.name());
+        log(4) << "Done computing region provided\n";
 
         /* The following would work if things were only ever computed
          * exactly to cover the region read. Loop splitting (which
@@ -393,8 +396,9 @@ private:
 
 class InlineFunction : public IRMutator {
     Function func;
+    bool found;
 public:
-    InlineFunction(Function f) : func(f) {
+    InlineFunction(Function f) : func(f), found(false) {
         assert(!f.is_reduction());
     }
 private:
@@ -412,31 +416,30 @@ private:
             Expr body = qualify_expr(func.name() + ".", func.value());
 
             
-            // Bind the args using Let nodes
-
-            /*
+            // Bind the args using Let nodes            
             assert(args.size() == func.args().size());
+            
             for (size_t i = 0; i < args.size(); i++) {
                 body = Let::make(func.name() + "." + func.args()[i], 
                                args[i], 
                                body);
-            }
-            */
+            }            
             
-            
-            // Paste in the args directly - introducing too many let
-            // statements messes up all our peephole matching
-            
-            for (size_t i = 0; i < args.size(); i++) {
-                body = substitute(func.name() + "." + func.args()[i], 
-                                  args[i], body);
-            
-            }
-            
-            
-            expr = body;
+            expr = body;            
+
+            found = true;
         } else {
             IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Provide *op) {
+        found = false;
+        IRMutator::visit(op);
+
+        if (found) {
+            // Clean up so that we don't get code explosion due to recursive inlining
+            stmt = common_subexpression_elimination(stmt);
         }
     }
 };
@@ -817,6 +820,7 @@ Stmt lower(Function f) {
     log(1) << "Simplifying...\n";
     s = remove_trivial_for_loops(s);
     s = simplify(s);
+    s = common_subexpression_elimination(s);
     log(1) << "Simplified: \n" << s << "\n\n";
 
     return s;

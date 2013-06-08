@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "Buffer.h"
 #include "IRVisitor.h"
+#include "Buffer.h"
 #include "Type.h"
 #include "IntrusivePtr.h"
 #include "Util.h"
@@ -187,6 +187,7 @@ struct Expr : public Internal::IRHandle {
             return a.ptr < b.ptr;
         }
     };
+
 };    
 
 }
@@ -202,7 +203,7 @@ struct Stmt : public IRHandle {
     Stmt() : IRHandle() {}
     Stmt(const BaseStmtNode *n) : IRHandle(n) {}
 
-    /** This lets you use a Stmt as a key in a map of the form
+    /** This lets you use a Stmt as a key in a map of the form    
      * map<Stmt, Foo, Stmt::Compare> */
     struct Compare {
         bool operator()(const Stmt &a, const Stmt &b) const {
@@ -617,7 +618,7 @@ struct Let : public ExprNode<Let> {
         assert(body.defined() && "Let of undefined");
 
         Let *node = new Let;
-        node->type = value.type();
+        node->type = body.type();
         node->name = name;
         node->value = value;
         node->body = body;        
