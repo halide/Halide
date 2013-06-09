@@ -21,7 +21,6 @@ static bool write_stub(const void *bytes, size_t size, void *f) {
 WEAK int32_t halide_debug_to_file(const char *filename, uint8_t *data, 
 				  int32_t s0, int32_t s1, int32_t s2, int32_t s3, 
 				  int32_t type_code, int32_t bytes_per_element) {
-    size_t written;
     FILE *f = fopen(filename, "wb");
     if (!f) return -1;
 
