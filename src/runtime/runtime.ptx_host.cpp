@@ -229,7 +229,7 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
 WEAK void halide_dev_free(buffer_t* buf) {
 
     #ifndef NDEBUG
-    fprintf(stderr, "In dev_free of %p - dev: 0x%zx\n", buf, buf->dev);
+    fprintf(stderr, "In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
     #endif
 
     assert(halide_validate_dev_pointer(buf));
