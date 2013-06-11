@@ -50,7 +50,7 @@ Halide::Expr Type::max() const {
         else if (is_uint()) ss << "u";
         else ss << "f";
         ss << bits;
-        return Internal::Call::make(*this, ss.str(), std::vector<Expr>());
+        return Internal::Call::make(*this, ss.str(), std::vector<Expr>(), Internal::Call::Extern);
     }
 }
 
@@ -88,7 +88,7 @@ Expr Type::min() const {
         else if (is_uint()) ss << "u";
         else ss << "f";
         ss << bits;
-        return Internal::Call::make(*this, ss.str(), std::vector<Expr>());
+        return Internal::Call::make(*this, ss.str(), std::vector<Expr>(), Internal::Call::Extern);
     }
 
 }

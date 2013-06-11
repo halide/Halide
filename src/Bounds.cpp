@@ -611,8 +611,8 @@ void bounds_test() {
     Stmt loop = For::make("x", 3, 10, For::Serial, 
                         Provide::make("output", 
                                     Add::make(
-                                        Call::make(Int(32), "input", input_site_1),
-                                        Call::make(Int(32), "input", input_site_2)),
+                                        Call::make(Int(32), "input", input_site_1, Call::Extern),
+                                        Call::make(Int(32), "input", input_site_2, Call::Extern)),
                                     output_site));
 
     map<string, Region> r;

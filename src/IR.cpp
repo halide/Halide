@@ -73,5 +73,17 @@ template<> EXPORT IRNodeType StmtNode<Free>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Realize>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Block>::_type_info = {};
 
+using std::string;
+const string Call::debug_to_file = "debug_to_file";
+const string Call::shuffle_vector = "shuffle_vector";
+const string Call::interleave_vectors = "interleave_vectors";
+const string Call::reinterpret = "reinterpret";
+const string Call::bitwise_and = "bitwise_and";
+const string Call::bitwise_not = "bitwise_not";
+const string Call::bitwise_xor = "bitwise_xor";
+const string Call::bitwise_or = "bitwise_or";
+const string Call::shift_left = "shift_left";
+const string Call::shift_right = "shift_right";
+
 }
 }

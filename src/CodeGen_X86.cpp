@@ -225,7 +225,7 @@ void CodeGen_X86::visit(const Cast *op) {
         if (!use_sse_41 && pattern.needs_sse_41) continue;
         if (expr_match(pattern.pattern, op, matches)) {
             if (pattern.extern_call) {
-                value = codegen(Call::make(pattern.type, pattern.intrin, matches));
+                value = codegen(Call::make(pattern.type, pattern.intrin, matches, Call::Extern));
             } else {
                 value = call_intrin(pattern.type, pattern.intrin, matches);
             }
@@ -284,14 +284,14 @@ void CodeGen_X86::visit(const Div *op) {
     vector<Expr> matches;    
     if (op->type == Float(32, 4) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
-        if (expr_match(Call::make(Float(32, 4), "sqrt_f32", vec(wild_f32x4)), op->b, matches)) {            
+        if (expr_match(Call::make(Float(32, 4), "sqrt_f32", vec(wild_f32x4), Call::Extern), op->b, matches)) {            
             value = call_intrin(Float(32, 4), "sse.rsqrt.ps", matches);
         } else {
             value = call_intrin(Float(32, 4), "sse.rcp.ps", vec(op->b));
         }
     } else if (use_avx && op->type == Float(32, 8) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
-        if (expr_match(Call::make(Float(32, 8), "sqrt_f32", vec(wild_f32x8)), op->b, matches)) {            
+        if (expr_match(Call::make(Float(32, 8), "sqrt_f32", vec(wild_f32x8), Call::Extern), op->b, matches)) {            
             value = call_intrin(Float(32, 8), "avx.rsqrt.ps.256", matches);
         } else {
             value = call_intrin(Float(32, 8), "avx.rcp.ps.256", vec(op->b));
@@ -518,7 +518,7 @@ void CodeGen_X86::test() {
 
     // Then run a parallel for loop that clobbers three elements of buf
     Expr e = Select::make(alpha > 4.0f, 3, 2);
-    e += (Call::make(Int(32), "extern_function_1", vec<Expr>(alpha)));
+    e += (Call::make(Int(32), "extern_function_1", vec<Expr>(alpha), Call::Extern));
     Stmt loop = Store::make("buf", e, x + i);
     loop = LetStmt::make("x", beta+1, loop);
     // Do some local allocations within the loop
