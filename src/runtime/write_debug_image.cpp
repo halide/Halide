@@ -119,7 +119,7 @@ int halide_write_debug_image(const char *filename, uint8_t *data,
 	header.entry_count = sizeof(header.entries) / sizeof(header.entries[0]);
 
 	tiff_tag *tag = &header.entries[0];
-	tag++->assign32(256, 1, s0);                             // Image width
+	tag++->assign32(256, 1, width);                             // Image width
 	tag++->assign32(257, 1, height);                         // Image height
 	tag++->assign16(258, 1, int16_t(bytes_per_element * 8)); // Bits per sample
 	tag++->assign16(259, 1, 1);                              // Compression -- none
