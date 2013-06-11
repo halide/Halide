@@ -9,7 +9,7 @@ namespace Internal {
 static ostringstream nil;
 
 CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev() {
-	clc = new CodeGen_OpenCL_C(src_stream);
+    clc = new CodeGen_OpenCL_C(src_stream);
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
@@ -55,21 +55,21 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
 namespace {
 Expr simt_intrinsic(const string &name) {
     if (ends_with(name, ".threadidx")) {
-        return Call::make(Int(32), "get_local_id", vec(Expr(0)));
+        return Call::make(Int(32), "get_local_id", vec(Expr(0)), Call::Extern);
     } else if (ends_with(name, ".threadidy")) {
-        return Call::make(Int(32), "get_local_id", vec(Expr(1)));
+        return Call::make(Int(32), "get_local_id", vec(Expr(1)), Call::Extern);
     } else if (ends_with(name, ".threadidz")) {
-        return Call::make(Int(32), "get_local_id", vec(Expr(2)));
+        return Call::make(Int(32), "get_local_id", vec(Expr(2)), Call::Extern);
     } else if (ends_with(name, ".threadidw")) {
-        return Call::make(Int(32), "get_local_id", vec(Expr(3)));
+        return Call::make(Int(32), "get_local_id", vec(Expr(3)), Call::Extern);
     } else if (ends_with(name, ".blockidx")) {
-        return Call::make(Int(32), "get_group_id", vec(Expr(0)));
+        return Call::make(Int(32), "get_group_id", vec(Expr(0)), Call::Extern);
     } else if (ends_with(name, ".blockidy")) {
-        return Call::make(Int(32), "get_group_id", vec(Expr(1)));
+        return Call::make(Int(32), "get_group_id", vec(Expr(1)), Call::Extern);
     } else if (ends_with(name, ".blockidz")) {
-        return Call::make(Int(32), "get_group_id", vec(Expr(2)));
+        return Call::make(Int(32), "get_group_id", vec(Expr(2)), Call::Extern);
     } else if (ends_with(name, ".blockidw")) {
-        return Call::make(Int(32), "get_group_id", vec(Expr(3)));
+        return Call::make(Int(32), "get_group_id", vec(Expr(3)), Call::Extern);
     }
     assert(false && "simt_intrinsic called on bad variable name");
 }
@@ -88,14 +88,14 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         string id_idx = print_expr(simt_idx);
         string id_cond = print_expr(cond);
 
-	    do_indent();
-	    stream << "if (" << id_cond << ")\n";
+        do_indent();
+        stream << "if (" << id_cond << ")\n";
 	    
-	    open_scope();
-	    do_indent();
+        open_scope();
+        do_indent();
         stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << id_idx << ";\n";
-	    loop->body.accept(this);
-	    close_scope();
+        loop->body.accept(this);
+        close_scope();
 
     } else {
     	assert(loop->for_type != For::Parallel && "Cannot emit parallel loops in OpenCL C");
@@ -104,11 +104,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
 }
 
 void CodeGen_OpenCL_Dev::compile(Stmt s, string name, const vector<Argument> &args) {
-	log(0) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
+    log(0) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
 
-	// TODO: do we have to uniquify these names, or can we trust that they are safe?
-	cur_kernel_name = name;
-	clc->compile(s, name, args);
+    // TODO: do we have to uniquify these names, or can we trust that they are safe?
+    cur_kernel_name = name;
+    clc->compile(s, name, args);
 }
 
 namespace {
@@ -116,9 +116,9 @@ const string preamble = ""; // nothing for now
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::compile(Stmt s, string name, const vector<Argument> &args) {
-	log(0) << "hi! " << name << "\n";
+    log(0) << "hi! " << name << "\n";
 
-	stream << preamble;
+    stream << preamble;
 
     // Emit the function prototype
     stream << "__kernel void " << name << "(";
@@ -139,31 +139,31 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::compile(Stmt s, string name, const ve
 
     stream << ") {\n";
 
-	print(s);
+    print(s);
 
-	stream << "}\n";
+    stream << "}\n";
 }
 
 void CodeGen_OpenCL_Dev::init_module() {
     log(0) << "OpenCL device codegen init_module\n";
 
-	// wipe the internal kernel source
-	src_stream.str("");
-	src_stream.clear();
+    // wipe the internal kernel source
+    src_stream.str("");
+    src_stream.clear();
 
-	cur_kernel_name = "";
+    cur_kernel_name = "";
 }
 
 string CodeGen_OpenCL_Dev::compile_to_src() {
-	return src_stream.str();
+    return src_stream.str();
 }
 
 string CodeGen_OpenCL_Dev::get_current_kernel_name() {
-	return cur_kernel_name;
+    return cur_kernel_name;
 }
 
 void CodeGen_OpenCL_Dev::dump() {
-	cerr << src_stream.str() << endl;
+    cerr << src_stream.str() << endl;
 }
 
 }}
