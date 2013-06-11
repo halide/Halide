@@ -432,7 +432,7 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
         } else {
             log(1) << "Looking for OpenCL shared library...\n";
             string error;
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libopencl.so", &error);
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
             if (!error.empty()) {
                 error.clear();
                 llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenCL.framework/OpenCL", &error);

@@ -155,7 +155,7 @@ WEAK void halide_init_kernels(const char* src) {
         dev = devices[deviceCount-1];
 
         #ifndef NDEBUG
-        fprintf(stderr, "Got device %lld, about to create context (t=%d)\n", (int64_t)dev, halide_current_time());
+        fprintf(stderr, "Got device %lld, about to create context (t=%d)\n", (long long)dev, halide_current_time());
         #endif
 
 

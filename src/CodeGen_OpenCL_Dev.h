@@ -13,7 +13,7 @@ namespace Internal {
 
 class CodeGen_OpenCL_Dev : public CodeGen_GPU_Dev {
 public:
-	CodeGen_OpenCL_Dev();
+    CodeGen_OpenCL_Dev();
 
     /** Compile a GPU kernel into the module. This may be called many times 
      * with different kernels, which will all be accumulated into a single 
@@ -33,23 +33,23 @@ public:
 
 protected:
 
-	class CodeGen_OpenCL_C : public CodeGen_C {
-	public:
-		CodeGen_OpenCL_C(std::ostream &s) : CodeGen_C(s) {}
-	    void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
-
-	protected:
-		using CodeGen_C::visit;
-		std::string print_type(Type type);
-
-	    void visit(const For *);
-	};
-
-	CodeGen_OpenCL_C *clc;
-
-	std::ostringstream src_stream;
-
-	std::string cur_kernel_name;
+    class CodeGen_OpenCL_C : public CodeGen_C {
+    public:
+        CodeGen_OpenCL_C(std::ostream &s) : CodeGen_C(s) {}
+        void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
+        
+    protected:
+        using CodeGen_C::visit;
+        std::string print_type(Type type);
+        
+        void visit(const For *);
+    };
+    
+    CodeGen_OpenCL_C *clc;
+    
+    std::ostringstream src_stream;
+    
+    std::string cur_kernel_name;
 };
 
 }}
