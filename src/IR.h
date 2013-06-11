@@ -896,8 +896,21 @@ namespace Internal {
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image, Extern, Halide} CallType;
+    typedef enum {Image, Extern, Halide, Intrinsic} CallType;    
     CallType call_type;
+
+    // Halide uses calls internally to represent certain operations
+    // (instead of IR nodes). These are matched by name.
+    static const std::string debug_to_file, 
+        shuffle_vector, 
+        interleave_vectors, 
+        reinterpret, 
+        bitwise_and, 
+        bitwise_not, 
+        bitwise_xor, 
+        bitwise_or, 
+        shift_left, 
+        shift_right;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function
@@ -912,7 +925,7 @@ struct Call : public ExprNode<Call> {
     Parameter param;
 
     static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type, 
-                            Function func, Buffer image, Parameter param) { 
+                     Function func = Function(), Buffer image = Buffer(), Parameter param = Parameter()) { 
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Call of undefined");
         }
@@ -932,11 +945,6 @@ struct Call : public ExprNode<Call> {
         node->image = image;
         node->param = param;
         return node;
-    }
-
-    /** Convenience constructor for calls to externally defined functions */
-    static Expr make(Type type, std::string name, const std::vector<Expr> &args) {
-        return make(type, name, args, Extern, Function(), Buffer(), Parameter());
     }
 
     /** Convenience constructor for calls to other halide functions */

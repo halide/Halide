@@ -174,7 +174,7 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
         log(2) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
         assert(loop->for_type == For::Parallel && "kernel loop must be parallel");
 
-        Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>());
+        Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
         Expr loop_var = loop->min + simt_idx;
         Expr cond = simt_idx < loop->extent;
         log(3) << "for -> if (" << cond << ")\n";

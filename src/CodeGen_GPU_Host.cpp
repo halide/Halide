@@ -718,7 +718,8 @@ void CodeGen_GPU_Host::visit(const Pipeline *n) {
 void CodeGen_GPU_Host::visit(const Call *call) {
     // The other way in which buffers might be read by the host is in
     // calls to whole-buffer builtins like debug_to_file.
-    if (call->name == "debug to file") {
+    if (call->call_type == Call::Intrinsic && 
+        call->name == Call::debug_to_file) {
         assert(call->args.size() == 9 && "malformed debug to file node");
         const Load *func = call->args[1].as<Load>();
         assert(func && "malformed debug to file node");

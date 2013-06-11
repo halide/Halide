@@ -58,7 +58,7 @@ private:
             for (int i = 0; i < new_width; i++) {
                 args.push_back(starting_lane + lane_stride * i);
             }
-            expr = Call::make(t, "shuffle vector", args);
+            expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
         }
     }
 
@@ -174,7 +174,7 @@ class Interleaver : public IRMutator {
             }   
 
             if (a.defined() && b.defined()) {
-                expr = Call::make(op->type, "interleave vectors", vec(a, b));
+                expr = Call::make(op->type, Call::interleave_vectors, vec(a, b), Call::Intrinsic);
                 return;
             }
         }

@@ -126,7 +126,7 @@ private:
     }
 
     void visit(const Call *call) {            
-        if (call->call_type == Call::Extern) {
+        if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
             vector<Expr> args(call->args.size());
             bool changed = false;
             for (size_t i = 0; i < args.size(); i++) {
@@ -136,7 +136,7 @@ private:
             if (!changed) {
                 expr = call;
             } else {
-                expr = Call::make(call->type, call->name, args);
+                expr = Call::make(call->type, call->name, args, call->call_type);
             }
         } else {
             Expr idx = mutate(flatten_args(call->name, call->args));

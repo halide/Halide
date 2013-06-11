@@ -28,7 +28,7 @@ class DebugToFile : public IRMutator {
             vector<Expr> args;
 
             // The name of the file
-            args.push_back(Call::make(Int(32), f.debug_file(), vector<Expr>()));
+            args.push_back(Call::make(Int(32), f.debug_file(), vector<Expr>(), Call::Intrinsic));
 
             // Inject loads to the corners of the function so that any
             // passes doing further analysis of buffer use understand
@@ -80,7 +80,7 @@ class DebugToFile : public IRMutator {
             args.push_back(type_code);
             args.push_back(t.bits / 8);
 
-            Expr call = Call::make(Int(32), "debug to file", args);
+            Expr call = Call::make(Int(32), Call::debug_to_file, args, Call::Intrinsic);
 
             Stmt body = AssertStmt::make(call == 0, 
                                        "Failed to dump function " + 
