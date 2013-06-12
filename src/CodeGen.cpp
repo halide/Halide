@@ -45,7 +45,9 @@ using std::stack;
 // Override above empty init function with macro for supported targets.
 #define InitializeX86Target()   InitializeTarget(X86)
 #define InitializeARMTarget()   InitializeTarget(ARM)
+#if WITH_PTX
 #define InitializeNVPTXTarget() InitializeTarget(NVPTX)
+#endif
 
 CodeGen::CodeGen() : 
     module(NULL), owns_module(false), 
