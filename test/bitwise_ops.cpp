@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
     for (int x = 0; x < 128; x++) {
         uint32_t correct = input(x) << (input(x+1) & 0xf);
         if (im6(x) != correct) {
-            printf("%x << (%x & 0xf) instead of %x\n", 
+            printf("%x << (%x & 0xf) -> %x instead of %x\n", 
                    input(x), input(x+1), im6(x), correct);
         }
     }
