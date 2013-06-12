@@ -1,10 +1,12 @@
 #include "CodeGen_OpenCL_Dev.h"
 #include "Log.h"
 
-using namespace std;
-
 namespace Halide { 
 namespace Internal {
+
+using std::ostringstream;
+using std::string;
+using std::vector;
 
 static ostringstream nil;
 
@@ -163,7 +165,7 @@ string CodeGen_OpenCL_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_OpenCL_Dev::dump() {
-    cerr << src_stream.str() << endl;
+    std::cerr << src_stream.str() << std::endl;
 }
 
 }}
