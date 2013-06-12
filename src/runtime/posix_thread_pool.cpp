@@ -1,6 +1,11 @@
 #include <stdint.h>
 
-#ifndef __APPLE__
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#include <errno.h>
+#include <pthread.h>
+#else
+#include <unistd.h>
 #ifdef _LP64
 typedef uint64_t size_t;
 #else
@@ -11,7 +16,7 @@ typedef uint32_t size_t;
 
 extern "C" {
 
-#ifndef __SIZEOF_PTHREAD_ATTR_T
+#if !defined(__SIZEOF_PTHREAD_ATTR_T) && !defined(__APPLE__)
 
 typedef struct {
     uint32_t flags;
@@ -195,6 +200,21 @@ WEAK void *halide_worker_thread(void *void_arg) {
     return NULL;
 }
 
+WEAK int halide_host_cpu_count() {
+#ifdef __APPLE__
+    int num_cores = 0;
+    size_t num_cores_size = sizeof(num_cores);
+    if (sysctlbyname("machdep.cpu.thread_count", &num_cores, &num_cores_size, NULL, 0) != 0) {
+      halide_printf("Error getting core count: %s\n", strerror(errno));
+      return 2;
+    }
+    return num_cores;
+#else
+    // Linux
+    return sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+}
+
 WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {
     if (halide_custom_do_par_for) {
         (*halide_custom_do_par_for)(f, min, size, closure);
@@ -207,20 +227,16 @@ WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_
         halide_work_queue.jobs = NULL;
 
         char *threadStr = getenv("HL_NUMTHREADS");
-        #ifdef _LP64
-        // On 64-bit systems we use 8 threads by default
-        halide_threads = 8;
-        #else
-        // On 32-bit systems we use 2 threads by default
-        halide_threads = 2;
-        #endif
         if (threadStr) {
             halide_threads = atoi(threadStr);
         } else {
+            halide_threads = halide_host_cpu_count();
             halide_printf("HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
         }
         if (halide_threads > MAX_THREADS) {
             halide_threads = MAX_THREADS;
+        } else if (halide_threads < 1) {
+            halide_threads = 1;
         }
         for (int i = 0; i < halide_threads-1; i++) {
             //fprintf(stderr, "Creating thread %d\n", i);
