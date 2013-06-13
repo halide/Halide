@@ -80,4 +80,31 @@ INLINE int64_t abs_i64(int64_t a) {return a >= 0 ? a : -a;}
 INLINE float abs_f32(float a) {return fabsf(a);}
 INLINE double abs_f64(double a) {return fabs(a);}
 
+INLINE float nan_f32() {
+    union {
+        uint32_t as_uint;
+        float as_float;
+    } nan;
+    nan.as_uint = 0x7fc00000;
+    return nan.as_float;
+}
+
+INLINE float neg_inf_f32() {
+    union {
+        uint32_t as_uint;
+        float as_float;
+    } neg_inf;
+    neg_inf.as_uint = 0xff800000;
+    return neg_inf.as_float;
+}
+
+INLINE float inf_f32() {
+    union {
+        uint32_t as_uint;
+        float as_float;
+    } inf;
+    inf.as_uint = 0x7f800000;
+    return inf.as_float;
+}
+
 }
