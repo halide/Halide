@@ -216,7 +216,7 @@ WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_
             halide_threads = atoi(threadStr);
         } else {
             halide_threads = halide_host_cpu_count();
-            halide_printf("HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
+            // halide_printf("HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
         }
         if (halide_threads > MAX_THREADS) {
             halide_threads = MAX_THREADS;
