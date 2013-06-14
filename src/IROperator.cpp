@@ -1,5 +1,6 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 #include <iostream>
 #include <math.h>
 
@@ -29,6 +30,16 @@ bool is_const(Expr e, int value) {
     if (const Cast *c = e.as<Cast>()) return is_const(c->value, value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_const(b->value, value);
     return false;
+}
+
+const int * EXPORT as_const_int(Expr e) {
+    const IntImm *i = e.as<IntImm>();
+    return i ? &(i->value) : NULL;
+}
+
+const float * as_const_float(Expr e) {
+    const FloatImm *f = e.as<FloatImm>();
+    return f ? &(f->value) : NULL;
 }
 
 bool is_const_power_of_two(Expr e, int *bits) {
@@ -266,6 +277,14 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
 Expr halide_log(Expr x_full) {
     assert(x_full.type() == Float(32));
 
+    if (is_const(x_full)) {
+        x_full = simplify(x_full);
+        const float * f = as_const_float(x_full);
+        if (f) {
+            return logf(*f);
+        }
+    }
+
     Expr nan = Call::make(Float(32), "nan_f32", std::vector<Expr>(), Call::Extern);
     Expr neg_inf = Call::make(Float(32), "neg_inf_f32", std::vector<Expr>(), Call::Extern);
 
@@ -301,6 +320,14 @@ Expr halide_log(Expr x_full) {
 
 Expr halide_exp(Expr x_full) {
     assert(x_full.type() == Float(32));
+
+    if (is_const(x_full)) {
+        x_full = simplify(x_full);
+        const float * f = as_const_float(x_full);
+        if (f) {
+            return logf(*f);
+        }
+    }
 
     float ln2_part1 = 0.6931457519f;
     float ln2_part2 = 1.4286067653e-6f;
