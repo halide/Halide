@@ -21,6 +21,14 @@ bool EXPORT is_const(Expr e);
  * Cast, or Broadcast of the same. */
 bool EXPORT is_const(Expr e, int v);
 
+/** If an expression is an IntImm, return a pointer to its
+ * value. Otherwise returns NULL. */
+const int * EXPORT as_const_int(Expr e);
+
+/** If an expression is a FloatImm, return a pointer to its
+ * value. Otherwise returns NULL. */
+const float * EXPORT as_const_float(Expr e);
+
 /** Is the expression a constant integer power of two. Also returns
  * log base two of the expression if it is. */
 bool EXPORT is_const_power_of_two(Expr e, int *bits);
@@ -144,7 +152,7 @@ inline Expr cast(Type t, Expr a) {
             assert(b->width == t.width);
             return Internal::Broadcast::make(cast(t.element_of(), b->value), t.width);
         }
-    }
+    }    
     return Internal::Cast::make(t, a);
 }
 
