@@ -265,6 +265,11 @@ public:
     /** Get a handle on the Buffer that this image holds */
     operator Buffer() const {return buffer;}
 
+    /** Convert this image to an argument to a halide pipeline. */
+    operator Argument() const {
+        return Argument(buffer);
+    }
+
     /** Treating the image as an Expr is equivalent to call it with no
      * arguments. For example, you can say:
      *
