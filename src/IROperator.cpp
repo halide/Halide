@@ -368,6 +368,23 @@ Expr halide_exp(Expr x_full) {
     return result;
 }
 
+Expr raise_to_integer_power(Expr e, int p) {
+    Expr result;
+    if (p == 0) {
+        result = make_one(e.type());
+    } else if (p == 1) {
+        result = e;
+    } else if (p < 0) {
+        result = make_one(e.type())/raise_to_integer_power(e, -p);
+    } else {
+        // p is at least 2
+        Expr y = raise_to_integer_power(e, p>>1);
+        if (p & 1) result = y*y*e;
+        else result = y*y;
+    }
+    return result;
+}
+
 }
 
 Expr fast_log(Expr x) {

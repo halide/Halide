@@ -132,6 +132,10 @@ Expr EXPORT halide_log(Expr a);
 Expr EXPORT halide_exp(Expr a);
 // @}
 
+/** Raise an expression to an integer power by repeatedly multiplying
+ * it by itself. */
+Expr EXPORT raise_to_integer_power(Expr a, int b);
+
 
 }
 
@@ -567,6 +571,11 @@ inline Expr log(Expr x) {
  * approaching overflow. */
 inline Expr pow(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "pow of undefined");
+    
+    if (const int *i = as_const_int(y)) {
+        return raise_to_integer_power(x, *i);
+    }
+
     if (x.type() == Float(64)) {
         y = cast<double>(y);
         return Internal::Call::make(Float(64), "pow_f64", vec(x, y), Internal::Call::Extern);
@@ -592,6 +601,10 @@ EXPORT Expr fast_exp(Expr x);
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
  * mantissa for typical exponents. Gets worse when approaching overflow. */
 inline Expr fast_pow(Expr x, Expr y) {
+    if (const int *i = as_const_int(y)) {
+        return raise_to_integer_power(x, *i);
+    }
+
     x = cast<float>(x);
     y = cast<float>(y);
     return select(x == 0.0f, 0.0f, fast_exp(fast_log(x) * y));
