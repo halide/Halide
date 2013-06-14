@@ -592,7 +592,8 @@ EXPORT Expr fast_exp(Expr x);
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
  * mantissa for typical exponents. Gets worse when approaching overflow. */
 inline Expr fast_pow(Expr x, Expr y) {
-    assert(x.type() == Float(32) && y.type() == Float(32));
+    x = cast<float>(x);
+    y = cast<float>(y);
     return select(x == 0.0f, 0.0f, fast_exp(fast_log(x) * y));
 }
 
