@@ -1,5 +1,5 @@
 #include "CodeGen_OpenCL_Dev.h"
-#include "Log.h"
+#include "Debug.h"
 
 namespace Halide { 
 namespace Internal {
@@ -79,13 +79,13 @@ Expr simt_intrinsic(const string &name) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        log(0) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
+        debug(0) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
         assert(loop->for_type == For::Parallel && "kernel loop must be parallel");
 
         Expr simt_idx = simt_intrinsic(loop->name);
         Expr loop_var = Add::make(loop->min, simt_idx);
         Expr cond = LT::make(simt_idx, loop->extent);
-        log(0) << "for -> if (" << cond << ")\n";
+        debug(0) << "for -> if (" << cond << ")\n";
 
         string id_idx = print_expr(simt_idx);
         string id_cond = print_expr(cond);
@@ -106,7 +106,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
 }
 
 void CodeGen_OpenCL_Dev::compile(Stmt s, string name, const vector<Argument> &args) {
-    log(0) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
+    debug(0) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
@@ -118,7 +118,7 @@ const string preamble = ""; // nothing for now
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::compile(Stmt s, string name, const vector<Argument> &args) {
-    log(0) << "hi! " << name << "\n";
+    debug(0) << "hi! " << name << "\n";
 
     stream << preamble;
 
@@ -147,7 +147,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::compile(Stmt s, string name, const ve
 }
 
 void CodeGen_OpenCL_Dev::init_module() {
-    log(0) << "OpenCL device codegen init_module\n";
+    debug(0) << "OpenCL device codegen init_module\n";
 
     // wipe the internal kernel source
     src_stream.str("");

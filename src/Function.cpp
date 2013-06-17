@@ -3,7 +3,7 @@
 #include "Function.h"
 #include "Scope.h"
 #include "IRPrinter.h"
-#include "Log.h"
+#include "Debug.h"
 #include "CSE.h"
 #include <set>
 

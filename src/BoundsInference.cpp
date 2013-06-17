@@ -2,7 +2,7 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "Bounds.h"
-#include "Log.h"
+#include "Debug.h"
 #include <sstream>
 
 namespace Halide {
@@ -32,7 +32,7 @@ public:
         Stmt body = mutate(for_loop->body);
 
 
-        log(3) << "Bounds inference considering loop over " << for_loop->name << '\n';
+        debug(3) << "Bounds inference considering loop over " << for_loop->name << '\n';
 
         // Inject let statements defining those bounds
         for (size_t i = 0; i < funcs.size(); i++) {
@@ -40,7 +40,7 @@ public:
             const Region &region = regions[funcs[i]];
             const Function &f = env.find(funcs[i])->second;
             if (region.empty()) continue;
-            log(3) << "Injecting bounds for " << funcs[i] << '\n';
+            debug(3) << "Injecting bounds for " << funcs[i] << '\n';
             assert(region.size() == f.args().size() && "Dimensionality mismatch between function and region required");
             for (size_t j = 0; j < region.size(); j++) {
                 const string &arg_name = f.args()[j];
@@ -90,7 +90,7 @@ Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Fun
     // For the output function, the bounds required is the size of the buffer
     Function f = env.find(order[order.size()-1])->second;
     for (size_t i = 0; i < f.args().size(); i++) {
-        log(2) << f.name() << ", " << f.args()[i] << "\n";
+        debug(2) << f.name() << ", " << f.args()[i] << "\n";
         ostringstream buf_min_name, buf_extent_name;
         buf_min_name << f.name() << ".min." << i;
         buf_extent_name << f.name() << ".extent." << i;

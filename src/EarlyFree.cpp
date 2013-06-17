@@ -1,7 +1,7 @@
 #include "EarlyFree.h"
 #include "IRVisitor.h"
 #include "IRMutator.h"
-#include "Log.h"
+#include "Debug.h"
 #include "IRPrinter.h"
 #include "IROperator.h"
 #include "Scope.h"

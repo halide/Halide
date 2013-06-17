@@ -5,7 +5,7 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "Var.h"
-#include "Log.h"
+#include "Debug.h"
 #include "ModulusRemainder.h"
 #include <iostream>
 
@@ -157,7 +157,7 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Add *op) {
-        log(3) << "Simplifying " << Expr(op) << "\n";
+        debug(3) << "Simplifying " << Expr(op) << "\n";
 
         int ia, ib;
         float fa, fb;
@@ -244,7 +244,7 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Sub *op) {
-        log(3) << "Simplifying " << Expr(op) << "\n";
+        debug(3) << "Simplifying " << Expr(op) << "\n";
 
         Expr a = mutate(op->a), b = mutate(op->b);
 

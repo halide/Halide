@@ -2,7 +2,7 @@
 #include "IRMutator.h"
 #include "Util.h"
 #include "IROperator.h"
-#include "Log.h"
+#include "Debug.h"
 
 #include <map>
 #include <vector>

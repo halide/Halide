@@ -5,7 +5,7 @@
 #include "Var.h"
 #include <sstream>
 #include <iostream>
-#include "Log.h"
+#include "Debug.h"
 
 namespace Halide { 
 namespace Internal {

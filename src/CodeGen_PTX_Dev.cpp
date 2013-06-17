@@ -4,7 +4,7 @@
 #include "buffer_t.h"
 #include "IRPrinter.h"
 #include "IRMatch.h"
-#include "Log.h"
+#include "Debug.h"
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
@@ -89,7 +89,7 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
     BasicBlock *body_block = BasicBlock::Create(*context, "body", function);
     builder->SetInsertPoint(body_block);
 
-    log(1) << "Generating llvm bitcode...\n";
+    debug(1) << "Generating llvm bitcode...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
     stmt.accept(this);
@@ -113,7 +113,7 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
 
     // Finally, verify the module is ok
     verifyModule(*module);
-    log(2) << "Done generating llvm bitcode\n";
+    debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize it - this really only optimizes the current function
     optimize_module();
@@ -139,7 +139,7 @@ void CodeGen_PTX_Dev::init_module() {
     module->setTargetTriple(Triple::normalize(march()+"--"));
 
     // Fix the target triple
-    log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     module->setModuleIdentifier("<halide_ptx>");
 
@@ -171,13 +171,13 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
 
 void CodeGen_PTX_Dev::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        log(2) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
+        debug(2) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
         assert(loop->for_type == For::Parallel && "kernel loop must be parallel");
 
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
         Expr loop_var = loop->min + simt_idx;
         Expr cond = simt_idx < loop->extent;
-        log(3) << "for -> if (" << cond << ")\n";
+        debug(3) << "for -> if (" << cond << ")\n";
 
         BasicBlock *loop_bb = BasicBlock::Create(*context, loop->name + "_loop", function);
         BasicBlock *after_bb = BasicBlock::Create(*context, loop->name + "_after_loop", function);
@@ -205,7 +205,7 @@ void CodeGen_PTX_Dev::visit(const Pipeline *n) {
         FunctionType *func_t = FunctionType::get(llvm::Type::getVoidTy(*context), vector<llvm::Type *>(), false);    
         syncthreads = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.nvvm.barrier0", module);
         syncthreads->setCallingConv(CallingConv::C);
-        log(2) << "Declaring syncthreads intrinsic\n";
+        debug(2) << "Declaring syncthreads intrinsic\n";
     }
 
     if (n->update.defined()) {
@@ -221,12 +221,12 @@ void CodeGen_PTX_Dev::visit(const Pipeline *n) {
 
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
-    log(1) << "Allocate " << alloc->name << " on device\n";
+    debug(1) << "Allocate " << alloc->name << " on device\n";
 
     llvm::Type *llvm_type = llvm_type_of(alloc->type);
 
     string allocation_name = alloc->name + ".host";
-    log(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
+    debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
     // If this is a shared allocation, there should already be a
     // pointer into shared memory in the symbol table.    
@@ -372,7 +372,7 @@ string CodeGen_PTX_Dev::compile_to_src() {
                                            TargetMachine::CGFT_AssemblyFile,
                                            true);
     if (fail) {
-        log(0) << "Failed to set up passes to emit PTX source\n";
+        debug(0) << "Failed to set up passes to emit PTX source\n";
         assert(false);
     }
 

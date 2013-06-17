@@ -4,7 +4,7 @@
 #include "buffer_t.h"
 #include "IRPrinter.h"
 #include "IRMatch.h"
-#include "Log.h"
+#include "Debug.h"
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
@@ -96,7 +96,7 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     }
     #endif
 
-    log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // For now we'll just leave it as whatever the module was
     // compiled as. This assumes that we're not cross-compiling

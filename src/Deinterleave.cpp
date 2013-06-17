@@ -5,7 +5,7 @@
 #include "IREquality.h"
 #include "IRPrinter.h"
 #include "ModulusRemainder.h"
-#include "Log.h"
+#include "Debug.h"
 #include "Scope.h"
 
 namespace Halide {
@@ -157,9 +157,9 @@ class Interleaver : public IRMutator {
         const Mod *mod = eq ? eq->a.as<Mod>() : NULL;
         const Ramp *ramp = mod ? mod->a.as<Ramp>() : NULL;
         if (ramp && ramp->width > 2 && is_one(ramp->stride) && is_const(eq->b) && is_two(mod->b)) {
-            log(3) << "Detected interleave vector pattern. Deinterleaving.\n";
+            debug(3) << "Detected interleave vector pattern. Deinterleaving.\n";
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            log(3) << "Base is congruent to " << mod_rem.remainder << " modulo " << mod_rem.modulus << "\n";
+            debug(3) << "Base is congruent to " << mod_rem.remainder << " modulo " << mod_rem.modulus << "\n";
             Expr a, b;
             bool base_is_even = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 0);
             bool base_is_odd  = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 1);

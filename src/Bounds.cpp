@@ -7,7 +7,7 @@
 #include "IRPrinter.h"
 #include "Util.h"
 #include "Var.h"
-#include "Log.h"
+#include "Debug.h"
 #include <iostream>
 
 
@@ -188,7 +188,7 @@ private:
         op->b.accept(this);
         Expr min_b = min, max_b = max;
 
-        log(3) << "Bounds of " << Expr(op) << "\n";
+        debug(3) << "Bounds of " << Expr(op) << "\n";
 
         if (min_a.defined() && min_b.defined()) {
             min = Min::make(min_a, min_b);
@@ -202,7 +202,7 @@ private:
             max = max_a.defined() ? max_a : max_b;
         }
 
-        log(3) << min << ", " << max << "\n";
+        debug(3) << min << ", " << max << "\n";
     }
 
 
@@ -212,7 +212,7 @@ private:
         op->b.accept(this);
         Expr min_b = min, max_b = max;
 
-        log(3) << "Bounds of " << Expr(op) << "\n";
+        debug(3) << "Bounds of " << Expr(op) << "\n";
 
         if (min_a.defined() && min_b.defined()) {
             min = Max::make(min_a, min_b);
@@ -226,7 +226,7 @@ private:
             max = Expr();
         }
 
-        log(3) << min << ", " << max << "\n";
+        debug(3) << min << ", " << max << "\n";
     }
 
     void visit(const EQ *) {
@@ -370,7 +370,7 @@ Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope) {
 
 Interval interval_union(const Interval &a, const Interval &b) {    
     Expr max, min;
-    log(3) << "Interval union of " << a.min << ", " << a.max << ",  " << b.min << ", " << b.max << "\n";
+    debug(3) << "Interval union of " << a.min << ", " << a.max << ",  " << b.min << ", " << b.max << "\n";
     if (a.max.defined() && b.max.defined()) max = Max::make(a.max, b.max);
     if (a.min.defined() && b.min.defined()) min = Min::make(a.min, b.min);
     return Interval(min, max);
@@ -456,12 +456,12 @@ private:
         // InjectRealization in Lower.cpp)
         if (consider_calls && !inside_update.contains(op->name) && 
             (func.empty() || func == op->name)) {
-            log(3) << "Found call to " << op->name << ": " << Expr(op) << "\n";
+            debug(3) << "Found call to " << op->name << ": " << Expr(op) << "\n";
 
             vector<Interval> &r = func.empty() ? regions[op->name] : region;
             for (size_t i = 0; i < op->args.size(); i++) {
                 Interval bounds = bounds_of_expr_in_scope(op->args[i], scope);
-                log(3) << "Bounds of call to " << op->name << " in dimension " << i << ": " 
+                debug(3) << "Bounds of call to " << op->name << " in dimension " << i << ": " 
                        << bounds.min << ", " << bounds.max << "\n";
                 if (r.size() > i) {
                     r[i] = interval_union(r[i], bounds);

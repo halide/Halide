@@ -2,7 +2,7 @@
 #include "JITCompiledModule.h"
 #include "CodeGen.h"
 #include "LLVM_Headers.h"
-#include "Log.h"
+#include "Debug.h"
 
 #include <string>
 
@@ -28,7 +28,7 @@ public:
 
     ~JITModuleHolder() {
         for (size_t i = 0; i < cleanup_routines.size(); i++) {
-            log(2) << "Calling target specific cleanup routine at " << cleanup_routines[i] << "\n";
+            debug(2) << "Calling target specific cleanup routine at " << cleanup_routines[i] << "\n";
             (*cleanup_routines[i])();
         }
 
@@ -62,7 +62,7 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
 
     assert(mod && ee);
 
-    log(2) << "Retrieving " << name << " from module\n";
+    debug(2) << "Retrieving " << name << " from module\n";
     llvm::Function *fn = mod->getFunction(name);
     if (!fn) {
         if (must_succeed) {
@@ -74,7 +74,7 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
         }
     }
 
-    log(2) << "JIT Compiling " << name << "\n";
+    debug(2) << "JIT Compiling " << name << "\n";
     void *f = ee->getPointerToFunction(fn);
     if (!f && must_succeed) {
         std::cerr << "Compiling " << name << " returned NULL\n";
@@ -91,7 +91,7 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
 void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name) {
 
     // Make the execution engine
-    log(2) << "Creating new execution engine\n";
+    debug(2) << "Creating new execution engine\n";
     string error_string;
     
     TargetOptions options;
@@ -141,11 +141,11 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
-    log(1) << "JIT compiling...\n";
+    debug(1) << "JIT compiling...\n";
 
     hook_up_function_pointer(ee, m, function_name, true, &function);
 
-    log(1) << "JIT compiled function pointer 0x" << std::hex << (unsigned long)function << std::dec << "\n";
+    debug(1) << "JIT compiled function pointer 0x" << std::hex << (unsigned long)function << std::dec << "\n";
 
     hook_up_function_pointer(ee, m, function_name + "_jit_wrapper", true, &wrapped_function);
     hook_up_function_pointer(ee, m, "halide_copy_to_host", false, &copy_to_host);
