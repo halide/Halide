@@ -2,7 +2,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
-#include "Log.h"
+#include "Debug.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -91,7 +91,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             if (min.defined()) {
                 // Ok, we've isolated a function, a dimension to slide along, and loop variable to slide over
-                log(2) << "Sliding " << func.name() << " over dimension " << dim << " along loop variable " << loop_var << "\n";
+                debug(2) << "Sliding " << func.name() << " over dimension " << dim << " along loop variable " << loop_var << "\n";
                 
                 Expr loop_var_expr = Variable::make(Int(32), loop_var);
                 Expr steady_state = loop_var_expr > loop_min;
@@ -108,7 +108,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 stmt = LetStmt::make(func.name() + "." + dim + ".min", new_min, stmt);
 
             } else {
-                log(2) << "Could not perform sliding window optimization of " << func.name() << " over " << loop_var << "\n";
+                debug(2) << "Could not perform sliding window optimization of " << func.name() << " over " << loop_var << "\n";
                 stmt = op;
             }
 

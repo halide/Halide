@@ -10,7 +10,7 @@
 #include "CodeGen_C.h"
 #include "Image.h"
 #include "Param.h"
-#include "Log.h"
+#include "Debug.h"
 #include <iostream>
 #include <fstream>
 
@@ -172,7 +172,7 @@ FuncRefExpr Func::operator()(vector<Expr> args) const {
 void Func::add_implicit_vars(vector<Var> &args) const {
     int i = 0;    
     while ((int)args.size() < dimensions()) {        
-        Internal::log(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+        Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
         args.push_back(Var::implicit(i++));
     }
 }
@@ -180,7 +180,7 @@ void Func::add_implicit_vars(vector<Var> &args) const {
 void Func::add_implicit_vars(vector<Expr> &args) const {
     int i = 0;
     while ((int)args.size() < dimensions()) {
-        Internal::log(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+        Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
         args.push_back(Var::implicit(i++));
     }
 }
@@ -716,7 +716,7 @@ public:
 
 void FuncRefVar::add_implicit_vars(vector<string> &a, Expr e) const {
     CountImplicitVars count(e);
-    Internal::log(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
+    Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
     for (int i = 0; i < count.count; i++) {
         a.push_back(Var::implicit(i).name());
     }    
@@ -787,7 +787,7 @@ void FuncRefExpr::add_implicit_vars(vector<Expr> &a, Expr e) const {
     for (size_t i = 0; i < args.size(); i++) {
         args[i].accept(&f);
     }
-    Internal::log(2) << "Adding " << f.count << " implicit vars to LHS of " << func.name() << "\n";
+    Internal::debug(2) << "Adding " << f.count << " implicit vars to LHS of " << func.name() << "\n";
     for (int i = 0; i < f.count; i++) {
         a.push_back(Var::implicit(i));
     }
@@ -877,11 +877,11 @@ private:
         Buffer b;
         string arg_name;
         if (op->image.defined()) {            
-            Internal::log(2) << "Found an image argument: " << op->image.name() << "\n";
+            Internal::debug(2) << "Found an image argument: " << op->image.name() << "\n";
             b = op->image;
             arg_name = op->image.name();
         } else if (op->param.defined()) {
-            Internal::log(2) << "Found an image param argument: " << op->param.name() << "\n";
+            Internal::debug(2) << "Found an image param argument: " << op->param.name() << "\n";
             b = op->param.get_buffer();
             arg_name = op->param.name();
         } else {
@@ -892,7 +892,7 @@ private:
         bool already_included = false;
         for (size_t i = 0; i < arg_types.size(); i++) {
             if (arg_types[i].name == op->name) {
-                Internal::log(2) << "Already included.\n";
+                Internal::debug(2) << "Already included.\n";
                 already_included = true;
             }
         }
@@ -921,7 +921,7 @@ private:
                 }
             }
             if (!already_included) {
-                Internal::log(2) << "Found a param: " << op->param.name() << "\n";
+                Internal::debug(2) << "Found a param: " << op->param.name() << "\n";
                 if (op->param.is_buffer()) {
                     int idx = (int)(arg_values.size());
                     image_param_args.push_back(make_pair(idx, op->param));                    
@@ -1119,22 +1119,22 @@ void Func::realize(Buffer dst) {
     arg_values[arg_values.size()-1] = dst.raw_buffer();
 
     // Update the addresses of the image param args
-    Internal::log(3) << image_param_args.size() << " image param args to set\n";
+    Internal::debug(3) << image_param_args.size() << " image param args to set\n";
     for (size_t i = 0; i < image_param_args.size(); i++) {
-        Internal::log(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
+        Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
         Buffer b = image_param_args[i].second.get_buffer();
         assert(b.defined() && "An ImageParam is not bound to a buffer");
         arg_values[image_param_args[i].first] = b.raw_buffer();
     }
 
     for (size_t i = 0; i < arg_values.size(); i++) {
-        Internal::log(2) << "Arg " << i << " = " << arg_values[i] << "\n";
+        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
         assert(arg_values[i] != NULL && "An argument to a jitted function is null\n");
     }
 
-    Internal::log(2) << "Calling jitted function\n";
+    Internal::debug(2) << "Calling jitted function\n";
     compiled_module.wrapped_function(&(arg_values[0]));    
-    Internal::log(2) << "Back from jitted function\n";
+    Internal::debug(2) << "Back from jitted function\n";
 
     dst.set_source_module(compiled_module);
 }
@@ -1154,9 +1154,9 @@ void *Func::compile_jit() {
     arg_values.push_back(NULL); // A spot to put the address of the output buffer
     image_param_args = infer_args.image_param_args;
     
-    Internal::log(2) << "Inferred argument list:\n";
+    Internal::debug(2) << "Inferred argument list:\n";
     for (size_t i = 0; i < infer_args.arg_types.size(); i++) {
-        Internal::log(2) << infer_args.arg_types[i].name << ", " 
+        Internal::debug(2) << infer_args.arg_types[i].name << ", " 
                          << infer_args.arg_types[i].type << ", " 
                          << infer_args.arg_types[i].is_buffer << "\n";
     }
@@ -1164,7 +1164,7 @@ void *Func::compile_jit() {
     StmtCompiler cg;
     cg.compile(lowered, name(), infer_args.arg_types);
     
-    if (log::debug_level >= 3) {
+    if (debug::debug_level >= 3) {
         cg.compile_to_native(name() + ".s", true);
         cg.compile_to_bitcode(name() + ".bc");
         ofstream stmt_debug((name() + ".stmt").c_str());

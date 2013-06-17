@@ -6,7 +6,7 @@
 #include "buffer_t.h"
 #include "IRPrinter.h"
 #include "IRMatch.h"
-#include "Log.h"
+#include "Debug.h"
 #include "Var.h"
 #include "Param.h"
 #include "integer_division_table.h"
@@ -46,7 +46,7 @@ struct SharedCudaContext {
     
     // Freed on program exit
     ~SharedCudaContext() {
-        log(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
+        debug(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
         if (ptr && cuCtxDestroy) {
             (*cuCtxDestroy)(ptr);
             ptr = 0;
@@ -256,15 +256,15 @@ vector<Argument> CodeGen_GPU_Host::Closure::arguments() {
     vector<Argument> res;
     map<string, Type>::const_iterator iter;
     for (iter = vars.begin(); iter != vars.end(); ++iter) {
-        log(2) << "var: " << iter->first << "\n";
+        debug(2) << "var: " << iter->first << "\n";
         res.push_back(Argument(iter->first, false, iter->second));
     }
     for (iter = reads.begin(); iter != reads.end(); ++iter) {
-        log(2) << "read: " << iter->first << "\n";
+        debug(2) << "read: " << iter->first << "\n";
         res.push_back(Argument(iter->first, true, iter->second));
     }
     for (iter = writes.begin(); iter != writes.end(); ++iter) {
-        log(2) << "write: " << iter->first << "\n";
+        debug(2) << "write: " << iter->first << "\n";
         res.push_back(Argument(iter->first, true, iter->second));
     }
     return res;
@@ -304,10 +304,10 @@ CodeGen_GPU_Host::CodeGen_GPU_Host(uint32_t options) :
 CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(uint32_t options)
 {
     if (options & GPU_PTX) {
-        log(0) << "Constructing PTX device codegen\n";
+        debug(0) << "Constructing PTX device codegen\n";
         return new CodeGen_PTX_Dev();
     } else if (options & GPU_OpenCL) {
-        log(0) << "Constructing OpenCL device codegen\n";
+        debug(0) << "Constructing OpenCL device codegen\n";
         return new CodeGen_OpenCL_Dev();
     } else {
         assert(false && "Requested unknown GPU target");
@@ -359,7 +359,7 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     assert(dev_sync_fn && "Could not find halide_dev_sync in module");
 
     // Fix the target triple
-    log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // For now we'll just leave it as whatever the module was
     // compiled as. This assumes that we're not cross-compiling
@@ -369,13 +369,13 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
 
-    if (log::debug_level >= 2) {
+    if (debug::debug_level >= 2) {
         cgdev->dump();
         module->dump();
     }
 
     string kernel_src = cgdev->compile_to_src();
-    log(2) << kernel_src;
+    debug(2) << kernel_src;
     llvm::Type *kernel_src_type = ArrayType::get(i8, kernel_src.size()+1);
     GlobalVariable *kernel_src_global = new GlobalVariable(*module, kernel_src_type, 
                                                          true, GlobalValue::PrivateLinkage, 0,
@@ -400,9 +400,9 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (dlsym(NULL, "cuInit")) {
-            log(1) << "This program was linked to cuda already\n";
+            debug(1) << "This program was linked to cuda already\n";
         } else {
-            log(1) << "Looking for cuda shared library...\n";
+            debug(1) << "Looking for cuda shared library...\n";
             string error;
             llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
             if (!error.empty()) {
@@ -423,14 +423,14 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
         assert(ptr && "Could not find cuCtxDestroy_v2 in cuda library");
         cuCtxDestroy = (int (*)(CUctx_st *))(ptr);
     } else if (options & GPU_OpenCL) {
-        log(0) << "TODO: cache results of linking OpenCL lib\n";
+        debug(0) << "TODO: cache results of linking OpenCL lib\n";
 
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (dlsym(NULL, "clCreateContext")) {
-            log(1) << "This program was linked to OpenCL already\n";
+            debug(1) << "This program was linked to OpenCL already\n";
         } else {
-            log(1) << "Looking for OpenCL shared library...\n";
+            debug(1) << "Looking for OpenCL shared library...\n";
             string error;
             llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
             if (!error.empty()) {
@@ -464,13 +464,13 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
         assert(f && "Could not find compiled form of halide_release in module");
         (*cleanup_routines).push_back((void (*)())f);
     } else if (options & GPU_OpenCL) {
-        log(0) << "TODO: set cleanup for OpenCL\n";
+        debug(0) << "TODO: set cleanup for OpenCL\n";
     }
 }
 
 void CodeGen_GPU_Host::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
-        log(2) << "Kernel launch: " << loop->name << "\n";
+        debug(2) << "Kernel launch: " << loop->name << "\n";
 
         // compute kernel launch bounds
         ExtractBounds bounds(loop);
@@ -483,7 +483,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         Expr n_blkid_y = bounds.block_extent[1];
         Expr n_blkid_z = bounds.block_extent[2];
         Expr n_blkid_w = bounds.block_extent[3];
-        log(2) << "Kernel bounds: ("
+        debug(2) << "Kernel bounds: ("
                << n_tid_x << ", " << n_tid_y << ", " << n_tid_z << ", " << n_tid_w << ") threads, ("
                << n_blkid_x << ", " << n_blkid_y << ", " << n_blkid_z << ", " << n_blkid_w << ") blocks\n";
 
@@ -502,7 +502,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         for (map<string, Expr>::iterator iter = bounds.shared_allocations.begin(); 
              iter != bounds.shared_allocations.end(); ++iter) {
 
-            log(2) << "Internal shared allocation" << iter->first 
+            debug(2) << "Internal shared allocation" << iter->first 
                    << " has max size " << iter->second << "\n";
             
             Value *size = codegen(iter->second);
@@ -528,24 +528,24 @@ void CodeGen_GPU_Host::visit(const For *loop) {
             // allocations done via static analysis, external ones
             // need to be dynamically checked
             Value *buf = sym_get(it->first + ".buffer");            
-            log(4) << "halide_dev_malloc " << it->first << "\n";
+            debug(4) << "halide_dev_malloc " << it->first << "\n";
             builder->CreateCall(dev_malloc_fn, buf);
 
             // Anything dirty on the cpu that gets read on the gpu
             // needs to be copied over
-            log(4) << "halide_copy_to_dev " << it->first << "\n";
+            debug(4) << "halide_copy_to_dev " << it->first << "\n";
             builder->CreateCall(copy_to_dev_fn, buf);
         }
 
         for (it = c.writes.begin(); it != c.writes.end(); ++it) {
             Value *buf = sym_get(it->first + ".buffer");            
-            log(4) << "halide_dev_malloc " << it->first << "\n";
+            debug(4) << "halide_dev_malloc " << it->first << "\n";
             builder->CreateCall(dev_malloc_fn, buf);
         }
 
         // get the actual name of the generated kernel for this loop
         kernel_name = cgdev->get_current_kernel_name();
-        log(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
+        debug(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
         Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
 
         // build the kernel arguments array
@@ -619,7 +619,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
 
         // mark written buffers dirty
         for (it = c.writes.begin(); it != c.writes.end(); ++it) {
-            log(4) << "setting dev_dirty " << it->first << " (write)\n";
+            debug(4) << "setting dev_dirty " << it->first << " (write)\n";
             Value *buf = sym_get(it->first + ".buffer");
             builder->CreateStore(ConstantInt::get(i8, 1), buffer_dev_dirty_ptr(buf));
         }
@@ -643,7 +643,7 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
     Allocation host_allocation = {NULL, 0, NULL};
     Value *saved_stack = NULL;
     if (usage.used_on_host) {
-        log(2) << alloc->name << " is used on the host\n";
+        debug(2) << alloc->name << " is used on the host\n";
         host_allocation = create_allocation(alloc->name, alloc->type, alloc->size);
     } else {
         host_allocation.ptr = ConstantPointerNull::get(llvm_type_of(alloc->type)->getPointerTo());
@@ -651,7 +651,7 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
 
     Value *buf = NULL;
     if (usage.used_on_device) {
-        log(2) << alloc->name << " is used on the device\n";
+        debug(2) << alloc->name << " is used on the device\n";
         // create a buffer_t to track this allocation
         if (!host_allocation.saved_stack) {
             // Save the stack pointer if we haven't already

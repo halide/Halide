@@ -1,5 +1,5 @@
 #include "CodeGen_Internal.h"
-#include "Log.h"
+#include "Debug.h"
 
 namespace Halide {
 namespace Internal {
@@ -35,10 +35,10 @@ void Closure::visit(const For *op) {
 void Closure::visit(const Load *op) {
     op->index.accept(this);
     if (!ignore.contains(op->name)) {
-        log(3) << "Adding " << op->name << " to closure\n";
+        debug(3) << "Adding " << op->name << " to closure\n";
         reads[op->name] = op->type;
     } else {
-        log(3) << "Not adding " << op->name << " to closure\n";
+        debug(3) << "Not adding " << op->name << " to closure\n";
     }
 }
 
@@ -46,10 +46,10 @@ void Closure::visit(const Store *op) {
     op->index.accept(this);
     op->value.accept(this);
     if (!ignore.contains(op->name)) {
-        log(3) << "Adding " << op->name << " to closure\n";
+        debug(3) << "Adding " << op->name << " to closure\n";
         writes[op->name] = op->value.type();
     } else {
-        log(3) << "Not adding " << op->name << " to closure\n";
+        debug(3) << "Not adding " << op->name << " to closure\n";
     }
 }
 
@@ -62,9 +62,9 @@ void Closure::visit(const Allocate *op) {
 
 void Closure::visit(const Variable *op) {            
     if (ignore.contains(op->name)) {
-        log(3) << "Not adding " << op->name << " to closure\n";
+        debug(3) << "Not adding " << op->name << " to closure\n";
     } else {
-        log(3) << "Adding " << op->name << " to closure\n";
+        debug(3) << "Adding " << op->name << " to closure\n";
         vars[op->name] = op->type;
     }
 }
@@ -104,17 +104,17 @@ vector<string> Closure::names() {
     vector<string> res;
     map<string, Type>::const_iterator iter;
     for (iter = vars.begin(); iter != vars.end(); ++iter) {
-        log(2) << "vars:  " << iter->first << "\n";
+        debug(2) << "vars:  " << iter->first << "\n";
         res.push_back(iter->first);
     }
     for (iter = reads.begin(); iter != reads.end(); ++iter) {
-        log(2) << "reads: " << iter->first << "\n";
+        debug(2) << "reads: " << iter->first << "\n";
         res.push_back(iter->first + ".host");
         // Some backends (ptx) track a whole buffer as well as a host pointer
         if (track_buffers) res.push_back(iter->first + ".buffer");
     }
     for (iter = writes.begin(); iter != writes.end(); ++iter) {
-        log(2) << "writes: " << iter->first << "\n";
+        debug(2) << "writes: " << iter->first << "\n";
         res.push_back(iter->first + ".host");
         if (track_buffers) res.push_back(iter->first + ".buffer");
     }

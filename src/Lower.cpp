@@ -6,7 +6,7 @@
 #include "Bounds.h"
 #include "Simplify.h"
 #include "IRPrinter.h"
-#include "Log.h"
+#include "Debug.h"
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -170,7 +170,7 @@ Stmt build_update(Function f) {
 
     for (size_t i = 0; i < f.reduction_args().size(); i++) {
         site.push_back(qualify_expr(prefix, f.reduction_args()[i]));
-        log(2) << "Reduction site " << i << " = " << site[i] << "\n";
+        debug(2) << "Reduction site " << i << " = " << site[i] << "\n";
     }
 
     Stmt loop = build_provide_loop_nest(f.name(), prefix, site, value, f.reduction_schedule());
@@ -287,9 +287,9 @@ private:
         
         /* The following works if the provide steps of a realization
          * always covers the region that will be used */
-        log(4) << "Computing region provided of " << func.name() << " by " << s << "\n";
+        debug(4) << "Computing region provided of " << func.name() << " by " << s << "\n";
         Region bounds = region_provided(s, func.name());
-        log(4) << "Done computing region provided\n";
+        debug(4) << "Done computing region provided\n";
 
         /* The following would work if things were only ever computed
          * exactly to cover the region read. Loop splitting (which
@@ -327,7 +327,7 @@ private:
     using IRMutator::visit;
 
     virtual void visit(const For *for_loop) {            
-        log(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
+        debug(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
         const Schedule::LoopLevel &compute_level = func.schedule().compute_level;
         const Schedule::LoopLevel &store_level = func.schedule().store_level;
 
@@ -340,14 +340,14 @@ private:
                    func.schedule().compute_level.is_inline() &&
                    function_is_called_in_stmt(func, for_loop)) {
             // If we're trying to inline a reduction, schedule it here and bail out            
-            log(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
+            debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
             stmt = build_realize(build_pipeline(for_loop));
             found_store_level = found_compute_level = true;
             return;
         }
 
         if (compute_level.match(for_loop->name)) {
-            log(3) << "Found compute level\n";
+            debug(3) << "Found compute level\n";
             if (function_is_called_in_stmt(func, body)) {
                 body = build_pipeline(body);
             }
@@ -355,7 +355,7 @@ private:
         } 
 
         if (store_level.match(for_loop->name)) {
-            log(3) << "Found store level\n";
+            debug(3) << "Found store level\n";
             assert(found_compute_level && 
                    "The compute loop level was not found within the store loop level!");
 
@@ -384,7 +384,7 @@ private:
             func.is_reduction() && 
             func.schedule().compute_level.is_inline() &&
             function_is_called_in_stmt(func, op)) {
-            log(2) << "Injecting realization of " << func.name() << " around node " << Stmt(op) << "\n";
+            debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(op) << "\n";
             stmt = build_realize(build_pipeline(op));
             found_store_level = found_compute_level = true;
         } else {
@@ -604,15 +604,15 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
         }
 
         if (!f.is_reduction() && f.schedule().compute_level.is_inline()) {
-            log(1) << "Inlining " << order[i-1] << '\n';
+            debug(1) << "Inlining " << order[i-1] << '\n';
             s = InlineFunction(f).mutate(s);
         } else {
-            log(1) << "Injecting realization of " << order[i-1] << '\n';
+            debug(1) << "Injecting realization of " << order[i-1] << '\n';
             InjectRealization injector(f);
             s = injector.mutate(s);
             assert(injector.found_store_level && injector.found_compute_level);
         }
-        log(2) << s << '\n';
+        debug(2) << s << '\n';
     }
 
     // We can remove the loop over root now
@@ -657,9 +657,9 @@ Stmt add_image_checks(Stmt s, Function f) {
             // Figure out the region touched
             const Region &region = regions[name];
             if (region.size()) {
-                log(3) << "In image " << name << " region touched is:\n";
+                debug(3) << "In image " << name << " region touched is:\n";
                 for (size_t j = 0; j < region.size(); j++) {
-                    log(3) << region[j].min << ", " << region[j].extent << "\n";
+                    debug(3) << region[j].min << ", " << region[j].extent << "\n";
                     ostringstream min_name, extent_name;
                     min_name << name << ".min." << j;
                     extent_name << name << ".extent." << j;
@@ -681,7 +681,7 @@ Stmt add_image_checks(Stmt s, Function f) {
                 }
             }
         } else {
-            log(2) << "Bounds checking disabled via HL_DISABLE_BOUNDS_CHECKING\n";
+            debug(2) << "Bounds checking disabled via HL_DISABLE_BOUNDS_CHECKING\n";
         }
 
 
@@ -748,80 +748,80 @@ Stmt lower(Function f) {
     vector<string> order = realization_order(f.name(), env, graph);
     Stmt s = create_initial_loop_nest(f);
 
-    log(2) << "Initial statement: " << '\n' << s << '\n';
+    debug(2) << "Initial statement: " << '\n' << s << '\n';
     s = schedule_functions(s, order, env, graph);
-    log(2) << "All realizations injected:\n" << s << '\n';
+    debug(2) << "All realizations injected:\n" << s << '\n';
 
-    log(1) << "Injecting tracing...\n";
+    debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s);
-    log(2) << "Tracing injected:\n" << s << '\n';
+    debug(2) << "Tracing injected:\n" << s << '\n';
 
-    log(1) << "Adding checks for images\n";
+    debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, f);    
-    log(2) << "Image checks injected:\n" << s << '\n';
+    debug(2) << "Image checks injected:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify from here until we fix them up
-    log(1) << "Performing bounds inference...\n";
+    debug(1) << "Performing bounds inference...\n";
     s = bounds_inference(s, order, env);
-    log(2) << "Bounds inference:\n" << s << '\n';
+    debug(2) << "Bounds inference:\n" << s << '\n';
 
-    log(1) << "Performing sliding window optimization...\n";
+    debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
-    log(2) << "Sliding window:\n" << s << '\n';
+    debug(2) << "Sliding window:\n" << s << '\n';
 
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
     // equivalence means semantic equivalence.
-    log(1) << "Uniquifying variable names...\n";
+    debug(1) << "Uniquifying variable names...\n";
     s = uniquify_variable_names(s);
-    log(2) << "Uniquified variable names: \n" << s << "\n\n";
+    debug(2) << "Uniquified variable names: \n" << s << "\n\n";
 
-    log(1) << "Simplifying...\n";
+    debug(1) << "Simplifying...\n";
     s = simplify(s);
-    log(2) << "Simplified: \n" << s << "\n\n";
+    debug(2) << "Simplified: \n" << s << "\n\n";
 
-    log(1) << "Performing storage folding optimization...\n";
+    debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s);
-    log(2) << "Storage folding:\n" << s << '\n';
+    debug(2) << "Storage folding:\n" << s << '\n';
 
-    log(1) << "Injecting debug_to_file calls...\n";
+    debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, env);
-    log(2) << "Injected debug_to_file calls:\n" << s << '\n';
+    debug(2) << "Injected debug_to_file calls:\n" << s << '\n';
 
-    log(1) << "Performing storage flattening...\n";
+    debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, env);
-    log(2) << "Storage flattening: " << '\n' << s << "\n\n";
+    debug(2) << "Storage flattening: " << '\n' << s << "\n\n";
 
-    log(1) << "Simplifying...\n";
+    debug(1) << "Simplifying...\n";
     s = simplify(s);
-    log(2) << "Simplified: \n" << s << "\n\n";
+    debug(2) << "Simplified: \n" << s << "\n\n";
 
-    log(1) << "Vectorizing...\n";
+    debug(1) << "Vectorizing...\n";
     s = vectorize_loops(s);
-    log(2) << "Vectorized: \n" << s << "\n\n";
+    debug(2) << "Vectorized: \n" << s << "\n\n";
 
-    log(1) << "Unrolling...\n";
+    debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
-    log(2) << "Unrolled: \n" << s << "\n\n";
+    debug(2) << "Unrolled: \n" << s << "\n\n";
 
-    log(1) << "Simplifying...\n";
+    debug(1) << "Simplifying...\n";
     s = simplify(s);
-    log(2) << "Simplified: \n" << s << "\n\n";
+    debug(2) << "Simplified: \n" << s << "\n\n";
 
-    log(1) << "Detecting vector interleavings...\n";
+    debug(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);
-    log(2) << "Rewrote vector interleavings: \n" << s << "\n\n";
+    debug(2) << "Rewrote vector interleavings: \n" << s << "\n\n";
 
-    log(1) << "Injecting early frees...\n";
+    debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
-    log(2) << "Injected early frees: \n" << s << "\n\n";
+    debug(2) << "Injected early frees: \n" << s << "\n\n";
     
-    log(1) << "Simplifying...\n";
+    debug(1) << "Simplifying...\n";
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     s = common_subexpression_elimination(s);
-    log(1) << "Simplified: \n" << s << "\n\n";
+    debug(1) << "Simplified: \n" << s << "\n\n";
 
     return s;
 } 

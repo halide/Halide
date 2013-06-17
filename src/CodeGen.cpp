@@ -2,7 +2,7 @@
 #include "IRPrinter.h"
 #include "CodeGen.h"
 #include "IROperator.h"
-#include "Log.h"
+#include "Debug.h"
 #include "CodeGen_C.h"
 #include "Function.h"
 #include "Deinterleave.h"
@@ -170,7 +170,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
         }
     }
 
-    log(1) << "Generating llvm bitcode...\n";
+    debug(1) << "Generating llvm bitcode...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
     stmt.accept(this);
@@ -179,7 +179,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     builder->CreateRetVoid();
 
     module->setModuleIdentifier("halide_" + name);
-    log(2) << module << "\n";
+    debug(2) << module << "\n";
 
     // Now verify the function is ok
     verifyFunction(*function);
@@ -207,19 +207,19 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
             wrapper_args[i] = builder->CreateLoad(ptr);
         }
     }
-    log(4) << "Creating call from wrapper to actual function\n";
+    debug(4) << "Creating call from wrapper to actual function\n";
     builder->CreateCall(function, wrapper_args);
     builder->CreateRetVoid();
     verifyFunction(*wrapper);
 
     // Finally, verify the module is ok
     verifyModule(*module);
-    log(2) << "Done generating llvm bitcode\n";
+    debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize it
     optimize_module();
 
-    if (log::debug_level >= 2) {
+    if (debug::debug_level >= 2) {
         module->dump();
     }
 }
@@ -263,7 +263,7 @@ void CodeGen::optimize_module() {
     function_pass_manager.run(*fn);
     function_pass_manager.doFinalization();
 
-    if (log::debug_level >= 3) {
+    if (debug::debug_level >= 3) {
         module->dump();
     }
 }
@@ -281,8 +281,8 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
 
     // Get the target specific parser.
     string error_string;
-    log(1) << "Compiling to native code...\n";
-    log(2) << "Target triple: " << module->getTargetTriple() << "\n";
+    debug(1) << "Compiling to native code...\n";
+    debug(2) << "Target triple: " << module->getTargetTriple() << "\n";
 
     const Target *target = TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
     if (!target) {
@@ -291,7 +291,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     }
     assert(target && "Could not create target");
 
-    log(2) << "Selected target: " << target->getName() << "\n";
+    debug(2) << "Selected target: " << target->getName() << "\n";
 
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
@@ -380,7 +380,7 @@ llvm::Value *CodeGen::sym_get(const string &name, bool must_succeed) {
         if (must_succeed) {
             std::cerr << "Symbol not found: " << name << "\n";
             
-            if (log::debug_level > 0) {
+            if (debug::debug_level > 0) {
                 std::cerr << "The following names are in scope:\n";
                 std::cerr << symbol_table << "\n";
             }
@@ -525,7 +525,7 @@ Value *CodeGen::buffer_elem_size_ptr(Value *buffer) {
 
 Value *CodeGen::codegen(Expr e) {
     assert(e.defined());
-    log(4) << "Codegen: " << e.type() << ", " << e << "\n";
+    debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
     value = NULL;
     e.accept(this);
     assert(value && "Codegen of an expr did not produce an llvm value");
@@ -534,7 +534,7 @@ Value *CodeGen::codegen(Expr e) {
 
 void CodeGen::codegen(Stmt s) {
     assert(s.defined());
-    log(3) << "Codegen: " << s << "\n";
+    debug(3) << "Codegen: " << s << "\n";
     value = NULL;
     s.accept(this);
 }
@@ -1035,7 +1035,7 @@ void CodeGen::visit(const Call *op) {
         } else if (op->name == Call::interleave_vectors) {
             assert(op->args.size() == 2);
             Expr a = op->args[0], b = op->args[1];
-            log(3) << "Vectors to interleave: " << a << ", " << b << "\n";
+            debug(3) << "Vectors to interleave: " << a << ", " << b << "\n";
             
             vector<Constant *> indices(op->type.width);
             for (int i = 0; i < op->type.width; i++) {
@@ -1065,11 +1065,11 @@ void CodeGen::visit(const Call *op) {
             data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
             vector<Value *> args = vec(char_ptr, data_ptr);
             for (size_t i = 3; i < 9; i++) {
-                log(4) << op->args[i];
+                debug(4) << op->args[i];
                 args.push_back(codegen(op->args[i]));
             }
             
-            log(4) << "Creating call to debug_to_file\n";
+            debug(4) << "Creating call to debug_to_file\n";
             
             value = builder->CreateCall(debug_to_file, args);
         } else if (op->name == Call::bitwise_and) {
@@ -1131,7 +1131,7 @@ void CodeGen::visit(const Call *op) {
         }
         
         if (op->type.is_scalar()) {
-            log(4) << "Creating call to " << op->name << "\n";
+            debug(4) << "Creating call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, args);
             call->setDoesNotAccessMemory();
             call->setDoesNotThrow();
@@ -1144,7 +1144,7 @@ void CodeGen::visit(const Call *op) {
             ss << op->name << 'x' << op->type.width;
             llvm::Function *vec_fn = module->getFunction(ss.str());
             if (vec_fn) {
-                log(4) << "Creating call to " << ss.str() << "\n";
+                debug(4) << "Creating call to " << ss.str() << "\n";
                 CallInst *call = builder->CreateCall(vec_fn, args);
                 call->setDoesNotAccessMemory();
                 call->setDoesNotThrow();
@@ -1160,7 +1160,7 @@ void CodeGen::visit(const Call *op) {
                     for (size_t j = 0; j < args.size(); j++) {
                         arg_lane[j] = builder->CreateExtractElement(args[j], idx);
                     }
-                    log(4) << "Creating call to " << op->name << "\n";
+                    debug(4) << "Creating call to " << op->name << "\n";
                     CallInst *call = builder->CreateCall(fn, arg_lane);
                     call->setDoesNotAccessMemory();
                     call->setDoesNotThrow();
@@ -1258,7 +1258,7 @@ void CodeGen::visit(const PrintStmt *op) {
     assert(halide_printf && "Could not find halide_printf in initial module");
 
     // Call it
-    log(4) << "Creating call to halide_printf\n";
+    debug(4) << "Creating call to halide_printf\n";
     builder->CreateCall(halide_printf, args);
 }
 
@@ -1288,11 +1288,11 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
     // Call the error handler
     llvm::Function *error_handler = module->getFunction("halide_error");
     assert(error_handler && "Could not find halide_error in initial module");
-    log(4) << "Creating call to error handlers\n";
+    debug(4) << "Creating call to error handlers\n";
     builder->CreateCall(error_handler, vec(char_ptr));
 
     // Do any architecture-specific cleanup necessary
-    log(4) << "Creating cleanup code\n";
+    debug(4) << "Creating cleanup code\n";
     prepare_for_early_exit();
 
     // Bail out
@@ -1356,7 +1356,7 @@ void CodeGen::visit(const For *op) {
         sym_pop(op->name);
     } else if (op->for_type == For::Parallel) {
 
-        log(3) << "Entering parallel for loop over " << op->name << "\n";
+        debug(3) << "Entering parallel for loop over " << op->name << "\n";
 
         // Find every symbol that the body of this loop refers to
         // and dump it into a closure
@@ -1410,10 +1410,10 @@ void CodeGen::visit(const For *op) {
         //do_par_for->setDoesNotCapture(4);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
         vector<Value *> args = vec<Value *>(function, min, extent, ptr);
-        log(4) << "Creating call to do_par_for\n";
+        debug(4) << "Creating call to do_par_for\n";
         builder->CreateCall(do_par_for, args);
 
-        log(3) << "Leaving parallel for loop over " << op->name << "\n";
+        debug(3) << "Leaving parallel for loop over " << op->name << "\n";
 
         // Now restore the scope
         std::swap(symbol_table, saved_symbol_table);
