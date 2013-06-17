@@ -48,6 +48,8 @@ int main(int argc, char **argv) {
     Func g;
     g(x, y) = my_func(3, Expr(0));
     g.parallel(y);
+    // Avoid the race condition by not actually being parallel
+    setenv("HL_NUMTHREADS", "1", 1);
     g.realize(32, 32);
 
     if (call_counter[3] != 32) {
