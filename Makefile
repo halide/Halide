@@ -176,9 +176,7 @@ test_apps: $(BIN_DIR)/libHalide.a
 	make -C apps/blur clean
 	make -C apps/blur test
 	./apps/blur/test
-	make -C apps/wavelet filter
-	cd apps/wavelet; ./filter input.png; cd ../..
-
+	make -C apps/wavelet test
 
 ifneq (,$(findstring version 3.,$(CLANG_VERSION)))
 ifeq (,$(findstring version 3.0,$(CLANG_VERSION)))
