@@ -51,9 +51,6 @@ Expr call(const ImageParam &a, Expr b, Expr c) { return a(b, c); }
 Expr call(const ImageParam &a, Expr b, Expr c, Expr d) { return a(b, c, d); }
 Expr call(const ImageParam &a, Expr b, Expr c, Expr d, Expr e) { return a(b, c, d, e); }
 
-void assign(Param &a, int b) { a.set(b); }
-void assign(Param &a, double b) { a.set(b); }
-
 void assign(FuncRefExpr &a, Expr b) { a = b; }
 void assign(FuncRefVar &a, Expr b) { a = b; }
 void assign(ImageParam &a, const Buffer &b) { a.set(b); }
