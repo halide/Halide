@@ -6,6 +6,10 @@
 using namespace Halide;
 %}
 
+namespace Halide {
+%ignore Internal;
+}
+
 %include "std_string.i"
 %include "std_vector.i"
 
@@ -47,6 +51,3 @@ namespace std {
 //   %template(ListUniformImage) vector<UniformImage>;
    %template(ListInt) vector<int>;
 };
-
-//%ignore std::ostream operator <<;
-%ignore operator<<;

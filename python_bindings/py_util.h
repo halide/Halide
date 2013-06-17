@@ -97,9 +97,6 @@ DEFINE_TYPE(float)
 DEFINE_TYPE(double)
 #undef DEFINE_TYPE
 
-void assign(Buffer &a, int b);
-void assign(Buffer &a, double b);
-
 #define DEFINE_TYPE(T) \
 void assign(Param<T> &a, int b); \
 void assign(Param<T> &a, double b);
