@@ -24,8 +24,8 @@ fcam/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
 process: process.cpp curved.o fcam/Demosaic.o fcam/Demosaic_ARM.o
 	$(CXX) -I../support -Wall -O3 $^ -o $@ -lpthread -ldl -fopenmp $(CUDA_LFLAGS) $(PNGFLAGS)
 
-out.png: process raw.png
-	./process raw.png 3700 2.0 50 out.png
+out.png: process 
+	./process ../images/bayer_raw.png 3700 2.0 50 out.png
 
 clean:
 	rm -f out.png process curved.o camera_pipe
