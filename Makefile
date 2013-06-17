@@ -139,21 +139,25 @@ clean:
 
 TESTS = $(shell ls test/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
+TUTORIALS = $(shell ls tutorial/*.cpp)
 
 # TODO: move this implementation into Makefile.tests which contains a .NOTPARALLEL rule?
 tests: build_tests run_tests
 
-run_tests: $(TESTS:test/%.cpp=test_%) $(ERROR_TESTS:test/error/%.cpp=error_%)
-build_tests: $(TESTS:test/%.cpp=$(BIN_DIR)/test_%) $(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%)
+run_tests: $(TESTS:test/%.cpp=test_%) $(ERROR_TESTS:test/error/%.cpp=error_%) $(TUTORIALS:tutorial/%.cpp=tutorial_%)
+build_tests: $(TESTS:test/%.cpp=$(BIN_DIR)/test_%) $(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) $(TUTORIAL:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
 
 $(BIN_DIR)/test_%: test/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) -O3 $<  -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
+	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
 
 $(BIN_DIR)/error_%: test/error/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) -O3 $<  -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
+	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
+
+$(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
+	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
 
 test_%: $(BIN_DIR)/test_%
 	@-mkdir -p tmp
@@ -163,6 +167,11 @@ test_%: $(BIN_DIR)/test_%
 error_%: $(BIN_DIR)/error_%
 	@-mkdir -p tmp
 	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$< 2>&1 | egrep --q "Assertion.*failed"
+	@-echo
+
+tutorial_%: $(BIN_DIR)/tutorial_%
+	@-mkdir -p tmp
+	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$< 
 	@-echo
 
 .PHONY: test_apps
