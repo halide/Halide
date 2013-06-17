@@ -10,7 +10,6 @@
 #include <iostream>
 #include <set>
 #include <sstream>
-#include "RemoveDeadLets.h"
 #include "Tracing.h"
 #include "StorageFlattening.h"
 #include "BoundsInference.h"
@@ -22,6 +21,8 @@
 #include "Deinterleave.h"
 #include "DebugToFile.h"
 #include "EarlyFree.h"
+#include "UniquifyVariableNames.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -286,7 +287,9 @@ private:
         
         /* The following works if the provide steps of a realization
          * always covers the region that will be used */
+        log(4) << "Computing region provided of " << func.name() << " by " << s << "\n";
         Region bounds = region_provided(s, func.name());
+        log(4) << "Done computing region provided\n";
 
         /* The following would work if things were only ever computed
          * exactly to cover the region read. Loop splitting (which
@@ -393,8 +396,9 @@ private:
 
 class InlineFunction : public IRMutator {
     Function func;
+    bool found;
 public:
-    InlineFunction(Function f) : func(f) {
+    InlineFunction(Function f) : func(f), found(false) {
         assert(!f.is_reduction());
     }
 private:
@@ -412,31 +416,30 @@ private:
             Expr body = qualify_expr(func.name() + ".", func.value());
 
             
-            // Bind the args using Let nodes
-
-            /*
+            // Bind the args using Let nodes            
             assert(args.size() == func.args().size());
+            
             for (size_t i = 0; i < args.size(); i++) {
                 body = Let::make(func.name() + "." + func.args()[i], 
                                args[i], 
                                body);
-            }
-            */
+            }            
             
-            
-            // Paste in the args directly - introducing too many let
-            // statements messes up all our peephole matching
-            
-            for (size_t i = 0; i < args.size(); i++) {
-                body = substitute(func.name() + "." + func.args()[i], 
-                                  args[i], body);
-            
-            }
-            
-            
-            expr = body;
+            expr = body;            
+
+            found = true;
         } else {
             IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Provide *op) {
+        found = false;
+        IRMutator::visit(op);
+
+        if (found) {
+            // Clean up so that we don't get code explosion due to recursive inlining
+            stmt = common_subexpression_elimination(stmt);
         }
     }
 };
@@ -709,12 +712,12 @@ Stmt add_image_checks(Stmt s, Function f) {
         // The stride of the output buffer in dimension 0 should also be 1
         lets.push_back(make_pair(f.name() + ".stride.0", 1));
 
-        // Copy the values::make to the old names
+        // Copy the new values to the old names
         for (size_t i = 0; i < lets.size(); i++) {
             s = LetStmt::make(lets[i].first, Variable::make(Int(32), lets[i].first + ".constrained"), s);
         }
 
-        // Assert all the conditions, and set the values::make
+        // Assert all the conditions, and set the new values
         vector<Stmt> asserts;
         for (size_t i = 0; i < lets.size(); i++) {
             Expr var = Variable::make(Int(32), lets[i].first);
@@ -757,6 +760,8 @@ Stmt lower(Function f) {
     s = add_image_checks(s, f);    
     log(2) << "Image checks injected:\n" << s << '\n';
 
+    // This pass injects nested definitions of variable names, so we
+    // can't simplify from here until we fix them up
     log(1) << "Performing bounds inference...\n";
     s = bounds_inference(s, order, env);
     log(2) << "Bounds inference:\n" << s << '\n';
@@ -764,6 +769,13 @@ Stmt lower(Function f) {
     log(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
     log(2) << "Sliding window:\n" << s << '\n';
+
+    // This uniquifies the variable names, so we're good to simplify
+    // after this point. This lets later passes assume syntactic
+    // equivalence means semantic equivalence.
+    log(1) << "Uniquifying variable names...\n";
+    s = uniquify_variable_names(s);
+    log(2) << "Uniquified variable names: \n" << s << "\n\n";
 
     log(1) << "Simplifying...\n";
     s = simplify(s);
@@ -804,12 +816,11 @@ Stmt lower(Function f) {
     log(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     log(2) << "Injected early frees: \n" << s << "\n\n";
-
+    
     log(1) << "Simplifying...\n";
-    s = simplify(s);
     s = remove_trivial_for_loops(s);
-    s = remove_dead_lets(s);
     s = simplify(s);
+    s = common_subexpression_elimination(s);
     log(1) << "Simplified: \n" << s << "\n\n";
 
     return s;

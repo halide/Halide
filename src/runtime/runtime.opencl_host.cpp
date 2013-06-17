@@ -26,7 +26,11 @@
 #endif
 #endif
 
+#ifdef __APPLE__
 #include <OpenCL/cl.h>
+#else
+#include <CL/cl.h>
+#endif
 
 #define WEAK __attribute__((weak))
 
@@ -40,7 +44,7 @@ extern "C" {
 #define TIME_START()
 #define TIME_CHECK(str)
 #else // DEBUG
-#define CHECK_ERR(e,str) fprintf(stderr, "Do %s\n", str); \
+#define CHECK_ERR(err,str) fprintf(stderr, "Do %s\n", str); \
                          if (err != CL_SUCCESS)           \
                             fprintf(stderr, "CL: %s returned non-success: %d\n", str, err); \
                          assert(err == CL_SUCCESS)
@@ -108,29 +112,28 @@ WEAK buffer_t* __malloc_buffer(int32_t size)
     return __make_buffer((uint8_t*)malloc(size), sizeof(uint8_t), size, 1, 1, 1);
 }
 
-WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
-    // TODO
+WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
+
+    size_t real_size;
+    cl_int result = clGetMemObjectInfo((cl_mem)buf->dev, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
+    if (result) {
+        fprintf(stderr, "Bad device pointer %p: clGetMemObjectInfo returned %d\n", (void *)buf->dev, result);
+        return false;
+    }
+    fprintf(stderr, "validate %p: asked for %zu, actual allocated %zu\n", (void*)buf->dev, size, real_size);
+    if (size) assert(real_size >= size && "Validating pointer with insufficient size");
     return true;
 }
 
-WEAK void halide_free_dev_buffer(buffer_t* buf) {
-    #if 0 // temp disable
+WEAK void halide_dev_free(buffer_t* buf) {
+
     #ifndef NDEBUG
-    fprintf(stderr, "In free_buffer of %p - dev: 0x%zx\n", buf, buf->dev);
+    fprintf(stderr, "In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
     #endif
-    //assert(buf->host);
-    //free(buf->host);
-    //buf->host = NULL;
-    if (buf->dev) {
-        CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
-        buf->dev = 0;
-    }
-    // __release_buffer(buf);
-    #else
-    #ifndef NDEBUG
-    fprintf(stderr, "Would have run free_buffer, but skipping (#if disabled)\n");
-    #endif
-    #endif
+
+    assert(halide_validate_dev_pointer(buf));
+    CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
+    buf->dev = 0;
 }
 
 WEAK void halide_init_kernels(const char* src) {
@@ -152,7 +155,7 @@ WEAK void halide_init_kernels(const char* src) {
         dev = devices[deviceCount-1];
 
         #ifndef NDEBUG
-        fprintf(stderr, "Got device %lld, about to create context (t=%d)\n", (int64_t)dev, halide_current_time());
+        fprintf(stderr, "Got device %lld, about to create context (t=%d)\n", (long long)dev, halide_current_time());
         #endif
 
 
@@ -192,19 +195,31 @@ WEAK void halide_init_kernels(const char* src) {
     }
 }
 
+// Used to generate correct timings when tracing
+WEAK void halide_dev_sync() {
+    clFinish(cl_q);
+}
+
 WEAK void halide_release() {
-    #if 0
-    CUcontext ignore;
     // TODO: this is for timing; bad for release-mode performance
-    CHECK_CALL( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
-    //CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
+    #ifndef NDEBUG
+    fprintf( stderr, "dev_sync on exit" );
     #endif
+    halide_dev_sync();
+
+    // TODO: destroy context if we own it
+
+    // Unload the module
+    if (__mod) {
+        CHECK_CALL( clReleaseProgram(__mod), "clReleaseProgram" );
+        __mod = 0;
+    }
 }
 
 static cl_kernel __get_kernel(const char* entry_name) {
     cl_kernel f;
     #ifdef NDEBUG
-    char msg[1];
+    // char msg[1];
     #else
     char msg[256];
     snprintf(msg, 256, "get_kernel %s (t=%d)", entry_name, halide_current_time() );
@@ -221,7 +236,7 @@ static cl_kernel __get_kernel(const char* entry_name) {
 static cl_mem __dev_malloc(size_t bytes) {
     cl_mem p;
     #ifdef NDEBUG
-    char msg[1];
+    // char msg[1];
     #else
     char msg[256];
     snprintf(msg, 256, "dev_malloc (%zu bytes) (t=%d)", bytes, halide_current_time() );
@@ -247,32 +262,31 @@ static inline size_t buf_size(buffer_t* buf) {
     return sz;
 }
 
-WEAK void halide_dev_malloc_if_missing(buffer_t* buf) {
+WEAK void halide_dev_malloc(buffer_t* buf) {
     #ifndef NDEBUG
-    fprintf(stderr, "dev_malloc_if_missing of %dx%dx%dx%d (%d bytes) (buf->dev = %p) buffer\n",
+    fprintf(stderr, "dev_malloc of %dx%dx%dx%d (%d bytes) (buf->dev = %p) buffer\n",
             buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
     #endif
     if (buf->dev) {
-        #ifndef NDEBUG
         assert(halide_validate_dev_pointer(buf));
-        #endif
         return;
     }
     size_t size = buf_size(buf);
-    buf->dev = (uint64_t)((void*)__dev_malloc(size));
+    buf->dev = (uint64_t)__dev_malloc(size);
     assert(buf->dev);
 }
 
 WEAK void halide_copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         assert(buf->host && buf->dev);
-        size_t size = buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->extent[3] * buf->elem_size;
+        size_t size = buf_size(buf);
         #ifdef NDEBUG
-        char msg[1];
+        // char msg[1];
         #else
         char msg[256];
         snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, halide_current_time() );
         #endif
+        assert(halide_validate_dev_pointer(buf));
         TIME_START();
         int err = clEnqueueWriteBuffer( cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
         CHECK_ERR( err, msg );
@@ -285,13 +299,14 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
     if (buf->dev_dirty) {
         clFinish(cl_q); // block on completion before read back
         assert(buf->host && buf->dev);
-        size_t size = buf->extent[0] * buf->extent[1] * buf->extent[2] * buf->extent[3] * buf->elem_size;
+        size_t size = buf_size(buf);
         #ifdef NDEBUG
         char msg[1];
         #else
         char msg[256];
         snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
         #endif
+        assert(halide_validate_dev_pointer(buf, size));
         TIME_START();
         printf("%s\n", msg);
         int err = clEnqueueReadBuffer( cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
@@ -307,7 +322,7 @@ WEAK void halide_dev_run(
     int blocksX, int blocksY, int blocksZ,
     int threadsX, int threadsY, int threadsZ,
     int shared_mem_bytes,
-    size_t argSizes[],
+    size_t arg_sizes[],
     void* args[])
 {
     cl_kernel f = __get_kernel(entry_name);
@@ -328,15 +343,17 @@ WEAK void halide_dev_run(
 
     // Set args
     int i = 0;
-    while (argSizes[i] != 0) {
-        CHECK_CALL( clSetKernelArg(f, i, argSizes[i], args[i]), "clSetKernelArg" );
+    while (arg_sizes[i] != 0) {
+        CHECK_CALL( clSetKernelArg(f, i, arg_sizes[i], args[i]), "clSetKernelArg" );
         i++;
     }
     // Set the shared mem buffer last
-    CHECK_CALL( clSetKernelArg(f, i, shared_mem_bytes, NULL), "clSetKernelArg" );
+    // Always set at least 1 byte of shmem, to keep the launch happy
+    CHECK_CALL( clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL), "clSetKernelArg" );
 
     // Launch kernel
     TIME_START();
+    fprintf(stderr, "%s\n", msg);
     int err =
     clEnqueueNDRangeKernel(
         cl_q,
@@ -376,6 +393,14 @@ int f( buffer_t *input, buffer_t *result, int N )
     int blocksY = 1;
     int blocksZ = 1;
 
+
+    threadsX = 8;
+    threadsY =  1;
+    threadsZ =  1;
+    blocksX = 4;
+    blocksY = 4;
+    blocksZ = 1;
+
     // Invoke
     size_t argSizes[] = { sizeof(cl_mem), sizeof(cl_mem), sizeof(int), 0 };
     void* args[] = { &input->dev, &result->dev, &N, 0 };
@@ -412,8 +437,8 @@ int main(int argc, char* argv[]) {
     }
     in.host_dirty = true;
 
-    halide_dev_malloc_if_missing(&in);
-    halide_dev_malloc_if_missing(&out);
+    halide_dev_malloc(&in);
+    halide_dev_malloc(&out);
     halide_copy_to_dev(&in);
 
     f( &in, &out, N );

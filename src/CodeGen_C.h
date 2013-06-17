@@ -30,7 +30,7 @@ public:
  
     /** Emit source code equivalent to the given statement, wrapped in
      * a function with the given type signature */
-    void compile(Stmt stmt, const std::string &name, const std::vector<Argument> &args);    
+    void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);    
 
     /** Emit a header file defining a halide pipeline with the given
      * type signature */
@@ -53,7 +53,7 @@ protected:
     void print_stmt(Stmt);
 
     /** Emit the C name for a halide type */
-    std::string print_type(Type);
+    virtual std::string print_type(Type);
 
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
     std::string print_name(const std::string &);    

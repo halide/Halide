@@ -48,7 +48,7 @@ private:
                 args.push_back(op->bounds[i].min);
                 args.push_back(op->bounds[i].extent);
             }
-            Expr time = Call::make(Int(32), "halide_current_time", std::vector<Expr>());
+            Expr time = Call::make(Int(32), "halide_current_time", std::vector<Expr>(), Call::Extern);
             Stmt print = PrintStmt::make("Realizing " + op->name + " over ", args);
             Stmt start_time = PrintStmt::make("Starting realization of " + op->name + " at time ", vec(time));
             Stmt body = Block::make(Block::make(start_time, print), op->body);
@@ -58,7 +58,7 @@ private:
 
     void visit(const Pipeline *op) {
         if (level >= 1) {
-            Expr time = Call::make(Int(32), "halide_current_time", std::vector<Expr>());
+            Expr time = Call::make(Int(32), "halide_current_time", std::vector<Expr>(), Call::Extern);
             Stmt print_produce = PrintStmt::make("Producing " + op->name + " at time ", vec(time));
             Stmt print_update = PrintStmt::make("Updating " + op->name + " at time ", vec(time));
             Stmt print_consume = PrintStmt::make("Consuming " + op->name + " at time ", vec(time));
@@ -88,8 +88,8 @@ Stmt inject_tracing(Stmt s) {
     InjectTracing tracing;
     s = tracing.mutate(s);
     if (tracing.level >= 1) {
-        Expr time = Call::make(Int(32), "halide_current_time", std::vector<Expr>());
-        Expr start_clock_call = Call::make(Int(32), "halide_start_clock", std::vector<Expr>());
+        Expr time = Call::make(Int(32), "halide_current_time", std::vector<Expr>(), Call::Extern);
+        Expr start_clock_call = Call::make(Int(32), "halide_start_clock", std::vector<Expr>(), Call::Extern);
         Stmt start_clock = AssertStmt::make(start_clock_call == 0, "Failed to start clock");
         Stmt print_final_time = PrintStmt::make("Total time: ", vec(time));
         s = Block::make(Block::make(start_clock, s), print_final_time);

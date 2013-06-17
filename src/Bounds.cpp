@@ -230,39 +230,57 @@ private:
     }
 
     void visit(const EQ *) {
-        assert(false && "Bounds of boolean");
+        //assert(false && "Bounds of boolean");
+        min = Expr();
+        max = Expr();
     }
 
     void visit(const NE *) {
-        assert(false && "Bounds of boolean");
+        // assert(false && "Bounds of boolean");
+        min = Expr();
+        max = Expr();
     }
 
     void visit(const LT *) {
-        assert(false && "Bounds of boolean");
+        // assert(false && "Bounds of boolean");
+        min = Expr();
+        max = Expr();
     }
 
     void visit(const LE *) {
-        assert(false && "Bounds of boolean");
+        // assert(false && "Bounds of boolean");
+        min = Expr();
+        max = Expr();
     }
 
     void visit(const GT *) {
-        assert(false && "Bounds of boolean");
+        // assert(false && "Bounds of boolean");
+        min = Expr();
+        max = Expr();
     }
 
     void visit(const GE *) {
-        assert(false && "Bounds of comparison");
+        // assert(false && "Bounds of comparison");
+        min = Expr();
+        max = Expr();
     }
 
     void visit(const And *) {
-        assert(false && "Bounds of comparison");
+        // assert(false && "Bounds of comparison");
+        min = Expr();
+        max = Expr();
     }
 
     void visit(const Or *) {
-        assert(false && "Bounds of comparison");
+        // assert(false && "Bounds of comparison");
+        min = Expr();
+        max = Expr();
     }
 
     void visit(const Not *) {
-        assert(false && "Bounds of comparison");
+        // assert(false && "Bounds of comparison");
+        min = Expr();
+        max = Expr();
     }
 
     void visit(const Select *op) {
@@ -593,8 +611,8 @@ void bounds_test() {
     Stmt loop = For::make("x", 3, 10, For::Serial, 
                         Provide::make("output", 
                                     Add::make(
-                                        Call::make(Int(32), "input", input_site_1),
-                                        Call::make(Int(32), "input", input_site_2)),
+                                        Call::make(Int(32), "input", input_site_1, Call::Extern),
+                                        Call::make(Int(32), "input", input_site_2, Call::Extern)),
                                     output_site));
 
     map<string, Region> r;

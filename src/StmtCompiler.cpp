@@ -58,6 +58,9 @@ StmtCompiler::StmtCompiler(string arch) {
     else if (arch == "ptx") {
         // equivalent to "x86" on the host side, i.e. x86_64, no AVX
         contents = new CodeGen_GPU_Host(X86_64Bit | X86_SSE41 | GPU_PTX);
+    } else if (arch == "opencl") {
+        // equivalent to "x86" on the host side, i.e. x86_64, no AVX
+        contents = new CodeGen_GPU_Host(X86_64Bit | X86_SSE41 | GPU_OpenCL);
     }
 #endif // _WIN32
     else {
@@ -65,7 +68,7 @@ StmtCompiler::StmtCompiler(string arch) {
         std::cerr << "Known targets are: "
                   << "x86 x86-avx x86-32 arm arm-android " 
                   << "x86-nacl x86-32-nacl x86-32-sse41-nacl arm-nacl "
-                  << "ptx"
+                  << "ptx opencl"
 		  << std::endl;
         assert(false);
     }

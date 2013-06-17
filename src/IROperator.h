@@ -21,6 +21,14 @@ bool EXPORT is_const(Expr e);
  * Cast, or Broadcast of the same. */
 bool EXPORT is_const(Expr e, int v);
 
+/** If an expression is an IntImm, return a pointer to its
+ * value. Otherwise returns NULL. */
+const int * EXPORT as_const_int(Expr e);
+
+/** If an expression is a FloatImm, return a pointer to its
+ * value. Otherwise returns NULL. */
+const float * EXPORT as_const_float(Expr e);
+
 /** Is the expression a constant integer power of two. Also returns
  * log base two of the expression if it is. */
 bool EXPORT is_const_power_of_two(Expr e, int *bits);
@@ -117,6 +125,18 @@ Expr EXPORT const_false(int width = 1);
  * 
  */
 void EXPORT match_types(Expr &a, Expr &b);
+
+/** Halide's vectorizable transcendentals. */
+// @{
+Expr EXPORT halide_log(Expr a);
+Expr EXPORT halide_exp(Expr a);
+// @}
+
+/** Raise an expression to an integer power by repeatedly multiplying
+ * it by itself. */
+Expr EXPORT raise_to_integer_power(Expr a, int b);
+
+
 }
 
 /** Cast an expression to the halide type corresponding to the C++ type T */
@@ -136,7 +156,7 @@ inline Expr cast(Type t, Expr a) {
             assert(b->width == t.width);
             return Internal::Broadcast::make(cast(t.element_of(), b->value), t.width);
         }
-    }
+    }    
     return Internal::Cast::make(t, a);
 }
 
@@ -329,17 +349,17 @@ inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
 inline Expr abs(Expr a) {
     assert(a.defined() && "abs of undefined");
     if (a.type() == Int(8))
-        return Internal::Call::make(Int(8), "abs_i8", vec(a));
+        return Internal::Call::make(Int(8), "abs_i8", vec(a), Internal::Call::Extern);
     if (a.type() == Int(16)) 
-        return Internal::Call::make(Int(16), "abs_i16", vec(a));
+        return Internal::Call::make(Int(16), "abs_i16", vec(a), Internal::Call::Extern);
     if (a.type() == Int(32)) 
-        return Internal::Call::make(Int(32), "abs_i32", vec(a));
+        return Internal::Call::make(Int(32), "abs_i32", vec(a), Internal::Call::Extern);
     if (a.type() == Int(64)) 
-        return Internal::Call::make(Int(64), "abs_i64", vec(a));
+        return Internal::Call::make(Int(64), "abs_i64", vec(a), Internal::Call::Extern);
     if (a.type() == Float(32)) 
-        return Internal::Call::make(Float(32), "abs_f32", vec(a));
+        return Internal::Call::make(Float(32), "abs_f32", vec(a), Internal::Call::Extern);
     if (a.type() == Float(64)) 
-        return Internal::Call::make(Float(64), "abs_f64", vec(a));
+        return Internal::Call::make(Float(64), "abs_f64", vec(a), Internal::Call::Extern);
     assert(false && "Invalid type for abs");
     return 0; // prevent "control reaches end of non-void function" error
 }
@@ -356,9 +376,9 @@ inline Expr select(Expr a, Expr b, Expr c) {
 inline Expr sin(Expr x) {
     assert(x.defined() && "sin of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "sin_f64", vec(x));
+        return Internal::Call::make(Float(64), "sin_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "sin_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "sin_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -367,9 +387,9 @@ inline Expr sin(Expr x) {
 inline Expr asin(Expr x) {
     assert(x.defined() && "asin of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "asin_f64", vec(x));
+        return Internal::Call::make(Float(64), "asin_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "asin_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "asin_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -378,9 +398,9 @@ inline Expr asin(Expr x) {
 inline Expr cos(Expr x) {
     assert(x.defined() && "cos of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "cos_f64", vec(x));
+        return Internal::Call::make(Float(64), "cos_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "cos_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "cos_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -389,9 +409,9 @@ inline Expr cos(Expr x) {
 inline Expr acos(Expr x) {
     assert(x.defined() && "acos of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "acos_f64", vec(x));
+        return Internal::Call::make(Float(64), "acos_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "acos_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "acos_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -400,9 +420,9 @@ inline Expr acos(Expr x) {
 inline Expr tan(Expr x) {
     assert(x.defined() && "tan of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "tan_f64", vec(x));
+        return Internal::Call::make(Float(64), "tan_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "tan_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "tan_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -411,9 +431,9 @@ inline Expr tan(Expr x) {
 inline Expr atan(Expr x) {
     assert(x.defined() && "atan of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "atan_f64", vec(x));
+        return Internal::Call::make(Float(64), "atan_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "atan_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "atan_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -422,9 +442,9 @@ inline Expr atan(Expr x) {
 inline Expr sinh(Expr x) {
     assert(x.defined() && "sinh of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "sinh_f64", vec(x));
+        return Internal::Call::make(Float(64), "sinh_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "sinh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "sinh_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -433,9 +453,9 @@ inline Expr sinh(Expr x) {
 inline Expr asinh(Expr x) {
     assert(x.defined() && "asinh of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "asinh_f64", vec(x));
+        return Internal::Call::make(Float(64), "asinh_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "asinh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "asinh_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -444,9 +464,9 @@ inline Expr asinh(Expr x) {
 inline Expr cosh(Expr x) {
     assert(x.defined() && "cosh of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "cosh_f64", vec(x));
+        return Internal::Call::make(Float(64), "cosh_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "cosh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "cosh_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -455,9 +475,9 @@ inline Expr cosh(Expr x) {
 inline Expr acosh(Expr x) {
     assert(x.defined() && "acosh of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "acosh_f64", vec(x));
+        return Internal::Call::make(Float(64), "acosh_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "acosh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "acosh_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -466,9 +486,9 @@ inline Expr acosh(Expr x) {
 inline Expr tanh(Expr x) {
     assert(x.defined() && "tanh of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "tanh_f64", vec(x));
+        return Internal::Call::make(Float(64), "tanh_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "tanh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "tanh_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -477,9 +497,9 @@ inline Expr tanh(Expr x) {
 inline Expr atanh(Expr x) {
     assert(x.defined() && "atanh of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "atanh_f64", vec(x));
+        return Internal::Call::make(Float(64), "atanh_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "atanh_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "atanh_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -488,46 +508,106 @@ inline Expr atanh(Expr x) {
 inline Expr sqrt(Expr x) {
     assert(x.defined() && "sqrt of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "sqrt_f64", vec(x));
+        return Internal::Call::make(Float(64), "sqrt_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "sqrt_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "sqrt_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
-/** Return the square root of a floating-point expression. If the
- * argument is not floating-point, is it cast to Float(32). */
+/** Return the square root of the sum of the squares of two
+ * floating-point expressions. If the argument is not floating-point,
+ * is it cast to Float(32). On platforms with a sqrt op (e.g. x86),
+ * it's faster to compute this manually using sqrt. */
 inline Expr hypot(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "hypot of undefined");
     if (x.type() == Float(64)) {
         y = cast<double>(y);
-        return Internal::Call::make(Float(64), "hypot_f64", vec(x, y));
+        return Internal::Call::make(Float(64), "hypot_f64", vec(x, y), Internal::Call::Extern);
     } else {
         x = cast<float>(x);
         y = cast<float>(y);
-        return Internal::Call::make(Float(32), "hypot_f32", vec(x, y));
+        return Internal::Call::make(Float(32), "hypot_f32", vec(x, y), Internal::Call::Extern);
     }
 }
 
 /** Return the exponential of a floating-point expression. If the
- * argument is not floating-point, is it cast to Float(32). */
+ * argument is not floating-point, is it cast to Float(32). For
+ * Float(64) arguments, this calls the system exp function, and does
+ * not vectorize well. For Float(32) arguments, this function is
+ * vectorizable, does the right thing for extremely small or extremely
+ * large inputs, and is accurate up to the last bit of the
+ * mantissa. */
 inline Expr exp(Expr x) {
     assert(x.defined() && "exp of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "exp_f64", vec(x));
+        return Internal::Call::make(Float(64), "exp_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "exp_f32", vec(cast<float>(x)));
+        // return Internal::Call::make(Float(32), "exp_f32", vec(cast<float>(x)), Internal::Call::Extern);
+        return Internal::halide_exp(cast<float>(x));
     }
 }
 
 /** Return the logarithm of a floating-point expression. If the
- * argument is not floating-point, is it cast to Float(32). */
+ * argument is not floating-point, is it cast to Float(32). For
+ * Float(64) arguments, this calls the system log function, and does
+ * not vectorize well. For Float(32) arguments, this function is
+ * vectorizable, does the right thing for inputs <= 0 (returns
+ * -inf or nan), and is accurate up to the last bit of the mantissa. */
 inline Expr log(Expr x) {
     assert(x.defined() && "log of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "log_f64", vec(x));
+        return Internal::Call::make(Float(64), "log_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "log_f32", vec(cast<float>(x)));
+        // return Internal::Call::make(Float(32), "log_f32", vec(cast<float>(x)), Internal::Call::Extern);
+        return Internal::halide_log(cast<float>(x));
     }
+}
+
+/** Return one floating point expression raised to the power of
+ * another. The type of the result is given by the type of the first
+ * argument. If the first argument is not a floating-point type, it is
+ * cast to Float(32). For Float(32), cleanly vectorizable, and
+ * accurate up to the last few bits of the mantissa. Gets worse when
+ * approaching overflow. */
+inline Expr pow(Expr x, Expr y) {
+    assert(x.defined() && y.defined() && "pow of undefined");
+    
+    if (const int *i = as_const_int(y)) {
+        return raise_to_integer_power(x, *i);
+    }
+
+    if (x.type() == Float(64)) {
+        y = cast<double>(y);
+        return Internal::Call::make(Float(64), "pow_f64", vec(x, y), Internal::Call::Extern);
+    } else {
+        x = cast<float>(x);
+        y = cast<float>(y);
+        return Internal::halide_exp(Internal::halide_log(x) * y);
+    }
+}
+
+/** Fast approximate cleanly vectorizable log for Float(32). Returns
+ * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
+ * mantissa. */
+EXPORT Expr fast_log(Expr x);
+
+/** Fast approximate cleanly vectorizable exp for Float(32). Returns
+ * nonsense for inputs that would overflow or underflow. Typically
+ * accurate up to the last 5 bits of the mantissa. Gets worse when
+ * approaching overflow. */
+EXPORT Expr fast_exp(Expr x);
+
+/** Fast approximate cleanly vectorizable pow for Float(32). Returns
+ * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
+ * mantissa for typical exponents. Gets worse when approaching overflow. */
+inline Expr fast_pow(Expr x, Expr y) {
+    if (const int *i = as_const_int(y)) {
+        return raise_to_integer_power(x, *i);
+    }
+
+    x = cast<float>(x);
+    y = cast<float>(y);
+    return select(x == 0.0f, 0.0f, fast_exp(fast_log(x) * y));
 }
 
 /** Return the greatest whole number less than or equal to a
@@ -537,9 +617,9 @@ inline Expr log(Expr x) {
 inline Expr floor(Expr x) {
     assert(x.defined() && "floor of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "floor_f64", vec(x));
+        return Internal::Call::make(Float(64), "floor_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "floor_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "floor_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -550,9 +630,9 @@ inline Expr floor(Expr x) {
 inline Expr ceil(Expr x) {
     assert(x.defined() && "ceil of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "ceil_f64", vec(x));
+        return Internal::Call::make(Float(64), "ceil_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "ceil_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "ceil_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -563,26 +643,84 @@ inline Expr ceil(Expr x) {
 inline Expr round(Expr x) {
     assert(x.defined() && "round of undefined");
     if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "round_f64", vec(x));
+        return Internal::Call::make(Float(64), "round_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "round_f32", vec(cast<float>(x)));
+        return Internal::Call::make(Float(32), "round_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
-/** Return one floating point expression raised to the power of
- * another. The type of the result is given by the type of the first
- * argument. If the first argument is not a floating-point type, it is
- * cast to Float(32) */
-inline Expr pow(Expr x, Expr y) {
-    assert(x.defined() && y.defined() && "pow of undefined");
-    if (x.type() == Float(64)) {
-        y = cast<double>(y);
-        return Internal::Call::make(Float(64), "pow_f64", vec(x, y));
-    } else {
-        x = cast<float>(x);
-        y = cast<float>(y);
-        return Internal::Call::make(Float(32), "pow_f32", vec(x, y));
+/** Reinterpret the bits of one value as another type. */
+inline Expr reinterpret(Type t, Expr e) {
+    assert(e.defined() && "reinterpret of undefined");
+    assert((t.bits * t.width) == (e.type().bits * e.type().width));
+    return Internal::Call::make(t, Internal::Call::reinterpret, vec(e), Internal::Call::Intrinsic);
+}
+
+template<typename T>
+inline Expr reinterpret(Expr e) {
+    return reinterpret(type_of<T>(), e);
+}
+
+/** Return the bitwise and of two expressions (which need not have the
+ * same type). The type of the result is the type of the first
+ * argument. */
+inline Expr operator&(Expr x, Expr y) {
+    assert(x.defined() && y.defined() && "bitwise and of undefined");
+    if (y.type() != x.type()) {
+        y = reinterpret(x.type(), y);
     }
+    return Internal::Call::make(x.type(), Internal::Call::bitwise_and, vec(x, y), Internal::Call::Intrinsic);
+}
+
+/** Return the bitwise or of two expressions (which need not have the
+ * same type). The type of the result is the type of the first
+ * argument. */
+inline Expr operator|(Expr x, Expr y) {
+    assert(x.defined() && y.defined() && "bitwise or of undefined");
+    if (y.type() != x.type()) {
+        y = reinterpret(x.type(), y);
+    }
+    return Internal::Call::make(x.type(), Internal::Call::bitwise_or, vec(x, y), Internal::Call::Intrinsic);
+}
+
+/** Return the bitwise exclusive or of two expressions (which need not
+ * have the same type). The type of the result is the type of the
+ * first argument. */
+inline Expr operator^(Expr x, Expr y) {
+    assert(x.defined() && y.defined() && "bitwise or of undefined");
+    if (y.type() != x.type()) {
+        y = reinterpret(x.type(), y);
+    }
+    return Internal::Call::make(x.type(), Internal::Call::bitwise_xor, vec(x, y), Internal::Call::Intrinsic);
+}
+
+/** Return the bitwise not of an expression. */
+inline Expr operator~(Expr x) {
+    assert(x.defined() && "bitwise or of undefined");
+    return Internal::Call::make(x.type(), Internal::Call::bitwise_not, vec(x), Internal::Call::Intrinsic);
+}
+
+/** Shift the bits of an integer value left. This is actually less
+ * efficient than multiplying by 2^n, because Halide's optimization
+ * passes understand multiplication, and will compile it to
+ * shifting. This operator is only for if you really really need bit
+ * shifting (e.g. because the exponent is a run-time parameter). */
+inline Expr operator<<(Expr x, Expr y) {
+    assert(x.defined() && y.defined() && "shift left of undefined");
+    assert(!x.type().is_float() && "bit shifting not defined for floats");
+    return Internal::Call::make(x.type(), Internal::Call::shift_left, vec(x, y), Internal::Call::Intrinsic);
+}
+
+/** Shift the bits of an integer value right. Does sign extension for
+ * signed integers. This is less efficient than dividing by a power of
+ * two. Halide's definition of division (always round to negative
+ * infinity) means that all divisions by powers of two get compiled to
+ * bit-shifting, and Halide's optimization routines understand
+ * division and can work with it. */
+inline Expr operator>>(Expr x, Expr y) {
+    assert(x.defined() && y.defined() && "shift right of undefined");
+    assert(!x.type().is_float() && "bit shifting not defined for floats");
+    return Internal::Call::make(x.type(), Internal::Call::shift_right, vec(x, y), Internal::Call::Intrinsic);
 }
 
 }

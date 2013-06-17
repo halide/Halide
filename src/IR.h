@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "Buffer.h"
 #include "IRVisitor.h"
+#include "Buffer.h"
 #include "Type.h"
 #include "IntrusivePtr.h"
 #include "Util.h"
@@ -25,7 +25,7 @@ struct IRNodeType {};
 
 /** The abstract base classes for a node in the Halide IR. */
 struct IRNode {
-
+    
     /** We use the visitor pattern to traverse IR nodes throughout the
      * compiler, so we have a virtual accept method which accepts
      * visitors.
@@ -48,6 +48,12 @@ struct IRNode {
      * without it), and we only want it for IR nodes. */
     virtual const IRNodeType *type_info() const = 0;
 };
+
+template<>
+EXPORT inline RefCount &ref_count<IRNode>(const IRNode *n) {return n->ref_count;}
+
+template<>
+EXPORT inline void destroy<IRNode>(const IRNode *n) {delete n;}
 
 /** IR nodes are split into expressions and statements. These are
    similar to expressions and statements in C - expressions
@@ -119,6 +125,35 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
     }
 };
 
+/** Integer constants */
+struct IntImm : public ExprNode<IntImm> {
+    int value;
+
+    static IntImm *make(int value) {
+        if (value >= -8 && value <= 8) return small_int_cache + value + 8;
+        IntImm *node = new IntImm;
+        node->type = Int(32);
+        node->value = value;
+        return node;
+    }
+
+private:
+    /** ints from -8 to 8 */
+    static IntImm small_int_cache[17];
+};
+
+/** Floating point constants */
+struct FloatImm : public ExprNode<FloatImm> {
+    float value;
+
+    static FloatImm *make(float value) {
+        FloatImm *node = new FloatImm;
+        node->type = Float(32);
+        node->value = value;
+        return node;
+    }
+};
+
 }
 
 /** A fragment of Halide syntax. It's implemented as reference-counted
@@ -131,16 +166,28 @@ struct Expr : public Internal::IRHandle {
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
     Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
 
+    
     /** Make an expression representing a const 32-bit int (i.e. an IntImm) */
-    EXPORT Expr(int);
+    EXPORT Expr(int x) : IRHandle(Internal::IntImm::make(x)) {
+    }
 
     /** Make an expression representing a const 32-bit float (i.e. a FloatImm) */
-    EXPORT Expr(float);
+    EXPORT Expr(float x) : IRHandle(Internal::FloatImm::make(x)) {
+    }   
 
     /** Get the type of this expression node */
     Type type() const {
         return ((Internal::BaseExprNode *)ptr)->type;
     }
+
+    /** This lets you use an Expr as a key in a map of the form
+     * map<Expr, Foo, Expr::Compare> */
+    struct Compare {
+        bool operator()(const Expr &a, const Expr &b) const {
+            return a.ptr < b.ptr;
+        }
+    };
+
 };    
 
 }
@@ -155,34 +202,22 @@ namespace Internal {
 struct Stmt : public IRHandle {
     Stmt() : IRHandle() {}
     Stmt(const BaseStmtNode *n) : IRHandle(n) {}
+
+    /** This lets you use a Stmt as a key in a map of the form    
+     * map<Stmt, Foo, Stmt::Compare> */
+    struct Compare {
+        bool operator()(const Stmt &a, const Stmt &b) const {
+            return a.ptr < b.ptr;
+        }
+    };
 };
 
 /** The actual IR nodes begin here. Remember that all the Expr
  * nodes also have a public "type" property */
 
-/** Integer constants */
-struct IntImm : public ExprNode<IntImm> {
-    int value;
+}
 
-    static Expr make(int value) {
-        IntImm *node = new IntImm;
-        node->type = Int(32);
-        node->value = value;
-        return node;
-    }
-};
-
-/** Floating point constants */
-struct FloatImm : public ExprNode<FloatImm> {
-    float value;
-
-    static Expr make(float value) {
-        FloatImm *node = new FloatImm;
-        node->type = Float(32);
-        node->value = value;
-        return node;
-    }
-};
+namespace Internal {
 
 /** Cast a node from one type to another */
 struct Cast : public ExprNode<Cast> {
@@ -583,7 +618,7 @@ struct Let : public ExprNode<Let> {
         assert(body.defined() && "Let of undefined");
 
         Let *node = new Let;
-        node->type = value.type();
+        node->type = body.type();
         node->name = name;
         node->value = value;
         node->body = body;        
@@ -861,8 +896,21 @@ namespace Internal {
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image, Extern, Halide} CallType;
+    typedef enum {Image, Extern, Halide, Intrinsic} CallType;    
     CallType call_type;
+
+    // Halide uses calls internally to represent certain operations
+    // (instead of IR nodes). These are matched by name.
+    static const std::string debug_to_file, 
+        shuffle_vector, 
+        interleave_vectors, 
+        reinterpret, 
+        bitwise_and, 
+        bitwise_not, 
+        bitwise_xor, 
+        bitwise_or, 
+        shift_left, 
+        shift_right;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function
@@ -877,7 +925,7 @@ struct Call : public ExprNode<Call> {
     Parameter param;
 
     static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type, 
-                            Function func, Buffer image, Parameter param) { 
+                     Function func = Function(), Buffer image = Buffer(), Parameter param = Parameter()) { 
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Call of undefined");
         }
@@ -897,11 +945,6 @@ struct Call : public ExprNode<Call> {
         node->image = image;
         node->param = param;
         return node;
-    }
-
-    /** Convenience constructor for calls to externally defined functions */
-    static Expr make(Type type, std::string name, const std::vector<Expr> &args) {
-        return make(type, name, args, Extern, Function(), Buffer(), Parameter());
     }
 
     /** Convenience constructor for calls to other halide functions */

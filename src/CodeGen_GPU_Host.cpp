@@ -1,5 +1,6 @@
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_OpenCL_Dev.h"
 #include "IROperator.h"
 #include <iostream>
 #include "buffer_t.h"
@@ -25,6 +26,9 @@ extern "C" int halide_internal_initmod_ptx_host_length;
 static void *halide_internal_initmod_ptx_host = 0;
 static int halide_internal_initmod_ptx_host_length = 0;
 #endif
+
+extern "C" unsigned char halide_internal_initmod_opencl_host[];
+extern "C" int halide_internal_initmod_opencl_host_length;
 
 namespace Halide { 
 namespace Internal {
@@ -284,19 +288,31 @@ CodeGen_GPU_Host::CodeGen_GPU_Host(uint32_t options) :
     copy_to_host_fn(NULL), 
     dev_run_fn(NULL), 
     dev_sync_fn(NULL),
-    cgdev(make_dev(options)) {
+    cgdev(make_dev(options)),
+    options(options) {
 
     if (options & GPU_PTX) {
         assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
         initmod = halide_internal_initmod_ptx_host;
         initmod_length = halide_internal_initmod_ptx_host_length;
+    } else if (options & GPU_OpenCL) {
+        initmod = halide_internal_initmod_opencl_host;
+        initmod_length = halide_internal_initmod_opencl_host_length;
     }
 }
 
 CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(uint32_t options)
 {
-    assert(options & GPU_PTX);
-    return new CodeGen_PTX_Dev();
+    if (options & GPU_PTX) {
+        log(0) << "Constructing PTX device codegen\n";
+        return new CodeGen_PTX_Dev();
+    } else if (options & GPU_OpenCL) {
+        log(0) << "Constructing OpenCL device codegen\n";
+        return new CodeGen_OpenCL_Dev();
+    } else {
+        assert(false && "Requested unknown GPU target");
+        return NULL;
+    }
 }
 
 
@@ -358,19 +374,19 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
         module->dump();
     }
 
-    string ptx_src = cgdev->compile_to_src();
-    log(2) << ptx_src;
-    llvm::Type *ptx_src_type = ArrayType::get(i8, ptx_src.size()+1);
-    GlobalVariable *ptx_src_global = new GlobalVariable(*module, ptx_src_type, 
+    string kernel_src = cgdev->compile_to_src();
+    log(2) << kernel_src;
+    llvm::Type *kernel_src_type = ArrayType::get(i8, kernel_src.size()+1);
+    GlobalVariable *kernel_src_global = new GlobalVariable(*module, kernel_src_type, 
                                                          true, GlobalValue::PrivateLinkage, 0,
-                                                         "halide_ptx_src");
-    ptx_src_global->setInitializer(ConstantDataArray::getString(*context, ptx_src));
+                                                         "halide_kernel_src");
+    kernel_src_global->setInitializer(ConstantDataArray::getString(*context, kernel_src));
 
     // Jump to the start of the function and insert a call to halide_init_kernels
     builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
-    Value *ptx_src_ptr = builder->CreateConstInBoundsGEP2_32(ptx_src_global, 0, 0);
+    Value *kernel_src_ptr = builder->CreateConstInBoundsGEP2_32(kernel_src_global, 0, 0);
     Value *init = module->getFunction("halide_init_kernels");
-    builder->CreateCall(init, ptx_src_ptr);
+    builder->CreateCall(init, kernel_src_ptr);
 
     delete bitcode_buffer;
 }
@@ -380,7 +396,7 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
     // Make sure extern cuda calls inside the module point to the
     // right things. If cuda is already linked in we should be
     // fine. If not we need to tell llvm to load it.
-    if (!lib_cuda_linked) {
+    if (options & GPU_PTX && !lib_cuda_linked) {
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (dlsym(NULL, "cuInit")) {
@@ -390,9 +406,11 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
             string error;
             llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
             if (!error.empty()) {
+                error.clear();
                 llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.dylib", &error);
             }
             if (!error.empty()) {
+                error.clear();
                 llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
             }
             assert(error.empty() && "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll");
@@ -404,25 +422,50 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
         void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("cuCtxDestroy_v2");
         assert(ptr && "Could not find cuCtxDestroy_v2 in cuda library");
         cuCtxDestroy = (int (*)(CUctx_st *))(ptr);
+    } else if (options & GPU_OpenCL) {
+        log(0) << "TODO: cache results of linking OpenCL lib\n";
+
+        // First check if libCuda has already been linked
+        // in. If so we shouldn't need to set any mappings.
+        if (dlsym(NULL, "clCreateContext")) {
+            log(1) << "This program was linked to OpenCL already\n";
+        } else {
+            log(1) << "Looking for OpenCL shared library...\n";
+            string error;
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
+            if (!error.empty()) {
+                error.clear();
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenCL.framework/OpenCL", &error);
+            }
+            if (!error.empty()) {
+                error.clear();
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("opencl.dll", &error); // TODO: test on Windows
+            }
+            assert(error.empty() && "Could not find libopencl.so, OpenCL.framework, or opencl.dll");
+        }
     }
 }
 
 void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<void (*)()> *cleanup_routines) {
-    // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
-    // CUDA behaves much better when you don't initialize >2 contexts.
-    llvm::Function *fn = module->getFunction("halide_set_cuda_context");
-    assert(fn && "Could not find halide_set_cuda_context in module");
-    void *f = ee->getPointerToFunction(fn);
-    assert(f && "Could not find compiled form of halide_set_cuda_context in module");
-    void (*set_cuda_context)(CUcontext *) = (void (*)(CUcontext *))f;
-    set_cuda_context(&cuda_ctx.ptr);
+    if (options & GPU_PTX) {
+        // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
+        // CUDA behaves much better when you don't initialize >2 contexts.
+        llvm::Function *fn = module->getFunction("halide_set_cuda_context");
+        assert(fn && "Could not find halide_set_cuda_context in module");
+        void *f = ee->getPointerToFunction(fn);
+        assert(f && "Could not find compiled form of halide_set_cuda_context in module");
+        void (*set_cuda_context)(CUcontext *) = (void (*)(CUcontext *))f;
+        set_cuda_context(&cuda_ctx.ptr);
 
-    // When the module dies, we need to call halide_release
-    fn = module->getFunction("halide_release");
-    assert(fn && "Could not find halide_release in module");
-    f = ee->getPointerToFunction(fn);
-    assert(f && "Could not find compiled form of halide_release in module");
-    (*cleanup_routines).push_back((void (*)())f);
+        // When the module dies, we need to call halide_release
+        fn = module->getFunction("halide_release");
+        assert(fn && "Could not find halide_release in module");
+        f = ee->getPointerToFunction(fn);
+        assert(f && "Could not find compiled form of halide_release in module");
+        (*cleanup_routines).push_back((void (*)())f);
+    } else if (options & GPU_OpenCL) {
+        log(0) << "TODO: set cleanup for OpenCL\n";
+    }
 }
 
 void CodeGen_GPU_Host::visit(const For *loop) {
@@ -507,12 +550,15 @@ void CodeGen_GPU_Host::visit(const For *loop) {
 
         // build the kernel arguments array
         vector<Argument> closure_args = c.arguments();
-        llvm::Type *arg_t = i8->getPointerTo(); // void*
+        llvm::PointerType *arg_t = i8->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
         Value *saved_stack = save_stack();
         Value *gpu_args_arr = builder->CreateAlloca(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
                                                     NULL,
                                                     kernel_name + "_args");
+        Value *gpu_arg_sizes_arr = builder->CreateAlloca(ArrayType::get(i64, num_args+1), // NULL-terminated list of size_t's
+                                                         NULL,
+                                                         kernel_name + "_arg_sizes");
 
         for (int i = 0; i < num_args; i++) {
             // get the closure argument
@@ -538,7 +584,18 @@ void CodeGen_GPU_Host::visit(const For *loop) {
             Value *bits = builder->CreateBitCast(ptr, arg_t);
             builder->CreateStore(bits,
                                  builder->CreateConstGEP2_32(gpu_args_arr, 0, i));
+
+            // store the size of the argument
+            // TODO: support non-64-bit hosts for CUDA, OpenCL
+            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits;
+            builder->CreateStore(ConstantInt::get(i64, size_bits/8),
+                                 builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, i));
         }
+        // NULL-terminate the lists
+        builder->CreateStore(ConstantPointerNull::get(arg_t),
+                             builder->CreateConstGEP2_32(gpu_args_arr, 0, num_args));
+        builder->CreateStore(ConstantInt::get(i64, 0),
+                             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
 
         // Figure out how much shared memory we need to allocate, and
         // build offsets into it for the internal allocations
@@ -550,10 +607,11 @@ void CodeGen_GPU_Host::visit(const For *loop) {
             codegen(n_blkid_x), codegen(n_blkid_y), codegen(n_blkid_z),
             codegen(n_tid_x), codegen(n_tid_y), codegen(n_tid_z),
             shared_mem_size, 
+            builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref")
         };
         builder->CreateCall(dev_run_fn, launch_args);
-        
+
         // Sync so that timing will be correct
         if (tracing_level() > 0) {
             builder->CreateCall(dev_sync_fn);
@@ -718,7 +776,8 @@ void CodeGen_GPU_Host::visit(const Pipeline *n) {
 void CodeGen_GPU_Host::visit(const Call *call) {
     // The other way in which buffers might be read by the host is in
     // calls to whole-buffer builtins like debug_to_file.
-    if (call->name == "debug to file") {
+    if (call->call_type == Call::Intrinsic && 
+        call->name == Call::debug_to_file) {
         assert(call->args.size() == 9 && "malformed debug to file node");
         const Load *func = call->args[1].as<Load>();
         assert(func && "malformed debug to file node");

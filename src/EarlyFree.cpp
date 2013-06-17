@@ -146,8 +146,6 @@ class InjectEarlyFrees : public IRMutator {
         FindLastUse last_use(alloc->name);
         stmt.accept(&last_use);
 
-        log(1) << "Last use of " << alloc->name << " is " << last_use.last_use << "\n";
-
         if (last_use.last_use.defined()) {
             InjectMarker inject_marker;
             inject_marker.func = alloc->name;

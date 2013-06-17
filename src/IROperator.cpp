@@ -1,6 +1,8 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Simplify.h"
 #include <iostream>
+#include <math.h>
 
 namespace Halide { 
 namespace Internal {
@@ -28,6 +30,16 @@ bool is_const(Expr e, int value) {
     if (const Cast *c = e.as<Cast>()) return is_const(c->value, value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_const(b->value, value);
     return false;
+}
+
+const int * EXPORT as_const_int(Expr e) {
+    const IntImm *i = e.as<IntImm>();
+    return i ? &(i->value) : NULL;
+}
+
+const float * as_const_float(Expr e) {
+    const FloatImm *f = e.as<FloatImm>();
+    return f ? &(f->value) : NULL;
 }
 
 bool is_const_power_of_two(Expr e, int *bits) {
@@ -210,6 +222,218 @@ void match_types(Expr &a, Expr &b) {
     }
 }
 
-    
+// Fast math ops based on those from Syrah (http://github.com/boulos/syrah). Thanks, Solomon!
+
+// Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5
+void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
+    Expr int_version = reinterpret<int>(input);
+
+    // single precision = SEEE EEEE EMMM MMMM MMMM MMMM MMMM MMMM
+    // exponent mask    = 0111 1111 1000 0000 0000 0000 0000 0000
+    //                    0x7  0xF  0x8  0x0  0x0  0x0  0x0  0x0
+    // non-exponent     = 1000 0000 0111 1111 1111 1111 1111 1111
+    //                  = 0x8  0x0  0x7  0xF  0xF  0xF  0xF  0xF
+    int non_exponent_mask = 0x807fffff;
+
+    // Extract a version with no exponent (between 1.0 and 2.0)
+    Expr no_exponent = int_version & non_exponent_mask;
+
+    // If > 1.5, we want to divide by two, to normalize back into the
+    // range (0.75, 1.5). We can detect this by sniffing the high bit
+    // of the mantissa.
+    Expr new_exponent = no_exponent >> 22;
+
+    Expr new_biased_exponent = 127 - new_exponent;
+    Expr old_biased_exponent = int_version >> 23;
+    *exponent = old_biased_exponent - new_biased_exponent;
+
+    Expr blended = (int_version & non_exponent_mask) | (new_biased_exponent << 23);
+
+    *reduced = reinterpret<float>(blended);
+
+    /*
+    // Floats represent exponents using 8 bits, which encode the range
+    // from [-127, 128]. Zero maps to 127.
+
+    // The reduced version is between 0.5 and 1.0, which means it has
+    // an exponent of -1. Floats encode this as 126.
+    int exponent_neg1 = 126 << 23;   
+
+    // Grab the exponent bits from the input. We know the sign bit is
+    // zero because we're taking a log, and negative inputs are
+    // handled elsewhere.
+    Expr biased_exponent = int_version >> 23;
+
+    // Add one, to account for the fact that the reduced version has
+    // an exponent of -1.
+    Expr offset_exponent = biased_exponent + 1;
+    *exponent = offset_exponent - 127;
+
+    // Blend the offset_exponent with the original input.
+    Expr blended = (int_version & non_exponent_mask) | (exponent_neg1);
+    */
 }
+
+Expr halide_log(Expr x_full) {
+    assert(x_full.type() == Float(32));
+
+    if (is_const(x_full)) {
+        x_full = simplify(x_full);
+        const float * f = as_const_float(x_full);
+        if (f) {
+            return logf(*f);
+        }
+    }
+
+    Expr nan = Call::make(Float(32), "nan_f32", std::vector<Expr>(), Call::Extern);
+    Expr neg_inf = Call::make(Float(32), "neg_inf_f32", std::vector<Expr>(), Call::Extern);
+
+    Expr use_nan = x_full < 0.0f; // log of a negative returns nan
+    Expr use_neg_inf = x_full == 0.0f; // log of zero is -inf
+    Expr exceptional = use_nan | use_neg_inf;
+
+    // Avoid producing nans or infs by generating ln(1.0f) instead and
+    // then fixing it later.
+    Expr patched = select(exceptional, 1.0f, x_full);
+    Expr reduced, exponent;
+    range_reduce_log(patched, &reduced, &exponent);
+   
+    // Very close to the Taylor series for log about 1, but tuned to
+    // have minimum relative error in the reduced domain (0.75 - 1.5).
+    
+    Expr x1 = reduced - 1.0f;
+    Expr result = 0.0f;
+    result = x1 * result + 0.05111976432738144643f;
+    result = x1 * result + -0.11793923497136414580f;
+    result = x1 * result + 0.14971993724699017569f;
+    result = x1 * result + -0.16862004708254804686f;
+    result = x1 * result + 0.19980668101718729313f;
+    result = x1 * result + -0.24991211576292837737f;
+    result = x1 * result + 0.33333435275479328386f;
+    result = x1 * result + -0.50000106292873236491f;
+    result = x1 * x1 * result + x1;
+
+    result += cast<float>(exponent) * logf(2.0);
+
+    return select(exceptional, select(use_nan, nan, neg_inf), result);
+}
+
+Expr halide_exp(Expr x_full) {
+    assert(x_full.type() == Float(32));
+
+    if (is_const(x_full)) {
+        x_full = simplify(x_full);
+        const float * f = as_const_float(x_full);
+        if (f) {
+            return logf(*f);
+        }
+    }
+
+    float ln2_part1 = 0.6931457519f;
+    float ln2_part2 = 1.4286067653e-6f;
+    float one_over_ln2 = 1.0/logf(2.0);
+
+    Expr scaled = x_full * one_over_ln2;
+    Expr k_real = floor(scaled);
+    Expr k = cast<int>(k_real);
+
+    Expr x = x_full - k_real * ln2_part1;
+    x -= k_real * ln2_part2;
+
+    Expr result = 0.0f;
+    result = x * result + 0.00031965933071842413f;
+    result = x * result + 0.00119156835564003744f;
+    result = x * result + 0.00848988645943932717f;
+    result = x * result + 0.04160188091348320655f;
+    result = x * result + 0.16667983794100929562f;
+    result = x * result + 0.49999899033463041098f;
+    result = x * result + 1.0f;
+    result = x * result + 1.0f;
+
+    // Compute 2^k.
+    int fpbias = 127;
+    Expr biased = k + fpbias;
+
+    Expr inf = Call::make(Float(32), "inf_f32", std::vector<Expr>(), Call::Extern);
+    
+    // Shift the bits up into the exponent field and reinterpret this
+    // thing as float.
+    Expr two_to_the_n = reinterpret<float>(biased << 23);
+    result *= two_to_the_n;    
+
+    // Catch overflow and underflow
+    result = select(biased < 255, result, inf);
+    result = select(biased > 0, result, 0.0f);
+
+    return result;
+}
+
+Expr raise_to_integer_power(Expr e, int p) {
+    Expr result;
+    if (p == 0) {
+        result = make_one(e.type());
+    } else if (p == 1) {
+        result = e;
+    } else if (p < 0) {
+        result = make_one(e.type())/raise_to_integer_power(e, -p);
+    } else {
+        // p is at least 2
+        Expr y = raise_to_integer_power(e, p>>1);
+        if (p & 1) result = y*y*e;
+        else result = y*y;
+    }
+    return result;
+}
+
+}
+
+Expr fast_log(Expr x) {
+    assert(x.type() == Float(32) && "fast_log only works for Float(32)");
+
+    Expr reduced, exponent;
+    range_reduce_log(x, &reduced, &exponent);
+
+    Expr x1 = reduced - 1.0f;
+    Expr result = 0.0f;
+
+    result = x1 * result + 0.07640318789187280912f;
+    result = x1 * result + -0.16252961013874300811f;
+    result = x1 * result + 0.20625219040645212387f;
+    result = x1 * result + -0.25110261010892864775f;
+    result = x1 * result + 0.33320464908377461777f;
+    result = x1 * result + -0.49997513376789826101f;
+    result *= x1 * x1;
+    result += x1;
+
+    return result + cast<float>(exponent) * logf(2);
+}
+
+Expr fast_exp(Expr x_full) {
+    assert(x_full.type() == Float(32) && "fast_exp only works for Float(32)");
+
+    Expr scaled = x_full / logf(2.0);
+    Expr k_real = floor(scaled);
+    Expr k = cast<int>(k_real);
+    Expr x = x_full - k_real * logf(2.0);
+
+    Expr result = 0.0f;
+    result = x * result + 0.01314350012789660196f;
+    result = x * result + 0.03668965196652099192f;
+    result = x * result + 0.16873890085469545053f;
+    result = x * result + 0.49970514590562437052f;
+    result = x * result + 1.0f;
+    result = x * result + 1.0f;
+
+    // Compute 2^k.
+    int fpbias = 127;
+    Expr biased = clamp(k + fpbias, 0, 255);
+
+    // Shift the bits up into the exponent field and reinterpret this
+    // thing as float.
+    Expr two_to_the_n = reinterpret<float>(biased << 23);
+    result *= two_to_the_n;
+
+    return result;
+}
+
 }

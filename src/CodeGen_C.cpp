@@ -131,7 +131,7 @@ const string preamble =
 }
 
 
-void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args) {
+void CodeGen_C::compile(Stmt s, string name, const vector<Argument> &args) {
     stream << preamble;
 
     // Emit the function prototype
@@ -188,6 +188,11 @@ void CodeGen_C::compile(Stmt s, const string &name, const vector<Argument> &args
                        << name
                        << "->stride[" << j << "];\n";
             }
+            stream << "const int32_t "
+                   << name
+                   << "_elem_size = _"
+                   << name
+                   << "->elem_size;\n";
         }
     }        
 
@@ -273,7 +278,7 @@ void CodeGen_C::visit(const Div *op) {
         oss << print_expr(op->a) << " >> " << bits;
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "sdiv", vec(op->a, op->b)));
+        print_expr(Call::make(op->type, "sdiv", vec(op->a, op->b), Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
@@ -286,16 +291,16 @@ void CodeGen_C::visit(const Mod *op) {
         oss << print_expr(op->a) << " & " << ((1 << bits)-1);
         print_assignment(op->type, oss.str());
     } else {
-        print_expr(Call::make(op->type, "mod", vec(op->a, op->b)));
+        print_expr(Call::make(op->type, "mod", vec(op->a, op->b), Call::Extern));
     }
 }
 
 void CodeGen_C::visit(const Max *op) {
-    print_expr(Call::make(op->type, "max", vec(op->a, op->b)));
+    print_expr(Call::make(op->type, "max", vec(op->a, op->b), Call::Extern));
 }
 
 void CodeGen_C::visit(const Min *op) {
-    print_expr(Call::make(op->type, "min", vec(op->a, op->b)));
+    print_expr(Call::make(op->type, "min", vec(op->a, op->b), Call::Extern));
 }
 
 void CodeGen_C::visit(const EQ *op) {
@@ -352,7 +357,8 @@ void CodeGen_C::visit(const Call *op) {
     ostringstream rhs;
 
     // Handle intrinsics first
-    if (op->name == "debug to file") {
+    if (op->call_type == Call::Intrinsic &&
+        op->name == Call::debug_to_file) {
         assert(op->args.size() == 8);
         string filename = op->args[0].as<Call>()->name;
         string func = op->args[1].as<Call>()->name;
@@ -368,6 +374,7 @@ void CodeGen_C::visit(const Call *op) {
             rhs << ", " << args[i];
         }
         rhs << ")";
+        // TODO: other intrinsics
     } else {
         // Generic calls
         vector<string> args(op->args.size());
@@ -630,6 +637,7 @@ void CodeGen_C::test() {
         "const int32_t buf_stride_1 = _buf->stride[1];\n"
         "const int32_t buf_stride_2 = _buf->stride[2];\n"
         "const int32_t buf_stride_3 = _buf->stride[3];\n"
+        "const int32_t buf_elem_size = _buf->elem_size;\n"
         "{\n"
         " int32_t V0 = 43 * beta;\n"
         " int32_t *tmp_heap = (int32_t *)halide_malloc(sizeof(int32_t)*V0);\n"
