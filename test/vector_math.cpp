@@ -1,6 +1,8 @@
 #include <Halide.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
+#include <cmath> 
 
 using namespace Halide;
 
@@ -67,6 +69,12 @@ float divide(float x, float y) {
 template<>
 double divide(double x, double y) {
     return x/y;
+}
+
+int mantissa(float x) {
+    int bits = 0;
+    memcpy(&bits, &x, 4);
+    return bits & 0x007fffff;
 }
 
 template<typename A>
@@ -245,15 +253,15 @@ bool test(int vec_width) {
     }
 
     // Extern function call
-    if (verbose) printf("External call to pow\n");
+    if (verbose) printf("External call to hypot\n");
     Func f8;
-    f8(x, y) = pow(1.1f, cast<float>(input(x, y)));
+    f8(x, y) = hypot(1.1f, cast<float>(input(x, y)));
     f8.vectorize(x, vec_width);
     Image<float> im8 = f8.realize(W, H);
     
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            float correct = powf(1.1f, (float)input(x, y));
+            float correct = hypot(1.1f, (float)input(x, y));
             if (!close_enough(im8(x, y), correct)) {
                 printf("im8(%d, %d) = %f instead of %f\n", 
                        x, y, (double)im8(x, y), correct);
@@ -376,6 +384,118 @@ bool test(int vec_width) {
                 }
             }
         }
+    }
+
+    // Fast exp, log, and pow
+    if (type_of<A>() == Float(32)) {
+        if (verbose) printf("Fast transcendentals\n");
+        Func f15, f16, f17, f18, f19, f20;
+        Expr a = input(x, y) * 0.5f;
+        Expr b = input((x+1)%W, y) * 0.5f;
+        f15(x, y) = log(a);
+        f16(x, y) = exp(b);
+        f17(x, y) = pow(a, b/16.0f);
+        f18(x, y) = fast_log(a);
+        f19(x, y) = fast_exp(b);
+        f20(x, y) = fast_pow(a, b/16.0f);
+        Image<float> im15 = f15.realize(W, H);
+        Image<float> im16 = f16.realize(W, H);
+        Image<float> im17 = f17.realize(W, H);
+        Image<float> im18 = f18.realize(W, H);
+        Image<float> im19 = f19.realize(W, H);
+        Image<float> im20 = f20.realize(W, H);
+
+        float worst_log_error = 1e20;
+        float worst_exp_error = 1e20;
+        float worst_pow_error = 1e20;
+        float worst_fast_log_error = 1e20;
+        float worst_fast_exp_error = 1e20;
+        float worst_fast_pow_error = 1e20;
+
+        int worst_log_mantissa = 0;
+        int worst_exp_mantissa = 0;
+        int worst_pow_mantissa = 0;
+        int worst_fast_log_mantissa = 0;
+        int worst_fast_exp_mantissa = 0;
+        int worst_fast_pow_mantissa = 0;
+
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                float a = input(x, y) * 0.5f;
+                float b = input((x+1)%W, y) * 0.5f;
+                float correct_log = logf(a);
+                float correct_exp = expf(b);
+                float correct_pow = powf(a, b/16.0f);
+
+                int correct_log_mantissa = mantissa(correct_log);
+                int correct_exp_mantissa = mantissa(correct_exp);
+                int correct_pow_mantissa = mantissa(correct_pow);
+
+                int log_mantissa = mantissa(im15(x, y));
+                int exp_mantissa = mantissa(im16(x, y));
+                int pow_mantissa = mantissa(im17(x, y));
+
+                int fast_log_mantissa = mantissa(im18(x, y));
+                int fast_exp_mantissa = mantissa(im19(x, y));
+                int fast_pow_mantissa = mantissa(im20(x, y));
+
+                int log_mantissa_error = abs(log_mantissa - correct_log_mantissa);
+                int exp_mantissa_error = abs(exp_mantissa - correct_exp_mantissa);
+                int pow_mantissa_error = abs(pow_mantissa - correct_pow_mantissa);
+                int fast_log_mantissa_error = abs(fast_log_mantissa - correct_log_mantissa);
+                int fast_exp_mantissa_error = abs(fast_exp_mantissa - correct_exp_mantissa);
+                int fast_pow_mantissa_error = abs(fast_pow_mantissa - correct_pow_mantissa);
+
+                worst_log_mantissa = std::max(worst_log_mantissa, log_mantissa_error);
+                worst_exp_mantissa = std::max(worst_exp_mantissa, exp_mantissa_error);
+
+                if (a >= 0) 
+                    worst_pow_mantissa = std::max(worst_pow_mantissa, pow_mantissa_error);
+                
+                if (std::isfinite(correct_log)) 
+                    worst_fast_log_mantissa = std::max(worst_fast_log_mantissa, fast_log_mantissa_error);
+                
+                if (std::isfinite(correct_exp)) 
+                    worst_fast_exp_mantissa = std::max(worst_fast_exp_mantissa, fast_exp_mantissa_error);
+                
+                if (std::isfinite(correct_pow) && a > 0)
+                    worst_fast_pow_mantissa = std::max(worst_fast_pow_mantissa, fast_pow_mantissa_error);
+
+                if (log_mantissa_error > 2) {
+                    printf("log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
+                           a, im15(x, y), correct_log, correct_log_mantissa, log_mantissa);
+                }
+                if (exp_mantissa_error > 2) {
+                    printf("exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
+                           b, im16(x, y), correct_exp, correct_exp_mantissa, exp_mantissa);
+                }
+                if (a >= 0 && pow_mantissa_error > 32) {
+                    printf("pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
+                           a, b/16.0f, im17(x, y), correct_pow, correct_pow_mantissa, pow_mantissa);
+                }
+                if (std::isfinite(correct_log) && fast_log_mantissa_error > 64) {
+                    printf("fast_log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
+                           a, im18(x, y), correct_log, correct_log_mantissa, fast_log_mantissa);
+                }
+                if (std::isfinite(correct_exp) && fast_exp_mantissa_error > 64) {
+                    printf("fast_exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
+                           b, im19(x, y), correct_exp, correct_exp_mantissa, fast_exp_mantissa);
+                }
+                if (a >= 0 && std::isfinite(correct_pow) && fast_pow_mantissa_error > 128) {
+                    printf("fast_pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
+                           a, b/16.0f, im20(x, y), correct_pow, correct_pow_mantissa, fast_pow_mantissa);
+                }
+            }
+        }
+
+        /*
+        printf("log mantissa error: %d\n", worst_log_mantissa);
+        printf("exp mantissa error: %d\n", worst_exp_mantissa);
+        printf("pow mantissa error: %d\n", worst_pow_mantissa);
+        printf("fast_log mantissa error: %d\n", worst_fast_log_mantissa);
+        printf("fast_exp mantissa error: %d\n", worst_fast_exp_mantissa);
+        printf("fast_pow mantissa error: %d\n", worst_fast_pow_mantissa);
+        */
     }
 
     return true;

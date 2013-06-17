@@ -695,14 +695,15 @@ FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a) : func(f) {
 }           
     
 namespace {
-class CountImplicitVars : public Internal::IRVisitor {
+class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
     int count;
+
     CountImplicitVars(Expr e) : count(0) {
         e.accept(this);
     }
 
-    using IRVisitor::visit;
+    using IRGraphVisitor::visit;
 
     void visit(const Variable *v) {
         if (v->name.size() > 3 && v->name.substr(0, 3) == "iv.") {
@@ -861,17 +862,17 @@ Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
 
 namespace {
 
-class InferArguments : public IRVisitor {
+class InferArguments : public IRGraphVisitor {
 public:
     vector<Argument> arg_types;
     vector<const void *> arg_values;
     vector<pair<int, Internal::Parameter> > image_param_args;    
 
 private:
-    using IRVisitor::visit;
+    using IRGraphVisitor::visit;
 
     void visit(const Load *op) {
-        IRVisitor::visit(op);
+        IRGraphVisitor::visit(op);
 
         Buffer b;
         string arg_name;
@@ -1024,8 +1025,8 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
     Argument me(name(), true, value().type());
     args.push_back(me);
 
-    ofstream header(filename.c_str());
-    CodeGen_C cg(header);
+    ofstream src(filename.c_str());
+    CodeGen_C cg(src);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
 }
 

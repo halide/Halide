@@ -96,9 +96,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 Expr loop_var_expr = Variable::make(Int(32), loop_var);
                 Expr steady_state = loop_var_expr > loop_min;
 
-                // The min::make is one beyond the max we reached on the last loop iteration
+                // The new min is one beyond the max we reached on the last loop iteration
                 Expr new_min = substitute(loop_var, loop_var_expr - 1, min + extent);
-                // The extent::make is the old extent shrunk by how much we trimmed off the min
+                // The new extent is the old extent shrunk by how much we trimmed off the min
                 Expr new_extent = extent + min - new_min;
 
                 new_min = Select::make(steady_state, new_min, min);

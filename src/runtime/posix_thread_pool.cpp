@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <unistd.h>
 
 #ifndef __APPLE__
 #ifdef _LP64
@@ -10,6 +11,8 @@ typedef uint32_t size_t;
 #define WEAK __attribute__((weak))
 
 extern "C" {
+
+#ifndef __SIZEOF_PTHREAD_ATTR_T
 
 typedef struct {
     uint32_t flags;
@@ -41,6 +44,14 @@ extern int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t 
 extern int pthread_mutex_lock(pthread_mutex_t *mutex);
 extern int pthread_mutex_unlock(pthread_mutex_t *mutex);
 extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
+#else
+
+// We've already included some of pthreads, may as well include it
+// all. This is forced by the OpenCL backend, where CL.h includes some
+// of pthreads.
+#include <pthread.h>
+
+#endif
 
 extern char *getenv(const char *);
 extern int atoi(const char *);
@@ -185,6 +196,10 @@ WEAK void *halide_worker_thread(void *void_arg) {
     return NULL;
 }
 
+WEAK int halide_host_cpu_count() {
+    return sysconf(_SC_NPROCESSORS_ONLN);
+}
+
 WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {
     if (halide_custom_do_par_for) {
         (*halide_custom_do_par_for)(f, min, size, closure);
@@ -197,20 +212,16 @@ WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_
         halide_work_queue.jobs = NULL;
 
         char *threadStr = getenv("HL_NUMTHREADS");
-        #ifdef _LP64
-        // On 64-bit systems we use 8 threads by default
-        halide_threads = 8;
-        #else
-        // On 32-bit systems we use 2 threads by default
-        halide_threads = 2;
-        #endif
         if (threadStr) {
             halide_threads = atoi(threadStr);
         } else {
-            halide_printf("HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
+            halide_threads = halide_host_cpu_count();
+            // halide_printf("HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
         }
         if (halide_threads > MAX_THREADS) {
             halide_threads = MAX_THREADS;
+        } else if (halide_threads < 1) {
+            halide_threads = 1;
         }
         for (int i = 0; i < halide_threads-1; i++) {
             //fprintf(stderr, "Creating thread %d\n", i);

@@ -25,6 +25,7 @@ Stmt IRMutator::mutate(Stmt s) {
     return stmt;
 }
 
+namespace {
 template<typename T> 
 void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *stmt) {
     Expr a = mutator->mutate(op->a);
@@ -33,6 +34,7 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
         b.same_as(op->b)) *expr = op;
     else *expr = T::make(a, b);            
     *stmt = NULL;
+}
 }
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}

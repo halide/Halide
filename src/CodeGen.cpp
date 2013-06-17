@@ -45,7 +45,9 @@ using std::stack;
 // Override above empty init function with macro for supported targets.
 #define InitializeX86Target()   InitializeTarget(X86)
 #define InitializeARMTarget()   InitializeTarget(ARM)
+#if WITH_PTX
 #define InitializeNVPTXTarget() InitializeTarget(NVPTX)
+#endif
 
 CodeGen::CodeGen() : 
     module(NULL), owns_module(false), 
@@ -882,7 +884,24 @@ void CodeGen::visit(const Load *op) {
             value = builder->CreateAlignedLoad(ptr, alignment);                
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
-            Value *base = codegen(ramp->base);
+
+            // If the base ends in an odd constant, then subtract one
+            // and do a different shuffle. This helps expressions like
+            // (f(2*x) + f(2*x+1) share loads.
+            Expr new_base;
+            const Add *add = ramp->base.as<Add>();
+            const IntImm *offset = add ? add->b.as<IntImm>() : NULL;
+            if (offset) {
+                if (offset->value == 1) {
+                    new_base = add->a;
+                } else {
+                    new_base = add->a + (offset->value - 1);
+                }
+            } else {
+                new_base = ramp->base;
+            }
+
+            Value *base = codegen(new_base);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             Value *a = builder->CreateAlignedLoad(ptr, alignment);
@@ -891,7 +910,7 @@ void CodeGen::visit(const Load *op) {
             Value *b = builder->CreateAlignedLoad(ptr, gcd(alignment, bytes));
             vector<Constant *> indices(ramp->width);
             for (int i = 0; i < ramp->width; i++) {
-                indices[i] = ConstantInt::get(i32, i*2);
+                indices[i] = ConstantInt::get(i32, i*2 + (offset ? 1 : 0));
             }
             value = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
         } else if (ramp && stride && stride->value == -1) {
@@ -994,122 +1013,161 @@ void CodeGen::visit(const Broadcast *op) {
 }
 
 void CodeGen::visit(const Call *op) {
-    assert(op->call_type == Call::Extern && "Can only codegen extern calls");
+    assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic) && 
+           "Can only codegen extern calls and intrinsics");
 
-    // Some call nodes are actually injected at various stages as a
-    // cue for llvm to generate particular ops. In general these are
-    // handled in the standard library, but ones with e.g. varying
-    // types are handled here.
-    if (op->name == "shuffle vector") {
-        assert((int) op->args.size() == 1 + op->type.width);
-        vector<Constant *> indices(op->type.width);
-        for (size_t i = 0; i < indices.size(); i++) {
-            const IntImm *idx = op->args[i+1].as<IntImm>();
-            assert(idx);
-            indices[i] = ConstantInt::get(i32, idx->value);
-        }
-        Value *arg = codegen(op->args[0]);
-        value = builder->CreateShuffleVector(arg, arg, ConstantVector::get(indices));
-        return;
-    } 
-
-    if (op->name == "interleave vectors") {
-        assert(op->args.size() == 2);
-        Expr a = op->args[0], b = op->args[1];
-        log(3) << "Vectors to interleave: " << a << ", " << b << "\n";
-        
-        vector<Constant *> indices(op->type.width);
-        for (int i = 0; i < op->type.width; i++) {
-            int idx = i/2;
-            if (i % 2 == 1) idx += a.type().width;
-            indices[i] = ConstantInt::get(i32, idx);
-        }
-        
-        value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
-        return;
-    }
-
-    if (op->name == "debug to file") {
-        assert(op->args.size() == 9);
-        const Call *filename = op->args[0].as<Call>();
-        const Load *func = op->args[1].as<Load>();
-        assert(func && filename && "Malformed debug_to_file node");
-        // Grab the function from the initial module
-        llvm::Function *debug_to_file = module->getFunction("halide_debug_to_file");
-        assert(debug_to_file && "Could not find halide_debug_to_file function in initial module");
-
-        // Make the filename a global string constant
-        llvm::Type *filename_type = ArrayType::get(i8, filename->name.size()+1);
-        GlobalVariable *filename_global = new GlobalVariable(*module, filename_type, 
-                                                             true, GlobalValue::PrivateLinkage, 0);
-        filename_global->setInitializer(ConstantDataArray::getString(*context, filename->name));
-        Value *char_ptr = builder->CreateConstInBoundsGEP2_32(filename_global, 0, 0);
-        Value *data_ptr = symbol_table.get(func->name + ".host");
-        data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
-        vector<Value *> args = vec(char_ptr, data_ptr);
-        for (size_t i = 3; i < 9; i++) {
-            log(4) << op->args[i];
-            args.push_back(codegen(op->args[i]));
-        }
-
-        log(4) << "Creating call to debug_to_file\n";
-
-        value = builder->CreateCall(debug_to_file, args);
-        return;
-    }
-
-    // Now, codegen the args
-    vector<Value *> args(op->args.size());
-    for (size_t i = 0; i < op->args.size(); i++) {
-        args[i] = codegen(op->args[i]);
-    }
-
-    llvm::Function *fn = module->getFunction(op->name);
-        
-    llvm::Type *result_type = llvm_type_of(op->type);
-
-    // If we can't find it, declare it extern "C"
-    if (!fn) {
-        // cout << "Didn't find " << op->name << " in initial module. Assuming it's extern." << endl;
-        vector<llvm::Type *> arg_types(args.size());
-        for (size_t i = 0; i < args.size(); i++) {
-            arg_types[i] = args[i]->getType();
-        }
-        FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
-            
-        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module);
-        fn->setCallingConv(CallingConv::C);            
-    }
-
-    if (op->type.is_scalar()) {
-        log(4) << "Creating call to " << op->name << "\n";
-        value = builder->CreateCall(fn, args);
-    } else {
-        // Check if a vector version of the function already
-        // exists. We use the naming convention that a N-wide
-        // version of a function foo is called fooxN.
-        ostringstream ss;
-        ss << op->name << 'x' << op->type.width;
-        llvm::Function *vec_fn = module->getFunction(ss.str());
-        if (vec_fn) {
-            log(4) << "Creating call to " << ss.str() << "\n";
-            value = builder->CreateCall(vec_fn, args);
-            fn = vec_fn;
-        } else {
-            // Scalarize. Extract each simd lane in turn and do
-            // one scalar call to the function.
-            value = UndefValue::get(result_type);
-            for (int i = 0; i < op->type.width; i++) {
-                Value *idx = ConstantInt::get(i32, i);
-                vector<Value *> arg_lane(args.size());
-                for (size_t j = 0; j < args.size(); j++) {
-                    arg_lane[j] = builder->CreateExtractElement(args[j], idx);
-                }
-                log(4) << "Creating call to " << op->name << "\n";
-                Value *result_lane = builder->CreateCall(fn, arg_lane);
-                value = builder->CreateInsertElement(value, result_lane, idx);
+    if (op->call_type == Call::Intrinsic) {
+        // Some call nodes are actually injected at various stages as a
+        // cue for llvm to generate particular ops. In general these are
+        // handled in the standard library, but ones with e.g. varying
+        // types are handled here.
+        if (op->name == Call::shuffle_vector) {
+            assert((int) op->args.size() == 1 + op->type.width);
+            vector<Constant *> indices(op->type.width);
+            for (size_t i = 0; i < indices.size(); i++) {
+                const IntImm *idx = op->args[i+1].as<IntImm>();
+                assert(idx);
+                indices[i] = ConstantInt::get(i32, idx->value);
             }
-        }            
+            Value *arg = codegen(op->args[0]);
+            value = builder->CreateShuffleVector(arg, arg, ConstantVector::get(indices));
+
+        } else if (op->name == Call::interleave_vectors) {
+            assert(op->args.size() == 2);
+            Expr a = op->args[0], b = op->args[1];
+            log(3) << "Vectors to interleave: " << a << ", " << b << "\n";
+            
+            vector<Constant *> indices(op->type.width);
+            for (int i = 0; i < op->type.width; i++) {
+                int idx = i/2;
+                if (i % 2 == 1) idx += a.type().width;
+                indices[i] = ConstantInt::get(i32, idx);
+            }
+            
+            value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+
+        } else if (op->name == Call::debug_to_file) {
+            assert(op->args.size() == 9);
+            const Call *filename = op->args[0].as<Call>();
+            const Load *func = op->args[1].as<Load>();
+            assert(func && filename && "Malformed debug_to_file node");
+            // Grab the function from the initial module
+            llvm::Function *debug_to_file = module->getFunction("halide_debug_to_file");
+            assert(debug_to_file && "Could not find halide_debug_to_file function in initial module");
+            
+            // Make the filename a global string constant
+            llvm::Type *filename_type = ArrayType::get(i8, filename->name.size()+1);
+            GlobalVariable *filename_global = new GlobalVariable(*module, filename_type, 
+                                                                 true, GlobalValue::PrivateLinkage, 0);
+            filename_global->setInitializer(ConstantDataArray::getString(*context, filename->name));
+            Value *char_ptr = builder->CreateConstInBoundsGEP2_32(filename_global, 0, 0);
+            Value *data_ptr = symbol_table.get(func->name + ".host");
+            data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
+            vector<Value *> args = vec(char_ptr, data_ptr);
+            for (size_t i = 3; i < 9; i++) {
+                log(4) << op->args[i];
+                args.push_back(codegen(op->args[i]));
+            }
+            
+            log(4) << "Creating call to debug_to_file\n";
+            
+            value = builder->CreateCall(debug_to_file, args);
+        } else if (op->name == Call::bitwise_and) {
+            assert(op->args.size() == 2);
+            value = builder->CreateAnd(codegen(op->args[0]), codegen(op->args[1]));
+        } else if (op->name == Call::bitwise_xor) {
+            assert(op->args.size() == 2);
+            value = builder->CreateXor(codegen(op->args[0]), codegen(op->args[1]));
+        } else if (op->name == Call::bitwise_or) {
+            assert(op->args.size() == 2);
+            value = builder->CreateOr(codegen(op->args[0]), codegen(op->args[1]));
+        } else if (op->name == Call::bitwise_not) {
+            assert(op->args.size() == 1);
+            value = builder->CreateNot(codegen(op->args[0]));
+        } else if (op->name == Call::reinterpret) {
+            assert(op->args.size() == 1);
+            value = builder->CreateBitCast(codegen(op->args[0]), llvm_type_of(op->type));
+        } else if (op->name == Call::shift_left) {
+            assert(op->args.size() == 2);
+            value = builder->CreateShl(codegen(op->args[0]), codegen(op->args[1]));
+        } else if (op->name == Call::shift_right) {
+            assert(op->args.size() == 2);
+            if (op->type.is_int()) {
+                value = builder->CreateAShr(codegen(op->args[0]), codegen(op->args[1]));
+            } else {
+                value = builder->CreateLShr(codegen(op->args[0]), codegen(op->args[1]));
+            }
+        } else {
+            std::cerr << "Unknown intrinsic: " << op->name << "\n";
+            assert(false);
+        }        
+
+
+    } else {
+        // It's an extern call.
+
+        // Codegen the args
+        vector<Value *> args(op->args.size());
+        for (size_t i = 0; i < op->args.size(); i++) {
+            args[i] = codegen(op->args[i]);
+        }
+        
+        llvm::Function *fn = module->getFunction(op->name);
+        
+        llvm::Type *result_type = llvm_type_of(op->type);
+
+        // If we can't find it, declare it extern "C"
+        if (!fn) {
+            // cout << "Didn't find " << op->name << " in initial module. Assuming it's extern." << endl;
+            vector<llvm::Type *> arg_types(args.size());
+            for (size_t i = 0; i < args.size(); i++) {
+                arg_types[i] = args[i]->getType();
+            }
+            FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
+            
+            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module);
+            fn->setCallingConv(CallingConv::C);            
+
+        }
+        
+        if (op->type.is_scalar()) {
+            log(4) << "Creating call to " << op->name << "\n";
+            CallInst *call = builder->CreateCall(fn, args);
+            call->setDoesNotAccessMemory();
+            call->setDoesNotThrow();
+            value = call;
+        } else {
+            // Check if a vector version of the function already
+            // exists. We use the naming convention that a N-wide
+            // version of a function foo is called fooxN.
+            ostringstream ss;
+            ss << op->name << 'x' << op->type.width;
+            llvm::Function *vec_fn = module->getFunction(ss.str());
+            if (vec_fn) {
+                log(4) << "Creating call to " << ss.str() << "\n";
+                CallInst *call = builder->CreateCall(vec_fn, args);
+                call->setDoesNotAccessMemory();
+                call->setDoesNotThrow();
+                value = call;
+                fn = vec_fn;
+            } else {
+                // Scalarize. Extract each simd lane in turn and do
+                // one scalar call to the function.
+                value = UndefValue::get(result_type);
+                for (int i = 0; i < op->type.width; i++) {
+                    Value *idx = ConstantInt::get(i32, i);
+                    vector<Value *> arg_lane(args.size());
+                    for (size_t j = 0; j < args.size(); j++) {
+                        arg_lane[j] = builder->CreateExtractElement(args[j], idx);
+                    }
+                    log(4) << "Creating call to " << op->name << "\n";
+                    CallInst *call = builder->CreateCall(fn, arg_lane);
+                    call->setDoesNotAccessMemory();
+                    call->setDoesNotThrow();
+                    value = builder->CreateInsertElement(value, call, idx);
+                }
+            }            
+        }
     }
 }
 

@@ -20,6 +20,11 @@ int main(int argc, char **argv) {
         g.cuda_tile(x, y, 8, 8);
         h.cuda_tile(x, y, 8, 8);
     }
+    if (target && std::string(target) == "opencl") {
+        f.cuda_tile(x, y, 32, 1);
+        g.cuda_tile(x, y, 32, 1);
+        h.cuda_tile(x, y, 32, 1);
+    }
  
     printf("Realizing function...\n");
 
@@ -45,7 +50,6 @@ int main(int argc, char **argv) {
                 printf("imh[%d, %d] = %d (not %d)\n", i, j, imh(i, j), href);
                 return -1;
             }
-            
         }
     }
 
