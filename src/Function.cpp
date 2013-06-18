@@ -10,6 +10,13 @@
 namespace Halide {
 namespace Internal {
 
+static void assertf(bool cond, const char* msg, const std::string& name) {
+  if (!cond) {
+    std::cerr << msg << " (Func: " << name << ")" << std::endl;
+    assert(false);
+  }
+}
+
 using std::vector;
 using std::string;
 using std::set;
@@ -28,6 +35,9 @@ struct CheckVars : public IRGraphVisitor {
     vector<string> pure_args;
     ReductionDomain reduction_domain;
     Scope<int> defined_internally;
+    const std::string name;
+
+    CheckVars(const std::string& n) : name(n) {}
 
     using IRVisitor::visit;
 
@@ -57,12 +67,14 @@ struct CheckVars : public IRGraphVisitor {
             } else if (var->reduction_domain.same_as(reduction_domain)) {
                 // It's in a reduction domain we already know about
                 return;
-            } else {                
-                assert(false && "Multiple reduction domains found in function definition");
+            } else {
+                assertf(false, "Multiple reduction domains found in function definition", name);
             }
         }
 
-        std::cerr << "Undefined variable in function definition: " << var->name << std::endl;
+        std::cerr << "Undefined variable in function definition: " << var->name
+            << " (Func: " << name << ")"
+            << std::endl;
         assert(false);
     }
 };
@@ -72,7 +84,7 @@ struct CountSelfReferences : public IRGraphVisitor {
     const Function *func;
 
     using IRVisitor::visit;
-    
+
     void visit(const Call *c) {
         if (c->func.same_as(*func)) {
             calls.insert(c);
@@ -81,44 +93,44 @@ struct CountSelfReferences : public IRGraphVisitor {
 };
 
 void Function::define(const vector<string> &args, Expr value) {
-    assert(!name().empty() && "A function needs a name");
-    assert(value.defined() && "Undefined expression in right-hand-side of function definition\n");
+    assertf(!name().empty(), "A function needs a name", name());
+    assertf(value.defined(), "Undefined expression in right-hand-side of function definition", name());
 
     // Make sure all the vars in the value are either args or are
     // attached to some parameter
-    CheckVars check;
+    CheckVars check(name());
     check.pure_args = args;
     value.accept(&check);
 
     value = common_subexpression_elimination(value);
 
-    assert(!check.reduction_domain.defined() && "Reduction domain referenced in pure function definition");
+    assertf(!check.reduction_domain.defined(), "Reduction domain referenced in pure function definition", name());
 
     if (!contents.defined()) {
         contents = new FunctionContents;
         contents.ptr->name = unique_name('f');
     }
 
-    assert(!contents.ptr->value.defined() && "Function is already defined");
+    assertf(!contents.ptr->value.defined(), "Function is already defined", name());
     contents.ptr->value = value;
     contents.ptr->args = args;
-        
+
     for (size_t i = 0; i < args.size(); i++) {
         Schedule::Dim d = {args[i], For::Serial};
         contents.ptr->schedule.dims.push_back(d);
         contents.ptr->schedule.storage_dims.push_back(args[i]);
-    }        
+    }
 }
 
 void Function::define_reduction(const vector<Expr> &_args, Expr value) {
-    assert(!name().empty() && "A function needs a name");
-    assert(contents.ptr->value.defined() && "Can't add a reduction definition without a regular definition first");
-    assert(!is_reduction() && "Function already has a reduction definition");
-    assert(value.defined() && "Undefined expression in right-hand-side of reduction");
+    assertf(!name().empty(), "A function needs a name", name());
+    assertf(contents.ptr->value.defined(), "Can't add a reduction definition without a regular definition first", name());
+    assertf(!is_reduction(), "Function already has a reduction definition", name());
+    assertf(value.defined(), "Undefined expression in right-hand-side of reduction", name());
 
     // Check the dimensionality matches
-    assert(_args.size() == contents.ptr->args.size() && 
-           "Dimensionality of reduction definition must match dimensionality of pure definition");
+    assertf(_args.size() == contents.ptr->args.size(),
+           "Dimensionality of reduction definition must match dimensionality of pure definition", name());
 
     value = common_subexpression_elimination(value);
     vector<Expr> args(_args.size());
@@ -129,18 +141,19 @@ void Function::define_reduction(const vector<Expr> &_args, Expr value) {
     // Check that pure value and the reduction value have the same
     // type.  Without this check, allocations may be the wrong size
     // relative to what update code expects.
-    assert(contents.ptr->value.type() == value.type() &&
-	   "Reduction definition does not match type of pure function definition.");
+    assertf(contents.ptr->value.type() == value.type(),
+     "Reduction definition does not match type of pure function definition.",
+     name());
 
     // The pure args are those naked vars in the args that are not in
     // a reduction domain and are not parameters
     vector<string> pure_args;
     for (size_t i = 0; i < args.size(); i++) {
-        assert(args[i].defined() && "Undefined expression in left-hand-side of reduction");
-        if (const Variable *var = args[i].as<Variable>()) {           
+        assertf(args[i].defined(), "Undefined expression in left-hand-side of reduction", name());
+        if (const Variable *var = args[i].as<Variable>()) {
             if (!var->param.defined() && !var->reduction_domain.defined()) {
-                assert(var->name == contents.ptr->args[i] && 
-                       "Pure argument to update step must have the same name as pure argument to initialization step in the same dimension");
+                assertf(var->name == contents.ptr->args[i],
+                       "Pure argument to update step must have the same name as pure argument to initialization step in the same dimension", name());
                 pure_args.push_back(var->name);
             }
         }
@@ -149,14 +162,14 @@ void Function::define_reduction(const vector<Expr> &_args, Expr value) {
 
     // Make sure all the vars in the args and the value are either
     // pure args, in the reduction domain, or a parameter
-    CheckVars check;
+    CheckVars check(name());
     check.pure_args = pure_args;
     value.accept(&check);
     for (size_t i = 0; i < args.size(); i++) {
         args[i].accept(&check);
     }
 
-    assert(check.reduction_domain.defined() && "No reduction domain referenced in reduction definition");
+    assertf(check.reduction_domain.defined(), "No reduction domain referenced in reduction definition", name());
 
     contents.ptr->reduction_args = args;
     contents.ptr->reduction_value = value;
@@ -175,8 +188,8 @@ void Function::define_reduction(const vector<Expr> &_args, Expr value) {
 
     for (size_t i = 0; i < counter.calls.size(); i++) {
         contents.ptr->ref_count.decrement();
-        assert(!contents.ptr->ref_count.is_zero() && 
-               "Bug: removed too many circular references when defining reduction\n");
+        assertf(!contents.ptr->ref_count.is_zero(),
+               "Bug: removed too many circular references when defining reduction", name());
     }
 
     // First add the pure args in order
