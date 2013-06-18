@@ -157,7 +157,7 @@ $(BIN_DIR)/error_%: test/error/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
+	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -lpng -o $@	
 
 test_%: $(BIN_DIR)/test_%
 	@-mkdir -p tmp
