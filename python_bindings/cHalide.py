@@ -817,9 +817,9 @@ def call(*args):
   return _cHalide.call(*args)
 call = _cHalide.call
 
-def assign(*args):
-  return _cHalide.assign(*args)
-assign = _cHalide.assign
+def set(*args):
+  return _cHalide.set(*args)
+set = _cHalide.set
 
 def load_png(*args):
   return _cHalide.load_png(*args)

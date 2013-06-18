@@ -11,7 +11,7 @@
 
 void (*signal(int signum, void (*sighandler)(int)))(int);
 
-void assign(Func &f, const Expr &e) {
+void set(Func &f, const Expr &e) {
   f = e;
 }
 
@@ -51,21 +51,21 @@ Expr call(const ImageParam &a, Expr b, Expr c) { return a(b, c); }
 Expr call(const ImageParam &a, Expr b, Expr c, Expr d) { return a(b, c, d); }
 Expr call(const ImageParam &a, Expr b, Expr c, Expr d, Expr e) { return a(b, c, d, e); }
 
-void assign(FuncRefExpr &a, Expr b) { a = b; }
-void assign(FuncRefVar &a, Expr b) { a = b; }
-void assign(ImageParam &a, const Buffer &b) { a.set(b); }
+void set(FuncRefExpr &a, Expr b) { a = b; }
+void set(FuncRefVar &a, Expr b) { a = b; }
+void set(ImageParam &a, const Buffer &b) { a.set(b); }
 
-#define DEFINE_TYPE(T) void assign(ImageParam &a, Image<T> b) { a = b; }
+#define DEFINE_TYPE(T) void set(ImageParam &a, Image<T> b) { a.set(b); }
 #include "expand_types.h"
 #undef DEFINE_TYPE
 
-#define DEFINE_TYPE(T) void assign(Image<T> &a, Buffer b) { a = b; }
+#define DEFINE_TYPE(T) void set(Image<T> &a, Buffer b) { a = b; }
 #include "expand_types.h"
 #undef DEFINE_TYPE
 
 #define DEFINE_TYPE(T) \
-void assign(Param<T> &a, int b) { a = b; } \
-void assign(Param<T> &a, double b) { a = b; }
+void set(Param<T> &a, int b) { a.set(b); } \
+void set(Param<T> &a, double b) { a.set(b); }
 #include "expand_types.h"
 #undef DEFINE_TYPE
 
@@ -120,7 +120,7 @@ void exit_on_signal() {
 std::string image_to_string(const Image<T> &a) { \
     int dims = a.dimensions(); \
     Buffer d(a); \
-    return std::string((char *) a.data(), (d.type().bits/8)*d.stride(dims-1)*a.size(dims-1)); \
+    return std::string((char *) a.data(), (d.type().bits/8)*d.stride(dims-1)*a.extent(dims-1)); \
 }
 DEFINE_TYPE(uint8_t)
 DEFINE_TYPE(uint16_t)
@@ -168,35 +168,35 @@ void imul(FuncRefVar &f, const Expr &e) { f *= e; }
 void iadd(FuncRefExpr &f, const Expr &e) { f += e; }
 void imul(FuncRefExpr &f, const Expr &e) { f *= e; }
 
-//void assign(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
+//void set(UniformImage &a, Image<uint8_t> b) { a = DynImage(b); }
 
 #define DEFINE_TYPE(T) \
 void assign_array(Image<T> &a, size_t base, size_t xstride) { \
-    for (int x = 0; x < a.size(0); x++) { \
+    for (int x = 0; x < a.extent(0); x++) { \
         a(x) = *(T*)(((uint8_t *) base) + (xstride*x)); \
     } \
 } \
 void assign_array(Image<T> &a, size_t base, size_t xstride, size_t ystride) { \
-    for (int x = 0; x < a.size(0); x++) { \
-    for (int y = 0; y < a.size(1); y++) { \
+    for (int x = 0; x < a.extent(0); x++) { \
+    for (int y = 0; y < a.extent(1); y++) { \
         a(x,y) = *(T*)(((uint8_t *) base) + (xstride*x) + (ystride*y)); \
     } \
     } \
 } \
 void assign_array(Image<T> &a, size_t base, size_t xstride, size_t ystride, size_t zstride) { \
-    for (int x = 0; x < a.size(0); x++) { \
-    for (int y = 0; y < a.size(1); y++) { \
-    for (int z = 0; z < a.size(2); z++) { \
+    for (int x = 0; x < a.extent(0); x++) { \
+    for (int y = 0; y < a.extent(1); y++) { \
+    for (int z = 0; z < a.extent(2); z++) { \
         a(x,y,z) = *(T*)(((uint8_t *) base) + (xstride*x) + (ystride*y) + (zstride*z)); \
     } \
     } \
     } \
 } \
 void assign_array(Image<T> &a, size_t base, size_t xstride, size_t ystride, size_t zstride, size_t wstride) { \
-    for (int x = 0; x < a.size(0); x++) { \
-    for (int y = 0; y < a.size(1); y++) { \
-    for (int z = 0; z < a.size(2); z++) { \
-    for (int w = 0; w < a.size(3); w++) { \
+    for (int x = 0; x < a.extent(0); x++) { \
+    for (int y = 0; y < a.extent(1); y++) { \
+    for (int z = 0; z < a.extent(2); z++) { \
+    for (int w = 0; w < a.extent(3); w++) { \
         a(x,y,z,w) = *(T*)(((uint8_t *) base) + (xstride*x) + (ystride*y) + (zstride*z) + (wstride*w)); \
     } \
     } \
