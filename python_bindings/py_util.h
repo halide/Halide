@@ -10,7 +10,7 @@
 
 using namespace Halide;
 
-void assign(Func &f, const Expr &e);
+void set(Func &f, const Expr &e);
 void iadd(FuncRefVar &f, const Expr &e);
 void imul(FuncRefVar &f, const Expr &e);
 void iadd(FuncRefExpr &f, const Expr &e);
@@ -71,11 +71,11 @@ DEFINE_TYPE(float)
 DEFINE_TYPE(double)
 #undef DEFINE_TYPE
 
-void assign(FuncRefVar &a, Expr b);
-void assign(FuncRefExpr &a, Expr b);
-void assign(ImageParam &a, const Buffer &b);
+void set(FuncRefVar &a, Expr b);
+void set(FuncRefExpr &a, Expr b);
+void set(ImageParam &a, const Buffer &b);
 
-#define DEFINE_TYPE(T) void assign(ImageParam &a, Image<T> b);
+#define DEFINE_TYPE(T) void set(ImageParam &a, Image<T> b);
 DEFINE_TYPE(uint8_t)
 DEFINE_TYPE(uint16_t)
 DEFINE_TYPE(uint32_t)
@@ -86,7 +86,7 @@ DEFINE_TYPE(float)
 DEFINE_TYPE(double)
 #undef DEFINE_TYPE
 
-#define DEFINE_TYPE(T) void assign(Image<T> &a, Buffer b);
+#define DEFINE_TYPE(T) void set(Image<T> &a, Buffer b);
 DEFINE_TYPE(uint8_t)
 DEFINE_TYPE(uint16_t)
 DEFINE_TYPE(uint32_t)
@@ -98,8 +98,8 @@ DEFINE_TYPE(double)
 #undef DEFINE_TYPE
 
 #define DEFINE_TYPE(T) \
-void assign(Param<T> &a, int b); \
-void assign(Param<T> &a, double b);
+void set(Param<T> &a, int b); \
+void set(Param<T> &a, double b);
 DEFINE_TYPE(uint8_t)
 DEFINE_TYPE(uint16_t)
 DEFINE_TYPE(uint32_t)
