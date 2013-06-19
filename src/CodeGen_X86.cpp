@@ -703,8 +703,8 @@ void CodeGen_X86::visit(const Load *op) {
         Expr condition = And::make(check_min, check_max);
         condition = simplify(condition);
 
-        Load simplified_load = *(Load::make(op->type, op->name, new_index,
-                                            op->image, op->param).as<Load>());
+        const Load *simplified_load = Load::make(op->type, op->name, new_index,
+                                                 op->image, op->param).as<Load>();
         
         // Make condition
         Value *condition_val = codegen(condition);
@@ -725,7 +725,7 @@ void CodeGen_X86::visit(const Load *op) {
         // For bounded case, use ramp
         builder->SetInsertPoint(bounded_bb);
         value = NULL;
-        CodeGen::visit(&simplified_load);
+        CodeGen::visit(simplified_load);
         Value *bounded = value;
         builder->CreateBr(after_bb);
         
