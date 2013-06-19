@@ -686,8 +686,8 @@ Expr extract_dense_load_index(const Load *op) {
 
 void CodeGen_X86::visit(const Load *op) {
     // for testing
-    char *enabled = getenv("HL_ENABLE_CLAMPED_VECTOR_LOAD");
-    bool is_enabled = enabled == NULL ? 0 : atoi(enabled);
+    // char *enabled = getenv("HL_ENABLE_CLAMPED_VECTOR_LOAD");
+    bool is_enabled = true; //enabled == NULL ? 0 : atoi(enabled);
 
     Expr new_index = extract_dense_load_index(op);
     new_index = simplify(new_index);
