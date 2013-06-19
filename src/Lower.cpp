@@ -821,6 +821,7 @@ Stmt lower(Function f) {
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     s = common_subexpression_elimination(s);
+    s = simplify(s);
     debug(1) << "Simplified: \n" << s << "\n\n";
 
     return s;
