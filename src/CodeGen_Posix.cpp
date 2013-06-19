@@ -5,7 +5,7 @@
 #include "buffer_t.h"
 #include "IRPrinter.h"
 #include "IRMatch.h"
-#include "Log.h"
+#include "Debug.h"
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
@@ -186,7 +186,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             free_stack_blocks.pop_back();
 
             if (old_alloc.stack_size < allocation.stack_size) {
-                log(2) << "Allocation of " << name << " reusing an old smaller allocation\n";
+                debug(2) << "Allocation of " << name << " reusing an old smaller allocation\n";
                 // We need to go back in time and rewrite the original
                 // alloca to be slightly larger so we can fit this one
                 // into the same space.
@@ -202,7 +202,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                 allocation.alloca_inst = new_alloca;
                 
             } else {
-                log(2) << "Allocation of " << name << " reusing an old larger allocation\n";                
+                debug(2) << "Allocation of " << name << " reusing an old larger allocation\n";                
                 allocation.alloca_inst = old_alloc.alloca_inst;
                 allocation.stack_size = old_alloc.stack_size;
             }
@@ -232,13 +232,13 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         llvm_size = builder->CreateIntCast(llvm_size, malloc_fn->arg_begin()->getType(), false);
 
-        log(4) << "Creating call to halide_malloc\n";
+        debug(4) << "Creating call to halide_malloc\n";
         CallInst *call = builder->CreateCall(malloc_fn, llvm_size);
         allocation.ptr = call;
     }
 
     // Push the allocation base pointer onto the symbol table
-    log(3) << "Pushing allocation called " << name << ".host onto the symbol table\n";
+    debug(3) << "Pushing allocation called " << name << ".host onto the symbol table\n";
 
     allocations.push(name, allocation);
     sym_push(name + ".host", allocation.ptr);
@@ -250,14 +250,14 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     Allocation alloc = allocations.get(name);
 
     if (alloc.stack_size) {
-        log(2) << "Moving allocation " << name << " onto the free stack blocks list\n";
+        debug(2) << "Moving allocation " << name << " onto the free stack blocks list\n";
         // Mark this block as free, but don't restore the stack yet
         free_stack_blocks.push_back(alloc);
     } else {
         // Call free
         llvm::Function *free_fn = module->getFunction("halide_free");
         assert(free_fn && "Could not find halide_free in module");
-        log(4) << "Creating call to halide_free\n";
+        debug(4) << "Creating call to halide_free\n";
         builder->CreateCall(free_fn, alloc.ptr);
     }
 
@@ -294,7 +294,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     assert(!sym_exists(alloc->name + ".host"));
     assert(!allocations.contains(alloc->name));
     
-    log(2) << "Destroying allocation " << alloc->name << "\n";
+    debug(2) << "Destroying allocation " << alloc->name << "\n";
     destroy_allocation(allocation);
 }
 

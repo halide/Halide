@@ -4,7 +4,7 @@
 #include "Substitute.h"
 #include "CSE.h"
 #include "IRPrinter.h"
-#include "Log.h"
+#include "Debug.h"
 #include "IREquality.h"
 #include "Scope.h"
 #include "Simplify.h"
@@ -140,11 +140,11 @@ struct FindOneCommonSubexpression : public IRGraphVisitor {
 
 Expr common_subexpression_elimination(Expr e) {
 
-    // log(0) << "Input to letify " << e << "\n";
+    // debug(0) << "Input to letify " << e << "\n";
     
     e = remove_lets(e);
 
-    // log(0) << "Deletified letify " << e << "\n";
+    // debug(0) << "Deletified letify " << e << "\n";
 
     vector<pair<string, Expr> > lets;
 
@@ -153,21 +153,21 @@ Expr common_subexpression_elimination(Expr e) {
         finder.include(e);
         if (!finder.result.defined()) break;
 
-        // log(0) << "\nHoisting out " << finder.result << " from " << e << "\n";
+        // debug(0) << "\nHoisting out " << finder.result << " from " << e << "\n";
 
         string name = unique_name('t');
 
         lets.push_back(make_pair(name, finder.result));
 
         e = replace_expr(e, finder.result, Variable::make(finder.result.type(), name));
-        // log(0) << "Result: " << e << "\n";
+        // debug(0) << "Result: " << e << "\n";
     }
 
     for (size_t i = lets.size(); i > 0; i--) {
         e = Let::make(lets[i-1].first, lets[i-1].second, e);
     }
 
-    // log(0) << "Output of letify " << e << "\n";
+    // debug(0) << "Output of letify " << e << "\n";
 
     return e;
 }

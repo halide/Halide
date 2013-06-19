@@ -1,12 +1,13 @@
 #include "CodeGen_X86.h"
 #include "IROperator.h"
 #include <iostream>
+#include <cstdio>
 #include "buffer_t.h"
+#include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IRMatch.h"
-#include "Log.h"
-#include "Deinterleave.h"
 #include "Simplify.h"
+#include "Debug.h"
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
@@ -98,7 +99,7 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     }
     #endif
 
-    log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // For now we'll just leave it as whatever the module was
     // compiled as. This assumes that we're not cross-compiling
@@ -470,292 +471,293 @@ void CodeGen_X86::visit(const Max *op) {
     }    
 }
 
-Expr extract_ramp_helper(const Expr op, int *n_ramps) {
-    const Add *asAdd = op.as<Add>();
-    const Sub *asSub = op.as<Sub>();
-    const Mul *asMul = op.as<Mul>();
-    const Max *asMax = op.as<Max>();
-    const Min *asMin = op.as<Min>();
-    const Ramp *asRamp = op.as<Ramp>();
-    Expr ret, a, b;
-    int n_ramps_a = 0, n_ramps_b = 0;
-    if (asAdd) {
-        // add
-        ret = Add::make(extract_ramp_helper(asAdd->a, &n_ramps_a),
-			extract_ramp_helper(asAdd->b, &n_ramps_b));
-    } else if (asSub) {
-        // subtract
-        ret = Sub::make(extract_ramp_helper(asSub->a, &n_ramps_a),
-			extract_ramp_helper(asSub->b, &n_ramps_b));
-    } else if (asMul) {
-        // multiply
-        ret = Mul::make(extract_ramp_helper(asMul->a, &n_ramps_a),
-			extract_ramp_helper(asMul->b, &n_ramps_b));        
-    } else if (asMax) {
-        // max - if a or b has ramp, replace
-        a = extract_ramp_helper(asMax->a, &n_ramps_a);
-        b = extract_ramp_helper(asMax->b, &n_ramps_b);
-        if ((n_ramps_a == 1) && (n_ramps_b==0)) ret = a;
-        else if ((n_ramps_b == 1) && (n_ramps_b==1)) ret = b;
-        else ret = Max::make(a, b);
-    } else if (asMin) {
-        // min - if a or b has ramp, replace
-        a = extract_ramp_helper(asMin->a, &n_ramps_a);
-        b = extract_ramp_helper(asMin->b, &n_ramps_b);
-        if ((n_ramps_a == 1) && (n_ramps_b==0)) ret = a;
-        else if ((n_ramps_b == 1) && (n_ramps_b==1)) ret = b;
-        else ret = Min::make(a, b);
-    } else if (asRamp) {
-        // return ramp
-        ret = op;
-        n_ramps_a = 1;
-    } else {
-        ret = op;
+/** Walks a load index, looking for a ramp surrounded by mins and maxes.
+ * Returns an expression either checking that largest value the ramp takes
+ * on is less than the max bound (if extract_bound_from_min is set to false)
+ * or that the smallest value the ramp takes on is greater than the min bound
+ * (if extract_bound_from_min is set to true).
+ *
+ * If both these conditions are satisfied, the entire ramp index fits within
+ * the clamp bounds and we can do a dense load.
+ */
+class ExtractDenseLoadCondition : public IRMutator {
+public:
+    // save condition expression here - default to true in case this doesn't get
+    // overwritten (due to the index being only a min or max rather than a clamp,
+    // and thus only requiring a single bounds check)
+    Expr condition;
+    ExtractDenseLoadCondition(bool extract_bound_from_min) : condition(true),
+                                                             extract_bound_from_min(extract_bound_from_min),
+                                                             found_ramp(false),
+                                                             inside_min(false),
+                                                             inside_max(false) {}
+private:
+    bool extract_bound_from_min, found_ramp, inside_min, inside_max;
+
+    using IRMutator::visit;
+
+    void visit(const Min *op) {
+        if (inside_min || found_ramp) {
+            // skip if we've alread found a ramp or for some reason there are nested mins
+            // (be conservative for now)
+            expr = op;
+        } else {
+            inside_min = true;
+            // check left and right expressions for ramps
+            Expr a = mutate(op->a);
+            bool found_ramp_a = found_ramp;
+            found_ramp = false;
+            Expr b = mutate(op->b);
+            bool found_ramp_b = found_ramp;
+            found_ramp = found_ramp_a || found_ramp_b;
+            if (found_ramp) {
+                if (!extract_bound_from_min) {
+                    // if we've found a ramp in a or b, but aren't supposed to extract
+                    // the bound from it, we just pass it through - there might be a
+                    // max expression higher in the tree that will use this
+                    expr = found_ramp_a ? a : b; 
+                } else {
+                    // if we are supposed to extract the condition, we save a LE expression
+                    // comparing the extreme value of the ramp with the bound
+                    // (min condition is satisfied if largest value in ramp is less than
+                    // the bound)
+                    Expr extreme_value_of_ramp, bound;
+                    extreme_value_of_ramp = found_ramp_a ? a : b;
+                    bound = found_ramp_a ? b : a;
+                    condition = LE::make(extreme_value_of_ramp, bound);
+                }
+            }
+            expr = Min::make(a, b);
+            inside_min = false;
+        }
     }
-    if (n_ramps) *n_ramps = *n_ramps + n_ramps_a + n_ramps_b;
-    return ret;
-}
 
-Expr extract_ramp(const Expr index) {
-    int n_ramps = 0;
-    Expr extracted = extract_ramp_helper(index, &n_ramps);
-    if (n_ramps==1) return extracted;
-    else return index;
-}
-
-Expr extract_ramp_condition(const Expr op, int *n_ramps, bool replace_max) {
-    // get condition from clamped index
-    // (convert min/max to GE/LE on bounds of ramp indices)
-    const Add *asAdd = op.as<Add>();
-    const Sub *asSub = op.as<Sub>();
-    const Mul *asMul = op.as<Mul>();
-    const Max *asMax = op.as<Max>();
-    const Min *asMin = op.as<Min>();
-    const Ramp *asRamp = op.as<Ramp>();
-    const Broadcast *asBroadcast = op.as<Broadcast>();
-    Expr ret, a, b;
-    int n_ramps_a = 0, n_ramps_b = 0;
-    if (asAdd) {
-        // add
-	a = extract_ramp_condition(asAdd->a, &n_ramps_a, replace_max);
-	b = extract_ramp_condition(asAdd->b, &n_ramps_b, replace_max);
-	if (n_ramps_a==1 && n_ramps_b==0) ret = a;
-	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
-	else ret = op;
-    } else if (asSub) {
-        // subtract
-	a = extract_ramp_condition(asSub->a, &n_ramps_a, replace_max);
-	b = extract_ramp_condition(asSub->b, &n_ramps_b, replace_max);
-	if (n_ramps_a==1 && n_ramps_b==0) ret = a;
-	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
-	else ret = op;
-    } else if (asMul) {
-        // multiply
-	a = extract_ramp_condition(asMul->a, &n_ramps_a, replace_max);
-	b = extract_ramp_condition(asMul->b, &n_ramps_b, replace_max);
-	if (n_ramps_a==1 && n_ramps_b==0) ret = a;
-	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
-	else ret = op;
-    } else if (asMax) {
-        a = extract_ramp_condition(asMax->a, &n_ramps_a, replace_max);
-        b = extract_ramp_condition(asMax->b, &n_ramps_b, replace_max);
-	// if replacing max, replace with appropriate GE
-	if (replace_max && n_ramps_a==1 && n_ramps_b==0) ret = GE::make(a, b);
-	else if (replace_max && n_ramps_a==0 && n_ramps_b==1) ret = GE::make(b, a);
-	else if (n_ramps_a==1 && n_ramps_b==0) ret = a;
-	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
-	else ret = op;
-    } else if (asMin) {
-        // min - if a or b has ramp, replace
-        a = extract_ramp_condition(asMin->a, &n_ramps_a, replace_max);
-        b = extract_ramp_condition(asMin->b, &n_ramps_b, replace_max);
-	// if replacing max, replace with appropriate LE
-	if (!replace_max && n_ramps_a==1 && n_ramps_b==0) ret = LE::make(a, b);
-	else if (!replace_max && n_ramps_a==0 && n_ramps_b==1) ret = LE::make(b, a);
-	else if (n_ramps_a==1 && n_ramps_b==0) ret = a;
-	else if (n_ramps_a==0 && n_ramps_b==1) ret = b;
-	else ret = op;
-    } else if (asRamp) {
-	// we found a ramp
-	n_ramps_a = 1;
-        int stride = asRamp->stride.as<IntImm>()->value;
-	// if stride is positive and replacing max, use base (or negative and not replacing max)
-	if ((replace_max && stride > 0) || (!replace_max && stride < 0)) {
-	    ret = asRamp->base;
-	} else {
-	    ret = asRamp->base + (asRamp->width*asRamp->stride);
-	}
-    } else if (asBroadcast) {
-	ret = asBroadcast->value;
-    } else {
-        ret = op;
+    void visit(const Max *op) {
+        if (inside_max || found_ramp) {
+            // skip if we've alread found a ramp or are too deep in maxes
+            expr = op;
+        } else {
+            inside_max = true;
+            // check left and right expressions for ramps
+            Expr a = mutate(op->a);
+            bool found_ramp_a = found_ramp;
+            found_ramp = false;
+            Expr b = mutate(op->b);
+            bool found_ramp_b = found_ramp;
+            found_ramp = found_ramp_a || found_ramp_b;
+            if (found_ramp) {
+                if (extract_bound_from_min) {
+                    // if we've found a ramp in a or b, but aren't supposed to extract
+                    // the bound from it, we just pass it through - there might be a
+                    // min expression higher in the tree that will use this
+                    expr = found_ramp_a ? a : b; 
+                } else {
+                    // if we are supposed to extract the bound, we save a GE expression
+                    // comparing the extreme value of the ramp with the bound
+                    // (max condition is satisfied if smallest value in ramp is greater
+                    // than the bound)
+                    Expr extreme_value_of_ramp, bound;
+                    extreme_value_of_ramp = found_ramp_a ? a : b;
+                    bound = found_ramp_a ? b : a;
+                    condition = GE::make(extreme_value_of_ramp, bound);
+                }
+            }
+            expr = Max::make(a, b);
+            inside_max = false;
+        }
     }
-    if (n_ramps) *n_ramps = *n_ramps + n_ramps_a + n_ramps_b;
-    return ret;
+        
+    void visit(const Broadcast *op) {
+        // replace vector expressions with single value for comparison
+        expr = mutate(op->value);
+    }
+    
+    void visit(const Ramp *op) {
+        if (inside_min || inside_max) {
+            // replace ramp with extremum value, either highest or lowest
+            // depending on which bound we are checking
+            found_ramp = true;
+            int stride = op->stride.as<IntImm>()->value;
+            // if stride is positive and extracting bound that satisfies min
+            // use base + width (or if stride is negative and extracting bound
+            // that satisfies max condition)
+            if ((stride > 0 && extract_bound_from_min) || 
+                (stride < 0 && !extract_bound_from_min)) {
+                expr = op->base + ((op->width - 1)*op->stride);
+            } else {
+                expr = op->base;
+            }
+        } else {
+            // we only expect there to be one ramp in a load index
+            assert(false && "should only have ramp inside min or max");
+            expr = op;
+        }
+    }
+};
+    
+Expr extract_dense_load_condition(bool extract_bound_from_min, const Load *op) {
+    ExtractDenseLoadCondition e(extract_bound_from_min);
+    e.mutate(op->index);
+    // condition for dense load gets written into e.condition; the expression
+    // returned by mutate is just the extremum value of the index and is not used
+    return e.condition;
 }
+    
+/** Walks a load index, looking for expressions that match the pattern
+ * Min/Max(broadcast, expression containing ramp). Replaces a found min/max
+ * with the expression containing the ramp. The resulting expression is
+ * equivalent to the original expression when all of the bounds conditions
+ * enforced by the mins and maxes are satisfied.
+ *
+ * To make things simple for now, only look for a single ramp inside at most
+ * one min and one max expression.
+ */
+class ExtractDenseLoadIndex : public IRMutator {
+public:
+    ExtractDenseLoadIndex() : found_ramp(false),
+                        inside_min(false),
+                        inside_max(false) {}
+private:
+    bool found_ramp, inside_min, inside_max;
 
+    using IRMutator::visit;
+
+    void visit(const Min *op) {
+        if (inside_min || found_ramp) {
+            // skip if we've alread found a ramp or are too deep in mins
+            expr = op;
+        } else {
+            inside_min = true;
+            Expr maybe_ramp;
+            if (op->a.as<Broadcast>()) {
+                maybe_ramp = mutate(op->b);
+            } else if (op->b.as<Broadcast>()) {
+                maybe_ramp = mutate(op->a);
+            }
+            if (found_ramp) {
+                // maybe_ramp will have been initialized now so we
+                // pass through the side of the min containing the ramp
+                expr = maybe_ramp;
+            } else {
+                // otherwise we just leave things as are, because the
+                // index expression often contains other mins or maxes
+                expr = op;
+            }
+            inside_min = false;
+        }
+    }
+    
+    void visit(const Max *op) {
+        if (inside_max || found_ramp) {
+            // skip if we've alread found a ramp or are too deep in maxes
+            expr = op;
+        } else {
+            inside_max = true;
+            Expr maybe_ramp;
+            if (op->a.as<Broadcast>()) {
+                maybe_ramp = mutate(op->b);
+            } else if (op->b.as<Broadcast>()) {
+                maybe_ramp = mutate(op->a);
+            }
+            if (found_ramp) {
+                // maybe_ramp will have been initialized now so we
+                // pass through the side of the min containing the ramp
+                expr = maybe_ramp;
+            } else {
+                // otherwise we just leave things as are, because the
+                // index expression often contains other mins or maxes
+                expr = op;
+            }
+            inside_max = false;
+        }
+    }
+    
+    void visit(const Ramp *op) {
+        // here all we want to do is note that we found a ramp
+        if (inside_min || inside_max) {
+            found_ramp = true;
+        }
+        expr = op;
+    }
+};
+    
+Expr extract_dense_load_index(const Load *op) {
+    ExtractDenseLoadIndex e;
+    return e.mutate(op->index);
+}
 
 void CodeGen_X86::visit(const Load *op) {
-    create_load(op, true);
-}
 
-void CodeGen_X86::create_load(const Load *op, bool recurse) {
-    // Nick - code here is mostly same as in CodeGen.cpp except for clamped vector load check
-    // There are several cases. Different architectures may wish to override some
-    if (op->type.is_scalar()) {
-        // Scalar loads
-        Value *index = codegen(op->index);
-        Value *ptr = codegen_buffer_pointer(op->name, op->type, index);
-        LoadInst *load = builder->CreateLoad(ptr);
-        load->setMetadata("tbaa", MDNode::get(*context, vec<Value *>(MDString::get(*context, op->name))));
-        value = load;
+    // for testing
+    char *enabled = getenv("HL_ENABLE_CLAMPED_VECTOR_LOAD");
+    bool is_enabled = enabled == NULL ? 0 : atoi(enabled);
+    
+    IRPrinter irp = IRPrinter(std::cout);
+
+    Expr new_index = extract_dense_load_index(op);
+    new_index = simplify(new_index);
+
+    printf("FOO new idx: "); irp.print(simplify(new_index)); printf("\n");
+
+    if (is_enabled && !op->index.as<Ramp>() && new_index.as<Ramp>()) {
+        // only do clamped vector load if we didn't already have a ramp index
+        // Expr check_min = extract_ramp_condition(op->index, NULL, false);
+        printf("FOO old idx: "); irp.print(simplify(op->index)); printf("\n");
+        Expr check_min = extract_dense_load_condition(true, op);
+        check_min = simplify(check_min);
+
+        printf("min check: "); irp.print(check_min); printf("\n");
         
-    } else {            
-        int alignment = op->type.bits / 8;
-        const Ramp *ramp = op->index.as<Ramp>();
-        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
+        //Expr check_max = extract_ramp_condition(op->index, NULL, true);
+        Expr check_max = extract_dense_load_condition(false, op);
+        check_max = simplify(check_max);
 
-        bool internal = !op->image.defined() && !op->param.defined();
+        printf("max check: "); irp.print(check_max); printf("\n");
+        
+        Expr condition = And::make(check_min, check_max);
+        condition = simplify(condition);
 
-        if (ramp && internal) {
-            // If it's an internal allocation, we can boost the
-            // alignment using the results of the modulus remainder
-            // analysis
-            ModulusRemainder mod_rem = modulus_remainder(ramp->base);
-            alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32); 
-        }
-                    
-        if (ramp && stride && stride->value == 1) {
-            Value *base = codegen(ramp->base);
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
-            ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            value = builder->CreateAlignedLoad(ptr, alignment);                
-        } else if (ramp && stride && stride->value == 2) {
-            // Load two vectors worth and then shuffle
-            Value *base = codegen(ramp->base);
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
-            ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            Value *a = builder->CreateAlignedLoad(ptr, alignment);
-            ptr = builder->CreateConstInBoundsGEP1_32(ptr, 1);
-            int bytes = (op->type.bits * op->type.width)/8;
-            Value *b = builder->CreateAlignedLoad(ptr, gcd(alignment, bytes));
-            vector<Constant *> indices(ramp->width);
-            for (int i = 0; i < ramp->width; i++) {
-                indices[i] = ConstantInt::get(i32, i*2);
-            }
-            value = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
-        } else if (ramp && stride && stride->value == -1) {
-            // Load the vector and then flip it in-place
-            Value *base = codegen(ramp->base - ramp->width + 1);
-
-            // Re-do alignment analysis for the flipped index
-            if (internal) {
-                alignment = op->type.bits / 8;
-                ModulusRemainder mod_rem = modulus_remainder(ramp->base - ramp->width + 1);
-                alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);             
-            }
-
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
-            ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            Value *vec = builder->CreateAlignedLoad(ptr, alignment);
-            Value *undef = UndefValue::get(vec->getType());
-
-            vector<Constant *> indices(ramp->width);
-            for (int i = 0; i < ramp->width; i++) {
-                indices[i] = ConstantInt::get(i32, ramp->width-1-i);
-            }
-            value = builder->CreateShuffleVector(vec, undef, ConstantVector::get(indices));
-        } else if (ramp) {
-            // Gather without generating the indices as a vector
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
-            Value *stride = codegen(ramp->stride);
-            value = UndefValue::get(llvm_type_of(op->type));
-            for (int i = 0; i < ramp->width; i++) {                
-                Value *lane = ConstantInt::get(i32, i);
-                Value *val = builder->CreateLoad(ptr);
-                value = builder->CreateInsertElement(value, val, lane);
-                ptr = builder->CreateInBoundsGEP(ptr, stride);
-            }
-        } else if (false /* should_scalarize(op->index) */) {
-            // TODO: put something sensible in for
-            // should_scalarize. Probably a good idea if there are no
-            // loads in it, and it's all int32.
-
-            // Compute the index as scalars, and then do a gather
-            Value *vec = UndefValue::get(llvm_type_of(op->type));
-            for (int i = 0; i < op->type.width; i++) {
-                Value *idx = codegen(extract_lane(op->index, i));
-                Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-                Value *val = builder->CreateLoad(ptr);
-                vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
-            }
-            value = vec;
-        } else {                
-	    // check for clamped vector load
-	    Expr new_index = extract_ramp(op->index);
-	    new_index = simplify(new_index);
-	    if (recurse && new_index.as<Ramp>()) {
-		Expr check_min = extract_ramp_condition(op->index, NULL, false);
-		check_min = simplify(check_min);
-
-		Expr check_max = extract_ramp_condition(op->index, NULL, true);
-		check_max = simplify(check_max);
-
-		Expr condition = And::make(check_min, check_max);
-		condition = simplify(condition);
-		Load simplified_load = *(Load::make(op->type, op->name, new_index,
-						    op->image, op->param).as<Load>());
-		
-		// Make condition
-		Value *condition_val = codegen(condition);
-		
-		// Create the block for the bounded case
-		BasicBlock *bounded_bb = BasicBlock::Create(*context, op->name + "_bounded_load",
-							    function);
-		// Create the block for the unbounded case
-		BasicBlock *unbounded_bb = BasicBlock::Create(*context, op->name + "_unbounded_load",
-							      function);
-		// Create the block that comes after
-		BasicBlock *after_bb = BasicBlock::Create(*context, op->name + "_after_load",
-							  function);
-
-		// Check the bounds, branch accordingly
-		builder->CreateCondBr(condition_val, bounded_bb, unbounded_bb);
-
-		// For bounded case, use ramp
-		builder->SetInsertPoint(bounded_bb);
-		value = NULL;
-		CodeGen_X86::create_load(&simplified_load, false);
-		Value *bounded = value;
-		builder->CreateBr(after_bb);
-
-		// For unbounded case, create_load will fall through to general gather
-		// (with recurse set to false)
-		builder->SetInsertPoint(unbounded_bb);
-		value = NULL;
-		create_load(op, false);
-		Value *unbounded = value;
-		builder->CreateBr(after_bb);
-
-		// Make a phi node
-		builder->SetInsertPoint(after_bb);
-		PHINode *phi = builder->CreatePHI(unbounded->getType(),2);
-		phi->addIncoming(bounded, bounded_bb);
-		phi->addIncoming(unbounded, unbounded_bb);
-		value = phi;
-	    } else {
-	      // General gathers
-	      Value *index = codegen(op->index);
-	      Value *vec = UndefValue::get(llvm_type_of(op->type));
-	      for (int i = 0; i < op->type.width; i++) {
-		  Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32, i));
-		  Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-		  Value *val = builder->CreateLoad(ptr);
-		  vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
-	      }
-	      value = vec;
-	    }
-	}
+        Load simplified_load = *(Load::make(op->type, op->name, new_index,
+                                            op->image, op->param).as<Load>());
+        
+        // Make condition
+        Value *condition_val = codegen(condition);
+        
+        // Create the block for the bounded case
+        BasicBlock *bounded_bb = BasicBlock::Create(*context, op->name + "_bounded_load",
+                                                    function);
+        // Create the block for the unbounded case
+        BasicBlock *unbounded_bb = BasicBlock::Create(*context, op->name + "_unbounded_load",
+                                                      function);
+        // Create the block that comes after
+        BasicBlock *after_bb = BasicBlock::Create(*context, op->name + "_after_load",
+                                                  function);
+        
+        // Check the bounds, branch accordingly
+        builder->CreateCondBr(condition_val, bounded_bb, unbounded_bb);
+        
+        // For bounded case, use ramp
+        builder->SetInsertPoint(bounded_bb);
+        value = NULL;
+        CodeGen::visit(&simplified_load);
+        Value *bounded = value;
+        builder->CreateBr(after_bb);
+        
+        // for unbounded case, revert to default
+        builder->SetInsertPoint(unbounded_bb);
+        value = NULL;
+        CodeGen::visit(op);
+        Value *unbounded = value;
+        builder->CreateBr(after_bb);
+        
+        // Make a phi node
+        builder->SetInsertPoint(after_bb);
+        PHINode *phi = builder->CreatePHI(unbounded->getType(),2);
+        phi->addIncoming(bounded, bounded_bb);
+        phi->addIncoming(unbounded, unbounded_bb);
+        value = phi;
+    } else {
+        CodeGen::visit(op);
     }
 }
 

@@ -24,3 +24,6 @@ filter: filter.o
 
 clean:
 	rm -f wavelet filter filter.o $(HL_MODULES) $(HL_MODULES:%.o) $(HL_MODULES:%.o=%.h)
+
+test: filter
+	./filter ../images/gray.png

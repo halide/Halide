@@ -19,7 +19,7 @@ process: process.cpp local_laplacian.o
 	$(CXX) -I../support -Wall -O3 process.cpp local_laplacian.o -o process -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS)
 
 out.png: process
-	./process input.png 8 1 1 out.png
+	./process ../images/rgb.png 8 1 1 out.png
 
 clean:
 	rm -f process local_laplacian.o local_laplacian
