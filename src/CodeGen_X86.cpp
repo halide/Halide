@@ -1,10 +1,8 @@
 #include "CodeGen_X86.h"
 #include "IROperator.h"
 #include <iostream>
-#include <cstdio>
 #include "buffer_t.h"
 #include "IRMutator.h"
-#include "IRPrinter.h"
 #include "IRMatch.h"
 #include "Simplify.h"
 #include "Debug.h"
@@ -687,32 +685,20 @@ Expr extract_dense_load_index(const Load *op) {
 }
 
 void CodeGen_X86::visit(const Load *op) {
-
     // for testing
     char *enabled = getenv("HL_ENABLE_CLAMPED_VECTOR_LOAD");
     bool is_enabled = enabled == NULL ? 0 : atoi(enabled);
-    
-    IRPrinter irp = IRPrinter(std::cout);
 
     Expr new_index = extract_dense_load_index(op);
     new_index = simplify(new_index);
 
-    printf("FOO new idx: "); irp.print(simplify(new_index)); printf("\n");
-
     if (is_enabled && !op->index.as<Ramp>() && new_index.as<Ramp>()) {
         // only do clamped vector load if we didn't already have a ramp index
-        // Expr check_min = extract_ramp_condition(op->index, NULL, false);
-        printf("FOO old idx: "); irp.print(simplify(op->index)); printf("\n");
         Expr check_min = extract_dense_load_condition(true, op);
         check_min = simplify(check_min);
 
-        printf("min check: "); irp.print(check_min); printf("\n");
-        
-        //Expr check_max = extract_ramp_condition(op->index, NULL, true);
         Expr check_max = extract_dense_load_condition(false, op);
         check_max = simplify(check_max);
-
-        printf("max check: "); irp.print(check_max); printf("\n");
         
         Expr condition = And::make(check_min, check_max);
         condition = simplify(condition);
@@ -757,6 +743,7 @@ void CodeGen_X86::visit(const Load *op) {
         phi->addIncoming(unbounded, unbounded_bb);
         value = phi;
     } else {
+        // fall back to default behaviour
         CodeGen::visit(op);
     }
 }
