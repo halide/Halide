@@ -1,7 +1,7 @@
 
 #include "IR.h"
 #include "IRPrinter.h"
-#include "Log.h"
+#include "Debug.h"
 
 namespace Halide { 
 namespace Internal {
@@ -402,7 +402,7 @@ public:
 
 int deep_compare(Expr a, Expr b) {
     // Undefined exprs come first
-    // log(0) << "deep comparison of " << a << " and " << b << "\n";
+    // debug(0) << "deep comparison of " << a << " and " << b << "\n";
     if (!a.defined() && b.defined()) return -1;
     if (a.defined() && !b.defined()) return 1;
     if (!a.defined() && !b.defined()) return 0;

@@ -19,7 +19,7 @@ filter: bilateral_grid.o filter.cpp
 	$(GXX) -I../support -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -lpng -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LDFLAGS)
 
 out.png: filter
-	./filter input.png out.png 0.1
+	./filter ../images/gray.png out.png 0.1
 
 clean:
 	rm -f bilateral_grid bilateral_grid.o bilateral_grid.h filter

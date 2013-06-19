@@ -13,7 +13,7 @@ interpolate: ../../ interpolate.cpp
 	$(GXX) $(CPPFLAGS) interpolate.cpp -I ../../include/ -I ../support ../../bin/libHalide.a -o interpolate  -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS)
 
 out.png: interpolate
-	./interpolate in.png out.png
+	./interpolate ../images/rgba.png out.png
 
 clean:
 	rm -f interpolate interpolate.h out.png

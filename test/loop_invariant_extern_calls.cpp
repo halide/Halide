@@ -12,6 +12,13 @@ extern "C" int my_func(int counter, int x) {
 }
 HalideExtern_2(int, my_func, int, int);
 
+// A parallel for loop runner that isn't actually parallel
+void not_really_parallel_for(void (*f)(int, uint8_t *), int min, int extent, uint8_t *closure) {
+    for (int i = min; i < min + extent; i++) {
+        f(i, closure);
+    }
+}
+
 int main(int argc, char **argv) {
     Var x, y;
     Func f;
@@ -48,6 +55,8 @@ int main(int argc, char **argv) {
     Func g;
     g(x, y) = my_func(3, Expr(0));
     g.parallel(y);
+    // Avoid the race condition by not actually being parallel
+    g.set_custom_do_par_for(&not_really_parallel_for);
     g.realize(32, 32);
 
     if (call_counter[3] != 32) {

@@ -5,7 +5,7 @@
 #include "IRPrinter.h"
 #include "IRMatch.h"
 #include "IREquality.h"
-#include "Log.h"
+#include "Debug.h"
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
@@ -71,7 +71,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
 
     // Fix the target triple. The initial module was probably compiled for x86
 
-    log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
     if (use_android) {
         module->setTargetTriple("arm-linux-eabi");
     } else if (use_nacl) {
@@ -79,7 +79,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
     } else {
         module->setTargetTriple("arm-linux-gnueabihf");
     }
-    log(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";        
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";        
 
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
@@ -204,7 +204,7 @@ Value *CodeGen_ARM::call_intrin(llvm::Type *result_type,
 
     }
 
-    log(4) << "Creating call to " << name << "\n";
+    debug(4) << "Creating call to " << name << "\n";
     return builder->CreateCall(fn, arg_values, name);
 }
  
@@ -239,7 +239,7 @@ void CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> arg_value
         fn->setDoesNotThrow();
     }
 
-    log(4) << "Creating call to " << name << "\n";
+    debug(4) << "Creating call to " << name << "\n";
     builder->CreateCall(fn, arg_values);    
 }
 
@@ -382,9 +382,9 @@ void CodeGen_ARM::visit(const Cast *op) {
         
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
-        //log(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
+        //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
-            //log(4) << "Match!\n";
+            //debug(4) << "Match!\n";
             if (pattern.type == Simple) {
                 value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
                 return;
@@ -997,7 +997,7 @@ void CodeGen_ARM::visit(const Store *op) {
         Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), codegen(ramp->base));
         Value *stride = codegen(ramp->stride * (op->value.type().bits / 8));
         Value *val = codegen(op->value);
-	log(4) << "Creating call to " << builtin.str() << "\n";
+	debug(4) << "Creating call to " << builtin.str() << "\n";
         builder->CreateCall(fn, vec(base, stride, val));
         return;
     }
@@ -1084,7 +1084,7 @@ void CodeGen_ARM::visit(const Load *op) {
         }
 
         if (group) {            
-            log(4) << "Extracting element " << offset << " from resulting struct\n";
+            debug(4) << "Extracting element " << offset << " from resulting struct\n";
             value = builder->CreateExtractValue(group, vec((unsigned int)offset));            
             return;
         }
@@ -1101,7 +1101,7 @@ void CodeGen_ARM::visit(const Load *op) {
     if (fn) {
         Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
         Value *stride = codegen(ramp->stride * (op->type.bits / 8));
-	log(4) << "Creating call to " << builtin.str() << "\n";
+	debug(4) << "Creating call to " << builtin.str() << "\n";
         value = builder->CreateCall(fn, vec(base, stride), builtin.str());
         return;
     }

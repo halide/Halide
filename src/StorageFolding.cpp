@@ -7,7 +7,7 @@
 #include "Simplify.h"
 #include "Bounds.h"
 #include "IRPrinter.h"
-#include "Log.h"
+#include "Debug.h"
 #include "Derivative.h"
 
 namespace Halide {
@@ -104,7 +104,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             max_extent = simplify(max_extent);
 
-            log(2) << "Considering folding " << func << " over for loop over " << op->name << '\n'
+            debug(2) << "Considering folding " << func << " over for loop over " << op->name << '\n'
                    << "Min: " << min << '\n'
                    << "Extent: " << extent << '\n'
                    << "Monotonic increasing: " << monotonic_increasing << '\n'
@@ -116,7 +116,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                  equal(monotonic_decreasing, const_true()))
                 && max_extent_int) {
                 int extent = max_extent_int->value;
-                log(2) << "Proceeding...\n";
+                debug(2) << "Proceeding...\n";
 
                 int factor = 1;
                 while (factor < extent) factor *= 2;

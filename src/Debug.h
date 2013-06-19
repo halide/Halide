@@ -1,5 +1,5 @@
-#ifndef HALIDE_LOG_H
-#define HALIDE_LOG_H
+#ifndef HALIDE_DEBUG_H
+#define HALIDE_DEBUG_H
 
 /** \file
  * Defines functions for debug logging during code generation.
@@ -12,11 +12,11 @@
 namespace Halide {
 namespace Internal {
 
-/** For optional debugging during codegen, use the log class as
+/** For optional debugging during codegen, use the debug class as
  * follows: 
  * 
  \code
- log(verbosity) << "The expression is " << expr << std::endl; 
+ debug(verbosity) << "The expression is " << expr << std::endl; 
  \endcode
  *
  * verbosity of 0 always prints, 1 should print after every major
@@ -26,12 +26,12 @@ namespace Internal {
  * HL_DEBUG_CODEGEN
  */
 
-struct log {
+struct debug {
     static int debug_level;
     static bool initialized;
     int verbosity;
 
-    log(int v) : verbosity(v) {
+    debug(int v) : verbosity(v) {
         if (!initialized) {
             // Read the debug level from the environment
             #ifdef _WIN32
@@ -52,7 +52,7 @@ struct log {
     }
 
     template<typename T>
-    log &operator<<(T x) {
+    debug &operator<<(T x) {
         if (verbosity > debug_level) return *this;
         std::cerr << x;
         return *this;
