@@ -73,8 +73,6 @@ int main(int argc, char **argv) {
         t_clamped = test(f);
     }
 
-    // return 0;
-
     {
         // Variant 2 - do the load as a scalar op just before the vectorized stuff
         Func g;
