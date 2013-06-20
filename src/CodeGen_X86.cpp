@@ -497,44 +497,69 @@ bool detect_clamped_load(Expr index, Expr *condition, Expr *simplified_index) {
         }
     }
 
+    Expr base, stride, lower, upper;
     // Match a bunch of common cases for which we know what to do.
     if (expr_match(max(min(ramp, broadcast), broadcast), index, matches)) {
         // debug(0) << "Case 1: " << index << "\n";
         // This is by far the most common case. All clamped ramps plus
         // a scalar get rewritten by the simplifier into this form.
-        Expr base = matches[0], stride = matches[1], upper = matches[2], lower = matches[3];
-        Expr end = base + stride * (w - 1);
-        *condition = (base >= lower) && (base <= upper) && (end >= lower) && (end <= upper);
-        *simplified_index = Ramp::make(base, stride, w);
-        return true;
+        base = matches[0];
+        stride = matches[1];
+        upper = matches[2];
+        lower = matches[3];
     } else if (expr_match(min(max(ramp, broadcast), broadcast), index, matches)) {
         // debug(0) << "Case 2: " << index << "\n";
         // Max and min reversed. Should only happen if the programmer didn't use the clamp operator.
-        Expr base = matches[0], stride = matches[1], lower = matches[2], upper = matches[3];
-        Expr end = base + stride * (w - 1);
-        *condition = (base >= lower) && (base <= upper) && (end >= lower) && (end <= upper);
-        *simplified_index = Ramp::make(base, stride, w);
-        return true;
+        base = matches[0];
+        stride = matches[1];
+        lower = matches[2];
+        upper = matches[3];
     } else if (expr_match(max(ramp, broadcast), index, matches)) {
         // No min
         // debug(0) << "Case 3: " << index << "\n";
-        Expr base = matches[0], stride = matches[1], lower = matches[2];
-        Expr end = base + stride * (w - 1);
-        *condition = (base >= lower) && (end >= lower);
-        *simplified_index = Ramp::make(base, stride, w);
-        return true;
+        base = matches[0];
+        stride = matches[1];
+        lower = matches[2];
     } else if (expr_match(min(ramp, broadcast), index, matches)) {
         // No max
         // debug(0) << "Case 4: " << index << "\n";
-        Expr base = matches[0], stride = matches[1], upper = matches[2];
-        Expr end = base + stride * (w - 1);
-        *condition = (base <= upper) && (end <= upper);
-        *simplified_index = Ramp::make(base, stride, w);
-        return true;
+        base = matches[0];
+        stride = matches[1];
+        upper = matches[2];
     } else {
         // debug(0) << "No match: " << index << "\n";
         return false;
     }
+
+    // The last element of the ramp.
+    Expr end = base + stride * (w - 1);
+    
+    // Compute the condition separately for when the stride is
+    // positive vs negative. If we can use a simpler condition, we end
+    // up getting much better performance.
+    Expr pos_cond = const_true();
+    Expr neg_cond = const_true();
+    if (upper.defined()) {
+        pos_cond = pos_cond && (end <= upper);
+        neg_cond = neg_cond && (base <= upper);
+    }
+    if (lower.defined()) {
+        pos_cond = pos_cond && (base >= lower);
+        neg_cond = neg_cond && (end >= lower);
+    }
+
+    if (is_positive_const(stride)) {
+        *condition = pos_cond;
+    } else if (is_negative_const(stride)) {
+        *condition = neg_cond;
+    } else {
+        // If we don't know about the stride, we have to enforce both variants.
+        *condition = pos_cond && neg_cond;
+    }
+
+    *condition = simplify(*condition);    
+    *simplified_index = Ramp::make(base, stride, w);
+    return true;
 }
 
 void CodeGen_X86::visit(const Load *op) {
