@@ -6,6 +6,10 @@
 // g++ lesson_02.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -lpng -o lesson_02
 // LD_LIBRARY_PATH=../bin ./lesson_02 
 
+// On os x:
+// g++ lesson_02.cpp -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_02
+// DYLD_LIBRARY_PATH=../bin ./lesson_02 
+
 // The only Halide header file you need is Halide.h. It includes all of Halide.
 #include <Halide.h>
 
@@ -83,5 +87,6 @@ int main(int argc, char **argv) {
     // Save the output for inspection. It should look like a bright parrot.
     save(output, "brighter.png");
     
+    printf("Success!\n");
     return 0;
 }
