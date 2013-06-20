@@ -9,9 +9,6 @@
 // The only Halide header file you need is Halide.h. It includes all of Halide.
 #include <Halide.h>
 
-// We'll also include stdio for printf.
-#include <stdio.h>
-
 // Include some support code for loading pngs. It assumes there's an
 // Image type, so we'll pull the one from Halide namespace;
 using Halide::Image;
@@ -49,9 +46,9 @@ int main(int argc, char **argv) {
     // of our constant.
     value = value * 1.5f;
 
-    // Clamp it to between zero and 255 so we don't get overflow when
-    // we cast it back to an 8-bit unsigned int.
-    value = Halide::clamp(value, 0.0f, 255.0f);
+    // Clamp it to be less than 255, so we don't get overflow when we
+    // cast it back to an 8-bit unsigned int.
+    value = Halide::min(value, 255.0f);
 
     // Cast it back to an 8-bit unsigned integer.
     value = Halide::cast<uint8_t>(value);
@@ -61,7 +58,7 @@ int main(int argc, char **argv) {
 
     // The equivalent one-liner to all of the above is:
     // 
-    // brighter(x, y, c) = Halide::cast<uint8_t>(clamp(input(x, y, c) * 1.5f, 0, 255));
+    // brighter(x, y, c) = Halide::cast<uint8_t>(min(input(x, y, c) * 1.5f, 255));
     // 
     // In the shorter version: 
     // - I skipped the cast to float, because multiplying by 1.5f does
