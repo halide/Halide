@@ -1129,12 +1129,20 @@ void CodeGen::visit(const Call *op) {
             fn->setCallingConv(CallingConv::C);            
 
         }
-        
+
+        bool has_side_effects = false;
+        // TODO: Need a general solution here
+        if (op->name == "halide_current_time") {
+            has_side_effects = true;
+        }
+
         if (op->type.is_scalar()) {
             debug(4) << "Creating call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, args);
-            call->setDoesNotAccessMemory();
-            call->setDoesNotThrow();
+            if (!has_side_effects) {
+                call->setDoesNotAccessMemory();
+                call->setDoesNotThrow();
+            }
             value = call;
         } else {
             // Check if a vector version of the function already
@@ -1146,8 +1154,10 @@ void CodeGen::visit(const Call *op) {
             if (vec_fn) {
                 debug(4) << "Creating call to " << ss.str() << "\n";
                 CallInst *call = builder->CreateCall(vec_fn, args);
-                call->setDoesNotAccessMemory();
-                call->setDoesNotThrow();
+                if (!has_side_effects) {
+                    call->setDoesNotAccessMemory();
+                    call->setDoesNotThrow();
+                }
                 value = call;
                 fn = vec_fn;
             } else {
@@ -1162,8 +1172,10 @@ void CodeGen::visit(const Call *op) {
                     }
                     debug(4) << "Creating call to " << op->name << "\n";
                     CallInst *call = builder->CreateCall(fn, arg_lane);
-                    call->setDoesNotAccessMemory();
-                    call->setDoesNotThrow();
+                    if (!has_side_effects) {
+                        call->setDoesNotAccessMemory();
+                        call->setDoesNotThrow();
+                    }
                     value = builder->CreateInsertElement(value, call, idx);
                 }
             }            
