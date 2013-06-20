@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
 
         f.vectorize(x, 8);
 
-        t_ref = test(f);        
+        t_ref = test(f);
     }
 
     {
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
         // Variant 4 - make sure we don't do the wrong thing with more complex load expressions
         Func g;
         g(x, y) = input(clamp(clamp(x, MIN, MAX) + clamp(x * y, MIN, MAX) + clamp(-x, MIN, MAX), MIN, MAX), y);
-        //.g(x, y) = input(clamp(2*x * x, MIN, MAX), y);
+        //g(x, y) = input(clamp(2*x * x, MIN, MAX), y);
 
         Func f;
         f(x, y) = g(x, y) * 3 + g(x+1, y);
@@ -115,7 +115,7 @@ int main(int argc, char **argv) {
         test(f);
     }
 
-    if (t_clamped > 2.0f * t_ref || t_clamped > t_scalar || t_clamped > t_pad) {
+    if (t_clamped > 4.0f * t_ref || t_clamped > t_scalar || t_clamped > t_pad) {
         printf("Clamped load timings suspicious:\n"
                "Unclamped: %f\n"
                "Clamped: %f\n"
