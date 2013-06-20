@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
         t_pad = test(f);
     }
 
-    if (t_clamped > 2.0f * t_ref || t_clamped > t_scalar || t_clamped > t_pad) {
+    if (t_clamped > 2.5f * t_ref || t_clamped > t_scalar || t_clamped > t_pad) {
         printf("Clamped load timings suspicious:\n"
                "Unclamped: %f\n"
                "Clamped: %f\n"
