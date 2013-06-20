@@ -10,6 +10,7 @@
 #include "Var.h"
 #include "Param.h"
 #include "integer_division_table.h"
+#include "IRPrinter.h"
 #include "LLVM_Headers.h"
 
 extern "C" unsigned char halide_internal_initmod_x86[];
@@ -469,242 +470,79 @@ void CodeGen_X86::visit(const Max *op) {
     }    
 }
 
-/** Walks a load index, looking for a ramp surrounded by mins and maxes.
- * Returns an expression either checking that largest value the ramp takes
- * on is less than the max bound (if extract_bound_from_min is set to false)
- * or that the smallest value the ramp takes on is greater than the min bound
- * (if extract_bound_from_min is set to true).
- *
- * If both these conditions are satisfied, the entire ramp index fits within
- * the clamp bounds and we can do a dense load.
- */
-class ExtractDenseLoadCondition : public IRMutator {
-public:
-    // save condition expression here - default to true in case this doesn't get
-    // overwritten (due to the index being only a min or max rather than a clamp,
-    // and thus only requiring a single bounds check)
-    Expr condition;
-    ExtractDenseLoadCondition(bool extract_bound_from_min) : condition(true),
-                                                             extract_bound_from_min(extract_bound_from_min),
-                                                             found_ramp(false),
-                                                             inside_min(false),
-                                                             inside_max(false) {}
-private:
-    bool extract_bound_from_min, found_ramp, inside_min, inside_max;
+bool detect_clamped_load(Expr index, Expr *condition, Expr *simplified_index) {
+    // debug(0) << "In detect clamped load\n";
 
-    using IRMutator::visit;
+    int w = index.type().width;
+    
+    if (w <= 1) return false;
 
-    void visit(const Min *op) {
-        if (inside_min || found_ramp) {
-            // skip if we've alread found a ramp or for some reason there are nested mins
-            // (be conservative for now)
-            expr = op;
+    Expr wild = Variable::make(Int(32), "*");
+    Expr wild_vec = Variable::make(Int(32, w), "*");
+    Expr broadcast = Broadcast::make(wild, w);
+    Expr ramp = Ramp::make(wild, wild, w);
+    vector<Expr> matches;
+
+    // The cases we can match usually have a + broadcast at the end
+    // debug(0) << index << " vs " << (wild_vec + broadcast) << "\n";
+    if (expr_match(wild_vec + broadcast, index, matches)) {
+        // debug(0) << "Clamped vector load case 0: " << index << "\n";
+        if (detect_clamped_load(matches[0], condition, simplified_index)) {
+            const Ramp *r = simplified_index->as<Ramp>();
+            assert(r);
+            *simplified_index = Ramp::make(r->base + matches[1], r->stride, w);
+            return true;
         } else {
-            inside_min = true;
-            // check left and right expressions for ramps
-            Expr a = mutate(op->a);
-            bool found_ramp_a = found_ramp;
-            found_ramp = false;
-            Expr b = mutate(op->b);
-            bool found_ramp_b = found_ramp;
-            found_ramp = found_ramp_a || found_ramp_b;
-            if (found_ramp) {
-                if (!extract_bound_from_min) {
-                    // if we've found a ramp in a or b, but aren't supposed to extract
-                    // the bound from it, we just pass it through - there might be a
-                    // max expression higher in the tree that will use this
-                    expr = found_ramp_a ? a : b; 
-                } else {
-                    // if we are supposed to extract the condition, we save a LE expression
-                    // comparing the extreme value of the ramp with the bound
-                    // (min condition is satisfied if largest value in ramp is less than
-                    // the bound)
-                    Expr extreme_value_of_ramp, bound;
-                    extreme_value_of_ramp = found_ramp_a ? a : b;
-                    bound = found_ramp_a ? b : a;
-                    condition = LE::make(extreme_value_of_ramp, bound);
-                }
-            }
-            expr = Min::make(a, b);
-            inside_min = false;
+            return false;
         }
     }
 
-    void visit(const Max *op) {
-        if (inside_max || found_ramp) {
-            // skip if we've alread found a ramp or are too deep in maxes
-            expr = op;
-        } else {
-            inside_max = true;
-            // check left and right expressions for ramps
-            Expr a = mutate(op->a);
-            bool found_ramp_a = found_ramp;
-            found_ramp = false;
-            Expr b = mutate(op->b);
-            bool found_ramp_b = found_ramp;
-            found_ramp = found_ramp_a || found_ramp_b;
-            if (found_ramp) {
-                if (extract_bound_from_min) {
-                    // if we've found a ramp in a or b, but aren't supposed to extract
-                    // the bound from it, we just pass it through - there might be a
-                    // min expression higher in the tree that will use this
-                    expr = found_ramp_a ? a : b; 
-                } else {
-                    // if we are supposed to extract the bound, we save a GE expression
-                    // comparing the extreme value of the ramp with the bound
-                    // (max condition is satisfied if smallest value in ramp is greater
-                    // than the bound)
-                    Expr extreme_value_of_ramp, bound;
-                    extreme_value_of_ramp = found_ramp_a ? a : b;
-                    bound = found_ramp_a ? b : a;
-                    condition = GE::make(extreme_value_of_ramp, bound);
-                }
-            }
-            expr = Max::make(a, b);
-            inside_max = false;
-        }
+    // Match a bunch of common cases for which we know what to do.
+    if (expr_match(max(min(ramp, broadcast), broadcast), index, matches)) {
+        // debug(0) << "Case 1: " << index << "\n";
+        // This is by far the most common case. All clamped ramps plus
+        // a scalar get rewritten by the simplifier into this form.
+        Expr base = matches[0], stride = matches[1], upper = matches[2], lower = matches[3];
+        *condition = (base >= lower) && (base <= upper);
+        *simplified_index = Ramp::make(base, stride, w);
+        return true;
+    } else if (expr_match(min(max(ramp, broadcast), broadcast), index, matches)) {
+        // debug(0) << "Case 2: " << index << "\n";
+        // Max and min reversed. Should only happen if the programmer didn't use the clamp operator.
+        Expr base = matches[0], stride = matches[1], lower = matches[2], upper = matches[3];
+        *condition = (base >= lower) && (base <= upper);
+        *simplified_index = Ramp::make(base, stride, w);
+        return true;
+    } else if (expr_match(max(ramp, broadcast), index, matches)) {
+        // No min
+        // debug(0) << "Case 3: " << index << "\n";
+        Expr base = matches[0], stride = matches[1], lower = matches[2];
+        *condition = (base >= lower);
+        *simplified_index = Ramp::make(base, stride, w);
+        return true;
+    } else if (expr_match(min(ramp, broadcast), index, matches)) {
+        // No max
+        // debug(0) << "Case 4: " << index << "\n";
+        Expr base = matches[0], stride = matches[1], upper = matches[2];
+        *condition = (base <= upper);
+        *simplified_index = Ramp::make(base, stride, w);
+        return true;
+    } else {
+        // debug(0) << "No match: " << index << "\n";
+        return false;
     }
-        
-    void visit(const Broadcast *op) {
-        // replace vector expressions with single value for comparison
-        expr = mutate(op->value);
-    }
-    
-    void visit(const Ramp *op) {
-        if (inside_min || inside_max) {
-            // replace ramp with extremum value, either highest or lowest
-            // depending on which bound we are checking
-            found_ramp = true;
-            int stride = op->stride.as<IntImm>()->value;
-            // if stride is positive and extracting bound that satisfies min
-            // use base + width (or if stride is negative and extracting bound
-            // that satisfies max condition)
-            if ((stride > 0 && extract_bound_from_min) || 
-                (stride < 0 && !extract_bound_from_min)) {
-                expr = op->base + ((op->width - 1)*op->stride);
-            } else {
-                expr = op->base;
-            }
-        } else {
-            // we only expect there to be one ramp in a load index
-            assert(false && "should only have ramp inside min or max");
-            expr = op;
-        }
-    }
-};
-    
-Expr extract_dense_load_condition(bool extract_bound_from_min, const Load *op) {
-    ExtractDenseLoadCondition e(extract_bound_from_min);
-    e.mutate(op->index);
-    // condition for dense load gets written into e.condition; the expression
-    // returned by mutate is just the extremum value of the index and is not used
-    return e.condition;
-}
-    
-/** Walks a load index, looking for expressions that match the pattern
- * Min/Max(broadcast, expression containing ramp). Replaces a found min/max
- * with the expression containing the ramp. The resulting expression is
- * equivalent to the original expression when all of the bounds conditions
- * enforced by the mins and maxes are satisfied.
- *
- * To make things simple for now, only look for a single ramp inside at most
- * one min and one max expression.
- */
-class ExtractDenseLoadIndex : public IRMutator {
-public:
-    ExtractDenseLoadIndex() : found_ramp(false),
-                        inside_min(false),
-                        inside_max(false) {}
-private:
-    bool found_ramp, inside_min, inside_max;
-
-    using IRMutator::visit;
-
-    void visit(const Min *op) {
-        if (inside_min || found_ramp) {
-            // skip if we've alread found a ramp or are too deep in mins
-            expr = op;
-        } else {
-            inside_min = true;
-            Expr maybe_ramp;
-            if (op->a.as<Broadcast>()) {
-                maybe_ramp = mutate(op->b);
-            } else if (op->b.as<Broadcast>()) {
-                maybe_ramp = mutate(op->a);
-            }
-            if (found_ramp) {
-                // maybe_ramp will have been initialized now so we
-                // pass through the side of the min containing the ramp
-                expr = maybe_ramp;
-            } else {
-                // otherwise we just leave things as are, because the
-                // index expression often contains other mins or maxes
-                expr = op;
-            }
-            inside_min = false;
-        }
-    }
-    
-    void visit(const Max *op) {
-        if (inside_max || found_ramp) {
-            // skip if we've alread found a ramp or are too deep in maxes
-            expr = op;
-        } else {
-            inside_max = true;
-            Expr maybe_ramp;
-            if (op->a.as<Broadcast>()) {
-                maybe_ramp = mutate(op->b);
-            } else if (op->b.as<Broadcast>()) {
-                maybe_ramp = mutate(op->a);
-            }
-            if (found_ramp) {
-                // maybe_ramp will have been initialized now so we
-                // pass through the side of the min containing the ramp
-                expr = maybe_ramp;
-            } else {
-                // otherwise we just leave things as are, because the
-                // index expression often contains other mins or maxes
-                expr = op;
-            }
-            inside_max = false;
-        }
-    }
-    
-    void visit(const Ramp *op) {
-        // here all we want to do is note that we found a ramp
-        if (inside_min || inside_max) {
-            found_ramp = true;
-        }
-        expr = op;
-    }
-};
-    
-Expr extract_dense_load_index(const Load *op) {
-    ExtractDenseLoadIndex e;
-    return e.mutate(op->index);
 }
 
 void CodeGen_X86::visit(const Load *op) {
-    // for testing
-    // char *enabled = getenv("HL_ENABLE_CLAMPED_VECTOR_LOAD");
-    bool is_enabled = true; //enabled == NULL ? 0 : atoi(enabled);
+    Expr condition, simpler_index;
+    
+    // TODO: fix detect_clamped_load and re-enable
+    if (detect_clamped_load(op->index, &condition, &simpler_index)) {
 
-    Expr new_index = extract_dense_load_index(op);
-    new_index = simplify(new_index);
+        assert(condition.defined() && simpler_index.defined());
 
-    if (is_enabled && !op->index.as<Ramp>() && new_index.as<Ramp>()) {
-        // only do clamped vector load if we didn't already have a ramp index
-        Expr check_min = extract_dense_load_condition(true, op);
-        check_min = simplify(check_min);
-
-        Expr check_max = extract_dense_load_condition(false, op);
-        check_max = simplify(check_max);
-        
-        Expr condition = And::make(check_min, check_max);
-        condition = simplify(condition);
-
-        Expr simplified_load = Load::make(op->type, op->name, new_index,
-                                          op->image, op->param);
+        Expr simpler_load = Load::make(op->type, op->name, simpler_index,
+                                       op->image, op->param);
         
         // Make condition
         Value *condition_val = codegen(condition);
@@ -720,12 +558,13 @@ void CodeGen_X86::visit(const Load *op) {
                                                   function);
         
         // Check the bounds, branch accordingly
+        // TODO: add branch weight metadata to tell llvm the unbounded case is unlikely
         builder->CreateCondBr(condition_val, bounded_bb, unbounded_bb);
         
         // For bounded case, use ramp
         builder->SetInsertPoint(bounded_bb);
         value = NULL;
-        CodeGen::visit(simplified_load.as<Load>());
+        CodeGen::visit(simpler_load.as<Load>());
         Value *bounded = value;
         builder->CreateBr(after_bb);
         

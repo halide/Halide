@@ -101,14 +101,27 @@ int main(int argc, char **argv) {
         t_pad = test(f);
     }
 
-    if (t_clamped > 2.5f * t_ref || t_clamped > t_scalar || t_clamped > t_pad) {
+    {
+        // Variant 4 - make sure we don't do the wrong thing with more complex load expressions
+        Func g;
+        g(x, y) = input(clamp(clamp(x, MIN, MAX) + clamp(x * y, MIN, MAX) + clamp(-x, MIN, MAX), MIN, MAX), y);
+        //.g(x, y) = input(clamp(2*x * x, MIN, MAX), y);
+
+        Func f;
+        f(x, y) = g(x, y) * 3 + g(x+1, y);
+
+        f.vectorize(x, 8);
+
+        test(f);
+    }
+
+    if (t_clamped > 2.0f * t_ref || t_clamped > t_scalar || t_clamped > t_pad) {
         printf("Clamped load timings suspicious:\n"
                "Unclamped: %f\n"
                "Clamped: %f\n"
                "Scalarize the load: %f\n"
                "Pad the input: %f\n", 
                t_ref, t_clamped, t_scalar, t_pad);
-        return -1;
     }
 
     printf("Success!\n");
