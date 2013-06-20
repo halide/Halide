@@ -503,28 +503,48 @@ bool detect_clamped_load(Expr index, Expr *condition, Expr *simplified_index) {
         // This is by far the most common case. All clamped ramps plus
         // a scalar get rewritten by the simplifier into this form.
         Expr base = matches[0], stride = matches[1], upper = matches[2], lower = matches[3];
-        *condition = (base >= lower) && (base <= upper);
+        // check stride sign to get proper bounds
+        if (stride.as<IntImm>()->value > 0) {
+            *condition = (base >= lower) && ((base + (w-1)*stride) <= upper);
+        } else {
+            *condition = ((base + (w-1)*stride) >= lower) && (base <= upper);
+        }
         *simplified_index = Ramp::make(base, stride, w);
         return true;
     } else if (expr_match(min(max(ramp, broadcast), broadcast), index, matches)) {
         // debug(0) << "Case 2: " << index << "\n";
         // Max and min reversed. Should only happen if the programmer didn't use the clamp operator.
         Expr base = matches[0], stride = matches[1], lower = matches[2], upper = matches[3];
-        *condition = (base >= lower) && (base <= upper);
+        // check stride sign to get proper bounds
+        if (stride.as<IntImm>()->value > 0) {
+            *condition = (base >= lower) && ((base + (w-1)*stride) <= upper);
+        } else {
+            *condition = ((base + (w-1)*stride) >= lower) && (base <= upper);
+        }
         *simplified_index = Ramp::make(base, stride, w);
         return true;
     } else if (expr_match(max(ramp, broadcast), index, matches)) {
         // No min
         // debug(0) << "Case 3: " << index << "\n";
         Expr base = matches[0], stride = matches[1], lower = matches[2];
-        *condition = (base >= lower);
+        // check stride sign to get proper bounds
+        if (stride.as<IntImm>()->value > 0) {
+            *condition = (base >= lower);
+        } else {
+            *condition = (base + (w-1)*stride) >= lower;
+        }
         *simplified_index = Ramp::make(base, stride, w);
         return true;
     } else if (expr_match(min(ramp, broadcast), index, matches)) {
         // No max
         // debug(0) << "Case 4: " << index << "\n";
         Expr base = matches[0], stride = matches[1], upper = matches[2];
-        *condition = (base <= upper);
+        // check stride sign to get proper bounds
+        if (stride.as<IntImm>()->value > 0) {
+            *condition = ((base + (w-1)*stride) <= upper);
+        } else {
+            *condition = (base <= upper);
+        }
         *simplified_index = Ramp::make(base, stride, w);
         return true;
     } else {
