@@ -42,8 +42,9 @@ struct CheckVars : public IRGraphVisitor {
     using IRVisitor::visit;
 
     void visit(const Let *let) {
-        defined_internally.push(let->name, 0);
         let->value.accept(this);
+        defined_internally.push(let->name, 0);
+        let->body.accept(this);
         defined_internally.pop(let->name);
     }
 
