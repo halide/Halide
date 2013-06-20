@@ -485,9 +485,9 @@ bool detect_clamped_load(Expr index, Expr *condition, Expr *simplified_index) {
 
     // The cases we can match usually have a + broadcast at the end
     // debug(0) << index << " vs " << (wild_vec + broadcast) << "\n";
-    if (expr_match(index, wild_vec + broadcast, matches)) {
-        // debug(0) << "Case 0: " << index << "\n";
-        if (detect_clamped_load(wild_vec, condition, simplified_index)) {
+    if (expr_match(wild_vec + broadcast, index, matches)) {
+        // debug(0) << "Clamped vector load case 0: " << index << "\n";
+        if (detect_clamped_load(matches[0], condition, simplified_index)) {
             const Ramp *r = simplified_index->as<Ramp>();
             assert(r);
             *simplified_index = Ramp::make(r->base + matches[1], r->stride, w);
@@ -498,7 +498,7 @@ bool detect_clamped_load(Expr index, Expr *condition, Expr *simplified_index) {
     }
 
     // Match a bunch of common cases for which we know what to do.
-    if (expr_match(index, max(min(ramp, broadcast), broadcast), matches)) {
+    if (expr_match(max(min(ramp, broadcast), broadcast), index, matches)) {
         // debug(0) << "Case 1: " << index << "\n";
         // This is by far the most common case. All clamped ramps plus
         // a scalar get rewritten by the simplifier into this form.
@@ -506,21 +506,21 @@ bool detect_clamped_load(Expr index, Expr *condition, Expr *simplified_index) {
         *condition = (base >= lower) && (base <= upper);
         *simplified_index = Ramp::make(base, stride, w);
         return true;
-    } else if (expr_match(index, min(max(ramp, broadcast), broadcast), matches)) {
+    } else if (expr_match(min(max(ramp, broadcast), broadcast), index, matches)) {
         // debug(0) << "Case 2: " << index << "\n";
         // Max and min reversed. Should only happen if the programmer didn't use the clamp operator.
         Expr base = matches[0], stride = matches[1], lower = matches[2], upper = matches[3];
         *condition = (base >= lower) && (base <= upper);
         *simplified_index = Ramp::make(base, stride, w);
         return true;
-    } else if (expr_match(index, max(ramp, broadcast), matches)) {
+    } else if (expr_match(max(ramp, broadcast), index, matches)) {
         // No min
         // debug(0) << "Case 3: " << index << "\n";
         Expr base = matches[0], stride = matches[1], lower = matches[2];
         *condition = (base >= lower);
         *simplified_index = Ramp::make(base, stride, w);
         return true;
-    } else if (expr_match(index, min(ramp, broadcast), matches)) {
+    } else if (expr_match(min(ramp, broadcast), index, matches)) {
         // No max
         // debug(0) << "Case 4: " << index << "\n";
         Expr base = matches[0], stride = matches[1], upper = matches[2];
@@ -537,7 +537,7 @@ void CodeGen_X86::visit(const Load *op) {
     Expr condition, simpler_index;
     
     // TODO: fix detect_clamped_load and re-enable
-    if (false && detect_clamped_load(op->index, &condition, &simpler_index)) {
+    if (detect_clamped_load(op->index, &condition, &simpler_index)) {
 
         assert(condition.defined() && simpler_index.defined());
 
