@@ -18,6 +18,8 @@ void expr_match_test() {
     Expr fx = Variable::make(Float(32), "fx");
     Expr fy = Variable::make(Float(32), "fy");
 
+    Expr vec_wild = Variable::make(Int(32, 4), "*");
+
     assert(expr_match(w, 3, matches) && 
            equal(matches[0], 3));
 
@@ -36,6 +38,8 @@ void expr_match_test() {
            matches.empty());
     assert(!expr_match(w * 3, 3 * x, matches) &&
            matches.empty());
+
+    assert(expr_match(vec_wild * 3, Ramp::make(x, y, 4) * 3, matches));
 
     std::cout << "expr_match test passed" << std::endl;
 }
