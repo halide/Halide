@@ -1122,12 +1122,22 @@ void CodeGen::visit(const Call *op) {
             vector<llvm::Type *> arg_types(args.size());
             for (size_t i = 0; i < args.size(); i++) {
                 arg_types[i] = args[i]->getType();
+                if (arg_types[i]->isVectorTy()) {
+                    VectorType *vt = dyn_cast<VectorType>(arg_types[i]);
+                    arg_types[i] = vt->getElementType();
+                }
             }
-            FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
+
+            llvm::Type *scalar_result_type = result_type;
+            if (result_type->isVectorTy()) {
+                VectorType *vt = dyn_cast<VectorType>(result_type);
+                scalar_result_type = vt->getElementType();
+            }
+
+            FunctionType *func_t = FunctionType::get(scalar_result_type, arg_types, false);
             
             fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module);
             fn->setCallingConv(CallingConv::C);            
-
         }
 
         bool has_side_effects = false;
@@ -1170,7 +1180,6 @@ void CodeGen::visit(const Call *op) {
                     for (size_t j = 0; j < args.size(); j++) {
                         arg_lane[j] = builder->CreateExtractElement(args[j], idx);
                     }
-                    debug(4) << "Creating call to " << op->name << "\n";
                     CallInst *call = builder->CreateCall(fn, arg_lane);
                     if (!has_side_effects) {
                         call->setDoesNotAccessMemory();
