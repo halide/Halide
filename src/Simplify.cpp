@@ -1026,7 +1026,7 @@ class Simplify : public IRMutator {
         info.old_uses = 0;
         info.new_uses = 0;
 
-        if (is_simple_const(value)) {
+        if (is_const(value)) {
             // Substitute the value wherever we see it and remove this let statement
             info.replacement = value;
         } else if (ramp && is_simple_const(ramp->stride)) {
@@ -1071,6 +1071,11 @@ class Simplify : public IRMutator {
         bool value_tracked = false;
         if (new_value.defined() && new_value.type() == Int(32)) {
             ModulusRemainder mod_rem = modulus_remainder(new_value, alignment_info);
+            alignment_info.push(op->name, mod_rem);
+            value_tracked = true;
+        }
+        if (value.defined() && value.type() == Int(32)) {
+            ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
             alignment_info.push(op->name, mod_rem);
             value_tracked = true;
         }
