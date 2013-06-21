@@ -188,6 +188,11 @@ protected:
      * the type passed in. */
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
 
+    /** Mark a load or store with type-based-alias-analysis metadata
+     * so that llvm knows it can reorder loads and stores across
+     * different buffers */
+    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer);
+
     using IRVisitor::visit;
 
     /** Generate code for various IR nodes. These can be overridden by
