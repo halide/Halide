@@ -127,7 +127,7 @@ struct FindOneCommonSubexpression : public IRGraphVisitor {
         set<const IRNode *, Expr::Compare>::iterator iter = visited.find(e.ptr);
         
         if (iter != visited.end()) {
-            if (e.as<IntImm>() || e.as<FloatImm>() || e.as<Variable>()) {
+            if (e.as<IntImm>() || e.as<FloatImm>() || e.as<Variable>() || e.as<Cast>()) {
                 return;
             }
             result = e;
