@@ -87,10 +87,23 @@ struct RemoveLets : public IRMutator {
         expr = mutate(let->body);
         leave_scope();
     }
+
+    void visit(const LetStmt *let) {
+        Expr var = canonicalize(Variable::make(let->value.type(), let->name));
+        Expr new_value = mutate(let->value);
+        enter_scope();
+        add_replacement(var, new_value);
+        stmt = mutate(let->body);
+        leave_scope();
+    }
 };
 
 Expr remove_lets(Expr e) {
     return RemoveLets().mutate(e);
+}
+
+Stmt remove_lets(Stmt s) {
+    return RemoveLets().mutate(s);
 }
 
 struct ReplaceExpr : public IRMutator {

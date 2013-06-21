@@ -25,6 +25,16 @@ Expr common_subexpression_elimination(Expr);
  * statement. Does not introduce let statements. */
 Stmt common_subexpression_elimination(Stmt);
 
+/** Remove all lets from a statement or expression by substituting
+ * them in. All sub-expressions will exist once in memory, but may
+ * have many pointers to them, so this doesn't cause a combinatorial
+ * explosion. If you walk over this as if it were a tree, however,
+ * you're going to have a bad time. */
+// @{
+Expr remove_lets(Expr);
+Stmt remove_lets(Stmt);
+// @}
+
 }
 }
 
