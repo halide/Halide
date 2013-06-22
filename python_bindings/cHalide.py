@@ -96,6 +96,22 @@ class SwigPyIterator(_object):
 SwigPyIterator_swigregister = _cHalide.SwigPyIterator_swigregister
 SwigPyIterator_swigregister(SwigPyIterator)
 
+
+def unique_name(*args):
+  return _cHalide.unique_name(*args)
+unique_name = _cHalide.unique_name
+
+def starts_with(*args):
+  return _cHalide.starts_with(*args)
+starts_with = _cHalide.starts_with
+
+def ends_with(*args):
+  return _cHalide.ends_with(*args)
+ends_with = _cHalide.ends_with
+
+def base_name(*args):
+  return _cHalide.base_name(*args)
+base_name = _cHalide.base_name
 class Type(_object):
     __swig_setmethods__ = {}
     __setattr__ = lambda self, name, value: _swig_setattr(self, Type, name, value)
@@ -177,6 +193,40 @@ class Argument(_object):
 Argument_swigregister = _cHalide.Argument_swigregister
 Argument_swigregister(Argument)
 
+class IRVisitor(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, IRVisitor, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, IRVisitor, name)
+    __repr__ = _swig_repr
+    __swig_destroy__ = _cHalide.delete_IRVisitor
+    __del__ = lambda self : None;
+    def visit(self, *args): return _cHalide.IRVisitor_visit(self, *args)
+    def __init__(self): 
+        this = _cHalide.new_IRVisitor()
+        try: self.this.append(this)
+        except: self.this = this
+IRVisitor_swigregister = _cHalide.IRVisitor_swigregister
+IRVisitor_swigregister(IRVisitor)
+
+class IRGraphVisitor(IRVisitor):
+    __swig_setmethods__ = {}
+    for _s in [IRVisitor]: __swig_setmethods__.update(getattr(_s,'__swig_setmethods__',{}))
+    __setattr__ = lambda self, name, value: _swig_setattr(self, IRGraphVisitor, name, value)
+    __swig_getmethods__ = {}
+    for _s in [IRVisitor]: __swig_getmethods__.update(getattr(_s,'__swig_getmethods__',{}))
+    __getattr__ = lambda self, name: _swig_getattr(self, IRGraphVisitor, name)
+    __repr__ = _swig_repr
+    def visit(self, *args): return _cHalide.IRGraphVisitor_visit(self, *args)
+    def __init__(self): 
+        this = _cHalide.new_IRGraphVisitor()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_IRGraphVisitor
+    __del__ = lambda self : None;
+IRGraphVisitor_swigregister = _cHalide.IRGraphVisitor_swigregister
+IRGraphVisitor_swigregister(IRGraphVisitor)
+
 class buffer_t(_object):
     __swig_setmethods__ = {}
     __setattr__ = lambda self, name, value: _swig_setattr(self, buffer_t, name, value)
@@ -216,6 +266,106 @@ class buffer_t(_object):
 buffer_t_swigregister = _cHalide.buffer_t_swigregister
 buffer_t_swigregister(buffer_t)
 
+class RefCount(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, RefCount, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, RefCount, name)
+    __repr__ = _swig_repr
+    def __init__(self): 
+        this = _cHalide.new_RefCount()
+        try: self.this.append(this)
+        except: self.this = this
+    def increment(self): return _cHalide.RefCount_increment(self)
+    def decrement(self): return _cHalide.RefCount_decrement(self)
+    def is_zero(self): return _cHalide.RefCount_is_zero(self)
+    __swig_destroy__ = _cHalide.delete_RefCount
+    __del__ = lambda self : None;
+RefCount_swigregister = _cHalide.RefCount_swigregister
+RefCount_swigregister(RefCount)
+
+class JITCompiledModule(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, JITCompiledModule, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, JITCompiledModule, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["function"] = _cHalide.JITCompiledModule_function_set
+    __swig_getmethods__["function"] = _cHalide.JITCompiledModule_function_get
+    if _newclass:function = _swig_property(_cHalide.JITCompiledModule_function_get, _cHalide.JITCompiledModule_function_set)
+    __swig_setmethods__["wrapped_function"] = _cHalide.JITCompiledModule_wrapped_function_set
+    __swig_getmethods__["wrapped_function"] = _cHalide.JITCompiledModule_wrapped_function_get
+    if _newclass:wrapped_function = _swig_property(_cHalide.JITCompiledModule_wrapped_function_get, _cHalide.JITCompiledModule_wrapped_function_set)
+    __swig_setmethods__["copy_to_host"] = _cHalide.JITCompiledModule_copy_to_host_set
+    __swig_getmethods__["copy_to_host"] = _cHalide.JITCompiledModule_copy_to_host_get
+    if _newclass:copy_to_host = _swig_property(_cHalide.JITCompiledModule_copy_to_host_get, _cHalide.JITCompiledModule_copy_to_host_set)
+    __swig_setmethods__["copy_to_dev"] = _cHalide.JITCompiledModule_copy_to_dev_set
+    __swig_getmethods__["copy_to_dev"] = _cHalide.JITCompiledModule_copy_to_dev_get
+    if _newclass:copy_to_dev = _swig_property(_cHalide.JITCompiledModule_copy_to_dev_get, _cHalide.JITCompiledModule_copy_to_dev_set)
+    __swig_setmethods__["free_dev_buffer"] = _cHalide.JITCompiledModule_free_dev_buffer_set
+    __swig_getmethods__["free_dev_buffer"] = _cHalide.JITCompiledModule_free_dev_buffer_get
+    if _newclass:free_dev_buffer = _swig_property(_cHalide.JITCompiledModule_free_dev_buffer_get, _cHalide.JITCompiledModule_free_dev_buffer_set)
+    __swig_setmethods__["set_error_handler"] = _cHalide.JITCompiledModule_set_error_handler_set
+    __swig_getmethods__["set_error_handler"] = _cHalide.JITCompiledModule_set_error_handler_get
+    if _newclass:set_error_handler = _swig_property(_cHalide.JITCompiledModule_set_error_handler_get, _cHalide.JITCompiledModule_set_error_handler_set)
+    __swig_setmethods__["set_custom_allocator"] = _cHalide.JITCompiledModule_set_custom_allocator_set
+    __swig_getmethods__["set_custom_allocator"] = _cHalide.JITCompiledModule_set_custom_allocator_get
+    if _newclass:set_custom_allocator = _swig_property(_cHalide.JITCompiledModule_set_custom_allocator_get, _cHalide.JITCompiledModule_set_custom_allocator_set)
+    __swig_setmethods__["set_custom_do_par_for"] = _cHalide.JITCompiledModule_set_custom_do_par_for_set
+    __swig_getmethods__["set_custom_do_par_for"] = _cHalide.JITCompiledModule_set_custom_do_par_for_get
+    if _newclass:set_custom_do_par_for = _swig_property(_cHalide.JITCompiledModule_set_custom_do_par_for_get, _cHalide.JITCompiledModule_set_custom_do_par_for_set)
+    __swig_setmethods__["set_custom_do_task"] = _cHalide.JITCompiledModule_set_custom_do_task_set
+    __swig_getmethods__["set_custom_do_task"] = _cHalide.JITCompiledModule_set_custom_do_task_get
+    if _newclass:set_custom_do_task = _swig_property(_cHalide.JITCompiledModule_set_custom_do_task_get, _cHalide.JITCompiledModule_set_custom_do_task_set)
+    __swig_setmethods__["shutdown_thread_pool"] = _cHalide.JITCompiledModule_shutdown_thread_pool_set
+    __swig_getmethods__["shutdown_thread_pool"] = _cHalide.JITCompiledModule_shutdown_thread_pool_get
+    if _newclass:shutdown_thread_pool = _swig_property(_cHalide.JITCompiledModule_shutdown_thread_pool_get, _cHalide.JITCompiledModule_shutdown_thread_pool_set)
+    __swig_setmethods__["module"] = _cHalide.JITCompiledModule_module_set
+    __swig_getmethods__["module"] = _cHalide.JITCompiledModule_module_get
+    if _newclass:module = _swig_property(_cHalide.JITCompiledModule_module_get, _cHalide.JITCompiledModule_module_set)
+    def __init__(self): 
+        this = _cHalide.new_JITCompiledModule()
+        try: self.this.append(this)
+        except: self.this = this
+    def compile_module(self, *args): return _cHalide.JITCompiledModule_compile_module(self, *args)
+    __swig_destroy__ = _cHalide.delete_JITCompiledModule
+    __del__ = lambda self : None;
+JITCompiledModule_swigregister = _cHalide.JITCompiledModule_swigregister
+JITCompiledModule_swigregister(JITCompiledModule)
+
+class BufferContents(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, BufferContents, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, BufferContents, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["buf"] = _cHalide.BufferContents_buf_set
+    __swig_getmethods__["buf"] = _cHalide.BufferContents_buf_get
+    if _newclass:buf = _swig_property(_cHalide.BufferContents_buf_get, _cHalide.BufferContents_buf_set)
+    __swig_setmethods__["type"] = _cHalide.BufferContents_type_set
+    __swig_getmethods__["type"] = _cHalide.BufferContents_type_get
+    if _newclass:type = _swig_property(_cHalide.BufferContents_type_get, _cHalide.BufferContents_type_set)
+    __swig_setmethods__["allocation"] = _cHalide.BufferContents_allocation_set
+    __swig_getmethods__["allocation"] = _cHalide.BufferContents_allocation_get
+    if _newclass:allocation = _swig_property(_cHalide.BufferContents_allocation_get, _cHalide.BufferContents_allocation_set)
+    __swig_setmethods__["ref_count"] = _cHalide.BufferContents_ref_count_set
+    __swig_getmethods__["ref_count"] = _cHalide.BufferContents_ref_count_get
+    if _newclass:ref_count = _swig_property(_cHalide.BufferContents_ref_count_get, _cHalide.BufferContents_ref_count_set)
+    __swig_setmethods__["name"] = _cHalide.BufferContents_name_set
+    __swig_getmethods__["name"] = _cHalide.BufferContents_name_get
+    if _newclass:name = _swig_property(_cHalide.BufferContents_name_get, _cHalide.BufferContents_name_set)
+    __swig_setmethods__["source_module"] = _cHalide.BufferContents_source_module_set
+    __swig_getmethods__["source_module"] = _cHalide.BufferContents_source_module_get
+    if _newclass:source_module = _swig_property(_cHalide.BufferContents_source_module_get, _cHalide.BufferContents_source_module_set)
+    def __init__(self, *args): 
+        this = _cHalide.new_BufferContents(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_BufferContents
+    __del__ = lambda self : None;
+BufferContents_swigregister = _cHalide.BufferContents_swigregister
+BufferContents_swigregister(BufferContents)
+
 class Buffer(_object):
     __swig_setmethods__ = {}
     __setattr__ = lambda self, name, value: _swig_setattr(self, Buffer, name, value)
@@ -251,10 +401,139 @@ class Buffer(_object):
 Buffer_swigregister = _cHalide.Buffer_swigregister
 Buffer_swigregister(Buffer)
 
-class Expr(_object):
+class IRNodeType(_object):
     __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, IRNodeType, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, IRNodeType, name)
+    __repr__ = _swig_repr
+    def __init__(self): 
+        this = _cHalide.new_IRNodeType()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_IRNodeType
+    __del__ = lambda self : None;
+IRNodeType_swigregister = _cHalide.IRNodeType_swigregister
+IRNodeType_swigregister(IRNodeType)
+
+class IRNode(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, IRNode, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, IRNode, name)
+    def __init__(self, *args, **kwargs): raise AttributeError("No constructor defined - class is abstract")
+    __repr__ = _swig_repr
+    def accept(self, *args): return _cHalide.IRNode_accept(self, *args)
+    __swig_destroy__ = _cHalide.delete_IRNode
+    __del__ = lambda self : None;
+    __swig_setmethods__["ref_count"] = _cHalide.IRNode_ref_count_set
+    __swig_getmethods__["ref_count"] = _cHalide.IRNode_ref_count_get
+    if _newclass:ref_count = _swig_property(_cHalide.IRNode_ref_count_get, _cHalide.IRNode_ref_count_set)
+    def type_info(self): return _cHalide.IRNode_type_info(self)
+IRNode_swigregister = _cHalide.IRNode_swigregister
+IRNode_swigregister(IRNode)
+
+class BaseStmtNode(IRNode):
+    __swig_setmethods__ = {}
+    for _s in [IRNode]: __swig_setmethods__.update(getattr(_s,'__swig_setmethods__',{}))
+    __setattr__ = lambda self, name, value: _swig_setattr(self, BaseStmtNode, name, value)
+    __swig_getmethods__ = {}
+    for _s in [IRNode]: __swig_getmethods__.update(getattr(_s,'__swig_getmethods__',{}))
+    __getattr__ = lambda self, name: _swig_getattr(self, BaseStmtNode, name)
+    def __init__(self, *args, **kwargs): raise AttributeError("No constructor defined - class is abstract")
+    __repr__ = _swig_repr
+    __swig_destroy__ = _cHalide.delete_BaseStmtNode
+    __del__ = lambda self : None;
+BaseStmtNode_swigregister = _cHalide.BaseStmtNode_swigregister
+BaseStmtNode_swigregister(BaseStmtNode)
+
+class BaseExprNode(IRNode):
+    __swig_setmethods__ = {}
+    for _s in [IRNode]: __swig_setmethods__.update(getattr(_s,'__swig_setmethods__',{}))
+    __setattr__ = lambda self, name, value: _swig_setattr(self, BaseExprNode, name, value)
+    __swig_getmethods__ = {}
+    for _s in [IRNode]: __swig_getmethods__.update(getattr(_s,'__swig_getmethods__',{}))
+    __getattr__ = lambda self, name: _swig_getattr(self, BaseExprNode, name)
+    def __init__(self, *args, **kwargs): raise AttributeError("No constructor defined - class is abstract")
+    __repr__ = _swig_repr
+    __swig_setmethods__["type"] = _cHalide.BaseExprNode_type_set
+    __swig_getmethods__["type"] = _cHalide.BaseExprNode_type_get
+    if _newclass:type = _swig_property(_cHalide.BaseExprNode_type_get, _cHalide.BaseExprNode_type_set)
+    __swig_destroy__ = _cHalide.delete_BaseExprNode
+    __del__ = lambda self : None;
+BaseExprNode_swigregister = _cHalide.BaseExprNode_swigregister
+BaseExprNode_swigregister(BaseExprNode)
+
+class IRHandle(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, IRHandle, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, IRHandle, name)
+    __repr__ = _swig_repr
+    def __init__(self, *args): 
+        this = _cHalide.new_IRHandle(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    def accept(self, *args): return _cHalide.IRHandle_accept(self, *args)
+    __swig_destroy__ = _cHalide.delete_IRHandle
+    __del__ = lambda self : None;
+IRHandle_swigregister = _cHalide.IRHandle_swigregister
+IRHandle_swigregister(IRHandle)
+
+class IntImm(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, IntImm, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, IntImm, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["value"] = _cHalide.IntImm_value_set
+    __swig_getmethods__["value"] = _cHalide.IntImm_value_get
+    if _newclass:value = _swig_property(_cHalide.IntImm_value_get, _cHalide.IntImm_value_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.IntImm_make
+    if _newclass:make = staticmethod(_cHalide.IntImm_make)
+    def __init__(self): 
+        this = _cHalide.new_IntImm()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_IntImm
+    __del__ = lambda self : None;
+IntImm_swigregister = _cHalide.IntImm_swigregister
+IntImm_swigregister(IntImm)
+
+def IntImm_make(*args):
+  return _cHalide.IntImm_make(*args)
+IntImm_make = _cHalide.IntImm_make
+
+class FloatImm(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, FloatImm, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, FloatImm, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["value"] = _cHalide.FloatImm_value_set
+    __swig_getmethods__["value"] = _cHalide.FloatImm_value_get
+    if _newclass:value = _swig_property(_cHalide.FloatImm_value_get, _cHalide.FloatImm_value_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.FloatImm_make
+    if _newclass:make = staticmethod(_cHalide.FloatImm_make)
+    def __init__(self): 
+        this = _cHalide.new_FloatImm()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_FloatImm
+    __del__ = lambda self : None;
+FloatImm_swigregister = _cHalide.FloatImm_swigregister
+FloatImm_swigregister(FloatImm)
+
+def FloatImm_make(*args):
+  return _cHalide.FloatImm_make(*args)
+FloatImm_make = _cHalide.FloatImm_make
+
+class Expr(IRHandle):
+    __swig_setmethods__ = {}
+    for _s in [IRHandle]: __swig_setmethods__.update(getattr(_s,'__swig_setmethods__',{}))
     __setattr__ = lambda self, name, value: _swig_setattr(self, Expr, name, value)
     __swig_getmethods__ = {}
+    for _s in [IRHandle]: __swig_getmethods__.update(getattr(_s,'__swig_getmethods__',{}))
     __getattr__ = lambda self, name: _swig_getattr(self, Expr, name)
     __repr__ = _swig_repr
     def __init__(self, *args): 
@@ -267,6 +546,1455 @@ class Expr(_object):
 Expr_swigregister = _cHalide.Expr_swigregister
 Expr_swigregister(Expr)
 
+class ParameterContents(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, ParameterContents, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, ParameterContents, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["ref_count"] = _cHalide.ParameterContents_ref_count_set
+    __swig_getmethods__["ref_count"] = _cHalide.ParameterContents_ref_count_get
+    if _newclass:ref_count = _swig_property(_cHalide.ParameterContents_ref_count_get, _cHalide.ParameterContents_ref_count_set)
+    __swig_setmethods__["type"] = _cHalide.ParameterContents_type_set
+    __swig_getmethods__["type"] = _cHalide.ParameterContents_type_get
+    if _newclass:type = _swig_property(_cHalide.ParameterContents_type_get, _cHalide.ParameterContents_type_set)
+    __swig_setmethods__["is_buffer"] = _cHalide.ParameterContents_is_buffer_set
+    __swig_getmethods__["is_buffer"] = _cHalide.ParameterContents_is_buffer_get
+    if _newclass:is_buffer = _swig_property(_cHalide.ParameterContents_is_buffer_get, _cHalide.ParameterContents_is_buffer_set)
+    __swig_setmethods__["name"] = _cHalide.ParameterContents_name_set
+    __swig_getmethods__["name"] = _cHalide.ParameterContents_name_get
+    if _newclass:name = _swig_property(_cHalide.ParameterContents_name_get, _cHalide.ParameterContents_name_set)
+    __swig_setmethods__["buffer"] = _cHalide.ParameterContents_buffer_set
+    __swig_getmethods__["buffer"] = _cHalide.ParameterContents_buffer_get
+    if _newclass:buffer = _swig_property(_cHalide.ParameterContents_buffer_get, _cHalide.ParameterContents_buffer_set)
+    __swig_setmethods__["data"] = _cHalide.ParameterContents_data_set
+    __swig_getmethods__["data"] = _cHalide.ParameterContents_data_get
+    if _newclass:data = _swig_property(_cHalide.ParameterContents_data_get, _cHalide.ParameterContents_data_set)
+    __swig_setmethods__["min_constraint"] = _cHalide.ParameterContents_min_constraint_set
+    __swig_getmethods__["min_constraint"] = _cHalide.ParameterContents_min_constraint_get
+    if _newclass:min_constraint = _swig_property(_cHalide.ParameterContents_min_constraint_get, _cHalide.ParameterContents_min_constraint_set)
+    __swig_setmethods__["extent_constraint"] = _cHalide.ParameterContents_extent_constraint_set
+    __swig_getmethods__["extent_constraint"] = _cHalide.ParameterContents_extent_constraint_get
+    if _newclass:extent_constraint = _swig_property(_cHalide.ParameterContents_extent_constraint_get, _cHalide.ParameterContents_extent_constraint_set)
+    __swig_setmethods__["stride_constraint"] = _cHalide.ParameterContents_stride_constraint_set
+    __swig_getmethods__["stride_constraint"] = _cHalide.ParameterContents_stride_constraint_get
+    if _newclass:stride_constraint = _swig_property(_cHalide.ParameterContents_stride_constraint_get, _cHalide.ParameterContents_stride_constraint_set)
+    def __init__(self, *args): 
+        this = _cHalide.new_ParameterContents(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_ParameterContents
+    __del__ = lambda self : None;
+ParameterContents_swigregister = _cHalide.ParameterContents_swigregister
+ParameterContents_swigregister(ParameterContents)
+
+class Parameter(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Parameter, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Parameter, name)
+    __repr__ = _swig_repr
+    def __init__(self, *args): 
+        this = _cHalide.new_Parameter(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    def type(self): return _cHalide.Parameter_type(self)
+    def name(self): return _cHalide.Parameter_name(self)
+    def is_buffer(self): return _cHalide.Parameter_is_buffer(self)
+    def get_buffer(self): return _cHalide.Parameter_get_buffer(self)
+    def set_buffer(self, *args): return _cHalide.Parameter_set_buffer(self, *args)
+    def get_scalar_address(self): return _cHalide.Parameter_get_scalar_address(self)
+    def defined(self): return _cHalide.Parameter_defined(self)
+    def set_min_constraint(self, *args): return _cHalide.Parameter_set_min_constraint(self, *args)
+    def set_extent_constraint(self, *args): return _cHalide.Parameter_set_extent_constraint(self, *args)
+    def set_stride_constraint(self, *args): return _cHalide.Parameter_set_stride_constraint(self, *args)
+    def min_constraint(self, *args): return _cHalide.Parameter_min_constraint(self, *args)
+    def extent_constraint(self, *args): return _cHalide.Parameter_extent_constraint(self, *args)
+    def stride_constraint(self, *args): return _cHalide.Parameter_stride_constraint(self, *args)
+    __swig_destroy__ = _cHalide.delete_Parameter
+    __del__ = lambda self : None;
+Parameter_swigregister = _cHalide.Parameter_swigregister
+Parameter_swigregister(Parameter)
+
+class Stmt(IRHandle):
+    __swig_setmethods__ = {}
+    for _s in [IRHandle]: __swig_setmethods__.update(getattr(_s,'__swig_setmethods__',{}))
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Stmt, name, value)
+    __swig_getmethods__ = {}
+    for _s in [IRHandle]: __swig_getmethods__.update(getattr(_s,'__swig_getmethods__',{}))
+    __getattr__ = lambda self, name: _swig_getattr(self, Stmt, name)
+    __repr__ = _swig_repr
+    def __init__(self, *args): 
+        this = _cHalide.new_Stmt(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Stmt
+    __del__ = lambda self : None;
+Stmt_swigregister = _cHalide.Stmt_swigregister
+Stmt_swigregister(Stmt)
+
+class Cast(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Cast, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Cast, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["value"] = _cHalide.Cast_value_set
+    __swig_getmethods__["value"] = _cHalide.Cast_value_get
+    if _newclass:value = _swig_property(_cHalide.Cast_value_get, _cHalide.Cast_value_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Cast_make
+    if _newclass:make = staticmethod(_cHalide.Cast_make)
+    def __init__(self): 
+        this = _cHalide.new_Cast()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Cast
+    __del__ = lambda self : None;
+Cast_swigregister = _cHalide.Cast_swigregister
+Cast_swigregister(Cast)
+
+def Cast_make(*args):
+  return _cHalide.Cast_make(*args)
+Cast_make = _cHalide.Cast_make
+
+class Add(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Add, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Add, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.Add_a_set
+    __swig_getmethods__["a"] = _cHalide.Add_a_get
+    if _newclass:a = _swig_property(_cHalide.Add_a_get, _cHalide.Add_a_set)
+    __swig_setmethods__["b"] = _cHalide.Add_b_set
+    __swig_getmethods__["b"] = _cHalide.Add_b_get
+    if _newclass:b = _swig_property(_cHalide.Add_b_get, _cHalide.Add_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Add_make
+    if _newclass:make = staticmethod(_cHalide.Add_make)
+    def __init__(self): 
+        this = _cHalide.new_Add()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Add
+    __del__ = lambda self : None;
+Add_swigregister = _cHalide.Add_swigregister
+Add_swigregister(Add)
+
+def Add_make(*args):
+  return _cHalide.Add_make(*args)
+Add_make = _cHalide.Add_make
+
+class Sub(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Sub, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Sub, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.Sub_a_set
+    __swig_getmethods__["a"] = _cHalide.Sub_a_get
+    if _newclass:a = _swig_property(_cHalide.Sub_a_get, _cHalide.Sub_a_set)
+    __swig_setmethods__["b"] = _cHalide.Sub_b_set
+    __swig_getmethods__["b"] = _cHalide.Sub_b_get
+    if _newclass:b = _swig_property(_cHalide.Sub_b_get, _cHalide.Sub_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Sub_make
+    if _newclass:make = staticmethod(_cHalide.Sub_make)
+    def __init__(self): 
+        this = _cHalide.new_Sub()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Sub
+    __del__ = lambda self : None;
+Sub_swigregister = _cHalide.Sub_swigregister
+Sub_swigregister(Sub)
+
+def Sub_make(*args):
+  return _cHalide.Sub_make(*args)
+Sub_make = _cHalide.Sub_make
+
+class Mul(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Mul, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Mul, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.Mul_a_set
+    __swig_getmethods__["a"] = _cHalide.Mul_a_get
+    if _newclass:a = _swig_property(_cHalide.Mul_a_get, _cHalide.Mul_a_set)
+    __swig_setmethods__["b"] = _cHalide.Mul_b_set
+    __swig_getmethods__["b"] = _cHalide.Mul_b_get
+    if _newclass:b = _swig_property(_cHalide.Mul_b_get, _cHalide.Mul_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Mul_make
+    if _newclass:make = staticmethod(_cHalide.Mul_make)
+    def __init__(self): 
+        this = _cHalide.new_Mul()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Mul
+    __del__ = lambda self : None;
+Mul_swigregister = _cHalide.Mul_swigregister
+Mul_swigregister(Mul)
+
+def Mul_make(*args):
+  return _cHalide.Mul_make(*args)
+Mul_make = _cHalide.Mul_make
+
+class Div(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Div, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Div, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.Div_a_set
+    __swig_getmethods__["a"] = _cHalide.Div_a_get
+    if _newclass:a = _swig_property(_cHalide.Div_a_get, _cHalide.Div_a_set)
+    __swig_setmethods__["b"] = _cHalide.Div_b_set
+    __swig_getmethods__["b"] = _cHalide.Div_b_get
+    if _newclass:b = _swig_property(_cHalide.Div_b_get, _cHalide.Div_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Div_make
+    if _newclass:make = staticmethod(_cHalide.Div_make)
+    def __init__(self): 
+        this = _cHalide.new_Div()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Div
+    __del__ = lambda self : None;
+Div_swigregister = _cHalide.Div_swigregister
+Div_swigregister(Div)
+
+def Div_make(*args):
+  return _cHalide.Div_make(*args)
+Div_make = _cHalide.Div_make
+
+class Mod(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Mod, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Mod, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.Mod_a_set
+    __swig_getmethods__["a"] = _cHalide.Mod_a_get
+    if _newclass:a = _swig_property(_cHalide.Mod_a_get, _cHalide.Mod_a_set)
+    __swig_setmethods__["b"] = _cHalide.Mod_b_set
+    __swig_getmethods__["b"] = _cHalide.Mod_b_get
+    if _newclass:b = _swig_property(_cHalide.Mod_b_get, _cHalide.Mod_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Mod_make
+    if _newclass:make = staticmethod(_cHalide.Mod_make)
+    def __init__(self): 
+        this = _cHalide.new_Mod()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Mod
+    __del__ = lambda self : None;
+Mod_swigregister = _cHalide.Mod_swigregister
+Mod_swigregister(Mod)
+
+def Mod_make(*args):
+  return _cHalide.Mod_make(*args)
+Mod_make = _cHalide.Mod_make
+
+class Min(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Min, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Min, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.Min_a_set
+    __swig_getmethods__["a"] = _cHalide.Min_a_get
+    if _newclass:a = _swig_property(_cHalide.Min_a_get, _cHalide.Min_a_set)
+    __swig_setmethods__["b"] = _cHalide.Min_b_set
+    __swig_getmethods__["b"] = _cHalide.Min_b_get
+    if _newclass:b = _swig_property(_cHalide.Min_b_get, _cHalide.Min_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Min_make
+    if _newclass:make = staticmethod(_cHalide.Min_make)
+    def __init__(self): 
+        this = _cHalide.new_Min()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Min
+    __del__ = lambda self : None;
+Min_swigregister = _cHalide.Min_swigregister
+Min_swigregister(Min)
+
+def Min_make(*args):
+  return _cHalide.Min_make(*args)
+Min_make = _cHalide.Min_make
+
+class Max(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Max, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Max, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.Max_a_set
+    __swig_getmethods__["a"] = _cHalide.Max_a_get
+    if _newclass:a = _swig_property(_cHalide.Max_a_get, _cHalide.Max_a_set)
+    __swig_setmethods__["b"] = _cHalide.Max_b_set
+    __swig_getmethods__["b"] = _cHalide.Max_b_get
+    if _newclass:b = _swig_property(_cHalide.Max_b_get, _cHalide.Max_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Max_make
+    if _newclass:make = staticmethod(_cHalide.Max_make)
+    def __init__(self): 
+        this = _cHalide.new_Max()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Max
+    __del__ = lambda self : None;
+Max_swigregister = _cHalide.Max_swigregister
+Max_swigregister(Max)
+
+def Max_make(*args):
+  return _cHalide.Max_make(*args)
+Max_make = _cHalide.Max_make
+
+class EQ(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, EQ, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, EQ, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.EQ_a_set
+    __swig_getmethods__["a"] = _cHalide.EQ_a_get
+    if _newclass:a = _swig_property(_cHalide.EQ_a_get, _cHalide.EQ_a_set)
+    __swig_setmethods__["b"] = _cHalide.EQ_b_set
+    __swig_getmethods__["b"] = _cHalide.EQ_b_get
+    if _newclass:b = _swig_property(_cHalide.EQ_b_get, _cHalide.EQ_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.EQ_make
+    if _newclass:make = staticmethod(_cHalide.EQ_make)
+    def __init__(self): 
+        this = _cHalide.new_EQ()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_EQ
+    __del__ = lambda self : None;
+EQ_swigregister = _cHalide.EQ_swigregister
+EQ_swigregister(EQ)
+
+def EQ_make(*args):
+  return _cHalide.EQ_make(*args)
+EQ_make = _cHalide.EQ_make
+
+class NE(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, NE, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, NE, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.NE_a_set
+    __swig_getmethods__["a"] = _cHalide.NE_a_get
+    if _newclass:a = _swig_property(_cHalide.NE_a_get, _cHalide.NE_a_set)
+    __swig_setmethods__["b"] = _cHalide.NE_b_set
+    __swig_getmethods__["b"] = _cHalide.NE_b_get
+    if _newclass:b = _swig_property(_cHalide.NE_b_get, _cHalide.NE_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.NE_make
+    if _newclass:make = staticmethod(_cHalide.NE_make)
+    def __init__(self): 
+        this = _cHalide.new_NE()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_NE
+    __del__ = lambda self : None;
+NE_swigregister = _cHalide.NE_swigregister
+NE_swigregister(NE)
+
+def NE_make(*args):
+  return _cHalide.NE_make(*args)
+NE_make = _cHalide.NE_make
+
+class LT(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, LT, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, LT, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.LT_a_set
+    __swig_getmethods__["a"] = _cHalide.LT_a_get
+    if _newclass:a = _swig_property(_cHalide.LT_a_get, _cHalide.LT_a_set)
+    __swig_setmethods__["b"] = _cHalide.LT_b_set
+    __swig_getmethods__["b"] = _cHalide.LT_b_get
+    if _newclass:b = _swig_property(_cHalide.LT_b_get, _cHalide.LT_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.LT_make
+    if _newclass:make = staticmethod(_cHalide.LT_make)
+    def __init__(self): 
+        this = _cHalide.new_LT()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_LT
+    __del__ = lambda self : None;
+LT_swigregister = _cHalide.LT_swigregister
+LT_swigregister(LT)
+
+def LT_make(*args):
+  return _cHalide.LT_make(*args)
+LT_make = _cHalide.LT_make
+
+class LE(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, LE, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, LE, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.LE_a_set
+    __swig_getmethods__["a"] = _cHalide.LE_a_get
+    if _newclass:a = _swig_property(_cHalide.LE_a_get, _cHalide.LE_a_set)
+    __swig_setmethods__["b"] = _cHalide.LE_b_set
+    __swig_getmethods__["b"] = _cHalide.LE_b_get
+    if _newclass:b = _swig_property(_cHalide.LE_b_get, _cHalide.LE_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.LE_make
+    if _newclass:make = staticmethod(_cHalide.LE_make)
+    def __init__(self): 
+        this = _cHalide.new_LE()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_LE
+    __del__ = lambda self : None;
+LE_swigregister = _cHalide.LE_swigregister
+LE_swigregister(LE)
+
+def LE_make(*args):
+  return _cHalide.LE_make(*args)
+LE_make = _cHalide.LE_make
+
+class GT(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, GT, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, GT, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.GT_a_set
+    __swig_getmethods__["a"] = _cHalide.GT_a_get
+    if _newclass:a = _swig_property(_cHalide.GT_a_get, _cHalide.GT_a_set)
+    __swig_setmethods__["b"] = _cHalide.GT_b_set
+    __swig_getmethods__["b"] = _cHalide.GT_b_get
+    if _newclass:b = _swig_property(_cHalide.GT_b_get, _cHalide.GT_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.GT_make
+    if _newclass:make = staticmethod(_cHalide.GT_make)
+    def __init__(self): 
+        this = _cHalide.new_GT()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_GT
+    __del__ = lambda self : None;
+GT_swigregister = _cHalide.GT_swigregister
+GT_swigregister(GT)
+
+def GT_make(*args):
+  return _cHalide.GT_make(*args)
+GT_make = _cHalide.GT_make
+
+class GE(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, GE, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, GE, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.GE_a_set
+    __swig_getmethods__["a"] = _cHalide.GE_a_get
+    if _newclass:a = _swig_property(_cHalide.GE_a_get, _cHalide.GE_a_set)
+    __swig_setmethods__["b"] = _cHalide.GE_b_set
+    __swig_getmethods__["b"] = _cHalide.GE_b_get
+    if _newclass:b = _swig_property(_cHalide.GE_b_get, _cHalide.GE_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.GE_make
+    if _newclass:make = staticmethod(_cHalide.GE_make)
+    def __init__(self): 
+        this = _cHalide.new_GE()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_GE
+    __del__ = lambda self : None;
+GE_swigregister = _cHalide.GE_swigregister
+GE_swigregister(GE)
+
+def GE_make(*args):
+  return _cHalide.GE_make(*args)
+GE_make = _cHalide.GE_make
+
+class And(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, And, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, And, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.And_a_set
+    __swig_getmethods__["a"] = _cHalide.And_a_get
+    if _newclass:a = _swig_property(_cHalide.And_a_get, _cHalide.And_a_set)
+    __swig_setmethods__["b"] = _cHalide.And_b_set
+    __swig_getmethods__["b"] = _cHalide.And_b_get
+    if _newclass:b = _swig_property(_cHalide.And_b_get, _cHalide.And_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.And_make
+    if _newclass:make = staticmethod(_cHalide.And_make)
+    def __init__(self): 
+        this = _cHalide.new_And()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_And
+    __del__ = lambda self : None;
+And_swigregister = _cHalide.And_swigregister
+And_swigregister(And)
+
+def And_make(*args):
+  return _cHalide.And_make(*args)
+And_make = _cHalide.And_make
+
+class Or(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Or, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Or, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.Or_a_set
+    __swig_getmethods__["a"] = _cHalide.Or_a_get
+    if _newclass:a = _swig_property(_cHalide.Or_a_get, _cHalide.Or_a_set)
+    __swig_setmethods__["b"] = _cHalide.Or_b_set
+    __swig_getmethods__["b"] = _cHalide.Or_b_get
+    if _newclass:b = _swig_property(_cHalide.Or_b_get, _cHalide.Or_b_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Or_make
+    if _newclass:make = staticmethod(_cHalide.Or_make)
+    def __init__(self): 
+        this = _cHalide.new_Or()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Or
+    __del__ = lambda self : None;
+Or_swigregister = _cHalide.Or_swigregister
+Or_swigregister(Or)
+
+def Or_make(*args):
+  return _cHalide.Or_make(*args)
+Or_make = _cHalide.Or_make
+
+class Not(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Not, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Not, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["a"] = _cHalide.Not_a_set
+    __swig_getmethods__["a"] = _cHalide.Not_a_get
+    if _newclass:a = _swig_property(_cHalide.Not_a_get, _cHalide.Not_a_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Not_make
+    if _newclass:make = staticmethod(_cHalide.Not_make)
+    def __init__(self): 
+        this = _cHalide.new_Not()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Not
+    __del__ = lambda self : None;
+Not_swigregister = _cHalide.Not_swigregister
+Not_swigregister(Not)
+
+def Not_make(*args):
+  return _cHalide.Not_make(*args)
+Not_make = _cHalide.Not_make
+
+class Select(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Select, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Select, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["condition"] = _cHalide.Select_condition_set
+    __swig_getmethods__["condition"] = _cHalide.Select_condition_get
+    if _newclass:condition = _swig_property(_cHalide.Select_condition_get, _cHalide.Select_condition_set)
+    __swig_setmethods__["true_value"] = _cHalide.Select_true_value_set
+    __swig_getmethods__["true_value"] = _cHalide.Select_true_value_get
+    if _newclass:true_value = _swig_property(_cHalide.Select_true_value_get, _cHalide.Select_true_value_set)
+    __swig_setmethods__["false_value"] = _cHalide.Select_false_value_set
+    __swig_getmethods__["false_value"] = _cHalide.Select_false_value_get
+    if _newclass:false_value = _swig_property(_cHalide.Select_false_value_get, _cHalide.Select_false_value_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Select_make
+    if _newclass:make = staticmethod(_cHalide.Select_make)
+    def __init__(self): 
+        this = _cHalide.new_Select()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Select
+    __del__ = lambda self : None;
+Select_swigregister = _cHalide.Select_swigregister
+Select_swigregister(Select)
+
+def Select_make(*args):
+  return _cHalide.Select_make(*args)
+Select_make = _cHalide.Select_make
+
+class Load(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Load, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Load, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.Load_name_set
+    __swig_getmethods__["name"] = _cHalide.Load_name_get
+    if _newclass:name = _swig_property(_cHalide.Load_name_get, _cHalide.Load_name_set)
+    __swig_setmethods__["index"] = _cHalide.Load_index_set
+    __swig_getmethods__["index"] = _cHalide.Load_index_get
+    if _newclass:index = _swig_property(_cHalide.Load_index_get, _cHalide.Load_index_set)
+    __swig_setmethods__["image"] = _cHalide.Load_image_set
+    __swig_getmethods__["image"] = _cHalide.Load_image_get
+    if _newclass:image = _swig_property(_cHalide.Load_image_get, _cHalide.Load_image_set)
+    __swig_setmethods__["param"] = _cHalide.Load_param_set
+    __swig_getmethods__["param"] = _cHalide.Load_param_get
+    if _newclass:param = _swig_property(_cHalide.Load_param_get, _cHalide.Load_param_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Load_make
+    if _newclass:make = staticmethod(_cHalide.Load_make)
+    def __init__(self): 
+        this = _cHalide.new_Load()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Load
+    __del__ = lambda self : None;
+Load_swigregister = _cHalide.Load_swigregister
+Load_swigregister(Load)
+
+def Load_make(*args):
+  return _cHalide.Load_make(*args)
+Load_make = _cHalide.Load_make
+
+class Ramp(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Ramp, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Ramp, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["base"] = _cHalide.Ramp_base_set
+    __swig_getmethods__["base"] = _cHalide.Ramp_base_get
+    if _newclass:base = _swig_property(_cHalide.Ramp_base_get, _cHalide.Ramp_base_set)
+    __swig_setmethods__["stride"] = _cHalide.Ramp_stride_set
+    __swig_getmethods__["stride"] = _cHalide.Ramp_stride_get
+    if _newclass:stride = _swig_property(_cHalide.Ramp_stride_get, _cHalide.Ramp_stride_set)
+    __swig_setmethods__["width"] = _cHalide.Ramp_width_set
+    __swig_getmethods__["width"] = _cHalide.Ramp_width_get
+    if _newclass:width = _swig_property(_cHalide.Ramp_width_get, _cHalide.Ramp_width_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Ramp_make
+    if _newclass:make = staticmethod(_cHalide.Ramp_make)
+    def __init__(self): 
+        this = _cHalide.new_Ramp()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Ramp
+    __del__ = lambda self : None;
+Ramp_swigregister = _cHalide.Ramp_swigregister
+Ramp_swigregister(Ramp)
+
+def Ramp_make(*args):
+  return _cHalide.Ramp_make(*args)
+Ramp_make = _cHalide.Ramp_make
+
+class Broadcast(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Broadcast, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Broadcast, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["value"] = _cHalide.Broadcast_value_set
+    __swig_getmethods__["value"] = _cHalide.Broadcast_value_get
+    if _newclass:value = _swig_property(_cHalide.Broadcast_value_get, _cHalide.Broadcast_value_set)
+    __swig_setmethods__["width"] = _cHalide.Broadcast_width_set
+    __swig_getmethods__["width"] = _cHalide.Broadcast_width_get
+    if _newclass:width = _swig_property(_cHalide.Broadcast_width_get, _cHalide.Broadcast_width_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Broadcast_make
+    if _newclass:make = staticmethod(_cHalide.Broadcast_make)
+    def __init__(self): 
+        this = _cHalide.new_Broadcast()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Broadcast
+    __del__ = lambda self : None;
+Broadcast_swigregister = _cHalide.Broadcast_swigregister
+Broadcast_swigregister(Broadcast)
+
+def Broadcast_make(*args):
+  return _cHalide.Broadcast_make(*args)
+Broadcast_make = _cHalide.Broadcast_make
+
+class Let(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Let, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Let, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.Let_name_set
+    __swig_getmethods__["name"] = _cHalide.Let_name_get
+    if _newclass:name = _swig_property(_cHalide.Let_name_get, _cHalide.Let_name_set)
+    __swig_setmethods__["value"] = _cHalide.Let_value_set
+    __swig_getmethods__["value"] = _cHalide.Let_value_get
+    if _newclass:value = _swig_property(_cHalide.Let_value_get, _cHalide.Let_value_set)
+    __swig_setmethods__["body"] = _cHalide.Let_body_set
+    __swig_getmethods__["body"] = _cHalide.Let_body_get
+    if _newclass:body = _swig_property(_cHalide.Let_body_get, _cHalide.Let_body_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Let_make
+    if _newclass:make = staticmethod(_cHalide.Let_make)
+    def __init__(self): 
+        this = _cHalide.new_Let()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Let
+    __del__ = lambda self : None;
+Let_swigregister = _cHalide.Let_swigregister
+Let_swigregister(Let)
+
+def Let_make(*args):
+  return _cHalide.Let_make(*args)
+Let_make = _cHalide.Let_make
+
+class LetStmt(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, LetStmt, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, LetStmt, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.LetStmt_name_set
+    __swig_getmethods__["name"] = _cHalide.LetStmt_name_get
+    if _newclass:name = _swig_property(_cHalide.LetStmt_name_get, _cHalide.LetStmt_name_set)
+    __swig_setmethods__["value"] = _cHalide.LetStmt_value_set
+    __swig_getmethods__["value"] = _cHalide.LetStmt_value_get
+    if _newclass:value = _swig_property(_cHalide.LetStmt_value_get, _cHalide.LetStmt_value_set)
+    __swig_setmethods__["body"] = _cHalide.LetStmt_body_set
+    __swig_getmethods__["body"] = _cHalide.LetStmt_body_get
+    if _newclass:body = _swig_property(_cHalide.LetStmt_body_get, _cHalide.LetStmt_body_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.LetStmt_make
+    if _newclass:make = staticmethod(_cHalide.LetStmt_make)
+    def __init__(self): 
+        this = _cHalide.new_LetStmt()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_LetStmt
+    __del__ = lambda self : None;
+LetStmt_swigregister = _cHalide.LetStmt_swigregister
+LetStmt_swigregister(LetStmt)
+
+def LetStmt_make(*args):
+  return _cHalide.LetStmt_make(*args)
+LetStmt_make = _cHalide.LetStmt_make
+
+class PrintStmt(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, PrintStmt, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, PrintStmt, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["prefix"] = _cHalide.PrintStmt_prefix_set
+    __swig_getmethods__["prefix"] = _cHalide.PrintStmt_prefix_get
+    if _newclass:prefix = _swig_property(_cHalide.PrintStmt_prefix_get, _cHalide.PrintStmt_prefix_set)
+    __swig_setmethods__["args"] = _cHalide.PrintStmt_args_set
+    __swig_getmethods__["args"] = _cHalide.PrintStmt_args_get
+    if _newclass:args = _swig_property(_cHalide.PrintStmt_args_get, _cHalide.PrintStmt_args_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.PrintStmt_make
+    if _newclass:make = staticmethod(_cHalide.PrintStmt_make)
+    def __init__(self): 
+        this = _cHalide.new_PrintStmt()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_PrintStmt
+    __del__ = lambda self : None;
+PrintStmt_swigregister = _cHalide.PrintStmt_swigregister
+PrintStmt_swigregister(PrintStmt)
+
+def PrintStmt_make(*args):
+  return _cHalide.PrintStmt_make(*args)
+PrintStmt_make = _cHalide.PrintStmt_make
+
+class AssertStmt(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, AssertStmt, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, AssertStmt, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["condition"] = _cHalide.AssertStmt_condition_set
+    __swig_getmethods__["condition"] = _cHalide.AssertStmt_condition_get
+    if _newclass:condition = _swig_property(_cHalide.AssertStmt_condition_get, _cHalide.AssertStmt_condition_set)
+    __swig_setmethods__["message"] = _cHalide.AssertStmt_message_set
+    __swig_getmethods__["message"] = _cHalide.AssertStmt_message_get
+    if _newclass:message = _swig_property(_cHalide.AssertStmt_message_get, _cHalide.AssertStmt_message_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.AssertStmt_make
+    if _newclass:make = staticmethod(_cHalide.AssertStmt_make)
+    def __init__(self): 
+        this = _cHalide.new_AssertStmt()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_AssertStmt
+    __del__ = lambda self : None;
+AssertStmt_swigregister = _cHalide.AssertStmt_swigregister
+AssertStmt_swigregister(AssertStmt)
+
+def AssertStmt_make(*args):
+  return _cHalide.AssertStmt_make(*args)
+AssertStmt_make = _cHalide.AssertStmt_make
+
+class Pipeline(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Pipeline, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Pipeline, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.Pipeline_name_set
+    __swig_getmethods__["name"] = _cHalide.Pipeline_name_get
+    if _newclass:name = _swig_property(_cHalide.Pipeline_name_get, _cHalide.Pipeline_name_set)
+    __swig_setmethods__["produce"] = _cHalide.Pipeline_produce_set
+    __swig_getmethods__["produce"] = _cHalide.Pipeline_produce_get
+    if _newclass:produce = _swig_property(_cHalide.Pipeline_produce_get, _cHalide.Pipeline_produce_set)
+    __swig_setmethods__["update"] = _cHalide.Pipeline_update_set
+    __swig_getmethods__["update"] = _cHalide.Pipeline_update_get
+    if _newclass:update = _swig_property(_cHalide.Pipeline_update_get, _cHalide.Pipeline_update_set)
+    __swig_setmethods__["consume"] = _cHalide.Pipeline_consume_set
+    __swig_getmethods__["consume"] = _cHalide.Pipeline_consume_get
+    if _newclass:consume = _swig_property(_cHalide.Pipeline_consume_get, _cHalide.Pipeline_consume_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Pipeline_make
+    if _newclass:make = staticmethod(_cHalide.Pipeline_make)
+    def __init__(self): 
+        this = _cHalide.new_Pipeline()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Pipeline
+    __del__ = lambda self : None;
+Pipeline_swigregister = _cHalide.Pipeline_swigregister
+Pipeline_swigregister(Pipeline)
+
+def Pipeline_make(*args):
+  return _cHalide.Pipeline_make(*args)
+Pipeline_make = _cHalide.Pipeline_make
+
+class For(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, For, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, For, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.For_name_set
+    __swig_getmethods__["name"] = _cHalide.For_name_get
+    if _newclass:name = _swig_property(_cHalide.For_name_get, _cHalide.For_name_set)
+    __swig_setmethods__["min"] = _cHalide.For_min_set
+    __swig_getmethods__["min"] = _cHalide.For_min_get
+    if _newclass:min = _swig_property(_cHalide.For_min_get, _cHalide.For_min_set)
+    __swig_setmethods__["extent"] = _cHalide.For_extent_set
+    __swig_getmethods__["extent"] = _cHalide.For_extent_get
+    if _newclass:extent = _swig_property(_cHalide.For_extent_get, _cHalide.For_extent_set)
+    Serial = _cHalide.For_Serial
+    Parallel = _cHalide.For_Parallel
+    Vectorized = _cHalide.For_Vectorized
+    Unrolled = _cHalide.For_Unrolled
+    __swig_setmethods__["for_type"] = _cHalide.For_for_type_set
+    __swig_getmethods__["for_type"] = _cHalide.For_for_type_get
+    if _newclass:for_type = _swig_property(_cHalide.For_for_type_get, _cHalide.For_for_type_set)
+    __swig_setmethods__["body"] = _cHalide.For_body_set
+    __swig_getmethods__["body"] = _cHalide.For_body_get
+    if _newclass:body = _swig_property(_cHalide.For_body_get, _cHalide.For_body_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.For_make
+    if _newclass:make = staticmethod(_cHalide.For_make)
+    def __init__(self): 
+        this = _cHalide.new_For()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_For
+    __del__ = lambda self : None;
+For_swigregister = _cHalide.For_swigregister
+For_swigregister(For)
+
+def For_make(*args):
+  return _cHalide.For_make(*args)
+For_make = _cHalide.For_make
+
+class Store(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Store, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Store, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.Store_name_set
+    __swig_getmethods__["name"] = _cHalide.Store_name_get
+    if _newclass:name = _swig_property(_cHalide.Store_name_get, _cHalide.Store_name_set)
+    __swig_setmethods__["value"] = _cHalide.Store_value_set
+    __swig_getmethods__["value"] = _cHalide.Store_value_get
+    if _newclass:value = _swig_property(_cHalide.Store_value_get, _cHalide.Store_value_set)
+    __swig_setmethods__["index"] = _cHalide.Store_index_set
+    __swig_getmethods__["index"] = _cHalide.Store_index_get
+    if _newclass:index = _swig_property(_cHalide.Store_index_get, _cHalide.Store_index_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Store_make
+    if _newclass:make = staticmethod(_cHalide.Store_make)
+    def __init__(self): 
+        this = _cHalide.new_Store()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Store
+    __del__ = lambda self : None;
+Store_swigregister = _cHalide.Store_swigregister
+Store_swigregister(Store)
+
+def Store_make(*args):
+  return _cHalide.Store_make(*args)
+Store_make = _cHalide.Store_make
+
+class Provide(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Provide, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Provide, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.Provide_name_set
+    __swig_getmethods__["name"] = _cHalide.Provide_name_get
+    if _newclass:name = _swig_property(_cHalide.Provide_name_get, _cHalide.Provide_name_set)
+    __swig_setmethods__["value"] = _cHalide.Provide_value_set
+    __swig_getmethods__["value"] = _cHalide.Provide_value_get
+    if _newclass:value = _swig_property(_cHalide.Provide_value_get, _cHalide.Provide_value_set)
+    __swig_setmethods__["args"] = _cHalide.Provide_args_set
+    __swig_getmethods__["args"] = _cHalide.Provide_args_get
+    if _newclass:args = _swig_property(_cHalide.Provide_args_get, _cHalide.Provide_args_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Provide_make
+    if _newclass:make = staticmethod(_cHalide.Provide_make)
+    def __init__(self): 
+        this = _cHalide.new_Provide()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Provide
+    __del__ = lambda self : None;
+Provide_swigregister = _cHalide.Provide_swigregister
+Provide_swigregister(Provide)
+
+def Provide_make(*args):
+  return _cHalide.Provide_make(*args)
+Provide_make = _cHalide.Provide_make
+
+class Allocate(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Allocate, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Allocate, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.Allocate_name_set
+    __swig_getmethods__["name"] = _cHalide.Allocate_name_get
+    if _newclass:name = _swig_property(_cHalide.Allocate_name_get, _cHalide.Allocate_name_set)
+    __swig_setmethods__["type"] = _cHalide.Allocate_type_set
+    __swig_getmethods__["type"] = _cHalide.Allocate_type_get
+    if _newclass:type = _swig_property(_cHalide.Allocate_type_get, _cHalide.Allocate_type_set)
+    __swig_setmethods__["size"] = _cHalide.Allocate_size_set
+    __swig_getmethods__["size"] = _cHalide.Allocate_size_get
+    if _newclass:size = _swig_property(_cHalide.Allocate_size_get, _cHalide.Allocate_size_set)
+    __swig_setmethods__["body"] = _cHalide.Allocate_body_set
+    __swig_getmethods__["body"] = _cHalide.Allocate_body_get
+    if _newclass:body = _swig_property(_cHalide.Allocate_body_get, _cHalide.Allocate_body_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Allocate_make
+    if _newclass:make = staticmethod(_cHalide.Allocate_make)
+    def __init__(self): 
+        this = _cHalide.new_Allocate()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Allocate
+    __del__ = lambda self : None;
+Allocate_swigregister = _cHalide.Allocate_swigregister
+Allocate_swigregister(Allocate)
+
+def Allocate_make(*args):
+  return _cHalide.Allocate_make(*args)
+Allocate_make = _cHalide.Allocate_make
+
+class Free(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Free, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Free, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.Free_name_set
+    __swig_getmethods__["name"] = _cHalide.Free_name_get
+    if _newclass:name = _swig_property(_cHalide.Free_name_get, _cHalide.Free_name_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Free_make
+    if _newclass:make = staticmethod(_cHalide.Free_make)
+    def __init__(self): 
+        this = _cHalide.new_Free()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Free
+    __del__ = lambda self : None;
+Free_swigregister = _cHalide.Free_swigregister
+Free_swigregister(Free)
+
+def Free_make(*args):
+  return _cHalide.Free_make(*args)
+Free_make = _cHalide.Free_make
+
+class Range(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Range, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Range, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["min"] = _cHalide.Range_min_set
+    __swig_getmethods__["min"] = _cHalide.Range_min_get
+    if _newclass:min = _swig_property(_cHalide.Range_min_get, _cHalide.Range_min_set)
+    __swig_setmethods__["extent"] = _cHalide.Range_extent_set
+    __swig_getmethods__["extent"] = _cHalide.Range_extent_get
+    if _newclass:extent = _swig_property(_cHalide.Range_extent_get, _cHalide.Range_extent_set)
+    def __init__(self, *args): 
+        this = _cHalide.new_Range(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Range
+    __del__ = lambda self : None;
+Range_swigregister = _cHalide.Range_swigregister
+Range_swigregister(Range)
+
+class Realize(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Realize, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Realize, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.Realize_name_set
+    __swig_getmethods__["name"] = _cHalide.Realize_name_get
+    if _newclass:name = _swig_property(_cHalide.Realize_name_get, _cHalide.Realize_name_set)
+    __swig_setmethods__["type"] = _cHalide.Realize_type_set
+    __swig_getmethods__["type"] = _cHalide.Realize_type_get
+    if _newclass:type = _swig_property(_cHalide.Realize_type_get, _cHalide.Realize_type_set)
+    __swig_setmethods__["bounds"] = _cHalide.Realize_bounds_set
+    __swig_getmethods__["bounds"] = _cHalide.Realize_bounds_get
+    if _newclass:bounds = _swig_property(_cHalide.Realize_bounds_get, _cHalide.Realize_bounds_set)
+    __swig_setmethods__["body"] = _cHalide.Realize_body_set
+    __swig_getmethods__["body"] = _cHalide.Realize_body_get
+    if _newclass:body = _swig_property(_cHalide.Realize_body_get, _cHalide.Realize_body_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Realize_make
+    if _newclass:make = staticmethod(_cHalide.Realize_make)
+    def __init__(self): 
+        this = _cHalide.new_Realize()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Realize
+    __del__ = lambda self : None;
+Realize_swigregister = _cHalide.Realize_swigregister
+Realize_swigregister(Realize)
+
+def Realize_make(*args):
+  return _cHalide.Realize_make(*args)
+Realize_make = _cHalide.Realize_make
+
+class Block(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Block, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Block, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["first"] = _cHalide.Block_first_set
+    __swig_getmethods__["first"] = _cHalide.Block_first_get
+    if _newclass:first = _swig_property(_cHalide.Block_first_get, _cHalide.Block_first_set)
+    __swig_setmethods__["rest"] = _cHalide.Block_rest_set
+    __swig_getmethods__["rest"] = _cHalide.Block_rest_get
+    if _newclass:rest = _swig_property(_cHalide.Block_rest_get, _cHalide.Block_rest_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Block_make
+    if _newclass:make = staticmethod(_cHalide.Block_make)
+    def __init__(self): 
+        this = _cHalide.new_Block()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Block
+    __del__ = lambda self : None;
+Block_swigregister = _cHalide.Block_swigregister
+Block_swigregister(Block)
+
+def Block_make(*args):
+  return _cHalide.Block_make(*args)
+Block_make = _cHalide.Block_make
+
+class ReductionVariable(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, ReductionVariable, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, ReductionVariable, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["var"] = _cHalide.ReductionVariable_var_set
+    __swig_getmethods__["var"] = _cHalide.ReductionVariable_var_get
+    if _newclass:var = _swig_property(_cHalide.ReductionVariable_var_get, _cHalide.ReductionVariable_var_set)
+    __swig_setmethods__["min"] = _cHalide.ReductionVariable_min_set
+    __swig_getmethods__["min"] = _cHalide.ReductionVariable_min_get
+    if _newclass:min = _swig_property(_cHalide.ReductionVariable_min_get, _cHalide.ReductionVariable_min_set)
+    __swig_setmethods__["extent"] = _cHalide.ReductionVariable_extent_set
+    __swig_getmethods__["extent"] = _cHalide.ReductionVariable_extent_get
+    if _newclass:extent = _swig_property(_cHalide.ReductionVariable_extent_get, _cHalide.ReductionVariable_extent_set)
+    def __init__(self): 
+        this = _cHalide.new_ReductionVariable()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_ReductionVariable
+    __del__ = lambda self : None;
+ReductionVariable_swigregister = _cHalide.ReductionVariable_swigregister
+ReductionVariable_swigregister(ReductionVariable)
+
+class ReductionDomainContents(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, ReductionDomainContents, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, ReductionDomainContents, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["ref_count"] = _cHalide.ReductionDomainContents_ref_count_set
+    __swig_getmethods__["ref_count"] = _cHalide.ReductionDomainContents_ref_count_get
+    if _newclass:ref_count = _swig_property(_cHalide.ReductionDomainContents_ref_count_get, _cHalide.ReductionDomainContents_ref_count_set)
+    __swig_setmethods__["domain"] = _cHalide.ReductionDomainContents_domain_set
+    __swig_getmethods__["domain"] = _cHalide.ReductionDomainContents_domain_get
+    if _newclass:domain = _swig_property(_cHalide.ReductionDomainContents_domain_get, _cHalide.ReductionDomainContents_domain_set)
+    def __init__(self): 
+        this = _cHalide.new_ReductionDomainContents()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_ReductionDomainContents
+    __del__ = lambda self : None;
+ReductionDomainContents_swigregister = _cHalide.ReductionDomainContents_swigregister
+ReductionDomainContents_swigregister(ReductionDomainContents)
+
+class ReductionDomain(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, ReductionDomain, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, ReductionDomain, name)
+    __repr__ = _swig_repr
+    def __init__(self, *args): 
+        this = _cHalide.new_ReductionDomain(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    def defined(self): return _cHalide.ReductionDomain_defined(self)
+    def same_as(self, *args): return _cHalide.ReductionDomain_same_as(self, *args)
+    def domain(self): return _cHalide.ReductionDomain_domain(self)
+    __swig_destroy__ = _cHalide.delete_ReductionDomain
+    __del__ = lambda self : None;
+ReductionDomain_swigregister = _cHalide.ReductionDomain_swigregister
+ReductionDomain_swigregister(ReductionDomain)
+
+class Schedule(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Schedule, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Schedule, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["store_level"] = _cHalide.Schedule_store_level_set
+    __swig_getmethods__["store_level"] = _cHalide.Schedule_store_level_get
+    if _newclass:store_level = _swig_property(_cHalide.Schedule_store_level_get, _cHalide.Schedule_store_level_set)
+    __swig_setmethods__["compute_level"] = _cHalide.Schedule_compute_level_set
+    __swig_getmethods__["compute_level"] = _cHalide.Schedule_compute_level_get
+    if _newclass:compute_level = _swig_property(_cHalide.Schedule_compute_level_get, _cHalide.Schedule_compute_level_set)
+    __swig_setmethods__["splits"] = _cHalide.Schedule_splits_set
+    __swig_getmethods__["splits"] = _cHalide.Schedule_splits_get
+    if _newclass:splits = _swig_property(_cHalide.Schedule_splits_get, _cHalide.Schedule_splits_set)
+    __swig_setmethods__["dims"] = _cHalide.Schedule_dims_set
+    __swig_getmethods__["dims"] = _cHalide.Schedule_dims_get
+    if _newclass:dims = _swig_property(_cHalide.Schedule_dims_get, _cHalide.Schedule_dims_set)
+    __swig_setmethods__["storage_dims"] = _cHalide.Schedule_storage_dims_set
+    __swig_getmethods__["storage_dims"] = _cHalide.Schedule_storage_dims_get
+    if _newclass:storage_dims = _swig_property(_cHalide.Schedule_storage_dims_get, _cHalide.Schedule_storage_dims_set)
+    __swig_setmethods__["bounds"] = _cHalide.Schedule_bounds_set
+    __swig_getmethods__["bounds"] = _cHalide.Schedule_bounds_get
+    if _newclass:bounds = _swig_property(_cHalide.Schedule_bounds_get, _cHalide.Schedule_bounds_set)
+    def __init__(self): 
+        this = _cHalide.new_Schedule()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Schedule
+    __del__ = lambda self : None;
+Schedule_swigregister = _cHalide.Schedule_swigregister
+Schedule_swigregister(Schedule)
+
+class FunctionContents(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, FunctionContents, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, FunctionContents, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["ref_count"] = _cHalide.FunctionContents_ref_count_set
+    __swig_getmethods__["ref_count"] = _cHalide.FunctionContents_ref_count_get
+    if _newclass:ref_count = _swig_property(_cHalide.FunctionContents_ref_count_get, _cHalide.FunctionContents_ref_count_set)
+    __swig_setmethods__["name"] = _cHalide.FunctionContents_name_set
+    __swig_getmethods__["name"] = _cHalide.FunctionContents_name_get
+    if _newclass:name = _swig_property(_cHalide.FunctionContents_name_get, _cHalide.FunctionContents_name_set)
+    __swig_setmethods__["args"] = _cHalide.FunctionContents_args_set
+    __swig_getmethods__["args"] = _cHalide.FunctionContents_args_get
+    if _newclass:args = _swig_property(_cHalide.FunctionContents_args_get, _cHalide.FunctionContents_args_set)
+    __swig_setmethods__["value"] = _cHalide.FunctionContents_value_set
+    __swig_getmethods__["value"] = _cHalide.FunctionContents_value_get
+    if _newclass:value = _swig_property(_cHalide.FunctionContents_value_get, _cHalide.FunctionContents_value_set)
+    __swig_setmethods__["schedule"] = _cHalide.FunctionContents_schedule_set
+    __swig_getmethods__["schedule"] = _cHalide.FunctionContents_schedule_get
+    if _newclass:schedule = _swig_property(_cHalide.FunctionContents_schedule_get, _cHalide.FunctionContents_schedule_set)
+    __swig_setmethods__["reduction_value"] = _cHalide.FunctionContents_reduction_value_set
+    __swig_getmethods__["reduction_value"] = _cHalide.FunctionContents_reduction_value_get
+    if _newclass:reduction_value = _swig_property(_cHalide.FunctionContents_reduction_value_get, _cHalide.FunctionContents_reduction_value_set)
+    __swig_setmethods__["reduction_args"] = _cHalide.FunctionContents_reduction_args_set
+    __swig_getmethods__["reduction_args"] = _cHalide.FunctionContents_reduction_args_get
+    if _newclass:reduction_args = _swig_property(_cHalide.FunctionContents_reduction_args_get, _cHalide.FunctionContents_reduction_args_set)
+    __swig_setmethods__["reduction_schedule"] = _cHalide.FunctionContents_reduction_schedule_set
+    __swig_getmethods__["reduction_schedule"] = _cHalide.FunctionContents_reduction_schedule_get
+    if _newclass:reduction_schedule = _swig_property(_cHalide.FunctionContents_reduction_schedule_get, _cHalide.FunctionContents_reduction_schedule_set)
+    __swig_setmethods__["reduction_domain"] = _cHalide.FunctionContents_reduction_domain_set
+    __swig_getmethods__["reduction_domain"] = _cHalide.FunctionContents_reduction_domain_get
+    if _newclass:reduction_domain = _swig_property(_cHalide.FunctionContents_reduction_domain_get, _cHalide.FunctionContents_reduction_domain_set)
+    __swig_setmethods__["debug_file"] = _cHalide.FunctionContents_debug_file_set
+    __swig_getmethods__["debug_file"] = _cHalide.FunctionContents_debug_file_get
+    if _newclass:debug_file = _swig_property(_cHalide.FunctionContents_debug_file_get, _cHalide.FunctionContents_debug_file_set)
+    def __init__(self): 
+        this = _cHalide.new_FunctionContents()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_FunctionContents
+    __del__ = lambda self : None;
+FunctionContents_swigregister = _cHalide.FunctionContents_swigregister
+FunctionContents_swigregister(FunctionContents)
+
+class Function(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Function, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Function, name)
+    __repr__ = _swig_repr
+    def define(self, *args): return _cHalide.Function_define(self, *args)
+    def define_reduction(self, *args): return _cHalide.Function_define_reduction(self, *args)
+    def __init__(self, *args): 
+        this = _cHalide.new_Function(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    def name(self): return _cHalide.Function_name(self)
+    def args(self): return _cHalide.Function_args(self)
+    def value(self): return _cHalide.Function_value(self)
+    def schedule(self, *args): return _cHalide.Function_schedule(self, *args)
+    def reduction_schedule(self, *args): return _cHalide.Function_reduction_schedule(self, *args)
+    def reduction_value(self): return _cHalide.Function_reduction_value(self)
+    def reduction_args(self): return _cHalide.Function_reduction_args(self)
+    def reduction_domain(self): return _cHalide.Function_reduction_domain(self)
+    def is_reduction(self): return _cHalide.Function_is_reduction(self)
+    def same_as(self, *args): return _cHalide.Function_same_as(self, *args)
+    def debug_file(self, *args): return _cHalide.Function_debug_file(self, *args)
+    __swig_destroy__ = _cHalide.delete_Function
+    __del__ = lambda self : None;
+Function_swigregister = _cHalide.Function_swigregister
+Function_swigregister(Function)
+
+class Call(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Call, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Call, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.Call_name_set
+    __swig_getmethods__["name"] = _cHalide.Call_name_get
+    if _newclass:name = _swig_property(_cHalide.Call_name_get, _cHalide.Call_name_set)
+    __swig_setmethods__["args"] = _cHalide.Call_args_set
+    __swig_getmethods__["args"] = _cHalide.Call_args_get
+    if _newclass:args = _swig_property(_cHalide.Call_args_get, _cHalide.Call_args_set)
+    Image = _cHalide.Call_Image
+    Extern = _cHalide.Call_Extern
+    Halide = _cHalide.Call_Halide
+    Intrinsic = _cHalide.Call_Intrinsic
+    __swig_setmethods__["call_type"] = _cHalide.Call_call_type_set
+    __swig_getmethods__["call_type"] = _cHalide.Call_call_type_get
+    if _newclass:call_type = _swig_property(_cHalide.Call_call_type_get, _cHalide.Call_call_type_set)
+    __swig_setmethods__["func"] = _cHalide.Call_func_set
+    __swig_getmethods__["func"] = _cHalide.Call_func_get
+    if _newclass:func = _swig_property(_cHalide.Call_func_get, _cHalide.Call_func_set)
+    __swig_setmethods__["image"] = _cHalide.Call_image_set
+    __swig_getmethods__["image"] = _cHalide.Call_image_get
+    if _newclass:image = _swig_property(_cHalide.Call_image_get, _cHalide.Call_image_set)
+    __swig_setmethods__["param"] = _cHalide.Call_param_set
+    __swig_getmethods__["param"] = _cHalide.Call_param_get
+    if _newclass:param = _swig_property(_cHalide.Call_param_get, _cHalide.Call_param_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Call_make
+    if _newclass:make = staticmethod(_cHalide.Call_make)
+    def __init__(self): 
+        this = _cHalide.new_Call()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Call
+    __del__ = lambda self : None;
+Call_swigregister = _cHalide.Call_swigregister
+Call_swigregister(Call)
+cvar = _cHalide.cvar
+Call.debug_to_file = _cHalide.cvar.Call_debug_to_file
+Call.shuffle_vector = _cHalide.cvar.Call_shuffle_vector
+Call.interleave_vectors = _cHalide.cvar.Call_interleave_vectors
+Call.reinterpret = _cHalide.cvar.Call_reinterpret
+Call.bitwise_and = _cHalide.cvar.Call_bitwise_and
+Call.bitwise_not = _cHalide.cvar.Call_bitwise_not
+Call.bitwise_xor = _cHalide.cvar.Call_bitwise_xor
+Call.bitwise_or = _cHalide.cvar.Call_bitwise_or
+Call.shift_left = _cHalide.cvar.Call_shift_left
+Call.shift_right = _cHalide.cvar.Call_shift_right
+
+def Call_make(*args):
+  return _cHalide.Call_make(*args)
+Call_make = _cHalide.Call_make
+
+class Variable(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Variable, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Variable, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["name"] = _cHalide.Variable_name_set
+    __swig_getmethods__["name"] = _cHalide.Variable_name_get
+    if _newclass:name = _swig_property(_cHalide.Variable_name_get, _cHalide.Variable_name_set)
+    __swig_setmethods__["param"] = _cHalide.Variable_param_set
+    __swig_getmethods__["param"] = _cHalide.Variable_param_get
+    if _newclass:param = _swig_property(_cHalide.Variable_param_get, _cHalide.Variable_param_set)
+    __swig_setmethods__["reduction_domain"] = _cHalide.Variable_reduction_domain_set
+    __swig_getmethods__["reduction_domain"] = _cHalide.Variable_reduction_domain_get
+    if _newclass:reduction_domain = _swig_property(_cHalide.Variable_reduction_domain_get, _cHalide.Variable_reduction_domain_set)
+    __swig_getmethods__["make"] = lambda x: _cHalide.Variable_make
+    if _newclass:make = staticmethod(_cHalide.Variable_make)
+    def __init__(self): 
+        this = _cHalide.new_Variable()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Variable
+    __del__ = lambda self : None;
+Variable_swigregister = _cHalide.Variable_swigregister
+Variable_swigregister(Variable)
+
+def Variable_make(*args):
+  return _cHalide.Variable_make(*args)
+Variable_make = _cHalide.Variable_make
+
+class Interval(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, Interval, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, Interval, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["min"] = _cHalide.Interval_min_set
+    __swig_getmethods__["min"] = _cHalide.Interval_min_get
+    if _newclass:min = _swig_property(_cHalide.Interval_min_get, _cHalide.Interval_min_set)
+    __swig_setmethods__["max"] = _cHalide.Interval_max_set
+    __swig_getmethods__["max"] = _cHalide.Interval_max_get
+    if _newclass:max = _swig_property(_cHalide.Interval_max_get, _cHalide.Interval_max_set)
+    def __init__(self, *args): 
+        this = _cHalide.new_Interval(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_Interval
+    __del__ = lambda self : None;
+Interval_swigregister = _cHalide.Interval_swigregister
+Interval_swigregister(Interval)
+
+
+def bounds_of_expr_in_scope(*args):
+  return _cHalide.bounds_of_expr_in_scope(*args)
+bounds_of_expr_in_scope = _cHalide.bounds_of_expr_in_scope
+
+def regions_called(*args):
+  return _cHalide.regions_called(*args)
+regions_called = _cHalide.regions_called
+
+def regions_provided(*args):
+  return _cHalide.regions_provided(*args)
+regions_provided = _cHalide.regions_provided
+
+def regions_touched(*args):
+  return _cHalide.regions_touched(*args)
+regions_touched = _cHalide.regions_touched
+
+def region_touched(*args):
+  return _cHalide.region_touched(*args)
+region_touched = _cHalide.region_touched
+
+def region_provided(*args):
+  return _cHalide.region_provided(*args)
+region_provided = _cHalide.region_provided
+
+def region_called(*args):
+  return _cHalide.region_called(*args)
+region_called = _cHalide.region_called
+
+def region_union(*args):
+  return _cHalide.region_union(*args)
+region_union = _cHalide.region_union
+
+def bounds_test():
+  return _cHalide.bounds_test()
+bounds_test = _cHalide.bounds_test
+
+def bounds_inference(*args):
+  return _cHalide.bounds_inference(*args)
+bounds_inference = _cHalide.bounds_inference
+class IRPrinter(IRVisitor):
+    __swig_setmethods__ = {}
+    for _s in [IRVisitor]: __swig_setmethods__.update(getattr(_s,'__swig_setmethods__',{}))
+    __setattr__ = lambda self, name, value: _swig_setattr(self, IRPrinter, name, value)
+    __swig_getmethods__ = {}
+    for _s in [IRVisitor]: __swig_getmethods__.update(getattr(_s,'__swig_getmethods__',{}))
+    __getattr__ = lambda self, name: _swig_getattr(self, IRPrinter, name)
+    __repr__ = _swig_repr
+    def __init__(self, *args): 
+        this = _cHalide.new_IRPrinter(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    def _print(self, *args): return _cHalide.IRPrinter__print(self, *args)
+    __swig_getmethods__["test"] = lambda x: _cHalide.IRPrinter_test
+    if _newclass:test = staticmethod(_cHalide.IRPrinter_test)
+    __swig_destroy__ = _cHalide.delete_IRPrinter
+    __del__ = lambda self : None;
+IRPrinter_swigregister = _cHalide.IRPrinter_swigregister
+IRPrinter_swigregister(IRPrinter)
+
+def IRPrinter_test():
+  return _cHalide.IRPrinter_test()
+IRPrinter_test = _cHalide.IRPrinter_test
+
+class CodeGen_C(IRPrinter):
+    __swig_setmethods__ = {}
+    for _s in [IRPrinter]: __swig_setmethods__.update(getattr(_s,'__swig_setmethods__',{}))
+    __setattr__ = lambda self, name, value: _swig_setattr(self, CodeGen_C, name, value)
+    __swig_getmethods__ = {}
+    for _s in [IRPrinter]: __swig_getmethods__.update(getattr(_s,'__swig_getmethods__',{}))
+    __getattr__ = lambda self, name: _swig_getattr(self, CodeGen_C, name)
+    __repr__ = _swig_repr
+    def __init__(self, *args): 
+        this = _cHalide.new_CodeGen_C(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    def compile(self, *args): return _cHalide.CodeGen_C_compile(self, *args)
+    def compile_header(self, *args): return _cHalide.CodeGen_C_compile_header(self, *args)
+    __swig_getmethods__["test"] = lambda x: _cHalide.CodeGen_C_test
+    if _newclass:test = staticmethod(_cHalide.CodeGen_C_test)
+    __swig_destroy__ = _cHalide.delete_CodeGen_C
+    __del__ = lambda self : None;
+CodeGen_C_swigregister = _cHalide.CodeGen_C_swigregister
+CodeGen_C_swigregister(CodeGen_C)
+
+def CodeGen_C_test():
+  return _cHalide.CodeGen_C_test()
+CodeGen_C_test = _cHalide.CodeGen_C_test
+
+class ModulusRemainder(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, ModulusRemainder, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, ModulusRemainder, name)
+    __repr__ = _swig_repr
+    def __init__(self, *args): 
+        this = _cHalide.new_ModulusRemainder(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_setmethods__["modulus"] = _cHalide.ModulusRemainder_modulus_set
+    __swig_getmethods__["modulus"] = _cHalide.ModulusRemainder_modulus_get
+    if _newclass:modulus = _swig_property(_cHalide.ModulusRemainder_modulus_get, _cHalide.ModulusRemainder_modulus_set)
+    __swig_setmethods__["remainder"] = _cHalide.ModulusRemainder_remainder_set
+    __swig_getmethods__["remainder"] = _cHalide.ModulusRemainder_remainder_get
+    if _newclass:remainder = _swig_property(_cHalide.ModulusRemainder_remainder_get, _cHalide.ModulusRemainder_remainder_set)
+    __swig_destroy__ = _cHalide.delete_ModulusRemainder
+    __del__ = lambda self : None;
+ModulusRemainder_swigregister = _cHalide.ModulusRemainder_swigregister
+ModulusRemainder_swigregister(ModulusRemainder)
+
+
+def modulus_remainder(*args):
+  return _cHalide.modulus_remainder(*args)
+modulus_remainder = _cHalide.modulus_remainder
+
+def reduce_expr_modulo(*args):
+  return _cHalide.reduce_expr_modulo(*args)
+reduce_expr_modulo = _cHalide.reduce_expr_modulo
+
+def modulus_remainder_test():
+  return _cHalide.modulus_remainder_test()
+modulus_remainder_test = _cHalide.modulus_remainder_test
+
+def gcd(*args):
+  return _cHalide.gcd(*args)
+gcd = _cHalide.gcd
+X86_64Bit = _cHalide.X86_64Bit
+X86_SSE41 = _cHalide.X86_SSE41
+X86_AVX = _cHalide.X86_AVX
+X86_NaCl = _cHalide.X86_NaCl
 class Var(_object):
     __swig_setmethods__ = {}
     __setattr__ = lambda self, name, value: _swig_setattr(self, Var, name, value)
@@ -492,6 +2220,49 @@ def Func_test():
   return _cHalide.Func_test()
 Func_test = _cHalide.Func_test
 
+GPU_PTX = _cHalide.GPU_PTX
+GPU_OpenCL = _cHalide.GPU_OpenCL
+GPU_OpenGL = _cHalide.GPU_OpenGL
+class CodeGen_GPU_Host(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, CodeGen_GPU_Host, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, CodeGen_GPU_Host, name)
+    __repr__ = _swig_repr
+    def __init__(self, options=0): 
+        this = _cHalide.new_CodeGen_GPU_Host(options)
+        try: self.this.append(this)
+        except: self.this = this
+    def compile(self, *args): return _cHalide.CodeGen_GPU_Host_compile(self, *args)
+    __swig_destroy__ = _cHalide.delete_CodeGen_GPU_Host
+    __del__ = lambda self : None;
+CodeGen_GPU_Host_swigregister = _cHalide.CodeGen_GPU_Host_swigregister
+CodeGen_GPU_Host_swigregister(CodeGen_GPU_Host)
+
+
+def extract_odd_lanes(*args):
+  return _cHalide.extract_odd_lanes(*args)
+extract_odd_lanes = _cHalide.extract_odd_lanes
+
+def extract_even_lanes(*args):
+  return _cHalide.extract_even_lanes(*args)
+extract_even_lanes = _cHalide.extract_even_lanes
+
+def extract_lane(*args):
+  return _cHalide.extract_lane(*args)
+extract_lane = _cHalide.extract_lane
+
+def rewrite_interleavings(*args):
+  return _cHalide.rewrite_interleavings(*args)
+rewrite_interleavings = _cHalide.rewrite_interleavings
+
+def deinterleave_vector_test():
+  return _cHalide.deinterleave_vector_test()
+deinterleave_vector_test = _cHalide.deinterleave_vector_test
+
+def finite_difference(*args):
+  return _cHalide.finite_difference(*args)
+finite_difference = _cHalide.finite_difference
 
 def sum(*args):
   return _cHalide.sum(*args)
@@ -508,6 +2279,156 @@ maximum = _cHalide.maximum
 def minimum(*args):
   return _cHalide.minimum(*args)
 minimum = _cHalide.minimum
+
+def equal(*args):
+  return _cHalide.equal(*args)
+equal = _cHalide.equal
+
+def deep_compare(*args):
+  return _cHalide.deep_compare(*args)
+deep_compare = _cHalide.deep_compare
+class ExprDeepCompare(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, ExprDeepCompare, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, ExprDeepCompare, name)
+    __repr__ = _swig_repr
+    def __call__(self, *args): return _cHalide.ExprDeepCompare___call__(self, *args)
+    def __init__(self): 
+        this = _cHalide.new_ExprDeepCompare()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_ExprDeepCompare
+    __del__ = lambda self : None;
+ExprDeepCompare_swigregister = _cHalide.ExprDeepCompare_swigregister
+ExprDeepCompare_swigregister(ExprDeepCompare)
+
+class StmtDeepCompare(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, StmtDeepCompare, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, StmtDeepCompare, name)
+    __repr__ = _swig_repr
+    def __call__(self, *args): return _cHalide.StmtDeepCompare___call__(self, *args)
+    def __init__(self): 
+        this = _cHalide.new_StmtDeepCompare()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_StmtDeepCompare
+    __del__ = lambda self : None;
+StmtDeepCompare_swigregister = _cHalide.StmtDeepCompare_swigregister
+StmtDeepCompare_swigregister(StmtDeepCompare)
+
+
+def expr_match(*args):
+  return _cHalide.expr_match(*args)
+expr_match = _cHalide.expr_match
+
+def expr_match_test():
+  return _cHalide.expr_match_test()
+expr_match_test = _cHalide.expr_match_test
+class IRMutator(IRVisitor):
+    __swig_setmethods__ = {}
+    for _s in [IRVisitor]: __swig_setmethods__.update(getattr(_s,'__swig_setmethods__',{}))
+    __setattr__ = lambda self, name, value: _swig_setattr(self, IRMutator, name, value)
+    __swig_getmethods__ = {}
+    for _s in [IRVisitor]: __swig_getmethods__.update(getattr(_s,'__swig_getmethods__',{}))
+    __getattr__ = lambda self, name: _swig_getattr(self, IRMutator, name)
+    __repr__ = _swig_repr
+    def mutate(self, *args): return _cHalide.IRMutator_mutate(self, *args)
+    def __init__(self): 
+        this = _cHalide.new_IRMutator()
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_IRMutator
+    __del__ = lambda self : None;
+IRMutator_swigregister = _cHalide.IRMutator_swigregister
+IRMutator_swigregister(IRMutator)
+
+
+def is_const(*args):
+  return _cHalide.is_const(*args)
+is_const = _cHalide.is_const
+
+def as_const_int(*args):
+  return _cHalide.as_const_int(*args)
+as_const_int = _cHalide.as_const_int
+
+def as_const_float(*args):
+  return _cHalide.as_const_float(*args)
+as_const_float = _cHalide.as_const_float
+
+def is_const_power_of_two(*args):
+  return _cHalide.is_const_power_of_two(*args)
+is_const_power_of_two = _cHalide.is_const_power_of_two
+
+def is_positive_const(*args):
+  return _cHalide.is_positive_const(*args)
+is_positive_const = _cHalide.is_positive_const
+
+def is_negative_const(*args):
+  return _cHalide.is_negative_const(*args)
+is_negative_const = _cHalide.is_negative_const
+
+def is_zero(*args):
+  return _cHalide.is_zero(*args)
+is_zero = _cHalide.is_zero
+
+def is_one(*args):
+  return _cHalide.is_one(*args)
+is_one = _cHalide.is_one
+
+def is_two(*args):
+  return _cHalide.is_two(*args)
+is_two = _cHalide.is_two
+
+def int_cast_constant(*args):
+  return _cHalide.int_cast_constant(*args)
+int_cast_constant = _cHalide.int_cast_constant
+
+def make_const(*args):
+  return _cHalide.make_const(*args)
+make_const = _cHalide.make_const
+
+def make_bool(*args):
+  return _cHalide.make_bool(*args)
+make_bool = _cHalide.make_bool
+
+def make_zero(*args):
+  return _cHalide.make_zero(*args)
+make_zero = _cHalide.make_zero
+
+def make_one(*args):
+  return _cHalide.make_one(*args)
+make_one = _cHalide.make_one
+
+def make_two(*args):
+  return _cHalide.make_two(*args)
+make_two = _cHalide.make_two
+
+def const_true(width=1):
+  return _cHalide.const_true(width)
+const_true = _cHalide.const_true
+
+def const_false(width=1):
+  return _cHalide.const_false(width)
+const_false = _cHalide.const_false
+
+def match_types(*args):
+  return _cHalide.match_types(*args)
+match_types = _cHalide.match_types
+
+def halide_log(*args):
+  return _cHalide.halide_log(*args)
+halide_log = _cHalide.halide_log
+
+def halide_exp(*args):
+  return _cHalide.halide_exp(*args)
+halide_exp = _cHalide.halide_exp
+
+def raise_to_integer_power(*args):
+  return _cHalide.raise_to_integer_power(*args)
+raise_to_integer_power = _cHalide.raise_to_integer_power
 
 def cast(*args):
   return _cHalide.cast(*args)
@@ -716,6 +2637,119 @@ __rshift__ = _cHalide.__rshift__
 def _lambda(*args):
   return _cHalide._lambda(*args)
 _lambda = _cHalide._lambda
+class debug(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, debug, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, debug, name)
+    __repr__ = _swig_repr
+    __swig_setmethods__["debug_level"] = _cHalide.debug_debug_level_set
+    __swig_getmethods__["debug_level"] = _cHalide.debug_debug_level_get
+    if _newclass:debug_level = _swig_property(_cHalide.debug_debug_level_get, _cHalide.debug_debug_level_set)
+    __swig_setmethods__["initialized"] = _cHalide.debug_initialized_set
+    __swig_getmethods__["initialized"] = _cHalide.debug_initialized_get
+    if _newclass:initialized = _swig_property(_cHalide.debug_initialized_get, _cHalide.debug_initialized_set)
+    __swig_setmethods__["verbosity"] = _cHalide.debug_verbosity_set
+    __swig_getmethods__["verbosity"] = _cHalide.debug_verbosity_get
+    if _newclass:verbosity = _swig_property(_cHalide.debug_verbosity_get, _cHalide.debug_verbosity_set)
+    def __init__(self, *args): 
+        this = _cHalide.new_debug(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    __swig_destroy__ = _cHalide.delete_debug
+    __del__ = lambda self : None;
+debug_swigregister = _cHalide.debug_swigregister
+debug_swigregister(debug)
+
+
+def lower(*args):
+  return _cHalide.lower(*args)
+lower = _cHalide.lower
+
+def lower_test():
+  return _cHalide.lower_test()
+lower_test = _cHalide.lower_test
+
+def remove_trivial_for_loops(*args):
+  return _cHalide.remove_trivial_for_loops(*args)
+remove_trivial_for_loops = _cHalide.remove_trivial_for_loops
+
+def simplify(*args):
+  return _cHalide.simplify(*args)
+simplify = _cHalide.simplify
+
+def simplify_test():
+  return _cHalide.simplify_test()
+simplify_test = _cHalide.simplify_test
+
+def sliding_window(*args):
+  return _cHalide.sliding_window(*args)
+sliding_window = _cHalide.sliding_window
+class StmtCompiler(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, StmtCompiler, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, StmtCompiler, name)
+    __repr__ = _swig_repr
+    def __init__(self, arch=""): 
+        this = _cHalide.new_StmtCompiler(arch)
+        try: self.this.append(this)
+        except: self.this = this
+    def compile(self, *args): return _cHalide.StmtCompiler_compile(self, *args)
+    def compile_to_bitcode(self, *args): return _cHalide.StmtCompiler_compile_to_bitcode(self, *args)
+    def compile_to_native(self, *args): return _cHalide.StmtCompiler_compile_to_native(self, *args)
+    def compile_to_function_pointers(self): return _cHalide.StmtCompiler_compile_to_function_pointers(self)
+    __swig_destroy__ = _cHalide.delete_StmtCompiler
+    __del__ = lambda self : None;
+StmtCompiler_swigregister = _cHalide.StmtCompiler_swigregister
+StmtCompiler_swigregister(StmtCompiler)
+
+
+def storage_flattening(*args):
+  return _cHalide.storage_flattening(*args)
+storage_flattening = _cHalide.storage_flattening
+
+def storage_folding(*args):
+  return _cHalide.storage_folding(*args)
+storage_folding = _cHalide.storage_folding
+
+def substitute(*args):
+  return _cHalide.substitute(*args)
+substitute = _cHalide.substitute
+
+def inject_tracing(*args):
+  return _cHalide.inject_tracing(*args)
+inject_tracing = _cHalide.inject_tracing
+
+def tracing_level():
+  return _cHalide.tracing_level()
+tracing_level = _cHalide.tracing_level
+
+def unroll_loops(*args):
+  return _cHalide.unroll_loops(*args)
+unroll_loops = _cHalide.unroll_loops
+
+def vectorize_loops(*args):
+  return _cHalide.vectorize_loops(*args)
+vectorize_loops = _cHalide.vectorize_loops
+ARM_Android = _cHalide.ARM_Android
+ARM_NaCl = _cHalide.ARM_NaCl
+
+def debug_to_file(*args):
+  return _cHalide.debug_to_file(*args)
+debug_to_file = _cHalide.debug_to_file
+
+def inject_early_frees(*args):
+  return _cHalide.inject_early_frees(*args)
+inject_early_frees = _cHalide.inject_early_frees
+
+def uniquify_variable_names(*args):
+  return _cHalide.uniquify_variable_names(*args)
+uniquify_variable_names = _cHalide.uniquify_variable_names
+
+def common_subexpression_elimination(*args):
+  return _cHalide.common_subexpression_elimination(*args)
+common_subexpression_elimination = _cHalide.common_subexpression_elimination
 
 def add(*args):
   return _cHalide.add(*args)
@@ -741,9 +2775,9 @@ def mod(*args):
   return _cHalide.mod(*args)
 mod = _cHalide.mod
 
-def expr_from_int(*args):
-  return _cHalide.expr_from_int(*args)
-expr_from_int = _cHalide.expr_from_int
+def cast_to_expr(*args):
+  return _cHalide.cast_to_expr(*args)
+cast_to_expr = _cHalide.cast_to_expr
 
 def lt(*args):
   return _cHalide.lt(*args)
@@ -1391,6 +3425,53 @@ class ListInt(_object):
     __del__ = lambda self : None;
 ListInt_swigregister = _cHalide.ListInt_swigregister
 ListInt_swigregister(ListInt)
+
+class ListString(_object):
+    __swig_setmethods__ = {}
+    __setattr__ = lambda self, name, value: _swig_setattr(self, ListString, name, value)
+    __swig_getmethods__ = {}
+    __getattr__ = lambda self, name: _swig_getattr(self, ListString, name)
+    __repr__ = _swig_repr
+    def iterator(self): return _cHalide.ListString_iterator(self)
+    def __iter__(self): return self.iterator()
+    def __nonzero__(self): return _cHalide.ListString___nonzero__(self)
+    def __bool__(self): return _cHalide.ListString___bool__(self)
+    def __len__(self): return _cHalide.ListString___len__(self)
+    def pop(self): return _cHalide.ListString_pop(self)
+    def __getslice__(self, *args): return _cHalide.ListString___getslice__(self, *args)
+    def __setslice__(self, *args): return _cHalide.ListString___setslice__(self, *args)
+    def __delslice__(self, *args): return _cHalide.ListString___delslice__(self, *args)
+    def __delitem__(self, *args): return _cHalide.ListString___delitem__(self, *args)
+    def __getitem__(self, *args): return _cHalide.ListString___getitem__(self, *args)
+    def __setitem__(self, *args): return _cHalide.ListString___setitem__(self, *args)
+    def append(self, *args): return _cHalide.ListString_append(self, *args)
+    def empty(self): return _cHalide.ListString_empty(self)
+    def size(self): return _cHalide.ListString_size(self)
+    def clear(self): return _cHalide.ListString_clear(self)
+    def swap(self, *args): return _cHalide.ListString_swap(self, *args)
+    def get_allocator(self): return _cHalide.ListString_get_allocator(self)
+    def begin(self): return _cHalide.ListString_begin(self)
+    def end(self): return _cHalide.ListString_end(self)
+    def rbegin(self): return _cHalide.ListString_rbegin(self)
+    def rend(self): return _cHalide.ListString_rend(self)
+    def pop_back(self): return _cHalide.ListString_pop_back(self)
+    def erase(self, *args): return _cHalide.ListString_erase(self, *args)
+    def __init__(self, *args): 
+        this = _cHalide.new_ListString(*args)
+        try: self.this.append(this)
+        except: self.this = this
+    def push_back(self, *args): return _cHalide.ListString_push_back(self, *args)
+    def front(self): return _cHalide.ListString_front(self)
+    def back(self): return _cHalide.ListString_back(self)
+    def assign(self, *args): return _cHalide.ListString_assign(self, *args)
+    def resize(self, *args): return _cHalide.ListString_resize(self, *args)
+    def insert(self, *args): return _cHalide.ListString_insert(self, *args)
+    def reserve(self, *args): return _cHalide.ListString_reserve(self, *args)
+    def capacity(self): return _cHalide.ListString_capacity(self)
+    __swig_destroy__ = _cHalide.delete_ListString
+    __del__ = lambda self : None;
+ListString_swigregister = _cHalide.ListString_swigregister
+ListString_swigregister(ListString)
 
 # This file is compatible with both classic and new-style classes.
 
