@@ -564,6 +564,8 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
     if isinstance(input, ImageParamType):
         if isinstance(in_image, str):
             input_png = Image(dtype, in_image)
+        elif isinstance(in_image, numpy.ndarray):
+            input_png = Image(in_image)
         else:
             input_png = in_image
         input.set(input_png)
