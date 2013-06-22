@@ -72,4 +72,5 @@ namespace std {
    %template(ListFunc) vector<Func>;
    %template(ListInt) vector<int>;
    %template(ListString) vector<std::string>;
+   %template(ListArgument) vector<Argument>;
 };
