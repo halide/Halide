@@ -72,9 +72,7 @@ def main():
         # Best schedule for GPU
         gridz = grid.arg(2)
         grid.root().cudaTile(x, y, 16, 16)
-        print 'Before scheduling update'
         grid.update().root().cudaTile(x, y, 16, 16)
-        print 'After scheduling update'
         blurx.root().cudaTile(x, y, 8, 8)
         blury.root().cudaTile(x, y, 8, 8)
         blurz.root().cudaTile(x, y, 8, 8)
