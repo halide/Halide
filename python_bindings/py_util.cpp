@@ -15,7 +15,38 @@ void set(Func &f, const Expr &e) {
   f = e;
 }
 
-Expr expr_from_int(int a) { return Expr(a); }
+Expr cast_to_expr(int a) { return Expr(a); }
+Expr cast_to_expr(float a) { return Expr(a); }
+Expr cast_to_expr(const Func &f) { return Expr(f); }
+Expr cast_to_expr(const FuncRefVar &f) { return Expr(f); }
+Expr cast_to_expr(const FuncRefExpr &f) { return Expr(f); }
+Expr cast_to_expr(Var v) { return Expr(v); }
+Expr cast_to_expr(Expr e) { return e; }
+Expr cast_to_expr(RVar r) { return Expr(r); }
+Expr cast_to_expr(RDom r) { return Expr(r); }
+#define DEFINE_TYPE(T) Expr cast_to_expr(const Image<T> &I) { return Expr(I); }
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) Expr cast_to_expr(const Param<T> &v) { return Expr(v); }
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+Expr cast_to_expr(const ImageParam &I) { return Expr(I); }
 
 Expr add(Expr a, Expr b) { return a+b; }
 Expr sub(Expr a, Expr b) { return a-b; }
@@ -46,6 +77,12 @@ FuncRefExpr call(Func &a, Expr b, Expr c, Expr d) { return a(b, c, d); }
 FuncRefExpr call(Func &a, Expr b, Expr c, Expr d, Expr e) { return a(b, c, d, e); }
 FuncRefExpr call(Func &a, const std::vector<Expr> &args) { return a(args); }
 
+FuncRefVar call(Func &a, const std::vector<Var> &args) { return a(args); }
+FuncRefVar call(Func &a, Var b) { return a(b); }
+FuncRefVar call(Func &a, Var b, Var c) { return a(b, c); }
+FuncRefVar call(Func &a, Var b, Var c, Var d) { return a(b, c, d); }
+FuncRefVar call(Func &a, Var b, Var c, Var d, Var e) { return a(b, c, d, e); }
+
 Expr call(const ImageParam &a, Expr b) { return a(b); }
 Expr call(const ImageParam &a, Expr b, Expr c) { return a(b, c); }
 Expr call(const ImageParam &a, Expr b, Expr c, Expr d) { return a(b, c, d); }
@@ -65,7 +102,7 @@ void set(ImageParam &a, const Buffer &b) { a.set(b); }
 
 #define DEFINE_TYPE(T) \
 void set(Param<T> &a, int b) { a.set(b); } \
-void set(Param<T> &a, double b) { a.set(b); }
+void set(Param<T> &a, double b) { a.set(T(b)); }
 #include "expand_types.h"
 #undef DEFINE_TYPE
 

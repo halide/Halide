@@ -22,7 +22,38 @@ Expr mul(Expr a, Expr b);
 Expr div(Expr a, Expr b);
 Expr mod(Expr a, Expr b);
 
-Expr expr_from_int(int a);
+Expr cast_to_expr(int a);
+Expr cast_to_expr(float a);
+Expr cast_to_expr(const Func &f);
+Expr cast_to_expr(const FuncRefVar &f);
+Expr cast_to_expr(const FuncRefExpr &f);
+Expr cast_to_expr(Var v);
+Expr cast_to_expr(Expr e);
+Expr cast_to_expr(RVar r);
+Expr cast_to_expr(RDom r);
+#define DEFINE_TYPE(T) Expr cast_to_expr(const Image<T> &I);
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+#define DEFINE_TYPE(T) Expr cast_to_expr(const Param<T> &v);
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+Expr cast_to_expr(const ImageParam &I);
 
 Expr lt(Expr a, Expr b);
 Expr le(Expr a, Expr b);
@@ -50,6 +81,11 @@ FuncRefExpr call(Func &a, Expr b);
 FuncRefExpr call(Func &a, Expr b, Expr c);
 FuncRefExpr call(Func &a, Expr b, Expr c, Expr d);
 FuncRefExpr call(Func &a, Expr b, Expr c, Expr d, Expr e);
+FuncRefVar call(Func &a, const std::vector<Var> &args);
+FuncRefVar call(Func &a, Var b);
+FuncRefVar call(Func &a, Var b, Var c);
+FuncRefVar call(Func &a, Var b, Var c, Var d);
+FuncRefVar call(Func &a, Var b, Var c, Var d, Var e);
 
 Expr call(const ImageParam &a, Expr b);
 Expr call(const ImageParam &a, Expr b, Expr c);
