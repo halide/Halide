@@ -1,6 +1,6 @@
 // Halide tutorial lesson 3
 
-// This lesson demonstrates how to inpsect what the Halide compiler is producing.
+// This lesson demonstrates how to inspect what the Halide compiler is producing.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_03.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_03
