@@ -3,8 +3,8 @@ Python 2.x Bindings for Halide
 
 By Connelly Barnes, 2012-2013.
 
-These allow you to write Halide code in python. This code has currently only been tested on Mac OS,
-against a Halide source build, and are experimental. Currently the library does not install into
+This library allows you to write Halide code in Python. The library has currently only been tested on Mac OS,
+against a Halide source build, and is experimental. Currently the library does not install into
 the system package directory.
 
 Installation
@@ -16,10 +16,10 @@ Install SWIG 2.0.7+, and Python libraries Numpy, and Python Image Library (PIL).
 
 On Mac:
 
-  sudo easy_install pip
-  brew install swig
-  sudo pip install numpy
-  sudo pip install pil
+    sudo easy_install pip
+    brew install swig
+    sudo pip install numpy
+    sudo pip install pil
 
 ### Building
 
