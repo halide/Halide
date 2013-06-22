@@ -851,6 +851,14 @@ Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *
     return builder->CreateInBoundsGEP(base_address, index);
 }
 
+void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer) {
+    // Add type-based-alias-analysis metadata to the pointer, so that
+    // loads and stores to different buffers can get reordered.
+    MDNode *tbaa_root = MDNode::get(*context, vec<Value *>(MDString::get(*context, "Halide buffer")));
+    MDNode *tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, buffer), tbaa_root));
+    inst->setMetadata("tbaa", tbaa);
+}
+
 void CodeGen::visit(const Load *op) {
     // There are several cases. Different architectures may wish to override some
 
@@ -859,9 +867,8 @@ void CodeGen::visit(const Load *op) {
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, op->type, index);
         LoadInst *load = builder->CreateLoad(ptr);
-        load->setMetadata("tbaa", MDNode::get(*context, vec<Value *>(MDString::get(*context, op->name))));
+        add_tbaa_metadata(load, op->name);
         value = load;
-        
     } else {            
         int alignment = op->type.bits / 8;
         const Ramp *ramp = op->index.as<Ramp>();
@@ -881,10 +888,12 @@ void CodeGen::visit(const Load *op) {
             Value *base = codegen(ramp->base);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            value = builder->CreateAlignedLoad(ptr, alignment);                
+            LoadInst *load = builder->CreateAlignedLoad(ptr, alignment);                
+            add_tbaa_metadata(load, op->name);
+            value = load;
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
-
+            
             // If the base ends in an odd constant, then subtract one
             // and do a different shuffle. This helps expressions like
             // (f(2*x) + f(2*x+1) share loads.
@@ -904,10 +913,12 @@ void CodeGen::visit(const Load *op) {
             Value *base = codegen(new_base);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            Value *a = builder->CreateAlignedLoad(ptr, alignment);
+            LoadInst *a = builder->CreateAlignedLoad(ptr, alignment);
+            add_tbaa_metadata(a, op->name);
             ptr = builder->CreateConstInBoundsGEP1_32(ptr, 1);
             int bytes = (op->type.bits * op->type.width)/8;
-            Value *b = builder->CreateAlignedLoad(ptr, gcd(alignment, bytes));
+            LoadInst *b = builder->CreateAlignedLoad(ptr, gcd(alignment, bytes));
+            add_tbaa_metadata(b, op->name);
             vector<Constant *> indices(ramp->width);
             for (int i = 0; i < ramp->width; i++) {
                 indices[i] = ConstantInt::get(i32, i*2 + (offset ? 1 : 0));
@@ -926,7 +937,8 @@ void CodeGen::visit(const Load *op) {
 
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            Value *vec = builder->CreateAlignedLoad(ptr, alignment);
+            LoadInst *vec = builder->CreateAlignedLoad(ptr, alignment);
+            add_tbaa_metadata(vec, op->name);
             Value *undef = UndefValue::get(vec->getType());
 
             vector<Constant *> indices(ramp->width);
@@ -941,7 +953,8 @@ void CodeGen::visit(const Load *op) {
             value = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < ramp->width; i++) {                
                 Value *lane = ConstantInt::get(i32, i);
-                Value *val = builder->CreateLoad(ptr);
+                LoadInst *val = builder->CreateLoad(ptr);
+                add_tbaa_metadata(val, op->name);
                 value = builder->CreateInsertElement(value, val, lane);
                 ptr = builder->CreateInBoundsGEP(ptr, stride);
             }
@@ -955,7 +968,8 @@ void CodeGen::visit(const Load *op) {
             for (int i = 0; i < op->type.width; i++) {
                 Value *idx = codegen(extract_lane(op->index, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-                Value *val = builder->CreateLoad(ptr);
+                LoadInst *val = builder->CreateLoad(ptr);
+                add_tbaa_metadata(val, op->name);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
             }
             value = vec;
@@ -966,12 +980,14 @@ void CodeGen::visit(const Load *op) {
             for (int i = 0; i < op->type.width; i++) {
                 Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-                Value *val = builder->CreateLoad(ptr);
+                LoadInst *val = builder->CreateLoad(ptr);
+                add_tbaa_metadata(val, op->name);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
             }
             value = vec;
         }            
     }
+
 }
 
 void CodeGen::visit(const Ramp *op) {        
@@ -1122,19 +1138,37 @@ void CodeGen::visit(const Call *op) {
             vector<llvm::Type *> arg_types(args.size());
             for (size_t i = 0; i < args.size(); i++) {
                 arg_types[i] = args[i]->getType();
+                if (arg_types[i]->isVectorTy()) {
+                    VectorType *vt = dyn_cast<VectorType>(arg_types[i]);
+                    arg_types[i] = vt->getElementType();
+                }
             }
-            FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
+
+            llvm::Type *scalar_result_type = result_type;
+            if (result_type->isVectorTy()) {
+                VectorType *vt = dyn_cast<VectorType>(result_type);
+                scalar_result_type = vt->getElementType();
+            }
+
+            FunctionType *func_t = FunctionType::get(scalar_result_type, arg_types, false);
             
             fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module);
             fn->setCallingConv(CallingConv::C);            
-
         }
-        
+
+        bool has_side_effects = false;
+        // TODO: Need a general solution here
+        if (op->name == "halide_current_time") {
+            has_side_effects = true;
+        }
+
         if (op->type.is_scalar()) {
             debug(4) << "Creating call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, args);
-            call->setDoesNotAccessMemory();
-            call->setDoesNotThrow();
+            if (!has_side_effects) {
+                call->setDoesNotAccessMemory();
+                call->setDoesNotThrow();
+            }
             value = call;
         } else {
             // Check if a vector version of the function already
@@ -1146,8 +1180,10 @@ void CodeGen::visit(const Call *op) {
             if (vec_fn) {
                 debug(4) << "Creating call to " << ss.str() << "\n";
                 CallInst *call = builder->CreateCall(vec_fn, args);
-                call->setDoesNotAccessMemory();
-                call->setDoesNotThrow();
+                if (!has_side_effects) {
+                    call->setDoesNotAccessMemory();
+                    call->setDoesNotThrow();
+                }
                 value = call;
                 fn = vec_fn;
             } else {
@@ -1160,10 +1196,11 @@ void CodeGen::visit(const Call *op) {
                     for (size_t j = 0; j < args.size(); j++) {
                         arg_lane[j] = builder->CreateExtractElement(args[j], idx);
                     }
-                    debug(4) << "Creating call to " << op->name << "\n";
                     CallInst *call = builder->CreateCall(fn, arg_lane);
-                    call->setDoesNotAccessMemory();
-                    call->setDoesNotThrow();
+                    if (!has_side_effects) {
+                        call->setDoesNotAccessMemory();
+                        call->setDoesNotThrow();
+                    }
                     value = builder->CreateInsertElement(value, call, idx);
                 }
             }            
@@ -1431,7 +1468,7 @@ void CodeGen::visit(const Store *op) {
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, value_type, index);        
         StoreInst *store = builder->CreateStore(val, ptr);
-        store->setMetadata("tbaa", MDNode::get(*context, vec<Value *>(MDString::get(*context, op->name))));
+        add_tbaa_metadata(store, op->name);
     } else {
         int alignment = op->value.type().bits / 8;
         const Ramp *ramp = op->index.as<Ramp>();
@@ -1450,7 +1487,8 @@ void CodeGen::visit(const Store *op) {
             Value *base = codegen(ramp->base);
             Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), base);
             Value *ptr2 = builder->CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
-            builder->CreateAlignedStore(val, ptr2, alignment);
+            StoreInst *store = builder->CreateAlignedStore(val, ptr2, alignment);
+            add_tbaa_metadata(store, op->name);
         } else if (ramp) {
             Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), codegen(ramp->base));
             const IntImm *const_stride = ramp->stride.as<IntImm>();
@@ -1458,14 +1496,16 @@ void CodeGen::visit(const Store *op) {
             // Scatter without generating the indices as a vector
             for (int i = 0; i < ramp->width; i++) {                
                 Constant *lane = ConstantInt::get(i32, i);                
-                Value *v = builder->CreateExtractElement(val, lane);
+                Value *v = builder->CreateExtractElement(val, lane);                
                 if (const_stride) {
                     // Use a constant offset from the base pointer
                     Value *p = builder->CreateConstInBoundsGEP1_32(ptr, const_stride->value * i);
-                    builder->CreateAlignedStore(v, p, op->value.type().bits/8);
+                    StoreInst *store = builder->CreateAlignedStore(v, p, op->value.type().bits/8);
+                    add_tbaa_metadata(store, op->name);
                 } else {
                     // Increment the pointer by the stride for each element
-                    builder->CreateAlignedStore(v, ptr, op->value.type().bits/8);
+                    StoreInst *store = builder->CreateAlignedStore(v, ptr, op->value.type().bits/8);
+                    add_tbaa_metadata(store, op->name);
                     ptr = builder->CreateInBoundsGEP(ptr, stride);
                 }
             }
@@ -1477,14 +1517,14 @@ void CodeGen::visit(const Store *op) {
                 Value *idx = builder->CreateExtractElement(index, lane);
                 Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
-                builder->CreateStore(v, ptr); 
+                StoreInst *store = builder->CreateStore(v, ptr);
+                add_tbaa_metadata(store, op->name);
             }
-        }
-        
-
-
+        }       
     }
+
 }
+
 
 void CodeGen::visit(const Block *op) {
     codegen(op->first);
