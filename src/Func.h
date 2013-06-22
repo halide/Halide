@@ -493,17 +493,16 @@ public:
      * is in TIFF format and can be read by standard tools. Oherwise, the
      * file format is as follows: 
      * 
-     * All data is in the byte-order of the target platform.
-     * First, a 20 byte-header containing four 32-bit ints,
-     * giving the extents of the first four dimensions.
-     * Dimensions beyond four are folded into the fourth.
-     * Then, a fifth 32-bit int giving the data type of the
-     * function. The typecodes are given by: float = 0, double = 1,
-     * uint8_t = 2, int8_t = 3, uint16_t = 4, uint32_t = 5, int32_t =
-     * 6, uint64_t = 7, int64_t = 8. The data follows the header, as a
-     * densely packed array of the given size and the given type. If
-     * given the extension .tmp, this file format can be natively read
-     * by the program ImageStack. */
+     * All data is in the byte-order of the target platform.  First, a
+     * 20 byte-header containing four 32-bit ints, giving the extents
+     * of the first four dimensions.  Dimensions beyond four are
+     * folded into the fourth.  Then, a fifth 32-bit int giving the
+     * data type of the function. The typecodes are given by: float =
+     * 0, double = 1, uint8_t = 2, int8_t = 3, uint16_t = 4, int16_t =
+     * 5, uint32_t = 6, int32_t = 7, uint64_t = 8, int64_t = 9. The
+     * data follows the header, as a densely packed array of the given
+     * size and the given type. If given the extension .tmp, this file
+     * format can be natively read by the program ImageStack. */
     EXPORT void debug_to_file(const std::string &filename);
 
     /** The name of this function, either given during construction,

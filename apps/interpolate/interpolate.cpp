@@ -106,14 +106,18 @@ int main(int argc, char **argv) {
     }
     case 2:
     {
-        Var yi;
+        Var xi, yi;
         std::cout << "Flat schedule with parallelization + vectorization." << std::endl;                
         clamped.compute_root().parallel(y).bound(c, 0, 4).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
         for (unsigned int l = 1; l < levels-1; ++l) {
-            downsampled[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
+            if (l > 0) downsampled[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
             interpolated[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
+            interpolated[l].unroll(x, 2).unroll(y, 2);
         }
-        final.parallel(y).reorder(c, x, y).bound(c, 0, 3);
+        final.reorder(c, x, y).bound(c, 0, 3).parallel(y);
+        final.tile(x, y, xi, yi, 2, 2).unroll(xi).unroll(yi);
+        final.bound(x, 0, input.width()); 
+        final.bound(y, 0, input.height()); 
         break;
     }
     case 3:

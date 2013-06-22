@@ -206,19 +206,20 @@ Value *CodeGen_ARM::call_intrin(llvm::Type *result_type,
 
     debug(4) << "Creating call to " << name << "\n";
     return builder->CreateCall(fn, arg_values, name);
+
 }
  
-void CodeGen_ARM::call_void_intrin(const string &name, vector<Expr> args) {    
+Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Expr> args) {    
     vector<Value *> arg_values(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         arg_values[i] = codegen(args[i]);
     }
 
-    call_void_intrin(name, arg_values);
+    return call_void_intrin(name, arg_values);
 }
 
 
-void CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> arg_values) {
+Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> arg_values) {
     vector<llvm::Type *> arg_types(arg_values.size());
     for (size_t i = 0; i < arg_values.size(); i++) {
         arg_types[i] = arg_values[i]->getType();
@@ -240,7 +241,7 @@ void CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> arg_value
     }
 
     debug(4) << "Creating call to " << name << "\n";
-    builder->CreateCall(fn, arg_values);    
+    return builder->CreateCall(fn, arg_values);    
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
@@ -929,6 +930,7 @@ void CodeGen_ARM::visit(const Select *op) {
 }
 
 void CodeGen_ARM::visit(const Store *op) {
+
     // A dense store of an interleaving can be done using a vst2 intrinsic
     const Call *call = op->value.as<Call>();
     const Ramp *ramp = op->index.as<Ramp>();
@@ -940,7 +942,8 @@ void CodeGen_ARM::visit(const Store *op) {
     }
 
     if (is_one(ramp->stride) && 
-        call && call->name == "interleave vectors") {
+        call && call->call_type == Call::Intrinsic && 
+        call->name == Call::interleave_vectors) {
         assert(call->args.size() == 2 && "Wrong number of args to interleave vectors");
         vector<Value *> args(call->args.size() + 2);
 
@@ -956,25 +959,30 @@ void CodeGen_ARM::visit(const Store *op) {
         args[2] = codegen(call->args[1]);
         args[3] = ConstantInt::get(i32, alignment);
 
+        Instruction *store = NULL;
         if (t == Int(8, 8) || t == UInt(8, 8)) {
-            call_void_intrin("vst2.v8i8", args);  
+            store = call_void_intrin("vst2.v8i8", args);  
         } else if (t == Int(8, 16) || t == UInt(8, 16)) {
-            call_void_intrin("vst2.v16i8", args);  
+            store = call_void_intrin("vst2.v16i8", args);  
         } else if (t == Int(16, 4) || t == UInt(16, 4)) {
-            call_void_intrin("vst2.v4i16", args);  
+            store = call_void_intrin("vst2.v4i16", args);  
         } else if (t == Int(16, 8) || t == UInt(16, 8)) {
-            call_void_intrin("vst2.v8i16", args);  
+            store = call_void_intrin("vst2.v8i16", args);  
         } else if (t == Int(32, 2) || t == UInt(32, 2)) {
-            call_void_intrin("vst2.v2i32", args);  
+            store = call_void_intrin("vst2.v2i32", args);  
         } else if (t == Int(32, 4) || t == UInt(32, 4)) {
-            call_void_intrin("vst2.v4i32", args); 
+            store = call_void_intrin("vst2.v4i32", args); 
         } else if (t == Float(32, 2)) {
-            call_void_intrin("vst2.v2f32", args); 
+            store = call_void_intrin("vst2.v2f32", args); 
         } else if (t == Float(32, 4)) {
-            call_void_intrin("vst2.v4f32", args); 
+            store = call_void_intrin("vst2.v4f32", args); 
         } else {
             CodeGen::visit(op);
         }
+        if (store) {
+            add_tbaa_metadata(store, op->name);
+        }
+
         return;
     } 
 
@@ -998,7 +1006,9 @@ void CodeGen_ARM::visit(const Store *op) {
         Value *stride = codegen(ramp->stride * (op->value.type().bits / 8));
         Value *val = codegen(op->value);
 	debug(4) << "Creating call to " << builtin.str() << "\n";
-        builder->CreateCall(fn, vec(base, stride, val));
+        Instruction *store = builder->CreateCall(fn, vec(base, stride, val));
+        (void)store;
+        add_tbaa_metadata(store, op->name);
         return;
     }
 
@@ -1045,7 +1055,6 @@ void CodeGen_ARM::visit(const Load *op) {
             base = simplify(base - offset);
         }
         
-
         int alignment = op->type.bits / 8;
         //alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
         Value *align = ConstantInt::get(i32, alignment);
@@ -1084,6 +1093,7 @@ void CodeGen_ARM::visit(const Load *op) {
         }
 
         if (group) {            
+            add_tbaa_metadata(dyn_cast<Instruction>(group), op->name);
             debug(4) << "Extracting element " << offset << " from resulting struct\n";
             value = builder->CreateExtractValue(group, vec((unsigned int)offset));            
             return;
@@ -1102,7 +1112,9 @@ void CodeGen_ARM::visit(const Load *op) {
         Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
         Value *stride = codegen(ramp->stride * (op->type.bits / 8));
 	debug(4) << "Creating call to " << builtin.str() << "\n";
-        value = builder->CreateCall(fn, vec(base, stride), builtin.str());
+        Instruction *load = builder->CreateCall(fn, vec(base, stride), builtin.str());
+        add_tbaa_metadata(load, op->name);
+        value = load;
         return;
     }
 
