@@ -18,7 +18,6 @@ namespace Internal {
 struct Interval {
     Expr min, max;
     Interval(Expr min, Expr max) : min(min), max(max) {}
-    Interval();
 };
 
 /** Given an expression in some variables, and a map from those
@@ -32,9 +31,6 @@ struct Interval {
  * loaded by a chunk of code.
  */
 Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope);    
-
-/** Call bounds_of_expr_in_scope with an empty scope */
-Interval bounds_of_expr(Expr expr);
 
 /** Compute rectangular domains large enough to cover all the 'Call's
  * to each function that occurs within a given statement. This is
