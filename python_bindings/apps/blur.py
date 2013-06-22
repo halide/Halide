@@ -20,7 +20,7 @@ def main():
 #    blur_x.compute_at(blur_y, x).vectorize(x, 8)                   # This fails when Func::operator = (const Func &) is defined
     
     maxval = 255
-    in_image = Image(UInt(16), '../../apps/images/rgb.png', maxval)
+    in_image = Image(UInt(16), os.path.join(inputs_dir(), 'rgb.png'), maxval)
     eval_func = filter_image(input, blur_y, in_image, disp_time=True, out_dims = OUT_DIMS, times=5)
     eval_func().show(maxval)
 
