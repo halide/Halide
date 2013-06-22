@@ -17,7 +17,7 @@ def main():
     xi, yi = Var('xi'), Var('yi')
 
     blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
-    #blur_x.compute_at(blur_y, x).vectorize(x, 8)                   # This fail, not sure why
+#    blur_x.compute_at(blur_y, x).vectorize(x, 8)                   # This fails when Func::operator = (const Func &) is defined
     
     maxval = 255
     in_image = Image(UInt(16), '../../apps/images/rgb.png', maxval)
