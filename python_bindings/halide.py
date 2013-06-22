@@ -120,7 +120,7 @@ def raise_error(e):
 #_reset0 = Func.reset     # Reset schedule has been removed (could be reimplemented in C++ layer as a walk over all Funcs)
 _split0 = Func.split
 _tile0 = Func.tile
-_reorder0 = Func.reorder
+#_reorder0 = Func.reorder
 _bound0 = Func.bound
 
 _generic_getitem_var_or_expr = lambda x, key: call(x, *wrap_func_args(key)) if isinstance(key,tuple) else call(x, wrap(key) if not isinstance(key,Var) else key)
@@ -140,7 +140,7 @@ Func.set = _generic_set
 #Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
 Func.split = lambda self, a, b, c, d: _split0(self, a, b, c, wrap(d))
 Func.tile = lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
-Func.reorder = lambda self, *a: _reorder0(self, ListVar(a))
+#Func.reorder = lambda self, *a: _reorder0(self, ListVar(a))
 Func.bound = lambda self, a, b, c: _bound0(self, a, wrap(b), wrap(c))
 
 # ----------------------------------------------------
@@ -593,10 +593,8 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
             T.append(time.time()-T0)
         out = Image(realized) #.set(realized)
         
-        if nchan != 1:
-            assert out.width() == w and out.height() == h and out.channels() == nchan, (out.width(), out.height(), out.channels(), w, h, nchan)
-        else:
-            assert out.width() == w and out.height() == h, (out.width(), out.height(), w, h)
+        
+        assert out.width() == w and out.height() == h, (out.width(), out.height(), w, h)
         if disp_time:
             if times > 1:
                 print 'Filtered %d times, min: %.6f secs, mean: %.6f secs.' % (times, numpy.min(T), numpy.mean(T))
