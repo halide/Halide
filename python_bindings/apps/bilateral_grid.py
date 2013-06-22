@@ -71,12 +71,12 @@ def main():
     elif schedule == 2:
         # Best schedule for GPU
         gridz = grid.arg(2)
-        grid.root().cudaTile(x, y, 16, 16)
+        grid.compute_root().cudaTile(x, y, 16, 16)
         grid.update().root().cudaTile(x, y, 16, 16)
-        blurx.root().cudaTile(x, y, 8, 8)
-        blury.root().cudaTile(x, y, 8, 8)
-        blurz.root().cudaTile(x, y, 8, 8)
-        smoothed.root().cudaTile(x, y, s_sigma, s_sigma)
+        blurx.compute_root().cudaTile(x, y, 8, 8)
+        blury.compute_root().cudaTile(x, y, 8, 8)
+        blurz.compute_root().cudaTile(x, y, 8, 8)
+        smoothed.compute_root().cudaTile(x, y, s_sigma, s_sigma)
     else:
         raise ValueError
     
