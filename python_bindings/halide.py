@@ -123,7 +123,8 @@ _tile0 = Func.tile
 _reorder0 = Func.reorder
 _bound0 = Func.bound
 
-_generic_getitem = lambda x, key: call(x, *wrap_func_args(key)) if isinstance(key,tuple) else call(x, wrap(key) if not isinstance(key,Var) else key)
+_generic_getitem_var_or_expr = lambda x, key: call(x, *wrap_func_args(key)) if isinstance(key,tuple) else call(x, wrap(key) if not isinstance(key,Var) else key)
+_generic_getitem_expr = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_set = lambda x, y: set(x, wrap(y))
 #_realize = Func.realize
 
@@ -134,7 +135,7 @@ def wrap_func_args(args):
     return [wrap(y) for y in args]
     
 Func.__setitem__ = lambda x, key, value: set(call(x, *wrap_func_args(key)), wrap(value)) if isinstance(key,tuple) else set(call(x, wrap(key) if not isinstance(key,Var) else key), wrap(value))
-Func.__getitem__ = _generic_getitem
+Func.__getitem__ = _generic_getitem_var_or_expr
 Func.set = _generic_set
 #Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
 Func.split = lambda self, a, b, c, d: _split0(self, a, b, c, wrap(d))
@@ -182,7 +183,7 @@ def image_getattr(self, name):
     raise AttributeError(name)
 
 for _ImageT in ImageTypes:
-    _ImageT.__getitem__ = _generic_getitem
+    _ImageT.__getitem__ = _generic_getitem_expr
 
 Image_int8.type = lambda x: Int(8)
 Image_int16.type = lambda x: Int(16)
@@ -193,8 +194,11 @@ Image_uint32.type = lambda x: UInt(32)
 Image_float32.type = lambda x: Float(32)
 Image_float64.type = lambda x: Float(64)
 
-def show_image(I):
+def show_image(I, maxval=None):
+    "Shows an Image instance on the screen, by converting through numpy and PIL."
     A = numpy.asarray(I)
+    if maxval is not None:
+        A = numpy.asarray(A,'float32')*(1.0/maxval)
   #  print 'converted to numpy', A.dtype
     if A.dtype == numpy.uint8:
         pass
@@ -214,7 +218,7 @@ for _ImageT in ImageTypes:
     _ImageT.save = lambda x, y: save_png(x, y)
     _ImageT.set = _generic_set
     _ImageT.__getattr__ = image_getattr
-    _ImageT.show = lambda x: show_image(x)
+    _ImageT.show = lambda *args: show_image(*args)
 
 def _image_from_numpy(a):
     a = numpy.asarray(a)
@@ -246,7 +250,7 @@ def Image(typeval, *args):
     """
     Constructors:
     Image(typeval),    typeval=Int(n), UInt(n), Float(n), Bool()
-    Image(typeval, png_filename)
+    Image(typeval, filename, [maxval])     -- Loads via Python Image Library, uses max value of maxval
     Image(typeval, nsize)
     Image(typeval, w, h)
     Image(typeval, w, h, nchan)
@@ -271,26 +275,44 @@ def Image(typeval, *args):
     
     if sig == (8, True, False, False):
         C = Image_int8
+        target_dtype = 'int8'
     elif sig == (16, True, False, False):
         C = Image_int16
+        target_dtype = 'int16'
     elif sig == (32, True, False, False):
         C = Image_int32
+        target_dtype = 'int32'
     elif sig == (8, False, True, False):
         C = Image_uint8
+        target_dtype = 'uint8'
     elif sig == (16, False, True, False):
         C = Image_uint16
+        target_dtype = 'uint16'
     elif sig == (32, False, True, False):
         C = Image_uint32
+        target_dtype = 'uint32'
     elif sig == (32, False, False, True):
         C = Image_float32
+        target_dtype = 'float32'
     elif sig == (64, False, False, True):
         C = Image_float64
+        target_dtype = 'float64'
     else:
         raise ValueError('unimplemented Image type signature %r' % typeval)
     if len(args) == 0:
         return C
-    elif len(args) == 1 and isinstance(args[0], str):
-        return load_png(C(1), args[0])
+    elif len(args) in [1,2] and isinstance(args[0], str):
+        #return load_png(C(1), args[0])     # load_png() seems broken so use PIL conversion instead
+        I = numpy.asarray(PIL.open(args[0]))
+        in_range = 255
+        if len(args) == 2:
+            out_range = args[1]
+        else:
+            out_range = typeval.maxval()
+        if in_range != out_range:
+            return Image(numpy.asarray(numpy.asarray(I,float)*(1.0*out_range/in_range), target_dtype))
+        else:
+            return Image(numpy.asarray(I, target_dtype))
     elif all(isinstance(x, int) for x in args):
         return C(*args)
     elif len(args) == 1 and isinstance(args[0], ImageTypes+(ImageParamType,)+(Buffer,)):
@@ -345,7 +367,7 @@ for ParamT in ParamTypes: # + (DynUniform,):
 #UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
 
 for _ImageT in [ImageParam]:
-    _ImageT.__getitem__ = _generic_getitem
+    _ImageT.__getitem__ = _generic_getitem_expr
     _ImageT.set = lambda x, y: set(x, Image(y) if isinstance(y,numpy.ndarray) else y)
     #_ImageT.save = lambda x, y: save_png(x, y)
 
@@ -543,10 +565,11 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
         if isinstance(in_image, str):
             input_png = Image(dtype, in_image)
         else:
-            input_png = Image(in_image)
+            input_png = in_image
         input.set(input_png)
     else:
         input_png = input
+
     w = input_png.width() if out_dims is None else out_dims[0]
     h = input_png.height() if out_dims is None else out_dims[1]
     nchan = input_png.channels() if out_dims is None else (out_dims[2] if len(out_dims) >= 3 else 1)
@@ -561,11 +584,17 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
             if eval_func is not None:
                 realized = eval_func(input_png)
             else:
-                realized = out_func.realize(w, h, nchan)
+                if nchan != 1:
+                    realized = out_func.realize(w, h, nchan)
+                else:
+                    realized = out_func.realize(w, h)
             T.append(time.time()-T0)
         out = Image(realized) #.set(realized)
-
-        assert out.width() == w and out.height() == h and out.channels() == nchan, (out.width(), out.height(), out.channels(), w, h, nchan)
+        
+        if nchan != 1:
+            assert out.width() == w and out.height() == h and out.channels() == nchan, (out.width(), out.height(), out.channels(), w, h, nchan)
+        else:
+            assert out.width() == w and out.height() == h, (out.width(), out.height(), w, h)
         if disp_time:
             if times > 1:
                 print 'Filtered %d times, min: %.6f secs, mean: %.6f secs.' % (times, numpy.min(T), numpy.mean(T))
