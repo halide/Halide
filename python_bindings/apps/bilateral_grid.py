@@ -10,7 +10,7 @@ float_t = Float(32)
 def main():
     def lerp(a, b, alpha):
         return (1.0-alpha)*a + alpha*b
-
+    
     input = ImageParam(float_t, 3, 'input')
     r_sigma = Param(float_t, 0.1)
     s_sigma = 8
@@ -62,17 +62,19 @@ def main():
         pass
     elif schedule == 1:
         # Best schedule for CPU
-        grid.parallel(z)
-        grid.update().reorder(c, x, y).parallel(y)
-        blurx.parallel(z).vectorize(x, 4)
-        blury.parallel(z).vectorize(x, 4)
-        blurz.parallel(z).vectorize(x, 4)
-        smoothed.parallel(y).vectorize(x, 4)
+        grid.compute_root().parallel(z)
+        #grid.update().reorder(c, x, y).parallel(y)         # This fails with SEGFAULT
+        blurx.compute_root().parallel(z).vectorize(x, 4)
+        blury.compute_root().parallel(z).vectorize(x, 4)
+        blurz.compute_root().parallel(z).vectorize(x, 4)
+        smoothed.compute_root().parallel(y).vectorize(x, 4)
     elif schedule == 2:
         # Best schedule for GPU
         gridz = grid.arg(2)
         grid.root().cudaTile(x, y, 16, 16)
+        print 'Before scheduling update'
         grid.update().root().cudaTile(x, y, 16, 16)
+        print 'After scheduling update'
         blurx.root().cudaTile(x, y, 8, 8)
         blury.root().cudaTile(x, y, 8, 8)
         blurz.root().cudaTile(x, y, 8, 8)
@@ -80,7 +82,9 @@ def main():
     else:
         raise ValueError
     
-    filter_image(input, out_func, os.path.join(inputs_dir(), 'rgb.png'), disp_time=True)().show()
+    eval_func = filter_image(input, smoothed, os.path.join(inputs_dir(), 'rgb.png'), disp_time=True)
+    I = eval_func()
+    I.show()
     
 if __name__ == '__main__':
     main()

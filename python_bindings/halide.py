@@ -8,7 +8,7 @@ import os
 import sys
 import signal
 
-#exit_on_signal()                   # Install C++ debugging traceback
+exit_on_signal()                   # Install C++ debugging traceback
 
 # ----------------------------------------------------------------------------------------------------------
 # Types (functions are used to replace the "constructors" due to an issue with SWIG replacing __new__)
