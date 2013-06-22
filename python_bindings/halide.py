@@ -551,7 +551,7 @@ def roundup_multiple(x, y):
 
 def inputs_dir():
     "Get directory of example inputs."
-    return os.path.dirname(__file__)
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '../apps/images'))
     
 def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None, out_dims=None, times=1): #, pad_multiple=1):
     """
