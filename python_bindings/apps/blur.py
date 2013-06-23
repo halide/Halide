@@ -1,4 +1,4 @@
-#import sys; sys.path += ['..', '.']
+
 import os; os.environ['HL_DISABLE_BOUNDS_CHECKING'] = '1'
 from halide import *
 
@@ -20,7 +20,7 @@ def main():
 #    blur_x.compute_at(blur_y, x).vectorize(x, 8)                   # This fails when Func::operator = (const Func &) is defined
     
     maxval = 255
-    in_image = Image(UInt(16), os.path.join(inputs_dir(), 'rgb.png'), maxval)
+    in_image = Image(UInt(16), builtin_image('rgb.png'), scale=1.0) # Set scale to 1 so that we only use 0...255 of the UInt(16) range
     eval_func = filter_image(input, blur_y, in_image, disp_time=True, out_dims = OUT_DIMS, times=5)
     eval_func().show(maxval)
 

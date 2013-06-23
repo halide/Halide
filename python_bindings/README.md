@@ -23,7 +23,13 @@ On Mac:
 
 ### Building
 
-You can build Halide by using 'make' in the parent directory. Next, build the Python bindings with 'make' and run the test suite with 'make test'.
+You can build Halide by using 'make' in the parent directory. Next, build the Python bindings:
+
+    make                % Build
+    make test           % Run unit tests
+    sudo make install   % Install
+
+If anything fails then use 'sudo make clean' to clean up and try again.
 
 Usage
 -----
