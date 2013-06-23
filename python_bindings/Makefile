@@ -15,7 +15,7 @@ clean:
 	rm -f halide/cHalide_wrap.cxx
 	rm -f halide/halide.so
 	rm -f halide/_cHalide.so
-	rm -f halide/cHalide.pyc halide/cHalide.py halide/halide.pyc
+	rm -f halide/cHalide.py halide/*.pyc
 
 run_apps:
 	python apps/blur.py
@@ -24,4 +24,4 @@ run_apps:
 	python apps/bilateral_grid.py
 
 test:
-	python -c "import os; os.chdir('apps'); import halide; halide.test()"
+	python test_halide.py

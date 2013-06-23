@@ -29,9 +29,6 @@ setup(
     packages=['halide'],
     package_dir={'halide': 'halide'},
     package_data={'halide': ['data/*.png']},
-    install_requires=['numpy', 'pil'],
-    #data_files=[('halide_images', glob.glob('../apps/images/*.png'))],
-    #py_modules=['cHalide'],
     ext_modules = ext_modules
 )
 

@@ -29,12 +29,12 @@ Quick install:
 
 Detailed installation:
 
-You can build Halide by using 'make' in the parent directory. This is implicitly done by the Makefile for the Python bindings. The following make options are then provided:
+You can build Halide by using 'make' in the parent directory. This is implicitly done by the Makefile for the Python bindings. The following make options are then provided for the Python bindings:
 
-    make clean                % Clean in case any problems occurred
-    make                      % Build in place
-    sudo make install         % Build and install
+    sudo make clean           % Clean in case any problems occurred
+    make build                % Build in place
     make test                 % Run unit tests
+    sudo make install         % Build and install
     make run_apps             % Run apps/*.py
 
 Usage
