@@ -5,8 +5,7 @@ from cHalide import *               # The direct wrapper of the C++ code generat
 import numpy
 import Image as PIL
 import os
-import sys
-import signal
+import pkg_resources
 
 exit_on_signal()                   # Install C++ debugging traceback
 
@@ -546,12 +545,11 @@ def get_blur():
     blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
     return (input, x, y, c, blur_x, blur_y, input_clamped)
 
-def roundup_multiple(x, y):
-    return (x+y-1)/y*y
-
-def inputs_dir():
-    "Get directory of example inputs."
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), '../apps/images'))
+def input_image(filename):
+    "Get fully qualified pathname of an input image (in ../apps/images/ or installed with the module to a system path)."
+    #dirname = os.path.join(os.path.dirname(__file__), '../apps/images')
+    dirname = pkg_resources.resource_filename(__name__, 'halide_images/' + filename)
+    return os.path.abspath(dirname)
     
 def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None, out_dims=None, times=1): #, pad_multiple=1):
     """

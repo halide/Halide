@@ -1,4 +1,4 @@
-import sys; sys.path += ['..', '.']
+#import sys; sys.path += ['..', '.']
 import os; os.environ['HL_DISABLE_BOUNDS_CHECKING'] = '1'
 from halide import *
 
