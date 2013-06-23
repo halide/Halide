@@ -16,7 +16,7 @@ Install SWIG 2.0.7+, and Python libraries Numpy, and Python Image Library (PIL).
 On Mac:
 
     sudo easy_install pip
-    brew install swig
+    brew install swig         % Assumes you have Homebrew package manager (use your preferred package manager)
     sudo pip install numpy
     sudo pip install pil
 
@@ -24,18 +24,18 @@ On Mac:
 
 Quick install:
 
-    sudo make install   % Install
-    make test           % Optional: run unit tests
+    sudo make install         % Install
+    make test                 % Optional: run unit tests
 
 Detailed installation:
 
 You can build Halide by using 'make' in the parent directory. This is implicitly done by the Makefile for the Python bindings. The following make options are then provided:
 
-    make clean          % Clean in case any problems occurred
-    make                % Build in place
-    sudo make install   % Build and install
-    make test           % Run unit tests
-    make run_apps       % Run apps/*.py
+    make clean                % Clean in case any problems occurred
+    make                      % Build in place
+    sudo make install         % Build and install
+    make test                 % Run unit tests
+    make run_apps             % Run apps/*.py
 
 Usage
 -----
