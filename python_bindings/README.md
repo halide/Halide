@@ -4,8 +4,7 @@ Python 2.x Bindings for Halide
 By Connelly Barnes, 2012-2013.
 
 This library allows you to write Halide code in Python. The library has currently only been tested on Mac OS,
-against a Halide source build, and is experimental. Currently the library does not install into
-the system package directory.
+against a Halide source build, and is experimental.
 
 Installation
 ------------
@@ -21,15 +20,22 @@ On Mac:
     sudo pip install numpy
     sudo pip install pil
 
-### Building
+### Installation
 
-You can build Halide by using 'make' in the parent directory. Next, build the Python bindings:
+Quick install:
 
-    make                % Build
-    make test           % Run unit tests
     sudo make install   % Install
+    make test           % Optional: run unit tests
 
-If anything fails then use 'sudo make clean' to clean up and try again.
+Detailed installation:
+
+You can build Halide by using 'make' in the parent directory. This is implicitly done by the Makefile for the Python bindings. The following make options are then provided:
+
+    make clean          % Clean in case any problems occurred
+    make                % Build in place
+    sudo make install   % Build and install
+    make test           % Run unit tests
+    make run_apps       % Run apps/*.py
 
 Usage
 -----
