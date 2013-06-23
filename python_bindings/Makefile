@@ -1,8 +1,8 @@
-all: cHalide_wrap.cxx
+all: halide/cHalide_wrap.cxx
 
-cHalide_wrap.cxx: cHalide.i ../src/*.cpp ../src/runtime/*.cpp ../src/*.h ../include/*.h py_util.cpp py_util.h expand_types.h
+halide/cHalide_wrap.cxx: halide/cHalide.i ../src/*.cpp ../src/runtime/*.cpp ../src/*.h ../include/*.h halide/py_util.cpp halide/py_util.h halide/expand_types.h
 	cd ..; make
-	swig -c++ -python -I../include cHalide.i
+	swig -c++ -python -I../include halide/cHalide.i
 	CXX=g++ CC=g++ python setup.py build_ext --inplace
 
 install:
@@ -10,10 +10,10 @@ install:
 
 clean:
 	rm -rf build
-	rm -f cHalide_wrap.cxx
-	rm -f halide.so
-	rm -f _cHalide.so
-	rm -f cHalide.pyc cHalide.py halide.pyc
+	rm -f halide/cHalide_wrap.cxx
+	rm -f halide/halide.so
+	rm -f halide/_cHalide.so
+	rm -f halide/cHalide.pyc halide/cHalide.py halide/halide.pyc
 
 test:
 	python -c "import halide; halide.test()"

@@ -3,7 +3,6 @@
 Local Laplacian, see e.g. Aubry et al 2011, "Fast and Robust Pyramid-based Image Processing".
 """
 
-import sys; sys.path += ['..', '.']
 from halide import *
 
 int_t = Int(32)
@@ -105,7 +104,7 @@ def main(J=8, dtype=UInt(16)):
         gPyramid[j].compute_root().parallel(k)
         outGPyramid[j].compute_root().parallel(y)
     
-    filter_image(input, output, os.path.join(inputs_dir(), 'rgb.png'), disp_time=True)().show()
+    filter_image(input, output, builtin_image('rgb.png'), disp_time=True)().show()
 
 if __name__ == '__main__':
     main()

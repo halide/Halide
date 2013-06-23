@@ -1,7 +1,6 @@
 
 "Bilateral grid."
 
-import sys; sys.path += ['..', '.']
 from halide import *
 
 int_t = Int(32)
@@ -80,7 +79,7 @@ def main():
     else:
         raise ValueError
     
-    eval_func = filter_image(input, smoothed, os.path.join(inputs_dir(), 'rgb.png'), disp_time=True)
+    eval_func = filter_image(input, smoothed, builtin_image('rgb.png'), disp_time=True)
     I = eval_func()
     I.show()
     
