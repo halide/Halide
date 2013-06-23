@@ -20,7 +20,7 @@ On Mac:
     sudo pip install numpy
     sudo pip install pil
 
-### Installation
+### Building and Installing the Python bindings
 
 Quick install:
 
