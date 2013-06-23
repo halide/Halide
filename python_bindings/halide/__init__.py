@@ -44,8 +44,6 @@ def wrap(*a):
             #return expr_from_tuple(*(wrap(x) for x in a[0]))
     return ExprType(*a)
     
-in_filename = '../apps/images/rgb.png'
-    
 pow0 = pow
 
 for BaseT in (Expr, FuncRefExpr, FuncRefVar, Var, RDom, RVar, Func) + ParamTypes:
@@ -561,8 +559,10 @@ def get_blur():
     blur_y[x,y,c] = (blur_x[x,y-1,c]+blur_x[x,y,c]+blur_x[x,y+1,c])/3*4
     return (input, x, y, c, blur_x, blur_y, input_clamped)
 
-def builtin_image(filename, raw_string=False):
+def builtin_image(filename=None, raw_string=False):
     "PIL Image instance for one of the built-in input images (in halide/data/ or installed with the package)."
+    if filename is None:
+        filename = 'rgb.png'
     s = pkgutil.get_data('halide', os.path.join('data', filename))
     if raw_string:
         return s
@@ -632,7 +632,7 @@ def example_out():
     blur_y.unroll(y,16).vectorize(x,16)
     blur_y.compile_jit()
 
-    return filter_image(input, blur_y, in_filename)()
+    return filter_image(input, blur_y, builtin_image())()
 
 def test_blur():
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
@@ -659,7 +659,7 @@ def test_blur():
         except: pass
 #        blur_y.compile_to_file('halide_blur', [input_arg])
 
-        outf = filter_image(input, blur_y, in_filename)
+        outf = filter_image(input, blur_y, builtin_image())
         T0 = time.time()
         out = outf()
         T1 = time.time()
@@ -674,9 +674,11 @@ def test_blur():
     
     print 'halide.test_blur:                    OK'
 
-def test_func(compile=True, in_image=in_filename):
+def test_func(compile=True, in_image=None):
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
 
+    if in_image is None:
+        in_image = builtin_image()
     outf = filter_image(input, blur_y, in_image, compile=compile)
     out = [None]
     
@@ -765,7 +767,7 @@ def test_numpy():
 
     for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
         for mul in [0, 1]:
-            a = numpy.asarray(Image(dtype, in_filename))*mul
+            a = numpy.asarray(Image(dtype, builtin_image()))*mul
             b = Image(a)
             c = numpy.asarray(b)
             assert a.dtype == c.dtype
