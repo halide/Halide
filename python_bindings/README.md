@@ -15,10 +15,13 @@ Install SWIG 2.0.4+, and Python libraries Numpy, and Python Image Library (PIL).
 
 On Mac:
 
-    sudo easy_install pip
     brew install swig         % Assumes you have Homebrew package manager (use your preferred package manager)
-    sudo pip install numpy
-    sudo pip install pil
+    sudo easy_install pip
+    sudo pip install numpy pil
+
+On Ubuntu Linux:
+
+    sudo apt-get install python-dev libpng12-dev python-imaging python-numpy swig
 
 ### Building and Installing the Python bindings
 
