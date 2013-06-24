@@ -11,6 +11,8 @@ import pkgutil
 import cStringIO
 import tempfile
 
+__version__ = '0.2.0'
+
 exit_on_signal()                   # Install C++ debugging traceback
 
 # ----------------------------------------------------------------------------------------------------------

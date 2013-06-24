@@ -20,7 +20,7 @@ if glob.glob('halide/data/*.png') == []:
     
 setup(
     name = 'halide',
-    version = '0.1',
+    version = '0.2',
     author = 'Connelly Barnes',
     license = 'MIT',
     classifiers=[
