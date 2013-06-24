@@ -22,7 +22,7 @@ make -j8
 
 Then finally tell Halide's Makefile about it like so:
 
-export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm_config
+export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm-config
 export CLANG=<path to llvm>/Release+Asserts/bin/clang
 
 If you want a newer llvm, then trunk llvm should also work.
