@@ -2,7 +2,7 @@ all: halide/cHalide_wrap.cxx
 
 halide/cHalide_wrap.cxx: halide/cHalide.i ../src/*.cpp ../src/runtime/*.cpp ../src/*.h ../include/*.h halide/py_util.cpp halide/py_util.h halide/expand_types.h
 	make -C ..
-	swig -c++ -python -I../include halide/cHalide.i
+	swig -c++ -python -w362,325,314,389,381,382,361,401,503,509 -I../include halide/cHalide.i
 
 build: halide/cHalide_wrap.cxx
 	python setup.py build_ext --inplace

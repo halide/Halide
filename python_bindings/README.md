@@ -6,6 +6,11 @@ By Connelly Barnes, 2012-2013.
 This library allows you to write Halide code in Python. The library has currently only been tested on Mac OS
 and Linux (Debian), against a Halide source build, and is more experimental than the C++ Halide.
 
+Documentation
+-------------
+
+Module documentation is [available](http://connellybarnes.com/documents/halide/).
+
 Installation
 ------------
 
