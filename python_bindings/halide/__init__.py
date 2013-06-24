@@ -196,8 +196,8 @@ Image_uint32.type = lambda x: UInt(32)
 Image_float32.type = lambda x: Float(32)
 Image_float64.type = lambda x: Float(64)
 
-def show_image(I, maxval=None):
-    "Shows an Image instance on the screen, by converting through numpy and PIL."
+def _to_pil(I, maxval=None):
+    "Convert an Image instance to a PIL image."
     A = numpy.asarray(I)
     if maxval is not None:
         A = numpy.asarray(A,'float32')*(1.0/maxval)
@@ -214,13 +214,21 @@ def show_image(I, maxval=None):
         raise ValueError('Unsupported dtype %r' % A.dtype)
     if len(A.shape) == 3 and A.shape[2] == 1:
         A = A[:,:,0]
-    PIL.fromarray(A).show()
+    return PIL.fromarray(A)
+    
+def _show_image(I, maxval=None):
+    "Shows an Image instance on the screen, by converting through numpy and PIL."
+    _to_pil(I, maxval).show()
+
+def _save_image(I, filename, maxval=None):
+    _to_pil(I, maxval).save(filename)
     
 for _ImageT in ImageTypes:
-    _ImageT.save = lambda x, y: save_png(x, y)
+    _ImageT.save = lambda *args, **kw: _save_image(*args, **kw)
+    _ImageT.to_pil = lambda *args, **kw: _to_pil(*args, **kw)
     _ImageT.set = _generic_set
     _ImageT.__getattr__ = image_getattr
-    _ImageT.show = lambda *args, **kw: show_image(*args, **kw)
+    _ImageT.show = lambda *args, **kw: _show_image(*args, **kw)
 
 def _numpy_to_image(a, dtype, C):
     a = numpy.asarray(a, dtype)

@@ -1,6 +1,7 @@
 
 "Bilateral grid."
 
+import sys
 from halide import *
 
 int_t = Int(32)
@@ -81,7 +82,10 @@ def main():
     
     eval_func = filter_image(input, smoothed, builtin_image('rgb.png'), disp_time=True)
     I = eval_func()
-    I.show()
+    if len(sys.argv) >= 2:
+        I.save(sys.argv[1])
+    else:
+        I.show()
     
 if __name__ == '__main__':
     main()
