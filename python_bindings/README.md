@@ -1,10 +1,10 @@
-Python 2.x Bindings for Halide
-------------------------------
+Python Bindings for Halide
+--------------------------
 
 By Connelly Barnes, 2012-2013.
 
-This library allows you to write Halide code in Python. The library has currently only been tested on Mac OS
-and Linux (Debian), against a Halide source build, and is more experimental than the C++ Halide.
+This library allows you to write Halide code in Python 2.7. The library has currently only been tested on Mac OS
+and Linux (Debian, Ubuntu), against a Halide source build, and is more experimental than the C++ Halide.
 
 Installation
 ------------
