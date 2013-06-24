@@ -107,8 +107,8 @@ class Simplify : public IRMutator {
     void visit(const Cast *op) {
         Expr value = mutate(op->value);        
         const Cast *cast = value.as<Cast>();
-        float f;
-        int i;
+        float f = 0.0;
+        int i = 0;
         if (value.type() == op->type) {
             expr = value;
         } else if (op->type == Int(32) && const_float(value, &f)) {
@@ -159,8 +159,8 @@ class Simplify : public IRMutator {
     void visit(const Add *op) {
         debug(3) << "Simplifying " << Expr(op) << "\n";
 
-        int ia, ib;
-        float fa, fb;
+        int ia = 0, ib = 0;
+        float fa = 0.0, fb = 0.0;
 
         Expr a = mutate(op->a), b = mutate(op->b);
 
@@ -248,8 +248,8 @@ class Simplify : public IRMutator {
 
         Expr a = mutate(op->a), b = mutate(op->b);
 
-        int ia, ib; 
-        float fa, fb;
+        int ia = 0, ib = 0; 
+        float fa = 0.0, fb = 0.0;
 
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
@@ -338,8 +338,8 @@ class Simplify : public IRMutator {
 
         if (is_simple_const(a)) std::swap(a, b);
 
-        int ia, ib; 
-        float fa, fb;
+        int ia = 0, ib = 0; 
+        float fa = 0.0, fb = 0.0;
 
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
@@ -384,8 +384,8 @@ class Simplify : public IRMutator {
     void visit(const Div *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
         
-        int ia, ib;
-        float fa, fb;
+        int ia = 0, ib = 0;
+        float fa = 0.0, fb = 0.0;
 
         const Mul *mul_a = a.as<Mul>();
         const Add *add_a = a.as<Add>();
@@ -472,8 +472,8 @@ class Simplify : public IRMutator {
     void visit(const Mod *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
-        int ia, ib;
-        float fa, fb;
+        int ia = 0, ib = 0;
+        float fa = 0.0, fb = 0.0;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Mul *mul_a = a.as<Mul>();
@@ -532,8 +532,8 @@ class Simplify : public IRMutator {
             std::swap(a, b);
         }
 
-        int ia, ib;
-        float fa, fb;
+        int ia = 0, ib = 0;
+        float fa = 0.0, fb = 0.0;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
@@ -623,8 +623,8 @@ class Simplify : public IRMutator {
             std::swap(a, b);
         }
 
-        int ia, ib;
-        float fa, fb;
+        int ia = 0, ib = 0;
+        float fa = 0.0, fb = 0.0;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
@@ -716,7 +716,7 @@ class Simplify : public IRMutator {
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
         
-        int ia, ib;
+        int ia = 0, ib = 0;
 
         if (const_castint(a, &ia) && const_castint(b, &ib)) {
             if (a.type().is_uint()) {
@@ -795,7 +795,7 @@ class Simplify : public IRMutator {
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
-        int ia, ib;
+        int ia = 0, ib = 0;
         
         // Note that the computation of delta could be incorrect if 
         // ia and/or ib are large unsigned integer constants, especially when
