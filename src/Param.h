@@ -2,7 +2,7 @@
 #define HALIDE_PARAM_H
 
 /** \file
- * 
+ *
  * Classes for declaring scalar and image parameters to halide pipelines
  */
 
@@ -21,6 +21,7 @@ template<typename T>
 class Param {
     /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
+
 public:
     /** Construct a scalar parameter of type T with a unique
      * auto-generated name */
@@ -63,51 +64,39 @@ public:
     }
 };
 
-/** An Image parameter to a halide pipeline. E.g., the input image. */
-class ImageParam {
+
+/** A handle on the output buffer of a pipeline. Used to make static
+ * promises about the output size and stride. */
+class OutputImageParam {
+protected:
     /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
 
-    /** The dimensionality of this image. We need to know in order to
-     * inject the right number of implicit vars when calling
-     * operator() */
+    /** The dimensionality of this image. */
     int dims;
+
 public:
 
     /** Construct a NULL image parameter handle. */
-    ImageParam() : dims(0) {}
+    OutputImageParam() :
+        dims(0) {}
 
-    /** Construct an image parameter of the given type and
-     * dimensionality, with an auto-generated unique name. */
-    ImageParam(Type t, int d) : param(t, true), dims(d) {}
+    /** Construct an OutputImageParam that wraps an Internal Parameter object. */
+    OutputImageParam(const Internal::Parameter &p, int d) :
+        param(p), dims(d) {}
 
-    /** Construct an image parameter of the given type and
-     * dimensionality, with the given name */
-    ImageParam(Type t, int d, const std::string &n) : param(t, true, n), dims(d) {}
-
-    /** Get the name of this ImageParam */
+    /** Get the name of this Param */
     const std::string &name() const {
         return param.name();
     }
 
-    /** Get the type of the image data this ImageParam refers to */
+    /** Get the type of the image data this Param refers to */
     Type type() const {
         return param.type();
     }
 
-    /** Bind a buffer or image to this ImageParam. Only relevant for jitting */
-    void set(Buffer b) {
-        if (b.defined()) assert(b.type() == type() && "Setting buffer of incorrect type");
-        param.set_buffer(b);
-    }
-    
-    /** Get the buffer bound to this ImageParam. Only relevant for jitting */
-    Buffer get() const {
-        return param.get_buffer();
-    }
-
-    /** Is this handle non-NULL */
-    bool defined() const {
+    /** Is this parameter handle non-NULL */
+    bool defined() {
         return param.defined();
     }
 
@@ -124,14 +113,14 @@ public:
     Expr stride(int x) const {
         std::ostringstream s;
         s << name() << ".stride." << x;
-        return Internal::Variable::make(Int(32), s.str(), param);        
+        return Internal::Variable::make(Int(32), s.str(), param);
     }
 
     /** Set the extent in a given dimension to equal the given
      * expression. Images passed in that fail this check will generate
      * a runtime error. Returns a reference to the ImageParam so that
-     * these calls may be chained.  
-     * 
+     * these calls may be chained.
+     *
      * This may help the compiler generate better
      * code. E.g:
      \code
@@ -148,7 +137,7 @@ public:
      im.set_extent(0, (im.extent(0)/32)*32);
      \endcode
      * tells the compiler that the extent is a multiple of 32. */
-    ImageParam &set_extent(int dim, Expr extent) {
+    OutputImageParam &set_extent(int dim, Expr extent) {
         param.set_extent_constraint(dim, extent);
         return *this;
     }
@@ -156,7 +145,7 @@ public:
     /** Set the min in a given dimension to equal the given
      * expression. Setting the mins to zero may simplify some
      * addressing math. */
-    ImageParam &set_min(int dim, Expr min) {
+    OutputImageParam &set_min(int dim, Expr min) {
         param.set_min_constraint(dim, min);
         return *this;
     }
@@ -165,13 +154,13 @@ public:
      * value. This is particularly helpful to set when
      * vectorizing. Known strides for the vectorized dimension
      * generate better code. */
-    ImageParam &set_stride(int dim, Expr stride) {
+    OutputImageParam &set_stride(int dim, Expr stride) {
         param.set_stride_constraint(dim, stride);
         return *this;
     }
 
     /** Set the min and extent in one call. */
-    ImageParam &set_bounds(int dim, Expr min, Expr extent) {
+    OutputImageParam &set_bounds(int dim, Expr min, Expr extent) {
         return set_min(dim, min).set_extent(dim, extent);
     }
 
@@ -193,7 +182,7 @@ public:
         assert(dims >= 1);
         return extent(1);
     }
-    
+
     /** Get an expression giving the extent in dimension 2, which by
      * convention is the channel-count of the image */
     Expr channels() const {
@@ -201,10 +190,41 @@ public:
         return extent(2);
     }
 
+};
+
+/** An Image parameter to a halide pipeline. E.g., the input image. */
+class ImageParam : public OutputImageParam {
+
+public:
+
+    /** Construct a NULL image parameter handle. */
+    ImageParam() : OutputImageParam() {}
+
+    /** Construct an image parameter of the given type and
+     * dimensionality, with an auto-generated unique name. */
+    ImageParam(Type t, int d) :
+        OutputImageParam(Internal::Parameter(t, true), d) {}
+
+    /** Construct an image parameter of the given type and
+     * dimensionality, with the given name */
+    ImageParam(Type t, int d, const std::string &n) :
+        OutputImageParam(Internal::Parameter(t, true, n), d) {}
+
+    /** Bind a buffer or image to this ImageParam. Only relevant for jitting */
+    void set(Buffer b) {
+        if (b.defined()) assert(b.type() == type() && "Setting buffer of incorrect type");
+        param.set_buffer(b);
+    }
+
+    /** Get the buffer bound to this ImageParam. Only relevant for jitting */
+    Buffer get() const {
+        return param.get_buffer();
+    }
+
     /** Construct an expression which loads from this image
      * parameter. The location is extended with enough implicit
      * variables to match the dimensionality of the image
-     * (see \ref Var::implicit) 
+     * (see \ref Var::implicit)
      */
     // @{
     Expr operator()() const {
@@ -268,7 +288,7 @@ public:
      * statically compiling halide pipelines. */
     operator Argument() const {
         return Argument(name(), true, type());
-    }   
+    }
 
     /** Treating the image parameter as an Expr is equivalent to call
      * it with no arguments. For example, you can say:
@@ -278,7 +298,7 @@ public:
      Func f;
      f = im*2;
      \endcode
-     * 
+     *
      * This will define f as a two-dimensional function with value at
      * position (x, y) equal to twice the value of the image parameter
      * at the same location.
@@ -287,6 +307,7 @@ public:
         return (*this)();
     }
 };
+
 
 }
 

@@ -37,9 +37,9 @@ int main(int argc, char **argv) {
 
     // Scale the result back to 8-bit
     int pixels = in.extent(0)*in.extent(1);
-    rescaled = cast<uint8_t>((equalized*256)/pixels);
+    rescaled(i) = cast<uint8_t>((equalized(i)*256)/pixels);
 
-    Image<uint8_t> out = rescaled.realize(in.width(), in.height());    
+    Image<uint8_t> out = rescaled.realize(in.width(), in.height());
 
     // Compute the histogram of the output
     int out_hist[16], in_hist[16];

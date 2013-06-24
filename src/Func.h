@@ -2,7 +2,7 @@
 #define HALIDE_FUNC_H
 
 /** \file
- * 
+ *
  * Defines Func - the front-end handle on a halide function, and related classes.
  */
 
@@ -18,7 +18,7 @@
 #include "Util.h"
 
 namespace Halide {
-        
+
 /** A fragment of front-end syntax of the form f(x, y, z), where x,
  * y, z are Vars. It could be the left-hand side of a function
  * definition, or it could be a call to a function. We don't know
@@ -30,7 +30,7 @@ class FuncRefVar {
     void add_implicit_vars(std::vector<std::string> &args, Expr e) const;
 public:
     FuncRefVar(Internal::Function, const std::vector<Var> &);
-        
+
     /**  Use this as the left-hand-side of a definition */
     EXPORT void operator=(Expr);
 
@@ -52,27 +52,27 @@ public:
      * should refer to some RDom to take the product over. If the
      * function does not already have a pure definition, this sets it
      * to 1.
-     */    
+     */
     EXPORT void operator*=(Expr);
 
     /** Define this function as the product reduction over the inverse
      * of the expression. The expression should refer to some RDom to
      * take the product over. If the function does not already have a
-     * pure definition, this sets it to 1. 
+     * pure definition, this sets it to 1.
      */
     EXPORT void operator/=(Expr);
 
-    /** Override the usual assignment operator, so that 
-     * f(x, y) = g(x, y) defines f. 
+    /** Override the usual assignment operator, so that
+     * f(x, y) = g(x, y) defines f.
      */
     void operator=(const FuncRefVar &e) {*this = Expr(e);}
-        
+
     /** Use this FuncRefVar as a call to the function, and not as the
-     * left-hand-side of a definition. 
+     * left-hand-side of a definition.
      */
     EXPORT operator Expr() const;
 };
-    
+
 /** A fragment of front-end syntax of the form f(x, y, z), where x, y,
  * z are Exprs. If could be the left hand side of a reduction
  * definition, or it could be a call to a function. We don't know
@@ -85,7 +85,7 @@ class FuncRefExpr {
 public:
     FuncRefExpr(Internal::Function, const std::vector<Expr> &);
     FuncRefExpr(Internal::Function, const std::vector<std::string> &);
-        
+
     /** Use this as the left-hand-side of a reduction definition (see
      * \ref RDom). The function must already have a pure definition.
      */
@@ -109,21 +109,21 @@ public:
      * should refer to some RDom to take the product over. If the
      * function does not already have a pure definition, this sets it
      * to 1.
-     */    
+     */
     EXPORT void operator*=(Expr);
 
     /** Define this function as the product reduction over the inverse
      * of the expression. The expression should refer to some RDom to
      * take the product over. If the function does not already have a
-     * pure definition, this sets it to 1. 
+     * pure definition, this sets it to 1.
      */
     EXPORT void operator/=(Expr);
 
     /* Override the usual assignment operator, so that
-     * f(x, y) = g(x, y) defines f. 
+     * f(x, y) = g(x, y) defines f.
      */
     void operator=(const FuncRefExpr &e) {*this = Expr(e);}
-        
+
     /** Use this as a call to the function, and not the left-hand-side
      * of a definition. */
     EXPORT operator Expr() const;
@@ -244,9 +244,9 @@ public:
      * unrolling, reordering, etc first. */
     // @{
     EXPORT ScheduleHandle &cuda(Var block_x, Var thread_x);
-    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, 
+    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y,
                                 Var thread_x, Var thread_y);
-    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z, 
+    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z,
                                 Var thread_x, Var thread_y, Var thread_z);
     // @}
 
@@ -257,7 +257,7 @@ public:
     // @{
     EXPORT ScheduleHandle &cuda_tile(Var x, int x_size);
     EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int x_size, int y_size);
-    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,  
+    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,
                                      int x_size, int y_size, int z_size);
     // @}
 
@@ -268,7 +268,7 @@ public:
  * they are aggressively inlined, so you are encouraged to make lots
  * of little functions, rather than storing things in Exprs. */
 class Func {
-    
+
     /** A handle on the internal halide function that this
      * represents */
     Internal::Function func;
@@ -322,7 +322,7 @@ class Func {
      * still be valid though. */
     std::vector<std::pair<int, Internal::Parameter> > image_param_args;
 
-public:        
+public:
     static void test();
 
     /** Declare a new undefined function with the given name */
@@ -352,13 +352,13 @@ public:
     /** Evaluate this function over some rectangular domain and return
      * the resulting buffer. The buffer should probably be instantly
      * wrapped in an Image class of the appropriate type. That is, do
-     * this: 
-     * 
+     * this:
+     *
      * Image<float> im = f.realize(...);
-     * 
+     *
      * not this:
-     * 
-     * Buffer im = f.realize(...) 
+     *
+     * Buffer im = f.realize(...)
      *
      */
     EXPORT Buffer realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
@@ -395,7 +395,7 @@ public:
      * useful for checking what Halide is producing without having to
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
-    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");    
+    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
     /** Statically compile this function to C source code. This is
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
@@ -404,7 +404,7 @@ public:
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
-     * argument. 
+     * argument.
      */
     //@{
     EXPORT void compile_to_file(const std::string &filename_prefix, std::vector<Argument> args);
@@ -427,11 +427,11 @@ public:
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling
      * statically, you can also just define your own function with
-     * signature 
+     * signature
      \code
      extern "C" halide_error(char *)
      \endcode
-     * This will clobber Halide's version. 
+     * This will clobber Halide's version.
      */
     EXPORT void set_error_handler(void (*handler)(char *));
 
@@ -441,11 +441,11 @@ public:
      * off the end slightly. Metadata (e.g. the base address of the
      * region allocated) can go in this margin - it is only read, not
      * written. If you are compiling statically, you can also just
-     * define your own functions with signatures 
+     * define your own functions with signatures
      \code
-     extern "C" void *malloc(size_t) 
+     extern "C" void *malloc(size_t)
      extern "C" void halide_free(void *)
-     \endcode 
+     \endcode
      * These will clobber Halide's versions.
      */
     EXPORT void set_custom_allocator(void *(*malloc)(size_t), void (*free)(void *));
@@ -462,7 +462,7 @@ public:
      * If you are statically compiling, you can also just define your
      * own version of the above function, and it will clobber Halide's
      * version.
-     * 
+     *
      * If you're trying to use a custom parallel runtime, you probably
      * don't want to call this. See instead \ref Func::set_custom_do_par_for .
     */
@@ -485,14 +485,14 @@ public:
     EXPORT void set_custom_do_par_for(void (*custom_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *));
 
     /** When this function is compiled, include code that dumps its values
-     * to a file after it is realized, for the purpose of debugging. 
+     * to a file after it is realized, for the purpose of debugging.
      * The file covers the realized extent at the point in the schedule that
      * debug_to_file appears.
-     * 
+     *
      * If filename ends in ".tif" or ".tiff" (case insensitive) the file
      * is in TIFF format and can be read by standard tools. Oherwise, the
-     * file format is as follows: 
-     * 
+     * file format is as follows:
+     *
      * All data is in the byte-order of the target platform.  First, a
      * 20 byte-header containing four 32-bit ints, giving the extents
      * of the first four dimensions.  Dimensions beyond four are
@@ -576,14 +576,14 @@ public:
     EXPORT Func &cuda_blocks(Var block_x, Var block_y);
     EXPORT Func &cuda_blocks(Var block_x, Var block_y, Var block_z);
     EXPORT Func &cuda(Var block_x, Var thread_x);
-    EXPORT Func &cuda(Var block_x, Var block_y, 
+    EXPORT Func &cuda(Var block_x, Var block_y,
                       Var thread_x, Var thread_y);
-    EXPORT Func &cuda(Var block_x, Var block_y, Var block_z, 
+    EXPORT Func &cuda(Var block_x, Var block_y, Var block_z,
                       Var thread_x, Var thread_y, Var thread_z);
     EXPORT Func &cuda_tile(Var x, int x_size);
-    EXPORT Func &cuda_tile(Var x, Var y, 
+    EXPORT Func &cuda_tile(Var x, Var y,
                            int x_size, int y_size);
-    EXPORT Func &cuda_tile(Var x, Var y, Var z, 
+    EXPORT Func &cuda_tile(Var x, Var y, Var z,
                            int x_size, int y_size, int z_size);
     // @}
 
@@ -598,25 +598,25 @@ public:
 
     /** Compute this function as needed for each unique value of the
      * given var for the given calling function f.
-     * 
+     *
      * For example, consider the simple pipeline:
-     \code    
+     \code
      Func f, g;
      Var x, y;
      g(x, y) = x*y;
      f(x, y) = g(x, y) + g(x, y+1) + g(x+1, y) + g(x+1, y+1);
      \endcode
-     * 
+     *
      * If we schedule f like so:
-     * 
-     \code 
-     g.compute_at(f, x); 
+     *
+     \code
+     g.compute_at(f, x);
      \endcode
      *
      * Then the C code equivalent to this pipeline will look like this
-     * 
+     *
      \code
-     
+
      int f[height][width];
      for (int y = 0; y < height; y++) {
          for (int x = 0; x < width; x++) {
@@ -630,24 +630,24 @@ public:
      }
 
      \endcode
-     * 
+     *
      * The allocation and computation of g is within f's loop over x,
      * and enough of g is computed to satisfy all that f will need for
      * that iteration. This has excellent locality - values of g are
      * used as soon as they are computed, but it does redundant
      * work. Each value of g ends up getting computed four times. If
      * we instead schedule f like so:
-     * 
-     \code      
-     g.compute_at(f, y);     
+     *
+     \code
+     g.compute_at(f, y);
      \endcode
-     * 
-     * The equivalent C code is: 
-     * 
+     *
+     * The equivalent C code is:
+     *
      \code
      int f[height][width];
      for (int y = 0; y < height; y++) {
-         int g[2][width+1]; 
+         int g[2][width+1];
          for (int x = 0; x < width; x++) {
              g[0][x] = x*y;
              g[1][x] = x*(y+1);
@@ -655,9 +655,9 @@ public:
          for (int x = 0; x < width; x++) {
              f[y][x] = g[0][x] + g[1][x] + g[0][x+1] + g[1][x+1];
          }
-     }     
+     }
      \endcode
-     * 
+     *
      * The allocation and computation of g is within f's loop over y,
      * and enough of g is computed to satisfy all that f will need for
      * that iteration. This does less redundant work (each point in g
@@ -675,7 +675,7 @@ public:
     /** Compute all of this function once ahead of time. Reusing
      * the example in \ref Func::compute_at :
      *
-     \code 
+     \code
      Func f, g;
      Var x, y;
      g(x, y) = x*y;
@@ -683,9 +683,9 @@ public:
 
      g.compute_root();
      \endcode
-     * 
+     *
      * is equivalent to
-     * 
+     *
      \code
      int f[height][width];
      int g[height+1][width+1];
@@ -698,9 +698,9 @@ public:
          for (int x = 0; x < width; x++) {
              f[y][x] = g[y][x] + g[y+1][x] + g[y][x+1] + g[y+1][x+1];
          }
-     }          
+     }
      \endcode
-     * 
+     *
      * g is computed once ahead of time, and enough is computed to
      * satisfy all uses of it. This does no redundant work (each point
      * in g is evaluated once), but has poor locality (values of g are
@@ -715,7 +715,7 @@ public:
      * level at which computation occurs to trade off between locality
      * and redundant work. This can open the door for two types of
      * optimization.
-     * 
+     *
      * Consider again the pipeline from \ref Func::compute_at :
      \code
      Func f, g;
@@ -723,20 +723,20 @@ public:
      g(x, y) = x*y;
      f(x, y) = g(x, y) + g(x+1, y) + g(x, y+1) + g(x+1, y+1);
      \endcode
-     * 
+     *
      * If we schedule it like so:
-     * 
+     *
      \code
      g.compute_at(f, x).store_at(f, y);
      \endcode
-     * 
+     *
      * Then the computation of g takes place within the loop over x,
      * but the storage takes place within the loop over y:
      *
-     \code 
+     \code
      int f[height][width];
      for (int y = 0; y < height; y++) {
-         int g[2][width+1]; 
+         int g[2][width+1];
          for (int x = 0; x < width; x++) {
              g[0][x] = x*y;
              g[0][x+1] = (x+1)*y;
@@ -744,17 +744,17 @@ public:
              g[1][x+1] = (x+1)*(y+1);
              f[y][x] = g[0][x] + g[1][x] + g[0][x+1] + g[1][x+1];
          }
-     }          
+     }
      \endcode
-     * 
+     *
      * Provided the for loop over x is serial, halide then
      * automatically performs the following sliding window
      * optimization:
-     * 
-     \code 
+     *
+     \code
      int f[height][width];
      for (int y = 0; y < height; y++) {
-         int g[2][width+1]; 
+         int g[2][width+1];
          for (int x = 0; x < width; x++) {
              if (x == 0) {
                  g[0][x] = x*y;
@@ -764,9 +764,9 @@ public:
              g[1][x+1] = (x+1)*(y+1);
              f[y][x] = g[0][x] + g[1][x] + g[0][x+1] + g[1][x+1];
          }
-     }          
+     }
      \endcode
-     * 
+     *
      * Two of the assignments to g only need to be done when x is
      * zero. The rest of the time, those sites have already been
      * filled in by a previous iteration. This version has the
@@ -774,11 +774,11 @@ public:
      * does much less redundant work.
      *
      * Halide then further optimizes this pipeline like so:
-     * 
+     *
      \code
      int f[height][width];
      for (int y = 0; y < height; y++) {
-         int g[2][2]; 
+         int g[2][2];
          for (int x = 0; x < width; x++) {
              if (x == 0) {
                  g[0][0] = x*y;
@@ -788,9 +788,9 @@ public:
              g[1][(x+1)%2] = (x+1)*(y+1);
              f[y][x] = g[0][x%2] + g[1][x%2] + g[0][(x+1)%2] + g[1][(x+1)%2];
          }
-     }          
+     }
      \endcode
-     * 
+     *
      * Halide has detected that it's possible to use a circular buffer
      * to represent g, and has reduced all accesses to g modulo 2 in
      * the x dimension. This optimization only triggers if the for
@@ -819,27 +819,27 @@ public:
      * innermost loop as possible.
      *
      * Consider once more the pipeline from \ref Func::compute_at :
-     * 
+     *
      \code
      Func f, g;
      Var x, y;
      g(x, y) = x*y;
      f(x, y) = g(x, y) + g(x+1, y) + g(x, y+1) + g(x+1, y+1);
      \endcode
-     * 
+     *
      * Leaving g as inline, this compiles to code equivalent to the following C:
-     * 
-     \code 
+     *
+     \code
      int f[height][width];
      for (int y = 0; y < height; y++) {
          for (int x = 0; x < width; x++) {
              f[y][x] = x*y + x*(y+1) + (x+1)*y + (x+1)*(y+1);
          }
-     }   
+     }
      \endcode
      */
     EXPORT Func &compute_inline();
-    
+
     /** Get a handle on the update step of a reduction for the
      * purposes of scheduling it. Only the pure dimensions of the
      * update step can be meaningfully manipulated (see \ref RDom) */
@@ -848,42 +848,54 @@ public:
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide
      * functions */
-    Internal::Function function() const {return func;}
+    Internal::Function function() const {
+        return func;
+    }
+
+    /** Get a handle on the output buffer for this Func. Only relevant
+     * if this is the output Func in a pipeline. Useful for making
+     * static promises about strides, mins, and extents. */
+    OutputImageParam output_buffer() const;
 
     /** Casting a function to an expression is equivalent to calling
      * the function with zero arguments. Implicit variables will be
-     * injected according to the function's dimensionality 
+     * injected according to the function's dimensionality
      * (see \ref Var::implicit).
-     * 
-     * Combined with Func::operator=, this lets you write things like:
-     * 
+     *
+     * This lets you write things like:
+     *
      \code
      Func f, g;
      Var x;
-     g(x) = ...     
-     f = g * 2;
+     g(x) = ...
+     f() = g * 2;
      \endcode
-     *
-     */
+    */
     operator Expr() const {
         return (*this)();
     }
 
-    /** Define a function to take a number of arguments according to
+    /* These operators are being removed because they break putting
+     * Funcs in STL containers, the python bindings, and have
+     * generally caused confusion.
+
+    ** Define a function to take a number of arguments according to
      * the implicit variables present in the given expression, and
      * return the given expression. The expression may not have free
-     * variables. */
+     * variables. *
     void operator=(Expr e) {
         (*this)() = e;
     }
 
-    /** Define a function to simply call another function. Note that
+    ** Define a function to simply call another function. Note that
      * this is not equivalent to the standard c++ operator=. We opt
      * instead for consistency with Halide function definition, of
-     * which this is a degenerate case. */
+     * which this is a degenerate case. *
     void operator=(const Func &f) {
         (*this)() = f();
     }
+
+    */
 };
 
 
