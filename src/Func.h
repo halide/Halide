@@ -509,10 +509,28 @@ public:
      * or automatically generated. */
     EXPORT const std::string &name() const;
 
+    /** Get the pure arguments. */
+    EXPORT std::vector<Var> args() const;
+
     /** The right-hand-side value of the pure definition of this
      * function. May be undefined if the function has no pure
      * definition yet. */
     EXPORT Expr value() const;
+
+    /** Get the left-hand-side of the reduction definition. An empty
+     * vector if there's no reduction definition. */
+    EXPORT const std::vector<Expr> &reduction_args() const;
+
+    /** Get the right-hand-side of the reduction definition. Returns
+     * undefined Expr if there's no reduction definition. */
+    EXPORT Expr reduction_value() const;
+
+    /** Get the reduction domain for the reduction definition. Returns
+     * an undefined RDom if there's no reduction definition. */
+    EXPORT RDom reduction_domain() const;
+
+    /** Is this function a reduction? */
+    EXPORT bool is_reduction() const;
 
     /** The dimensionality (number of arguments) of this
      * function. Zero if the function is not yet defined. */
