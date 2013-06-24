@@ -1,7 +1,7 @@
 all: halide/cHalide_wrap.cxx
 
 halide/cHalide_wrap.cxx: halide/cHalide.i ../src/*.cpp ../src/runtime/*.cpp ../src/*.h ../include/*.h halide/py_util.cpp halide/py_util.h halide/expand_types.h
-	cd ..; make
+	make -C ..
 	swig -c++ -python -I../include halide/cHalide.i
 
 build: halide/cHalide_wrap.cxx
