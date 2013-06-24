@@ -17,8 +17,8 @@ def main():
     xi, yi = Var('xi'), Var('yi')
 
     blur_y.tile(x, y, xi, yi, 8, 4).parallel(y).vectorize(xi, 8)
-#    blur_x.compute_at(blur_y, x).vectorize(x, 8)                   # This fails when Func::operator = (const Func &) is defined
-    
+    blur_x.compute_at(blur_y, x).vectorize(x, 8)
+
     maxval = 255
     in_image = Image(UInt(16), builtin_image('rgb.png'), scale=1.0) # Set scale to 1 so that we only use 0...255 of the UInt(16) range
     eval_func = filter_image(input, blur_y, in_image, disp_time=True, out_dims = OUT_DIMS, times=5)
