@@ -22,9 +22,9 @@ svn checkout llvm into Halide/llvm
 
 svn checkout clang into Halide/llvm/tools/clang
 
-run cmake configure on Halide/llvm, build into Halide/llvm/build
+run cmake configure on Halide/llvm, build into llvm/build
   set PYTHON_EXECUTABLE to python.exe (from python 2.7)
-  set LLVM_BUILD_TARGETS to X86;ARM
+  set LLVM_TARGETS_TO_BUILD to X86;ARM
   use Win64 compiler
 
 Open Halide/build/LLVM.sln solution and compile in debug and release mode for x64 (if no x64, then you didn't select the 64-bit compiler target in cmake)

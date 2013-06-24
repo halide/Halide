@@ -43,45 +43,53 @@
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -124,6 +132,7 @@
     <PostBuildEvent>
       <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
+      <Message>Running tests...</Message>
     </PostBuildEvent>
     <CustomBuildStep>
       <Command>
@@ -141,6 +150,7 @@
     <PostBuildEvent>
       <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
+      <Message>Running tests...</Message>
     </PostBuildEvent>
     <CustomBuildStep>
       <Command>
@@ -159,6 +169,7 @@
     <PostBuildEvent>
       <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
+      <Message>Running tests...</Message>
     </PostBuildEvent>
     <CustomBuildStep>
       <Command>
@@ -176,6 +187,7 @@
     <PostBuildEvent>
       <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
+      <Message>Running tests...</Message>
     </PostBuildEvent>
     <CustomBuildStep>
       <Command>
@@ -198,6 +210,7 @@
     <PostBuildEvent>
       <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
+      <Message>Running tests...</Message>
     </PostBuildEvent>
     <CustomBuildStep>
       <Command>
@@ -223,6 +236,7 @@
     <PostBuildEvent>
       <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
+      <Message>Running tests...</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">
@@ -241,6 +255,7 @@
     <PostBuildEvent>
       <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
+      <Message>Running tests...</Message>
     </PostBuildEvent>
     <CustomBuildStep>
       <Command>
@@ -266,10 +281,9 @@
     <PostBuildEvent>
       <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
+      <Message>Running tests...</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
-  <ItemGroup>
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

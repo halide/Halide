@@ -23,11 +23,11 @@ bool EXPORT is_const(Expr e, int v);
 
 /** If an expression is an IntImm, return a pointer to its
  * value. Otherwise returns NULL. */
-const int * EXPORT as_const_int(Expr e);
+EXPORT const int * as_const_int(Expr e);
 
 /** If an expression is a FloatImm, return a pointer to its
  * value. Otherwise returns NULL. */
-const float * EXPORT as_const_float(Expr e);
+EXPORT const float * as_const_float(Expr e);
 
 /** Is the expression a constant integer power of two. Also returns
  * log base two of the expression if it is. */
