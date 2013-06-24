@@ -9,7 +9,7 @@
 #include "ModulusRemainder.h"
 #include <iostream>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using std::string;
@@ -88,7 +88,7 @@ class Simplify : public IRMutator {
         if (intimm) {
             *i = intimm->value;
             return true;
-        } else if (cast && (cast->type.is_int() || cast->type.is_uint()) && 
+        } else if (cast && (cast->type.is_int() || cast->type.is_uint()) &&
                    cast->type.bits <= (int) (sizeof(int) * 8)) {
             const IntImm *imm = cast->value.as<IntImm>();
             if (imm) {
@@ -105,9 +105,9 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Cast *op) {
-        Expr value = mutate(op->value);        
+        Expr value = mutate(op->value);
         const Cast *cast = value.as<Cast>();
-        float f = 0.0;
+        float f = 0.0f;
         int i = 0;
         if (value.type() == op->type) {
             expr = value;
@@ -118,9 +118,9 @@ class Simplify : public IRMutator {
         } else if (op->type == Int(32) && cast && const_int(cast->value, &i)) {
             // Cast to something then back to int
             expr = do_indirect_int_cast(cast->type, i);
-        } else if (!op->type.is_float() && 
-                   op->type.bits <= 32 && 
-                   const_int(value, &i) && 
+        } else if (!op->type.is_float() &&
+                   op->type.bits <= 32 &&
+                   const_int(value, &i) &&
                    do_indirect_int_cast(op->type, i) != i) {
             // Rewrite things like cast(UInt(8), 256) to cast(UInt(8),
             // 0), so any later peephole matching that ignores casts
@@ -160,7 +160,7 @@ class Simplify : public IRMutator {
         debug(3) << "Simplifying " << Expr(op) << "\n";
 
         int ia = 0, ib = 0;
-        float fa = 0.0, fb = 0.0;
+        float fa = 0.0f, fb = 0.0f;
 
         Expr a = mutate(op->a), b = mutate(op->b);
 
@@ -203,11 +203,11 @@ class Simplify : public IRMutator {
                                    ramp_a->stride + ramp_b->stride, ramp_a->width));
         } else if (ramp_a && broadcast_b) {
             // Ramp + Broadcast
-            expr = mutate(Ramp::make(ramp_a->base + broadcast_b->value, 
+            expr = mutate(Ramp::make(ramp_a->base + broadcast_b->value,
                                    ramp_a->stride, ramp_a->width));
         } else if (broadcast_a && ramp_b) {
             // Broadcast + Ramp
-            expr = mutate(Ramp::make(broadcast_a->value + ramp_b->base, 
+            expr = mutate(Ramp::make(broadcast_a->value + ramp_b->base,
                                    ramp_b->stride, ramp_b->width));
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
@@ -224,7 +224,7 @@ class Simplify : public IRMutator {
         } else if (sub_a && equal(b, sub_a->b)) {
             // Additions that cancel an inner term
             expr = sub_a->a;
-        } else if (sub_b && equal(a, sub_b->b)) {            
+        } else if (sub_b && equal(a, sub_b->b)) {
             expr = sub_b->a;
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
             // Pull out common factors a*x + b*x
@@ -248,8 +248,8 @@ class Simplify : public IRMutator {
 
         Expr a = mutate(op->a), b = mutate(op->b);
 
-        int ia = 0, ib = 0; 
-        float fa = 0.0, fb = 0.0;
+        int ia = 0, ib = 0;
+        float fa = 0.0f, fb = 0.0f;
 
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
@@ -286,11 +286,11 @@ class Simplify : public IRMutator {
                                    ramp_a->stride - ramp_b->stride, ramp_a->width));
         } else if (ramp_a && broadcast_b) {
             // Ramp - Broadcast
-            expr = mutate(Ramp::make(ramp_a->base - broadcast_b->value, 
+            expr = mutate(Ramp::make(ramp_a->base - broadcast_b->value,
                                    ramp_a->stride, ramp_a->width));
         } else if (broadcast_a && ramp_b) {
             // Broadcast - Ramp
-            expr = mutate(Ramp::make(broadcast_a->value - ramp_b->base, 
+            expr = mutate(Ramp::make(broadcast_a->value - ramp_b->base,
                                    make_zero(ramp_b->stride.type())- ramp_b->stride,
                                    ramp_b->width));
         } else if (broadcast_a && broadcast_b) {
@@ -338,8 +338,8 @@ class Simplify : public IRMutator {
 
         if (is_simple_const(a)) std::swap(a, b);
 
-        int ia = 0, ib = 0; 
-        float fa = 0.0, fb = 0.0;
+        int ia = 0, ib = 0;
+        float fa = 0.0f, fb = 0.0f;
 
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
@@ -383,9 +383,9 @@ class Simplify : public IRMutator {
 
     void visit(const Div *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
-        
+
         int ia = 0, ib = 0;
-        float fa = 0.0, fb = 0.0;
+        float fa = 0.0f, fb = 0.0f;
 
         const Mul *mul_a = a.as<Mul>();
         const Add *add_a = a.as<Add>();
@@ -423,15 +423,15 @@ class Simplify : public IRMutator {
             }
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(broadcast_a->value / broadcast_b->value, broadcast_a->width));
-        } else if (ramp_a && broadcast_b && 
-                   const_int(broadcast_b->value, &ib) && 
+        } else if (ramp_a && broadcast_b &&
+                   const_int(broadcast_b->value, &ib) &&
                    const_int(ramp_a->stride, &ia) && ((ia % ib) == 0)) {
             // ramp(x, ia, w) / broadcast(ib, w) -> ramp(x/ib, ia/ib, w) when ib divides ia
             expr = mutate(Ramp::make(ramp_a->base/ib, ia/ib, ramp_a->width));
         } else if (div_a && const_int(div_a->b, &ia) && const_int(b, &ib)) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(div_a->a / (ia*ib));
-        } else if (mul_a && const_int(mul_a->b, &ia) && const_int(b, &ib) && 
+        } else if (mul_a && const_int(mul_a->b, &ia) && const_int(b, &ib) &&
                    ia && ib && (ia % ib == 0 || ib % ia == 0)) {
             if (ia % ib == 0) {
                 // (x * 4) / 2 -> x * 2
@@ -439,22 +439,22 @@ class Simplify : public IRMutator {
             } else {
                 // (x * 2) / 4 -> x / 2
                 expr = mutate(mul_a->a / (ib / ia));
-            }            
-        } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && 
+            }
+        } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) &&
                    ib && (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
-            // (x*4 + y) / 2 -> x*2 + y/2            
+            // (x*4 + y) / 2 -> x*2 + y/2
             expr = mutate((mul_a_a->a * (ia/ib)) + (add_a->b / b));
-        } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && 
+        } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) &&
                    ib && (ia % ib == 0)) {
             // (y + x*4) / 2 -> y/2 + x*2
             expr = mutate((add_a->a / b) + (mul_a_b->a * (ia/ib)));
-        } else if (sub_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && 
+        } else if (sub_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) &&
                    ib && (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
-            // (x*4 - y) / 2 -> x*2 - y/2            
+            // (x*4 - y) / 2 -> x*2 - y/2
             expr = mutate((mul_a_a->a * (ia/ib)) - (sub_a->b / b));
-        } else if (sub_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && 
+        } else if (sub_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) &&
                    ib && (ia % ib == 0)) {
             // (y - x*4) / 2 -> y/2 - x*2
             expr = mutate((sub_a->a / b) - (mul_a_b->a * (ia/ib)));
@@ -473,7 +473,7 @@ class Simplify : public IRMutator {
         Expr a = mutate(op->a), b = mutate(op->b);
 
         int ia = 0, ib = 0;
-        float fa = 0.0, fb = 0.0;
+        float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Mul *mul_a = a.as<Mul>();
@@ -512,7 +512,7 @@ class Simplify : public IRMutator {
         } else if (const_int(b, &ib) && a.type() == Int(32) && mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
             expr = mod_rem.remainder % ib;
-        } else if (ramp_a && const_int(ramp_a->stride, &ia) && 
+        } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) &&
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
@@ -520,7 +520,7 @@ class Simplify : public IRMutator {
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
-            expr = Mod::make(a, b);            
+            expr = Mod::make(a, b);
         }
     }
 
@@ -533,7 +533,7 @@ class Simplify : public IRMutator {
         }
 
         int ia = 0, ib = 0;
-        float fa = 0.0, fb = 0.0;
+        float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
@@ -546,7 +546,7 @@ class Simplify : public IRMutator {
 
         // Sometimes we can do bounds analysis to simplify
         // things. Only worth doing for ints
-        
+
         if (equal(a, b)) {
             expr = a;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
@@ -567,8 +567,8 @@ class Simplify : public IRMutator {
             expr = b;
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
-        } else if (add_a && const_int(add_a->b, &ia) && 
-                   add_b && const_int(add_b->b, &ib) && 
+        } else if (add_a && const_int(add_a->b, &ia) &&
+                   add_b && const_int(add_b->b, &ib) &&
                    equal(add_a->a, add_b->a)) {
             // min(x + 3, x - 2) -> x - 2
             if (ia > ib) {
@@ -598,16 +598,16 @@ class Simplify : public IRMutator {
             expr = a;
         } else if (min_b && (equal(min_b->b, a) || equal(min_b->a, a))) {
             // min(y, min(x, y)) -> min(x, y)
-            expr = b;            
+            expr = b;
         } else if (min_a_a && equal(min_a_a->b, b)) {
             // min(min(min(x, y), z), y) -> min(min(x, y), z)
-            expr = a;            
+            expr = a;
         } else if (min_a_a_a && equal(min_a_a_a->b, b)) {
             // min(min(min(min(x, y), z), w), y) -> min(min(min(x, y), z), w)
-            expr = a;            
+            expr = a;
         } else if (min_a_a_a_a && equal(min_a_a_a_a->b, b)) {
             // min(min(min(min(min(x, y), z), w), l), y) -> min(min(min(min(x, y), z), w), l)
-            expr = a;            
+            expr = a;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -624,7 +624,7 @@ class Simplify : public IRMutator {
         }
 
         int ia = 0, ib = 0;
-        float fa = 0.0, fb = 0.0;
+        float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
@@ -684,16 +684,16 @@ class Simplify : public IRMutator {
             expr = a;
         } else if (max_b && (equal(max_b->b, a) || equal(max_b->a, a))) {
             // max(y, max(x, y)) -> max(x, y)
-            expr = b;            
+            expr = b;
         } else if (max_a_a && equal(max_a_a->b, b)) {
             // max(max(max(x, y), z), y) -> max(max(x, y), z)
-            expr = a;            
+            expr = a;
         } else if (max_a_a_a && equal(max_a_a_a->b, b)) {
             // max(max(max(max(x, y), z), w), y) -> max(max(max(x, y), z), w)
-            expr = a;            
+            expr = a;
         } else if (max_a_a_a_a && equal(max_a_a_a_a->b, b)) {
             // max(max(max(max(max(x, y), z), w), l), y) -> max(max(max(max(x, y), z), w), l)
-            expr = a;            
+            expr = a;
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -715,7 +715,7 @@ class Simplify : public IRMutator {
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
-        
+
         int ia = 0, ib = 0;
 
         if (const_castint(a, &ia) && const_castint(b, &ib)) {
@@ -796,10 +796,10 @@ class Simplify : public IRMutator {
         const Mul *mul_b = b.as<Mul>();
 
         int ia = 0, ib = 0;
-        
-        // Note that the computation of delta could be incorrect if 
+
+        // Note that the computation of delta could be incorrect if
         // ia and/or ib are large unsigned integer constants, especially when
-        // int is 32 bits on the machine.  
+        // int is 32 bits on the machine.
         // Explicit comparison is preferred.
         if (const_castint(a, &ia) && const_castint(b, &ib)) {
             if (a.type().is_uint()) {
@@ -851,8 +851,8 @@ class Simplify : public IRMutator {
         } else if (sub_b && equal(sub_b->a, a)) {
             // Add a term to both sides
             expr = mutate(sub_b->b < make_zero(sub_b->b.type()));
-        } else if (mul_a && mul_b && 
-                   is_positive_const(mul_a->b) && is_positive_const(mul_b->b) && 
+        } else if (mul_a && mul_b &&
+                   is_positive_const(mul_a->b) && is_positive_const(mul_b->b) &&
                    equal(mul_a->b, mul_b->b)) {
             // Divide both sides by a constant
             expr = mutate(mul_a->a < mul_b->a);
@@ -913,7 +913,7 @@ class Simplify : public IRMutator {
 
     void visit(const Not *op) {
         Expr a = mutate(op->a);
-        
+
         if (is_one(a)) {
             expr = make_zero(a.type());
         } else if (is_zero(a)) {
@@ -954,11 +954,11 @@ class Simplify : public IRMutator {
         } else if (equal(true_value, false_value)) {
             expr = true_value;
         } else if (const NE *ne = condition.as<NE>()) {
-            // Normalize select(a != b, c, d) to select(a == b, d, c) 
-            expr = mutate(Select::make(ne->a == ne->b, false_value, true_value));               
+            // Normalize select(a != b, c, d) to select(a == b, d, c)
+            expr = mutate(Select::make(ne->a == ne->b, false_value, true_value));
         } else if (const LE *le = condition.as<LE>()) {
-            // Normalize select(a <= b, c, d) to select(b < a, d, c) 
-            expr = mutate(Select::make(le->b < le->a, false_value, true_value));               
+            // Normalize select(a <= b, c, d) to select(b < a, d, c)
+            expr = mutate(Select::make(le->b < le->a, false_value, true_value));
         } else if (condition.same_as(op->condition) &&
                    true_value.same_as(op->true_value) &&
                    false_value.same_as(op->false_value)) {
@@ -1005,10 +1005,10 @@ class Simplify : public IRMutator {
         IRMutator::visit(op);
     }
 
-    template<typename T, typename Body> 
+    template<typename T, typename Body>
     Body simplify_let(const T *op) {
         assert(!var_info.contains(op->name) && "Simplify only works on code where every name is unique\n");
-        
+
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
         Expr value = mutate(op->value);
@@ -1016,7 +1016,7 @@ class Simplify : public IRMutator {
         assert(value.defined());
         assert(body.defined());
         const Ramp *ramp = value.as<Ramp>();
-        const Broadcast *broadcast = value.as<Broadcast>();        
+        const Broadcast *broadcast = value.as<Broadcast>();
         const Variable *var = value.as<Variable>();
 
         Expr new_value;
@@ -1051,10 +1051,10 @@ class Simplify : public IRMutator {
             new_value = base;
 
         } else if (broadcast) {
-            // Make a new name to refer to the scalar version, and push the broadcast inside            
+            // Make a new name to refer to the scalar version, and push the broadcast inside
             new_name = op->name + ".base";
-            info.replacement =                 
-                Broadcast::make(Variable::make(broadcast->value.type(), 
+            info.replacement =
+                Broadcast::make(Variable::make(broadcast->value.type(),
                                                new_name),
                                 broadcast->width);
             new_value = broadcast->value;
@@ -1067,7 +1067,7 @@ class Simplify : public IRMutator {
 
         var_info.push(op->name, info);
 
-        // Before we enter the body, track the alignment info 
+        // Before we enter the body, track the alignment info
         bool value_tracked = false;
         if (new_value.defined() && new_value.type() == Int(32)) {
             ModulusRemainder mod_rem = modulus_remainder(new_value, alignment_info);
@@ -1089,12 +1089,12 @@ class Simplify : public IRMutator {
         info = var_info.get(op->name);
         var_info.pop(op->name);
 
-        if (body.same_as(op->body) && 
-            value.same_as(op->value) && 
+        if (body.same_as(op->body) &&
+            value.same_as(op->value) &&
             !new_value.defined()) {
             return op;
         }
-        
+
         Body result = body;
 
         if (new_value.defined() && info.new_uses > 0) {
@@ -1172,9 +1172,9 @@ class Simplify : public IRMutator {
         IRMutator::visit(op);
     }
 
-    void visit(const Block *op) {        
+    void visit(const Block *op) {
         IRMutator::visit(op);
-    }    
+    }
 };
 
 Expr simplify(Expr e) {
@@ -1195,12 +1195,12 @@ void check(Expr a, Expr b) {
         assert(false);
     }
 }
-        
+
 void simplify_test() {
     Expr x = Var("x"), y = Var("y"), z = Var("z");
     Expr xf = cast<float>(x);
     Expr yf = cast<float>(y);
-    
+
     // Check the type casting operations.
     assert((int_cast_constant(Int(8), 128) == (int8_t) 128) && "Simplify test failed: int_cast_constant");
     assert((int_cast_constant(UInt(8), -1) == (uint8_t) -1) && "Simplify test failed: int_cast_constant");
@@ -1216,7 +1216,7 @@ void simplify_test() {
 
     check(Cast::make(Int(32), Cast::make(Int(8), 3)), 3);
     check(Cast::make(Int(32), Cast::make(Int(8), 1232)), -48);
-    
+
     // Check evaluation of constant expressions involving casts
     check(cast(UInt(16), 53) + cast(UInt(16), 87), cast(UInt(16), 140));
     check(cast(Int(8), 127) + cast(Int(8), 1), cast(Int(8), -128));
@@ -1241,7 +1241,7 @@ void simplify_test() {
     check(max(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), cast(UInt(32), (int) 4000000023UL));
     check(cast(UInt(32), (int) 4000000023UL) < cast(UInt(32), 1000), const_false());
     check(cast(UInt(32), (int) 4000000023UL) == cast(UInt(32), 1000), const_false());
-    
+
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));
     check(Expr(-23) / 4, Expr(-6));
@@ -1320,7 +1320,7 @@ void simplify_test() {
     check((x*4 - y)/2, x*2 - y/2);
     check((y - x*4)/2, y/2 - x*2);
     check(xf / 4.0f, xf * 0.25f);
-    check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)), 
+    check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)),
           Expr(Broadcast::make(y/x, 4)));
     check(Expr(Ramp::make(x, 4, 4)) / 2, Ramp::make(x/2, 2, 4));
 
@@ -1329,20 +1329,20 @@ void simplify_test() {
     check(Expr(-7.25f) % 2.0f, 0.75f);
     check(Expr(-7.25f) % -2.0f, -1.25f);
     check(Expr(7.25f) % -2.0f, -0.75f);
-    check(Expr(Broadcast::make(x, 4)) % Expr(Broadcast::make(y, 4)), 
+    check(Expr(Broadcast::make(x, 4)) % Expr(Broadcast::make(y, 4)),
           Expr(Broadcast::make(x % y, 4)));
     check((x*8) % 4, 0);
     check((x*8 + y) % 4, y % 4);
     check((y + x*8) % 4, y % 4);
     check((y*16 + 13) % 2, 1);
-    check(Expr(Ramp::make(x, 2, 4)) % (Broadcast::make(2, 4)), 
+    check(Expr(Ramp::make(x, 2, 4)) % (Broadcast::make(2, 4)),
           Broadcast::make(x % 2, 4));
-    check(Expr(Ramp::make(2*x+1, 4, 4)) % (Broadcast::make(2, 4)), 
+    check(Expr(Ramp::make(2*x+1, 4, 4)) % (Broadcast::make(2, 4)),
           Broadcast::make(1, 4));
 
     check(Min::make(7, 3), 3);
     check(Min::make(4.25f, 1.25f), 1.25f);
-    check(Min::make(Broadcast::make(x, 4), Broadcast::make(y, 4)), 
+    check(Min::make(Broadcast::make(x, 4), Broadcast::make(y, 4)),
           Broadcast::make(Min::make(x, y), 4));
     check(Min::make(x, x+3), x);
     check(Min::make(x+4, x), x);
@@ -1355,7 +1355,7 @@ void simplify_test() {
 
     check(Max::make(7, 3), 7);
     check(Max::make(4.25f, 1.25f), 4.25f);
-    check(Max::make(Broadcast::make(x, 4), Broadcast::make(y, 4)), 
+    check(Max::make(Broadcast::make(x, 4), Broadcast::make(y, 4)),
           Broadcast::make(Max::make(x, y), 4));
     check(Max::make(x, x+3), x+3);
     check(Max::make(x+4, x), x+4);
@@ -1395,10 +1395,10 @@ void simplify_test() {
     check(select(x < (x+1), 9, 2), 9);
     check(select(x > (x+1), 9, 2), 2);
     // Selects of comparisons should always become selects of LT or selects of EQ
-    check(select(x != 5, 2, 3), select(x == 5, 3, 2));    
-    check(select(x >= 5, 2, 3), select(x < 5, 3, 2));    
-    check(select(x <= 5, 2, 3), select(5 < x, 3, 2));    
-    check(select(x > 5, 2, 3), select(5 < x, 2, 3));    
+    check(select(x != 5, 2, 3), select(x == 5, 3, 2));
+    check(select(x >= 5, 2, 3), select(x < 5, 3, 2));
+    check(select(x <= 5, 2, 3), select(5 < x, 3, 2));
+    check(select(x > 5, 2, 3), select(5 < x, 2, 3));
 
     // Check that simplifier can recognise instances where the extremes of the
     // datatype appear as constants in comparisons, Min and Max expressions.
@@ -1425,7 +1425,7 @@ void simplify_test() {
     check(!(x == y), x != y);
     check(!(x != y), x == y);
     check(!(!(x == 0)), x == 0);
-    check(!Expr(Broadcast::make(x > y, 4)), 
+    check(!Expr(Broadcast::make(x > y, 4)),
           Broadcast::make(x <= y, 4));
 
     check(t && (x < 0), x < 0);
@@ -1438,13 +1438,13 @@ void simplify_test() {
     check(Let::make("x", 3, x+4), 7);
 
     // Check ramps in lets get pushed inwards
-    check(Let::make("vec", Ramp::make(x*2+7, 3, 4), vec + Expr(Broadcast::make(2, 4))), 
-          Let::make("vec.base", x*2+7, 
+    check(Let::make("vec", Ramp::make(x*2+7, 3, 4), vec + Expr(Broadcast::make(2, 4))),
+          Let::make("vec.base", x*2+7,
                     Ramp::make(Expr(Variable::make(Int(32), "vec.base")) + 2, 3, 4)));
 
     // Check broadcasts in lets get pushed inwards
     check(Let::make("vec", Broadcast::make(x, 4), vec + Expr(Broadcast::make(2, 4))),
-          Let::make("vec.base", x, 
+          Let::make("vec.base", x,
                     Broadcast::make(Expr(Variable::make(Int(32), "vec.base")) + 2, 4)));
 
     // Check that dead lets get stripped
