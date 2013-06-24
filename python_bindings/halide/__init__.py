@@ -14,7 +14,7 @@ import tempfile
 exit_on_signal()                   # Install C++ debugging traceback
 
 # ----------------------------------------------------------------------------------------------------------
-# Types (functions are used to replace the "constructors" due to an issue with SWIG replacing __new__)
+# Types (classes/functions are used to replace the "constructors" due to working around SWIG)
 # ----------------------------------------------------------------------------------------------------------
 
 ExprType = Expr
@@ -23,6 +23,13 @@ RDomType = RDom
 ImageTypes = (Image_int8, Image_int16, Image_int32, Image_uint8, Image_uint16, Image_uint32, Image_float32, Image_float64)
 ImageParamType = ImageParam
 BufferType = Buffer
+FuncType = Func
+VarType = Var
+RVarType = RVar
+RDomType = RDom
+TypeType = Type
+FuncRefExprType = FuncRefExpr
+FuncRefVarType = FuncRefVar
 
 # ----------------------------------------------------
 # Expr
@@ -46,7 +53,7 @@ def wrap(*a):
     
 pow0 = pow
 
-for BaseT in (Expr, FuncRefExpr, FuncRefVar, Var, RDom, RVar, Func) + ParamTypes:
+for BaseT in (ExprType, FuncRefExpr, FuncRefVar, VarType, RDomType, RVarType, FuncType) + ParamTypes:
     BaseT.__add__ = lambda x, y: add(wrap(x), wrap(y))
     BaseT.__sub__ = lambda x, y: sub(wrap(x), wrap(y))
     BaseT.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
@@ -81,18 +88,40 @@ for BaseT in (Expr, FuncRefExpr, FuncRefVar, Var, RDom, RVar, Func) + ParamTypes
     BaseT.__idiv__ = lambda x, y: idiv(wrap(x), wrap(y))
 
 # ----------------------------------------------------
-# RDom
-# ----------------------------------------------------
-
-def RDom(*args):
-    args = [wrap(x) if not isinstance(x,str) else x for x in args]
-    return RDomType(*args)
-
-# ----------------------------------------------------
 # Var, Func
 # ----------------------------------------------------
 
-for C in [Var, FuncRefExpr, FuncRefVar]:
+class Var(object):
+    """
+    A Halide variable, to be used when defining functions. It is just
+    a name, and can be reused in places where no name conflict will
+    occur. It can be used in the left-hand-side of a function
+    definition, or as an Expr. As an Expr, it always has type Int(32).
+    
+    Constructors::
+    
+      Var()      -- Construct Var with an automatically-generated unique name
+      Var(name)  -- Construct Var with the given string name.
+    """
+    def __new__(cls, *args):
+        return VarType(*args)
+    
+    def name(self):
+        """
+        Get the name of a Var.
+        """
+    
+    def same_as(self, other):
+        """
+        Test if two Vars are the same.
+        """
+    
+    def implicit(self, n):
+        """
+        Construct implicit Var from int n.
+        """
+        
+for C in [VarType, FuncRefExpr, FuncRefVar]:
     C.__add__ = lambda x, y: add(wrap(x), wrap(y))
     C.__sub__ = lambda x, y: sub(wrap(x), wrap(y))
     C.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
@@ -120,46 +149,402 @@ def raise_error(e):
     raise e
 
 #_reset0 = Func.reset     # Reset schedule has been removed (could be reimplemented in C++ layer as a walk over all Funcs)
-_split0 = Func.split
-_tile0 = Func.tile
+_split0 = FuncType.split
+_tile0 = FuncType.tile
 #_reorder0 = Func.reorder
-_bound0 = Func.bound
+_bound0 = FuncType.bound
 
-_generic_getitem_var_or_expr = lambda x, key: call(x, *wrap_func_args(key)) if isinstance(key,tuple) else call(x, wrap(key) if not isinstance(key,Var) else key)
+_generic_getitem_var_or_expr = lambda x, key: call(x, *wrap_func_args(key)) if isinstance(key,tuple) else call(x, wrap(key) if not isinstance(key,VarType) else key)
 _generic_getitem_expr = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_set = lambda x, y: set(x, wrap(y))
 #_realize = Func.realize
 
-Func.__call__ = lambda self, *L: raise_error(ValueError('used f(x, y) to refer to a Func -- proper syntax is f[x, y]'))
+FuncType.__call__ = lambda self, *L: raise_error(ValueError('used f(x, y) to refer to a Func -- proper syntax is f[x, y]'))
 def wrap_func_args(args):
-    if all(isinstance(x, Var) for x in args):
+    if all(isinstance(x, VarType) for x in args):
         return args
     return [wrap(y) for y in args]
     
-Func.__setitem__ = lambda x, key, value: set(call(x, *wrap_func_args(key)), wrap(value)) if isinstance(key,tuple) else set(call(x, wrap(key) if not isinstance(key,Var) else key), wrap(value))
-Func.__getitem__ = _generic_getitem_var_or_expr
-Func.set = _generic_set
+FuncType.__setitem__ = lambda x, key, value: set(call(x, *wrap_func_args(key)), wrap(value)) if isinstance(key,tuple) else set(call(x, wrap(key) if not isinstance(key,VarType) else key), wrap(value))
+FuncType.__getitem__ = _generic_getitem_var_or_expr
+FuncType.set = _generic_set
 #Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
-Func.split = lambda self, a, b, c, d: _split0(self, a, b, c, wrap(d))
-Func.tile = lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
+FuncType.split = lambda self, a, b, c, d: _split0(self, a, b, c, wrap(d))
+FuncType.tile = lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
 #Func.reorder = lambda self, *a: _reorder0(self, ListVar(a))
-Func.bound = lambda self, a, b, c: _bound0(self, a, wrap(b), wrap(c))
+FuncType.bound = lambda self, a, b, c: _bound0(self, a, wrap(b), wrap(c))
 
+class Func(object):
+    """
+    A halide function. This class represents one stage in a Halide
+    pipeline, and is the unit by which we schedule things. By default
+    they are aggressively inlined, so you are encouraged to make lots
+    of little functions, rather than storing things in Exprs.
+    
+    Constructors::
+    
+      Func()      -- Declare a new undefined function with an automatically-generated unique name
+      Func(expr)  -- Declare a new function with an automatically-generated unique
+                     name, and define it to return the given expression (which may
+                     not contain free variables).
+      Func(name)  -- Declare a new undefined function with the given name
+
+    """
+    def __new__(cls, *args):
+        return FuncType(*args)
+    
+    def set(self, y):
+        """
+        Typically one uses f[x, y] = expr to assign to a function. However f.set(expr) can be used also.
+        """
+    
+    def realize(self, x_size=0, y_size=0, z_size=0, w_size=0):
+        """
+        Evaluate this function over some rectangular domain and return
+        the resulting buffer. The buffer should probably be instantly
+        wrapped in an Image class.
+
+        One can use f.realize(Buffer) to realize into an existing buffer.
+        """
+        
+    def compile_to_bitcode(self, filename, list_of_Argument, fn_name=""):
+        """
+        Statically compile this function to llvm bitcode, with the
+        given filename (which should probably end in .bc), type
+        signature, and C function name (which defaults to the same name
+        as this halide function.
+        """
+    
+    def compile_to_c(self, filename, list_of_Argument, fn_name=""):
+        """
+        Statically compile this function to C source code. This is
+        useful for providing fallback code paths that will compile on
+        many platforms. Vectorization will fail, and parallelization
+        will produce serial code.
+        """
+    
+    def compile_to_file(self, filename_prefix, list_of_Argument):
+        """
+        Various signatures::
+        
+          compile_to_file(filename_prefix, list_of_Argument)
+          compile_to_file(filename_prefix)
+          compile_to_file(filename_prefix, Argument a)
+          compile_to_file(filename_prefix, Argument a, Argument b)
+        
+        Compile to object file and header pair, with the given
+        arguments. Also names the C function to match the first
+        argument.
+        """
+    
+    def compile_jit(self):
+        """
+        Eagerly jit compile the function to machine code. This
+        normally happens on the first call to realize. If you're
+        running your halide pipeline inside time-sensitive code and
+        wish to avoid including the time taken to compile a pipeline,
+        then you can call this ahead of time. Returns the raw function
+        pointer to the compiled pipeline.
+        """
+    
+    def debug_to_file(self, filename):
+        """
+        When this function is compiled, include code that dumps its values
+        to a file after it is realized, for the purpose of debugging.
+        The file covers the realized extent at the point in the schedule that
+        debug_to_file appears.
+      
+        If filename ends in ".tif" or ".tiff" (case insensitive) the file
+        is in TIFF format and can be read by standard tools.
+        """
+    
+    def name(self):
+        """
+        The name of this function, either given during construction, or automatically generated.
+        """
+    
+    def value(self):
+        """
+        The right-hand-side value of the pure definition of this
+        function. May be undefined if the function has no pure
+        definition yet.
+        """
+    
+    def dimensions(self):
+        """
+        The dimensionality (number of arguments) of this
+        function. Zero if the function is not yet defined.
+        """
+    
+    def __getitem__(self, *args):
+        """
+        Either calls to the function, or the left-hand-side of a
+        reduction definition (see \ref RDom). If the function has
+        already been defined, and fewer arguments are given than the
+        function has dimensions, then enough implicit vars are added to
+        the end of the argument list to make up the difference.
+        """
+    
+    def split(self, old, outer, inner, factor):
+        """
+        Split a dimension into inner and outer subdimensions with the
+        given names, where the inner dimension iterates from 0 to
+        factor-1. The inner and outer subdimensions can then be dealt
+        with using the other scheduling calls. It's ok to reuse the old
+        variable name as either the inner or outer variable.
+        
+        The arguments are all Var instances.
+        """
+        
+    def parallel(self, var):
+        """
+        Mark a dimension (Var instance) to be traversed in parallel.
+        """
+    
+    def vectorize(self, var, factor):
+        """
+        Split a dimension (Var instance) by the given int factor, then vectorize the
+        inner dimension. This is how you vectorize a loop of unknown
+        size. The variable to be vectorized should be the innermost
+        one. After this call, var refers to the outer dimension of the
+        split.
+        """
+    
+    def unroll(self, var, factor=None):
+        """
+        Split a dimension (Var instance) by the given int factor, then unroll the inner
+        dimension. This is how you unroll a loop of unknown size by
+        some constant factor. After this call, var refers to the outer
+        dimension of the split.
+        """
+    
+    def bound(self, min_expr, extent_expr):
+        """
+        Statically declare that the range over which a function should
+        be evaluated is given by the second and third arguments. This
+        can let Halide perform some optimizations. E.g. if you know
+        there are going to be 4 color channels, you can completely
+        vectorize the color channel dimension without the overhead of
+        splitting it up. If bounds inference decides that it requires
+        more of this function than the bounds you have stated, a
+        runtime error will occur when you try to run your pipeline.
+        """
+    
+    def tile(self, x, y, xo, yo, xi, yi, xfactor, yfactor):
+        """
+        Traverse in tiled order. Two signatures::
+        
+          tile(x, y, xi, yi, xfactor, yfactor)          
+          tile(x, y, xo, yo, xi, yi, xfactor, yfactor)
+        
+        Split two dimensions at once by the given factors, and then
+        reorder the resulting dimensions to be xi, yi, xo, yo from
+        innermost outwards. This gives a tiled traversal.
+        
+        The shorter form of tile reuses the old variable names as
+        the new outer dimensions.
+        """
+    
+    def reorder(self, *args):
+        """
+        Reorder the dimensions (Var arguments) to have the given nesting
+        order, from innermost loop order to outermost.
+        """
+    
+    def rename(self, old_name, new_name):
+        """
+        Rename a dimension. Equivalent to split with a inner size of one.
+        """
+    
+    def cuda_threads(self, *args):
+        """
+        Tell Halide that the following dimensions correspond to cuda
+        thread indices. This is useful if you compute a producer
+        function within the block indices of a consumer function, and
+        want to control how that function's dimensions map to cuda
+        threads. If the selected target is not ptx, this just marks
+        those dimensions as parallel.
+        """
+    
+    def cuda_blocks(self, *args):
+        """
+        Tell Halide that the following dimensions correspond to cuda
+        block indices. This is useful for scheduling stages that will
+        run serially within each cuda block. If the selected target is
+        not ptx, this just marks those dimensions as parallel.
+        """
+    
+    def cuda(self, block_x, thread_x):
+        """
+        Three signatures::
+        
+          cuda(block_x, thread_x)
+          cuda(block_x, block_y, thread_x, thread_y)
+          cuda(block_x, block_y, block_z, thread_x, thread_y, thread_z)
+        
+        Tell Halide that the following dimensions correspond to cuda
+        block indices and thread indices. If the selected target is not
+        ptx, these just mark the given dimensions as parallel. The
+        dimensions are consumed by this call, so do all other
+        unrolling, reordering, etc first.
+        """
+    
+    def cuda_tile(self, x, x_size):
+        """
+        Three signatures:
+        
+          cuda_tile(x, x_size)
+          cuda_tile(x, y, x_size, y_size)
+          cuda_tile(x, y, z, x_size, y_size, z_size)
+        
+        Short-hand for tiling a domain and mapping the tile indices
+        to cuda block indices and the coordinates within each tile to
+        cuda thread indices. Consumes the variables given, so do all
+        other scheduling first.
+        """
+    
+    def reorder_storage(self, *args):
+        """
+        Scheduling calls that control how the storage for the function
+        is laid out. Right now you can only reorder the dimensions.
+        """
+    
+    def compute_at(self, f, var):
+        """
+        Compute this function as needed for each unique value of the
+        given var (can be a Var or an RVar) for the given calling function f.
+        """
+    
+    def compute_root(self):
+        """
+        Compute all of this function once ahead of time.
+        """
+
+    def store_at(self, f, var):
+        """
+        Allocate storage for this function within f's loop over
+        var (can be a Var or an RVar). Scheduling storage is optional, and can be used to
+        separate the loop level at which storage occurs from the loop
+        level at which computation occurs to trade off between locality
+        and redundant work.
+        """
+    
+    def store_root(self):
+        """
+        Equivalent to Func.store_at, but schedules storage outside the outermost loop.
+        """
+        
+    def compute_inline(self):
+        """
+        Aggressively inline all uses of this function. This is the
+        default schedule, so you're unlikely to need to call this. For
+        a reduction, that means it gets computed as close to the
+        innermost loop as possible.
+        """
+    
+    def update(self):
+        """
+        Get a handle on the update step of a reduction for the
+        purposes of scheduling it. Only the pure dimensions of the
+        update step can be meaningfully manipulated (see RDom).
+        """
+    
+    def function(self):
+        """
+        Get a handle on the internal halide function that this Func
+        represents. Useful if you want to do introspection on Halide
+        functions.
+        """
+    
 # ----------------------------------------------------
-# FuncRef
+# RDom and RVar
 # ----------------------------------------------------
 
-#FuncRef.__mul__ = lambda x, y: mul(wrap(x), wrap(y))
-#FuncRef.__rmul__ = lambda x, y: mul(wrap(x), wrap(y))
+class RDom(object):
+    """
+    A multi-dimensional domain over which to iterate. Used when
+    defining functions as reductions. See apps/bilateral_grid.py for an
+    example of a reduction.
+    
+    Constructors::
+    
+      RDom(Expr min, Expr extent, name="")                             -- 1D reduction
+      RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, name="")  -- 2D reduction
+      (Similar for 3D and 4D reductions)
+      RDom(Buffer|ImageParam)                    -- Iterate over all points in the domain
 
+    The following global functions can be used for inline reductions::
+    
+        minimum, maximum, product, sum
+    """
+    def __new__(cls, *args):
+        args = [wrap(x) if not isinstance(x,str) else x for x in args]
+        return RDomType(*args)
+    
+    def defined(self):
+        """
+        Check if reduction domain is non-NULL.
+        """
+    
+    def same_as(self, other):
+        """
+        Check if two reduction domains are the same.
+        """
+    
+    def dimensions(self):
+        """
+        Number of dimensions.
+        """
+    
+    x = property(doc="Access dimension 1 of reduction domain.")
+    y = property(doc="Access dimension 2 of reduction domain.")
+    z = property(doc="Access dimension 3 of reduction domain.")
+    w = property(doc="Access dimension 4 of reduction domain.")
+
+class RVar(object):
+    """
+    A reduction variable represents a single dimension of a reduction
+    domain (RDom). Don't construct them directly, instead construct an
+    RDom, and use fields .x, .y, .z, .w to get at the variables. For
+    single-dimensional reduction domains, you can just cast a
+    single-dimensional RDom to an RVar.
+    """
+    def __new__(cls, *args):
+        return RVarType(*args)
+
+    def min(self):
+        """
+        The minimum value that this variable will take on.
+        """
+    
+    def extent(self):
+        """
+        The number that this variable will take on. The maximum value
+        of this variable will be min() + extent() - 1.
+        """
+    
+    def name(self):
+        """
+        The name of this reduction variable.
+        """
+        
 # ----------------------------------------------------
 # Image
 # ----------------------------------------------------
 
-# Halide examples use f[x,y] convention -- flip to I[y,x] convention when converting Halide <=> numpy
-flip_xy = True
+_flip_xy = True
 
-def image_getattr(self, name):
+def flip_xy(flip=True):
+    """
+    Whether to flip array dimensions when converting to Numpy/PIL.
+    
+    Halide examples use f[x,y] convention. If flip_xy(True) is called (the default) then the variables
+    are flipped to I[y,x] convention when converting to Numpy/PIL.
+    """
+    global _flip_xy
+    _flip_xy = flip
+
+def _image_getattr(self, name):
     if name == '__array_interface__':
         #print 'get array'
         D = self
@@ -174,7 +559,7 @@ def image_getattr(self, name):
             raise ValueError('Unknown type %r'%t)
         shape = tuple([D.extent(i) for i in range(D.dimensions())])
         strides = tuple([D.stride(i)*(t.bits/8) for i in range(D.dimensions())])
-        if flip_xy and len(strides) >= 2:
+        if _flip_xy and len(strides) >= 2:
             strides = (strides[1], strides[0]) + strides[2:]
             shape = (shape[1], shape[0]) + shape[2:]
         data = image_to_string(self)
@@ -217,7 +602,6 @@ def _to_pil(I, maxval=None):
     return PIL.fromarray(A)
     
 def _show_image(I, maxval=None):
-    "Shows an Image instance on the screen, by converting through numpy and PIL."
     _to_pil(I, maxval).show()
 
 def _save_image(I, filename, maxval=None):
@@ -227,14 +611,15 @@ for _ImageT in ImageTypes:
     _ImageT.save = lambda *args, **kw: _save_image(*args, **kw)
     _ImageT.to_pil = lambda *args, **kw: _to_pil(*args, **kw)
     _ImageT.set = _generic_set
-    _ImageT.__getattr__ = image_getattr
+    _ImageT.__getattr__ = _image_getattr
     _ImageT.show = lambda *args, **kw: _show_image(*args, **kw)
+    _ImageT.tostring = lambda self: image_to_string(self)
 
 def _numpy_to_image(a, dtype, C):
     a = numpy.asarray(a, dtype)
     shape = a.shape
     strides = a.strides
-    if flip_xy and len(shape) >= 2:
+    if _flip_xy and len(shape) >= 2:
         shape = (shape[1], shape[0]) + shape[2:]
         strides = (strides[1], strides[0]) + strides[2:]
         
@@ -253,15 +638,22 @@ def _numpy_to_type(a):
          numpy.dtype('float64'): Float(64)}
     return d[a.dtype]
             
-def Image(typeval, contents=None, scale=None):
+class Image(object):
     """
-    Image([typeval=Int(n), UInt(n), Float(n), Bool()], contents, [scale=None]), constructs an Image, contents is one of:
+    Construct an Image::
+
+        Image(contents, [scale=None])
+        Image([typeval=Int(n), UInt(n), Float(n), Bool()], contents, [scale=None])
+    
+    The contents can be:
     
         - PIL image
         - Numpy array
         - Filename of existing file (typeval defaults to UInt(8))
         - halide.Buffer
         - An int or tuple -- constructs an n-D image (typeval argument is required).
+
+    The image can be indexed via I[x], I[y,x], etc, which gives a Halide Expr.
 
     If not provided (or None) then the typeval is inferred from the input argument.
     
@@ -270,114 +662,244 @@ def Image(typeval, contents=None, scale=None):
     scale is set to convert between source and target data type ranges, where int types range from 0 to maxval, and float types
     range from 0 to 1.
     """
+    def __new__(cls, typeval, contents=None, scale=None):
+        if contents is None:                        # If contents is None then Image(contents) is assumed as the call
+            (typeval, contents) = (None, typeval)
     
-    if contents is None:                        # If contents is None then Image(contents) is assumed as the call
-        (typeval, contents) = (None, typeval)
-
-    if isinstance(contents, (str, unicode)):    # Convert filename to PIL image
-        contents = PIL.open(contents)
-        if typeval is None:
-            typeval = UInt(8)
-            contents = numpy.asarray(contents, 'uint8')
-        
-    if hasattr(contents, 'putpixel'):           # Convert PIL images to numpy
-        contents = numpy.asarray(contents)
-
-    if typeval is None:
-        if hasattr(contents, 'type'):
-            typeval = contents.type()
-        elif isinstance(contents, numpy.ndarray):
-            typeval = _numpy_to_type(contents)
-        else:
-            raise ValueError('unknown halide.Image constructor')
+        if isinstance(contents, (str, unicode)):    # Convert filename to PIL image
+            contents = PIL.open(contents)
+            if typeval is None:
+                typeval = UInt(8)
+                contents = numpy.asarray(contents, 'uint8')
             
-    assert isinstance(typeval, Type), typeval
-    sig = (typeval.bits, typeval.is_int(), typeval.is_uint(), typeval.is_float())
+        if hasattr(contents, 'putpixel'):           # Convert PIL images to numpy
+            contents = numpy.asarray(contents)
     
-    if sig == (8, True, False, False):
-        C = Image_int8
-        target_dtype = 'int8'
-    elif sig == (16, True, False, False):
-        C = Image_int16
-        target_dtype = 'int16'
-    elif sig == (32, True, False, False):
-        C = Image_int32
-        target_dtype = 'int32'
-    elif sig == (8, False, True, False):
-        C = Image_uint8
-        target_dtype = 'uint8'
-    elif sig == (16, False, True, False):
-        C = Image_uint16
-        target_dtype = 'uint16'
-    elif sig == (32, False, True, False):
-        C = Image_uint32
-        target_dtype = 'uint32'
-    elif sig == (32, False, False, True):
-        C = Image_float32
-        target_dtype = 'float32'
-    elif sig == (64, False, False, True):
-        C = Image_float64
-        target_dtype = 'float64'
-    else:
-        raise ValueError('unimplemented halide.Image type signature %r' % typeval)
+        if typeval is None:
+            if hasattr(contents, 'type'):
+                typeval = contents.type()
+            elif isinstance(contents, numpy.ndarray):
+                typeval = _numpy_to_type(contents)
+            else:
+                raise ValueError('unknown halide.Image constructor')
+                
+        assert isinstance(typeval, TypeType), typeval
+        sig = (typeval.bits, typeval.is_int(), typeval.is_uint(), typeval.is_float())
+        
+        if sig == (8, True, False, False):
+            C = Image_int8
+            target_dtype = 'int8'
+        elif sig == (16, True, False, False):
+            C = Image_int16
+            target_dtype = 'int16'
+        elif sig == (32, True, False, False):
+            C = Image_int32
+            target_dtype = 'int32'
+        elif sig == (8, False, True, False):
+            C = Image_uint8
+            target_dtype = 'uint8'
+        elif sig == (16, False, True, False):
+            C = Image_uint16
+            target_dtype = 'uint16'
+        elif sig == (32, False, True, False):
+            C = Image_uint32
+            target_dtype = 'uint32'
+        elif sig == (32, False, False, True):
+            C = Image_float32
+            target_dtype = 'float32'
+        elif sig == (64, False, False, True):
+            C = Image_float64
+            target_dtype = 'float64'
+        else:
+            raise ValueError('unimplemented halide.Image type signature %r' % typeval)
+    
+        if isinstance(contents, numpy.ndarray):
+            if scale is None:
+                in_range = _numpy_to_type(contents).typical_max()
+                out_range = typeval.typical_max()
+                if in_range != out_range:
+                    scale = float(out_range)/in_range
+            if scale is not None:
+                contents = numpy.asarray(numpy.asarray(contents,'float')*float(scale), target_dtype)
+            return _numpy_to_image(contents, target_dtype, C)
+        elif isinstance(contents, ImageTypes+(ImageParamType,BufferType)):
+            return C(contents)
+        elif isinstance(contents, tuple) or isinstance(contents, list) or isinstance(contents, (int, long)):
+            if isinstance(contents, (int, long)):
+                contents = (contents,)
+            if not all(isinstance(x, (int, long)) for x in contents):
+                raise ValueError('halide.Image constructor did not receive a tuple of ints for Image size')
+            return C(*contents)
+        else:
+            raise ValueError('unknown Image constructor contents %r' % contents)
 
-    if isinstance(contents, numpy.ndarray):
-        if scale is None:
-            in_range = _numpy_to_type(contents).maxval()
-            out_range = typeval.maxval()
-            if in_range != out_range:
-                scale = float(out_range)/in_range
-        if scale is not None:
-            contents = numpy.asarray(numpy.asarray(contents,'float')*float(scale), target_dtype)
-        return _numpy_to_image(contents, target_dtype, C)
-    elif isinstance(contents, ImageTypes+(ImageParamType,BufferType)):
-        return C(contents)
-    elif isinstance(contents, tuple) or isinstance(contents, list) or isinstance(contents, (int, long)):
-        if isinstance(contents, (int, long)):
-            contents = (contents,)
-        if not all(isinstance(x, (int, long)) for x in contents):
-            raise ValueError('halide.Image constructor did not receive a tuple of ints for Image size')
-        return C(*contents)
-    else:
-        raise ValueError('unknown Image constructor contents %r' % contents)
+    def show(self, maxval=None):
+        """
+        Shows an Image instance on the screen, by converting through numpy and PIL.
+        
+        If maxval is not None then rescales so that bright white is equal to maxval.
+        """
 
+    def save(self, filename, maxval=None):
+        """
+        Save an Image (converted via PIL).
+
+        If maxval is not None then rescales so that bright white is equal to maxval.
+        """
+
+    def to_pil(self):
+        """
+        Convert to PIL (Python Imaging Library) image.
+        
+        The fromarray() constructor in PIL does not work due to ignoring array stride so this is a workaround.
+        """
+
+    def tostring(self):
+        """
+        Convert to str.
+        """
+
+    def set(self, contents):
+        """
+        Sets contents of Image or ImageParam::
+
+            set(Image, Buffer)
+            set(ImageParam, Buffer|Image)
+        """
+    
+    def channels(self):
+        """
+        Number of channels.
+        """
+    
+    def copy_to_host(self):
+        """
+        Manually copy-back data to the host, if it's on a device. This
+        is done for you if you construct an image from a buffer, but
+        you might need to call this if you realize a gpu kernel into an
+        existing image.
+        """
+    
+    def defined(self):
+        """
+        Return whether buffer points to actual data (non-NULL Image).
+        """
+    
+    def dimensions(self):
+        """
+        Get the dimensionality of the data. Typically two for grayscale images, and three for color images.
+        """
+    
+    def extent(self, i):
+        """
+        Extent of dimension i.
+        """
+    
+    def height(self):
+        """
+        Get the extent of dimension 0, which by convention we use as
+        the height of the image.
+        """
+    
+    def set_host_dirty(self, dirty=True):
+        """
+        Mark the buffer as dirty-on-host.  is done for you if you
+        construct an image from a buffer, but you might need to call
+        this if you realize a gpu kernel into an existing image, or
+        modify the data via some other back-door.
+        """
+    
+    def stride(self, dim):
+        """
+        Get the number of elements in the buffer between two adjacent
+        elements in the given dimension. For example, the stride in
+        dimension 0 is usually 1, and the stride in dimension 1 is
+        usually the extent of dimension 0. This is not necessarily true
+        though.
+        """
+    
+    def width(self):
+        """
+        Get the extent of dimension 0, which by convention we use as
+        the width of the image.
+        """
+    
+    def type(self):
+        """
+        Return Type instance for the data type of the image.
+        """
+        
 # ----------------------------------------------------
 # Param
 # ----------------------------------------------------
 
-def Param(typeval, *args):
-    assert isinstance(typeval, Type)
-    sig = (typeval.bits, typeval.is_int(), typeval.is_uint(), typeval.is_float())
-    if sig == (8, True, False, False):
-        C = Param_int8
-    elif sig == (16, True, False, False):
-        C = Param_int16
-    elif sig == (32, True, False, False):
-        C = Param_int32
-    elif sig == (8, False, True, False):
-        C = Param_uint8
-    elif sig == (16, False, True, False):
-        C = Param_uint16
-    elif sig == (32, False, True, False):
-        C = Param_uint32
-    elif sig == (32, False, False, True):
-        C = Param_float32
-    elif sig == (64, False, False, True):
-        C = Param_float64
-    else:
-        raise ValueError('unimplemented Param type signature %r' % typeval)
-    if len(args) == 1:          # Handle special cases since SWIG apparently cannot convert int32_t to int.
-        if isinstance(args[0], (int, float)):
-            ans = C()
-            set(ans, args[0])
-            return ans
-    elif len(args) == 2:
-        if isinstance(args[1], (int, float)):
-            ans = C(args[0])
-            set(ans, args[1])
-            return ans
-    return C(*args)
+class Param(object):
+    """
+    A scalar parameter to a halide pipeline. If you're jitting, this
+    should be bound to an actual value of type T using the set method
+    before you realize the function uses this. If you're statically
+    compiling, this param should appear in the argument list.
+    
+    Constructors::
+    
+      Param(typeval, [value])
+      Param(typeval, name, [value])
+    
+    See Type for how to construct typeval.
+    """
+    def __new__(cls, typeval, *args):
+        assert isinstance(typeval, TypeType)
+        sig = (typeval.bits, typeval.is_int(), typeval.is_uint(), typeval.is_float())
+        if sig == (8, True, False, False):
+            C = Param_int8
+        elif sig == (16, True, False, False):
+            C = Param_int16
+        elif sig == (32, True, False, False):
+            C = Param_int32
+        elif sig == (8, False, True, False):
+            C = Param_uint8
+        elif sig == (16, False, True, False):
+            C = Param_uint16
+        elif sig == (32, False, True, False):
+            C = Param_uint32
+        elif sig == (32, False, False, True):
+            C = Param_float32
+        elif sig == (64, False, False, True):
+            C = Param_float64
+        else:
+            raise ValueError('unimplemented Param type signature %r' % typeval)
+        if len(args) == 1:          # Handle special cases since SWIG apparently cannot convert int32_t to int.
+            if isinstance(args[0], (int, float)):
+                ans = C()
+                set(ans, args[0])
+                return ans
+        elif len(args) == 2:
+            if isinstance(args[1], (int, float)):
+                ans = C(args[0])
+                set(ans, args[1])
+                return ans
+        return C(*args)
 
+    def name(self):
+        """
+        String name of parameter.
+        """
+    
+    def get(self):
+        """
+        Get the current value of this parameter. Only meaningful when jitting.
+        """
+    
+    def set(self, val):
+        """
+        Set the current value of this parameter. Only meaningful when jitting.
+        """
+    
+    def type(self):
+        """
+        Get the Halide type.
+        """
+        
 for ParamT in ParamTypes: # + (DynUniform,):
     ParamT.set = lambda x, y: set(x, y) #_generic_assign
 
@@ -387,16 +909,71 @@ for ParamT in ParamTypes: # + (DynUniform,):
 
 #UniformImage.__setitem__ = lambda x, key, value: assign(call(x, *[wrap(y) for y in key]), wrap(value)) if isinstance(key,tuple) else assign(call(x, key), wrap(value))
 
-for _ImageT in [ImageParam]:
+for _ImageT in [ImageParamType]:
     _ImageT.__getitem__ = _generic_getitem_expr
-    _ImageT.set = lambda x, y: set(x, Image(y) if isinstance(y,numpy.ndarray) else y)
+    _ImageT.set = lambda x, y: set(x, Image(y) if (isinstance(y,numpy.ndarray) or hasattr(y, 'putpixel')) else y)
     #_ImageT.save = lambda x, y: save_png(x, y)
 
 # ----------------------------------------------------
 # Type
 # ----------------------------------------------------
 
-def _type_maxval(typeval):          # The typical maximum value used for image processing (1.0 for float types)
+class Type(object):
+    """
+    A Halide type. Constructors are the following global functions::
+    
+      Float(nbits)
+      UInt(nbits)
+      Int(nbits)
+      Bool([width])
+    """
+    
+    def __new__(cls, *args):
+        return TypeType(*args)
+    
+    def to_numpy(self):
+        """
+        Convert to a numpy dtype instance.
+        """
+    
+    def typical_max(self):
+        """
+        Get typical maximum value of the type (1.0 for float, otherwise max int value).
+        """
+
+    def is_int(self):
+        """
+        True if Int() type.
+        """
+    
+    def is_uint(self):
+        """
+        True if UInt() type.
+        """
+    
+    def is_float(self):
+        """
+        True if Float() type.
+        """
+    
+    def is_bool(self):
+        """
+        True if Bool() type.
+        """
+        
+    def imin(self):
+        """
+        Minimum value for integer (assert if not integer).
+        """
+    
+    def imax(self):
+        """
+        Maximum value for integer (assert if not integer).
+        """
+        
+    bits = property(doc='Bits of type')
+    
+def _type_typical_max(typeval):          # The typical maximum value used for image processing (1.0 for float types)
     if typeval.is_uint():
         return 2**(typeval.bits)-1
     elif typeval.is_int():
@@ -416,17 +993,17 @@ def _type_to_numpy(typeval):
     else:
         raise ValueError('unknown type %r'%typeval)
 
-Type.maxval = _type_maxval
-Type.to_numpy = _type_to_numpy
+TypeType.typical_max = _type_typical_max
+TypeType.to_numpy = _type_to_numpy
 
 # ----------------------------------------------------
 # Repr
 # ----------------------------------------------------
 
-Var.__repr__ = lambda self: 'Var(%r)'%self.name()
-Type.__repr__ = lambda self: 'UInt(%d)'%self.bits if self.is_uint() else 'Int(%d)'%self.bits if self.is_int() else 'Float(%d)'%self.bits if self.is_float() else 'Type(%d)'%self.bits 
-Expr.__repr__ = lambda self: 'Expr(%s)' % ', '.join([repr(self.type())]) #  + [str(_x) for _x in self.vars()]
-Func.__repr__ = lambda self: 'Func(%r)' % self.name()
+VarType.__repr__ = lambda self: 'Var(%r)'%self.name()
+TypeType.__repr__ = lambda self: 'UInt(%d)'%self.bits if self.is_uint() else 'Int(%d)'%self.bits if self.is_int() else 'Float(%d)'%self.bits if self.is_float() else 'Type(%d)'%self.bits 
+ExprType.__repr__ = lambda self: 'Expr(%s)' % ', '.join([repr(self.type())]) #  + [str(_x) for _x in self.vars()]
+FuncType.__repr__ = lambda self: 'Func(%r)' % self.name()
 
 # ----------------------------------------------------
 # Global functions
@@ -465,7 +1042,68 @@ sum     = lambda x: sum_func(wrap(x))
 # Constructors
 # ----------------------------------------------------
 
-Expr = wrap
+class Expr(object):
+    """
+    An expression or fragment of Halide code.
+    
+    One can explicitly coerce most types to Expr via the Expr(x) constructor.
+    The following operators are implemented over Expr, and also other types
+    such as Image, Func, Var, RVar generally coerce to Expr when used in arithmetic::
+    
+      + - * / % ** & |
+      -(unary) ~(unary)
+      < <= == != > >=
+      += -= *= /=
+    
+    The following math global functions are also available::
+    
+       Unary:
+         abs acos acosh asin asinh atan atanh ceil cos cosh exp
+         fast_exp fast_log floor log round sin sinh sqrt tan tanh
+       
+       Binary:
+         hypot fast_pow max min pow
+        
+       Ternary:
+         clamp(x, lo, hi)                  -- Clamp expression to [lo, hi]
+         select(cond, if_true, if_false)   -- Return if_true if cond else if_false
+    """
+    def __new__(cls, *args):
+        return wrap(*args)
+
+    def type(self):
+        """
+        Type of expression.
+        """
+        
+class ImageParam(object):
+    """
+    An Image parameter to a halide pipeline. E.g., the input image.
+    
+    Constructor::
+
+      ImageParam(Type t, int dims, name="")
+      
+    The image can be indexed via I[x], I[y,x], etc, which gives a Halide Expr. Supports most of
+    the methods of Image.
+    """
+    def __new__(cls, *args):
+        return ImageParamType(*args)
+    
+    def name(self):
+        """
+        Get name of ImageParam.
+        """
+        
+    def set(self, I):
+        """
+        Bind a Buffer, Image, numpy array, or PIL image. Only relevant for jitting.
+        """
+    
+    def get(self):
+        """
+        Get the Buffer that is bound. Only relevant for jitting.
+        """
 
 # ----------------------------------------------------
 # Test
@@ -534,11 +1172,11 @@ def test_core():
     assert isinstance(x+1, ExprType)
     assert isinstance(x/y, ExprType)
     assert isinstance((x/y)+(x-1), ExprType)
-    assert isinstance(blur_x[x-1,y], FuncRefExpr)
-    assert isinstance(blur_x[x, y], FuncRefVar)
-    assert isinstance(blur_x[x-1], FuncRefExpr)
-    assert isinstance(blur_x[x-1,y,z], FuncRefExpr)
-    assert isinstance(blur_x[x-1,y,z,q], FuncRefExpr)
+    assert isinstance(blur_x[x-1,y], FuncRefExprType)
+    assert isinstance(blur_x[x, y], FuncRefVarType)
+    assert isinstance(blur_x[x-1], FuncRefExprType)
+    assert isinstance(blur_x[x-1,y,z], FuncRefExprType)
+    assert isinstance(blur_x[x-1,y,z,q], FuncRefExprType)
     f = Func()
     f[x,y]=x+1
     
@@ -776,6 +1414,11 @@ def test_numpy():
             c = numpy.asarray(b)
             assert a.dtype == c.dtype
             assert dist(a,c) < 1e-8
+            if dtype == UInt(8):
+                d = numpy.asarray(b.to_pil())
+                e = numpy.asarray(PIL.fromarray(c))
+                assert dist(a,d) < 1e-8
+                assert dist(a,e) < 1e-8
 
             if dtype == UInt(16):
                 locals_d = test_func(in_image=a)
