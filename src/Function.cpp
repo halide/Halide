@@ -121,6 +121,8 @@ void Function::define(const vector<string> &args, Expr value) {
         contents.ptr->schedule.dims.push_back(d);
         contents.ptr->schedule.storage_dims.push_back(args[i]);
     }
+
+    contents.ptr->output_buffer = Parameter(value.type(), true, name());
 }
 
 void Function::define_reduction(const vector<Expr> &_args, Expr value) {
