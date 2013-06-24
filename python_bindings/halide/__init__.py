@@ -438,16 +438,12 @@ for _funcname in 'max min hypot fast_pow'.split():
 #_debug = debug         # Debug node was removed from C++ layer
 #debug  = lambda x, y, *a: _debug(wrap(x), y, *a)
 
-_max = max
-_min = min
 _clamp = clamp
 _cast = cast
 _select = select
 
 pow    = lambda x, y: wrap(x)**wrap(y)
 
-max    = lambda x, y: _max(wrap(x), wrap(y))
-min    = lambda x, y: _min(wrap(x), wrap(y))
 clamp  = lambda x, y, z: _clamp(wrap(x), wrap(y), wrap(z))
 cast   = lambda x, y: _cast(x, wrap(y))
 select = lambda x, y, z: _select(wrap(x), wrap(y), wrap(z))
@@ -573,7 +569,7 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
     """
     Utility function to filter an image filename or numpy array with a Halide Func, returning output Image of the same size.
     
-    Given input and output Funcs, and filename/numpy array (in_image), returns evaluate. Calling evaluate() returns the output Image.
+    Given input and output Funcs, and filename/numpy/PIL array (in_image), returns evaluate. Calling evaluate() returns the output Image.
     """
 #    print 'filter_image, input=', input, 'dtype', input.type()
     dtype = input.type()

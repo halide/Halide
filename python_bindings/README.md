@@ -44,6 +44,7 @@ Currently, there is no manual. The Python bindings are made by wrapping the C++ 
 
 Run the example applications in the apps/ subdirectory, and look at their code, to understand the library.
 
+License
+-------
 
-
-
+The Python bindings use the same [MIT license](https://github.com/halide/Halide/blob/master/LICENSE.txt) as Halide.

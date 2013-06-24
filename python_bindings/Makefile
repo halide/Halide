@@ -22,6 +22,7 @@ run_apps:
 	python apps/local_laplacian.py
 	python apps/interpolate.py
 	python apps/bilateral_grid.py
+	python apps/erode.py
 
 test:
 	python test_halide.py
