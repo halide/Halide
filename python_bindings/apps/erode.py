@@ -2,6 +2,7 @@
 Erode application using Python Halide bindings
 """
 
+import sys
 from halide import *
 
 def main(dtype=UInt(16)):
@@ -25,8 +26,11 @@ def main(dtype=UInt(16)):
     erode_x.compute_root().split(y, y, yi, 8).parallel(y)
     erode_y.compute_root().split(y, y, yi, 8).parallel(y)
         
-    eval_func = filter_image(input, erode_y, builtin_image(), disp_time=True, times=5)
-    eval_func().show()
+    I = filter_image(input, erode_y, builtin_image(), disp_time=True, times=5)()
+    if len(sys.argv) >= 2:
+        I.save(sys.argv[1])
+    else:
+        I.show()
 
 if __name__ == '__main__':
     main()

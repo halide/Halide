@@ -24,5 +24,12 @@ run_apps:
 	python apps/bilateral_grid.py
 	python apps/erode.py
 
+run_apps_headless:
+	python apps/blur.py apps/out_blur.png
+	python apps/local_laplacian.py apps/out_local_laplacian.png
+	python apps/interpolate.py apps/out_interpolate.png
+	python apps/bilateral_grid.py apps/out_bilateral_grid.png
+	python apps/erode.py apps/out_erode.png
+
 test:
 	python test_halide.py

@@ -1,7 +1,7 @@
 
 "Fast image interpolation using a pyramid."
 
-import time
+import time, sys
 from halide import *
 
 int_t = Int(32)
@@ -73,7 +73,12 @@ def main(dtype=Float(32)):
         print 'Interpolated in %.5f secs' % (time.time()-T0)
 
         return out
-    filter_image(input, final, builtin_image('rgba.png'), eval_func=evaluate)().show()
+        
+    I = filter_image(input, final, builtin_image('rgba.png'), eval_func=evaluate)()
+    if len(sys.argv) >= 2:
+        I.save(sys.argv[1])
+    else:
+        I.show()
 
 if __name__ == '__main__':
     main()

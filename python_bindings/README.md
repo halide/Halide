@@ -35,7 +35,8 @@ You can build Halide by using 'make' in the parent directory. This is done autom
     make build                % Build in place
     make test                 % Run unit tests
     sudo make install         % Build and install
-    make run_apps             % Run apps/*.py
+    make run_apps             % Run apps/*.py with GUI output
+    make run_apps_headless    % Run apps; output to apps/out*.png
 
 Usage
 -----
