@@ -29,7 +29,7 @@ PTX_CXX_FLAGS=$(if $(WITH_PTX), "-DWITH_PTX=1", )
 PTX_ARCHS=$(if $(WITH_PTX), ptx_host ptx_dev, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
 
-CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC -O3 
+CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC -O3 -fno-strict-aliasing
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
