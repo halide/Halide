@@ -47,7 +47,7 @@ def main(J=8, dtype=UInt(16)):
     remap[x] = (alpha/cast(float_t, levels-1))*fx*exp(-fx*fx/2.0)
     
     floating = Func('floating')
-    floating[x,y,c] = cast(float_t, input[x,y,c])/float(dtype.maxval())
+    floating[x,y,c] = cast(float_t, input[x,y,c])/float(dtype.typical_max())
     
     clamped = Func('clamped')
     clamped[x,y,c] = floating[clamp(x,cast(int_t,0),cast(int_t,input.width()-1)),
@@ -88,7 +88,7 @@ def main(J=8, dtype=UInt(16)):
     color[x,y,c] = outGPyramid[0][x,y] * (clamped[x,y,c]+0.01) / (gray[x,y]+0.01)
     
     output = Func('output')
-    output[x,y,c] = cast(dtype, clamp(color[x,y,c], cast(float_t,0.0), cast(float_t,1.0))*float(dtype.maxval()))
+    output[x,y,c] = cast(dtype, clamp(color[x,y,c], cast(float_t,0.0), cast(float_t,1.0))*float(dtype.typical_max()))
     
     yi = Var('yi')
     
