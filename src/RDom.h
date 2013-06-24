@@ -27,7 +27,7 @@ public:
 
     /** Construct a reduction variable with the given name and
      * bounds. Must be a member of the given reduction domain. */
-    RVar(std::string __name, Expr __min, Expr __extent, Internal::ReductionDomain _domain) : 
+    RVar(std::string __name, Expr __min, Expr __extent, Internal::ReductionDomain _domain) :
         _name(__name), _min(__min), _extent(__extent), domain(_domain) {}
 
     /** The minimum value that this variable will take on */
@@ -45,7 +45,7 @@ public:
 };
 
 /** A multi-dimensional domain over which to iterate. Used when
- * defining functions as reductions. 
+ * defining functions as reductions.
  *
  * A reduction is a function with a two-part definition. It has an
  * initial value, which looks much like a pure function, and an update
@@ -123,26 +123,26 @@ public:
  sum_x(x, y)   = input(x, y);
  sum_x(r.x, y) = sum_x(r.x, y) + sum_x(r.x-1, y);
  sum_y(x, y)   = sum_x(x, y);
- sum_y(x, r.y) = sum_y(x, r.y) + sum_y(x, r.y-1); 
+ sum_y(x, r.y) = sum_y(x, r.y) + sum_y(x, r.y-1);
  \endcode
  *
  * This lets us schedule it more flexibly. You can now parallelize the
  * update step of sum_x over y by calling:
  \code
  sum_x.update().parallel(y).
- \endcode 
+ \endcode
  *
  * Note that calling sum_x.parallel(y) only parallelizes the
  * initialization step, and not the update step! Scheduling the update
- * step of a reduction must be done using the handle returned by 
- * \ref Func::update(). This code parallelizes both the initialization 
+ * step of a reduction must be done using the handle returned by
+ * \ref Func::update(). This code parallelizes both the initialization
  * step and the update step:
  *
  \code
  sum_x.parallel(y);
  sum_x.update().parallel(y);
  \endcode
- * 
+ *
  * When you mix reduction variables and pure dimensions, the reduction
  * domain is traversed outermost. That is, for each point in the
  * reduction domain, the inferred pure domain is traversed in its
@@ -156,7 +156,7 @@ public:
  \code
  sum_x.compute_at(sum_y, r.y);
  \endcode
- * 
+ *
  * Then the sum in x is computed only as necessary for each scanline
  * of the sum in y. This not only results in sum_x walking along the
  * rows, it also improves the locality of the entire pipeline.
@@ -190,6 +190,9 @@ public:
     EXPORT RDom(Buffer);
     EXPORT RDom(ImageParam);
     // @}
+
+    /** Construct a reduction domain that wraps an Internal ReductionDomain object. */
+    EXPORT RDom(Internal::ReductionDomain d) : domain(d) {}
 
     /** Check if this reduction domain is non-NULL */
     bool defined() const {return domain.defined();}
