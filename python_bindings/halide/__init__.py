@@ -37,13 +37,11 @@ def wrap(*a):
             return a[0] #ExprType(to_dynimage(a[0]))
         elif isinstance(a[0], (int,long)):
             return cast_to_expr(a[0])
-        elif isinstance(a[0], tuple):
-            raise ValueError('tuple syntactic sugar not supported -- use select() instead')
         else:
             return cast_to_expr(a[0])
             #return expr_from_tuple(*(wrap(x) for x in a[0]))
     return ExprType(*a)
-    
+
 pow0 = pow
 
 for BaseT in (Expr, FuncRefExpr, FuncRefVar, Var, RDom, RVar, Func) + ParamTypes:
@@ -135,7 +133,7 @@ def wrap_func_args(args):
     if all(isinstance(x, Var) for x in args):
         return args
     return [wrap(y) for y in args]
-    
+
 Func.__setitem__ = lambda x, key, value: set(call(x, *wrap_func_args(key)), wrap(value)) if isinstance(key,tuple) else set(call(x, wrap(key) if not isinstance(key,Var) else key), wrap(value))
 Func.__getitem__ = _generic_getitem_var_or_expr
 Func.set = _generic_set
@@ -215,14 +213,14 @@ def _to_pil(I, maxval=None):
     if len(A.shape) == 3 and A.shape[2] == 1:
         A = A[:,:,0]
     return PIL.fromarray(A)
-    
+
 def _show_image(I, maxval=None):
     "Shows an Image instance on the screen, by converting through numpy and PIL."
     _to_pil(I, maxval).show()
 
 def _save_image(I, filename, maxval=None):
     _to_pil(I, maxval).save(filename)
-    
+
 for _ImageT in ImageTypes:
     _ImageT.save = lambda *args, **kw: _save_image(*args, **kw)
     _ImageT.to_pil = lambda *args, **kw: _to_pil(*args, **kw)
@@ -237,7 +235,7 @@ def _numpy_to_image(a, dtype, C):
     if flip_xy and len(shape) >= 2:
         shape = (shape[1], shape[0]) + shape[2:]
         strides = (strides[1], strides[0]) + strides[2:]
-        
+
     ans = C(*shape)
     assign_array(ans, a.__array_interface__['data'][0], *strides)
     return ans
@@ -252,11 +250,11 @@ def _numpy_to_type(a):
          numpy.dtype('float32'): Float(32),
          numpy.dtype('float64'): Float(64)}
     return d[a.dtype]
-            
+
 def Image(typeval, contents=None, scale=None):
     """
     Image([typeval=Int(n), UInt(n), Float(n), Bool()], contents, [scale=None]), constructs an Image, contents is one of:
-    
+
         - PIL image
         - Numpy array
         - Filename of existing file (typeval defaults to UInt(8))
@@ -264,13 +262,13 @@ def Image(typeval, contents=None, scale=None):
         - An int or tuple -- constructs an n-D image (typeval argument is required).
 
     If not provided (or None) then the typeval is inferred from the input argument.
-    
+
     For PIL, numpy, and filename constructors, if scale is provided then the input is scaled by the floating point scale factor
     (for example, Image(filename, UInt(16), 1.0/256) reads a UInt(16) image rescaled to have maximum value 255). If omitted,
     scale is set to convert between source and target data type ranges, where int types range from 0 to maxval, and float types
     range from 0 to 1.
     """
-    
+
     if contents is None:                        # If contents is None then Image(contents) is assumed as the call
         (typeval, contents) = (None, typeval)
 
@@ -279,7 +277,7 @@ def Image(typeval, contents=None, scale=None):
         if typeval is None:
             typeval = UInt(8)
             contents = numpy.asarray(contents, 'uint8')
-        
+
     if hasattr(contents, 'putpixel'):           # Convert PIL images to numpy
         contents = numpy.asarray(contents)
 
@@ -290,10 +288,10 @@ def Image(typeval, contents=None, scale=None):
             typeval = _numpy_to_type(contents)
         else:
             raise ValueError('unknown halide.Image constructor')
-            
+
     assert isinstance(typeval, Type), typeval
     sig = (typeval.bits, typeval.is_int(), typeval.is_uint(), typeval.is_float())
-    
+
     if sig == (8, True, False, False):
         C = Image_int8
         target_dtype = 'int8'
@@ -424,7 +422,7 @@ Type.to_numpy = _type_to_numpy
 # ----------------------------------------------------
 
 Var.__repr__ = lambda self: 'Var(%r)'%self.name()
-Type.__repr__ = lambda self: 'UInt(%d)'%self.bits if self.is_uint() else 'Int(%d)'%self.bits if self.is_int() else 'Float(%d)'%self.bits if self.is_float() else 'Type(%d)'%self.bits 
+Type.__repr__ = lambda self: 'UInt(%d)'%self.bits if self.is_uint() else 'Int(%d)'%self.bits if self.is_int() else 'Float(%d)'%self.bits if self.is_float() else 'Type(%d)'%self.bits
 Expr.__repr__ = lambda self: 'Expr(%s)' % ', '.join([repr(self.type())]) #  + [str(_x) for _x in self.vars()]
 Func.__repr__ = lambda self: 'Func(%r)' % self.name()
 
@@ -442,7 +440,7 @@ for _funcname in 'sqrt sin cos exp log floor ceil round asin acos atan tan sinh 
 for _funcname in 'max min hypot fast_pow'.split():
     exec "_%s = %s" % (_funcname, _funcname)
     exec "%s = lambda x, y: _%s(wrap(x), wrap(y))" % (_funcname, _funcname)
-    
+
 #_debug = debug         # Debug node was removed from C++ layer
 #debug  = lambda x, y, *a: _debug(wrap(x), y, *a)
 
@@ -520,7 +518,7 @@ def test_core():
                     check([x])
                     x /= y
                     check([x])
-        
+
     #blur_x += expr_x
     #blur_x(expr_x)
 
@@ -530,7 +528,7 @@ def test_core():
     y = var_y
     z = Var()
     q = Var()
-    
+
     assert isinstance(x+1, ExprType)
     assert isinstance(x/y, ExprType)
     assert isinstance((x/y)+(x-1), ExprType)
@@ -541,11 +539,11 @@ def test_core():
     assert isinstance(blur_x[x-1,y,z,q], FuncRefExpr)
     f = Func()
     f[x,y]=x+1
-    
+
     print 'halide.test_core:                    OK'
-  
+
 def func_varlist(f):
-    return [x for x in f.function().args()]
+    return [x.name() for x in f.args()]
 
 def get_blur():
     input = ImageParam(UInt(16), 3, 'input')
@@ -572,11 +570,11 @@ def builtin_image(filename=None, raw_string=False):
         return s
     f = cStringIO.StringIO(s)
     return PIL.open(f)
-    
+
 def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None, out_dims=None, times=1): #, pad_multiple=1):
     """
     Utility function to filter an image filename or numpy array with a Halide Func, returning output Image of the same size.
-    
+
     Given input and output Funcs, and filename/numpy/PIL array (in_image), returns evaluate. Calling evaluate() returns the output Image.
     """
 #    print 'filter_image, input=', input, 'dtype', input.type()
@@ -614,15 +612,15 @@ def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_
                     realized = out_func.realize(w, h)
             T.append(time.time()-T0)
         out = Image(realized) #.set(realized)
-        
-        
+
+
         assert out.width() == w and out.height() == h, (out.width(), out.height(), w, h)
         if disp_time:
             if times > 1:
                 print 'Filtered %d times, min: %.6f secs, mean: %.6f secs.' % (times, numpy.min(T), numpy.mean(T))
             else:
                 print 'Filtered in %.6f secs' % T[0]
-                
+
         return out
     return evaluate
 
@@ -640,20 +638,20 @@ def example_out():
 
 def test_blur():
     (input, x, y, c, blur_x, blur_y, input_clamped) = get_blur()
-    
+
     for f in [blur_y, blur_x]:
-        assert len(f.function().args()) == 3
-        assert f.function().args()[0]=='x'
-        assert f.function().args()[1]=='y'
-        assert f.function().args()[2]=='c'
-    #assert blur_y.value().funcs()[0].name()=='blur_x'
+        assert len(f.args()) == 3
+        args = f.args()
+        assert args[0].name()=='x'
+        assert args[1].name()=='y'
+        assert args[2].name()=='c'
     str(blur_y.value())
 
     #assert len(blur_y.value().funcs()) == 1, list(blur_y.value().funcs())
     #assert set(all_funcs(blur_y).keys()) == set(['blur_x', 'blur_y', 'input_clamped']), set(all_funcs(blur_y).keys())
     assert func_varlist(blur_y) == ['x', 'y', 'c'], func_varlist(blur_y)
     assert func_varlist(blur_x) == ['x', 'y', 'c'], func_varlist(blur_x)
-    
+
     for i in range(2):
         input_arg = Argument('input', True, UInt(16))
         blur_y.compile_to_file('halide_blur', input_arg)
@@ -668,14 +666,14 @@ def test_blur():
         out = outf()
         T1 = time.time()
         #print T1-T0, 'secs'
-    
+
         out_filename = 'test_out.png'
         out.save(out_filename)
         s = image_to_string(out)
         assert isinstance(s, str)
         I1 = numpy.asarray(PIL.open(out_filename))
         os.remove(out_filename)
-    
+
     print 'halide.test_blur:                    OK'
 
 def test_func(compile=True, in_image=None):
@@ -685,13 +683,13 @@ def test_func(compile=True, in_image=None):
         in_image = builtin_image()
     outf = filter_image(input, blur_y, in_image, compile=compile)
     out = [None]
-    
+
     def test(func):
         T0 = time.time()
         out[0] = outf()
         T1 = time.time()
         return T1-T0
-    
+
     return locals()
 
 def test_segfault():
@@ -701,18 +699,18 @@ def test_segfault():
     c = locals_d['c']
     blur_y = locals_d['blur_y']
     test = locals_d['test']
-    
+
     exit_on_signal()
     # TODO: Implement a test that segfaults...
-    
+
 def test_examples():
     import examples
     in_grayscale = 'lena_crop_grayscale.png'
     in_color = 'lena_crop.png'
-    
+
     names = []
     do_filter = True
-    
+
 #    for example_name in ['interpolate']: #
     for example_name in 'interpolate blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
 #    for example_name in 'interpolate blur dilate boxblur_sat boxblur_cumsum local_laplacian snake'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
@@ -830,24 +828,24 @@ def test_image_constructors():
     I = builtin_image('rgb.png')
     A = numpy.asarray(I)
     B = Buffer(UInt(8), 5, 5, 3)
-    
+
     filename = tempfile.mktemp(suffix='.png')
     try:
         f = open(filename, 'wb')
         f.write(builtin_image('rgb.png', raw_string=True))
         f.close()
-        
+
         I8 = Image(UInt(8), I)
         I16 = Image(UInt(16), I)
         Ip = ImageParam(UInt(16), 2)
-        
+
         check(Image(I), UInt(8))
         check(Image(A), UInt(8))
         check(Image(B), UInt(8))
 #        check(Image(I8), UInt())
 #        check(Image(I16))
 #        check(Image(Ip))
-        
+
         for typeval in [None, Int(8), UInt(16), UInt(32), Float(64)]:
             check(Image(typeval, I), typeval)
             check(Image(typeval, A), typeval)
@@ -868,9 +866,9 @@ def test_image_constructors():
             os.remove(filename)
         except:
             pass
-    
+
     print 'halide.test_image_constructors:      OK'
-    
+
 def test():
     exit_on_signal()
 
@@ -879,7 +877,7 @@ def test():
     test_core()
     test_numpy()
     test_image_constructors()
-    
+
 if __name__ == '__main__':
     test()
-    
+
