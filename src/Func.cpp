@@ -70,8 +70,44 @@ const string &Func::name() const {
     return func.name();
 }
 
+/** Get the pure arguments. */
+std::vector<Var> Func::args() const {
+    const std::vector<std::string> arg_names = func.args();
+    std::vector<Var> args(arg_names.size());
+    for (size_t i = 0; i < arg_names.size(); i++) {
+        args[i] = Var(arg_names[i]);
+    }
+    return args;
+}
+
+/** The right-hand-side value of the pure definition of this
+ * function. May be undefined if the function has no pure
+ * definition yet. */
 Expr Func::value() const {
     return func.value();
+}
+
+/** Get the left-hand-side of the reduction definition. An empty
+ * vector if there's no reduction definition. */
+const std::vector<Expr> &Func::reduction_args() const {
+    return func.reduction_args();
+}
+
+/** Get the right-hand-side of the reduction definition. Returns
+ * undefined Expr if there's no reduction definition. */
+Expr Func::reduction_value() const {
+    return func.reduction_value();
+}
+
+/** Get the reduction domain for the reduction definition. Returns
+ * an undefined RDom if there's no reduction definition. */
+RDom Func::reduction_domain() const {
+    return func.reduction_domain();
+}
+
+/** Is this function a reduction? */
+bool Func::is_reduction() const {
+    return reduction_value().defined();
 }
 
 int Func::dimensions() const {
