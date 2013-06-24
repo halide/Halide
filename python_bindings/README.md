@@ -6,11 +6,6 @@ By Connelly Barnes, 2012-2013.
 This library allows you to write Halide code in Python. The library has currently only been tested on Mac OS
 and Linux (Debian), against a Halide source build, and is more experimental than the C++ Halide.
 
-Documentation
--------------
-
-Module documentation is [available](http://connellybarnes.com/documents/halide/).
-
 Installation
 ------------
 
@@ -40,15 +35,16 @@ You can build Halide by using 'make' in the parent directory. This is done autom
     make build                % Build in place
     make test                 % Run unit tests
     sudo make install         % Build and install
-    make run_apps             % Run apps/*.py with GUI output
+
+Documentation and Examples
+--------------------------
+
+Consult the [module documentation](http://connellybarnes.com/documents/halide/).
+
+Check out the code for the example applications in the apps/ subdirectory. You can run them individually or as a batch:
+
+    make run_apps             % Run apps/*.py with GUI output 
     make run_apps_headless    % Run apps; output to apps/out*.png
-
-Usage
------
-
-Currently, there is no manual. The Python bindings are made by wrapping the C++ layer, so the syntax is thus quite similar.
-
-Run the example applications in the apps/ subdirectory, and look at their code, to understand the library.
 
 License
 -------
