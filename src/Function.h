@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 struct FunctionContents {
@@ -27,7 +27,9 @@ struct FunctionContents {
     ReductionDomain reduction_domain;
 
     std::string debug_file;
-};        
+
+    Parameter output_buffer;
+};
 
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
@@ -46,7 +48,7 @@ public:
      * have a definition. All the free variables in 'value' must
      * appear in the args list. 'value' must not depend on any
      * reduction domain */
-    void define(const std::vector<std::string> &args, Expr value);   
+    void define(const std::vector<std::string> &args, Expr value);
 
     /** Add a reduction definition to this function. It must already
      * have a pure definition but not a reduction definition, and the
@@ -82,12 +84,18 @@ public:
      * it */
     Schedule &schedule() {
         return contents.ptr->schedule;
-    }   
+    }
 
     /** Get a const handle to the schedule for inspecting it */
     const Schedule &schedule() const {
         return contents.ptr->schedule;
-    }   
+    }
+
+    /** Get a handle on the output buffer used for setting constraints
+     * on it. */
+    Parameter output_buffer() const {
+        return contents.ptr->output_buffer;
+    }
 
     /** Get a mutable handle to the schedule for the reduction
      * stage */
@@ -107,7 +115,7 @@ public:
 
     /** Get the left-hand-side of the reduction definition */
     const std::vector<Expr> &reduction_args() const {
-        return contents.ptr->reduction_args;        
+        return contents.ptr->reduction_args;
     }
 
     /** Get the reduction domain for the reduction definition */

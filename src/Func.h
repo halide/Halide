@@ -848,8 +848,14 @@ public:
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide
      * functions */
-    Internal::Function function() const {return func;}
+    Internal::Function function() const {
+        return func;
+    }
 
+    /** Get a handle on the output buffer for this Func. Only relevant
+     * if this is the output Func in a pipeline. Useful for making
+     * static promises about strides, mins, and extents. */
+    OutputImageParam output_buffer() const;
 
     /** Casting a function to an expression is equivalent to calling
      * the function with zero arguments. Implicit variables will be

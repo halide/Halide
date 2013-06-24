@@ -39,14 +39,14 @@ void lower_test() {
 
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y"), xi, xo, yi, yo;
-    
-    h(x, y) = x-y;    
+
+    h(x, y) = x-y;
     g(x, y) = h(x+1, y) + h(x-1, y);
     f(x, y) = g(x, y-1) + g(x, y+1);
-    
+
 
     //f.split(x, xo, xi, 4).vectorize(xi).parallel(xo);
-    //f.compute_root();       
+    //f.compute_root();
 
     //g.split(y, yo, yi, 2).unroll(yi);;
     g.store_at(f, y).compute_at(f, x);
@@ -90,10 +90,10 @@ Expr qualify_expr(string prefix, Expr value) {
 Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Expr value, const Schedule &s) {
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
-            
+
     // Make the (multi-dimensional) store node
     Stmt stmt = Provide::make(buffer, value, site);
-            
+
     // Define the function args in terms of the loop variables using the splits
     for (size_t i = 0; i < s.splits.size(); i++) {
         const Schedule::Split &split = s.splits[i];
@@ -107,7 +107,7 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
             stmt = substitute(prefix + split.old_var, outer, stmt);
         }
     }
-       
+
     // Build the loop nest
     for (size_t i = 0; i < s.dims.size(); i++) {
         const Schedule::Dim &dim = s.dims[i];
@@ -128,7 +128,7 @@ Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Ex
             stmt = LetStmt::make(prefix + split.inner + ".min", 0, stmt);
             stmt = LetStmt::make(prefix + split.inner + ".extent", inner_extent, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".min", 0, stmt);
-            stmt = LetStmt::make(prefix + split.outer + ".extent", outer_extent, stmt);            
+            stmt = LetStmt::make(prefix + split.outer + ".extent", outer_extent, stmt);
         } else {
             stmt = LetStmt::make(prefix + split.outer + ".min", old_var_min, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".extent", old_var_extent, stmt);
@@ -150,7 +150,7 @@ Stmt build_produce(Function f) {
 
     // Compute the site to store to as the function args
     vector<Expr> site;
-    Expr value = qualify_expr(prefix, f.value());   
+    Expr value = qualify_expr(prefix, f.value());
 
     for (size_t i = 0; i < f.args().size(); i++) {
         site.push_back(Variable::make(Int(32), f.name() + "." + f.args()[i]));
@@ -189,7 +189,7 @@ Stmt build_update(Function f) {
 pair<Stmt, Stmt> build_realization(Function func) {
     Stmt produce = build_produce(func);
     Stmt update = build_update(func);
-    
+
     if (update.defined()) {
         // Expand the bounds computed in the produce step
         // using the bounds read in the update step. This is
@@ -199,7 +199,7 @@ pair<Stmt, Stmt> build_realization(Function func) {
         if (!bounds.empty()) {
             assert(bounds.size() == func.args().size());
             // Expand the region to be computed using the region read in the update step
-            for (size_t i = 0; i < bounds.size(); i++) {                        
+            for (size_t i = 0; i < bounds.size(); i++) {
                 string var = func.name() + "." + func.args()[i];
                 Expr update_min = Variable::make(Int(32), var + ".update_min");
                 Expr update_extent = Variable::make(Int(32), var + ".update_extent");
@@ -211,7 +211,7 @@ pair<Stmt, Stmt> build_realization(Function func) {
                 produce = LetStmt::make(var + ".min", init_min, produce);
                 produce = LetStmt::make(var + ".extent", init_extent, produce);
             }
-            
+
             // Define the region read during the update step
             for (size_t i = 0; i < bounds.size(); i++) {
                 string var = func.name() + "." + func.args()[i];
@@ -219,7 +219,7 @@ pair<Stmt, Stmt> build_realization(Function func) {
                 produce = LetStmt::make(var + ".update_extent", bounds[i].extent, produce);
             }
         }
-    }    
+    }
     return make_pair(produce, update);
 }
 
@@ -227,7 +227,7 @@ pair<Stmt, Stmt> build_realization(Function func) {
 // injects let statements that set those bounds, and assertions that
 // check that those bounds are sufficiently large to cover the
 // inferred bounds required.
-Stmt inject_explicit_bounds(Stmt body, Function func) {           
+Stmt inject_explicit_bounds(Stmt body, Function func) {
     // Inject any explicit bounds
     for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
         Schedule::Bound b = func.schedule().bounds[i];
@@ -235,12 +235,12 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
         string extent_name = func.name() + "." + b.var + ".extent";
         Expr min_var = Variable::make(Int(32), min_name);
         Expr extent_var = Variable::make(Int(32), extent_name);
-        Expr check = (b.min <= min_var) && ((b.min + b.extent) >= (min_var + extent_var)); 
+        Expr check = (b.min <= min_var) && ((b.min + b.extent) >= (min_var + extent_var));
         string error_msg = "Bounds given for " + b.var + " in " + func.name() + " don't cover required region";
         body = Block::make(AssertStmt::make(check, error_msg),
-                         LetStmt::make(min_name, b.min, 
+                         LetStmt::make(min_name, b.min,
                                      LetStmt::make(extent_name, b.extent, body)));
-    }            
+    }
     return body;
 }
 
@@ -258,7 +258,7 @@ public:
     bool result;
     IsCalledInStmt(Function f) : func(f.name()), result(false) {
     }
-    
+
 };
 
 bool function_is_called_in_stmt(Function f, Stmt s) {
@@ -273,7 +273,7 @@ class InjectRealization : public IRMutator {
 public:
     const Function &func;
     bool found_store_level, found_compute_level;
-    InjectRealization(const Function &f) : func(f), found_store_level(false), found_compute_level(false) {}    
+    InjectRealization(const Function &f) : func(f), found_store_level(false), found_compute_level(false) {}
 
 private:
     Stmt build_pipeline(Stmt s) {
@@ -282,9 +282,9 @@ private:
     }
 
     Stmt build_realize(Stmt s) {
-        // The allocate should cover everything touched below this point        
+        // The allocate should cover everything touched below this point
         //Region bounds = region_touched(s, func.name());
-        
+
         /* The following works if the provide steps of a realization
          * always covers the region that will be used */
         debug(4) << "Computing region provided of " << func.name() << " by " << s << "\n";
@@ -307,12 +307,12 @@ private:
 
         for (size_t i = 0; i < bounds.size(); i++) {
             if (!bounds[i].min.defined()) {
-                std::cerr << "Use of " << func.name() << " is unbounded below in dimension " 
+                std::cerr << "Use of " << func.name() << " is unbounded below in dimension "
                           << func.args()[i] << " in the following statement:\n" << s << "\n";
                 assert(false);
             }
             if (!bounds[i].extent.defined()) {
-                std::cerr << "Use of " << func.name() << " is unbounded above in dimension " 
+                std::cerr << "Use of " << func.name() << " is unbounded above in dimension "
                           << func.args()[i] << " in the following statement:\n" << s << "\n";
                 assert(false);
             }
@@ -320,13 +320,13 @@ private:
 
         // Change the body of the for loop to do an allocation
         s = Realize::make(func.name(), func.value().type(), bounds, s);
-        
-        return inject_explicit_bounds(s, func);        
+
+        return inject_explicit_bounds(s, func);
     }
 
     using IRMutator::visit;
 
-    virtual void visit(const For *for_loop) {            
+    virtual void visit(const For *for_loop) {
         debug(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
         const Schedule::LoopLevel &compute_level = func.schedule().compute_level;
         const Schedule::LoopLevel &store_level = func.schedule().store_level;
@@ -336,10 +336,10 @@ private:
         // Can't schedule things inside a vector for loop
         if (for_loop->for_type != For::Vectorized) {
             body = mutate(for_loop->body);
-        } else if (func.is_reduction() && 
+        } else if (func.is_reduction() &&
                    func.schedule().compute_level.is_inline() &&
                    function_is_called_in_stmt(func, for_loop)) {
-            // If we're trying to inline a reduction, schedule it here and bail out            
+            // If we're trying to inline a reduction, schedule it here and bail out
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
             stmt = build_realize(build_pipeline(for_loop));
             found_store_level = found_compute_level = true;
@@ -352,11 +352,11 @@ private:
                 body = build_pipeline(body);
             }
             found_compute_level = true;
-        } 
+        }
 
         if (store_level.match(for_loop->name)) {
             debug(3) << "Found store level\n";
-            assert(found_compute_level && 
+            assert(found_compute_level &&
                    "The compute loop level was not found within the store loop level!");
 
             if (function_is_called_in_stmt(func, body)) {
@@ -370,18 +370,18 @@ private:
         if (body.same_as(for_loop->body)) {
             stmt = for_loop;
         } else {
-            stmt = For::make(for_loop->name, 
-                           for_loop->min, 
-                           for_loop->extent, 
-                           for_loop->for_type, 
+            stmt = For::make(for_loop->name,
+                           for_loop->min,
+                           for_loop->extent,
+                           for_loop->for_type,
                            body);
         }
     }
-    
+
     // If we're an inline reduction, we may need to inject a realization here
-    virtual void visit(const Provide *op) {               
-        if (op->name != func.name() && 
-            func.is_reduction() && 
+    virtual void visit(const Provide *op) {
+        if (op->name != func.name() &&
+            func.is_reduction() &&
             func.schedule().compute_level.is_inline() &&
             function_is_called_in_stmt(func, op)) {
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(op) << "\n";
@@ -404,7 +404,7 @@ public:
 private:
     using IRMutator::visit;
 
-    void visit(const Call *op) {        
+    void visit(const Call *op) {
         // std::cout << "Found call to " << op->name << endl;
         if (op->name == func.name()) {
             // Mutate the args
@@ -415,17 +415,17 @@ private:
             // Grab the body
             Expr body = qualify_expr(func.name() + ".", func.value());
 
-            
-            // Bind the args using Let nodes            
+
+            // Bind the args using Let nodes
             assert(args.size() == func.args().size());
-            
+
             for (size_t i = 0; i < args.size(); i++) {
-                body = Let::make(func.name() + "." + func.args()[i], 
-                               args[i], 
+                body = Let::make(func.name() + "." + func.args()[i],
+                               args[i],
                                body);
-            }            
-            
-            expr = body;            
+            }
+
+            expr = body;
 
             found = true;
         } else {
@@ -451,14 +451,14 @@ public:
 
     using IRVisitor::visit;
 
-    void visit(const Call *call) {                
+    void visit(const Call *call) {
         IRVisitor::visit(call);
         if (call->call_type == Call::Halide) {
             map<string, Function>::iterator iter = calls.find(call->name);
             if (iter == calls.end()) {
                 calls[call->name] = call->func;
             } else {
-                assert(iter->second.same_as(call->func) && 
+                assert(iter->second.same_as(call->func) &&
                        "Can't compile a pipeline using multiple functions with same name");
             }
         }
@@ -479,7 +479,7 @@ public:
     using IRVisitor::visit;
 
     void visit(const Call *op) {
-        IRVisitor::visit(op);        
+        IRVisitor::visit(op);
         if (op->image.defined()) {
             Result r;
             r.image = op->image;
@@ -494,14 +494,14 @@ public:
     }
 };
 
-void populate_environment(Function f, map<string, Function> &env, bool recursive = true) {    
+void populate_environment(Function f, map<string, Function> &env, bool recursive = true) {
     map<string, Function>::const_iterator iter = env.find(f.name());
     if (iter != env.end()) {
-        assert(iter->second.same_as(f) && 
+        assert(iter->second.same_as(f) &&
                "Can't compile a pipeline using multiple functions with same name");
         return;
     }
-            
+
     FindCalls calls;
     f.value().accept(&calls);
 
@@ -516,11 +516,11 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
     if (!recursive) {
         env.insert(calls.calls.begin(), calls.calls.end());
     } else {
-        env[f.name()] = f;            
+        env[f.name()] = f;
 
-        for (map<string, Function>::const_iterator iter = calls.calls.begin(); 
+        for (map<string, Function>::const_iterator iter = calls.calls.begin();
              iter != calls.calls.end(); ++iter) {
-            populate_environment(iter->second, env);                    
+            populate_environment(iter->second, env);
         }
     }
 }
@@ -528,12 +528,12 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
 vector<string> realization_order(string output, const map<string, Function> &env, map<string, set<string> > &graph) {
     // Make a DAG representing the pipeline. Each function maps to the set describing its inputs.
     // Populate the graph
-    for (map<string, Function>::const_iterator iter = env.begin(); 
+    for (map<string, Function>::const_iterator iter = env.begin();
          iter != env.end(); ++iter) {
         map<string, Function> calls;
         populate_environment(iter->second, calls, false);
 
-        for (map<string, Function>::const_iterator j = calls.begin(); 
+        for (map<string, Function>::const_iterator j = calls.begin();
              j != calls.end(); ++j) {
             graph[iter->first].insert(j->first);
         }
@@ -546,13 +546,13 @@ vector<string> realization_order(string output, const map<string, Function> &env
         // Find a function not in result_set, for which all its inputs are
         // in result_set. Stop when we reach the output function.
         bool scheduled_something = false;
-        for (map<string, Function>::const_iterator iter = env.begin(); 
+        for (map<string, Function>::const_iterator iter = env.begin();
              iter != env.end(); ++iter) {
             const string &f = iter->first;
             if (result_set.find(f) == result_set.end()) {
                 bool good_to_schedule = true;
                 const set<string> &inputs = graph[f];
-                for (set<string>::const_iterator i = inputs.begin(); 
+                for (set<string>::const_iterator i = inputs.begin();
                      i != inputs.end(); ++i) {
                     if (*i != f && result_set.find(*i) == result_set.end()) {
                         good_to_schedule = false;
@@ -567,14 +567,14 @@ vector<string> realization_order(string output, const map<string, Function> &env
                 }
             }
         }
-            
+
         assert(scheduled_something && "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?");
     }
 
 }
 
 Stmt create_initial_loop_nest(Function f) {
-    // Generate initial loop nest    
+    // Generate initial loop nest
     pair<Stmt, Stmt> r = build_realization(f);
     Stmt s = r.first;
     if (r.second.defined()) {
@@ -584,8 +584,8 @@ Stmt create_initial_loop_nest(Function f) {
     return inject_explicit_bounds(s, f);
 }
 
-Stmt schedule_functions(Stmt s, const vector<string> &order, 
-                        const map<string, Function> &env, 
+Stmt schedule_functions(Stmt s, const vector<string> &order,
+                        const map<string, Function> &env,
                         const map<string, set<string> > &graph) {
 
     // Inject a loop over root to give us a scheduling point
@@ -618,8 +618,8 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();
     assert(root_loop);
-    return root_loop->body;    
-    
+    return root_loop->body;
+
 }
 
 // Insert checks to make sure a statement doesn't read out of bounds
@@ -628,9 +628,13 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 Stmt add_image_checks(Stmt s, Function f) {
     FindBuffers finder;
     s.accept(&finder);
-    map<string, FindBuffers::Result> bufs = finder.buffers;    
+    map<string, FindBuffers::Result> bufs = finder.buffers;
 
-    bufs[f.name()].type = f.value().type();
+    // Add the output buffer
+    FindBuffers::Result output_buffer;
+    output_buffer.type = f.value().type();
+    output_buffer.param = f.output_buffer();
+    bufs[f.name()] = output_buffer;
 
     map<string, Region> regions = regions_touched(s);
     for (map<string, FindBuffers::Result>::iterator iter = bufs.begin();
@@ -646,7 +650,7 @@ Stmt add_image_checks(Stmt s, Function f) {
             int correct_size = type.bits / 8;
             ostringstream error_msg;
             error_msg << "Element size for " << name << " should be " << correct_size;
-            Stmt check = AssertStmt::make(elem_size == type.bits / 8, error_msg.str()); 
+            Stmt check = AssertStmt::make(elem_size == type.bits / 8, error_msg.str());
             s = Block::make(check, s);
         }
 
@@ -668,14 +672,14 @@ Stmt add_image_checks(Stmt s, Function f) {
                     Expr min_used = region[j].min;
                     Expr extent_used = region[j].extent;
                     if (!min_used.defined() || !extent_used.defined()) {
-                        std::cerr << "Region used of buffer " << name 
+                        std::cerr << "Region used of buffer " << name
                                   << " is unbounded in dimension " << j << std::endl;
                         assert(false);
                     }
                     ostringstream error_msg;
                     error_msg << name << " is accessed out of bounds in dimension " << j;
                     Stmt check = AssertStmt::make((actual_min <= min_used) &&
-                                                (actual_min + actual_extent >= min_used + extent_used), 
+                                                (actual_min + actual_extent >= min_used + extent_used),
                                                 error_msg.str());
                     s = Block::make(check, s);
                 }
@@ -692,7 +696,7 @@ Stmt add_image_checks(Stmt s, Function f) {
             if (image.defined() && i < image.dimensions()) {
                 lets.push_back(make_pair(name + ".stride." + dim, image.stride(i)));
                 lets.push_back(make_pair(name + ".extent." + dim, image.extent(i)));
-                lets.push_back(make_pair(name + ".min." + dim, image.min(i)));                
+                lets.push_back(make_pair(name + ".min." + dim, image.min(i)));
             } else if (param.defined()) {
                 Expr stride = param.stride_constraint(i);
                 Expr extent = param.extent_constraint(i);
@@ -708,9 +712,6 @@ Stmt add_image_checks(Stmt s, Function f) {
                 }
             }
         }
-
-        // The stride of the output buffer in dimension 0 should also be 1
-        lets.push_back(make_pair(f.name() + ".stride.0", 1));
 
         // Copy the new values to the old names
         for (size_t i = 0; i < lets.size(); i++) {
@@ -732,8 +733,8 @@ Stmt add_image_checks(Stmt s, Function f) {
             s = Block::make(asserts[i-1], s);
         }
 
- 
-    }    
+
+    }
 
     return s;
 }
@@ -757,7 +758,7 @@ Stmt lower(Function f) {
     debug(2) << "Tracing injected:\n" << s << '\n';
 
     debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, f);    
+    s = add_image_checks(s, f);
     debug(2) << "Image checks injected:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
@@ -816,7 +817,7 @@ Stmt lower(Function f) {
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Injected early frees: \n" << s << "\n\n";
-    
+
     debug(1) << "Simplifying...\n";
     s = remove_trivial_for_loops(s);
     s = simplify(s);
@@ -825,7 +826,7 @@ Stmt lower(Function f) {
     debug(1) << "Simplified: \n" << s << "\n\n";
 
     return s;
-} 
-   
+}
+
 }
 }
