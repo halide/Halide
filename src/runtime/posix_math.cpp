@@ -18,11 +18,11 @@ INLINE float acos_f32(float x) {return acosf(x);}
 INLINE float tan_f32(float x) {return tanf(x);}
 INLINE float atan_f32(float x) {return atanf(x);}
 INLINE float sinh_f32(float x) {return sinhf(x);}
-INLINE float asinh_f32(float x) {return asinhf(x);}
+//INLINE float asinh_f32(float x) {return asinhf(x);}
 INLINE float cosh_f32(float x) {return coshf(x);}
-INLINE float acosh_f32(float x) {return acoshf(x);}
+//INLINE float acosh_f32(float x) {return acoshf(x);}
 INLINE float tanh_f32(float x) {return tanhf(x);}
-INLINE float atanh_f32(float x) {return atanhf(x);}
+//INLINE float atanh_f32(float x) {return atanhf(x);}
 INLINE float hypot_f32(float x, float y) {return hypotf(x, y);}
 INLINE float exp_f32(float x) {return expf(x);}
 INLINE float log_f32(float x) {return logf(x);}
@@ -39,11 +39,11 @@ INLINE double acos_f64(double x) {return acos(x);}
 INLINE double tan_f64(double x) {return tan(x);}
 INLINE double atan_f64(double x) {return atan(x);}
 INLINE double sinh_f64(double x) {return sinh(x);}
-INLINE double asinh_f64(double x) {return asinh(x);}
+//INLINE double asinh_f64(double x) {return asinh(x);}
 INLINE double cosh_f64(double x) {return cosh(x);}
-INLINE double acosh_f64(double x) {return acosh(x);}
+//INLINE double acosh_f64(double x) {return acosh(x);}
 INLINE double tanh_f64(double x) {return tanh(x);}
-INLINE double atanh_f64(double x) {return atanh(x);}
+//INLINE double atanh_f64(double x) {return atanh(x);}
 INLINE double hypot_f64(double x, double y) {return hypot(x, y);}
 INLINE double exp_f64(double x) {return exp(x);}
 INLINE double log_f64(double x) {return log(x);}
