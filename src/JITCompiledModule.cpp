@@ -17,18 +17,18 @@ using namespace llvm;
 // the memory for jit compiled code.
 class JITModuleHolder {
 public:
-    mutable RefCount ref_count;    
+    mutable RefCount ref_count;
 
-    JITModuleHolder(llvm::ExecutionEngine *ee, llvm::Module *m, void (*shutdown)()) : 
-        execution_engine(ee), 
-        module(m), 
-        context(&m->getContext()), 
+    JITModuleHolder(llvm::ExecutionEngine *ee, llvm::Module *m, void (*shutdown)()) :
+        execution_engine(ee),
+        module(m),
+        context(&m->getContext()),
         shutdown_thread_pool(shutdown) {
     }
 
     ~JITModuleHolder() {
         for (size_t i = 0; i < cleanup_routines.size(); i++) {
-            debug(2) << "Calling target specific cleanup routine at " << cleanup_routines[i] << "\n";
+            debug(1) << "Calling target specific cleanup routine at " << (void *)(cleanup_routines[i]) << "\n";
             (*cleanup_routines[i])();
         }
 
@@ -93,7 +93,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     string error_string;
-    
+
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
     options.NoFramePointerElim = false;
@@ -104,7 +104,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
     options.UseSoftFloat = false;
-    options.FloatABIType = 
+    options.FloatABIType =
         cg->use_soft_float_abi() ? FloatABI::Soft : FloatABI::Hard;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
@@ -116,25 +116,25 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     options.EnableSegmentedStacks = false;
     options.UseInitArray = false;
     options.SSPBufferSize = 0;
-    
+
     EngineBuilder engine_builder(m);
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(EngineKind::JIT);
     #ifdef USE_MCJIT
-    engine_builder.setUseMCJIT(true);        
+    engine_builder.setUseMCJIT(true);
     engine_builder.setJITMemoryManager(JITMemoryManager::CreateDefaultMemManager());
     #else
     engine_builder.setUseMCJIT(false);
     #endif
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-    engine_builder.setMCPU(cg->mcpu());    
+    engine_builder.setMCPU(cg->mcpu());
     engine_builder.setMAttrs(vec<string>(cg->mattrs()));
     ExecutionEngine *ee = engine_builder.create();
     if (!ee) std::cerr << error_string << "\n";
-    assert(ee && "Couldn't create execution engine");        
+    assert(ee && "Couldn't create execution engine");
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
-    // ee->runStaticConstructorsDestructors(...);    
+    // ee->runStaticConstructorsDestructors(...);
 
     // Do any target-specific initialization
     cg->jit_init(ee, m);
