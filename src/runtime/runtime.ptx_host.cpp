@@ -36,14 +36,14 @@ extern "C" {
 #define TIME_CALL(c,str) (CHECK_CALL((c),(str)))
 #else
 //#define CHECK_CALL(c) (assert((c) == CUDA_SUCCESS))
-#define CHECK_CALL(c,str) {\
+#define CHECK_CALL(c,str) do {\
     fprintf(stderr, "Do %s\n", str); \
     CUresult status = (c); \
     if (status != CUDA_SUCCESS) \
         fprintf(stderr, "CUDA: %s returned non-success: %d\n", str, status); \
     assert(status == CUDA_SUCCESS); \
-} halide_current_time() // just *some* expression fragment after which it's legal to put a ;
-#define TIME_CALL(c,str) {\
+} while(0)
+#define TIME_CALL(c,str) do {\
     cuEventRecord(__start, 0);                              \
     CHECK_CALL((c),(str));                                  \
     cuEventRecord(__end, 0);                                \
@@ -51,7 +51,7 @@ extern "C" {
     float msec;                                             \
     cuEventElapsedTime(&msec, __start, __end);              \
     printf("   (took %fms, t=%d)\n", msec, halide_current_time());  \
-} halide_current_time() // just *some* expression fragment after which it's legal to put a ;
+} while(0)
 #endif //NDEBUG
 
 #ifndef __cuda_cuda_h__
@@ -90,7 +90,7 @@ typedef enum {
     CUDA_ERROR_PROFILER_DISABLED           = 5,
     CUDA_ERROR_PROFILER_NOT_INITIALIZED       = 6,
     CUDA_ERROR_PROFILER_ALREADY_STARTED       = 7,
-    CUDA_ERROR_PROFILER_ALREADY_STOPPED       = 8,  
+    CUDA_ERROR_PROFILER_ALREADY_STOPPED       = 8,
     CUDA_ERROR_NO_DEVICE                      = 100,
     CUDA_ERROR_INVALID_DEVICE                 = 101,
     CUDA_ERROR_INVALID_IMAGE                  = 200,
@@ -221,7 +221,7 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
     CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, buf->dev);
     if (result) {
         fprintf(stderr, "Bad device pointer %p: cuPointerGetAttribute returned %d\n", (void *)buf->dev, result);
-        return false;        
+        return false;
     }
     return true;
 }
@@ -253,7 +253,7 @@ WEAK void halide_init_kernels(const char* ptx_src) {
         int deviceCount = 0;
         CHECK_CALL( cuDeviceGetCount(&deviceCount), "cuDeviceGetCount" );
         assert(deviceCount > 0);
-        
+
         char *device_str = getenv("HL_GPU_DEVICE");
 
         CUdevice dev;
@@ -285,7 +285,7 @@ WEAK void halide_init_kernels(const char* ptx_src) {
     } else {
         //CHECK_CALL( cuCtxPushCurrent(*cuda_ctx_ptr), "cuCtxPushCurrent" );
     }
-    
+
     // Initialize a module for just this Halide module
     if (!__mod) {
         // Create module
@@ -303,14 +303,24 @@ WEAK void halide_init_kernels(const char* ptx_src) {
     }
 }
 
+#define CHECK_CALL_DEINIT_OK(c,str) do {\
+    fprintf(stderr, "Do %s\n", str); \
+    CUresult status = (c); \
+    if (status != CUDA_SUCCESS && status != CUDA_ERROR_DEINITIALIZED) \
+        fprintf(stderr, "CUDA: %s returned non-success: %d\n", str, status); \
+    assert(status == CUDA_SUCCESS || status == CUDA_ERROR_DEINITIALIZED); \
+} while(0)
+
 WEAK void halide_release() {
-    // CUcontext ignore;
-    // TODO: this is for timing; bad for release-mode performance
-    CHECK_CALL( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
+    // It's possible that this is being called from the destructor of
+    // a static variable, in which case the driver may already be
+    // shutting down. For this reason we allow the deinitialized
+    // error.
+    CHECK_CALL_DEINIT_OK( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
 
     // Only destroy the context if we own it
     if (weak_cuda_ctx) {
-        CHECK_CALL( cuCtxDestroy(weak_cuda_ctx), "cuCtxDestroy on exit" );    
+        CHECK_CALL_DEINIT_OK( cuCtxDestroy(weak_cuda_ctx), "cuCtxDestroy on exit" );
         weak_cuda_ctx = 0;
     }
 
@@ -323,7 +333,7 @@ WEAK void halide_release() {
 
     // Unload the module
     if (__mod) {
-        CHECK_CALL( cuModuleUnload(__mod), "cuModuleUnload" );
+        CHECK_CALL_DEINIT_OK( cuModuleUnload(__mod), "cuModuleUnload" );
         __mod = 0;
     }
 
@@ -364,7 +374,7 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
     #ifndef NDEBUG
     fprintf(stderr, "dev_malloc of %zdx%zdx%zdx%zd (%zd bytes per element) (buf->dev = %p) buffer\n",
             buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
-    #endif    
+    #endif
 
     CUdeviceptr p;
     TIME_CALL( cuMemAlloc(&p, buf_size(buf)), "dev_malloc");
@@ -556,7 +566,7 @@ int f( buffer_t *input, buffer_t *result, int N )
     // CHECK_CALL( cuCtxSynchronize(), "pre-sync" ); // only necessary for async copies?
     halide_copy_to_host(result);
     // CHECK_CALL( cuCtxSynchronize(), "post-sync" );
-    
+
     return 0;
 }
 
