@@ -8,7 +8,7 @@
 #include "CodeGen_X86.h"
 #include "CodeGen_GPU_Dev.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** Bitmask flags for specifying code generation options to CodeGen_GPU. */
@@ -27,7 +27,9 @@ public:
      * CodeGen_GPU_Options. Processor features can be enabled using the
      * appropriate flags from CodeGen_X86_Options */
     CodeGen_GPU_Host(uint32_t options = 0);
-        
+
+    virtual ~CodeGen_GPU_Host();
+
     /** Compile to an internally-held llvm module. Takes a halide
      * statement, the name of the function produced, and the arguments
      * to the function produced. After calling this, call
@@ -52,7 +54,7 @@ protected:
 
     // We track buffer_t's for each allocation in order to manage dirty bits
     bool track_buffers() {return true;}
-    
+
     //** Runtime function handles */
     // @{
     llvm::Function *dev_malloc_fn;
