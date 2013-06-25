@@ -2,7 +2,7 @@
 #define HALIDE_SCHEDULE_H
 
 /** \file
- * Defines the internal representation of the schedule for a function 
+ * Defines the internal representation of the schedule for a function
  */
 
 #include "IR.h"
@@ -30,8 +30,8 @@ struct Schedule {
         /** Construct an empty LoopLevel, which is interpreted as
          * 'inline'. This is a special LoopLevel value that implies
          * that a function should be inlined away */
-        LoopLevel() {} 
-        
+        LoopLevel() {}
+
         /** Test if a loop level corresponds to inlining the function */
         bool is_inline() const {return var.empty();}
 
@@ -74,7 +74,7 @@ struct Schedule {
         bool is_rename;
     };
     /** The traversal of the domain of a function can have some of its
-     * dimensions split into sub-dimensions. See 
+     * dimensions split into sub-dimensions. See
      * \ref ScheduleHandle::split */
     std::vector<Split> splits;
 
