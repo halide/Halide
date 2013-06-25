@@ -30,7 +30,7 @@ static int halide_internal_initmod_ptx_host_length = 0;
 extern "C" unsigned char halide_internal_initmod_opencl_host[];
 extern "C" int halide_internal_initmod_opencl_host_length;
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 extern "C" { typedef struct CUctx_st *CUcontext; }
@@ -43,7 +43,7 @@ struct SharedCudaContext {
     // Will be created on first use by a jitted kernel that uses it
     SharedCudaContext() : ptr(0) {
     }
-    
+
     // Freed on program exit
     ~SharedCudaContext() {
         debug(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
@@ -89,7 +89,7 @@ protected:
 // memory to allocate).
 class ExtractBounds : public IRVisitor {
 public:
-    
+
     Expr thread_extent[4];
     Expr block_extent[4];
     map<string, Expr> shared_allocations;
@@ -131,7 +131,7 @@ private:
         bool old_inside_thread = inside_thread;
 
         if (ends_with(loop->name, ".threadidx")) {
-            thread_extent[0] = unify(thread_extent[0], max_extent);            
+            thread_extent[0] = unify(thread_extent[0], max_extent);
             inside_thread = true;
         } else if (ends_with(loop->name, ".threadidy")) {
             thread_extent[1] = unify(thread_extent[1], max_extent);
@@ -151,7 +151,7 @@ private:
         } else if (ends_with(loop->name, ".blockidw")) {
             block_extent[3] = unify(block_extent[3], max_extent);
         }
-        
+
         // What's the largest the loop variable could be?
         Expr max_loop = bounds_of_expr_in_scope(loop->min + loop->extent - 1, scope).max;
         Expr min_loop = bounds_of_expr_in_scope(loop->min, scope).min;
@@ -196,18 +196,18 @@ class WhereIsBufferUsed : public IRVisitor {
 public:
     string buf;
     bool used_on_host, used_on_device,
-        written_on_host, read_on_host, 
+        written_on_host, read_on_host,
         written_on_device, read_on_device;
     WhereIsBufferUsed(string b) : buf(b),
-                                  used_on_host(false), 
-                                  used_on_device(false), 
-                                  written_on_host(false), 
-                                  read_on_host(false), 
+                                  used_on_host(false),
+                                  used_on_device(false),
+                                  written_on_host(false),
+                                  read_on_host(false),
                                   written_on_device(false),
                                   read_on_device(false),
                                   in_device_code(false) {}
 
-private:    
+private:
     bool in_device_code;
 
     using IRVisitor::visit;
@@ -247,7 +247,7 @@ private:
                 used_on_host = true;
                 written_on_host = true;
             }
-        }        
+        }
         IRVisitor::visit(op);
     }
 };
@@ -272,7 +272,7 @@ vector<Argument> CodeGen_GPU_Host::Closure::arguments() {
 
 
 void CodeGen_GPU_Host::Closure::visit(const For *loop) {
-    if (skip_gpu_loops && 
+    if (skip_gpu_loops &&
         CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         return;
     }
@@ -282,11 +282,11 @@ void CodeGen_GPU_Host::Closure::visit(const For *loop) {
 
 CodeGen_GPU_Host::CodeGen_GPU_Host(uint32_t options) :
     CodeGen_X86(options),
-    dev_malloc_fn(NULL), 
+    dev_malloc_fn(NULL),
     dev_free_fn(NULL),
-    copy_to_dev_fn(NULL), 
-    copy_to_host_fn(NULL), 
-    dev_run_fn(NULL), 
+    copy_to_dev_fn(NULL),
+    copy_to_host_fn(NULL),
+    dev_run_fn(NULL),
     dev_sync_fn(NULL),
     cgdev(make_dev(options)),
     options(options) {
@@ -315,9 +315,12 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(uint32_t options)
     }
 }
 
+CodeGen_GPU_Host::~CodeGen_GPU_Host() {
+    delete cgdev;
+}
 
 void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &args) {
-    
+
     init_module();
 
     // also set up the child codegenerator - this is set up once per
@@ -377,7 +380,7 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     string kernel_src = cgdev->compile_to_src();
     debug(2) << kernel_src;
     llvm::Type *kernel_src_type = ArrayType::get(i8, kernel_src.size()+1);
-    GlobalVariable *kernel_src_global = new GlobalVariable(*module, kernel_src_type, 
+    GlobalVariable *kernel_src_global = new GlobalVariable(*module, kernel_src_type,
                                                          true, GlobalValue::PrivateLinkage, 0,
                                                          "halide_kernel_src");
     kernel_src_global->setInitializer(ConstantDataArray::getString(*context, kernel_src));
@@ -499,21 +502,21 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         Expr n_threads = n_tid_x * n_tid_y * n_tid_z * n_tid_w;
         Value *shared_mem_size = ConstantInt::get(i32, 0);
         vector<string> shared_mem_allocations;
-        for (map<string, Expr>::iterator iter = bounds.shared_allocations.begin(); 
+        for (map<string, Expr>::iterator iter = bounds.shared_allocations.begin();
              iter != bounds.shared_allocations.end(); ++iter) {
 
-            debug(2) << "Internal shared allocation" << iter->first 
+            debug(2) << "Internal shared allocation" << iter->first
                    << " has max size " << iter->second << "\n";
-            
+
             Value *size = codegen(iter->second);
 
             string name = iter->first + ".shared_mem";
             shared_mem_allocations.push_back(name);
             sym_push(name, shared_mem_size);
             c.vars[name] = Int(32);
-            
+
             shared_mem_size = builder->CreateAdd(shared_mem_size, size);
-        }        
+        }
 
         // compile the kernel
         string kernel_name = "kernel_" + loop->name;
@@ -527,7 +530,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
             // While internal buffers have all had their device
             // allocations done via static analysis, external ones
             // need to be dynamically checked
-            Value *buf = sym_get(it->first + ".buffer");            
+            Value *buf = sym_get(it->first + ".buffer");
             debug(4) << "halide_dev_malloc " << it->first << "\n";
             builder->CreateCall(dev_malloc_fn, buf);
 
@@ -538,7 +541,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         }
 
         for (it = c.writes.begin(); it != c.writes.end(); ++it) {
-            Value *buf = sym_get(it->first + ".buffer");            
+            Value *buf = sym_get(it->first + ".buffer");
             debug(4) << "halide_dev_malloc " << it->first << "\n";
             builder->CreateCall(dev_malloc_fn, buf);
         }
@@ -566,7 +569,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
             Value *val;
 
             if (closure_args[i].is_buffer) {
-                // If it's a buffer, dereference the dev handle                
+                // If it's a buffer, dereference the dev handle
                 val = buffer_dev(sym_get(name + ".buffer"));
             } else {
                 // Otherwise just look up the symbol
@@ -606,7 +609,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
             entry_name_str,
             codegen(n_blkid_x), codegen(n_blkid_y), codegen(n_blkid_z),
             codegen(n_tid_x), codegen(n_tid_y), codegen(n_tid_z),
-            shared_mem_size, 
+            shared_mem_size,
             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref")
         };
@@ -662,14 +665,14 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
             *one32  = ConstantInt::get(i32, 1),
             *null64 = ConstantInt::get(i64, 0),
             *zero8  = ConstantInt::get( i8, 0);
-        
+
         Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
         builder->CreateStore(host_ptr, buffer_host_ptr(buf));
         builder->CreateStore(null64,   buffer_dev_ptr(buf));
-        
+
         builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
         builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
-        
+
         // For now, we just track the allocation as a single 1D buffer of the
         // required size. If we break this into multiple dimensions, this will
         // fail to account for expansion for alignment.
@@ -678,12 +681,12 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
         builder->CreateStore(zero32,  buffer_extent_ptr(buf, 1));
         builder->CreateStore(zero32,  buffer_extent_ptr(buf, 2));
         builder->CreateStore(zero32,  buffer_extent_ptr(buf, 3));
-        
+
         builder->CreateStore(one32,   buffer_stride_ptr(buf, 0));
         builder->CreateStore(zero32,  buffer_stride_ptr(buf, 1));
         builder->CreateStore(zero32,  buffer_stride_ptr(buf, 2));
         builder->CreateStore(zero32,  buffer_stride_ptr(buf, 3));
-        
+
         builder->CreateStore(zero32,  buffer_min_ptr(buf, 0));
         builder->CreateStore(zero32,  buffer_min_ptr(buf, 1));
         builder->CreateStore(zero32,  buffer_min_ptr(buf, 2));
@@ -723,7 +726,7 @@ void CodeGen_GPU_Host::visit(const Free *f) {
 }
 
 void CodeGen_GPU_Host::visit(const Pipeline *n) {
-    
+
     Value *buf = sym_get(n->name + ".buffer", false);
     Value *host = sym_get(n->name + ".host", false);
 
@@ -757,7 +760,7 @@ void CodeGen_GPU_Host::visit(const Pipeline *n) {
 
         codegen(n->update);
 
-        // Track host update writes 
+        // Track host update writes
         if (update_usage.written_on_host) {
             builder->CreateStore(ConstantInt::get(i8, 1),
                                  buffer_host_dirty_ptr(buf));
@@ -776,18 +779,18 @@ void CodeGen_GPU_Host::visit(const Pipeline *n) {
 void CodeGen_GPU_Host::visit(const Call *call) {
     // The other way in which buffers might be read by the host is in
     // calls to whole-buffer builtins like debug_to_file.
-    if (call->call_type == Call::Intrinsic && 
+    if (call->call_type == Call::Intrinsic &&
         call->name == Call::debug_to_file) {
         assert(call->args.size() == 9 && "malformed debug to file node");
         const Load *func = call->args[1].as<Load>();
         assert(func && "malformed debug to file node");
-        
+
         Value *buf = sym_get(func->name + ".buffer", false);
         if (buf) {
             // This buffer may have been last-touched on device
             builder->CreateCall(copy_to_host_fn, buf);
         }
-    } 
+    }
 
     CodeGen::visit(call);
 }
