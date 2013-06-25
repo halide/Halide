@@ -189,7 +189,7 @@ FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) const {
 }
 
 FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const {
-  vector<Expr> args = vec(x, y, z, w, u);
+    vector<Expr> args = vec(x, y, z, w, u);
     add_implicit_vars(args);
     return FuncRefExpr(func, args);
 }
@@ -802,6 +802,12 @@ FuncRefVar::operator Expr() const {
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
     for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].type().is_float()) {
+            std::cerr << "Error: implicit cast from float to int in argument " << (i+1)
+                      << " in call to " << f.name() << "\n";
+            assert(false);
+        }
+        // We're allowed to implicitly cast from different varieties of int.
         args[i] = cast<int>(args[i]);
     }
 }
