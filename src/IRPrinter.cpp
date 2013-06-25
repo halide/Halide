@@ -16,13 +16,13 @@ using std::ostringstream;
 ostream &operator<<(ostream &out, Type type) {
     switch (type.t) {
     case Type::Int:
-        out << 'i';
+        out << "int";
         break;
     case Type::UInt:
-        out << 'u';
+        out << "uint";
         break;
     case Type::Float:
-        out << 'f';
+        out << "float";
         break;
     default:
         assert(false && "Malformed type");
@@ -68,7 +68,7 @@ void IRPrinter::test() {
     ostringstream source;
     source << allocate;
     std::string correct_source = \
-        "allocate buf[f32 * 1023]\n"
+        "allocate buf[float32 * 1023]\n"
         "let y = 17\n"
         "assert((y > 3), \"y is greater than 3\")\n"
         "produce buf {\n"
@@ -84,7 +84,7 @@ void IRPrinter::test() {
         std::cout << "Correct output:" << std::endl << correct_source;
         std::cout << "Actual output:" << std::endl << source.str();
         assert(false);
-    }        
+    }
     std::cout << "IRPrinter test passed" << std::endl;
 }
 
@@ -119,7 +119,7 @@ ostream &operator<<(ostream &stream, Stmt ir) {
 }
 
 IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {
-    s.setf(std::ios::fixed, std::ios::floatfield);    
+    s.setf(std::ios::fixed, std::ios::floatfield);
 }
 
 void IRPrinter::print(Expr ir) {
@@ -134,27 +134,27 @@ void IRPrinter::print(Stmt ir) {
 void IRPrinter::do_indent() {
     for (int i = 0; i < indent; i++) stream << ' ';
 }
-    
+
 void IRPrinter::visit(const IntImm *op) {
     stream << op->value;
 }
-    
+
 void IRPrinter::visit(const FloatImm *op) {
     stream << op->value << 'f';
 }
-    
-void IRPrinter::visit(const Cast *op) { 
+
+void IRPrinter::visit(const Cast *op) {
     stream << op->type << '(';
     print(op->value);
     stream << ')';
 }
-    
+
 void IRPrinter::visit(const Variable *op) {
     // omit the type
     // stream << op->name << "." << op->type;
     stream << op->name;
 }
-    
+
 void IRPrinter::visit(const Add *op) {
     stream << '(';
     print(op->a);
@@ -186,7 +186,7 @@ void IRPrinter::visit(const Div *op) {
     print(op->b);
     stream << ')';
 }
-            
+
 void IRPrinter::visit(const Mod *op) {
     stream << '(';
     print(op->a);
@@ -370,7 +370,7 @@ void IRPrinter::visit(const Pipeline *op) {
         print(op->update);
         indent -= 2;
     }
-        
+
     do_indent();
     stream << "}\n";
 
@@ -386,7 +386,7 @@ void IRPrinter::visit(const For *op) {
     stream << ", ";
     print(op->extent);
     stream << ") {" << endl;
-        
+
     indent += 2;
     print(op->body);
     indent -= 2;
@@ -455,5 +455,5 @@ void IRPrinter::visit(const Block *op) {
     if (op->rest.defined()) print(op->rest);
 }
 
-    
+
 }}
