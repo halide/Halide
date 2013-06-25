@@ -6,12 +6,16 @@
 Overview of Halide Python bindings
 ========================================
 
+This is documentation for the `Python bindings`_ of the Halide_ language.
+
 For install and license information see the README_.
 
 The example_ applications demonstrate how to use the bindings.
 
 .. _README: https://github.com/halide/Halide/blob/master/python_bindings/README.md
 .. _example: https://github.com/halide/Halide/blob/master/python_bindings/apps/
+.. _Python bindings: https://github.com/halide/Halide/blob/master/python_bindings/
+.. _Halide: http://halide-lang.org/
 
 Classes:
 
