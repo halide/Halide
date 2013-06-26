@@ -39,7 +39,7 @@ inline void convert(float in, double &out) {out = in;}
 inline void convert(double in, uint8_t &out) {out = (uint8_t)(in*255.0f);}
 inline void convert(double in, uint16_t &out) {out = (uint16_t)(in*65535.0f);}
 inline void convert(double in, uint32_t &out) {out = (uint16_t)(in*4294967295.0f);}
-inline void convert(double in, float &out) {out = in;}
+inline void convert(double in, float &out) {out = (float)in;}
 inline void convert(double in, double &out) {out = in;}
 
 inline bool ends_with_ignore_case(std::string a, std::string b) {
