@@ -119,7 +119,7 @@ Image<T> load_png(std::string filename) {
         for (int y = 0; y < im.height(); y++) {
             uint8_t *srcPtr = (uint8_t *)(row_pointers[y]);
             for (int x = 0; x < im.width(); x++) {
-                for (int c = 0; c < im.channels(); c++) {                    
+                for (int c = 0; c < channels; c++) {                    
                     convert(*srcPtr++, ptr[c*c_stride]);
                 }
                 ptr++;
@@ -129,7 +129,7 @@ Image<T> load_png(std::string filename) {
         for (int y = 0; y < im.height(); y++) {
             uint8_t *srcPtr = (uint8_t *)(row_pointers[y]);
             for (int x = 0; x < im.width(); x++) {
-                for (int c = 0; c < im.channels(); c++) {
+                for (int c = 0; c < channels; c++) {
                     uint16_t hi = (*srcPtr++) << 8;
                     uint16_t lo = hi | (*srcPtr++);
                     convert(lo, ptr[c*c_stride]);
@@ -160,13 +160,16 @@ void save_png(Image<T> im, std::string filename) {
 
     im.copy_to_host();
 
-    _assert(im.channels() > 0 && im.channels() < 5,
+	int channels = im.channels();
+	if (channels == 0)
+		channels = 1;
+    _assert(channels > 0 && channels < 5,
            "Can't write PNG files that have other than 1, 2, 3, or 4 channels\n");
 
     png_byte color_types[4] = {PNG_COLOR_TYPE_GRAY, PNG_COLOR_TYPE_GRAY_ALPHA,
                                PNG_COLOR_TYPE_RGB,  PNG_COLOR_TYPE_RGB_ALPHA
                               };
-    color_type = color_types[im.channels() - 1];
+    color_type = color_types[channels - 1];
 
     // open file
     FILE *f = fopen(filename.c_str(), "wb");
@@ -210,7 +213,7 @@ void save_png(Image<T> im, std::string filename) {
         if (bit_depth == 16) {
             // convert to uint16_t
             for (int x = 0; x < im.width(); x++) {
-                for (int c = 0; c < im.channels(); c++) {
+                for (int c = 0; c < channels; c++) {
                     uint16_t out;
                     convert(srcPtr[c*c_stride], out);
                     *dstPtr++ = out >> 8; 
@@ -221,7 +224,7 @@ void save_png(Image<T> im, std::string filename) {
         } else if (bit_depth == 8) {
             // convert to uint8_t
             for (int x = 0; x < im.width(); x++) {
-                for (int c = 0; c < im.channels(); c++) {
+                for (int c = 0; c < channels; c++) {
                     uint8_t out;
                     convert(srcPtr[c*c_stride], out);
                     *dstPtr++ = out;
