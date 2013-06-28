@@ -21,6 +21,9 @@
     <CustomBuild Include="..\..\src\runtime\runtime.x86_avx.cpp">
       <Filter>Source Files</Filter>
     </CustomBuild>
+    <CustomBuild Include="..\..\src\runtime\runtime.x86_32.cpp">
+      <Filter>Source Files</Filter>
+    </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\runtime\android_io.cpp">
@@ -50,10 +53,5 @@
     <ClInclude Include="..\..\src\runtime\fake_thread_pool.cpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\src\runtime\runtime.x86_32.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
 </Project>

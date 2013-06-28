@@ -8,9 +8,8 @@
 
 #include <llvm/Config/config.h>
 
-// MCJIT doesn't seem to work right on os x yet
-#if defined(__APPLE__) || defined(_WIN32)
-#else
+// MCJIT doesn't seem to work right on os x or Windows yet
+#if !defined(__APPLE__) && !defined(_WIN32)
 #define USE_MCJIT
 #endif
 

@@ -7,8 +7,8 @@
 
 extern "C" {
 #ifdef _WIN32
-extern float roundf(float);
-extern double round(double);
+float roundf(float value) { return floor(value + 0.5f); }
+double round(double value) { return floor(value + 0.5); }
 #endif
 
 INLINE float sqrt_f32(float x) {return sqrtf(x);}
