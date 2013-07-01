@@ -1078,6 +1078,15 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
 }
 
+void Func::compile_to_lowered_stmt(const string &filename) {
+    if (!lowered.defined()) {
+        lowered = Halide::Internal::lower(func);
+    }
+
+    ofstream stmt_output(filename.c_str());
+    stmt_output << lowered;
+}
+
 void Func::compile_to_file(const string &filename_prefix, vector<Argument> args) {
     compile_to_header(filename_prefix + ".h", args, filename_prefix);
     compile_to_object(filename_prefix + ".o", args, filename_prefix);
