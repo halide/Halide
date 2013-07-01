@@ -69,7 +69,7 @@ STDLIB_ARCHS = x86 x86_avx x86_32 arm arm_android opencl_host $(PTX_ARCHS) $(NAT
 INITIAL_MODULES = $(STDLIB_ARCHS:%=$(BUILD_DIR)/initmod.%.o)
 
 .PHONY: all
-all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h test_internal
+all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h test_internal
 
 $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@-mkdir -p $(BIN_DIR)
@@ -84,6 +84,10 @@ $(BIN_DIR)/libHalide.so: $(BIN_DIR)/libHalide.a
 include/Halide.h: $(HEADERS) $(BIN_DIR)/build_halide_h
 	mkdir -p include
 	cd src; ../$(BIN_DIR)/build_halide_h $(HEADER_FILES) > ../include/Halide.h; cd ..
+
+include/HalideRuntime.h: src/runtime/HalideRuntime.h
+	mkdir -p include
+	cp src/runtime/HalideRuntime.h include/
 
 $(BIN_DIR)/build_halide_h: src/build_halide_h.cpp
 	g++ $< -o $@
