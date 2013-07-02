@@ -13,7 +13,7 @@
 
 // This file is largely a port of src/bounds.ml
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using std::make_pair;
@@ -37,7 +37,7 @@ private:
         } else {
             max = Expr();
             min = Expr();
-        }        
+        }
     }
 
     using IRVisitor::visit;
@@ -46,7 +46,7 @@ private:
         min = op;
         max = op;
     }
-    
+
     void visit(const FloatImm *op) {
         min = op;
         max = op;
@@ -72,6 +72,7 @@ private:
             min = bounds.min;
             max = bounds.max;
         } else {
+            debug(3) << op->name << " not in scope, so leaving it as-is\n";
             min = op;
             max = op;
         }
@@ -112,13 +113,13 @@ private:
         if (!min_a.defined() || !max_a.defined()) {
             min = Expr(); max = Expr(); return;
         }
-        
+
         op->b.accept(this);
         Expr min_b = min, max_b = max;
         if (!min_b.defined() || !max_b.defined()) {
             min = Expr(); max = Expr(); return;
         }
-        
+
         if (min_a.same_as(max_a) && min_b.same_as(max_b)) {
             // A and B are constant
             min = max = min_a * min_b;
@@ -137,12 +138,12 @@ private:
             min = select(cmp, a, b);
             max = select(cmp, b, a);
         } else {
-            
+
             Expr a = min_a * min_b;
             Expr b = min_a * max_b;
             Expr c = max_a * min_b;
-            Expr d = max_a * max_b;            
-            
+            Expr d = max_a * max_b;
+
             min = Min::make(Min::make(a, b), Min::make(c, d));
             max = Max::make(Max::make(a, b), Max::make(c, d));
         }
@@ -173,21 +174,21 @@ private:
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
             Expr min_is_positive = simplify(min_b > make_zero(min_b.type()));
             Expr max_is_negative = simplify(max_b < make_zero(max_b.type()));
-            if (!equal(min_b, max_b) && 
-                !equal(min_is_positive, const_true()) && 
+            if (!equal(min_b, max_b) &&
+                !equal(min_is_positive, const_true()) &&
                 !equal(max_is_negative, const_true())) {
                 min = Expr();
                 max = Expr();
                 return;
-            }               
-                
+            }
+
             // Divisor is either strictly positive or strictly
             // negative, so we can just take the extrema.
             Expr a = min_a / min_b;
             Expr b = min_a / max_b;
             Expr c = max_a / min_b;
             Expr d = max_a / max_b;
-            
+
             min = Min::make(Min::make(a, b), Min::make(c, d));
             max = Max::make(Max::make(a, b), Max::make(c, d));
         }
@@ -198,12 +199,12 @@ private:
         Expr min_a = min, max_a = max;
 
         op->b.accept(this);
-        Expr min_b = min, max_b = max;        
+        Expr min_b = min, max_b = max;
         if (!min_b.defined() || !max_b.defined()) {
             min = Expr(); max = Expr(); return;
         }
 
-        if (min_a.defined() && min_a.same_as(max_a) && min_b.same_as(max_b)) {            
+        if (min_a.defined() && min_a.same_as(max_a) && min_b.same_as(max_b)) {
             min = max = Mod::make(min_a, min_b);
         } else {
             // Only consider B (so A can be undefined)
@@ -338,7 +339,7 @@ private:
         }
 
         op->false_value.accept(this);
-        Expr min_b = min, max_b = max;        
+        Expr min_b = min, max_b = max;
         if (!min_b.defined() || !max_b.defined()) {
             min = Expr(); max = Expr(); return;
         }
@@ -385,7 +386,7 @@ private:
         }
 
         if (const_args) {
-            min = max = Call::make(op->type, op->name, new_args, op->call_type, 
+            min = max = Call::make(op->type, op->name, new_args, op->call_type,
                                    op->func, op->image, op->param);
         } else {
             // Just use the bounds of the type
@@ -442,13 +443,15 @@ private:
 };
 
 Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope) {
+    debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
     Bounds b;
     b.scope = scope;
     expr.accept(&b);
+    debug(3) << "bounds_of_expr_in_scope " << expr << " = " << b.min << ", " << b.max << "\n";
     return Interval(b.min, b.max);
 }
 
-Interval interval_union(const Interval &a, const Interval &b) {    
+Interval interval_union(const Interval &a, const Interval &b) {
     Expr max, min;
     debug(3) << "Interval union of " << a.min << ", " << a.max << ",  " << b.min << ", " << b.max << "\n";
     if (a.max.defined() && b.max.defined()) max = Max::make(a.max, b.max);
@@ -466,6 +469,7 @@ Region region_union(const Region &a, const Region &b) {
         Expr max_plus_one = Max::make(max_a, max_b);
         Expr extent = max_plus_one - min;
         result.push_back(Range(simplify(min), simplify(extent)));
+        //result.push_back(Range(min, extent));
     }
     return result;
 }
@@ -482,7 +486,7 @@ public:
     map<string, vector<Interval> > regions;
 
     // Min, Max per dimension of func, if it is non-empty
-    vector<Interval> region; 
+    vector<Interval> region;
 
     // Take into account call nodes
     bool consider_calls;
@@ -505,12 +509,12 @@ private:
         op->body.accept(this);
         scope.pop(op->name);
     }
-    
+
     void visit(const Let *op) {
         op->value.accept(this);
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
         scope.push(op->name, value_bounds);
-        op->body.accept(this);        
+        op->body.accept(this);
         scope.pop(op->name);
     }
 
@@ -522,11 +526,13 @@ private:
         Expr min = min_bounds.min;
         Expr max = (min_bounds.max + extent_bounds.max) - 1;
         scope.push(op->name, Interval(min, max));
+        debug(3) << "Adding " << op->name << " to scope\n";
         op->body.accept(this);
+        debug(3) << "Removing " << op->name << " from scope\n";
         scope.pop(op->name);
     }
 
-    void visit(const Call *op) {        
+    void visit(const Call *op) {
         IRVisitor::visit(op);
         // Ignore calls to a function from within it's own update step
         // (i.e. recursive calls from a function to itself). Including
@@ -542,14 +548,14 @@ private:
             return;
         }
 
-        if (consider_calls && !inside_update.contains(op->name) && 
+        if (consider_calls && !inside_update.contains(op->name) &&
             (func.empty() || func == op->name)) {
             debug(3) << "Found call to " << op->name << ": " << Expr(op) << "\n";
 
             vector<Interval> &r = func.empty() ? regions[op->name] : region;
             for (size_t i = 0; i < op->args.size(); i++) {
                 Interval bounds = bounds_of_expr_in_scope(op->args[i], scope);
-                debug(3) << "Bounds of call to " << op->name << " in dimension " << i << ": " 
+                debug(3) << "Bounds of call to " << op->name << " in dimension " << i << ": "
                        << bounds.min << ", " << bounds.max << "\n";
                 if (r.size() > i) {
                     r[i] = interval_union(r[i], bounds);
@@ -560,7 +566,7 @@ private:
         }
     }
 
-    void visit(const Provide *op) {        
+    void visit(const Provide *op) {
         IRVisitor::visit(op);
         if (consider_provides && (func.empty() || func == op->name)) {
             vector<Interval> &r = func.empty() ? regions[op->name] : region;
@@ -591,7 +597,7 @@ Range interval_to_range(const Interval &i) {
     if (!i.min.defined() || !i.max.defined()) {
         return Range();
     } else {
-        return Range(simplify(i.min), 
+        return Range(simplify(i.min),
                      simplify((i.max + 1) - i.min));
     }
 }
@@ -602,7 +608,7 @@ Region compute_region_touched(Stmt s, bool consider_calls, bool consider_provide
     r.consider_provides = consider_provides;
     r.func = func;
     s.accept(&r);
-    const vector<Interval> &box = r.region;    
+    const vector<Interval> &box = r.region;
     Region region;
     for (size_t i = 0; i < box.size(); i++) {
         region.push_back(interval_to_range(box[i]));
@@ -617,7 +623,7 @@ map<string, Region> compute_regions_touched(Stmt s, bool consider_calls, bool co
     r.func = "";
     s.accept(&r);
     map<string, Region> regions;
-    for (map<string, vector<Interval> >::iterator iter = r.regions.begin(); 
+    for (map<string, vector<Interval> >::iterator iter = r.regions.begin();
          iter != r.regions.end(); ++iter) {
         Region region;
         const vector<Interval> &box = iter->second;
@@ -696,8 +702,8 @@ void bounds_test() {
     vector<Expr> input_site_2 = vec(2*x+1);
     vector<Expr> output_site = vec(x+1);
 
-    Stmt loop = For::make("x", 3, 10, For::Serial, 
-                        Provide::make("output", 
+    Stmt loop = For::make("x", 3, 10, For::Serial,
+                        Provide::make("output",
                                     Add::make(
                                         Call::make(Int(32), "input", input_site_1, Call::Extern),
                                         Call::make(Int(32), "input", input_site_2, Call::Extern)),
