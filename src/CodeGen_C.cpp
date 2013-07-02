@@ -140,8 +140,29 @@ const string preamble =
     // when used in this way. See http://blog.regehr.org/archives/959
     // for a detailed comparison of type-punning methods.
     "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
-    "\n" +
-    buffer_t_definition;
+    "\n"
+
+    "bool halide_maybe_rewrite_buffer(bool go, buffer_t *b, int32_t elem_size,\n"
+    "                                 int32_t min0, int32_t extent0, int32_t stride0,\n"
+    "                                 int32_t min1, int32_t extent1, int32_t stride1,\n"
+    "                                 int32_t min2, int32_t extent2, int32_t stride2,\n"
+    "                                 int32_t min3, int32_t extent3, int32_t stride3) {\n"
+    " if (!go) return true;\n"
+    " b->min[0] = min0;\n"
+    " b->min[1] = min1;\n"
+    " b->min[2] = min2;\n"
+    " b->min[3] = min3;\n"
+    " b->extent[0] = extent0;\n"
+    " b->extent[1] = extent1;\n"
+    " b->extent[2] = extent2;\n"
+    " b->extent[3] = extent3;\n"
+    " b->stride[0] = stride0;\n"
+    " b->stride[1] = stride1;\n"
+    " b->stride[2] = stride2;\n"
+    " b->stride[3] = stride3;\n"
+    " return true;\n"
+    "}\n"
+    + buffer_t_definition;
 }
 
 CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {}
@@ -243,6 +264,13 @@ void CodeGen_C::compile(Stmt s, string name, const vector<Argument> &args) {
                    << name
                    << "->host);\n";
             allocations.push(args[i].name, args[i].type);
+
+            stream << "const bool "
+                   << name
+                   << "_host_and_dev_are_null = (_"
+                   << name << "->host == NULL) && (_"
+                   << name << "->dev == 0);\n";
+            stream << "(void)" << name << "_host_and_dev_are_null;\n";
 
             for (int j = 0; j < 4; j++) {
                 stream << "const int32_t "
@@ -479,6 +507,28 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->name == Call::shift_right) {
             assert(op->args.size() == 2);
             rhs << print_expr(op->args[0]) << " >> " << print_expr(op->args[1]);
+        } else if (op->name == Call::maybe_rewrite_buffer) {
+            assert(op->args.size() == 15);
+            vector<string> args(op->args.size());
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (i == 1) {
+                    args[i] = "_" + op->args[i].as<Call>()->name;
+                } else {
+                    args[i] = print_expr(op->args[i]);
+                }
+            }
+            rhs << "halide_maybe_rewrite_buffer(";
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (i > 0) rhs << ", ";
+                rhs << args[i];
+            }
+            rhs << ")";
+        } else if (op->name == Call::maybe_return) {
+            assert(op->args.size() == 1);
+            string cond = print_expr(op->args[0]);
+            do_indent();
+            stream << "if (" << cond << ") return;\n";
+            rhs << "true";
         } else {
           // TODO: other intrinsics
           std::cerr << "Unhandled intrinsic: " << op->name << std::endl;
@@ -738,6 +788,8 @@ void CodeGen_C::test() {
     string correct_source = preamble +
         "extern \"C\" void test1(const buffer_t *_buf, const float alpha, const int32_t beta) {\n"
         "int32_t *buf = (int32_t *)(_buf->host);\n"
+        "const bool buf_host_and_dev_are_null = (_buf->host == NULL) && (_buf->dev == 0);\n"
+        "(void)buf_host_and_dev_are_null;\n"
         "const int32_t buf_min_0 = _buf->min[0];\n"
         "(void)buf_min_0;\n"
         "const int32_t buf_min_1 = _buf->min[1];\n"
