@@ -3,7 +3,7 @@
 # 'make test_foo' builds and runs test/foo.cpp for any cpp file in the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
-CXX ?= g++ 
+CXX ?= g++
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version)
@@ -20,7 +20,7 @@ LLVM_CXX_FLAGS += -I$(shell $(LLVM_CONFIG) --src-root)/include
 
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", )
-NATIVE_CLIENT_ARCHS = $(if $(WITH_NATIVE_CLIENT), x86_32_nacl x86_32_sse41_nacl x86_64_nacl x86_64_sse41_nacl x86_64_avx_nacl, )
+NATIVE_CLIENT_ARCHS = $(if $(WITH_NATIVE_CLIENT), x86_32_nacl x86_32_sse41_nacl x86_64_nacl x86_64_sse41_nacl x86_64_avx_nacl arm_nacl,)
 NATIVE_CLIENT_LLVM_CONFIG_LIB = $(if $(WITH_NATIVE_CLIENT), nacltransforms, )
 NATIVE_CLIENT_ROOT ?=
 
@@ -92,16 +92,21 @@ include/HalideRuntime.h: src/runtime/HalideRuntime.h
 $(BIN_DIR)/build_halide_h: src/build_halide_h.cpp
 	g++ $< -o $@
 
-RUNTIME_OPTS_x86_64 = -march=corei7
-RUNTIME_OPTS_x86_avx = -march=corei7-avx 
-RUNTIME_OPTS_x86_32 = -m32 -march=atom
-RUNTIME_OPTS_arm = -m32 
-RUNTIME_OPTS_arm_android = -m32 
+RUNTIME_OPTS_x86_64 = -march=k8
+RUNTIME_OPTS_x86_64_sse41 = -march=penryn
+RUNTIME_OPTS_x86_64_avx = -march=corei7-avx
+RUNTIME_OPTS_x86_32 = -m32 -march=k8
+RUNTIME_OPTS_x86_32_sse41 = -m32 -march=penryn
+RUNTIME_OPTS_arm = -m32
+RUNTIME_OPTS_arm_android = -m32
 RUNTIME_OPTS_opencl_host = $(RUNTIME_OPTS_x86_64)
 RUNTIME_OPTS_ptx_host = $(RUNTIME_OPTS_x86_64)
-RUNTIME_OPTS_ptx_dev = 
-RUNTIME_OPTS_x86_64_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=corei7 -isystem $(NATIVE_CLIENT_X86_INCLUDE)
-RUNTIME_OPTS_x86_32_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=atom -isystem $(NATIVE_CLIENT_X86_INCLUDE)
+RUNTIME_OPTS_ptx_dev =
+RUNTIME_OPTS_x86_64_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=k8 -isystem $(NATIVE_CLIENT_X86_INCLUDE)
+RUNTIME_OPTS_x86_64_sse41_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=penryn -isystem $(NATIVE_CLIENT_X86_INCLUDE)
+RUNTIME_OPTS_x86_64_avx_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=corei7-avx -isystem $(NATIVE_CLIENT_X86_INCLUDE)
+RUNTIME_OPTS_x86_32_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=k8 -isystem $(NATIVE_CLIENT_X86_INCLUDE)
+RUNTIME_OPTS_x86_32_sse41_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=penryn -isystem $(NATIVE_CLIENT_X86_INCLUDE)
 RUNTIME_OPTS_arm_nacl = -Xclang -target-cpu -Xclang "" -Xclang -triple -Xclang arm-unknown-nacl -m32 -isystem $(NATIVE_CLIENT_ARM_INCLUDE)
 RUNTIME_LL_STUBS_x86_32 = src/runtime/x86.ll
 RUNTIME_LL_STUBS_x86_32_sse41 = src/runtime/x86.ll src/runtime/x86_sse41.ll
@@ -138,7 +143,7 @@ $(BUILD_DIR)/initmod.%.o: $(BUILD_DIR)/initmod.%.cpp
 
 $(BUILD_DIR)/%.o: src/%.cpp src/%.h $(BUILD_DIR)/llvm_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o 
+	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
 .PHONY: clean
 clean:
@@ -161,16 +166,16 @@ run_tests: $(TESTS:test/%.cpp=test_%) $(ERROR_TESTS:test/error/%.cpp=error_%) $(
 build_tests: $(TESTS:test/%.cpp=$(BIN_DIR)/test_%) $(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) $(TUTORIAL:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
-	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
+	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
 $(BIN_DIR)/test_%: test/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
+	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
 $(BIN_DIR)/error_%: test/error/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@	
+	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl $(LIBPNG_LIBS) -o $@	
+	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl $(LIBPNG_LIBS) -o $@
 
 test_%: $(BIN_DIR)/test_%
 	@-mkdir -p tmp
@@ -184,7 +189,7 @@ error_%: $(BIN_DIR)/error_%
 
 tutorial_%: $(BIN_DIR)/tutorial_%
 	@-mkdir -p tmp
-	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$< 
+	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$<
 	@-echo
 
 .PHONY: test_apps
