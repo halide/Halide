@@ -1,76 +1,107 @@
 #include "Substitute.h"
+#include "Scope.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
+using std::map;
 using std::string;
 
 class Substitute : public IRMutator {
-public:
-    Substitute(string v, Expr r) : 
-        var(v), replacement(r) {
+    const map<string, Expr> &replace;
+    Scope<int> hidden;
+
+    Expr find_replacement(const string &s) {
+        map<string, Expr>::const_iterator iter = replace.find(s);
+        if (iter != replace.end() && !hidden.contains(s)) {
+            return iter->second;
+        } else {
+            return Expr();
+        }
     }
 
-protected:
-    string var;
-    Expr replacement;
+public:
+    Substitute(const map<string, Expr> &m) : replace(m) {}
 
     using IRMutator::visit;
 
     void visit(const Variable *v) {
-        if (v->name == var) expr = replacement;
-        else expr = v;
-    }   
+        Expr r = find_replacement(v->name);
+        if (r.defined()) {
+            expr = r;
+        } else {
+            expr = v;
+        }
+    }
 
     void visit(const Let *op) {
-        if (op->name == var) {
-            Expr new_value = mutate(op->value);
-            if (new_value.same_as(op->value)) {
-                expr = op;
-            } else {
-                expr = Let::make(op->name, new_value, op->body);
-            }
+        Expr new_value = mutate(op->value);
+        hidden.push(op->name, 0);
+        Expr new_body = mutate(op->body);
+        hidden.pop(op->name);
+
+        if (new_value.same_as(op->value) &&
+            new_body.same_as(op->body)) {
+            expr = op;
         } else {
-            IRMutator::visit(op);
+            expr = Let::make(op->name, new_value, new_body);
         }
     }
 
     void visit(const LetStmt *op) {
-        if (op->name == var) {
-            Expr new_value = mutate(op->value);
-            if (new_value.same_as(op->value)) {
-                stmt = op;
-            } else {
-                stmt = LetStmt::make(op->name, new_value, op->body);
-            }
+        Expr new_value = mutate(op->value);
+        hidden.push(op->name, 0);
+        Stmt new_body = mutate(op->body);
+        hidden.pop(op->name);
+
+        if (new_value.same_as(op->value) &&
+            new_body.same_as(op->body)) {
+            stmt = op;
         } else {
-            IRMutator::visit(op);
+            stmt = LetStmt::make(op->name, new_value, new_body);
         }
     }
 
     void visit(const For *op) {
-        if (op->name == var) {
-            Expr new_min = mutate(op->min);
-            Expr new_extent = mutate(op->extent);
-            if (new_min.same_as(op->min) && new_extent.same_as(op->extent)) {
-                stmt = op;
-            } else {
-                stmt = For::make(op->name, new_min, new_extent, op->for_type, op->body);
-            }
+
+        Expr new_min = mutate(op->min);
+        Expr new_extent = mutate(op->extent);
+        hidden.push(op->name, 0);
+        Stmt new_body = mutate(op->body);
+        hidden.pop(op->name);
+
+        if (new_min.same_as(op->min) &&
+            new_extent.same_as(op->extent) &&
+            new_body.same_as(op->body)) {
+            stmt = op;
         } else {
-            IRMutator::visit(op);
+            stmt = For::make(op->name, new_min, new_extent, op->for_type, new_body);
         }
     }
 
 };
 
 Expr substitute(string name, Expr replacement, Expr expr) {
-    Substitute s(name, replacement);
+    map<string, Expr> m;
+    m[name] = replacement;
+    Substitute s(m);
     return s.mutate(expr);
 }
 
 Stmt substitute(string name, Expr replacement, Stmt stmt) {
-    Substitute s(name, replacement);
+    map<string, Expr> m;
+    m[name] = replacement;
+    Substitute s(m);
+    return s.mutate(stmt);
+}
+
+Expr substitute(const map<string, Expr> &m, Expr expr) {
+    Substitute s(m);
+    return s.mutate(expr);
+}
+
+Stmt substitute(const map<string, Expr> &m, Stmt stmt) {
+    Substitute s(m);
     return s.mutate(stmt);
 }
 

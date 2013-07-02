@@ -369,6 +369,16 @@ public:
      * safe to run in-place. */
     EXPORT void realize(Buffer dst);
 
+    /** For a given size of output, or a given output buffer,
+     * determine the bounds required of all unbound ImageParams
+     * referenced. Communicates the result by allocating new buffers
+     * of the appropriate size and binding them to the unbound
+     * ImageParams. */
+    // @{
+    EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
+    EXPORT void infer_input_bounds(Buffer dst);
+    // @}
+
     /** Statically compile this function to llvm bitcode, with the
      * given filename (which should probably end in .bc), type
      * signature, and C function name (which defaults to the same name
@@ -401,6 +411,11 @@ public:
      * many platforms. Vectorization will fail, and parallelization
      * will produce serial code. */
     EXPORT void compile_to_c(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+
+    /** Write out an internal representation of lowered code. Useful
+     * for analyzing and debugging scheduling. Canonical extension is
+     * .stmt, which must be supplied in filename. */
+    EXPORT void compile_to_lowered_stmt(const std::string &filename);
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
