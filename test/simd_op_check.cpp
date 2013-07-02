@@ -12,7 +12,7 @@ using std::vector;
 bool failed = false;
 Var x, y;
 
-bool use_avx, use_avx2;
+bool use_ssse3, use_sse41, use_sse42, use_avx, use_avx2;
 
 char *filter = NULL;
 
@@ -74,12 +74,12 @@ void do_job(job &j) {
     const char *args = j.args;
     const char *module = j.module;
     Func f = j.f;
-    
+
     char cmd[1024];
-    snprintf(cmd, 1024, 
+    snprintf(cmd, 1024,
 	     "sed -n '/v._loop/,/v._after_loop/p' < %s | "
              "sed 's/@.*//' > %s.s && "
-	     "grep \"\tv\\{0,1\\}%s\" %s.s > /dev/null", 
+	     "grep \"\tv\\{0,1\\}%s\" %s.s > /dev/null",
 	     module, module, op, module);
 
     if (system(cmd) != 0) {
@@ -91,7 +91,7 @@ void do_job(job &j) {
 	const int max_size = 4096;
 	char *buf = j.result + strlen(j.result);
 	memset(buf, 0, max_size);
-	size_t bytes_in = fread(buf, 1, max_size, f);	
+	size_t bytes_in = fread(buf, 1, max_size, f);
 	if (bytes_in > max_size-1) {
 	    buf[max_size-6] = ' ';
 	    buf[max_size-5] = '.';
@@ -132,12 +132,12 @@ void do_all_jobs() {
 
 void print_results() {
     for (size_t i = 0; i < jobs.size(); i++) {
-	if (jobs[i].result) 
+	if (jobs[i].result)
 	    fprintf(stderr, "%s\n", jobs[i].result);
-    }    
+    }
     fprintf(stderr, "Successfully generated: ");
     for (size_t i = 0; i < jobs.size(); i++) {
-	if (!jobs[i].result) 
+	if (!jobs[i].result)
 	    fprintf(stderr, "%s ", jobs[i].op);
     }
     fprintf(stderr, "\n");
@@ -180,7 +180,7 @@ Expr i16(Expr e) {
 Expr u16(Expr e) {
     return cast(UInt(16), e);
 }
- 
+
 Expr i8(Expr e) {
     return cast(Int(8), e);
 }
@@ -257,7 +257,7 @@ void check_sse_all() {
     check_sse("pcmpgtw", 8, select(u16_1 > u16_2, u16(1), u16(2)));
     check_sse("pcmpeqd", 4, select(u32_1 == u32_2, u32(1), u32(2)));
     check_sse("pcmpgtd", 4, select(u32_1 > u32_2, u32(1), u32(2)));
-    
+
 
     // SSE 1
     check_sse("addps", 4, f32_1 + f32_2);
@@ -281,8 +281,8 @@ void check_sse_all() {
     /* Not implemented yet in the front-end
     check_sse("andnps", 4, bool1 & (~bool2));
     check_sse("andps", 4, bool1 & bool2);
-    check_sse("orps", 4, bool1 | bool2);    
-    check_sse("xorps", 4, bool1 ^ bool2);    
+    check_sse("orps", 4, bool1 | bool2);
+    check_sse("xorps", 4, bool1 ^ bool2);
     */
 
     check_sse("cmpeqps", 4, select(f32_1 == f32_2, 1.0f, 2.0f));
@@ -316,7 +316,7 @@ void check_sse_all() {
     //check_sse("cvttpd2dq", 4, i32(f64_1));
     //check_sse("cvtdq2pd", 4, f64(i32_1));
     //check_sse("cvttps2dq", 4, i32(f32_1));
-    //check_sse("cvtdq2ps", 4, f32(i32_1));    
+    //check_sse("cvtdq2ps", 4, f32(i32_1));
     //check_sse("cvtps2pd", 4, f64(f32_1));
     //check_sse("cvtpd2ps", 4, f32(f64_1));
 
@@ -331,18 +331,21 @@ void check_sse_all() {
     // SSE 3
 
     // We don't do horizontal add/sub ops, so nothing new here
-    
+
     // SSSE 3
+    if (use_ssse3) {
     check_sse("pabsb", 16, abs(i8_1));
     check_sse("pabsw", 8, abs(i16_1));
     check_sse("pabsd", 4, abs(i32_1));
+    }
 
     // SSE 4.1
 
-    // skip dot product and argmin 
+    // skip dot product and argmin
 
     // llvm doesn't distinguish between signed and unsigned multiplies
     //check_sse("pmuldq", 4, i64(i32_1) * i64(i32_2));
+    if (use_sse41) {
     check_sse("pmuludq", 4, u64(u32_1) * u64(u32_2));
     check_sse("pmulld", 4, i32_1 * i32_2);
 
@@ -368,10 +371,12 @@ void check_sse_all() {
 
     check_sse("pcmpeqq", 2, select(i64_1 == i64_2, i64(1), i64(2)));
     check_sse("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));
+    }
 
     // SSE 4.2
-    
+    if (use_sse42) {
     check_sse("pcmpgtq", 2, select(i64_1 > i64_2, i64(1), i64(2)));
+    }
 
     // AVX
     if (use_avx) {
@@ -379,14 +384,14 @@ void check_sse_all() {
 	check_sse("vsqrtpd", 4, sqrt(f64_1));
 	check_sse("vrsqrtps", 8, 1.0f/sqrt(f32_1));
 	check_sse("vrcpps", 8, 1.0f/f32_1);
-	
+
 	/* Not implemented yet in the front-end
 	   check_sse("vandnps", 8, bool1 & (!bool2));
 	   check_sse("vandps", 8, bool1 & bool2);
-	   check_sse("vorps", 8, bool1 | bool2);    
-	   check_sse("vxorps", 8, bool1 ^ bool2);    
+	   check_sse("vorps", 8, bool1 | bool2);
+	   check_sse("vxorps", 8, bool1 ^ bool2);
 	*/
-	
+
 	check_sse("vaddps", 8, f32_1 + f32_2);
 	check_sse("vaddpd", 4, f64_1 + f64_2);
 	check_sse("vmulps", 8, f32_1 * f32_2);
@@ -401,7 +406,7 @@ void check_sse_all() {
 	check_sse("vmaxpd", 4, max(f64_1, f64_2));
 	check_sse("vroundps", 8, round(f32_1));
 	check_sse("vroundpd", 4, round(f64_1));
-	
+
 	check_sse("vcmpeqpd", 4, select(f64_1 == f64_2, 1.0f, 2.0f));
 	//check_sse("vcmpneqpd", 4, select(f64_1 != f64_2, 1.0f, 2.0f));
 	//check_sse("vcmplepd", 4, select(f64_1 <= f64_2, 1.0f, 2.0f));
@@ -410,12 +415,12 @@ void check_sse_all() {
 	//check_sse("vcmpneqps", 8, select(f32_1 != f32_2, 1.0f, 2.0f));
 	//check_sse("vcmpleps", 8, select(f32_1 <= f32_2, 1.0f, 2.0f));
 	check_sse("vcmpltps", 8, select(f32_1 < f32_2, 1.0f, 2.0f));
-	
+
 	check_sse("vblendvps", 8, select(f32_1 > 0.7f, f32_1, f32_2));
 	check_sse("vblendvpd", 4, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
-	        
+
 	check_sse("vcvttps2dq", 8, i32(f32_1));
-	check_sse("vcvtdq2ps", 8, f32(i32_1));    
+	check_sse("vcvtdq2ps", 8, f32(i32_1));
 	check_sse("vcvttpd2dq", 8, i32(f64_1));
 	check_sse("vcvtdq2pd", 8, f64(i32_1));
 	check_sse("vcvtps2pd", 8, f64(f32_1));
@@ -450,8 +455,8 @@ void check_sse_all() {
 	check_sse("vpcmpeqw", 16, select(u16_1 == u16_2, u16(1), u16(2)));
 	check_sse("vpcmpgtw", 16, select(u16_1 > u16_2, u16(1), u16(2)));
 	check_sse("vpcmpeqd", 8, select(u32_1 == u32_2, u32(1), u32(2)));
-	check_sse("vpcmpgtd", 8, select(u32_1 > u32_2, u32(1), u32(2)));    
-	
+	check_sse("vpcmpgtd", 8, select(u32_1 > u32_2, u32(1), u32(2)));
+
 	check_sse("vpavgb", 32, u8((u16(u8_1) + u16(u8_2) + 1)/2));
 	check_sse("vpavgw", 16, u16((u32(u16_1) + u32(u16_2) + 1)/2));
 	check_sse("vpmaxsw", 16, max(i16_1, i16_2));
@@ -459,26 +464,26 @@ void check_sse_all() {
 	check_sse("vpmaxub", 32, max(u8_1, u8_2));
 	check_sse("vpminub", 32, min(u8_1, u8_2));
 	check_sse("vpmulhuw", 16, i16((i32(i16_1) * i32(i16_2))/(256*256)));
-	
+
 	check_sse("vpaddq", 8, i64_1 + i64_2);
 	check_sse("vpsubq", 8, i64_1 - i64_2);
 	check_sse("vpmuludq", 8, u64_1 * u64_2);
-	
+
 	check_sse("vpackssdw", 16, i16(clamp(i32_1, min_i16, max_i16)));
 	check_sse("vpacksswb", 32, i8(clamp(i16_1, min_i8, max_i8)));
 	check_sse("vpackuswb", 32, u8(clamp(i16_1, 0, max_u8)));
-	
+
 	check_sse("vpabsb", 32, abs(i8_1));
 	check_sse("vpabsw", 16, abs(i16_1));
 	check_sse("vpabsd", 8, abs(i32_1));
-	
+
         // llvm doesn't distinguish between signed and unsigned multiplies
         // check_sse("vpmuldq", 8, i64(i32_1) * i64(i32_2));
         check_sse("vpmuludq", 8, u64(u32_1) * u64(u32_2));
 	check_sse("vpmulld", 8, i32_1 * i32_2);
-	
+
 	check_sse("vpblendvb", 32, select(u8_1 > 7, u8_1, u8_2));
-	
+
 	check_sse("vpmaxsb", 32, max(i8_1, i8_2));
 	check_sse("vpminsb", 32, min(i8_1, i8_2));
 	check_sse("vpmaxuw", 16, max(u16_1, u16_2));
@@ -567,7 +572,7 @@ void check_neon_all() {
     check_neon("vabd.s32", 4, absd(i32_2, i32_3));
     check_neon("vabd.u32", 4, absd(u32_2, u32_3));
 
-    // VABDL	I	-	Absolute Difference Long    
+    // VABDL	I	-	Absolute Difference Long
     check_neon("vabdl.s8", 8, absd(i16(i8_2), i16(i8_3)));
     check_neon("vabdl.u8", 8, absd(u16(u8_2), u16(u8_3)));
     check_neon("vabdl.s16", 4, absd(i32(i16_2), i32(i16_3)));
@@ -583,7 +588,7 @@ void check_neon_all() {
     check_neon("vabs.f32", 4, abs(f32_1));
     check_neon("vabs.s32", 4, abs(i32_1));
     check_neon("vabs.s16", 8, abs(i16_1));
-    check_neon("vabs.s8", 16, abs(i8_1));    
+    check_neon("vabs.s8", 16, abs(i8_1));
 
     // VACGE	F	-	Absolute Compare Greater Than or Equal
     // VACGT	F	-	Absolute Compare Greater Than
@@ -671,7 +676,7 @@ void check_neon_all() {
 
 
     // VCGE	I, F	-	Compare Greater Than or Equal
-    /* Halide flips these to less than instead 
+    /* Halide flips these to less than instead
     check_neon("vcge.s8", 16, select(i8_1 >= i8_2, i8(1), i8(2)));
     check_neon("vcge.u8", 16, select(u8_1 >= u8_2, u8(1), u8(2)));
     check_neon("vcge.s16", 8, select(i16_1 >= i16_2, i16(1), i16(2)));
@@ -702,7 +707,7 @@ void check_neon_all() {
     check_neon("vcgt.u16", 4, select(u16_1 > u16_2, u16(1), u16(2)));
     check_neon("vcgt.s32", 2, select(i32_1 > i32_2, i32(1), i32(2)));
     check_neon("vcgt.u32", 2, select(u32_1 > u32_2, u32(1), u32(2)));
-    check_neon("vcgt.f32", 2, select(f32_1 > f32_2, 1.0f, 2.0f));   
+    check_neon("vcgt.f32", 2, select(f32_1 > f32_2, 1.0f, 2.0f));
 
     // VCLS	I	-	Count Leading Sign Bits
     // VCLZ	I	-	Count Leading Zeros
@@ -830,7 +835,7 @@ void check_neon_all() {
     check_neon("vld2.8",  8, in_u8(x*2) + in_u8(x*2+1));
     check_neon("vld2.16", 4, in_i16(x*2) + in_i16(x*2+1));
     check_neon("vld2.16", 4, in_u16(x*2) + in_u16(x*2+1));
-    
+
 
     // VLD3	X	-	Load Three-Element Structures
     check_neon("vld3.8", 16, in_i8(x*3+y));
@@ -956,7 +961,7 @@ void check_neon_all() {
     check_neon("vmovl.u16", 4, i32(u16_1));
     check_neon("vmovl.s32", 2, i64(i32_1));
     check_neon("vmovl.u32", 2, u64(u32_1));
-    check_neon("vmovl.u32", 2, i64(u32_1));   
+    check_neon("vmovl.u32", 2, i64(u32_1));
 
     // VMOVN	I	-	Move and Narrow
     check_neon("vmovn.i16", 8, i8(i16_1));
@@ -1024,17 +1029,17 @@ void check_neon_all() {
     check_neon("vneg.f32", 4, -f32_1);
     check_neon("vneg.f64", 2, -f64_1);
 
-    // VNMLA	-	F, D	Negative Multiply Accumulate   
+    // VNMLA	-	F, D	Negative Multiply Accumulate
     // VNMLS	-	F, D	Negative Multiply Subtract
     // VNMUL	-	F, D	Negative Multiply
     // These are vfp, not neon. They only work on scalars
     /*
     check_neon("vnmla.f32", 4, -(f32_1 + f32_2*f32_3));
-    check_neon("vnmla.f64", 2, -(f64_1 + f64_2*f64_3));    
+    check_neon("vnmla.f64", 2, -(f64_1 + f64_2*f64_3));
     check_neon("vnmls.f32", 4, -(f32_1 - f32_2*f32_3));
-    check_neon("vnmls.f64", 2, -(f64_1 - f64_2*f64_3));    
+    check_neon("vnmls.f64", 2, -(f64_1 - f64_2*f64_3));
     check_neon("vnmul.f32", 4, -(f32_1*f32_2));
-    check_neon("vnmul.f64", 2, -(f64_1*f64_2));    
+    check_neon("vnmul.f64", 2, -(f64_1*f64_2));
     */
 
     // VORN	X	-	Bitwise OR NOT
@@ -1081,7 +1086,7 @@ void check_neon_all() {
 
     // Can't do larger ones because we only have i32 constants
 
-    // VQDMLAL	I	-	Saturating Double Multiply Accumulate Long    
+    // VQDMLAL	I	-	Saturating Double Multiply Accumulate Long
     // VQDMLSL	I	-	Saturating Double Multiply Subtract Long
     // VQDMULH	I	-	Saturating Doubling Multiply Returning High Half
     // VQDMULL	I	-	Saturating Doubling Multiply Long
@@ -1109,7 +1114,7 @@ void check_neon_all() {
     check_neon("vqneg.s32", 2, -max(i32_1, -max_i32));
 
     // VQRDMULH	I	-	Saturating Rounding Doubling Multiply Returning High Half
-    // VQRSHL	I	-	Saturating Rounding Shift Left    
+    // VQRSHL	I	-	Saturating Rounding Shift Left
     // VQRSHRN	I	-	Saturating Rounding Shift Right Narrow
     // VQRSHRUN	I	-	Saturating Rounding Shift Right Unsigned Narrow
     // We use the non-rounding form of these (at worst we do an extra add)
@@ -1162,7 +1167,7 @@ void check_neon_all() {
     check_neon("vqsub.u16", 8, u16(clamp(i32(u16_1) - i32(u16_2), 0, max_u16)));
     check_neon("vqsub.u32", 4, u32(clamp(i64(u32_1) - i64(u32_2), 0, max_u32)));
     check_neon("vqsub.u8",  8,  u8(clamp(i16(u8_1)  - i16(u8_2),  0, max_u8)));
-    check_neon("vqsub.u16", 4, u16(clamp(i32(u16_1) - i32(u16_2), 0, max_u16)));    
+    check_neon("vqsub.u16", 4, u16(clamp(i32(u16_1) - i32(u16_2), 0, max_u16)));
     check_neon("vqsub.u32", 2, u32(clamp(i64(u32_1) - i64(u32_2), 0, max_u32)));
 
     // VRADDHN	I	-	Rounding Add and Narrow Returning High Half
@@ -1182,7 +1187,7 @@ void check_neon_all() {
 
     // VREV16	X	-	Reverse in Halfwords
     // VREV32	X	-	Reverse in Words
-    // VREV64	X	-	Reverse in Doublewords    
+    // VREV64	X	-	Reverse in Doublewords
     // A reverse dense load should trigger vrev
     check_neon("vrev64.16", 4, in_i16(100-x));
     //check_neon("vrev64.16", 8, in_i16(100-x)); This doesn't work :(
@@ -1216,7 +1221,7 @@ void check_neon_all() {
     // VRSQRTS	F	-	Reciprocal Square Root Step
     // One newtown rhapson iteration of 1/sqrt(x). Skip it.
 
-    // VRSRA	I	-	Rounding Shift Right and Accumulate    
+    // VRSRA	I	-	Rounding Shift Right and Accumulate
     // VRSUBHN	I	-	Rounding Subtract and Narrow Returning High Half
     // Boo rounding ops
 
@@ -1236,7 +1241,7 @@ void check_neon_all() {
     check_neon("vshl.i16", 4, u16_1*16);
     check_neon("vshl.i32", 2, u32_1*16);
 
-    
+
     // VSHLL	I	-	Shift Left Long
     check_neon("vshll.s8",  8, i16(i8_1)*16);
     check_neon("vshll.s16", 4, i32(i16_1)*16);
@@ -1259,7 +1264,7 @@ void check_neon_all() {
     check_neon("vshr.u64", 2, u64_1/16);
     check_neon("vshr.u8",  8,  u8_1/16);
     check_neon("vshr.u16", 4, u16_1/16);
-    check_neon("vshr.u32", 2, u32_1/16);    
+    check_neon("vshr.u32", 2, u32_1/16);
 
     // VSHRN	I	-	Shift Right Narrow
     check_neon("vshrn.i16", 8,  i8(i16_1/256));
@@ -1292,7 +1297,7 @@ void check_neon_all() {
     check_neon("vsra.u64", 2, u64_2 + u64_1/16);
     check_neon("vsra.u8",  8,  u8_2 + u8_1/16);
     check_neon("vsra.u16", 4, u16_2 + u16_1/16);
-    check_neon("vsra.u32", 2, u32_2 + u32_1/16);        
+    check_neon("vsra.u32", 2, u32_2 + u32_1/16);
 
     // VSRI	X	-	Shift Right and Insert
     // See VSLI
@@ -1341,7 +1346,7 @@ void check_neon_all() {
     check_neon("vsub.i16", 4, u16_1 - u16_2);
     check_neon("vsub.i32", 2, i32_1 - i32_2);
     check_neon("vsub.i32", 2, u32_1 - u32_2);
-    check_neon("vsub.f32", 2, f32_1 - f32_2);    
+    check_neon("vsub.f32", 2, f32_1 - f32_2);
 
     // VSUBHN	I	-	Subtract and Narrow
     check_neon("vsubhn.i16", 8,  i8((i16_1 - i16_2)/256));
@@ -1370,7 +1375,7 @@ void check_neon_all() {
 
     // VTBL	X	-	Table Lookup
     // Arm's version of shufps. Allows for arbitrary permutations of a
-    // 64-bit vector. We typically use vrev variants instead. 
+    // 64-bit vector. We typically use vrev variants instead.
 
     // VTBX	X	-	Table Extension
     // Like vtbl, but doesn't change any elements where the index was
@@ -1402,8 +1407,15 @@ int main(int argc, char **argv) {
     if (!target) target = "arm";
     #endif
 
+    use_sse41 = target && strstr(target, "sse41");
     use_avx = target && strstr(target, "avx");
     use_avx2 = target && strstr(target, "avx2");
+    // There's no separate target for SSSE3; we currently enable it in
+    // lockstep with SSE4.1
+    use_ssse3 = use_sse41;
+    // There's no separate target for SSS4.2; we currently assume that
+    // it should be used iff AVX is being used.
+    use_sse42 = use_avx;
     if (!target || strncasecmp(target, "x86", 3) == 0) {
 	check_sse_all();
     } else if (strncasecmp(target, "arm", 3) == 0) {
