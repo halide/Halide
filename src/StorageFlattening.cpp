@@ -1,6 +1,7 @@
 #include "StorageFlattening.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Scope.h"
 #include <sstream>
 
 namespace Halide {
@@ -14,22 +15,36 @@ using std::map;
 class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const map<string, Function> &e) : env(e) {}
+    Scope<int> scope;
 private:
     const map<string, Function> &env;
 
     Expr flatten_args(const string &name, const vector<Expr> &args) {
         Expr idx = 0;
-        // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride] This
-        // strategy makes sense when we expect x to cancel with
-        // something in xmin.  We use this for internal allocations
+        vector<Expr> mins(args.size()), strides(args.size());
+
+        for (size_t i = 0; i < args.size(); i++) {
+            char dim = '0' + i;
+            string stride_name = name + ".stride." + dim;
+            string min_name = name + ".min." + dim;
+            string stride_name_constrained = stride_name + ".constrained";
+            string min_name_constrained = min_name + ".constrained";
+            if (scope.contains(stride_name_constrained)) {
+                stride_name = stride_name_constrained;
+            }
+            if (scope.contains(min_name_constrained)) {
+                min_name = min_name_constrained;
+            }
+            strides[i] = Variable::make(Int(32), stride_name);
+            mins[i] = Variable::make(Int(32), min_name);
+        }
+
         if (env.find(name) != env.end()) {
+            // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride] This
+            // strategy makes sense when we expect x to cancel with
+            // something in xmin.  We use this for internal allocations
             for (size_t i = 0; i < args.size(); i++) {
-                ostringstream stride_name, min_name;
-                stride_name << name << ".stride." << i;
-                min_name << name << ".min." << i;
-                Expr stride = Variable::make(Int(32), stride_name.str());
-                Expr min = Variable::make(Int(32), min_name.str());
-                idx += (args[i] - min) * stride;
+                idx += (args[i] - mins[i]) * strides[i];
             }
         } else {
             // f(x, y) -> f[x*stride + y*ystride - (xstride*xmin +
@@ -39,18 +54,13 @@ private:
             // to be symbolic
             Expr base = 0;
             for (size_t i = 0; i < args.size(); i++) {
-                ostringstream stride_name, min_name;
-                stride_name << name << ".stride." << i;
-                min_name << name << ".min." << i;
-                Expr stride = Variable::make(Int(32), stride_name.str());
-                Expr min = Variable::make(Int(32), min_name.str());
-                idx += args[i] * stride;            
-                base += min * stride;
+                idx += args[i] * strides[i];
+                base += mins[i] * strides[i];
             }
             idx -= base;
         }
 
-        return idx;            
+        return idx;
     }
 
     using IRMutator::visit;
@@ -79,14 +89,14 @@ private:
                 assert(storage_permutation.size() == i+1);
             }
         }
-       
+
         assert(storage_permutation.size() == realize->bounds.size());
 
         size = mutate(size);
 
         stmt = Allocate::make(realize->name, realize->type, size, body);
 
-        // Compute the strides 
+        // Compute the strides
         for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
             int prev_j = storage_permutation[i-1];
             int j = storage_permutation[i];
@@ -107,10 +117,10 @@ private:
         } else {
             stride_0_name << realize->name << ".stride.0";
         }
-        stmt = LetStmt::make(stride_0_name.str(), 1, stmt);           
+        stmt = LetStmt::make(stride_0_name.str(), 1, stmt);
 
         // Assign the mins and extents stored
-        for (size_t i = realize->bounds.size(); i > 0; i--) { 
+        for (size_t i = realize->bounds.size(); i > 0; i--) {
             ostringstream min_name, extent_name;
             min_name << realize->name << ".min." << (i-1);
             extent_name << realize->name << ".extent." << (i-1);
@@ -122,10 +132,10 @@ private:
     void visit(const Provide *provide) {
         Expr idx = mutate(flatten_args(provide->name, provide->args));
         Expr val = mutate(provide->value);
-        stmt = Store::make(provide->name, val, idx); 
+        stmt = Store::make(provide->name, val, idx);
     }
 
-    void visit(const Call *call) {            
+    void visit(const Call *call) {
         if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
             vector<Expr> args(call->args.size());
             bool changed = false;
@@ -144,6 +154,19 @@ private:
         }
     }
 
+    void visit(const LetStmt *let) {
+        // Discover constrained versions of things.
+        bool constrained_version_exists = ends_with(let->name, ".constrained");
+        if (constrained_version_exists) {
+            scope.push(let->name, 0);
+        }
+
+        IRMutator::visit(let);
+
+        if (constrained_version_exists) {
+            scope.pop(let->name);
+        }
+    }
 };
 
 Stmt storage_flattening(Stmt s, const map<string, Function> &env) {

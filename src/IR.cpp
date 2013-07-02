@@ -15,24 +15,24 @@ IntImm make_immortal_int(int x) {
 
 }
 
-IntImm IntImm::small_int_cache[] = {make_immortal_int(-8), 
-                                    make_immortal_int(-7), 
-                                    make_immortal_int(-6), 
-                                    make_immortal_int(-5), 
-                                    make_immortal_int(-4), 
-                                    make_immortal_int(-3), 
-                                    make_immortal_int(-2), 
-                                    make_immortal_int(-1), 
-                                    make_immortal_int(0), 
-                                    make_immortal_int(1), 
-                                    make_immortal_int(2), 
-                                    make_immortal_int(3), 
-                                    make_immortal_int(4), 
-                                    make_immortal_int(5), 
-                                    make_immortal_int(6), 
-                                    make_immortal_int(7), 
+IntImm IntImm::small_int_cache[] = {make_immortal_int(-8),
+                                    make_immortal_int(-7),
+                                    make_immortal_int(-6),
+                                    make_immortal_int(-5),
+                                    make_immortal_int(-4),
+                                    make_immortal_int(-3),
+                                    make_immortal_int(-2),
+                                    make_immortal_int(-1),
+                                    make_immortal_int(0),
+                                    make_immortal_int(1),
+                                    make_immortal_int(2),
+                                    make_immortal_int(3),
+                                    make_immortal_int(4),
+                                    make_immortal_int(5),
+                                    make_immortal_int(6),
+                                    make_immortal_int(7),
                                     make_immortal_int(8)};
-                            
+
 
 
 template<> EXPORT IRNodeType ExprNode<IntImm>::_type_info = {};
@@ -84,6 +84,8 @@ const string Call::bitwise_xor = "bitwise_xor";
 const string Call::bitwise_or = "bitwise_or";
 const string Call::shift_left = "shift_left";
 const string Call::shift_right = "shift_right";
+const string Call::maybe_rewrite_buffer = "maybe_rewrite_buffer";
+const string Call::maybe_return = "maybe_return";
 
 }
 }
