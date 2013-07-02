@@ -1,3 +1,5 @@
+#include "HalideRuntime.h"
+
 #include <dispatch/dispatch.h>
 #include <stdint.h>
 
