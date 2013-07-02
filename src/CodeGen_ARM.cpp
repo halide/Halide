@@ -26,7 +26,7 @@ static void *halide_internal_initmod_arm_nacl = 0;
 static int halide_internal_initmod_arm_nacl_length = 0;
 #endif
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using std::vector;
@@ -51,9 +51,9 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
     StringRef sb;
 
     if (use_android) {
-        assert(halide_internal_initmod_arm_android_length && 
+        assert(halide_internal_initmod_arm_android_length &&
                "initial module for arm_android is empty");
-        sb = StringRef((char *)halide_internal_initmod_arm_android, 
+        sb = StringRef((char *)halide_internal_initmod_arm_android,
                        halide_internal_initmod_arm_android_length);
     } else {
 	if (use_nacl) {
@@ -66,7 +66,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
     }
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
-    // Parse it    
+    // Parse it
     module = ParseBitcodeFile(bitcode_buffer, *context);
 
     // Fix the target triple. The initial module was probably compiled for x86
@@ -75,11 +75,11 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
     if (use_android) {
         module->setTargetTriple("arm-linux-eabi");
     } else if (use_nacl) {
-        module->setTargetTriple("arm-nacl");        
+        module->setTargetTriple("arm-nacl");
     } else {
         module->setTargetTriple("arm-linux-gnueabihf");
     }
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";        
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
@@ -110,7 +110,7 @@ Expr _i16(Expr e) {
 Expr _u16(Expr e) {
     return cast(UInt(16, e.type().width), e);
 }
- 
+
 Expr _i8(Expr e) {
     return cast(Int(8, e.type().width), e);
 }
@@ -168,7 +168,7 @@ Expr _u32q(Expr e) {
 
 }
 
-Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Expr> args) {    
+Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Expr> args) {
     vector<Value *> arg_values(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         arg_values[i] = codegen(args[i]);
@@ -177,8 +177,8 @@ Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Exp
     return call_intrin(llvm_type_of(result_type), name, arg_values);
 }
 
-Value *CodeGen_ARM::call_intrin(llvm::Type *result_type, 
-                                const string &name, 
+Value *CodeGen_ARM::call_intrin(llvm::Type *result_type,
+                                const string &name,
                                 vector<Value *> arg_values) {
     vector<llvm::Type *> arg_types(arg_values.size());
     for (size_t i = 0; i < arg_values.size(); i++) {
@@ -188,9 +188,9 @@ Value *CodeGen_ARM::call_intrin(llvm::Type *result_type,
     llvm::Function *fn = module->getFunction("llvm.arm.neon." + name);
 
     if (!fn) {
-        FunctionType *func_t = FunctionType::get(result_type, arg_types, false);    
-        fn = llvm::Function::Create(func_t, 
-                                    llvm::Function::ExternalLinkage, 
+        FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
+        fn = llvm::Function::Create(func_t,
+                                    llvm::Function::ExternalLinkage,
                                     "llvm.arm.neon." + name, module);
         fn->setCallingConv(CallingConv::C);
 
@@ -208,8 +208,8 @@ Value *CodeGen_ARM::call_intrin(llvm::Type *result_type,
     return builder->CreateCall(fn, arg_values, name);
 
 }
- 
-Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Expr> args) {    
+
+Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Expr> args) {
     vector<Value *> arg_values(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         arg_values[i] = codegen(args[i]);
@@ -228,9 +228,9 @@ Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> a
     llvm::Function *fn = module->getFunction("llvm.arm.neon." + name);
 
     if (!fn) {
-        FunctionType *func_t = FunctionType::get(void_t, arg_types, false);    
-        fn = llvm::Function::Create(func_t, 
-                                    llvm::Function::ExternalLinkage, 
+        FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
+        fn = llvm::Function::Create(func_t,
+                                    llvm::Function::ExternalLinkage,
                                     "llvm.arm.neon." + name, module);
         fn->setCallingConv(CallingConv::C);
 
@@ -241,13 +241,13 @@ Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> a
     }
 
     debug(4) << "Creating call to " << name << "\n";
-    return builder->CreateCall(fn, arg_values);    
+    return builder->CreateCall(fn, arg_values);
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
 
     vector<Expr> matches;
- 
+
     struct Pattern {
         string intrin;
         Expr pattern;
@@ -314,7 +314,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         {"vqadds.v8i16", _i16q(_i32(wild_i16x8) + _i32(wild_i16x8)), Simple},
         {"vqaddu.v8i16", _u16q(_u32(wild_u16x8) + _u32(wild_u16x8)), Simple},
         {"vqadds.v4i32", _i32q(_i64(wild_i32x4) + _i64(wild_i32x4)), Simple},
-        {"vqaddu.v4i32", _u32q(_u64(wild_u32x4) + _u64(wild_u32x4)), Simple},        
+        {"vqaddu.v4i32", _u32q(_u64(wild_u32x4) + _u64(wild_u32x4)), Simple},
 
         // N.B. Saturating subtracts of unsigned types are expressed
         // by widening to a *signed* type
@@ -328,7 +328,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         {"vqsubu.v16i8", _u8q(_i16(wild_u8x16) - _i16(wild_u8x16)), Simple},
         {"vqsubs.v8i16", _i16q(_i32(wild_i16x8) - _i32(wild_i16x8)), Simple},
         {"vqsubu.v8i16", _u16q(_i32(wild_u16x8) - _i32(wild_u16x8)), Simple},
-        {"vqsubs.v4i32", _i32q(_i64(wild_i32x4) - _i64(wild_i32x4)), Simple},        
+        {"vqsubs.v4i32", _i32q(_i64(wild_i32x4) - _i64(wild_i32x4)), Simple},
         {"vqsubu.v4i32", _u32q(_i64(wild_u32x4) - _i64(wild_u32x4)), Simple},
 
         {"vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), RightShift},
@@ -380,7 +380,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         {"sentinel", 0}
 
     };
-        
+
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
         //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
@@ -397,10 +397,10 @@ void CodeGen_ARM::visit(const Cast *op) {
                     if (pattern.type == RightShift) {
                         shift_amount = -shift_amount;
                     }
-                    Value *shift = ConstantInt::get(llvm_type_of(matches[0].type()), 
+                    Value *shift = ConstantInt::get(llvm_type_of(matches[0].type()),
                                                     shift_amount);
-                    value = call_intrin(llvm_type_of(pattern.pattern.type()), 
-                                        pattern.intrin, 
+                    value = call_intrin(llvm_type_of(pattern.pattern.type()),
+                                        pattern.intrin,
                                         vec(codegen(matches[0]), shift));
                     return;
                 }
@@ -412,7 +412,7 @@ void CodeGen_ARM::visit(const Cast *op) {
 
 }
 
-void CodeGen_ARM::visit(const Mul *op) {  
+void CodeGen_ARM::visit(const Mul *op) {
     // We only have peephole optimizations for int vectors for now
     if (op->type.is_scalar() || op->type.is_float()) {
         CodeGen::visit(op);
@@ -437,7 +437,7 @@ void CodeGen_ARM::visit(const Mul *op) {
     }
 
     vector<Expr> matches;
- 
+
     struct Pattern {
         string intrin;
         Expr pattern;
@@ -456,11 +456,11 @@ void CodeGen_ARM::visit(const Mul *op) {
         {"vshifts.v16i8", wild_i8x16*wild_i8x16},
         {"vshifts.v8i16", wild_i16x8*wild_i16x8},
         {"vshifts.v4i32", wild_i32x4*wild_i32x4},
-        {"vshifts.v2i64", wild_i64x2*wild_i64x2},        
+        {"vshifts.v2i64", wild_i64x2*wild_i64x2},
         {"vshiftu.v16i8", wild_u8x16*wild_u8x16},
         {"vshiftu.v8i16", wild_u16x8*wild_u16x8},
         {"vshiftu.v4i32", wild_u32x4*wild_u32x4},
-        {"vshiftu.v2i64", wild_u64x2*wild_u64x2},        
+        {"vshiftu.v2i64", wild_u64x2*wild_u64x2},
         {"vshifts.v8i8",  wild_i8x8*wild_i8x8},
         {"vshifts.v4i16", wild_i16x4*wild_i16x4},
         {"vshifts.v2i32", wild_i32x2*wild_i32x2},
@@ -487,7 +487,7 @@ void CodeGen_ARM::visit(const Mul *op) {
     CodeGen::visit(op);
 }
 
-void CodeGen_ARM::visit(const Div *op) {    
+void CodeGen_ARM::visit(const Div *op) {
 
     // First check if it's an averaging op
     struct Pattern {
@@ -519,7 +519,7 @@ void CodeGen_ARM::visit(const Div *op) {
         {"vhsubu.v8i16", (wild_u16x8 - wild_u16x8)/2},
         {"vhsubs.v4i32", (wild_i32x4 - wild_i32x4)/2},
         {"vhsubu.v4i32", (wild_u32x4 - wild_u32x4)/2}};
-    
+
     if (is_two(op->b) && (op->a.as<Add>() || op->a.as<Sub>())) {
         vector<Expr> matches;
         for (size_t i = 0; i < sizeof(averagings)/sizeof(averagings[0]); i++) {
@@ -532,7 +532,7 @@ void CodeGen_ARM::visit(const Div *op) {
 
     // Detect if it's a small int division
     const Broadcast *broadcast = op->b.as<Broadcast>();
-    const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;    
+    const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;
     const IntImm *int_imm = cast_b ? cast_b->value.as<IntImm>() : NULL;
     if (broadcast && !int_imm) int_imm = broadcast->value.as<IntImm>();
     if (!int_imm) int_imm = op->b.as<IntImm>();
@@ -542,7 +542,7 @@ void CodeGen_ARM::visit(const Div *op) {
     int shift_amount;
     bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
 
-    vector<Expr> matches;    
+    vector<Expr> matches;
     if (op->type == Float(32, 4) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
         if (expr_match(Call::make(Float(32, 4), "sqrt_f32", vec(wild_f32x4), Call::Extern), op->b, matches)) {
@@ -565,9 +565,9 @@ void CodeGen_ARM::visit(const Div *op) {
         Value *numerator = codegen(op->a);
         Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
         value = builder->CreateLShr(numerator, shift);
-    } else if (op->type.is_int() && 
-               (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) && 
-               const_divisor > 1 && 
+    } else if (op->type.is_int() &&
+               (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) &&
+               const_divisor > 1 &&
                ((op->type.bits > 8 && const_divisor < 256) || const_divisor < 128)) {
 
         int64_t multiplier, shift;
@@ -580,18 +580,18 @@ void CodeGen_ARM::visit(const Div *op) {
         } else {
             // 8 bit
             multiplier = IntegerDivision::table_s8[const_divisor-2][1];
-            shift      = IntegerDivision::table_s8[const_divisor-2][2];    
+            shift      = IntegerDivision::table_s8[const_divisor-2][2];
         }
 
         Value *val = codegen(op->a);
-        
+
         // Make an all-ones mask if the numerator is negative
-        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits-1)));            
+        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits-1)));
         // Flip the numerator bits if the mask is high
         Value *flipped = builder->CreateXor(sign, val);
         // Grab the multiplier
         Value *mult = codegen(make_const(op->type, multiplier));
-        // Widening multiply 
+        // Widening multiply
         llvm::Type *narrower = llvm_type_of(op->type);
         llvm::Type *wider = llvm_type_of(Int(op->type.bits*2, op->type.width));
         // flipped's high bit is zero, so it's ok to zero-extend it
@@ -615,8 +615,8 @@ void CodeGen_ARM::visit(const Div *op) {
         }
         // Maybe flip the bits again
         value = builder->CreateXor(val, sign);
-    
-    } else if (op->type.is_uint() && 
+
+    } else if (op->type.is_uint() &&
                (op->type.bits == 32 || op->type.bits == 16 || op->type.bits == 8) &&
                const_divisor > 1 && const_divisor < 256) {
 
@@ -625,7 +625,7 @@ void CodeGen_ARM::visit(const Div *op) {
             method     = IntegerDivision::table_u32[const_divisor-2][0];
             multiplier = IntegerDivision::table_u32[const_divisor-2][1];
             shift      = IntegerDivision::table_u32[const_divisor-2][2];
-        } else if (op->type.bits == 16) {        
+        } else if (op->type.bits == 16) {
             method     = IntegerDivision::table_u16[const_divisor-2][0];
             multiplier = IntegerDivision::table_u16[const_divisor-2][1];
             shift      = IntegerDivision::table_u16[const_divisor-2][2];
@@ -647,7 +647,7 @@ void CodeGen_ARM::visit(const Div *op) {
         // Multiply
         val = builder->CreateMul(val, mult);
 
-        // Narrow 
+        // Narrow
         if (op->type == UInt(32, 2) && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
             val = call_intrin(narrower, "vshiftn.v2i32", vec<Value *>(val, shift_amount));
@@ -683,7 +683,7 @@ void CodeGen_ARM::visit(const Div *op) {
                 diff = builder->CreateLShr(diff, ConstantInt::get(diff->getType(), 1));
                 val = builder->CreateAdd(val, diff);
             }
-        
+
             // Do the final shift
             if (shift) {
                 val = builder->CreateLShr(val, ConstantInt::get(narrower, shift));
@@ -692,7 +692,7 @@ void CodeGen_ARM::visit(const Div *op) {
 
         value = val;
 
-    } else {        
+    } else {
 
         CodeGen::visit(op);
     }
@@ -714,7 +714,7 @@ void CodeGen_ARM::visit(const Sub *op) {
         {"vqneg.v4i16", -max(wild_i16x4, -32767)},
         {"vqneg.v8i16", -max(wild_i16x8, -32767)},
         {"vqneg.v2i32", -max(wild_i32x2, -(0x7fffffff))},
-        {"vqneg.v4i32", -max(wild_i32x4, -(0x7fffffff))}        
+        {"vqneg.v4i32", -max(wild_i32x4, -(0x7fffffff))}
     };
 
     vector<Expr> matches;
@@ -749,7 +749,7 @@ void CodeGen_ARM::visit(const Sub *op) {
     CodeGen::visit(op);
 }
 
-void CodeGen_ARM::visit(const Min *op) {    
+void CodeGen_ARM::visit(const Min *op) {
 
     if (op->type == Float(32)) {
         // Use a 2-wide vector instead
@@ -786,13 +786,13 @@ void CodeGen_ARM::visit(const Min *op) {
         if (op->type == patterns[i].t) {
             value = call_intrin(op->type, patterns[i].op, vec(op->a, op->b));
             return;
-        } 
+        }
     }
 
     CodeGen::visit(op);
 }
 
-void CodeGen_ARM::visit(const Max *op) {    
+void CodeGen_ARM::visit(const Max *op) {
 
     if (op->type == Float(32)) {
         // Use a 2-wide vector instead
@@ -829,26 +829,26 @@ void CodeGen_ARM::visit(const Max *op) {
         if (op->type == patterns[i].t) {
             value = call_intrin(op->type, patterns[i].op, vec(op->a, op->b));
             return;
-        } 
+        }
     }
 
-    CodeGen::visit(op);    
+    CodeGen::visit(op);
 }
 
 void CodeGen_ARM::visit(const LT *op) {
     const Call *a = op->a.as<Call>(), *b = op->b.as<Call>();
-    
+
     if (a && b) {
         Constant *zero = ConstantVector::getSplat(op->type.width, ConstantInt::get(i32, 0));
-        if (a->type == Float(32, 4) && 
-            a->name == "abs_f32" && 
-            b->name == "abs_f32") {            
-            value = call_intrin(Int(32, 4), "vacgtq", vec(b->args[0], a->args[0]));            
+        if (a->type == Float(32, 4) &&
+            a->name == "abs_f32" &&
+            b->name == "abs_f32") {
+            value = call_intrin(Int(32, 4), "vacgtq", vec(b->args[0], a->args[0]));
             value = builder->CreateICmpNE(value, zero);
-        } else if (a->type == Float(32, 2) && 
-            a->name == "abs_f32" && 
-            b->name == "abs_f32") {            
-            value = call_intrin(Int(32, 2), "vacgtd", vec(b->args[0], a->args[0]));            
+        } else if (a->type == Float(32, 2) &&
+            a->name == "abs_f32" &&
+            b->name == "abs_f32") {
+            value = call_intrin(Int(32, 2), "vacgtd", vec(b->args[0], a->args[0]));
             value = builder->CreateICmpNE(value, zero);
         } else {
             CodeGen::visit(op);
@@ -856,23 +856,23 @@ void CodeGen_ARM::visit(const LT *op) {
     } else {
         CodeGen::visit(op);
     }
-    
+
 }
 
 void CodeGen_ARM::visit(const LE *op) {
     const Call *a = op->a.as<Call>(), *b = op->b.as<Call>();
-    
+
     if (a && b) {
         Constant *zero = ConstantVector::getSplat(op->type.width, ConstantInt::get(i32, 0));
-        if (a->type == Float(32, 4) && 
-            a->name == "abs_f32" && 
-            b->name == "abs_f32") {            
-            value = call_intrin(Int(32, 4), "vacgeq", vec(b->args[0], a->args[0]));            
-            value = builder->CreateICmpNE(value, zero);            
-        } else if (a->type == Float(32, 2) && 
-            a->name == "abs_f32" && 
-            b->name == "abs_f32") {            
-            value = call_intrin(Int(32, 2), "vacged", vec(b->args[0], a->args[0]));            
+        if (a->type == Float(32, 4) &&
+            a->name == "abs_f32" &&
+            b->name == "abs_f32") {
+            value = call_intrin(Int(32, 4), "vacgeq", vec(b->args[0], a->args[0]));
+            value = builder->CreateICmpNE(value, zero);
+        } else if (a->type == Float(32, 2) &&
+            a->name == "abs_f32" &&
+            b->name == "abs_f32") {
+            value = call_intrin(Int(32, 2), "vacged", vec(b->args[0], a->args[0]));
             value = builder->CreateICmpNE(value, zero);
         } else {
             CodeGen::visit(op);
@@ -880,26 +880,26 @@ void CodeGen_ARM::visit(const LE *op) {
     } else {
         CodeGen::visit(op);
     }
-    
+
 }
 
 void CodeGen_ARM::visit(const Select *op) {
 
     // Absolute difference patterns:
-    // select(a < b, b - a, a - b)    
-    const LT *cmp = op->condition.as<LT>();    
+    // select(a < b, b - a, a - b)
+    const LT *cmp = op->condition.as<LT>();
     const Sub *a = op->true_value.as<Sub>();
     const Sub *b = op->false_value.as<Sub>();
     Type t = op->type;
 
     int vec_bits = t.bits * t.width;
 
-    if (cmp && a && b && 
+    if (cmp && a && b &&
         equal(a->a, b->b) &&
         equal(a->b, b->a) &&
         equal(cmp->a, a->b) &&
         equal(cmp->b, a->a) &&
-        (!t.is_float()) && 
+        (!t.is_float()) &&
         (t.bits == 8 || t.bits == 16 || t.bits == 32 || t.bits == 64) &&
         (vec_bits == 64 || vec_bits == 128)) {
 
@@ -934,15 +934,15 @@ void CodeGen_ARM::visit(const Store *op) {
     // A dense store of an interleaving can be done using a vst2 intrinsic
     const Call *call = op->value.as<Call>();
     const Ramp *ramp = op->index.as<Ramp>();
-    
+
     // We only deal with ramps here
     if (!ramp) {
         CodeGen::visit(op);
         return;
     }
 
-    if (is_one(ramp->stride) && 
-        call && call->call_type == Call::Intrinsic && 
+    if (is_one(ramp->stride) &&
+        call && call->call_type == Call::Intrinsic &&
         call->name == Call::interleave_vectors) {
         assert(call->args.size() == 2 && "Wrong number of args to interleave vectors");
         vector<Value *> args(call->args.size() + 2);
@@ -952,7 +952,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
         Value *index = codegen(ramp->base);
         Value *ptr = codegen_buffer_pointer(op->name, call->type.element_of(), index);
-        ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());  
+        ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
 
         args[0] = ptr; // The pointer
         args[1] = codegen(call->args[0]);
@@ -961,21 +961,21 @@ void CodeGen_ARM::visit(const Store *op) {
 
         Instruction *store = NULL;
         if (t == Int(8, 8) || t == UInt(8, 8)) {
-            store = call_void_intrin("vst2.v8i8", args);  
+            store = call_void_intrin("vst2.v8i8", args);
         } else if (t == Int(8, 16) || t == UInt(8, 16)) {
-            store = call_void_intrin("vst2.v16i8", args);  
+            store = call_void_intrin("vst2.v16i8", args);
         } else if (t == Int(16, 4) || t == UInt(16, 4)) {
-            store = call_void_intrin("vst2.v4i16", args);  
+            store = call_void_intrin("vst2.v4i16", args);
         } else if (t == Int(16, 8) || t == UInt(16, 8)) {
-            store = call_void_intrin("vst2.v8i16", args);  
+            store = call_void_intrin("vst2.v8i16", args);
         } else if (t == Int(32, 2) || t == UInt(32, 2)) {
-            store = call_void_intrin("vst2.v2i32", args);  
+            store = call_void_intrin("vst2.v2i32", args);
         } else if (t == Int(32, 4) || t == UInt(32, 4)) {
-            store = call_void_intrin("vst2.v4i32", args); 
+            store = call_void_intrin("vst2.v4i32", args);
         } else if (t == Float(32, 2)) {
-            store = call_void_intrin("vst2.v2f32", args); 
+            store = call_void_intrin("vst2.v2f32", args);
         } else if (t == Float(32, 4)) {
-            store = call_void_intrin("vst2.v4f32", args); 
+            store = call_void_intrin("vst2.v4f32", args);
         } else {
             CodeGen::visit(op);
         }
@@ -984,7 +984,7 @@ void CodeGen_ARM::visit(const Store *op) {
         }
 
         return;
-    } 
+    }
 
     // If the stride is one or minus one, we can deal with that using vanilla codegen
     const IntImm *stride = ramp->stride.as<IntImm>();
@@ -997,7 +997,7 @@ void CodeGen_ARM::visit(const Store *op) {
     ostringstream builtin;
     builtin << "strided_store_"
             << (op->value.type().is_float() ? 'f' : 'i')
-            << op->value.type().bits 
+            << op->value.type().bits
             << 'x' << op->value.type().width;
 
     llvm::Function *fn = module->getFunction(builtin.str());
@@ -1035,12 +1035,12 @@ void CodeGen_ARM::visit(const Load *op) {
 
     // Strided loads with known stride
     if (stride && stride->value >= 2 && stride->value <= 4) {
-        // Check alignment on the base. 
+        // Check alignment on the base.
         Expr base = ramp->base;
         int offset = 0;
         ModulusRemainder mod_rem = modulus_remainder(ramp->base);
 
-        
+
         if ((mod_rem.modulus % stride->value) == 0) {
             offset = mod_rem.remainder % stride->value;
             base = simplify(base - offset);
@@ -1054,7 +1054,7 @@ void CodeGen_ARM::visit(const Load *op) {
             if (offset < 0) offset += stride->value;
             base = simplify(base - offset);
         }
-        
+
         int alignment = op->type.bits / 8;
         //alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
         Value *align = ConstantInt::get(i32, alignment);
@@ -1092,10 +1092,10 @@ void CodeGen_ARM::visit(const Load *op) {
             group = call_intrin(result_type, pre+"v4f32", vec(ptr, align));
         }
 
-        if (group) {            
+        if (group) {
             add_tbaa_metadata(dyn_cast<Instruction>(group), op->name);
             debug(4) << "Extracting element " << offset << " from resulting struct\n";
-            value = builder->CreateExtractValue(group, vec((unsigned int)offset));            
+            value = builder->CreateExtractValue(group, vec((unsigned int)offset));
             return;
         }
     }
@@ -1104,7 +1104,7 @@ void CodeGen_ARM::visit(const Load *op) {
     ostringstream builtin;
     builtin << "strided_load_"
             << (op->type.is_float() ? 'f' : 'i')
-            << op->type.bits 
+            << op->type.bits
             << 'x' << op->type.width;
 
     llvm::Function *fn = module->getFunction(builtin.str());
