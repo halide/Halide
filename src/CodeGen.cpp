@@ -12,7 +12,7 @@
 
 #include <sstream>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using namespace llvm;
@@ -49,18 +49,18 @@ using std::stack;
 #define InitializeNVPTXTarget() InitializeTarget(NVPTX)
 #endif
 
-CodeGen::CodeGen() : 
-    module(NULL), owns_module(false), 
-    function(NULL), context(NULL), 
-    builder(NULL), 
-    value(NULL), 
+CodeGen::CodeGen() :
+    module(NULL), owns_module(false),
+    function(NULL), context(NULL),
+    builder(NULL),
+    value(NULL),
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
     buffer_t(NULL) {
 
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
-    if (!llvm_initialized) {            
+    if (!llvm_initialized) {
         InitializeNativeTarget();
         InitializeNativeTargetAsmPrinter();
         InitializeNativeTargetAsmParser();
@@ -147,7 +147,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
             function->setDoesNotAlias(i+1);
         }
     }
-    
+
 
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
@@ -158,7 +158,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
         size_t i = 0;
         for (llvm::Function::arg_iterator iter = function->arg_begin();
              iter != function->arg_end();
-             iter++) {                        
+             iter++) {
 
             if (args[i].is_buffer) {
                 unpack_buffer(args[i].name, iter);
@@ -199,7 +199,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
         Value *ptr = builder->CreateConstGEP1_32(arg_array, (int)i);
         ptr = builder->CreateLoad(ptr);
         if (args[i].is_buffer) {
-            // Cast the argument to a buffer_t * 
+            // Cast the argument to a buffer_t *
             wrapper_args[i] = builder->CreatePointerCast(ptr, buffer_t->getPointerTo());
         } else {
             // Cast to the appropriate type and load
@@ -248,17 +248,17 @@ void CodeGen::optimize_module() {
 
     // Make sure things marked as always-inline get inlined
     module_pass_manager.add(createAlwaysInlinerPass());
-        
+
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
-                
+
     llvm::Function *fn = module->getFunction(function_name);
     assert(fn && "Could not find function inside llvm module");
-        
+
     // Run optimization passes
-    module_pass_manager.run(*module);        
+    module_pass_manager.run(*module);
     function_pass_manager.doInitialization();
     function_pass_manager.run(*fn);
     function_pass_manager.doFinalization();
@@ -269,7 +269,7 @@ void CodeGen::optimize_module() {
 }
 
 void CodeGen::compile_to_bitcode(const string &filename) {
-    assert(module && "No module defined. Must call compile before calling compile_to_bitcode");        
+    assert(module && "No module defined. Must call compile before calling compile_to_bitcode");
 
     string error_string;
     raw_fd_ostream out(filename.c_str(), error_string);
@@ -287,7 +287,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     const Target *target = TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
     if (!target) {
         cout << error_string << endl;
-        TargetRegistry::printRegisteredTargetsForVersion();   
+        TargetRegistry::printRegisteredTargetsForVersion();
     }
     assert(target && "Could not create target");
 
@@ -295,7 +295,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
 
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
-    options.NoFramePointerElim = false; 
+    options.NoFramePointerElim = false;
     options.NoFramePointerElimNonLeaf = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
@@ -315,15 +315,15 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     options.EnableSegmentedStacks = false;
     options.UseInitArray = false;
     options.SSPBufferSize = 0;
-        
+
     TargetMachine *target_machine =
-        target->createTargetMachine(module->getTargetTriple(), 
+        target->createTargetMachine(module->getTargetTriple(),
                                     mcpu(), mattrs(),
-                                    options, 
-                                    Reloc::PIC_, 
-                                    CodeModel::Default, 
+                                    options,
+                                    Reloc::PIC_,
+                                    CodeModel::Default,
                                     CodeGenOpt::Aggressive);
-                                
+
     assert(target_machine && "Could not allocate target machine!");
 
     // Figure out where we are going to send the output.
@@ -338,7 +338,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     PassManager pass_manager;
 
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
-    pass_manager.add(new TargetLibraryInfo(Triple(module->getTargetTriple())));       
+    pass_manager.add(new TargetLibraryInfo(Triple(module->getTargetTriple())));
 
     #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
     pass_manager.add(new TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
@@ -354,9 +354,9 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     // Override default to generate verbose assembly.
     target_machine->setAsmVerbosityDefault(true);
 
-    // Ask the target to add backend passes as necessary.        
+    // Ask the target to add backend passes as necessary.
     TargetMachine::CodeGenFileType file_type =
-        assembly ? TargetMachine::CGFT_AssemblyFile : 
+        assembly ? TargetMachine::CGFT_AssemblyFile :
         TargetMachine::CGFT_ObjectFile;
     target_machine->addPassesToEmitFile(pass_manager, out, file_type);
 
@@ -379,12 +379,12 @@ llvm::Value *CodeGen::sym_get(const string &name, bool must_succeed) {
     if (!symbol_table.contains(name)) {
         if (must_succeed) {
             std::cerr << "Symbol not found: " << name << "\n";
-            
+
             if (debug::debug_level > 0) {
                 std::cerr << "The following names are in scope:\n";
                 std::cerr << symbol_table << "\n";
             }
-            
+
             assert(false);
         } else {
             return NULL;
@@ -401,6 +401,7 @@ bool CodeGen::sym_exists(const string &name) {
 // and populate the symbol table with its constituent parts
 void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
     Value *host_ptr = buffer_host(buffer);
+    Value *dev_ptr = buffer_dev(buffer);
 
     /*
     // Check it's 32-byte aligned
@@ -411,18 +412,19 @@ void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
     Value *base = builder->CreatePtrToInt(host_ptr, i64);
     Value *check_alignment = builder->CreateAnd(base, 0x1f);
     check_alignment = builder->CreateIsNull(check_alignment);
-                                            
+
     string error_message = "Buffer " + name + " is not 32-byte aligned";
     create_assertion(check_alignment, error_message);
     */
 
     // Push the buffer pointer as well, for backends that care.
-    if (track_buffers()) {
-        sym_push(name + ".buffer", buffer);
-    }
+    sym_push(name + ".buffer", buffer);
 
     sym_push(name + ".host", host_ptr);
-    sym_push(name + ".dev", buffer_dev(buffer));
+    sym_push(name + ".dev", dev_ptr);
+    Value *nullity_test = builder->CreateAnd(builder->CreateIsNull(host_ptr),
+                                             builder->CreateIsNull(dev_ptr));
+    sym_push(name + ".host_and_dev_are_null", nullity_test);
     sym_push(name + ".host_dirty", buffer_host_dirty(buffer));
     sym_push(name + ".dev_dirty", buffer_dev_dirty(buffer));
     sym_push(name + ".extent.0", buffer_extent(buffer, 0));
@@ -607,7 +609,7 @@ void CodeGen::visit(const Div *op) {
     if (op->type.is_float()) {
         value = builder->CreateFDiv(codegen(op->a), codegen(op->b));
     } else if (op->type.is_uint()) {
-        value = builder->CreateUDiv(codegen(op->a), codegen(op->b));        
+        value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
     } else {
         // Signed integer division sucks. It should round down (to
         // make upsampling kernels work across the zero boundary), but
@@ -627,7 +629,7 @@ void CodeGen::visit(const Div *op) {
         // We get the rounding to work correctly by introducing a pre
         // and post offset by one. The offsets depend on the sign of
         // the numerator and denominator
-        
+
         /* Here's the C code that we're trying to match (due to Len Hamey)
         T axorb = a ^ b;
         post = a != 0 ? ((axorb) >> (t.bits-1)) : 0;
@@ -697,7 +699,7 @@ void CodeGen::visit(const Mod *op) {
         Value *rem_xor_b_lt_zero = builder->CreateICmpSLT(rem_xor_b, zero);
         Value *need_to_add_b = builder->CreateAnd(rem_not_zero, rem_xor_b_lt_zero);
         Value *offset = builder->CreateSelect(need_to_add_b, b, zero);
-        value = builder->CreateAdd(rem, offset);        
+        value = builder->CreateAdd(rem, offset);
     }
 }
 
@@ -715,7 +717,7 @@ void CodeGen::visit(const Max *op) {
     value = codegen(equiv);
 }
 
-void CodeGen::visit(const EQ *op) {    
+void CodeGen::visit(const EQ *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     Halide::Type t = op->a.type();
@@ -820,7 +822,7 @@ void CodeGen::visit(const Select *op) {
 
         builder->SetInsertPoint(false_bb);
         Value *false_value = codegen(op->false_value);
-        builder->CreateBr(after_bb);        
+        builder->CreateBr(after_bb);
 
         builder->SetInsertPoint(after_bb);
         PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
@@ -829,8 +831,8 @@ void CodeGen::visit(const Select *op) {
 
         value = phi;
     } else {
-        value = builder->CreateSelect(codegen(op->condition), 
-                                      codegen(op->true_value), 
+        value = builder->CreateSelect(codegen(op->condition),
+                                      codegen(op->true_value),
                                       codegen(op->false_value));
     }
 }
@@ -845,7 +847,7 @@ Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *
 
     // If the type doesn't match the expected type, we need to pointer cast
     if (load_type != base_address_type) {
-        base_address = builder->CreatePointerCast(base_address, load_type);            
+        base_address = builder->CreatePointerCast(base_address, load_type);
     }
 
     return builder->CreateInBoundsGEP(base_address, index);
@@ -869,7 +871,7 @@ void CodeGen::visit(const Load *op) {
         LoadInst *load = builder->CreateLoad(ptr);
         add_tbaa_metadata(load, op->name);
         value = load;
-    } else {            
+    } else {
         int alignment = op->type.bits / 8;
         const Ramp *ramp = op->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
@@ -881,19 +883,19 @@ void CodeGen::visit(const Load *op) {
             // alignment using the results of the modulus remainder
             // analysis
             ModulusRemainder mod_rem = modulus_remainder(ramp->base);
-            alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32); 
+            alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
         }
-                    
+
         if (ramp && stride && stride->value == 1) {
             Value *base = codegen(ramp->base);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            LoadInst *load = builder->CreateAlignedLoad(ptr, alignment);                
+            LoadInst *load = builder->CreateAlignedLoad(ptr, alignment);
             add_tbaa_metadata(load, op->name);
             value = load;
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
-            
+
             // If the base ends in an odd constant, then subtract one
             // and do a different shuffle. This helps expressions like
             // (f(2*x) + f(2*x+1) share loads.
@@ -932,7 +934,7 @@ void CodeGen::visit(const Load *op) {
             if (internal) {
                 alignment = op->type.bits / 8;
                 ModulusRemainder mod_rem = modulus_remainder(ramp->base - ramp->width + 1);
-                alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);             
+                alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
             }
 
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
@@ -951,7 +953,7 @@ void CodeGen::visit(const Load *op) {
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
             Value *stride = codegen(ramp->stride);
             value = UndefValue::get(llvm_type_of(op->type));
-            for (int i = 0; i < ramp->width; i++) {                
+            for (int i = 0; i < ramp->width; i++) {
                 Value *lane = ConstantInt::get(i32, i);
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name);
@@ -973,7 +975,7 @@ void CodeGen::visit(const Load *op) {
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
             }
             value = vec;
-        } else {                
+        } else {
             // General gathers
             Value *index = codegen(op->index);
             Value *vec = UndefValue::get(llvm_type_of(op->type));
@@ -985,12 +987,12 @@ void CodeGen::visit(const Load *op) {
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
             }
             value = vec;
-        }            
+        }
     }
 
 }
 
-void CodeGen::visit(const Ramp *op) {        
+void CodeGen::visit(const Ramp *op) {
     if (is_const(op->stride) && !is_const(op->base)) {
         // If the stride is const and the base is not (e.g. ramp(x, 1,
         // 4)), we can lift out the stride and broadcast the base so
@@ -1000,7 +1002,7 @@ void CodeGen::visit(const Ramp *op) {
         Expr ramp = Ramp::make(make_zero(op->base.type()), op->stride, op->width);
         value = codegen(broadcast + ramp);
     } else {
-        // Otherwise we generate element by element by adding the stride to the base repeatedly        
+        // Otherwise we generate element by element by adding the stride to the base repeatedly
 
         Value *base = codegen(op->base);
         Value *stride = codegen(op->stride);
@@ -1020,7 +1022,7 @@ void CodeGen::visit(const Ramp *op) {
 }
 
 void CodeGen::visit(const Broadcast *op) {
-    value = codegen(op->value);        
+    value = codegen(op->value);
     Constant *undef = UndefValue::get(VectorType::get(value->getType(), 1));
     Constant *zero = ConstantInt::get(i32, 0);
     value = builder->CreateInsertElement(undef, value, zero);
@@ -1029,7 +1031,7 @@ void CodeGen::visit(const Broadcast *op) {
 }
 
 void CodeGen::visit(const Call *op) {
-    assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic) && 
+    assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic) &&
            "Can only codegen extern calls and intrinsics");
 
     if (op->call_type == Call::Intrinsic) {
@@ -1052,14 +1054,14 @@ void CodeGen::visit(const Call *op) {
             assert(op->args.size() == 2);
             Expr a = op->args[0], b = op->args[1];
             debug(3) << "Vectors to interleave: " << a << ", " << b << "\n";
-            
+
             vector<Constant *> indices(op->type.width);
             for (int i = 0; i < op->type.width; i++) {
                 int idx = i/2;
                 if (i % 2 == 1) idx += a.type().width;
                 indices[i] = ConstantInt::get(i32, idx);
             }
-            
+
             value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
 
         } else if (op->name == Call::debug_to_file) {
@@ -1070,10 +1072,10 @@ void CodeGen::visit(const Call *op) {
             // Grab the function from the initial module
             llvm::Function *debug_to_file = module->getFunction("halide_debug_to_file");
             assert(debug_to_file && "Could not find halide_debug_to_file function in initial module");
-            
+
             // Make the filename a global string constant
             llvm::Type *filename_type = ArrayType::get(i8, filename->name.size()+1);
-            GlobalVariable *filename_global = new GlobalVariable(*module, filename_type, 
+            GlobalVariable *filename_global = new GlobalVariable(*module, filename_type,
                                                                  true, GlobalValue::PrivateLinkage, 0);
             filename_global->setInitializer(ConstantDataArray::getString(*context, filename->name));
             Value *char_ptr = builder->CreateConstInBoundsGEP2_32(filename_global, 0, 0);
@@ -1084,9 +1086,9 @@ void CodeGen::visit(const Call *op) {
                 debug(4) << op->args[i];
                 args.push_back(codegen(op->args[i]));
             }
-            
+
             debug(4) << "Creating call to debug_to_file\n";
-            
+
             value = builder->CreateCall(debug_to_file, args);
         } else if (op->name == Call::bitwise_and) {
             assert(op->args.size() == 2);
@@ -1113,10 +1115,65 @@ void CodeGen::visit(const Call *op) {
             } else {
                 value = builder->CreateLShr(codegen(op->args[0]), codegen(op->args[1]));
             }
+        } else if (op->name == Call::maybe_rewrite_buffer) {
+            assert(op->args.size() == 15);
+
+            Value *cond = codegen(op->args[0]);
+
+            const Call *call = op->args[1].as<Call>();
+            assert(call);
+            Value *buffer = sym_get(call->name + ".buffer");
+
+            BasicBlock *continue_bb = BasicBlock::Create(*context, "after_maybe_return", function);
+            BasicBlock *rewrite_bb = BasicBlock::Create(*context, "after_maybe_return", function);
+
+            // If the condition is true, enter the rewrite case, otherwise skip over this.
+            builder->CreateCondBr(cond, rewrite_bb, continue_bb);
+
+            // Build the rewrite case
+            builder->SetInsertPoint(rewrite_bb);
+
+            // Rewrite the buffer_t using the args
+            builder->CreateStore(codegen(op->args[2]), buffer_elem_size_ptr(buffer));
+            for (int i = 0; i < 4; i++) {
+                builder->CreateStore(codegen(op->args[i*3+3]), buffer_min_ptr(buffer, i));
+                builder->CreateStore(codegen(op->args[i*3+4]), buffer_extent_ptr(buffer, i));
+                builder->CreateStore(codegen(op->args[i*3+5]), buffer_stride_ptr(buffer, i));
+            }
+
+            builder->CreateBr(continue_bb);
+
+            // Continue on using the continue case
+            builder->SetInsertPoint(continue_bb);
+
+            // From the point of view of the continued code, this returns true.
+            value = codegen(const_true());
+        } else if (op->name == Call::maybe_return) {
+            assert(op->args.size() == 1);
+
+            Value *cond = codegen(op->args[0]);
+
+            BasicBlock *continue_bb = BasicBlock::Create(*context, "after_maybe_return", function);
+            BasicBlock *exit_bb = BasicBlock::Create(*context, "maybe_return_exit", function);
+
+            // If the condition is true, go to the exit_bb
+            builder->CreateCondBr(cond, exit_bb, continue_bb);
+
+            // Build the exit case
+            builder->SetInsertPoint(exit_bb);
+            // TODO: Doesn't work from inside parallel for bodies
+
+            builder->CreateRetVoid();
+            // Continue on using the continue case
+            builder->SetInsertPoint(continue_bb);
+
+            // From the point of view of the continued code, this returns true.
+            value = codegen(const_true());
+
         } else {
             std::cerr << "Unknown intrinsic: " << op->name << "\n";
             assert(false);
-        }        
+        }
 
 
     } else {
@@ -1127,9 +1184,9 @@ void CodeGen::visit(const Call *op) {
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = codegen(op->args[i]);
         }
-        
+
         llvm::Function *fn = module->getFunction(op->name);
-        
+
         llvm::Type *result_type = llvm_type_of(op->type);
 
         // If we can't find it, declare it extern "C"
@@ -1151,9 +1208,9 @@ void CodeGen::visit(const Call *op) {
             }
 
             FunctionType *func_t = FunctionType::get(scalar_result_type, arg_types, false);
-            
+
             fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module);
-            fn->setCallingConv(CallingConv::C);            
+            fn->setCallingConv(CallingConv::C);
         }
 
         bool has_side_effects = false;
@@ -1203,7 +1260,7 @@ void CodeGen::visit(const Call *op) {
                     }
                     value = builder->CreateInsertElement(value, call, idx);
                 }
-            }            
+            }
         }
     }
 }
@@ -1235,7 +1292,7 @@ void CodeGen::visit(const LetStmt *op) {
 void CodeGen::visit(const PrintStmt *op) {
     // Codegen the args, and flatten them into an array of
     // scalars. Also generate a format string
-    ostringstream format_string;        
+    ostringstream format_string;
     format_string << op->prefix;
 
     string fmt_of_type[3];
@@ -1272,12 +1329,12 @@ void CodeGen::visit(const PrintStmt *op) {
     // Now cast all the args to the appropriate types
     for (size_t i = 0; i < args.size(); i++) {
         if (dst_types[i].is_int()) {
-            args[i] = builder->CreateIntCast(args[i], i32, true);                
+            args[i] = builder->CreateIntCast(args[i], i32, true);
         } else if (dst_types[i].is_uint()) {
             args[i] = builder->CreateIntCast(args[i], i32, false);
         } else {
             args[i] = builder->CreateFPCast(args[i], f64);
-        }            
+        }
     }
 
     // Make the format string a global constant
@@ -1317,7 +1374,7 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
 
     // Make the error message string a global constant
     llvm::Type *msg_type = ArrayType::get(i8, message.size()+1);
-    GlobalVariable *msg_global = new GlobalVariable(*module, msg_type, 
+    GlobalVariable *msg_global = new GlobalVariable(*module, msg_type,
                                                     true, GlobalValue::PrivateLinkage, 0);
     msg_global->setInitializer(ConstantDataArray::getString(*context, message));
     Value *char_ptr = builder->CreateConstInBoundsGEP2_32(msg_global, 0, 0);
@@ -1351,10 +1408,10 @@ void CodeGen::visit(const Pipeline *op) {
 void CodeGen::visit(const For *op) {
     Value *min = codegen(op->min);
     Value *extent = codegen(op->extent);
-        
+
     if (op->for_type == For::Serial) {
         Value *max = builder->CreateAdd(min, extent);
-            
+
         BasicBlock *preheader_bb = builder->GetInsertBlock();
 
         // Make a new basic block for the loop
@@ -1365,7 +1422,7 @@ void CodeGen::visit(const For *op) {
         // If min < max, fall through to the loop bb
         Value *enter_condition = builder->CreateICmpSLT(min, max);
         builder->CreateCondBr(enter_condition, loop_bb, after_bb);
-        builder->SetInsertPoint(loop_bb);        
+        builder->SetInsertPoint(loop_bb);
 
         // Make our phi node
         PHINode *phi = builder->CreatePHI(i32, 2);
@@ -1401,7 +1458,7 @@ void CodeGen::visit(const For *op) {
 
         // Allocate a closure
         StructType *closure_t = closure.build_type(context);
-        Value *ptr = builder->CreateAlloca(closure_t, ConstantInt::get(i32, 1)); 
+        Value *ptr = builder->CreateAlloca(closure_t, ConstantInt::get(i32, 1));
 
         // Fill in the closure
         closure.pack_struct(ptr, symbol_table, builder);
@@ -1427,7 +1484,7 @@ void CodeGen::visit(const For *op) {
         llvm::Function::arg_iterator iter = function->arg_begin();
         sym_push(op->name, iter);
 
-        // The closure pointer is the second argument. 
+        // The closure pointer is the second argument.
         ++iter;
         iter->setName("closure");
         Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
@@ -1436,7 +1493,7 @@ void CodeGen::visit(const For *op) {
 
         // Generate the new function body
         codegen(op->body);
-        
+
         builder->CreateRetVoid();
 
         // Move the builder back to the main function and call do_par_for
@@ -1466,7 +1523,7 @@ void CodeGen::visit(const Store *op) {
     // Scalar
     if (value_type.is_scalar()) {
         Value *index = codegen(op->index);
-        Value *ptr = codegen_buffer_pointer(op->name, value_type, index);        
+        Value *ptr = codegen_buffer_pointer(op->name, value_type, index);
         StoreInst *store = builder->CreateStore(val, ptr);
         add_tbaa_metadata(store, op->name);
     } else {
@@ -1476,7 +1533,7 @@ void CodeGen::visit(const Store *op) {
 
             // Boost the alignment if possible
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            while ((mod_rem.remainder & 1) == 0 && 
+            while ((mod_rem.remainder & 1) == 0 &&
                    (mod_rem.modulus & 1) == 0 &&
                    alignment < 256) {
                 mod_rem.modulus /= 2;
@@ -1494,9 +1551,9 @@ void CodeGen::visit(const Store *op) {
             const IntImm *const_stride = ramp->stride.as<IntImm>();
             Value *stride = codegen(ramp->stride);
             // Scatter without generating the indices as a vector
-            for (int i = 0; i < ramp->width; i++) {                
-                Constant *lane = ConstantInt::get(i32, i);                
-                Value *v = builder->CreateExtractElement(val, lane);                
+            for (int i = 0; i < ramp->width; i++) {
+                Constant *lane = ConstantInt::get(i32, i);
+                Value *v = builder->CreateExtractElement(val, lane);
                 if (const_stride) {
                     // Use a constant offset from the base pointer
                     Value *p = builder->CreateConstInBoundsGEP1_32(ptr, const_stride->value * i);
@@ -1520,7 +1577,7 @@ void CodeGen::visit(const Store *op) {
                 StoreInst *store = builder->CreateStore(v, ptr);
                 add_tbaa_metadata(store, op->name);
             }
-        }       
+        }
     }
 
 }
@@ -1529,7 +1586,7 @@ void CodeGen::visit(const Store *op) {
 void CodeGen::visit(const Block *op) {
     codegen(op->first);
     if (op->rest.defined()) codegen(op->rest);
-}        
+}
 
 void CodeGen::visit(const Realize *op) {
     assert(false && "Realize encountered during codegen");

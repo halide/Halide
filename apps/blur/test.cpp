@@ -29,11 +29,11 @@ Image blur(const Image &in) {
 
     begin_timing;
 
-    for (int y = 0; y < in.height(); y++) 
-        for (int x = 0; x < in.width(); x++) 
+    for (int y = 0; y < in.height(); y++)
+        for (int x = 0; x < in.width(); x++)
             tmp(x, y) = (in(x-1, y) + in(x, y) + in(x+1, y))/3;
 
-    for (int y = 0; y < in.height(); y++) 
+    for (int y = 0; y < in.height(); y++)
         for (int x = 0; x < in.width(); x++)
             out(x, y) = (tmp(x, y-1) + tmp(x, y) + tmp(x, y+1))/3;
 
@@ -55,7 +55,7 @@ Image blur_fast(const Image &in) {
             __m128i *tmpPtr = tmp;
             for (int y = -1; y < 32+1; y++) {
                 const uint16_t *inPtr = &(in(xTile, yTile+y));
-                for (int x = 0; x < 128; x += 8) {          
+                for (int x = 0; x < 128; x += 8) {
                     a = _mm_loadu_si128((__m128i*)(inPtr-1));
                     b = _mm_loadu_si128((__m128i*)(inPtr+1));
                     c = _mm_load_si128((__m128i*)(inPtr));
@@ -77,8 +77,8 @@ Image blur_fast(const Image &in) {
                     _mm_store_si128(outPtr++, avg);
                 }
             }
-        } 
-    }  
+        }
+    }
     end_timing;
     return out;
 }
@@ -95,7 +95,7 @@ Image blur_fast(const Image &in) {
   __m128i *tmpPtr = tmp;
   for (int y = -1; y < 64+1; y++) {
   const uint16_t *inPtr = &(in(xTile, yTile+y));
-  for (int x = 0; x < 64; x += 8) {          
+  for (int x = 0; x < 64; x += 8) {
   __m128i val = _mm_loadu_si128((__m128i *)(inPtr-1));
   val = _mm_add_epi16(val, _mm_load_si128((__m128i *)inPtr));
   val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+1)));
@@ -116,9 +116,9 @@ Image blur_fast(const Image &in) {
   tmpPtr++;
   }
   }
-  } 
   }
-  
+  }
+
   return out;
   }
 */
@@ -133,7 +133,7 @@ Image blur_fast2(const Image &in) {
     // dividing by three
     __m128i one_third = _mm_set1_epi16(21846);
 
-  
+
 #pragma omp parallel for
     for (int yTile = 0; yTile < in.height(); yTile += 128) {
 
@@ -156,7 +156,7 @@ Image blur_fast2(const Image &in) {
                 val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+1)));
                 val = _mm_mulhi_epi16(val, one_third);
                 _mm_store_si128(tmpPtr0++, val);
-        
+
                 // blur vertically using previous scanlines of tmp to produce output
                 if (y >= 0) {
                     val = _mm_add_epi16(val, _mm_load_si128(tmpPtr1++));
@@ -171,7 +171,7 @@ Image blur_fast2(const Image &in) {
     }
 
     end_timing;
-  
+
     return out;
 }
 
@@ -181,11 +181,11 @@ extern "C" {
 
 // Convert a CIMG image to a buffer_t for halide
 buffer_t halideBufferOfImage(Image &im) {
-    buffer_t buf = {0, (uint8_t *)im.data(), 
-                    {im.width(), im.height(), 1, 1}, 
-                    {1, im.width(), 0, 0}, 
-                    {0, 0, 0, 0}, 
-                    sizeof(int16_t), 
+    buffer_t buf = {0, (uint8_t *)im.data(),
+                    {im.width(), im.height(), 1, 1},
+                    {1, im.width(), 0, 0},
+                    {0, 0, 0, 0},
+                    sizeof(int16_t),
                     false, false};
     return buf;
 }
@@ -196,11 +196,15 @@ Image blur_halide(Image &in) {
     buffer_t inbuf = halideBufferOfImage(in);
     buffer_t outbuf = halideBufferOfImage(out);
 
+    // expand the input for the purposes of bounds checking
+    inbuf.extent[0] += 2;
+    inbuf.extent[1] += 2;
+
     // Call it once to initialize the halide runtime stuff
     halide_blur(&inbuf, &outbuf);
 
     begin_timing;
-    
+
     // Compute the same region of the output as blur_fast (i.e., we're
     // still being sloppy with boundary conditions)
     halide_blur(&inbuf, &outbuf);
@@ -242,7 +246,7 @@ int main(int argc, char **argv) {
 
     Image halide = blur_halide(input);
     float halide_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
-    
+
     // fast_time2 is always slower than fast_time, so skip printing it
     printf("times: %f %f %f\n", slow_time, fast_time, halide_time);
     /*

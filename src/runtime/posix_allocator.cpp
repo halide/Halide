@@ -1,3 +1,5 @@
+#include "HalideRuntime.h"
+
 #include <stdint.h>
 
 #ifdef __APPLE__

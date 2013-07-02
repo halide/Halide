@@ -12,6 +12,7 @@
 #include "Param.h"
 #include "Debug.h"
 #include <iostream>
+#include <string.h>
 #include <fstream>
 
 namespace Halide {
@@ -903,6 +904,14 @@ Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
     return buf;
 }
 
+void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
+    assert(value().defined() && "Can't infer input bounds on an undefined function");
+    Type t = value().type();
+    // Use a dummy non-null pointer
+    Buffer buf(t, x_size, y_size, z_size, w_size, (uint8_t *)1);
+    infer_input_bounds(buf);
+}
+
 OutputImageParam Func::output_buffer() const {
     assert(value().defined() && "Can't access output buffer of undefined function");
     return OutputImageParam(func.output_buffer(), dimensions());
@@ -1078,6 +1087,15 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
 }
 
+void Func::compile_to_lowered_stmt(const string &filename) {
+    if (!lowered.defined()) {
+        lowered = Halide::Internal::lower(func);
+    }
+
+    ofstream stmt_output(filename.c_str());
+    stmt_output << lowered;
+}
+
 void Func::compile_to_file(const string &filename_prefix, vector<Argument> args) {
     compile_to_header(filename_prefix + ".h", args, filename_prefix);
     compile_to_object(filename_prefix + ".o", args, filename_prefix);
@@ -1183,6 +1201,91 @@ void Func::realize(Buffer dst) {
     Internal::debug(2) << "Calling jitted function\n";
     compiled_module.wrapped_function(&(arg_values[0]));
     Internal::debug(2) << "Back from jitted function\n";
+
+    dst.set_source_module(compiled_module);
+}
+
+void Func::infer_input_bounds(Buffer dst) {
+    if (!compiled_module.wrapped_function) compile_jit();
+
+    assert(compiled_module.wrapped_function);
+
+    // Check the type and dimensionality of the buffer
+    assert(dst.dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
+    assert(dst.type() == value().type() && "Buffer and Func have different element types");
+
+    // In case these have changed since the last realization
+    compiled_module.set_error_handler(error_handler);
+    compiled_module.set_custom_allocator(custom_malloc, custom_free);
+    compiled_module.set_custom_do_par_for(custom_do_par_for);
+    compiled_module.set_custom_do_task(custom_do_task);
+
+    // Update the address of the buffer we're realizing into
+    arg_values[arg_values.size()-1] = dst.raw_buffer();
+
+    // Update the addresses of the image param args
+    Internal::debug(3) << image_param_args.size() << " image param args to set\n";
+    vector<buffer_t> dummy_buffers;
+    for (size_t i = 0; i < image_param_args.size(); i++) {
+        Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
+        Buffer b = image_param_args[i].second.get_buffer();
+        if (b.defined()) {
+            arg_values[image_param_args[i].first] = b.raw_buffer();
+        } else {
+            Internal::debug(1) << "Going to infer input size for param " << image_param_args[i].second.name() << "\n";
+            buffer_t buf;
+            memset(&buf, 0, sizeof(buffer_t));
+            dummy_buffers.push_back(buf);
+            arg_values[image_param_args[i].first] = &dummy_buffers[dummy_buffers.size()-1];
+        }
+    }
+
+    for (size_t i = 0; i < arg_values.size(); i++) {
+        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
+        assert(arg_values[i] != NULL && "An argument to a jitted function is null\n");
+    }
+
+    Internal::debug(2) << "Calling jitted function\n";
+    compiled_module.wrapped_function(&(arg_values[0]));
+    Internal::debug(2) << "Back from jitted function\n";
+
+    // Now allocate the resulting buffers
+    size_t j = 0;
+    for (size_t i = 0; i < image_param_args.size(); i++) {
+        Buffer b = image_param_args[i].second.get_buffer();
+        if (!b.defined()) {
+            buffer_t buf = dummy_buffers[j];
+
+            // Figure out how much memory to allocate for this buffer
+            size_t min_idx = 0, max_idx = 0;
+            for (int d = 0; d < 4; d++) {
+                if (buf.stride[d] > 0) {
+                    min_idx += buf.min[d] * buf.stride[d];
+                    max_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
+                } else {
+                    max_idx += buf.min[d] * buf.stride[d];
+                    min_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
+                }
+            }
+            size_t total_size = (max_idx - min_idx);
+            while (total_size & 0x1f) total_size++;
+
+            // Allocate enough memory with the right dimensionality.
+            Buffer buffer(image_param_args[i].second.type(), total_size,
+                          buf.extent[1] > 0 ? 1 : 0,
+                          buf.extent[2] > 0 ? 1 : 0,
+                          buf.extent[3] > 0 ? 1 : 0);
+
+            // Rewrite the buffer fields to match the ones returned
+            for (int d = 0; d < 4; d++) {
+                buffer.raw_buffer()->min[d] = buf.min[d];
+                buffer.raw_buffer()->stride[d] = buf.stride[d];
+                buffer.raw_buffer()->extent[d] = buf.extent[d];
+            }
+            j++;
+            image_param_args[i].second.set_buffer(buffer);
+        }
+    }
 
     dst.set_source_module(compiled_module);
 }
