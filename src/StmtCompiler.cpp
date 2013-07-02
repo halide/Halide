@@ -15,7 +15,7 @@ StmtCompiler::StmtCompiler(string arch) {
     #ifdef __arm__
     const char *native = "arm";
     #else
-    const char *native = "x86";
+    const char *native = "x86-64-sse41";
     #endif
     if (arch.empty()) {
         #ifdef _WIN32
@@ -26,23 +26,34 @@ StmtCompiler::StmtCompiler(string arch) {
         else arch = native;
         #else
         char *target = getenv("HL_TARGET");
-        if (target) arch = target;        
+        if (target) arch = target;
         else arch = native;
         #endif
     }
 
-    if (arch == "x86") {
-        contents = new CodeGen_X86(X86_64Bit | X86_SSE41);
-    } else if (arch == "x86-32") {
+    if (arch == "x86-32") {
         contents = new CodeGen_X86();
-    } else if (arch == "x86-avx") {
+    } else if (arch == "x86-32-sse41") {
+        contents = new CodeGen_X86(X86_SSE41);
+    } else if (arch == "x86-64") {
+        // Lowest-common-denominator for 64-bit x86, including those
+        // without SSE4.1 (e.g. Clovertown) or SSSE3 (e.g. early AMD parts)...
+        // essentially, just SSE2.
+        contents = new CodeGen_X86(X86_64Bit);
+    } else if (arch == "x86-64-sse41") {
+        contents = new CodeGen_X86(X86_64Bit | X86_SSE41);
+    } else if (arch == "x86-64-avx") {
         contents = new CodeGen_X86(X86_64Bit | X86_SSE41 | X86_AVX);
-    } else if (arch == "x86-nacl") {
-        contents = new CodeGen_X86(X86_64Bit | X86_SSE41 | X86_NaCl);
     } else if (arch == "x86-32-nacl") {
         contents = new CodeGen_X86(X86_NaCl);
     } else if (arch == "x86-32-sse41-nacl") {
         contents = new CodeGen_X86(X86_SSE41 | X86_NaCl);
+    } else if (arch == "x86-64-nacl") {
+        contents = new CodeGen_X86(X86_64Bit | X86_NaCl);
+    } else if (arch == "x86-64-sse41-nacl") {
+        contents = new CodeGen_X86(X86_64Bit | X86_SSE41 | X86_NaCl);
+    } else if (arch == "x86-64-avx-nacl") {
+        contents = new CodeGen_X86(X86_64Bit | X86_SSE41 | X86_AVX | X86_NaCl);
     }
 
 #ifndef _WIN32 // I've temporarily disabled ARM on Windows since it leads to a linking error on halide_internal_initmod_arm stuff (kwampler@adobe.com)
@@ -66,13 +77,16 @@ StmtCompiler::StmtCompiler(string arch) {
     else {
         std::cerr << "Unknown target " << arch << '\n';
         std::cerr << "Known targets are: "
-                  << "x86 x86-avx x86-32 arm arm-android " 
-                  << "x86-nacl x86-32-nacl x86-32-sse41-nacl arm-nacl "
+                  << "x86-32 x86-32-sse41 "
+                  << "x86-64 x86-64-sse41 x86-64-avx "
+                  << "x86-32-nacl x86-32-sse41-nacl "
+                  << "x86-64-nacl x86-64-sse41-nacl x86-64-avx-nacl "
+                  << "arm arm-android "
                   << "ptx opencl"
 		  << std::endl;
         assert(false);
     }
-} 
+}
 
 void StmtCompiler::compile(Stmt stmt, string name, const vector<Argument> &args) {
     contents.ptr->compile(stmt, name, args);
