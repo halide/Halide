@@ -412,6 +412,11 @@ public:
      * will produce serial code. */
     EXPORT void compile_to_c(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
 
+    /** Write out an internal representation of lowered code. Useful
+     * for analyzing and debugging scheduling. Canonical extension is
+     * .stmt, which must be supplied in filename. */
+    EXPORT void compile_to_lowered_stmt(const std::string &filename);
+
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
      * argument.

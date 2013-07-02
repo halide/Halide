@@ -1,3 +1,5 @@
+#include "HalideRuntime.h"
+
 #include <stdarg.h>
 #include <stdint.h>
 

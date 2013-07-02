@@ -1,3 +1,4 @@
+#include "HalideRuntime.h"
 
 #define WEAK __attribute__((weak))
 
