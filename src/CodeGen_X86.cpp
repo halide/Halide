@@ -14,20 +14,13 @@
 #include "LLVM_Headers.h"
 
 // Ugly but quite expedient.
-#define DECLARE_INITMOD_(TARGET) \
+#define DECLARE_INITMOD(TARGET) \
     extern "C" unsigned char halide_internal_initmod_##TARGET[]; \
     extern "C" int halide_internal_initmod_##TARGET##_length;
 
-#if WITH_NATIVE_CLIENT
-#define DECLARE_INITMOD(TARGET) \
-    DECLARE_INITMOD_(TARGET)
-    DECLARE_INITMOD_(TARGET##_nacl)
-#else
-#define DECLARE_INITMOD(TARGET) \
-    DECLARE_INITMOD_(TARGET) \
-    static void* halide_internal_initmod_##TARGET##_nacl = 0; \
-    static int halide_internal_initmod_##TARGET##_nacl_length = 0;
-#endif
+#define DECLARE_EMPTY_INITMOD(TARGET) \
+    static void *halide_internal_initmod_##TARGET = 0; \
+    static int halide_internal_initmod_##TARGET##_length = 0;
 
 DECLARE_INITMOD(x86_32)
 DECLARE_INITMOD(x86_32_sse41)
@@ -35,7 +28,20 @@ DECLARE_INITMOD(x86_64)
 DECLARE_INITMOD(x86_64_sse41)
 DECLARE_INITMOD(x86_64_avx)
 
-#undef DECLARE_INITMOD_
+#if WITH_NATIVE_CLIENT
+DECLARE_INITMOD(x86_32_nacl)
+DECLARE_INITMOD(x86_32_sse41_nacl)
+DECLARE_INITMOD(x86_64_nacl)
+DECLARE_INITMOD(x86_64_sse41_nacl)
+DECLARE_INITMOD(x86_64_avx_nacl)
+#else
+DECLARE_EMPTY_INITMOD(x86_32_nacl)
+DECLARE_EMPTY_INITMOD(x86_32_sse41_nacl)
+DECLARE_EMPTY_INITMOD(x86_64_nacl)
+DECLARE_EMPTY_INITMOD(x86_64_sse41_nacl)
+DECLARE_EMPTY_INITMOD(x86_64_avx_nacl)
+#endif
+
 #undef DECLARE_INITMOD
 
 namespace Halide {
