@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
 
     // implicit for all x, y on both sides, except for the float which has zero implicit args
     Func h;
-    h = (g + f)*6.0f;
+    h() = (g + f)*6.0f;
 
     printf("Realizing function...\n");
 
