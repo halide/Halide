@@ -934,8 +934,14 @@ struct Call : public ExprNode<Call> {
         if (call_type == Halide) {
             assert(func.value().defined() && "Call to undefined halide function");
             assert(args.size() <= func.args().size() && "Call node with too many arguments.");
+            for (size_t i = 0; i < args.size(); i++) {
+                assert(args[i].type() == Int(32) && "Args to call to halide function must be type Int(32)");
+            }
         } else if (call_type == Image) {
             assert((param.defined() || image.defined()) && "Call node to undefined image");
+            for (size_t i = 0; i < args.size(); i++) {
+                assert(args[i].type() == Int(32) && "Args to load from image must be type Int(32)");
+            }
         }
 
         Call *node = new Call;
@@ -964,6 +970,7 @@ struct Call : public ExprNode<Call> {
     static Expr make(Parameter param, const std::vector<Expr> &args) {
         return make(param.type(), param.name(), args, Image, Function(), Buffer(), param);
     }
+
 };
 
 /** A named variable. Might be a loop variable, function argument,
