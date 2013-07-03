@@ -41,7 +41,7 @@ uint64_t ubits(int unique, int i, int j) {
     // so we are assured that the initial value computed below occupies 64 bits
     // and then the subsequent operations help ensure that every bit is affected by
     // all three inputs.
-    
+
     bits = ((unique * mu + i) * mi + j) * mj;  // All multipliers are prime
     bits = (bits ^ (bits >> 32)) * mk;
     bits = (bits ^ (bits >> 32)) * ml;
@@ -85,7 +85,7 @@ template<typename T,typename BIG,int bits>
 BIG maximum() {
     Type t = type_of<T>();
     t.bits = bits;
-    
+
     if (t.is_float()) {
         return (BIG) 1.0;
     }
@@ -110,7 +110,7 @@ template<typename T,typename BIG,int bits>
 BIG minimum() {
     Type t = type_of<T>();
     t.bits = bits;
-    
+
     if (t.is_float()) {
         return (BIG) 0.0;
     }
@@ -126,7 +126,7 @@ BIG minimum() {
         return min;
     }
     assert(0);
-    return (BIG) 0; 
+    return (BIG) 0;
 }
 
 // Construct an image for testing.
@@ -140,11 +140,11 @@ template<typename T,typename BIG,int bits>
 Image<T> init(Type t, int unique, int width, int height) {
     if (width < 2) width = 2;
     if (height < 2) height = 2;
-        
+
     Image<T> result(width, height);
-    
+
     assert(t.bits == bits);
-        
+
     if (t.is_int()) {
         // Signed integer type with specified number of bits.
         int64_t max, min, neg, v, vsalt;
@@ -153,7 +153,7 @@ Image<T> init(Type t, int unique, int width, int height) {
         neg = (~((int64_t) 0)) ^ max;  // The bits that should all be 1 for negative numbers.
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
-                v = (int64_t) (ubits(unique,i,j));      
+                v = (int64_t) (ubits(unique,i,j));
                 if (v < 0)
                     v |= neg; // Make all the high bits one
                 else
@@ -226,11 +226,11 @@ Image<T> init(Type t, int unique, int width, int height) {
     else {
         printf ("Unknown data type in init.\n");
     }
-        
+
     return result;
 }
 
-// halide_div is the Halide definition of division, expression in BIG type 
+// halide_div is the Halide definition of division, expression in BIG type
 // to avoid overflow issues.  Type cast the result to T.
 template<typename T,typename BIG>
 BIG halide_div(BIG a, BIG b) {
@@ -332,7 +332,7 @@ T new_mod(T a, T b) {
     // Mask should be -1 in the cases:
     // (rem ^ b) is negative and (rem | -rem) is negative.
     // Negative test is implemented by arithmetic right shift
-    // by the word size less 1 bit. 
+    // by the word size less 1 bit.
 #if MOD_METHOD==3
     T mask = (((T)(rem ^ b)) >> (t.bits-1)) & (((T)(rem | -rem)) >> (t.bits-1));
     rem = rem + (b & mask);
@@ -353,15 +353,15 @@ bool division() {
     Type t = type_of<T>();
     BIG minval = minimum<T,BIG,bits>();
     bool success = true;
-    
+
     std::cout << "Test division of " << t << '\n';
     t.bits = bits; // Override the bits
-    
+
     // The parameter bits can be used to control the maximum data value.
     Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
     Image<T> b = init<T,BIG,bits>(t, 2, WIDTH, HEIGHT);
     Image<T> out(WIDTH,HEIGHT);
-    
+
     // Filter the input values for the operation to be tested.
     // Cannot divide by zero, so remove zeroes from b.
     // Also, cannot divide the most negative number by -1.
@@ -375,12 +375,12 @@ bool division() {
             }
         }
     }
-    
+
     // Compute division result and check it.
     Func f;
-    f = a / b;  // Using Halide division operation.
+    f() = a / b;  // Using Halide division operation.
     f.realize(out);
-    
+
     int ecount = 0;
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
@@ -391,7 +391,7 @@ bool division() {
             }
         }
     }
-    
+
     // Explicit checks of the simplifier
     ecount = 0;
     for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {
@@ -408,7 +408,7 @@ bool division() {
             }
         }
     }
-    
+
     /* Test alternative C implementation to match Halide definition. */
     ecount = 0;
     for (i = 0; i < WIDTH; i++) {
@@ -433,15 +433,15 @@ bool mod() {
     Type t = type_of<T>();
     BIG minval = minimum<T,BIG,bits>();
     bool success = true;
-    
+
     std::cout << "Test mod of " << t << '\n';
     t.bits = bits; // Override the bits
-    
+
     // The parameter bits can be used to control the maximum data value.
     Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
     Image<T> b = init<T,BIG,bits>(t, 2, WIDTH, HEIGHT);
     Image<T> out(WIDTH,HEIGHT);
-    
+
     // Filter the input values for the operation to be tested.
     // Cannot divide by zero, so remove zeroes from b.
     // Also, cannot divide the most negative number by -1.
@@ -455,12 +455,12 @@ bool mod() {
             }
         }
     }
-    
+
     // Compute modulus result and check it.
     Func f;
-    f = a % b;  // Using Halide mod operation.
+    f() = a % b;  // Using Halide mod operation.
     f.realize(out);
-    
+
     int ecount = 0;
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
@@ -471,7 +471,7 @@ bool mod() {
             }
         }
     }
-    
+
     // Explicit checks of the simplifier
     ecount = 0;
     for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {
@@ -488,7 +488,7 @@ bool mod() {
             }
         }
     }
-    
+
     /* Test alternative C implementation to match Halide definition. */
     ecount = 0;
     for (i = 0; i < WIDTH; i++) {
@@ -514,15 +514,15 @@ bool f_mod() {
     BIG minval = 0.0;
     BIG maxval = 1.0;
     bool success = true;
-    
+
     std::cout << "Test mod of " << t << '\n';
     t.bits = bits; // Override the bits
-    
+
     // The parameter bits can be used to control the maximum data value.
     Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
     Image<T> b = init<T,BIG,bits>(t, 2, WIDTH, HEIGHT);
     Image<T> out(WIDTH,HEIGHT);
-    
+
     // Filter the input values for the operation to be tested.
     // Cannot divide by zero, so remove zeroes from b.
     for (i = 0; i < WIDTH; i++) {
@@ -532,12 +532,12 @@ bool f_mod() {
             }
         }
     }
-    
+
     // Compute modulus result and check it.
     Func f;
-    f = a % b;  // Using Halide mod operation.
+    f() = a % b;  // Using Halide mod operation.
     f.realize(out);
-    
+
     // Explicit checks of the simplifier for consistency with runtime computation
     int ecount = 0;
     for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {

@@ -326,7 +326,7 @@ public:
     static void test();
 
     /** Declare a new undefined function with the given name */
-    EXPORT Func(const std::string &name);
+    EXPORT explicit Func(const std::string &name);
 
     /** Declare a new undefined function with an
      * automatically-generated unique name */
@@ -335,7 +335,7 @@ public:
     /** Declare a new function with an automatically-generated unique
      * name, and define it to return the given expression (which may
      * not contain free variables). */
-    EXPORT Func(Expr e);
+    EXPORT explicit Func(Expr e);
 
     /** Generate a new uniquely-named function that returns the given
      * buffer. Has the same dimensionality as the buffer. Useful for
