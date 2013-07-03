@@ -698,8 +698,8 @@ void CodeGen_X86::test() {
     Stmt loop = Store::make("buf", e, x + i);
     loop = LetStmt::make("x", beta+1, loop);
     // Do some local allocations within the loop
-    loop = Allocate::make("tmp_stack", Int(32), 127, loop);
-    loop = Allocate::make("tmp_heap", Int(32), 43 * beta, loop);
+    loop = Allocate::make("tmp_stack", Int(32), 127, Block::make(loop, Free::make("tmp_stack")));
+    loop = Allocate::make("tmp_heap", Int(32), 43 * beta, Block::make(loop, Free::make("tmp_heap")));
     loop = For::make("i", -1, 3, For::Parallel, loop);
 
     Stmt s = Block::make(init, loop);
