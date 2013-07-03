@@ -802,16 +802,7 @@ FuncRefVar::operator Expr() const {
 }
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
-    for (size_t i = 0; i < args.size(); i++) {
-        Type t = args[i].type();
-        if (t.is_float() || (t.is_uint() && t.bits >= 32) || (t.is_int() && t.bits > 32)) {
-            std::cerr << "Error: implicit cast from " << t << " to int in argument " << (i+1)
-                      << " in call to " << f.name() << " is not allowed. Use an explicit cast.\n";
-            assert(false);
-        }
-        // We're allowed to implicitly cast from other varieties of int
-        args[i] = cast<int>(args[i]);
-    }
+    ImageParam::check_arg_types(f.name(), &args);
 }
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a) : func(f) {
