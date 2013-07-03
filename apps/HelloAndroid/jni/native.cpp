@@ -12,7 +12,7 @@
 
 #define DEBUG 1
 
-extern "C" void set_error_handler(void (*handler)(char *));
+extern "C" void halide_set_error_handler(void (*handler)(char *));
 
 void handler(char *msg) {
     LOGE(msg);
@@ -21,7 +21,7 @@ void handler(char *msg) {
 extern "C" {
 JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(JNIEnv * env, jobject obj, jbyteArray jSrc, jobject surf) {
 
-    set_error_handler(handler);
+    halide_set_error_handler(handler);
 
     unsigned char *src = (unsigned char *)env->GetByteArrayElements(jSrc, NULL);
 
@@ -33,7 +33,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     static unsigned times[16];
     if (first_call) {
       LOGD("Resetting buffer format");
-      ANativeWindow_setBuffersGeometry(win, 640, 360, 0); 
+      ANativeWindow_setBuffersGeometry(win, 640, 360, 0);
       first_call = false;
       for (int t = 0; t < 16; t++) times[t] = 0;
     }
@@ -49,7 +49,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     srcBuf.extent[1] = 362;
     srcBuf.extent[2] = 1;
     srcBuf.extent[3] = 1;
-    srcBuf.stride[0] = 1;    
+    srcBuf.stride[0] = 1;
     srcBuf.stride[1] = 640;
     srcBuf.min[0] = -1;
     srcBuf.min[1] = -1;
@@ -77,7 +77,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     unsigned min = times[0];
     for (int i = 1; i < 16; i++) {
         if (times[i] < min) min = times[i];
-    }    
+    }
     LOGD("Time taken: %d (%d)", elapsed, min);
 
     // Just copy over chrominance untouched
@@ -87,6 +87,6 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     ANativeWindow_unlockAndPost(win);
     ANativeWindow_release(win);
 
-    env->ReleaseByteArrayElements(jSrc, (jbyte *)src, 0);        
+    env->ReleaseByteArrayElements(jSrc, (jbyte *)src, 0);
 }
 }
