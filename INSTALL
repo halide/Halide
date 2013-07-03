@@ -54,9 +54,16 @@ to the Native Client target.
 In order to build Halide with Native Client support, one will need the
 PNaCl llvm tree from:
     http://git.chromium.org/native_client/pnacl-llvm.git
+and, for good measure, PNaCl's version of clang:
+    http://git.chromium.org/native_client/pnacl-clang.git
+To check these out:
+  % git clone http://git.chromium.org/native_client/pnacl-llvm.git pnacl-llvm
+  % cd pnacl-llvm/tools
+  % git clone http://git.chromium.org/native_client/pnacl-clang.git clang
+  % cd ../..
 
 To enable all Halide targets, configure it like so:
-    ./configure --enable-assertions --enable-optimized --enable-targets=arm,x86,nvptx
+  % ./configure --enable-assertions --enable-optimized --enable-targets=arm,x86,nvptx
 
 It will possibly be helpful to get the entire dev tree for
 PNaCl. Documentation for this is here:
@@ -77,13 +84,14 @@ variables (on the command line or by editing the Makefile):
   % export LLVM_CONFIG=<path-to-Halide>/llvm/pnacl-llvm/Release+Asserts/bin/llvm-config
 
  Change WITH_NATIVE_CLIENT to "true" (or any non-empty value):
- 
+
   % export WITH_NATIVE_CLIENT=true
 
  Point NATIVE_CLIENT_X86_INCLUDE and NATIVE_CLIENT_ARM_INCLUDE to the
  appropriate include directories within the native client SDK. E.g.:
 
   % export NATIVE_CLIENT_X86_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_x86_glibc/x86_64-nacl/include/
+  % export NATIVE_CLIENT_ARM_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_arm_newlib/arm-nacl/include/
 
 With these variables set, run make. This will build a Halide lib
 capable of generating native client objects. Neither the tests nor

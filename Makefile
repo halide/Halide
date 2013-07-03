@@ -22,7 +22,14 @@ WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", )
 NATIVE_CLIENT_ARCHS = $(if $(WITH_NATIVE_CLIENT), x86_32_nacl x86_32_sse41_nacl x86_64_nacl x86_64_sse41_nacl x86_64_avx_nacl arm_nacl,)
 NATIVE_CLIENT_LLVM_CONFIG_LIB = $(if $(WITH_NATIVE_CLIENT), nacltransforms, )
-NATIVE_CLIENT_ROOT ?=
+ifneq ($(WITH_NATIVE_CLIENT), )
+ifndef NATIVE_CLIENT_X86_INCLUDE
+$(error Compiling with native client support but NATIVE_CLIENT_X86_INCLUDE not defined)
+endif
+ifndef NATIVE_CLIENT_ARM_INCLUDE
+$(error Compiling with native client support but NATIVE_CLIENT_ARM_INCLUDE not defined)
+endif
+endif
 
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 PTX_CXX_FLAGS=$(if $(WITH_PTX), "-DWITH_PTX=1", )
