@@ -268,6 +268,7 @@ $(DISTRIB_DIR)/halide.tgz: all
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/lib
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/lib
 	cp include/Halide.h $(DISTRIB_DIR)/include
+	cp include/HalideRuntime.h $(DISTRIB_DIR)/include
 	tar -czf $(DISTRIB_DIR)/halide.tgz -C $(DISTRIB_DIR) lib include
 
 distrib: $(DISTRIB_DIR)/halide.tgz
