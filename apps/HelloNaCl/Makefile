@@ -1,7 +1,7 @@
 
 NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_26
 
-WARNINGS := -Wall -Wswitch-enum 
+WARNINGS := -Wall -Wswitch-enum
 CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include
 
 UNAME = $(shell uname)
@@ -29,10 +29,10 @@ hello_nacl.zip: hello_nacl_64.nexe hello_nacl_32.nexe
 	zip hello_nacl.zip hello_nacl.html hello_nacl.nmf hello_nacl_32.nexe hello_nacl_64.nexe *game_of_life.cpp halide_game_of_life.s
 
 hello_nacl_64.nexe: $(OBJECTS_64) .lib64_linked
-	$(CXX_64) -o $@ -m64 $(OBJECTS_64) $(LDFLAGS_64)	
+	$(CXX_64) -o $@ -m64 $(OBJECTS_64) $(LDFLAGS_64)
 
 hello_nacl_32.nexe: $(OBJECTS_32) .lib32_linked
-	$(CXX_32) -o $@ -m32 $(OBJECTS_32) $(LDFLAGS_32)	
+	$(CXX_32) -o $@ -m32 $(OBJECTS_32) $(LDFLAGS_32)
 
 .lib64_linked:
 	ln -fs $(TC)/x86_64-nacl/lib64 lib64
@@ -40,9 +40,9 @@ hello_nacl_32.nexe: $(OBJECTS_32) .lib32_linked
 
 .lib32_linked:
 	ln -fs $(TC)/x86_64-nacl/lib32 lib32
-	touch .lib32_linked	
+	touch .lib32_linked
 
-hello_nacl_64.o: hello_nacl.cpp halide_game_of_life_64.o 
+hello_nacl_64.o: hello_nacl.cpp halide_game_of_life_64.o
 	$(CXX_64) -o $@ -m64 -c $< $(CXXFLAGS)
 
 hello_nacl_32.o: hello_nacl.cpp halide_game_of_life_32.o
@@ -55,7 +55,7 @@ c_game_of_life_64.o: c_game_of_life.cpp
 	$(CXX_64) -o $@ -m64 -c $< $(CXXFLAGS)
 
 halide_game_of_life_64.o: halide_game_of_life
-	HL_TARGET=x86-nacl DYLD_LIBRARY_PATH=../../bin LD_LIBRARY_PATH=../../bin ./halide_game_of_life
+	HL_TARGET=x86-64-sse41-nacl DYLD_LIBRARY_PATH=../../bin LD_LIBRARY_PATH=../../bin ./halide_game_of_life
 	mv halide_game_of_life.o halide_game_of_life_64.o
 
 halide_game_of_life_32.o: halide_game_of_life

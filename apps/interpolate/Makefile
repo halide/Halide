@@ -1,6 +1,6 @@
-GXX ?= g++
+CXX ?= g++
 
-PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
+PNGFLAGS=-lpng $(shell libpng-config --cflags)
 
 ifeq ($(HL_TARGET),ptx)
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
@@ -10,7 +10,7 @@ all: interpolate
 
 interpolate: ../../ interpolate.cpp
 	$(MAKE) -C ../../ bin/libHalide.a
-	$(GXX) $(CPPFLAGS) interpolate.cpp -I ../../include/ -I ../support ../../bin/libHalide.a -o interpolate  -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS)
+	$(CXX) $(CPPFLAGS) interpolate.cpp -I ../../include/ -I ../support ../../bin/libHalide.a -o interpolate  -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS)
 
 out.png: interpolate
 	./interpolate ../images/rgba.png out.png

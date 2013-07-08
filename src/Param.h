@@ -8,6 +8,7 @@
 
 #include "IR.h"
 #include "Var.h"
+#include "IRPrinter.h"
 #include <sstream>
 #include <vector>
 
@@ -236,6 +237,22 @@ public:
         return Internal::Call::make(param, args);
     }
 
+    /** Force the args to a call to an image to be int32. */
+    static void check_arg_types(const std::string &name, std::vector<Expr> *args) {
+        for (size_t i = 0; i < args->size(); i++) {
+            Type t = (*args)[i].type();
+            if (t.is_float() || (t.is_uint() && t.bits >= 32) || (t.is_int() && t.bits > 32)) {
+                std::cerr << "Error: implicit cast from " << t << " to int in argument " << (i+1)
+                          << " in call to " << name << " is not allowed. Use an explicit cast.\n";
+                assert(false);
+            }
+            // We're allowed to implicitly cast from other varieties of int
+            if (t != Int(32)) {
+                (*args)[i] = Internal::Cast::make(Int(32), (*args)[i]);
+            }
+        }
+    }
+
     Expr operator()(Expr x) const {
         assert(dimensions() >= 1);
         std::vector<Expr> args;
@@ -243,6 +260,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
+        check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
 
@@ -254,6 +272,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
+        check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
 
@@ -266,6 +285,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
+        check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
 
@@ -279,6 +299,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
+        check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
     // @}

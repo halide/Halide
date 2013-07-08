@@ -21,14 +21,14 @@ using std::tr1::shared_ptr;
 #define BUFFER_T_DEFINED
 #include <stdint.h>
 typedef struct buffer_t {
-  uint8_t* host;
-  uint64_t dev;
-  bool host_dirty;
-  bool dev_dirty;
-  int32_t extent[4];
-  int32_t stride[4];
-  int32_t min[4];
-  size_t elem_size;
+    uint64_t dev;
+    uint8_t* host;
+    int32_t extent[4];
+    int32_t stride[4];
+    int32_t min[4];
+    int32_t elem_size;
+    bool host_dirty;
+    bool dev_dirty;
 } buffer_t;
 #endif
 
@@ -42,7 +42,7 @@ class Image {
         uint8_t *alloc;
         ~Contents() {
             delete[] alloc;
-        }        
+        }
     };
 
     shared_ptr<Contents> contents;
@@ -68,14 +68,14 @@ class Image {
         buf.host_dirty = false;
         buf.dev_dirty = false;
         buf.dev = 0;
-        while ((size_t)buf.host & 0x1f) buf.host++; 
+        while ((size_t)buf.host & 0x1f) buf.host++;
         contents.reset(new Contents(buf, ptr));
     }
 
 public:
     Image() {
     }
-    
+
     Image(int w, int h = 1, int c = 1) {
         initialize(w, h, c);
     }
@@ -125,27 +125,27 @@ public:
         return ptr[c*contents->buf.stride[2] + y*contents->buf.stride[1] + x*contents->buf.stride[0]];
     }
 
-    operator buffer_t *() {
+    operator buffer_t *() const {
         return &(contents->buf);
     }
 
-    int width() {
+    int width() const {
         return contents->buf.extent[0];
     }
 
-    int height() {
+    int height() const {
         return contents->buf.extent[1];
     }
 
-    int channels() {
+    int channels() const {
         return contents->buf.extent[2];
     }
 
-    int stride(int dim) {
+    int stride(int dim) const {
         return contents->buf.stride[dim];
     }
 
-    int size(int dim) {
+    int size(int dim) const {
         return contents->buf.extent[dim];
     }
 

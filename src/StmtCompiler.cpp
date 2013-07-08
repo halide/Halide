@@ -11,11 +11,94 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+#ifndef __arm__
+// CPU feature detection code taken from ispc
+// (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
+static void cpuid(int info[4], int infoType) {
+    __asm__ __volatile__ (
+        "xchg{l}\t{%%}ebx, %1  \n\t"
+        "cpuid                 \n\t"
+        "xchg{l}\t{%%}ebx, %1  \n\t"
+        : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
+        : "0" (infoType));
+}
+
+/* Save %ebx in case it's the PIC register */
+static void cpuid_count(int info[4], int level, int count) {
+    __asm__ __volatile__ (
+        "xchg{l}\t{%%}ebx, %1  \n\t"
+        "cpuid                 \n\t"
+        "xchg{l}\t{%%}ebx, %1  \n\t"
+        : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
+        : "0" (level), "2" (count));
+}
+
+string get_native_x86_target() {
+     int info[4];
+     cpuid(info, 1);
+
+     bool use_64_bits = (sizeof(size_t) == 8);
+     bool have_sse41 = info[2] & (1 << 19);
+     bool have_sse2 = info[3] & (1 << 26);
+     bool have_avx = info[2] & (1 << 28);
+     bool have_f16 = info[2] & (1 << 29);
+     bool have_rdrand = info[2] & (1 << 30);
+
+     /* NOTE: the values returned below must be the same as the
+        corresponding enumerant values in Target::ISA. */
+     if (use_64_bits) {
+         if (have_avx) {
+             if (have_f16 && have_rdrand) {
+                 // So far, so good.  AVX2?
+                 // Call cpuid with eax=7, ecx=0
+                 int info2[4];
+                 cpuid_count(info2, 7, 0);
+                 bool have_avx2 = info[2] & (1 << 5);
+                 if (have_avx2) {
+                     // AVX 2
+                     // For now we just return avx.
+                     return "x86-64-avx";
+                 } else {
+                     // AVX with float16 and rdrand
+                     // For now we just return avx.
+                     return "x86-64-avx";
+                 }
+             }
+             // Regular AVX
+             return "x86-64-avx";
+         } else if (have_sse41) {
+             // SSE4.1
+             return "x86-64-sse41";
+         } else if (have_sse2) {
+             // SSE2
+             return "x86-64";
+         } else {
+
+         }
+     } else {
+         // 32-bit targets
+         if ((info[2] & (1 << 19)) != 0) {
+             // SSE4.1
+             return "x86-32-sse41";
+         } else if ((info[3] & (1 << 26)) != 0) {
+             // SSE2
+             return "x86-32";
+         }
+     }
+     std::cerr << "cpuid instruction returned " << std::hex
+               << info[0] << ", "
+               << info[1] << ", "
+               << info[2] << ", "
+               << info[3] << "\n";
+     assert(false && "No SSE2 support, or failed to correctly interpret the result of cpuid.");
+}
+#endif
+
 StmtCompiler::StmtCompiler(string arch) {
     #ifdef __arm__
     const char *native = "arm";
     #else
-    const char *native = "x86";
+    string native = get_native_x86_target();
     #endif
     if (arch.empty()) {
         #ifdef _WIN32
@@ -26,23 +109,38 @@ StmtCompiler::StmtCompiler(string arch) {
         else arch = native;
         #else
         char *target = getenv("HL_TARGET");
-        if (target) arch = target;        
+        if (target) arch = target;
         else arch = native;
         #endif
     }
 
-    if (arch == "x86") {
-        contents = new CodeGen_X86(X86_64Bit | X86_SSE41);
-    } else if (arch == "x86-32") {
+    if (arch.empty() || arch == "native") {
+        arch = native;
+    }
+
+    if (arch == "x86-32") {
         contents = new CodeGen_X86();
-    } else if (arch == "x86-avx") {
+    } else if (arch == "x86-32-sse41") {
+        contents = new CodeGen_X86(X86_SSE41);
+    } else if (arch == "x86-64") {
+        // Lowest-common-denominator for 64-bit x86, including those
+        // without SSE4.1 (e.g. Clovertown) or SSSE3 (e.g. early AMD parts)...
+        // essentially, just SSE2.
+        contents = new CodeGen_X86(X86_64Bit);
+    } else if (arch == "x86-64-sse41") {
+        contents = new CodeGen_X86(X86_64Bit | X86_SSE41);
+    } else if (arch == "x86-64-avx") {
         contents = new CodeGen_X86(X86_64Bit | X86_SSE41 | X86_AVX);
-    } else if (arch == "x86-nacl") {
-        contents = new CodeGen_X86(X86_64Bit | X86_SSE41 | X86_NaCl);
     } else if (arch == "x86-32-nacl") {
         contents = new CodeGen_X86(X86_NaCl);
     } else if (arch == "x86-32-sse41-nacl") {
         contents = new CodeGen_X86(X86_SSE41 | X86_NaCl);
+    } else if (arch == "x86-64-nacl") {
+        contents = new CodeGen_X86(X86_64Bit | X86_NaCl);
+    } else if (arch == "x86-64-sse41-nacl") {
+        contents = new CodeGen_X86(X86_64Bit | X86_SSE41 | X86_NaCl);
+    } else if (arch == "x86-64-avx-nacl") {
+        contents = new CodeGen_X86(X86_64Bit | X86_SSE41 | X86_AVX | X86_NaCl);
     }
 
 #ifndef _WIN32 // I've temporarily disabled ARM on Windows since it leads to a linking error on halide_internal_initmod_arm stuff (kwampler@adobe.com)
@@ -64,15 +162,21 @@ StmtCompiler::StmtCompiler(string arch) {
     }
 #endif // _WIN32
     else {
-        std::cerr << "Unknown target " << arch << '\n';
-        std::cerr << "Known targets are: "
-                  << "x86 x86-avx x86-32 arm arm-android " 
-                  << "x86-nacl x86-32-nacl x86-32-sse41-nacl arm-nacl "
-                  << "ptx opencl"
-		  << std::endl;
+        std::cerr << "Unknown target \"" << arch << "\"\n"
+                  << "Known targets are: "
+                  << "x86-32 x86-32-sse41 "
+                  << "x86-64 x86-64-sse41 x86-64-avx "
+                  << "x86-32-nacl x86-32-sse41-nacl "
+                  << "x86-64-nacl x86-64-sse41-nacl x86-64-avx-nacl "
+                  << "arm arm-android "
+                  << "ptx opencl "
+                  << "native"
+		  << "\n"
+                  << "On this machine, native means " << native << "\n";
+
         assert(false);
     }
-} 
+}
 
 void StmtCompiler::compile(Stmt stmt, string name, const vector<Argument> &args) {
     contents.ptr->compile(stmt, name, args);

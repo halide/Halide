@@ -54,9 +54,16 @@ to the Native Client target.
 In order to build Halide with Native Client support, one will need the
 PNaCl llvm tree from:
     http://git.chromium.org/native_client/pnacl-llvm.git
+and, for good measure, PNaCl's version of clang:
+    http://git.chromium.org/native_client/pnacl-clang.git
+To check these out:
+  % git clone http://git.chromium.org/native_client/pnacl-llvm.git pnacl-llvm
+  % cd pnacl-llvm/tools
+  % git clone http://git.chromium.org/native_client/pnacl-clang.git clang
+  % cd ../..
 
 To enable all Halide targets, configure it like so:
-    ./configure --enable-assertions --enable-optimized --enable-targets=arm,x86,nvptx
+  % ./configure --enable-assertions --enable-optimized --enable-targets=arm,x86,nvptx
 
 It will possibly be helpful to get the entire dev tree for
 PNaCl. Documentation for this is here:
@@ -77,13 +84,14 @@ variables (on the command line or by editing the Makefile):
   % export LLVM_CONFIG=<path-to-Halide>/llvm/pnacl-llvm/Release+Asserts/bin/llvm-config
 
  Change WITH_NATIVE_CLIENT to "true" (or any non-empty value):
- 
+
   % export WITH_NATIVE_CLIENT=true
 
  Point NATIVE_CLIENT_X86_INCLUDE and NATIVE_CLIENT_ARM_INCLUDE to the
  appropriate include directories within the native client SDK. E.g.:
 
   % export NATIVE_CLIENT_X86_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_x86_glibc/x86_64-nacl/include/
+  % export NATIVE_CLIENT_ARM_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_arm_newlib/arm-nacl/include/
 
 With these variables set, run make. This will build a Halide lib
 capable of generating native client objects. Neither the tests nor
@@ -92,3 +100,25 @@ compilation however. Try the app HelloNacl for a theoretically-working
 example.
 
 ARM native client has not been tested yet.
+
+------------------------------------------------------------------
+Building Halide and llvm as 32-bit on 64-bit linux
+------------------------------------------------------------------
+
+This is necessary if you want to JIT-compile 32-bit code.
+
+To get a 32-bit llvm, configure and compile it like so:
+  % CC="gcc -m32" CXX="g++ -m32" ./configure --enable-targets=x86,arm,nvptx --enable-assertions --enable-optimized --build=i686-pc-linux-gnu
+  % CC="gcc -m32" CXX="g++ -m32" make
+
+To generate a 32-bit Halide, compile it like so:
+  % HL_TARGET=x86-32 LD="ld -melf_i386" CC="gcc -m32" CXX="g++ -m32" make
+
+You should then be able to run the JIT tests with a 32-bit target:
+  % CXX="g++ -m32 -msse4" make build_tests
+  % HL_TARGET=x86-32-sse41 make run_tests
+
+If you have a 32-bit libpng, you can also run the apps in 32-bit:
+  % HL_TARGET=x86-32-sse41 CXX="g++ -m32 -msse4" make test_apps
+The tests should pass, but the tutorials will fail to compile unless
+you manually supply a 32-bit libpng.

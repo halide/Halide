@@ -2,18 +2,18 @@
 #define HALIDE_CODEGEN_X86_H
 
 /** \file
- * Defines the code-generator for producing x86 machine code 
+ * Defines the code-generator for producing x86 machine code
  */
 
 #include "CodeGen_Posix.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** Bitmask flags for specifying code generation options to CodeGen_X86. */
 enum CodeGen_X86_Options {
     X86_64Bit = 1,  /// Compile for x86_64
-    X86_SSE41 = 2,  /// Compile for SSE 4.1
+    X86_SSE41 = 2,  /// Compile for SSE 4.1 and SSSE3
     X86_AVX   = 4,  /// Compile for AVX (v1)
     X86_NaCl  = 8,  /// Compile for Native Client (Must be using the Native Client llvm tree)
 };
@@ -24,7 +24,7 @@ public:
     /** Create an x86 code generator. Processor features can be
      * enabled using the appropriate flags from CodeGen_X86_Options */
     CodeGen_X86(uint32_t options = 0);
-        
+
     /** Compile to an internally-held llvm module. Takes a halide
      * statement, the name of the function produced, and the arguments
      * to the function produced. After calling this, call
@@ -50,8 +50,8 @@ protected:
 
     /** Generate a call to an sse or avx intrinsic */
     // @{
-    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);    
-    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);    
+    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);
+    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);
     // @}
 
     using CodeGen_Posix::visit;

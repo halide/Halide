@@ -41,3 +41,24 @@ define weak_odr <2 x double> @round_f64x2(<2 x double> %x) nounwind uwtable read
   ret <2 x double> %1
 }
 
+define weak_odr <16 x i8> @abs_i8x16(<16 x i8> %x) nounwind uwtable readnone alwaysinline {
+  %1 = tail call <16 x i8> @llvm.x86.ssse3.pabs.b.128(<16 x i8> %x)
+  ret <16 x i8> %1
+}
+
+declare <16 x i8> @llvm.x86.ssse3.pabs.b.128(<16 x i8>) nounwind readnone
+
+define weak_odr <8 x i16> @abs_i16x8(<8 x i16> %x) nounwind uwtable readnone alwaysinline {
+  %1 = tail call <8 x i16> @llvm.x86.ssse3.pabs.w.128(<8 x i16> %x)
+  ret <8 x i16> %1
+}
+
+declare <8 x i16> @llvm.x86.ssse3.pabs.w.128(<8 x i16>) nounwind readnone
+
+define weak_odr <4 x i32> @abs_i32x4(<4 x i32> %x) nounwind uwtable readnone alwaysinline {
+  %1 = tail call <4 x i32> @llvm.x86.ssse3.pabs.d.128(<4 x i32> %x)
+  ret <4 x i32> %1
+}
+
+declare <4 x i32> @llvm.x86.ssse3.pabs.d.128(<4 x i32>) nounwind readnone
+

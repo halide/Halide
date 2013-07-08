@@ -1,6 +1,6 @@
-CXX ?= g++ 
+CXX ?= g++
 
-PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
+PNGFLAGS=-lpng $(shell libpng-config --cflags)
 
 ifeq ($(HL_TARGET),ptx)
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda

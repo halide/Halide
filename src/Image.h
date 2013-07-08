@@ -2,7 +2,7 @@
 #define HALIDE_IMAGE_H
 
 /** \file
- * Defines Halide's Image data type 
+ * Defines Halide's Image data type
  */
 
 #include "Buffer.h"
@@ -20,11 +20,11 @@ template<typename T>
 class Image {
 private:
     /** The underlying memory object */
-    Buffer buffer;    
+    Buffer buffer;
 
     /** These fields are also stored in the buffer, but they're cached
      * here in the handle to make operator() fast. This is safe to do
-     * because the buffer is never modified 
+     * because the buffer is never modified
      */
     // @{
     T *base;
@@ -37,7 +37,7 @@ private:
     void prepare_for_direct_pixel_access() {
         // Make sure buffer has been copied to host. This is a no-op
         // if there's no device involved.
-        buffer.copy_to_host();        
+        buffer.copy_to_host();
 
         // We're probably about to modify the pixels, so to be
         // conservative we'd better set host dirty. If you're sure
@@ -95,7 +95,7 @@ public:
      * modify the data via some other back-door. */
     void set_host_dirty(bool dirty = true) {
         buffer.set_host_dirty(dirty);
-    }    
+    }
 
     /** Check if this image handle points to actual data */
     bool defined() const {
@@ -201,12 +201,12 @@ public:
      * dimensionality of the image (see \ref Var::implicit) */
     Expr operator()() const {
         assert(dims >= 0);
-        std::vector<Expr> args;        
+        std::vector<Expr> args;
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
         return Internal::Call::make(buffer, args);
-    }    
+    }
 
     /** Construct an expression which loads from this image. The
      * location is extended with enough implicit variables to match
@@ -219,6 +219,9 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
+
+        ImageParam::check_arg_types(buffer.name(), &args);
+
         return Internal::Call::make(buffer, args);
     }
 
@@ -230,6 +233,9 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
+
+        ImageParam::check_arg_types(buffer.name(), &args);
+
         return Internal::Call::make(buffer, args);
     }
 
@@ -242,6 +248,9 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
+
+        ImageParam::check_arg_types(buffer.name(), &args);
+
         return Internal::Call::make(buffer, args);
     }
 
@@ -255,6 +264,9 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
+
+        ImageParam::check_arg_types(buffer.name(), &args);
+
         return Internal::Call::make(buffer, args);
     }
     // @}
@@ -278,7 +290,7 @@ public:
      Func f;
      f = im*2;
      \endcode
-     * 
+     *
      * This will define f as a two-dimensional function with value at
      * position (x, y) equal to twice the value of the image at the
      * same location.
