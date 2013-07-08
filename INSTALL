@@ -115,8 +115,10 @@ To generate a 32-bit Halide, compile it like so:
   % HL_TARGET=x86-32 LD="ld -melf_i386" CC="gcc -m32" CXX="g++ -m32" make
 
 You should then be able to run the JIT tests with a 32-bit target:
-  % CXX="g++ -m32" make build_tests
+  % CXX="g++ -m32 -msse4" make build_tests
   % HL_TARGET=x86-32-sse41 make run_tests
 
+If you have a 32-bit libpng, you can also run the apps in 32-bit:
+  % HL_TARGET=x86-32-sse41 CXX="g++ -m32 -msse4" make test_apps
 The tests should pass, but the tutorials will fail to compile unless
 you manually supply a 32-bit libpng.
