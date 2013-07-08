@@ -10,7 +10,6 @@
 
 using namespace Halide;
 
-void set(Func &f, const Expr &e);
 void iadd(FuncRefVar &f, const Expr &e);
 void imul(FuncRefVar &f, const Expr &e);
 void iadd(FuncRefExpr &f, const Expr &e);
