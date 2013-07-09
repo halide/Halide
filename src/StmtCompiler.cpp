@@ -4,6 +4,9 @@
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
 #include <iostream>
+#ifdef _WIN32
+#include <intrin.h>
+#endif	// _WIN32
 
 namespace Halide {
 namespace Internal {
@@ -12,6 +15,12 @@ using std::string;
 using std::vector;
 
 #ifndef __arm__
+#ifdef _WIN32
+
+#define cpuid __cpuid
+#define cpuid_count __cpuidex
+
+#else
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 static void cpuid(int info[4], int infoType) {
@@ -32,6 +41,7 @@ static void cpuid_count(int info[4], int level, int count) {
         : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
         : "0" (level), "2" (count));
 }
+#endif
 
 string get_native_x86_target() {
      int info[4];
