@@ -1,7 +1,7 @@
 #include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using std::ostringstream;
@@ -27,7 +27,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
         } else {
             assert(false && "Can't represent a float with this many bits in OpenCL C");
         }
-            
+
     } else {
         if (type.is_uint() && type.bits > 1) oss << 'u';
         switch (type.bits) {
@@ -47,7 +47,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
             oss << "long";
             break;
         default:
-            assert(false && "Can't represent an integer with this many bits in OpenCL C");                
+            assert(false && "Can't represent an integer with this many bits in OpenCL C");
         }
     }
     return oss.str();
@@ -92,12 +92,12 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
 
         do_indent();
         stream << "if (" << id_cond << ")\n";
-	    
+
         open_scope();
         do_indent();
         stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << id_idx << ";\n";
         loop->body.accept(this);
-        close_scope();
+        close_scope("for " + id_cond);
 
     } else {
     	assert(loop->for_type != For::Parallel && "Cannot emit parallel loops in OpenCL C");

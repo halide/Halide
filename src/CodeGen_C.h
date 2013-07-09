@@ -2,8 +2,8 @@
 #define HALIDE_CODEGEN_C_H
 
 /** \file
- * 
- * Defines an IRPrinter that emits C++ code equivalent to a halide stmt 
+ *
+ * Defines an IRPrinter that emits C++ code equivalent to a halide stmt
  */
 
 #include "IRPrinter.h"
@@ -14,7 +14,7 @@
 #include <ostream>
 #include <map>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** This class emits C++ code equivalent to a halide Stmt. It's
@@ -27,17 +27,17 @@ public:
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
     CodeGen_C(std::ostream &);
- 
+
     /** Emit source code equivalent to the given statement, wrapped in
      * a function with the given type signature */
-    void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);    
+    void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
 
     /** Emit a header file defining a halide pipeline with the given
      * type signature */
     void compile_header(const std::string &name, const std::vector<Argument> &args);
-    
+
     static void test();
-    
+
 protected:
     /** An for the most recently generated ssa variable */
     std::string id;
@@ -48,7 +48,7 @@ protected:
     /** Emit an expression as an assignment, then return the id of the
      * resulting var */
     std::string print_expr(Expr);
-    
+
     /** Emit a statement */
     void print_stmt(Stmt);
 
@@ -56,7 +56,7 @@ protected:
     virtual std::string print_type(Type);
 
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
-    std::string print_name(const std::string &);    
+    std::string print_name(const std::string &);
 
     /** Emit an SSA-style assignment, and set id to the freshly generated name */
     void print_assignment(Type t, const std::string &rhs);
@@ -65,7 +65,7 @@ protected:
     void open_scope();
 
     /** Close a C scope (i.e. throw in an end brace, decrease the indent) */
-    void close_scope();
+    void close_scope(const std::string &comment);
 
     /** Track the types of allocations to avoid unnecessary casts. */
     Scope<Type> allocations;
@@ -109,7 +109,7 @@ protected:
     void visit(const Allocate *);
     void visit(const Free *);
     void visit(const Realize *);
-    
+
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 };
 
