@@ -343,11 +343,15 @@ void CodeGen_C::open_scope() {
     stream << "{\n";
 }
 
-void CodeGen_C::close_scope() {
+void CodeGen_C::close_scope(const std::string &comment) {
     cache.clear();
     indent--;
     do_indent();
-    stream << "}\n";
+    if (!comment.empty()) {
+        stream << "} // " << comment << "\n";
+    } else {
+        stream << "}\n";
+    }
 }
 
 void CodeGen_C::visit(const Variable *op) {
@@ -656,6 +660,7 @@ void CodeGen_C::visit(const AssertStmt *op) {
     stream << "assert(" << id_cond
            << " && \"" << op->message
            << "\");\n";
+    do_indent();
     stream << "(void)" << id_cond << ";\n";
 }
 
@@ -701,7 +706,7 @@ void CodeGen_C::visit(const For *op) {
 
     open_scope();
     op->body.accept(this);
-    close_scope();
+    close_scope("for " + print_name(op->name));
 
 }
 
@@ -744,7 +749,7 @@ void CodeGen_C::visit(const Allocate *op) {
     // Should have been freed internally
     assert(!allocations.contains(op->name));
 
-    close_scope();
+    close_scope("alloc " + print_name(op->name));
 }
 
 void CodeGen_C::visit(const Free *op) {
@@ -824,9 +829,9 @@ void CodeGen_C::test() {
         "  bool V2 = alpha > 4.000000f;\n"
         "  int32_t V3 = int32_t(V2 ? 3 : 2);\n"
         "  buf[V1] = V3;\n"
-        " }\n"
+        " } // alloc tmp_stack\n"
         " halide_free(tmp_heap);\n"
-        "}\n"
+        "} // alloc tmp_heap\n"
         "}\n";
     if (source.str() != correct_source) {
         std::cout << "Correct source code:" << std::endl << correct_source;
