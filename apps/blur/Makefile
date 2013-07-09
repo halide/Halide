@@ -15,7 +15,7 @@ halide_blur.o: halide_blur
 
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
 test: test.cpp halide_blur.o
-	$(CXX) -fopenmp -lpng -Wall -O2 -I ../support/ test.cpp halide_blur.o -o test -lpthread -ldl -lpng $(PNGFLAGS) $(CUDA_LDFLAGS)
+	$(CXX) -msse2 -fopenmp -lpng -Wall -O2 -I ../support/ test.cpp halide_blur.o -o test -lpthread -ldl -lpng $(PNGFLAGS) $(CUDA_LDFLAGS)
 
 clean:
 	rm -f test halide_blur.o halide_blur
