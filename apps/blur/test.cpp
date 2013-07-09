@@ -126,11 +126,17 @@ Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
     // dividing by three
     __m128i one_third = _mm_set1_epi16(21846);
 
+    int vw = in.width()/8;
+    if (vw > 1024) {
+        printf("Image too large for constant-sized stack allocation\n");
+        return out;
+    }
+
 #pragma omp parallel for
     for (int yTile = 0; yTile < in.height(); yTile += 128) {
 
-        int vw = in.width()/8;
-        __m128i tmp[vw*4]; // four scanlines
+
+        __m128i tmp[1024*4]; // four scanlines
         for (int y = -2; y < 128; y++) {
             // to produce this scanline of the output
             __m128i *outPtr = (__m128i *)(&(out(0, yTile + y)));

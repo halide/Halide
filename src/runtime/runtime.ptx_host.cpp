@@ -371,13 +371,15 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
         return;
     }
 
+    size_t size = buf_size(buf);
+
     #ifndef NDEBUG
-    fprintf(stderr, "dev_malloc of %zdx%zdx%zdx%zd (%zd bytes per element) (buf->dev = %p) buffer\n",
-            buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
+    fprintf(stderr, "dev_malloc allocating buffer of %zd bytes, %zdx%zdx%zdx%zd (%d bytes per element)\n",
+            size, buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size);
     #endif
 
     CUdeviceptr p;
-    TIME_CALL( cuMemAlloc(&p, buf_size(buf)), "dev_malloc");
+    TIME_CALL( cuMemAlloc(&p, size), "dev_malloc");
     buf->dev = (uint64_t)p;
     assert(buf->dev);
 

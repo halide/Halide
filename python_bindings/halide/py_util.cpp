@@ -11,10 +11,6 @@
 
 void (*signal(int signum, void (*sighandler)(int)))(int);
 
-void set(Func &f, const Expr &e) {
-  f = e;
-}
-
 Expr cast_to_expr(int a) { return Expr(a); }
 Expr cast_to_expr(float a) { return Expr(a); }
 Expr cast_to_expr(const Func &f) { return Expr(f); }
