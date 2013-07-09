@@ -105,7 +105,9 @@ ARM native client has not been tested yet.
 Building Halide and llvm as 32-bit on 64-bit linux
 ------------------------------------------------------------------
 
-This is necessary if you want to JIT-compile 32-bit code.
+This is necessary if you want to JIT compile 32-bit code. It is not
+necessary for AOT compiling 32-bit Halide pipelines. The 64-bit
+version of Halide cross-compiles 32-bit code just fine.
 
 To get a 32-bit llvm, configure and compile it like so:
   % CC="gcc -m32" CXX="g++ -m32" ./configure --enable-targets=x86,arm,nvptx --enable-assertions --enable-optimized --build=i686-pc-linux-gnu
