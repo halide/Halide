@@ -546,6 +546,8 @@ vector<string> realization_order(string output, const map<string, Function> &env
         // Find a function not in result_set, for which all its inputs are
         // in result_set. Stop when we reach the output function.
         bool scheduled_something = false;
+        // Inject a dummy use of this var in case asserts are off.
+        (void)scheduled_something;
         for (map<string, Function>::const_iterator iter = env.begin();
              iter != env.end(); ++iter) {
             const string &f = iter->first;

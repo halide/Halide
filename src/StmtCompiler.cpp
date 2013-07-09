@@ -102,6 +102,7 @@ string get_native_x86_target() {
                << info[2] << ", "
                << info[3] << "\n";
      assert(false && "No SSE2 support, or failed to correctly interpret the result of cpuid.");
+     return "";
 }
 #endif
 

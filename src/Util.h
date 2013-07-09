@@ -27,7 +27,7 @@
 #endif
 #endif
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** Build small vectors of up to 6 elements. If we used C++11 and
@@ -61,7 +61,7 @@ std::vector<T> vec(T a, T b, T c) {
 template<typename T>
 std::vector<T> vec(T a, T b, T c, T d) {
     std::vector<T> v(4);
-    v[0] = a;        
+    v[0] = a;
     v[1] = b;
     v[2] = c;
     v[3] = d;
@@ -71,7 +71,7 @@ std::vector<T> vec(T a, T b, T c, T d) {
 template<typename T>
 std::vector<T> vec(T a, T b, T c, T d, T e) {
     std::vector<T> v(5);
-    v[0] = a;        
+    v[0] = a;
     v[1] = b;
     v[2] = c;
     v[3] = d;
@@ -82,7 +82,7 @@ std::vector<T> vec(T a, T b, T c, T d, T e) {
 template<typename T>
 std::vector<T> vec(T a, T b, T c, T d, T e, T f) {
     std::vector<T> v(6);
-    v[0] = a;        
+    v[0] = a;
     v[1] = b;
     v[2] = c;
     v[3] = d;
