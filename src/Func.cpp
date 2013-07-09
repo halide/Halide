@@ -1327,12 +1327,10 @@ void Func::test() {
         }
     }
 
-
     Func f, g;
     Var x, y;
     f(x, y) = input(x+1, y) + input(x+1, y)*3 + 1;
     g(x, y) = f(x-1, y) + 2*f(x+1, y);
-
 
     f.compute_root();
 
@@ -1341,11 +1339,15 @@ void Func::test() {
     for (int y = 0; y < 5; y++) {
         for (int x = 0; x < 5; x++) {
             int correct = (4*input(x, y)+1) + 2*(4*input(x+2, y)+1);
-            assert(result(x, y) == correct);
+            if (result(x, y) != correct) {
+                std::cerr << "Func test failed: f(" << x << ", " << y << ") = "
+                          << result(x, y) << " instead of " << correct << "\n";
+                return;
+            }
         }
     }
 
-    std::cout << "Func test passed" << std::endl;
+    std::cout << "Func test passed\n";
 
 }
 
