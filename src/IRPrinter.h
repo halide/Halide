@@ -23,11 +23,11 @@ namespace Halide {
 
 /** Emit an expression on an output stream (such as std::cout) in a
  * human-readable form */
-std::ostream &operator<<(std::ostream &stream, Expr);
+EXPORT std::ostream &operator<<(std::ostream &stream, Expr);
 
 /** Emit a halide type on an output stream (such as std::cout) in a
  * human-readable form */
-std::ostream &operator<<(std::ostream &stream, Type);
+EXPORT std::ostream &operator<<(std::ostream &stream, Type);
 
 namespace Internal {
 
