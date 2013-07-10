@@ -4,6 +4,7 @@
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
 #include <iostream>
+
 #ifdef _WIN32
 #include <intrin.h>
 #endif	// _WIN32
@@ -15,11 +16,9 @@ using std::string;
 using std::vector;
 
 #ifndef __arm__
+
 #ifdef _WIN32
-
-#define cpuid __cpuid
-#define cpuid_count __cpuidex
-
+#define cpuid __cpuidex
 #else
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
@@ -33,6 +32,7 @@ static void cpuid(int info[4], int infoType, int extra) {
         : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
         : "0" (infoType), "2" (extra));
 }
+
 #endif
 
 #endif
@@ -97,6 +97,7 @@ string get_native_x86_target() {
      assert(false && "No SSE2 support, or failed to correctly interpret the result of cpuid.");
      return "";
 }
+
 #endif
 
 StmtCompiler::StmtCompiler(string arch) {
