@@ -4,7 +4,7 @@
 #include "IR.h"
 
 // This file is largely a port of parts of src/analysis.ml
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 class ComputeModulusRemainder : public IRVisitor {
@@ -51,18 +51,18 @@ public:
     void visit(const Provide *);
     void visit(const Allocate *);
     void visit(const Realize *);
-    void visit(const Block *);        
+    void visit(const Block *);
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
     ComputeModulusRemainder mr;
-    return mr.analyze(e);        
+    return mr.analyze(e);
 }
 
 ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope) {
     ComputeModulusRemainder mr;
     mr.scope = scope;
-    return mr.analyze(e);        
+    return mr.analyze(e);
 }
 
 
@@ -74,16 +74,16 @@ bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
      * said that expr = 16*k + 13, then because 16 % 8 == 0, the
      * result is 13 % 8 == 5. But if the analysis says that expr =
      * 6*k + 3, then expr mod 8 could be 1, 3, 5, or 7, so we just
-     * return false. 
+     * return false.
      */
 
     if (result.modulus % modulus == 0) {
         *remainder = result.remainder % modulus;
         return true;
     } else {
-        return false;            
+        return false;
     }
-}    
+}
 
 ModulusRemainder ComputeModulusRemainder::analyze(Expr e) {
     e.accept(this);
@@ -97,8 +97,8 @@ void check(Expr e, int m, int r) {
         std::cerr << "Test failed for modulus_remainder:\n";
         std::cerr << "Expression: " << e << "\n";
         std::cerr << "Correct modulus, remainder  = " << m << ", " << r << "\n";
-        std::cerr << "Computed modulus, remainder = " 
-                  << result.modulus << ", " 
+        std::cerr << "Computed modulus, remainder = "
+                  << result.modulus << ", "
                   << result.remainder << "\n";
         exit(-1);
     }
@@ -108,16 +108,16 @@ void check(Expr e, int m, int r) {
 void modulus_remainder_test() {
     Expr x = Variable::make(Int(32), "x");
     Expr y = Variable::make(Int(32), "y");
-    
-    check((30*x + 3) + (40*y + 2), 10, 5);   
-    check((6*x + 3) * (4*y + 1), 2, 1); 
+
+    check((30*x + 3) + (40*y + 2), 10, 5);
+    check((6*x + 3) * (4*y + 1), 2, 1);
     check(max(30*x - 24, 40*y + 31), 5, 1);
     check(10*x - 33*y, 1, 0);
     check(10*x - 35*y, 5, 0);
     check(123, 0, 123);
     check(Let::make("y", x*3 + 4, y*3 + 4), 9, 7);
 
-    std::cerr << "modulus_remainder test passed\n";
+    std::cout << "modulus_remainder test passed\n";
 }
 
 
@@ -154,7 +154,7 @@ int gcd(int a, int b) {
     while (b != 0) {
         int tmp = b;
         b = a % b;
-        a = tmp;            
+        a = tmp;
     }
     return a;
 }
@@ -183,7 +183,7 @@ void ComputeModulusRemainder::visit(const Sub *op) {
 void ComputeModulusRemainder::visit(const Mul *op) {
     ModulusRemainder a = analyze(op->a);
     ModulusRemainder b = analyze(op->b);
-    
+
     if (a.modulus == 0) {
         // a is constant
         modulus = a.remainder * b.modulus;
@@ -205,7 +205,7 @@ void ComputeModulusRemainder::visit(const Mul *op) {
     } else {
         // All our tricks failed. Convert them to the same modulus and multiply
         modulus = gcd(a.modulus, b.modulus);
-        a.remainder = mod(a.remainder * b.remainder, modulus);        
+        a.remainder = mod(a.remainder * b.remainder, modulus);
     }
 }
 
@@ -220,7 +220,7 @@ void ComputeModulusRemainder::visit(const Div *) {
 namespace {
 ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
     // We don't know if we're going to get a or b, so we'd better find
-    // a single modulus remainder that works for both. 
+    // a single modulus remainder that works for both.
 
     // For example:
     // max(30*_ + 13, 40*_ + 27) ->
@@ -228,21 +228,21 @@ ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
     // max(2*_ + 1, 2*_ + 1) ->
     // 2*_ + 1
 
-    // Reduce them to the same modulus and the same remainder       
+    // Reduce them to the same modulus and the same remainder
     int modulus = gcd(a.modulus, b.modulus);
     int diff = a.remainder - b.remainder;
     if (diff < 0) diff = -diff;
     modulus = gcd(diff, modulus);
-    int ra = mod(a.remainder, modulus);
-    int rb = mod(b.remainder, modulus);
 
-    assert(ra == rb && "There's a bug inside ModulusRemainder in unify_alternatives");
+    int ra = mod(a.remainder, modulus);
+
+    assert(ra == mod(b.remainder, modulus) && "There's a bug inside ModulusRemainder in unify_alternatives");
 
     return ModulusRemainder(modulus, ra);
 }
 }
 
-void ComputeModulusRemainder::visit(const Mod *op) {   
+void ComputeModulusRemainder::visit(const Mod *op) {
     // We can treat x mod y as x + z*y, where we know nothing about z.
     // (ax + b) + z (cx + d) ->
     // ax + b + zcx + dz ->
@@ -255,11 +255,11 @@ void ComputeModulusRemainder::visit(const Mod *op) {
     // 2(4x + 3zx + x) + 5 ->
     // 2w + 1
     ModulusRemainder a = analyze(op->a);
-    ModulusRemainder b = analyze(op->b);    
+    ModulusRemainder b = analyze(op->b);
     modulus = gcd(a.modulus, b.modulus);
     modulus = gcd(modulus, b.remainder);
     remainder = mod(a.remainder, modulus);
-} 
+}
 
 void ComputeModulusRemainder::visit(const Min *op) {
     ModulusRemainder r = unify_alternatives(analyze(op->a), analyze(op->b));
@@ -310,7 +310,7 @@ void ComputeModulusRemainder::visit(const Not *) {
 }
 
 void ComputeModulusRemainder::visit(const Select *op) {
-    ModulusRemainder r = unify_alternatives(analyze(op->true_value), 
+    ModulusRemainder r = unify_alternatives(analyze(op->true_value),
                                             analyze(op->false_value));
     modulus = r.modulus;
     remainder = r.remainder;

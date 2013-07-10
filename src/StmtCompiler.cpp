@@ -23,29 +23,23 @@ using std::vector;
 #else
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
-static void cpuid(int info[4], int infoType) {
-    __asm__ __volatile__ (
-        "xchg{l}\t{%%}ebx, %1  \n\t"
-        "cpuid                 \n\t"
-        "xchg{l}\t{%%}ebx, %1  \n\t"
-        : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType));
-}
 
-/* Save %ebx in case it's the PIC register */
-static void cpuid_count(int info[4], int level, int count) {
+static void cpuid(int info[4], int infoType, int extra) {
+    // We save %ebx in case it's the PIC register
     __asm__ __volatile__ (
         "xchg{l}\t{%%}ebx, %1  \n\t"
         "cpuid                 \n\t"
         "xchg{l}\t{%%}ebx, %1  \n\t"
         : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (level), "2" (count));
+        : "0" (infoType), "2" (extra));
 }
+#endif
+
 #endif
 
 string get_native_x86_target() {
      int info[4];
-     cpuid(info, 1);
+     cpuid(info, 1, 0);
 
      bool use_64_bits = (sizeof(size_t) == 8);
      bool have_sse41 = info[2] & (1 << 19);
@@ -62,7 +56,7 @@ string get_native_x86_target() {
                  // So far, so good.  AVX2?
                  // Call cpuid with eax=7, ecx=0
                  int info2[4];
-                 cpuid_count(info2, 7, 0);
+                 cpuid(info2, 7, 0);
                  bool have_avx2 = info[2] & (1 << 5);
                  if (have_avx2) {
                      // AVX 2
@@ -101,6 +95,7 @@ string get_native_x86_target() {
                << info[2] << ", "
                << info[3] << "\n";
      assert(false && "No SSE2 support, or failed to correctly interpret the result of cpuid.");
+     return "";
 }
 #endif
 
@@ -178,7 +173,7 @@ StmtCompiler::StmtCompiler(string arch) {
                   << "x86-64 x86-64-sse41 x86-64-avx "
                   << "x86-32-nacl x86-32-sse41-nacl "
                   << "x86-64-nacl x86-64-sse41-nacl x86-64-avx-nacl "
-                  << "arm arm-android "
+                  << "arm arm-android arm-nacl"
                   << "ptx opencl "
                   << "native"
 		  << "\n"

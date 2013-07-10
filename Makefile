@@ -36,7 +36,7 @@ PTX_CXX_FLAGS=$(if $(WITH_PTX), "-DWITH_PTX=1", )
 PTX_ARCHS=$(if $(WITH_PTX), ptx_host ptx_dev, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
 
-CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC -O3 -fno-strict-aliasing
+CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC -O3
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
@@ -49,7 +49,7 @@ TEST_CXX_FLAGS += -rdynamic
 endif
 
 # Compiling the tutorials requires libpng
-LIBPNG_LIBS ?= $(shell libpng-config --ldflags)
+LIBPNG_LIBS ?= -L/opt/local/lib -lpng
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
 
 ifdef BUILD_PREFIX
@@ -211,6 +211,8 @@ test_apps: $(BIN_DIR)/libHalide.a
 	make -C apps/blur test
 	./apps/blur/test
 	make -C apps/wavelet test
+	make -C apps/c_backend clean
+	make -C apps/c_backend test
 
 ifneq (,$(findstring version 3.,$(CLANG_VERSION)))
 ifeq (,$(findstring version 3.0,$(CLANG_VERSION)))

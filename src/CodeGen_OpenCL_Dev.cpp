@@ -74,6 +74,7 @@ Expr simt_intrinsic(const string &name) {
         return Call::make(Int(32), "get_group_id", vec(Expr(3)), Call::Extern);
     }
     assert(false && "simt_intrinsic called on bad variable name");
+    return Expr();
 }
 }
 
