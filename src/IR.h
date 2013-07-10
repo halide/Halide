@@ -179,15 +179,14 @@ struct Expr : public Internal::IRHandle {
     Type type() const {
         return ((Internal::BaseExprNode *)ptr)->type;
     }
+};
 
-    /** This lets you use an Expr as a key in a map of the form
-     * map<Expr, Foo, Expr::Compare> */
-    struct Compare {
-        bool operator()(const Expr &a, const Expr &b) const {
-            return a.ptr < b.ptr;
-        }
-    };
-
+/** This lets you use an Expr as a key in a map of the form
+ * map<Expr, Foo, ExprCompare> */
+struct ExprCompare {
+    bool operator()(Expr a, Expr b) const {
+        return a.ptr < b.ptr;
+    }
 };
 
 }
