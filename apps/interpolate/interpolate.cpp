@@ -44,25 +44,29 @@ int main(int argc, char **argv) {
     Func clamped;
     clamped(x, y, c) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
 
-    downsampled[0](x, y, c) = select(c < 3, clamped(x, y, c) * clamped(x, y, 3), clamped(x, y, 3));
+    // This triggers a bug in llvm 3.3 (3.2 and trunk are fine), so we
+    // rewrite it in a way that doesn't trigger the bug. The rewritten
+    // form assumes the input alpha is zero or one.
+    // downsampled[0](x, y, c) = select(c < 3, clamped(x, y, c) * clamped(x, y, 3), clamped(x, y, 3));
+    downsampled[0](x, y, c) = clamped(x, y, c) * clamped(x, y, 3);
 
     for (unsigned int l = 1; l < levels; ++l) {
-        downx[l](x, y, c) = (downsampled[l-1](x*2-1, y, c) + 
-                             2.0f * downsampled[l-1](x*2, y, c) + 
+        downx[l](x, y, c) = (downsampled[l-1](x*2-1, y, c) +
+                             2.0f * downsampled[l-1](x*2, y, c) +
                              downsampled[l-1](x*2+1, y, c)) * 0.25f;
-        downsampled[l](x, y, c) = (downx[l](x, y*2-1, c) + 
-                                   2.0f * downx[l](x, y*2, c) + 
+        downsampled[l](x, y, c) = (downx[l](x, y*2-1, c) +
+                                   2.0f * downx[l](x, y*2, c) +
                                    downx[l](x, y*2+1, c)) * 0.25f;
     }
     interpolated[levels-1](x, y, c) = downsampled[levels-1](x, y, c);
     for (unsigned int l = levels-2; l < levels; --l) {
-        upsampledx[l](x, y, c) = select((x % 2) == 0, 
-                                        interpolated[l+1](x/2, y, c), 
-                                        0.5f * (interpolated[l+1](x/2, y, c) + 
+        upsampledx[l](x, y, c) = select((x % 2) == 0,
+                                        interpolated[l+1](x/2, y, c),
+                                        0.5f * (interpolated[l+1](x/2, y, c) +
                                                 interpolated[l+1](x/2+1, y, c)));
         upsampled[l](x, y, c) = select((y % 2) == 0,
-                                       upsampledx[l](x, y/2, c), 
-                                       0.5f * (upsampledx[l](x, y/2, c) + 
+                                       upsampledx[l](x, y/2, c),
+                                       0.5f * (upsampledx[l](x, y/2, c) +
                                                upsampledx[l](x, y/2+1, c)));
         interpolated[l](x, y, c) = downsampled[l](x, y, c) + (1.0f - downsampled[l](x, y, 3)) * upsampled[l](x, y, c);
     }
@@ -72,7 +76,7 @@ int main(int argc, char **argv) {
 
     Func final("final");
     final(x, y, c) = normalize(x, y, c);
-	
+
     std::cout << "Finished function setup." << std::endl;
 
     int sched;
@@ -107,7 +111,7 @@ int main(int argc, char **argv) {
     case 2:
     {
         Var xi, yi;
-        std::cout << "Flat schedule with parallelization + vectorization." << std::endl;                
+        std::cout << "Flat schedule with parallelization + vectorization." << std::endl;
         clamped.compute_root().parallel(y).bound(c, 0, 4).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
         for (unsigned int l = 1; l < levels-1; ++l) {
             if (l > 0) downsampled[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
@@ -116,8 +120,8 @@ int main(int argc, char **argv) {
         }
         final.reorder(c, x, y).bound(c, 0, 3).parallel(y);
         final.tile(x, y, xi, yi, 2, 2).unroll(xi).unroll(yi);
-        final.bound(x, 0, input.width()); 
-        final.bound(y, 0, input.height()); 
+        final.bound(x, 0, input.width());
+        final.bound(y, 0, input.height());
         break;
     }
     case 3:
@@ -135,7 +139,7 @@ int main(int argc, char **argv) {
         }
         final.compute_root();
         break;
-    }        
+    }
     case 4:
     {
         std::cout << "GPU schedule." << std::endl;
@@ -174,7 +178,7 @@ int main(int argc, char **argv) {
     double min = std::numeric_limits<double>::infinity();
     const unsigned int iters = 20;
 
-    for (unsigned int x = 0; x < iters; ++x) {                        
+    for (unsigned int x = 0; x < iters; ++x) {
         double before = now();
         final.realize(out);
         double after = now();
@@ -182,7 +186,7 @@ int main(int argc, char **argv) {
 
         std::cout << "   " << amt * 1000 << std::endl;
         if (amt < min) min = amt;
-        
+
     }
     std::cout << " took " << min * 1000 << " msec." << std::endl;
 
