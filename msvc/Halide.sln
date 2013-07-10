@@ -1,8 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.20617.1 PREVIEW
-MinimumVisualStudioVersion = 10.0.40219.1
+# Visual Studio 2012
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Halide", "Halide.vcxproj", "{399EED61-D098-04A1-30AA-DEA4AB62D16F}"
 	ProjectSection(ProjectDependencies) = postProject
 		{85D3DBB3-2E33-4CDD-8601-B73AA41A215F} = {85D3DBB3-2E33-4CDD-8601-B73AA41A215F}
@@ -242,8 +240,8 @@ Global
 		{5534B216-0B4B-4020-A13C-54A92657DB36}.Release-Static|x64.ActiveCfg = Release-Static|x64
 		{5534B216-0B4B-4020-A13C-54A92657DB36}.Release-Static|x64.Build.0 = Release-Static|x64
 		{85D3DBB3-2E33-4CDD-8601-B73AA41A215F}.Debug|Win32.ActiveCfg = Release|x64
-		{85D3DBB3-2E33-4CDD-8601-B73AA41A215F}.Debug|x64.ActiveCfg = Release|x64
-		{85D3DBB3-2E33-4CDD-8601-B73AA41A215F}.Debug|x64.Build.0 = Release|x64
+		{85D3DBB3-2E33-4CDD-8601-B73AA41A215F}.Debug|x64.ActiveCfg = Debug|x64
+		{85D3DBB3-2E33-4CDD-8601-B73AA41A215F}.Debug|x64.Build.0 = Debug|x64
 		{85D3DBB3-2E33-4CDD-8601-B73AA41A215F}.Debug-Static|Win32.ActiveCfg = Release|x64
 		{85D3DBB3-2E33-4CDD-8601-B73AA41A215F}.Debug-Static|x64.ActiveCfg = Release|x64
 		{85D3DBB3-2E33-4CDD-8601-B73AA41A215F}.Debug-Static|x64.Build.0 = Release|x64

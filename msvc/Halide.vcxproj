@@ -192,7 +192,7 @@
       <TargetMachine>MachineX86</TargetMachine>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\halide_initial_modules.lib;$(SolutionDir)..\build\lib\$(Configuration)\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(TargetDir)halide_initial_modules.lib;$(SolutionDir)..\build\lib\$(Configuration)\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
       <Command>cd $(SolutionDir)..\src
@@ -228,7 +228,7 @@ cd $(SolutionDir)</Command>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\halide_initial_modules.lib;$(SolutionDir)..\..\llvm\build\lib\$(Configuration)\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(TargetDir)halide_initial_modules.lib;$(SolutionDir)..\..\llvm\build\lib\$(Configuration)\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
       <Command>cd $(SolutionDir)..\src
@@ -351,7 +351,7 @@ cd $(SolutionDir)</Command>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\halide_initial_modules.lib;$(SolutionDir)..\build\lib\$(Configuration)\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(TargetDir)halide_initial_modules.lib;$(SolutionDir)..\build\lib\$(Configuration)\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
       <Command>cd $(SolutionDir)..\src
@@ -387,7 +387,7 @@ cd $(SolutionDir)</Command>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\halide_initial_modules.lib;$(SolutionDir)..\..\llvm\build\lib\$(Configuration)\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(TargetDir)halide_initial_modules.lib;$(SolutionDir)..\..\llvm\build\lib\$(Configuration)\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
       <Command>cd $(SolutionDir)..\src
