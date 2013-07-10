@@ -5,6 +5,7 @@
 #include "Var.h"
 #include <sstream>
 #include <iostream>
+#include <cmath>
 #include "Debug.h"
 
 namespace Halide {
@@ -459,10 +460,21 @@ void CodeGen_C::visit(const IntImm *op) {
 }
 
 void CodeGen_C::visit(const FloatImm *op) {
-    ostringstream oss;
-    oss.setf(std::ios::fixed, std::ios::floatfield);
-    oss << op->value << 'f';
-    id = oss.str();
+    // TODO: the following code may not work in visual studio
+    if (std::isnan(op->value)) {
+        id = "nan_f32()";
+    } else if (std::isinf(op->value)) {
+        if (op->value > 0) {
+            id = "inf_f32()";
+        } else {
+            id = "neg_inf_f32()";
+        }
+    } else {
+        ostringstream oss;
+        oss.setf(std::ios::fixed, std::ios::floatfield);
+        oss << op->value << 'f';
+        id = oss.str();
+    }
 }
 
 void CodeGen_C::visit(const Call *op) {
