@@ -51,6 +51,37 @@ public:
         return type_of<T>();
     }
 
+    /** Get or set the possible range of this parameter. Use undefined
+     * Exprs to mean unbounded. */
+    // @{
+    void set_range(Expr min, Expr max) {
+        set_min_value(min);
+        set_max_value(max);
+    }
+
+    void set_min_value(Expr min) {
+        if (min.type() != type_of<T>()) {
+            min = Internal::Cast::make(type_of<T>(), min);
+        }
+        param.set_min_value(min);
+    }
+
+    void set_max_value(Expr max) {
+        if (max.type() != type_of<T>()) {
+            max = Internal::Cast::make(type_of<T>(), max);
+        }
+        param.set_max_value(max);
+    }
+
+    Expr get_min_value() {
+        return param.get_min_value();
+    }
+
+    Expr get_max_value() {
+        return param.get_max_value();
+    }
+    // @}
+
     /** You can use this parameter as an expression in a halide
      * function definition */
     operator Expr() const {

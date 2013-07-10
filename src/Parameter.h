@@ -2,7 +2,7 @@
 #define HALIDE_PARAMETER_H
 
 /** \file
- * Defines the internal representation of parameters to halide piplines 
+ * Defines the internal representation of parameters to halide piplines
  */
 
 #include <string>
@@ -20,11 +20,12 @@ struct ParameterContents {
     Expr min_constraint[4];
     Expr extent_constraint[4];
     Expr stride_constraint[4];
+    Expr min_value, max_value;
     ParameterContents(Type t, bool b, const std::string &n) : type(t), is_buffer(b), name(n), buffer(Buffer()), data(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
-        stride_constraint[0] = 1;        
+        stride_constraint[0] = 1;
     }
 
     template<typename T>
@@ -46,15 +47,15 @@ public:
      * argument is true, this is a buffer parameter, otherwise, it is
      * a scalar parameter. The parameter will be given a unique
      * auto-generated name. */
-    Parameter(Type t, bool is_buffer) : 
+    Parameter(Type t, bool is_buffer) :
         contents(new ParameterContents(t, is_buffer, unique_name('p'))) {
     }
-    
+
     /** Construct a new parameter of the given type with name given by
      * the third argument. If the second argument is true, this is a
      * buffer parameter, otherwise, it is a scalar parameter. The
      * parameter will be given a unique auto-generated name. */
-    Parameter(Type t, bool is_buffer, const std::string &name) : 
+    Parameter(Type t, bool is_buffer, const std::string &name) :
         contents(new ParameterContents(t, is_buffer, name)) {
     }
 
@@ -148,6 +149,29 @@ public:
         return contents.ptr->stride_constraint[dim];
     }
     //@}
+
+    /** Get and set constraints for scalar parameters */
+    // @{
+    void set_min_value(Expr e) {
+        assert(contents.defined() && !is_buffer());
+        contents.ptr->min_value = e;
+    }
+
+    Expr get_min_value() {
+        assert(contents.defined() && !is_buffer());
+        return contents.ptr->min_value;
+    }
+
+    void set_max_value(Expr e) {
+        assert(contents.defined() && !is_buffer());
+        contents.ptr->max_value = e;
+    }
+
+    Expr get_max_value() {
+        assert(contents.defined() && !is_buffer());
+        return contents.ptr->max_value;
+    }
+    // @}
 };
 
 }
