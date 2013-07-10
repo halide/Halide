@@ -131,14 +131,14 @@ void do_all_jobs() {
 void print_results() {
     for (size_t i = 0; i < jobs.size(); i++) {
 	if (jobs[i].result)
-	    fprintf(stderr, "%s\n", jobs[i].result);
+	    printf("%s\n", jobs[i].result);
     }
-    fprintf(stderr, "Successfully generated: ");
+    printf("Successfully generated: ");
     for (size_t i = 0; i < jobs.size(); i++) {
 	if (!jobs[i].result)
-	    fprintf(stderr, "%s ", jobs[i].op);
+	    printf("%s ", jobs[i].op);
     }
-    fprintf(stderr, "\n");
+    printf("\n");
 }
 
 Expr i64(Expr e) {

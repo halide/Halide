@@ -117,7 +117,7 @@ void modulus_remainder_test() {
     check(123, 0, 123);
     check(Let::make("y", x*3 + 4, y*3 + 4), 9, 7);
 
-    std::cerr << "modulus_remainder test passed\n";
+    std::cout << "modulus_remainder test passed\n";
 }
 
 
