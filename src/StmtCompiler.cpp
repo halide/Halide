@@ -35,8 +35,6 @@ static void cpuid(int info[4], int infoType, int extra) {
 
 #endif
 
-#endif
-
 string get_native_x86_target() {
      int info[4];
      cpuid(info, 1, 0);
