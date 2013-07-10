@@ -675,7 +675,10 @@ void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_
                   << "Should have been: " << correct_max << std::endl;
         success = false;
     }
-    assert(success && "Bounds test failed");
+    if (!success) {
+        std::cout << "Bounds test failed\n";
+        assert(false);
+    }
 }
 
 void bounds_test() {

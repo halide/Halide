@@ -8,27 +8,27 @@ const char *string_of_type();
 
 #define DECL_SOT(name)                                          \
     template<>                                                  \
-    const char *string_of_type<name>() {return #name;}          
+    const char *string_of_type<name>() {return #name;}
 
-DECL_SOT(uint8_t);    
-DECL_SOT(int8_t);    
-DECL_SOT(uint16_t);    
-DECL_SOT(int16_t);    
-DECL_SOT(uint32_t);    
-DECL_SOT(int32_t);    
-DECL_SOT(float);    
-DECL_SOT(double);    
+DECL_SOT(uint8_t);
+DECL_SOT(int8_t);
+DECL_SOT(uint16_t);
+DECL_SOT(int16_t);
+DECL_SOT(uint32_t);
+DECL_SOT(int32_t);
+DECL_SOT(float);
+DECL_SOT(double);
 
 template<typename A, typename B>
 bool test(int vec_width) {
-    
+
     int W = vec_width*4;
     int H = 1;
 
     Image<A> input(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            input(x, y) = (A)(rand()*0.1);
+            input(x, y) = (A)((rand()&0xffff)*0.1);
         }
     }
 
@@ -52,14 +52,14 @@ bool test(int vec_width) {
 
             bool ok = ((B)(input(x, y)) == output(x, y));
             if (!ok) {
-                printf("%s x %d -> %s x %d failed\n", 
-                       string_of_type<A>(), vec_width, 
-                       string_of_type<B>(), vec_width);        
-                printf("At %d %d, %d -> %d instead of %d\n", 
+                printf("%s x %d -> %s x %d failed\n",
+                       string_of_type<A>(), vec_width,
+                       string_of_type<B>(), vec_width);
+                printf("At %d %d, %f -> %f instead of %f\n",
                        x, y,
-                       (int)(input(x, y)),
-                       (int)(output(x, y)), 
-                       (int)((B)(input(x, y))));
+                       (double)(input(x, y)),
+                       (double)(output(x, y)),
+                       (double)((B)(input(x, y))));
                 return false;
             }
         }

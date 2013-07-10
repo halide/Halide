@@ -40,6 +40,7 @@ const string preamble =
     "#include <float.h>\n"
     "#include <assert.h>\n"
     "#include <string.h>\n"
+    "#include <stdint.h>\n"
     "\n"
     "extern \"C\" void *halide_malloc(size_t);\n"
     "extern \"C\" void halide_free(void *);\n"
@@ -141,7 +142,7 @@ const string preamble =
     // for a detailed comparison of type-punning methods.
     "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
     "\n"
-
+    + buffer_t_definition +
     "bool halide_maybe_rewrite_buffer(bool go, buffer_t *b, int32_t elem_size,\n"
     "                                 int32_t min0, int32_t extent0, int32_t stride0,\n"
     "                                 int32_t min1, int32_t extent1, int32_t stride1,\n"
@@ -161,8 +162,7 @@ const string preamble =
     " b->stride[2] = stride2;\n"
     " b->stride[3] = stride3;\n"
     " return true;\n"
-    "}\n"
-    + buffer_t_definition;
+    "}\n";
 }
 
 CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {}
@@ -217,7 +217,7 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     for (size_t i = 0; i < args.size(); i++) {
         if (i > 0) stream << ", ";
         if (args[i].is_buffer) {
-            stream << "const buffer_t *" << args[i].name;
+            stream << "buffer_t *" << args[i].name;
         } else {
             stream << "const "
                    << print_type(args[i].type)
@@ -236,7 +236,7 @@ void CodeGen_C::compile(Stmt s, string name, const vector<Argument> &args) {
     stream << "extern \"C\" void " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << "const buffer_t *_"
+            stream << "buffer_t *_"
                    << print_name(args[i].name);
         } else {
             stream << "const "
@@ -343,11 +343,15 @@ void CodeGen_C::open_scope() {
     stream << "{\n";
 }
 
-void CodeGen_C::close_scope() {
+void CodeGen_C::close_scope(const std::string &comment) {
     cache.clear();
     indent--;
     do_indent();
-    stream << "}\n";
+    if (!comment.empty()) {
+        stream << "} // " << comment << "\n";
+    } else {
+        stream << "}\n";
+    }
 }
 
 void CodeGen_C::visit(const Variable *op) {
@@ -656,6 +660,7 @@ void CodeGen_C::visit(const AssertStmt *op) {
     stream << "assert(" << id_cond
            << " && \"" << op->message
            << "\");\n";
+    do_indent();
     stream << "(void)" << id_cond << ";\n";
 }
 
@@ -701,7 +706,7 @@ void CodeGen_C::visit(const For *op) {
 
     open_scope();
     op->body.accept(this);
-    close_scope();
+    close_scope("for " + print_name(op->name));
 
 }
 
@@ -744,7 +749,7 @@ void CodeGen_C::visit(const Allocate *op) {
     // Should have been freed internally
     assert(!allocations.contains(op->name));
 
-    close_scope();
+    close_scope("alloc " + print_name(op->name));
 }
 
 void CodeGen_C::visit(const Free *op) {
@@ -786,7 +791,7 @@ void CodeGen_C::test() {
     cg.compile(s, "test1", args);
 
     string correct_source = preamble +
-        "extern \"C\" void test1(const buffer_t *_buf, const float alpha, const int32_t beta) {\n"
+        "extern \"C\" void test1(buffer_t *_buf, const float alpha, const int32_t beta) {\n"
         "int32_t *buf = (int32_t *)(_buf->host);\n"
         "const bool buf_host_and_dev_are_null = (_buf->host == NULL) && (_buf->dev == 0);\n"
         "(void)buf_host_and_dev_are_null;\n"
@@ -824,9 +829,9 @@ void CodeGen_C::test() {
         "  bool V2 = alpha > 4.000000f;\n"
         "  int32_t V3 = int32_t(V2 ? 3 : 2);\n"
         "  buf[V1] = V3;\n"
-        " }\n"
+        " } // alloc tmp_stack\n"
         " halide_free(tmp_heap);\n"
-        "}\n"
+        "} // alloc tmp_heap\n"
         "}\n";
     if (source.str() != correct_source) {
         std::cout << "Correct source code:" << std::endl << correct_source;

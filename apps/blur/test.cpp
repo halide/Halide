@@ -1,41 +1,34 @@
-// Compile the halide module like so:
-// make -C ../../../FImage/cpp_bindings/ FImage.a && g++-4.6 -std=c++0x halide_blur.cpp -I ../../../FImage/cpp_bindings/ ../../../FImage/cpp_bindings/FImage.a && ./a.out && opt -O3 -always-inline halide_blur.bc | llc -filetype=obj > halide_blur.o
-
-// Then compile this file like so:
-// g++-4.6 -Wall -ffast-math -O3 -fopenmp test.cpp halide_blur.o
-
 #include <emmintrin.h>
 #include <math.h>
 #include <sys/time.h>
 #include <stdint.h>
+#include <stdio.h>
 
-#define cimg_display 0
-#include "CImg.h"
-using namespace cimg_library;
+#include "static_image.h"
 
-// TODO: fold into module
-extern "C" { typedef struct CUctx_st *CUcontext; }
-namespace FImage { CUcontext cuda_ctx = 0; }
+//#define cimg_display 0
+//#include "CImg.h"
+//using namespace cimg_library;
 
 timeval t1, t2;
 #define begin_timing gettimeofday(&t1, NULL); for (int i = 0; i < 10; i++) {
 #define end_timing } gettimeofday(&t2, NULL);
 
-typedef CImg<uint16_t> Image;
+// typedef CImg<uint16_t> Image;
 
-Image blur(const Image &in) {
-    Image tmp(in.width(), in.height());
-    Image out(in.width(), in.height());
+Image<uint16_t> blur(Image<uint16_t> in) {
+    Image<uint16_t> tmp(in.width()-8, in.height());
+    Image<uint16_t> out(in.width()-8, in.height()-2);
 
     begin_timing;
 
-    for (int y = 0; y < in.height(); y++)
-        for (int x = 0; x < in.width(); x++)
-            tmp(x, y) = (in(x-1, y) + in(x, y) + in(x+1, y))/3;
+    for (int y = 0; y < tmp.height(); y++)
+        for (int x = 0; x < tmp.width(); x++)
+            tmp(x, y) = (in(x, y) + in(x+1, y) + in(x+2, y))/3;
 
-    for (int y = 0; y < in.height(); y++)
-        for (int x = 0; x < in.width(); x++)
-            out(x, y) = (tmp(x, y-1) + tmp(x, y) + tmp(x, y+1))/3;
+    for (int y = 0; y < out.height(); y++)
+        for (int x = 0; x < out.width(); x++)
+            out(x, y) = (tmp(x, y) + tmp(x, y+1) + tmp(x, y+2))/3;
 
     end_timing;
 
@@ -43,22 +36,22 @@ Image blur(const Image &in) {
 }
 
 
-Image blur_fast(const Image &in) {
-    Image out(in.width(), in.height());
+Image<uint16_t> blur_fast(Image<uint16_t> in) {
+    Image<uint16_t> out(in.width()-8, in.height()-2);
     begin_timing;
     __m128i one_third = _mm_set1_epi16(21846);
 #pragma omp parallel for
-    for (int yTile = 0; yTile < in.height(); yTile += 32) {
+    for (int yTile = 0; yTile < out.height(); yTile += 32) {
         __m128i a, b, c, sum, avg;
-        __m128i tmp[(128/8)*(32+2)];
-        for (int xTile = 0; xTile < in.width(); xTile += 128) {
+        __m128i tmp[(128/8) * (32 + 2)];
+        for (int xTile = 0; xTile < out.width(); xTile += 128) {
             __m128i *tmpPtr = tmp;
-            for (int y = -1; y < 32+1; y++) {
+            for (int y = 0; y < 32+2; y++) {
                 const uint16_t *inPtr = &(in(xTile, yTile+y));
                 for (int x = 0; x < 128; x += 8) {
-                    a = _mm_loadu_si128((__m128i*)(inPtr-1));
+                    a = _mm_load_si128((__m128i*)(inPtr));
                     b = _mm_loadu_si128((__m128i*)(inPtr+1));
-                    c = _mm_load_si128((__m128i*)(inPtr));
+                    c = _mm_loadu_si128((__m128i*)(inPtr+2));
                     sum = _mm_add_epi16(_mm_add_epi16(a, b), c);
                     avg = _mm_mulhi_epi16(sum, one_third);
                     _mm_store_si128(tmpPtr++, avg);
@@ -124,8 +117,8 @@ Image blur_fast(const Image &in) {
 */
 
 
-Image blur_fast2(const Image &in) {
-    Image out(in.width(), in.height());
+Image<uint16_t> blur_fast2(const Image<uint16_t> &in) {
+    Image<uint16_t> out(in.width()-8, in.height()-2);
 
     begin_timing;
 
@@ -133,17 +126,22 @@ Image blur_fast2(const Image &in) {
     // dividing by three
     __m128i one_third = _mm_set1_epi16(21846);
 
+    int vw = in.width()/8;
+    if (vw > 1024) {
+        printf("Image too large for constant-sized stack allocation\n");
+        return out;
+    }
 
 #pragma omp parallel for
     for (int yTile = 0; yTile < in.height(); yTile += 128) {
 
-        int vw = in.width()/8;
-        __m128i tmp[vw*4]; // four scanlines
+
+        __m128i tmp[1024*4]; // four scanlines
         for (int y = -2; y < 128; y++) {
             // to produce this scanline of the output
             __m128i *outPtr = (__m128i *)(&(out(0, yTile + y)));
             // we use this scanline of the input
-            const uint16_t *inPtr = &(in(0, yTile + y + 1));
+            const uint16_t *inPtr = &(in(0, yTile + y + 2));
             // and these scanlines of the intermediate result
             // We start y at negative 2 to fill the tmp buffer
             __m128i *tmpPtr0 = tmp + ((y+4) & 3) * vw;
@@ -151,9 +149,9 @@ Image blur_fast2(const Image &in) {
             __m128i *tmpPtr2 = tmp + ((y+2) & 3) * vw;
             for (int x = 0; x < vw; x++) {
                 // blur horizontally to produce next scanline of tmp
-                __m128i val = _mm_loadu_si128((__m128i *)(inPtr-1));
-                val = _mm_add_epi16(val, _mm_load_si128((__m128i *)inPtr));
+                __m128i val = _mm_load_si128((__m128i *)(inPtr));
                 val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+1)));
+                val = _mm_add_epi16(val, _mm_loadu_si128((__m128i *)(inPtr+2)));
                 val = _mm_mulhi_epi16(val, one_third);
                 _mm_store_si128(tmpPtr0++, val);
 
@@ -179,55 +177,26 @@ extern "C" {
 #include "halide_blur.h"
 }
 
-// Convert a CIMG image to a buffer_t for halide
-buffer_t halideBufferOfImage(Image &im) {
-    buffer_t buf = {0, (uint8_t *)im.data(),
-                    {im.width(), im.height(), 1, 1},
-                    {1, im.width(), 0, 0},
-                    {0, 0, 0, 0},
-                    sizeof(int16_t),
-                    false, false};
-    return buf;
-}
-
-Image blur_halide(Image &in) {
-    Image out(in.width(), in.height());
-
-    buffer_t inbuf = halideBufferOfImage(in);
-    buffer_t outbuf = halideBufferOfImage(out);
-
-    // expand the input for the purposes of bounds checking
-    inbuf.extent[0] += 2;
-    inbuf.extent[1] += 2;
+Image<uint16_t> blur_halide(Image<uint16_t> in) {
+    Image<uint16_t> out(in.width()-8, in.height()-2);
 
     // Call it once to initialize the halide runtime stuff
-    halide_blur(&inbuf, &outbuf);
+    halide_blur(in, out);
 
     begin_timing;
 
     // Compute the same region of the output as blur_fast (i.e., we're
     // still being sloppy with boundary conditions)
-    halide_blur(&inbuf, &outbuf);
+    halide_blur(in, out);
 
     end_timing;
 
     return out;
 }
 
-Image make_log() {
-    Image input(32, 32);
-    Image out(32, 32);
-    buffer_t inbuf = halideBufferOfImage(input);
-    buffer_t outbuf = halideBufferOfImage(out);
-    for (int i = 0; i < 10; i++) {
-        halide_blur(&inbuf, &outbuf);
-    }
-    return out;
-}
-
 int main(int argc, char **argv) {
 
-    Image input(6400, 4800);
+    Image<uint16_t> input(6408, 4802);
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
@@ -235,27 +204,27 @@ int main(int argc, char **argv) {
         }
     }
 
-    Image blurry = blur(input);
+    Image<uint16_t> blurry = blur(input);
     float slow_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
 
-    Image speedy = blur_fast(input);
+    Image<uint16_t> speedy = blur_fast(input);
     float fast_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
 
-    //Image speedy2 = blur_fast2(input);
+    //Image<uint16_t> speedy2 = blur_fast2(input);
     //float fast_time2 = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
 
-    Image halide = blur_halide(input);
+    Image<uint16_t> halide = blur_halide(input);
     float halide_time = (t2.tv_sec - t1.tv_sec) + (t2.tv_usec - t1.tv_usec) / 1000000.0f;
 
     // fast_time2 is always slower than fast_time, so skip printing it
     printf("times: %f %f %f\n", slow_time, fast_time, halide_time);
-    /*
+
     for (int y = 64; y < input.height() - 64; y++) {
         for (int x = 64; x < input.width() - 64; x++) {
             if (blurry(x, y) != speedy(x, y) || blurry(x, y) != halide(x, y))
                 printf("difference at (%d,%d): %d %d %d\n", x, y, blurry(x, y), speedy(x, y), halide(x, y));
         }
     }
-    */
+
     return 0;
 }

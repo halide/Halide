@@ -13,26 +13,38 @@
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
 
-extern "C" unsigned char halide_internal_initmod_x86[];
-extern "C" int halide_internal_initmod_x86_length;
-extern "C" unsigned char halide_internal_initmod_x86_32[];
-extern "C" int halide_internal_initmod_x86_32_length;
-extern "C" unsigned char halide_internal_initmod_x86_avx[];
-extern "C" int halide_internal_initmod_x86_avx_length;
+// Ugly but quite expedient.
+#define DECLARE_INITMOD(TARGET) \
+    extern "C" unsigned char halide_internal_initmod_##TARGET[]; \
+    extern "C" int halide_internal_initmod_##TARGET##_length;
+
+#define DECLARE_EMPTY_INITMOD(TARGET) \
+    static void *halide_internal_initmod_##TARGET = 0; \
+    static int halide_internal_initmod_##TARGET##_length = 0;
+
+DECLARE_INITMOD(x86_32)
+DECLARE_INITMOD(x86_32_sse41)
+DECLARE_INITMOD(x86_64)
+DECLARE_INITMOD(x86_64_sse41)
+DECLARE_INITMOD(x86_64_avx)
 
 #if WITH_NATIVE_CLIENT
-extern "C" unsigned char halide_internal_initmod_x86_nacl[];
-extern "C" int halide_internal_initmod_x86_nacl_length;
-extern "C" unsigned char halide_internal_initmod_x86_32_nacl[];
-extern "C" int halide_internal_initmod_x86_32_nacl_length;
+DECLARE_INITMOD(x86_32_nacl)
+DECLARE_INITMOD(x86_32_sse41_nacl)
+DECLARE_INITMOD(x86_64_nacl)
+DECLARE_INITMOD(x86_64_sse41_nacl)
+DECLARE_INITMOD(x86_64_avx_nacl)
 #else
-static void * halide_internal_initmod_x86_nacl = 0;
-static int halide_internal_initmod_x86_nacl_length = 0;
-static void * halide_internal_initmod_x86_32_nacl = 0;
-static int halide_internal_initmod_x86_32_nacl_length = 0;
+DECLARE_EMPTY_INITMOD(x86_32_nacl)
+DECLARE_EMPTY_INITMOD(x86_32_sse41_nacl)
+DECLARE_EMPTY_INITMOD(x86_64_nacl)
+DECLARE_EMPTY_INITMOD(x86_64_sse41_nacl)
+DECLARE_EMPTY_INITMOD(x86_64_avx_nacl)
 #endif
 
-namespace Halide { 
+#undef DECLARE_INITMOD
+
+namespace Halide {
 namespace Internal {
 
 using std::vector;
@@ -40,9 +52,9 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(uint32_t options) : CodeGen_Posix(), 
-                                             use_64_bit(options & X86_64Bit), 
-                                             use_sse_41(options & X86_SSE41), 
+CodeGen_X86::CodeGen_X86(uint32_t options) : CodeGen_Posix(),
+                                             use_64_bit(options & X86_64Bit),
+                                             use_sse_41(options & X86_SSE41),
                                              use_avx   (options & X86_AVX),
                                              use_nacl  (options & X86_NaCl) {
     assert(llvm_X86_enabled && "llvm build not configured with X86 target enabled.");
@@ -55,31 +67,42 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
 
     init_module();
 
-    StringRef sb;
+    char* buf = NULL;
+    int len = 0;
+    const int options = (use_64_bit ? X86_64Bit : 0) |
+                        (use_sse_41 ? X86_SSE41 : 0) |
+                        (use_avx ? X86_AVX : 0) |
+                        (use_nacl ? X86_NaCl : 0);
+    switch (options) {
+        // Ugly but expedient.
+        #define CASE_INITMOD(OPTIONS, TARGET) \
+                case OPTIONS: \
+                    buf = (char*)halide_internal_initmod_##TARGET; \
+                    len = halide_internal_initmod_##TARGET##_length; \
+                    break; \
+                case OPTIONS | X86_NaCl: \
+                    buf = (char*)halide_internal_initmod_##TARGET##_nacl; \
+                    len = halide_internal_initmod_##TARGET##_nacl_length; \
+                    break;
 
-    if (use_avx) {
-        assert(halide_internal_initmod_x86_avx_length && "initial module for x86_avx is empty");
-        sb = StringRef((char *)halide_internal_initmod_x86_avx, halide_internal_initmod_x86_avx_length);
-    } else if (!use_64_bit) {
-        if (use_nacl) {
-            assert(halide_internal_initmod_x86_32_nacl_length && "initial module for x86_32_nacl is empty");
-            sb = StringRef((char *)halide_internal_initmod_x86_32_nacl, halide_internal_initmod_x86_32_nacl_length);
-        } else {
-            assert(halide_internal_initmod_x86_32_length && "initial module for x86_32 is empty");
-            sb = StringRef((char *)halide_internal_initmod_x86_32, halide_internal_initmod_x86_32_length);
-        }
-    } else {
-        if (use_nacl) {
-            assert(halide_internal_initmod_x86_nacl_length && "initial module for x86_nacl is empty");
-            sb = StringRef((char *)halide_internal_initmod_x86_nacl, halide_internal_initmod_x86_nacl_length);
-        } else {
-            assert(halide_internal_initmod_x86_length && "initial module for x86 is empty");
-            sb = StringRef((char *)halide_internal_initmod_x86, halide_internal_initmod_x86_length);
-        }
+        CASE_INITMOD((0), x86_32)
+        CASE_INITMOD((X86_SSE41), x86_32_sse41)
+        CASE_INITMOD((X86_64Bit), x86_64)
+        CASE_INITMOD((X86_64Bit | X86_SSE41), x86_64_sse41)
+        CASE_INITMOD((X86_64Bit | X86_SSE41 | X86_AVX), x86_64_avx)
+
+        #undef CASE_INITMOD
+
+        default:
+            assert(false && "unsupported options / target combination");
+            break;
     }
+
+    assert(len && "initial module for x86 is empty");
+    StringRef sb = StringRef(buf, len);
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
-    // Parse it    
+    // Parse it
     std::string errstr;
     module = ParseBitcodeFile(bitcode_buffer, *context, &errstr);
     if (!module) {
@@ -104,7 +127,7 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     // compiled as. This assumes that we're not cross-compiling
     // between different x86 operating systems
     // module->setTargetTriple( ... );
-        
+
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
     delete bitcode_buffer;
@@ -132,7 +155,7 @@ Expr _i16(Expr e) {
 Expr _u16(Expr e) {
     return cast(UInt(16, e.type().width), e);
 }
- 
+
 Expr _i8(Expr e) {
     return cast(Int(8, e.type().width), e);
 }
@@ -167,18 +190,18 @@ Value *CodeGen_X86::call_intrin(llvm::Type *result_type, const string &name, vec
     llvm::Function *fn = module->getFunction("llvm.x86." + name);
 
     if (!fn) {
-        FunctionType *func_t = FunctionType::get(result_type, arg_types, false);    
+        FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
         fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.x86." + name, module);
         fn->setCallingConv(CallingConv::C);
     }
 
     return builder->CreateCall(fn, arg_values);
 }
- 
+
 void CodeGen_X86::visit(const Cast *op) {
 
     vector<Expr> matches;
- 
+
     struct Pattern {
         bool needs_sse_41;
         bool extern_call;
@@ -188,40 +211,40 @@ void CodeGen_X86::visit(const Cast *op) {
     };
 
     Pattern patterns[] = {
-        {false, false, Int(8, 16), "sse2.padds.b", 
+        {false, false, Int(8, 16), "sse2.padds.b",
          _i8(clamp(_i16(wild_i8x16) + _i16(wild_i8x16), -128, 127))},
-        {false, false, Int(8, 16), "sse2.psubs.b", 
+        {false, false, Int(8, 16), "sse2.psubs.b",
          _i8(clamp(_i16(wild_i8x16) - _i16(wild_i8x16), -128, 127))},
-        {false, false, UInt(8, 16), "sse2.paddus.b", 
+        {false, false, UInt(8, 16), "sse2.paddus.b",
          _u8(min(_u16(wild_u8x16) + _u16(wild_u8x16), 255))},
-        {false, false, UInt(8, 16), "sse2.psubus.b", 
+        {false, false, UInt(8, 16), "sse2.psubus.b",
          _u8(max(_i16(wild_u8x16) - _i16(wild_u8x16), 0))},
-        {false, false, Int(16, 8), "sse2.padds.w", 
+        {false, false, Int(16, 8), "sse2.padds.w",
          _i16(clamp(_i32(wild_i16x8) + _i32(wild_i16x8), -32768, 32767))},
-        {false, false, Int(16, 8), "sse2.psubs.w", 
+        {false, false, Int(16, 8), "sse2.psubs.w",
          _i16(clamp(_i32(wild_i16x8) - _i32(wild_i16x8), -32768, 32767))},
-        {false, false, UInt(16, 8), "sse2.paddus.w", 
+        {false, false, UInt(16, 8), "sse2.paddus.w",
          _u16(min(_u32(wild_u16x8) + _u32(wild_u16x8), 65535))},
-        {false, false, UInt(16, 8), "sse2.psubus.w", 
+        {false, false, UInt(16, 8), "sse2.psubus.w",
          _u16(max(_i32(wild_u16x8) - _i32(wild_u16x8), 0))},
-        {false, false, Int(16, 8), "sse2.pmulh.w", 
+        {false, false, Int(16, 8), "sse2.pmulh.w",
          _i16((_i32(wild_i16x8) * _i32(wild_i16x8)) / 65536)},
-        {false, false, UInt(16, 8), "sse2.pmulhu.w", 
+        {false, false, UInt(16, 8), "sse2.pmulhu.w",
          _u16((_u32(wild_u16x8) * _u32(wild_u16x8)) / 65536)},
         {false, false, UInt(8, 16), "sse2.pavg.b",
          _u8(((_u16(wild_u8x16) + _u16(wild_u8x16)) + 1) / 2)},
         {false, false, UInt(16, 8), "sse2.pavg.w",
          _u16(((_u32(wild_u16x8) + _u32(wild_u16x8)) + 1) / 2)},
-        {false, true, Int(16, 8), "packssdw", 
+        {false, true, Int(16, 8), "packssdw",
          _i16(clamp(wild_i32x8, -32768, 32767))},
-        {false, true, Int(8, 16), "packsswb", 
+        {false, true, Int(8, 16), "packsswb",
          _i8(clamp(wild_i16x16, -128, 127))},
-        {false, true, UInt(8, 16), "packuswb", 
+        {false, true, UInt(8, 16), "packuswb",
          _u8(clamp(wild_i16x16, 0, 255))},
         {true, true, UInt(16, 8), "packusdw",
          _u16(clamp(wild_i32x8, 0, 65535))}
     };
-        
+
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
         if (!use_sse_41 && pattern.needs_sse_41) continue;
@@ -234,7 +257,7 @@ void CodeGen_X86::visit(const Cast *op) {
             return;
         }
     }
-        
+
     CodeGen::visit(op);
 
     /*
@@ -269,13 +292,13 @@ void CodeGen_X86::visit(const Cast *op) {
     */
 }
 
-void CodeGen_X86::visit(const Div *op) {    
+void CodeGen_X86::visit(const Div *op) {
 
     assert(!is_zero(op->b) && "Division by constant zero");
 
     // Detect if it's a small int division
     const Broadcast *broadcast = op->b.as<Broadcast>();
-    const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;    
+    const Cast *cast_b = broadcast ? broadcast->value.as<Cast>() : NULL;
     const IntImm *int_imm = cast_b ? cast_b->value.as<IntImm>() : NULL;
     if (broadcast && !int_imm) int_imm = broadcast->value.as<IntImm>();
     if (!int_imm) int_imm = op->b.as<IntImm>();
@@ -283,17 +306,17 @@ void CodeGen_X86::visit(const Div *op) {
     int shift_amount;
     bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
 
-    vector<Expr> matches;    
+    vector<Expr> matches;
     if (op->type == Float(32, 4) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
-        if (expr_match(Call::make(Float(32, 4), "sqrt_f32", vec(wild_f32x4), Call::Extern), op->b, matches)) {            
+        if (expr_match(Call::make(Float(32, 4), "sqrt_f32", vec(wild_f32x4), Call::Extern), op->b, matches)) {
             value = call_intrin(Float(32, 4), "sse.rsqrt.ps", matches);
         } else {
             value = call_intrin(Float(32, 4), "sse.rcp.ps", vec(op->b));
         }
     } else if (use_avx && op->type == Float(32, 8) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
-        if (expr_match(Call::make(Float(32, 8), "sqrt_f32", vec(wild_f32x8), Call::Extern), op->b, matches)) {            
+        if (expr_match(Call::make(Float(32, 8), "sqrt_f32", vec(wild_f32x8), Call::Extern), op->b, matches)) {
             value = call_intrin(Float(32, 8), "avx.rsqrt.ps.256", matches);
         } else {
             value = call_intrin(Float(32, 8), "avx.rcp.ps.256", vec(op->b));
@@ -306,9 +329,9 @@ void CodeGen_X86::visit(const Div *op) {
         Value *numerator = codegen(op->a);
         Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
         value = builder->CreateLShr(numerator, shift);
-    } else if (op->type.is_int() && 
-               (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) && 
-               const_divisor > 1 && 
+    } else if (op->type.is_int() &&
+               (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) &&
+               const_divisor > 1 &&
                ((op->type.bits > 8 && const_divisor < 256) || const_divisor < 128)) {
 
         int64_t multiplier, shift;
@@ -321,20 +344,20 @@ void CodeGen_X86::visit(const Div *op) {
         } else {
             // 8 bit
             multiplier = IntegerDivision::table_s8[const_divisor-2][1];
-            shift      = IntegerDivision::table_s8[const_divisor-2][2];    
+            shift      = IntegerDivision::table_s8[const_divisor-2][2];
         }
 
         Value *val = codegen(op->a);
-        
+
         // Make an all-ones mask if the numerator is negative
-        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits-1)));            
-        // Flip the numerator bits if the mask is high. 
+        Value *sign = builder->CreateAShr(val, codegen(make_const(op->type, op->type.bits-1)));
+        // Flip the numerator bits if the mask is high.
         Value *flipped = builder->CreateXor(sign, val);
 
         llvm::Type *narrower = llvm_type_of(op->type);
         llvm::Type *wider = llvm_type_of(Int(op->type.bits*2, op->type.width));
 
-        // Grab the multiplier. 
+        // Grab the multiplier.
         Value *mult = ConstantInt::get(narrower, multiplier);
 
         // Widening multiply, keep high half, shift
@@ -354,12 +377,12 @@ void CodeGen_X86::visit(const Div *op) {
             val = builder->CreateLShr(wide_val, shift_amount);
             val = builder->CreateIntCast(val, narrower, true);
         }
-        
+
         // Maybe flip the bits again
         value = builder->CreateXor(val, sign);
-    
-    } else if (op->type.is_uint() && 
-               (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) && 
+
+    } else if (op->type.is_uint() &&
+               (op->type.bits == 8 || op->type.bits == 16 || op->type.bits == 32) &&
                const_divisor > 1 && const_divisor < 256) {
 
         int64_t method, multiplier, shift;
@@ -367,7 +390,7 @@ void CodeGen_X86::visit(const Div *op) {
             method     = IntegerDivision::table_u32[const_divisor-2][0];
             multiplier = IntegerDivision::table_u32[const_divisor-2][1];
             shift      = IntegerDivision::table_u32[const_divisor-2][2];
-        } else if (op->type.bits == 16) {        
+        } else if (op->type.bits == 16) {
             method     = IntegerDivision::table_u16[const_divisor-2][0];
             multiplier = IntegerDivision::table_u16[const_divisor-2][1];
             shift      = IntegerDivision::table_u16[const_divisor-2][2];
@@ -393,7 +416,7 @@ void CodeGen_X86::visit(const Div *op) {
                 val = builder->CreateLShr(val, shift_amount);
             }
         } else {
-            
+
             // Widen
             mult = builder->CreateIntCast(mult, wider, false);
             val = builder->CreateIntCast(val, wider, false);
@@ -420,7 +443,7 @@ void CodeGen_X86::visit(const Div *op) {
             Value *diff = builder->CreateSub(num, val);
             diff = builder->CreateLShr(diff, ConstantInt::get(diff->getType(), 1));
             val = builder->CreateAdd(val, diff);
-        
+
             // Do the final shift
             if (shift) {
                 val = builder->CreateLShr(val, ConstantInt::get(narrower, shift));
@@ -429,7 +452,7 @@ void CodeGen_X86::visit(const Div *op) {
 
         value = val;
 
-    } else {    
+    } else {
         CodeGen::visit(op);
     }
 }
@@ -446,7 +469,7 @@ void CodeGen_X86::visit(const Min *op) {
     } else if (use_sse_41 && op->type == Int(32, 4)) {
         value = call_intrin(Int(32, 4), "sse41.pminsd", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == UInt(32, 4)) {
-        value = call_intrin(UInt(32, 4), "sse41.pminud", vec(op->a, op->b));               
+        value = call_intrin(UInt(32, 4), "sse41.pminud", vec(op->a, op->b));
     } else {
         CodeGen::visit(op);
     }
@@ -464,17 +487,17 @@ void CodeGen_X86::visit(const Max *op) {
     } else if (use_sse_41 && op->type == Int(32, 4)) {
         value = call_intrin(Int(32, 4), "sse41.pmaxsd", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == UInt(32, 4)) {
-        value = call_intrin(UInt(32, 4), "sse41.pmaxud", vec(op->a, op->b));               
+        value = call_intrin(UInt(32, 4), "sse41.pmaxud", vec(op->a, op->b));
     } else {
         CodeGen::visit(op);
-    }    
+    }
 }
 
 bool detect_clamped_load(Expr index, Expr *condition, Expr *simplified_index) {
     // debug(0) << "In detect clamped load\n";
 
     int w = index.type().width;
-    
+
     if (w <= 1) return false;
 
     Expr wild = Variable::make(Int(32), "*");
@@ -533,7 +556,7 @@ bool detect_clamped_load(Expr index, Expr *condition, Expr *simplified_index) {
 
     // The last element of the ramp.
     Expr end = base + stride * (w - 1);
-    
+
     // Compute the condition separately for when the stride is
     // positive vs negative. If we can use a simpler condition, we end
     // up getting much better performance.
@@ -557,14 +580,14 @@ bool detect_clamped_load(Expr index, Expr *condition, Expr *simplified_index) {
         *condition = pos_cond && neg_cond;
     }
 
-    *condition = simplify(*condition);    
+    *condition = simplify(*condition);
     *simplified_index = Ramp::make(base, stride, w);
     return true;
 }
 
 void CodeGen_X86::visit(const Load *op) {
     Expr condition, simpler_index;
-    
+
     // TODO: fix detect_clamped_load and re-enable
     if (detect_clamped_load(op->index, &condition, &simpler_index)) {
 
@@ -572,10 +595,10 @@ void CodeGen_X86::visit(const Load *op) {
 
         Expr simpler_load = Load::make(op->type, op->name, simpler_index,
                                        op->image, op->param);
-        
+
         // Make condition
         Value *condition_val = codegen(condition);
-        
+
         // Create the block for the bounded case
         BasicBlock *bounded_bb = BasicBlock::Create(*context, op->name + "_bounded_load",
                                                     function);
@@ -585,7 +608,7 @@ void CodeGen_X86::visit(const Load *op) {
         // Create the block that comes after
         BasicBlock *after_bb = BasicBlock::Create(*context, op->name + "_after_load",
                                                   function);
-        
+
         // Tell llvm that the condition is usually true
         // llvm::Function *expect = llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::expect);
         // llvm::Value *true_val = ConstantInt::get(i1, 1);
@@ -594,21 +617,21 @@ void CodeGen_X86::visit(const Load *op) {
         // Check the bounds, branch accordingly
         // TODO: add branch weight metadata to tell llvm the unbounded case is unlikely
         builder->CreateCondBr(condition_val, bounded_bb, unbounded_bb);
-        
+
         // For bounded case, use ramp
         builder->SetInsertPoint(bounded_bb);
         value = NULL;
         CodeGen::visit(simpler_load.as<Load>());
         Value *bounded = value;
         builder->CreateBr(after_bb);
-        
+
         // for unbounded case, revert to default
         builder->SetInsertPoint(unbounded_bb);
         value = NULL;
         CodeGen::visit(op);
         Value *unbounded = value;
         builder->CreateBr(after_bb);
-        
+
         // Make a phi node
         builder->SetInsertPoint(after_bb);
         PHINode *phi = builder->CreatePHI(unbounded->getType(),2);
@@ -639,29 +662,29 @@ void CodeGen_X86::test() {
     vector<Argument> args(3);
     args[0] = buffer_arg;
     args[1] = float_arg;
-    args[2] = int_arg;        
+    args[2] = int_arg;
     Var x("x"), i("i");
     Param<float> alpha("alpha");
     Param<int> beta("beta");
 
     // We'll clear out the initial buffer except for the first and
     // last two elements using dense unaligned vectors
-    Stmt init = For::make("i", 0, 3, For::Serial, 
-                          Store::make("buf", 
+    Stmt init = For::make("i", 0, 3, For::Serial,
+                          Store::make("buf",
                                       Ramp::make(i*4+2, 1, 4),
                                       Ramp::make(i*4+2, 1, 4)));
-    
+
     // Now set the first two elements using scalars, and last four elements using a dense aligned vector
     init = Block::make(init, Store::make("buf", 0, 0));
     init = Block::make(init, Store::make("buf", 1, 1));
     init = Block::make(init, Store::make("buf", Ramp::make(12, 1, 4), Ramp::make(12, 1, 4)));
-    
+
     // Then multiply the even terms by 17 using sparse vectors
-    init = Block::make(init, 
-                       For::make("i", 0, 2, For::Serial, 
-                                 Store::make("buf", 
-                                             Mul::make(Broadcast::make(17, 4), 
-                                                       Load::make(Int(32, 4), "buf", 
+    init = Block::make(init,
+                       For::make("i", 0, 2, For::Serial,
+                                 Store::make("buf",
+                                             Mul::make(Broadcast::make(17, 4),
+                                                       Load::make(Int(32, 4), "buf",
                                                                   Ramp::make(i*8, 2, 4), Buffer(), Parameter())),
                                              Ramp::make(i*8, 2, 4))));
 
@@ -675,9 +698,9 @@ void CodeGen_X86::test() {
     Stmt loop = Store::make("buf", e, x + i);
     loop = LetStmt::make("x", beta+1, loop);
     // Do some local allocations within the loop
-    loop = Allocate::make("tmp_stack", Int(32), 127, loop);
-    loop = Allocate::make("tmp_heap", Int(32), 43 * beta, loop);
-    loop = For::make("i", -1, 3, For::Parallel, loop);        
+    loop = Allocate::make("tmp_stack", Int(32), 127, Block::make(loop, Free::make("tmp_stack")));
+    loop = Allocate::make("tmp_heap", Int(32), 43 * beta, Block::make(loop, Free::make("tmp_heap")));
+    loop = For::make("i", -1, 3, For::Parallel, loop);
 
     Stmt s = Block::make(init, loop);
 
@@ -694,7 +717,7 @@ void CodeGen_X86::test() {
         size_t read;
         getenv_s(&read, buf, "HL_NUMTHREADS");
         if (read == 0) putenv("HL_NUMTHREADS=4");
-    }    
+    }
     #else
     if (!getenv("HL_NUMTHREADS")) {
         setenv("HL_NUMTHREADS", "4", 1);
@@ -762,8 +785,10 @@ void CodeGen_X86::test() {
 
 string CodeGen_X86::mcpu() const {
     if (use_avx) return "corei7-avx";
-    if (use_sse_41) return "corei7";
-    return "core2";
+    // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
+    if (use_sse_41) return "penryn";
+    // Default should not include SSSE3, hence "k8" rather than "core2"
+    return "k8";
 }
 
 string CodeGen_X86::mattrs() const {

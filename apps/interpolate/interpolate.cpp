@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
     ImageParam input(Float(32), 3);
 
-    unsigned int levels = 10;
+    const unsigned int levels = 10;
 
     Func downsampled[levels];
     Func downx[levels];

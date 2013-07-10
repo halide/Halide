@@ -802,16 +802,7 @@ FuncRefVar::operator Expr() const {
 }
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
-    for (size_t i = 0; i < args.size(); i++) {
-        Type t = args[i].type();
-        if (t.is_float() || (t.is_uint() && t.bits >= 32) || (t.is_int() && t.bits > 32)) {
-            std::cerr << "Error: implicit cast from " << t << " to int in argument " << (i+1)
-                      << " in call to " << f.name() << " is not allowed. Use an explicit cast.\n";
-            assert(false);
-        }
-        // We're allowed to implicitly cast from other varieties of int
-        args[i] = cast<int>(args[i]);
-    }
+    ImageParam::check_arg_types(f.name(), &args);
 }
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a) : func(f) {
@@ -1336,12 +1327,10 @@ void Func::test() {
         }
     }
 
-
     Func f, g;
     Var x, y;
     f(x, y) = input(x+1, y) + input(x+1, y)*3 + 1;
     g(x, y) = f(x-1, y) + 2*f(x+1, y);
-
 
     f.compute_root();
 
@@ -1350,11 +1339,15 @@ void Func::test() {
     for (int y = 0; y < 5; y++) {
         for (int x = 0; x < 5; x++) {
             int correct = (4*input(x, y)+1) + 2*(4*input(x+2, y)+1);
-            assert(result(x, y) == correct);
+            if (result(x, y) != correct) {
+                std::cerr << "Func test failed: f(" << x << ", " << y << ") = "
+                          << result(x, y) << " instead of " << correct << "\n";
+                return;
+            }
         }
     }
 
-    std::cout << "Func test passed" << std::endl;
+    std::cout << "Func test passed\n";
 
 }
 

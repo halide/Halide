@@ -466,7 +466,7 @@ public:
 };
 
 /* Find all the externally referenced buffers in a stmt */
-class FindBuffers : public IRVisitor {
+class FindBuffers : public IRGraphVisitor {
 public:
     struct Result {
         Buffer image;
@@ -476,10 +476,10 @@ public:
 
     map<string, Result> buffers;
 
-    using IRVisitor::visit;
+    using IRGraphVisitor::visit;
 
     void visit(const Call *op) {
-        IRVisitor::visit(op);
+        IRGraphVisitor::visit(op);
         if (op->image.defined()) {
             Result r;
             r.image = op->image;
@@ -490,6 +490,20 @@ public:
             r.param = op->param;
             r.type = op->type.element_of();
             buffers[op->name] = r;
+        }
+    }
+};
+
+/* Find all the externally referenced scalar parameters */
+class FindParameters : public IRGraphVisitor {
+public:
+    map<string, Parameter> params;
+
+    using IRGraphVisitor::visit;
+
+    void visit(const Variable *op) {
+        if (op->param.defined()) {
+            params[op->name] = op->param;
         }
     }
 };
@@ -546,6 +560,8 @@ vector<string> realization_order(string output, const map<string, Function> &env
         // Find a function not in result_set, for which all its inputs are
         // in result_set. Stop when we reach the output function.
         bool scheduled_something = false;
+        // Inject a dummy use of this var in case asserts are off.
+        (void)scheduled_something;
         for (map<string, Function>::const_iterator iter = env.begin();
              iter != env.end(); ++iter) {
             const string &f = iter->first;
@@ -621,6 +637,66 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
     return root_loop->body;
 
 }
+
+// Insert checks to make sure that parameters are within their
+// declared range.
+Stmt add_parameter_checks(Stmt s) {
+    // First, find all the parameters
+    FindParameters finder;
+    s.accept(&finder);
+
+    map<string, Expr> replace_with_constrained;
+    vector<pair<string, Expr> > lets;
+    vector<Expr> asserts;
+
+    // Make constrained versions of the params
+    for (map<string, Parameter>::iterator iter = finder.params.begin();
+         iter != finder.params.end(); iter++) {
+        Parameter param = iter->second;
+
+        if (!param.is_buffer() &&
+            (param.get_min_value().defined() ||
+             param.get_max_value().defined())) {
+
+            string constrained_name = iter->first + ".constrained";
+
+            Expr constrained_var = Variable::make(param.type(), constrained_name);
+            Expr constrained_value = Variable::make(param.type(), iter->first, param);
+            replace_with_constrained[iter->first] = constrained_var;
+            if (param.get_min_value().defined()) {
+                asserts.push_back(constrained_value >= param.get_min_value());
+                constrained_value = max(constrained_value, param.get_min_value());
+            }
+
+            if (param.get_max_value().defined()) {
+                Expr condition = constrained_value >= param.get_min_value();
+                std::ostringstream oss;
+                asserts.push_back(constrained_value <= param.get_max_value());
+                constrained_value = min(constrained_value, param.get_max_value());
+            }
+
+            lets.push_back(make_pair(constrained_name, constrained_value));
+        }
+    }
+
+    // Replace the params with their constrained version in the rest of the pipeline
+    s = substitute(replace_with_constrained, s);
+
+    // Inject the let statements
+    for (size_t i = 0; i < lets.size(); i++) {
+        s = LetStmt::make(lets[i].first, lets[i].second, s);
+    }
+
+    // Inject the assert statements
+    for (size_t i = 0; i < asserts.size(); i++) {
+        std::ostringstream oss;
+        oss << "Static bounds constraint on parameter violated: " << asserts[i];
+        s = Block::make(AssertStmt::make(asserts[i], oss.str()), s);
+    }
+
+    return s;
+}
+
 
 // Insert checks to make sure a statement doesn't read out of bounds
 // on inputs or outputs, and that the inputs and outputs conform to
@@ -936,6 +1012,10 @@ Stmt lower(Function f) {
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s);
     debug(2) << "Tracing injected:\n" << s << '\n';
+
+    debug(1) << "Adding checks for parameters\n";
+    s = add_parameter_checks(s);
+    debug(2) << "Parameter checks injected:\n" << s << '\n';
 
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, f);

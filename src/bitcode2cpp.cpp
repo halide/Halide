@@ -9,7 +9,7 @@
 
 
 int main(int argc, const char **argv) {
-    assert(argc == 2 && "Requires target name as an argument (e.g. x86)");
+    assert(argc == 2 && "Requires target name as an argument (e.g. x86_64)");
 #ifdef _WIN32
     _setmode(_fileno(stdin), O_BINARY); // On windows bad things will happen unless we read stdin in binary mode
 #endif
