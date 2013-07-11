@@ -1,7 +1,7 @@
 #ifndef HALIDE_IR_OPERATOR_H
 #define HALIDE_IR_OPERATOR_H
 
-/** \file 
+/** \file
  *
  * Defines various operator overloads and utility functions that make
  * it more pleasant to work with Halide expressions.
@@ -57,7 +57,7 @@ bool EXPORT is_two(Expr e);
  * and return the bits as int. Unsigned types are returned as bits in the int
  * and should be cast to unsigned int for comparison.
  * int_cast_constant implements bit manipulations to wrap val into the
- * value range of the Type t. 
+ * value range of the Type t.
  * For example, int_cast_constant(UInt(16), -1) returns 65535
  * int_cast_constant(Int(8), 128) returns -128
  */
@@ -98,13 +98,13 @@ Expr EXPORT const_false(int width = 1);
  * UInt(1). We use the following procedure:
  *
  * If the types already match, do nothing.
- * 
+ *
  * Then, if one type is a vector and the other is a scalar, the scalar
  * is broadcast to match the vector width, and we continue.
  *
  * Then, if one type is floating-point and the other is not, the
  * non-float is cast to the floating-point type, and we're done.
- * 
+ *
  * Then, if neither is a float but one of the two is a constant, the
  * constant is cast to match the non-const type and we're done. For
  * example, e has type UInt(8), then (e*32) also has type UInt(8),
@@ -122,7 +122,7 @@ Expr EXPORT const_false(int width = 1);
  * int, both are cast to a signed int with the greater of the two
  * bit-widths. For example, matching an Int(8) with a UInt(16) results
  * in an Int(16).
- * 
+ *
  */
 void EXPORT match_types(Expr &a, Expr &b);
 
@@ -156,7 +156,7 @@ inline Expr cast(Type t, Expr a) {
             assert(b->width == t.width);
             return Internal::Broadcast::make(cast(t.element_of(), b->value), t.width);
         }
-    }    
+    }
     return Internal::Cast::make(t, a);
 }
 
@@ -167,7 +167,7 @@ inline Expr operator+(Expr a, Expr b) {
     Internal::match_types(a, b);
     return Internal::Add::make(a, b);
 }
-    
+
 /** Modify the first expression to be the sum of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
@@ -211,7 +211,7 @@ inline Expr operator*(Expr a, Expr b) {
     Internal::match_types(a, b);
     return Internal::Mul::make(a, b);
 }
-    
+
 /** Modify the first expression to be the product of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
@@ -317,7 +317,7 @@ inline Expr operator!(Expr a) {
 }
 
 /** Returns an expression representing the greater of the two
- * arguments, after doing any necessary type coercion using 
+ * arguments, after doing any necessary type coercion using
  * \ref Internal::match_types */
 inline Expr max(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "max of undefined");
@@ -326,7 +326,7 @@ inline Expr max(Expr a, Expr b) {
 }
 
 /** Returns an expression representing the lesser of the two
- * arguments, after doing any necessary type coercion using 
+ * arguments, after doing any necessary type coercion using
  * \ref Internal::match_types */
 inline Expr min(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "min of undefined");
@@ -350,15 +350,15 @@ inline Expr abs(Expr a) {
     assert(a.defined() && "abs of undefined");
     if (a.type() == Int(8))
         return Internal::Call::make(Int(8), "abs_i8", vec(a), Internal::Call::Extern);
-    if (a.type() == Int(16)) 
+    if (a.type() == Int(16))
         return Internal::Call::make(Int(16), "abs_i16", vec(a), Internal::Call::Extern);
-    if (a.type() == Int(32)) 
+    if (a.type() == Int(32))
         return Internal::Call::make(Int(32), "abs_i32", vec(a), Internal::Call::Extern);
-    if (a.type() == Int(64)) 
+    if (a.type() == Int(64))
         return Internal::Call::make(Int(64), "abs_i64", vec(a), Internal::Call::Extern);
-    if (a.type() == Float(32)) 
+    if (a.type() == Float(32))
         return Internal::Call::make(Float(32), "abs_f32", vec(a), Internal::Call::Extern);
-    if (a.type() == Float(64)) 
+    if (a.type() == Float(64))
         return Internal::Call::make(Float(64), "abs_f64", vec(a), Internal::Call::Extern);
     assert(false && "Invalid type for abs");
     return 0; // prevent "control reaches end of non-void function" error
@@ -516,18 +516,9 @@ inline Expr sqrt(Expr x) {
 
 /** Return the square root of the sum of the squares of two
  * floating-point expressions. If the argument is not floating-point,
- * is it cast to Float(32). On platforms with a sqrt op (e.g. x86),
- * it's faster to compute this manually using sqrt. */
+ * is it cast to Float(32). */
 inline Expr hypot(Expr x, Expr y) {
-    assert(x.defined() && y.defined() && "hypot of undefined");
-    if (x.type() == Float(64)) {
-        y = cast<double>(y);
-        return Internal::Call::make(Float(64), "hypot_f64", vec(x, y), Internal::Call::Extern);
-    } else {
-        x = cast<float>(x);
-        y = cast<float>(y);
-        return Internal::Call::make(Float(32), "hypot_f32", vec(x, y), Internal::Call::Extern);
-    }
+    return sqrt(x*x + y*y);
 }
 
 /** Return the exponential of a floating-point expression. If the
@@ -571,7 +562,7 @@ inline Expr log(Expr x) {
  * approaching overflow. */
 inline Expr pow(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "pow of undefined");
-    
+
     if (const int *i = as_const_int(y)) {
         return raise_to_integer_power(x, *i);
     }
