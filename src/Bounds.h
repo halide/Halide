@@ -7,9 +7,9 @@
 #include <utility>
 #include <vector>
 
-/** \file 
+/** \file
  * Methods for computing the upper and lower bounds of an expression,
- * and the regions of a function read or written by a statement. 
+ * and the regions of a function read or written by a statement.
  */
 
 namespace Halide {
@@ -30,7 +30,7 @@ struct Interval {
  * This is for tasks such as deducing the region of a buffer
  * loaded by a chunk of code.
  */
-Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope);    
+Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope);
 
 /** Compute rectangular domains large enough to cover all the 'Call's
  * to each function that occurs within a given statement. This is
@@ -45,7 +45,7 @@ std::map<std::string, Region> regions_provided(Stmt s);
 
 /** Compute rectangular domains large enough to cover all Calls and
  * Provides to each function that occurs within a given statement */
-std::map<std::string, Region> regions_touched(Stmt s);;
+std::map<std::string, Region> regions_touched(Stmt s);
 
 /** Compute a rectangular domain large enough to cover all Calls and
  * Provides to a given function */
@@ -63,7 +63,7 @@ Region region_called(Stmt s, const std::string &func);
 Region region_union(const Region &, const Region &);
 
 void bounds_test();
-        
+
 }
 }
 

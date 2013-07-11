@@ -424,7 +424,9 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
         // shared context at termination
         void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("cuCtxDestroy_v2");
         assert(ptr && "Could not find cuCtxDestroy_v2 in cuda library");
-        cuCtxDestroy = (int (*)(CUctx_st *))(ptr);
+
+        cuCtxDestroy = reinterpret_bits<int (*)(CUctx_st *)>(ptr);
+
     } else if (options & GPU_OpenCL) {
         debug(0) << "TODO: cache results of linking OpenCL lib\n";
 
@@ -457,7 +459,8 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
         assert(fn && "Could not find halide_set_cuda_context in module");
         void *f = ee->getPointerToFunction(fn);
         assert(f && "Could not find compiled form of halide_set_cuda_context in module");
-        void (*set_cuda_context)(CUcontext *) = (void (*)(CUcontext *))f;
+        void (*set_cuda_context)(CUcontext *) =
+            reinterpret_bits<void (*)(CUcontext *)>(f);
         set_cuda_context(&cuda_ctx.ptr);
 
         // When the module dies, we need to call halide_release
@@ -465,7 +468,9 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
         assert(fn && "Could not find halide_release in module");
         f = ee->getPointerToFunction(fn);
         assert(f && "Could not find compiled form of halide_release in module");
-        (*cleanup_routines).push_back((void (*)())f);
+        void (*cleanup_routine)() =
+            reinterpret_bits<void (*)()>(f);
+        cleanup_routines->push_back(cleanup_routine);
     } else if (options & GPU_OpenCL) {
         debug(0) << "TODO: set cleanup for OpenCL\n";
     }

@@ -15,7 +15,7 @@ namespace Internal {
 enum CodeGen_GPU_Options {
     GPU_PTX     = 0x1000000,  /// Compile for PTX
     GPU_OpenCL  = 0x2000000,  /// Compile for OpenCL
-    GPU_OpenGL  = 0x4000000,  /// Compile for OpenGL
+    GPU_OpenGL  = 0x4000000   /// Compile for OpenGL
 };
 
 

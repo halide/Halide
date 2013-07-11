@@ -2,18 +2,18 @@
 #define HALIDE_CODEGEN_ARM_H
 
 /** \file
- * Defines the code-generator for producing ARM machine code 
+ * Defines the code-generator for producing ARM machine code
  */
 
 #include "CodeGen_Posix.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** Bitmask flags for specifying code generation options to CodeGen_ARM. */
 enum CodeGen_ARM_Options {
     ARM_Android = 1,  /// Compile targetting the Android standard library
-    ARM_NaCl    = 2,  /// Compile for Native Client (must be using the Native Client llvm tree)
+    ARM_NaCl    = 2   /// Compile for Native Client (must be using the Native Client llvm tree)
 };
 
 /** A code generator that emits ARM code from a given Halide stmt. */
@@ -22,7 +22,7 @@ public:
     /** Create an ARM code generator. Processor features can be
      * enabled using the appropriate flags from CodeGen_X86_Options */
     CodeGen_ARM(uint32_t options = 0);
-        
+
     /** Compile to an internally-held llvm module. Takes a halide
      * statement, the name of the function produced, and the arguments
      * to the function produced. After calling this, call
@@ -43,8 +43,8 @@ protected:
 
     /** Generate a call to a neon intrinsic */
     // @{
-    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);    
-    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);    
+    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);
+    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);
     llvm::Instruction *call_void_intrin(const std::string &name, std::vector<Expr>);
     llvm::Instruction *call_void_intrin(const std::string &name, std::vector<llvm::Value *>);
     // @}
@@ -52,7 +52,7 @@ protected:
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific neon intrinsics */
-    // @{    
+    // @{
     void visit(const Cast *);
     void visit(const Add *);
     void visit(const Sub *);

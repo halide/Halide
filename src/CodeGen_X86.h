@@ -15,7 +15,7 @@ enum CodeGen_X86_Options {
     X86_64Bit = 1,  /// Compile for x86_64
     X86_SSE41 = 2,  /// Compile for SSE 4.1 and SSSE3
     X86_AVX   = 4,  /// Compile for AVX (v1)
-    X86_NaCl  = 8,  /// Compile for Native Client (Must be using the Native Client llvm tree)
+    X86_NaCl  = 8   /// Compile for Native Client (Must be using the Native Client llvm tree)
 };
 
 /** A code generator that emits x86 code from a given Halide stmt. */
