@@ -195,7 +195,11 @@ Value *CodeGen_X86::call_intrin(llvm::Type *result_type, const string &name, vec
         fn->setCallingConv(CallingConv::C);
     }
 
-    return builder->CreateCall(fn, arg_values);
+    CallInst *call = builder->CreateCall(fn, arg_values);
+    call->setDoesNotAccessMemory();
+    call->setDoesNotThrow();
+
+    return call;
 }
 
 void CodeGen_X86::visit(const Cast *op) {
@@ -725,8 +729,9 @@ void CodeGen_X86::test() {
     #endif
 
     JITCompiledModule m = cg.compile_to_function_pointers();
+
     typedef void (*fn_type)(::buffer_t *, float, int);
-    fn_type fn = (fn_type)m.function;
+    fn_type fn = reinterpret_bits<fn_type>(m.function);
 
     int scratch_buf[64];
     int *scratch = &scratch_buf[0];

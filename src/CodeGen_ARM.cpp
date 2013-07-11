@@ -205,6 +205,7 @@ Value *CodeGen_ARM::call_intrin(llvm::Type *result_type,
     }
 
     debug(4) << "Creating call to " << name << "\n";
+
     return builder->CreateCall(fn, arg_values, name);
 
 }
