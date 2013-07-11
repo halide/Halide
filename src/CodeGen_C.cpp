@@ -459,11 +459,18 @@ void CodeGen_C::visit(const IntImm *op) {
     id = oss.str();
 }
 
+#ifdef _MSC_VER
+#define isnan(x) _isnanf(x)
+#define isinf(x) (!_finitef(x))
+#else
+#define isnan(x) std::isnan(x)
+#define isinf(x) std::isinf(x)
+#endif
+
 void CodeGen_C::visit(const FloatImm *op) {
-    // TODO: the following code may not work in visual studio
-    if (std::isnan(op->value)) {
+    if (isnan(op->value)) {
         id = "nan_f32()";
-    } else if (std::isinf(op->value)) {
+    } else if (isinf(op->value)) {
         if (op->value > 0) {
             id = "inf_f32()";
         } else {
