@@ -16,6 +16,13 @@
 
 #include <Halide.h>
 #include <stdio.h>
+
+#ifdef WIN32
+#define HALIDETUTORIALS_EXPORT __declspec(dllexport)
+#else
+#define HALIDETUTORIALS_EXPORT
+#endif
+
 using namespace Halide;
 
 // We'll define a function that we want our Halide routine to call. It
@@ -23,7 +30,7 @@ using namespace Halide;
 // has to have 'extern "C"' linkage, so that Halide can look for it by
 // name. C++ linkage results in name mangling and makes it impossible
 // for Halide to find your function.
-extern "C" int snoop(int x, int y, int val) {
+extern "C" HALIDETUTORIALS_EXPORT int snoop(int x, int y, int val) {
     printf("Storing the value %d at pixel %d %d\n", val, x, y);
     return val;
 }

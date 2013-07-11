@@ -32,7 +32,7 @@ bool is_const(Expr e, int value) {
     return false;
 }
 
-const int * EXPORT as_const_int(Expr e) {
+EXPORT const int * as_const_int(Expr e) {
     const IntImm *i = e.as<IntImm>();
     return i ? &(i->value) : NULL;
 }

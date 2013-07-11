@@ -900,7 +900,7 @@ struct Call : public ExprNode<Call> {
 
     // Halide uses calls internally to represent certain operations
     // (instead of IR nodes). These are matched by name.
-    static const std::string debug_to_file,
+    static EXPORT const std::string debug_to_file,
         shuffle_vector,
         interleave_vectors,
         reinterpret,

@@ -10,8 +10,12 @@
 #include <memory>
 #include <limits>
 
+#ifdef _HAS_CPP0X
+using std::shared_ptr;
+#else
 #include <tr1/memory>
 using std::tr1::shared_ptr;
+#endif
 
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED

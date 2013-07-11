@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <float.h>
+#include <limits>
 
 #define INLINE inline __attribute__((used)) __attribute__((always_inline)) __attribute__((nothrow))
 
@@ -18,11 +19,17 @@ INLINE float acos_f32(float x) {return acosf(x);}
 INLINE float tan_f32(float x) {return tanf(x);}
 INLINE float atan_f32(float x) {return atanf(x);}
 INLINE float sinh_f32(float x) {return sinhf(x);}
+#ifndef _WIN32
 INLINE float asinh_f32(float x) {return asinhf(x);}
+#endif
 INLINE float cosh_f32(float x) {return coshf(x);}
+#ifndef _WIN32
 INLINE float acosh_f32(float x) {return acoshf(x);}
+#endif
 INLINE float tanh_f32(float x) {return tanhf(x);}
+#ifndef _WIN32
 INLINE float atanh_f32(float x) {return atanhf(x);}
+#endif
 INLINE float hypot_f32(float x, float y) {return hypotf(x, y);}
 INLINE float exp_f32(float x) {return expf(x);}
 INLINE float log_f32(float x) {return logf(x);}
@@ -39,11 +46,17 @@ INLINE double acos_f64(double x) {return acos(x);}
 INLINE double tan_f64(double x) {return tan(x);}
 INLINE double atan_f64(double x) {return atan(x);}
 INLINE double sinh_f64(double x) {return sinh(x);}
+#ifndef _WIN32
 INLINE double asinh_f64(double x) {return asinh(x);}
+#endif
 INLINE double cosh_f64(double x) {return cosh(x);}
+#ifndef _WIN32
 INLINE double acosh_f64(double x) {return acosh(x);}
+#endif
 INLINE double tanh_f64(double x) {return tanh(x);}
+#ifndef _WIN32
 INLINE double atanh_f64(double x) {return atanh(x);}
+#endif
 INLINE double hypot_f64(double x, double y) {return hypot(x, y);}
 INLINE double exp_f64(double x) {return exp(x);}
 INLINE double log_f64(double x) {return log(x);}
@@ -80,8 +93,8 @@ INLINE int64_t abs_i64(int64_t a) {return a >= 0 ? a : -a;}
 INLINE float abs_f32(float a) {return fabsf(a);}
 INLINE double abs_f64(double a) {return fabs(a);}
 
-INLINE float nan_f32() {return NAN;}
-INLINE float neg_inf_f32() {return -INFINITY;}
-INLINE float inf_f32() {return INFINITY;}
+INLINE float nan_f32() {return std::numeric_limits<float>::signaling_NaN();}
+INLINE float neg_inf_f32() {return -std::numeric_limits<float>::infinity();}
+INLINE float inf_f32() {return std::numeric_limits<float>::infinity();}
 
 }

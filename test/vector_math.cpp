@@ -4,6 +4,12 @@
 #include <string.h>
 #include <cmath> 
 
+#ifdef _WIN32
+#define ISFINITE(x) _finite(x)
+#else
+#define ISFINITE(x) std::isfinite(x)
+#endif
+
 using namespace Halide;
 
 // Make some functions for turning types into strings
@@ -452,13 +458,13 @@ bool test(int vec_width) {
                 if (a >= 0) 
                     worst_pow_mantissa = std::max(worst_pow_mantissa, pow_mantissa_error);
                 
-                if (std::isfinite(correct_log)) 
+                if (ISFINITE(correct_log))
                     worst_fast_log_mantissa = std::max(worst_fast_log_mantissa, fast_log_mantissa_error);
                 
-                if (std::isfinite(correct_exp)) 
+                if (ISFINITE(correct_exp))
                     worst_fast_exp_mantissa = std::max(worst_fast_exp_mantissa, fast_exp_mantissa_error);
                 
-                if (std::isfinite(correct_pow) && a > 0)
+                if (ISFINITE(correct_pow) && a > 0)
                     worst_fast_pow_mantissa = std::max(worst_fast_pow_mantissa, fast_pow_mantissa_error);
 
                 if (log_mantissa_error > 2) {
@@ -473,15 +479,15 @@ bool test(int vec_width) {
                     printf("pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
                            a, b/16.0f, im17(x, y), correct_pow, correct_pow_mantissa, pow_mantissa);
                 }
-                if (std::isfinite(correct_log) && fast_log_mantissa_error > 64) {
+                if (ISFINITE(correct_log) && fast_log_mantissa_error > 64) {
                     printf("fast_log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
                            a, im18(x, y), correct_log, correct_log_mantissa, fast_log_mantissa);
                 }
-                if (std::isfinite(correct_exp) && fast_exp_mantissa_error > 64) {
+                if (ISFINITE(correct_exp) && fast_exp_mantissa_error > 64) {
                     printf("fast_exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
                            b, im19(x, y), correct_exp, correct_exp_mantissa, fast_exp_mantissa);
                 }
-                if (a >= 0 && std::isfinite(correct_pow) && fast_pow_mantissa_error > 128) {
+                if (a >= 0 && ISFINITE(correct_pow) && fast_pow_mantissa_error > 128) {
                     printf("fast_pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, b/16.0f, im20(x, y), correct_pow, correct_pow_mantissa, fast_pow_mantissa);
                 }
