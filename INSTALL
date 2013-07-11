@@ -62,8 +62,11 @@ To check these out:
   % git clone http://git.chromium.org/native_client/pnacl-clang.git clang
   % cd ../..
 
-To enable all Halide targets, configure it like so:
-  % ./configure --enable-assertions --enable-optimized --enable-targets=arm,x86,nvptx
+To enable all Halide targets, build it like so:
+  % mkdir build
+  % cd build
+  % cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+  % make -j8
 
 It will possibly be helpful to get the entire dev tree for
 PNaCl. Documentation for this is here:
@@ -81,7 +84,7 @@ variables (on the command line or by editing the Makefile):
  Point LLVM_CONFIG to the llvm-config that lives in your pnacl llvm
  build. E.g:
 
-  % export LLVM_CONFIG=<path-to-Halide>/llvm/pnacl-llvm/Release+Asserts/bin/llvm-config
+  % export LLVM_CONFIG=<path-to-Halide>/llvm/pnacl-llvm/build/bin/llvm-config
 
  Change WITH_NATIVE_CLIENT to "true" (or any non-empty value):
 
