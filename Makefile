@@ -115,22 +115,22 @@ RUNTIME_OPTS_x86_64_avx_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 
 RUNTIME_OPTS_x86_32_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=k8 -isystem $(NATIVE_CLIENT_X86_INCLUDE)
 RUNTIME_OPTS_x86_32_sse41_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=penryn -isystem $(NATIVE_CLIENT_X86_INCLUDE)
 RUNTIME_OPTS_arm_nacl = -Xclang -target-cpu -Xclang "" -Xclang -triple -Xclang arm-unknown-nacl -m32 -isystem $(NATIVE_CLIENT_ARM_INCLUDE)
-RUNTIME_LL_STUBS_x86_32 = src/runtime/x86.ll
-RUNTIME_LL_STUBS_x86_32_sse41 = src/runtime/x86.ll src/runtime/x86_sse41.ll
-RUNTIME_LL_STUBS_x86_64 = src/runtime/x86.ll
-RUNTIME_LL_STUBS_x86_64_sse41 = src/runtime/x86.ll src/runtime/x86_sse41.ll
-RUNTIME_LL_STUBS_x86_64_avx = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll
-RUNTIME_LL_STUBS_arm = src/runtime/arm.ll
-RUNTIME_LL_STUBS_arm_android = src/runtime/arm.ll
-RUNTIME_LL_STUBS_opencl_host = $(RUNTIME_LL_STUBS_x86)
-RUNTIME_LL_STUBS_ptx_host = $(RUNTIME_LL_STUBS_x86)
+RUNTIME_LL_STUBS_x86_32 = src/runtime/x86.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_x86_32_sse41 = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_x86_64 = src/runtime/x86.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_x86_64_sse41 = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_x86_64_avx = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_arm = src/runtime/arm.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_arm_android = src/runtime/arm.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_opencl_host = $(RUNTIME_LL_STUBS_x86) src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_ptx_host = $(RUNTIME_LL_STUBS_x86) src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_ptx_dev = src/runtime/ptx_dev.ll
-RUNTIME_LL_STUBS_x86_32_nacl = src/runtime/x86.ll
-RUNTIME_LL_STUBS_x86_32_sse41_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll
-RUNTIME_LL_STUBS_x86_64_nacl = src/runtime/x86.ll
-RUNTIME_LL_STUBS_x86_64_sse41_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll
-RUNTIME_LL_STUBS_x86_64_avx_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll
-RUNTIME_LL_STUBS_arm_nacl = src/runtime/arm.ll
+RUNTIME_LL_STUBS_x86_32_nacl = src/runtime/x86.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_x86_32_sse41_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_x86_64_nacl = src/runtime/x86.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_x86_64_sse41_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_x86_64_avx_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_arm_nacl = src/runtime/arm.ll src/runtime/posix_math.ll
 
 -include $(OBJECTS:.o=.d)
 
