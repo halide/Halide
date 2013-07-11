@@ -103,6 +103,22 @@ void Function::define(const vector<string> &args, Expr value) {
     check.pure_args = args;
     value.accept(&check);
 
+    // Make sure all the vars in the args have unique non-empty names
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].empty()) {
+            std::cerr << "In the left-hand-side of the definition of " << name()
+                      << ", argument " << i << " has an empty name\n";
+            assert(false);
+        }
+        for (size_t j = 0; j < i; j++) {
+            if (args[i] == args[j]) {
+                std::cerr << "In the left-hand-side of the definition of " << name()
+                          << ", arguments " << j << " and " << i << " have the same name: " << args[i] << "\n";
+                assert(false);
+            }
+        }
+    }
+
     value = common_subexpression_elimination(value);
 
     assertf(!check.reduction_domain.defined(), "Reduction domain referenced in pure function definition", name());
