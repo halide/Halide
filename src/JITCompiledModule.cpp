@@ -116,7 +116,6 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     options.PositionIndependentExecutable = true;
     options.EnableSegmentedStacks = false;
     options.UseInitArray = false;
-    options.SSPBufferSize = 0;
 
     EngineBuilder engine_builder(m);
     engine_builder.setTargetOptions(options);
