@@ -314,7 +314,6 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     options.PositionIndependentExecutable = true;
     options.EnableSegmentedStacks = false;
     options.UseInitArray = false;
-    options.SSPBufferSize = 0;
 
     TargetMachine *target_machine =
         target->createTargetMachine(module->getTargetTriple(),
