@@ -28,7 +28,8 @@ public:
 
     ~JITModuleHolder() {
         for (size_t i = 0; i < cleanup_routines.size(); i++) {
-            debug(1) << "Calling target specific cleanup routine at " << (void *)(cleanup_routines[i]) << "\n";
+            void *ptr = reinterpret_bits<void *>(cleanup_routines[i]);
+            debug(1) << "Calling target specific cleanup routine at " << ptr << "\n";
             (*cleanup_routines[i])();
         }
 
@@ -81,7 +82,7 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
         assert(false);
     }
 
-    *result = (FP)f;
+    *result = reinterpret_bits<FP>(f);
 
 }
 
@@ -145,7 +146,8 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
 
     hook_up_function_pointer(ee, m, function_name, true, &function);
 
-    debug(1) << "JIT compiled function pointer 0x" << std::hex << (unsigned long)function << std::dec << "\n";
+    unsigned long function_address = reinterpret_bits<unsigned long>(function);
+    debug(1) << "JIT compiled function pointer 0x" << std::hex << function_address << std::dec << "\n";
 
     hook_up_function_pointer(ee, m, function_name + "_jit_wrapper", true, &wrapped_function);
     hook_up_function_pointer(ee, m, "halide_copy_to_host", false, &copy_to_host);
