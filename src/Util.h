@@ -15,6 +15,7 @@
 
 #include <vector>
 #include <string>
+#include <cstring>
 
 // by default, the symbol EXPORT does nothing. In windows dll builds we can define it to __declspec(dllexport)
 #ifdef _WINDOWS_DLL
