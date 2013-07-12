@@ -648,7 +648,7 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
     WhereIsBufferUsed usage(alloc->name);
     alloc->accept(&usage);
 
-    Allocation host_allocation = {NULL, 0, NULL};
+    Allocation host_allocation = {NULL, 0, NULL, NULL};
     Value *saved_stack = NULL;
     if (usage.used_on_host) {
         debug(2) << alloc->name << " is used on the host\n";

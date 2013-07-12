@@ -1019,7 +1019,7 @@ void validate_arguments(const vector<Argument> &args, Stmt lowered) {
         }
     }
 }
-};
+}
 
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name) {
