@@ -9,7 +9,7 @@
 #include <assert.h>
 #include "../buffer_t.h"
 
-// The PTX host extends the x86 target
+// The OpenCL host extends the x86 target
 #include "posix_allocator.cpp"
 #include "posix_clock.cpp"
 #include "posix_error_handler.cpp"
@@ -26,11 +26,9 @@
 #endif
 #endif
 
-#ifdef __APPLE__
-#include <OpenCL/cl.h>
-#else
-#include <CL/cl.h>
-#endif
+// OpenCL defines are included simply by embedding the standard Khronos cl.h,
+// cl_platform.h headers in the project. They are licensed permissively enough.
+#include "CL/cl.h"
 
 #define WEAK __attribute__((weak))
 
