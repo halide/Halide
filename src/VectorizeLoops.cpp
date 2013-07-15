@@ -1,6 +1,7 @@
 #include "VectorizeLoops.h"
 #include "IRMutator.h"
 #include "Scope.h"
+#include "IRPrinter.h"
 
 namespace Halide {
 namespace Internal {
@@ -214,7 +215,13 @@ class VectorizeLoops : public IRMutator {
     void visit(const For *for_loop) {
         if (for_loop->for_type == For::Vectorized) {
             const IntImm *extent = for_loop->extent.as<IntImm>();
-            assert(extent && "Can only vectorize for loops over a constant extent");    
+            if (!extent || extent->value <= 1) {
+                std::cerr << "Loop over " << for_loop->name 
+                          << " has extent " << for_loop->extent
+                          << ". Can only vectorize loops over a "
+                          << "constant extent > 1\n";
+                assert(false);
+            }
 
             // Replace the var with a ramp within the body
             Expr for_var = Variable::make(Int(32), for_loop->name);                
