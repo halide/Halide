@@ -136,8 +136,8 @@ RUNTIME_LL_STUBS_arm_nacl = src/runtime/arm.ll src/runtime/posix_math.ll
 
 $(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/bitcode2cpp src/runtime/*.cpp src/runtime/*.ll $(BUILD_DIR)/llvm_ok $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o - | \
-	cat - $(RUNTIME_LL_STUBS_$*) | \
+	$(CLANG) $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o $(BUILD_DIR)/initmod.$*.ll && \
+	cat $(BUILD_DIR)/initmod.$*.ll $(RUNTIME_LL_STUBS_$*) | \
 	$(LLVM_AS) -o - | \
 	./$(BIN_DIR)/bitcode2cpp $* > $@
 
