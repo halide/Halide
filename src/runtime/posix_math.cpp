@@ -3,67 +3,12 @@
 #include <float.h>
 #include <limits>
 
-#define INLINE inline __attribute__((used)) __attribute__((always_inline)) __attribute__((nothrow))
+#define INLINE inline __attribute__((used)) __attribute__((always_inline)) __attribute__((nothrow)) __attribute__((pure))
 
 extern "C" {
-#ifdef _WIN32
-float roundf(float value) { return floor(value + 0.5f); }
-double round(double value) { return floor(value + 0.5); }
-#endif
 
-INLINE float sqrt_f32(float x) {return sqrtf(x);}
-INLINE float sin_f32(float x) {return sinf(x);}
-INLINE float asin_f32(float x) {return asinf(x);}
-INLINE float cos_f32(float x) {return cosf(x);}
-INLINE float acos_f32(float x) {return acosf(x);}
-INLINE float tan_f32(float x) {return tanf(x);}
-INLINE float atan_f32(float x) {return atanf(x);}
-INLINE float sinh_f32(float x) {return sinhf(x);}
-#ifndef _WIN32
-INLINE float asinh_f32(float x) {return asinhf(x);}
-#endif
-INLINE float cosh_f32(float x) {return coshf(x);}
-#ifndef _WIN32
-INLINE float acosh_f32(float x) {return acoshf(x);}
-#endif
-INLINE float tanh_f32(float x) {return tanhf(x);}
-#ifndef _WIN32
-INLINE float atanh_f32(float x) {return atanhf(x);}
-#endif
-INLINE float hypot_f32(float x, float y) {return hypotf(x, y);}
-INLINE float exp_f32(float x) {return expf(x);}
-INLINE float log_f32(float x) {return logf(x);}
-INLINE float pow_f32(float x, float y) {return powf(x, y);}
-INLINE float floor_f32(float x) {return floorf(x);}
-INLINE float ceil_f32(float x) {return ceilf(x);}
-INLINE float round_f32(float x) {return roundf(x);}
-
-INLINE double sqrt_f64(double x) {return sqrt(x);}
-INLINE double sin_f64(double x) {return sin(x);}
-INLINE double asin_f64(double x) {return asin(x);}
-INLINE double cos_f64(double x) {return cos(x);}
-INLINE double acos_f64(double x) {return acos(x);}
-INLINE double tan_f64(double x) {return tan(x);}
-INLINE double atan_f64(double x) {return atan(x);}
-INLINE double sinh_f64(double x) {return sinh(x);}
-#ifndef _WIN32
-INLINE double asinh_f64(double x) {return asinh(x);}
-#endif
-INLINE double cosh_f64(double x) {return cosh(x);}
-#ifndef _WIN32
-INLINE double acosh_f64(double x) {return acosh(x);}
-#endif
-INLINE double tanh_f64(double x) {return tanh(x);}
-#ifndef _WIN32
-INLINE double atanh_f64(double x) {return atanh(x);}
-#endif
-INLINE double hypot_f64(double x, double y) {return hypot(x, y);}
-INLINE double exp_f64(double x) {return exp(x);}
-INLINE double log_f64(double x) {return log(x);}
-INLINE double pow_f64(double x, double y) {return pow(x, y);}
-INLINE double floor_f64(double x) {return floor(x);}
-INLINE double ceil_f64(double x) {return ceil(x);}
-INLINE double round_f64(double x) {return round(x);}
+// Transcendentals have been moved into posix_math.ll so that the
+// calls can be marked as pure.
 
 INLINE float maxval_f32() {return FLT_MAX;}
 INLINE float minval_f32() {return -FLT_MAX;}
@@ -90,8 +35,6 @@ INLINE int8_t abs_i8(int8_t a) {return a >= 0 ? a : -a;}
 INLINE int16_t abs_i16(int16_t a) {return a >= 0 ? a : -a;}
 INLINE int32_t abs_i32(int32_t a) {return a >= 0 ? a : -a;}
 INLINE int64_t abs_i64(int64_t a) {return a >= 0 ? a : -a;}
-INLINE float abs_f32(float a) {return fabsf(a);}
-INLINE double abs_f64(double a) {return fabs(a);}
 
 INLINE float nan_f32() {return std::numeric_limits<float>::signaling_NaN();}
 INLINE float neg_inf_f32() {return -std::numeric_limits<float>::infinity();}

@@ -205,6 +205,7 @@ Value *CodeGen_ARM::call_intrin(llvm::Type *result_type,
     }
 
     debug(4) << "Creating call to " << name << "\n";
+
     return builder->CreateCall(fn, arg_values, name);
 
 }
@@ -377,7 +378,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         {"vqmovnsu.v4i16", _u16q(wild_i32x4), Simple},
         {"vqmovnsu.v2i32", _u32q(wild_i64x2), Simple},
 
-        {"sentinel", 0}
+        {"sentinel", 0, Simple}
 
     };
 

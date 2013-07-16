@@ -1,5 +1,10 @@
 #include <stdint.h>
-#include <ctime>
+
+#if defined(_WIN32)
+  #include <time.h>
+#else
+  #include <sys/time.h>
+#endif
 
 extern "C" {
 
@@ -13,6 +18,4 @@ WEAK int halide_start_clock() {
 WEAK int halide_current_time() {
 	clock_t now = clock();
 	return (now - halide_reference_clock) * 1000 / CLOCKS_PER_SEC;
-}
-
 }

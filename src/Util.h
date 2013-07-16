@@ -15,6 +15,7 @@
 
 #include <vector>
 #include <string>
+#include <cstring>
 
 // by default, the symbol EXPORT does nothing. In windows dll builds we can define it to __declspec(dllexport)
 #ifdef _WINDOWS_DLL
@@ -91,6 +92,15 @@ std::vector<T> vec(T a, T b, T c, T d, T e, T f) {
     return v;
 }
 // @}
+
+/** An aggressive form of reinterpret cast used for correct type-punning. */
+template<typename DstType, typename SrcType>
+DstType reinterpret_bits(const SrcType &src) {
+    assert(sizeof(SrcType) == sizeof(DstType));
+    DstType dst;
+    memcpy(&dst, &src, sizeof(SrcType));
+    return dst;
+}
 
 /** Generate a unique name starting with the given character. It's
  * unique relative to all other calls to unique_name done by this
