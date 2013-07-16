@@ -11,6 +11,7 @@
 #include <set>
 #include <sstream>
 #include "Tracing.h"
+#include "Profiling.h"
 #include "StorageFlattening.h"
 #include "BoundsInference.h"
 #include "VectorizeLoops.h"
@@ -1012,6 +1013,10 @@ Stmt lower(Function f) {
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s);
     debug(2) << "Tracing injected:\n" << s << '\n';
+
+    debug(1) << "Injecting profiling...\n";
+    s = inject_profiling(s, f.name());
+    debug(2) << "Profiling injected:\n" << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(s);

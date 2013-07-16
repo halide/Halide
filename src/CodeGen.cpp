@@ -1169,6 +1169,12 @@ void CodeGen::visit(const Call *op) {
             // From the point of view of the continued code, this returns true.
             value = codegen(const_true());
 
+        } else if (op->name == Call::profiling_timer) {
+            assert(op->args.size() == 0);
+            llvm::Function *fn = Intrinsic::getDeclaration(module,
+                Intrinsic::readcyclecounter, std::vector<llvm::Type*>());
+            CallInst *call = builder->CreateCall(fn);
+            value = call;
         } else {
             std::cerr << "Unknown intrinsic: " << op->name << "\n";
             assert(false);
@@ -1214,7 +1220,7 @@ void CodeGen::visit(const Call *op) {
 
         bool has_side_effects = false;
         // TODO: Need a general solution here
-        if (op->name == "halide_current_time") {
+        if (op->name == "halide_current_time" || op->name == "halide_current_time_usec") {
             has_side_effects = true;
         }
 
@@ -1294,10 +1300,15 @@ void CodeGen::visit(const PrintStmt *op) {
     ostringstream format_string;
     format_string << op->prefix;
 
-    string fmt_of_type[3];
-    fmt_of_type[Halide::Type::UInt] = "%u";
-    fmt_of_type[Halide::Type::Int] = "%d";
-    fmt_of_type[Halide::Type::Float] = "%3.3f";
+    string fmt_of_type_32[3];
+    fmt_of_type_32[Halide::Type::UInt] = "%u";
+    fmt_of_type_32[Halide::Type::Int] = "%d";
+    fmt_of_type_32[Halide::Type::Float] = "%3.3f";
+
+    string fmt_of_type_64[3];
+    fmt_of_type_64[Halide::Type::UInt] = "%lu";
+    fmt_of_type_64[Halide::Type::Int] = "%ld";
+    fmt_of_type_64[Halide::Type::Float] = "%3.3f";
 
     vector<Value *> args;
     vector<Halide::Type> dst_types;
@@ -1305,6 +1316,7 @@ void CodeGen::visit(const PrintStmt *op) {
         format_string << ' ';
         Expr arg = op->args[i];
         Value *ll_arg = codegen(arg);
+        string* fmt_of_type = arg.type().bits > 32 ? fmt_of_type_64 : fmt_of_type_32;
         if (arg.type().is_vector()) {
             format_string << '[';
             for (int j = 0; j < arg.type().width; j++) {
@@ -1328,9 +1340,11 @@ void CodeGen::visit(const PrintStmt *op) {
     // Now cast all the args to the appropriate types
     for (size_t i = 0; i < args.size(); i++) {
         if (dst_types[i].is_int()) {
-            args[i] = builder->CreateIntCast(args[i], i32, true);
+            args[i] = builder->CreateIntCast(args[i],
+                dst_types[i].bits > 32 ? i64 : i32, true);
         } else if (dst_types[i].is_uint()) {
-            args[i] = builder->CreateIntCast(args[i], i32, false);
+            args[i] = builder->CreateIntCast(args[i],
+                dst_types[i].bits > 32 ? i64 : i32, false);
         } else {
             args[i] = builder->CreateFPCast(args[i], f64);
         }
