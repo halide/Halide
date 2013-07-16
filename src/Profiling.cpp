@@ -140,6 +140,9 @@ private:
         Expr idx = get_index(full_name);
 
         string begin_var_name = "begin_" + full_name;
+        // variable name doesn't matter at all, but de-spacing
+        // makes the Stmt output easier to read
+        std::replace(begin_var_name.begin(), begin_var_name.end(), ' ', '_');
         Expr begin_var = Variable::make(UInt(64), begin_var_name);
 
         Expr old_val = Load::make(UInt(64), kBufName, idx, Buffer(), Parameter());
@@ -178,11 +181,16 @@ private:
     }
 
     void visit(const For *op) {
+        IRMutator::visit(op);
+        if (level >= 1) {
+            if (op->for_type == For::Parallel) {
+                assert(false && "Halide Profiler does not yet support parallel schedules. "
+                    "try removing parallel() schedules and re-running.");
+            }
+        }
         // We only instrument loops at profiling level 2 or higher
         if (level >= 2) {
             stmt = add_count_and_ticks("forloop", op->name, stmt);
-        } else {
-            IRMutator::visit(op);
         }
     }
 };
