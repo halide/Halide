@@ -145,8 +145,8 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
 
     hook_up_function_pointer(ee, m, function_name, true, &function);
 
-    unsigned long function_address = reinterpret_bits<unsigned long>(function);
-    debug(1) << "JIT compiled function pointer 0x" << std::hex << function_address << std::dec << "\n";
+    void *function_address = reinterpret_bits<void *>(function);
+    debug(1) << "JIT compiled function pointer " << function_address << "\n";
 
     hook_up_function_pointer(ee, m, function_name + "_jit_wrapper", true, &wrapped_function);
     hook_up_function_pointer(ee, m, "halide_copy_to_host", false, &copy_to_host);
