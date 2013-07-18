@@ -38,7 +38,7 @@ private:
             // Don't capture implicit vars
             return;
         }
-        
+
         if (v->reduction_domain.defined()) {
             // Skip reduction variables
             return;
@@ -59,37 +59,54 @@ private:
 }
 
 Expr sum(Expr e) {
+    return sum(e, "sum");
+}
+
+Expr product(Expr e) {
+    return product(e, "product");
+}
+
+Expr maximum(Expr e) {
+    return maximum(e, "maximum");
+}
+
+Expr minimum(Expr e) {
+    return minimum(e, "minimum");
+}
+
+Expr sum(Expr e, const std::string &name) {
     Internal::FindFreeVars v;
     e.accept(&v);
-    Func f("sum");
+    Func f(name);
     f(v.free_vars) += e;
     return f(v.free_vars);
 }
 
-Expr product(Expr e) {
+Expr product(Expr e, const std::string &name) {
     Internal::FindFreeVars v;
     e.accept(&v);
-    Func f("product");
+    Func f(name);
     f(v.free_vars) *= e;
     return f(v.free_vars);
 }
 
-Expr maximum(Expr e) {
+Expr maximum(Expr e, const std::string &name) {
     Internal::FindFreeVars v;
     e.accept(&v);
-    Func f("maximum");
+    Func f(name);
     f(v.free_vars) = e.type().min();
     f(v.free_vars) = max(f(v.free_vars), e);
     return f(v.free_vars);
 }
 
-Expr minimum(Expr e) {
+Expr minimum(Expr e, const std::string &name) {
     Internal::FindFreeVars v;
     e.accept(&v);
-    Func f("minimum");
+    Func f(name);
     f(v.free_vars) = e.type().max();
     f(v.free_vars) = min(f(v.free_vars), e);
     return f(v.free_vars);
 }
+
 
 }
