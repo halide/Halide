@@ -166,7 +166,7 @@ namespace {
 int main(int argc, char** argv) {
 
   if (HasOpt(argv, argv + argc, "-h")) {
-    printf("HalideProf [-f funcname] [-sort c|t|to] < profiledata\n");
+    printf("HalideProf [-f funcname] [-sort c|t|to] [-top N] < profiledata\n");
     return 0;
   }
 
@@ -183,6 +183,12 @@ int main(int argc, char** argv) {
   } else {
     std::cerr << "Unknown value for -sort: " << sort_by << "\n";
     exit(-1);
+  }
+
+  int32_t top_n = 10;
+  std::string top_n_str = GetOpt(argv, argv + argc, "-top");
+  if (!top_n_str.empty()) {
+    std::istringstream(top_n_str) >> top_n;
   }
 
   FuncInfoMap func_info_map;
@@ -214,7 +220,6 @@ int main(int argc, char** argv) {
       << std::setw(8) << std::fixed << "%-only"
       << "\n";
     std::vector<OpInfo> op_info = SortOpInfo(f->second, sort_by_func);
-    double po_total = 0.0f;
     for (std::vector<OpInfo>::const_iterator o = op_info.begin(); o != op_info.end(); ++o) {
       const OpInfo& op_info = *o;
       std::cout
@@ -228,11 +233,10 @@ int main(int argc, char** argv) {
         << std::setw(12) << std::setprecision(2) << std::fixed << (op_info.usec_only / 1000.0)
         << std::setw(8) << std::setprecision(2) << std::fixed << (op_info.percent_only * 100.0)
         << "\n";
-      po_total += op_info.percent_only;
+      if (--top_n <= 0) {
+        break;
+      }
     }
-    std::cout << "%-only total: "
-      << std::setw(8) << std::setprecision(2) << std::fixed << (po_total * 100.0)
-      << "\n";
   }
 }
 
