@@ -1,11 +1,14 @@
 #include <Halide.h>
 #include <stdio.h>
+#ifndef _MSC_VER
+#include <unistd.h>
+#endif
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
     Func f, g, h, j;
-    Var x, y;       
+    Var x, y;
     f(x, y) = x + y;
     g(x, y) = cast<float>(f(x, y) + f(x+1, y));
     h(x, y) = f(x, y) + g(x, y);
@@ -18,7 +21,9 @@ int main(int argc, char **argv) {
     const char *result_file = "compile_to_lowered_stmt.stmt";
     j.compile_to_lowered_stmt(result_file);
 
+    #ifndef _MSC_VER
     assert(access("compile_to_lowered_stmt.stmt", F_OK) == 0 && "Output file not created.");
+    #endif
 
     printf("Success!\n");
     return 0;
