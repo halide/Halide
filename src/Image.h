@@ -272,7 +272,7 @@ public:
     // @}
 
     /** Get a pointer to the raw buffer_t that this image holds */
-    operator const buffer_t *() const {return buffer.raw_buffer();}
+    operator buffer_t *() const {return buffer.raw_buffer();}
 
     /** Get a handle on the Buffer that this image holds */
     operator Buffer() const {return buffer;}
