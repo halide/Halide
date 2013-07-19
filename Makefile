@@ -207,7 +207,7 @@ tutorial_%: $(BIN_DIR)/tutorial_%
 	@-echo
 
 .PHONY: test_apps
-test_apps: $(BIN_DIR)/libHalide.a
+test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/bilateral_grid clean
 	make -C apps/bilateral_grid out.png
 	make -C apps/local_laplacian clean
