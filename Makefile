@@ -49,8 +49,15 @@ TEST_CXX_FLAGS += -rdynamic
 endif
 
 # Compiling the tutorials requires libpng
-LIBPNG_LIBS ?= -L/opt/local/lib -lpng
+LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
+# Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
+ifneq (,$(findstring -m32,$(CXX)))
+ifneq (,$(findstring x86_64,$(LIBPNG_LIBS_DEFAULT)))
+LIBPNG_LIBS ?= -lpng
+endif
+endif
+LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
 ifdef BUILD_PREFIX
 BUILD_DIR = build/$(BUILD_PREFIX)
@@ -170,7 +177,7 @@ TUTORIALS = $(shell ls tutorial/*.cpp)
 tests: build_tests run_tests
 
 run_tests: $(TESTS:test/%.cpp=test_%) $(ERROR_TESTS:test/error/%.cpp=error_%) $(TUTORIALS:tutorial/%.cpp=tutorial_%)
-build_tests: $(TESTS:test/%.cpp=$(BIN_DIR)/test_%) $(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) $(TUTORIAL:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
+build_tests: $(TESTS:test/%.cpp=$(BIN_DIR)/test_%) $(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) $(TUTORIALS:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
@@ -200,7 +207,7 @@ tutorial_%: $(BIN_DIR)/tutorial_%
 	@-echo
 
 .PHONY: test_apps
-test_apps: $(BIN_DIR)/libHalide.a
+test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/bilateral_grid clean
 	make -C apps/bilateral_grid out.png
 	make -C apps/local_laplacian clean
