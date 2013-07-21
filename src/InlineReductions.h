@@ -5,7 +5,7 @@
 
 /** \file
  * Defines some inline reductions: sum, product, minimum, maximum.
- */ 
+ */
 namespace Halide {
 
 /** An inline reduction. This is suitable for convolution-type
@@ -15,9 +15,9 @@ namespace Halide {
  * variables are still free in the return value, but the reduction
  * domain is captured - the result expression does not refer to a
  * reduction domain and can be used in a pure function definition.
- * 
+ *
  * An example:
- * 
+ *
  \code
  Func f, g;
  Var x;
@@ -35,6 +35,10 @@ EXPORT Expr sum(Expr);
 EXPORT Expr product(Expr);
 EXPORT Expr maximum(Expr);
 EXPORT Expr minimum(Expr);
+EXPORT Expr sum(Expr, const std::string &);
+EXPORT Expr product(Expr, const std::string &);
+EXPORT Expr maximum(Expr, const std::string &);
+EXPORT Expr minimum(Expr, const std::string &);
 //@}
 
 }

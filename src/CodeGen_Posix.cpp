@@ -13,7 +13,7 @@
 
 
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using std::vector;
@@ -24,14 +24,14 @@ using std::stack;
 
 using namespace llvm;
 
-CodeGen_Posix::CodeGen_Posix() : 
+CodeGen_Posix::CodeGen_Posix() :
     CodeGen(),
 
     // Vector types. These need an LLVMContext before they can be initialized.
-    i8x8(NULL), 
+    i8x8(NULL),
     i8x16(NULL),
     i8x32(NULL),
-    i16x4(NULL), 
+    i16x4(NULL),
     i16x8(NULL),
     i16x16(NULL),
     i32x2(NULL),
@@ -120,7 +120,7 @@ void CodeGen_Posix::init_module() {
     i32x4 = VectorType::get(i32, 4);
     i32x8 = VectorType::get(i32, 8);
     i64x2 = VectorType::get(i64, 2);
-    i64x4 = VectorType::get(i64, 4);    
+    i64x4 = VectorType::get(i64, 4);
     f32x2 = VectorType::get(f32, 2);
     f32x4 = VectorType::get(f32, 4);
     f32x8 = VectorType::get(f32, 8);
@@ -131,7 +131,7 @@ void CodeGen_Posix::init_module() {
 Value *CodeGen_Posix::save_stack() {
     llvm::Function *stacksave =
         llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stacksave);
-    return builder->CreateCall(stacksave);    
+    return builder->CreateCall(stacksave);
 }
 
 void CodeGen_Posix::restore_stack(llvm::Value *saved_stack) {
@@ -162,73 +162,19 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     llvm::Type *llvm_type = llvm_type_of(type);
 
     if (allocation.stack_size) {
-        // First, try to reuse an existing free block using a best-fit
-        // algorithm. Note that we don't actually need to fit, because
-        // it's possible to go back to the original alloca and
-        // increase its size.
-        int best_fit = -1;
-        int best_waste = 0;
-        for (size_t i = 0; i < free_stack_blocks.size(); i++) {
-            int waste = free_stack_blocks[i].stack_size - allocation.stack_size;
-            if (waste < 0) waste = -waste;
-            if (i == 0 || waste <= best_waste) {
-                best_fit = (int)i;
-                best_waste = waste;
-            }
-        }
-        
-        // Seems to be buggy. Disabled for now.
-        if (best_fit >= 0 && false) {
-
-            // Grab the old allocation and remove it from the free blocks list
-            Allocation old_alloc = free_stack_blocks[best_fit];
-            free_stack_blocks[best_fit] = free_stack_blocks[free_stack_blocks.size()-1];
-            free_stack_blocks.pop_back();
-
-            if (old_alloc.stack_size < allocation.stack_size) {
-                debug(2) << "Allocation of " << name << " reusing an old smaller allocation\n";
-                // We need to go back in time and rewrite the original
-                // alloca to be slightly larger so we can fit this one
-                // into the same space.
-                Value *size = ConstantInt::get(i32, allocation.stack_size/32);
-                // Insert the new version just before the old version
-                string old_name = old_alloc.alloca_inst->getName();
-                AllocaInst *new_alloca = new AllocaInst(i32x8, size, old_name + "_" + name, old_alloc.alloca_inst);
-                // Replace all uses of the old version with the new version
-                old_alloc.alloca_inst->replaceAllUsesWith(new_alloca);
-                // Delete the old version
-                old_alloc.alloca_inst->eraseFromParent();
-                // For future rewrites to this alloca, we want to rewrite the new version
-                allocation.alloca_inst = new_alloca;
-                
-            } else {
-                debug(2) << "Allocation of " << name << " reusing an old larger allocation\n";                
-                allocation.alloca_inst = old_alloc.alloca_inst;
-                allocation.stack_size = old_alloc.stack_size;
-            }
-
-            // No need to restore the stack if we're reusing an old allocation
-            allocation.saved_stack = NULL;
-
-            // The new allocation uses the same pointer and the same alloca instruction
-            allocation.ptr = old_alloc.ptr;                
-
-        } else {            
-            // Do a new 32-byte aligned alloca
-            allocation.saved_stack = save_stack();
-            Value *size = ConstantInt::get(i32, allocation.stack_size/32);
-            allocation.alloca_inst = builder->CreateAlloca(i32x8, size, name);
-            allocation.ptr = builder->CreatePointerCast(allocation.alloca_inst, llvm_type->getPointerTo());
-        }
+        // Do a new 32-byte aligned alloca
+        allocation.saved_stack = save_stack();
+        Value *size = ConstantInt::get(i32, allocation.stack_size/32);
+        Value *ptr = builder->CreateAlloca(i32x8, size, name);
+        allocation.ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
     } else {
         allocation.saved_stack = NULL;
-        allocation.alloca_inst = NULL;
         Value *llvm_size = codegen(size * bytes_per_element);
 
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("halide_malloc");
         malloc_fn->setDoesNotAlias(0);
-        assert(malloc_fn && "Could not find halide_malloc in module");        
+        assert(malloc_fn && "Could not find halide_malloc in module");
 
         llvm_size = builder->CreateIntCast(llvm_size, malloc_fn->arg_begin()->getType(), false);
 
@@ -250,9 +196,7 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     Allocation alloc = allocations.get(name);
 
     if (alloc.stack_size) {
-        debug(2) << "Moving allocation " << name << " onto the free stack blocks list\n";
-        // Mark this block as free, but don't restore the stack yet
-        free_stack_blocks.push_back(alloc);
+        // Free is a no-op for stack allocations
     } else {
         // Call free
         llvm::Function *free_fn = module->getFunction("halide_free");
@@ -268,24 +212,14 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
 void CodeGen_Posix::destroy_allocation(Allocation alloc) {
 
     if (alloc.saved_stack) {
-        // We should be in the free blocks list
-        bool found = false;
-        for (size_t i = 0; !found && i < free_stack_blocks.size(); i++) {            
-            if (free_stack_blocks[i].ptr == alloc.ptr) {
-                free_stack_blocks[i] = free_stack_blocks[free_stack_blocks.size()-1];
-                free_stack_blocks.pop_back();
-                found = true;
-            }
-        }
-        assert(found && "Stack allocation should have been in the free blocks list");
-
         restore_stack(alloc.saved_stack);
     }
-    
+
+    // Heap allocations have already been freed.
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
-    
+
     Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->size);
 
     codegen(alloc->body);
@@ -293,7 +227,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     // Should have been freed
     assert(!sym_exists(alloc->name + ".host"));
     assert(!allocations.contains(alloc->name));
-    
+
     debug(2) << "Destroying allocation " << alloc->name << "\n";
     destroy_allocation(allocation);
 }
@@ -310,7 +244,7 @@ void CodeGen_Posix::prepare_for_early_exit() {
         string name = iter->first;
         std::vector<Allocation> stash;
         while (allocations.contains(name)) {
-            stash.push_back(allocations.get(name));            
+            stash.push_back(allocations.get(name));
             free_allocation(name);
         }
 
