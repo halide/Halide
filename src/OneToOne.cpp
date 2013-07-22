@@ -18,6 +18,8 @@ public:
     FindVariable() : var(NULL), multiple(false) {}
 
 private:
+    using IRGraphVisitor::visit;
+
     void visit(const Let *let) {
         include(let->value);
         internal.push(let->name, 0);
