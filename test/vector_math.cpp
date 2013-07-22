@@ -378,7 +378,7 @@ bool test(int vec_width) {
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 A correct = input(x, y);
-                if (correct < 0) correct = -correct;
+                if (correct <= 0) correct = -correct;
                 if (im14(x, y) != correct) {
                     printf("im14(%d, %d) = %f instead of %f\n", x, y, (double)(im14(x, y)), (double)(correct));
                 }
