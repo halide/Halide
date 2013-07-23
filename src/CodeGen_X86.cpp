@@ -404,18 +404,21 @@ void CodeGen_X86::visit(const Div *op) {
             shift      = IntegerDivision::table_u8[const_divisor-2][2];
         }
 
+        assert(method != 0 && 
+               "method 0 division is for powers of two and should have been handled elsewhere");
+
         Value *num = codegen(op->a);
 
         // Widen, multiply, narrow
         llvm::Type *narrower = llvm_type_of(op->type);
         llvm::Type *wider = llvm_type_of(UInt(op->type.bits*2, op->type.width));
 
-        Value *mult = ConstantInt::get (narrower, multiplier);
+        Value *mult = ConstantInt::get(narrower, multiplier);
         Value *val = num;
 
         if (op->type == UInt(16, 8)) {
             val = call_intrin(narrower, "sse2.pmulhu.w", vec(val, mult));
-            if (shift && method != 2) {
+            if (shift && method == 1) {
                 Constant *shift_amount = ConstantInt::get(narrower, shift);
                 val = builder->CreateLShr(val, shift_amount);
             }
@@ -430,8 +433,8 @@ void CodeGen_X86::visit(const Div *op) {
 
             // Keep high half
             int shift_bits = op->type.bits;
-            // For methods 0 and 1, we can do the final shift here too
-            if (method != 2) {
+            // For method 1, we can do the final shift here too
+            if (method == 1) {
                 shift_bits += shift;
             }
             Constant *shift_amount = ConstantInt::get(wider, shift_bits);
