@@ -14,9 +14,7 @@ double currentTime() {
 #else
 #include <sys/time.h>
 double currentTime() {
-    timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
+    return (clock() * 1000.0) / CLOCKS_PER_SEC;
 }
 #endif
 
