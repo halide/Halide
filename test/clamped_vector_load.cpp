@@ -1,22 +1,6 @@
 #include <Halide.h>
-
 #include <stdio.h>
-
-#ifdef _WIN32
-extern "C" bool QueryPerformanceCounter(uint64_t *);
-extern "C" bool QueryPerformanceFrequency(uint64_t *);
-double currentTime() {
-    uint64_t t, freq;
-    QueryPerformanceCounter(&t);
-    QueryPerformanceFrequency(&freq);
-    return (t * 1000.0) / freq;
-}
-#else
-#include <sys/time.h>
-double currentTime() {
-    return (clock() * 1000.0) / CLOCKS_PER_SEC;
-}
-#endif
+#include "clock.h"
 
 using namespace Halide;
 

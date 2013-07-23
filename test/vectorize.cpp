@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <Halide.h>
+#include "clock.h"
 
 using namespace Halide;
 
@@ -18,22 +19,6 @@ DECL_SOT(uint32_t);
 DECL_SOT(int32_t);    
 DECL_SOT(float);    
 DECL_SOT(double);    
-
-#ifdef _WIN32
-extern "C" bool QueryPerformanceCounter(uint64_t *);
-extern "C" bool QueryPerformanceFrequency(uint64_t *);
-double currentTime() {
-    uint64_t t, freq;
-    QueryPerformanceCounter(&t);
-    QueryPerformanceFrequency(&freq);
-    return (t * 1000.0) / freq;
-}
-#else
-#include <sys/time.h>
-double currentTime() {
-    return (clock() * 1000.0) / CLOCKS_PER_SEC;
-}
-#endif
 
 template<typename A>
 bool test(int vec_width) {
