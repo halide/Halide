@@ -74,7 +74,7 @@ bool u_method_2(int den, int64_t mul, int sh_post, int bits) {
 bool s_method_0(int den, int sh_post, int bits) {
     int64_t min = -(1L << (bits-1)), max = (1L << (bits-1))-1;
     //for (int64_t num = min; num <= max; num++) {    
-    for (int iter = 0; iter < 100000L; iter++) {
+    for (int iter = 0; iter < 1000000L; iter++) {
         int64_t num = r(min, max);
         // Make sure we hit the extremes
         if (iter == 0) num = min;
@@ -90,7 +90,7 @@ bool s_method_1(int den, int64_t mul, int sh_post, int bits) {
     int64_t min = -(1 << (bits-1)), max = (1 << (bits-1))-1;
 
     //for (int64_t num = min; num <= max; num++) {    
-    for (int iter = 0; iter < 100000L; iter++) {
+    for (int iter = 0; iter < 1000000L; iter++) {
         int64_t num = r(min, max);
         // Make sure we hit the extremes
         if (iter == 0) num = min;
