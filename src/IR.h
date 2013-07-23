@@ -911,7 +911,8 @@ struct Call : public ExprNode<Call> {
         shift_left,
         shift_right,
         maybe_rewrite_buffer,
-        maybe_return;
+        maybe_return,
+        profiling_timer;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function

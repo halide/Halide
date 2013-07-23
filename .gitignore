@@ -63,23 +63,6 @@ apps/bilateral_grid/bilateral_grid
 apps/bilateral_grid/bilateral_grid.h
 
 # test intermediates
-test/*/*.so
-test/*/*.s
-test/*/*.png
-test/*/*.time
-test/cpp/*/*.lowered
-test/cpp/*/*.sexp
-test/cpp/*/*.def
-test/cpp/*/*_pseudojit.so
-test/cpp/*/*_pseudojit.c
-test/cpp/*/*.ptx
-test/cpp/*/passes.txt
-test/cpp/*/*.h
-test/*.h
-test/*.o
-test/cpp/*/*.o
-test/*.ptx
-test/*/*.tmp
 log.txt
 err.txt
 test/*.lowered

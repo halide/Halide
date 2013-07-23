@@ -2,7 +2,17 @@ CXX ?= g++
 
 HL_MODULES = daubechies_x.o inverse_daubechies_x.o haar_x.o inverse_haar_x.o
 
-PNGFLAGS=-L/opt/local/lib -lpng $(shell libpng-config --cflags)
+LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
+LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
+# Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
+ifneq (,$(findstring -m32,$(CXX)))
+ifneq (,$(findstring x86_64,$(LIBPNG_LIBS_DEFAULT)))
+LIBPNG_LIBS ?= -lpng
+endif
+endif
+LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
+PNGFLAGS=$(LIBPNG_LIBS) $(LIBPNG_CXX_FLAGS)
+
 ifeq ($(HL_TARGET),ptx)
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif

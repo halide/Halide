@@ -3,6 +3,7 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "Debug.h"
+#include "IRPrinter.h"
 #include <sstream>
 
 namespace Halide {
@@ -43,6 +44,14 @@ public:
             debug(3) << "Injecting bounds for " << funcs[i] << '\n';
             assert(region.size() == f.args().size() && "Dimensionality mismatch between function and region required");
             for (size_t j = 0; j < region.size(); j++) {
+                if (!region[j].min.defined() || !region[j].extent.defined()) {
+                    std::cerr << "Use of " << f.name()
+                              << " is unbounded in dimension " << j
+                              << " in the following fragment of generated code: \n"
+                              << for_loop->body;
+                    assert(false);
+                }
+
                 const string &arg_name = f.args()[j];
                 body = LetStmt::make(f.name() + "." + arg_name + ".min", region[j].min, body);
                 body = LetStmt::make(f.name() + "." + arg_name + ".extent", region[j].extent, body);
@@ -63,10 +72,7 @@ public:
         if (pipeline->update.defined()) {
             // Even though there are calls to a function within the
             // update step of a pipeline, we shouldn't modify the
-            // bounds computed - they've already been fixed. Any
-            // dependencies required should have been scheduled within
-            // the initialization, not the update step, so these
-            // bounds can't be of use to anyone anyway.
+            // bounds computed - they've already been fixed.
             in_update.push(pipeline->name, 0);
             update = mutate(pipeline->update);
             in_update.pop(pipeline->name);

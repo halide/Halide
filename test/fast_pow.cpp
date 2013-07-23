@@ -1,23 +1,6 @@
 #include <Halide.h>
 #include <stdio.h>
-
-#ifdef _WIN32
-extern "C" bool QueryPerformanceCounter(uint64_t *);
-extern "C" bool QueryPerformanceFrequency(uint64_t *);
-double currentTime() {
-    uint64_t t, freq;
-    QueryPerformanceCounter(&t);
-    QueryPerformanceFrequency(&freq);
-    return (t * 1000.0) / freq;
-}
-#else
-#include <sys/time.h>
-double currentTime() {
-    timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
-}
-#endif
+#include "clock.h"
 
 using namespace Halide;
 
@@ -38,40 +21,51 @@ int main(int argc, char **argv) {
     g.compile_jit();
     h.compile_jit();
 
-    Image<float> correct_result(1024, 768);
-    Image<float> fast_result(1024, 768);
-    Image<float> faster_result(1024, 768);
+    g.compile_to_assembly("g.s", std::vector<Argument>(), "g");
+    h.compile_to_assembly("h.s", std::vector<Argument>(), "h");
+
+    Image<float> correct_result(2048, 768);
+    Image<float> fast_result(2048, 768);
+    Image<float> faster_result(2048, 768);
+
+    const int iterations = 5;
 
     double t1 = currentTime();
-    f.realize(correct_result);
+    for (int i = 0; i < iterations; i++) {
+        f.realize(correct_result);
+    }
     double t2 = currentTime();
-    g.realize(fast_result);
+    for (int i = 0; i < iterations; i++) {
+        g.realize(fast_result);
+    }
     double t3 = currentTime();
-    h.realize(faster_result);
+    for (int i = 0; i < iterations; i++) {
+        h.realize(faster_result);
+    }
     double t4 = currentTime();
 
     RDom r(correct_result);
     Func fast_error, faster_error;
     Expr fast_delta = correct_result(r.x, r.y) - fast_result(r.x, r.y);
     Expr faster_delta = correct_result(r.x, r.y) - faster_result(r.x, r.y);
-    fast_error() += fast_delta * fast_delta;
-    faster_error() += faster_delta * faster_delta;
+    fast_error() += cast<double>(fast_delta * fast_delta);
+    faster_error() += cast<double>(faster_delta * faster_delta);
 
-    Image<float> fast_err = fast_error.realize();
-    Image<float> faster_err = faster_error.realize();
+    Image<double> fast_err = fast_error.realize();
+    Image<double> faster_err = faster_error.realize();
 
-    int N = correct_result.width() * correct_result.height();
-    fast_err(0) = sqrtf(fast_err(0)/N);
-    faster_err(0) = sqrtf(faster_err(0)/N);
+    int N = correct_result.width() * correct_result.height() * iterations;
+    fast_err(0) = sqrt(fast_err(0)/N);
+    faster_err(0) = sqrt(faster_err(0)/N);
 
     printf("powf: %f ns per pixel\n"
-           "Halide's pow: %f ns per pixel (rms error = %f)\n"
-           "Halide's fast_pow: %f ns per pixel (rms error = %f)\n", 
+           "Halide's pow: %f ns per pixel (rms error = %0.10f)\n"
+           "Halide's fast_pow: %f ns per pixel (rms error = %0.10f)\n", 
            1000000*(t2-t1) / N, 
            1000000*(t3-t2) / N, fast_err(0),
            1000000*(t4-t3) / N, faster_err(0));
 
-    if (fast_err(0) > 0.0000001) {
+    if (fast_err(0) > 0.000001) {
         printf("Error for pow too large\n");
         return -1;
     }

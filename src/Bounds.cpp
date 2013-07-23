@@ -374,6 +374,10 @@ private:
 
     void visit(const Call *op) {
         // If the args are const we can return the call of those args
+        // for pure functions (extern and image). For other types of
+        // functions, the same call in two different places might
+        // produce different results (e.g. during the update step of a
+        // reduction), so we can't move around call nodes.
         std::vector<Expr> new_args(op->args.size());
         bool const_args = true;
         for (size_t i = 0; i < op->args.size() && const_args; i++) {
@@ -385,7 +389,7 @@ private:
             }
         }
 
-        if (const_args) {
+        if (const_args && (op->call_type == Call::Image || op->call_type == Call::Extern)) {
             min = max = Call::make(op->type, op->name, new_args, op->call_type,
                                    op->func, op->image, op->param);
         } else {

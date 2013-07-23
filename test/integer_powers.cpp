@@ -54,8 +54,8 @@ int main(int argc, char **argv) {
 
         Func rms_1, rms_2;
         RDom r(exact_result);
-        rms_1() = sqrt(sum(pow(approx_result_1(r) - exact_result(r), 2)));
-        rms_2() = sqrt(sum(pow(approx_result_2(r) - exact_result(r), 2)));
+        rms_1() = sqrt(sum(pow(approx_result_1(r) - exact_result(r), 2), "rms_1_sum"));
+        rms_2() = sqrt(sum(pow(approx_result_2(r) - exact_result(r), 2), "rms_2_sum"));
         Image<float> error_1 = rms_1.realize();
         Image<float> error_2 = rms_2.realize();
 
@@ -96,8 +96,8 @@ int main(int argc, char **argv) {
 
         Func rms_1, rms_2;
         RDom r(exact_result);
-        rms_1() = sqrt(sum(pow(approx_result_1(r) - exact_result(r), 2)));
-        rms_2() = sqrt(sum(pow(approx_result_2(r) - exact_result(r), 2)));
+        rms_1() = sqrt(sum(pow(approx_result_1(r) - exact_result(r), 2), "rms_1_neg_sum"));
+        rms_2() = sqrt(sum(pow(approx_result_2(r) - exact_result(r), 2), "rms_2_neg_sum"));
         Image<float> error_1 = rms_1.realize();
         Image<float> error_2 = rms_2.realize();
 

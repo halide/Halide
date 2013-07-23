@@ -48,6 +48,8 @@ const string preamble =
     "extern \"C\" int halide_debug_to_file(const char *filename, void *data, int, int, int, int, int, int);\n"
     "extern \"C\" int halide_start_clock();\n"
     "extern \"C\" int halide_current_time();\n"
+    "extern \"C\" int64_t halide_current_time_usec();\n"
+    "extern \"C\" uint64_t halide_profiling_timer();\n"
     "extern \"C\" int halide_printf(const char *fmt, ...);\n"
     "\n"
 
@@ -552,6 +554,9 @@ void CodeGen_C::visit(const Call *op) {
             do_indent();
             stream << "if (" << cond << ") return;\n";
             rhs << "true";
+        } else if (op->name == Call::profiling_timer) {
+            assert(op->args.size() == 0);
+            rhs << "halide_profiling_timer()";
         } else {
           // TODO: other intrinsics
           std::cerr << "Unhandled intrinsic: " << op->name << std::endl;
