@@ -42,12 +42,20 @@ int main(int argc, char **argv) {
     Image<float> fast_result(2048, 768);
     Image<float> faster_result(2048, 768);
 
+    const int iterations = 5;
+
     double t1 = currentTime();
-    f.realize(correct_result);
+    for (int i = 0; i < iterations; i++) {
+        f.realize(correct_result);
+    }
     double t2 = currentTime();
-    g.realize(fast_result);
+    for (int i = 0; i < iterations; i++) {
+        g.realize(fast_result);
+    }
     double t3 = currentTime();
-    h.realize(faster_result);
+    for (int i = 0; i < iterations; i++) {
+        h.realize(faster_result);
+    }
     double t4 = currentTime();
 
     RDom r(correct_result);
@@ -60,7 +68,7 @@ int main(int argc, char **argv) {
     Image<double> fast_err = fast_error.realize();
     Image<double> faster_err = faster_error.realize();
 
-    int N = correct_result.width() * correct_result.height();
+    int N = correct_result.width() * correct_result.height() * iterations;
     fast_err(0) = sqrt(fast_err(0)/N);
     faster_err(0) = sqrt(faster_err(0)/N);
 
