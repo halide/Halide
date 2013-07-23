@@ -13,9 +13,7 @@ double currentTime() {
 #else
 #include <sys/time.h>
 double currentTime() {
-    timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
+    return (clock() * 1000.0) / CLOCKS_PER_SEC;
 }
 #endif
 
@@ -37,6 +35,9 @@ int main(int argc, char **argv) {
     f.compile_jit();
     g.compile_jit();
     h.compile_jit();
+
+    g.compile_to_assembly("g.s", std::vector<Argument>(), "g");
+    h.compile_to_assembly("h.s", std::vector<Argument>(), "h");
 
     Image<float> correct_result(2048, 768);
     Image<float> fast_result(2048, 768);
