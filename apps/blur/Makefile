@@ -1,4 +1,5 @@
-CXX ?= g++
+# We really need to use g++ here, to support openmp
+GXX ?= g++
 
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
@@ -18,14 +19,14 @@ endif
 
 halide_blur: ../../ halide_blur.cpp
 	$(MAKE) -C ../../ bin/libHalide.a
-	$(CXX) halide_blur.cpp -I ../../include ../../bin/libHalide.a -o halide_blur -ldl -lpthread
+	$(GXX) halide_blur.cpp -I ../../include ../../bin/libHalide.a -o halide_blur -ldl -lpthread
 
 halide_blur.o: halide_blur
 	./halide_blur
 
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
 test: test.cpp halide_blur.o
-	$(CXX) -msse2 -fopenmp -lpng -Wall -O2 -I ../support/ test.cpp halide_blur.o -o test -lpthread -ldl -lpng $(PNGFLAGS) $(CUDA_LDFLAGS)
+	$(GXX) -msse2 -fopenmp -lpng -Wall -O2 -I ../support/ test.cpp halide_blur.o -o test -lpthread -ldl -lpng $(PNGFLAGS) $(CUDA_LDFLAGS)
 
 clean:
 	rm -f test halide_blur.o halide_blur
