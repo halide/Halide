@@ -25,7 +25,6 @@ int main(int argc, char **argv) {
     t1 = currentTime();
     f.realize(imf);
     t2 = currentTime();
-
     double parallelTime = t2 - t1;
 
     printf("Realizing g\n");
