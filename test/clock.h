@@ -12,22 +12,17 @@ double currentTime() {
 #else
 #include <sys/time.h>
 double currentTime() {
-    if (CLOCKS_PER_SEC >= 100000) {
-        return (clock() * 1000.0) / CLOCKS_PER_SEC;
+    static bool first_call = true;
+    static timeval reference_time;
+    if (first_call) {
+        first_call = false;
+        gettimeofday(&reference_time, NULL);
+        return 0.0;
     } else {
-        static bool first_call = true;
-        static timeval reference_time;
-        if (first_call) {
-            first_call = false;
-            gettimeofday(&reference_time, NULL);
-            return 0.0;
-        } else {
-            timeval t;
-            gettimeofday(&t, NULL);
-            return ((t.tv_sec - reference_time.tv_sec)*1000.0 +
-                    (t.tv_usec - reference_time.tv_usec)/1000.0);
-        }
-
+        timeval t;
+        gettimeofday(&t, NULL);
+        return ((t.tv_sec - reference_time.tv_sec)*1000.0 +
+                (t.tv_usec - reference_time.tv_usec)/1000.0);
     }
 }
 #endif
