@@ -98,7 +98,6 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
     options.NoFramePointerElim = false;
-    options.NoFramePointerElimNonLeaf = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
     options.NoInfsFPMath = true;

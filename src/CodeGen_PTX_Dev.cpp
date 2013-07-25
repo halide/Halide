@@ -300,7 +300,6 @@ string CodeGen_PTX_Dev::compile_to_src() {
     Options.LessPreciseFPMADOption = true;
     Options.PrintMachineCode = false;
     Options.NoFramePointerElim = false;
-    Options.NoFramePointerElimNonLeaf = false;
     //Options.NoExcessFPPrecision = false;
     Options.AllowFPOpFusion = FPOpFusion::Fast;
     Options.UnsafeFPMath = true;

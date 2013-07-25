@@ -296,7 +296,6 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
     options.NoFramePointerElim = false;
-    options.NoFramePointerElimNonLeaf = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
     options.NoInfsFPMath = true;
