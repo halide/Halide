@@ -93,6 +93,9 @@ std::vector<T> vec(T a, T b, T c, T d, T e, T f) {
 }
 // @}
 
+/** Convert an integer to a string. */
+EXPORT std::string int_to_string(int x);
+
 /** An aggressive form of reinterpret cast used for correct type-punning. */
 template<typename DstType, typename SrcType>
 DstType reinterpret_bits(const SrcType &src) {

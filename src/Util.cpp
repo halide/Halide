@@ -35,6 +35,15 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
+/** Convert an integer to a string. */
+string int_to_string(int x) {
+    static const string small_ints[] = {"0", "1", "2", "3", "4", "5", "6", "7"};
+    if (x < 7) return small_ints[x];
+    ostringstream ss;
+    ss << x;
+    return ss.str();
+}
+
 string unique_name(const string &name) {
     static map<string, int> known_names;
 
