@@ -19,28 +19,58 @@ LLVM_CXX_FLAGS = $(shell $(LLVM_CONFIG) --cppflags)
 LLVM_CXX_FLAGS += -I$(shell $(LLVM_CONFIG) --src-root)/include
 
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
-NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), "-DWITH_NATIVE_CLIENT=1", )
-NATIVE_CLIENT_ARCHS = $(if $(WITH_NATIVE_CLIENT), x86_32_nacl x86_32_sse41_nacl x86_64_nacl x86_64_sse41_nacl x86_64_avx_nacl arm_nacl,)
+WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
+WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
+WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
+WITH_OPENCL ?= 1
+
+NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), -DWITH_NATIVE_CLIENT=1, )
+NATIVE_CLIENT_ARCHS =
 NATIVE_CLIENT_LLVM_CONFIG_LIB = $(if $(WITH_NATIVE_CLIENT), nacltransforms, )
+
 ifneq ($(WITH_NATIVE_CLIENT), )
+
+ifneq ($(WITH_X86), )
 ifndef NATIVE_CLIENT_X86_INCLUDE
-$(error Compiling with native client support but NATIVE_CLIENT_X86_INCLUDE not defined)
+$(error Compiling with x86 native client support but NATIVE_CLIENT_X86_INCLUDE not defined)
 endif
-ifndef NATIVE_CLIENT_ARM_INCLUDE
-$(error Compiling with native client support but NATIVE_CLIENT_ARM_INCLUDE not defined)
-endif
+NATIVE_CLIENT_ARCHS += x86_32_nacl x86_32_sse41_nacl x86_64_nacl x86_64_sse41_nacl x86_64_avx_nacl
 endif
 
-WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
-PTX_CXX_FLAGS=$(if $(WITH_PTX), "-DWITH_PTX=1", )
+ifneq ($(WITH_ARM), )
+ifndef NATIVE_CLIENT_ARM_INCLUDE
+$(error Compiling with arm native client support but NATIVE_CLIENT_ARM_INCLUDE not defined)
+endif
+NATIVE_CLIENT_ARCHS += arm_nacl
+endif
+
+endif
+
+
+X86_CXX_FLAGS=$(if $(WITH_X86), -DWITH_X86=1, )
+X86_ARCHS=$(if $(WITH_X86), x86_32 x86_32_sse41 x86_64 x86_64_sse41 x86_64_avx, )
+X86_LLVM_CONFIG_LIB=$(if $(WITH_X86), x86, )
+
+ARM_CXX_FLAGS=$(if $(WITH_ARM), -DWITH_ARM=1, )
+ARM_ARCHS=$(if $(WITH_ARM), arm arm_android , )
+ARM_LLVM_CONFIG_LIB=$(if $(WITH_ARM), arm, )
+
+PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_PTX=1, )
 PTX_ARCHS=$(if $(WITH_PTX), ptx_host ptx_dev, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
+
+OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL=1, )
+OPENCL_ARCHS=$(if $(WITH_OPENCL), opencl_host, )
+OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
 CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC -O3
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
-LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader x86 arm linker ipo mcjit jit $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB))
+CXX_FLAGS += $(ARM_CXX_FLAGS)
+CXX_FLAGS += $(X86_CXX_FLAGS)
+CXX_FLAGS += $(OPENCL_CXX_FLAGS)
+LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB))
 
 TEST_CXX_FLAGS ?=
 UNAME = $(shell uname)
@@ -78,7 +108,7 @@ SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-STDLIB_ARCHS = x86_32 x86_32_sse41 x86_64 x86_64_sse41 x86_64_avx arm arm_android opencl_host $(PTX_ARCHS) $(NATIVE_CLIENT_ARCHS)
+STDLIB_ARCHS = $(X86_ARCHS) $(ARM_ARCHS) $(PTX_ARCHS) $(NATIVE_CLIENT_ARCHS) $(OPENCL_ARCHS)
 
 INITIAL_MODULES = $(STDLIB_ARCHS:%=$(BUILD_DIR)/initmod.%.o)
 

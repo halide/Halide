@@ -27,8 +27,13 @@ static void *halide_internal_initmod_ptx_host = 0;
 static int halide_internal_initmod_ptx_host_length = 0;
 #endif
 
+#if WITH_OPENCL
 extern "C" unsigned char halide_internal_initmod_opencl_host[];
 extern "C" int halide_internal_initmod_opencl_host_length;
+#else
+static void * halide_internal_initmod_opencl_host = 0;
+static int halide_internal_initmod_opencl_host_length = 0;
+#endif
 
 namespace Halide {
 namespace Internal {
@@ -293,9 +298,15 @@ CodeGen_GPU_Host::CodeGen_GPU_Host(uint32_t options) :
 
     if (options & GPU_PTX) {
         assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
+        #if !(WITH_PTX)
+        assert(false && "ptx not enabled for this build of Halide.");
+        #endif
         initmod = halide_internal_initmod_ptx_host;
         initmod_length = halide_internal_initmod_ptx_host_length;
     } else if (options & GPU_OpenCL) {
+        #if !(WITH_OPENCL)
+        assert(false && "OpenCL target not enabled for this build of Halide.");
+        #endif
         initmod = halide_internal_initmod_opencl_host;
         initmod_length = halide_internal_initmod_opencl_host_length;
     }

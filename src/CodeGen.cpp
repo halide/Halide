@@ -43,8 +43,14 @@ using std::stack;
         llvm_##target##_enabled = true;
 
 // Override above empty init function with macro for supported targets.
+#if WITH_X86
 #define InitializeX86Target()   InitializeTarget(X86)
+#endif
+
+#if WITH_ARM
 #define InitializeARMTarget()   InitializeTarget(ARM)
+#endif
+
 #if WITH_PTX
 #define InitializeNVPTXTarget() InitializeTarget(NVPTX)
 #endif
