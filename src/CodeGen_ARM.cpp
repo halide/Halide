@@ -119,6 +119,7 @@ Expr _u8(Expr e) {
     return cast(UInt(8, e.type().width), e);
 }
 
+/*
 Expr _f32(Expr e) {
     return cast(Float(32, e.type().width), e);
 }
@@ -126,6 +127,7 @@ Expr _f32(Expr e) {
 Expr _f64(Expr e) {
     return cast(Float(64, e.type().width), e);
 }
+*/
 
 // saturating cast operators
 Expr _i8q(Expr e) {
