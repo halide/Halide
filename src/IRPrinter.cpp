@@ -24,8 +24,6 @@ ostream &operator<<(ostream &out, Type type) {
     case Type::Float:
         out << "float";
         break;
-    default:
-        assert(false && "Malformed type");
     }
     out << type.bits;
     if (type.width > 1) out << 'x' << type.width;
@@ -102,8 +100,6 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
     case For::Vectorized:
         out << "vectorized";
         break;
-    default:
-        assert(false && "Malformed for type");
     }
     return out;
 }
