@@ -96,3 +96,6 @@ apps/wavelet/haar_x.h
 apps/wavelet/inverse_daubechies_x.h
 apps/wavelet/inverse_haar_x.h
 apps/wavelet/wavelet
+
+zlib-1.2.8/
+lpng163/
