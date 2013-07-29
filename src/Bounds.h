@@ -17,6 +17,7 @@ namespace Internal {
 
 struct Interval {
     Expr min, max;
+    Interval() {}
     Interval(Expr min, Expr max) : min(min), max(max) {}
 };
 
