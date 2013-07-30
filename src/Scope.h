@@ -9,6 +9,7 @@
 #include <map>
 
 #include "Util.h"
+#include "Debug.h"
 
 /** \file
  * Defines the Scope class, which is used for keeping track of names in a scope while traversing IR
@@ -28,7 +29,7 @@ private:
 
 public:
     SmallStack() : _rest(NULL),
-              _empty(true) {}
+                   _empty(true) {}
 
     ~SmallStack() {
         if (_rest != NULL) {
@@ -39,14 +40,15 @@ public:
     }
 
     SmallStack(const SmallStack<T> &other) : _top(other._top),
-                                   _rest(NULL),
-                                   _empty(other._empty) {
+                                             _rest(NULL),
+                                             _empty(other._empty) {
         if (other._rest != NULL) {
             _rest = new SmallStack<T>(*other._rest);
         }
     }
 
     SmallStack<T> &operator=(const SmallStack<T> &other) {
+        if (this == &other) return *this;
         _top = other._top;
         if (_rest) {
             delete _rest;
@@ -74,11 +76,11 @@ public:
         if (_empty) {
             _empty = false;
             _top = t;
-            assert(_rest == NULL);
         } else {
             SmallStack<T> *new_rest = new SmallStack<T>();
-            new_rest->_top = _top;
             new_rest->_rest = _rest;
+            new_rest->_top = _top;
+            new_rest->_empty = _empty;
             _top = t;
             _rest = new_rest;
         }
