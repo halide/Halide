@@ -1,5 +1,9 @@
 CXX ?= g++
 
+ifeq ($(HL_TARGET),ptx)
+  CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
+endif
+
 pipeline: pipeline.cpp
 	$(CXX) -Wall pipeline.cpp -I ../../include ../../bin/libHalide.a -o pipeline -lpthread -ldl
 
@@ -16,7 +20,7 @@ pipeline_native.o: pipeline
 	./pipeline
 
 run: run.cpp pipeline_native.h pipeline_c.c
-	$(CXX) -Wall run.cpp pipeline_c.c pipeline_native.o -lpthread -o run
+	$(CXX) -Wall run.cpp pipeline_c.c pipeline_native.o -lpthread -o run $(CUDA_LDFLAGS)
 
 test: run
 	./run
