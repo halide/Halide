@@ -288,3 +288,6 @@ pip-log.txt
 
 #Mr Developer
 .mr.developer.cfg
+
+zlib-1.2.8/
+lpng163/

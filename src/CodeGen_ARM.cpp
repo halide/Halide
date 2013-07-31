@@ -13,12 +13,19 @@
 #include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
+#if WITH_ARM
 extern "C" unsigned char halide_internal_initmod_arm[];
 extern "C" int halide_internal_initmod_arm_length;
 extern "C" unsigned char halide_internal_initmod_arm_android[];
 extern "C" int halide_internal_initmod_arm_android_length;
+#else
+static void *halide_internal_initmod_arm = 0;
+static int halide_internal_initmod_arm_length = 0;
+static void *halide_internal_initmod_arm_android = 0;
+static int halide_internal_initmod_arm_android_length = 0;
+#endif
 
-#if WITH_NATIVE_CLIENT
+#if (WITH_NATIVE_CLIENT && WITH_ARM)
 extern "C" unsigned char halide_internal_initmod_arm_nacl[];
 extern "C" int halide_internal_initmod_arm_nacl_length;
 #else
@@ -38,7 +45,12 @@ using namespace llvm;
 CodeGen_ARM::CodeGen_ARM(uint32_t options) : CodeGen_Posix(),
 					     use_android(options & ARM_Android),
                                              use_nacl(options & ARM_NaCl) {
+    #if !(WITH_ARM)
+    assert(false && "arm not enabled for this build of Halide.");
+    #endif
+
     assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
+
     #if !(WITH_NATIVE_CLIENT)
     assert(!use_nacl && "llvm build not configured with native client enabled.");
     #endif
@@ -119,6 +131,7 @@ Expr _u8(Expr e) {
     return cast(UInt(8, e.type().width), e);
 }
 
+/*
 Expr _f32(Expr e) {
     return cast(Float(32, e.type().width), e);
 }
@@ -126,6 +139,7 @@ Expr _f32(Expr e) {
 Expr _f64(Expr e) {
     return cast(Float(64, e.type().width), e);
 }
+*/
 
 // saturating cast operators
 Expr _i8q(Expr e) {
@@ -636,7 +650,7 @@ void CodeGen_ARM::visit(const Div *op) {
             shift      = IntegerDivision::table_u8[const_divisor-2][2];
         }
 
-        assert(method != 0 && 
+        assert(method != 0 &&
                "method 0 division is for powers of two and should have been handled elsewhere");
 
         Value *num = codegen(op->a);

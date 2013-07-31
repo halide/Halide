@@ -100,7 +100,7 @@ Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Fun
         debug(2) << f.name() << ", " << f.args()[i] << "\n";
 
         string prefix = f.name() + "." + f.args()[i];
-        char dim = '0' + i;
+        string dim = int_to_string(i);
 
         if (b.min_constraint(i).defined()) {
             s = LetStmt::make(prefix + ".min", b.min_constraint(i), s);

@@ -317,8 +317,8 @@ inline Expr operator!(Expr a) {
 }
 
 /** Returns an expression representing the greater of the two
- * arguments, after doing any necessary type coercion using 
- * \ref Internal::match_types. Vectorizes cleanly on most platforms 
+ * arguments, after doing any necessary type coercion using
+ * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4). */
 inline Expr max(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "max of undefined");
@@ -328,7 +328,7 @@ inline Expr max(Expr a, Expr b) {
 
 /** Returns an expression representing the lesser of the two
  * arguments, after doing any necessary type coercion using
- * \ref Internal::match_types. Vectorizes cleanly on most platforms 
+ * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4). */
 inline Expr min(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "min of undefined");
@@ -675,6 +675,12 @@ inline Expr reinterpret(Expr e) {
  * argument. */
 inline Expr operator&(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "bitwise and of undefined");
+    // First widen or narrow, then bitcast.
+    if (y.type().bits != x.type().bits) {
+        Type t = y.type();
+        t.bits = x.type().bits;
+        y = cast(t, y);
+    }
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
     }
@@ -686,6 +692,12 @@ inline Expr operator&(Expr x, Expr y) {
  * argument. */
 inline Expr operator|(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "bitwise or of undefined");
+    // First widen or narrow, then bitcast.
+    if (y.type().bits != x.type().bits) {
+        Type t = y.type();
+        t.bits = x.type().bits;
+        y = cast(t, y);
+    }
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
     }
@@ -697,6 +709,12 @@ inline Expr operator|(Expr x, Expr y) {
  * first argument. */
 inline Expr operator^(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "bitwise or of undefined");
+    // First widen or narrow, then bitcast.
+    if (y.type().bits != x.type().bits) {
+        Type t = y.type();
+        t.bits = x.type().bits;
+        y = cast(t, y);
+    }
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
     }
@@ -713,10 +731,14 @@ inline Expr operator~(Expr x) {
  * efficient than multiplying by 2^n, because Halide's optimization
  * passes understand multiplication, and will compile it to
  * shifting. This operator is only for if you really really need bit
- * shifting (e.g. because the exponent is a run-time parameter). */
+ * shifting (e.g. because the exponent is a run-time parameter). The
+ * type of the result is equal to the type of the first argument. Both
+ * arguments must have integer type. */
 inline Expr operator<<(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "shift left of undefined");
-    assert(!x.type().is_float() && "bit shifting not defined for floats");
+    assert(!x.type().is_float() && "First argument to shift left is a float.");
+    assert(!y.type().is_float() && "Second argument to shift left is a float.");
+    Internal::match_types(x, y);
     return Internal::Call::make(x.type(), Internal::Call::shift_left, vec(x, y), Internal::Call::Intrinsic);
 }
 
@@ -725,10 +747,14 @@ inline Expr operator<<(Expr x, Expr y) {
  * two. Halide's definition of division (always round to negative
  * infinity) means that all divisions by powers of two get compiled to
  * bit-shifting, and Halide's optimization routines understand
- * division and can work with it. */
+ * division and can work with it. The type of the result is equal to
+ * the type of the first argument. Both arguments must have integer
+ * type. */
 inline Expr operator>>(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "shift right of undefined");
-    assert(!x.type().is_float() && "bit shifting not defined for floats");
+    assert(!x.type().is_float() && "First argument to shift right is a float.");
+    assert(!y.type().is_float() && "Second argument to shift right is a float.");
+    Internal::match_types(x, y);
     return Internal::Call::make(x.type(), Internal::Call::shift_right, vec(x, y), Internal::Call::Intrinsic);
 }
 

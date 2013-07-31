@@ -24,7 +24,7 @@ private:
         vector<Expr> mins(args.size()), strides(args.size());
 
         for (size_t i = 0; i < args.size(); i++) {
-            char dim = '0' + i;
+            string dim = int_to_string(i);
             string stride_name = name + ".stride." + dim;
             string min_name = name + ".min." + dim;
             string stride_name_constrained = stride_name + ".constrained";

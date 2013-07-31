@@ -746,7 +746,9 @@ Stmt add_image_checks(Stmt s, Function f) {
          iter != bufs.end(); ++iter) {
         const string &name = iter->first;
 
-        for (char dim = '0'; dim < '4'; dim++) {
+        for (int i = 0; i < 4; i++) {
+            string dim = int_to_string(i);
+
             Expr min_required = Variable::make(Int(32), name + ".min." + dim + ".required");
             replace_with_required[name + ".min." + dim] = min_required;
 
@@ -790,7 +792,7 @@ Stmt add_image_checks(Stmt s, Function f) {
         // Check that the region passed in (after applying constraints) is within the region used
         debug(3) << "In image " << name << " region touched is:\n";
         for (size_t j = 0; j < region.size(); j++) {
-            char dim = '0' + j;
+            string dim = int_to_string(j);
             debug(3) << region[j].min << ", " << region[j].extent << "\n";
             string actual_min_name = name + ".min." + dim;
             string actual_extent_name = name + ".extent." + dim;
@@ -823,11 +825,12 @@ Stmt add_image_checks(Stmt s, Function f) {
             // order (e.g if storage is swizzled relative to dimension
             // order).
             Expr stride_required;
-            if (dim == '0') {
+            if (j == 0) {
                 stride_required = 1;
             } else {
-                stride_required = (Variable::make(Int(32), name + ".stride." + (char)(dim-1) + ".required") *
-                                   Variable::make(Int(32), name + ".extent." + (char)(dim-1) + ".required"));
+                string last_dim = int_to_string(j-1);
+                stride_required = (Variable::make(Int(32), name + ".stride." + last_dim + ".required") *
+                                   Variable::make(Int(32), name + ".extent." + last_dim + ".required"));
             }
             lets_required.push_back(make_pair(name + ".stride." + dim + ".required", stride_required));
         }
@@ -836,7 +839,7 @@ Stmt add_image_checks(Stmt s, Function f) {
         Expr buffer_name = Call::make(Int(32), name, vector<Expr>(), Call::Intrinsic);
         vector<Expr> args = vec(inference_mode, buffer_name, Expr(type.bits/8));
         for (size_t i = 0; i < 4; i++) {
-            char dim = '0' + i;
+            string dim = int_to_string(i);
             if (i < region.size()) {
                 args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
                 args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
@@ -853,7 +856,7 @@ Stmt add_image_checks(Stmt s, Function f) {
         // Build the constraints tests and proposed sizes.
         vector<pair<string, Expr> > constraints;
         for (size_t i = 0; i < region.size(); i++) {
-            char dim = '0' + i;
+            string dim = int_to_string(i);
             string min_name = name + ".min." + dim;
             string stride_name = name + ".stride." + dim;
             string extent_name = name + ".extent." + dim;

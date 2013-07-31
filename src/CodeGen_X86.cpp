@@ -22,13 +22,21 @@
     static void *halide_internal_initmod_##TARGET = 0; \
     static int halide_internal_initmod_##TARGET##_length = 0;
 
+#if WITH_X86
 DECLARE_INITMOD(x86_32)
 DECLARE_INITMOD(x86_32_sse41)
 DECLARE_INITMOD(x86_64)
 DECLARE_INITMOD(x86_64_sse41)
 DECLARE_INITMOD(x86_64_avx)
+#else
+DECLARE_EMPTY_INITMOD(x86_32)
+DECLARE_EMPTY_INITMOD(x86_32_sse41)
+DECLARE_EMPTY_INITMOD(x86_64)
+DECLARE_EMPTY_INITMOD(x86_64_sse41)
+DECLARE_EMPTY_INITMOD(x86_64_avx)
+#endif
 
-#if WITH_NATIVE_CLIENT
+#if (WITH_NATIVE_CLIENT && WITH_X86)
 DECLARE_INITMOD(x86_32_nacl)
 DECLARE_INITMOD(x86_32_sse41_nacl)
 DECLARE_INITMOD(x86_64_nacl)
@@ -57,7 +65,12 @@ CodeGen_X86::CodeGen_X86(uint32_t options) : CodeGen_Posix(),
                                              use_sse_41(options & X86_SSE41),
                                              use_avx   (options & X86_AVX),
                                              use_nacl  (options & X86_NaCl) {
+    #if !(WITH_X86)
+    assert(false && "x86 not enabled for this build of Halide.");
+    #endif
+
     assert(llvm_X86_enabled && "llvm build not configured with X86 target enabled.");
+
     #if !(WITH_NATIVE_CLIENT)
     assert(!use_nacl && "llvm build not configured with native client enabled.");
     #endif
@@ -404,7 +417,7 @@ void CodeGen_X86::visit(const Div *op) {
             shift      = IntegerDivision::table_u8[const_divisor-2][2];
         }
 
-        assert(method != 0 && 
+        assert(method != 0 &&
                "method 0 division is for powers of two and should have been handled elsewhere");
 
         Value *num = codegen(op->a);

@@ -11,6 +11,7 @@
 #include <string>
 #include <stdio.h>
 #include <algorithm>
+#include <string.h>
 
 //#include <sys/time.h>
 
@@ -51,7 +52,7 @@ inline bool ends_with_ignore_case(std::string a, std::string b) {
 
 template<typename T>
 Image<T> load_png(std::string filename) {
-    png_byte header[8]; 
+    png_byte header[8];
     png_structp png_ptr;
     png_infop info_ptr;
     png_bytep *row_pointers;
@@ -93,7 +94,7 @@ Image<T> load_png(std::string filename) {
     } else {
         im = Image<T>(width, height);
     }
-    
+
     png_set_interlace_handling(png_ptr);
     png_read_update_info(png_ptr, info_ptr);
 
@@ -149,7 +150,7 @@ Image<T> load_png(std::string filename) {
 
     im.set_host_dirty();
     return im;
-} 
+}
 
 template<typename T>
 void save_png(Image<T> im, std::string filename) {
@@ -189,7 +190,7 @@ void save_png(Image<T> im, std::string filename) {
     unsigned int bit_depth = 16;
     if (sizeof(T) == 1) {
         bit_depth = 8;
-    } 
+    }
 
     // write header
     _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing header\n");
@@ -216,7 +217,7 @@ void save_png(Image<T> im, std::string filename) {
                 for (int c = 0; c < channels; c++) {
                     uint16_t out;
                     convert(srcPtr[c*c_stride], out);
-                    *dstPtr++ = out >> 8; 
+                    *dstPtr++ = out >> 8;
                     *dstPtr++ = out & 0xff;
                 }
                 srcPtr++;
@@ -235,7 +236,7 @@ void save_png(Image<T> im, std::string filename) {
             _assert(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.");
         }
     }
-    
+
     // write data
     _assert(!setjmp(png_jmpbuf(png_ptr)), "[write_png_file] Error during writing bytes");
 
@@ -279,7 +280,7 @@ Image<T> load_ppm(std::string filename) {
     _assert(fscanf(f, "%d %d\n", &width, &height) == 2, "Could not read PPM width and height\n");
     _assert(fscanf(f, "%d", &maxval) == 1, "Could not read PPM max value\n");
     _assert(fgetc(f) != EOF, "Could not read char from PPM\n");
-    
+
     int bit_depth = 0;
     if (maxval == 255) { bit_depth = 8; }
     else if (maxval == 65535) { bit_depth = 16; }
@@ -293,8 +294,8 @@ Image<T> load_ppm(std::string filename) {
     // convert the data to T
     if (bit_depth == 8) {
         uint8_t *data = new uint8_t[width*height*3];
-        _assert(fread((void *) data, 
-                      sizeof(uint8_t), width*height*3, f) == (size_t) (width*height*3), 
+        _assert(fread((void *) data,
+                      sizeof(uint8_t), width*height*3, f) == (size_t) (width*height*3),
                 "Could not read PPM 8-bit data\n");
         fclose(f);
 
@@ -328,7 +329,7 @@ Image<T> load_ppm(std::string filename) {
     im(0,0,0) = im(0,0,0);      /* Mark dirty inside read/write functions. */
 
     return im;
-} 
+}
 
 template<typename T>
 void save_ppm(Image<T> im, std::string filename) {
@@ -338,13 +339,13 @@ void save_ppm(Image<T> im, std::string filename) {
     _assert(f, "File %s could not be opened for writing\n", filename.c_str());
     fprintf(f, "P6\n%d %d\n%d\n", im.width(), im.height(), (1<<bit_depth)-1);
     int width = im.width(), height = im.height();
-    
+
     if (bit_depth == 8) {
         uint8_t *data = new uint8_t[width*height*3];
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 uint8_t *p = (uint8_t *)(&data[(y*width+x)*3]);
-                for (int c = 0; c < im.channels(); c++) {                    
+                for (int c = 0; c < im.channels(); c++) {
                     convert(im(x, y, c), p[c]);
                 }
             }
@@ -357,7 +358,7 @@ void save_ppm(Image<T> im, std::string filename) {
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 uint16_t *p = (uint16_t *)(&data[(y*width+x)*3]);
-                for (int c = 0; c < im.channels(); c++) {                    
+                for (int c = 0; c < im.channels(); c++) {
                     uint16_t value;
                     convert(im(x, y, c), value);
                     SWAP_ENDIAN16(little_endian, value);
@@ -369,7 +370,7 @@ void save_ppm(Image<T> im, std::string filename) {
         delete[] data;
     }
     fclose(f);
-} 
+}
 
 template<typename T>
 Image<T> load(std::string filename) {
