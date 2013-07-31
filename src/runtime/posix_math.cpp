@@ -1,9 +1,18 @@
 #include <stdint.h>
 #include <math.h>
 #include <float.h>
-#include <limits>
 
 #define INLINE inline __attribute__((used)) __attribute__((always_inline)) __attribute__((nothrow)) __attribute__((pure))
+
+#ifndef _HUGE_ENUF
+#define _HUGE_ENUF  1e+300	/* _HUGE_ENUF*_HUGE_ENUF must overflow */
+#endif /* _HUGE_ENUF */
+
+#define INFINITY   ((float)(_HUGE_ENUF * _HUGE_ENUF))  /* causes warning C4756: overflow in constant arithmetic (by design) */
+#define HUGE_VALD  ((double)INFINITY)
+#define HUGE_VALF  ((float)INFINITY)
+#define HUGE_VALL  ((long double)INFINITY)
+#define NAN        ((float)(INFINITY * 0.0F))
 
 extern "C" {
 
@@ -36,8 +45,8 @@ INLINE int16_t abs_i16(int16_t a) {return a >= 0 ? a : -a;}
 INLINE int32_t abs_i32(int32_t a) {return a >= 0 ? a : -a;}
 INLINE int64_t abs_i64(int64_t a) {return a >= 0 ? a : -a;}
 
-INLINE float nan_f32() {return std::numeric_limits<float>::signaling_NaN();}
-INLINE float neg_inf_f32() {return -std::numeric_limits<float>::infinity();}
-INLINE float inf_f32() {return std::numeric_limits<float>::infinity();}
+INLINE float nan_f32() {return NAN;}
+INLINE float neg_inf_f32() {return -INFINITY;}
+INLINE float inf_f32() {return INFINITY;}
 
 }

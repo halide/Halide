@@ -535,6 +535,7 @@ cd $(SolutionDir)</Command>
     <ClCompile Include="..\src\Lower.cpp" />
     <ClCompile Include="..\src\ModulusRemainder.cpp" />
     <ClCompile Include="..\src\Parameter.cpp" />
+    <ClCompile Include="..\src\Profiling.cpp" />
     <ClCompile Include="..\src\RDom.cpp" />
     <ClCompile Include="..\src\Reduction.cpp" />
     <ClCompile Include="..\src\RemoveTrivialForLoops.cpp" />
@@ -590,6 +591,7 @@ cd $(SolutionDir)</Command>
     <ClInclude Include="..\src\ModulusRemainder.h" />
     <ClInclude Include="..\src\Param.h" />
     <ClInclude Include="..\src\Parameter.h" />
+    <ClInclude Include="..\src\Profiling.h" />
     <ClInclude Include="..\src\RDom.h" />
     <ClInclude Include="..\src\Reduction.h" />
     <ClInclude Include="..\src\RemoveTrivialForLoops.h" />

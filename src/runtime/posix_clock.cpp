@@ -19,3 +19,5 @@ WEAK int halide_current_time() {
 	clock_t now = clock();
 	return (now - halide_reference_clock) * 1000 / CLOCKS_PER_SEC;
 }
+
+}
