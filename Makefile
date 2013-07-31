@@ -247,6 +247,7 @@ test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/blur clean
 	make -C apps/blur test
 	./apps/blur/test
+	make -C apps/wavelet clean
 	make -C apps/wavelet test
 	make -C apps/c_backend clean
 	make -C apps/c_backend test
