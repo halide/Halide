@@ -110,7 +110,6 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;
     options.StackAlignmentOverride = 0;
-    options.RealignStack = true;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
     options.EnableSegmentedStacks = false;

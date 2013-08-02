@@ -318,7 +318,6 @@ string CodeGen_PTX_Dev::compile_to_src() {
     Options.JITEmitDebugInfoToDisk = false;
     Options.GuaranteedTailCallOpt = false;
     Options.StackAlignmentOverride = 0;
-    Options.RealignStack = true;
     // Options.DisableJumpTables = false;
     Options.TrapFuncName = "";
     Options.EnableSegmentedStacks = false;
