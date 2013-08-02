@@ -758,6 +758,96 @@ inline Expr operator>>(Expr x, Expr y) {
     return Internal::Call::make(x.type(), Internal::Call::shift_right, vec(x, y), Internal::Call::Intrinsic);
 }
 
+/** Linear interpolate between the two values according to a weight.
+ * \param zero_val The result when weight is 0
+ * \param one_val The result when weight is 1
+ * \param weight The interpolation amount
+ *
+ * Both zero_val and one_val must have the same type. All types are
+ * supported, including bool.
+ *
+ * The weight is treated as its own type and must be float or an
+ * unsigned integer type. It is scaled to the bit-size of the type of
+ * x and y if they are integer, or converted to float if they are
+ * float. Integer weights are converted to float via division by the
+ * full-range value of the weight's type. Floating-point weights used
+ * to interpolate between integer values must be between 0.0f and
+ * 1.0f, and an error may be signaled if it is not provably so. (clamp
+ * operators can be added to provide proof. Currently an error is only
+ * signalled for constant weights.)
+ *
+ * For integer linear interpolation, out of range values cannot be
+ * represented. In particular, weights that are conceptually less than
+ * 0 or greater than 1.0 are not representable. As such the result is
+ * always between x and y (inclusive of course). For lerp with
+ * floating-point values and floating-point weight, the full range of
+ * a float is valid, however underflow and overflow can still occur.
+ *
+ * Ordering is not required between zero_val and one_val:
+ *     lerp(42, 69, .5f) == lerp(69, 42, .5f) == 56
+ * 
+ * Results for integer types are for exactly rounded arithmetic. As
+ * such, there are cases where 16-bit and float differ because 32-bit
+ * floating-point (float) does not have enough precision to produce
+ * the exact result. (Likely true for 32-bit integer
+ * vs. double-precision floating-point as well.)
+ *
+ * At present, double precision and 64-bit integers are not supported.
+ *
+ * Generally, lerp will vectorize as if it were an operation on a type
+ * twice the bit size of the inferred type for x and y.
+ *
+ * Some examples:
+ * \code
+ *
+ *     // Since Halide does not have direct type delcarations, casts
+ *     // below are used to indicate the types of the parameters.
+ *     // Such casts not required or expected in actual code where types
+ *     // are inferred.
+ *
+ *     lerp(cast<float>(x), cast<float>(y), cast<float>(w)) ->
+ *       x * (1.0f - w) + y * w
+ *
+ *     lerp(cast<uint8_t>(x), cast<uint8_t>(y), cast<uint8_t>(w)) ->
+ *       cast<uint8_t>(cast<uint8_t>(x) * (1.0f - cast<uint8_t>(w) / 255.0f) +
+ *                     cast<uint8_t>(y) * cast<uint8_t>(w) / 255.0f + .5f)
+ *
+ *     // Note addition in Halide promoted uint8_t + int8_t to int16_t already,
+ *     // the outer cast is added for clarity.
+ *     lerp(cast<uint8_t>(x), cast<int8_t>(y), cast<uint8_t>(w)) ->
+ *       cast<int16_t>(cast<uint8_t>(x) * (1.0f - cast<uint8_t>(w) / 255.0f) +
+ *                     cast<int8_t>(y) * cast<uint8_t>(w) / 255.0f + .5f)
+ *
+ *     lerp(cast<int8_t>(x), cast<int8_t>(y), cast<float>(w)) ->
+ *       cast<int8_t>(cast<int8_t>(x) * (1.0f - cast<float>(w)) +
+ *                    cast<int8_t>(y) * cast<uint8_t>(w))
+ *
+ * \endcode
+ * */
+inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
+    assert(zero_val.defined() && "lerp with undefined zero value");
+    assert(one_val.defined()  && "lerp with undefined one value");
+    assert(weight.defined()   && "lerp with undefined weight");
+    assert(zero_val.type() == one_val.type() &&
+           "lerp zero and one values must be the same type.");
+    assert((weight.type().is_uint() || weight.type().is_float()) &&
+           "lerp weight must be unsigned or float.");
+    assert((zero_val.type().is_float() || zero_val.type().width <= 32) &&
+           "lerp with 64-bit integers is not supported.");
+    // Compilation error for constant weight that is out of range for integer use
+    // as this seems like an easy to catch gotcha.
+    if (!zero_val.type().is_float()) {
+        const float *const_weight = as_const_float(weight);
+        if (const_weight != NULL) {
+            assert(*const_weight >= 0.0f && *const_weight <= 1.0f &&
+                   "floating-point weight for lerp with integer arguments must be between 0.0f and 1.0f.");
+        }
+    }
+    return Internal::Call::make(zero_val.type(), Internal::Call::lerp,
+                                vec(zero_val, one_val, weight),
+                                Internal::Call::Intrinsic);
+}
+
 }
 
 
