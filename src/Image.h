@@ -6,6 +6,7 @@
  */
 
 #include "Buffer.h"
+#include "Tuple.h"
 
 namespace Halide {
 
@@ -78,6 +79,11 @@ public:
     /** Wrap a buffer in an Image object, so that we can directly
      * access its pixels in a type-safe way. */
     Image(const Buffer &buf) : buffer(buf) {
+        prepare_for_direct_pixel_access();
+    }
+
+    /** Wrap a single-element realization in an Image object. */
+    Image(const Realization &r) : buffer(r) {
         prepare_for_direct_pixel_access();
     }
 

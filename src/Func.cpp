@@ -999,20 +999,25 @@ FuncRefExpr::operator Tuple() const {
 }
 */
 
-Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
+Realization Func::realize(int x_size, int y_size, int z_size, int w_size) {
     assert(defined() && "Can't realize undefined function");
-    Type t = value().type();
-    Buffer buf(t, x_size, y_size, z_size, w_size);
-    realize(buf);
-    return buf;
+    vector<Buffer> outputs(func.values().size());
+    for (size_t i = 0; i < outputs.size(); i++) {
+        outputs[i] = Buffer(func.values()[i].type(), x_size, y_size, z_size, w_size);
+    }
+    Realization r(outputs);
+    realize(r);
+    return r;
 }
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     assert(defined() && "Can't infer input bounds on an undefined function");
-    Type t = value().type();
-    // Use a dummy non-null pointer
-    Buffer buf(t, x_size, y_size, z_size, w_size, (uint8_t *)1);
-    infer_input_bounds(buf);
+    vector<Buffer> outputs(func.values().size());
+    for (size_t i = 0; i < outputs.size(); i++) {
+        outputs[i] = Buffer(func.values()[i].type(), x_size, y_size, z_size, w_size, (uint8_t *)1);
+    }
+    Realization r(outputs);
+    infer_input_bounds(r);
 }
 
 OutputImageParam Func::output_buffer() const {
@@ -1270,14 +1275,20 @@ void Func::set_custom_do_task(void (*cust_do_task)(void (*)(int, uint8_t *), int
     }
 }
 
-void Func::realize(Buffer dst) {
+void Func::realize(Buffer b) {
+    realize(Realization(vec<Buffer>(b)));
+}
+
+void Func::realize(Realization dst) {
     if (!compiled_module.wrapped_function) compile_jit();
 
     assert(compiled_module.wrapped_function);
 
     // Check the type and dimensionality of the buffer
-    assert(dst.dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
-    assert(dst.type() == value().type() && "Buffer and Func have different element types");
+    for (size_t i = 0; i < dst.size(); i++) {
+        assert(dst[i].dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
+        assert(dst[i].type() == func.values()[i].type() && "Buffer and Func have different element types");
+    }
 
     // In case these have changed since the last realization
     compiled_module.set_error_handler(error_handler);
@@ -1285,8 +1296,10 @@ void Func::realize(Buffer dst) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
 
-    // Update the address of the buffer we're realizing into
-    arg_values[arg_values.size()-1] = dst.raw_buffer();
+    // Update the address of the buffers we're realizing into
+    for (size_t i = 0; i < dst.size(); i++) {
+        arg_values[arg_values.size()-dst.size()+i] = dst[i].raw_buffer();
+    }
 
     // Update the addresses of the image param args
     Internal::debug(3) << image_param_args.size() << " image param args to set\n";
@@ -1306,17 +1319,26 @@ void Func::realize(Buffer dst) {
     compiled_module.wrapped_function(&(arg_values[0]));
     Internal::debug(2) << "Back from jitted function\n";
 
-    dst.set_source_module(compiled_module);
+    for (size_t i = 0; i < dst.size(); i++) {
+        dst[i].set_source_module(compiled_module);
+    }
 }
 
 void Func::infer_input_bounds(Buffer dst) {
+    infer_input_bounds(Realization(vec<Buffer>(dst)));
+}
+
+void Func::infer_input_bounds(Realization dst) {
     if (!compiled_module.wrapped_function) compile_jit();
 
     assert(compiled_module.wrapped_function);
 
+
     // Check the type and dimensionality of the buffer
-    assert(dst.dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
-    assert(dst.type() == value().type() && "Buffer and Func have different element types");
+    for (size_t i = 0; i < dst.size(); i++) {
+        assert(dst[i].dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
+        assert(dst[i].type() == func.values()[i].type() && "Buffer and Func have different element types");
+    }
 
     // In case these have changed since the last realization
     compiled_module.set_error_handler(error_handler);
@@ -1324,8 +1346,10 @@ void Func::infer_input_bounds(Buffer dst) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
 
-    // Update the address of the buffer we're realizing into
-    arg_values[arg_values.size()-1] = dst.raw_buffer();
+    // Update the address of the buffers we're realizing into
+    for (size_t i = 0; i < dst.size(); i++) {
+        arg_values[arg_values.size()-dst.size()+i] = dst[i].raw_buffer();
+    }
 
     // Update the addresses of the image param args
     Internal::debug(3) << image_param_args.size() << " image param args to set\n";
@@ -1391,7 +1415,9 @@ void Func::infer_input_bounds(Buffer dst) {
         }
     }
 
-    dst.set_source_module(compiled_module);
+    for (size_t i = 0; i < dst.size(); i++) {
+        dst[i].set_source_module(compiled_module);
+    }
 }
 
 void *Func::compile_jit() {
@@ -1402,11 +1428,17 @@ void *Func::compile_jit() {
     // Infer arguments
     InferArguments infer_args;
     lowered.accept(&infer_args);
-
-    Argument me(name(), true, value().type());
-    infer_args.arg_types.push_back(me);
     arg_values = infer_args.arg_values;
-    arg_values.push_back(NULL); // A spot to put the address of the output buffer
+
+    for (size_t i = 0; i < func.values().size(); i++) {
+        string buffer_name = name();
+        if (func.values().size() > 1) {
+            buffer_name = buffer_name + '.' + int_to_string(i);
+        }
+        Argument me(buffer_name, true, func.values()[i].type());
+        infer_args.arg_types.push_back(me);
+        arg_values.push_back(NULL); // A spot to put the address of the output buffers
+    }
     image_param_args = infer_args.image_param_args;
 
     Internal::debug(2) << "Inferred argument list:\n";
