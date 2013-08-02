@@ -93,15 +93,19 @@ struct CountSelfReferences : public IRGraphVisitor {
     }
 };
 
-void Function::define(const vector<string> &args, Expr value) {
+void Function::define(const vector<string> &args, vector<Expr> values) {
     assertf(!name().empty(), "A function needs a name", name());
-    assertf(value.defined(), "Undefined expression in right-hand-side of function definition", name());
+    for (size_t i = 0; i < values.size(); i++) {
+        assertf(values[i].defined(), "Undefined expression in right-hand-side of function definition", name());
+    }
 
     // Make sure all the vars in the value are either args or are
     // attached to some parameter
     CheckVars check(name());
     check.pure_args = args;
-    value.accept(&check);
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i].accept(&check);
+    }
 
     // Make sure all the vars in the args have unique non-empty names
     for (size_t i = 0; i < args.size(); i++) {
@@ -119,7 +123,9 @@ void Function::define(const vector<string> &args, Expr value) {
         }
     }
 
-    value = common_subexpression_elimination(value);
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i] = common_subexpression_elimination(values[i]);
+    }
 
     assertf(!check.reduction_domain.defined(), "Reduction domain referenced in pure function definition", name());
 
@@ -128,8 +134,8 @@ void Function::define(const vector<string> &args, Expr value) {
         contents.ptr->name = unique_name('f');
     }
 
-    assertf(!contents.ptr->value.defined(), "Function is already defined", name());
-    contents.ptr->value = value;
+    assertf(contents.ptr->values.empty(), "Function is already defined", name());
+    contents.ptr->values = values;
     contents.ptr->args = args;
 
     for (size_t i = 0; i < args.size(); i++) {
@@ -138,31 +144,45 @@ void Function::define(const vector<string> &args, Expr value) {
         contents.ptr->schedule.storage_dims.push_back(args[i]);
     }
 
-    contents.ptr->output_buffer = Parameter(value.type(), true, name());
+    for (size_t i = 0; i < values.size(); i++) {
+        string buffer_name = name();
+        if (values.size() > 1) {
+            buffer_name += '.' + int_to_string((int)i);
+        }
+        contents.ptr->output_buffers.push_back(Parameter(values[i].type(), true, buffer_name));
+    }
 }
 
-void Function::define_reduction(const vector<Expr> &_args, Expr value) {
+void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) {
     assertf(!name().empty(), "A function needs a name", name());
-    assertf(contents.ptr->value.defined(), "Can't add a reduction definition without a regular definition first", name());
-    assertf(!is_reduction(), "Function already has a reduction definition", name());
-    assertf(value.defined(), "Undefined expression in right-hand-side of reduction", name());
+    assertf(has_pure_definition(), "Can't add a reduction definition without a regular definition first", name());
+    assertf(!has_reduction_definition(), "Function already has a reduction definition", name());
+    for (size_t i = 0; i < values.size(); i++) {
+        assertf(values[i].defined(), "Undefined expression in right-hand-side of reduction", name());
+    }
 
     // Check the dimensionality matches
     assertf(_args.size() == contents.ptr->args.size(),
            "Dimensionality of reduction definition must match dimensionality of pure definition", name());
 
-    value = common_subexpression_elimination(value);
+    assertf(values.size() == contents.ptr->values.size(),
+            "Number of tuple elements for reduction definition must "
+            "match number of tuple elements for pure definition", name());
+
+    for (size_t i = 0; i < values.size(); i++) {
+        // Check that pure value and the reduction value have the same
+        // type.  Without this check, allocations may be the wrong size
+        // relative to what update code expects.
+        assertf(contents.ptr->values[i].type() == values[i].type(),
+                "Reduction definition does not match type of pure function definition.",
+                name());
+        values[i] = common_subexpression_elimination(values[i]);
+    }
+
     vector<Expr> args(_args.size());
     for (size_t i = 0; i < args.size(); i++) {
         args[i] = common_subexpression_elimination(_args[i]);
     }
-
-    // Check that pure value and the reduction value have the same
-    // type.  Without this check, allocations may be the wrong size
-    // relative to what update code expects.
-    assertf(contents.ptr->value.type() == value.type(),
-     "Reduction definition does not match type of pure function definition.",
-     name());
 
     // The pure args are those naked vars in the args that are not in
     // a reduction domain and are not parameters
@@ -183,7 +203,9 @@ void Function::define_reduction(const vector<Expr> &_args, Expr value) {
     // pure args, in the reduction domain, or a parameter
     CheckVars check(name());
     check.pure_args = pure_args;
-    value.accept(&check);
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i].accept(&check);
+    }
     for (size_t i = 0; i < args.size(); i++) {
         args[i].accept(&check);
     }
@@ -191,7 +213,7 @@ void Function::define_reduction(const vector<Expr> &_args, Expr value) {
     assertf(check.reduction_domain.defined(), "No reduction domain referenced in reduction definition", name());
 
     contents.ptr->reduction_args = args;
-    contents.ptr->reduction_value = value;
+    contents.ptr->reduction_values = values;
     contents.ptr->reduction_domain = check.reduction_domain;
 
     // The reduction value and args probably refer back to the
@@ -203,12 +225,14 @@ void Function::define_reduction(const vector<Expr> &_args, Expr value) {
     for (size_t i = 0; i < args.size(); i++) {
         args[i].accept(&counter);
     }
-    value.accept(&counter);
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i].accept(&counter);
+    }
 
     for (size_t i = 0; i < counter.calls.size(); i++) {
         contents.ptr->ref_count.decrement();
         assertf(!contents.ptr->ref_count.is_zero(),
-               "Bug: removed too many circular references when defining reduction", name());
+                "Bug: removed too many circular references when defining reduction", name());
     }
 
     // First add the pure args in order

@@ -1,22 +1,22 @@
 #include "IRVisitor.h"
 #include "IR.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 IRVisitor::~IRVisitor() {
 }
-    
+
 void IRVisitor::visit(const IntImm *) {
 }
-    
+
 void IRVisitor::visit(const FloatImm *) {
 }
-    
+
 void IRVisitor::visit(const Cast *op) {
     op->value.accept(this);
 }
-    
+
 void IRVisitor::visit(const Variable *) {
 }
 
@@ -88,7 +88,7 @@ void IRVisitor::visit(const GE *op) {
 void IRVisitor::visit(const And *op) {
     op->a.accept(this);
     op->b.accept(this);
-}        
+}
 
 void IRVisitor::visit(const Or *op) {
     op->a.accept(this);
@@ -98,7 +98,7 @@ void IRVisitor::visit(const Or *op) {
 void IRVisitor::visit(const Not *op) {
     op->a.accept(this);
 }
-    
+
 void IRVisitor::visit(const Select *op) {
     op->condition.accept(this);
     op->true_value.accept(this);
@@ -162,7 +162,9 @@ void IRVisitor::visit(const Store *op) {
 }
 
 void IRVisitor::visit(const Provide *op) {
-    op->value.accept(this);
+    for (size_t i = 0; i < op->values.size(); i++) {
+        op->values[i].accept(this);
+    }
     for (size_t i = 0; i < op->args.size(); i++) {
         op->args[i].accept(this);
     }
@@ -210,17 +212,17 @@ void IRGraphVisitor::include(const Stmt &s) {
         return;
     }
 }
-    
+
 void IRGraphVisitor::visit(const IntImm *) {
 }
-    
+
 void IRGraphVisitor::visit(const FloatImm *) {
 }
-    
+
 void IRGraphVisitor::visit(const Cast *op) {
     include(op->value);
 }
-    
+
 void IRGraphVisitor::visit(const Variable *op) {
 }
 
@@ -292,7 +294,7 @@ void IRGraphVisitor::visit(const GE *op) {
 void IRGraphVisitor::visit(const And *op) {
     include(op->a);
     include(op->b);
-}        
+}
 
 void IRGraphVisitor::visit(const Or *op) {
     include(op->a);
@@ -302,7 +304,7 @@ void IRGraphVisitor::visit(const Or *op) {
 void IRGraphVisitor::visit(const Not *op) {
     include(op->a);
 }
-    
+
 void IRGraphVisitor::visit(const Select *op) {
     include(op->condition);
     include(op->true_value);
@@ -366,7 +368,9 @@ void IRGraphVisitor::visit(const Store *op) {
 }
 
 void IRGraphVisitor::visit(const Provide *op) {
-    include(op->value);
+    for (size_t i = 0; i < op->values.size(); i++) {
+        include(op->values[i]);
+    }
     for (size_t i = 0; i < op->args.size(); i++) {
         include(op->args[i]);
     }
