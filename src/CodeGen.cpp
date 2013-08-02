@@ -1215,7 +1215,7 @@ void CodeGen::visit(const Call *op) {
                 if (weight.type().is_float())
                     half_weight = 0.5f;
                 else {
-                  half_weight = weight.type().imax() / 2; 
+                  half_weight = weight.type().imax() / 2;
                 }
 
                 result = select(weight > half_weight, one_val, zero_val);
@@ -1264,12 +1264,11 @@ void CodeGen::visit(const Call *op) {
                         if (bit_size_difference < 0) {
                             typed_weight =
                               Cast::make(computation_type, weight) *
-                              Cast::make(computation_type, (int32_t)scaling_factor);
+                              cast(computation_type, (int32_t)scaling_factor);
                         } else {
                             typed_weight =
                                 Cast::make(computation_type,
-                                           weight / 
-                                           Cast::make(weight.type(), (int32_t)scaling_factor));
+                                           weight / cast(weight.type(), (int32_t)scaling_factor));
                         }
                     }
                     inverse_typed_weight =
@@ -1278,7 +1277,7 @@ void CodeGen::visit(const Call *op) {
                 }
 
                 if (computation_type.is_float()) {
-                    result = zero_val * inverse_typed_weight + 
+                    result = zero_val * inverse_typed_weight +
                              one_val * typed_weight;
                 } else {
                     int32_t bits = computation_type.bits;
@@ -1312,7 +1311,7 @@ void CodeGen::visit(const Call *op) {
                         break;
                     default:
                         break;
-                    }               
+                    }
                 }
 
                 if (bias_value != 0) {
