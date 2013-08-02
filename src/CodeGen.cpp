@@ -314,7 +314,6 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;
     options.StackAlignmentOverride = 0;
-    options.RealignStack = true;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
     options.EnableSegmentedStacks = false;
