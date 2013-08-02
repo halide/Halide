@@ -87,6 +87,7 @@ const string Call::shift_right = "shift_right";
 const string Call::maybe_rewrite_buffer = "maybe_rewrite_buffer";
 const string Call::maybe_return = "maybe_return";
 const string Call::profiling_timer = "profiling_timer";
+const string Call::lerp = "lerp";
 
 }
 }
