@@ -125,7 +125,8 @@ private:
         return add_delta("usec", op_type, op_name, usec, usec, s);
     }
 
-    Stmt add_delta(const string& metric_name, const string& op_type, const string& op_name, Expr begin_val, Expr end_val, Stmt s) {
+    Stmt add_delta(const string& metric_name, const string& op_type, const string& op_name,
+                   Expr begin_val, Expr end_val, Stmt s) {
         string parent_name_pair = call_stack.empty() ?
             "null null" :
             call_stack.back();

@@ -391,7 +391,7 @@ private:
 
         if (const_args && (op->call_type == Call::Image || op->call_type == Call::Extern)) {
             min = max = Call::make(op->type, op->name, new_args, op->call_type,
-                                   op->func, op->image, op->param);
+                                   op->func, op->value_index, op->image, op->param);
         } else {
             // Just use the bounds of the type
             bounds_of_type(op->type);
@@ -710,11 +710,11 @@ void bounds_test() {
     vector<Expr> output_site = vec(x+1);
 
     Stmt loop = For::make("x", 3, 10, For::Serial,
-                        Provide::make("output",
-                                    Add::make(
-                                        Call::make(Int(32), "input", input_site_1, Call::Extern),
-                                        Call::make(Int(32), "input", input_site_2, Call::Extern)),
-                                    output_site));
+                          Provide::make("output",
+                                        vec(Add::make(
+                                                Call::make(Int(32), "input", input_site_1, Call::Extern),
+                                                Call::make(Int(32), "input", input_site_2, Call::Extern))),
+                                        output_site));
 
     map<string, Region> r;
     r = regions_called(loop);

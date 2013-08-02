@@ -94,7 +94,15 @@ private:
 
         size = mutate(size);
 
-        stmt = Allocate::make(realize->name, realize->type, size, body);
+        stmt = body;
+        for (size_t i = 0; i < realize->types.size(); i++) {
+            string buffer_name = realize->name;
+            if (realize->types.size() > 1) {
+                buffer_name = buffer_name + '.' + int_to_string(i);
+            }
+            stmt = Allocate::make(buffer_name, realize->types[i], size, stmt);
+        }
+
 
         // Compute the strides
         for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
@@ -131,8 +139,24 @@ private:
 
     void visit(const Provide *provide) {
         Expr idx = mutate(flatten_args(provide->name, provide->args));
-        Expr val = mutate(provide->value);
-        stmt = Store::make(provide->name, val, idx);
+        Expr val = mutate(provide->values[0]);
+        string buffer_name = provide->name;
+        if (provide->values.size() > 1) {
+            buffer_name = buffer_name + ".0";
+        }
+
+        // TODO: this should be a chain of LetStmts instead to get the
+        // ordering right in case the vals contain loads from the same
+        // buffer.
+        Stmt result = Store::make(buffer_name, val, idx);
+
+        for (size_t i = 1; i < provide->values.size(); i++) {
+            buffer_name = provide->name + '.' + int_to_string(i);
+            val = mutate(provide->values[i]);
+            result = Block::make(result, Store::make(buffer_name, val, idx));
+        }
+
+        stmt = result;
     }
 
     void visit(const Call *call) {
@@ -150,7 +174,14 @@ private:
             }
         } else {
             Expr idx = mutate(flatten_args(call->name, call->args));
-            expr = Load::make(call->type, call->name, idx, call->image, call->param);
+
+            string name = call->name;
+            if (call->call_type == Call::Halide &&
+                call->func.values().size() > 1) {
+                name = name + '.' + int_to_string(call->value_index);
+            }
+
+            expr = Load::make(call->type, name, idx, call->image, call->param);
         }
     }
 

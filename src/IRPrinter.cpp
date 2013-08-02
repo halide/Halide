@@ -408,7 +408,19 @@ void IRPrinter::visit(const Provide *op) {
         if (i < op->args.size() - 1) stream << ", ";
     }
     stream << ") = ";
-    print(op->value);
+    if (op->values.size() > 1) {
+        stream << "{";
+    }
+    for (size_t i = 0; i < op->values.size(); i++) {
+        if (i > 0) {
+            stream << ", ";
+        }
+        print(op->values[i]);
+    }
+    if (op->values.size() > 1) {
+        stream << "}";
+    }
+
     stream << endl;
 }
 

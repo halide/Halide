@@ -88,12 +88,16 @@ Expr qualify_expr(string prefix, Expr value) {
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest(string buffer, string prefix, vector<Expr> site, Expr value, const Schedule &s) {
+Stmt build_provide_loop_nest(string buffer, string prefix,
+                             const vector<Expr> &site,
+                             const vector<Expr> &values,
+                             const Schedule &s) {
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
 
-    // Make the (multi-dimensional) store node
-    Stmt stmt = Provide::make(buffer, value, site);
+    // Make the (multi-dimensional) store nodes
+    assert(!values.empty());
+    Stmt stmt = Provide::make(buffer, values, site);
 
     // Define the function args in terms of the loop variables using the splits
     for (size_t i = 0; i < s.splits.size(); i++) {
@@ -151,30 +155,37 @@ Stmt build_produce(Function f) {
 
     // Compute the site to store to as the function args
     vector<Expr> site;
-    Expr value = qualify_expr(prefix, f.value());
+
+    vector<Expr> values(f.values().size());
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i] = qualify_expr(prefix, f.values()[i]);
+    }
 
     for (size_t i = 0; i < f.args().size(); i++) {
         site.push_back(Variable::make(Int(32), f.name() + "." + f.args()[i]));
     }
 
-    return build_provide_loop_nest(f.name(), prefix, site, value, f.schedule());
+    return build_provide_loop_nest(f.name(), prefix, site, values, f.schedule());
 }
 
 // Build the loop nest that updates a function (assuming it's a reduction).
 Stmt build_update(Function f) {
-    if (!f.is_reduction()) return Stmt();
+    if (!f.has_reduction_definition()) return Stmt();
 
     string prefix = f.name() + ".";
 
     vector<Expr> site;
-    Expr value = qualify_expr(prefix, f.reduction_value());
+    vector<Expr> values(f.reduction_values().size());
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i] = qualify_expr(prefix, f.reduction_values()[i]);
+    }
 
     for (size_t i = 0; i < f.reduction_args().size(); i++) {
         site.push_back(qualify_expr(prefix, f.reduction_args()[i]));
         debug(2) << "Reduction site " << i << " = " << site[i] << "\n";
     }
 
-    Stmt loop = build_provide_loop_nest(f.name(), prefix, site, value, f.reduction_schedule());
+    Stmt loop = build_provide_loop_nest(f.name(), prefix, site, values, f.reduction_schedule());
 
     // Now define the bounds on the reduction domain
     const vector<ReductionVariable> &dom = f.reduction_domain().domain();
@@ -320,7 +331,12 @@ private:
         }
 
         // Change the body of the for loop to do an allocation
-        s = Realize::make(func.name(), func.value().type(), bounds, s);
+        vector<Type> types(func.values().size());
+        for (size_t i = 0; i < types.size(); i++) {
+            types[i] = func.values()[i].type();
+        }
+        s = Realize::make(func.name(), types, bounds, s);
+
 
         return inject_explicit_bounds(s, func);
     }
@@ -337,7 +353,7 @@ private:
         // Can't schedule things inside a vector for loop
         if (for_loop->for_type != For::Vectorized) {
             body = mutate(for_loop->body);
-        } else if (func.is_reduction() &&
+        } else if (func.has_reduction_definition() &&
                    func.schedule().compute_level.is_inline() &&
                    function_is_called_in_stmt(func, for_loop)) {
             // If we're trying to inline a reduction, schedule it here and bail out
@@ -382,7 +398,7 @@ private:
     // If we're an inline reduction, we may need to inject a realization here
     virtual void visit(const Provide *op) {
         if (op->name != func.name() &&
-            func.is_reduction() &&
+            func.has_reduction_definition() &&
             func.schedule().compute_level.is_inline() &&
             function_is_called_in_stmt(func, op)) {
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(op) << "\n";
@@ -400,7 +416,7 @@ class InlineFunction : public IRMutator {
     bool found;
 public:
     InlineFunction(Function f) : func(f), found(false) {
-        assert(!f.is_reduction());
+        assert(!f.has_reduction_definition());
     }
 private:
     using IRMutator::visit;
@@ -414,7 +430,7 @@ private:
                 args[i] = mutate(op->args[i]);
             }
             // Grab the body
-            Expr body = qualify_expr(func.name() + ".", func.value());
+            Expr body = qualify_expr(func.name() + ".", func.values()[op->value_index]);
 
 
             // Bind the args using Let nodes
@@ -422,8 +438,8 @@ private:
 
             for (size_t i = 0; i < args.size(); i++) {
                 body = Let::make(func.name() + "." + func.args()[i],
-                               args[i],
-                               body);
+                                 args[i],
+                                 body);
             }
 
             expr = body;
@@ -518,11 +534,15 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
     }
 
     FindCalls calls;
-    f.value().accept(&calls);
+    for (size_t i = 0; i < f.values().size(); i++) {
+        f.values()[i].accept(&calls);
+    }
 
     // Consider reductions
-    if (f.is_reduction()) {
-        f.reduction_value().accept(&calls);
+    if (f.has_reduction_definition()) {
+        for (size_t i = 0; i < f.reduction_values().size(); i++) {
+            f.reduction_values()[i].accept(&calls);
+        }
         for (size_t i = 0; i < f.reduction_args().size(); i++) {
             f.reduction_args()[i].accept(&calls);
         }
@@ -620,7 +640,8 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
             assert(false);
         }
 
-        if (!f.is_reduction() && f.schedule().compute_level.is_inline()) {
+        if (!f.has_reduction_definition() &&
+            f.schedule().compute_level.is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = InlineFunction(f).mutate(s);
         } else {
@@ -713,11 +734,18 @@ Stmt add_image_checks(Stmt s, Function f) {
     s.accept(&finder);
     map<string, FindBuffers::Result> bufs = finder.buffers;
 
-    // Add the output buffer
-    FindBuffers::Result output_buffer;
-    output_buffer.type = f.value().type();
-    output_buffer.param = f.output_buffer();
-    bufs[f.name()] = output_buffer;
+    // Add the output buffer(s)
+    for (size_t i = 0; i < f.values().size(); i++) {
+        FindBuffers::Result output_buffer;
+        output_buffer.type = f.values()[i].type();
+        output_buffer.param = f.output_buffers()[i];
+        if (f.values().size() > 1) {
+            bufs[f.name() + '.' + int_to_string(i)] = output_buffer;
+        } else {
+            bufs[f.name()] = output_buffer;
+        }
+
+    }
 
     // Now compute what regions of each buffer are touched
     map<string, Region> regions = regions_touched(s);

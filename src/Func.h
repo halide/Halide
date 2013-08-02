@@ -16,6 +16,7 @@
 #include "JITCompiledModule.h"
 #include "Image.h"
 #include "Util.h"
+#include "Tuple.h"
 
 namespace Halide {
 
@@ -24,15 +25,21 @@ namespace Halide {
  * definition, or it could be a call to a function. We don't know
  * until we see how this object gets used.
  */
+class FuncRefExpr;
+
 class FuncRefVar {
     Internal::Function func;
     std::vector<std::string> args;
-    void add_implicit_vars(std::vector<std::string> &args, Expr e) const;
+    void add_implicit_vars(std::vector<std::string> &args, const std::vector<Expr> &e) const;
 public:
     FuncRefVar(Internal::Function, const std::vector<Var> &);
 
-    /**  Use this as the left-hand-side of a definition */
+    /**  Use this as the left-hand-side of a definition. */
     EXPORT void operator=(Expr);
+
+    /** Use this as the left-hand-side of a definition for a Func with
+     * multiple outputs. */
+    EXPORT void operator=(const Tuple &);
 
     /** Define this function as a sum reduction over the negative of
      * the given expression. The expression should refer to some RDom
@@ -65,12 +72,24 @@ public:
     /** Override the usual assignment operator, so that
      * f(x, y) = g(x, y) defines f.
      */
-    void operator=(const FuncRefVar &e) {*this = Expr(e);}
+    // @{
+    void operator=(const FuncRefVar &e);
+    void operator=(const FuncRefExpr &e);
+    // @}
 
     /** Use this FuncRefVar as a call to the function, and not as the
-     * left-hand-side of a definition.
+     * left-hand-side of a definition. Only works for single-output
+     * funcs.
      */
     EXPORT operator Expr() const;
+
+    /** When a FuncRefVar refers to a function that provides multiple
+     * outputs, you can access each output as an Expr using
+     * operator[] */
+    EXPORT Expr operator[](int) const;
+
+    /** How many outputs does the function this refers to produce. */
+    size_t size() const;
 };
 
 /** A fragment of front-end syntax of the form f(x, y, z), where x, y,
@@ -81,7 +100,7 @@ public:
 class FuncRefExpr {
     Internal::Function func;
     std::vector<Expr> args;
-    void add_implicit_vars(std::vector<Expr> &args, Expr e) const;
+    void add_implicit_vars(std::vector<Expr> &args, const std::vector<Expr> &e) const;
 public:
     FuncRefExpr(Internal::Function, const std::vector<Expr> &);
     FuncRefExpr(Internal::Function, const std::vector<std::string> &);
@@ -90,6 +109,10 @@ public:
      * \ref RDom). The function must already have a pure definition.
      */
     EXPORT void operator=(Expr);
+
+    /** Use this as the left-hand-side of a reduction definition for a
+     * Func with multiple outputs. */
+    EXPORT void operator=(const Tuple &);
 
     /** Define this function as a sum reduction over the negative of
      * the given expression. The expression should refer to some RDom
@@ -122,11 +145,23 @@ public:
     /* Override the usual assignment operator, so that
      * f(x, y) = g(x, y) defines f.
      */
-    void operator=(const FuncRefExpr &e) {*this = Expr(e);}
+    // @{
+    void operator=(const FuncRefVar &);
+    void operator=(const FuncRefExpr &);
+    // @}
 
     /** Use this as a call to the function, and not the left-hand-side
-     * of a definition. */
+     * of a definition. Only works for single-output Funcs. */
     EXPORT operator Expr() const;
+
+    /** When a FuncRefExpr refers to a function that provides multiple
+     * outputs, you can access each output as an Expr using
+     * operator[].
+     */
+    EXPORT Expr operator[](int) const;
+
+    /** How many outputs does the function this refers to produce. */
+    size_t size() const;
 };
 
 /** A wrapper around a schedule used for common schedule manipulations */
@@ -262,6 +297,10 @@ public:
     // @}
 
 };
+
+
+
+
 
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
@@ -531,6 +570,9 @@ public:
      * function. May be undefined if the function has no pure
      * definition yet. */
     EXPORT Expr value() const;
+
+    /** Does this function have at least a pure definition. */
+    EXPORT bool defined() const;
 
     /** Get the left-hand-side of the reduction definition. An empty
      * vector if there's no reduction definition. */

@@ -32,8 +32,8 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = args[dim] % factor;
-            expr = Call::make(op->type, op->name, args, op->call_type, 
-                            op->func, op->image, op->param);
+            expr = Call::make(op->type, op->name, args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
         }
     }
 
@@ -44,12 +44,13 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = args[dim] % factor;
-            stmt = Provide::make(op->name, op->value, args);
+            stmt = Provide::make(op->name, op->values, args);
         }
     }
 
 public:
-    FoldStorageOfFunction(string f, int d, Expr e) : func(f), dim(d), factor(e) {}
+    FoldStorageOfFunction(string f, int d, Expr e) :
+        func(f), dim(d), factor(e) {}
 };
 
 // Attempt to fold the storage of a particular function in a statement
@@ -73,7 +74,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             stmt = op;
             return;
         }
-            
+
         map<string, Region> regions = regions_touched(op->body);
         const Region &region = regions[func];
 
@@ -82,14 +83,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             stmt = op;
             return;
         }
-        
+
         // Try each dimension in turn from outermost in
         for (size_t i = region.size(); i > 0; i--) {
             Expr min = region[i-1].min;
             Expr extent = region[i-1].extent;
             Expr loop_var = Variable::make(Int(32), op->name);
 
-            // The min has to be monotonic with the loop variable            
+            // The min has to be monotonic with the loop variable
             Expr prev_min = substitute(op->name, loop_var - 1, min);
             Expr monotonic_increasing = simplify(min >= prev_min);
             Expr monotonic_decreasing = simplify(min <= prev_min);
@@ -112,7 +113,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                    << "Max extent: " << max_extent << '\n';
 
             const IntImm *max_extent_int = max_extent.as<IntImm>();
-            if ((equal(monotonic_increasing, const_true()) || 
+            if ((equal(monotonic_increasing, const_true()) ||
                  equal(monotonic_decreasing, const_true()))
                 && max_extent_int) {
                 int extent = max_extent_int->value;
@@ -130,11 +131,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
 
         // No luck
-        stmt = op;        
+        stmt = op;
 
     }
-    
-public:    
+
+public:
     int dim_folded;
     Expr fold_factor;
     AttemptStorageFoldingOfFunction(string f) : func(f), dim_folded(-1) {}
@@ -153,12 +154,12 @@ class StorageFolding : public IRMutator {
         } else {
             Region bounds = op->bounds;
 
-            assert(folder.dim_folded >= 0 && 
+            assert(folder.dim_folded >= 0 &&
                    folder.dim_folded < (int)bounds.size());
 
             bounds[folder.dim_folded] = Range(0, folder.fold_factor);
-            
-            stmt = Realize::make(op->name, op->type, bounds, new_body);
+
+            stmt = Realize::make(op->name, op->types, bounds, new_body);
         }
     }
 };

@@ -4,7 +4,7 @@
 #include "IROperator.h"
 #include <iostream>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using std::vector;
@@ -20,13 +20,13 @@ void expr_match_test() {
 
     Expr vec_wild = Variable::make(Int(32, 4), "*");
 
-    assert(expr_match(w, 3, matches) && 
+    assert(expr_match(w, 3, matches) &&
            equal(matches[0], 3));
 
     assert(expr_match(w + 3, (y*2) + 3, matches) &&
            equal(matches[0], y*2));
 
-    assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)), 
+    assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)),
                       (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(4.5f)), matches) &&
            equal(matches[0], 81.0f * fy) &&
            equal(matches[1], x/2) &&
@@ -140,7 +140,7 @@ public:
             op->false_value.accept(this);
         } else {
             result = false;
-        }            
+        }
     }
 
     void visit(const Load *op) {
@@ -177,9 +177,10 @@ public:
 
     void visit(const Call *op) {
         const Call *e = expr.as<Call>();
-        if (result && e && 
-            e->type == op->type && 
-            e->name == op->name && 
+        if (result && e &&
+            e->type == op->type &&
+            e->name == op->name &&
+            e->value_index == op->value_index &&
             e->call_type == op->call_type &&
             e->args.size() == op->args.size()) {
             for (size_t i = 0; result && (i < e->args.size()); i++) {
