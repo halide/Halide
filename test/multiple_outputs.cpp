@@ -37,11 +37,14 @@ int main(int argc, char **argv) {
                            Tuple(r.x, r.y, next_value),
                            Tuple(best_x, best_y, best_so_far));
 
-        Func result;
-        result(x) = select(x == 0, best_x, best_y);
-
-        Image<int> out = result.realize(2);
-        printf("%d %d %f\n", out(0), out(1), sin(out(0) * out(1)));
+        Realization result = g.realize();
+        int result_x = Image<int>(result[0])(0);
+        int result_y = Image<int>(result[1])(0);
+        float result_val = Image<float>(result[2])(0);
+        if (result_val < 0.9999) {
+            printf("Argmax of sin(x*y) is underwhelming: %f. We expected it to be closer to one.\n", result_val);
+            return 1;
+        }
     }
 
     printf("Success!\n");

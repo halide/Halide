@@ -389,24 +389,40 @@ public:
     //@}
 
     /** Evaluate this function over some rectangular domain and return
-     * the resulting buffer. The buffer should probably be instantly
-     * wrapped in an Image class of the appropriate type. That is, do
-     * this:
+     * the resulting buffer or buffers. The buffer should probably be
+     * instantly wrapped in an Image class of the appropriate
+     * type. That is, do this:
      *
+     * f(x) = sin(x);
      * Image<float> im = f.realize(...);
      *
      * not this:
      *
+     * f(x) = sin(x)
      * Buffer im = f.realize(...)
      *
+     * If your Func has multiple values, because you defined it using
+     * a Tuple, then casting the result of a realize call to a buffer
+     * or image will produce a run-time errorInstead you should do the
+     * following:
+     *
+     * f(x) = Tuple(x, sin(x));
+     * Realization r = f.realize(...);
+     * Image<int> im0 = r[0];
+     * Image<float> im1 = r[1];
+     *
      */
-    EXPORT Buffer realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
+    EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
 
-    /** Evaluate this function into an existing allocated buffer. If
-     * the buffer is also one of the arguments to the function,
-     * strange things may happen, as the pipeline isn't necessarily
-     * safe to run in-place. */
+    /** Evaluate this function into an existing allocated buffer or
+     * buffers. If the buffer is also one of the arguments to the
+     * function, strange things may happen, as the pipeline isn't
+     * necessarily safe to run in-place. If you pass multiple buffers,
+     * they must have matching sizes. */
+    // @{
+    EXPORT void realize(Realization dst);
     EXPORT void realize(Buffer dst);
+    // @}
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
@@ -415,6 +431,7 @@ public:
      * ImageParams. */
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
+    EXPORT void infer_input_bounds(Realization dst);
     EXPORT void infer_input_bounds(Buffer dst);
     // @}
 

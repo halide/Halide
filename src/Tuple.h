@@ -77,6 +77,62 @@ public:
     }
 };
 
+/** Funcs with Tuple values return multiple buffers when you realize
+ * them. Tuples are to Exprs as Realizations are to Buffers. */
+class Realization {
+private:
+    std::vector<Buffer> buffers;
+public:
+    /** The number of elements in the tuple. */
+    size_t size() const { return buffers.size(); }
+
+    /** Get a reference to an element. */
+    Buffer &operator[](size_t x) {
+        assert(x < buffers.size() && "Realization access out of bounds");
+        return buffers[x];
+    }
+
+    /** Get a copy of an element. */
+    Buffer operator[](size_t x) const {
+        assert(x < buffers.size() && "Realization access out of bounds");
+        return buffers[x];
+    }
+
+    /** Single-element realizations are implicitly castable to Buffers. */
+    operator Buffer() const {
+        assert(buffers.size() == 1 && "Can only cast single-element realizations to buffers or images");
+        return buffers[0];
+    }
+
+    /** Construct a Realization from some Buffers. */
+    //@{
+    Realization(Buffer a, Buffer b) :
+        buffers(Internal::vec<Buffer>(a, b)) {}
+
+    Realization(Buffer a, Buffer b, Buffer c) :
+        buffers(Internal::vec<Buffer>(a, b, c)) {}
+
+    Realization(Buffer a, Buffer b, Buffer c, Buffer d) :
+        buffers(Internal::vec<Buffer>(a, b, c, d)) {}
+
+    Realization(Buffer a, Buffer b, Buffer c, Buffer d, Buffer e) :
+        buffers(Internal::vec<Buffer>(a, b, c, d, e)) {}
+
+    Realization(Buffer a, Buffer b, Buffer c, Buffer d, Buffer e, Buffer f) :
+        buffers(Internal::vec<Buffer>(a, b, c, d, e, f)) {}
+    //@}
+
+    /** Construct a Realization from a vector of Buffers */
+    explicit Realization(const std::vector<Buffer> &e) : buffers(e) {
+        assert(e.size() > 0 && "Realizations must have at least one element\n");
+    }
+
+    /** Treat the Realization as a vector of Buffers */
+    const std::vector<Buffer> &as_vector() const {
+        return buffers;
+    }
+};
+
 /** Equivalents of some standard operators for tuples. */
 // @{
 inline Tuple tuple_select(Tuple condition, const Tuple &true_value, const Tuple &false_value) {
