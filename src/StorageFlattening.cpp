@@ -139,24 +139,39 @@ private:
 
     void visit(const Provide *provide) {
         Expr idx = mutate(flatten_args(provide->name, provide->args));
-        Expr val = mutate(provide->values[0]);
-        string buffer_name = provide->name;
-        if (provide->values.size() > 1) {
-            buffer_name = buffer_name + ".0";
+
+        vector<Expr> values(provide->values.size());
+        for (size_t i = 0; i < values.size(); i++) {
+            values[i] = mutate(provide->values[i]);
         }
 
-        // TODO: this should be a chain of LetStmts instead to get the
-        // ordering right in case the vals contain loads from the same
-        // buffer.
-        Stmt result = Store::make(buffer_name, val, idx);
+        if (values.size() == 1) {
+            stmt = Store::make(provide->name, values[0], idx);
+        } else {
 
-        for (size_t i = 1; i < provide->values.size(); i++) {
-            buffer_name = provide->name + '.' + int_to_string(i);
-            val = mutate(provide->values[i]);
-            result = Block::make(result, Store::make(buffer_name, val, idx));
+            vector<string> names(provide->values.size());
+            Stmt result;
+
+            // Store the values by name
+            for (size_t i = 0; i < provide->values.size(); i++) {
+                string name = provide->name + "." + int_to_string(i);
+                names[i] = name + ".value";
+                Expr var = Variable::make(values[i].type(), names[i]);
+                Stmt store = Store::make(name, var, idx);
+                if (result.defined()) {
+                    result = Block::make(result, store);
+                } else {
+                    result = store;
+                }
+            }
+
+            // Add the let statements that define the values
+            for (size_t i = provide->values.size(); i > 0; i--) {
+                result = LetStmt::make(names[i-1], values[i-1], result);
+            }
+
+            stmt = result;
         }
-
-        stmt = result;
     }
 
     void visit(const Call *call) {
