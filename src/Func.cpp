@@ -82,11 +82,20 @@ std::vector<Var> Func::args() const {
 }
 
 /** The right-hand-side value of the pure definition of this
- * function. May be undefined if the function has no pure
- * definition yet. */
+ * function. An error if the Func has no definition, or is defined as
+ * a Tuple. */
 Expr Func::value() const {
+    assert(defined() &&
+           "Can't call Func::value() on an undefined Func. To check if a Func is defined, call Func::defined()");
     assert(func.values().size() == 1 && "Can't call Func::value() on a func with multiple values");
     return func.values()[0];
+}
+
+/** The values returned by a Func, in Tuple form. */
+Tuple Func::values() const {
+    assert(defined() &&
+           "Can't call Func::values() on an undefined Func. To check if a Func is defined, call Func::defined()");
+    return Tuple(func.values());
 }
 
 /** Get the left-hand-side of the reduction definition. An empty
@@ -95,11 +104,21 @@ const std::vector<Expr> &Func::reduction_args() const {
     return func.reduction_args();
 }
 
-/** Get the right-hand-side of the reduction definition. Returns
- * undefined Expr if there's no reduction definition. */
+/** Get the right-hand-side of the reduction definition. An error if
+ * there is no reduction definition. */
 Expr Func::reduction_value() const {
-    assert(func.values().size() == 1 && "Can't call Func::reduction_value() on a func with multiple values");
+    assert(is_reduction() && "Can't call Func::reduction_value() on a func with no reduction definition. "
+           "Use Func::is_reduction() to check for the existence of a reduction definition\n");
+    assert(func.reduction_values().size() == 1 &&
+           "Can't call Func::reduction_value() on a func with multiple values");
     return func.reduction_values()[0];
+}
+
+/** The reduction values returned by a Func, in Tuple form. */
+Tuple Func::reduction_values() const {
+    assert(is_reduction() && "Can't call Func::reduction_values() on a func with no reduction definition. "
+           "Use Func::is_reduction() to check for the existence of a reduction definition\n");
+    return Tuple(func.reduction_values());
 }
 
 /** Get the reduction domain for the reduction definition. Returns
