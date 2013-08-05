@@ -67,8 +67,8 @@ public:
 
     /** Construct a Tuple from a function reference. */
     // @{
-    Tuple(const FuncRefVar &);
-    Tuple(const FuncRefExpr &);
+    EXPORT Tuple(const FuncRefVar &);
+    EXPORT Tuple(const FuncRefExpr &);
     // @}
 
     /** Treat the tuple as a vector of Exprs */
