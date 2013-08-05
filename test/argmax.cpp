@@ -29,28 +29,29 @@ int main(int argc, char **argv) {
     Func g, arg_max_g;
     Var y, c;
     r = RDom(0, 100, 0, 100);
-
     g(x, y) = x * (100 - x) + y * (80 - y);
-    arg_max_g(c) = 0;
-    best_so_far = g(clamp(arg_max_g(0), 0, 99), clamp(arg_max_g(1), 0, 99));
-    arg_max_g(c) = select(g(r.x, r.y) > best_so_far,
-                          select(c == 0, r.x, r.y),
-                          arg_max_g(c));
-
     g.compute_root();
-    arg_max_g.bound(c, 0, 2).unroll(c).update().unroll(c);
 
-    Image<int> result_g = arg_max_g.realize(2);
-    printf("%d %d\n", result_g(0), result_g(1));
+    arg_max_g() = Tuple(0, 0, g(0,0));
+    best_so_far = g(clamp(arg_max_g()[0], 0, 99), clamp(arg_max_g()[1], 0, 99));
+    arg_max_g() = tuple_select(g(r.x, r.y) > arg_max_g()[2],
+                               Tuple(r.x, r.y, g(r.x, r.y)),
+                               arg_max_g());
+
+    Realization result_g = arg_max_g.realize();
+    int best_x = Image<int>(result_g[0])(0);
+    int best_y = Image<int>(result_g[1])(0);
+
+    printf("%d %d\n", best_x, best_y);
 
     if (result_f(0) != 50) {
         printf("Arg max of f is %d, but should have been 50\n", result_f(0));
         return -1;
     }
 
-    if (result_g(0) != 50 || result_g(1) != 40) {
+    if (best_x != 50 || best_y != 40) {
         printf("Arg max of g is %d, %d, but should have been 50, 40\n",
-               result_g(0), result_g(1));
+               best_x, best_y);
         return -1;
     }
 

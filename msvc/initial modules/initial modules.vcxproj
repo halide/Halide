@@ -79,6 +79,34 @@
         echo ... done
       </Command>
       <Outputs>%(ModName).initmod.obj</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+        @echo on
+        echo ... calling clang
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -march=corei7-avx -D_LP64 -D_CRT_SECURE_NO_WARNINGS -emit-llvm -O3 -I $(SolutionDir)\pthread -S %(Identity) -o tmp.ll
+        echo ... adding ll stubs
+        copy /b tmp.ll + $(SolutionDir)..\src\runtime\%(LlName).ll + $(SolutionDir)..\src\\runtime\posix_math.ll %(ModName).initmod.ll
+        echo ... calling llvm-as
+        $(SolutionDir)..\..\llvm\build\bin\Release\llvm-as.exe %(ModName).initmod.ll -o %(ModName).initmod.bc
+        echo ... calling bitcode2cpp
+        $(TargetDir)bitcode2cpp.exe %(ModName) &lt; %(ModName).initmod.bc &gt; %(ModName).initmod.cpp
+        echo ... compiling init mod
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -c %(ModName).initmod.cpp -o %(ModName).initmod.obj
+        echo ... done
+      </Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+        @echo on
+        echo ... calling clang
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -march=corei7-avx -D_LP64 -D_CRT_SECURE_NO_WARNINGS -emit-llvm -O3 -I $(SolutionDir)\pthread -S %(Identity) -o tmp.ll
+        echo ... adding ll stubs
+        copy /b tmp.ll + $(SolutionDir)..\src\runtime\%(LlName).ll + $(SolutionDir)..\src\runtime\posix_math.ll %(ModName).initmod.ll
+        echo ... calling llvm-as
+        $(SolutionDir)..\..\llvm\build\bin\Release\llvm-as.exe %(ModName).initmod.ll -o %(ModName).initmod.bc
+        echo ... calling bitcode2cpp
+        $(TargetDir)bitcode2cpp.exe %(ModName) &lt; %(ModName).initmod.bc &gt; %(ModName).initmod.cpp
+        echo ... compiling init mod
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -c %(ModName).initmod.cpp -o %(ModName).initmod.obj
+        echo ... done
+      </Command>
     </CustomBuild>
     <CustomBuild Include="..\..\src\runtime\runtime.x86_32_sse41.cpp">
       <LlName>x86_sse41</LlName>
@@ -98,6 +126,34 @@
         echo ... done
       </Command>
       <Outputs>%(ModName).initmod.obj</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+        @echo on
+        echo ... calling clang
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -march=corei7-avx -D_LP64 -D_CRT_SECURE_NO_WARNINGS -emit-llvm -O3 -I $(SolutionDir)\pthread -S %(Identity) -o tmp.ll
+        echo ... adding ll stubs
+        copy /b tmp.ll + $(SolutionDir)..\src\runtime\%(LlName).ll + $(SolutionDir)..\src\\runtime\posix_math.ll %(ModName).initmod.ll
+        echo ... calling llvm-as
+        $(SolutionDir)..\..\llvm\build\bin\Release\llvm-as.exe %(ModName).initmod.ll -o %(ModName).initmod.bc
+        echo ... calling bitcode2cpp
+        $(TargetDir)bitcode2cpp.exe %(ModName) &lt; %(ModName).initmod.bc &gt; %(ModName).initmod.cpp
+        echo ... compiling init mod
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -c %(ModName).initmod.cpp -o %(ModName).initmod.obj
+        echo ... done
+      </Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+        @echo on
+        echo ... calling clang
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -march=corei7-avx -D_LP64 -D_CRT_SECURE_NO_WARNINGS -emit-llvm -O3 -I $(SolutionDir)\pthread -S %(Identity) -o tmp.ll
+        echo ... adding ll stubs
+        copy /b tmp.ll + $(SolutionDir)..\src\runtime\%(LlName).ll + $(SolutionDir)..\src\runtime\posix_math.ll %(ModName).initmod.ll
+        echo ... calling llvm-as
+        $(SolutionDir)..\..\llvm\build\bin\Release\llvm-as.exe %(ModName).initmod.ll -o %(ModName).initmod.bc
+        echo ... calling bitcode2cpp
+        $(TargetDir)bitcode2cpp.exe %(ModName) &lt; %(ModName).initmod.bc &gt; %(ModName).initmod.cpp
+        echo ... compiling init mod
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -c %(ModName).initmod.cpp -o %(ModName).initmod.obj
+        echo ... done
+      </Command>
     </CustomBuild>
     <CustomBuild Include="..\..\src\runtime\runtime.x86_64.cpp">
       <LlName>x86</LlName>
@@ -117,6 +173,34 @@
         echo ... done
       </Command>
       <Outputs>%(ModName).initmod.obj</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+        @echo on
+        echo ... calling clang
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -march=corei7-avx -D_LP64 -D_CRT_SECURE_NO_WARNINGS -emit-llvm -O3 -I $(SolutionDir)\pthread -S %(Identity) -o tmp.ll
+        echo ... adding ll stubs
+        copy /b tmp.ll + $(SolutionDir)..\src\runtime\%(LlName).ll + $(SolutionDir)..\src\\runtime\posix_math.ll %(ModName).initmod.ll
+        echo ... calling llvm-as
+        $(SolutionDir)..\..\llvm\build\bin\Release\llvm-as.exe %(ModName).initmod.ll -o %(ModName).initmod.bc
+        echo ... calling bitcode2cpp
+        $(TargetDir)bitcode2cpp.exe %(ModName) &lt; %(ModName).initmod.bc &gt; %(ModName).initmod.cpp
+        echo ... compiling init mod
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -c %(ModName).initmod.cpp -o %(ModName).initmod.obj
+        echo ... done
+      </Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+        @echo on
+        echo ... calling clang
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -march=corei7-avx -D_LP64 -D_CRT_SECURE_NO_WARNINGS -emit-llvm -O3 -I $(SolutionDir)\pthread -S %(Identity) -o tmp.ll
+        echo ... adding ll stubs
+        copy /b tmp.ll + $(SolutionDir)..\src\runtime\%(LlName).ll + $(SolutionDir)..\src\runtime\posix_math.ll %(ModName).initmod.ll
+        echo ... calling llvm-as
+        $(SolutionDir)..\..\llvm\build\bin\Release\llvm-as.exe %(ModName).initmod.ll -o %(ModName).initmod.bc
+        echo ... calling bitcode2cpp
+        $(TargetDir)bitcode2cpp.exe %(ModName) &lt; %(ModName).initmod.bc &gt; %(ModName).initmod.cpp
+        echo ... compiling init mod
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -c %(ModName).initmod.cpp -o %(ModName).initmod.obj
+        echo ... done
+      </Command>
     </CustomBuild>
     <CustomBuild Include="..\..\src\runtime\runtime.x86_64_avx.cpp">
       <LlName>x86_avx</LlName>
@@ -136,6 +220,34 @@
         echo ... done
       </Command>
       <Outputs>%(ModName).initmod.obj</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+        @echo on
+        echo ... calling clang
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -march=corei7-avx -D_LP64 -D_CRT_SECURE_NO_WARNINGS -emit-llvm -O3 -I $(SolutionDir)\pthread -S %(Identity) -o tmp.ll
+        echo ... adding ll stubs
+        copy /b tmp.ll + $(SolutionDir)..\src\runtime\%(LlName).ll + $(SolutionDir)..\src\\runtime\posix_math.ll %(ModName).initmod.ll
+        echo ... calling llvm-as
+        $(SolutionDir)..\..\llvm\build\bin\Release\llvm-as.exe %(ModName).initmod.ll -o %(ModName).initmod.bc
+        echo ... calling bitcode2cpp
+        $(TargetDir)bitcode2cpp.exe %(ModName) &lt; %(ModName).initmod.bc &gt; %(ModName).initmod.cpp
+        echo ... compiling init mod
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -c %(ModName).initmod.cpp -o %(ModName).initmod.obj
+        echo ... done
+      </Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+        @echo on
+        echo ... calling clang
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -march=corei7-avx -D_LP64 -D_CRT_SECURE_NO_WARNINGS -emit-llvm -O3 -I $(SolutionDir)\pthread -S %(Identity) -o tmp.ll
+        echo ... adding ll stubs
+        copy /b tmp.ll + $(SolutionDir)..\src\runtime\%(LlName).ll + $(SolutionDir)..\src\runtime\posix_math.ll %(ModName).initmod.ll
+        echo ... calling llvm-as
+        $(SolutionDir)..\..\llvm\build\bin\Release\llvm-as.exe %(ModName).initmod.ll -o %(ModName).initmod.bc
+        echo ... calling bitcode2cpp
+        $(TargetDir)bitcode2cpp.exe %(ModName) &lt; %(ModName).initmod.bc &gt; %(ModName).initmod.cpp
+        echo ... compiling init mod
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -c %(ModName).initmod.cpp -o %(ModName).initmod.obj
+        echo ... done
+      </Command>
     </CustomBuild>
     <CustomBuild Include="..\..\src\runtime\runtime.x86_64_sse41.cpp">
       <LlName>x86_sse41</LlName>
@@ -155,6 +267,20 @@
         echo ... done
       </Command>
       <Outputs>%(ModName).initmod.obj</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+        @echo on
+        echo ... calling clang
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -march=corei7-avx -D_LP64 -D_CRT_SECURE_NO_WARNINGS -emit-llvm -O3 -I $(SolutionDir)\pthread -S %(Identity) -o tmp.ll
+        echo ... adding ll stubs
+        copy /b tmp.ll + $(SolutionDir)..\src\runtime\%(LlName).ll + $(SolutionDir)..\src\runtime\posix_math.ll %(ModName).initmod.ll
+        echo ... calling llvm-as
+        $(SolutionDir)..\..\llvm\build\bin\Release\llvm-as.exe %(ModName).initmod.ll -o %(ModName).initmod.bc
+        echo ... calling bitcode2cpp
+        $(TargetDir)bitcode2cpp.exe %(ModName) &lt; %(ModName).initmod.bc &gt; %(ModName).initmod.cpp
+        echo ... compiling init mod
+        $(SolutionDir)..\..\llvm\build\bin\Release\clang.exe -c %(ModName).initmod.cpp -o %(ModName).initmod.obj
+        echo ... done
+      </Command>
     </CustomBuild>
   </ItemGroup>
   <ItemDefinitionGroup>

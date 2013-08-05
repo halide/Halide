@@ -18,17 +18,17 @@ struct FunctionContents {
     mutable RefCount ref_count;
     std::string name;
     std::vector<std::string> args;
-    Expr value;
+    std::vector<Expr> values;
     Schedule schedule;
 
-    Expr reduction_value;
+    std::vector<Expr> reduction_values;
     std::vector<Expr> reduction_args;
     Schedule reduction_schedule;
     ReductionDomain reduction_domain;
 
     std::string debug_file;
 
-    Parameter output_buffer;
+    std::vector<Parameter> output_buffers;
 };
 
 /** A reference-counted handle to Halide's internal representation of
@@ -48,7 +48,7 @@ public:
      * have a definition. All the free variables in 'value' must
      * appear in the args list. 'value' must not depend on any
      * reduction domain */
-    void define(const std::vector<std::string> &args, Expr value);
+    void define(const std::vector<std::string> &args, std::vector<Expr> values);
 
     /** Add a reduction definition to this function. It must already
      * have a pure definition but not a reduction definition, and the
@@ -58,7 +58,7 @@ public:
      * variables. Any pure variables must also appear as Variables in
      * the args array, and they must have the same name as the pure
      * definition's argument in the same index. */
-    void define_reduction(const std::vector<Expr> &args, Expr value);
+    void define_reduction(const std::vector<Expr> &args, std::vector<Expr> values);
 
     /** Construct a new function with the given name */
     Function(const std::string &n) : contents(new FunctionContents) {
@@ -76,8 +76,13 @@ public:
     }
 
     /** Get the right-hand-side of the pure definition */
-    Expr value() const {
-        return contents.ptr->value;
+    const std::vector<Expr> &values() const {
+        return contents.ptr->values;
+    }
+
+    /** Does this function have a pure definition */
+    bool has_pure_definition() const {
+        return !contents.ptr->values.empty();
     }
 
     /** Get a handle to the schedule for the purpose of modifying
@@ -93,8 +98,8 @@ public:
 
     /** Get a handle on the output buffer used for setting constraints
      * on it. */
-    Parameter output_buffer() const {
-        return contents.ptr->output_buffer;
+    const std::vector<Parameter> &output_buffers() const {
+        return contents.ptr->output_buffers;
     }
 
     /** Get a mutable handle to the schedule for the reduction
@@ -109,8 +114,13 @@ public:
     }
 
     /** Get the right-hand-side of the reduction definition */
-    Expr reduction_value() const {
-        return contents.ptr->reduction_value;
+    const std::vector<Expr> &reduction_values() const {
+        return contents.ptr->reduction_values;
+    }
+
+    /** Does this function have a reduction definition */
+    bool has_reduction_definition() const {
+        return !contents.ptr->reduction_values.empty();
     }
 
     /** Get the left-hand-side of the reduction definition */
@@ -121,11 +131,6 @@ public:
     /** Get the reduction domain for the reduction definition */
     ReductionDomain reduction_domain() const {
         return contents.ptr->reduction_domain;
-    }
-
-    /** Is this function a reduction? */
-    bool is_reduction() const {
-        return reduction_value().defined();
     }
 
     /** Equality of identity */

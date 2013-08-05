@@ -766,18 +766,21 @@ struct Store : public StmtNode<Store> {
  * Store node. */
 struct Provide : public StmtNode<Provide> {
     std::string name;
-    Expr value;
+    std::vector<Expr> values;
     std::vector<Expr> args;
 
-    static Stmt make(std::string name, Expr value, const std::vector<Expr> &args) {
-        assert(value.defined() && "Provide of undefined");
+    static Stmt make(std::string name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
+        assert(!values.empty() && "Provide of no values");
+        for (size_t i = 0; i < values.size(); i++) {
+            assert(values[i].defined() && "Provide of undefined value");
+        }
         for (size_t i = 0; i < args.size(); i++) {
-            assert(args[i].defined() && "Provide of undefined");
+            assert(args[i].defined() && "Provide to undefined location");
         }
 
         Provide *node = new Provide;
         node->name = name;
-        node->value = value;
+        node->values = values;
         node->args = args;
         return node;
     }
@@ -837,11 +840,11 @@ typedef std::vector<Range> Region;
  * (min, extent) pairs for each dimension. */
 struct Realize : public StmtNode<Realize> {
     std::string name;
-    Type type;
+    std::vector<Type> types;
     Region bounds;
     Stmt body;
 
-    static Stmt make(std::string name, Type type, const Region &bounds, Stmt body) {
+    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Stmt body) {
         for (size_t i = 0; i < bounds.size(); i++) {
             assert(bounds[i].min.defined() && "Realize of undefined");
             assert(bounds[i].extent.defined() && "Realize of undefined");
@@ -849,10 +852,11 @@ struct Realize : public StmtNode<Realize> {
             assert(bounds[i].extent.type().is_scalar() && "Realize of vector size");
         }
         assert(body.defined() && "Realize of undefined");
+        assert(!types.empty() && "Realize has empty type");
 
         Realize *node = new Realize;
         node->name = name;
-        node->type = type;
+        node->types = types;
         node->bounds = bounds;
         node->body = body;
         return node;
@@ -912,11 +916,16 @@ struct Call : public ExprNode<Call> {
         shift_right,
         maybe_rewrite_buffer,
         maybe_return,
-        profiling_timer;
+        profiling_timer,
+        lerp;
 
     // If it's a call to another halide function, this call node
-    // holds onto a pointer to that function
+    // holds onto a pointer to that function.
     Function func;
+
+    // If that function has multiple values, which value does this
+    // call node refer to?
+    int value_index;
 
     // If it's a call to an image, this call nodes hold a
     // pointer to that image's buffer
@@ -927,12 +936,16 @@ struct Call : public ExprNode<Call> {
     Parameter param;
 
     static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
-                     Function func = Function(), Buffer image = Buffer(), Parameter param = Parameter()) {
+                     Function func = Function(), int value_index = 0,
+                     Buffer image = Buffer(), Parameter param = Parameter()) {
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Call of undefined");
         }
         if (call_type == Halide) {
-            assert(func.value().defined() && "Call to undefined halide function");
+            assert(value_index >= 0 &&
+                   value_index < (int)func.values().size() &&
+                   "Value index out of range in call to halide function");
+            assert(func.has_pure_definition() && "Call to undefined halide function");
             assert(args.size() <= func.args().size() && "Call node with too many arguments.");
             for (size_t i = 0; i < args.size(); i++) {
                 assert(args[i].type() == Int(32) && "Args to call to halide function must be type Int(32)");
@@ -950,25 +963,29 @@ struct Call : public ExprNode<Call> {
         node->args = args;
         node->call_type = call_type;
         node->func = func;
+        node->value_index = value_index;
         node->image = image;
         node->param = param;
         return node;
     }
 
     /** Convenience constructor for calls to other halide functions */
-    static Expr make(Function func, const std::vector<Expr> &args) {
-        assert(func.value().defined() && "Call to undefined halide function");
-        return make(func.value().type(), func.name(), args, Halide, func, Buffer(), Parameter());
+    static Expr make(Function func, const std::vector<Expr> &args, int idx = 0) {
+        assert(idx >= 0 &&
+               idx < (int)func.values().size() &&
+               "Value index out of range in call to halide function");
+        assert(func.has_pure_definition() && "Call to undefined halide function");
+        return make(func.values()[idx].type(), func.name(), args, Halide, func, idx, Buffer(), Parameter());
     }
 
     /** Convenience constructor for loads from concrete images */
     static Expr make(Buffer image, const std::vector<Expr> &args) {
-        return make(image.type(), image.name(), args, Image, Function(), image, Parameter());
+        return make(image.type(), image.name(), args, Image, Function(), 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, Function(), Buffer(), param);
+        return make(param.type(), param.name(), args, Image, Function(), 0, Buffer(), param);
     }
 
 };

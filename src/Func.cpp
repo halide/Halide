@@ -85,7 +85,8 @@ std::vector<Var> Func::args() const {
  * function. May be undefined if the function has no pure
  * definition yet. */
 Expr Func::value() const {
-    return func.value();
+    assert(func.values().size() == 1 && "Can't call Func::value() on a func with multiple values");
+    return func.values()[0];
 }
 
 /** Get the left-hand-side of the reduction definition. An empty
@@ -97,7 +98,8 @@ const std::vector<Expr> &Func::reduction_args() const {
 /** Get the right-hand-side of the reduction definition. Returns
  * undefined Expr if there's no reduction definition. */
 Expr Func::reduction_value() const {
-    return func.reduction_value();
+    assert(func.values().size() == 1 && "Can't call Func::reduction_value() on a func with multiple values");
+    return func.reduction_values()[0];
 }
 
 /** Get the reduction domain for the reduction definition. Returns
@@ -106,13 +108,17 @@ RDom Func::reduction_domain() const {
     return func.reduction_domain();
 }
 
+bool Func::defined() const {
+    return func.has_pure_definition();
+}
+
 /** Is this function a reduction? */
 bool Func::is_reduction() const {
-    return reduction_value().defined();
+    return func.has_reduction_definition();
 }
 
 int Func::dimensions() const {
-    if (!func.value().defined()) return 0;
+    if (!defined()) return 0;
     return (int)func.args().size();
 }
 
@@ -736,8 +742,10 @@ class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
     int count;
 
-    CountImplicitVars(Expr e) : count(0) {
-        e.accept(this);
+    CountImplicitVars(const vector<Expr> &e) : count(0) {
+        for (size_t i = 0; i < e.size(); i++) {
+            e[i].accept(this);
+        }
     }
 
     using IRGraphVisitor::visit;
@@ -751,7 +759,7 @@ public:
 };
 }
 
-void FuncRefVar::add_implicit_vars(vector<string> &a, Expr e) const {
+void FuncRefVar::add_implicit_vars(vector<string> &a, const vector<Expr> &e) const {
     CountImplicitVars count(e);
     Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
     for (int i = 0; i < count.count; i++) {
@@ -760,16 +768,36 @@ void FuncRefVar::add_implicit_vars(vector<string> &a, Expr e) const {
 }
 
 void FuncRefVar::operator=(Expr e) {
+    (*this) = Tuple(vec<Expr>(e));
+}
+
+void FuncRefVar::operator=(const Tuple &e) {
     // If the function has already been defined, this must actually be a reduction
-    if (func.value().defined()) {
+    if (func.has_pure_definition()) {
         FuncRefExpr(func, args) = e;
         return;
     }
 
     // Find implicit args in the expr and add them to the args list before calling define
     vector<string> a = args;
-    add_implicit_vars(a, e);
-    func.define(a, e);
+    add_implicit_vars(a, e.as_vector());
+    func.define(a, e.as_vector());
+}
+
+void FuncRefVar::operator=(const FuncRefVar &e) {
+    if (e.size() == 1) {
+        (*this) = Expr(e);
+    } else {
+        (*this) = Tuple(e);
+    }
+}
+
+void FuncRefVar::operator=(const FuncRefExpr &e) {
+    if (e.size() == 1) {
+        (*this) = Expr(e);
+    } else {
+        (*this) = Tuple(e);
+    }
 }
 
 void FuncRefVar::operator+=(Expr e) {
@@ -793,13 +821,48 @@ void FuncRefVar::operator/=(Expr e) {
 }
 
 FuncRefVar::operator Expr() const {
-    assert(func.value().defined() && "Can't call function with undefined value");
+    assert(func.has_pure_definition() && "Can't call undefined function");
     vector<Expr> expr_args(args.size());
     for (size_t i = 0; i < expr_args.size(); i++) {
         expr_args[i] = Var(args[i]);
     }
+    assert(func.values().size() == 1 &&
+           "Can't convert a reference to a function that has multiple outputs to an Expr");
     return Call::make(func, expr_args);
 }
+
+Expr FuncRefVar::operator[](int i) const {
+    assert(func.has_pure_definition() && "Can't call undefined function");
+    assert(func.values().size() != 1 &&
+           "Can't index into a reference to a function that only provides one output");
+    assert(i >= 0 && i < (int)func.values().size() && "index out of range");
+    vector<Expr> expr_args(args.size());
+    for (size_t j = 0; j < expr_args.size(); j++) {
+        expr_args[j] = Var(args[j]);
+    }
+    return Call::make(func, expr_args, i);
+}
+
+size_t FuncRefVar::size() const {
+    return func.values().size();
+}
+
+/*
+FuncRefVar::operator Tuple() const {
+    assert(func.has_pure_definition() && "Can't call undefined function");
+    assert(func.values().size() != 1 &&
+           "Can't create a tuple from a call to a function that only provides one output");
+    vector<Expr> expr_args(args.size());
+    for (size_t j = 0; j < expr_args.size(); j++) {
+        expr_args[j] = Var(args[j]);
+    }
+    Tuple tuple(std::vector<Expr>(func.values().size()));
+    for (size_t i = 0; i < tuple.size(); i++) {
+        tuple[i] = Call::make(func, expr_args, i);
+    }
+    return tuple;
+}
+*/
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
     ImageParam::check_arg_types(f.name(), &args);
@@ -812,7 +875,7 @@ FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a) : func(f
     }
 }
 
-void FuncRefExpr::add_implicit_vars(vector<Expr> &a, Expr e) const {
+void FuncRefExpr::add_implicit_vars(vector<Expr> &a, const vector<Expr> &e) const {
     CountImplicitVars f(e);
     // Implicit vars are also allowed in the lhs of a reduction. E.g.:
     // f(x, y) = x+y
@@ -829,19 +892,39 @@ void FuncRefExpr::add_implicit_vars(vector<Expr> &a, Expr e) const {
 }
 
 void FuncRefExpr::operator=(Expr e) {
-    assert(func.value().defined() &&
+    (*this) = Tuple(vec<Expr>(e));
+}
+
+void FuncRefExpr::operator=(const Tuple &e) {
+    assert(func.has_pure_definition() &&
            "Can't add a reduction definition to an undefined function");
 
     vector<Expr> a = args;
-    add_implicit_vars(a, e);
+    add_implicit_vars(a, e.as_vector());
 
-    func.define_reduction(args, e);
+    func.define_reduction(args, e.as_vector());
+}
+
+void FuncRefExpr::operator=(const FuncRefExpr &e) {
+    if (e.size() == 1) {
+        (*this) = Expr(e);
+    } else {
+        (*this) = Tuple(e);
+    }
+}
+
+void FuncRefExpr::operator=(const FuncRefVar &e) {
+    if (e.size() == 1) {
+        (*this) = Expr(e);
+    } else {
+        (*this) = Tuple(e);
+    }
 }
 
 // Inject a suitable base-case definition given a reduction
 // definition. This is a helper for FuncRefExpr::operator+= and co.
 void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
-    if (func.value().defined()) return;
+    if (func.has_pure_definition()) return;
     vector<Var> pure_args(a.size());
 
     // Reuse names of existing pure args
@@ -858,56 +941,89 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
 
 void FuncRefExpr::operator+=(Expr e) {
     vector<Expr> a = args;
-    add_implicit_vars(a, e);
+    add_implicit_vars(a, vec(e));
     define_base_case(func, a, cast(e.type(), 0));
     (*this) = Expr(*this) + e;
 }
 
 void FuncRefExpr::operator*=(Expr e) {
     vector<Expr> a = args;
-    add_implicit_vars(a, e);
+    add_implicit_vars(a, vec(e));
     define_base_case(func, a, cast(e.type(), 1));
     (*this) = Expr(*this) * e;
 }
 
 void FuncRefExpr::operator-=(Expr e) {
     vector<Expr> a = args;
-    add_implicit_vars(a, e);
+    add_implicit_vars(a, vec(e));
     define_base_case(func, a, cast(e.type(), 0));
     (*this) = Expr(*this) - e;
 }
 
 void FuncRefExpr::operator/=(Expr e) {
     vector<Expr> a = args;
-    add_implicit_vars(a, e);
+    add_implicit_vars(a, vec(e));
     define_base_case(func, a, cast(e.type(), 1));
     (*this) = Expr(*this) / e;
 }
 
 FuncRefExpr::operator Expr() const {
-    assert(func.value().defined() && "Can't call function with undefined value");
+    assert(func.has_pure_definition() && "Can't call undefined function");
+    assert(func.values().size() == 1 &&
+           "Can't convert a reference to a function that has multiple outputs to an Expr");
     return Call::make(func, args);
 }
 
-Buffer Func::realize(int x_size, int y_size, int z_size, int w_size) {
-    assert(value().defined() && "Can't realize undefined function");
-    Type t = value().type();
-    Buffer buf(t, x_size, y_size, z_size, w_size);
-    realize(buf);
-    return buf;
+Expr FuncRefExpr::operator[](int i) const {
+    assert(func.has_pure_definition() && "Can't call undefined function");
+    assert(func.values().size() != 1 &&
+           "Can't index into a reference to a function that only provides one output");
+    assert(i >= 0 && i < (int)func.values().size() && "index out of range");
+    return Call::make(func, args, i);
+}
+
+size_t FuncRefExpr::size() const {
+    return func.values().size();
+}
+
+/*
+FuncRefExpr::operator Tuple() const {
+    assert(func.has_pure_definition() && "Can't call undefined function");
+    assert(func.values().size() != 1 &&
+           "Can't create a tuple from a call to a function that only provides one output");
+    Tuple tuple(std::vector<Expr>(func.values().size()));
+    for (size_t i = 0; i < tuple.size(); i++) {
+        tuple[i] = Call::make(func, args, i);
+    }
+    return tuple;
+}
+*/
+
+Realization Func::realize(int x_size, int y_size, int z_size, int w_size) {
+    assert(defined() && "Can't realize undefined function");
+    vector<Buffer> outputs(func.values().size());
+    for (size_t i = 0; i < outputs.size(); i++) {
+        outputs[i] = Buffer(func.values()[i].type(), x_size, y_size, z_size, w_size);
+    }
+    Realization r(outputs);
+    realize(r);
+    return r;
 }
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
-    assert(value().defined() && "Can't infer input bounds on an undefined function");
-    Type t = value().type();
-    // Use a dummy non-null pointer
-    Buffer buf(t, x_size, y_size, z_size, w_size, (uint8_t *)1);
-    infer_input_bounds(buf);
+    assert(defined() && "Can't infer input bounds on an undefined function");
+    vector<Buffer> outputs(func.values().size());
+    for (size_t i = 0; i < outputs.size(); i++) {
+        outputs[i] = Buffer(func.values()[i].type(), x_size, y_size, z_size, w_size, (uint8_t *)1);
+    }
+    Realization r(outputs);
+    infer_input_bounds(r);
 }
 
 OutputImageParam Func::output_buffer() const {
-    assert(value().defined() && "Can't access output buffer of undefined function");
-    return OutputImageParam(func.output_buffer(), dimensions());
+    assert(defined() && "Can't access output buffer of undefined function");
+    assert(func.output_buffers().size() == 1 && "Can only call Func::output_buffer on Funcs with one value");
+    return OutputImageParam(func.output_buffers()[0], dimensions());
 }
 
 namespace {
@@ -1023,7 +1139,7 @@ void validate_arguments(const vector<Argument> &args, Stmt lowered) {
 
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name) {
-    assert(value().defined() && "Can't compile undefined function");
+    assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) {
         lowered = Halide::Internal::lower(func);
@@ -1040,7 +1156,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 }
 
 void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name) {
-    assert(value().defined() && "Can't compile undefined function");
+    assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) {
         lowered = Halide::Internal::lower(func);
@@ -1119,7 +1235,7 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 }
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name) {
-    assert(value().defined() && "Can't compile undefined function");
+    assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) lowered = Halide::Internal::lower(func);
     Argument me(name(), true, value().type());
@@ -1159,14 +1275,20 @@ void Func::set_custom_do_task(void (*cust_do_task)(void (*)(int, uint8_t *), int
     }
 }
 
-void Func::realize(Buffer dst) {
+void Func::realize(Buffer b) {
+    realize(Realization(vec<Buffer>(b)));
+}
+
+void Func::realize(Realization dst) {
     if (!compiled_module.wrapped_function) compile_jit();
 
     assert(compiled_module.wrapped_function);
 
     // Check the type and dimensionality of the buffer
-    assert(dst.dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
-    assert(dst.type() == value().type() && "Buffer and Func have different element types");
+    for (size_t i = 0; i < dst.size(); i++) {
+        assert(dst[i].dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
+        assert(dst[i].type() == func.values()[i].type() && "Buffer and Func have different element types");
+    }
 
     // In case these have changed since the last realization
     compiled_module.set_error_handler(error_handler);
@@ -1174,8 +1296,10 @@ void Func::realize(Buffer dst) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
 
-    // Update the address of the buffer we're realizing into
-    arg_values[arg_values.size()-1] = dst.raw_buffer();
+    // Update the address of the buffers we're realizing into
+    for (size_t i = 0; i < dst.size(); i++) {
+        arg_values[arg_values.size()-dst.size()+i] = dst[i].raw_buffer();
+    }
 
     // Update the addresses of the image param args
     Internal::debug(3) << image_param_args.size() << " image param args to set\n";
@@ -1195,17 +1319,26 @@ void Func::realize(Buffer dst) {
     compiled_module.wrapped_function(&(arg_values[0]));
     Internal::debug(2) << "Back from jitted function\n";
 
-    dst.set_source_module(compiled_module);
+    for (size_t i = 0; i < dst.size(); i++) {
+        dst[i].set_source_module(compiled_module);
+    }
 }
 
 void Func::infer_input_bounds(Buffer dst) {
+    infer_input_bounds(Realization(vec<Buffer>(dst)));
+}
+
+void Func::infer_input_bounds(Realization dst) {
     if (!compiled_module.wrapped_function) compile_jit();
 
     assert(compiled_module.wrapped_function);
 
+
     // Check the type and dimensionality of the buffer
-    assert(dst.dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
-    assert(dst.type() == value().type() && "Buffer and Func have different element types");
+    for (size_t i = 0; i < dst.size(); i++) {
+        assert(dst[i].dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
+        assert(dst[i].type() == func.values()[i].type() && "Buffer and Func have different element types");
+    }
 
     // In case these have changed since the last realization
     compiled_module.set_error_handler(error_handler);
@@ -1213,8 +1346,10 @@ void Func::infer_input_bounds(Buffer dst) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
 
-    // Update the address of the buffer we're realizing into
-    arg_values[arg_values.size()-1] = dst.raw_buffer();
+    // Update the address of the buffers we're realizing into
+    for (size_t i = 0; i < dst.size(); i++) {
+        arg_values[arg_values.size()-dst.size()+i] = dst[i].raw_buffer();
+    }
 
     // Update the addresses of the image param args
     Internal::debug(3) << image_param_args.size() << " image param args to set\n";
@@ -1280,22 +1415,30 @@ void Func::infer_input_bounds(Buffer dst) {
         }
     }
 
-    dst.set_source_module(compiled_module);
+    for (size_t i = 0; i < dst.size(); i++) {
+        dst[i].set_source_module(compiled_module);
+    }
 }
 
 void *Func::compile_jit() {
-    assert(value().defined() && "Can't realize undefined function");
+    assert(defined() && "Can't realize undefined function");
 
     if (!lowered.defined()) lowered = Halide::Internal::lower(func);
 
     // Infer arguments
     InferArguments infer_args;
     lowered.accept(&infer_args);
-
-    Argument me(name(), true, value().type());
-    infer_args.arg_types.push_back(me);
     arg_values = infer_args.arg_values;
-    arg_values.push_back(NULL); // A spot to put the address of the output buffer
+
+    for (size_t i = 0; i < func.values().size(); i++) {
+        string buffer_name = name();
+        if (func.values().size() > 1) {
+            buffer_name = buffer_name + '.' + int_to_string(i);
+        }
+        Argument me(buffer_name, true, func.values()[i].type());
+        infer_args.arg_types.push_back(me);
+        arg_values.push_back(NULL); // A spot to put the address of the output buffers
+    }
     image_param_args = infer_args.image_param_args;
 
     Internal::debug(2) << "Inferred argument list:\n";

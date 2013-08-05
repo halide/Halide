@@ -44,7 +44,7 @@ private:
             expr = Ramp::make(expr, op->stride * lane_stride, new_width);
         }
     }
-    
+
     void visit(const Variable *op) {
         Type t = op->type;
         t.width = new_width;
@@ -79,8 +79,8 @@ private:
             args[i] = mutate(op->args[i]);
         }
 
-        expr = Call::make(t, op->name, args, op->call_type, 
-                        op->func, op->image, op->param);
+        expr = Call::make(t, op->name, args, op->call_type,
+                          op->func, op->value_index, op->image, op->param);
     }
 
     void visit(const Let *op) {
@@ -128,7 +128,7 @@ class Interleaver : public IRMutator {
         Expr value = mutate(op->value);
         if (value.type() == Int(32)) alignment_info.push(op->name, modulus_remainder(value));
         Expr body = mutate(op->body);
-        if (value.type() == Int(32)) alignment_info.pop(op->name);        
+        if (value.type() == Int(32)) alignment_info.pop(op->name);
         if (value.same_as(op->value) && body.same_as(op->body)) {
             expr = op;
         } else {
@@ -138,10 +138,10 @@ class Interleaver : public IRMutator {
 
     void visit(const LetStmt *op) {
         Expr value = mutate(op->value);
-        if (value.type() == Int(32)) alignment_info.push(op->name, 
+        if (value.type() == Int(32)) alignment_info.push(op->name,
                                                          modulus_remainder(value, alignment_info));
         Stmt body = mutate(op->body);
-        if (value.type() == Int(32)) alignment_info.pop(op->name);        
+        if (value.type() == Int(32)) alignment_info.pop(op->name);
         if (value.same_as(op->value) && body.same_as(op->body)) {
             stmt = op;
         } else {
@@ -163,15 +163,15 @@ class Interleaver : public IRMutator {
             Expr a, b;
             bool base_is_even = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 0);
             bool base_is_odd  = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 1);
-            if ((is_zero(eq->b) && base_is_even) || 
+            if ((is_zero(eq->b) && base_is_even) ||
                 (is_one(eq->b) && base_is_odd)) {
                 a = extract_even_lanes(true_value);
                 b = extract_odd_lanes(false_value);
-            } else if ((is_one(eq->b) && base_is_even) || 
+            } else if ((is_one(eq->b) && base_is_even) ||
                        (is_zero(eq->b) && base_is_odd)) {
                 a = extract_even_lanes(false_value);
                 b = extract_odd_lanes(true_value);
-            }   
+            }
 
             if (a.defined() && b.defined()) {
                 expr = Call::make(op->type, Call::interleave_vectors, vec(a, b), Call::Intrinsic);
@@ -179,14 +179,14 @@ class Interleaver : public IRMutator {
             }
         }
 
-        if (condition.same_as(op->condition) && 
-            true_value.same_as(op->true_value) && 
+        if (condition.same_as(op->condition) &&
+            true_value.same_as(op->true_value) &&
             false_value.same_as(op->false_value)) {
             expr = op;
         } else {
             expr = Select::make(condition, true_value, false_value);
         }
-    }        
+    }
 };
 
 Stmt rewrite_interleavings(Stmt s) {
@@ -221,9 +221,9 @@ void deinterleave_vector_test() {
 
     check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
-    
-    check(Load::make(ramp.type(), "buf", ramp, Buffer(), Parameter()), 
-          Load::make(ramp_a.type(), "buf", ramp_a, Buffer(), Parameter()), 
+
+    check(Load::make(ramp.type(), "buf", ramp, Buffer(), Parameter()),
+          Load::make(ramp_a.type(), "buf", ramp_a, Buffer(), Parameter()),
           Load::make(ramp_b.type(), "buf", ramp_b, Buffer(), Parameter()));
 
     std::cout << "deinterleave_vector test passed" << std::endl;

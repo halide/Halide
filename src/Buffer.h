@@ -50,7 +50,7 @@ struct BufferContents {
         type(t), allocation(NULL), name(unique_name('b'))
     {
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
-        buf.elem_size = t.bits / 8;        
+        buf.elem_size = (t.bits+ 7) / 8;        
         size_t size = 1;
         if (x_size) size *= x_size;
         if (y_size) size *= y_size;

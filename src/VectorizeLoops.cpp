@@ -23,7 +23,7 @@ class VectorizeLoops : public IRMutator {
         }
 
         using IRMutator::visit;
-            
+
         virtual void visit(const Cast *op) {
             Expr value = mutate(op->value);
             if (value.same_as(op->value)) {
@@ -48,7 +48,7 @@ class VectorizeLoops : public IRMutator {
             }
         }
 
-        template<typename T> 
+        template<typename T>
         void mutate_binary_operator(const T *op) {
             Expr a = mutate(op->a), b = mutate(op->b);
             if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -106,7 +106,7 @@ class VectorizeLoops : public IRMutator {
         void visit(const Call *op) {
             vector<Expr> new_args(op->args.size());
             bool changed = false;
-                
+
             // Mutate the args
             int max_width = 0;
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -116,15 +116,15 @@ class VectorizeLoops : public IRMutator {
                 new_args[i] = new_arg;
                 max_width = std::max(new_arg.type().width, max_width);
             }
-                
+
             if (!changed) expr = op;
             else {
                 // Widen the args to have the same width as the max width found
                 for (size_t i = 0; i < new_args.size(); i++) {
                     new_args[i] = widen(new_args[i], max_width);
                 }
-                expr = Call::make(op->type.vector_of(max_width), op->name, new_args, 
-                                op->call_type, op->func, op->image, op->param);
+                expr = Call::make(op->type.vector_of(max_width), op->name, new_args,
+                                  op->call_type, op->func, op->value_index, op->image, op->param);
             }
         }
 
@@ -144,7 +144,7 @@ class VectorizeLoops : public IRMutator {
                 expr = op;
             } else {
                 expr = Let::make(op->name, value, body);
-            }                
+            }
         }
 
         void visit(const LetStmt *op) {
@@ -163,13 +163,14 @@ class VectorizeLoops : public IRMutator {
                 stmt = op;
             } else {
                 stmt = LetStmt::make(op->name, value, body);
-            }                
+            }
         }
 
         void visit(const Provide *op) {
             vector<Expr> new_args(op->args.size());
+            vector<Expr> new_values(op->values.size());
             bool changed = false;
-                
+
             // Mutate the args
             int max_width = 0;
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -179,19 +180,27 @@ class VectorizeLoops : public IRMutator {
                 new_args[i] = new_arg;
                 max_width = std::max(new_arg.type().width, max_width);
             }
-                
-            Expr value = mutate(op->value);
 
-            if (!changed && value.same_as(op->value)) {
+            for (size_t i = 0; i < op->args.size(); i++) {
+                Expr old_value = op->values[i];
+                Expr new_value = mutate(old_value);
+                if (!new_value.same_as(old_value)) changed = true;
+                new_values[i] = new_value;
+                max_width = std::max(new_value.type().width, max_width);
+            }
+
+            if (!changed) {
                 stmt = op;
             } else {
                 // Widen the args to have the same width as the max width found
                 for (size_t i = 0; i < new_args.size(); i++) {
                     new_args[i] = widen(new_args[i], max_width);
                 }
-                value = widen(value, max_width);
-                stmt = Provide::make(op->name, value, new_args);
-            }                
+                for (size_t i = 0; i < new_values.size(); i++) {
+                    new_values[i] = widen(new_values[i], max_width);
+                }
+                stmt = Provide::make(op->name, new_values, new_args);
+            }
         }
 
         void visit(const Store *op) {
@@ -205,18 +214,18 @@ class VectorizeLoops : public IRMutator {
             }
         }
 
-    public: 
+    public:
         VectorSubs(string v, Expr r) : var(v), replacement(r) {
         }
     };
-        
+
     using IRMutator::visit;
 
     void visit(const For *for_loop) {
         if (for_loop->for_type == For::Vectorized) {
             const IntImm *extent = for_loop->extent.as<IntImm>();
             if (!extent || extent->value <= 1) {
-                std::cerr << "Loop over " << for_loop->name 
+                std::cerr << "Loop over " << for_loop->name
                           << " has extent " << for_loop->extent
                           << ". Can only vectorize loops over a "
                           << "constant extent > 1\n";
@@ -224,10 +233,10 @@ class VectorizeLoops : public IRMutator {
             }
 
             // Replace the var with a ramp within the body
-            Expr for_var = Variable::make(Int(32), for_loop->name);                
+            Expr for_var = Variable::make(Int(32), for_loop->name);
             Expr replacement = Ramp::make(for_var, 1, extent->value);
             Stmt body = VectorSubs(for_loop->name, replacement).mutate(for_loop->body);
-                
+
             // The for loop becomes a simple let statement
             stmt = LetStmt::make(for_loop->name, for_loop->min, body);
 
