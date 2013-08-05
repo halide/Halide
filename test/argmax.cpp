@@ -55,5 +55,34 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // Now try some inline argmaxs
+    Func inline_arg_max, inline_arg_min;
+    inline_arg_max() = argmax(g(r.x, r.y));
+    inline_arg_min() = argmin(g(r.x, r.y));
+
+    Realization inline_max = inline_arg_max.realize();
+    Realization inline_min = inline_arg_min.realize();
+
+    best_x = inline_max[0].as<int>();
+    best_y = inline_max[1].as<int>();
+    int best_val = inline_max[2].as<int>();
+    if (best_x != 50 || best_y != 40 || best_val != 4100) {
+        printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
+               best_x, best_y, best_val, 50, 40, 4100);
+        return -1;
+    }
+
+    best_x = inline_min[0].as<int>();
+    best_y = inline_min[1].as<int>();
+    best_val = inline_min[2].as<int>();
+
+    if (best_x != 0 || best_y != 99 || best_val != -1881) {
+        printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
+               best_x, best_y, best_val, 50, 40, 4100);
+        return -1;
+    }
+
+    printf("Success!\n");
+
     return 0;
 }

@@ -15,6 +15,7 @@ namespace Internal {
 class FindFreeVars : public IRVisitor {
 public:
     vector<Var> free_vars;
+    RDom rdom;
 
 private:
     Scope<int> internal;
@@ -40,7 +41,7 @@ private:
         }
 
         if (v->reduction_domain.defined()) {
-            // Skip reduction variables
+            rdom = RDom(v->reduction_domain);
             return;
         }
 
@@ -108,5 +109,56 @@ Expr minimum(Expr e, const std::string &name) {
     return f(v.free_vars);
 }
 
+Tuple argmax(Expr e, const std::string &name) {
+    Internal::FindFreeVars v;
+    e.accept(&v);
+    Func f(name);
+    assert(v.rdom.defined());
+
+    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
+    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
+    for (int i = 0; i < v.rdom.dimensions(); i++) {
+        initial_tup[i] = 0;
+        update_tup[i] = v.rdom[i];
+    }
+    int value_index = (int)initial_tup.size()-1;
+    initial_tup[value_index] = e.type().min();
+    update_tup[value_index] = e;
+
+    f(v.free_vars) = initial_tup;
+    Expr better = e > f(v.free_vars)[value_index];
+    Tuple update = tuple_select(better, update_tup, f(v.free_vars));
+    f(v.free_vars) = update;
+    return f(v.free_vars);
+}
+
+Tuple argmin(Expr e, const std::string &name) {
+    Internal::FindFreeVars v;
+    e.accept(&v);
+    Func f(name);
+
+    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
+    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
+    for (int i = 0; i < v.rdom.dimensions(); i++) {
+        initial_tup[i] = 0;
+        update_tup[i] = v.rdom[i];
+    }
+    int value_index = (int)initial_tup.size()-1;
+    initial_tup[value_index] = e.type().max();
+    update_tup[value_index] = e;
+
+    f(v.free_vars) = initial_tup;
+    Expr better = e < f(v.free_vars)[value_index];
+    f(v.free_vars) = tuple_select(better, update_tup, f(v.free_vars));
+    return f(v.free_vars);
+}
+
+Tuple argmin(Expr e) {
+    return argmin(e, "argmin");
+}
+
+Tuple argmax(Expr e) {
+    return argmax(e, "argmax");
+}
 
 }
