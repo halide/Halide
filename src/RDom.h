@@ -164,6 +164,9 @@ public:
 class RDom {
     Internal::ReductionDomain domain;
 public:
+    /** Construct an undefined reduction domain. */
+    EXPORT RDom() {}
+
     /** Construct a single-dimensional reduction domain with the given
      * name. If the name is left blank, a unique one is
      * auto-generated. */
@@ -192,7 +195,7 @@ public:
     // @}
 
     /** Construct a reduction domain that wraps an Internal ReductionDomain object. */
-    EXPORT RDom(Internal::ReductionDomain d) : domain(d) {}
+    EXPORT RDom(Internal::ReductionDomain d);
 
     /** Check if this reduction domain is non-NULL */
     bool defined() const {return domain.defined();}

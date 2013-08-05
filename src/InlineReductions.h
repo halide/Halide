@@ -2,6 +2,8 @@
 #define HALIDE_INLINE_REDUCTIONS_H
 
 #include "IR.h"
+#include "Tuple.h"
+#include "Var.h"
 
 /** \file
  * Defines some inline reductions: sum, product, minimum, maximum.
@@ -40,6 +42,17 @@ EXPORT Expr product(Expr, const std::string &);
 EXPORT Expr maximum(Expr, const std::string &);
 EXPORT Expr minimum(Expr, const std::string &);
 //@}
+
+/** Returns an Expr or Tuple representing the coordinates of the point
+ * in the RDom which minimizes or maximizes the expression. The
+ * expression must refer to some RDom. Also returns the extreme value
+ * of the expression as the last element of the tuple. */
+// @{
+EXPORT Tuple argmax(Expr);
+EXPORT Tuple argmin(Expr);
+EXPORT Tuple argmax(Expr, const std::string &);
+EXPORT Tuple argmin(Expr, const std::string &);
+// @}
 
 }
 

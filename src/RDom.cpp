@@ -13,9 +13,9 @@ RVar::operator Expr() const {
     return Internal::Variable::make(Int(32), name(), domain);
 }
 
-Internal::ReductionDomain build_domain(string name0, Expr min0, Expr extent0, 
-                                       string name1, Expr min1, Expr extent1, 
-                                       string name2, Expr min2, Expr extent2, 
+Internal::ReductionDomain build_domain(string name0, Expr min0, Expr extent0,
+                                       string name1, Expr min1, Expr extent1,
+                                       string name2, Expr min2, Expr extent2,
                                        string name3, Expr min3, Expr extent3) {
     vector<Internal::ReductionVariable> d;
     if (min0.defined()) {
@@ -36,8 +36,24 @@ Internal::ReductionDomain build_domain(string name0, Expr min0, Expr extent0,
     }
 
     Internal::ReductionDomain dom(d);
-    
+
     return dom;
+}
+
+RDom::RDom(Internal::ReductionDomain d) : domain(d) {
+    const std::vector<Internal::ReductionVariable> &vars = domain.domain();
+    if (vars.size() > 0) {
+        x = RVar(vars[0].var, vars[0].min, vars[0].extent, d);
+    }
+    if (vars.size() > 1) {
+        y = RVar(vars[1].var, vars[1].min, vars[1].extent, d);
+    }
+    if (vars.size() > 2) {
+        z = RVar(vars[2].var, vars[2].min, vars[2].extent, d);
+    }
+    if (vars.size() > 3) {
+        w = RVar(vars[3].var, vars[3].min, vars[3].extent, d);
+    }
 }
 
 // We suffix all RVars with $r to prevent unintentional name matches with pure vars called x, y, z, w.
@@ -45,9 +61,9 @@ RDom::RDom(Expr min, Expr extent, string name) {
     min = cast<int>(min);
     extent = cast<int>(extent);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x$r", min, extent, 
-                          "", Expr(), Expr(), 
-                          "", Expr(), Expr(), 
+    domain = build_domain(name + ".x$r", min, extent,
+                          "", Expr(), Expr(),
+                          "", Expr(), Expr(),
                           "", Expr(), Expr());
     x = RVar(name + ".x$r", min, extent, domain);
 }
@@ -58,9 +74,9 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
     min1 = cast<int>(min1);
     extent1 = cast<int>(extent1);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x$r", min0, extent0, 
+    domain = build_domain(name + ".x$r", min0, extent0,
                           name + ".y$r", min1, extent1,
-                          "", Expr(), Expr(), 
+                          "", Expr(), Expr(),
                           "", Expr(), Expr());
     x = RVar(name + ".x$r", min0, extent0, domain);
     y = RVar(name + ".y$r", min1, extent1, domain);
@@ -74,7 +90,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     min2 = cast<int>(min2);
     extent2 = cast<int>(extent2);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x$r", min0, extent0, 
+    domain = build_domain(name + ".x$r", min0, extent0,
                           name + ".y$r", min1, extent1,
                           name + ".z$r", min2, extent2,
                           "", Expr(), Expr());
@@ -93,9 +109,9 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     min3 = cast<int>(min3);
     extent3 = cast<int>(extent3);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x$r", min0, extent0, 
-                          name + ".y$r", min1, extent1, 
-                          name + ".z$r", min2, extent2, 
+    domain = build_domain(name + ".x$r", min0, extent0,
+                          name + ".y$r", min1, extent1,
+                          name + ".z$r", min2, extent2,
                           name + ".w$r", min3, extent3);
     x = RVar(name + ".x$r", min0, extent0, domain);
     y = RVar(name + ".y$r", min1, extent1, domain);
@@ -103,19 +119,19 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     w = RVar(name + ".w$r", min3, extent3, domain);
 }
 
-RDom::RDom(Buffer b) {   
+RDom::RDom(Buffer b) {
     Expr min[4], extent[4];
     for (int i = 0; i < 4; i++) {
         if (b.dimensions() > i) {
             min[i] = b.min(i);
             extent[i] = b.extent(i);
-        }    
+        }
     }
     string names[] = {b.name() + ".x$r", b.name() + ".y$r", b.name() + ".z$r", b.name() + ".w$r"};
     domain = build_domain(names[0], min[0], extent[0],
                           names[1], min[1], extent[1],
                           names[2], min[2], extent[2],
-                          names[3], min[3], extent[3]);    
+                          names[3], min[3], extent[3]);
     RVar *vars[] = {&x, &y, &z, &w};
     for (int i = 0; i < 4; i++) {
         if (b.dimensions() > i) {
@@ -130,13 +146,13 @@ RDom::RDom(ImageParam p) {
         if (p.dimensions() > i) {
             min[i] = 0;
             extent[i] = p.extent(i);
-        }    
+        }
     }
     string names[] = {p.name() + ".x$r", p.name() + ".y$r", p.name() + ".z$r", p.name() + ".w$r"};
     domain = build_domain(names[0], min[0], extent[0],
                           names[1], min[1], extent[1],
                           names[2], min[2], extent[2],
-                          names[3], min[3], extent[3]);    
+                          names[3], min[3], extent[3]);
     RVar *vars[] = {&x, &y, &z, &w};
     for (int i = 0; i < 4; i++) {
         if (p.dimensions() > i) {
@@ -156,7 +172,7 @@ RVar RDom::operator[](int i) {
     if (i == 2) return z;
     if (i == 3) return w;
     assert(false && "Reduction domain index out of bounds");
-	return x; // Keep the compiler happy
+    return x; // Keep the compiler happy
 }
 
 RDom::operator Expr() const {
@@ -164,7 +180,7 @@ RDom::operator Expr() const {
         std::cerr << "Error: Can't treat this multidimensional RDom as an Expr:\n"
                   << (*this) << "\n"
                   << "Only single-dimensional RDoms can be cast to Expr.\n";
-        assert(false);            
+        assert(false);
     }
     return Expr(x);
 }
@@ -188,10 +204,10 @@ std::ostream &operator<<(std::ostream &stream, RVar v) {
 /** Emit an RDom in a human-readable form. */
 std::ostream &operator<<(std::ostream &stream, RDom dom) {
     stream << "RDom(\n";
-    for (int i = 0; i < dom.dimensions(); i++) {        
+    for (int i = 0; i < dom.dimensions(); i++) {
         stream << "  " << dom[i] << "\n";
     }
-    stream << ")\n";        
+    stream << ")\n";
     return stream;
 }
 
