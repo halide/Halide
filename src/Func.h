@@ -584,9 +584,14 @@ public:
     EXPORT std::vector<Var> args() const;
 
     /** The right-hand-side value of the pure definition of this
-     * function. May be undefined if the function has no pure
-     * definition yet. */
+     * function. Causes an error if there's no pure definition, or if
+     * the function is defined to return multiple values. */
     EXPORT Expr value() const;
+
+    /** The values returned by this function. An error if the function
+     * has not been been defined. Returns a Tuple with one element for
+     * functions defined to return a single value. */
+    EXPORT Tuple values() const;
 
     /** Does this function have at least a pure definition. */
     EXPORT bool defined() const;
@@ -595,9 +600,15 @@ public:
      * vector if there's no reduction definition. */
     EXPORT const std::vector<Expr> &reduction_args() const;
 
-    /** Get the right-hand-side of the reduction definition. Returns
-     * undefined Expr if there's no reduction definition. */
+    /** Get the right-hand-side of the reduction definition. An error
+     * if there's no reduction definition. */
     EXPORT Expr reduction_value() const;
+
+    /** Get the right-hand-side of the reduction definition for
+     * functions that returns multiple values. An error if there's no
+     * reduction definition. Returns a Tuple with one element for
+     * functions that return a single value. */
+    EXPORT Tuple reduction_values() const;
 
     /** Get the reduction domain for the reduction definition. Returns
      * an undefined RDom if there's no reduction definition. */
