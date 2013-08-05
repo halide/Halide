@@ -46,7 +46,7 @@ bool relatively_equal(value_t a, value_t b) {
         value_t relative_error;
 
         // This test seems a bit high.
-        if (fabs(b - a) < .00001)
+        if (fabs(b - a) < .0001)
           return true;
 
         if (fabs(a) > fabs(b))
@@ -91,7 +91,7 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
 
     const value_t *result_ptr = static_cast<value_t *>(result.host_ptr());
     buffer_t *buffer = result.raw_buffer();
-    
+
     for (int32_t i = buffer->min[0]; i < buffer->min[0] + buffer->extent[0]; i++) {
         for (int32_t j = buffer->min[1]; j < buffer->min[1] + buffer->extent[1]; j++) {
             for (int32_t k = buffer->min[2]; k < buffer->min[2] + buffer->extent[2]; k++) {
@@ -182,7 +182,7 @@ int main(int argc, char **argv) {
   // Verify float weights with integer values
   check_range<uint16_t, float>(0, 1, 0, 1,
                                65535, 1, 0, 1,
-                               0, 257, 255, 1/255.0f,
+                               0, 257, 255, 1/65535.0f,
                                "<uint16_t, float> zero, one float weight test");
 
   check_range<int16_t, uint16_t>(0, 65536, -32768, 1,
