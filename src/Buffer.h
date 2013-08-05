@@ -284,6 +284,7 @@ public:
     template<typename T>
     T &as() {
         assert(defined() && dimensions() == 0);
+        assert(type_of<T>() == type() && "Calling Buffer::as with wrong type for this buffer");
         return ((T *)contents.ptr->buf.host)[0];
     }
 };
