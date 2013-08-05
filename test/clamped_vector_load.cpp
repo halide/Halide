@@ -1,24 +1,6 @@
 #include <Halide.h>
-
 #include <stdio.h>
-
-#ifdef _WIN32
-extern "C" bool QueryPerformanceCounter(uint64_t *);
-extern "C" bool QueryPerformanceFrequency(uint64_t *);
-double currentTime() {
-    uint64_t t, freq;
-    QueryPerformanceCounter(&t);
-    QueryPerformanceFrequency(&freq);
-    return (t * 1000.0) / freq;
-}
-#else
-#include <sys/time.h>
-double currentTime() {
-    timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
-}
-#endif
+#include "clock.h"
 
 using namespace Halide;
 
@@ -40,8 +22,8 @@ double test(Func f, bool test_correctness = true) {
                 int ix2 = std::max(std::min(x+1, MAX), MIN);
                 uint16_t correct = input(ix1, y) * 3 + input(ix2, y);
                 if (output(x, y) != correct) {
-                    printf("output(%d, %d) = %d instead of %d\n", 
-                           x, y, output(x, y), correct); 
+                    printf("output(%d, %d) = %d instead of %d\n",
+                           x, y, output(x, y), correct);
                     exit(-1);
                 }
             }
@@ -49,7 +31,7 @@ double test(Func f, bool test_correctness = true) {
     }
 
     double t1 = currentTime();
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 10; i++) {
         f.realize(output);
     }
     return currentTime() - t1;
@@ -58,8 +40,8 @@ double test(Func f, bool test_correctness = true) {
 int main(int argc, char **argv) {
     // Try doing vector loads with a boundary condition in various
     // ways and compare the performance.
-    
-    input = Image<uint16_t>(1024+8, 32);
+
+    input = Image<uint16_t>(1024+8, 320);
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
@@ -67,9 +49,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    output = Image<uint16_t>(1024, 32);
-        
-    Var x, y;    
+    output = Image<uint16_t>(1024, 320);
+
+    Var x, y;
 
     double t_ref, t_clamped, t_scalar, t_pad;
 
@@ -80,14 +62,14 @@ int main(int argc, char **argv) {
 
         f.vectorize(x, 8);
 
-        t_ref = test(f, false);        
+        t_ref = test(f, false);
     }
 
     {
         // Variant 1 - do the clamped vector load
         Func g;
         g(x, y) = input(clamp(x, MIN, MAX), y);
-        
+
         Func f;
         f(x, y) = g(x, y) * 3 + g(x+1, y);
 
@@ -100,7 +82,7 @@ int main(int argc, char **argv) {
         // Variant 2 - do the load as a scalar op just before the vectorized stuff
         Func g;
         g(x, y) = input(clamp(x, MIN, MAX), y);
-        
+
         Func f;
         f(x, y) = g(x, y) * 3 + g(x+1, y);
 
@@ -114,7 +96,7 @@ int main(int argc, char **argv) {
         // Variant 3 - pad each scanline using scalar code
         Func g;
         g(x, y) = input(clamp(x, MIN, MAX), y);
-        
+
         Func f;
         f(x, y) = g(x, y) * 3 + g(x+1, y);
 
@@ -124,12 +106,15 @@ int main(int argc, char **argv) {
         t_pad = test(f);
     }
 
-    if (t_clamped > 2.5f * t_ref || t_clamped > t_scalar || t_clamped > t_pad) {
+    // This constraint is pretty lax, because the op is so trivial
+    // that the overhead of branching is large. For more complex ops,
+    // the overhead should be smaller.
+    if (t_clamped > 5.0f * t_ref || t_clamped > t_scalar || t_clamped > t_pad) {
         printf("Clamped load timings suspicious:\n"
                "Unclamped: %f\n"
                "Clamped: %f\n"
                "Scalarize the load: %f\n"
-               "Pad the input: %f\n", 
+               "Pad the input: %f\n",
                t_ref, t_clamped, t_scalar, t_pad);
         return -1;
     }

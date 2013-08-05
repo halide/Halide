@@ -157,8 +157,6 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Add *op) {
-        debug(3) << "Simplifying " << Expr(op) << "\n";
-
         int ia = 0, ib = 0;
         float fa = 0.0f, fb = 0.0f;
 
@@ -244,8 +242,6 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Sub *op) {
-        debug(3) << "Simplifying " << Expr(op) << "\n";
-
         Expr a = mutate(op->a), b = mutate(op->b);
 
         int ia = 0, ib = 0;
@@ -1125,7 +1121,17 @@ class Simplify : public IRMutator {
     }
 
     void visit(const AssertStmt *op) {
-        IRMutator::visit(op);
+        Expr condition = mutate(op->condition);
+
+        if (is_const(condition, 0)) {
+            std::cerr << "This pipeline is guaranteed to fail an assertion at runtime: \n"
+                      << Stmt(op) << "\n";
+            assert(false);
+        } else if (condition.same_as(op->condition)) {
+            stmt = op;
+        } else {
+            stmt = AssertStmt::make(condition, op->message);
+        }
     }
 
     void visit(const Pipeline *op) {
@@ -1173,7 +1179,23 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Block *op) {
-        IRMutator::visit(op);
+        Stmt first = mutate(op->first);
+
+        if (!op->rest.defined()) {
+            stmt = first;
+        } else {
+            Stmt rest = mutate(op->rest);
+
+            // Check if the first is a no-op
+            const AssertStmt *noop = first.as<AssertStmt>();
+            if (noop && is_const(noop->condition, 1)) {
+                stmt = rest;
+            } else if (op->first.same_as(first) && op->rest.same_as(rest)) {
+                stmt = op;
+            } else {
+                stmt = Block::make(first, rest);
+            }
+        }
     }
 };
 

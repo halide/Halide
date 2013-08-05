@@ -15,10 +15,19 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="..\..\src\runtime\runtime.x86.cpp">
+    <CustomBuild Include="..\..\src\runtime\runtime.x86_32.cpp">
       <Filter>Source Files</Filter>
     </CustomBuild>
-    <CustomBuild Include="..\..\src\runtime\runtime.x86_avx.cpp">
+    <CustomBuild Include="..\..\src\runtime\runtime.x86_32_sse41.cpp">
+      <Filter>Source Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="..\..\src\runtime\runtime.x86_64.cpp">
+      <Filter>Source Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="..\..\src\runtime\runtime.x86_64_avx.cpp">
+      <Filter>Source Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="..\..\src\runtime\runtime.x86_64_sse41.cpp">
       <Filter>Source Files</Filter>
     </CustomBuild>
   </ItemGroup>
@@ -50,10 +59,5 @@
     <ClInclude Include="..\..\src\runtime\fake_thread_pool.cpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\src\runtime\runtime.x86_32.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
 </Project>

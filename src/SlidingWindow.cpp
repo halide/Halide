@@ -12,7 +12,7 @@ using std::string;
 using std::map;
 
 // Does an expression depend on a particular variable?
-class ExprDependsOnVar : public IRVisitor {    
+class ExprDependsOnVar : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Variable *op) {
@@ -32,7 +32,7 @@ public:
     bool result;
     string var;
 
-    ExprDependsOnVar(string v) : result(false), var(v) {        
+    ExprDependsOnVar(string v) : result(false), var(v) {
     }
 };
 
@@ -56,7 +56,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         if (op->name != func.name()) {
             IRMutator::visit(op);
         } else {
-            
+
             // We're interested in the case where exactly one of the
             // mins of the buffer depends on the loop_var, and none of
             // the extents do.
@@ -92,7 +92,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             if (min.defined()) {
                 // Ok, we've isolated a function, a dimension to slide along, and loop variable to slide over
                 debug(2) << "Sliding " << func.name() << " over dimension " << dim << " along loop variable " << loop_var << "\n";
-                
+
                 Expr loop_var_expr = Variable::make(Int(32), loop_var);
                 Expr steady_state = loop_var_expr > loop_min;
 
@@ -170,11 +170,11 @@ class SlidingWindow : public IRMutator {
             new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
         }
         new_body = mutate(new_body);
-        
+
         if (new_body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = Realize::make(op->name, op->type, op->bounds, new_body);
+            stmt = Realize::make(op->name, op->types, op->bounds, new_body);
         }
     }
 public:

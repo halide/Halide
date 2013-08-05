@@ -25,7 +25,7 @@ struct IRNodeType {};
 
 /** The abstract base classes for a node in the Halide IR. */
 struct IRNode {
-    
+
     /** We use the visitor pattern to traverse IR nodes throughout the
      * compiler, so we have a virtual accept method which accepts
      * visitors.
@@ -95,7 +95,7 @@ struct StmtNode : public BaseStmtNode {
     virtual IRNodeType *type_info() const {return &_type_info;}
     static EXPORT IRNodeType _type_info;
 };
-    
+
 /** IR nodes are passed around opaque handles to them. This is a
    base class for those handles. It manages the reference count,
    and dispatches visitors. */
@@ -113,7 +113,7 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
     /** Downcast this ir node to its actual type (e.g. Add, or
      * Select). This returns NULL if the node is not of the requested
      * type. Example usage:
-     * 
+     *
      * if (const Add *add = node->as<Add>()) {
      *   // This is an add node
      * }
@@ -161,34 +161,33 @@ struct FloatImm : public ExprNode<FloatImm> {
  * can treat it as a value type. */
 struct Expr : public Internal::IRHandle {
     /** Make an undefined expression */
-    Expr() : Internal::IRHandle() {}        
+    Expr() : Internal::IRHandle() {}
 
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
     Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
 
-    
+
     /** Make an expression representing a const 32-bit int (i.e. an IntImm) */
     EXPORT Expr(int x) : IRHandle(Internal::IntImm::make(x)) {
     }
 
     /** Make an expression representing a const 32-bit float (i.e. a FloatImm) */
     EXPORT Expr(float x) : IRHandle(Internal::FloatImm::make(x)) {
-    }   
+    }
 
     /** Get the type of this expression node */
     Type type() const {
         return ((Internal::BaseExprNode *)ptr)->type;
     }
+};
 
-    /** This lets you use an Expr as a key in a map of the form
-     * map<Expr, Foo, Expr::Compare> */
-    struct Compare {
-        bool operator()(const Expr &a, const Expr &b) const {
-            return a.ptr < b.ptr;
-        }
-    };
-
-};    
+/** This lets you use an Expr as a key in a map of the form
+ * map<Expr, Foo, ExprCompare> */
+struct ExprCompare {
+    bool operator()(Expr a, Expr b) const {
+        return a.ptr < b.ptr;
+    }
+};
 
 }
 
@@ -203,7 +202,7 @@ struct Stmt : public IRHandle {
     Stmt() : IRHandle() {}
     Stmt(const BaseStmtNode *n) : IRHandle(n) {}
 
-    /** This lets you use a Stmt as a key in a map of the form    
+    /** This lets you use a Stmt as a key in a map of the form
      * map<Stmt, Foo, Stmt::Compare> */
     struct Compare {
         bool operator()(const Stmt &a, const Stmt &b) const {
@@ -281,7 +280,7 @@ struct Mul : public ExprNode<Mul> {
         node->a = a;
         node->b = b;
         return node;
-    }        
+    }
 };
 
 /** The ratio of two expressions */
@@ -304,7 +303,7 @@ struct Div : public ExprNode<Div> {
 /** The remainder of a / b. Mostly equivalent to '%' in C, except that
  * the result here is always positive. For floats, this is equivalent
  * to calling fmod. */
-struct Mod : public ExprNode<Mod> { 
+struct Mod : public ExprNode<Mod> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
@@ -333,7 +332,7 @@ struct Min : public ExprNode<Min> {
         node->type = a.type();
         node->a = a;
         node->b = b;
-        return node;        
+        return node;
     }
 };
 
@@ -350,7 +349,7 @@ struct Max : public ExprNode<Max> {
         node->type = a.type();
         node->a = a;
         node->b = b;
-        return node;        
+        return node;
     }
 };
 
@@ -576,7 +575,7 @@ struct Ramp : public ExprNode<Ramp> {
         assert(stride.type().is_scalar() && "Ramp with vector stride");
         assert(width > 1 && "Ramp of width <= 1");
         assert(stride.type() == base.type() && "Ramp of mismatched types");
-        
+
         Ramp *node = new Ramp;
         node->type = base.type().vector_of(width);
         node->base = base;
@@ -592,11 +591,11 @@ struct Ramp : public ExprNode<Ramp> {
 struct Broadcast : public ExprNode<Broadcast> {
     Expr value;
     int width;
-        
+
     static Expr make(Expr value, int width) {
         assert(value.defined() && "Broadcast of undefined");
         assert(value.type().is_scalar() && "Broadcast of vector");
-        assert(width > 1 && "Broadcast of width <= 1");            
+        assert(width > 1 && "Broadcast of width <= 1");
 
         Broadcast *node = new Broadcast;
         node->type = value.type().vector_of(width);
@@ -621,7 +620,7 @@ struct Let : public ExprNode<Let> {
         node->type = body.type();
         node->name = name;
         node->value = value;
-        node->body = body;        
+        node->body = body;
         return node;
     }
 };
@@ -640,7 +639,7 @@ struct LetStmt : public StmtNode<LetStmt> {
         LetStmt *node = new LetStmt;
         node->name = name;
         node->value = value;
-        node->body = body;        
+        node->body = body;
         return node;
     }
 };
@@ -655,7 +654,7 @@ struct PrintStmt : public StmtNode<PrintStmt> {
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "PrintStmt of undefined");
         }
-        
+
         PrintStmt *node = new PrintStmt;
         node->prefix = prefix;
         node->args = args;
@@ -687,7 +686,7 @@ struct AssertStmt : public StmtNode<AssertStmt> {
  * read-write. In 'consume' it is read-only. The 'update' node is
  * often NULL. (check update.defined() to find out). None of this
  * is actually enforced, the node is purely for informative
- * purposes to help out our analysis during lowering. */ 
+ * purposes to help out our analysis during lowering. */
 struct Pipeline : public StmtNode<Pipeline> {
     std::string name;
     Stmt produce, update, consume;
@@ -705,7 +704,7 @@ struct Pipeline : public StmtNode<Pipeline> {
         return node;
     }
 };
-    
+
 /** A for loop. Execute the 'body' statement for all values of the
  * variable 'name' from 'min' to 'min + extent'. There are four
  * types of For nodes. A 'Serial' for loop is a conventional
@@ -767,18 +766,21 @@ struct Store : public StmtNode<Store> {
  * Store node. */
 struct Provide : public StmtNode<Provide> {
     std::string name;
-    Expr value;
+    std::vector<Expr> values;
     std::vector<Expr> args;
 
-    static Stmt make(std::string name, Expr value, const std::vector<Expr> &args) {
-        assert(value.defined() && "Provide of undefined");
+    static Stmt make(std::string name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
+        assert(!values.empty() && "Provide of no values");
+        for (size_t i = 0; i < values.size(); i++) {
+            assert(values[i].defined() && "Provide of undefined value");
+        }
         for (size_t i = 0; i < args.size(); i++) {
-            assert(args[i].defined() && "Provide of undefined");
+            assert(args[i].defined() && "Provide to undefined location");
         }
 
         Provide *node = new Provide;
         node->name = name;
-        node->value = value;
+        node->values = values;
         node->args = args;
         return node;
     }
@@ -811,7 +813,7 @@ struct Allocate : public StmtNode<Allocate> {
 /** Free the resources associated with the given buffer. */
 struct Free : public StmtNode<Free> {
     std::string name;
-    
+
     static Stmt make(std::string name) {
         Free *node = new Free;
         node->name = name;
@@ -830,7 +832,7 @@ struct Range {
 };
 
 /** A multi-dimensional box. The outer product of the elements */
-typedef std::vector<Range> Region;   
+typedef std::vector<Range> Region;
 
 /** Allocate a multi-dimensional buffer of the given type and
  * size. Create some scratch memory that will back the function 'name'
@@ -838,11 +840,11 @@ typedef std::vector<Range> Region;
  * (min, extent) pairs for each dimension. */
 struct Realize : public StmtNode<Realize> {
     std::string name;
-    Type type;
+    std::vector<Type> types;
     Region bounds;
     Stmt body;
 
-    static Stmt make(std::string name, Type type, const Region &bounds, Stmt body) {
+    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Stmt body) {
         for (size_t i = 0; i < bounds.size(); i++) {
             assert(bounds[i].min.defined() && "Realize of undefined");
             assert(bounds[i].extent.defined() && "Realize of undefined");
@@ -850,10 +852,11 @@ struct Realize : public StmtNode<Realize> {
             assert(bounds[i].extent.type().is_scalar() && "Realize of vector size");
         }
         assert(body.defined() && "Realize of undefined");
+        assert(!types.empty() && "Realize has empty type");
 
         Realize *node = new Realize;
         node->name = name;
-        node->type = type;
+        node->types = types;
         node->bounds = bounds;
         node->body = body;
         return node;
@@ -864,7 +867,7 @@ struct Realize : public StmtNode<Realize> {
  * NULL. Used rest.defined() to find out. */
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
-        
+
     static Stmt make(Stmt first, Stmt rest) {
         assert(first.defined() && "Block of undefined");
         // rest is allowed to be null
@@ -896,25 +899,33 @@ namespace Internal {
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image, Extern, Halide, Intrinsic} CallType;    
+    typedef enum {Image, Extern, Halide, Intrinsic} CallType;
     CallType call_type;
 
     // Halide uses calls internally to represent certain operations
     // (instead of IR nodes). These are matched by name.
-    static EXPORT const std::string debug_to_file, 
-        shuffle_vector, 
-        interleave_vectors, 
-        reinterpret, 
-        bitwise_and, 
-        bitwise_not, 
-        bitwise_xor, 
-        bitwise_or, 
-        shift_left, 
-        shift_right;
+    static EXPORT const std::string debug_to_file,
+        shuffle_vector,
+        interleave_vectors,
+        reinterpret,
+        bitwise_and,
+        bitwise_not,
+        bitwise_xor,
+        bitwise_or,
+        shift_left,
+        shift_right,
+        maybe_rewrite_buffer,
+        maybe_return,
+        profiling_timer,
+        lerp;
 
     // If it's a call to another halide function, this call node
-    // holds onto a pointer to that function
+    // holds onto a pointer to that function.
     Function func;
+
+    // If that function has multiple values, which value does this
+    // call node refer to?
+    int value_index;
 
     // If it's a call to an image, this call nodes hold a
     // pointer to that image's buffer
@@ -924,16 +935,26 @@ struct Call : public ExprNode<Call> {
     // pointer to that
     Parameter param;
 
-    static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type, 
-                     Function func = Function(), Buffer image = Buffer(), Parameter param = Parameter()) { 
+    static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
+                     Function func = Function(), int value_index = 0,
+                     Buffer image = Buffer(), Parameter param = Parameter()) {
         for (size_t i = 0; i < args.size(); i++) {
             assert(args[i].defined() && "Call of undefined");
         }
         if (call_type == Halide) {
-            assert(func.value().defined() && "Call to undefined halide function");
+            assert(value_index >= 0 &&
+                   value_index < (int)func.values().size() &&
+                   "Value index out of range in call to halide function");
+            assert(func.has_pure_definition() && "Call to undefined halide function");
             assert(args.size() <= func.args().size() && "Call node with too many arguments.");
+            for (size_t i = 0; i < args.size(); i++) {
+                assert(args[i].type() == Int(32) && "Args to call to halide function must be type Int(32)");
+            }
         } else if (call_type == Image) {
             assert((param.defined() || image.defined()) && "Call node to undefined image");
+            for (size_t i = 0; i < args.size(); i++) {
+                assert(args[i].type() == Int(32) && "Args to load from image must be type Int(32)");
+            }
         }
 
         Call *node = new Call;
@@ -942,26 +963,31 @@ struct Call : public ExprNode<Call> {
         node->args = args;
         node->call_type = call_type;
         node->func = func;
+        node->value_index = value_index;
         node->image = image;
         node->param = param;
         return node;
     }
 
     /** Convenience constructor for calls to other halide functions */
-    static Expr make(Function func, const std::vector<Expr> &args) {
-        assert(func.value().defined() && "Call to undefined halide function");
-        return make(func.value().type(), func.name(), args, Halide, func, Buffer(), Parameter());
+    static Expr make(Function func, const std::vector<Expr> &args, int idx = 0) {
+        assert(idx >= 0 &&
+               idx < (int)func.values().size() &&
+               "Value index out of range in call to halide function");
+        assert(func.has_pure_definition() && "Call to undefined halide function");
+        return make(func.values()[idx].type(), func.name(), args, Halide, func, idx, Buffer(), Parameter());
     }
 
     /** Convenience constructor for loads from concrete images */
     static Expr make(Buffer image, const std::vector<Expr> &args) {
-        return make(image.type(), image.name(), args, Image, Function(), image, Parameter());
+        return make(image.type(), image.name(), args, Image, Function(), 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, Function(), Buffer(), param);
+        return make(param.type(), param.name(), args, Image, Function(), 0, Buffer(), param);
     }
+
 };
 
 /** A named variable. Might be a loop variable, function argument,

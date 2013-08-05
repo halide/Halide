@@ -1,23 +1,6 @@
 #include <stdio.h>
 #include <Halide.h>
-
-#ifdef _WIN32
-extern "C" bool QueryPerformanceCounter(uint64_t *);
-extern "C" bool QueryPerformanceFrequency(uint64_t *);
-double currentTime() {
-    uint64_t t, freq;
-    QueryPerformanceCounter(&t);
-    QueryPerformanceFrequency(&freq);
-    return (t * 1000.0) / freq;
-}
-#else
-#include <sys/time.h>
-double currentTime() {
-    timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000.0 + t.tv_usec / 1000.0f;
-}
-#endif
+#include "clock.h"
 
 using namespace Halide;
 
@@ -42,7 +25,6 @@ int main(int argc, char **argv) {
     t1 = currentTime();
     f.realize(imf);
     t2 = currentTime();
-
     double parallelTime = t2 - t1;
 
     printf("Realizing g\n");

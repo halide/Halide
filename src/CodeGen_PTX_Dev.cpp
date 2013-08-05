@@ -19,7 +19,7 @@ static void *halide_internal_initmod_ptx_dev = 0;
 static int halide_internal_initmod_ptx_dev_length = 0;
 #endif
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using std::vector;
@@ -27,9 +27,10 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev()
-    : CodeGen()
-{
+CodeGen_PTX_Dev::CodeGen_PTX_Dev() : CodeGen() {
+    #if !(WITH_PTX)
+    assert(false && "ptx not enabled for this build of Halide.");
+    #endif
     assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
 }
 
@@ -56,7 +57,7 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
             function->setDoesNotAlias(i+1);
         }
     }
-    
+
 
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
@@ -67,13 +68,13 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
         size_t i = 0;
         for (llvm::Function::arg_iterator iter = function->arg_begin();
              iter != function->arg_end();
-             iter++) {                        
+             iter++) {
 
             if (args[i].is_buffer) {
                 // HACK: codegen expects a load from foo to use base
                 // address 'foo.host', so we store the device pointer
                 // as foo.host in this scope.
-                sym_push(args[i].name + ".host", iter); 
+                sym_push(args[i].name + ".host", iter);
             } else {
                 sym_push(args[i].name, iter);
             }
@@ -101,7 +102,7 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
     builder->SetInsertPoint(entry_block);
     builder->CreateBr(body_block);
 
-    // Add the nvvm annotation that it is a kernel function. 
+    // Add the nvvm annotation that it is a kernel function.
     MDNode *mdNode = MDNode::get(*context, vec<Value *>(function,
                                                         MDString::get(*context, "kernel"),
                                                         ConstantInt::get(i32, 1)));
@@ -152,7 +153,7 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
     if (ends_with(name, ".threadidx")) {
         return "llvm.nvvm.read.ptx.sreg.tid.x";
     } else if (ends_with(name, ".threadidy")) {
-        return "llvm.nvvm.read.ptx.sreg.tid.y";        
+        return "llvm.nvvm.read.ptx.sreg.tid.y";
     } else if (ends_with(name, ".threadidz")) {
         return "llvm.nvvm.read.ptx.sreg.tid.z";
     } else if (ends_with(name, ".threadidw")) {
@@ -202,7 +203,7 @@ void CodeGen_PTX_Dev::visit(const Pipeline *n) {
     // Grab the syncthreads intrinsic, or declare it if it doesn't exist yet
     llvm::Function *syncthreads = module->getFunction("llvm.nvvm.barrier0");
     if (!syncthreads) {
-        FunctionType *func_t = FunctionType::get(llvm::Type::getVoidTy(*context), vector<llvm::Type *>(), false);    
+        FunctionType *func_t = FunctionType::get(llvm::Type::getVoidTy(*context), vector<llvm::Type *>(), false);
         syncthreads = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.nvvm.barrier0", module);
         syncthreads->setCallingConv(CallingConv::C);
         debug(2) << "Declaring syncthreads intrinsic\n";
@@ -229,7 +230,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
     debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
     // If this is a shared allocation, there should already be a
-    // pointer into shared memory in the symbol table.    
+    // pointer into shared memory in the symbol table.
     Value *ptr;
     Value *offset = sym_get(alloc->name + ".shared_mem", false);
 
@@ -291,7 +292,7 @@ string CodeGen_PTX_Dev::compile_to_src() {
     const std::string MArch = march();
     const std::string MCPU = mcpu();
     const Target* TheTarget = 0;
-    
+
     std::string errStr;
     TheTarget = TargetRegistry::lookupTarget(TheTriple.getTriple(), errStr);
     assert(TheTarget);
@@ -300,7 +301,6 @@ string CodeGen_PTX_Dev::compile_to_src() {
     Options.LessPreciseFPMADOption = true;
     Options.PrintMachineCode = false;
     Options.NoFramePointerElim = false;
-    Options.NoFramePointerElimNonLeaf = false;
     //Options.NoExcessFPPrecision = false;
     Options.AllowFPOpFusion = FPOpFusion::Fast;
     Options.UnsafeFPMath = true;
@@ -318,7 +318,6 @@ string CodeGen_PTX_Dev::compile_to_src() {
     Options.JITEmitDebugInfoToDisk = false;
     Options.GuaranteedTailCallOpt = false;
     Options.StackAlignmentOverride = 0;
-    Options.RealignStack = true;
     // Options.DisableJumpTables = false;
     Options.TrapFuncName = "";
     Options.EnableSegmentedStacks = false;

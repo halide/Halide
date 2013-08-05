@@ -15,6 +15,7 @@
 
 #include <vector>
 #include <string>
+#include <cstring>
 
 // by default, the symbol EXPORT does nothing. In windows dll builds we can define it to __declspec(dllexport)
 #ifdef _WINDOWS_DLL
@@ -27,7 +28,7 @@
 #endif
 #endif
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** Build small vectors of up to 6 elements. If we used C++11 and
@@ -61,7 +62,7 @@ std::vector<T> vec(T a, T b, T c) {
 template<typename T>
 std::vector<T> vec(T a, T b, T c, T d) {
     std::vector<T> v(4);
-    v[0] = a;        
+    v[0] = a;
     v[1] = b;
     v[2] = c;
     v[3] = d;
@@ -71,7 +72,7 @@ std::vector<T> vec(T a, T b, T c, T d) {
 template<typename T>
 std::vector<T> vec(T a, T b, T c, T d, T e) {
     std::vector<T> v(5);
-    v[0] = a;        
+    v[0] = a;
     v[1] = b;
     v[2] = c;
     v[3] = d;
@@ -82,7 +83,7 @@ std::vector<T> vec(T a, T b, T c, T d, T e) {
 template<typename T>
 std::vector<T> vec(T a, T b, T c, T d, T e, T f) {
     std::vector<T> v(6);
-    v[0] = a;        
+    v[0] = a;
     v[1] = b;
     v[2] = c;
     v[3] = d;
@@ -91,6 +92,18 @@ std::vector<T> vec(T a, T b, T c, T d, T e, T f) {
     return v;
 }
 // @}
+
+/** Convert an integer to a string. */
+EXPORT std::string int_to_string(int x);
+
+/** An aggressive form of reinterpret cast used for correct type-punning. */
+template<typename DstType, typename SrcType>
+DstType reinterpret_bits(const SrcType &src) {
+    assert(sizeof(SrcType) == sizeof(DstType));
+    DstType dst;
+    memcpy(&dst, &src, sizeof(SrcType));
+    return dst;
+}
 
 /** Generate a unique name starting with the given character. It's
  * unique relative to all other calls to unique_name done by this

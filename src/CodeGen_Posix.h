@@ -2,12 +2,12 @@
 #define HALIDE_CODEGEN_POSIX_H
 
 /** \file
- * Defines a base-class for code-generators on posixy cpu platforms 
+ * Defines a base-class for code-generators on posixy cpu platforms
  */
 
 #include "CodeGen.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** A code generator that emits posix code from a given Halide stmt. */
@@ -55,7 +55,7 @@ protected:
      * on the stack. The rest go on the heap by calling "halide_malloc"
      * and "halide_free" in the standard library. */
     // @{
-    void visit(const Allocate *);        
+    void visit(const Allocate *);
     void visit(const Free *);
     // @}
 
@@ -65,18 +65,11 @@ protected:
 
         /** How many bytes of stack space used. 0 implies it was a
          * heap allocation. */
-        int stack_size; 
+        int stack_size;
 
         /** The stack pointer before the allocation was created. NULL
-         * for heap allocations, or for stack allocations which reuse
-         * existing stack blocks. */
-        llvm::Value *saved_stack; 
-
-        /** The actual instruction that did the alloca. Used so we can
-         * rewrite it if we want to expand it later. NULL for heap
-         * allocations. */
-        llvm::AllocaInst *alloca_inst;
-
+         * for heap allocations. */
+        llvm::Value *saved_stack;
     };
 
     /** The allocations currently in scope */
@@ -90,12 +83,12 @@ protected:
      * allocations this calls halide_malloc in the runtime, and for
      * stack allocations it either reuses an existing block from the
      * free_stack_blocks list, or it saves the stack pointer and calls
-     * alloca. 
-     * 
+     * alloca.
+     *
      * This call returns the allocation, pushes it onto the
      * 'allocations' map, and adds an entry to the symbol table called
      * name.host that provides the base pointer.
-     * 
+     *
      * When the allocation can be freed call 'free_allocation', and
      * when it goes out of scope call 'finalize_allocation'. */
     Allocation create_allocation(const std::string &name, Type type, Expr size);

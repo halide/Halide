@@ -1,3 +1,5 @@
+#include "HalideRuntime.h"
+
 #include <stdint.h>
 #ifdef _LP64
 typedef uint64_t size_t;

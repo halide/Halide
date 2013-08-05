@@ -17,18 +17,19 @@ using namespace llvm;
 // the memory for jit compiled code.
 class JITModuleHolder {
 public:
-    mutable RefCount ref_count;    
+    mutable RefCount ref_count;
 
-    JITModuleHolder(llvm::ExecutionEngine *ee, llvm::Module *m, void (*shutdown)()) : 
-        execution_engine(ee), 
-        module(m), 
-        context(&m->getContext()), 
+    JITModuleHolder(llvm::ExecutionEngine *ee, llvm::Module *m, void (*shutdown)()) :
+        execution_engine(ee),
+        module(m),
+        context(&m->getContext()),
         shutdown_thread_pool(shutdown) {
     }
 
     ~JITModuleHolder() {
         for (size_t i = 0; i < cleanup_routines.size(); i++) {
-            debug(2) << "Calling target specific cleanup routine at " << cleanup_routines[i] << "\n";
+            void *ptr = reinterpret_bits<void *>(cleanup_routines[i]);
+            debug(1) << "Calling target specific cleanup routine at " << ptr << "\n";
             (*cleanup_routines[i])();
         }
 
@@ -81,7 +82,7 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
         assert(false);
     }
 
-    *result = (FP)f;
+    *result = reinterpret_bits<FP>(f);
 
 }
 
@@ -93,48 +94,45 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     string error_string;
-    
+
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
     options.NoFramePointerElim = false;
-    options.NoFramePointerElimNonLeaf = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
     options.UseSoftFloat = false;
-    options.FloatABIType = 
+    options.FloatABIType =
         cg->use_soft_float_abi() ? FloatABI::Soft : FloatABI::Hard;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;
     options.StackAlignmentOverride = 0;
-    options.RealignStack = true;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
     options.EnableSegmentedStacks = false;
     options.UseInitArray = false;
-    options.SSPBufferSize = 0;
-    
+
     EngineBuilder engine_builder(m);
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(EngineKind::JIT);
     #ifdef USE_MCJIT
-    engine_builder.setUseMCJIT(true);        
+    engine_builder.setUseMCJIT(true);
     engine_builder.setJITMemoryManager(JITMemoryManager::CreateDefaultMemManager());
     #else
     engine_builder.setUseMCJIT(false);
     #endif
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-    engine_builder.setMCPU(cg->mcpu());    
+    engine_builder.setMCPU(cg->mcpu());
     engine_builder.setMAttrs(vec<string>(cg->mattrs()));
     ExecutionEngine *ee = engine_builder.create();
     if (!ee) std::cerr << error_string << "\n";
-    assert(ee && "Couldn't create execution engine");        
+    assert(ee && "Couldn't create execution engine");
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
-    // ee->runStaticConstructorsDestructors(...);    
+    // ee->runStaticConstructorsDestructors(...);
 
     // Do any target-specific initialization
     cg->jit_init(ee, m);
@@ -145,7 +143,8 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
 
     hook_up_function_pointer(ee, m, function_name, true, &function);
 
-    debug(1) << "JIT compiled function pointer 0x" << std::hex << (unsigned long)function << std::dec << "\n";
+    void *function_address = reinterpret_bits<void *>(function);
+    debug(1) << "JIT compiled function pointer " << function_address << "\n";
 
     hook_up_function_pointer(ee, m, function_name + "_jit_wrapper", true, &wrapped_function);
     hook_up_function_pointer(ee, m, "halide_copy_to_host", false, &copy_to_host);

@@ -1,7 +1,7 @@
 #ifndef HALIDE_IR_OPERATOR_H
 #define HALIDE_IR_OPERATOR_H
 
-/** \file 
+/** \file
  *
  * Defines various operator overloads and utility functions that make
  * it more pleasant to work with Halide expressions.
@@ -57,7 +57,7 @@ bool EXPORT is_two(Expr e);
  * and return the bits as int. Unsigned types are returned as bits in the int
  * and should be cast to unsigned int for comparison.
  * int_cast_constant implements bit manipulations to wrap val into the
- * value range of the Type t. 
+ * value range of the Type t.
  * For example, int_cast_constant(UInt(16), -1) returns 65535
  * int_cast_constant(Int(8), 128) returns -128
  */
@@ -98,13 +98,13 @@ Expr EXPORT const_false(int width = 1);
  * UInt(1). We use the following procedure:
  *
  * If the types already match, do nothing.
- * 
+ *
  * Then, if one type is a vector and the other is a scalar, the scalar
  * is broadcast to match the vector width, and we continue.
  *
  * Then, if one type is floating-point and the other is not, the
  * non-float is cast to the floating-point type, and we're done.
- * 
+ *
  * Then, if neither is a float but one of the two is a constant, the
  * constant is cast to match the non-const type and we're done. For
  * example, e has type UInt(8), then (e*32) also has type UInt(8),
@@ -122,7 +122,7 @@ Expr EXPORT const_false(int width = 1);
  * int, both are cast to a signed int with the greater of the two
  * bit-widths. For example, matching an Int(8) with a UInt(16) results
  * in an Int(16).
- * 
+ *
  */
 void EXPORT match_types(Expr &a, Expr &b);
 
@@ -139,7 +139,7 @@ Expr EXPORT raise_to_integer_power(Expr a, int b);
 
 }
 
-/** Cast an expression to the halide type corresponding to the C++ type T */
+/** Cast an expression to the halide type corresponding to the C++ type T. */
 template<typename T>
 inline Expr cast(Expr a) {
     return cast(type_of<T>(), a);
@@ -156,7 +156,7 @@ inline Expr cast(Type t, Expr a) {
             assert(b->width == t.width);
             return Internal::Broadcast::make(cast(t.element_of(), b->value), t.width);
         }
-    }    
+    }
     return Internal::Cast::make(t, a);
 }
 
@@ -167,7 +167,7 @@ inline Expr operator+(Expr a, Expr b) {
     Internal::match_types(a, b);
     return Internal::Add::make(a, b);
 }
-    
+
 /** Modify the first expression to be the sum of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
@@ -211,7 +211,7 @@ inline Expr operator*(Expr a, Expr b) {
     Internal::match_types(a, b);
     return Internal::Mul::make(a, b);
 }
-    
+
 /** Modify the first expression to be the product of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
@@ -317,8 +317,9 @@ inline Expr operator!(Expr a) {
 }
 
 /** Returns an expression representing the greater of the two
- * arguments, after doing any necessary type coercion using 
- * \ref Internal::match_types */
+ * arguments, after doing any necessary type coercion using
+ * \ref Internal::match_types. Vectorizes cleanly on most platforms
+ * (with the exception of integer types on x86 without SSE4). */
 inline Expr max(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "max of undefined");
     Internal::match_types(a, b);
@@ -326,8 +327,9 @@ inline Expr max(Expr a, Expr b) {
 }
 
 /** Returns an expression representing the lesser of the two
- * arguments, after doing any necessary type coercion using 
- * \ref Internal::match_types */
+ * arguments, after doing any necessary type coercion using
+ * \ref Internal::match_types. Vectorizes cleanly on most platforms
+ * (with the exception of integer types on x86 without SSE4). */
 inline Expr min(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "min of undefined");
     Internal::match_types(a, b);
@@ -335,7 +337,7 @@ inline Expr min(Expr a, Expr b) {
 }
 
 /** Clamps an expression to lie within the given bounds. The bounds
- * are type-cast to match the expression. */
+ * are type-cast to match the expression. Vectorizes as well as min/max. */
 inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
     assert(a.defined() && min_val.defined() && max_val.defined() &&
            "clamp of undefined");
@@ -345,20 +347,20 @@ inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
 }
 
 /** Returns the absolute value of a signed integer or floating-point
- * expression */
+ * expression. Vectorizes cleanly. */
 inline Expr abs(Expr a) {
     assert(a.defined() && "abs of undefined");
     if (a.type() == Int(8))
         return Internal::Call::make(Int(8), "abs_i8", vec(a), Internal::Call::Extern);
-    if (a.type() == Int(16)) 
+    if (a.type() == Int(16))
         return Internal::Call::make(Int(16), "abs_i16", vec(a), Internal::Call::Extern);
-    if (a.type() == Int(32)) 
+    if (a.type() == Int(32))
         return Internal::Call::make(Int(32), "abs_i32", vec(a), Internal::Call::Extern);
-    if (a.type() == Int(64)) 
+    if (a.type() == Int(64))
         return Internal::Call::make(Int(64), "abs_i64", vec(a), Internal::Call::Extern);
-    if (a.type() == Float(32)) 
+    if (a.type() == Float(32))
         return Internal::Call::make(Float(32), "abs_f32", vec(a), Internal::Call::Extern);
-    if (a.type() == Float(64)) 
+    if (a.type() == Float(64))
         return Internal::Call::make(Float(64), "abs_f64", vec(a), Internal::Call::Extern);
     assert(false && "Invalid type for abs");
     return 0; // prevent "control reaches end of non-void function" error
@@ -366,13 +368,15 @@ inline Expr abs(Expr a) {
 
 /** Returns an expression equivalent to the ternary operator in C. If
  * the first argument is true, then return the second, else return the
- * third. */
+ * third. Typically vectorizes cleanly, but benefits from SSE41 or newer
+ * on x86. */
 inline Expr select(Expr a, Expr b, Expr c) {
     return Internal::Select::make(a, b, c);
 }
 
 /** Return the sine of a floating-point expression. If the argument is
- * not floating-point, is it cast to Float(32). */
+ * not floating-point, is it cast to Float(32). Does not vectorize
+ * well. */
 inline Expr sin(Expr x) {
     assert(x.defined() && "sin of undefined");
     if (x.type() == Float(64)) {
@@ -382,8 +386,9 @@ inline Expr sin(Expr x) {
     }
 }
 
-/** Return the arcsine of a floating-point expression. If the argument is
- * not floating-point, is it cast to Float(32). */
+/** Return the arcsine of a floating-point expression. If the argument
+ * is not floating-point, is it cast to Float(32). Does not vectorize
+ * well. */
 inline Expr asin(Expr x) {
     assert(x.defined() && "asin of undefined");
     if (x.type() == Float(64)) {
@@ -394,7 +399,8 @@ inline Expr asin(Expr x) {
 }
 
 /** Return the cosine of a floating-point expression. If the argument
- * is not floating-point, is it cast to Float(32). */
+ * is not floating-point, is it cast to Float(32). Does not vectorize
+ * well. */
 inline Expr cos(Expr x) {
     assert(x.defined() && "cos of undefined");
     if (x.type() == Float(64)) {
@@ -404,8 +410,9 @@ inline Expr cos(Expr x) {
     }
 }
 
-/** Return the arccosine of a floating-point expression. If the argument
- * is not floating-point, is it cast to Float(32). */
+/** Return the arccosine of a floating-point expression. If the
+ * argument is not floating-point, is it cast to Float(32). Does not
+ * vectorize well. */
 inline Expr acos(Expr x) {
     assert(x.defined() && "acos of undefined");
     if (x.type() == Float(64)) {
@@ -415,8 +422,9 @@ inline Expr acos(Expr x) {
     }
 }
 
-/** Return the tangent of a floating-point expression. If the argument is
- * not floating-point, is it cast to Float(32). */
+/** Return the tangent of a floating-point expression. If the argument
+ * is not floating-point, is it cast to Float(32). Does not vectorize
+ * well. */
 inline Expr tan(Expr x) {
     assert(x.defined() && "tan of undefined");
     if (x.type() == Float(64)) {
@@ -426,8 +434,9 @@ inline Expr tan(Expr x) {
     }
 }
 
-/** Return the arctangent of a floating-point expression. If the argument is
- * not floating-point, is it cast to Float(32). */
+/** Return the arctangent of a floating-point expression. If the
+ * argument is not floating-point, is it cast to Float(32). Does not
+ * vectorize well. */
 inline Expr atan(Expr x) {
     assert(x.defined() && "atan of undefined");
     if (x.type() == Float(64)) {
@@ -437,8 +446,9 @@ inline Expr atan(Expr x) {
     }
 }
 
-/** Return the hyperbolic sine of a floating-point expression.
- *  If the argument is not floating-point, is it cast to Float(32). */
+/** Return the hyperbolic sine of a floating-point expression.  If the
+ *  argument is not floating-point, is it cast to Float(32). Does not
+ *  vectorize well. */
 inline Expr sinh(Expr x) {
     assert(x.defined() && "sinh of undefined");
     if (x.type() == Float(64)) {
@@ -448,8 +458,9 @@ inline Expr sinh(Expr x) {
     }
 }
 
-/** Return the hyperbolic arcsinhe of a floating-point expression.
- * If the argument is not floating-point, is it cast to Float(32). */
+/** Return the hyperbolic arcsinhe of a floating-point expression.  If
+ * the argument is not floating-point, is it cast to Float(32). Does
+ * not vectorize well. */
 inline Expr asinh(Expr x) {
     assert(x.defined() && "asinh of undefined");
     if (x.type() == Float(64)) {
@@ -459,8 +470,9 @@ inline Expr asinh(Expr x) {
     }
 }
 
-/** Return the hyperbolic cosine of a floating-point expression.
- * If the argument is not floating-point, is it cast to Float(32). */
+/** Return the hyperbolic cosine of a floating-point expression.  If
+ * the argument is not floating-point, is it cast to Float(32). Does
+ * not vectorize well. */
 inline Expr cosh(Expr x) {
     assert(x.defined() && "cosh of undefined");
     if (x.type() == Float(64)) {
@@ -471,7 +483,8 @@ inline Expr cosh(Expr x) {
 }
 
 /** Return the hyperbolic arccosine of a floating-point expression.
- * If the argument is not floating-point, is it cast to Float(32). */
+ * If the argument is not floating-point, is it cast to
+ * Float(32). Does not vectorize well. */
 inline Expr acosh(Expr x) {
     assert(x.defined() && "acosh of undefined");
     if (x.type() == Float(64)) {
@@ -481,8 +494,9 @@ inline Expr acosh(Expr x) {
     }
 }
 
-/** Return the hyperbolic tangent of a floating-point expression.
- * If the argument is not floating-point, is it cast to Float(32). */
+/** Return the hyperbolic tangent of a floating-point expression.  If
+ * the argument is not floating-point, is it cast to Float(32). Does
+ * not vectorize well. */
 inline Expr tanh(Expr x) {
     assert(x.defined() && "tanh of undefined");
     if (x.type() == Float(64)) {
@@ -493,7 +507,8 @@ inline Expr tanh(Expr x) {
 }
 
 /** Return the hyperbolic arctangent of a floating-point expression.
- * If the argument is not floating-point, is it cast to Float(32). */
+ * If the argument is not floating-point, is it cast to
+ * Float(32). Does not vectorize well. */
 inline Expr atanh(Expr x) {
     assert(x.defined() && "atanh of undefined");
     if (x.type() == Float(64)) {
@@ -504,7 +519,8 @@ inline Expr atanh(Expr x) {
 }
 
 /** Return the square root of a floating-point expression. If the
- * argument is not floating-point, is it cast to Float(32). */
+ * argument is not floating-point, is it cast to Float(32). Typically
+ * vectorizes cleanly. */
 inline Expr sqrt(Expr x) {
     assert(x.defined() && "sqrt of undefined");
     if (x.type() == Float(64)) {
@@ -516,18 +532,9 @@ inline Expr sqrt(Expr x) {
 
 /** Return the square root of the sum of the squares of two
  * floating-point expressions. If the argument is not floating-point,
- * is it cast to Float(32). On platforms with a sqrt op (e.g. x86),
- * it's faster to compute this manually using sqrt. */
+ * is it cast to Float(32). Vectorizes cleanly. */
 inline Expr hypot(Expr x, Expr y) {
-    assert(x.defined() && y.defined() && "hypot of undefined");
-    if (x.type() == Float(64)) {
-        y = cast<double>(y);
-        return Internal::Call::make(Float(64), "hypot_f64", vec(x, y), Internal::Call::Extern);
-    } else {
-        x = cast<float>(x);
-        y = cast<float>(y);
-        return Internal::Call::make(Float(32), "hypot_f32", vec(x, y), Internal::Call::Extern);
-    }
+    return sqrt(x*x + y*y);
 }
 
 /** Return the exponential of a floating-point expression. If the
@@ -536,7 +543,7 @@ inline Expr hypot(Expr x, Expr y) {
  * not vectorize well. For Float(32) arguments, this function is
  * vectorizable, does the right thing for extremely small or extremely
  * large inputs, and is accurate up to the last bit of the
- * mantissa. */
+ * mantissa. Vectorizes cleanly. */
 inline Expr exp(Expr x) {
     assert(x.defined() && "exp of undefined");
     if (x.type() == Float(64)) {
@@ -551,8 +558,9 @@ inline Expr exp(Expr x) {
  * argument is not floating-point, is it cast to Float(32). For
  * Float(64) arguments, this calls the system log function, and does
  * not vectorize well. For Float(32) arguments, this function is
- * vectorizable, does the right thing for inputs <= 0 (returns
- * -inf or nan), and is accurate up to the last bit of the mantissa. */
+ * vectorizable, does the right thing for inputs <= 0 (returns -inf or
+ * nan), and is accurate up to the last bit of the
+ * mantissa. Vectorizes cleanly. */
 inline Expr log(Expr x) {
     assert(x.defined() && "log of undefined");
     if (x.type() == Float(64)) {
@@ -568,10 +576,10 @@ inline Expr log(Expr x) {
  * argument. If the first argument is not a floating-point type, it is
  * cast to Float(32). For Float(32), cleanly vectorizable, and
  * accurate up to the last few bits of the mantissa. Gets worse when
- * approaching overflow. */
+ * approaching overflow. Vectorizes cleanly. */
 inline Expr pow(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "pow of undefined");
-    
+
     if (const int *i = as_const_int(y)) {
         return raise_to_integer_power(x, *i);
     }
@@ -588,18 +596,19 @@ inline Expr pow(Expr x, Expr y) {
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
- * mantissa. */
+ * mantissa. Vectorizes cleanly. */
 EXPORT Expr fast_log(Expr x);
 
 /** Fast approximate cleanly vectorizable exp for Float(32). Returns
  * nonsense for inputs that would overflow or underflow. Typically
  * accurate up to the last 5 bits of the mantissa. Gets worse when
- * approaching overflow. */
+ * approaching overflow. Vectorizes cleanly. */
 EXPORT Expr fast_exp(Expr x);
 
 /** Fast approximate cleanly vectorizable pow for Float(32). Returns
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
- * mantissa for typical exponents. Gets worse when approaching overflow. */
+ * mantissa for typical exponents. Gets worse when approaching
+ * overflow. Vectorizes cleanly. */
 inline Expr fast_pow(Expr x, Expr y) {
     if (const int *i = as_const_int(y)) {
         return raise_to_integer_power(x, *i);
@@ -613,7 +622,7 @@ inline Expr fast_pow(Expr x, Expr y) {
 /** Return the greatest whole number less than or equal to a
  * floating-point expression. If the argument is not floating-point,
  * is it cast to Float(32). The return value is still in floating
- * point, despite being a whole number. */
+ * point, despite being a whole number. Vectorizes cleanly. */
 inline Expr floor(Expr x) {
     assert(x.defined() && "floor of undefined");
     if (x.type() == Float(64)) {
@@ -626,7 +635,7 @@ inline Expr floor(Expr x) {
 /** Return the least whole number greater than or equal to a
  * floating-point expression. If the argument is not floating-point,
  * is it cast to Float(32). The return value is still in floating
- * point, despite being a whole number. */
+ * point, despite being a whole number. Vectorizes cleanly. */
 inline Expr ceil(Expr x) {
     assert(x.defined() && "ceil of undefined");
     if (x.type() == Float(64)) {
@@ -639,7 +648,7 @@ inline Expr ceil(Expr x) {
 /** Return the whole number closest to a floating-point expression. If
  * the argument is not floating-point, is it cast to Float(32). The
  * return value is still in floating point, despite being a whole
- * number. On ties, we round up. */
+ * number. On ties, we round up. Vectorizes cleanly. */
 inline Expr round(Expr x) {
     assert(x.defined() && "round of undefined");
     if (x.type() == Float(64)) {
@@ -666,6 +675,12 @@ inline Expr reinterpret(Expr e) {
  * argument. */
 inline Expr operator&(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "bitwise and of undefined");
+    // First widen or narrow, then bitcast.
+    if (y.type().bits != x.type().bits) {
+        Type t = y.type();
+        t.bits = x.type().bits;
+        y = cast(t, y);
+    }
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
     }
@@ -677,6 +692,12 @@ inline Expr operator&(Expr x, Expr y) {
  * argument. */
 inline Expr operator|(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "bitwise or of undefined");
+    // First widen or narrow, then bitcast.
+    if (y.type().bits != x.type().bits) {
+        Type t = y.type();
+        t.bits = x.type().bits;
+        y = cast(t, y);
+    }
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
     }
@@ -688,6 +709,12 @@ inline Expr operator|(Expr x, Expr y) {
  * first argument. */
 inline Expr operator^(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "bitwise or of undefined");
+    // First widen or narrow, then bitcast.
+    if (y.type().bits != x.type().bits) {
+        Type t = y.type();
+        t.bits = x.type().bits;
+        y = cast(t, y);
+    }
     if (y.type() != x.type()) {
         y = reinterpret(x.type(), y);
     }
@@ -704,10 +731,14 @@ inline Expr operator~(Expr x) {
  * efficient than multiplying by 2^n, because Halide's optimization
  * passes understand multiplication, and will compile it to
  * shifting. This operator is only for if you really really need bit
- * shifting (e.g. because the exponent is a run-time parameter). */
+ * shifting (e.g. because the exponent is a run-time parameter). The
+ * type of the result is equal to the type of the first argument. Both
+ * arguments must have integer type. */
 inline Expr operator<<(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "shift left of undefined");
-    assert(!x.type().is_float() && "bit shifting not defined for floats");
+    assert(!x.type().is_float() && "First argument to shift left is a float.");
+    assert(!y.type().is_float() && "Second argument to shift left is a float.");
+    Internal::match_types(x, y);
     return Internal::Call::make(x.type(), Internal::Call::shift_left, vec(x, y), Internal::Call::Intrinsic);
 }
 
@@ -716,11 +747,105 @@ inline Expr operator<<(Expr x, Expr y) {
  * two. Halide's definition of division (always round to negative
  * infinity) means that all divisions by powers of two get compiled to
  * bit-shifting, and Halide's optimization routines understand
- * division and can work with it. */
+ * division and can work with it. The type of the result is equal to
+ * the type of the first argument. Both arguments must have integer
+ * type. */
 inline Expr operator>>(Expr x, Expr y) {
     assert(x.defined() && y.defined() && "shift right of undefined");
-    assert(!x.type().is_float() && "bit shifting not defined for floats");
+    assert(!x.type().is_float() && "First argument to shift right is a float.");
+    assert(!y.type().is_float() && "Second argument to shift right is a float.");
+    Internal::match_types(x, y);
     return Internal::Call::make(x.type(), Internal::Call::shift_right, vec(x, y), Internal::Call::Intrinsic);
+}
+
+/** Linear interpolate between the two values according to a weight.
+ * \param zero_val The result when weight is 0
+ * \param one_val The result when weight is 1
+ * \param weight The interpolation amount
+ *
+ * Both zero_val and one_val must have the same type. All types are
+ * supported, including bool.
+ *
+ * The weight is treated as its own type and must be float or an
+ * unsigned integer type. It is scaled to the bit-size of the type of
+ * x and y if they are integer, or converted to float if they are
+ * float. Integer weights are converted to float via division by the
+ * full-range value of the weight's type. Floating-point weights used
+ * to interpolate between integer values must be between 0.0f and
+ * 1.0f, and an error may be signaled if it is not provably so. (clamp
+ * operators can be added to provide proof. Currently an error is only
+ * signalled for constant weights.)
+ *
+ * For integer linear interpolation, out of range values cannot be
+ * represented. In particular, weights that are conceptually less than
+ * 0 or greater than 1.0 are not representable. As such the result is
+ * always between x and y (inclusive of course). For lerp with
+ * floating-point values and floating-point weight, the full range of
+ * a float is valid, however underflow and overflow can still occur.
+ *
+ * Ordering is not required between zero_val and one_val:
+ *     lerp(42, 69, .5f) == lerp(69, 42, .5f) == 56
+ * 
+ * Results for integer types are for exactly rounded arithmetic. As
+ * such, there are cases where 16-bit and float differ because 32-bit
+ * floating-point (float) does not have enough precision to produce
+ * the exact result. (Likely true for 32-bit integer
+ * vs. double-precision floating-point as well.)
+ *
+ * At present, double precision and 64-bit integers are not supported.
+ *
+ * Generally, lerp will vectorize as if it were an operation on a type
+ * twice the bit size of the inferred type for x and y.
+ *
+ * Some examples:
+ * \code
+ *
+ *     // Since Halide does not have direct type delcarations, casts
+ *     // below are used to indicate the types of the parameters.
+ *     // Such casts not required or expected in actual code where types
+ *     // are inferred.
+ *
+ *     lerp(cast<float>(x), cast<float>(y), cast<float>(w)) ->
+ *       x * (1.0f - w) + y * w
+ *
+ *     lerp(cast<uint8_t>(x), cast<uint8_t>(y), cast<uint8_t>(w)) ->
+ *       cast<uint8_t>(cast<uint8_t>(x) * (1.0f - cast<uint8_t>(w) / 255.0f) +
+ *                     cast<uint8_t>(y) * cast<uint8_t>(w) / 255.0f + .5f)
+ *
+ *     // Note addition in Halide promoted uint8_t + int8_t to int16_t already,
+ *     // the outer cast is added for clarity.
+ *     lerp(cast<uint8_t>(x), cast<int8_t>(y), cast<uint8_t>(w)) ->
+ *       cast<int16_t>(cast<uint8_t>(x) * (1.0f - cast<uint8_t>(w) / 255.0f) +
+ *                     cast<int8_t>(y) * cast<uint8_t>(w) / 255.0f + .5f)
+ *
+ *     lerp(cast<int8_t>(x), cast<int8_t>(y), cast<float>(w)) ->
+ *       cast<int8_t>(cast<int8_t>(x) * (1.0f - cast<float>(w)) +
+ *                    cast<int8_t>(y) * cast<uint8_t>(w))
+ *
+ * \endcode
+ * */
+inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
+    assert(zero_val.defined() && "lerp with undefined zero value");
+    assert(one_val.defined()  && "lerp with undefined one value");
+    assert(weight.defined()   && "lerp with undefined weight");
+    assert(zero_val.type() == one_val.type() &&
+           "lerp zero and one values must be the same type.");
+    assert((weight.type().is_uint() || weight.type().is_float()) &&
+           "lerp weight must be unsigned or float.");
+    assert((zero_val.type().is_float() || zero_val.type().width <= 32) &&
+           "lerp with 64-bit integers is not supported.");
+    // Compilation error for constant weight that is out of range for integer use
+    // as this seems like an easy to catch gotcha.
+    if (!zero_val.type().is_float()) {
+        const float *const_weight = as_const_float(weight);
+        if (const_weight != NULL) {
+            assert(*const_weight >= 0.0f && *const_weight <= 1.0f &&
+                   "floating-point weight for lerp with integer arguments must be between 0.0f and 1.0f.");
+        }
+    }
+    return Internal::Call::make(zero_val.type(), Internal::Call::lerp,
+                                vec(zero_val, one_val, weight),
+                                Internal::Call::Intrinsic);
 }
 
 }

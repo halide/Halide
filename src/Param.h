@@ -8,6 +8,7 @@
 
 #include "IR.h"
 #include "Var.h"
+#include "IRPrinter.h"
 #include <sstream>
 #include <vector>
 
@@ -49,6 +50,37 @@ public:
     Type type() const {
         return type_of<T>();
     }
+
+    /** Get or set the possible range of this parameter. Use undefined
+     * Exprs to mean unbounded. */
+    // @{
+    void set_range(Expr min, Expr max) {
+        set_min_value(min);
+        set_max_value(max);
+    }
+
+    void set_min_value(Expr min) {
+        if (min.type() != type_of<T>()) {
+            min = Internal::Cast::make(type_of<T>(), min);
+        }
+        param.set_min_value(min);
+    }
+
+    void set_max_value(Expr max) {
+        if (max.type() != type_of<T>()) {
+            max = Internal::Cast::make(type_of<T>(), max);
+        }
+        param.set_max_value(max);
+    }
+
+    Expr get_min_value() {
+        return param.get_min_value();
+    }
+
+    Expr get_max_value() {
+        return param.get_max_value();
+    }
+    // @}
 
     /** You can use this parameter as an expression in a halide
      * function definition */
@@ -236,6 +268,22 @@ public:
         return Internal::Call::make(param, args);
     }
 
+    /** Force the args to a call to an image to be int32. */
+    static void check_arg_types(const std::string &name, std::vector<Expr> *args) {
+        for (size_t i = 0; i < args->size(); i++) {
+            Type t = (*args)[i].type();
+            if (t.is_float() || (t.is_uint() && t.bits >= 32) || (t.is_int() && t.bits > 32)) {
+                std::cerr << "Error: implicit cast from " << t << " to int in argument " << (i+1)
+                          << " in call to " << name << " is not allowed. Use an explicit cast.\n";
+                assert(false);
+            }
+            // We're allowed to implicitly cast from other varieties of int
+            if (t != Int(32)) {
+                (*args)[i] = Internal::Cast::make(Int(32), (*args)[i]);
+            }
+        }
+    }
+
     Expr operator()(Expr x) const {
         assert(dimensions() >= 1);
         std::vector<Expr> args;
@@ -243,6 +291,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
+        check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
 
@@ -254,6 +303,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
+        check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
 
@@ -266,6 +316,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
+        check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
 
@@ -279,6 +330,7 @@ public:
         for (int i = 0; args.size() < (size_t)dimensions(); i++) {
             args.push_back(Var::implicit(i));
         }
+        check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
     // @}

@@ -2,10 +2,11 @@
 #define HALIDE_IMAGE_H
 
 /** \file
- * Defines Halide's Image data type 
+ * Defines Halide's Image data type
  */
 
 #include "Buffer.h"
+#include "Tuple.h"
 
 namespace Halide {
 
@@ -20,14 +21,14 @@ template<typename T>
 class Image {
 private:
     /** The underlying memory object */
-    Buffer buffer;    
+    Buffer buffer;
 
     /** These fields are also stored in the buffer, but they're cached
      * here in the handle to make operator() fast. This is safe to do
-     * because the buffer is never modified 
+     * because the buffer is never modified
      */
     // @{
-    T *base;
+    T *origin;
     int stride_0, stride_1, stride_2, stride_3, dims;
     // @}
 
@@ -37,7 +38,7 @@ private:
     void prepare_for_direct_pixel_access() {
         // Make sure buffer has been copied to host. This is a no-op
         // if there's no device involved.
-        buffer.copy_to_host();        
+        buffer.copy_to_host();
 
         // We're probably about to modify the pixels, so to be
         // conservative we'd better set host dirty. If you're sure
@@ -47,14 +48,20 @@ private:
         buffer.set_host_dirty(true);
 
         if (buffer.defined()) {
-            base = (T *)buffer.host_ptr();
+            origin = (T *)buffer.host_ptr();
             stride_0 = buffer.stride(0);
             stride_1 = buffer.stride(1);
             stride_2 = buffer.stride(2);
             stride_3 = buffer.stride(3);
+            // The host pointer points to the mins vec, but we want to
+            // point to the origin of the coordinate system.
+            origin -= (buffer.min(0) * stride_0 +
+                       buffer.min(1) * stride_1 +
+                       buffer.min(2) * stride_2 +
+                       buffer.min(3) * stride_3);
             dims = buffer.dimensions();
         } else {
-            base = NULL;
+            origin = NULL;
             stride_0 = stride_1 = stride_2 = stride_3 = 0;
             dims = 0;
         }
@@ -62,7 +69,7 @@ private:
 
 public:
     /** Construct an undefined image handle */
-    Image() : base(NULL), stride_0(0), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
+    Image() : origin(NULL), stride_0(0), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
 
     /** Allocate an image with the given dimensions. */
     Image(int x, int y = 0, int z = 0, int w = 0) : buffer(Buffer(type_of<T>(), x, y, z, w)) {
@@ -72,6 +79,11 @@ public:
     /** Wrap a buffer in an Image object, so that we can directly
      * access its pixels in a type-safe way. */
     Image(const Buffer &buf) : buffer(buf) {
+        prepare_for_direct_pixel_access();
+    }
+
+    /** Wrap a single-element realization in an Image object. */
+    Image(const Realization &r) : buffer(r) {
         prepare_for_direct_pixel_access();
     }
 
@@ -95,7 +107,7 @@ public:
      * modify the data via some other back-door. */
     void set_host_dirty(bool dirty = true) {
         buffer.set_host_dirty(dirty);
-    }    
+    }
 
     /** Check if this image handle points to actual data */
     bool defined() const {
@@ -145,55 +157,55 @@ public:
 
     /** Get a pointer to the first element. */
     T *data() const {
-        return base;
+        return origin;
     }
 
     /** Assuming this image is one-dimensional, get the value of the
      * element at position x */
     T operator()(int x) const {
-        return base[x];
+        return origin[x];
     }
 
     /** Assuming this image is two-dimensional, get the value of the
      * element at position (x, y) */
     T operator()(int x, int y) const {
-        return base[x*stride_0 + y*stride_1];
+        return origin[x*stride_0 + y*stride_1];
     }
 
     /** Assuming this image is three-dimensional, get the value of the
      * element at position (x, y, z) */
     T operator()(int x, int y, int z) const {
-        return base[x*stride_0 + y*stride_1 + z*stride_2];
+        return origin[x*stride_0 + y*stride_1 + z*stride_2];
     }
 
     /** Assuming this image is four-dimensional, get the value of the
      * element at position (x, y, z, w) */
     T operator()(int x, int y, int z, int w) const {
-        return base[x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3];
+        return origin[x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3];
     }
 
     /** Assuming this image is one-dimensional, get a reference to the
      * element at position x */
     T &operator()(int x) {
-        return base[x*stride_0];
+        return origin[x*stride_0];
     }
 
     /** Assuming this image is two-dimensional, get a reference to the
      * element at position (x, y) */
     T &operator()(int x, int y) {
-        return base[x*stride_0 + y*stride_1];
+        return origin[x*stride_0 + y*stride_1];
     }
 
     /** Assuming this image is three-dimensional, get a reference to the
      * element at position (x, y, z) */
     T &operator()(int x, int y, int z) {
-        return base[x*stride_0 + y*stride_1 + z*stride_2];
+        return origin[x*stride_0 + y*stride_1 + z*stride_2];
     }
 
     /** Assuming this image is four-dimensional, get a reference to the
      * element at position (x, y, z, w) */
     T &operator()(int x, int y, int z, int w) {
-        return base[x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3];
+        return origin[x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3];
     }
 
     /** Construct an expression which loads from this image. The
@@ -201,12 +213,12 @@ public:
      * dimensionality of the image (see \ref Var::implicit) */
     Expr operator()() const {
         assert(dims >= 0);
-        std::vector<Expr> args;        
+        std::vector<Expr> args;
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
         return Internal::Call::make(buffer, args);
-    }    
+    }
 
     /** Construct an expression which loads from this image. The
      * location is extended with enough implicit variables to match
@@ -219,6 +231,9 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
+
+        ImageParam::check_arg_types(buffer.name(), &args);
+
         return Internal::Call::make(buffer, args);
     }
 
@@ -230,6 +245,9 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
+
+        ImageParam::check_arg_types(buffer.name(), &args);
+
         return Internal::Call::make(buffer, args);
     }
 
@@ -242,6 +260,9 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
+
+        ImageParam::check_arg_types(buffer.name(), &args);
+
         return Internal::Call::make(buffer, args);
     }
 
@@ -255,12 +276,15 @@ public:
         for (int i = 0; args.size() < (size_t)dims; i++) {
             args.push_back(Var::implicit(i));
         }
+
+        ImageParam::check_arg_types(buffer.name(), &args);
+
         return Internal::Call::make(buffer, args);
     }
     // @}
 
     /** Get a pointer to the raw buffer_t that this image holds */
-    operator const buffer_t *() const {return buffer.raw_buffer();}
+    operator buffer_t *() const {return buffer.raw_buffer();}
 
     /** Get a handle on the Buffer that this image holds */
     operator Buffer() const {return buffer;}
@@ -278,7 +302,7 @@ public:
      Func f;
      f = im*2;
      \endcode
-     * 
+     *
      * This will define f as a two-dimensional function with value at
      * position (x, y) equal to twice the value of the image at the
      * same location.

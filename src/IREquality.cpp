@@ -3,7 +3,7 @@
 #include "IRPrinter.h"
 #include "Debug.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using std::string;
@@ -54,7 +54,7 @@ public:
         } else if (a.width < b.width) {
             result = -1;
         } else if (a.width > b.width) {
-            result = 1;        
+            result = 1;
         }
         return result;
     }
@@ -98,7 +98,7 @@ public:
     void visit(const Variable *op) {
         if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
 
-        const Variable *e = expr.as<Variable>();        
+        const Variable *e = expr.as<Variable>();
 
         compare_names(e->name, op->name);
     }
@@ -136,7 +136,7 @@ public:
         if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
 
         const Not *e = expr.as<Not>();
-        
+
         expr = e->a;
         op->a.accept(this);
     }
@@ -162,7 +162,7 @@ public:
         const Load *e = expr.as<Load>();
 
         if (compare_names(op->name, e->name)) return;
-        
+
         expr = e->index;
         op->index.accept(this);
     }
@@ -194,12 +194,16 @@ public:
         if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
 
         const Call *e = expr.as<Call>();
-        
+
         if (compare_names(e->name, op->name)) return;
 
         if (e->call_type < op->call_type) {
             result = -1;
         } else if (e->call_type > op->call_type) {
+            result = 1;
+        } else if (e->value_index < op->value_index) {
+            result = -1;
+        } else if (e->value_index > op->value_index) {
             result = 1;
         } else if (e->args.size() < op->args.size()) {
             result = -1;
@@ -251,7 +255,7 @@ public:
         for (size_t i = 0; (result == 0) && (i < s->args.size()); i++) {
             expr = s->args[i];
             op->args[i].accept(this);
-        }                
+        }
     }
 
     void visit(const AssertStmt *op) {
@@ -262,7 +266,7 @@ public:
         if (compare_names(s->message, op->message)) return;
 
         expr = s->condition;
-        op->condition.accept(this);                
+        op->condition.accept(this);
     }
 
     void visit(const Pipeline *op) {
@@ -276,7 +280,7 @@ public:
             result = -1;
         } else if (!s->update.defined() && op->update.defined()) {
             result = 1;
-        } else {            
+        } else {
             stmt = s->produce;
             op->produce.accept(this);
 
@@ -318,7 +322,7 @@ public:
 
         const Store *s = stmt.as<Store>();
 
-        if (compare_names(s->name, op->name)) return;        
+        if (compare_names(s->name, op->name)) return;
 
         expr = s->value;
         op->value.accept(this);
@@ -332,13 +336,21 @@ public:
 
         const Provide *s = stmt.as<Provide>();
 
-        if (compare_names(s->name, op->name)) return;        
+        if (compare_names(s->name, op->name)) return;
 
         if (s->args.size() < op->args.size()) {
             result = -1;
         } else if (s->args.size() > op->args.size()) {
             result = 1;
+        } else if (s->values.size() < op->values.size()) {
+            result = -1;
+        } else if (s->values.size() > op->values.size()) {
+            result = 1;
         } else {
+            for (size_t i = 0; (result == 0) && (i < s->values.size()); i++) {
+                expr = s->values[i];
+                op->values[i].accept(this);
+            }
             for (size_t i = 0; (result == 0) && (i < s->args.size()); i++) {
                 expr = s->args[i];
                 op->args[i].accept(this);
@@ -364,18 +376,25 @@ public:
 
         if (compare_names(s->name, op->name)) return;
 
-        if (s->bounds.size() < op->bounds.size()) {
+        if (s->types.size() < op->types.size()) {
+            result = -1;
+        } else if (s->types.size() > op->types.size()) {
+            result = 1;
+        } else if (s->bounds.size() < op->bounds.size()) {
             result = -1;
         } else if (s->bounds.size() > op->bounds.size()) {
             result = 1;
         } else {
+            for (size_t i = 0; (result == 0) && (i < s->types.size()); i++) {
+                compare_types(s->types[i], op->types[i]);
+            }
             for (size_t i = 0; (result == 0) && (i < s->bounds.size()); i++) {
                 expr = s->bounds[i].min;
                 op->bounds[i].min.accept(this);
 
                 expr = s->bounds[i].extent;
                 op->bounds[i].extent.accept(this);
-            }                                      
+            }
         }
     }
 

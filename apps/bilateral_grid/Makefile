@@ -1,6 +1,15 @@
-GXX ?= g++
+CXX ?= g++
 
-PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
+LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
+LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
+# Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
+ifneq (,$(findstring -m32,$(CXX)))
+ifneq (,$(findstring x86_64,$(LIBPNG_LIBS_DEFAULT)))
+LIBPNG_LIBS ?= -lpng
+endif
+endif
+LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
+PNGFLAGS=$(LIBPNG_LIBS) $(LIBPNG_CXX_FLAGS)
 
 ifeq ($(HL_TARGET),ptx)
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
@@ -10,13 +19,13 @@ all: filter
 
 bilateral_grid: ../../ bilateral_grid.cpp
 	$(MAKE) -C ../../ bin/libHalide.a
-	$(GXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../include/ ../../bin/libHalide.a -o bilateral_grid  -lpthread -ldl
+	$(CXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../include/ ../../bin/libHalide.a -o bilateral_grid  -lpthread -ldl
 
 bilateral_grid.o: bilateral_grid
 	./bilateral_grid 8
 
 filter: bilateral_grid.o filter.cpp
-	$(GXX) -I../support -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -lpng -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LDFLAGS)
+	$(CXX) -I../support -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LDFLAGS)
 
 out.png: filter
 	./filter ../images/gray.png out.png 0.1

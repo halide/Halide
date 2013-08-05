@@ -2,7 +2,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#include <cmath> 
+#include <cmath>
 
 #ifdef _WIN32
 #define ISFINITE(x) _finite(x)
@@ -18,16 +18,16 @@ const char *string_of_type();
 
 #define DECL_SOT(name)                                          \
     template<>                                                  \
-    const char *string_of_type<name>() {return #name;}          
+    const char *string_of_type<name>() {return #name;}
 
-DECL_SOT(uint8_t);    
-DECL_SOT(int8_t);    
-DECL_SOT(uint16_t);    
-DECL_SOT(int16_t);    
-DECL_SOT(uint32_t);    
-DECL_SOT(int32_t);    
-DECL_SOT(float);    
-DECL_SOT(double);    
+DECL_SOT(uint8_t);
+DECL_SOT(int8_t);
+DECL_SOT(uint16_t);
+DECL_SOT(int16_t);
+DECL_SOT(uint32_t);
+DECL_SOT(int32_t);
+DECL_SOT(float);
+DECL_SOT(double);
 
 template<typename A>
 A mod(A x, A y);
@@ -62,7 +62,7 @@ bool close_enough<double>(double x, double y) {
     return fabs(x-y) < 1e-5;
 }
 
-template<typename T> 
+template<typename T>
 T divide(T x, T y) {
     return (x - (((x % y) + y) % y)) / y;
 }
@@ -87,7 +87,7 @@ template<typename A>
 bool test(int vec_width) {
     const int W = 320;
     const int H = 16;
-    
+
     const int verbose = false;
 
     printf("Testing %sx%d\n", string_of_type<A>(), vec_width);
@@ -109,7 +109,7 @@ bool test(int vec_width) {
     f1(x, y) = input(x, y) + input(x+1, y);
     f1.vectorize(x, vec_width);
     Image<A> im1 = f1.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             A correct = input(x, y) + input(x+1, y);
@@ -119,14 +119,14 @@ bool test(int vec_width) {
             }
         }
     }
-    
+
     // Sub
     if (verbose) printf("Subtract\n");
     Func f2;
     f2(x, y) = input(x, y) - input(x+1, y);
     f2.vectorize(x, vec_width);
     Image<A> im2 = f2.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             A correct = input(x, y) - input(x+1, y);
@@ -143,7 +143,7 @@ bool test(int vec_width) {
     f3(x, y) = input(x, y) * input(x+1, y);
     f3.vectorize(x, vec_width);
     Image<A> im3 = f3.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             A correct = input(x, y) * input(x+1, y);
@@ -160,7 +160,7 @@ bool test(int vec_width) {
     f4(x, y) = select(input(x, y) > input(x+1, y), input(x+2, y), input(x+3, y));
     f4.vectorize(x, vec_width);
     Image<A> im4 = f4.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             A correct = input(x, y) > input(x+1, y) ? input(x+2, y) : input(x+3, y);
@@ -180,7 +180,7 @@ bool test(int vec_width) {
     f5(x, y) = input(xCoord, yCoord);
     f5.vectorize(x, vec_width);
     Image<A> im5 = f5.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             int xCoord = (int)(input(x, y));
@@ -205,7 +205,7 @@ bool test(int vec_width) {
     f5a(x, y) = input(x, y)*cast<A>(2);
     f5a.vectorize(y, vec_width);
     Image<A> im5a = f5a.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             A correct = input(x, y) * ((A)(2));
@@ -228,7 +228,7 @@ bool test(int vec_width) {
     f6.vectorize(x, vec_width);
 
     Image<int> im6 = f6.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         int xCoord = (int)(input(2*y, y));
         if (xCoord >= W) xCoord = W-1;
@@ -248,7 +248,7 @@ bool test(int vec_width) {
     f7(x, y) = clamp(input(x, y), cast<A>(10), cast<A>(20));
     f7.vectorize(x, vec_width);
     Image<A> im7 = f7.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             if (im7(x, y) < (A)10 || im7(x, y) > (A)20) {
@@ -264,25 +264,25 @@ bool test(int vec_width) {
     f8(x, y) = hypot(1.1f, cast<float>(input(x, y)));
     f8.vectorize(x, vec_width);
     Image<float> im8 = f8.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             float correct = hypot(1.1f, (float)input(x, y));
             if (!close_enough(im8(x, y), correct)) {
-                printf("im8(%d, %d) = %f instead of %f\n", 
+                printf("im8(%d, %d) = %f instead of %f\n",
                        x, y, (double)im8(x, y), correct);
                 return false;
             }
         }
     }
-    
+
     // Div
     if (verbose) printf("Division\n");
     Func f9;
     f9(x, y) = input(x, y) / clamp(input(x+1, y), cast<A>(1), cast<A>(3));
     f9.vectorize(x, vec_width);
     Image<A> im9 = f9.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             A clamped = input(x+1, y);
@@ -291,8 +291,8 @@ bool test(int vec_width) {
             A correct = divide(input(x, y), clamped);
             // We allow floating point division to take some liberties with accuracy
             if (!close_enough(im9(x, y), correct)) {
-                printf("im9(%d, %d) = %f/%f = %f instead of %f\n", 
-                       x, y, 
+                printf("im9(%d, %d) = %f/%f = %f instead of %f\n",
+                       x, y,
                        (double)input(x, y), (double)clamped,
                        (double)(im9(x, y)), (double)(correct));
                 return false;
@@ -307,21 +307,21 @@ bool test(int vec_width) {
 	f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
 	f10.vectorize(x, vec_width);
 	Image<A> im10 = f10.realize(W, H);
-	
+
 	for (int y = 0; y < H; y++) {
-	    for (int x = 0; x < W; x++) {	  
+	    for (int x = 0; x < W; x++) {
                 A correct = divide(input(x, y), (A)c);
 
                 if (!close_enough(im10(x, y), correct)) {
-		    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y, 
+		    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y,
 			   (double)(input(x, y)), c,
-			   (double)(im10(x, y)), 
+			   (double)(im10(x, y)),
 			   (double)(correct));
 		    printf("Error when dividing by %d\n", c);
 		    return false;
 		}
 	    }
-	}    
+	}
     }
 
     // Interleave
@@ -330,7 +330,7 @@ bool test(int vec_width) {
     f11(x, y) = select((x%2)==0, input(x/2, y), input(x/2, y+1));
     f11.vectorize(x, vec_width);
     Image<A> im11 = f11.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             A correct = ((x%2)==0) ? input(x/2, y) : input(x/2, y+1);
@@ -347,7 +347,7 @@ bool test(int vec_width) {
     f12(x, y) = input(W-1-x, H-1-y);
     f12.vectorize(x, vec_width);
     Image<A> im12 = f12.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             A correct = input(W-1-x, H-1-y);
@@ -364,7 +364,7 @@ bool test(int vec_width) {
     f13(x, y) = input(x+3, y);
     f13.vectorize(x, vec_width);
     Image<A> im13 = f13.realize(W, H);
-    
+
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             A correct = input(x+3, y);
@@ -373,7 +373,7 @@ bool test(int vec_width) {
             }
         }
     }
-    
+
     // Absolute value
     if (!type_of<A>().is_uint()) {
         if (verbose) printf("Absolute value\n");
@@ -384,7 +384,7 @@ bool test(int vec_width) {
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 A correct = input(x, y);
-                if (correct < 0) correct = -correct;
+                if (correct <= 0) correct = -correct;
                 if (im14(x, y) != correct) {
                     printf("im14(%d, %d) = %f instead of %f\n", x, y, (double)(im14(x, y)), (double)(correct));
                 }
@@ -455,10 +455,10 @@ bool test(int vec_width) {
                 worst_log_mantissa = std::max(worst_log_mantissa, log_mantissa_error);
                 worst_exp_mantissa = std::max(worst_exp_mantissa, exp_mantissa_error);
 
-                if (a >= 0) 
+                if (a >= 0)
                     worst_pow_mantissa = std::max(worst_pow_mantissa, pow_mantissa_error);
-                
-                if (ISFINITE(correct_log))
+
+				if (ISFINITE(correct_log))
                     worst_fast_log_mantissa = std::max(worst_fast_log_mantissa, fast_log_mantissa_error);
                 
                 if (ISFINITE(correct_exp))
@@ -468,17 +468,18 @@ bool test(int vec_width) {
                     worst_fast_pow_mantissa = std::max(worst_fast_pow_mantissa, fast_pow_mantissa_error);
 
                 if (log_mantissa_error > 2) {
-                    printf("log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
+                    printf("log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, im15(x, y), correct_log, correct_log_mantissa, log_mantissa);
                 }
                 if (exp_mantissa_error > 2) {
-                    printf("exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
+                    printf("exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            b, im16(x, y), correct_exp, correct_exp_mantissa, exp_mantissa);
                 }
                 if (a >= 0 && pow_mantissa_error > 32) {
-                    printf("pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
+                    printf("pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, b/16.0f, im17(x, y), correct_pow, correct_pow_mantissa, pow_mantissa);
                 }
+<<<<<<< HEAD
                 if (ISFINITE(correct_log) && fast_log_mantissa_error > 64) {
                     printf("fast_log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n", 
                            a, im18(x, y), correct_log, correct_log_mantissa, fast_log_mantissa);
@@ -502,6 +503,42 @@ bool test(int vec_width) {
         printf("fast_exp mantissa error: %d\n", worst_fast_exp_mantissa);
         printf("fast_pow mantissa error: %d\n", worst_fast_pow_mantissa);
         */
+    }
+
+    // Lerp (where the weight is the same type as the values)
+    if (verbose) printf("Lerp\n");
+    Func f21;
+    Expr weight = input(x+2, y);
+    Type t = type_of<A>();
+    if (t.is_float()) {
+        weight = clamp(weight, cast<A>(0), cast<A>(1));
+    } else if (t.is_int()) {
+        weight = cast(UInt(t.bits, t.width), max(0, weight));
+    }
+    f21(x, y) = lerp(input(x, y), input(x+1, y), weight);
+    Image<A> im21 = f21.realize(W, H);
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            double a = (double)(input(x, y));
+            double b = (double)(input(x+1, y));
+            double w = (double)(input(x+2, y));
+            if (w < 0) w = 0;
+            if (!t.is_float()) {
+                w /= (1 << t.bits) - 1;
+            }
+            w = std::min(std::max(w, 0.0), 1.0);
+
+            double lerped = (a*(1.0-w) + b*w);
+            if (!t.is_float()) {
+                lerped = floorf(lerped + 0.5);
+            }
+            A correct = (A)(lerped);
+            if (im21(x, y) != correct) {
+                printf("lerp(%f, %f, %f) = %f instead of %f\n", a, b, w, (double)(im21(x, y)), (double)(correct));
+                return false;
+            }
+        }
     }
 
     return true;

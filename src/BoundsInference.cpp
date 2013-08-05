@@ -3,6 +3,7 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "Debug.h"
+#include "IRPrinter.h"
 #include <sstream>
 
 namespace Halide {
@@ -17,18 +18,18 @@ using std::map;
 class BoundsInference : public IRMutator {
 public:
     const vector<string> &funcs;
-    const map<string, Function> &env;    
+    const map<string, Function> &env;
     Scope<int> in_update;
 
-    BoundsInference(const vector<string> &f, const map<string, Function> &e) : funcs(f), env(e) {}    
+    BoundsInference(const vector<string> &f, const map<string, Function> &e) : funcs(f), env(e) {}
 
     using IRMutator::visit;
 
     virtual void visit(const For *for_loop) {
-        
+
         // Compute the region required of each function within this loop body
         map<string, Region> regions = regions_called(for_loop->body);
-        
+
         Stmt body = mutate(for_loop->body);
 
 
@@ -43,6 +44,14 @@ public:
             debug(3) << "Injecting bounds for " << funcs[i] << '\n';
             assert(region.size() == f.args().size() && "Dimensionality mismatch between function and region required");
             for (size_t j = 0; j < region.size(); j++) {
+                if (!region[j].min.defined() || !region[j].extent.defined()) {
+                    std::cerr << "Use of " << f.name()
+                              << " is unbounded in dimension " << j
+                              << " in the following fragment of generated code: \n"
+                              << for_loop->body;
+                    assert(false);
+                }
+
                 const string &arg_name = f.args()[j];
                 body = LetStmt::make(f.name() + "." + arg_name + ".min", region[j].min, body);
                 body = LetStmt::make(f.name() + "." + arg_name + ".extent", region[j].extent, body);
@@ -54,7 +63,7 @@ public:
         } else {
             stmt = For::make(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, body);
         }
-    }    
+    }
 
     virtual void visit(const Pipeline *pipeline) {
         Stmt produce = mutate(pipeline->produce);
@@ -63,10 +72,7 @@ public:
         if (pipeline->update.defined()) {
             // Even though there are calls to a function within the
             // update step of a pipeline, we shouldn't modify the
-            // bounds computed - they've already been fixed. Any
-            // dependencies required should have been scheduled within
-            // the initialization, not the update step, so these
-            // bounds can't be of use to anyone anyway.
+            // bounds computed - they've already been fixed.
             in_update.push(pipeline->name, 0);
             update = mutate(pipeline->update);
             in_update.pop(pipeline->name);
@@ -85,20 +91,37 @@ Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Fun
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();
     assert(root_loop);
-    s = root_loop->body;    
+    s = root_loop->body;
 
-    // For the output function, the bounds required is the size of the buffer
+    // For the output function, the bounds required is the (possibly constrained) size of the buffer
     Function f = env.find(order[order.size()-1])->second;
-    for (size_t i = 0; i < f.args().size(); i++) {
-        debug(2) << f.name() << ", " << f.args()[i] << "\n";
-        ostringstream buf_min_name, buf_extent_name;
-        buf_min_name << f.name() << ".min." << i;
-        buf_extent_name << f.name() << ".extent." << i;
-        Expr buf_min = Variable::make(Int(32), buf_min_name.str());
-        Expr buf_extent = Variable::make(Int(32), buf_extent_name.str());
-        s = LetStmt::make(f.name() + "." + f.args()[i] + ".min", buf_min, s);
-        s = LetStmt::make(f.name() + "." + f.args()[i] + ".extent", buf_extent, s);
-    }   
+
+    for (size_t j = 0; j < f.output_buffers().size(); j++) {
+        Parameter b = f.output_buffers()[j];
+        for (size_t i = 0; i < f.args().size(); i++) {
+            debug(2) << b.name() << ", " << f.args()[i] << "\n";
+
+            string prefix = b.name() + "." + f.args()[i];
+            string dim = int_to_string(i);
+
+            if (b.min_constraint(i).defined()) {
+                s = LetStmt::make(prefix + ".min", b.min_constraint(i), s);
+            } else {
+                string buf_min_name = b.name() + ".min." + dim;
+                Expr buf_min = Variable::make(Int(32), buf_min_name);
+                s = LetStmt::make(prefix + ".min", buf_min, s);
+            }
+
+            if (b.extent_constraint(i).defined()) {
+                s = LetStmt::make(prefix + ".extent", b.extent_constraint(i), s);
+            } else {
+                string buf_extent_name = b.name() + ".extent." + dim;
+                Expr buf_extent = Variable::make(Int(32), buf_extent_name);
+                s = LetStmt::make(prefix + ".extent", buf_extent, s);
+            }
+        }
+
+    }
 
     return s;
 }

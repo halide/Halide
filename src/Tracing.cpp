@@ -27,13 +27,13 @@ private:
         expr = op;
     }
 
-    void visit(const Provide *op) {       
+    void visit(const Provide *op) {
         IRMutator::visit(op);
         // We print every provide at tracing level 3 or higher
         if (level >= 3) {
             const Provide *op = stmt.as<Provide>();
             vector<Expr> args = op->args;
-            args.push_back(op->value);
+            args.insert(args.end(), op->values.begin(), op->values.end());
             Stmt print = PrintStmt::make("Provide " + op->name, args);
             stmt = Block::make(print, op);
         }
@@ -52,8 +52,8 @@ private:
             Stmt print = PrintStmt::make("Realizing " + op->name + " over ", args);
             Stmt start_time = PrintStmt::make("Starting realization of " + op->name + " at time ", vec(time));
             Stmt body = Block::make(Block::make(start_time, print), op->body);
-            stmt = Realize::make(op->name, op->type, op->bounds, body);
-        }        
+            stmt = Realize::make(op->name, op->types, op->bounds, body);
+        }
     }
 
     void visit(const Pipeline *op) {

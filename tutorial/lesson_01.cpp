@@ -29,20 +29,33 @@ int main(int argc, char **argv) {
     // Var objects are names to use as variables in the definition of
     // a Func. They have no meaning by themselves.
     Halide::Var x, y;
+    
+    // Funcs are defined at any integer coordinate of its variables as
+    // an Expr in terms of those variables and other functions.
+    // Here, we'll define an Expr which has the value x + y. Vars have
+    // appropriate operator overloading so that expressions like
+    // 'x + y' become 'Expr' objects.
+    Halide::Expr e = x + y;
 
     // Now we'll add a definition for the Func object. At pixel x, y,
-    // the image will have the value x + y. Vars have appropriate
-    // operator overloading so that expressions like 'x + y' become
-    // 'Expr' objects. On the left hand side we have the Func we're
-    // defining and some Vars. On the right hand side we have some
-    // Expr object that uses those same Vars.
-    gradient(x, y) = x + y;
+    // the image will have the value of the Expr e. On the left hand 
+    // side we have the Func we're defining and some Vars. On the right
+    // hand side we have some Expr object that uses those same Vars.
+    gradient(x, y) = e;
+
+    // This is the same as writing:
+    // 
+    //   gradient(x, y) = x + y;
+    // 
+    // which is the more common form, but we are showing the 
+    // intermediate Expr here for completeness.
 
     // That line of code defined the Func, but it didn't actually
     // compute the output image yet. At this stage it's just Funcs,
-    // Exprs, and Vars in memory. We're meta-programming. This C++
-    // program is constructing a Halide program in memory. Actually
-    // computing pixel data comes next.
+    // Exprs, and Vars in memory, representing the structure of our
+    // imaging pipeline. We're meta-programming. This C++ program is
+    // constructing a Halide program in memory. Actually computing
+    // pixel data comes next.
     
     // Now we 'realize' the Func, which JIT compiles some code that
     // implements the pipeline we've defined, and then runs it.  We
@@ -53,7 +66,7 @@ int main(int argc, char **argv) {
     // image.
     Halide::Image<int32_t> output = gradient.realize(800, 600);
     
-    // Halide does type inference for you. Vars objects represent
+    // Halide does type inference for you. Var objects represent
     // 32-bit integers, so the Expr object 'x + y' also represents a
     // 32-bit integer, and so 'gradient' defines a 32-bit image, and
     // so we got a 32-bit signed integer image out when we call

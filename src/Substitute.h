@@ -7,8 +7,9 @@
  * statements. */
 
 #include "IRMutator.h"
+#include <map>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** Substitute variables with the given name with the replacement
@@ -22,6 +23,12 @@ Expr substitute(std::string name, Expr replacement, Expr expr);
 /** Substitute variables with the given name with the replacement
  * expression within stmt. */
 Stmt substitute(std::string name, Expr replacement, Stmt stmt);
+
+/** Substitute variables with names in the map. */
+// @{
+Expr substitute(const std::map<std::string, Expr> &replacements, Expr expr);
+Stmt substitute(const std::map<std::string, Expr> &replacements, Stmt stmt);
+// @}
 
 }
 }

@@ -2,7 +2,7 @@
 #include <sstream>
 #include <map>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using std::string;
@@ -12,7 +12,7 @@ using std::map;
 
 string unique_name(char prefix) {
     // arrays with static storage duration should be initialized to zero automatically
-    static int instances[256]; 
+    static int instances[256];
     ostringstream str;
     str << prefix << instances[(unsigned char)prefix]++;
     return str.str();
@@ -35,19 +35,22 @@ bool ends_with(const string &str, const string &suffix) {
     return true;
 }
 
+/** Convert an integer to a string. */
+string int_to_string(int x) {
+    static const string small_ints[] = {"0", "1", "2", "3", "4", "5", "6", "7"};
+    if (x < 7) return small_ints[x];
+    ostringstream ss;
+    ss << x;
+    return ss.str();
+}
+
 string unique_name(const string &name) {
     static map<string, int> known_names;
-
-    // If the programmer specified a single character name then use the
-    // pre-existing Halide unique name generator.
-    if (name.length() == 1) {
-        return unique_name(name[0]);
-    }    
 
     // An empty string really does not make sense, but use 'z' as prefix.
     if (name.length() == 0) {
         return unique_name('z');
-    }    
+    }
 
     // Check the '$' character doesn't appear in the prefix. This lets
     // us separate the name from the number using '$' as a delimiter,
@@ -64,7 +67,7 @@ string unique_name(const string &name) {
         return name;
     } else {
         // Use the programmer-specified name but append a number to make it unique.
-        ostringstream oss;        
+        ostringstream oss;
         oss << name << '$' << count;
         return oss.str();
     }

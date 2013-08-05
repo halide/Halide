@@ -23,7 +23,7 @@ using std::make_pair;
 
 struct RemoveLets : public IRMutator {
     set<Expr, ExprDeepCompare> canonical;
-    vector<map<Expr, Expr, Expr::Compare> > replacement;
+    vector<map<Expr, Expr, ExprCompare> > replacement;
 
     RemoveLets() {
         enter_scope();
@@ -54,11 +54,11 @@ struct RemoveLets : public IRMutator {
         }
 
 
-    }    
+    }
 
     Expr find_replacement(Expr e) {
         for (size_t i = replacement.size(); i > 0; i--) {
-            map<Expr, Expr, Expr::Compare>::iterator iter = replacement[i-1].find(e);
+            map<Expr, Expr, ExprCompare>::iterator iter = replacement[i-1].find(e);
             if (iter != replacement[i-1].end()) return iter->second;
         }
         return Expr();
@@ -69,7 +69,7 @@ struct RemoveLets : public IRMutator {
     }
 
     void enter_scope() {
-        replacement.resize(replacement.size()+1);        
+        replacement.resize(replacement.size()+1);
     }
 
     void leave_scope() {
@@ -109,10 +109,10 @@ Stmt remove_lets(Stmt s) {
 struct ReplaceExpr : public IRMutator {
     using IRMutator::mutate;
 
-    map<Expr, Expr, Expr::Compare> mutated;
+    map<Expr, Expr, ExprCompare> mutated;
 
     Expr mutate(Expr e) {
-        map<Expr, Expr, Expr::Compare>::iterator iter = mutated.find(e);
+        map<Expr, Expr, ExprCompare>::iterator iter = mutated.find(e);
         if (iter != mutated.end()) {
             return iter->second;
         } else {
@@ -126,7 +126,7 @@ struct ReplaceExpr : public IRMutator {
 Expr replace_expr(Expr e, Expr old_expr, Expr replacement) {
     ReplaceExpr r;
     r.mutated[old_expr] = replacement;
-    return r.mutate(e);    
+    return r.mutate(e);
 }
 
 struct FindOneCommonSubexpression : public IRGraphVisitor {
@@ -137,8 +137,8 @@ struct FindOneCommonSubexpression : public IRGraphVisitor {
     void include(const Expr &e) {
         if (result.defined()) return;
 
-        set<const IRNode *, Expr::Compare>::iterator iter = visited.find(e.ptr);
-        
+        set<const IRNode *, ExprCompare>::iterator iter = visited.find(e.ptr);
+
         if (iter != visited.end()) {
             if (e.as<IntImm>() || e.as<FloatImm>() || e.as<Variable>() || e.as<Cast>()) {
                 return;
@@ -154,7 +154,7 @@ struct FindOneCommonSubexpression : public IRGraphVisitor {
 Expr common_subexpression_elimination(Expr e) {
 
     // debug(0) << "Input to letify " << e << "\n";
-    
+
     e = remove_lets(e);
 
     // debug(0) << "Deletified letify " << e << "\n";
