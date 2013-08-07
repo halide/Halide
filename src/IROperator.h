@@ -785,7 +785,7 @@ inline Expr operator>>(Expr x, Expr y) {
  *
  * Ordering is not required between zero_val and one_val:
  *     lerp(42, 69, .5f) == lerp(69, 42, .5f) == 56
- * 
+ *
  * Results for integer types are for exactly rounded arithmetic. As
  * such, there are cases where 16-bit and float differ because 32-bit
  * floating-point (float) does not have enough precision to produce
@@ -828,6 +828,20 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     assert(zero_val.defined() && "lerp with undefined zero value");
     assert(one_val.defined()  && "lerp with undefined one value");
     assert(weight.defined()   && "lerp with undefined weight");
+
+    // We allow integer constants through, so that you can say things
+    // like lerp(0, cast<uint8_t>(x), alpha) and produce an 8-bit
+    // result. Note that lerp(0.0f, cast<uint8_t>(x), alpha) will
+    // produce an error, as will lerp(0.0f, cast<double>(x),
+    // alpha). lerp(0, cast<float>(x), alpha) is also allowed and will
+    // produce a float result.
+    if (as_const_int(zero_val)) {
+        zero_val = cast(one_val.type(), zero_val);
+    }
+    if (as_const_int(one_val)) {
+        one_val = cast(zero_val.type(), one_val);
+    }
+
     assert(zero_val.type() == one_val.type() &&
            "lerp zero and one values must be the same type.");
     assert((weight.type().is_uint() || weight.type().is_float()) &&
