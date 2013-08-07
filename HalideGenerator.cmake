@@ -209,11 +209,15 @@ function(halide_add_generator_stub_library)
 
   halide_generator_genfiles_dir(${args_STUB_GENERATOR_TARGET} GENFILES_DIR)
 
-  set(STUB_HDR "${GENFILES_DIR}/${args_STUB_GENERATOR_TARGET}.stub.h")
+  # STUBNAME_BASE = strip_suffix(STUB_GENERATOR_TARGET, ".generator")
+  string(REGEX REPLACE "\\.generator*$" "" STUBNAME_BASE ${args_STUB_GENERATOR_TARGET})
+
+  set(STUB_HDR "${GENFILES_DIR}/${STUBNAME_BASE}.stub.h")
 
   set(GENERATOR_EXEC_ARGS "-o" "${GENFILES_DIR}" "-e" "cpp_stub")
   if (NOT ${args_STUB_GENERATOR_NAME} STREQUAL "")
     list(APPEND GENERATOR_EXEC_ARGS "-g" "${args_STUB_GENERATOR_NAME}")
+    list(APPEND GENERATOR_EXEC_ARGS "-n" "${STUBNAME_BASE}")
   endif()
 
   set(STUBGEN "${args_STUB_GENERATOR_TARGET}.exec_stub_generator")
