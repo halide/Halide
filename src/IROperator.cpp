@@ -4,7 +4,7 @@
 #include <iostream>
 #include <math.h>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 bool is_const(Expr e) {
@@ -16,12 +16,11 @@ bool is_const(Expr e) {
     if (const Ramp *r = e.as<Ramp>()) {
         return is_const(r->base) && is_const(r->stride);
     }
-
     if (const Broadcast *b = e.as<Broadcast>()) {
         return is_const(b->value);
     }
     return false;
-            
+
 }
 
 bool is_const(Expr e, int value) {
@@ -45,7 +44,7 @@ const float * as_const_float(Expr e) {
 bool is_const_power_of_two(Expr e, int *bits) {
     const Broadcast *b = e.as<Broadcast>();
     if (b) return is_const_power_of_two(b->value, bits);
-    
+
     const Cast *c = e.as<Cast>();
     if (c) return is_const_power_of_two(c->value, bits);
 
@@ -103,7 +102,7 @@ bool is_zero(Expr e) {
     if (const Broadcast *b = e.as<Broadcast>()) return is_zero(b->value);
     return false;
 }
-        
+
 bool is_one(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 1;
     if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 1.0f;
@@ -151,7 +150,7 @@ Expr make_const(Type t, int val) {
     }
     return Cast::make(t, val);
 }
-        
+
 Expr make_bool(bool val, int w) {
     return make_const(UInt(1, w), val);
 }
@@ -159,7 +158,7 @@ Expr make_bool(bool val, int w) {
 Expr make_zero(Type t) {
     return make_const(t, 0);
 }
-        
+
 Expr make_one(Type t) {
     return make_const(t, 1);
 }
@@ -167,7 +166,7 @@ Expr make_one(Type t) {
 Expr make_two(Type t) {
     return make_const(t, 2);
 }
-    
+
 Expr const_true(int w) {
     return make_one(UInt(1, w));
 }
@@ -180,6 +179,9 @@ Expr const_false(int w) {
 
 void match_types(Expr &a, Expr &b) {
     if (a.type() == b.type()) return;
+
+    bool a_int_imm = a.as<IntImm>() != NULL;
+    bool b_int_imm = b.as<IntImm>() != NULL;
 
     // First widen to match
     if (a.type().is_scalar() && b.type().is_vector()) {
@@ -194,21 +196,21 @@ void match_types(Expr &a, Expr &b) {
 
     if (!ta.is_float() && tb.is_float()) {
         // int(a) * float(b) -> float(b)
-        // uint(a) * float(b) -> float(b)        
+        // uint(a) * float(b) -> float(b)
         a = cast(tb, a);
     } else if (ta.is_float() && !tb.is_float()) {
         b = cast(ta, b);
-    } else if (ta.is_float() && tb.is_float()) {    
+    } else if (ta.is_float() && tb.is_float()) {
         // float(a) * float(b) -> float(max(a, b))
         if (ta.bits > tb.bits) b = cast(ta, b);
-        else a = cast(tb, a); 
-    } else if (!ta.is_float() && !tb.is_float() && is_const(b)) {
-        // (u)int(a) * (u)intImm(b) -> (u)int(a)
-        b = cast(ta, b); 
-    } else if (!tb.is_float() && !ta.is_float() && is_const(a)) {
-        a = cast(tb, a); 
+        else a = cast(tb, a);
+    } else if (!ta.is_float() && b_int_imm) {
+        // (u)int(a) * IntImm(b) -> (u)int(a)
+        b = cast(ta, b);
+    } else if (!tb.is_float() && a_int_imm) {
+        a = cast(tb, a);
     } else if (ta.is_uint() && tb.is_uint()) {
-        // uint(a) * uint(b) -> uint(max(a, b))        
+        // uint(a) * uint(b) -> uint(max(a, b))
         if (ta.bits > tb.bits) b = cast(ta, b);
         else a = cast(tb, a);
     } else if (!ta.is_float() && !tb.is_float()) {
@@ -218,7 +220,7 @@ void match_types(Expr &a, Expr &b) {
         b = cast(Int(bits), b);
     } else {
         std::cerr << "Could not match types: " << ta << ", " << tb << std::endl;
-        assert(false && "Failed type coercion");    
+        assert(false && "Failed type coercion");
     }
 }
 
@@ -257,7 +259,7 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
 
     // The reduced version is between 0.5 and 1.0, which means it has
     // an exponent of -1. Floats encode this as 126.
-    int exponent_neg1 = 126 << 23;   
+    int exponent_neg1 = 126 << 23;
 
     // Grab the exponent bits from the input. We know the sign bit is
     // zero because we're taking a log, and negative inputs are
@@ -297,10 +299,10 @@ Expr halide_log(Expr x_full) {
     Expr patched = select(exceptional, 1.0f, x_full);
     Expr reduced, exponent;
     range_reduce_log(patched, &reduced, &exponent);
-   
+
     // Very close to the Taylor series for log about 1, but tuned to
     // have minimum relative error in the reduced domain (0.75 - 1.5).
-    
+
     Expr x1 = reduced - 1.0f;
     Expr result = 0.0f;
     result = x1 * result + 0.05111976432738144643f;
@@ -355,11 +357,11 @@ Expr halide_exp(Expr x_full) {
     Expr biased = k + fpbias;
 
     Expr inf = Call::make(Float(32), "inf_f32", std::vector<Expr>(), Call::Extern);
-    
+
     // Shift the bits up into the exponent field and reinterpret this
     // thing as float.
     Expr two_to_the_n = reinterpret<float>(biased << 23);
-    result *= two_to_the_n;    
+    result *= two_to_the_n;
 
     // Catch overflow and underflow
     result = select(biased < 255, result, inf);
