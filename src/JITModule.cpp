@@ -3,6 +3,10 @@
 #include <mutex>
 #include <set>
 
+#ifdef __arm__
+#include <sys/mman.h>
+#endif
+
 #include "CodeGen_Internal.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
@@ -320,6 +324,15 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     debug(2) << "Flushing cache from " << (void *)start
              << " to " << (void *)end << "\n";
     __builtin___clear_cache(start, end);
+
+    // As of November 2016, llvm doesn't always mark the right pages
+    // as executable either.
+    // https://llvm.org/bugs/show_bug.cgi?id=30905
+
+    start = (char *)(((uintptr_t)start) & ~4095);
+    end = (char *)(((uintptr_t)end + 4095) & ~4095);
+    mprotect((void *)start, end - start, PROT_READ | PROT_EXEC);
+
 #endif
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
