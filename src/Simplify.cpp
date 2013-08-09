@@ -18,8 +18,9 @@ using std::pair;
 using std::make_pair;
 using std::ostringstream;
 
+// Immediates and broadcasts of immediates
 bool is_simple_const(Expr e) {
-    return is_const(e) && (!e.as<Cast>());
+    return (!e.as<Cast>()) && is_const(e);
 }
 
 // Is a constant representable as a certain type

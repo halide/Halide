@@ -108,12 +108,12 @@ for LLVM in trunk release-3.2 release-3.3 pnacl; do
         cd llvm/${LLVM}
         mkdir build-32
         cd build-32
-        cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=ON ..
+        cmake -DLLVM_ENABLE_CURSES=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=ON ..
         make -j8
         cd ..
         mkdir build-64
         cd build-64
-        cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+        cmake -DLLVM_ENABLE_CURSES=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
         make -j8
         cd ../../../
     elif [[ "$LLVM" == trunk ]]; then

@@ -546,6 +546,12 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
         for (size_t i = 0; i < f.reduction_args().size(); i++) {
             f.reduction_args()[i].accept(&calls);
         }
+
+        ReductionDomain d = f.reduction_domain();
+        for (size_t i = 0; i < d.domain().size(); i++) {
+            d.domain()[i].min.accept(&calls);
+            d.domain()[i].extent.accept(&calls);
+        }
     }
 
     if (!recursive) {
