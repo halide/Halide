@@ -335,11 +335,16 @@ void ComputeModulusRemainder::visit(const Call *) {
 }
 
 void ComputeModulusRemainder::visit(const Let *op) {
-    ModulusRemainder val = analyze(op->value);
-    scope.push(op->name, val);
-    val = analyze(op->body);
-    scope.pop(op->name);
+    bool value_interesting = op->value.type().is_int();
 
+    if (value_interesting) {
+        ModulusRemainder val = analyze(op->value);
+        scope.push(op->name, val);
+    }
+    ModulusRemainder val = analyze(op->body);
+    if (value_interesting) {
+        scope.pop(op->name);
+    }
     modulus = val.modulus;
     remainder = val.remainder;
 }
