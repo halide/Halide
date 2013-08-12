@@ -6,6 +6,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <stdint.h>
+#include <stdio.h>
 
 namespace {
 
