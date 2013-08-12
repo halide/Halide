@@ -203,11 +203,25 @@ pair<Stmt, Stmt> build_realization(Function func) {
     Stmt update = build_update(func);
 
     if (update.defined()) {
-        // Expand the bounds computed in the produce step
-        // using the bounds read in the update step. This is
-        // necessary because later bounds inference does not
-        // consider the bounds read during an update step
-        Region bounds = region_called(update, func.name());
+        // Expand the bounds computed in the produce step using the
+        // bounds read in the update step. This is necessary because
+        // later bounds inference does not consider the bounds read
+        // during an update step, the bounds computed in the produce
+        // step must cover all pixels touched in the update step or
+        // bounds inference is wrong. TODO: don't actually compute all
+        // the pixels in the produce step if they're just going to get
+        // clobbered, or if they never get read in the update step.
+        Region bounds = region_touched(update, func.name());
+        for (size_t i = 0; i < bounds.size(); i++) {
+            if (!bounds[i].min.defined() || !bounds[i].extent.defined()) {
+                std::cerr << "Error: The region of " << func.name()
+                          << " accessed in its reduction definition "
+                          << "is unbounded in dimension " << i << ".\n"
+                          << "Consider introducing clamp operators.\n";
+                assert(false);
+            }
+        }
+
         if (!bounds.empty()) {
             assert(bounds.size() == func.args().size());
             // Expand the region to be computed using the region read in the update step
@@ -750,7 +764,6 @@ Stmt add_image_checks(Stmt s, Function f) {
         } else {
             bufs[f.name()] = output_buffer;
         }
-
     }
 
     // Now compute what regions of each buffer are touched
