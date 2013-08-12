@@ -72,9 +72,27 @@ public:
     Image() : origin(NULL), stride_0(0), stride_1(0), stride_2(0), stride_3(0), dims(0) {}
 
     /** Allocate an image with the given dimensions. */
-    Image(int x, int y = 0, int z = 0, int w = 0) : buffer(Buffer(type_of<T>(), x, y, z, w)) {
+    // @{
+    Image(int x, int y = 0, int z = 0, int w = 0, const std::string &name = "") :
+        buffer(Buffer(type_of<T>(), x, y, z, w, NULL, name)) {
         prepare_for_direct_pixel_access();
     }
+
+    Image(int x, int y, int z, const std::string &name) :
+        buffer(Buffer(type_of<T>(), x, y, z, 0, NULL, name)) {
+        prepare_for_direct_pixel_access();
+    }
+
+    Image(int x, int y, const std::string &name) :
+        buffer(Buffer(type_of<T>(), x, y, 0, 0, NULL, name)) {
+        prepare_for_direct_pixel_access();
+    }
+
+    Image(int x, const std::string &name) :
+        buffer(Buffer(type_of<T>(), x, 0, 0, 0, NULL, name)) {
+        prepare_for_direct_pixel_access();
+    }
+    // @}
 
     /** Wrap a buffer in an Image object, so that we can directly
      * access its pixels in a type-safe way. */
@@ -89,7 +107,7 @@ public:
 
     /** Wrap a buffer_t in an Image object, so that we can access its
      * pixels. */
-    Image(const buffer_t *b) : buffer(type_of<T>(), b) {
+    Image(const buffer_t *b, const std::string &name = "") : buffer(type_of<T>(), b, name) {
         prepare_for_direct_pixel_access();
     }
 
@@ -122,8 +140,25 @@ public:
     /** Get the size of a dimension */
     int extent(int dim) const {
         assert(defined());
-        assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
+        assert(dim >= 0 && dim < dims && "dimension out of bounds in call to Image::extent");
         return buffer.extent(dim);
+    }
+
+    /** Get the min coordinate of a dimension. The top left of the
+     * image represents this point in a function that was realized
+     * into this image. */
+    int min(int dim) const {
+        assert(defined());
+        assert(dim >= 0 && dim < dims && "dimension out of bounds in call to Image::min");
+        return buffer.min(dim);
+    }
+
+    /** Set the min coordinates of a dimension. */
+    void set_min(int m0, int m1 = 0, int m2 = 0, int m3 = 0) {
+        assert(defined());
+        buffer.set_min(m0, m1, m2, m3);
+        // Move the origin
+        prepare_for_direct_pixel_access();
     }
 
     /** Get the number of elements in the buffer between two adjacent
@@ -133,7 +168,7 @@ public:
      * though. */
     int stride(int dim) const {
         assert(defined());
-        assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
+        assert(dim >= 0 && dim < dims && "dimension out of bounds in call to Image::stride");
         return buffer.stride(dim);
     }
 
@@ -155,9 +190,14 @@ public:
         return extent(2);
     }
 
-    /** Get a pointer to the first element. */
+    /** Get a pointer to the element at the min location. */
     T *data() const {
-        return origin;
+        assert(defined());
+        T *ptr = origin;
+        for (int i = 0; i < dims; i++) {
+            ptr += min(i) * stride(i);
+        }
+        return ptr;
     }
 
     /** Assuming this image is one-dimensional, get the value of the

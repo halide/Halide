@@ -46,9 +46,8 @@ struct BufferContents {
     JITCompiledModule source_module;
 
     BufferContents(Type t, int x_size, int y_size, int z_size, int w_size,
-                   uint8_t* data = NULL) :
-        type(t), allocation(NULL), name(unique_name('b'))
-    {
+                   uint8_t* data, const std::string &n) :
+        type(t), name(n.empty() ? unique_name('b') : n) {
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
         buf.elem_size = (t.bits+ 7) / 8;
         size_t size = 1;
@@ -57,7 +56,8 @@ struct BufferContents {
         if (z_size) size *= z_size;
         if (w_size) size *= w_size;
         if (!data) {
-            allocation = (uint8_t *)calloc(buf.elem_size, size + 32/buf.elem_size);
+            size = buf.elem_size*size + 32;
+            allocation = (uint8_t *)calloc(1, size);
             buf.host = allocation;
             while ((size_t)(buf.host) & 0x1f) buf.host++;
         } else {
@@ -80,8 +80,8 @@ struct BufferContents {
         buf.min[3] = 0;
     }
 
-    BufferContents(Type t, const buffer_t *b) :
-        type(t), allocation(NULL) {
+    BufferContents(Type t, const buffer_t *b, const std::string &n) :
+        type(t), name(n.empty() ? unique_name('b') : n) {
         buf = *b;
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
     }
@@ -104,12 +104,12 @@ public:
     Buffer() : contents(NULL) {}
 
     Buffer(Type t, int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
-           uint8_t* data = NULL) :
-        contents(new Internal::BufferContents(t, x_size, y_size, z_size, w_size, data)) {
+           uint8_t* data = NULL, const std::string &name = "") :
+        contents(new Internal::BufferContents(t, x_size, y_size, z_size, w_size, data, name)) {
     }
 
-    Buffer(Type t, const buffer_t *buf) :
-        contents(new Internal::BufferContents(t, buf)) {
+    Buffer(Type t, const buffer_t *buf, const std::string &name = "") :
+        contents(new Internal::BufferContents(t, buf, name)) {
     }
 
     /** Get a pointer to the host-side memory. */
@@ -195,6 +195,16 @@ public:
         assert(defined());
         assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
         return contents.ptr->buf.min[dim];
+    }
+
+    /** Set the coordinate in the function that this buffer represents
+     * that corresponds to the base address of the buffer. */
+    void set_min(int m0, int m1 = 0, int m2 = 0, int m3 = 0) {
+        assert(defined());
+        contents.ptr->buf.min[0] = m0;
+        contents.ptr->buf.min[1] = m1;
+        contents.ptr->buf.min[2] = m2;
+        contents.ptr->buf.min[3] = m3;
     }
 
     /** Get the Halide type of the contents of this buffer. */
@@ -287,6 +297,8 @@ public:
         assert(type_of<T>() == type() && "Calling Buffer::as with wrong type for this buffer");
         return ((T *)contents.ptr->buf.host)[0];
     }
+
+
 };
 
 namespace Internal {
@@ -298,13 +310,16 @@ inline RefCount &ref_count<BufferContents>(const BufferContents *p) {
 template<>
 inline void destroy<BufferContents>(const BufferContents *p) {
     // Free any device-side allocation
-    if (p->source_module.free_dev_buffer) p->source_module.free_dev_buffer(const_cast<buffer_t *>(&p->buf));
-    // Free any host-side allocation if we were the ones to make it
-    if (p->allocation) free(p->allocation);
+    if (p->source_module.free_dev_buffer) {
+        p->source_module.free_dev_buffer(const_cast<buffer_t *>(&p->buf));
+    }
+    if (p->allocation) {
+        free(p->allocation);
+    }
     delete p;
 }
-}
 
+}
 }
 
 #endif
