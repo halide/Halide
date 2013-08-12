@@ -2,16 +2,16 @@
 #define HALIDE_INTRUSIVE_PTR_H
 
 /** \file
- * 
+ *
  * Support classes for reference-counting via intrusive shared
  * pointers.
- */ 
+ */
 
 #include "Util.h"
 
 #include <stdlib.h>
 #include <iostream>
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** A class representing a reference count to be used with IntrusivePtr */
@@ -24,16 +24,16 @@ public:
     bool is_zero() const {return count == 0;}
 };
 
-/** 
+/**
  * Because in this header we don't yet know how client classes store
  * their RefCount (and we don't want to depend on the declarations of
  * the client classes), any class that you want to hold onto via one
  * of these must provide implementations of ref_count and destroy,
  * which we forward-declare here.
- * 
+ *
  * E.g. if you want to use IntrusivePtr<MyClass>, then you should
  * define something like this in MyClass.cpp (assuming MyClass has
- * a field: mutable int ref_count):
+ * a field: mutable RefCount ref_count):
  *
  * template<> RefCount &ref_count<MyClass>(const MyClass *c) {return c->ref_count;}
  * template<> void destroy<MyClass>(const MyClass *c) {delete c;}
@@ -50,18 +50,18 @@ template<typename T> EXPORT void destroy(const T *);
  * raw pointer, and it's impossible to have two different reference
  * counts attached to the same raw object. Seeing as we pass around
  * raw pointers to concrete IRNodes and Expr's interchangeably, this
- * is a useful property. 
+ * is a useful property.
  */
 template<typename T>
 struct IntrusivePtr {
 private:
-        
+
     void incref(T *ptr) {
         if (ptr) {
             ref_count(ptr).increment();
         }
     };
-        
+
     void decref(T *ptr) {
         if (ptr) {
             ref_count(ptr).decrement();
@@ -83,9 +83,6 @@ public:
     }
 
     IntrusivePtr(T *p) : ptr(p) {
-        if (ptr && ref_count(ptr).is_zero()) {
-            //std::cout << "Creating " << ptr << ", " << live_objects << "\n";
-        }
         incref(ptr);
     }
 
@@ -93,8 +90,10 @@ public:
         incref(ptr);
     }
 
-    IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {        
-        // other can be inside of something owned by this
+    IntrusivePtr<T> &operator=(const IntrusivePtr<T> &other) {
+        // Other can be inside of something owned by this, so we
+        // should be careful to incref other before we decref
+        // ourselves.
         T *temp = other.ptr;
         incref(temp);
         decref(ptr);
@@ -112,6 +111,7 @@ public:
     bool same_as(const IntrusivePtr &other) const {
         return ptr == other.ptr;
     }
+
 };
 
 }
