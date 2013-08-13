@@ -101,44 +101,42 @@ private:
                 buffer_name = buffer_name + '.' + int_to_string(i);
             }
             stmt = Allocate::make(buffer_name, realize->types[i], size, stmt);
-        }
 
+            // Compute the strides
+            for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
+                int prev_j = storage_permutation[i-1];
+                int j = storage_permutation[i];
+                ostringstream stride_name;
+                stride_name << buffer_name << ".stride." << j;
+                ostringstream prev_stride_name;
+                prev_stride_name << buffer_name << ".stride." << prev_j;
+                ostringstream prev_extent_name;
+                prev_extent_name << buffer_name << ".extent." << prev_j;
+                Expr prev_stride = Variable::make(Int(32), prev_stride_name.str());
+                Expr prev_extent = Variable::make(Int(32), prev_extent_name.str());
+                stmt = LetStmt::make(stride_name.str(), prev_stride * prev_extent, stmt);
+            }
+            // Innermost stride is one
+            ostringstream stride_0_name;
+            if (!storage_permutation.empty()) {
+                stride_0_name << buffer_name << ".stride." << storage_permutation[0];
+            } else {
+                stride_0_name << buffer_name << ".stride.0";
+            }
+            stmt = LetStmt::make(stride_0_name.str(), 1, stmt);
 
-        // Compute the strides
-        for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
-            int prev_j = storage_permutation[i-1];
-            int j = storage_permutation[i];
-            ostringstream stride_name;
-            stride_name << realize->name << ".stride." << j;
-            ostringstream prev_stride_name;
-            prev_stride_name << realize->name << ".stride." << prev_j;
-            ostringstream prev_extent_name;
-            prev_extent_name << realize->name << ".extent." << prev_j;
-            Expr prev_stride = Variable::make(Int(32), prev_stride_name.str());
-            Expr prev_extent = Variable::make(Int(32), prev_extent_name.str());
-            stmt = LetStmt::make(stride_name.str(), prev_stride * prev_extent, stmt);
-        }
-        // Innermost stride is one
-        ostringstream stride_0_name;
-        if (!storage_permutation.empty()) {
-            stride_0_name << realize->name << ".stride." << storage_permutation[0];
-        } else {
-            stride_0_name << realize->name << ".stride.0";
-        }
-        stmt = LetStmt::make(stride_0_name.str(), 1, stmt);
-
-        // Assign the mins and extents stored
-        for (size_t i = realize->bounds.size(); i > 0; i--) {
-            ostringstream min_name, extent_name;
-            min_name << realize->name << ".min." << (i-1);
-            extent_name << realize->name << ".extent." << (i-1);
-            stmt = LetStmt::make(min_name.str(), realize->bounds[i-1].min, stmt);
-            stmt = LetStmt::make(extent_name.str(), realize->bounds[i-1].extent, stmt);
+            // Assign the mins and extents stored
+            for (size_t i = realize->bounds.size(); i > 0; i--) {
+                ostringstream min_name, extent_name;
+                min_name << buffer_name << ".min." << (i-1);
+                extent_name << buffer_name << ".extent." << (i-1);
+                stmt = LetStmt::make(min_name.str(), realize->bounds[i-1].min, stmt);
+                stmt = LetStmt::make(extent_name.str(), realize->bounds[i-1].extent, stmt);
+            }
         }
     }
 
     void visit(const Provide *provide) {
-        Expr idx = mutate(flatten_args(provide->name, provide->args));
 
         vector<Expr> values(provide->values.size());
         for (size_t i = 0; i < values.size(); i++) {
@@ -146,6 +144,7 @@ private:
         }
 
         if (values.size() == 1) {
+            Expr idx = mutate(flatten_args(provide->name, provide->args));
             stmt = Store::make(provide->name, values[0], idx);
         } else {
 
@@ -155,6 +154,7 @@ private:
             // Store the values by name
             for (size_t i = 0; i < provide->values.size(); i++) {
                 string name = provide->name + "." + int_to_string(i);
+                Expr idx = mutate(flatten_args(name, provide->args));
                 names[i] = name + ".value";
                 Expr var = Variable::make(values[i].type(), names[i]);
                 Stmt store = Store::make(name, var, idx);
@@ -188,14 +188,14 @@ private:
                 expr = Call::make(call->type, call->name, args, call->call_type);
             }
         } else {
-            Expr idx = mutate(flatten_args(call->name, call->args));
-
             string name = call->name;
             if (call->call_type == Call::Halide &&
                 call->func.values().size() > 1) {
                 name = name + '.' + int_to_string(call->value_index);
+
             }
 
+            Expr idx = mutate(flatten_args(name, call->args));
             expr = Load::make(call->type, name, idx, call->image, call->param);
         }
     }

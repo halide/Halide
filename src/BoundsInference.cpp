@@ -93,34 +93,33 @@ Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Fun
     assert(root_loop);
     s = root_loop->body;
 
-    // For the output function, the bounds required is the (possibly constrained) size of the buffer
+    // For the output function, the bounds required is the (possibly
+    // constrained) size of the first output buffer. (TODO: check the
+    // other output buffers match this size).
     Function f = env.find(order[order.size()-1])->second;
 
-    for (size_t j = 0; j < f.output_buffers().size(); j++) {
-        Parameter b = f.output_buffers()[j];
-        for (size_t i = 0; i < f.args().size(); i++) {
-            debug(2) << b.name() << ", " << f.args()[i] << "\n";
+    Parameter b = f.output_buffers()[0];
+    for (size_t i = 0; i < f.args().size(); i++) {
+        debug(2) << b.name() << ", " << f.args()[i] << "\n";
 
-            string prefix = b.name() + "." + f.args()[i];
-            string dim = int_to_string(i);
+        string prefix = f.name() + "." + f.args()[i];
+        string dim = int_to_string(i);
 
-            if (b.min_constraint(i).defined()) {
-                s = LetStmt::make(prefix + ".min", b.min_constraint(i), s);
-            } else {
-                string buf_min_name = b.name() + ".min." + dim;
-                Expr buf_min = Variable::make(Int(32), buf_min_name);
-                s = LetStmt::make(prefix + ".min", buf_min, s);
-            }
-
-            if (b.extent_constraint(i).defined()) {
-                s = LetStmt::make(prefix + ".extent", b.extent_constraint(i), s);
-            } else {
-                string buf_extent_name = b.name() + ".extent." + dim;
-                Expr buf_extent = Variable::make(Int(32), buf_extent_name);
-                s = LetStmt::make(prefix + ".extent", buf_extent, s);
-            }
+        if (b.min_constraint(i).defined()) {
+            s = LetStmt::make(prefix + ".min", b.min_constraint(i), s);
+        } else {
+            string buf_min_name = b.name() + ".min." + dim;
+            Expr buf_min = Variable::make(Int(32), buf_min_name);
+            s = LetStmt::make(prefix + ".min", buf_min, s);
         }
 
+        if (b.extent_constraint(i).defined()) {
+            s = LetStmt::make(prefix + ".extent", b.extent_constraint(i), s);
+        } else {
+            string buf_extent_name = b.name() + ".extent." + dim;
+            Expr buf_extent = Variable::make(Int(32), buf_extent_name);
+            s = LetStmt::make(prefix + ".extent", buf_extent, s);
+        }
     }
 
     return s;
