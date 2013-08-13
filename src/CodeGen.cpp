@@ -27,32 +27,50 @@ using std::stack;
 
 // Define a local empty inline function for each target
 // to disable initialization.
-#define LLVM_TARGET(target)             \
-    void inline Initialize##target##Target() { \
-    }
-
+#define LLVM_TARGET(target) \
+    inline void Initialize##target##Target() {}
 #include <llvm/Config/Targets.def>
-
 #undef LLVM_TARGET
+
+#define LLVM_ASM_PARSER(target)     \
+    inline void Initialize##target##AsmParser() {}
+#include <llvm/Config/AsmParsers.def>
+#undef LLVM_ASM_PARSER
+
+#define LLVM_ASM_PRINTER(target)    \
+    inline void Initialize##target##AsmPrinter() {}
+#include <llvm/Config/AsmPrinters.def>
+#undef LLVM_ASM_PRINTER
 
 #define InitializeTarget(target)              \
         LLVMInitialize##target##Target();     \
         LLVMInitialize##target##TargetInfo(); \
-        LLVMInitialize##target##AsmPrinter(); \
         LLVMInitialize##target##TargetMC();   \
         llvm_##target##_enabled = true;
 
+#define InitializeAsmParser(target)           \
+        LLVMInitialize##target##AsmParser();  \
+
+#define InitializeAsmPrinter(target)          \
+        LLVMInitialize##target##AsmPrinter(); \
+
 // Override above empty init function with macro for supported targets.
 #if WITH_X86
-#define InitializeX86Target()   InitializeTarget(X86)
+#define InitializeX86Target()       InitializeTarget(X86)
+#define InitializeX86AsmParser()    InitializeAsmParser(X86)
+#define InitializeX86AsmPrinter()   InitializeAsmPrinter(X86)
 #endif
 
 #if WITH_ARM
-#define InitializeARMTarget()   InitializeTarget(ARM)
+#define InitializeARMTarget()       InitializeTarget(ARM)
+#define InitializeARMAsmParser()    InitializeAsmParser(ARM)
+#define InitializeARMAsmPrinter()   InitializeAsmPrinter(ARM)
 #endif
 
 #if WITH_PTX
-#define InitializeNVPTXTarget() InitializeTarget(NVPTX)
+#define InitializeNVPTXTarget()       InitializeTarget(NVPTX)
+#define InitializeNVPTXAsmParser()    InitializeAsmParser(NVPTX)
+#define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
 #endif
 
 CodeGen::CodeGen() :
@@ -72,11 +90,19 @@ CodeGen::CodeGen() :
         InitializeNativeTargetAsmParser();
 
         #define LLVM_TARGET(target)         \
-            Initialize##target##Target();   \
-
+            Initialize##target##Target();
         #include <llvm/Config/Targets.def>
-
         #undef LLVM_TARGET
+
+        #define LLVM_ASM_PARSER(target)     \
+            Initialize##target##AsmParser();
+        #include <llvm/Config/AsmParsers.def>
+        #undef LLVM_ASM_PARSER
+
+        #define LLVM_ASM_PRINTER(target)    \
+            Initialize##target##AsmPrinter();
+        #include <llvm/Config/AsmPrinters.def>
+        #undef LLVM_ASM_PRINTER
 
         llvm_initialized = true;
     }
