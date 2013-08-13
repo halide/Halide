@@ -116,6 +116,11 @@ public:
         return &contents.ptr->data;
     }
 
+    /** Tests if this handle is the same as another handle */
+    bool same_as(const Parameter &other) const {
+        return contents.ptr == other.contents.ptr;
+    }
+
     /** Tests if this handle is non-NULL */
     bool defined() const {
         return contents.defined();

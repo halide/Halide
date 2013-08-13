@@ -1045,6 +1045,16 @@ OutputImageParam Func::output_buffer() const {
     return OutputImageParam(func.output_buffers()[0], dimensions());
 }
 
+vector<OutputImageParam> Func::output_buffers() const {
+    assert(defined() && "Can't access output buffers of undefined function");
+
+    vector<OutputImageParam> bufs(func.output_buffers().size());
+    for (size_t i = 0; i < bufs.size(); i++) {
+        bufs[i] = OutputImageParam(func.output_buffers()[i], dimensions());
+    }
+    return bufs;
+}
+
 namespace {
 
 class InferArguments : public IRGraphVisitor {

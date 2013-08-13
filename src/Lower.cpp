@@ -819,7 +819,24 @@ Stmt add_image_checks(Stmt s, Function f) {
         Buffer &image = iter->second.image;
         Parameter &param = iter->second.param;
         Type type = iter->second.type;
-        const Region &region = regions[name];
+
+        // Detect if this is one of the outputs of a multi-output pipeline.
+        bool is_tuple_output_buffer = false;
+        bool is_secondary_output_buffer = false;
+        for (size_t i = 0; i < f.output_buffers().size(); i++) {
+            if (param.defined() &&
+                param.same_as(f.output_buffers()[i])) {
+                is_tuple_output_buffer = true;
+                if (i > 0) {
+                    is_secondary_output_buffer = true;
+                }
+            }
+        }
+
+
+        // If we're one of multiple output buffers, we should use the
+        // region inferred for the output Func.
+        const Region &region = regions[is_tuple_output_buffer ? f.name() : name];
 
         // An expression returning whether or not we're in inference mode
         Expr inference_mode = Variable::make(UInt(1), name + ".host_and_dev_are_null");
@@ -922,7 +939,27 @@ Stmt add_image_checks(Stmt s, Function f) {
             Expr extent_proposed = Variable::make(Int(32), extent_name + ".proposed");
             Expr min_proposed = Variable::make(Int(32), min_name + ".proposed");
 
-            if (image.defined() && (int)i < image.dimensions()) {
+            debug(2) << "Injecting constraints for " << name << "." << i << "\n";
+            if (is_secondary_output_buffer) {
+                // For multi-output (Tuple) pipelines, output buffers
+                // beyond the first implicitly have their min and extent
+                // constrained to match the first output.
+
+                if (param.defined()) {
+                    assert(!param.extent_constraint(i).defined() &&
+                           !param.min_constraint(i).defined() &&
+                           "Can't constrain the min or extent of an output buffer beyond the "
+                           "first. They are implicitly constrained to have the same min and extent "
+                           "as the first output buffer.");
+
+                    stride_constrained = param.stride_constraint(i);
+                } else if (image.defined() && (int)i < image.dimensions()) {
+                    stride_constrained = image.stride(i);
+                }
+
+                min_constrained = Variable::make(Int(32), f.name() + ".0.min." + dim);
+                extent_constrained = Variable::make(Int(32), f.name() + ".0.extent." + dim);
+            } else if (image.defined() && (int)i < image.dimensions()) {
                 stride_constrained = image.stride(i);
                 extent_constrained = image.extent(i);
                 min_constrained = image.min(i);

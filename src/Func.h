@@ -958,7 +958,10 @@ public:
     /** Get a handle on the output buffer for this Func. Only relevant
      * if this is the output Func in a pipeline. Useful for making
      * static promises about strides, mins, and extents. */
+    // @{
     OutputImageParam output_buffer() const;
+    std::vector<OutputImageParam> output_buffers() const;
+    // @}
 
     /** Casting a function to an expression is equivalent to calling
      * the function with zero arguments. Implicit variables will be
