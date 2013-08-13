@@ -587,6 +587,10 @@ void CodeGen::visit(const Variable *op) {
 void CodeGen::visit(const Add *op) {
     if (op->type.is_float()) {
         value = builder->CreateFAdd(codegen(op->a), codegen(op->b));
+    } else if (op->type.is_int()) {
+        // We tell llvm integers don't wrap, so that it generates good
+        // code for loop indices.
+        value = builder->CreateNSWAdd(codegen(op->a), codegen(op->b));
     } else {
         value = builder->CreateAdd(codegen(op->a), codegen(op->b));
     }
@@ -595,6 +599,10 @@ void CodeGen::visit(const Add *op) {
 void CodeGen::visit(const Sub *op) {
     if (op->type.is_float()) {
         value = builder->CreateFSub(codegen(op->a), codegen(op->b));
+    } else if (op->type.is_int()) {
+        // We tell llvm integers don't wrap, so that it generates good
+        // code for loop indices.
+        value = builder->CreateNSWSub(codegen(op->a), codegen(op->b));
     } else {
         value = builder->CreateSub(codegen(op->a), codegen(op->b));
     }
@@ -603,6 +611,10 @@ void CodeGen::visit(const Sub *op) {
 void CodeGen::visit(const Mul *op) {
     if (op->type.is_float()) {
         value = builder->CreateFMul(codegen(op->a), codegen(op->b));
+    } else if (op->type.is_int()) {
+        // We tell llvm integers don't wrap, so that it generates good
+        // code for loop indices.
+        value = builder->CreateNSWMul(codegen(op->a), codegen(op->b));
     } else {
         value = builder->CreateMul(codegen(op->a), codegen(op->b));
     }
@@ -853,6 +865,11 @@ Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *
         base_address = builder->CreatePointerCast(base_address, load_type);
     }
 
+    // Promote index to 64-bit on targets that use 64-bit pointers.
+    if (module->getPointerSize() == llvm::Module::Pointer64) {
+        index = builder->CreateIntCast(index, i64, true);
+    }
+
     return builder->CreateInBoundsGEP(base_address, index);
 }
 
@@ -871,7 +888,7 @@ void CodeGen::visit(const Load *op) {
         // Scalar loads
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, op->type, index);
-        LoadInst *load = builder->CreateLoad(ptr);
+        LoadInst *load = builder->CreateAlignedLoad(ptr, op->type.bits / 8);
         add_tbaa_metadata(load, op->name);
         value = load;
     } else {
@@ -1592,7 +1609,7 @@ void CodeGen::visit(const For *op) {
         codegen(op->body);
 
         // Update the counter
-        Value *next_var = builder->CreateAdd(phi, ConstantInt::get(i32, 1));
+        Value *next_var = builder->CreateNSWAdd(phi, ConstantInt::get(i32, 1));
 
         // Add the back-edge to the phi node
         phi->addIncoming(next_var, builder->GetInsertBlock());
@@ -1681,7 +1698,7 @@ void CodeGen::visit(const Store *op) {
     if (value_type.is_scalar()) {
         Value *index = codegen(op->index);
         Value *ptr = codegen_buffer_pointer(op->name, value_type, index);
-        StoreInst *store = builder->CreateStore(val, ptr);
+        StoreInst *store = builder->CreateAlignedStore(val, ptr, op->value.type().bits/8);
         add_tbaa_metadata(store, op->name);
     } else {
         int alignment = op->value.type().bits / 8;
