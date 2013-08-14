@@ -214,7 +214,7 @@ test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 
-tests: test_correctness test_errors test_tutorials
+run_tests: test_correctness test_errors test_tutorials
 	make test_performance
 
 build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
