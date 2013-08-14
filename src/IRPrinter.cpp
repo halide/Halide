@@ -24,6 +24,9 @@ ostream &operator<<(ostream &out, Type type) {
     case Type::Float:
         out << "float";
         break;
+    case Type::Handle:
+        out << "handle";
+        break;
     }
     out << type.bits;
     if (type.width > 1) out << 'x' << type.width;
