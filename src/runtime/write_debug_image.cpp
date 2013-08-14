@@ -1,11 +1,5 @@
 #include "HalideRuntime.h"
 
-#include <stdint.h>
-#include <stddef.h>
-#include <ctype.h>
-#include <memory.h>
-#include <string.h>
-
 // Use TIFF because it meets the following criteria:
 // - Supports uncompressed data
 // - Supports 3D images as well as 2D
@@ -72,26 +66,41 @@ struct halide_tiff_header {
     tiff_tag entries[15];
     int32_t ifd0_end;
     int32_t width_resolution[2];
-    int32_t height_resolution[2];      
+    int32_t height_resolution[2];
 };
 
 #pragma pack(pop)
 
 bool has_tiff_extension(const char *filename) {
-    const char *dot = strrchr(filename, '.');
-    return (dot != NULL                &&
-	    (  tolower(dot[1]) ==  't' &&
-	       tolower(dot[2]) ==  'i' &&
-	       tolower(dot[3]) ==  'f' &&
-	     ( tolower(dot[4]) == '\0' ||
-	      (tolower(dot[4]) ==  'f' &&
-	       tolower(dot[5]) == '\0'))));
+    const char *f = filename;
+
+    while (*f != '\0') f++;
+    while (f != filename && *f != '.') f--;
+
+    if (*f != '.') return false;
+    f++;
+
+    if (*f != 't' && *f != 'T') return false;
+    f++;
+
+    if (*f != 'i' && *f != 'I') return false;
+    f++;
+
+    if (*f != 'f' && *f != 'F') return false;
+    f++;
+
+    if (*f == '\0') return true;
+
+    if (*f != 'f' && *f != 'F') return false;
+    f++;
+
+    return *f == '\0';
 }
 
 typedef bool (*write_func)(const void *bytes, size_t size, void *arg);
 
 int halide_write_debug_image(const char *filename, uint8_t *data,
-			    int32_t s0, int32_t s1, int32_t s2, int32_t s3, 
+			    int32_t s0, int32_t s1, int32_t s2, int32_t s3,
 			    int32_t type_code, int32_t bytes_per_element, write_func write, void* write_arg) {
     size_t elts = s0;
     elts *= s1*s2*s3;
@@ -114,7 +123,8 @@ int halide_write_debug_image(const char *filename, uint8_t *data,
 
 	int32_t MMII = 0x4d4d4949;
 	// Select the appropriate two bytes signaling byte order automatically
-	memcpy(&header.byte_order_marker, &MMII, 2);
+        const char *c = (const char *)&MMII;
+        header.byte_order_marker = (c[0] << 8) | c[1];
 
 	header.version = 42;
 	header.ifd0_offset = offsetof(halide_tiff_header, entry_count);
@@ -178,6 +188,6 @@ int halide_write_debug_image(const char *filename, uint8_t *data,
     if (!write_success)
         return -1;
     return 0;
-    }      
-  
+    }
+
 };
