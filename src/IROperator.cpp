@@ -178,6 +178,9 @@ Expr const_false(int w) {
 
 
 void match_types(Expr &a, Expr &b) {
+    assert(!a.type().is_handle() && !b.type().is_handle() &&
+           "Can't do arithmetic on opaque pointer types\n");
+
     if (a.type() == b.type()) return;
 
     bool a_int_imm = a.as<IntImm>() != NULL;
