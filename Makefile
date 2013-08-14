@@ -12,6 +12,7 @@ CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
+LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = $(shell $(LLVM_CONFIG) --cppflags)
 
 # llvm_config doesn't always point to the correct include
@@ -171,12 +172,16 @@ RUNTIME_LL_STUBS_arm_nacl = src/runtime/arm.ll src/runtime/posix_math.ll
 
 -include $(OBJECTS:.o=.d)
 
-$(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/bitcode2cpp src/runtime/*.cpp src/runtime/CL/*.h src/runtime/*.ll $(BUILD_DIR)/llvm_ok $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.%.ll: src/runtime/*.cpp src/runtime/CL/*.h $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o $(BUILD_DIR)/initmod.$*.ll && \
+	$(CLANG) $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o $@
+
+$(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll src/runtime/*.ll $(BUILD_DIR)/llvm_ok
 	cat $(BUILD_DIR)/initmod.$*.ll $(RUNTIME_LL_STUBS_$*) | \
-	$(LLVM_AS) -o - | \
-	./$(BIN_DIR)/bitcode2cpp $* > $@
+	$(LLVM_AS) -o $@
+
+$(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/bitcode2cpp $(BUILD_DIR)/initmod.%.bc
+	./$(BIN_DIR)/bitcode2cpp $* < $(BUILD_DIR)/initmod.$*.bc > $@
 
 $(BIN_DIR)/bitcode2cpp: src/bitcode2cpp.cpp
 	@-mkdir -p $(BIN_DIR)
@@ -209,8 +214,7 @@ test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 
-tests:
-	make -j8 test_correctness test_errors test_tutorials
+tests: test_correctness test_errors test_tutorials
 	make test_performance
 
 build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
