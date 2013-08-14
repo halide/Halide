@@ -204,20 +204,14 @@ PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 TUTORIALS = $(shell ls tutorial/*.cpp)
 
-# TODO: move this implementation into Makefile.tests which contains a .NOTPARALLEL rule?
-tests: build_tests run_tests
-
 test_correctness: $(CORRECTNESS_TESTS:test/correctness/%.cpp=test_%)
 test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 
-run_tests:
-	make -j8 build_tests
-	make -j8 test_correctness
+tests:
+	make -j8 test_correctness test_errors test_tutorials
 	make test_performance
-	make -j8 test_errors
-	make -j8 test_tutorials
 
 build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(PERFORMANCE_TESTS:test/performance/%.cpp=$(BIN_DIR)/performance_%) \
