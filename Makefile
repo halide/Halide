@@ -199,20 +199,38 @@ clean:
 
 .SECONDARY:
 
-TESTS = $(shell ls test/*.cpp)
+CORRECTNESS_TESTS = $(shell ls test/correctness/*.cpp)
+PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 TUTORIALS = $(shell ls tutorial/*.cpp)
 
 # TODO: move this implementation into Makefile.tests which contains a .NOTPARALLEL rule?
 tests: build_tests run_tests
 
-run_tests: $(TESTS:test/%.cpp=test_%) $(ERROR_TESTS:test/error/%.cpp=error_%) $(TUTORIALS:tutorial/%.cpp=tutorial_%)
-build_tests: $(TESTS:test/%.cpp=$(BIN_DIR)/test_%) $(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) $(TUTORIALS:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
+test_correctness: $(CORRECTNESS_TESTS:test/correctness/%.cpp=test_%)
+test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
+test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
+test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
+
+run_tests:
+	make -j8 build_tests
+	make -j8 test_correctness
+	make test_performance
+	make -j8 test_errors
+	make -j8 test_tutorials
+
+build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
+	$(PERFORMANCE_TESTS:test/performance/%.cpp=$(BIN_DIR)/performance_%) \
+	$(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) \
+	$(TUTORIALS:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
-$(BIN_DIR)/test_%: test/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h test/clock.h
+$(BIN_DIR)/test_%: test/correctness/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
+	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
+
+$(BIN_DIR)/performance_%: test/performance/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h test/performance/clock.h
 	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
 $(BIN_DIR)/error_%: test/error/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
@@ -222,6 +240,11 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl $(LIBPNG_LIBS) -o $@
 
 test_%: $(BIN_DIR)/test_%
+	@-mkdir -p tmp
+	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$<
+	@-echo
+
+performance_%: $(BIN_DIR)/performance_%
 	@-mkdir -p tmp
 	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$<
 	@-echo
