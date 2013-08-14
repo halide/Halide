@@ -60,7 +60,7 @@ void Closure::visit(const Allocate *op) {
     ignore.pop(op->name);
 }
 
-void Closure::visit(const Variable *op) {            
+void Closure::visit(const Variable *op) {
     if (ignore.contains(op->name)) {
         debug(3) << "Not adding " << op->name << " to closure\n";
     } else {
@@ -139,15 +139,15 @@ void Closure::pack_struct(Value *dst, const Scope<Value *> &src, IRBuilder<> *bu
             Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx);
             if (val->getType() != ty[i]) {
                 val = builder->CreateBitCast(val, ty[i]);
-            }            
+            }
             builder->CreateStore(val, ptr);
         }
         idx++;
     }
 }
 
-void Closure::unpack_struct(Scope<Value *> &dst, 
-                            Value *src, 
+void Closure::unpack_struct(Scope<Value *> &dst,
+                            Value *src,
                             IRBuilder<> *builder) {
     // src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
@@ -158,7 +158,7 @@ void Closure::unpack_struct(Scope<Value *> &dst,
         LoadInst *load = builder->CreateLoad(ptr);
         if (load->getType()->isPointerTy()) {
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            load->setMetadata("tbaa", MDNode::get(context, 
+            load->setMetadata("tbaa", MDNode::get(context,
                                                   vec<Value *>(MDString::get(context, nm[i]))));
         }
         dst.push(nm[i], load);
@@ -181,6 +181,8 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
                 assert(false && "There is no llvm type matching this floating-point bit width");
                 return NULL;
             }
+        } else if (t.is_handle()) {
+            return llvm::Type::getInt8PtrTy(*c);
         } else {
             return llvm::Type::getIntNTy(*c, t.bits);
         }

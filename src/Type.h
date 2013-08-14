@@ -1,6 +1,8 @@
 #ifndef HALIDE_TYPE_H
 #define HALIDE_TYPE_H
 
+#include <stdint.h>
+
 /** \file
  * Defines halide types
  */
@@ -18,16 +20,17 @@ struct Type {
     /** The basic type code: signed integer, unsigned integer, or floating point */
     enum {Int,  //!< signed integers
           UInt, //!< unsigned integers
-          Float //!< floating point numbers
+          Float, //!< floating point numbers
+          Handle //!< opaque pointer type (i.e. void *)
     } t;
 
-    /** How many bits per element */
+    /** How many bits per element? */
     int bits;
 
-    /** How many elements (if a vector type). Should be 1 for scalar types */
-    int width;        
+    /** How many elements (if a vector type). Should be 1 for scalar types. */
+    int width;
 
-    /** Some helper functions to ask common questions about a type */
+    /** Some helper functions to ask common questions about a type. */
     // @{
     bool is_bool() const {return t == UInt && bits == 1;}
     bool is_vector() const {return width > 1;}
@@ -35,6 +38,7 @@ struct Type {
     bool is_float() const {return t == Float;}
     bool is_int() const {return t == Int;}
     bool is_uint() const {return t == UInt;}
+    bool is_handle() const {return t == Handle;}
     // @}
 
     /** Compare two types for equality */
@@ -60,14 +64,14 @@ struct Type {
     }
 
     /** Return an integer which is the maximum value of this type. */
-    int imax() const; 
-    
+    int imax() const;
+
     /** Return an expression which is the maximum value of this type */
     Expr max() const;
-    
+
     /** Return an integer which is the minimum value of this type */
     int imin() const;
-    
+
     /** Return an expression which is the minimum value of this type */
     Expr min() const;
 };
@@ -104,19 +108,84 @@ inline Type Bool(int width = 1) {
     return UInt(1, width);
 }
 
-/** Construct the halide equivalent of a C type */
-template<typename T> Type type_of();
+/** Construct a handle type */
+inline Type Handle(int width = 1) {
+    Type t;
+    t.t = Type::Handle;
+    t.bits = 64; // All handles are 64-bit for now
+    t.width = width;
+    return t;
+}
 
-template<> inline Type type_of<float>() {return Float(32);}
-template<> inline Type type_of<double>() {return Float(64);}
-template<> inline Type type_of<unsigned char>() {return UInt(8);}
-template<> inline Type type_of<unsigned short>() {return UInt(16);}
-template<> inline Type type_of<unsigned int>() {return UInt(32);}
-template<> inline Type type_of<bool>() {return Bool();}
-template<> inline Type type_of<char>() {return Int(8);}
-template<> inline Type type_of<short>() {return Int(16);}
-template<> inline Type type_of<int>() {return Int(32);}
-template<> inline Type type_of<signed char>() {return Int(8);}
+template<typename T>
+struct type_of_helper;
+
+template<typename T>
+struct type_of_helper<T *> {
+    operator Type() {
+        return Handle();
+    }
+};
+
+template<>
+struct type_of_helper<float> {
+    operator Type() {return Float(32);}
+};
+
+template<>
+struct type_of_helper<double> {
+    operator Type() {return Float(64);}
+};
+
+template<>
+struct type_of_helper<uint8_t> {
+    operator Type() {return UInt(8);}
+};
+
+template<>
+struct type_of_helper<uint16_t> {
+    operator Type() {return UInt(16);}
+};
+
+template<>
+struct type_of_helper<uint32_t> {
+    operator Type() {return UInt(32);}
+};
+
+template<>
+struct type_of_helper<uint64_t> {
+    operator Type() {return UInt(64);}
+};
+
+template<>
+struct type_of_helper<int8_t> {
+    operator Type() {return Int(8);}
+};
+
+template<>
+struct type_of_helper<int16_t> {
+    operator Type() {return Int(16);}
+};
+
+template<>
+struct type_of_helper<int32_t> {
+    operator Type() {return Int(32);}
+};
+
+template<>
+struct type_of_helper<int64_t> {
+    operator Type() {return Int(64);}
+};
+
+template<>
+struct type_of_helper<bool> {
+    operator Type() {return Bool();}
+};
+
+/** Construct the halide equivalent of a C type */
+template<typename T> Type type_of() {
+    return Type(type_of_helper<T>());
+}
 
 }
 
