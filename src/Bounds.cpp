@@ -558,9 +558,13 @@ private:
 
             vector<Interval> &r = func.empty() ? regions[op->name] : region;
             for (size_t i = 0; i < op->args.size(); i++) {
-                Interval bounds = bounds_of_expr_in_scope(op->args[i], scope);
-                debug(3) << "Bounds of call to " << op->name << " in dimension " << i << ": "
-                       << bounds.min << ", " << bounds.max << "\n";
+                Interval bounds;
+                if (!op->args[i].type().is_handle()) {
+                    bounds = bounds_of_expr_in_scope(op->args[i], scope);
+                    debug(3) << "Bounds of call to " << op->name << " in dimension " << i << ": "
+                             << bounds.min << ", " << bounds.max << "\n";
+                }
+                
                 if (r.size() > i) {
                     r[i] = interval_union(r[i], bounds);
                 } else {
