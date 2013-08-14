@@ -517,8 +517,11 @@ bool test(int vec_width) {
             double b = (double)(input(x+1, y));
             double w = (double)(input(x+2, y));
             if (w < 0) w = 0;
-            if (!t.is_float()) {
-                w /= (1 << t.bits) - 1;
+            if (!t.is_float()) {                
+                uint64_t divisor = 1;
+                divisor <<= t.bits;
+                divisor -= 1;
+                w /= divisor;
             }
             w = std::min(std::max(w, 0.0), 1.0);
 
