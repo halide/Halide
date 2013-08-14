@@ -12,6 +12,7 @@ CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
+LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = $(shell $(LLVM_CONFIG) --cppflags)
 
 # llvm_config doesn't always point to the correct include
@@ -171,12 +172,16 @@ RUNTIME_LL_STUBS_arm_nacl = src/runtime/arm.ll src/runtime/posix_math.ll
 
 -include $(OBJECTS:.o=.d)
 
-$(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/bitcode2cpp src/runtime/*.cpp src/runtime/CL/*.h src/runtime/*.ll $(BUILD_DIR)/llvm_ok $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.%.ll: src/runtime/*.cpp src/runtime/CL/*.h $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o $(BUILD_DIR)/initmod.$*.ll && \
+	$(CLANG) $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o $@
+
+$(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll src/runtime/*.ll $(BUILD_DIR)/llvm_ok
 	cat $(BUILD_DIR)/initmod.$*.ll $(RUNTIME_LL_STUBS_$*) | \
-	$(LLVM_AS) -o - | \
-	./$(BIN_DIR)/bitcode2cpp $* > $@
+	$(LLVM_AS) -o $@
+
+$(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/bitcode2cpp $(BUILD_DIR)/initmod.%.bc
+	./$(BIN_DIR)/bitcode2cpp $* < $(BUILD_DIR)/initmod.$*.bc > $@
 
 $(BIN_DIR)/bitcode2cpp: src/bitcode2cpp.cpp
 	@-mkdir -p $(BIN_DIR)
@@ -199,20 +204,31 @@ clean:
 
 .SECONDARY:
 
-TESTS = $(shell ls test/*.cpp)
+CORRECTNESS_TESTS = $(shell ls test/correctness/*.cpp)
+PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 TUTORIALS = $(shell ls tutorial/*.cpp)
 
-# TODO: move this implementation into Makefile.tests which contains a .NOTPARALLEL rule?
-tests: build_tests run_tests
+test_correctness: $(CORRECTNESS_TESTS:test/correctness/%.cpp=test_%)
+test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
+test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
+test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 
-run_tests: $(TESTS:test/%.cpp=test_%) $(ERROR_TESTS:test/error/%.cpp=error_%) $(TUTORIALS:tutorial/%.cpp=tutorial_%)
-build_tests: $(TESTS:test/%.cpp=$(BIN_DIR)/test_%) $(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) $(TUTORIALS:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
+run_tests: test_correctness test_errors test_tutorials
+	make test_performance
+
+build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
+	$(PERFORMANCE_TESTS:test/performance/%.cpp=$(BIN_DIR)/performance_%) \
+	$(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) \
+	$(TUTORIALS:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
-$(BIN_DIR)/test_%: test/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h test/clock.h
+$(BIN_DIR)/test_%: test/correctness/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
+	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
+
+$(BIN_DIR)/performance_%: test/performance/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h test/performance/clock.h
 	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
 $(BIN_DIR)/error_%: test/error/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
@@ -222,6 +238,11 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl $(LIBPNG_LIBS) -o $@
 
 test_%: $(BIN_DIR)/test_%
+	@-mkdir -p tmp
+	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$<
+	@-echo
+
+performance_%: $(BIN_DIR)/performance_%
 	@-mkdir -p tmp
 	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$<
 	@-echo
