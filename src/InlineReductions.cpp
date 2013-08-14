@@ -78,6 +78,9 @@ Expr minimum(Expr e) {
 Expr sum(Expr e, const std::string &name) {
     Internal::FindFreeVars v;
     e.accept(&v);
+
+    assert(v.rdom.defined() && "Expression passed to sum must reference a reduction domain");
+
     Func f(name);
     f(v.free_vars) += e;
     return f(v.free_vars);
@@ -86,6 +89,9 @@ Expr sum(Expr e, const std::string &name) {
 Expr product(Expr e, const std::string &name) {
     Internal::FindFreeVars v;
     e.accept(&v);
+
+    assert(v.rdom.defined() && "Expression passed to product must reference a reduction domain");
+
     Func f(name);
     f(v.free_vars) *= e;
     return f(v.free_vars);
@@ -94,6 +100,9 @@ Expr product(Expr e, const std::string &name) {
 Expr maximum(Expr e, const std::string &name) {
     Internal::FindFreeVars v;
     e.accept(&v);
+
+    assert(v.rdom.defined() && "Expression passed to maximum must reference a reduction domain");
+
     Func f(name);
     f(v.free_vars) = e.type().min();
     f(v.free_vars) = max(f(v.free_vars), e);
@@ -103,6 +112,9 @@ Expr maximum(Expr e, const std::string &name) {
 Expr minimum(Expr e, const std::string &name) {
     Internal::FindFreeVars v;
     e.accept(&v);
+
+    assert(v.rdom.defined() && "Expression passed to minimum must reference a reduction domain");
+
     Func f(name);
     f(v.free_vars) = e.type().max();
     f(v.free_vars) = min(f(v.free_vars), e);
@@ -113,7 +125,8 @@ Tuple argmax(Expr e, const std::string &name) {
     Internal::FindFreeVars v;
     e.accept(&v);
     Func f(name);
-    assert(v.rdom.defined());
+
+    assert(v.rdom.defined() && "Expression passed to argmax must reference a reduction domain");
 
     Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
     Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
@@ -136,6 +149,8 @@ Tuple argmin(Expr e, const std::string &name) {
     Internal::FindFreeVars v;
     e.accept(&v);
     Func f(name);
+
+    assert(v.rdom.defined() && "Expression passed to argmin must reference a reduction domain");
 
     Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
     Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
