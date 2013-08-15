@@ -7,6 +7,7 @@
 #include "Var.h"
 #include "Debug.h"
 #include "ModulusRemainder.h"
+#include "Substitute.h"
 #include <iostream>
 
 namespace Halide {
@@ -1196,13 +1197,19 @@ class Simplify : public IRMutator {
             if (noop && is_const(noop->condition, 1)) {
                 stmt = rest;
             } else if (let_first && let_rest &&
-                       let_first->name == let_rest->name &&
                        equal(let_first->value, let_rest->value)) {
-                debug(1) << "\nLifting let from:\n" << first << ", " << rest << "\n\n";
-                debug(1) << let_first->value << " vs " << let_rest->value << "\n";
 
                 // Do both first and rest start with the same let statement (occurs when unrolling).
                 Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
+
+                // We're just going to use the first name, so if the
+                // second name is different we need to rewrite it.
+                if (let_rest->name != let_first->name) {
+                    new_block = substitute(let_rest->name,
+                                           Variable::make(let_first->value.type(), let_first->name),
+                                           new_block);
+                }
+
                 stmt = LetStmt::make(let_first->name, let_first->value, new_block);
             } else if (op->first.same_as(first) && op->rest.same_as(rest)) {
                 stmt = op;
