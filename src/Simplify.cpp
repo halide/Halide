@@ -1187,15 +1187,29 @@ class Simplify : public IRMutator {
         } else {
             Stmt rest = mutate(op->rest);
 
-            // Check if the first is a no-op
+            // Check if both halves start with a let statement.
+            const LetStmt *let_first = first.as<LetStmt>();
+            const LetStmt *let_rest = rest.as<LetStmt>();
+
+            // Check if first is a no-op.
             const AssertStmt *noop = first.as<AssertStmt>();
             if (noop && is_const(noop->condition, 1)) {
                 stmt = rest;
+            } else if (let_first && let_rest &&
+                       let_first->name == let_rest->name &&
+                       equal(let_first->value, let_rest->value)) {
+                debug(1) << "\nLifting let from:\n" << first << ", " << rest << "\n\n";
+                debug(1) << let_first->value << " vs " << let_rest->value << "\n";
+
+                // Do both first and rest start with the same let statement (occurs when unrolling).
+                Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
+                stmt = LetStmt::make(let_first->name, let_first->value, new_block);
             } else if (op->first.same_as(first) && op->rest.same_as(rest)) {
                 stmt = op;
             } else {
                 stmt = Block::make(first, rest);
             }
+
         }
     }
 };
