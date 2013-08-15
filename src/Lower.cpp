@@ -99,6 +99,13 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
     assert(!values.empty());
     Stmt stmt = Provide::make(buffer, values, site);
 
+    // The dimensions for which we have a known static size.
+    map<string, Expr> known_size_dims;
+    // First hunt through the bounds for them.
+    for (size_t i = 0; i < s.bounds.size(); i++) {
+        known_size_dims[s.bounds[i].var] = s.bounds[i].extent;
+    }
+
     // Define the function args in terms of the loop variables using the splits
     for (size_t i = 0; i < s.splits.size(); i++) {
         const Schedule::Split &split = s.splits[i];
@@ -106,8 +113,42 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
         if (!split.is_rename) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
             Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".min");
-            // stmt = LetStmt::make(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
-            stmt = substitute(prefix + split.old_var, outer * split.factor + inner + old_min, stmt);
+            Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".extent");
+
+            known_size_dims[split.inner] = split.factor;
+
+            // Assuming for the moment that the original min is zero,
+            // the starting index for the inner loop should be:
+            Expr base = outer * split.factor;
+
+            map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
+            if (iter != known_size_dims.end() &&
+                is_zero(simplify(iter->second % split.factor))) {
+                // We have proved that the split factor divides the
+                // old extent. No need to adjust the base.
+                known_size_dims[split.outer] = iter->second / split.factor;
+            } else {
+                // The split factor may not divide the old extent, and
+                // we don't want to needlessly go beyond the original
+                // extent, or we get bounds expansion and do a lot of
+                // redundant compute, so push it backwards a little.
+                base = Min::make(base, old_extent - split.factor);
+
+                // Split it off into a variable, as there are few
+                // peephole simplification opportunities through a
+                // min.
+                string name = prefix + split.inner + ".base";
+                stmt = LetStmt::make(name, base, stmt);
+                base = Variable::make(Int(32), name);
+
+                // Perhaps we'd rather round up than go less than the
+                // original min, so we can push it forwards a little. I
+                // don't think this matters, so I'll leave it out for now.
+                // base = Max::make(base, 0);
+            }
+
+            // stmt = LetStmt::make(prefix + split.old_var, base + inner + old_min, stmt);
+            stmt = substitute(prefix + split.old_var, base + inner + old_min, stmt);
         } else {
             stmt = substitute(prefix + split.old_var, outer, stmt);
         }
