@@ -9,20 +9,20 @@ const char *string_of_type();
 
 #define DECL_SOT(name)                                          \
     template<>                                                  \
-    const char *string_of_type<name>() {return #name;}          
+    const char *string_of_type<name>() {return #name;}
 
-DECL_SOT(uint8_t);    
-DECL_SOT(int8_t);    
-DECL_SOT(uint16_t);    
-DECL_SOT(int16_t);    
-DECL_SOT(uint32_t);    
-DECL_SOT(int32_t);    
-DECL_SOT(float);    
-DECL_SOT(double);    
+DECL_SOT(uint8_t);
+DECL_SOT(int8_t);
+DECL_SOT(uint16_t);
+DECL_SOT(int16_t);
+DECL_SOT(uint32_t);
+DECL_SOT(int32_t);
+DECL_SOT(float);
+DECL_SOT(double);
 
 template<typename A>
 bool test(int vec_width) {
-    
+
     int W = vec_width*1;
     int H = 10000;
 
@@ -47,7 +47,7 @@ bool test(int vec_width) {
 
     f(x, y) = e;
     g(x, y) = e;
-    f.vectorize(x, vec_width);
+    f.bound(x, 0, vec_width).vectorize(x);
 
     Image<A> outputg = g.realize(W, H);
     Image<A> outputf = f.realize(W, H);
@@ -73,15 +73,16 @@ bool test(int vec_width) {
                        (int)outputg(x, y)
                     );
                 return false;
-            }            
+            }
         }
     }
 
-    printf("Vectorized vs scalar (%s x %d): %1.3gms %1.3gms. Speedup = %1.3f\n", string_of_type<A>(), vec_width, (t3-t2), (t2-t1), (t2-t1)/(t3-t2));
+    printf("Vectorized vs scalar (%s x %d): %1.3gms %1.3gms. Speedup = %1.3f\n",
+           string_of_type<A>(), vec_width, (t3-t2), (t2-t1), (t2-t1)/(t3-t2));
 
     if ((t3 - t2) > (t2 - t1)) {
         return false;
-    } 
+    }
 
 
     return true;
