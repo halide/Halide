@@ -17,6 +17,9 @@ extern "C" void set_error_handler(void (*)(char *));
 
 int main(int argc, char **argv) {
     Image<float> input(19);
+    for (int i = 0; i < 19; i++) {
+        input(i) = i;
+    }
     Var x;
     Func f;
     f(x) = input(x)*2;
@@ -32,16 +35,30 @@ int main(int argc, char **argv) {
     }
     error_occurred = false;
 
-    // Another more subtle way to read out of bounds due to bounds
-    // expansion when vectorizing
+    // Another more subtle way to read out of bounds used to be due to
+    // bounds expansion when vectorizing. This used to be an
+    // out-of-bounds error, but now isn't! Hooray!
     Func g, h;
     g(x) = input(x)*2;
     h(x) = g(x);
     g.compute_root().vectorize(x, 4);
 
     h.set_error_handler(&halide_error);
-    h.realize(19);
-    
+    h.realize(18);
+
+    if (error_occurred) {
+        printf("There should not have been an out-of-bounds error\n");
+        return 1;
+    }
+
+    // But if we try to make the input smaller than the vector width, it
+    // still won't work.
+    Image<float> small_input(3);
+    Func i;
+    i(x) = small_input(x);
+    i.vectorize(x, 4);
+    i.set_error_handler(&halide_error);
+    i.realize(4);
     if (!error_occurred) {
         printf("There should have been an out-of-bounds error\n");
         return 1;
