@@ -239,20 +239,24 @@ void CodeGen_Posix::visit(const Free *stmt) {
 void CodeGen_Posix::prepare_for_early_exit() {
     // We've jumped to a code path that will be called just before
     // bailing out. Free everything outstanding.
+    vector<string> names;
     for (Scope<Allocation>::iterator iter = allocations.begin();
          iter != allocations.end(); ++iter) {
-        const string &name = (*iter);
+        names.push_back(*iter);
+    }
+
+    for (size_t i = 0; i < names.size(); i++) {
         std::vector<Allocation> stash;
-        while (allocations.contains(name)) {
-            stash.push_back(allocations.get(name));
-            free_allocation(name);
+        while (allocations.contains(names[i])) {
+            stash.push_back(allocations.get(names[i]));
+            free_allocation(names[i]);
         }
 
         // Restore all the allocations before we jump back to the main
         // code path.
-        for (size_t i = stash.size(); i > 0; i--) {
-            allocations.push(name, stash[i-1]);
-            sym_push(name + ".host", stash[i-1].ptr);
+        for (size_t j = stash.size(); j > 0; j--) {
+            allocations.push(names[i], stash[j-1]);
+            sym_push(names[i] + ".host", stash[j-1].ptr);
         }
     }
 }
