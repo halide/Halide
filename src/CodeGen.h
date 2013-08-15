@@ -2,7 +2,7 @@
 #define HALIDE_CODEGEN_H
 
 /** \file
- * 
+ *
  * Defines the base-class for all architecture-specific code
  * generators that use llvm.
  */
@@ -35,14 +35,14 @@ class AllocaInst;
 #include "JITCompiledModule.h"
 #include "ModulusRemainder.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** A code generator abstract base class. Actual code generators
  * (e.g. CodeGen_X86) inherit from this. This class is responsible
  * for taking a Halide Stmt and producing llvm bitcode, machine
  * code in an object file, or machine code accessible through a
- * function pointer. 
+ * function pointer.
  */
 class CodeGen : public IRVisitor {
 public:
@@ -55,7 +55,7 @@ public:
      * internally. Call this before calling compile_to_bitcode or
      * compile_to_native. */
     virtual void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
-    
+
     /** Emit a compiled halide statement as llvm bitcode. Call this
      * after calling compile. */
     void compile_to_bitcode(const std::string &filename);
@@ -146,7 +146,7 @@ protected:
     /** Emit code that evaluates an expression, and return the llvm
      * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
-    
+
     /** Emit code that runs a statement. */
     void codegen(Stmt);
 
@@ -160,9 +160,9 @@ protected:
 
     /** Codegen an assertion. If false, it bails out and calls the error handler. */
     void create_assertion(llvm::Value *condition, const std::string &message);
-       
+
     /** Given an llvm value representing a pointer to a buffer_t, extract various subfields.
-     * The *_ptr variants return a pointer to the struct element, while the basic variants 
+     * The *_ptr variants return a pointer to the struct element, while the basic variants
      * load the actual value. */
     // @{
     llvm::Value *buffer_host(llvm::Value *);
@@ -186,7 +186,10 @@ protected:
     /** Generate a pointer into a named buffer at a given index, of a
      * given type. The index counts according to the scalar type of
      * the type passed in. */
+    // @{
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
+    llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, Expr index);
+    // @}
 
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
@@ -231,8 +234,8 @@ protected:
     virtual void visit(const Pipeline *);
     virtual void visit(const For *);
     virtual void visit(const Store *);
-    virtual void visit(const Block *);        
-    // @}    
+    virtual void visit(const Block *);
+    // @}
 
     /** Recursive code for generating a gather using a binary tree. */
     llvm::Value *codegen_gather(llvm::Value *indices, const Load *op);
@@ -240,12 +243,12 @@ protected:
     /** Generate code for an allocate node. It has no default
      * implementation - it must be handled in an architecture-specific
      * way. */
-    virtual void visit(const Allocate *) = 0; 
+    virtual void visit(const Allocate *) = 0;
 
     /** Generate code for a free node. It has no default
      * implementation and must be handled in an architecture-specific
      * way. */
-    virtual void visit(const Free *) = 0; 
+    virtual void visit(const Free *) = 0;
 
     /** Some backends may wish to track entire buffer_t's for each
      * allocation instead of just a host pointer. Those backends
@@ -276,7 +279,7 @@ private:
 
     /** Alignment info for Int(32) variables in scope. */
     Scope<ModulusRemainder> alignment_info;
-        
+
 };
 
 }}

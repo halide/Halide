@@ -968,8 +968,7 @@ void CodeGen_ARM::visit(const Store *op) {
         Type t = call->args[0].type();
         int alignment = t.bits / 8;
 
-        Value *index = codegen(ramp->base);
-        Value *ptr = codegen_buffer_pointer(op->name, call->type.element_of(), index);
+        Value *ptr = codegen_buffer_pointer(op->name, call->type.element_of(), ramp->base);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
 
         args[0] = ptr; // The pointer
@@ -1020,7 +1019,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
     llvm::Function *fn = module->getFunction(builtin.str());
     if (fn) {
-        Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), codegen(ramp->base));
+        Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), ramp->base);
         Value *stride = codegen(ramp->stride * (op->value.type().bits / 8));
         Value *val = codegen(op->value);
 	debug(4) << "Creating call to " << builtin.str() << "\n";
@@ -1077,7 +1076,7 @@ void CodeGen_ARM::visit(const Load *op) {
         //alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
         Value *align = ConstantInt::get(i32, alignment);
 
-        Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(base));
+        Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
 
         vector<llvm::Type *> type_vec(stride->value);
@@ -1127,7 +1126,7 @@ void CodeGen_ARM::visit(const Load *op) {
 
     llvm::Function *fn = module->getFunction(builtin.str());
     if (fn) {
-        Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
+        Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
         Value *stride = codegen(ramp->stride * (op->type.bits / 8));
 	debug(4) << "Creating call to " << builtin.str() << "\n";
         Instruction *load = builder->CreateCall(fn, vec(base, stride), builtin.str());
