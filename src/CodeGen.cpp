@@ -741,7 +741,7 @@ void CodeGen::visit(const Mod *op) {
         Value *rem_xor_b_lt_zero = builder->CreateICmpSLT(rem_xor_b, zero);
         Value *need_to_add_b = builder->CreateAnd(rem_not_zero, rem_xor_b_lt_zero);
         Value *offset = builder->CreateSelect(need_to_add_b, b, zero);
-        value = builder->CreateAdd(rem, offset);
+        value = builder->CreateNSWAdd(rem, offset);
     }
 }
 
@@ -879,6 +879,34 @@ void CodeGen::visit(const Select *op) {
     }
 }
 
+namespace {
+Expr promote_64(Expr e) {
+    if (const Add *a = e.as<Add>()) {
+        return Add::make(promote_64(a->a), promote_64(a->b));
+    } else if (const Sub *s = e.as<Sub>()) {
+        return Sub::make(promote_64(s->a), promote_64(s->b));
+    } else if (const Mul *m = e.as<Mul>()) {
+        return Mul::make(promote_64(m->a), promote_64(m->b));
+    } else if (const Min *m = e.as<Min>()) {
+        return Min::make(promote_64(m->a), promote_64(m->b));
+    } else if (const Max *m = e.as<Max>()) {
+        return Max::make(promote_64(m->a), promote_64(m->b));
+    } else {
+        return Cast::make(Int(64), e);
+    }
+}
+}
+
+Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Expr index) {
+    // Promote index to 64-bit on targets that use 64-bit pointers.
+    if (module->getPointerSize() == llvm::Module::Pointer64) {
+        index = promote_64(index);
+    }
+
+    return codegen_buffer_pointer(buffer, type, codegen(index));
+}
+
+
 Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
     // Find the base address from the symbol table
     Value *base_address = symbol_table.get(buffer + ".host");
@@ -909,12 +937,11 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer) {
 }
 
 void CodeGen::visit(const Load *op) {
-    // There are several cases. Different architectures may wish to override some
 
+    // There are several cases. Different architectures may wish to override some.
     if (op->type.is_scalar()) {
         // Scalar loads
-        Value *index = codegen(op->index);
-        Value *ptr = codegen_buffer_pointer(op->name, op->type, index);
+        Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
         LoadInst *load = builder->CreateAlignedLoad(ptr, op->type.bits / 8);
         add_tbaa_metadata(load, op->name);
         value = load;
@@ -934,8 +961,7 @@ void CodeGen::visit(const Load *op) {
         }
 
         if (ramp && stride && stride->value == 1) {
-            Value *base = codegen(ramp->base);
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             LoadInst *load = builder->CreateAlignedLoad(ptr, alignment);
             add_tbaa_metadata(load, op->name);
@@ -959,8 +985,7 @@ void CodeGen::visit(const Load *op) {
                 new_base = ramp->base;
             }
 
-            Value *base = codegen(new_base);
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), new_base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             LoadInst *a = builder->CreateAlignedLoad(ptr, alignment);
             add_tbaa_metadata(a, op->name);
@@ -975,7 +1000,7 @@ void CodeGen::visit(const Load *op) {
             value = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
-            Value *base = codegen(ramp->base - ramp->width + 1);
+            Expr base = ramp->base - ramp->width + 1;
 
             // Re-do alignment analysis for the flipped index
             if (internal) {
@@ -997,7 +1022,7 @@ void CodeGen::visit(const Load *op) {
             value = builder->CreateShuffleVector(vec, undef, ConstantVector::get(indices));
         } else if (ramp) {
             // Gather without generating the indices as a vector
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), codegen(ramp->base));
+            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
             Value *stride = codegen(ramp->stride);
             value = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < ramp->width; i++) {
@@ -1015,7 +1040,7 @@ void CodeGen::visit(const Load *op) {
             // Compute the index as scalars, and then do a gather
             Value *vec = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.width; i++) {
-                Value *idx = codegen(extract_lane(op->index, i));
+                Expr idx = extract_lane(op->index, i);
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name);
@@ -1060,7 +1085,7 @@ void CodeGen::visit(const Ramp *op) {
                 if (op->type.is_float()) {
                     base = builder->CreateFAdd(base, stride);
                 } else {
-                    base = builder->CreateAdd(base, stride);
+                    base = builder->CreateNSWAdd(base, stride);
                 }
             }
             value = builder->CreateInsertElement(value, base, ConstantInt::get(i32, i));
@@ -1435,7 +1460,6 @@ void CodeGen::visit(const Call *op) {
                     call->setDoesNotThrow();
                 }
                 value = call;
-                fn = vec_fn;
             } else {
                 // Scalarize. Extract each simd lane in turn and do
                 // one scalar call to the function.
@@ -1611,7 +1635,7 @@ void CodeGen::visit(const For *op) {
     Value *extent = codegen(op->extent);
 
     if (op->for_type == For::Serial) {
-        Value *max = builder->CreateAdd(min, extent);
+        Value *max = builder->CreateNSWAdd(min, extent);
 
         BasicBlock *preheader_bb = builder->GetInsertBlock();
 
@@ -1625,7 +1649,7 @@ void CodeGen::visit(const For *op) {
         builder->CreateCondBr(enter_condition, loop_bb, after_bb);
         builder->SetInsertPoint(loop_bb);
 
-        // Make our phi node
+        // Make our phi node.
         PHINode *phi = builder->CreatePHI(i32, 2);
         phi->addIncoming(min, preheader_bb);
 
@@ -1723,8 +1747,7 @@ void CodeGen::visit(const Store *op) {
     Halide::Type value_type = op->value.type();
     // Scalar
     if (value_type.is_scalar()) {
-        Value *index = codegen(op->index);
-        Value *ptr = codegen_buffer_pointer(op->name, value_type, index);
+        Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
         StoreInst *store = builder->CreateAlignedStore(val, ptr, op->value.type().bits/8);
         add_tbaa_metadata(store, op->name);
     } else {
@@ -1742,13 +1765,12 @@ void CodeGen::visit(const Store *op) {
                 alignment *= 2;
             }
 
-            Value *base = codegen(ramp->base);
-            Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), base);
+            Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), ramp->base);
             Value *ptr2 = builder->CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
             StoreInst *store = builder->CreateAlignedStore(val, ptr2, alignment);
             add_tbaa_metadata(store, op->name);
         } else if (ramp) {
-            Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), codegen(ramp->base));
+            Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), ramp->base);
             const IntImm *const_stride = ramp->stride.as<IntImm>();
             Value *stride = codegen(ramp->stride);
             // Scatter without generating the indices as a vector
