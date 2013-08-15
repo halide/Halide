@@ -210,7 +210,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     // Now we need to end the function
     builder->CreateRetVoid();
 
-    module->setModuleIdentifier("halide_" + name);
+    module->setModuleIdentifier("halide_module_" + name);
     debug(2) << module << "\n";
 
     // Now verify the function is ok
