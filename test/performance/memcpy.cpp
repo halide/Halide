@@ -24,6 +24,9 @@ int main(int argc, char **argv) {
 
     src.set(input);
 
+    // Get past one-time set-up issues for the ptx backend.
+    dst.realize(output);
+
     double halide = 0, system = 0;
     for (int i = 0; i < 50; i++) {
         double t1 = currentTime();
