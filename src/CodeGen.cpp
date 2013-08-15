@@ -289,15 +289,16 @@ void CodeGen::optimize_module() {
     llvm::Function *fn = module->getFunction(function_name);
     assert(fn && "Could not find function inside llvm module");
 
+    if (debug::debug_level >= 3) {
+        module->dump();
+    }
+
     // Run optimization passes
     module_pass_manager.run(*module);
     function_pass_manager.doInitialization();
     function_pass_manager.run(*fn);
     function_pass_manager.doFinalization();
 
-    if (debug::debug_level >= 3) {
-        module->dump();
-    }
 }
 
 void CodeGen::compile_to_bitcode(const string &filename) {
