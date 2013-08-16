@@ -1004,6 +1004,59 @@ public:
     */
 };
 
+/** JIT-Compile and run enough code to evaluate a Halide
+ * expression. This can be thought of as a scalar version of
+ * \ref Func::realize */
+template<typename T>
+T evaluate(Expr e) {
+    assert(e.type() == type_of<T>());
+    Func f;
+    f() = e;
+    Image<T> im = f.realize();
+    return im(0);
+}
+
+/** JIT-compile and run enough code to evaluate a Halide Tuple. */
+// @{
+template<typename A, typename B>
+void evaluate(Tuple t, A *a, B *b) {
+    assert(t[0].type() == type_of<A>());
+    assert(t[1].type() == type_of<B>());
+    Func f;
+    f() = t;
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
+}
+
+template<typename A, typename B, typename C>
+void evaluate(Tuple t, A *a, B *b, C *c) {
+    assert(t[0].type() == type_of<A>());
+    assert(t[1].type() == type_of<B>());
+    assert(t[2].type() == type_of<C>());
+    Func f;
+    f() = t;
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
+    *c = Image<C>(r[2])(0);
+}
+
+template<typename A, typename B, typename C, typename D>
+void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
+    assert(t[0].type() == type_of<A>());
+    assert(t[1].type() == type_of<B>());
+    assert(t[2].type() == type_of<C>());
+    assert(t[3].type() == type_of<D>());
+    Func f;
+    f() = t;
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
+    *c = Image<C>(r[2])(0);
+    *d = Image<D>(r[3])(0);
+}
+// @}
 
 }
 

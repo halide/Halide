@@ -18,12 +18,8 @@ int main(int argc, char **argv) {
     // don't infer anything about how large that could be.
     Expr best_so_far = f(clamp(arg_max_f(), 0, 100));
     arg_max_f() = select(f(r) > best_so_far, r, arg_max_f());
-    f.compute_root();
 
-    Image<int> result_f = arg_max_f.realize();
-
-    printf("%d\n", result_f(0));
-
+    int result_f = evaluate<int>(arg_max_f());
 
     // Now try a multi-dimensional argmax.
     Func g, arg_max_g;
@@ -33,19 +29,15 @@ int main(int argc, char **argv) {
     g.compute_root();
 
     arg_max_g() = Tuple(0, 0, g(0,0));
-    best_so_far = g(clamp(arg_max_g()[0], 0, 99), clamp(arg_max_g()[1], 0, 99));
     arg_max_g() = tuple_select(g(r.x, r.y) > arg_max_g()[2],
                                Tuple(r.x, r.y, g(r.x, r.y)),
                                arg_max_g());
 
-    Realization result_g = arg_max_g.realize();
-    int best_x = Image<int>(result_g[0])(0);
-    int best_y = Image<int>(result_g[1])(0);
+    int best_x, best_y, best_val;
+    evaluate(arg_max_g(), &best_x, &best_y, &best_val);
 
-    printf("%d %d\n", best_x, best_y);
-
-    if (result_f(0) != 50) {
-        printf("Arg max of f is %d, but should have been 50\n", result_f(0));
+    if (result_f != 50) {
+        printf("Arg max of f is %d, but should have been 50\n", result_f);
         return -1;
     }
 
@@ -56,25 +48,15 @@ int main(int argc, char **argv) {
     }
 
     // Now try some inline argmaxs
-    Func inline_arg_max, inline_arg_min;
-    inline_arg_max() = argmax(g(r.x, r.y));
-    inline_arg_min() = argmin(g(r.x, r.y));
+    evaluate(argmax(g(r.x, r.y)), &best_x, &best_y, &best_val);
 
-    Realization inline_max = inline_arg_max.realize();
-    Realization inline_min = inline_arg_min.realize();
-
-    best_x = inline_max[0].as<int>();
-    best_y = inline_max[1].as<int>();
-    int best_val = inline_max[2].as<int>();
     if (best_x != 50 || best_y != 40 || best_val != 4100) {
         printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
                best_x, best_y, best_val, 50, 40, 4100);
         return -1;
     }
 
-    best_x = inline_min[0].as<int>();
-    best_y = inline_min[1].as<int>();
-    best_val = inline_min[2].as<int>();
+    evaluate(argmin(g(r.x, r.y)), &best_x, &best_y, &best_val);
 
     if (best_x != 0 || best_y != 99 || best_val != -1881) {
         printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
