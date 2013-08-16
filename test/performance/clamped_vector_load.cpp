@@ -108,8 +108,9 @@ int main(int argc, char **argv) {
 
     // This constraint is pretty lax, because the op is so trivial
     // that the overhead of branching is large. For more complex ops,
-    // the overhead should be smaller.
-    if (t_clamped > 5.0f * t_ref || t_clamped > t_scalar || t_clamped > t_pad) {
+    // the overhead should be smaller. We just make sure it's faster
+    // than scalarizing or padding.
+    if (t_clamped > t_scalar || t_clamped > t_pad) {
         printf("Clamped load timings suspicious:\n"
                "Unclamped: %f\n"
                "Clamped: %f\n"
