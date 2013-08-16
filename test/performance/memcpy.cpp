@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     printf("halide memcpy: %f\n", halide);
 
     // memcpy will win by a little bit for large inputs because it uses streaming stores
-    if (halide > system * 1.2) {
+    if (halide > system * 2) {
         printf("Halide memcpy is slower than it should be.\n");
         return -1;
     }
