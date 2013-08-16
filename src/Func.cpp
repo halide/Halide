@@ -1063,7 +1063,11 @@ public:
     vector<const void *> arg_values;
     vector<pair<int, Internal::Parameter> > image_param_args;
 
+    InferArguments(const string &o) : output(o) {}
+
 private:
+    const string &output;
+
     using IRGraphVisitor::visit;
 
     void visit(const Load *op) {
@@ -1107,6 +1111,13 @@ private:
     }
 
     void visit(const Variable *op) {
+        if (op->name == output ||
+            starts_with(op->name, output + ".")) {
+            // We don't mind dependencies on the output buffer. It
+            // shouldn't be in the args list.
+            return;
+        }
+
         if (op->param.defined()) {
             Argument arg(op->param.name(), op->param.is_buffer(), op->param.type());
             bool already_included = false;
@@ -1132,8 +1143,8 @@ private:
 };
 
 /** Check that all the necessary arguments are in an args vector */
-void validate_arguments(const vector<Argument> &args, Stmt lowered) {
-    InferArguments infer_args;
+void validate_arguments(const string &output, const vector<Argument> &args, Stmt lowered) {
+    InferArguments infer_args(output);
     lowered.accept(&infer_args);
     const vector<Argument> &required_args = infer_args.arg_types;
 
@@ -1174,7 +1185,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
         lowered = Halide::Internal::lower(func);
     }
 
-    validate_arguments(args, lowered);
+    validate_arguments(name(), args, lowered);
 
     Argument me(name(), true, value().type());
     args.push_back(me);
@@ -1191,7 +1202,7 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
         lowered = Halide::Internal::lower(func);
     }
 
-    validate_arguments(args, lowered);
+    validate_arguments(name(), args, lowered);
 
     Argument me(name(), true, value().type());
     args.push_back(me);
@@ -1215,7 +1226,7 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
         lowered = Halide::Internal::lower(func);
     }
 
-    validate_arguments(args, lowered);
+    validate_arguments(name(), args, lowered);
 
     Argument me(name(), true, value().type());
     args.push_back(me);
@@ -1455,7 +1466,7 @@ void *Func::compile_jit() {
     if (!lowered.defined()) lowered = Halide::Internal::lower(func);
 
     // Infer arguments
-    InferArguments infer_args;
+    InferArguments infer_args(name());
     lowered.accept(&infer_args);
     arg_values = infer_args.arg_values;
 
