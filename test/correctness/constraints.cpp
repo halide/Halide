@@ -55,9 +55,14 @@ int main(int argc, char **argv) {
     Func h;
     h(x, y) = x*y;
     h.set_error_handler(my_error_handler);
-    h.output_buffer().set_stride(0, 1).set_bounds(1, 0, image1.extent(1));
+    h.output_buffer()
+        .set_stride(0, 1)
+        .set_bounds(1, 0, image1.extent(1))
+        .set_bounds(0, 0, ((h.output_buffer().extent(0))/8)*8);
     error_occurred = false;
     h.realize(image1);
+    // Also check it compiles ok without an inferred argument list
+    h.compile_to_assembly("h.s", Internal::vec<Argument>(image1), "h");
     if (error_occurred) {
         printf("Error incorrectly raised when constraining output buffer\n");
         return -1;
