@@ -11,8 +11,7 @@ int main(int argc, char **argv) {
     Param<const char *> message;
     message.set(c_message);
 
-    Func f = lambda(strlen(message));
-    int result = f.realize()[0].as<int>();
+    int result = evaluate<int>(strlen(message));
 
     int correct = strlen(c_message);
     if (result != correct) {
