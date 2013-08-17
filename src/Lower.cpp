@@ -106,9 +106,51 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
         known_size_dims[s.bounds[i].var] = s.bounds[i].extent;
     }
 
+    // TODO: Check that the dimensions post-splitting will have unique
+    // names. Otherwise the rebalancing just makes things more
+    // confused.
+
+    vector<Schedule::Split> splits = s.splits;
+
+    // Rebalance the split tree to make the outermost split first.
+    for (size_t i = 0; i < splits.size(); i++) {
+        for (size_t j = i+1; j < splits.size(); j++) {
+
+            // Given two splits:
+            // X  ->  a * Xo  + Xi
+            // (splits stuff other than Xo, including Xi)
+            // Xo ->  b * Xoo + Xoi
+
+            // Re-write to:
+            // X  -> ab * Xoo + s0
+            // s0 ->  a * Xoi + Xi
+            // (splits on stuff other than Xo, including Xi)
+
+            // The name Xo went away, because it was legal for it to
+            // be X before, but not after.
+
+            Schedule::Split &first = splits[i];
+            Schedule::Split &second = splits[j];
+            if (first.outer == second.old_var) {
+                second.old_var = unique_name('s');
+                first.outer   = second.outer;
+                second.outer  = second.inner;
+                second.inner  = first.inner;
+                first.inner   = second.old_var;
+                Expr f = simplify(first.factor * second.factor);
+                second.factor = first.factor;
+                first.factor  = f;
+                // Push the second split back to just after the first
+                for (size_t k = j; k > i+1; k--) {
+                    std::swap(splits[k], splits[k-1]);
+                }
+            }
+        }
+    }
+
     // Define the function args in terms of the loop variables using the splits
-    for (size_t i = 0; i < s.splits.size(); i++) {
-        const Schedule::Split &split = s.splits[i];
+    for (size_t i = 0; i < splits.size(); i++) {
+        const Schedule::Split &split = splits[i];
         Expr outer = Variable::make(Int(32), prefix + split.outer);
         if (!split.is_rename) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
@@ -164,8 +206,8 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
 
     // Define the bounds on the split dimensions using the bounds
     // on the function args
-    for (size_t i = s.splits.size(); i > 0; i--) {
-        const Schedule::Split &split = s.splits[i-1];
+    for (size_t i = splits.size(); i > 0; i--) {
+        const Schedule::Split &split = splits[i-1];
         Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".extent");
         Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".min");
         if (!split.is_rename) {

@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     f(x, y) = input(x, y)*2;
 
     Var yi;
-    f.vectorize(x, 4).unroll(x, 2);
+    f.vectorize(x, 4).unroll(x, 3).unroll(x, 2);
     f.split(y, y, yi, 16).parallel(y);
 
     Image<int> out = f.realize(87, 93);
