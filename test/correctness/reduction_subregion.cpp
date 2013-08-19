@@ -10,7 +10,7 @@ using namespace Halide;
 // Custom error handler. If we don't define this, it'll just print out
 // an error message and quit
 bool error_occurred = false;
-void halide_error(char *msg) {
+void halide_error(const char *msg) {
     printf("%s\n", msg);
     error_occurred = true;
 }

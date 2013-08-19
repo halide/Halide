@@ -2,7 +2,7 @@
 #define HALIDE_JIT_COMPILED_MODULE_H
 
 /** \file
- * Defines the struct representing a JIT compiled halide pipeline 
+ * Defines the struct representing a JIT compiled halide pipeline
  */
 
 #include "IntrusivePtr.h"
@@ -43,16 +43,16 @@ struct JITCompiledModule {
     // @}
 
     /** The type of a halide runtime error handler function */
-    typedef void (*ErrorHandler)(char *);
+    typedef void (*ErrorHandler)(const char *);
 
     /** Set the runtime error handler for this module */
     void (*set_error_handler)(ErrorHandler);
 
-    /** Set a custom malloc and free for this module to use. See 
+    /** Set a custom malloc and free for this module to use. See
      * \ref Func::set_custom_allocator */
     void (*set_custom_allocator)(void *(*malloc)(size_t), void (*free)(void *));
 
-    /** Set a custom parallel for loop launcher. See 
+    /** Set a custom parallel for loop launcher. See
      * \ref Func::set_custom_do_par_for */
     void (*set_custom_do_par_for)(void (*custom_do_par_for)(void (*)(int, unsigned char *), int, int, unsigned char *));
 
@@ -68,24 +68,24 @@ struct JITCompiledModule {
     // The JIT Module Allocator holds onto the memory storing the functions above.
     IntrusivePtr<JITModuleHolder> module;
 
-    JITCompiledModule() : 
-        function(NULL), 
+    JITCompiledModule() :
+        function(NULL),
         wrapped_function(NULL),
-        copy_to_host(NULL), 
-        copy_to_dev(NULL), 
-        free_dev_buffer(NULL), 
-        set_error_handler(NULL), 
-        set_custom_allocator(NULL), 
-        set_custom_do_par_for(NULL), 
-        set_custom_do_task(NULL), 
+        copy_to_host(NULL),
+        copy_to_dev(NULL),
+        free_dev_buffer(NULL),
+        set_error_handler(NULL),
+        set_custom_allocator(NULL),
+        set_custom_do_par_for(NULL),
+        set_custom_do_task(NULL),
         shutdown_thread_pool(NULL) {}
-                
+
     /** Take an llvm module and compile it. Populates the function
      * pointer members above with the result. */
     void compile_module(CodeGen *cg, llvm::Module *mod, const std::string &function_name);
 
 };
-        
+
 }
 }
 

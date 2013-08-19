@@ -4,7 +4,7 @@
 using namespace Halide;
 
 bool error_occurred;
-void halide_error(char *msg) {
+void halide_error(const char *msg) {
     printf("%s\n", msg);
     error_occurred = true;
 }

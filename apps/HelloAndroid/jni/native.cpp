@@ -12,7 +12,7 @@
 
 #define DEBUG 1
 
-extern "C" void halide_set_error_handler(void (*handler)(char *));
+extern "C" void halide_set_error_handler(void (*handler)(const char *));
 
 void handler(char *msg) {
     LOGE(msg);

@@ -22,15 +22,15 @@ void my_free(void *ptr) {
 }
 
 bool error_occurred = false;
-void my_error_handler(char *) {
+void my_error_handler(const char *) {
     error_occurred = true;
 }
 
 int main(int argc, char **argv) {
     Func f, g, h;
     Var x;
-        
-    f(x) = x;    
+
+    f(x) = x;
     f.compute_root();
     g(x) = f(x)+1;
     g.compute_root();

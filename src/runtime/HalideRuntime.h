@@ -40,7 +40,7 @@ extern int halide_printf(const char *, ...);
  * implementation of halide_error in AOT code.  See
  * Func::set_error_handler.
  */
-extern void halide_error(char *msg);
+extern void halide_error(const char *msg);
 
 /** Define halide_do_par_for to replace the default thread pool
  * implementation. halide_shutdown_thread_pool can also be called to
