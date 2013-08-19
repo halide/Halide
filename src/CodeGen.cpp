@@ -1303,45 +1303,61 @@ void CodeGen::visit(const Call *op) {
                     }
 
                 } else {
-                    // This code rescales integer weights to the right number of bits.
-                    // It takes advantage of (2^n - 1) == (2^(n/2) - 1)(2^(n/2) + 1)
-                    // e.g. 65535 = 255 * 257. (Ditto for the 32-bit equivalent.)
-                    // To recale a weight of m bits to be n bits, we need to do:
-                    //     scaled_weight = (weight / (2^m - 1)) * (2^n - 1)
-                    // which power of two values for m and n, results in a series like
-                    // so:
-                    //     (2^(m/2) + 1) * (2^(m/4) + 1) ... (2^(n*2) + 1)
-                    // The loop below computes a scaling constant and either multiples
-                    // or divides by the constant and relies on lowering and llvm to
-                    // generate efficient code for the operation.
-                    int bit_size_difference = weight.type().bits - computation_type.bits;
-                    if (bit_size_difference == 0) {
-                        typed_weight = weight;
-                    } else {
-                        typed_weight = Cast::make(computation_type, weight);
-
-                        int bits_left = ::abs(bit_size_difference);
-                        int shift_amount = std::min(computation_type.bits, weight.type().bits);
-                        uint64_t scaling_factor = 1;
-                        while (bits_left != 0) {
-                          assert(bits_left > 0);
-                            scaling_factor = scaling_factor + (scaling_factor << shift_amount);
-                            bits_left -= shift_amount;
-                            shift_amount *= 2;
-                        }
-                        if (bit_size_difference < 0) {
+                    if (computation_type.is_float()) {
+                        int weight_bits = weight.type().bits;
+                        if (weight_bits == 32) {
+                            // Should use ldexp, but can't make Expr from result
+                            // that is double
                             typed_weight =
-                              Cast::make(computation_type, weight) *
-                              cast(computation_type, (int32_t)scaling_factor);
+                              Cast::make(computation_type,
+                                         cast<double>(weight) / (pow(cast<double>(2), 32) - 1));
                         } else {
                             typed_weight =
-                                Cast::make(computation_type,
-                                           weight / cast(weight.type(), (int32_t)scaling_factor));
+                              Cast::make(computation_type,
+                                         weight / ((float)ldexp(1.0f, weight_bits) - 1));
                         }
+                        inverse_typed_weight = 1.0f - typed_weight;
+                    } else {
+                        // This code rescales integer weights to the right number of bits.
+                        // It takes advantage of (2^n - 1) == (2^(n/2) - 1)(2^(n/2) + 1)
+                        // e.g. 65535 = 255 * 257. (Ditto for the 32-bit equivalent.)
+                        // To recale a weight of m bits to be n bits, we need to do:
+                        //     scaled_weight = (weight / (2^m - 1)) * (2^n - 1)
+                        // which power of two values for m and n, results in a series like
+                        // so:
+                        //     (2^(m/2) + 1) * (2^(m/4) + 1) ... (2^(n*2) + 1)
+                        // The loop below computes a scaling constant and either multiples
+                        // or divides by the constant and relies on lowering and llvm to
+                        // generate efficient code for the operation.
+                        int bit_size_difference = weight.type().bits - computation_type.bits;
+                        if (bit_size_difference == 0) {
+                            typed_weight = weight;
+                        } else {
+                            typed_weight = Cast::make(computation_type, weight);
+
+                            int bits_left = ::abs(bit_size_difference);
+                            int shift_amount = std::min(computation_type.bits, weight.type().bits);
+                            uint64_t scaling_factor = 1;
+                            while (bits_left != 0) {
+                              assert(bits_left > 0);
+                                scaling_factor = scaling_factor + (scaling_factor << shift_amount);
+                                bits_left -= shift_amount;
+                                shift_amount *= 2;
+                            }
+                            if (bit_size_difference < 0) {
+                                typed_weight =
+                                  Cast::make(computation_type, weight) *
+                                  cast(computation_type, (int32_t)scaling_factor);
+                            } else {
+                                typed_weight =
+                                    Cast::make(computation_type,
+                                               weight / cast(weight.type(), (int32_t)scaling_factor));
+                            }
+                        }
+                        inverse_typed_weight =
+                            Cast::make(computation_type,
+                                       computation_type.imax() - typed_weight);
                     }
-                    inverse_typed_weight =
-                        Cast::make(computation_type,
-                                   computation_type.imax() - typed_weight);
                 }
 
                 if (computation_type.is_float()) {
