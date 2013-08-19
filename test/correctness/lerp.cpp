@@ -225,11 +225,11 @@ int main(int argc, char **argv) {
     // Check constant and constant case:
     Func lerp_constants("lerp_constants");
     lerp_constants() = lerp(0, cast<uint32_t>(1023), .5f);
-    Image<int32_t> result = lerp_constants.realize();
+    Image<uint32_t> result = lerp_constants.realize();
 
-    int32_t expected = (int32_t)(1023 * .5f + .5f);
+    uint32_t expected = (uint32_t)(1023 * .5f + .5f);
     if (result(0) != expected)
-      std::cerr << "Expected " << expected << " got " << result(0) << std::endl;
+        std::cerr << "Expected " << expected << " got " << result(0) << std::endl;
     assert(result(0) == expected);
 
     std::cout << "Success!" << std::endl;
