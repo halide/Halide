@@ -1380,29 +1380,28 @@ void check_neon_all() {
 
 }
 
+using std::string;
+
 int main(int argc, char **argv) {
 
     if (argc > 1) filter = argv[1];
     else filter = NULL;
 
-    const char *target = getenv("HL_TARGET");
+    string target = get_target();
 
-    #ifdef __arm__
-    if (!target) target = "arm";
-    #endif
+    use_avx2 = target.find("avx2") != string::npos;
+    use_avx = use_avx2 || target.find("avx") != string::npos;
+    use_sse41 = use_avx || target.find("sse41") != string::npos;
 
-    use_sse41 = target && strstr(target, "sse41");
-    use_avx = target && strstr(target, "avx");
-    use_avx2 = target && strstr(target, "avx2");
     // There's no separate target for SSSE3; we currently enable it in
     // lockstep with SSE4.1
     use_ssse3 = use_sse41;
     // There's no separate target for SSS4.2; we currently assume that
     // it should be used iff AVX is being used.
     use_sse42 = use_avx;
-    if (!target || strncasecmp(target, "x86", 3) == 0) {
+    if (target.find("x86") != string::npos) {
 	check_sse_all();
-    } else if (strncasecmp(target, "arm", 3) == 0) {
+    } else if (target.find("arm") != string::npos) {
 	check_neon_all();
     }
 

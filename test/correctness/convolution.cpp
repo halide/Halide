@@ -27,22 +27,22 @@ int main(int argc, char **argv) {
     tent(2, 0) = 1;
     tent(2, 1) = 2;
     tent(2, 2) = 1;
-    
+
     Func input("input");
     input(x, y) = in(clamp(x, 0, W-1), clamp(y, 0, H-1));
 
-    RDom r(tent);    
+    RDom r(tent);
 
     /* This iterates over r outermost. I.e. the for loop looks like:
      * for y:
      *   for x:
      *     blur1(x, y) = 0
-     * for r.y: 
-     *   for r.x: 
-     *     for y: 
-     *       for x: 
+     * for r.y:
+     *   for r.x:
+     *     for y:
+     *       for x:
      *         blur1(x, y) += tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1)
-     *     
+     *
      * In general, reductions iterate over the reduction domain outermost.
      */
     Func blur1("blur1");
@@ -53,24 +53,23 @@ int main(int argc, char **argv) {
      * of scheduling a convolution. "sum" creates an anonymous
      * reduction function that is computed within the for loop over x
      * in blur2. blur2 isn't actually a reduction. The loop nest looks like:
-     * for y: 
-     *   for x: 
+     * for y:
+     *   for x:
      *     tmp = 0
-     *     for r.y: 
-     *       for r.x: 
+     *     for r.y:
+     *       for r.x:
      *         tmp += tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1)
      *     blur(x, y) = tmp
      */
     Func blur2("blur2");
     blur2(x, y) = sum(tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1));
 
-    char *target = getenv("HL_TARGET");
-    if (target && std::string(target) == "ptx") {
+    if (get_target() == "ptx") {
         // Initialization (basically memset) done in a cuda kernel
         blur1.cuda_tile(x, y, 16, 16);
 
         // Summation is done as an outermost loop is done on the cpu
-        blur1.update().cuda_tile(x, y, 16, 16);        
+        blur1.update().cuda_tile(x, y, 16, 16);
 
         // Summation is done as a sequential loop within each gpu thread
         blur2.cuda_tile(x, y, 16, 16);
@@ -79,7 +78,7 @@ int main(int argc, char **argv) {
         Var xi("xi"), yi("yi");
         blur1.tile(x, y, xi, yi, 6, 6);
         blur1.update().tile(x, y, xi, yi, 4, 4).vectorize(xi).parallel(y);
-        
+
         blur2.vectorize(x, 4).parallel(y);
     }
 
@@ -88,7 +87,7 @@ int main(int argc, char **argv) {
 
     for (int y = 1; y < H-1; y++) {
         for (int x = 1; x < W-1; x++) {
-            uint16_t correct = (1*in(x-1, y-1) + 2*in(x, y-1) + 1*in(x+1, y-1) + 
+            uint16_t correct = (1*in(x-1, y-1) + 2*in(x, y-1) + 1*in(x+1, y-1) +
                                 2*in(x-1, y)   + 4*in(x, y) +   2*in(x+1, y) +
                                 1*in(x-1, y+1) + 2*in(x, y+1) + 1*in(x+1, y+1));
             if (out1(x, y) != correct) {

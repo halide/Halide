@@ -11,9 +11,8 @@ int main(int argc, char **argv) {
     Param<float> u;
 
     f(x) = u;
-    
-    char *target = getenv("HL_TARGET");
-    if (target && std::string(target) == "ptx") {
+
+    if (get_target() == "ptx") {
         f.cuda_tile(x, 256);
     }
 

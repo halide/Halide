@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Var x, y;
     Var xo, xi, yo, yi;
-    
+
     Func f, g;
 
     printf("Defining function...\n");
@@ -14,13 +14,11 @@ int main(int argc, char **argv) {
     f(x, y) = cast<float>(x);
     g(x, y) = f(x+1, y) + f(x-1, y);
 
-    
-    char *target = getenv("HL_TARGET");
-    if (target && std::string(target) == "ptx") {
+    if (get_target() == "ptx") {
         Var xi, yi;
         g.cuda_tile(x, y, 8, 8);
         f.compute_at(g, Var("blockidx")).cuda_threads(x, y);
-    } else {    
+    } else {
         g.tile(x, y, xo, yo, xi, yi, 8, 8);
         f.compute_at(g, xo);
     }

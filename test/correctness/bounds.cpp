@@ -14,18 +14,18 @@ int main(int argc, char **argv) {
     g(x, y) = min(x, y);
     h(x, y) = clamp(x+y, 20, 100);
 
-    char *target = getenv("HL_TARGET");
-    if (target && std::string(target) == "ptx") {
+    std::string target = get_target();
+    if (target == "ptx") {
         f.cuda_tile(x, y, 8, 8);
         g.cuda_tile(x, y, 8, 8);
         h.cuda_tile(x, y, 8, 8);
     }
-    if (target && std::string(target) == "opencl") {
+    if (target == "opencl") {
         f.cuda_tile(x, y, 32, 1);
         g.cuda_tile(x, y, 32, 1);
         h.cuda_tile(x, y, 32, 1);
     }
- 
+
     printf("Realizing function...\n");
 
     Image<int> imf = f.realize(32, 32);

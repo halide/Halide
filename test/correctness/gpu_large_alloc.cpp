@@ -10,15 +10,13 @@ int main(int argc, char **argv) {
     // Up to about 40MB/image * 2 buffers seems to work on luxosr, when freshly booted
     // 130MB works on 2GB Quadro 4000
     int W = 1024*130/4, H = 1024;
-    
+
     printf("Defining function...\n");
 
     f(x, y) = max(x, y);
     g(x, y) = clamp(f(x, y), 20, 100);
 
-
-    char *target = getenv("HL_TARGET");
-    if (target && std::string(target) == "ptx") {
+    if (get_target() == "ptx") {
         f.compute_root().cuda_tile(x, y, 16, 16);
         g.compute_root().cuda_tile(x, y, 16, 16);
     }
