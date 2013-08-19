@@ -1294,9 +1294,19 @@ void CodeGen::visit(const Call *op) {
                 if (weight.type().is_float()) {
                     typed_weight = weight;
                     if (computation_type.is_uint()) {
-                        typed_weight =
-                            Cast::make(computation_type,
-                                       computation_type.imax() * typed_weight);
+		        // TODO: Verify this reduces to efficient code or
+		        // figure out a better way to express a multiply
+		        // of unsigned 2^32-1 by a double promoted weight
+                        if (computation_type.bits == 32) {
+                           typed_weight =
+                              Cast::make(computation_type,
+                                         Expr(65535.0f) * Expr(65537.0f) *
+					 cast<double>(typed_weight));
+                        } else {
+                          typed_weight =
+                              Cast::make(computation_type,
+                                         computation_type.imax() * typed_weight);
+                        }
                         inverse_typed_weight = computation_type.imax() - typed_weight;
                     } else {
                         inverse_typed_weight = 1.0f - typed_weight;
