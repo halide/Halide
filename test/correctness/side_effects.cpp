@@ -4,40 +4,108 @@
 
 using namespace Halide;
 
-// NB: You must compile with -rdynamic for llvm to be able to find the appropriate symbols
-// This is not supported by the C PseudoJIT backend.
+// NB: You must compile with -rdynamic for llvm to be able to find the
+// appropriate symbols
 
 // Many things that are difficult to do with Halide can be hacked in
-// using reductions that call extern C functions. One example is
-// argmin
+// using reductions that call extern C functions. In general this is a
+// bad way to do things, because you've tied yourself to C, which
+// means no GPU.  Additionally, if your reduction has pure dimensions,
+// you need to take care to make your extern functions
+// thread-safe.
 
-extern "C" int argmin(int x, float y) {
-    static float minVal = 1e10;
-    static int minIndex = 0;
-    if (y < minVal) {
-        minIndex = x;
-        minVal = y;
+// Here we use an extern call to print an ascii-art Mandelbrot set.
+
+int call_count = 0;
+extern "C" int draw_pixel(int x, int y, int val) {
+    call_count++;
+    static int last_y = 0;
+    if (y != last_y) {
+        printf("\n");
+        last_y = y;
     }
-    return minIndex;
+
+    const char *code = " .:-~*={}&%#@";
+
+    if (val >= strlen(code)) {
+        val = strlen(code)-1;
+    }
+    printf("%c", code[val]);
+    return 0;
 }
-HalideExtern_2(int, argmin, int, float);
+HalideExtern_3(int, draw_pixel, int, int, int);
+
+// Make a complex number type using Tuples
+class Complex {
+    Tuple t;
+public:
+    Complex(Expr real, Expr imag) : t(real, imag) {}
+    Complex(Tuple tup) : t(tup) {}
+    Complex(FuncRefExpr f) : t(Tuple(f)) {}
+    Complex(FuncRefVar f) : t(Tuple(f)) {}
+    Expr real() const {return t[0];}
+    Expr imag() const {return t[1];}
+
+    operator Tuple() const {return t;}
+};
+
+// Define the usual complex arithmetic
+Complex operator+(const Complex &a, const Complex &b) {
+    return Complex(a.real() + b.real(),
+                   a.imag() + b.imag());
+}
+
+Complex operator-(const Complex &a, const Complex &b) {
+    return Complex(a.real() - b.real(),
+                   a.imag() - b.imag());
+}
+
+Complex operator*(const Complex &a, const Complex &b) {
+    return Complex(a.real() * b.real() - a.imag() * b.imag(),
+                   a.real() * b.imag() + a.imag() * b.real());
+}
+
+Complex conjugate(const Complex &a) {
+    return Complex(a.real(), -a.imag());
+}
+
+Expr magnitude(Complex a) {
+    return (a * conjugate(a)).real();
+}
+
 
 int main(int argc, char **argv) {
     Var x, y;
-    Func f, g, h;
 
-    printf("Defining function...\n");
+    Func mandelbrot;
+    // Use a different scale on x and y because terminal characters
+    // are not square. Arbitrarily chosen to fit the set nicely.
+    Complex initial(x/20.0f, y/8.0f);
+    Var z;
+    mandelbrot(x, y, z) = Complex(0.0f, 0.0f);
+    RDom t(1, 40);
+    Complex current = mandelbrot(x, y, t-1);
+    mandelbrot(x, y, t) = current*current + initial;
 
-    f(x) = sin(x/10.0f+17);
+    // How many iterations until something escapes a circle of radius 2?
+    Func count;
+    Tuple escape = argmin(magnitude(mandelbrot(x, y, t)) < 4);
+    // If it never escapes, use the value 0
+    count(x, y) = select(escape[1], 0, escape[0]);
 
-    // Compute argmin of f over [-100..100]
-    RDom r(-100, 100);
-    g(x) = 0;
-    g(x) = argmin(r, f(r));
+    RDom r(-45, 71, -10, 21);
+    Func render;
+    render() = 0;
+    render() = draw_pixel(r.x, r.y, count(r.x, r.y));
+    render.realize();
 
-    Image<int> result = g.realize(1);
-    int idx = result(0);
-    printf("sin(%d/10.0f+17) = %f\n", idx, sinf(idx/10.0f+17));
+    printf("\n");
+
+    // Check draw_pixel was called the right number of times.
+    if (call_count != 71*21) {
+        printf("Something went wrong\n");
+        return -1;
+    }
 
     printf("Success!\n");
     return 0;
