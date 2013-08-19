@@ -144,7 +144,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
     Allocation allocation;
 
-    int bytes_per_element = type.bits / 8;
+    int bytes_per_element = (type.bits + 7) / 8;
     if (const IntImm *int_size = size.as<IntImm>()) {
         allocation.stack_size = int_size->value * bytes_per_element;
 

@@ -97,6 +97,9 @@ int main(int argc, char **argv) {
     Func render;
     render() = 0;
     render() = draw_pixel(r.x, r.y, count(r.x, r.y));
+
+    mandelbrot.compute_at(render, r.x);
+
     render.realize();
 
     printf("\n");
