@@ -14,6 +14,9 @@ PNGFLAGS=$(LIBPNG_LIBS) $(LIBPNG_CXX_FLAGS)
 ifeq ($(HL_TARGET),ptx)
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
+ifeq ($(HL_TARGET),ptx-debug)
+  CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
+endif
 
 all: interpolate
 

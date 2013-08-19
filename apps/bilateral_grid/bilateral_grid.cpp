@@ -58,8 +58,8 @@ int main(int argc, char **argv) {
     Func bilateral_grid("bilateral_grid");
     bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
-    char *target = getenv("HL_TARGET");
-    if (target && std::string(target) == "ptx") {
+    std::string target = get_target();
+    if (target.find("ptx") != std::string::npos) {
 
         // GPU schedule
         grid.compute_root().reorder(z, c, x, y).cuda_tile(x, y, 8, 8);

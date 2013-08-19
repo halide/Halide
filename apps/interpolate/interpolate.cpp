@@ -80,8 +80,8 @@ int main(int argc, char **argv) {
     std::cout << "Finished function setup." << std::endl;
 
     int sched;
-    char *target = getenv("HL_TARGET");
-    if (target && std::string(target) == "ptx") {
+    std::string target = get_target();
+    if (target == "ptx" || target == "ptx-debug") {
         sched = 4;
     } else {
         sched = 2;

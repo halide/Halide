@@ -57,7 +57,7 @@ ARM_ARCHS=$(if $(WITH_ARM), arm arm_android , )
 ARM_LLVM_CONFIG_LIB=$(if $(WITH_ARM), arm, )
 
 PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_PTX=1, )
-PTX_ARCHS=$(if $(WITH_PTX), ptx_host ptx_dev, )
+PTX_ARCHS=$(if $(WITH_PTX), ptx_host ptx_host_debug ptx_dev, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
 
 OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL=1, )
@@ -146,6 +146,7 @@ RUNTIME_OPTS_arm = -m32
 RUNTIME_OPTS_arm_android = -m32
 RUNTIME_OPTS_opencl_host = $(RUNTIME_OPTS_x86_64)
 RUNTIME_OPTS_ptx_host = $(RUNTIME_OPTS_x86_64)
+RUNTIME_OPTS_ptx_host_debug = $(RUNTIME_OPTS_x86_64)
 RUNTIME_OPTS_ptx_dev =
 RUNTIME_OPTS_x86_64_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=k8 -isystem $(NATIVE_CLIENT_X86_INCLUDE)
 RUNTIME_OPTS_x86_64_sse41_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=penryn -isystem $(NATIVE_CLIENT_X86_INCLUDE)
@@ -162,6 +163,7 @@ RUNTIME_LL_STUBS_arm = src/runtime/arm.ll src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_arm_android = src/runtime/arm.ll src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_opencl_host = $(RUNTIME_LL_STUBS_x86) src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_ptx_host = $(RUNTIME_LL_STUBS_x86) src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_ptx_host_debug = $(RUNTIME_LL_STUBS_x86) src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_ptx_dev = src/runtime/ptx_dev.ll
 RUNTIME_LL_STUBS_x86_32_nacl = src/runtime/x86.ll src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_x86_32_sse41_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/posix_math.ll

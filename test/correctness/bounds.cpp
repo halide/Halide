@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     h(x, y) = clamp(x+y, 20, 100);
 
     std::string target = get_target();
-    if (target == "ptx") {
+    if (target == "ptx" || target == "ptx-debug") {
         f.cuda_tile(x, y, 8, 8);
         g.cuda_tile(x, y, 8, 8);
         h.cuda_tile(x, y, 8, 8);

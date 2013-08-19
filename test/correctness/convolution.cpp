@@ -64,7 +64,8 @@ int main(int argc, char **argv) {
     Func blur2("blur2");
     blur2(x, y) = sum(tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1));
 
-    if (get_target() == "ptx") {
+    std::string target = get_target();
+    if (target == "ptx" || target == "ptx-debug") {
         // Initialization (basically memset) done in a cuda kernel
         blur1.cuda_tile(x, y, 16, 16);
 

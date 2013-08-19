@@ -22,9 +22,13 @@
 #if WITH_PTX
 extern "C" unsigned char halide_internal_initmod_ptx_host[];
 extern "C" int halide_internal_initmod_ptx_host_length;
+extern "C" unsigned char halide_internal_initmod_ptx_host_debug[];
+extern "C" int halide_internal_initmod_ptx_host_debug_length;
 #else
 static void *halide_internal_initmod_ptx_host = 0;
 static int halide_internal_initmod_ptx_host_length = 0;
+static void *halide_internal_initmod_ptx_host_debug = 0;
+static int halide_internal_initmod_ptx_host_debug_length = 0;
 #endif
 
 #if WITH_OPENCL
@@ -301,8 +305,13 @@ CodeGen_GPU_Host::CodeGen_GPU_Host(uint32_t options) :
         #if !(WITH_PTX)
         assert(false && "ptx not enabled for this build of Halide.");
         #endif
-        initmod = halide_internal_initmod_ptx_host;
-        initmod_length = halide_internal_initmod_ptx_host_length;
+        if (options & GPU_debug) {
+            initmod = halide_internal_initmod_ptx_host_debug;
+            initmod_length = halide_internal_initmod_ptx_host_debug_length;
+        } else {
+            initmod = halide_internal_initmod_ptx_host;
+            initmod_length = halide_internal_initmod_ptx_host_length;
+        }
     } else if (options & GPU_OpenCL) {
         #if !(WITH_OPENCL)
         assert(false && "OpenCL target not enabled for this build of Halide.");
@@ -315,10 +324,10 @@ CodeGen_GPU_Host::CodeGen_GPU_Host(uint32_t options) :
 CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(uint32_t options)
 {
     if (options & GPU_PTX) {
-        debug(0) << "Constructing PTX device codegen\n";
+        debug(1) << "Constructing PTX device codegen\n";
         return new CodeGen_PTX_Dev();
     } else if (options & GPU_OpenCL) {
-        debug(0) << "Constructing OpenCL device codegen\n";
+        debug(1) << "Constructing OpenCL device codegen\n";
         return new CodeGen_OpenCL_Dev();
     } else {
         assert(false && "Requested unknown GPU target");

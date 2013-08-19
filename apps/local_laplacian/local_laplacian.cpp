@@ -114,7 +114,8 @@ int main(int argc, char **argv) {
     /* THE SCHEDULE */
     remap.compute_root();
 
-    if (get_target() == "ptx") {
+    std::string target = get_target();
+    if (target == "ptx" || target == "ptx-debug") {
         // gpu schedule
         output.compute_root().cuda_tile(x, y, 32, 32);
         for (int j = 0; j < J; j++) {

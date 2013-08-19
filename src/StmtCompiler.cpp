@@ -178,6 +178,8 @@ StmtCompiler::StmtCompiler(string arch) {
     else if (arch == "ptx") {
         // equivalent to "x86" on the host side, i.e. x86_64, no AVX
         contents = new CodeGen_GPU_Host(X86_64Bit | X86_SSE41 | GPU_PTX);
+    } else if (arch == "ptx-debug") {
+        contents = new CodeGen_GPU_Host(X86_64Bit | X86_SSE41 | GPU_PTX | GPU_debug);
     } else if (arch == "opencl") {
         // equivalent to "x86" on the host side, i.e. x86_64, no AVX
         contents = new CodeGen_GPU_Host(X86_64Bit | X86_SSE41 | GPU_OpenCL);
@@ -191,7 +193,7 @@ StmtCompiler::StmtCompiler(string arch) {
                   << "x86-32-nacl x86-32-sse41-nacl "
                   << "x86-64-nacl x86-64-sse41-nacl x86-64-avx-nacl "
                   << "arm arm-android arm-nacl"
-                  << "ptx opencl "
+                  << "ptx ptx-debug opencl"
                   << "native"
 		  << "\n"
                   << "On this machine, native means " << native << "\n";
