@@ -36,7 +36,8 @@ int main(int argc, char **argv) {
 
     // No parallel reductions
     /*
-    if (get_target() == "ptx") {
+    std::string target = get_target();
+    if (target == "ptx" || target == "ptx-debug") {
 	hist.cuda_tile(x, 64);
 	hist.update().cuda_tile(r.x, r.y, 16, 16);
     }

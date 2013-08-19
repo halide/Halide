@@ -29,11 +29,9 @@
 
 extern "C" {
 
-// #define NDEBUG // disable logging/asserts for performance
-
-#ifdef NDEBUG
-#define CHECK_CALL(c,str) (c)
-#define TIME_CALL(c,str) (CHECK_CALL((c),(str)))
+#ifndef DEBUG
+#define CHECK_CALL(c,str) c
+#define TIME_CALL(c,str) c
 #else
 //#define CHECK_CALL(c) (assert((c) == CUDA_SUCCESS))
 #define CHECK_CALL(c,str) do {\
@@ -52,7 +50,7 @@ extern "C" {
     cuEventElapsedTime(&msec, __start, __end);              \
     printf("   (took %fms, t=%d)\n", msec, halide_current_time());  \
 } while(0)
-#endif //NDEBUG
+#endif //DEBUG
 
 #ifndef __cuda_cuda_h__
 #ifdef _WIN32
@@ -228,11 +226,11 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
 
 WEAK void halide_dev_free(buffer_t* buf) {
 
-    #ifndef NDEBUG
+    #ifdef DEBUG
     fprintf(stderr, "In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
+    assert(halide_validate_dev_pointer(buf));
     #endif
 
-    assert(halide_validate_dev_pointer(buf));
     CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
     buf->dev = 0;
 
@@ -274,7 +272,7 @@ WEAK void halide_init_kernels(const char* ptx_src) {
             exit(-1);
         }
 
-        #ifndef NDEBUG
+        #ifdef DEBUG
         fprintf(stderr, "Got device %d, about to create context (t=%d)\n", dev, halide_current_time());
         #endif
 
@@ -291,7 +289,7 @@ WEAK void halide_init_kernels(const char* ptx_src) {
         // Create module
         CHECK_CALL( cuModuleLoadData(&__mod, ptx_src), "cuModuleLoadData" );
 
-        #ifndef NDEBUG
+        #ifdef DEBUG
         fprintf(stderr, "-------\nCompiling PTX:\n%s\n--------\n", ptx_src);
         #endif
     }
@@ -303,6 +301,7 @@ WEAK void halide_init_kernels(const char* ptx_src) {
     }
 }
 
+#ifdef DEBUG
 #define CHECK_CALL_DEINIT_OK(c,str) do {\
     fprintf(stderr, "Do %s\n", str); \
     CUresult status = (c); \
@@ -310,6 +309,9 @@ WEAK void halide_init_kernels(const char* ptx_src) {
         fprintf(stderr, "CUDA: %s returned non-success: %d\n", str, status); \
     assert(status == CUDA_SUCCESS || status == CUDA_ERROR_DEINITIALIZED); \
 } while(0)
+#else
+#define CHECK_CALL_DEINIT_OK(c,str) c
+#endif
 
 WEAK void halide_release() {
     // It's possible that this is being called from the destructor of
@@ -344,7 +346,7 @@ static CUfunction __get_kernel(const char* entry_name)
 {
     CUfunction f;
 
-    #ifndef NDEBUG
+    #ifdef DEBUG
     char msg[256];
     snprintf(msg, 256, "get_kernel %s (t=%d)", entry_name, halide_current_time() );
     #endif
@@ -373,7 +375,7 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
 
     size_t size = buf_size(buf);
 
-    #ifndef NDEBUG
+    #ifdef DEBUG
     fprintf(stderr, "dev_malloc allocating buffer of %zd bytes, %zdx%zdx%zdx%zd (%d bytes per element)\n",
             size, buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size);
     #endif
@@ -383,7 +385,7 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
     buf->dev = (uint64_t)p;
     assert(buf->dev);
 
-    #ifndef NDEBUG
+    #ifdef DEBUG
     assert(halide_validate_dev_pointer(buf));
     #endif
 }
@@ -392,12 +394,10 @@ WEAK void halide_copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         assert(buf->host && buf->dev);
         size_t size = buf_size(buf);
-        #ifdef NDEBUG
-        // char msg[1];
-        #else
-        assert(halide_validate_dev_pointer(buf));
+        #ifdef DEBUG
         char msg[256];
         snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, halide_current_time() );
+        assert(halide_validate_dev_pointer(buf));
         #endif
         TIME_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
     }
@@ -409,9 +409,7 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
         assert(buf->dev);
         assert(buf->host);
         size_t size = buf_size(buf);
-        #ifdef NDEBUG
-        // char msg[1];
-        #else
+        #ifdef DEBUG
         char msg[256];
         snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
         assert(halide_validate_dev_pointer(buf));
@@ -437,7 +435,7 @@ WEAK void halide_dev_run(
 {
     CUfunction f = __get_kernel(entry_name);
 
-    #ifndef NDEBUG
+    #ifdef DEBUG
     char msg[256];
     snprintf(
         msg, 256,
@@ -460,118 +458,5 @@ WEAK void halide_dev_run(
         msg
     );
 }
-
-#ifdef INCLUDE_WRAPPER
-#if 0
-const char* ptx_src = "\n\
-	.version 2.0\n\
-	.target sm_11, map_f64_to_f32\n\
-    \n\
-.entry kernel (.param .b32 __param_1, .param .b64 __param_2) // @kernel\n\
-{\n\
-	.reg .b32 %r<6>;\n\
-	.reg .b64 %rd<4>;\n\
-// BB#0:                                // %entry\n\
-	ld.param.u64	%rd0, [__param_2];\n\
-	mov.u32	%r5, %ctaid.x;\n\
-	shl.b32	%r1, %r5, 8;\n\
-	mov.u32	%r2, %tid.x;\n\
-	add.u32	%r3, %r1, %r2;\n\
-	cvt.s64.s32	%rd1, %r3;\n\
-	shl.b64	%rd2, %rd1, 2;\n\
-	add.u64	%rd3, %rd0, %rd2;\n\
-	mov.u32	%r4, 1067316150;\n\
-	st.global.u32	[%rd3], %r4;\n\
-	exit;\n\
-}";
-#endif
-const char* ptx_src = "                                               \n\
-	.version 2.0                                                        \n\
-	.target sm_11, map_f64_to_f32                                       \n\
-                                                                      \n\
-.extern .shared .b8 g_2E_f[32];                                       \n\
-                                                                      \n\
-.entry kernel (.param .b64 __param_1, .param .b32 __param_2) // @kerne\n\
-{                                                                     \n\
-	.reg .pred %p<3>;                                                   \n\
-	.reg .b32 %r<15>;                                                   \n\
-	.reg .b64 %rd<12>;                                                  \n\
-	.reg .f32 %f<1>;                                                    \n\
-// BB#0:                                // %entry                     \n\
-	ld.param.u32	%r1, [__param_2];                                     \n\
-	add.u32	%r2, %r1, 7;                                                \n\
-	shr.s32	%r3, %r2, 31;                                               \n\
-	shr.u32	%r4, %r3, 29;                                               \n\
-	add.u32	%r5, %r2, %r4;                                              \n\
-	shr.s32	%r6, %r5, 3;                                                \n\
-	mov.u32	%r7, %ctaid.y;                                              \n\
-	setp.ge.s32	%p0, %r7, %r6;                                          \n\
-	ld.param.u64	%rd0, [__param_1];                                    \n\
-@%p0	bra	$L__BB0_5;                                                  \n\
-// BB#1:                                // %g.blockidy_simt_loop      \n\
-	mov.u32	%r8, %tid.y;                                                \n\
-	setp.lt.s32	%p1, %r8, 8;                                            \n\
-@%p1	bra	$L__BB0_2;                                                  \n\
-	bra	$L__BB0_3;                                                      \n\
-$L__BB0_2:                              // %g.f.threadidy_simt_loop   \n\
-	cvt.s64.s32	%rd1, %r8;                                              \n\
-	shl.b64	%rd2, %rd1, 2;                                              \n\
-	mov.u64	%rd3, g_2E_f;                                               \n\
-	add.u64	%rd4, %rd3, %rd2;                                           \n\
-	mov.u32	%r10, 1073741824;                                           \n\
-	st.global.u32	[%rd4], %r10;                                         \n\
-$L__BB0_3:               tp.gt.s32	%p2, %r8, 7;                      \n\
-@%p2	bra	$L__BB0_5;                                                  \n\
-// BB#4:                                // %g.threadidy_simt_loop     \n\
-	shl.b32	%r12, %r7, 3;                                               \n\
-	add.u32	%r14, %r12, %r8;                                            \n\
-	cvt.s64.s32	%rd5, %r14;                                             \n\
-	shl.b64	%rd6, %rd5, 2;                                              \n\
-	add.u64	%rd7, %rd0, %rd6;                                           \n\
-	cvt.s64.s32	%rd8, %r8;                                              \n\
-	shl.b64	%rd9, %rd8, 2;                                              \n\
-	mov.u64	%rd10, g_2E_f;                                              \n\
-	add.u64	%rd11, %rd10, %rd9;                                         \n\
-	ld.global.f32	%f0, [%rd11];                                         \n\
-	st.global.f32	[%rd7], %f0;                                          \n\
-$L__BB0_5:                              // %g.blockidy_simt_afterloop \n\
-	exit;                                                               \n\
-}                                                                     \n\
-";
-int f( buffer_t *input, buffer_t *result, int N )
-{
-    const char* entry_name = "kernel";
-    __init(ptx_src);
-
-    int threadsX = 256;
-    int threadsY =  1;
-    int threadsZ =  1;
-    int blocksX = N / threadsX;
-    int blocksY = 1;
-    int blocksZ = 1;
-
-    halide_dev_malloc(result);
-
-    // Invoke
-    // void* cuArgs[] = { &N, &result->dev };
-    // void* cuArgs[] = { &N, &result->dev };
-    halide_dev_run(
-        entry_name,
-        blocksX,  blocksY,  blocksZ,
-        threadsX, threadsY, threadsZ,
-        // 0, // sharedMemBytes
-        32,
-        cuArgs
-    );
-
-    // Sync and copy back
-    // CHECK_CALL( cuCtxSynchronize(), "pre-sync" ); // only necessary for async copies?
-    halide_copy_to_host(result);
-    // CHECK_CALL( cuCtxSynchronize(), "post-sync" );
-
-    return 0;
-}
-
-#endif
 
 } // extern "C" linkage

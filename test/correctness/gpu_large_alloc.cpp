@@ -16,7 +16,8 @@ int main(int argc, char **argv) {
     f(x, y) = max(x, y);
     g(x, y) = clamp(f(x, y), 20, 100);
 
-    if (get_target() == "ptx") {
+    std::string target = get_target();
+    if (target == "ptx" || target == "ptx-debug") {
         f.compute_root().cuda_tile(x, y, 16, 16);
         g.compute_root().cuda_tile(x, y, 16, 16);
     }

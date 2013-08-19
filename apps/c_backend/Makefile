@@ -3,6 +3,9 @@ CXX ?= g++
 ifeq ($(HL_TARGET),ptx)
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
+ifeq ($(HL_TARGET),ptx-debug)
+  CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
+endif
 
 pipeline: pipeline.cpp
 	$(CXX) -Wall pipeline.cpp -I ../../include ../../bin/libHalide.a -o pipeline -lpthread -ldl

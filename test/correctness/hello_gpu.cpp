@@ -12,7 +12,8 @@ int main(int argc, char **argv) {
 
     f(x, y) = x*y;
 
-    if (get_target() == "ptx") {
+    std::string target = get_target();
+    if (target == "ptx" || target == "ptx-debug") {
         f.cuda_tile(x, y, 8, 8);
     }
 

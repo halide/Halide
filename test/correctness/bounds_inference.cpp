@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     g.compute_root();
 
     std::string target = get_target();
-    if (target == "ptx") {
+    if (target == "ptx" || target == "ptx-debug") {
         f.cuda_tile(x, y, 16, 16);
         g.cuda_tile(x, 128);
         h.cuda_tile(x, 128);

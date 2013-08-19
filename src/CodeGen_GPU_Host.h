@@ -13,9 +13,10 @@ namespace Internal {
 
 /** Bitmask flags for specifying code generation options to CodeGen_GPU. */
 enum CodeGen_GPU_Options {
-    GPU_PTX     = 0x1000000,  /// Compile for PTX
-    GPU_OpenCL  = 0x2000000,  /// Compile for OpenCL
-    GPU_OpenGL  = 0x4000000   /// Compile for OpenGL
+    GPU_PTX    = 0x1000000,  /// Compile for PTX
+    GPU_OpenCL = 0x2000000,  /// Compile for OpenCL
+    GPU_OpenGL = 0x4000000,  /// Compile for OpenGL
+    GPU_debug  = 0x8000000   /// Put synchronization and error checks around every gpu call
 };
 
 
