@@ -7,20 +7,19 @@ int main(int argc, char **argv) {
 
     {
         Func f, g, h, j;
-        Var x, y;       
+        Var x, y;
         f(x, y) = x + y;
         g(x, y) = cast<float>(f(x, y) + f(x+1, y));
         h(x, y) = f(x, y) + g(x, y);
         j(x, y) = h(x, y) * 2;
 
-        char *target = getenv("HL_TARGET");
-        if (target && std::string(target) == "ptx") {        
+        if (get_target() == "ptx") {
             f.compute_root().cuda_tile(x, y, 1, 1).debug_to_file("f.tmp");
-            g.compute_root().cuda_tile(x, y, 1, 1).debug_to_file("g.tmp");        
+            g.compute_root().cuda_tile(x, y, 1, 1).debug_to_file("g.tmp");
             h.compute_root().cuda_tile(x, y, 1, 1);
         } else {
             f.compute_root().debug_to_file("f.tmp");
-            g.compute_root().debug_to_file("g.tmp");        
+            g.compute_root().debug_to_file("g.tmp");
             h.compute_root();
         }
 
@@ -37,7 +36,7 @@ int main(int argc, char **argv) {
     assert(header[2] == 1);
     assert(header[3] == 1);
     assert(header[4] == 7);
-    
+
     int32_t f_data[11*10];
     assert(fread((void *)(&f_data[0]), 4, 11*10, f) == 11*10);
     for (int y = 0; y < 10; y++) {
@@ -57,7 +56,7 @@ int main(int argc, char **argv) {
     assert(header[2] == 1);
     assert(header[3] == 1);
     assert(header[4] == 0);
-    
+
     float g_data[10*10];
     assert(fread((void *)(&g_data[0]), 4, 10*10, g) == 10*10);
     for (int y = 0; y < 10; y++) {

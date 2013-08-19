@@ -2,7 +2,7 @@
 #define HALIDE_STMT_COMPILER_H
 
 /** \file
- * Defines a compiler that produces native code from halide statements 
+ * Defines a compiler that produces native code from halide statements
  */
 
 #include "IR.h"
@@ -12,7 +12,17 @@
 #include <vector>
 
 namespace Halide {
+
+/** Return the target that Halide will use if no HL_TARGET variable is
+ * defined, or if it is set to "native" */
+std::string get_native_target();
+
+/** Return the target that Halide will use. If HL_TARGET is set it
+ * uses that. Otherwise calls \ref get_native_target */
+std::string get_target();
+
 namespace Internal {
+
 
 /** A handle to a generic statement compiler. Can take Halide
  * statements and turn them into assembly, bitcode, machine code, or a
@@ -52,7 +62,7 @@ public:
      * such as a hook for setting the function to call when an assert
      * fails.
      */
-    JITCompiledModule compile_to_function_pointers();    
+    JITCompiledModule compile_to_function_pointers();
 };
 
 }

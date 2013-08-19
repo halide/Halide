@@ -36,8 +36,7 @@ int main(int argc, char **argv) {
 
     // No parallel reductions
     /*
-    char *target = getenv("HL_TARGET");
-    if (target && std::string(target) == "ptx") {
+    if (get_target() == "ptx") {
 	hist.cuda_tile(x, 64);
 	hist.update().cuda_tile(r.x, r.y, 16, 16);
     }

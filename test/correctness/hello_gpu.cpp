@@ -12,11 +12,10 @@ int main(int argc, char **argv) {
 
     f(x, y) = x*y;
 
-    char *target = getenv("HL_TARGET");
-    if (target && std::string(target) == "ptx") {
+    if (get_target() == "ptx") {
         f.cuda_tile(x, y, 8, 8);
     }
- 
+
     printf("Realizing function...\n");
 
     Image<int> imf = f.realize(32, 32);
