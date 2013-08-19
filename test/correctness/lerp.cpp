@@ -182,12 +182,12 @@ int main(int argc, char **argv) {
     // Verify float weights with integer values
     check_range<uint16_t, float>(0, 1, 0, 1,
                                  65535, 1, 0, 1,
-                                 0, 257, 255, 1/65535.0f,
+                                 0, 257, 0, 255.0f/65535.0f,
                                  "<uint16_t, float> zero, one float weight test");
 
     check_range<int16_t, uint16_t>(0, 65536, -32768, 1,
                                    0, 1, 0, 1,
-                                   0, 257, 255, 1,
+                                   0, 257, 0, 255,
                                    "<int16_t, uint16_t> all zero starts");
 
   #if 0 // takes too long, difficult to test with uint32_t
@@ -221,4 +221,16 @@ int main(int argc, char **argv) {
                                  0, 100, 0, .1,
                                  std::numeric_limits<int32_t>::min(), 257, 255 * 65535, 1,
                                  "<float, uint32_t> float values -5 to 5 by 1/100ths");
+
+    // Check constant and constant case:
+    Func lerp_constants("lerp_constants");
+    lerp_constants() = lerp(0, cast<uint32_t>(1023), .5f);
+    Image<int32_t> result = lerp_constants.realize();
+
+    int32_t expected = (int32_t)(1023 * .5f + .5f);
+    if (result(0) != expected)
+      std::cerr << "Expected " << expected << " got " << result(0) << std::endl;
+    assert(result(0) == expected);
+
+    std::cout << "Success!" << std::endl;
 }

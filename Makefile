@@ -14,6 +14,7 @@ LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = $(shell $(LLVM_CONFIG) --cppflags)
+OPTIMIZE ?= -O3
 
 # llvm_config doesn't always point to the correct include
 # directory. We haven't figured out why yet.
@@ -64,7 +65,7 @@ OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL=1, )
 OPENCL_ARCHS=$(if $(WITH_OPENCL), opencl_host, )
 OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
-CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC -O3
+CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC $(OPTIMIZE)
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
@@ -228,16 +229,16 @@ $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
 $(BIN_DIR)/test_%: test/correctness/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
 $(BIN_DIR)/performance_%: test/performance/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h test/performance/clock.h
-	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
 $(BIN_DIR)/error_%: test/error/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) -O3 $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl $(LIBPNG_LIBS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl $(LIBPNG_LIBS) -o $@
 
 test_%: $(BIN_DIR)/test_%
 	@-mkdir -p tmp
@@ -337,4 +338,4 @@ $(DISTRIB_DIR)/halide.tgz: all
 distrib: $(DISTRIB_DIR)/halide.tgz
 
 $(BIN_DIR)/HalideProf: util/HalideProf.cpp
-	$(CXX) -O3 $< -Iinclude -L$(BIN_DIR) -o $@
+	$(CXX) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -o $@
