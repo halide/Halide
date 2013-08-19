@@ -97,11 +97,21 @@ public:
     /** Wrap a buffer in an Image object, so that we can directly
      * access its pixels in a type-safe way. */
     Image(const Buffer &buf) : buffer(buf) {
+        if (type_of<T>() != buffer.type()) {
+            std::cerr << "Can't construct Image of type " << type_of<T>()
+                      << " from buffer of type " << buffer.type() << '\n';
+            assert(false);
+        }
         prepare_for_direct_pixel_access();
     }
 
     /** Wrap a single-element realization in an Image object. */
     Image(const Realization &r) : buffer(r) {
+        if (type_of<T>() != buffer.type()) {
+            std::cerr << "Can't construct Image of type " << type_of<T>()
+                      << " from buffer of type " << buffer.type() << '\n';
+            assert(false);
+        }
         prepare_for_direct_pixel_access();
     }
 
