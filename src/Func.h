@@ -332,7 +332,7 @@ class Func {
 
     /** The current error handler used for realizing this
      * function. May be NULL. Only relevant when jitting. */
-    void (*error_handler)(char *);
+    void (*error_handler)(const char *);
 
     /** The current custom allocator used for realizing this
      * function. May be NULL. Only relevant when jitting. */
@@ -500,11 +500,11 @@ public:
      * statically, you can also just define your own function with
      * signature
      \code
-     extern "C" halide_error(char *)
+     extern "C" halide_error(const char *)
      \endcode
      * This will clobber Halide's version.
      */
-    EXPORT void set_error_handler(void (*handler)(char *));
+    EXPORT void set_error_handler(void (*handler)(const char *));
 
     /** Set a custom malloc and free for halide to use. Malloc should
      * return 32-byte aligned chunks of memory, with 32-bytes extra

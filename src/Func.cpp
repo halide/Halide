@@ -1286,7 +1286,7 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
     cg.compile_to_native(filename, true);
 }
 
-void Func::set_error_handler(void (*handler)(char *)) {
+void Func::set_error_handler(void (*handler)(const char *)) {
     error_handler = handler;
     if (compiled_module.set_error_handler) {
         compiled_module.set_error_handler(handler);

@@ -11,17 +11,17 @@ extern void exit(int);
 #define NULL 0
 #endif
 
-WEAK void (*halide_error_handler)(char *) = NULL;
+WEAK void (*halide_error_handler)(const char *) = NULL;
 
-WEAK void halide_error(char *msg) {
+WEAK void halide_error(const char *msg) {
     if (halide_error_handler) (*halide_error_handler)(msg);
-    else {        
+    else {
         halide_printf("Error: %s\n", msg);
         exit(1);
     }
 }
 
-WEAK void halide_set_error_handler(void (*handler)(char *)) {
+WEAK void halide_set_error_handler(void (*handler)(const char *)) {
     halide_error_handler = handler;
 }
 

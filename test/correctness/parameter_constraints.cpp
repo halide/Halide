@@ -4,7 +4,7 @@
 using namespace Halide;
 
 bool error_occurred;
-void my_error_handler(char *msg) {
+void my_error_handler(const char *msg) {
     error_occurred = true;
 }
 
