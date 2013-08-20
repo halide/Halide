@@ -159,7 +159,9 @@ class Interleaver : public IRMutator {
         if (ramp && ramp->width > 2 && is_one(ramp->stride) && is_const(eq->b) && is_two(mod->b)) {
             debug(3) << "Detected interleave vector pattern. Deinterleaving.\n";
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            debug(3) << "Base is congruent to " << mod_rem.remainder << " modulo " << mod_rem.modulus << "\n";
+            debug(3) << "Base (" << ramp->base
+                     << ") is congruent to " << mod_rem.remainder
+                     << " modulo " << mod_rem.modulus << "\n";
             Expr a, b;
             bool base_is_even = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 0);
             bool base_is_odd  = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 1);
