@@ -7,6 +7,7 @@
 #include <iostream>
 #include <cmath>
 #include "Debug.h"
+#include "Lerp.h"
 
 namespace Halide {
 namespace Internal {
@@ -368,7 +369,7 @@ void CodeGen_C::visit(const Variable *op) {
 }
 
 void CodeGen_C::visit(const Cast *op) {
-    print_assignment(op->type, "(" + print_type(op->type) + ")" + print_expr(op->value));
+    print_assignment(op->type, "(" + print_type(op->type) + ")(" + print_expr(op->value) + ")");
 }
 
 void CodeGen_C::visit_binop(Type t, Expr a, Expr b, const char * op) {
@@ -557,6 +558,9 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->name == Call::profiling_timer) {
             assert(op->args.size() == 0);
             rhs << "halide_profiling_timer()";
+        } else if (op->name == Call::lerp) {
+            Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+            rhs << print_expr(e);
         } else {
           // TODO: other intrinsics
           std::cerr << "Unhandled intrinsic: " << op->name << std::endl;
