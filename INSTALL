@@ -25,7 +25,9 @@ Then finally tell Halide's Makefile about it like so:
 export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm-config
 export CLANG=<path to llvm>/Release+Asserts/bin/clang
 
-If you want a newer llvm, then trunk llvm should also work.
+If you want a newer llvm, then trunk llvm should also work. For recent
+versions of trunk, you'll need to pass --disable-terminfo to
+configure.
 
 ------------------------------------------------------------------
 Building Halide
@@ -33,13 +35,12 @@ Building Halide
 
 With LLVM_CONFIG and CLANG set (or the appropriate llvm-config and
 clang in your path), you should be able to just run 'make' in this
-directory. 'make tests' will run the JIT test suite, and 'make
+directory. 'make run_tests' will run the JIT test suite, and 'make
 test_apps' will make sure all the apps compile and run (but won't
 check their output).
 
-There is no 'make install' or 'make distrib' yet. If you want to make
-an install package, grab bin/libHalide.a, bin/libHalide.so, and
-include/Halide.h.
+There is no 'make install' yet. If you want to make an install
+package, run 'make distrib'.
 
 ------------------------------------------------------------------
 Building Halide with Native Client support
