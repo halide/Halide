@@ -132,6 +132,7 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
             Schedule::Split &first = splits[i];
             Schedule::Split &second = splits[j];
             if (first.outer == second.old_var) {
+                assert(!second.is_rename && "Rename of derived variable found in splits list. This should never happen.");
                 second.old_var = unique_name('s');
                 first.outer   = second.outer;
                 second.outer  = second.inner;
