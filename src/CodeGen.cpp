@@ -942,11 +942,11 @@ void CodeGen::visit(const Load *op) {
     if (op->type.is_scalar()) {
         // Scalar loads
         Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
-        LoadInst *load = builder->CreateAlignedLoad(ptr, op->type.bits / 8);
+        LoadInst *load = builder->CreateAlignedLoad(ptr, op->type.bytes());
         add_tbaa_metadata(load, op->name);
         value = load;
     } else {
-        int alignment = op->type.bits / 8;
+        int alignment = op->type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
 
@@ -1004,7 +1004,7 @@ void CodeGen::visit(const Load *op) {
 
             // Re-do alignment analysis for the flipped index
             if (internal) {
-                alignment = op->type.bits / 8;
+                alignment = op->type.bytes();
                 ModulusRemainder mod_rem = modulus_remainder(ramp->base - ramp->width + 1);
                 alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
             }
@@ -1774,10 +1774,10 @@ void CodeGen::visit(const Store *op) {
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
-        StoreInst *store = builder->CreateAlignedStore(val, ptr, op->value.type().bits/8);
+        StoreInst *store = builder->CreateAlignedStore(val, ptr, op->value.type().bytes());
         add_tbaa_metadata(store, op->name);
     } else {
-        int alignment = op->value.type().bits / 8;
+        int alignment = op->value.type().bytes();
         const Ramp *ramp = op->index.as<Ramp>();
         if (ramp && is_one(ramp->stride)) {
 
@@ -1806,11 +1806,11 @@ void CodeGen::visit(const Store *op) {
                 if (const_stride) {
                     // Use a constant offset from the base pointer
                     Value *p = builder->CreateConstInBoundsGEP1_32(ptr, const_stride->value * i);
-                    StoreInst *store = builder->CreateAlignedStore(v, p, op->value.type().bits/8);
+                    StoreInst *store = builder->CreateAlignedStore(v, p, op->value.type().bytes());
                     add_tbaa_metadata(store, op->name);
                 } else {
                     // Increment the pointer by the stride for each element
-                    StoreInst *store = builder->CreateAlignedStore(v, ptr, op->value.type().bits/8);
+                    StoreInst *store = builder->CreateAlignedStore(v, ptr, op->value.type().bytes());
                     add_tbaa_metadata(store, op->name);
                     ptr = builder->CreateInBoundsGEP(ptr, stride);
                 }

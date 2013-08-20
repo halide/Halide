@@ -717,7 +717,7 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
         builder->CreateStore(zero32,  buffer_min_ptr(buf, 2));
         builder->CreateStore(zero32,  buffer_min_ptr(buf, 3));
 
-        int bytes = alloc->type.width * alloc->type.bits / 8;
+        int bytes = alloc->type.width * alloc->type.bytes();
         builder->CreateStore(ConstantInt::get(i32, bytes),
                              buffer_elem_size_ptr(buf));
 

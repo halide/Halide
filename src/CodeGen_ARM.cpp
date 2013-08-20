@@ -966,7 +966,7 @@ void CodeGen_ARM::visit(const Store *op) {
         vector<Value *> args(call->args.size() + 2);
 
         Type t = call->args[0].type();
-        int alignment = t.bits / 8;
+        int alignment = t.bytes();
 
         Value *ptr = codegen_buffer_pointer(op->name, call->type.element_of(), ramp->base);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
@@ -1020,7 +1020,7 @@ void CodeGen_ARM::visit(const Store *op) {
     llvm::Function *fn = module->getFunction(builtin.str());
     if (fn) {
         Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), ramp->base);
-        Value *stride = codegen(ramp->stride * (op->value.type().bits / 8));
+        Value *stride = codegen(ramp->stride * op->value.type().bytes());
         Value *val = codegen(op->value);
 	debug(4) << "Creating call to " << builtin.str() << "\n";
         Instruction *store = builder->CreateCall(fn, vec(base, stride, val));
@@ -1072,7 +1072,7 @@ void CodeGen_ARM::visit(const Load *op) {
             base = simplify(base - offset);
         }
 
-        int alignment = op->type.bits / 8;
+        int alignment = op->type.bytes();
         //alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
         Value *align = ConstantInt::get(i32, alignment);
 
@@ -1127,7 +1127,7 @@ void CodeGen_ARM::visit(const Load *op) {
     llvm::Function *fn = module->getFunction(builtin.str());
     if (fn) {
         Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
-        Value *stride = codegen(ramp->stride * (op->type.bits / 8));
+        Value *stride = codegen(ramp->stride * op->type.bytes());
 	debug(4) << "Creating call to " << builtin.str() << "\n";
         Instruction *load = builder->CreateCall(fn, vec(base, stride), builtin.str());
         add_tbaa_metadata(load, op->name);
