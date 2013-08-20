@@ -324,13 +324,18 @@ ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor
 ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
+    string old_name;
     vector<Schedule::Dim> &dims = schedule.dims;
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old_var.name())) {
+            debug(0) << dims[i].var << " matches " << old_var.name() << "\n";
             found = true;
+            old_name = dims[i].var;
             dims[i].var += "." + new_var.name();
         }
     }
+
+    string new_name = old_name + "." + new_var.name();
 
     if (!found) {
         std::cerr << "Could not find rename dimension in argument list: "
@@ -340,9 +345,31 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
         assert(false);
     }
 
-    // Add the rename to the splits list
-    Schedule::Split split = {old_var.name(), old_var.name() + "." + new_var.name(), "", 1, true};
-    schedule.splits.push_back(split);
+    if (old_name.find('.') == string::npos) {
+        // If it's a primitive name, add the rename to the splits list.
+        Schedule::Split split = {old_name, new_name, "", 1, true};
+        schedule.splits.push_back(split);
+    } else {
+        // It's a derived name, so just rewrite the split or rename that defines it.
+        bool found = false;
+        for (size_t i = schedule.splits.size(); i > 0; i--) {
+            if (schedule.splits[i-1].inner == old_name) {
+                schedule.splits[i-1].inner = new_name;
+                found = true;
+                break;
+            }
+            if (schedule.splits[i-1].outer == old_name) {
+                schedule.splits[i-1].outer = new_name;
+                found = true;
+                break;
+            }
+            if (schedule.splits[i-1].old_var == old_name) {
+                assert(false && "Can't rename a variable that has already been renamed or split!");
+            }
+        }
+        assert(found && "Rename failed: Old name is not an arg, and was not defined by a split.");
+    }
+
     return *this;
 }
 
