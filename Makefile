@@ -1,5 +1,5 @@
 # 'make' builds libHalide.a, the internal test suite, and runs the internal test suite
-# 'make tests' builds and runs all the end-to-end tests in the test subdirectory
+# 'make run_tests' builds and runs all the end-to-end tests in the test subdirectory
 # 'make test_foo' builds and runs test/foo.cpp for any cpp file in the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
