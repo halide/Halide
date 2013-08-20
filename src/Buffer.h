@@ -49,7 +49,7 @@ struct BufferContents {
                    uint8_t* data, const std::string &n) :
         type(t), allocation(NULL), name(n.empty() ? unique_name('b') : n) {
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
-        buf.elem_size = (t.bits+ 7) / 8;
+        buf.elem_size = t.bytes();
         size_t size = 1;
         if (x_size) size *= x_size;
         if (y_size) size *= y_size;

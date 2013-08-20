@@ -930,7 +930,7 @@ Stmt add_image_checks(Stmt s, Function f) {
         {
             string elem_size_name = name + ".elem_size";
             Expr elem_size = Variable::make(Int(32), elem_size_name);
-            int correct_size = (type.bits + 7) / 8;
+            int correct_size = type.bytes();
             ostringstream error_msg;
             error_msg << "Element size for " << name << " should be " << correct_size;
             asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error_msg.str()));

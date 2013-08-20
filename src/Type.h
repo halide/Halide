@@ -27,6 +27,9 @@ struct Type {
     /** How many bits per element? */
     int bits;
 
+    /** How many bytes per element? */
+    int bytes() const {return (bits + 7) / 8;}
+
     /** How many elements (if a vector type). Should be 1 for scalar types. */
     int width;
 

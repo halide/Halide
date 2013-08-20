@@ -144,9 +144,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
     Allocation allocation;
 
-    int bytes_per_element = (type.bits + 7) / 8;
     if (const IntImm *int_size = size.as<IntImm>()) {
-        allocation.stack_size = int_size->value * bytes_per_element;
+        allocation.stack_size = int_size->value * type.bytes();
 
         // Round up to nearest multiple of 32.
         allocation.stack_size = ((allocation.stack_size + 31)/32)*32;
@@ -169,7 +168,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         allocation.ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
     } else {
         allocation.saved_stack = NULL;
-        Value *llvm_size = codegen(size * bytes_per_element);
+        Value *llvm_size = codegen(size * type.bytes());
 
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("halide_malloc");

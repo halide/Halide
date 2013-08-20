@@ -60,7 +60,7 @@ class DebugToFile : public IRMutator {
                 type_code = 0;
             } else if (t == Float(64)) {
                 type_code = 1;
-            } else if (t == UInt(8)) {
+            } else if (t == UInt(8) || t == UInt(1)) {
                 type_code = 2;
             } else if (t == Int(8)) {
                 type_code = 3;
@@ -80,7 +80,7 @@ class DebugToFile : public IRMutator {
                 assert(false && "Type not supported for debug_to_file");
             }
             args.push_back(type_code);
-            args.push_back(t.bits / 8);
+            args.push_back(t.bytes());
 
             Expr call = Call::make(Int(32), Call::debug_to_file, args, Call::Intrinsic);
 
