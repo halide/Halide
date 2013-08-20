@@ -1239,6 +1239,7 @@ Stmt lower(Function f) {
     debug(2) << "Unrolled: \n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
+    s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(2) << "Simplified: \n" << s << "\n\n";
 
@@ -1251,8 +1252,6 @@ Stmt lower(Function f) {
     debug(2) << "Injected early frees: \n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
-    s = remove_trivial_for_loops(s);
-    s = simplify(s);
     s = common_subexpression_elimination(s);
     s = simplify(s);
     debug(1) << "Simplified: \n" << s << "\n\n";
