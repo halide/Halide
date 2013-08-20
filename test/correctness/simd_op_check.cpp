@@ -890,7 +890,7 @@ void check_neon_all() {
     check("vmla.i16", 8, u16_1 + u16_2*u16_3);
     check("vmla.i32", 4, i32_1 + i32_2*i32_3);
     check("vmla.i32", 4, u32_1 + u32_2*u32_3);
-    //check("vmla.f32", 4, f32_1 + f32_2*f32_3);
+    check("vmla.f32", 4, f32_1 + f32_2*f32_3);
     //check("vmla.f64", 2, f64_1 + f64_2*f64_3);
     check("vmla.i8",  8, i8_1 + i8_2*i8_3);
     check("vmla.i8",  8, u8_1 + u8_2*u8_3);
@@ -898,7 +898,7 @@ void check_neon_all() {
     check("vmla.i16", 4, u16_1 + u16_2*u16_3);
     check("vmla.i32", 2, i32_1 + i32_2*i32_3);
     check("vmla.i32", 2, u32_1 + u32_2*u32_3);
-    //check("vmla.f32", 2, f32_1 + f32_2*f32_3);
+    check("vmla.f32", 2, f32_1 + f32_2*f32_3);
 
     // VMLS	I, F	F, D	Multiply Subtract
     check("vmls.i8", 16, i8_1 - i8_2*i8_3);
@@ -907,7 +907,7 @@ void check_neon_all() {
     check("vmls.i16", 8, u16_1 - u16_2*u16_3);
     check("vmls.i32", 4, i32_1 - i32_2*i32_3);
     check("vmls.i32", 4, u32_1 - u32_2*u32_3);
-    //check("vmls.f32", 4, f32_1 - f32_2*f32_3);
+    check("vmls.f32", 4, f32_1 - f32_2*f32_3);
     //check("vmls.f64", 2, f64_1 - f64_2*f64_3);
     check("vmls.i8",  8, i8_1 - i8_2*i8_3);
     check("vmls.i8",  8, u8_1 - u8_2*u8_3);
@@ -915,7 +915,7 @@ void check_neon_all() {
     check("vmls.i16", 4, u16_1 - u16_2*u16_3);
     check("vmls.i32", 2, i32_1 - i32_2*i32_3);
     check("vmls.i32", 2, u32_1 - u32_2*u32_3);
-    //check("vmls.f32", 2, f32_1 - f32_2*f32_3);
+    check("vmls.f32", 2, f32_1 - f32_2*f32_3);
 
     // VMLAL	I	-	Multiply Accumulate Long
     check("vmlal.s8",  8, i16_1 + i16(i8_2)*i8_3);
