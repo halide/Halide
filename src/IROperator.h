@@ -370,8 +370,22 @@ inline Expr abs(Expr a) {
  * the first argument is true, then return the second, else return the
  * third. Typically vectorizes cleanly, but benefits from SSE41 or newer
  * on x86. */
-inline Expr select(Expr a, Expr b, Expr c) {
-    return Internal::Select::make(a, b, c);
+inline Expr select(Expr condition, Expr true_value, Expr false_value) {
+
+    if (as_const_int(condition)) {
+        // Why are you doing this? We'll preserve the select node until constant folding for you.
+        condition = cast(Bool(), condition);
+    }
+
+    // Coerce int literals to the type of the other argument
+    if (as_const_int(true_value)) {
+        true_value = cast(false_value.type(), true_value);
+    }
+    if (as_const_int(false_value)) {
+        false_value = cast(true_value.type(), false_value);
+    }
+
+    return Internal::Select::make(condition, true_value, false_value);
 }
 
 /** Return the sine of a floating-point expression. If the argument is
