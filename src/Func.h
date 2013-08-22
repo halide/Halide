@@ -48,10 +48,10 @@ public:
      */
     EXPORT void operator+=(Expr);
 
-    /** Define this function as a sum reduction over the negative of
-     * the given expression. The expression should refer to some RDom
-     * to sum over. If the function does not already have a pure
-     * definition, this sets it to zero.
+    /** Define this function as a sum reduction over the given
+     * expression. The expression should refer to some RDom to sum
+     * over. If the function does not already have a pure definition,
+     * this sets it to zero.
      */
     EXPORT void operator-=(Expr);
 
@@ -121,10 +121,10 @@ public:
      */
     EXPORT void operator+=(Expr);
 
-    /** Define this function as a sum reduction over the negative of
-     * the given expression. The expression should refer to some RDom
-     * to sum over. If the function does not already have a pure
-     * definition, this sets it to zero.
+    /** Define this function as a sum reduction over the given
+     * expression. The expression should refer to some RDom to sum
+     * over. If the function does not already have a pure definition,
+     * this sets it to zero.
      */
     EXPORT void operator-=(Expr);
 
