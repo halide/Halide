@@ -10,10 +10,10 @@ typedef struct dispatch_queue_s *dispatch_queue_t;
 typedef long dispatch_queue_priority_t;
 
 extern dispatch_queue_t dispatch_get_global_queue(
-						  dispatch_queue_priority_t priority, unsigned long flags);
+                                                  dispatch_queue_priority_t priority, unsigned long flags);
 
 extern void dispatch_apply_f(size_t iterations, dispatch_queue_t queue,
-			     void *context, void (*work)(void *, size_t));
+                             void *context, void (*work)(void *, size_t));
 
 WEAK void halide_shutdown_thread_pool() {
 }
