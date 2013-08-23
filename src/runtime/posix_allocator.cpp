@@ -33,6 +33,10 @@ WEAK void *halide_malloc(size_t x) {
         return halide_custom_malloc(x);
     } else {
         void *orig = malloc(x+32);
+        if (orig == NULL) {
+            // Will result in a failed assertion and a call to halide_error
+            return NULL;
+        }
         // Round up to next multiple of 32. Should add at least 8 bytes so we can fit the original pointer.
         void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
         ((void **)ptr)[-1] = orig;
