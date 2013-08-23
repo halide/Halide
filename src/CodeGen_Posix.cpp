@@ -180,6 +180,10 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         debug(4) << "Creating call to halide_malloc\n";
         CallInst *call = builder->CreateCall(malloc_fn, llvm_size);
         allocation.ptr = call;
+
+        // Assert that the allocation worked.
+        create_assertion(builder->CreateIsNotNull(allocation.ptr),
+                         "Out of memory (malloc returned NULL)");
     }
 
     // Push the allocation base pointer onto the symbol table
