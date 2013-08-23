@@ -182,8 +182,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         allocation.ptr = call;
 
         // Assert that the allocation worked.
-        create_assertion(builder->CreateIsNotNull(allocation.ptr),
-                         "Out of memory (malloc returned NULL)");
+        //create_assertion(builder->CreateIsNotNull(allocation.ptr),
+        //"Out of memory (malloc returned NULL)");
     }
 
     // Push the allocation base pointer onto the symbol table
