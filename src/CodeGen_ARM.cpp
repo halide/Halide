@@ -18,11 +18,15 @@ extern "C" unsigned char halide_internal_initmod_arm[];
 extern "C" int halide_internal_initmod_arm_length;
 extern "C" unsigned char halide_internal_initmod_arm_android[];
 extern "C" int halide_internal_initmod_arm_android_length;
+extern "C" unsigned char halide_internal_initmod_arm_ios[];
+extern "C" int halide_internal_initmod_arm_ios_length;
 #else
 static void *halide_internal_initmod_arm = 0;
 static int halide_internal_initmod_arm_length = 0;
 static void *halide_internal_initmod_arm_android = 0;
 static int halide_internal_initmod_arm_android_length = 0;
+static void *halide_internal_initmod_arm_ios = 0;
+static int halide_internal_initmod_arm_ios_length = 0;
 #endif
 
 #if (WITH_NATIVE_CLIENT && WITH_ARM)
@@ -43,7 +47,8 @@ using std::ostringstream;
 using namespace llvm;
 
 CodeGen_ARM::CodeGen_ARM(uint32_t options) : CodeGen_Posix(),
-					     use_android(options & ARM_Android),
+                                             use_android(options & ARM_Android),
+                                             use_ios(options & ARM_IOS),
                                              use_nacl(options & ARM_NaCl) {
     #if !(WITH_ARM)
     assert(false && "arm not enabled for this build of Halide.");
@@ -67,14 +72,21 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
                "initial module for arm_android is empty");
         sb = StringRef((char *)halide_internal_initmod_arm_android,
                        halide_internal_initmod_arm_android_length);
+    } else if (use_ios) {
+        assert(halide_internal_initmod_arm_ios_length &&
+               "initial module for arm_ios is empty");
+        sb = StringRef((char *)halide_internal_initmod_arm_ios,
+                       halide_internal_initmod_arm_ios_length);
+    } else if (use_nacl) {
+        assert(halide_internal_initmod_arm_nacl_length &&
+               "initial module for arm_nacl is empty");
+        sb = StringRef((char *)halide_internal_initmod_arm_nacl,
+                       halide_internal_initmod_arm_nacl_length);
     } else {
-	if (use_nacl) {
-            assert(halide_internal_initmod_arm_nacl_length && "initial module for ARM_nacl is empty");
-            sb = StringRef((char *)halide_internal_initmod_arm_nacl, halide_internal_initmod_arm_nacl_length);
-	} else {
-	    assert(halide_internal_initmod_arm_length && "initial module for arm is empty");
-	    sb = StringRef((char *)halide_internal_initmod_arm, halide_internal_initmod_arm_length);
-	}
+        assert(halide_internal_initmod_arm_length &&
+               "initial module for arm is empty");
+        sb = StringRef((char *)halide_internal_initmod_arm,
+                       halide_internal_initmod_arm_length);
     }
     MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
 
@@ -86,6 +98,8 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
     if (use_android) {
         module->setTargetTriple("arm-linux-eabi");
+    } else if (use_ios) {
+        module->setTargetTriple("armv7-apple-ios");
     } else if (use_nacl) {
         module->setTargetTriple("arm-nacl");
     } else {
@@ -1022,7 +1036,7 @@ void CodeGen_ARM::visit(const Store *op) {
         Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), ramp->base);
         Value *stride = codegen(ramp->stride * op->value.type().bytes());
         Value *val = codegen(op->value);
-	debug(4) << "Creating call to " << builtin.str() << "\n";
+        debug(4) << "Creating call to " << builtin.str() << "\n";
         Instruction *store = builder->CreateCall(fn, vec(base, stride, val));
         (void)store;
         add_tbaa_metadata(store, op->name);
@@ -1128,7 +1142,7 @@ void CodeGen_ARM::visit(const Load *op) {
     if (fn) {
         Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
         Value *stride = codegen(ramp->stride * op->type.bytes());
-	debug(4) << "Creating call to " << builtin.str() << "\n";
+        debug(4) << "Creating call to " << builtin.str() << "\n";
         Instruction *load = builder->CreateCall(fn, vec(base, stride), builtin.str());
         add_tbaa_metadata(load, op->name);
         value = load;
@@ -1147,7 +1161,7 @@ string CodeGen_ARM::mattrs() const {
 }
 
 bool CodeGen_ARM::use_soft_float_abi() const {
-    return use_android;
+    return use_android || use_ios;
 }
 
 }}

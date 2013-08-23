@@ -13,7 +13,8 @@ namespace Internal {
 /** Bitmask flags for specifying code generation options to CodeGen_ARM. */
 enum CodeGen_ARM_Options {
     ARM_Android = 1,  /// Compile targetting the Android standard library
-    ARM_NaCl    = 2   /// Compile for Native Client (must be using the Native Client llvm tree)
+    ARM_NaCl    = 2,   /// Compile for Native Client (must be using the Native Client llvm tree)
+    ARM_IOS     = 4,  /// Compile targetting iOS
 };
 
 /** A code generator that emits ARM code from a given Halide stmt. */
@@ -37,6 +38,9 @@ protected:
 
     /** Use the android-specific standard library */
     bool use_android;
+
+    /** Use the android-specific standard library */
+    bool use_ios;
 
     /** Compile for Native Client. */
     bool use_nacl;

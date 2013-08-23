@@ -55,7 +55,7 @@ X86_ARCHS=$(if $(WITH_X86), x86_32 x86_32_sse41 x86_64 x86_64_sse41 x86_64_avx, 
 X86_LLVM_CONFIG_LIB=$(if $(WITH_X86), x86, )
 
 ARM_CXX_FLAGS=$(if $(WITH_ARM), -DWITH_ARM=1, )
-ARM_ARCHS=$(if $(WITH_ARM), arm arm_android , )
+ARM_ARCHS=$(if $(WITH_ARM), arm arm_android arm_ios , )
 ARM_LLVM_CONFIG_LIB=$(if $(WITH_ARM), arm, )
 
 PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_PTX=1, )
@@ -146,6 +146,7 @@ RUNTIME_OPTS_x86_32 = -m32 -march=k8
 RUNTIME_OPTS_x86_32_sse41 = -m32 -march=penryn
 RUNTIME_OPTS_arm = -m32
 RUNTIME_OPTS_arm_android = -m32
+RUNTIME_OPTS_arm_ios = -m32 -triple=armv7-apple-ios
 RUNTIME_OPTS_opencl_host = $(RUNTIME_OPTS_x86_64)
 RUNTIME_OPTS_ptx_host = $(RUNTIME_OPTS_x86_64)
 RUNTIME_OPTS_ptx_host_debug = $(RUNTIME_OPTS_x86_64)
@@ -163,6 +164,7 @@ RUNTIME_LL_STUBS_x86_64_sse41 = src/runtime/x86.ll src/runtime/x86_sse41.ll src/
 RUNTIME_LL_STUBS_x86_64_avx = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_arm = src/runtime/arm.ll src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_arm_android = src/runtime/arm.ll src/runtime/posix_math.ll
+RUNTIME_LL_STUBS_arm_ios = src/runtime/arm.ll src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_opencl_host = $(RUNTIME_LL_STUBS_x86_64_sse41)
 RUNTIME_LL_STUBS_ptx_host = $(RUNTIME_LL_STUBS_x86_64_sse41)
 RUNTIME_LL_STUBS_ptx_host_debug = $(RUNTIME_LL_STUBS_x86_64_sse41)

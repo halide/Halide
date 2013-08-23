@@ -170,6 +170,8 @@ StmtCompiler::StmtCompiler(string arch) {
         contents = new CodeGen_ARM();
     } else if (arch == "arm-android") {
         contents = new CodeGen_ARM(ARM_Android);
+    } else if (arch == "arm-ios") {
+        contents = new CodeGen_ARM(ARM_IOS);
     } else if (arch == "arm-nacl") {
         contents = new CodeGen_ARM(ARM_NaCl);
     }
@@ -192,10 +194,10 @@ StmtCompiler::StmtCompiler(string arch) {
                   << "x86-64 x86-64-sse41 x86-64-avx "
                   << "x86-32-nacl x86-32-sse41-nacl "
                   << "x86-64-nacl x86-64-sse41-nacl x86-64-avx-nacl "
-                  << "arm arm-android arm-nacl"
+                  << "arm arm-android arm-ios arm-nacl"
                   << "ptx ptx-debug opencl"
                   << "native"
-		  << "\n"
+                  << "\n"
                   << "On this machine, native means " << native << "\n";
 
         assert(false);
