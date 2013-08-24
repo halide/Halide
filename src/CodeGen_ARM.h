@@ -39,7 +39,7 @@ protected:
     /** Use the android-specific standard library */
     bool use_android;
 
-    /** Use the android-specific standard library */
+    /** Use the ios-specific standard library */
     bool use_ios;
 
     /** Compile for Native Client. */
