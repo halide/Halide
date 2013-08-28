@@ -160,11 +160,11 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
 
-    // Do any target-specific post-compilation module meddling
-    cg->jit_finalize(ee, m, &module.ptr->cleanup_routines);
-
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     module = new JITModuleHolder(ee, m, shutdown_thread_pool);
+
+    // Do any target-specific post-compilation module meddling
+    cg->jit_finalize(ee, m, &module.ptr->cleanup_routines);
 
     debug(2) << "Done with compilation\n";
 }
