@@ -344,8 +344,8 @@ class Func {
     /** The current custom parallel task launcher and handler for
      * realizing this function. May be NULL. */
     // @{
-    void (*custom_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *);
-    void (*custom_do_task)(void (*)(int, uint8_t *), int, uint8_t *);
+    int (*custom_do_par_for)(int (*)(int, uint8_t *), int, int, uint8_t *);
+    int (*custom_do_task)(int (*)(int, uint8_t *), int, uint8_t *);
     // @}
 
     /** Pointers to current values of the automatically inferred
@@ -526,8 +526,8 @@ public:
      * additional bookkeeping at the granularity of parallel
      * tasks. The default implementation does this:
      \code
-     extern "C" void halide_do_task(void (*f)(int, uint8_t *), int idx, uint8_t *state) {
-         f(idx, state);
+     extern "C" int halide_do_task(int (*f)(int, uint8_t *), int idx, uint8_t *state) {
+         return f(idx, state);
      }
      \endcode
      * If you are statically compiling, you can also just define your
@@ -537,23 +537,31 @@ public:
      * If you're trying to use a custom parallel runtime, you probably
      * don't want to call this. See instead \ref Func::set_custom_do_par_for .
     */
-    EXPORT void set_custom_do_task(void (*custom_do_task)(void (*)(int, uint8_t *), int, uint8_t *));
+    EXPORT void set_custom_do_task(int (*custom_do_task)(int (*)(int, uint8_t *), int, uint8_t *));
 
     /** Set a custom parallel for loop launcher. Useful if your app
      * already manages a thread pool. The default implementation is
      * equivalent to this:
      \code
-     extern "C" void halide_do_par_for(void (*f)(int uint8_t *), int min, int extent, uint8_t *state) {
+     extern "C" int halide_do_par_for(int (*f)(int uint8_t *), int min, int extent, uint8_t *state) {
+         int exit_status = 0;
          parallel for (int idx = min; idx < min+extent; idx++) {
-             halide_do_task(f, idx, state);
+             int job_status = halide_do_task(f, idx, state);
+             if (job_status) exit_status = job_status;
          }
+         return exit_status;
      }
      \endcode
+     *
+     * However, notwithstanding the above example code, if one task
+     * fails, we may skip over other tasks, and if two tasks return
+     * different error codes, we may select one arbitrarily to return.
+     *
      * If you are statically compiling, you can also just define your
      * own version of the above function, and it will clobber Halide's
      * version.
      */
-    EXPORT void set_custom_do_par_for(void (*custom_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *));
+    EXPORT void set_custom_do_par_for(int (*custom_do_par_for)(int (*)(int, uint8_t *), int, int, uint8_t *));
 
     /** When this function is compiled, include code that dumps its values
      * to a file after it is realized, for the purpose of debugging.

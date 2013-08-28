@@ -21,6 +21,7 @@ using std::string;
 using std::map;
 using std::pair;
 using std::stack;
+using std::make_pair;
 
 using namespace llvm;
 
@@ -182,15 +183,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         allocation.ptr = call;
 
         // Assert that the allocation worked.
-        //create_assertion(builder->CreateIsNotNull(allocation.ptr),
-        //"Out of memory (malloc returned NULL)");
+        create_assertion(builder->CreateIsNotNull(allocation.ptr),
+                         "Out of memory (malloc returned NULL)");
     }
 
     // Push the allocation base pointer onto the symbol table
     debug(3) << "Pushing allocation called " << name << ".host onto the symbol table\n";
 
     allocations.push(name, allocation);
-    sym_push(name + ".host", allocation.ptr);
 
     return allocation;
 }
@@ -198,9 +198,15 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 void CodeGen_Posix::free_allocation(const std::string &name) {
     Allocation alloc = allocations.get(name);
 
+    assert(alloc.ptr);
+
+    CallInst *call_inst = dyn_cast<CallInst>(alloc.ptr);
+    llvm::Function *allocated_in = call_inst ? call_inst->getParent()->getParent() : NULL;
+    llvm::Function *current_func = builder->GetInsertBlock()->getParent();
+
     if (alloc.stack_size) {
         // Free is a no-op for stack allocations
-    } else {
+    } else if (allocated_in == current_func) { // Skip over allocations from outside this function.
         // Call free
         llvm::Function *free_fn = module->getFunction("halide_free");
         assert(free_fn && "Could not find halide_free in module");
@@ -208,7 +214,6 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
         builder->CreateCall(free_fn, alloc.ptr);
     }
 
-    sym_pop(name + ".host");
     allocations.pop(name);
 }
 
@@ -224,6 +229,7 @@ void CodeGen_Posix::destroy_allocation(Allocation alloc) {
 void CodeGen_Posix::visit(const Allocate *alloc) {
 
     Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->size);
+    sym_push(alloc->name + ".host", allocation.ptr);
 
     codegen(alloc->body);
 
@@ -237,6 +243,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 
 void CodeGen_Posix::visit(const Free *stmt) {
     free_allocation(stmt->name);
+    sym_pop(stmt->name + ".host");
 }
 
 void CodeGen_Posix::prepare_for_early_exit() {
@@ -251,6 +258,9 @@ void CodeGen_Posix::prepare_for_early_exit() {
     for (size_t i = 0; i < names.size(); i++) {
         std::vector<Allocation> stash;
         while (allocations.contains(names[i])) {
+            // The value in the symbol table is not necessarily the
+            // one in the allocation - it may have been forwarded
+            // inside a parallel for loop
             stash.push_back(allocations.get(names[i]));
             free_allocation(names[i]);
         }
@@ -259,7 +269,6 @@ void CodeGen_Posix::prepare_for_early_exit() {
         // code path.
         for (size_t j = stash.size(); j > 0; j--) {
             allocations.push(names[i], stash[j-1]);
-            sym_push(names[i] + ".host", stash[j-1].ptr);
         }
     }
 }

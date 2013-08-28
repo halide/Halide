@@ -171,7 +171,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
     // Make our function
     function_name = name;
-    FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
+    FunctionType *func_t = FunctionType::get(i32, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
 
     // Mark the buffer args as no alias
@@ -209,7 +209,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     stmt.accept(this);
 
     // Now we need to end the function
-    builder->CreateRetVoid();
+    builder->CreateRet(ConstantInt::get(i32, 0));
 
     module->setModuleIdentifier("halide_module_" + name);
     debug(2) << module << "\n";
@@ -219,7 +219,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
 
     // Now we need to make the wrapper function (useful for calling from jit)
     string wrapper_name = name + "_jit_wrapper";
-    func_t = FunctionType::get(void_t, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
+    func_t = FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
     block = BasicBlock::Create(*context, "entry", wrapper);
     builder->SetInsertPoint(block);
@@ -241,8 +241,8 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
         }
     }
     debug(4) << "Creating call from wrapper to actual function\n";
-    builder->CreateCall(function, wrapper_args);
-    builder->CreateRetVoid();
+    Value *result = builder->CreateCall(function, wrapper_args);
+    builder->CreateRet(result);
     verifyFunction(*wrapper);
 
     // Finally, verify the module is ok
@@ -447,6 +447,9 @@ void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
     string error_message = "Buffer " + name + " is not 32-byte aligned";
     create_assertion(check_alignment, error_message);
     */
+
+    // Make sure the buffer object itself is not null
+    create_assertion(builder->CreateIsNotNull(buffer), "buffer argument " + name + " is NULL");
 
     // Push the buffer pointer as well, for backends that care.
     sym_push(name + ".buffer", buffer);
@@ -1236,7 +1239,7 @@ void CodeGen::visit(const Call *op) {
             builder->SetInsertPoint(exit_bb);
             // TODO: Doesn't work from inside parallel for bodies
 
-            builder->CreateRetVoid();
+            builder->CreateRet(ConstantInt::get(i32, 0));
             // Continue on using the continue case
             builder->SetInsertPoint(continue_bb);
 
@@ -1303,7 +1306,7 @@ void CodeGen::visit(const Call *op) {
         }
 
         if (op->type.is_scalar()) {
-            debug(4) << "Creating call to " << op->name << "\n";
+            debug(4) << "Creating scalar call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, args);
             if (!has_side_effects) {
                 call->setDoesNotAccessMemory();
@@ -1318,7 +1321,7 @@ void CodeGen::visit(const Call *op) {
             ss << op->name << 'x' << op->type.width;
             llvm::Function *vec_fn = module->getFunction(ss.str());
             if (vec_fn) {
-                debug(4) << "Creating call to " << ss.str() << "\n";
+                debug(4) << "Creating vector call to " << ss.str() << "\n";
                 CallInst *call = builder->CreateCall(vec_fn, args);
                 if (!has_side_effects) {
                     call->setDoesNotAccessMemory();
@@ -1479,11 +1482,8 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
     debug(4) << "Creating cleanup code\n";
     prepare_for_early_exit();
 
-    // Bail out
-
-    // TODO: What if an assertion happens inside a parallel for loop?
-    // This doesn't bail out all the way
-    builder->CreateRetVoid();
+    // Bail out with error code -1
+    builder->CreateRet(ConstantInt::get(i32, -1));
 
     // Continue on using the success case
     builder->SetInsertPoint(assert_succeeds_bb);
@@ -1554,7 +1554,7 @@ void CodeGen::visit(const For *op) {
         closure.pack_struct(ptr, symbol_table, builder);
 
         // Make a new function that does one iteration of the body of the loop
-        FunctionType *func_t = FunctionType::get(void_t, vec(i32, (llvm::Type *)(i8->getPointerTo())), false);
+        FunctionType *func_t = FunctionType::get(i32, vec(i32, (llvm::Type *)(i8->getPointerTo())), false);
         llvm::Function *containing_function = function;
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, "par_for_" + op->name, module);
         function->setDoesNotAlias(2);
@@ -1584,7 +1584,8 @@ void CodeGen::visit(const For *op) {
         // Generate the new function body
         codegen(op->body);
 
-        builder->CreateRetVoid();
+        // Return success
+        builder->CreateRet(ConstantInt::get(i32, 0));
 
         // Move the builder back to the main function and call do_par_for
         builder->SetInsertPoint(call_site);
@@ -1595,13 +1596,18 @@ void CodeGen::visit(const For *op) {
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
         vector<Value *> args = vec<Value *>(function, min, extent, ptr);
         debug(4) << "Creating call to do_par_for\n";
-        builder->CreateCall(do_par_for, args);
+        Value *result = builder->CreateCall(do_par_for, args);
 
         debug(3) << "Leaving parallel for loop over " << op->name << "\n";
 
         // Now restore the scope
         std::swap(symbol_table, saved_symbol_table);
         function = containing_function;
+
+        // Check for success
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+        create_assertion(did_succeed, "Failure inside parallel for loop");
+
     } else {
         assert(false && "Unknown type of For node. Only Serial and Parallel For nodes should survive down to codegen");
     }
