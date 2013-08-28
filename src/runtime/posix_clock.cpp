@@ -51,8 +51,12 @@ WEAK int64_t halide_current_time_usec() {
     return delta;
 }
 
-WEAK int halide_current_time() {
-  return int(halide_current_time_usec() / 1000);
+WEAK int32_t halide_current_time() {
+    timeval now = {0,0};
+    gettimeofday(&now, NULL);
+    int32_t delta = (now.tv_sec - halide_reference_clock.tv_sec)*1000;
+    delta += (now.tv_usec - halide_reference_clock.tv_usec)/1000;
+    return delta;
 }
 
 }
