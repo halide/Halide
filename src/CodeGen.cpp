@@ -1191,6 +1191,64 @@ void CodeGen::visit(const Call *op) {
             } else {
                 value = builder->CreateLShr(codegen(op->args[0]), codegen(op->args[1]));
             }
+        } else if (op->name == Call::create_buffer_t) {
+            // Make some memory for this buffer_t
+            const Call *c = op->args[0].as<Call>();
+
+            // TODO: What if this happens in an inner loop?
+            Value *buffer = builder->CreateAlloca(buffer_t, ConstantInt::get(i32, 1));
+
+            // Populate the fields
+            Value *host_ptr;
+            if (!c) {
+                const IntImm *imm = op->args[0].as<IntImm>();
+                assert(imm && imm->value == 0 && "First argument to create_buffer_t must either be a buffer name or the constant zero");
+                host_ptr = ConstantPointerNull::get(i8->getPointerTo());
+            } else {
+                host_ptr = sym_get(c->name + ".host");
+            }
+
+            int elem_size = op->args[1].as<IntImm>()->value;
+            int dims = op->args.size()/3;
+            for (int i = 0; i < 4; i++) {
+                Value *min, *extent, *stride;
+                if (i < dims) {
+                    min    = codegen(op->args[i*3+2]);
+                    extent = codegen(op->args[i*3+3]);
+                    stride = codegen(op->args[i*3+4]);
+                } else {
+                    min = extent = stride = ConstantInt::get(i32, 0);
+                }
+                builder->CreateStore(min, buffer_min_ptr(buffer, i));
+                builder->CreateStore(extent, buffer_extent_ptr(buffer, i));
+                builder->CreateStore(stride, buffer_stride_ptr(buffer, i));
+            }
+
+            // This implement sets device pointer and dirty bits to
+            // zero. GPU codegen should also catch this and do
+            // something smarter.
+            builder->CreateStore(ConstantInt::get(i8, 0), buffer_host_dirty_ptr(buffer));
+            builder->CreateStore(ConstantInt::get(i8, 0), buffer_dev_dirty_ptr(buffer));
+            builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
+            Value *host_ptr_field = buffer_host_ptr(buffer);
+            host_ptr = builder->CreatePointerCast(host_ptr, i8->getPointerTo());
+            builder->CreateStore(host_ptr, host_ptr_field);
+            builder->CreateStore(ConstantInt::get(i32, elem_size), buffer_elem_size_ptr(buffer));
+            value = buffer;
+        } else if (op->name == Call::extract_buffer_min) {
+            assert(op->args.size() == 2);
+            const IntImm *idx = op->args[1].as<IntImm>();
+            assert(idx);
+            Value *buffer = codegen(op->args[0]);
+            buffer = builder->CreatePointerCast(buffer, buffer_t->getPointerTo());
+            value = buffer_min(buffer, idx->value);
+        } else if (op->name == Call::extract_buffer_extent) {
+            assert(op->args.size() == 2);
+            const IntImm *idx = op->args[1].as<IntImm>();
+            assert(idx);
+            Value *buffer = codegen(op->args[0]);
+            buffer = builder->CreatePointerCast(buffer, buffer_t->getPointerTo());
+            value = buffer_extent(buffer, idx->value);
         } else if (op->name == Call::maybe_rewrite_buffer) {
             assert(op->args.size() == 15);
 
@@ -1297,6 +1355,24 @@ void CodeGen::visit(const Call *op) {
 
             fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module);
             fn->setCallingConv(CallingConv::C);
+            debug(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
+        } else {
+            debug(4) << "Found " << op->name << "\n";
+
+            // Halide's type system doesn't preserve pointer types
+            // correctly (they just get called "Handle()"), so we may
+            // need to pointer cast to the appropriate type.
+            FunctionType *func_t = fn->getFunctionType();
+            for (size_t i = 0; i < args.size(); i++) {
+                if (op->args[i].type().is_handle()) {
+                    llvm::Type *t = func_t->getParamType(i);
+                    if (t != args[i]->getType()) {
+                        debug(4) << "Pointer casting argument to extern call: "
+                                 << op->args[i] << "\n";
+                        args[i] = builder->CreatePointerCast(args[i], t);
+                    }
+                }
+            }
         }
 
         bool has_side_effects = false;

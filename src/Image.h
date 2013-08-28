@@ -344,6 +344,11 @@ public:
         return Argument(buffer);
     }
 
+    /** Convert this image to an argument to an extern stage. */
+    operator ExternFuncArgument() const {
+        return ExternFuncArgument(buffer);
+    }
+
     /** Treating the image as an Expr is equivalent to call it with no
      * arguments. For example, you can say:
      *

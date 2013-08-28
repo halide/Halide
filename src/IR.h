@@ -917,7 +917,10 @@ struct Call : public ExprNode<Call> {
         maybe_rewrite_buffer,
         maybe_return,
         profiling_timer,
-        lerp;
+        lerp,
+        create_buffer_t,
+        extract_buffer_min,
+        extract_buffer_extent;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.
@@ -943,10 +946,10 @@ struct Call : public ExprNode<Call> {
         }
         if (call_type == Halide) {
             assert(value_index >= 0 &&
-                   value_index < (int)func.values().size() &&
+                   value_index < func.outputs() &&
                    "Value index out of range in call to halide function");
-            assert(func.has_pure_definition() && "Call to undefined halide function");
-            assert(args.size() <= func.args().size() && "Call node with too many arguments.");
+            assert((func.has_pure_definition() || func.has_extern_definition()) && "Call to undefined halide function");
+            assert((int)args.size() <= func.dimensions() && "Call node with too many arguments.");
             for (size_t i = 0; i < args.size(); i++) {
                 assert(args[i].type() == Int(32) && "Args to call to halide function must be type Int(32)");
             }
@@ -972,10 +975,11 @@ struct Call : public ExprNode<Call> {
     /** Convenience constructor for calls to other halide functions */
     static Expr make(Function func, const std::vector<Expr> &args, int idx = 0) {
         assert(idx >= 0 &&
-               idx < (int)func.values().size() &&
+               idx < func.outputs() &&
                "Value index out of range in call to halide function");
-        assert(func.has_pure_definition() && "Call to undefined halide function");
-        return make(func.values()[idx].type(), func.name(), args, Halide, func, idx, Buffer(), Parameter());
+        assert((func.has_pure_definition() || func.has_extern_definition()) &&
+               "Call to undefined halide function");
+        return make(func.output_types()[idx], func.name(), args, Halide, func, idx, Buffer(), Parameter());
     }
 
     /** Convenience constructor for loads from concrete images */

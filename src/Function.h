@@ -12,13 +12,48 @@
 #include <vector>
 
 namespace Halide {
+
 namespace Internal {
+struct FunctionContents;
+}
+
+/** An argument to an extern-defined Func. May be a Function, Buffer,
+ * ImageParam or Expr. */
+struct ExternFuncArgument {
+    enum ArgType {UndefinedArg = 0, FuncArg, BufferArg, ExprArg, ImageParamArg};
+    ArgType arg_type;
+    Internal::IntrusivePtr<Internal::FunctionContents> func;
+    Buffer buffer;
+    Expr expr;
+    Internal::Parameter image_param;
+
+    ExternFuncArgument(Internal::IntrusivePtr<Internal::FunctionContents> f): arg_type(FuncArg), func(f) {}
+
+    ExternFuncArgument(Buffer b): arg_type(BufferArg), buffer(b) {}
+
+    ExternFuncArgument(Expr e): arg_type(ExprArg), expr(e) {}
+
+    ExternFuncArgument(Internal::Parameter p) : arg_type(ImageParamArg), image_param(p) {
+        assert(p.is_buffer());
+    }
+    ExternFuncArgument() : arg_type(UndefinedArg) {}
+
+    bool is_func() const {return arg_type == FuncArg;}
+    bool is_expr() const {return arg_type == ExprArg;}
+    bool is_buffer() const {return arg_type == BufferArg;}
+    bool is_image_param() const {return arg_type == ImageParamArg;}
+    bool defined() const {return arg_type != UndefinedArg;}
+};
+
+namespace Internal {
+
 
 struct FunctionContents {
     mutable RefCount ref_count;
     std::string name;
     std::vector<std::string> args;
     std::vector<Expr> values;
+    std::vector<Type> output_types;
     Schedule schedule;
 
     std::vector<Expr> reduction_values;
@@ -29,6 +64,9 @@ struct FunctionContents {
     std::string debug_file;
 
     std::vector<Parameter> output_buffers;
+
+    std::vector<ExternFuncArgument> extern_arguments;
+    std::string extern_function_name;
 };
 
 /** A reference-counted handle to Halide's internal representation of
@@ -43,6 +81,9 @@ public:
      * functions, etc.
      */
     Function() : contents(new FunctionContents) {}
+
+    /** Reconstruct a Function from a FunctionContents pointer. */
+    Function(const IntrusivePtr<FunctionContents> &c) : contents(c) {}
 
     /** Add a pure definition to this function. It may not already
      * have a definition. All the free variables in 'value' must
@@ -73,6 +114,21 @@ public:
     /** Get the pure arguments */
     const std::vector<std::string> &args() const {
         return contents.ptr->args;
+    }
+
+    /** Get the dimensionality */
+    int dimensions() const {
+        return args().size();
+    }
+
+    /** Get the number of outputs */
+    int outputs() const {
+        return output_types().size();
+    }
+
+    /** Get the types of the outputs */
+    const std::vector<Type> &output_types() const {
+        return contents.ptr->output_types;
     }
 
     /** Get the right-hand-side of the pure definition */
@@ -133,6 +189,28 @@ public:
         return contents.ptr->reduction_domain;
     }
 
+    /** Check if the function has an extern definition */
+    bool has_extern_definition() const {
+        return !contents.ptr->extern_function_name.empty();
+    }
+
+    /** Add an external definition of this Func */
+    void define_extern(const std::string &function_name,
+                       const std::vector<ExternFuncArgument> &args,
+                       const std::vector<Type> &types,
+                       int dimensionality);
+
+    /** Retrive the arguments of the extern definition */
+    const std::vector<ExternFuncArgument> &extern_arguments() const {
+        return contents.ptr->extern_arguments;
+    }
+
+    /** Get the name of the extern function called for an extern
+     * definition. */
+    const std::string &extern_function_name() const {
+        return contents.ptr->extern_function_name;
+    }
+
     /** Equality of identity */
     bool same_as(const Function &other) const {
         return contents.same_as(other.contents);
@@ -146,6 +224,11 @@ public:
     /** Get a handle to the debug filename */
     std::string &debug_file() {
         return contents.ptr->debug_file;
+    }
+
+    /** Use an an extern argument to another function. */
+    operator ExternFuncArgument() const {
+        return ExternFuncArgument(contents);
     }
 };
 

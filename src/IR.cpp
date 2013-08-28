@@ -88,6 +88,9 @@ const string Call::maybe_rewrite_buffer = "maybe_rewrite_buffer";
 const string Call::maybe_return = "maybe_return";
 const string Call::profiling_timer = "profiling_timer";
 const string Call::lerp = "lerp";
+const string Call::create_buffer_t = "create_buffer_t";
+const string Call::extract_buffer_min = "extract_buffer_min";
+const string Call::extract_buffer_extent = "extract_buffer_extent";
 
 }
 }
