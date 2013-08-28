@@ -45,6 +45,13 @@ private:
         IRVisitor::visit(load);
     }
 
+    void visit(const Call *call) {
+        if (call->name == func) {
+            last_use = containing_stmt;
+        }
+        IRVisitor::visit(call);
+    }
+
     void visit(const Store *store) {
         if (func == store->name) {
             last_use = containing_stmt;
@@ -57,16 +64,16 @@ private:
             IRVisitor::visit(pipe);
         } else {
 
-            Stmt old_containing_stmt = containing_stmt;            
+            Stmt old_containing_stmt = containing_stmt;
 
             containing_stmt = pipe->produce;
             pipe->produce.accept(this);
-            
+
             if (pipe->update.defined()) {
                 containing_stmt = pipe->update;
                 pipe->update.accept(this);
             }
-            
+
             containing_stmt = old_containing_stmt;
             pipe->consume.accept(this);
         }
@@ -76,17 +83,18 @@ private:
         if (in_loop) {
             IRVisitor::visit(block);
         } else {
-            Stmt old_containing_stmt = containing_stmt;            
+            Stmt old_containing_stmt = containing_stmt;
             containing_stmt = block->first;
-            block->first.accept(this);           
+            block->first.accept(this);
             if (block->rest.defined()) {
                 containing_stmt = block->rest;
-                block->rest.accept(this);            
+                block->rest.accept(this);
             }
             containing_stmt = old_containing_stmt;
         }
     }
-        
+
+
 };
 
 class InjectMarker : public IRMutator {
@@ -94,12 +102,17 @@ public:
     string func;
     Stmt last_use;
 
-private:    
+    InjectMarker() : injected(false) {}
+private:
+
+    bool injected;
 
     using IRMutator::visit;
 
     Stmt inject_marker(Stmt s) {
+        if (injected) return s;
         if (s.same_as(last_use)) {
+            injected = true;
             return Block::make(s, Free::make(func));
         } else {
             return mutate(s);
@@ -107,12 +120,14 @@ private:
     }
 
     void visit(const Pipeline *pipe) {
-        Stmt new_produce = inject_marker(pipe->produce);
+        // Do it in reverse order, so the injection occurs in the last instance of the stmt.
+        Stmt new_consume = inject_marker(pipe->consume);
         Stmt new_update;
         if (pipe->update.defined()) {
             new_update = inject_marker(pipe->update);
         }
-        Stmt new_consume = inject_marker(pipe->consume);
+        Stmt new_produce = inject_marker(pipe->produce);
+
         if (new_produce.same_as(pipe->produce) &&
             new_update.same_as(pipe->update) &&
             new_consume.same_as(pipe->consume)) {
@@ -122,16 +137,17 @@ private:
         }
     }
 
-    void visit(const Block *block) {        
-        Stmt new_first = inject_marker(block->first);
+    void visit(const Block *block) {
         Stmt new_rest = inject_marker(block->rest);
+        Stmt new_first = inject_marker(block->first);
+
         if (new_first.same_as(block->first) &&
             new_rest.same_as(block->rest)) {
             stmt = block;
         } else {
             stmt = Block::make(new_first, new_rest);
-        }        
-    }    
+        }
+    }
 
 };
 
@@ -151,8 +167,8 @@ class InjectEarlyFrees : public IRMutator {
             inject_marker.func = alloc->name;
             inject_marker.last_use = last_use.last_use;
             stmt = inject_marker.mutate(stmt);
-        } else {            
-            stmt = Allocate::make(alloc->name, alloc->type, alloc->size, 
+        } else {
+            stmt = Allocate::make(alloc->name, alloc->type, alloc->size,
                                 Block::make(alloc->body, Free::make(alloc->name)));
         }
 
@@ -161,7 +177,7 @@ class InjectEarlyFrees : public IRMutator {
 
 Stmt inject_early_frees(Stmt s) {
     InjectEarlyFrees early_frees;
-    return early_frees.mutate(s);    
+    return early_frees.mutate(s);
 }
 
 // TODO: test
