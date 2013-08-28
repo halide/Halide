@@ -94,6 +94,7 @@ struct CountSelfReferences : public IRGraphVisitor {
 };
 
 void Function::define(const vector<string> &args, vector<Expr> values) {
+    assertf(!has_extern_definition(), "Function with extern definition cannot be given a pure definition", name());
     assertf(!name().empty(), "A function needs a name", name());
     for (size_t i = 0; i < values.size(); i++) {
         assertf(values[i].defined(), "Undefined expression in right-hand-side of function definition", name());
@@ -138,6 +139,11 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     contents.ptr->values = values;
     contents.ptr->args = args;
 
+    contents.ptr->output_types.resize(values.size());
+    for (size_t i = 0; i < contents.ptr->output_types.size(); i++) {
+        contents.ptr->output_types[i] = values[i].type();
+    }
+
     for (size_t i = 0; i < args.size(); i++) {
         Schedule::Dim d = {args[i], For::Serial};
         contents.ptr->schedule.dims.push_back(d);
@@ -162,7 +168,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     }
 
     // Check the dimensionality matches
-    assertf(_args.size() == contents.ptr->args.size(),
+    assertf((int)_args.size() == dimensions(),
            "Dimensionality of reduction definition must match dimensionality of pure definition", name());
 
     assertf(values.size() == contents.ptr->values.size(),
@@ -246,6 +252,41 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
         Schedule::Dim d = {check.reduction_domain.domain()[i].var, For::Serial};
         contents.ptr->reduction_schedule.dims.push_back(d);
     }
+}
+
+void Function::define_extern(const std::string &function_name,
+                             const std::vector<ExternFuncArgument> &args,
+                             const std::vector<Type> &types,
+                             int dimensionality) {
+
+    assertf(!has_pure_definition() && !has_reduction_definition(),
+            "Function with a pure definition cannot have an extern definition",
+            name());
+
+    assertf(!has_extern_definition(),
+            "Function already has an extern definition",
+            name());
+
+    contents.ptr->extern_function_name = function_name;
+    contents.ptr->extern_arguments = args;
+    contents.ptr->output_types = types;
+
+    for (size_t i = 0; i < types.size(); i++) {
+        string buffer_name = name();
+        if (types.size() > 1) {
+            buffer_name += '.' + int_to_string((int)i);
+        }
+        contents.ptr->output_buffers.push_back(Parameter(types[i], true, buffer_name));
+    }
+
+    // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
+    contents.ptr->args.resize(dimensionality);
+    for (int i = 0; i < dimensionality; i++) {
+        string arg = unique_name('e');
+        contents.ptr->args[i] = arg;
+        contents.ptr->schedule.storage_dims.push_back(arg);
+    }
+
 }
 
 }

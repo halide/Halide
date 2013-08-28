@@ -87,7 +87,7 @@ std::vector<Var> Func::args() const {
 Expr Func::value() const {
     assert(defined() &&
            "Can't call Func::value() on an undefined Func. To check if a Func is defined, call Func::defined()");
-    assert(func.values().size() == 1 && "Can't call Func::value() on a func with multiple values");
+    assert(func.outputs() == 1 && "Can't call Func::value() on a func with multiple values");
     return func.values()[0];
 }
 
@@ -136,9 +136,38 @@ bool Func::is_reduction() const {
     return func.has_reduction_definition();
 }
 
+/** Is this function external? */
+EXPORT bool Func::is_extern() const {
+    return func.has_extern_definition();
+}
+
+/** Add an extern definition for this Func. */
+EXPORT void Func::define_extern(const std::string &function_name,
+                                const std::vector<ExternFuncArgument> &args,
+                                const std::vector<Type> &types,
+                                int dimensionality) {
+    func.define_extern(function_name, args, types, dimensionality);
+}
+
+/** Get the types of the buffers returned by an extern definition. */
+EXPORT const std::vector<Type> &Func::output_types() const {
+    return func.output_types();
+}
+
+/** Get the number of outputs this function has. */
+EXPORT int Func::outputs() const {
+    return func.outputs();
+}
+
+/** Get the name of the extern function called for an extern
+ * definition. */
+EXPORT const std::string &Func::extern_function_name() const {
+    return func.extern_function_name();
+}
+
 int Func::dimensions() const {
     if (!defined()) return 0;
-    return (int)func.args().size();
+    return func.dimensions();
 }
 
 FuncRefVar Func::operator()() const {
@@ -867,21 +896,21 @@ void FuncRefVar::operator/=(Expr e) {
 }
 
 FuncRefVar::operator Expr() const {
-    assert(func.has_pure_definition() && "Can't call undefined function");
+    assert((func.has_pure_definition() || func.has_extern_definition()) && "Can't call undefined function");
     vector<Expr> expr_args(args.size());
     for (size_t i = 0; i < expr_args.size(); i++) {
         expr_args[i] = Var(args[i]);
     }
-    assert(func.values().size() == 1 &&
+    assert(func.outputs() == 1 &&
            "Can't convert a reference to a function that has multiple outputs to an Expr");
     return Call::make(func, expr_args);
 }
 
 Expr FuncRefVar::operator[](int i) const {
-    assert(func.has_pure_definition() && "Can't call undefined function");
-    assert(func.values().size() != 1 &&
+    assert((func.has_pure_definition() || func.has_extern_definition()) && "Can't call undefined function");
+    assert(func.outputs() != 1 &&
            "Can't index into a reference to a function that only provides one output");
-    assert(i >= 0 && i < (int)func.values().size() && "index out of range");
+    assert(i >= 0 && i < func.outputs() && "index out of range");
     vector<Expr> expr_args(args.size());
     for (size_t j = 0; j < expr_args.size(); j++) {
         expr_args[j] = Var(args[j]);
@@ -890,13 +919,13 @@ Expr FuncRefVar::operator[](int i) const {
 }
 
 size_t FuncRefVar::size() const {
-    return func.values().size();
+    return func.outputs();
 }
 
 /*
 FuncRefVar::operator Tuple() const {
     assert(func.has_pure_definition() && "Can't call undefined function");
-    assert(func.values().size() != 1 &&
+    assert(func.outputs() != 1 &&
            "Can't create a tuple from a call to a function that only provides one output");
     vector<Expr> expr_args(args.size());
     for (size_t j = 0; j < expr_args.size(); j++) {
@@ -1014,30 +1043,34 @@ void FuncRefExpr::operator/=(Expr e) {
 }
 
 FuncRefExpr::operator Expr() const {
-    assert(func.has_pure_definition() && "Can't call undefined function");
+    assert((func.has_pure_definition() || func.has_extern_definition()) && "Can't call undefined function");
     assert(func.values().size() == 1 &&
            "Can't convert a reference to a function that has multiple outputs to an Expr");
     return Call::make(func, args);
 }
 
 Expr FuncRefExpr::operator[](int i) const {
-    assert(func.has_pure_definition() && "Can't call undefined function");
-    assert(func.values().size() != 1 &&
-           "Can't index into a reference to a function that only provides one output");
-    assert(i >= 0 && i < (int)func.values().size() && "index out of range");
+    assert((func.has_pure_definition() || func.has_extern_definition()) && "Can't call undefined function");
+    if (func.has_pure_definition()) {
+        assert(func.outputs() != 1 &&
+               "Can't index into a reference to a function that only provides one output");
+    } else {
+
+    }
+    assert(i >= 0 && i < func.outputs() && "index out of range");
     return Call::make(func, args, i);
 }
 
 size_t FuncRefExpr::size() const {
-    return func.values().size();
+    return func.outputs();
 }
 
 /*
 FuncRefExpr::operator Tuple() const {
     assert(func.has_pure_definition() && "Can't call undefined function");
-    assert(func.values().size() != 1 &&
+    assert(func.outputs() != 1 &&
            "Can't create a tuple from a call to a function that only provides one output");
-    Tuple tuple(std::vector<Expr>(func.values().size()));
+    Tuple tuple(std::vector<Expr>(func.outputs()));
     for (size_t i = 0; i < tuple.size(); i++) {
         tuple[i] = Call::make(func, args, i);
     }
@@ -1097,74 +1130,62 @@ private:
 
     using IRGraphVisitor::visit;
 
-    void visit(const Load *op) {
-        IRGraphVisitor::visit(op);
-
-        Buffer b;
-        string arg_name;
-        if (op->image.defined()) {
-            Internal::debug(2) << "Found an image argument: " << op->image.name() << "\n";
-            b = op->image;
-            arg_name = op->image.name();
-        } else if (op->param.defined()) {
-            Internal::debug(2) << "Found an image param argument: " << op->param.name() << "\n";
-            b = op->param.get_buffer();
-            arg_name = op->param.name();
-        } else {
-            return;
+    bool already_have(const string &name) {
+        // Ignore dependencies on the output buffers
+        if (name == output || starts_with(name, output + ".")) {
+            return true;
         }
-
-        Argument arg(arg_name, true, op->type);
-        bool already_included = false;
         for (size_t i = 0; i < arg_types.size(); i++) {
-            if (arg_types[i].name == op->name) {
-                Internal::debug(2) << "Already included.\n";
-                already_included = true;
+            if (arg_types[i].name == name) {
+                return true;
             }
         }
-        if (!already_included) {
-            if (op->param.defined()) {
-                int idx = (int)(arg_values.size());
-                image_param_args.push_back(make_pair(idx, op->param));
-            }
-            arg_types.push_back(arg);
-            if (op->image.defined()) {
-                assert(b.defined());
+        return false;
+    }
+
+    void include_parameter(Internal::Parameter p) {
+        if (!p.defined()) return;
+        if (already_have(p.name())) return;
+        arg_types.push_back(Argument(p.name(), p.is_buffer(), p.type()));
+        if (p.is_buffer()) {
+            Buffer b = p.get_buffer();
+            int idx = (int)arg_values.size();
+            image_param_args.push_back(make_pair(idx, p));
+            if (b.defined()) {
                 arg_values.push_back(b.raw_buffer());
             } else {
                 arg_values.push_back(NULL);
             }
+        } else {
+            arg_values.push_back(p.get_scalar_address());
         }
     }
 
+    void include_buffer(Buffer b) {
+        if (!b.defined()) return;
+        if (already_have(b.name())) return;
+        arg_types.push_back(Argument(b.name(), true, b.type()));
+        arg_values.push_back(b.raw_buffer());
+    }
+
+    void visit(const Load *op) {
+        IRGraphVisitor::visit(op);
+
+        include_parameter(op->param);
+        include_buffer(op->image);
+    }
+
     void visit(const Variable *op) {
-        if (op->name == output ||
-            starts_with(op->name, output + ".")) {
-            // We don't mind dependencies on the output buffer. It
-            // shouldn't be in the args list.
-            return;
-        }
+        include_parameter(op->param);
+    }
 
-        if (op->param.defined()) {
-            Argument arg(op->param.name(), op->param.is_buffer(), op->param.type());
-            bool already_included = false;
-            for (size_t i = 0; i < arg_types.size(); i++) {
-                if (arg_types[i].name == op->param.name()) {
-                    already_included = true;
-                }
-            }
-            if (!already_included) {
-                Internal::debug(2) << "Found a param: " << op->param.name() << "\n";
-                if (op->param.is_buffer()) {
-                    int idx = (int)(arg_values.size());
-                    image_param_args.push_back(make_pair(idx, op->param));
-                    arg_values.push_back(NULL);
-                } else {
-                    arg_values.push_back(op->param.get_scalar_address());
-                }
-                arg_types.push_back(arg);
+    void visit(const Call *op) {
+        IRGraphVisitor::visit(op);
 
-            }
+        // Sometimes, a buffer will be referred to by an intrinsic and nowhere else.
+        if (op->call_type == Call::Intrinsic) {
+            include_buffer(op->image);
+            include_parameter(op->param);
         }
     }
 };
@@ -1503,14 +1524,15 @@ void *Func::compile_jit() {
     lowered.accept(&infer_args);
     arg_values = infer_args.arg_values;
 
-    for (size_t i = 0; i < func.values().size(); i++) {
+    for (int i = 0; i < func.outputs(); i++) {
         string buffer_name = name();
-        if (func.values().size() > 1) {
+        if (func.outputs() > 1) {
             buffer_name = buffer_name + '.' + int_to_string(i);
         }
-        Argument me(buffer_name, true, func.values()[i].type());
+        Type t = func.output_types()[i];
+        Argument me(buffer_name, true, t);
         infer_args.arg_types.push_back(me);
-        arg_values.push_back(NULL); // A spot to put the address of the output buffers
+        arg_values.push_back(NULL); // A spot to put the address of this output buffer
     }
     image_param_args = infer_args.image_param_args;
 

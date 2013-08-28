@@ -16,6 +16,7 @@ class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const map<string, Function> &e) : env(e) {}
     Scope<int> scope;
+    Scope<int> need_buffer_t;
 private:
     const map<string, Function> &env;
 
@@ -68,6 +69,15 @@ private:
     void visit(const Realize *realize) {
         Stmt body = mutate(realize->body);
 
+        // Check if we need to create a buffer_t for this realization
+        vector<bool> make_buffer_t(realize->types.size());
+        while (need_buffer_t.contains(realize->name)) {
+            int idx = need_buffer_t.get(realize->name);
+            assert(idx < (int)make_buffer_t.size());
+            make_buffer_t[idx] = true;
+            need_buffer_t.pop(realize->name);
+        }
+
         // Compute the size
         Expr size = 1;
         for (size_t i = 0; i < realize->bounds.size(); i++) {
@@ -95,43 +105,65 @@ private:
         size = mutate(size);
 
         stmt = body;
-        for (size_t i = 0; i < realize->types.size(); i++) {
+        for (size_t idx = 0; idx < realize->types.size(); idx++) {
             string buffer_name = realize->name;
             if (realize->types.size() > 1) {
-                buffer_name = buffer_name + '.' + int_to_string(i);
+                buffer_name = buffer_name + '.' + int_to_string(idx);
             }
-            stmt = Allocate::make(buffer_name, realize->types[i], size, stmt);
+
+            // Make the names for the mins, extents, and strides
+            int dims = realize->bounds.size();
+            vector<string> min_name(dims), extent_name(dims), stride_name(dims);
+            for (int i = 0; i < dims; i++) {
+                string d = int_to_string(i);
+                min_name[i] = buffer_name + ".min." + d;
+                stride_name[i] = buffer_name + ".stride." + d;
+                extent_name[i] = buffer_name + ".extent." + d;
+            }
+            vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
+            for (int i = 0; i < dims; i++) {
+                min_var[i] = Variable::make(Int(32), min_name[i]);
+                extent_var[i] = Variable::make(Int(32), extent_name[i]);
+                stride_var[i] = Variable::make(Int(32), stride_name[i]);
+            }
+
+            if (make_buffer_t[idx]) {
+                // We need to make a buffer_t for this buffer
+                vector<Expr> args(dims*3 + 2);
+                args[0] = Variable::make(Handle(), buffer_name);
+                args[1] = realize->types[idx].bytes();
+                for (int i = 0; i < dims; i++) {
+                    args[3*i+2] = min_var[i];
+                    args[3*i+3] = extent_var[i];
+                    args[3*i+4] = stride_var[i];
+                }
+                Expr buf = Call::make(Handle(), Call::create_buffer_t,
+                                      args, Call::Intrinsic);
+                stmt = LetStmt::make(buffer_name + ".buffer",
+                                     buf,
+                                     stmt);
+            }
+
+            // Make the allocation node
+            stmt = Allocate::make(buffer_name, realize->types[idx], size, stmt);
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
                 int prev_j = storage_permutation[i-1];
                 int j = storage_permutation[i];
-                ostringstream stride_name;
-                stride_name << buffer_name << ".stride." << j;
-                ostringstream prev_stride_name;
-                prev_stride_name << buffer_name << ".stride." << prev_j;
-                ostringstream prev_extent_name;
-                prev_extent_name << buffer_name << ".extent." << prev_j;
-                Expr prev_stride = Variable::make(Int(32), prev_stride_name.str());
-                Expr prev_extent = Variable::make(Int(32), prev_extent_name.str());
-                stmt = LetStmt::make(stride_name.str(), prev_stride * prev_extent, stmt);
+                Expr stride = stride_var[prev_j] * extent_var[prev_j];
+                stmt = LetStmt::make(stride_name[j], stride, stmt);
             }
             // Innermost stride is one
-            ostringstream stride_0_name;
-            if (!storage_permutation.empty()) {
-                stride_0_name << buffer_name << ".stride." << storage_permutation[0];
-            } else {
-                stride_0_name << buffer_name << ".stride.0";
+            if (dims > 0) {
+                int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
+                stmt = LetStmt::make(stride_name[innermost], 1, stmt);
             }
-            stmt = LetStmt::make(stride_0_name.str(), 1, stmt);
 
             // Assign the mins and extents stored
             for (size_t i = realize->bounds.size(); i > 0; i--) {
-                ostringstream min_name, extent_name;
-                min_name << buffer_name << ".min." << (i-1);
-                extent_name << buffer_name << ".extent." << (i-1);
-                stmt = LetStmt::make(min_name.str(), realize->bounds[i-1].min, stmt);
-                stmt = LetStmt::make(extent_name.str(), realize->bounds[i-1].extent, stmt);
+                stmt = LetStmt::make(min_name[i-1], realize->bounds[i-1].min, stmt);
+                stmt = LetStmt::make(extent_name[i-1], realize->bounds[i-1].extent, stmt);
             }
         }
     }
@@ -175,6 +207,7 @@ private:
     }
 
     void visit(const Call *call) {
+
         if (call->call_type == Call::Extern || call->call_type == Call::Intrinsic) {
             vector<Expr> args(call->args.size());
             bool changed = false;
@@ -190,7 +223,7 @@ private:
         } else {
             string name = call->name;
             if (call->call_type == Call::Halide &&
-                call->func.values().size() > 1) {
+                call->func.outputs() > 1) {
                 name = name + '.' + int_to_string(call->value_index);
 
             }

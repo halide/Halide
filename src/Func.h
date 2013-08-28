@@ -298,10 +298,6 @@ public:
 
 };
 
-
-
-
-
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
  * they are aggressively inlined, so you are encouraged to make lots
@@ -624,6 +620,34 @@ public:
 
     /** Is this function a reduction? */
     EXPORT bool is_reduction() const;
+
+    /** Is this function external? */
+    EXPORT bool is_extern() const;
+
+    /** Add an extern definition for this Func. */
+    // @{
+    EXPORT void define_extern(const std::string &function_name,
+                              const std::vector<ExternFuncArgument> &params,
+                              Type t,
+                              int dimensionality) {
+        define_extern(function_name, params, Internal::vec<Type>(t), dimensionality);
+    }
+
+    EXPORT void define_extern(const std::string &function_name,
+                              const std::vector<ExternFuncArgument> &params,
+                              const std::vector<Type> &types,
+                              int dimensionality);
+    // @}
+
+    /** Get the types of the outputs of this Func. */
+    EXPORT const std::vector<Type> &output_types() const;
+
+    /** Get the number of outputs of this Func. */
+    EXPORT int outputs() const;
+
+    /** Get the name of the extern function called for an extern
+     * definition. */
+    EXPORT const std::string &extern_function_name() const;
 
     /** The dimensionality (number of arguments) of this
      * function. Zero if the function is not yet defined. */
@@ -989,27 +1013,11 @@ public:
         return (*this)();
     }
 
-    /* These operators are being removed because they break putting
-     * Funcs in STL containers, the python bindings, and have
-     * generally caused confusion.
-
-    ** Define a function to take a number of arguments according to
-     * the implicit variables present in the given expression, and
-     * return the given expression. The expression may not have free
-     * variables. *
-    void operator=(Expr e) {
-        (*this)() = e;
+    /** Use a Func as an argument to an external stage. */
+    operator ExternFuncArgument() const {
+        return ExternFuncArgument(func);
     }
 
-    ** Define a function to simply call another function. Note that
-     * this is not equivalent to the standard c++ operator=. We opt
-     * instead for consistency with Halide function definition, of
-     * which this is a degenerate case. *
-    void operator=(const Func &f) {
-        (*this)() = f();
-    }
-
-    */
 };
 
 /** JIT-Compile and run enough code to evaluate a Halide

@@ -235,21 +235,120 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
 // won't do any allocation.
 Stmt build_produce(Function f) {
 
-    string prefix = f.name() + ".";
+    if (f.has_extern_definition()) {
+        // Call the external function
 
-    // Compute the site to store to as the function args
-    vector<Expr> site;
+        // Build an argument list
+        vector<Expr> extern_call_args;
+        const vector<ExternFuncArgument> &args = f.extern_arguments();
 
-    vector<Expr> values(f.values().size());
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i] = qualify_expr(prefix, f.values()[i]);
+        const string &extern_name = f.extern_function_name();
+
+        vector<pair<string, Expr> > lets;
+
+        // Iterate through all of the input args to the extern
+        // function building a suitable argument list for the
+        // extern function call.
+        for (size_t j = 0; j < args.size(); j++) {
+            if (args[j].is_expr()) {
+                extern_call_args.push_back(args[j].expr);
+            } else if (args[j].is_func()) {
+                Function input(args[j].func);
+                for (int k = 0; k < input.outputs(); k++) {
+                    string name = input.name();
+                    if (input.outputs() > 1) {
+                        name += "." + int_to_string(k);
+                    }
+                    Expr host = Call::make(Handle(), name, vector<Expr>(), Call::Intrinsic);
+
+                    vector<Expr> buffer_args(2);
+                    buffer_args[0] = host;
+                    buffer_args[1] = input.output_types()[k].bytes();
+                    for (int i = 0; i < input.dimensions(); i++) {
+                        string d = int_to_string(i);
+                        buffer_args.push_back(Variable::make(Int(32), input.name() + ".min." + d));
+                        buffer_args.push_back(Variable::make(Int(32), input.name() + ".extent." + d));
+                        buffer_args.push_back(Variable::make(Int(32), input.name() + ".stride." + d));
+                    }
+
+                    Expr buf = Call::make(Handle(), Call::create_buffer_t,
+                                          buffer_args, Call::Intrinsic);
+
+                    name += ".tmp_buffer";
+                    lets.push_back(make_pair(name, buf));
+                    extern_call_args.push_back(Variable::make(Handle(), name));
+                }
+            } else if (args[j].is_buffer()) {
+                Buffer b = args[j].buffer;
+                Parameter p(b.type(), true, b.name());
+                p.set_buffer(b);
+                Expr buf = Variable::make(Handle(), b.name() + ".buffer", p);
+                extern_call_args.push_back(buf);
+            } else if (args[j].is_image_param()) {
+                Parameter p = args[j].image_param;
+                Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
+                extern_call_args.push_back(buf);
+            } else {
+                assert(false && "Bad ExternFuncArgument type");
+            }
+        }
+
+        // Make the buffer_ts representing the output. They
+        // all use the same size, but have differing types.
+        for (int j = 0; j < f.outputs(); j++) {
+            string name = f.name();
+            if (f.outputs() > 1) {
+                name += "." + int_to_string(j);
+            }
+            vector<Expr> buffer_args(2);
+            Expr host = Call::make(Handle(), name, vector<Expr>(), Call::Intrinsic);
+            buffer_args[0] = host;
+            buffer_args[1] = f.output_types()[j].bytes();
+            for (int k = 0; k < f.dimensions(); k++) {
+                string d = int_to_string(k);
+                buffer_args.push_back(Variable::make(Int(32), f.name() + ".min." + d));
+                buffer_args.push_back(Variable::make(Int(32), f.name() + ".extent." + d));
+                buffer_args.push_back(Variable::make(Int(32), f.name() + ".stride." + d));
+            }
+
+            Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
+                                              buffer_args, Call::Intrinsic);
+
+            name += ".tmp_buffer";
+            extern_call_args.push_back(Variable::make(Handle(), name));
+            lets.push_back(make_pair(name, output_buffer_t));
+        }
+
+        // Make the extern call
+        Expr e = Call::make(Int(32), extern_name,
+                            extern_call_args, Call::Extern);
+        // Check if it succeeded
+        Stmt check = AssertStmt::make(EQ::make(e, 0), "Call to external func " +
+                                      extern_name + " returned non-zero value");
+
+        for (size_t i = 0; i < lets.size(); i++) {
+            check = LetStmt::make(lets[i].first, lets[i].second, check);
+        }
+
+        return check;
+    } else {
+
+        string prefix = f.name() + ".";
+
+        // Compute the site to store to as the function args
+        vector<Expr> site;
+
+        vector<Expr> values(f.values().size());
+        for (size_t i = 0; i < values.size(); i++) {
+            values[i] = qualify_expr(prefix, f.values()[i]);
+        }
+
+        for (size_t i = 0; i < f.args().size(); i++) {
+            site.push_back(Variable::make(Int(32), f.name() + "." + f.args()[i]));
+        }
+
+        return build_provide_loop_nest(f.name(), prefix, site, values, f.schedule());
     }
-
-    for (size_t i = 0; i < f.args().size(); i++) {
-        site.push_back(Variable::make(Int(32), f.name() + "." + f.args()[i]));
-    }
-
-    return build_provide_loop_nest(f.name(), prefix, site, values, f.schedule());
 }
 
 // Build the loop nest that updates a function (assuming it's a reduction).
@@ -347,10 +446,14 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
         Expr extent_var = Variable::make(Int(32), extent_name);
         Expr check = (b.min <= min_var) && ((b.min + b.extent) >= (min_var + extent_var));
         string error_msg = "Bounds given for " + b.var + " in " + func.name() + " don't cover required region";
-        body = Block::make(AssertStmt::make(check, error_msg),
-                         LetStmt::make(min_name, b.min,
-                                     LetStmt::make(extent_name, b.extent, body)));
+
+
+        body = LetStmt::make(min_name, b.min,
+                             LetStmt::make(extent_name, b.extent, body));
+
+        body = Block::make(AssertStmt::make(check, error_msg), body);
     }
+
     return body;
 }
 
@@ -406,14 +509,16 @@ private:
          * rounds things up, and reductions spraying writes
          * everywhere, both break this assumption */
 
-        /*
-        Region bounds;
-        for (size_t i = 0; i < func.args().size(); i++) {
-            Expr min = Variable::make(Int(32), func.name() + "." + func.args()[i] + ".min");
-            Expr extent = Variable::make(Int(32), func.name() + "." + func.args()[i] + ".extent");
-            bounds.push_back(Range(min, extent));
+        // Externally-defined things should fill in exactly as much as they are asked to.
+        if (func.has_extern_definition()) {
+            assert(bounds.empty() && "Provide to an externally defined func");
+            for (int i = 0; i < func.dimensions(); i++) {
+                const string &arg = func.args()[i];
+                Expr min = Variable::make(Int(32), func.name() + "." + arg + ".min");
+                Expr extent = Variable::make(Int(32), func.name() + "." + arg + ".extent");
+                bounds.push_back(Range(min, extent));
+            }
         }
-        */
 
         for (size_t i = 0; i < bounds.size(); i++) {
             if (!bounds[i].min.defined()) {
@@ -429,12 +534,7 @@ private:
         }
 
         // Change the body of the for loop to do an allocation
-        vector<Type> types(func.values().size());
-        for (size_t i = 0; i < types.size(); i++) {
-            types[i] = func.values()[i].type();
-        }
-        s = Realize::make(func.name(), types, bounds, s);
-
+        s = Realize::make(func.name(), func.output_types(), bounds, s);
 
         return inject_explicit_bounds(s, func);
     }
@@ -448,13 +548,18 @@ private:
 
         Stmt body = for_loop->body;
 
+        debug(2) << func.has_extern_definition() << " "
+                 << func.schedule().compute_level.is_inline() << " "
+                 << function_is_called_in_stmt(func, for_loop) << "\n";
+
         // Can't schedule things inside a vector for loop
         if (for_loop->for_type != For::Vectorized) {
             body = mutate(for_loop->body);
-        } else if (func.has_reduction_definition() &&
+        } else if ((func.has_extern_definition() ||
+                    func.has_reduction_definition()) &&
                    func.schedule().compute_level.is_inline() &&
                    function_is_called_in_stmt(func, for_loop)) {
-            // If we're trying to inline a reduction, schedule it here and bail out
+            // If we're trying to inline a reduction or extern function, schedule it here and bail out
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
             stmt = build_realize(build_pipeline(for_loop));
             found_store_level = found_compute_level = true;
@@ -493,10 +598,11 @@ private:
         }
     }
 
-    // If we're an inline reduction, we may need to inject a realization here
+    // If we're an inline reduction or extern, we may need to inject a realization here
     virtual void visit(const Provide *op) {
         if (op->name != func.name() &&
-            func.has_reduction_definition() &&
+            (func.has_extern_definition() ||
+             func.has_reduction_definition()) &&
             func.schedule().compute_level.is_inline() &&
             function_is_called_in_stmt(func, op)) {
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(op) << "\n";
@@ -506,7 +612,6 @@ private:
             stmt = op;
         }
     }
-
 };
 
 class InlineFunction : public IRMutator {
@@ -566,16 +671,20 @@ public:
 
     using IRVisitor::visit;
 
+    void include_function(Function f) {
+        map<string, Function>::iterator iter = calls.find(f.name());
+        if (iter == calls.end()) {
+            calls[f.name()] = f;
+        } else {
+            assert(iter->second.same_as(f) &&
+                   "Can't compile a pipeline using multiple functions with same name");
+        }
+    }
+
     void visit(const Call *call) {
         IRVisitor::visit(call);
         if (call->call_type == Call::Halide) {
-            map<string, Function>::iterator iter = calls.find(call->name);
-            if (iter == calls.end()) {
-                calls[call->name] = call->func;
-            } else {
-                assert(iter->second.same_as(call->func) &&
-                       "Can't compile a pipeline using multiple functions with same name");
-            }
+            include_function(call->func);
         }
     }
 };
@@ -652,6 +761,17 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
         }
     }
 
+    // Consider extern calls
+    if (f.has_extern_definition()) {
+        for (size_t i = 0; i < f.extern_arguments().size(); i++) {
+            ExternFuncArgument arg = f.extern_arguments()[i];
+            if (arg.is_func()) {
+                Function g(arg.func);
+                calls.calls[g.name()] = g;
+            }
+        }
+    }
+
     if (!recursive) {
         env.insert(calls.calls.begin(), calls.calls.end());
     } else {
@@ -704,6 +824,7 @@ vector<string> realization_order(string output, const map<string, Function> &env
                     scheduled_something = true;
                     result_set.insert(f);
                     result.push_back(f);
+                    debug(4) << "Realization order: " << f << "\n";
                     if (f == output) return result;
                 }
             }
@@ -736,15 +857,31 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
     for (size_t i = order.size()-1; i > 0; i--) {
         Function f = env.find(order[i-1])->second;
 
+        // If f is extern, check that none of its inputs are scheduled inline.
+        if (f.has_extern_definition()) {
+            for (size_t i = 0; i < f.extern_arguments().size(); i++) {
+                ExternFuncArgument arg = f.extern_arguments()[i];
+                if (arg.is_func()) {
+                    Function g(arg.func);
+                    if (g.schedule().compute_level.is_inline()) {
+                        std::cerr << "Function " << g.name() << " cannot be scheduled to be computed inline, "
+                                  << "because it is used in the externally-computed function " << f.name() << "\n";
+                        assert(false);
+                    }
+                }
+            }
+        }
+
         if (f.schedule().compute_level.is_inline() &&
             !f.schedule().store_level.is_inline()) {
             std::cerr << "Function " << f.name() << " is scheduled to be computed inline, "
                       << "but is not scheduled to be stored inline. A storage schedule "
-                      << "makes no sense for functions computed inline" << std::endl;
+                      << "makes no sense for functions computed inline\n";
             assert(false);
         }
 
-        if (!f.has_reduction_definition() &&
+        if (f.has_pure_definition() &&
+            !f.has_reduction_definition() &&
             f.schedule().compute_level.is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = InlineFunction(f).mutate(s);
