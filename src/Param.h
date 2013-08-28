@@ -222,6 +222,11 @@ public:
         return extent(2);
     }
 
+    /** Get at the internal parameter object representing this ImageParam. */
+    Internal::Parameter parameter() const {
+        return param;
+    }
+
 };
 
 /** An Image parameter to a halide pipeline. E.g., the input image. */
