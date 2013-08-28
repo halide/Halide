@@ -1328,14 +1328,14 @@ void Func::set_custom_allocator(void *(*cust_malloc)(size_t), void (*cust_free)(
     }
 }
 
-void Func::set_custom_do_par_for(void (*cust_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *)) {
+void Func::set_custom_do_par_for(int (*cust_do_par_for)(int (*)(int, uint8_t *), int, int, uint8_t *)) {
     custom_do_par_for = cust_do_par_for;
     if (compiled_module.set_custom_do_par_for) {
         compiled_module.set_custom_do_par_for(cust_do_par_for);
     }
 }
 
-void Func::set_custom_do_task(void (*cust_do_task)(void (*)(int, uint8_t *), int, uint8_t *)) {
+void Func::set_custom_do_task(int (*cust_do_task)(int (*)(int, uint8_t *), int, uint8_t *)) {
     custom_do_task = cust_do_task;
     if (compiled_module.set_custom_do_task) {
         compiled_module.set_custom_do_task(cust_do_task);
@@ -1383,8 +1383,8 @@ void Func::realize(Realization dst) {
     }
 
     Internal::debug(2) << "Calling jitted function\n";
-    compiled_module.wrapped_function(&(arg_values[0]));
-    Internal::debug(2) << "Back from jitted function\n";
+    int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
+    Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     for (size_t i = 0; i < dst.size(); i++) {
         dst[i].set_source_module(compiled_module);
@@ -1441,7 +1441,13 @@ void Func::infer_input_bounds(Realization dst) {
     }
 
     Internal::debug(2) << "Calling jitted function\n";
-    compiled_module.wrapped_function(&(arg_values[0]));
+    int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
+    if (exit_status) {
+        std::cerr << "Calling " << name()
+                  << " in bounds inference mode returned non-success ("
+                  << exit_status << ")\n";
+        assert(false);
+    }
     Internal::debug(2) << "Back from jitted function\n";
 
     // Now allocate the resulting buffers

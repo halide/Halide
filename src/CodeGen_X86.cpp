@@ -744,10 +744,13 @@ void CodeGen_X86::test() {
     }
     #endif
 
+    debug(2) << "Compiling to function pointers \n";
     JITCompiledModule m = cg.compile_to_function_pointers();
 
-    typedef void (*fn_type)(::buffer_t *, float, int);
+    typedef int (*fn_type)(::buffer_t *, float, int);
     fn_type fn = reinterpret_bits<fn_type>(m.function);
+
+    debug(2) << "Function pointer lives at " << m.function << "\n";
 
     int scratch_buf[64];
     int *scratch = &scratch_buf[0];

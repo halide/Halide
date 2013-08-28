@@ -48,10 +48,12 @@ extern void halide_error(const char *msg);
  * where it makes sense. (E.g. On Mac OS, Grand Central Dispatch is
  * used so %Halide does not own the threads backing the pool and they
  * cannot be released.)  See Func::set_custom_do_task and
- * Func::set_custom_do_par_for.
+ * Func::set_custom_do_par_for. Should return zero if all the jobs
+ * return zero, or an arbitrarily chosen return value from one of the
+ * jobs otherwise.
  */
 //@{
-extern void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure);
+extern int halide_do_par_for(int (*f)(int, uint8_t *), int min, int size, uint8_t *closure);
 extern void halide_shutdown_thread_pool();
 //@}
 

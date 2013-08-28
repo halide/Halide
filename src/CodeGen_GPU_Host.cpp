@@ -673,6 +673,7 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
     if (usage.used_on_host) {
         debug(2) << alloc->name << " is used on the host\n";
         host_allocation = create_allocation(alloc->name, alloc->type, alloc->size);
+        sym_push(alloc->name + ".host", host_allocation.ptr);
     } else {
         host_allocation.ptr = ConstantPointerNull::get(llvm_type_of(alloc->type)->getPointerTo());
     }

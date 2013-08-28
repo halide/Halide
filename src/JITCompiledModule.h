@@ -31,7 +31,7 @@ struct JITCompiledModule {
     /** A slightly more type-safe wrapper around the raw halide
      * module. Takes it arguments as an array of pointers that
      * correspond to the arguments to \ref function */
-    void (*wrapped_function)(const void **);
+    int (*wrapped_function)(const void **);
 
     /** JITed helpers to interact with device-mapped buffer_t
      * objects. These pointers may be NULL if not compiling for a
@@ -54,11 +54,12 @@ struct JITCompiledModule {
 
     /** Set a custom parallel for loop launcher. See
      * \ref Func::set_custom_do_par_for */
-    void (*set_custom_do_par_for)(void (*custom_do_par_for)(void (*)(int, unsigned char *), int, int, unsigned char *));
+    typedef int (*HalideTask)(int, uint8_t *);
+    void (*set_custom_do_par_for)(int (*custom_do_par_for)(HalideTask, int, int, uint8_t *));
 
     /** Set a custom do parallel task. See
      * \ref Func::set_custom_do_task */
-    void (*set_custom_do_task)(void (*custom_do_task)(void (*)(int, unsigned char *), int, unsigned char *));
+    void (*set_custom_do_task)(int (*custom_do_task)(HalideTask, int, uint8_t *));
 
     /** Shutdown the thread pool maintained by this JIT module. This
      * is also done automatically when the last reference to this

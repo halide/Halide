@@ -27,12 +27,12 @@ typedef struct {
 typedef long pthread_t;
 typedef struct {
     // 48 bytes is enough for a cond on 64-bit and 32-bit systems
-    unsigned char _private[48]; 
+    unsigned char _private[48];
 } pthread_cond_t;
 typedef long pthread_condattr_t;
 typedef struct {
     // 40 bytes is enough for a mutex on 64-bit and 32-bit systems
-    unsigned char _private[40]; 
+    unsigned char _private[40];
 } pthread_mutex_t;
 typedef long pthread_mutexattr_t;
 extern int pthread_create(pthread_t *thread, pthread_attr_t const * attr,
@@ -66,11 +66,11 @@ extern int halide_printf(const char *, ...);
 
 struct work {
     work *next_job;
-    void (*f)(int, uint8_t *);
+    int (*f)(int, uint8_t *);
     int next, max;
     uint8_t *closure;
     int active_workers;
-
+    int exit_status;
     bool running() { return next < max || active_workers > 0; }
 };
 
@@ -88,12 +88,12 @@ WEAK struct {
     // Keep track of threads so they can be joined at shutdown
     pthread_t threads[MAX_THREADS];
 
-    // Global flag indicating 
+    // Global flag indicating
     bool shutdown;
 
-    bool running() { 
-        return !shutdown; 
-    }    
+    bool running() {
+        return !shutdown;
+    }
 
 } halide_work_queue;
 
@@ -124,21 +124,23 @@ WEAK void halide_shutdown_thread_pool() {
     halide_thread_pool_initialized = false;
 }
 
-WEAK void (*halide_custom_do_task)(void (*)(int, uint8_t *), int, uint8_t *);
-WEAK void halide_set_custom_do_task(void (*f)(void (*)(int, uint8_t *), int, uint8_t *)) {
+typedef int (*halide_task)(int, uint8_t *);
+
+WEAK int (*halide_custom_do_task)(halide_task, int, uint8_t *);
+WEAK void halide_set_custom_do_task(int (*f)(halide_task, int, uint8_t *)) {
     halide_custom_do_task = f;
 }
 
-WEAK void (*halide_custom_do_par_for)(void (*)(int, uint8_t *), int, int, uint8_t *);
-WEAK void halide_set_custom_do_par_for(void (*f)(void (*)(int, uint8_t *), int, int, uint8_t *)) {
+WEAK int (*halide_custom_do_par_for)(halide_task, int, int, uint8_t *);
+WEAK void halide_set_custom_do_par_for(int (*f)(halide_task, int, int, uint8_t *)) {
     halide_custom_do_par_for = f;
 }
 
-WEAK void halide_do_task(void (*f)(int, uint8_t *), int idx, uint8_t *closure) {
+WEAK int halide_do_task(halide_task f, int idx, uint8_t *closure) {
     if (halide_custom_do_task) {
-        (*halide_custom_do_task)(f, idx, closure);
+        return (*halide_custom_do_task)(f, idx, closure);
     } else {
-        f(idx, closure);
+        return f(idx, closure);
     }
 }
 
@@ -168,11 +170,11 @@ WEAK void *halide_worker_thread(void *void_arg) {
             work myjob = *job;
             job->next++;
 
-            // If there were no more tasks pending for this job,
-            // remove it from the stack.
+            // If there were no more tasks pending for this job, or if
+            // it has failed, remove it from the stack.
             if (job->next == job->max) {
                 halide_work_queue.jobs = job->next_job;
-            } 
+            }
 
             // Increment the active_worker count so that other threads
             // are aware that this job is still in progress even
@@ -181,9 +183,14 @@ WEAK void *halide_worker_thread(void *void_arg) {
 
             // Release the lock and do the task.
             pthread_mutex_unlock(&halide_work_queue.mutex);
-            halide_do_task(myjob.f, myjob.next, myjob.closure);
+            int result = halide_do_task(myjob.f, myjob.next, myjob.closure);
             pthread_mutex_lock(&halide_work_queue.mutex);
-            
+
+            // If this task failed, set the exit status on the job.
+            if (result) {
+                job->exit_status = result;
+            }
+
             // We are no longer active on this job
             job->active_workers--;
 
@@ -192,7 +199,7 @@ WEAK void *halide_worker_thread(void *void_arg) {
             if (!job->running() && job != owned_job) {
                 pthread_cond_broadcast(&halide_work_queue.state_change);
             }
-        }        
+        }
     }
     pthread_mutex_unlock(&halide_work_queue.mutex);
     return NULL;
@@ -202,10 +209,9 @@ WEAK int halide_host_cpu_count() {
     return sysconf(_SC_NPROCESSORS_ONLN);
 }
 
-WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {
+WEAK int halide_do_par_for(int (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {
     if (halide_custom_do_par_for) {
-        (*halide_custom_do_par_for)(f, min, size, closure);
-        return;
+        return (*halide_custom_do_par_for)(f, min, size, closure);
     }
     if (!halide_thread_pool_initialized) {
         halide_work_queue.shutdown = false;
@@ -234,24 +240,29 @@ WEAK void halide_do_par_for(void (*f)(int, uint8_t *), int min, int size, uint8_
     }
 
     // Make the job.
-    work job; 
+    work job;
     job.f = f;               // The job should call this function. It takes an index and a closure.
     job.next = min;          // Start at this index.
     job.max  = min + size;   // Keep going until one less than this index.
     job.closure = closure;   // Use this closure.
-    job.active_workers = 0;
+    job.exit_status = 0;     // The job hasn't failed yet
+    job.active_workers = 0;  // Nobody is working on this yet
 
     // Push the job onto the stack.
     pthread_mutex_lock(&halide_work_queue.mutex);
     job.next_job = halide_work_queue.jobs;
     halide_work_queue.jobs = &job;
     pthread_mutex_unlock(&halide_work_queue.mutex);
-    
+
     // Wake up any idle worker threads.
     pthread_cond_broadcast(&halide_work_queue.state_change);
 
     // Do some work myself.
-    halide_worker_thread((void *)(&job));    
+    halide_worker_thread((void *)(&job));
+
+    // Return zero if the job succeeded, otherwise return the exit
+    // status of one of the failing jobs (whichever one failed last).
+    return job.exit_status;
 }
 
 }
