@@ -233,6 +233,13 @@ public:
         return param;
     }
 
+    /** Construct the appropriate argument matching this parameter,
+     * for the purpose of generating the right type signature when
+     * statically compiling halide pipelines. */
+    operator Argument() const {
+        return Argument(name(), true, type());
+    }
+
 };
 
 /** An Image parameter to a halide pipeline. E.g., the input image. */
@@ -345,13 +352,6 @@ public:
         return Internal::Call::make(param, args);
     }
     // @}
-
-    /** Construct the appropriate argument matching this parameter,
-     * for the purpose of generating the right type signature when
-     * statically compiling halide pipelines. */
-    operator Argument() const {
-        return Argument(name(), true, type());
-    }
 
     /** Treating the image parameter as an Expr is equivalent to call
      * it with no arguments. For example, you can say:
