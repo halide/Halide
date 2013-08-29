@@ -186,11 +186,6 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     // Do any target-specific post-compilation module meddling
     cg->jit_finalize(ee, m, &module.ptr->cleanup_routines);
 
-    #ifdef USE_MCJIT
-    // Forcibly flushes the cache on arm
-    memory_manager->finalizeMemory();
-    #endif
-
     #ifdef __arm__
     // Flush each function from the dcache so that it gets pulled into
     // the icache correctly.
