@@ -194,8 +194,8 @@ StmtCompiler::StmtCompiler(string arch) {
                   << "x86-64 x86-64-sse41 x86-64-avx "
                   << "x86-32-nacl x86-32-sse41-nacl "
                   << "x86-64-nacl x86-64-sse41-nacl x86-64-avx-nacl "
-                  << "arm arm-android arm-ios arm-nacl"
-                  << "ptx ptx-debug opencl"
+                  << "arm arm-android arm-ios arm-nacl "
+                  << "ptx ptx-debug opencl "
                   << "native"
                   << "\n"
                   << "On this machine, native means " << native << "\n";
