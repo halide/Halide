@@ -366,10 +366,10 @@ inline Expr abs(Expr a) {
     return 0; // prevent "control reaches end of non-void function" error
 }
 
-/** Returns an expression equivalent to the ternary operator in C. If
- * the first argument is true, then return the second, else return the
- * third. Typically vectorizes cleanly, but benefits from SSE41 or newer
- * on x86. */
+/** Returns an expression similar to the ternary operator in C, except
+ * that it always evaluates all arguments. If the first argument is
+ * true, then return the second, else return the third. Typically
+ * vectorizes cleanly, but benefits from SSE41 or newer on x86. */
 inline Expr select(Expr condition, Expr true_value, Expr false_value) {
 
     if (as_const_int(condition)) {
