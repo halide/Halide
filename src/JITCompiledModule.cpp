@@ -56,6 +56,12 @@ EXPORT void destroy<JITModuleHolder>(const JITModuleHolder *f) {delete f;}
 
 namespace {
 
+#ifdef __arm__
+// On ARM we need to track the addresses of all the functions we
+// retrieve so that we can flush the icache.
+char *start, *end;
+#endif
+
 // Retrieve a function pointer from an llvm module, possibly by
 // compiling it. Returns it by assigning to the last argument.
 template<typename FP>
@@ -81,14 +87,23 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
         std::cerr << "Compiling " << name << " returned NULL\n";
         assert(false);
     }
-    debug(2) << "Function exists at " << f << "\n";
+
+    debug(2) << "Function " << name << " is at " << f << "\n";
 
     *result = reinterpret_bits<FP>(f);
 
+    #ifdef __arm__
+    if (start == NULL) {
+        start = (char *)f;
+        end = (char *)f;
+    } else {
+        start = std::min(start, (char *)f);
+        end = std::max(end, (char *)f+32);
+    }
+    #endif
 }
 
 }
-
 
 void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name) {
 
@@ -122,7 +137,8 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     engine_builder.setEngineKind(EngineKind::JIT);
     #ifdef USE_MCJIT
     engine_builder.setUseMCJIT(true);
-    engine_builder.setJITMemoryManager(JITMemoryManager::CreateDefaultMemManager());
+    JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
+    engine_builder.setJITMemoryManager(memory_manager);
     #else
     engine_builder.setUseMCJIT(false);
     #endif
@@ -134,6 +150,10 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     assert(ee && "Couldn't create execution engine");
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
     // ee->runStaticConstructorsDestructors(...);
+
+    #ifdef __arm__
+    start = end = NULL;
+    #endif
 
     // Do any target-specific initialization
     cg->jit_init(ee, m);
@@ -166,7 +186,25 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     // Do any target-specific post-compilation module meddling
     cg->jit_finalize(ee, m, &module.ptr->cleanup_routines);
 
-    debug(2) << "Done with compilation\n";
+    #ifdef USE_MCJIT
+    // Forcibly flushes the cache on arm
+    memory_manager->finalizeMemory();
+    #endif
+
+    #ifdef __arm__
+    // Flush each function from the dcache so that it gets pulled into
+    // the icache correctly.
+
+    // finalizeMemory should have done the trick, but as of Aug 28
+    // 2013, it doesn't work unless we also manually flush the
+    // cache. Otherwise the icache's view of the code is missing the
+    // relocations, which gets really confusing to debug, because
+    // gdb's view of the code uses the dcache, so the disassembly
+    // isn't right.
+    debug(2) << "Flushing cache from " << (void *)start
+             << " to " << (void *)end << "\n";
+    __clear_cache(start, end);
+    #endif
 }
 
 }
