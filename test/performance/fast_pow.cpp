@@ -10,13 +10,13 @@ int main(int argc, char **argv) {
     Func f, g, h;
     Var x, y;
 
-    f(x, y) = powf((x+1)/512.0f, (y+1)/512.0f);    
+    f(x, y) = powf((x+1)/512.0f, (y+1)/512.0f);
     g(x, y) = pow((x+1)/512.0f, (y+1)/512.0f);
     h(x, y) = fast_pow((x+1)/512.0f, (y+1)/512.0f);
     f.vectorize(x, 8);
     g.vectorize(x, 8);
     h.vectorize(x, 8);
-    
+
     f.compile_jit();
     g.compile_jit();
     h.compile_jit();
@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     Image<float> fast_result(2048, 768);
     Image<float> faster_result(2048, 768);
 
-    const int iterations = 5;
+    const int iterations = 20;
 
     double t1 = currentTime();
     for (int i = 0; i < iterations; i++) {
@@ -60,8 +60,8 @@ int main(int argc, char **argv) {
 
     printf("powf: %f ns per pixel\n"
            "Halide's pow: %f ns per pixel (rms error = %0.10f)\n"
-           "Halide's fast_pow: %f ns per pixel (rms error = %0.10f)\n", 
-           1000000*(t2-t1) / N, 
+           "Halide's fast_pow: %f ns per pixel (rms error = %0.10f)\n",
+           1000000*(t2-t1) / N,
            1000000*(t3-t2) / N, fast_err(0),
            1000000*(t4-t3) / N, faster_err(0));
 
@@ -86,6 +86,6 @@ int main(int argc, char **argv) {
     }
 
     printf("Success!\n");
-    
+
     return 0;
 }
