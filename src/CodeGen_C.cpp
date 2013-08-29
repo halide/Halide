@@ -183,6 +183,8 @@ string CodeGen_C::print_type(Type type) {
             assert(false && "Can't represent a float with this many bits in C");
         }
 
+    } else if (type.is_handle()) {
+        oss << "void *";
     } else {
         switch (type.bits) {
         case 1:
@@ -221,11 +223,11 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     for (size_t i = 0; i < args.size(); i++) {
         if (i > 0) stream << ", ";
         if (args[i].is_buffer) {
-            stream << "buffer_t *" << args[i].name;
+            stream << "buffer_t *" << print_name(args[i].name);
         } else {
             stream << "const "
                    << print_type(args[i].type)
-                   << " " << args[i].name;
+                   << " " << print_name(args[i].name);
         }
     }
     stream << ");\n";

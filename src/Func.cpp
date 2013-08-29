@@ -1235,8 +1235,9 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 
     validate_arguments(name(), args, lowered);
 
-    Argument me(name(), true, value().type());
-    args.push_back(me);
+    for (int i = 0; i < outputs(); i++) {
+        args.push_back(output_buffers()[i]);
+    }
 
     StmtCompiler cg;
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
@@ -1252,8 +1253,9 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
 
     validate_arguments(name(), args, lowered);
 
-    Argument me(name(), true, value().type());
-    args.push_back(me);
+    for (int i = 0; i < outputs(); i++) {
+        args.push_back(output_buffers()[i]);
+    }
 
     StmtCompiler cg;
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
@@ -1261,8 +1263,9 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
 }
 
 void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name) {
-    Argument me(name(), true, value().type());
-    args.push_back(me);
+    for (int i = 0; i < outputs(); i++) {
+        args.push_back(output_buffers()[i]);
+    }
 
     ofstream header(filename.c_str());
     CodeGen_C cg(header);
@@ -1276,8 +1279,9 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
 
     validate_arguments(name(), args, lowered);
 
-    Argument me(name(), true, value().type());
-    args.push_back(me);
+    for (int i = 0; i < outputs(); i++) {
+        args.push_back(output_buffers()[i]);
+    }
 
     ofstream src(filename.c_str());
     CodeGen_C cg(src);
@@ -1326,8 +1330,10 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
     assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) lowered = Halide::Internal::lower(func);
-    Argument me(name(), true, value().type());
-    args.push_back(me);
+
+    for (int i = 0; i < outputs(); i++) {
+        args.push_back(output_buffers()[i]);
+    }
 
     StmtCompiler cg;
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
