@@ -713,39 +713,37 @@ void CodeGen::visit(const Mod *op) {
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
     } else if (op->type.is_uint()) {
-        value = builder->CreateURem(codegen(op->a), codegen(op->b));
-    } else {
-        Value *a = codegen(op->a);
-        Value *b = codegen(op->b);
-        Expr modulus = op->b;
-        const Broadcast *broadcast = modulus.as<Broadcast>();
-        const IntImm *int_imm = broadcast ? broadcast->value.as<IntImm>() : modulus.as<IntImm>();
-        if (int_imm) {
-            // if we're modding by a power of two, we can use the unsigned version
-            bool is_power_of_two = true;
-            for (int v = int_imm->value; v > 1; v >>= 1) {
-                if (v & 1) is_power_of_two = false;
-            }
-            if (is_power_of_two) {
-                value = builder->CreateURem(a, b);
-                return;
-            }
+        int bits;
+        if (is_const_power_of_two(op->b, &bits)) {
+            Expr one = make_one(op->b.type());
+            value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
+        } else {
+            value = builder->CreateURem(codegen(op->a), codegen(op->b));
         }
+    } else {
+        int bits;
+        if (is_const_power_of_two(op->b, &bits)) {
+            Expr one = make_one(op->b.type());
+            value = builder->CreateAnd(codegen(op->a), codegen(op->b - one));
+        } else {
+            Value *a = codegen(op->a);
+            Value *b = codegen(op->b);
 
-        // Match this non-overflowing C code due to Len Hamey
-        /*
-        T rem = a % b;
-        rem = rem + (rem != 0 && (rem ^ b) < 0 ? b : 0);
-        */
+            // Match this non-overflowing C code due to Len Hamey
+            /*
+              T rem = a % b;
+              rem = rem + (rem != 0 && (rem ^ b) < 0 ? b : 0);
+            */
 
-        Value *rem = builder->CreateSRem(a, b);
-        Value *zero = ConstantInt::get(rem->getType(), 0);
-        Value *rem_not_zero = builder->CreateICmpNE(rem, zero);
-        Value *rem_xor_b = builder->CreateXor(rem, b);
-        Value *rem_xor_b_lt_zero = builder->CreateICmpSLT(rem_xor_b, zero);
-        Value *need_to_add_b = builder->CreateAnd(rem_not_zero, rem_xor_b_lt_zero);
-        Value *offset = builder->CreateSelect(need_to_add_b, b, zero);
-        value = builder->CreateNSWAdd(rem, offset);
+            Value *rem = builder->CreateSRem(a, b);
+            Value *zero = ConstantInt::get(rem->getType(), 0);
+            Value *rem_not_zero = builder->CreateICmpNE(rem, zero);
+            Value *rem_xor_b = builder->CreateXor(rem, b);
+            Value *rem_xor_b_lt_zero = builder->CreateICmpSLT(rem_xor_b, zero);
+            Value *need_to_add_b = builder->CreateAnd(rem_not_zero, rem_xor_b_lt_zero);
+            Value *offset = builder->CreateSelect(need_to_add_b, b, zero);
+            value = builder->CreateNSWAdd(rem, offset);
+        }
     }
 }
 
