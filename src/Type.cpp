@@ -13,7 +13,7 @@ using std::ostringstream;
 /** Return an integer which is the maximum value of this type. */
 int Type::imax() const {
     if (is_uint()) {
-        if (bits == 32) {            
+        if (bits == 32) {
             return 0xffffffff;
         } else if (bits < 32) {
             return (int) ((1 << bits) - 1);
@@ -33,13 +33,16 @@ int Type::imax() const {
     } else {
         assert(0 && "max of Type: Not available for floating point types");
         return 0;
-    }        
+    }
 }
 
 /** Return an expression which is the maximum value of this type */
 Halide::Expr Type::max() const {
+    if (width > 1) {
+        return Internal::Broadcast::make(element_of().max(), width);
+    }
     if (is_int() && bits == 32) {
-        return imax(); // No explicit cast of i32.
+        return imax(); // No explicit cast of scalar i32.
     } else if ((is_int() || is_uint()) && bits <= 32) {
         return Internal::Cast::make(*this, imax());
     } else {
@@ -71,13 +74,16 @@ int Type::imin() const {
         // Use a run-time call to a math intrinsic
         assert(0 && "min of Type: Not available for floating point types");
         return 0;
-    }        
+    }
 }
 
 /** Return an expression which is the minimum value of this type */
 Expr Type::min() const {
+    if (width > 1) {
+        return Internal::Broadcast::make(element_of().min(), width);
+    }
     if (is_int() && bits == 32) {
-        return imin(); // No explicit cast of i32.
+        return imin(); // No explicit cast of scalar i32.
     } else if ((is_int() || is_uint()) && bits <= 32) {
         return Internal::Cast::make(*this, imin());
     } else {
