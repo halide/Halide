@@ -70,7 +70,12 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
     void visit(const For *op) {
         if (op->for_type != For::Serial && op->for_type != For::Unrolled) {
-            // We can't proceed into a parallel for loop
+            // We can't proceed into a parallel for loop.
+
+            // TODO: If there's no overlap between the region touched
+            // by the threads as this loop counter varies
+            // (i.e. there's no cross-talk between threads), then it's
+            // safe to proceed.
             stmt = op;
             return;
         }
@@ -78,11 +83,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         map<string, Region> regions = regions_touched(op->body);
         const Region &region = regions[func];
 
-        if (!region.size()) {
-            // This for loop doesn't use this function
-            stmt = op;
-            return;
-        }
+        Stmt result = op;
 
         // Try each dimension in turn from outermost in
         for (size_t i = region.size(); i > 0; i--) {
@@ -90,8 +91,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent = region[i-1].extent;
             Expr loop_var = Variable::make(Int(32), op->name);
 
-            // The min has to be monotonic with the loop variable
+            // The min has to be monotonic with the loop variable, and
+            // should depend on the loop variable.
             Expr prev_min = substitute(op->name, loop_var - 1, min);
+            if (prev_min.same_as(min)) continue;
+
             Expr monotonic_increasing = simplify(min >= prev_min);
             Expr monotonic_decreasing = simplify(min <= prev_min);
 
@@ -104,6 +108,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             scope.pop(op->name);
 
             max_extent = simplify(max_extent);
+
+            // If the folding
 
             debug(2) << "Considering folding " << func << " over for loop over " << op->name << '\n'
                    << "Min: " << min << '\n'
@@ -124,14 +130,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
                 dim_folded = (int)i-1;
                 fold_factor = factor;
-                stmt = FoldStorageOfFunction(func, (int)i-1, factor).mutate(op);
-
-                return;
+                result = FoldStorageOfFunction(func, (int)i-1, factor).mutate(result);
             }
         }
 
-        // No luck
-        stmt = op;
+        stmt = result;
 
     }
 
@@ -141,25 +144,54 @@ public:
     AttemptStorageFoldingOfFunction(string f) : func(f), dim_folded(-1) {}
 };
 
+/** Check if a buffer's allocated is referred to directly via an
+ * intrinsic. If so we should leave it alone. (e.g. it may be used
+ * extern). */
+class IsBufferSpecial : public IRVisitor {
+public:
+    string func;
+    bool special;
+
+    IsBufferSpecial(string f) : func(f), special(false) {}
+private:
+
+    using IRVisitor::visit;
+
+    void visit(const Call *call) {
+        if (call->call_type == Call::Intrinsic &&
+            call->name == func) {
+            special = true;
+        }
+    }
+};
+
 // Look for opportunities for storage folding in a statement
 class StorageFolding : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Realize *op) {
-        AttemptStorageFoldingOfFunction folder(op->name);
-        Stmt new_body = folder.mutate(op->body);
 
-        if (new_body.same_as(op->body)) {
+        AttemptStorageFoldingOfFunction folder(op->name);
+        IsBufferSpecial special(op->name);
+        op->accept(&special);
+
+        if (special.special) {
             stmt = op;
         } else {
-            Region bounds = op->bounds;
+            Stmt new_body = folder.mutate(op->body);
 
-            assert(folder.dim_folded >= 0 &&
-                   folder.dim_folded < (int)bounds.size());
+            if (new_body.same_as(op->body)) {
+                stmt = op;
+            } else {
+                Region bounds = op->bounds;
 
-            bounds[folder.dim_folded] = Range(0, folder.fold_factor);
+                assert(folder.dim_folded >= 0 &&
+                       folder.dim_folded < (int)bounds.size());
 
-            stmt = Realize::make(op->name, op->types, bounds, new_body);
+                bounds[folder.dim_folded] = Range(0, folder.fold_factor);
+
+                stmt = Realize::make(op->name, op->types, bounds, new_body);
+            }
         }
     }
 };
