@@ -88,6 +88,12 @@ public:
         return Internal::Variable::make(type_of<T>(), name(), param);
     }
 
+    /** Using a param as the argument to an external stage treats it
+     * as an Expr */
+    operator ExternFuncArgument() const {
+        return Expr(*this);
+    }
+
     /** Construct the appropriate argument matching this parameter,
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */

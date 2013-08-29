@@ -128,7 +128,7 @@ RDom Func::reduction_domain() const {
 }
 
 bool Func::defined() const {
-    return func.has_pure_definition();
+    return func.has_pure_definition() || func.has_extern_definition();
 }
 
 /** Is this function a reduction? */
@@ -931,7 +931,7 @@ FuncRefVar::operator Tuple() const {
     for (size_t j = 0; j < expr_args.size(); j++) {
         expr_args[j] = Var(args[j]);
     }
-    Tuple tuple(std::vector<Expr>(func.values().size()));
+    Tuple tuple(std::vector<Expr>(func.outputs()));
     for (size_t i = 0; i < tuple.size(); i++) {
         tuple[i] = Call::make(func, expr_args, i);
     }
@@ -1044,7 +1044,7 @@ void FuncRefExpr::operator/=(Expr e) {
 
 FuncRefExpr::operator Expr() const {
     assert((func.has_pure_definition() || func.has_extern_definition()) && "Can't call undefined function");
-    assert(func.values().size() == 1 &&
+    assert(func.outputs() == 1 &&
            "Can't convert a reference to a function that has multiple outputs to an Expr");
     return Call::make(func, args);
 }
@@ -1080,9 +1080,9 @@ FuncRefExpr::operator Tuple() const {
 
 Realization Func::realize(int x_size, int y_size, int z_size, int w_size) {
     assert(defined() && "Can't realize undefined function");
-    vector<Buffer> outputs(func.values().size());
+    vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.values()[i].type(), x_size, y_size, z_size, w_size);
+        outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size);
     }
     Realization r(outputs);
     realize(r);
@@ -1091,9 +1091,9 @@ Realization Func::realize(int x_size, int y_size, int z_size, int w_size) {
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     assert(defined() && "Can't infer input bounds on an undefined function");
-    vector<Buffer> outputs(func.values().size());
+    vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
-        outputs[i] = Buffer(func.values()[i].type(), x_size, y_size, z_size, w_size, (uint8_t *)1);
+        outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size, (uint8_t *)1);
     }
     Realization r(outputs);
     infer_input_bounds(r);
@@ -1375,7 +1375,7 @@ void Func::realize(Realization dst) {
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
         assert(dst[i].dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
-        assert(dst[i].type() == func.values()[i].type() && "Buffer and Func have different element types");
+        assert(dst[i].type() == func.output_types()[i] && "Buffer and Func have different element types");
     }
 
     // In case these have changed since the last realization
@@ -1425,7 +1425,7 @@ void Func::infer_input_bounds(Realization dst) {
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
         assert(dst[i].dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
-        assert(dst[i].type() == func.values()[i].type() && "Buffer and Func have different element types");
+        assert(dst[i].type() == func.output_types()[i] && "Buffer and Func have different element types");
     }
 
     // In case these have changed since the last realization

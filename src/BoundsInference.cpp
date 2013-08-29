@@ -31,6 +31,47 @@ public:
         // Compute the region required of each function within this loop body
         map<string, Region> regions = regions_called(for_loop->body);
 
+        // In the outermost loop, the output func counts as used
+        if (for_loop->name == "<outermost>") {
+            // For the output function, the bounds required is the (possibly
+            // constrained) size of the first output buffer. (TODO: check the
+            // other output buffers match this size).
+            const Function &f = env.find(funcs[funcs.size()-1])->second;
+            Region region;
+
+            Parameter b = f.output_buffers()[0];
+            for (size_t i = 0; i < f.args().size(); i++) {
+
+                string prefix = f.name() + "." + f.args()[i];
+                string dim = int_to_string(i);
+
+                Expr min, extent;
+                if (b.min_constraint(i).defined()) {
+                    min = b.min_constraint(i);
+                } else {
+                    string buf_min_name = b.name() + ".min." + dim;
+                    min = Variable::make(Int(32), buf_min_name);
+                }
+
+                if (b.extent_constraint(i).defined()) {
+                    extent = b.extent_constraint(i);
+                } else {
+                    string buf_extent_name = b.name() + ".extent." + dim;
+                    extent = Variable::make(Int(32), buf_extent_name);
+                }
+
+                region.push_back(Range(min, extent));
+            }
+
+            map<string, Region>::iterator iter = regions.find(f.name());
+            if (iter != regions.end()) {
+                iter->second = region_union(iter->second, region);
+            } else {
+                regions[f.name()] = region;
+            }
+
+        }
+
         Stmt body = mutate(for_loop->body);
 
         debug(3) << "Bounds inference considering loop over " << for_loop->name << '\n';
@@ -38,6 +79,7 @@ public:
         // Inject let statements defining those bounds
         for (size_t i = 0; i < funcs.size(); i++) {
             if (in_consume.contains(funcs[i])) continue;
+            bool func_used = regions.find(funcs[i]) != regions.end();
             Region region = regions[funcs[i]];
             const Function &f = env.find(funcs[i])->second;
 
@@ -48,7 +90,7 @@ public:
             // on g.
             for (size_t j = i+1; j < funcs.size(); j++) {
                 debug(4) << "Checking to see if " << f.name() << " is used by an extern stage\n";
-                bool used = false;
+                bool used_by_extern = false;
                 const Function &g = env.find(funcs[j])->second;
 
                 // g isn't used in this loop, so don't bother.
@@ -60,11 +102,12 @@ public:
                         if (!arg.is_func()) continue;
                         Function input(arg.func);
                         if (input.same_as(f)) {
-                            used = true;
+                            used_by_extern = true;
                         }
                     }
                 }
-                if (used) {
+                if (used_by_extern) {
+                    func_used = true;
                     debug(4) << f.name() << " is used by extern stage " << g.name() << "\n";
                     // g is an extern func that takes f as an input,
                     // so we need to expand the bounds f using the
@@ -98,7 +141,7 @@ public:
 
             }
 
-            if (region.empty()) continue;
+            if (!func_used) continue;
             assert(region.size() == (size_t)f.dimensions() &&
                    "Dimensionality mismatch between function and region required");
 
@@ -265,7 +308,7 @@ public:
 
 Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Function> &env) {
     // Add a outermost::make loop to make sure we get outermost bounds definitions too
-    s = For::make("outermost", 0, 1, For::Serial, s);
+    s = For::make("<outermost>", 0, 1, For::Serial, s);
 
     s = BoundsInference(order, env).mutate(s);
 
@@ -273,35 +316,6 @@ Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Fun
     const For *root_loop = s.as<For>();
     assert(root_loop);
     s = root_loop->body;
-
-    // For the output function, the bounds required is the (possibly
-    // constrained) size of the first output buffer. (TODO: check the
-    // other output buffers match this size).
-    Function f = env.find(order[order.size()-1])->second;
-
-    Parameter b = f.output_buffers()[0];
-    for (size_t i = 0; i < f.args().size(); i++) {
-        debug(2) << b.name() << ", " << f.args()[i] << "\n";
-
-        string prefix = f.name() + "." + f.args()[i];
-        string dim = int_to_string(i);
-
-        if (b.min_constraint(i).defined()) {
-            s = LetStmt::make(prefix + ".min", b.min_constraint(i), s);
-        } else {
-            string buf_min_name = b.name() + ".min." + dim;
-            Expr buf_min = Variable::make(Int(32), buf_min_name);
-            s = LetStmt::make(prefix + ".min", buf_min, s);
-        }
-
-        if (b.extent_constraint(i).defined()) {
-            s = LetStmt::make(prefix + ".extent", b.extent_constraint(i), s);
-        } else {
-            string buf_extent_name = b.name() + ".extent." + dim;
-            Expr buf_extent = Variable::make(Int(32), buf_extent_name);
-            s = LetStmt::make(prefix + ".extent", buf_extent, s);
-        }
-    }
 
     return s;
 }

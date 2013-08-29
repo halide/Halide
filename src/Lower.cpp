@@ -548,10 +548,6 @@ private:
 
         Stmt body = for_loop->body;
 
-        debug(2) << func.has_extern_definition() << " "
-                 << func.schedule().compute_level.is_inline() << " "
-                 << function_is_called_in_stmt(func, for_loop) << "\n";
-
         // Can't schedule things inside a vector for loop
         if (for_loop->for_type != For::Vectorized) {
             body = mutate(for_loop->body);
@@ -854,7 +850,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
     string root_var = Schedule::LoopLevel::root().func + "." + Schedule::LoopLevel::root().var;
     s = For::make(root_var, 0, 1, For::Serial, s);
 
-    for (size_t i = order.size()-1; i > 0; i--) {
+    for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
 
         // If f is extern, check that none of its inputs are scheduled inline.
@@ -871,6 +867,9 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
                 }
             }
         }
+
+        // We don't actually want to schedule the output function here.
+        if (i == order.size()) continue;
 
         if (f.schedule().compute_level.is_inline() &&
             !f.schedule().store_level.is_inline()) {
