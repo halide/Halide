@@ -8,6 +8,7 @@
 #include "Debug.h"
 #include "ModulusRemainder.h"
 #include "Substitute.h"
+#include "Bounds.h"
 #include <iostream>
 
 namespace Halide {
@@ -49,6 +50,7 @@ class Simplify : public IRMutator {
 
     Scope<VarInfo> var_info;
     Scope<ModulusRemainder> alignment_info;
+    Scope<Interval> bounds_info;
 
     using IRMutator::visit;
 
@@ -542,32 +544,46 @@ class Simplify : public IRMutator {
         const Min *min_a_a_a = min_a_a ? min_a_a->a.as<Min>() : NULL;
         const Min *min_a_a_a_a = min_a_a_a ? min_a_a_a->a.as<Min>() : NULL;
 
-        // Sometimes we can do bounds analysis to simplify
-        // things. Only worth doing for ints
-
         if (equal(a, b)) {
             expr = a;
+            return;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
             expr = std::min(ia, ib);
+            return;
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = std::min(fa, fb);
+            return;
         } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
             if (op->type.is_uint()) {
                 expr = make_const(op->type, std::min(((unsigned int) ia), ((unsigned int) ib)));
             } else {
                 expr = make_const(op->type, std::min(ia,ib));
             }
+            return;
         } else if (const_castint(b, &ib) && ib == b.type().imax()) {
             // Compute minimum of expression of type and maximum of type --> expression
             expr = a;
+            return;
         } else if (const_castint(b, &ib) && ib == b.type().imin()) {
             // Compute minimum of expression of type and minimum of type --> min of type
             expr = b;
+            return;
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
-        } else if (add_a && const_int(add_a->b, &ia) &&
-                   add_b && const_int(add_b->b, &ib) &&
-                   equal(add_a->a, add_b->a)) {
+            return;
+        } else if (op->type == Int(32) && is_simple_const(b)) {
+            // Try to remove pointless mins that splitting introduces
+            Interval ia = bounds_of_expr_in_scope(a, bounds_info);
+            ia.max = mutate(ia.max);
+            if (ia.max.defined() && is_const(ia.max) && is_one(mutate(ia.max <= b))) {
+                expr = a;
+                return;
+            }
+        }
+
+        if (add_a && const_int(add_a->b, &ia) &&
+            add_b && const_int(add_b->b, &ib) &&
+            equal(add_a->a, add_b->a)) {
             // min(x + 3, x - 2) -> x - 2
             if (ia > ib) {
                 expr = b;
@@ -1016,6 +1032,10 @@ class Simplify : public IRMutator {
         const Ramp *ramp = value.as<Ramp>();
         const Broadcast *broadcast = value.as<Broadcast>();
         const Variable *var = value.as<Variable>();
+        const Mul *mul = value.as<Mul>();
+        const Add *add = value.as<Add>();
+        const Div *div = value.as<Div>();
+        const Sub *sub = value.as<Sub>();
 
         Expr new_value;
         string new_name;
@@ -1024,7 +1044,10 @@ class Simplify : public IRMutator {
         info.old_uses = 0;
         info.new_uses = 0;
 
-        if (is_const(value)) {
+        // Blindly push all vector expressions inside to help peephole matching later.
+        if (value.type().width > 1) {
+            info.replacement = value;
+        } else if (is_const(value)) {
             // Substitute the value wherever we see it and remove this let statement
             info.replacement = value;
         } else if (ramp && is_simple_const(ramp->stride)) {
@@ -1047,7 +1070,6 @@ class Simplify : public IRMutator {
             info.replacement = val;
 
             new_value = base;
-
         } else if (broadcast) {
             // Make a new name to refer to the scalar version, and push the broadcast inside
             new_name = op->name + ".base";
@@ -1056,7 +1078,42 @@ class Simplify : public IRMutator {
                                                new_name),
                                 broadcast->width);
             new_value = broadcast->value;
-
+        } else if (value.type() == Int(32) && mul && is_const(mul->b)) {
+            // Multiplication by a scalar. Push the scalar inside.
+            if (mul->a.as<Variable>()) {
+                info.replacement = value;
+            } else {
+                new_name = op->name + ".lhs";
+                info.replacement = Variable::make(value.type(), new_name) * mul->b;
+                new_value = mul->a;
+            }
+        } else if (value.type() == Int(32) && add && is_const(add->b)) {
+            // Addition of a scalar. Push the scalar inside.
+            if (add->a.as<Variable>()) {
+                info.replacement = value;
+            } else {
+                new_name = op->name + ".lhs";
+                info.replacement = Variable::make(value.type(), new_name) + add->b;
+                new_value = add->a;
+            }
+        } else if (value.type() == Int(32) && div && is_const(div->b)) {
+            // Division by a scalar. Push the scalar inside.
+            if (div->a.as<Variable>()) {
+                info.replacement = value;
+            } else {
+                new_name = op->name + ".lhs";
+                info.replacement = Variable::make(value.type(), new_name) / div->b;
+                new_value = div->a;
+            }
+        } else if (value.type() == Int(32) && sub && is_const(sub->b)) {
+            if (sub->a.as<Variable>()) {
+                info.replacement = value;
+            } else {
+                // Subtraction of a scalar. Push the scalar inside.
+                new_name = op->name + ".lhs";
+                info.replacement = Variable::make(value.type(), new_name) - sub->b;
+                new_value = sub->a;
+            }
         } else if (var) {
             // This var is just equal to another var. We should subs
             // it in.
@@ -1066,12 +1123,13 @@ class Simplify : public IRMutator {
         var_info.push(op->name, info);
 
         // Before we enter the body, track the alignment info
-        bool value_tracked = false;
+        bool new_value_tracked = false;
         if (new_value.defined() && new_value.type() == Int(32)) {
             ModulusRemainder mod_rem = modulus_remainder(new_value, alignment_info);
-            alignment_info.push(op->name, mod_rem);
-            value_tracked = true;
+            alignment_info.push(new_name, mod_rem);
+            new_value_tracked = true;
         }
+        bool value_tracked = false;
         if (value.defined() && value.type() == Int(32)) {
             ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
             alignment_info.push(op->name, mod_rem);
@@ -1082,6 +1140,9 @@ class Simplify : public IRMutator {
 
         if (value_tracked) {
             alignment_info.pop(op->name);
+        }
+        if (new_value_tracked) {
+            alignment_info.pop(new_name);
         }
 
         info = var_info.get(op->name);
@@ -1141,7 +1202,30 @@ class Simplify : public IRMutator {
     }
 
     void visit(const For *op) {
-        IRMutator::visit(op);
+        Expr new_min = mutate(op->min);
+        Expr new_extent = mutate(op->extent);
+
+        const IntImm *new_min_int = new_min.as<IntImm>();
+        const IntImm *new_extent_int = new_extent.as<IntImm>();
+        bool bounds_tracked = new_min_int && new_extent_int;
+        if (bounds_tracked) {
+            Interval i = Interval(new_min, new_min_int->value + new_extent_int->value - 1);
+            bounds_info.push(op->name, i);
+        }
+
+        Stmt new_body = mutate(op->body);
+
+        if (bounds_tracked) {
+            bounds_info.pop(op->name);
+        }
+
+        if (op->min.same_as(new_min) &&
+            op->extent.same_as(new_extent) &&
+            op->body.same_as(new_body)) {
+            stmt = op;
+        } else {
+            stmt = For::make(op->name, new_min, new_extent, op->for_type, new_body);
+        }
     }
 
     void visit(const Store *op) {
@@ -1483,13 +1567,11 @@ void simplify_test() {
 
     // Check ramps in lets get pushed inwards
     check(Let::make("vec", Ramp::make(x*2+7, 3, 4), vec + Expr(Broadcast::make(2, 4))),
-          Let::make("vec.base", x*2+7,
-                    Ramp::make(Expr(Variable::make(Int(32), "vec.base")) + 2, 3, 4)));
+          Ramp::make(x*2+9, 3, 4));
 
     // Check broadcasts in lets get pushed inwards
     check(Let::make("vec", Broadcast::make(x, 4), vec + Expr(Broadcast::make(2, 4))),
-          Let::make("vec.base", x,
-                    Broadcast::make(Expr(Variable::make(Int(32), "vec.base")) + 2, 4)));
+          Broadcast::make(x+2, 4));
 
     // Check that dead lets get stripped
     check(Let::make("x", 3*y*y*y, 4), 4);
