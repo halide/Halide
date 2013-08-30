@@ -57,6 +57,11 @@ private:
         op->value.accept(this);
         Expr min_a = min, max_a = max;
 
+        if (min_a.same_as(op->value) && max_a.same_as(op->value)) {
+            min = max = op;
+            return;
+        }
+
         min = min_a.defined() ? Cast::make(op->type, min_a) : Expr();
 
         if (min_a.same_as(max_a)) {
@@ -84,6 +89,12 @@ private:
         op->b.accept(this);
         Expr min_b = min, max_b = max;
 
+        if (min_a.same_as(op->a) && max_a.same_as(op->a) &&
+            min_b.same_as(op->b) && max_b.same_as(op->b)) {
+            min = max = op;
+            return;
+        }
+
         min = (min_b.defined() && min_a.defined()) ? Add::make(min_a, min_b) : Expr();
 
         if (min_a.same_as(max_a) && min_b.same_as(max_b)) {
@@ -98,6 +109,12 @@ private:
         Expr min_a = min, max_a = max;
         op->b.accept(this);
         Expr min_b = min, max_b = max;
+
+        if (min_a.same_as(op->a) && max_a.same_as(op->a) &&
+            min_b.same_as(op->b) && max_b.same_as(op->b)) {
+            min = max = op;
+            return;
+        }
 
         min = (max_b.defined() && min_a.defined()) ? Sub::make(min_a, max_b) : Expr();
         if (min_a.same_as(max_a) && min_b.same_as(max_b)) {
@@ -118,6 +135,12 @@ private:
         Expr min_b = min, max_b = max;
         if (!min_b.defined() || !max_b.defined()) {
             min = Expr(); max = Expr(); return;
+        }
+
+        if (min_a.same_as(op->a) && max_a.same_as(op->a) &&
+            min_b.same_as(op->b) && max_b.same_as(op->b)) {
+            min = max = op;
+            return;
         }
 
         if (min_a.same_as(max_a) && min_b.same_as(max_b)) {
@@ -163,6 +186,12 @@ private:
             min = Expr(); max = Expr(); return;
         }
 
+        if (min_a.same_as(op->a) && max_a.same_as(op->a) &&
+            min_b.same_as(op->b) && max_b.same_as(op->b)) {
+            min = max = op;
+            return;
+        }
+
         if (min_b.same_as(max_b)) {
             // Constant denominator
             Expr a = min_a / min_b;
@@ -204,6 +233,12 @@ private:
             min = Expr(); max = Expr(); return;
         }
 
+        if (min_a.same_as(op->a) && max_a.same_as(op->a) &&
+            min_b.same_as(op->b) && max_b.same_as(op->b)) {
+            min = max = op;
+            return;
+        }
+
         if (min_a.defined() && min_a.same_as(max_a) && min_b.same_as(max_b)) {
             min = max = Mod::make(min_a, min_b);
         } else {
@@ -225,6 +260,12 @@ private:
         Expr min_b = min, max_b = max;
 
         debug(3) << "Bounds of " << Expr(op) << "\n";
+
+        if (min_a.same_as(op->a) && max_a.same_as(op->a) &&
+            min_b.same_as(op->b) && max_b.same_as(op->b)) {
+            min = max = op;
+            return;
+        }
 
         if (min_a.defined() && min_a.same_as(min_b) &&
             max_a.defined() && max_a.same_as(max_b)) {
@@ -255,6 +296,12 @@ private:
         Expr min_b = min, max_b = max;
 
         debug(3) << "Bounds of " << Expr(op) << "\n";
+
+        if (min_a.same_as(op->a) && max_a.same_as(op->a) &&
+            min_b.same_as(op->b) && max_b.same_as(op->b)) {
+            min = max = op;
+            return;
+        }
 
         if (min_a.defined() && min_a.same_as(min_b) &&
             max_a.defined() && max_a.same_as(max_b)) {
@@ -564,7 +611,7 @@ private:
                     debug(3) << "Bounds of call to " << op->name << " in dimension " << i << ": "
                              << bounds.min << ", " << bounds.max << "\n";
                 }
-                
+
                 if (r.size() > i) {
                     r[i] = interval_union(r[i], bounds);
                 } else {
