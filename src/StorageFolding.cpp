@@ -111,7 +111,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             // If the folding
 
-            debug(2) << "Considering folding " << func << " over for loop over " << op->name << '\n'
+            debug(3) << "Considering folding " << func << " over for loop over " << op->name << '\n'
                    << "Min: " << min << '\n'
                    << "Extent: " << extent << '\n'
                    << "Monotonic increasing: " << monotonic_increasing << '\n'
@@ -123,7 +123,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                  equal(monotonic_decreasing, const_true()))
                 && max_extent_int) {
                 int extent = max_extent_int->value;
-                debug(2) << "Proceeding...\n";
+                debug(3) << "Proceeding...\n";
 
                 int factor = 1;
                 while (factor < extent) factor *= 2;
@@ -170,18 +170,27 @@ class StorageFolding : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Realize *op) {
+        Stmt body = mutate(op->body);
 
         AttemptStorageFoldingOfFunction folder(op->name);
         IsBufferSpecial special(op->name);
         op->accept(&special);
 
         if (special.special) {
-            stmt = op;
+            debug(3) << "Not attempting to fold " << op->name << " because it is referenced by an intrinsic\n";
+            if (body.same_as(op->body)) {
+                stmt = op;
+            } else {
+                stmt = Realize::make(op->name, op->types, op->bounds, body);
+            }
         } else {
-            Stmt new_body = folder.mutate(op->body);
+            debug(3) << "Attempting to fold " << op->name << "\n";
+            Stmt new_body = folder.mutate(body);
 
             if (new_body.same_as(op->body)) {
                 stmt = op;
+            } else if (new_body.same_as(body)) {
+                stmt = Realize::make(op->name, op->types, op->bounds, body);
             } else {
                 Region bounds = op->bounds;
 
