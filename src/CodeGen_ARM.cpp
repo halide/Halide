@@ -43,6 +43,8 @@ namespace Internal {
 using std::vector;
 using std::string;
 using std::ostringstream;
+using std::pair;
+using std::make_pair;
 
 using namespace llvm;
 
@@ -964,7 +966,6 @@ void CodeGen_ARM::visit(const Select *op) {
 void CodeGen_ARM::visit(const Store *op) {
 
     // A dense store of an interleaving can be done using a vst2 intrinsic
-    const Call *call = op->value.as<Call>();
     const Ramp *ramp = op->index.as<Ramp>();
 
     // We only deal with ramps here
@@ -972,6 +973,15 @@ void CodeGen_ARM::visit(const Store *op) {
         CodeGen::visit(op);
         return;
     }
+
+    // First dig through let expressions
+    Expr rhs = op->value;
+    vector<pair<string, Expr> > lets;
+    while (const Let *let = rhs.as<Let>()) {
+        rhs = let->body;
+        lets.push_back(make_pair(let->name, let->value));
+    }
+    const Call *call = rhs.as<Call>();
 
     if (is_one(ramp->stride) &&
         call && call->call_type == Call::Intrinsic &&
@@ -984,6 +994,11 @@ void CodeGen_ARM::visit(const Store *op) {
 
         Value *ptr = codegen_buffer_pointer(op->name, call->type.element_of(), ramp->base);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
+
+        // Codegen the lets
+        for (size_t i = 0; i < lets.size(); i++) {
+            sym_push(lets[i].first, codegen(lets[i].second));
+        }
 
         args[0] = ptr; // The pointer
         args[1] = codegen(call->args[0]);
@@ -1014,6 +1029,10 @@ void CodeGen_ARM::visit(const Store *op) {
             add_tbaa_metadata(store, op->name);
         }
 
+        for (size_t i = 0; i < lets.size(); i++) {
+            sym_pop(lets[i].first);
+        }
+
         return;
     }
 
@@ -1024,7 +1043,7 @@ void CodeGen_ARM::visit(const Store *op) {
         return;
     }
 
-    // We have builtins for strided loads with fixed but unknown stride
+    // We have builtins for strided stores with fixed but unknown stride
     ostringstream builtin;
     builtin << "strided_store_"
             << (op->value.type().is_float() ? 'f' : 'i')
