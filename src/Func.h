@@ -230,7 +230,7 @@ public:
 
     /** Reorder variables to have the given nesting order, from
      * innermost out */
-    EXPORT ScheduleHandle &reorder(const Var* vars, size_t numvars);
+    EXPORT ScheduleHandle &reorder(const std::vector<Var> &vars);
 
     /** Reorder two dimensions so that x is traversed inside y. Does
      * not affect the nesting order of other dimensions. E.g, if you
@@ -723,7 +723,7 @@ public:
     EXPORT Func &bound(Var var, Expr min, Expr extent);
     EXPORT Func &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
     EXPORT Func &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
-    EXPORT Func &reorder(const Var* vars, size_t numvars);
+    EXPORT Func &reorder(const std::vector<Var> &vars);
     EXPORT Func &reorder(Var x, Var y);
     EXPORT Func &reorder(Var x, Var y, Var z);
     EXPORT Func &reorder(Var x, Var y, Var z, Var w);
