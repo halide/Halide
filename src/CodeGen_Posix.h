@@ -102,14 +102,6 @@ protected:
      * stack removes the entry from the free_stack_blocks list. */
     void destroy_allocation(Allocation alloc);
 
-    /** Restores the stack pointer to the given value. Call this to
-     * free a stack variable. */
-    void restore_stack(llvm::Value *saved_stack);
-
-    /** Save the stack directly. You only need to call this if you're
-     * doing your own allocas. */
-    llvm::Value *save_stack();
-
     /** Free all heap allocations in scope. */
     void prepare_for_early_exit();
 

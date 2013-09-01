@@ -129,18 +129,6 @@ void CodeGen_Posix::init_module() {
     f64x4 = VectorType::get(f64, 4);
 }
 
-Value *CodeGen_Posix::save_stack() {
-    llvm::Function *stacksave =
-        llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stacksave);
-    return builder->CreateCall(stacksave);
-}
-
-void CodeGen_Posix::restore_stack(llvm::Value *saved_stack) {
-    llvm::Function *stackrestore =
-        llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore);
-    builder->CreateCall(stackrestore, saved_stack);
-}
-
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, Expr size) {
 
     Allocation allocation;
