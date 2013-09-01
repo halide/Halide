@@ -1,8 +1,35 @@
 #include <Halide.h>
 #include <stdio.h>
-#include <sys/resource.h>
 
 using namespace Halide;
+
+// Not threadsafe!!!
+size_t mem_limit = (size_t)-1;
+size_t total_allocated = 0;
+
+// Ussing a lookaside instead of increasing the size of the block to hold the
+// allocation size keeps the malloc behavior the same with regard to alignement
+// and bug behaviors, etc. Cheap enough to be good in testing.
+std::map<void *, size_t> allocation_sizes;
+
+extern "C" void *test_malloc(size_t x) {
+    if (total_allocated + x > mem_limit)
+        return NULL;
+
+    void * result = malloc(x);
+    if (result != NULL) {
+        total_allocated += x;
+	allocation_sizes[result] = x;
+    }
+
+    return result;
+}
+
+extern "C" void test_free(void *ptr) {
+    total_allocated -= allocation_sizes[ptr];
+    allocation_sizes.erase(ptr);
+    free(ptr);
+}
 
 bool error_occurred  = false;
 extern "C" void handler(const char *msg) {
@@ -23,9 +50,9 @@ int main(int argc, char **argv) {
     }
 
     // Limit ourselves to two stages worth of address space
-    struct rlimit lim = {big << 1, big << 1};
-    setrlimit(RLIMIT_AS, &lim);
+    mem_limit = big << 1;
 
+    funcs[funcs.size()-1].set_custom_allocator(&test_malloc, &test_free);
     funcs[funcs.size()-1].set_error_handler(&handler);
     funcs[funcs.size()-1].realize(1);
 
@@ -36,5 +63,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }
