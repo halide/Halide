@@ -272,6 +272,14 @@ protected:
      * current context. */
     llvm::Type *llvm_type_of(Type);
 
+    /** Restores the stack pointer to the given value. Call this to
+     * free a stack variable. */
+    void restore_stack(llvm::Value *saved_stack);
+
+    /** Save the stack directly. You only need to call this if you're
+     * doing your own allocas. */
+    llvm::Value *save_stack();
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */

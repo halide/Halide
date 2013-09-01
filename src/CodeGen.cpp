@@ -1620,6 +1620,8 @@ void CodeGen::visit(const For *op) {
         // and dump it into a closure
         Closure closure = Closure::make(op->body, op->name, track_buffers(), buffer_t);
 
+	Value *saved_stack = save_stack();
+
         // Allocate a closure
         StructType *closure_t = closure.build_type(context);
         Value *ptr = builder->CreateAlloca(closure_t, ConstantInt::get(i32, 1));
@@ -1673,6 +1675,8 @@ void CodeGen::visit(const For *op) {
         Value *result = builder->CreateCall(do_par_for, args);
 
         debug(3) << "Leaving parallel for loop over " << op->name << "\n";
+
+	restore_stack(saved_stack);
 
         // Now restore the scope
         std::swap(symbol_table, saved_symbol_table);
@@ -1762,6 +1766,18 @@ void CodeGen::visit(const Realize *op) {
 
 void CodeGen::visit(const Provide *op) {
     assert(false && "Provide encountered during codegen");
+}
+
+Value *CodeGen::save_stack() {
+    llvm::Function *stacksave =
+        llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stacksave);
+    return builder->CreateCall(stacksave);
+}
+
+void CodeGen::restore_stack(llvm::Value *saved_stack) {
+    llvm::Function *stackrestore =
+        llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore);
+    builder->CreateCall(stackrestore, saved_stack);
 }
 
 template<>
