@@ -228,6 +228,10 @@ public:
      * the new outer dimensions */
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
 
+    /** Reorder variables to have the given nesting order, from
+     * innermost out */
+    EXPORT ScheduleHandle &reorder(const std::vector<Var> &vars);
+
     /** Reorder two dimensions so that x is traversed inside y. Does
      * not affect the nesting order of other dimensions. E.g, if you
      * say foo(x, y, z, w) = bar; foo.reorder(w, x); then foo will be
@@ -246,6 +250,26 @@ public:
     /** Reorder five dimensions to have the given nesting order, from
      * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t);
+
+    /** Reorder six dimensions to have the given nesting order, from
+     * innermost out */
+    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2);
+
+    /** Reorder seven dimensions to have the given nesting order, from
+     * innermost out */
+    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3);
+
+    /** Reorder eight dimensions to have the given nesting order, from
+     * innermost out */
+    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4);
+
+    /** Reorder nine dimensions to have the given nesting order, from
+     * innermost out */
+    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5);
+
+    /** Reorder ten dimensions to have the given nesting order, from
+     * innermost out */
+    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6);
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
@@ -699,10 +723,16 @@ public:
     EXPORT Func &bound(Var var, Expr min, Expr extent);
     EXPORT Func &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
     EXPORT Func &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    EXPORT Func &reorder(const std::vector<Var> &vars);
     EXPORT Func &reorder(Var x, Var y);
     EXPORT Func &reorder(Var x, Var y, Var z);
     EXPORT Func &reorder(Var x, Var y, Var z, Var w);
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t);
+    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2);
+    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3);
+    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4);
+    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5);
+    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6);
     EXPORT Func &rename(Var old_name, Var new_name);
     EXPORT Func &cuda_threads(Var thread_x);
     EXPORT Func &cuda_threads(Var thread_x, Var thread_y);
