@@ -543,6 +543,7 @@ class Simplify : public IRMutator {
         const Min *min_a_a = min_a ? min_a->a.as<Min>() : NULL;
         const Min *min_a_a_a = min_a_a ? min_a_a->a.as<Min>() : NULL;
         const Min *min_a_a_a_a = min_a_a_a ? min_a_a_a->a.as<Min>() : NULL;
+        const Max *max_a = a.as<Max>();
 
         if (equal(a, b)) {
             expr = a;
@@ -604,6 +605,9 @@ class Simplify : public IRMutator {
             } else {
                 expr = b;
             }
+        } else if (max_a && equal(max_a->b, b)) {
+            // min(max(x, y), y) -> y
+            expr = b;
         } else if (min_a && is_simple_const(min_a->b) && is_simple_const(b)) {
             // min(min(x, 4), 5) -> min(x, 4)
             expr = Min::make(min_a->a, mutate(Min::make(min_a->b, b)));
@@ -648,6 +652,7 @@ class Simplify : public IRMutator {
         const Max *max_a_a = max_a ? max_a->a.as<Max>() : NULL;
         const Max *max_a_a_a = max_a_a ? max_a_a->a.as<Max>() : NULL;
         const Max *max_a_a_a_a = max_a_a_a ? max_a_a_a->a.as<Max>() : NULL;
+        const Min *min_a = a.as<Min>();
 
         if (equal(a, b)) {
             expr = a;
@@ -690,6 +695,9 @@ class Simplify : public IRMutator {
             } else {
                 expr = a;
             }
+        } else if (min_a && equal(min_a->b, b)) {
+            // max(min(x, y), y) -> y
+            expr = b;
         } else if (max_a && is_simple_const(max_a->b) && is_simple_const(b)) {
             // max(max(x, 4), 5) -> max(x, 5)
             expr = Max::make(max_a->a, mutate(Max::make(max_a->b, b)));
