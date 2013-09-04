@@ -148,18 +148,40 @@ private:
             min = max = min_a * min_b;
         } else if (min_a.same_as(max_a)) {
             // A is constant
-            Expr a = min_a * min_b;
-            Expr b = min_a * max_b;
-            Expr cmp = min_a > make_zero(min_a.type());
-            min = select(cmp, a, b);
-            max = select(cmp, b, a);
+            if (is_zero(min_a)) {
+                min = max = min_a;
+            } else if (is_positive_const(min_a)) {
+                min = min_b * min_a;
+                max = max_b * min_a;
+            } else if (is_negative_const(min_a)) {
+                min = max_b * min_a;
+                max = min_b * min_a;
+            } else {
+                // Sign of a is unknown
+                Expr a = min_a * min_b;
+                Expr b = min_a * max_b;
+                Expr cmp = min_a > make_zero(min_a.type());
+                min = select(cmp, a, b);
+                max = select(cmp, b, a);
+            }
         } else if (min_b.same_as(max_b)) {
             // B is constant
-            Expr a = min_b * min_a;
-            Expr b = min_b * max_a;
-            Expr cmp = min_b > make_zero(min_b.type());
-            min = select(cmp, a, b);
-            max = select(cmp, b, a);
+            if (is_zero(min_b)) {
+                min = max = min_a;
+            } else if (is_positive_const(min_b)) {
+                min = min_a * min_b;
+                max = max_a * min_b;
+            } else if (is_negative_const(min_b)) {
+                min = max_a * min_b;
+                max = min_a * min_b;
+            } else {
+                // Sign of b is unknown
+                Expr a = min_b * min_a;
+                Expr b = min_b * max_a;
+                Expr cmp = min_b > make_zero(min_b.type());
+                min = select(cmp, a, b);
+                max = select(cmp, b, a);
+            }
         } else {
 
             Expr a = min_a * min_b;
@@ -557,7 +579,9 @@ private:
         op->value.accept(this);
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
         scope.push(op->name, value_bounds);
+        debug(3) << "Adding " << op->name << " to scope\n";
         op->body.accept(this);
+        debug(3) << "Removing " << op->name << " from scope\n";
         scope.pop(op->name);
     }
 
@@ -575,7 +599,10 @@ private:
         Interval min_bounds = bounds_of_expr_in_scope(op->min, scope);
         Interval extent_bounds = bounds_of_expr_in_scope(op->extent, scope);
         Expr min = min_bounds.min;
-        Expr max = (min_bounds.max + extent_bounds.max) - 1;
+        Expr max;
+        if (min_bounds.max.defined() && extent_bounds.max.defined()) {
+            max = (min_bounds.max + extent_bounds.max) - 1;
+        }
         scope.push(op->name, Interval(min, max));
         debug(3) << "Adding " << op->name << " to scope\n";
         op->body.accept(this);
