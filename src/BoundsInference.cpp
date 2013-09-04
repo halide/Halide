@@ -28,8 +28,27 @@ public:
 
     virtual void visit(const For *for_loop) {
 
+        Stmt body = mutate(for_loop->body);
+
+        debug(3) << "\nIn loop over " << for_loop->name << " computing regions called...\n\n";
+
         // Compute the region required of each function within this loop body
-        map<string, Region> regions = regions_called(for_loop->body);
+        map<string, Region> regions = regions_called(body);
+
+
+        debug(3) << "\nIn loop over " << for_loop->name << " regions called are:\n\n";
+        for (size_t i = 0; i < funcs.size(); i++) {
+            map<string, Region>::const_iterator iter = regions.find(funcs[i]);
+            if (iter == regions.end()) continue;
+            const Region &r = iter->second;
+
+            debug(3) << funcs[i] << ":\n";
+            for (size_t j = 0; j < r.size(); j++) {
+                debug(3) << "  min " << j << ": " << r[j].min << "\n"
+                         << "  extent " << j << ": " << r[j].extent << "\n";
+            }
+            debug(3) << "\n";
+        }
 
         // In the outermost loop, the output func counts as used
         if (for_loop->name == "<outermost>") {
@@ -71,8 +90,6 @@ public:
             }
 
         }
-
-        Stmt body = mutate(for_loop->body);
 
         debug(3) << "Bounds inference considering loop over " << for_loop->name << '\n';
 
@@ -280,6 +297,8 @@ public:
                 body = LetStmt::make(min_name, region[j].min, body);
                 body = LetStmt::make(extent_name, region[j].extent, body);
 
+                debug(3) << "Assigning " << min_name << " and " << extent_name << "\n";
+
             }
         }
 
@@ -288,6 +307,8 @@ public:
         } else {
             stmt = For::make(for_loop->name, for_loop->min, for_loop->extent, for_loop->for_type, body);
         }
+
+        debug(3) << "New version of loop: \n" << stmt << "\n\n";
     }
 
     virtual void visit(const Pipeline *pipeline) {
