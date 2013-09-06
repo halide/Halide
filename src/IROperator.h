@@ -225,6 +225,7 @@ inline Expr &operator*=(Expr &a, Expr b) {
  * coercion using \ref Internal::match_types */
 inline Expr operator/(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator/ of undefined");
+    assert(!is_const(b, 0) && "operator/ with constant 0 divisor.");
     Internal::match_types(a, b);
     return Internal::Div::make(a, b);
 }
@@ -234,6 +235,7 @@ inline Expr operator/(Expr a, Expr b) {
  * the type of the first. */
 inline Expr &operator/=(Expr &a, Expr b) {
     assert(a.defined() && b.defined() && "operator/= of undefined");
+    assert(!is_const(b, 0) && "operator/= with constant 0 divisor.");
     a = Internal::Div::make(a, cast(a.type(), b));
     return a;
 }
@@ -242,6 +244,7 @@ inline Expr &operator/=(Expr &a, Expr b) {
  * necessary type coercion using \ref Internal::match_types */
 inline Expr operator%(Expr a, Expr b) {
     assert(a.defined() && b.defined() && "operator% of undefined");
+    assert(!is_const(b, 0) && "operator% with constant 0 divisor.");
     Internal::match_types(a, b);
     return Internal::Mod::make(a, b);
 }
