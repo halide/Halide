@@ -82,6 +82,19 @@ class Simplify : public IRMutator {
         }
     }
 
+    Expr is_round_up(Expr e, int *factor) {
+        const Mul *mul = e.as<Mul>();
+        if (!mul) return Expr();
+        if (!const_int(mul->b, factor)) return Expr();
+        const Div *div = mul->a.as<Div>();
+        if (!div) return Expr();
+        if (!is_const(div->b, *factor)) return Expr();
+        const Add *add = div->a.as<Add>();
+        if (!add) return Expr();
+        if (!is_const(add->b, (*factor)-1)) return Expr();
+        return add->a;
+    }
+
     /* Recognise an integer or cast integer and fetch its value.
      * Only matches if the number of bits of the cast integer does not exceed
      * the number of bits of an int in the compiler, because simplification
@@ -262,6 +275,14 @@ class Simplify : public IRMutator {
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
+        const Min *min_b = b.as<Min>();
+        const Add *add_b_a = min_b ? min_b->a.as<Add>() : NULL;
+        const Add *add_b_b = min_b ? min_b->b.as<Add>() : NULL;
+
+        const Min *min_a = a.as<Min>();
+        const Add *add_a_a = min_a ? min_a->a.as<Add>() : NULL;
+        const Add *add_a_b = min_a ? min_a->b.as<Add>() : NULL;
+
         if (is_zero(b)) {
             expr = a;
         } else if (equal(a, b)) {
@@ -326,6 +347,47 @@ class Simplify : public IRMutator {
             expr = mutate(mul_a->b * (mul_a->a - mul_b->a));
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->b)) {
             expr = mutate(mul_a->a * (mul_a->b - mul_b->a));
+        } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
+            // Quaternary expressions where a term cancels
+            // (a + b) - (c + b) -> a - c
+            expr = mutate(add_a->a - add_b->a);
+        } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
+            // (a + b) - (a + c) -> b - c
+            expr = mutate(add_a->b - add_b->b);
+        } else if (add_a && add_b && equal(add_a->a, add_b->b)) {
+            // (a + b) - (c + a) -> b - c
+            expr = mutate(add_a->b - add_b->a);
+        } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
+            // (b + a) - (a + c) -> b - c
+            expr = mutate(add_a->a - add_b->b);
+        } else if (min_b && add_b_a && equal(a, add_b_a->a)) {
+            // Quaternary expressions involving mins where a term
+            // cancels. These are important for bounds inference
+            // simplifications.
+            // a - min(a + b, c) -> max(-b, a-c)
+            expr = mutate(max(0 - add_b_a->b, a - min_b->b));
+        } else if (min_b && add_b_a && equal(a, add_b_a->b)) {
+            // a - min(b + a, c) -> max(-b, a-c)
+            expr = mutate(max(0 - add_b_a->a, a - min_b->b));
+        } else if (min_b && add_b_b && equal(a, add_b_b->a)) {
+            // a - min(c, a + b) -> max(-b, a-c)
+            expr = mutate(max(0 - add_b_b->b, a - min_b->a));
+        } else if (min_b && add_b_b && equal(a, add_b_b->b)) {
+            // a - min(c, b + a) -> max(-b, a-c)
+            expr = mutate(max(0 - add_b_b->a, a - min_b->a));
+        } else if (min_a && add_a_a && equal(b, add_a_a->a)) {
+            // min(a + b, c) - a -> min(b, c-a)
+            expr = mutate(min(add_a_a->b, min_a->b - b));
+        } else if (min_a && add_a_a && equal(b, add_a_a->b)) {
+            // min(b + a, c) - a -> min(b, c-a)
+            expr = mutate(min(add_a_a->a, min_a->b - b));
+        } else if (min_a && add_a_b && equal(b, add_a_b->a)) {
+            // min(c, a + b) - a -> min(b, c-a)
+            expr = mutate(min(add_a_b->b, min_a->a - b));
+        } else if (min_a && add_a_b && equal(b, add_a_b->b)) {
+            // min(c, b + a) - a -> min(b, c-a)
+            expr = mutate(min(add_a_b->a, min_a->a - b));
+
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -545,6 +607,11 @@ class Simplify : public IRMutator {
         const Min *min_a_a_a_a = min_a_a_a ? min_a_a_a->a.as<Min>() : NULL;
         const Max *max_a = a.as<Max>();
 
+        // Detect if the lhs or rhs is a rounding-up operation
+        int a_round_up_factor = 0, b_round_up_factor = 0;
+        Expr a_round_up = is_round_up(a, &a_round_up_factor);
+        Expr b_round_up = is_round_up(b, &b_round_up_factor);
+
         if (equal(a, b)) {
             expr = a;
             return;
@@ -605,6 +672,24 @@ class Simplify : public IRMutator {
             } else {
                 expr = b;
             }
+        } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
+            // min(a + b, c + b) -> min(a, c) + b
+            expr = mutate(min(add_a->a, add_b->a)) + add_a->b;
+        } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
+            // min(b + a, b + c) -> min(a, c) + b
+            expr = mutate(min(add_a->b, add_b->b)) + add_a->a;
+        } else if (add_a && add_b && equal(add_a->a, add_b->b)) {
+            // min(b + a, c + b) -> min(a, c) + b
+            expr = mutate(min(add_a->b, add_b->a)) + add_a->a;
+        } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
+            // min(a + b, b + c) -> min(a, c) + b
+            expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
+        } else if (a_round_up.defined() && equal(a_round_up, b)) {
+            // min(((a + 3)/4)*4, a) -> a
+            expr = b;
+        } else if (b_round_up.defined() && equal(b_round_up, a)) {
+            // min(a, ((a + 3)/4)*4) -> a
+            expr = a;
         } else if (max_a && equal(max_a->b, b)) {
             // min(max(x, y), y) -> y
             expr = b;
@@ -1551,6 +1636,31 @@ void simplify_test() {
     check(Max::make(x, Int(32).max()), Int(32).max());
     // Check that non-extremes do not lead to incorrect simplification
     check(Max::make(Cast::make(Int(8), x), Cast::make(Int(8), -127)), Max::make(Cast::make(Int(8), x), Cast::make(Int(8), -127)));
+
+    // Some quaternary rules with cancellations
+    check((x + y) - (z + y), x - z);
+    check((x + y) - (y + z), x - z);
+    check((y + x) - (z + y), x - z);
+    check((y + x) - (y + z), x - z);
+
+    check(x - min(x + y, z), max(-y, x-z));
+    check(x - min(y + x, z), max(-y, x-z));
+    check(x - min(z, x + y), max(-y, x-z));
+    check(x - min(z, y + x), max(-y, x-z));
+
+    check(min(x + y, z) - x, min(y, z-x));
+    check(min(y + x, z) - x, min(y, z-x));
+    check(min(z, x + y) - x, min(y, z-x));
+    check(min(z, y + x) - x, min(y, z-x));
+
+    check(min(x + y, z + y), min(x, z) + y);
+    check(min(y + x, z + y), min(x, z) + y);
+    check(min(x + y, y + z), min(x, z) + y);
+    check(min(y + x, y + z), min(x, z) + y);
+
+    // Mins of expressions and rounded up versions of them
+    check(min(((x+7)*8)/8, x), x);
+    check(min(x, ((x+7)*8)/8), x);
 
     check(!f, t);
     check(!t, f);
