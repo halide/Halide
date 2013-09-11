@@ -1,6 +1,11 @@
 #include "Tracing.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
+#include "Substitute.h"
+#include "Debug.h"
+#include "Lower.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {
@@ -11,89 +16,157 @@ int tracing_level() {
 }
 
 using std::vector;
+using std::map;
+using std::string;
 
 class InjectTracing : public IRMutator {
 public:
-    int level;
-    InjectTracing() {
-        level = tracing_level();
-    }
-
+    const map<string, Function> &env;
+    Function output;
+    int global_level;
+    InjectTracing(const map<string, Function> &e,
+                  Function o) : env(e),
+                                output(o),
+                                global_level(tracing_level()) {}
 
 private:
     using IRMutator::visit;
 
     void visit(const Call *op) {
-        expr = op;
+        IRMutator::visit(op);
+        op = expr.as<Call>();
+        assert(op);
+
+        if (op->call_type != Call::Halide) return;
+
+        Function f = op->func;
+        bool inlined = !f.same_as(output) && f.schedule().compute_level.is_inline();
+
+        if (f.is_tracing_loads() || (global_level > 2 && !inlined)) {
+
+            // Wrap the load in a call to trace_load
+            vector<Expr> args;
+            args.push_back(f.name());
+            args.push_back(halide_trace_load);
+            args.push_back(op->value_index);
+            args.push_back(op);
+            args.insert(args.end(), op->args.begin(), op->args.end());
+
+            expr = Call::make(op->type, Call::trace, args, Call::Intrinsic);
+        }
     }
 
     void visit(const Provide *op) {
         IRMutator::visit(op);
-        // We print every provide at tracing level 3 or higher
-        if (level >= 3) {
-            const Provide *op = stmt.as<Provide>();
-            vector<Expr> args = op->args;
-            args.insert(args.end(), op->values.begin(), op->values.end());
-            Stmt print = PrintStmt::make("Provide " + op->name, args);
-            stmt = Block::make(print, op);
+        op = stmt.as<Provide>();
+        assert(op);
+
+        map<string, Function>::const_iterator iter = env.find(op->name);
+        if (iter == env.end()) return;
+        Function f = iter->second;
+        bool inlined = !f.same_as(output) && f.schedule().compute_level.is_inline();
+
+        if (f.is_tracing_stores() || (global_level > 1 && !inlined)) {
+            // Wrap each expr in a tracing call
+
+            vector<Expr> new_values(op->values.size());
+
+            for (size_t i = 0; i < new_values.size(); i++) {
+                Expr old = op->values[i];
+                vector<Expr> args;
+                args.push_back(f.name());
+                args.push_back(halide_trace_store);
+                args.push_back((int)i);
+                args.push_back(old);
+                args.insert(args.end(), op->args.begin(), op->args.end());
+                new_values[i] = Call::make(old.type(), Call::trace, args, Call::Intrinsic);
+            }
+
+            stmt = Provide::make(op->name, new_values, op->args);
         }
     }
 
     void visit(const Realize *op) {
         IRMutator::visit(op);
-        if (level >= 1) {
-            const Realize *op = stmt.as<Realize>();
+        op = stmt.as<Realize>();
+        assert(op);
+
+        map<string, Function>::const_iterator iter = env.find(op->name);
+        if (iter == env.end()) return;
+        Function f = iter->second;
+        if (f.is_tracing_realizations() || global_level > 0) {
+
+            // Throw a tracing call before and after the realize body
             vector<Expr> args;
+            args.push_back(op->name);
+            args.push_back(halide_trace_begin_realization); // event type for begin realization
+
+            args.push_back(0); // value index
+            args.push_back(0); // value
+
             for (size_t i = 0; i < op->bounds.size(); i++) {
                 args.push_back(op->bounds[i].min);
                 args.push_back(op->bounds[i].extent);
             }
-            Expr time = Call::make(Int(32), "halide_current_time", std::vector<Expr>(), Call::Extern);
-            Stmt print = PrintStmt::make("Realizing " + op->name + " over ", args);
-            Stmt start_time = PrintStmt::make("Starting realization of " + op->name + " at time ", vec(time));
-            Stmt body = Block::make(Block::make(start_time, print), op->body);
-            stmt = Realize::make(op->name, op->types, op->bounds, body);
+
+            Expr call_before = Call::make(UInt(1), Call::trace, args, Call::Intrinsic);
+            args[1] = halide_trace_end_realization;
+            Expr call_after = Call::make(UInt(1), Call::trace, args, Call::Intrinsic);
+            stmt = Block::make(Evaluate::make(call_before), stmt);
+            stmt = Block::make(stmt, Evaluate::make(call_after));
         }
     }
 
     void visit(const Pipeline *op) {
-        if (level >= 1) {
-            Expr time = Call::make(Int(32), "halide_current_time", std::vector<Expr>(), Call::Extern);
-            Stmt print_produce = PrintStmt::make("Producing " + op->name + " at time ", vec(time));
-            Stmt print_update = PrintStmt::make("Updating " + op->name + " at time ", vec(time));
-            Stmt print_consume = PrintStmt::make("Consuming " + op->name + " at time ", vec(time));
-            Stmt produce = mutate(op->produce);
-            Stmt update = op->update.defined() ? mutate(op->update) : Stmt();
-            Stmt consume = mutate(op->consume);
-            produce = Block::make(print_produce, produce);
-            update = update.defined() ? Block::make(print_update, update) : Stmt();
-            consume = Block::make(print_consume, consume);
-            stmt = Pipeline::make(op->name, produce, update, consume);
-        } else {
-            IRMutator::visit(op);
-        }
-    }
 
-    void visit(const For *op) {
-        // We only enter for loops at tracing level 2 or higher
-        if (level >= 2) {
-            IRMutator::visit(op);
-        } else {
-            stmt = op;
+        IRMutator::visit(op);
+        op = stmt.as<Pipeline>();
+        assert(op);
+
+        map<string, Function>::const_iterator iter = env.find(op->name);
+        if (iter == env.end()) return;
+        Function f = iter->second;
+        if (f.is_tracing_realizations() || global_level > 0) {
+            // Throw a tracing call around each pipeline event
+            vector<Expr> args;
+            args.push_back(op->name);
+            args.push_back(halide_trace_produce); // event type for begin realization
+            args.push_back(0); // value index
+            args.push_back(0); // value
+
+            for (int i = 0; i < f.dimensions(); i++) {
+                Expr min = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".min");
+                Expr extent = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".extent");
+                args.push_back(min);
+                args.push_back(extent);
+            }
+
+            Expr call = Call::make(UInt(1), Call::trace, args, Call::Intrinsic);
+            Stmt new_produce = Block::make(Evaluate::make(call), op->produce);
+
+            Stmt new_update;
+            if (op->update.defined()) {
+                args[1] = halide_trace_update;
+                call = Call::make(UInt(1), Call::trace, args, Call::Intrinsic);
+                new_update = Block::make(Evaluate::make(call), op->update);
+            }
+
+            args[1] = halide_trace_consume;
+            call = Call::make(UInt(1), Call::trace, args, Call::Intrinsic);
+            Stmt new_consume = Block::make(Evaluate::make(call), op->consume);
+
+            args[1] = halide_trace_end_consume;
+            call = Call::make(UInt(1), Call::trace, args, Call::Intrinsic);
+            new_consume = Block::make(new_consume, Evaluate::make(call));
+
+            stmt = Pipeline::make(op->name, new_produce, new_update, new_consume);
         }
     }
 };
 
-Stmt inject_tracing(Stmt s) {
-    InjectTracing tracing;
+Stmt inject_tracing(Stmt s, const map<string, Function> &env, Function output) {
+    InjectTracing tracing(env, output);
     s = tracing.mutate(s);
-    if (tracing.level >= 1) {
-        Expr time = Call::make(Int(32), "halide_current_time", std::vector<Expr>(), Call::Extern);
-        Expr start_clock_call = Call::make(Int(32), "halide_start_clock", std::vector<Expr>(), Call::Extern);
-        Stmt start_clock = AssertStmt::make(start_clock_call == 0, "Failed to start clock");
-        Stmt print_final_time = PrintStmt::make("Total time: ", vec(time));
-        s = Block::make(Block::make(start_clock, s), print_final_time);
-    }
     return s;
 }
 

@@ -61,10 +61,19 @@ struct JITCompiledModule {
      * \ref Func::set_custom_do_task */
     void (*set_custom_do_task)(int (*custom_do_task)(HalideTask, int, uint8_t *));
 
+    /** Set a custom trace function. See \ref Func::set_custom_trace. */
+    typedef void (*TraceFn)(const char *, int, int, int, int, int, const void *, int, const int *);
+    void (*set_custom_trace)(TraceFn);
+
     /** Shutdown the thread pool maintained by this JIT module. This
      * is also done automatically when the last reference to this
      * module is destroyed. */
     void (*shutdown_thread_pool)();
+
+    /** Close the tracing file this module may be writing to. Also
+     * done automatically when the last reference to this module is
+     * destroyed. */
+    void (*shutdown_trace)();
 
     // The JIT Module Allocator holds onto the memory storing the functions above.
     IntrusivePtr<JITModuleHolder> module;
@@ -79,7 +88,9 @@ struct JITCompiledModule {
         set_custom_allocator(NULL),
         set_custom_do_par_for(NULL),
         set_custom_do_task(NULL),
-        shutdown_thread_pool(NULL) {}
+        set_custom_trace(NULL),
+        shutdown_thread_pool(NULL),
+        shutdown_trace(NULL) {}
 
     /** Take an llvm module and compile it. Populates the function
      * pointer members above with the result. */

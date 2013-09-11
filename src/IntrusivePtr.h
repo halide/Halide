@@ -56,18 +56,18 @@ template<typename T>
 struct IntrusivePtr {
 private:
 
-    void incref(T *ptr) {
-        if (ptr) {
-            ref_count(ptr).increment();
+    void incref(T *p) {
+        if (p) {
+            ref_count(p).increment();
         }
     };
 
-    void decref(T *ptr) {
-        if (ptr) {
-            ref_count(ptr).decrement();
-            if (ref_count(ptr).is_zero()) {
+    void decref(T *p) {
+        if (p) {
+            ref_count(p).decrement();
+            if (ref_count(p).is_zero()) {
                 //std::cout << "Destroying " << ptr << ", " << live_objects << "\n";
-                destroy(ptr);
+                destroy(p);
             }
         }
     }

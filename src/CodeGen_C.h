@@ -101,7 +101,6 @@ protected:
     void visit(const Store *);
     void visit(const Let *);
     void visit(const LetStmt *);
-    void visit(const PrintStmt *);
     void visit(const AssertStmt *);
     void visit(const Pipeline *);
     void visit(const For *);
@@ -109,6 +108,8 @@ protected:
     void visit(const Allocate *);
     void visit(const Free *);
     void visit(const Realize *);
+    void visit(const IfThenElse *);
+    void visit(const Evaluate *);
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 };

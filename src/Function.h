@@ -67,6 +67,10 @@ struct FunctionContents {
 
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
+
+    bool trace_loads, trace_stores, trace_realizations;
+
+    FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false) {}
 };
 
 /** A reference-counted handle to Halide's internal representation of
@@ -230,6 +234,29 @@ public:
     operator ExternFuncArgument() const {
         return ExternFuncArgument(contents);
     }
+
+    /** Tracing calls and accessors, passed down from the Func
+     * equivalents. */
+    // @{
+    void trace_loads() {
+        contents.ptr->trace_loads = true;
+    }
+    void trace_stores() {
+        contents.ptr->trace_stores = true;
+    }
+    void trace_realizations() {
+        contents.ptr->trace_realizations = true;
+    }
+    bool is_tracing_loads() {
+        return contents.ptr->trace_loads;
+    }
+    bool is_tracing_stores() {
+        return contents.ptr->trace_stores;
+    }
+    bool is_tracing_realizations() {
+        return contents.ptr->trace_realizations;
+    }
+    // @}
 };
 
 }}

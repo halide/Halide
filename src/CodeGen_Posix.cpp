@@ -240,7 +240,7 @@ void CodeGen_Posix::prepare_for_early_exit() {
     vector<string> names;
     for (Scope<Allocation>::iterator iter = allocations.begin();
          iter != allocations.end(); ++iter) {
-        names.push_back(*iter);
+        names.push_back(iter.name());
     }
 
     for (size_t i = 0; i < names.size(); i++) {

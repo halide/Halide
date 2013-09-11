@@ -31,20 +31,27 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
     Expr a = mutator->mutate(op->a);
     Expr b = mutator->mutate(op->b);
     if (a.same_as(op->a) &&
-        b.same_as(op->b)) *expr = op;
-    else *expr = T::make(a, b);
+        b.same_as(op->b)) {
+        *expr = op;
+    } else {
+        *expr = T::make(a, b);
+    }
     *stmt = NULL;
 }
 }
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}
 void IRMutator::visit(const FloatImm *op) {expr = op;}
+void IRMutator::visit(const StringImm *op) {expr = op;}
 void IRMutator::visit(const Variable *op) {expr = op;}
 
 void IRMutator::visit(const Cast *op) {
     Expr value = mutate(op->value);
-    if (value.same_as(op->value)) expr = op;
-    else expr = Cast::make(op->type, value);
+    if (value.same_as(op->value)) {
+        expr = op;
+    } else {
+        expr = Cast::make(op->type, value);
+    }
 }
 
 void IRMutator::visit(const Add *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
@@ -75,22 +82,31 @@ void IRMutator::visit(const Select *op)  {
     Expr f = mutate(op->false_value);
     if (cond.same_as(op->condition) &&
         t.same_as(op->true_value) &&
-        f.same_as(op->false_value)) expr = op;
-    else expr = Select::make(cond, t, f);
+        f.same_as(op->false_value)) {
+        expr = op;
+    } else {
+        expr = Select::make(cond, t, f);
+    }
 }
 
 void IRMutator::visit(const Load *op) {
     Expr index = mutate(op->index);
-    if (index.same_as(op->index)) expr = op;
-    else expr = Load::make(op->type, op->name, index, op->image, op->param);
+    if (index.same_as(op->index)) {
+        expr = op;
+    } else {
+        expr = Load::make(op->type, op->name, index, op->image, op->param);
+    }
 }
 
 void IRMutator::visit(const Ramp *op) {
     Expr base = mutate(op->base);
     Expr stride = mutate(op->stride);
     if (base.same_as(op->base) &&
-        stride.same_as(op->stride)) expr = op;
-    else expr = Ramp::make(base, stride, op->width);
+        stride.same_as(op->stride)) {
+        expr = op;
+    } else {
+        expr = Ramp::make(base, stride, op->width);
+    }
 }
 
 void IRMutator::visit(const Broadcast *op) {
@@ -111,47 +127,43 @@ void IRMutator::visit(const Call *op) {
         new_args[i] = new_arg;
     }
 
-    if (!changed) expr = op;
-    else expr = Call::make(op->type, op->name, new_args, op->call_type,
-                           op->func, op->value_index, op->image, op->param);
+    if (!changed) {
+        expr = op;
+    } else {
+        expr = Call::make(op->type, op->name, new_args, op->call_type,
+                          op->func, op->value_index, op->image, op->param);
+    }
 }
 
 void IRMutator::visit(const Let *op) {
     Expr value = mutate(op->value);
     Expr body = mutate(op->body);
     if (value.same_as(op->value) &&
-        body.same_as(op->body)) expr = op;
-    else expr = Let::make(op->name, value, body);
+        body.same_as(op->body)) {
+        expr = op;
+    } else {
+        expr = Let::make(op->name, value, body);
+    }
 }
 
 void IRMutator::visit(const LetStmt *op) {
     Expr value = mutate(op->value);
     Stmt body = mutate(op->body);
     if (value.same_as(op->value) &&
-        body.same_as(op->body)) stmt = op;
-    else stmt = LetStmt::make(op->name, value, body);
-}
-
-void IRMutator::visit(const PrintStmt *op) {
-    vector<Expr > new_args(op->args.size());
-    bool args_changed = false;
-
-    // Mutate the args
-    for (size_t i = 0; i < op->args.size(); i++) {
-        Expr old_arg = op->args[i];
-        Expr new_arg = mutate(old_arg);
-        if (!new_arg.same_as(old_arg)) args_changed = true;
-        new_args[i] = new_arg;
+        body.same_as(op->body)) {
+        stmt = op;
+    } else {
+        stmt = LetStmt::make(op->name, value, body);
     }
-
-    if (!args_changed) stmt = op;
-    else stmt = PrintStmt::make(op->prefix, new_args);
 }
 
 void IRMutator::visit(const AssertStmt *op) {
     Expr condition = mutate(op->condition);
-    if (condition.same_as(op->condition)) stmt = op;
-    else stmt = AssertStmt::make(condition, op->message);
+    if (condition.same_as(op->condition)) {
+        stmt = op;
+    } else {
+        stmt = AssertStmt::make(condition, op->message);
+    }
 }
 
 void IRMutator::visit(const Pipeline *op) {
@@ -242,15 +254,45 @@ void IRMutator::visit(const Realize *op) {
     }
 
     Stmt body = mutate(op->body);
-    if (!bounds_changed && body.same_as(op->body)) stmt = op;
-    else stmt = Realize::make(op->name, op->types, new_bounds, body);
+    if (!bounds_changed && body.same_as(op->body)) {
+        stmt = op;
+    } else {
+        stmt = Realize::make(op->name, op->types, new_bounds, body);
+    }
 }
 
 void IRMutator::visit(const Block *op) {
     Stmt first = mutate(op->first);
     Stmt rest = mutate(op->rest);
-    if (first.same_as(op->first) && rest.same_as(op->rest)) stmt = op;
-    else stmt = Block::make(first, rest);
+    if (first.same_as(op->first) &&
+        rest.same_as(op->rest)) {
+        stmt = op;
+    } else {
+        stmt = Block::make(first, rest);
+    }
 }
+
+void IRMutator::visit(const IfThenElse *op) {
+    Expr condition = mutate(op->condition);
+    Stmt then_case = mutate(op->then_case);
+    Stmt else_case = mutate(op->else_case);
+    if (condition.same_as(op->condition) &&
+        then_case.same_as(op->then_case) &&
+        else_case.same_as(op->else_case)) {
+        stmt = op;
+    } else {
+        stmt = IfThenElse::make(condition, then_case, else_case);
+    }
+}
+
+void IRMutator::visit(const Evaluate *op) {
+    Expr v = mutate(op->value);
+    if (v.same_as(op->value)) {
+        stmt = op;
+    } else {
+        stmt = Evaluate::make(v);
+    }
+}
+
 }
 }

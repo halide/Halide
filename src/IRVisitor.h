@@ -17,6 +17,7 @@ struct IRNode;
 struct Stmt;
 struct IntImm;
 struct FloatImm;
+struct StringImm;
 struct Cast;
 struct Variable;
 struct Add;
@@ -42,7 +43,6 @@ struct Broadcast;
 struct Call;
 struct Let;
 struct LetStmt;
-struct PrintStmt;
 struct AssertStmt;
 struct Pipeline;
 struct For;
@@ -52,6 +52,8 @@ struct Allocate;
 struct Free;
 struct Realize;
 struct Block;
+struct IfThenElse;
+struct Evaluate;
 
 /** A base class for algorithms that need to recursively walk over the
  * IR. The default implementations just recursively walk over the
@@ -62,6 +64,7 @@ public:
     virtual ~IRVisitor();
     virtual void visit(const IntImm *);
     virtual void visit(const FloatImm *);
+    virtual void visit(const StringImm *);
     virtual void visit(const Cast *);
     virtual void visit(const Variable *);
     virtual void visit(const Add *);
@@ -87,7 +90,6 @@ public:
     virtual void visit(const Call *);
     virtual void visit(const Let *);
     virtual void visit(const LetStmt *);
-    virtual void visit(const PrintStmt *);
     virtual void visit(const AssertStmt *);
     virtual void visit(const Pipeline *);
     virtual void visit(const For *);
@@ -97,6 +99,8 @@ public:
     virtual void visit(const Free *);
     virtual void visit(const Realize *);
     virtual void visit(const Block *);
+    virtual void visit(const IfThenElse *);
+    virtual void visit(const Evaluate *);
 };
 
 /** A base class for algorithms that walk recursively over the IR
@@ -123,6 +127,7 @@ public:
     // @{
     virtual void visit(const IntImm *);
     virtual void visit(const FloatImm *);
+    virtual void visit(const StringImm *);
     virtual void visit(const Cast *);
     virtual void visit(const Variable *);
     virtual void visit(const Add *);
@@ -148,7 +153,6 @@ public:
     virtual void visit(const Call *);
     virtual void visit(const Let *);
     virtual void visit(const LetStmt *);
-    virtual void visit(const PrintStmt *);
     virtual void visit(const AssertStmt *);
     virtual void visit(const Pipeline *);
     virtual void visit(const For *);
@@ -158,6 +162,8 @@ public:
     virtual void visit(const Free *);
     virtual void visit(const Realize *);
     virtual void visit(const Block *);
+    virtual void visit(const IfThenElse *);
+    virtual void visit(const Evaluate *);
     // @}
 };
 

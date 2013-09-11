@@ -30,7 +30,7 @@ class DebugToFile : public IRMutator {
             assert(op->types.size() == 1 && "debug_to_file doesn't handle functions with multiple values yet");
 
             // The name of the file
-            args.push_back(Call::make(Int(32), f.debug_file(), vector<Expr>(), Call::Intrinsic));
+            args.push_back(f.debug_file());
 
             // Inject loads to the corners of the function so that any
             // passes doing further analysis of buffer use understand

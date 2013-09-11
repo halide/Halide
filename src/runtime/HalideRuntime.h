@@ -42,6 +42,9 @@ extern int halide_printf(const char *, ...);
  */
 extern void halide_error(const char *msg);
 
+/** A macro that calls halide_error if the supplied condition is false. */
+#define halide_assert(cond) if (!(cond)) halide_error( #cond );
+
 /** Define halide_do_par_for to replace the default thread pool
  * implementation. halide_shutdown_thread_pool can also be called to
  * release resources used by the default thread pool on platforms
@@ -73,6 +76,32 @@ extern void halide_free(void *ptr);
 extern int32_t halide_debug_to_file(const char *filename, uint8_t *data,
                                     int32_t s0, int32_t s1, int32_t s2, int32_t s3,
                                     int32_t type_code, int32_t bytes_per_element);
+
+
+enum halide_trace_event_t {halide_trace_load = 0,
+                           halide_trace_store = 1,
+                           halide_trace_begin_realization = 2,
+                           halide_trace_end_realization = 3,
+                           halide_trace_produce = 4,
+                           halide_trace_update = 5,
+                           halide_trace_consume = 6,
+                           halide_trace_end_consume = 7};
+
+/** Called when Funcs are marked as trace_load, trace_store, or
+ * trace_realization. See Func::set_custom_trace. The default
+ * implementation either prints events via halide_printf, or if
+ * HL_TRACE_FILE is defined, dumps the trace to that file in a
+ * yet-to-be-documented binary format (see src/runtime/tracing.cpp to
+ * reverse engineer the format). If the trace is going to be large,
+ * you may want to make the file a named pipe, and then read from that
+ * pipe into gzip. */
+extern void halide_trace(const char *func, halide_trace_event_t event,
+                         int32_t type_code, int32_t bits, int32_t vector_width,
+                         int32_t value_idx, void *value,
+                         int32_t dimensions, const int32_t *coordinates);
+
+/** If tracing is writing to a file. This call closes that file (flushing the trace). */
+extern void halide_shutdown_trace();
 
 #ifdef __cplusplus
 } // End extern "C"

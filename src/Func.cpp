@@ -32,7 +32,8 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_malloc(NULL),
                                  custom_free(NULL),
                                  custom_do_par_for(NULL),
-                                 custom_do_task(NULL) {
+                                 custom_do_task(NULL),
+                                 custom_trace(NULL) {
 }
 
 Func::Func() : func(unique_name('f')),
@@ -40,7 +41,8 @@ Func::Func() : func(unique_name('f')),
                custom_malloc(NULL),
                custom_free(NULL),
                custom_do_par_for(NULL),
-               custom_do_task(NULL) {
+               custom_do_task(NULL),
+               custom_trace(NULL) {
 }
 
 Func::Func(Expr e) : func(unique_name('f')),
@@ -48,7 +50,8 @@ Func::Func(Expr e) : func(unique_name('f')),
                      custom_malloc(NULL),
                      custom_free(NULL),
                      custom_do_par_for(NULL),
-                     custom_do_task(NULL) {
+                     custom_do_task(NULL),
+                     custom_trace(NULL) {
     (*this)() = e;
 }
 
@@ -867,6 +870,21 @@ Func &Func::compute_inline() {
     return *this;
 }
 
+Func &Func::trace_loads() {
+    func.trace_loads();
+    return *this;
+}
+
+Func &Func::trace_stores() {
+    func.trace_stores();
+    return *this;
+}
+
+Func &Func::trace_realizations() {
+    func.trace_realizations();
+    return *this;
+}
+
 void Func::debug_to_file(const string &filename) {
     func.debug_file() = filename;
 }
@@ -1439,6 +1457,13 @@ void Func::set_custom_do_task(int (*cust_do_task)(int (*)(int, uint8_t *), int, 
     }
 }
 
+void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
+    custom_trace = t;
+    if (compiled_module.set_custom_trace) {
+        compiled_module.set_custom_trace(t);
+    }
+}
+
 void Func::realize(Buffer b) {
     realize(Realization(vec<Buffer>(b)));
 }
@@ -1459,6 +1484,7 @@ void Func::realize(Realization dst) {
     compiled_module.set_custom_allocator(custom_malloc, custom_free);
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
+    compiled_module.set_custom_trace(custom_trace);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {

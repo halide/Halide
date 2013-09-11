@@ -19,8 +19,7 @@ namespace Halide {
 namespace Internal {
 
 /** A class representing a type of IR node (e.g. Add, or Mul, or
- * PrintStmt). We use it for rtti (without having to compile with
- * rtti). */
+ * For). We use it for rtti (without having to compile with rtti). */
 struct IRNodeType {};
 
 /** The abstract base classes for a node in the Halide IR. */
@@ -154,6 +153,18 @@ struct FloatImm : public ExprNode<FloatImm> {
     }
 };
 
+/** String constants */
+struct StringImm : public ExprNode<StringImm> {
+    std::string value;
+
+    static StringImm *make(const std::string &val) {
+        StringImm *node = new StringImm;
+        node->type = Handle();
+        node->value = val;
+        return node;
+    }
+};
+
 }
 
 /** A fragment of Halide syntax. It's implemented as reference-counted
@@ -173,6 +184,10 @@ struct Expr : public Internal::IRHandle {
 
     /** Make an expression representing a const 32-bit float (i.e. a FloatImm) */
     EXPORT Expr(float x) : IRHandle(Internal::FloatImm::make(x)) {
+    }
+
+    /** Make an expression representing a const string (i.e. a StringImm) */
+    EXPORT Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {
     }
 
     /** Get the type of this expression node */
@@ -644,24 +659,6 @@ struct LetStmt : public StmtNode<LetStmt> {
     }
 };
 
-/** Used largely for debugging and tracing. Dumps the 'prefix'
- * string and the args to stdout. */
-struct PrintStmt : public StmtNode<PrintStmt> {
-    std::string prefix;
-    std::vector<Expr> args;
-
-    static Stmt make(std::string prefix, const std::vector<Expr> &args) {
-        for (size_t i = 0; i < args.size(); i++) {
-            assert(args[i].defined() && "PrintStmt of undefined");
-        }
-
-        PrintStmt *node = new PrintStmt;
-        node->prefix = prefix;
-        node->args = args;
-        return node;
-    }
-};
-
 /** If the 'condition' is false, then bail out printing the
  * 'message' to stderr */
 struct AssertStmt : public StmtNode<AssertStmt> {
@@ -671,7 +668,6 @@ struct AssertStmt : public StmtNode<AssertStmt> {
 
     static Stmt make(Expr condition, std::string message) {
         assert(condition.defined() && "AssertStmt of undefined");
-        assert(condition.type().is_scalar() && "AssertStmt of vector");
 
         AssertStmt *node = new AssertStmt;
         node->condition = condition;
@@ -879,6 +875,36 @@ struct Block : public StmtNode<Block> {
     }
 };
 
+/** An if-then-else block. 'else' may be NULL. */
+struct IfThenElse : public StmtNode<IfThenElse> {
+    Expr condition;
+    Stmt then_case, else_case;
+
+    static Stmt make(Expr condition, Stmt then_case, Stmt else_case = Stmt()) {
+        assert(condition.defined() && then_case.defined() && "IfThenElse of undefined");
+        // else_case may be null.
+
+        IfThenElse *node = new IfThenElse;
+        node->condition = condition;
+        node->then_case = then_case;
+        node->else_case = else_case;
+        return node;
+    }
+};
+
+/** Evaluate and discard an expression, presumably because it has some side-effect. */
+struct Evaluate : public StmtNode<Evaluate> {
+    Expr value;
+
+    static Stmt make(Expr v) {
+        assert(v.defined() && "Evaluate of undefined");
+
+        Evaluate *node = new Evaluate;
+        node->value = v;
+        return node;
+    }
+};
+
 }
 }
 // Now that we've defined an Expr and ForType, we can include the definition of a function
@@ -914,13 +940,13 @@ struct Call : public ExprNode<Call> {
         bitwise_or,
         shift_left,
         shift_right,
-        maybe_rewrite_buffer,
-        maybe_return,
+        rewrite_buffer,
         profiling_timer,
         lerp,
         create_buffer_t,
         extract_buffer_min,
-        extract_buffer_extent;
+        extract_buffer_extent,
+        trace;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

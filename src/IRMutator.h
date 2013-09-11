@@ -1,8 +1,8 @@
 #ifndef HALIDE_IR_MUTATOR_H
 #define HALIDE_IR_MUTATOR_H
 
-/** \file 
- * Defines a base class for passes over the IR that modify it 
+/** \file
+ * Defines a base class for passes over the IR that modify it
  */
 
 #include "IRVisitor.h"
@@ -11,7 +11,7 @@
 #include <vector>
 #include <utility>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** A base class for passes over the IR which modify it
@@ -47,6 +47,7 @@ protected:
 
     virtual void visit(const IntImm *);
     virtual void visit(const FloatImm *);
+    virtual void visit(const StringImm *);
     virtual void visit(const Cast *);
     virtual void visit(const Variable *);
     virtual void visit(const Add *);
@@ -72,7 +73,6 @@ protected:
     virtual void visit(const Call *);
     virtual void visit(const Let *);
     virtual void visit(const LetStmt *);
-    virtual void visit(const PrintStmt *);
     virtual void visit(const AssertStmt *);
     virtual void visit(const Pipeline *);
     virtual void visit(const For *);
@@ -82,8 +82,9 @@ protected:
     virtual void visit(const Free *);
     virtual void visit(const Realize *);
     virtual void visit(const Block *);
-
-};    
+    virtual void visit(const IfThenElse *);
+    virtual void visit(const Evaluate *);
+};
 
 }
 }

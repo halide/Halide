@@ -13,6 +13,9 @@ void IRVisitor::visit(const IntImm *) {
 void IRVisitor::visit(const FloatImm *) {
 }
 
+void IRVisitor::visit(const StringImm *) {
+}
+
 void IRVisitor::visit(const Cast *op) {
     op->value.accept(this);
 }
@@ -134,12 +137,6 @@ void IRVisitor::visit(const LetStmt *op) {
     op->body.accept(this);
 }
 
-void IRVisitor::visit(const PrintStmt *op) {
-    for (size_t i = 0; i < op->args.size(); i++) {
-        op->args[i].accept(this);
-    }
-}
-
 void IRVisitor::visit(const AssertStmt *op) {
     op->condition.accept(this);
 }
@@ -188,10 +185,22 @@ void IRVisitor::visit(const Realize *op) {
 
 void IRVisitor::visit(const Block *op) {
     op->first.accept(this);
-    if (op->rest.defined()) op->rest.accept(this);
+    if (op->rest.defined()) {
+        op->rest.accept(this);
+    }
 }
 
+void IRVisitor::visit(const IfThenElse *op) {
+    op->condition.accept(this);
+    op->then_case.accept(this);
+    if (op->else_case.defined()) {
+        op->else_case.accept(this);
+    }
+}
 
+void IRVisitor::visit(const Evaluate *op) {
+    op->value.accept(this);
+}
 
 void IRGraphVisitor::include(const Expr &e) {
     if (visited.count(e.ptr)) {
@@ -217,6 +226,9 @@ void IRGraphVisitor::visit(const IntImm *) {
 }
 
 void IRGraphVisitor::visit(const FloatImm *) {
+}
+
+void IRGraphVisitor::visit(const StringImm *) {
 }
 
 void IRGraphVisitor::visit(const Cast *op) {
@@ -340,12 +352,6 @@ void IRGraphVisitor::visit(const LetStmt *op) {
     include(op->body);
 }
 
-void IRGraphVisitor::visit(const PrintStmt *op) {
-    for (size_t i = 0; i < op->args.size(); i++) {
-        include(op->args[i]);
-    }
-}
-
 void IRGraphVisitor::visit(const AssertStmt *op) {
     include(op->condition);
 }
@@ -395,6 +401,18 @@ void IRGraphVisitor::visit(const Realize *op) {
 void IRGraphVisitor::visit(const Block *op) {
     include(op->first);
     if (op->rest.defined()) include(op->rest);
+}
+
+void IRGraphVisitor::visit(const IfThenElse *op) {
+    include(op->condition);
+    include(op->then_case);
+    if (op->else_case.defined()) {
+        include(op->else_case);
+    }
+}
+
+void IRGraphVisitor::visit(const Evaluate *op) {
+    include(op->value);
 }
 
 }
