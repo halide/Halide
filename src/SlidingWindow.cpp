@@ -58,8 +58,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         } else {
 
             // We're interested in the case where exactly one of the
-            // mins of the buffer depends on the loop_var, and none of
-            // the extents do.
+            // dimensions of the buffer has a min/extent that depends
+            // on the loop_var.
             string dim = "";
             Expr min, extent;
 
@@ -70,13 +70,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 Expr this_min = scope.get(min_name);
                 Expr this_extent = scope.get(extent_name);
 
-                if (expr_depends_on_var(this_extent, loop_var)) {
-                    min = Expr();
-                    extent = Expr();
-                    break;
-                }
-
-                if (expr_depends_on_var(this_min, loop_var)) {
+                if (expr_depends_on_var(this_min, loop_var) ||
+                    expr_depends_on_var(this_extent, loop_var)) {
                     if (min.defined()) {
                         min = Expr();
                         extent = Expr();
