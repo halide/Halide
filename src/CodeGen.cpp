@@ -1460,8 +1460,8 @@ void CodeGen::visit(const PrintStmt *op) {
     fmt_of_type_32[Halide::Type::Float] = "%3.3f";
 
     string fmt_of_type_64[3];
-    fmt_of_type_64[Halide::Type::UInt] = "%lu";
-    fmt_of_type_64[Halide::Type::Int] = "%ld";
+    fmt_of_type_64[Halide::Type::UInt] = "%llu";
+    fmt_of_type_64[Halide::Type::Int] = "%lld";
     fmt_of_type_64[Halide::Type::Float] = "%3.3f";
 
     vector<Value *> args;
