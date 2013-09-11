@@ -69,6 +69,7 @@ protected:
     void visit(const Select *);
     void visit(const Store *);
     void visit(const Load *);
+    void visit(const Call *);
     // @}
 
     std::string mcpu() const;
