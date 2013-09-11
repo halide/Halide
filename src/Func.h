@@ -368,6 +368,11 @@ class Func {
     int (*custom_do_task)(int (*)(int, uint8_t *), int, uint8_t *);
     // @}
 
+    /** The current custom tracing functions. May be NULL. */
+    // @{
+    void (*custom_trace)(const char *, int32_t, int32_t, int32_t, int32_t, int32_t, const void *, int32_t, const int32_t *);
+    // @}
+
     /** Pointers to current values of the automatically inferred
      * arguments (buffers and scalars) used to realize this
      * function. Only relevant when jitting. We can hold these things
@@ -582,6 +587,16 @@ public:
      * version.
      */
     EXPORT void set_custom_do_par_for(int (*custom_do_par_for)(int (*)(int, uint8_t *), int, int, uint8_t *));
+
+    /** Set custom routines to call when tracing is enabled. Call this
+     * on the output Func of your pipeline. This then sets custom
+     * routines for the entire pipeline, not just calls to this
+     * Func.
+     *
+     * If you are statically compiling, you can also just define your
+     * own versions of the tracing functions (see HalideRuntime.h),
+     * and they will clobber Halide's versions. */
+    EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
 
     /** When this function is compiled, include code that dumps its values
      * to a file after it is realized, for the purpose of debugging.
@@ -1009,6 +1024,21 @@ public:
      * purposes of scheduling it. Only the pure dimensions of the
      * update step can be meaningfully manipulated (see \ref RDom) */
     EXPORT ScheduleHandle update();
+
+    /** Trace all loads from this Func by emitting calls to
+     * halide_trace_load. If the Func is inlined, this has no
+     * effect. */
+    EXPORT Func &trace_loads();
+
+    /** Trace all stores to the buffer backing this Func by emitting
+     * calls to halide_trace_store. If the Func is inlined, this call
+     * has no effect. */
+    EXPORT Func &trace_stores();
+
+    /** Trace all realizations of this Func by emitting calls to
+     * halide_trace_produce, halide_trace_update,
+     * halide_trace_consume, and halide_trace_dispose. */
+    EXPORT Func &trace_realizations();
 
     /** Get a handle on the internal halide function that this Func
      * represents. Useful if you want to do introspection on Halide

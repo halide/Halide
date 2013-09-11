@@ -8,7 +8,6 @@
 namespace Halide {
 
 using std::ostream;
-using std::endl;
 using std::vector;
 using std::string;
 using std::ostringstream;
@@ -82,11 +81,11 @@ void IRPrinter::test() {
         "}\n";
 
     if (source.str() != correct_source) {
-        std::cout << "Correct output:" << std::endl << correct_source;
-        std::cout << "Actual output:" << std::endl << source.str();
+        std::cout << "Correct output:\n" << correct_source;
+        std::cout << "Actual output:\n" << source.str();
         assert(false);
     }
-    std::cout << "IRPrinter test passed" << std::endl;
+    std::cout << "IRPrinter test passed\n";
 }
 
 ostream &operator<<(ostream &out, const For::ForType &type) {
@@ -109,7 +108,7 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
 
 ostream &operator<<(ostream &stream, Stmt ir) {
     if (!ir.defined()) {
-        stream << "(undefined)" << std::endl;
+        stream << "(undefined)\n";
     } else {
         Internal::IRPrinter p(stream);
         p.print(ir);
@@ -140,6 +139,39 @@ void IRPrinter::visit(const IntImm *op) {
 
 void IRPrinter::visit(const FloatImm *op) {
     stream << op->value << 'f';
+}
+
+void IRPrinter::visit(const StringImm *op) {
+    stream << '"';
+    for (size_t i = 0; i < op->value.size(); i++) {
+        unsigned char c = op->value[i];
+        if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
+            stream << c;
+        } else {
+            stream << '\\';
+            switch (c) {
+            case '"':
+                stream << '"';
+                break;
+            case '\\':
+                stream << '\\';
+                break;
+            case '\t':
+                stream << 't';
+                break;
+            case '\r':
+                stream << 'r';
+                break;
+            case '\n':
+                stream << 'n';
+                break;
+            default:
+                string hex_digits = "0123456789ABCDEF";
+                stream << 'x' << hex_digits[c >> 4] << hex_digits[c & 0xf];
+            }
+        }
+    }
+    stream << '"';
 }
 
 void IRPrinter::visit(const Cast *op) {
@@ -332,39 +364,29 @@ void IRPrinter::visit(const LetStmt *op) {
     do_indent();
     stream << "let " << op->name << " = ";
     print(op->value);
-    stream << endl;
+    stream << '\n';
 
     print(op->body);
-}
-
-void IRPrinter::visit(const PrintStmt *op) {
-    do_indent();
-    stream << "print(" << op->prefix;
-    for (size_t i = 0; i < op->args.size(); i++) {
-        stream << ", ";
-        print(op->args[i]);
-    }
-    stream << ")" << endl;
 }
 
 void IRPrinter::visit(const AssertStmt *op) {
     do_indent();
     stream << "assert(";
     print(op->condition);
-    stream << ", \"" << op->message << "\")" << endl;
+    stream << ", \"" << op->message << "\")\n";
 }
 
 void IRPrinter::visit(const Pipeline *op) {
 
     do_indent();
-    stream << "produce " << op->name << " {" << endl;
+    stream << "produce " << op->name << " {\n";
     indent += 2;
     print(op->produce);
     indent -= 2;
 
     if (op->update.defined()) {
         do_indent();
-        stream << "} update " << op->name << " {" << endl;
+        stream << "} update " << op->name << " {\n";
         indent += 2;
         print(op->update);
         indent -= 2;
@@ -384,14 +406,14 @@ void IRPrinter::visit(const For *op) {
     print(op->min);
     stream << ", ";
     print(op->extent);
-    stream << ") {" << endl;
+    stream << ") {\n";
 
     indent += 2;
     print(op->body);
     indent -= 2;
 
     do_indent();
-    stream << "}" << endl;
+    stream << "}\n";
 }
 
 void IRPrinter::visit(const Store *op) {
@@ -400,7 +422,7 @@ void IRPrinter::visit(const Store *op) {
     print(op->index);
     stream << "] = ";
     print(op->value);
-    stream << endl;
+    stream << '\n';
 }
 
 void IRPrinter::visit(const Provide *op) {
@@ -424,20 +446,20 @@ void IRPrinter::visit(const Provide *op) {
         stream << "}";
     }
 
-    stream << endl;
+    stream << '\n';
 }
 
 void IRPrinter::visit(const Allocate *op) {
     do_indent();
     stream << "allocate " << op->name << "[" << op->type << " * ";
     print(op->size);
-    stream << "]" << endl;
+    stream << "]\n";
     print(op->body);
 }
 
 void IRPrinter::visit(const Free *op) {
     do_indent();
-    stream << "free " << op->name << endl;
+    stream << "free " << op->name << '\n';
 }
 
 void IRPrinter::visit(const Realize *op) {
@@ -451,14 +473,14 @@ void IRPrinter::visit(const Realize *op) {
         stream << "]";
         if (i < op->bounds.size() - 1) stream << ", ";
     }
-    stream << ") {" << endl;
+    stream << ") {\n";
 
     indent += 2;
     print(op->body);
     indent -= 2;
 
     do_indent();
-    stream << "}" << endl;
+    stream << "}\n";
 }
 
 void IRPrinter::visit(const Block *op) {
@@ -466,5 +488,30 @@ void IRPrinter::visit(const Block *op) {
     if (op->rest.defined()) print(op->rest);
 }
 
+void IRPrinter::visit(const IfThenElse *op) {
+    do_indent();
+    stream << "if (" << op->condition << ") {\n";
+    indent += 2;
+    print(op->then_case);
+    indent -= 2;
+
+    if (op->else_case.defined()) {
+        do_indent();
+        stream << "} else {\n";
+        indent += 2;
+        print(op->else_case);
+        indent -= 2;
+    }
+
+    do_indent();
+    stream << "}\n";
+
+}
+
+void IRPrinter::visit(const Evaluate *op) {
+    do_indent();
+    print(op->value);
+    stream << "\n";
+}
 
 }}

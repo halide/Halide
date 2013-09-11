@@ -710,7 +710,6 @@ void CodeGen_X86::test() {
 
     // Then print some stuff (disabled to prevent debugging spew)
     // vector<Expr> print_args = vec<Expr>(3, 4.5f, Cast::make(Int(8), 2), Ramp::make(alpha, 3.2f, 4));
-    // init = Block::make(init, PrintStmt::make("Test print: ", print_args));
 
     // Then run a parallel for loop that clobbers three elements of buf
     Expr e = Select::make(alpha > 4.0f, 3, 2);

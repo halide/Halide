@@ -147,12 +147,11 @@ const string preamble =
     "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
     "\n"
     + buffer_t_definition +
-    "bool halide_maybe_rewrite_buffer(bool go, buffer_t *b, int32_t elem_size,\n"
-    "                                 int32_t min0, int32_t extent0, int32_t stride0,\n"
-    "                                 int32_t min1, int32_t extent1, int32_t stride1,\n"
-    "                                 int32_t min2, int32_t extent2, int32_t stride2,\n"
-    "                                 int32_t min3, int32_t extent3, int32_t stride3) {\n"
-    " if (!go) return true;\n"
+    "bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
+    "                           int32_t min0, int32_t extent0, int32_t stride0,\n"
+    "                           int32_t min1, int32_t extent1, int32_t stride1,\n"
+    "                           int32_t min2, int32_t extent2, int32_t stride2,\n"
+    "                           int32_t min3, int32_t extent3, int32_t stride3) {\n"
     " b->min[0] = min0;\n"
     " b->min[1] = min1;\n"
     " b->min[2] = min2;\n"
@@ -219,7 +218,7 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     stream << buffer_t_definition;
 
     // Now the function prototype
-    stream << "extern \"C\" void " << name << "(";
+    stream << "extern \"C\" int " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (i > 0) stream << ", ";
         if (args[i].is_buffer) {
@@ -239,7 +238,7 @@ void CodeGen_C::compile(Stmt s, string name, const vector<Argument> &args) {
     stream << preamble;
 
     // Emit the function prototype
-    stream << "extern \"C\" void " << name << "(";
+    stream << "extern \"C\" int " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
             stream << "buffer_t *_"
@@ -313,7 +312,8 @@ void CodeGen_C::compile(Stmt s, string name, const vector<Argument> &args) {
 
     print(s);
 
-    stream << "}\n";
+    stream << "return 0;\n"
+           << "}\n";
 }
 
 string CodeGen_C::print_expr(Expr e) {
@@ -535,28 +535,27 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->name == Call::shift_right) {
             assert(op->args.size() == 2);
             rhs << print_expr(op->args[0]) << " >> " << print_expr(op->args[1]);
-        } else if (op->name == Call::maybe_rewrite_buffer) {
-            assert(op->args.size() == 15);
+        } else if (op->name == Call::rewrite_buffer) {
+            int dims = ((int)(op->args.size())-2)/3;
+            assert((int)(op->args.size()) == dims*3 + 2);
+            assert(dims <= 4);
             vector<string> args(op->args.size());
-            for (size_t i = 0; i < op->args.size(); i++) {
-                if (i == 1) {
-                    args[i] = "_" + op->args[i].as<Call>()->name;
+            const Variable *v = op->args[0].as<Variable>();
+            assert(v && ends_with(v->name, ".buffer"));
+            args[0] = "_" + v->name.substr(0, v->name.size() - 7);
+            for (size_t i = 1; i < op->args.size(); i++) {
+                args[i] = print_expr(op->args[i]);
+            }
+            rhs << "halide_rewrite_buffer(";
+            for (size_t i = 0; i < 14; i++) {
+                if (i > 0) rhs << ", ";
+                if (i < args.size()) {
+                    rhs << args[i];
                 } else {
-                    args[i] = print_expr(op->args[i]);
+                    rhs << '0';
                 }
             }
-            rhs << "halide_maybe_rewrite_buffer(";
-            for (size_t i = 0; i < op->args.size(); i++) {
-                if (i > 0) rhs << ", ";
-                rhs << args[i];
-            }
             rhs << ")";
-        } else if (op->name == Call::maybe_return) {
-            assert(op->args.size() == 1);
-            string cond = print_expr(op->args[0]);
-            do_indent();
-            stream << "if (" << cond << ") return;\n";
-            rhs << "true";
         } else if (op->name == Call::profiling_timer) {
             assert(op->args.size() == 0);
             rhs << "halide_profiling_timer()";
@@ -657,41 +656,22 @@ void CodeGen_C::visit(const LetStmt *op) {
     body.accept(this);
 }
 
-void CodeGen_C::visit(const PrintStmt *op) {
-
-    vector<string> args;
-    for (size_t i = 0; i < op->args.size(); i++) {
-        args.push_back(print_expr(op->args[i]));
-    }
-
-    do_indent();
-    string format_string;
-    stream << "halide_printf(\"" << op->prefix;
-    for (size_t i = 0; i < op->args.size(); i++) {
-        if (op->args[i].type().is_int() ||
-            op->args[i].type().is_uint()) {
-            stream << " %d";
-        } else {
-            stream << " %f";
-        }
-    }
-    stream << "\"";
-    for (size_t i = 0; i < op->args.size(); i++) {
-        stream << ", " << args[i];
-    }
-    stream << ");\n";
-}
-
 void CodeGen_C::visit(const AssertStmt *op) {
     string id_cond = print_expr(op->condition);
     do_indent();
-    // emit a "void" cast to supress "unused variable" warnings
-    // when building in non-debug mode
-    stream << "assert(" << id_cond
-           << " && \"" << op->message
-           << "\");\n";
+    // Halide asserts have different semantics to C asserts. The
+    // conditions sometimes contain necessary side-effects, and
+    // they're supposed to make the containing function return -1, so
+    // we can't use the C version of assert. Instead we convert to an
+    // if statement.
+
+    stream << "if (!" << id_cond << ") {\n";
     do_indent();
-    stream << "(void)" << id_cond << ";\n";
+    stream << " halide_printf(" << Expr(op->message + "\n") << ");\n";
+    do_indent();
+    stream << " return -1;\n";
+    do_indent();
+    stream << "}\n";
 }
 
 void CodeGen_C::visit(const Pipeline *op) {
@@ -797,6 +777,28 @@ void CodeGen_C::visit(const Realize *op) {
     assert(false && "Cannot emit realize statements to C");
 }
 
+void CodeGen_C::visit(const IfThenElse *op) {
+    do_indent();
+    string cond_id = print_expr(op->condition);
+
+    stream << "if (" << cond_id << ")\n";
+    open_scope();
+    op->then_case.accept(this);
+    close_scope("if " + cond_id);
+
+    if (op->else_case.defined()) {
+        open_scope();
+        op->else_case.accept(this);
+        close_scope("if " + cond_id + " else");
+    }
+}
+
+void CodeGen_C::visit(const Evaluate *op) {
+    string id = print_expr(op->value);
+    do_indent();
+    stream << "(void)" << id << ";\n";
+}
+
 void CodeGen_C::test() {
     Argument buffer_arg("buf", true, Int(32));
     Argument float_arg("alpha", false, Float(32));
@@ -821,7 +823,7 @@ void CodeGen_C::test() {
     cg.compile(s, "test1", args);
 
     string correct_source = preamble +
-        "extern \"C\" void test1(buffer_t *_buf, const float alpha, const int32_t beta) {\n"
+        "extern \"C\" int test1(buffer_t *_buf, const float alpha, const int32_t beta) {\n"
         "int32_t *buf = (int32_t *)(_buf->host);\n"
         "const bool buf_host_and_dev_are_null = (_buf->host == NULL) && (_buf->dev == 0);\n"
         "(void)buf_host_and_dev_are_null;\n"
@@ -862,6 +864,7 @@ void CodeGen_C::test() {
         " } // alloc tmp_stack\n"
         " halide_free(tmp_heap);\n"
         "} // alloc tmp_heap\n"
+        "return 0;\n"
         "}\n";
     if (source.str() != correct_source) {
         std::cout << "Correct source code:" << std::endl << correct_source;

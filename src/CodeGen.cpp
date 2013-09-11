@@ -583,6 +583,10 @@ void CodeGen::visit(const FloatImm *op) {
     value = ConstantFP::get(*context, APFloat(op->value));
 }
 
+void CodeGen::visit(const StringImm *op) {
+    value = create_string_constant(op->value);
+}
+
 void CodeGen::visit(const Cast *op) {
     value = codegen(op->value);
 
@@ -1095,13 +1099,27 @@ void CodeGen::visit(const Ramp *op) {
     }
 }
 
-void CodeGen::visit(const Broadcast *op) {
-    value = codegen(op->value);
-    Constant *undef = UndefValue::get(VectorType::get(value->getType(), 1));
+llvm::Value *CodeGen::create_broadcast(llvm::Value *v, int width) {
+    Constant *undef = UndefValue::get(VectorType::get(v->getType(), 1));
     Constant *zero = ConstantInt::get(i32, 0);
-    value = builder->CreateInsertElement(undef, value, zero);
-    Constant *zeros = ConstantVector::getSplat(op->width, zero);
-    value = builder->CreateShuffleVector(value, undef, zeros);
+    v = builder->CreateInsertElement(undef, v, zero);
+    Constant *zeros = ConstantVector::getSplat(width, zero);
+    return builder->CreateShuffleVector(v, undef, zeros);
+}
+
+void CodeGen::visit(const Broadcast *op) {
+    value = create_broadcast(codegen(op->value), op->width);
+}
+
+// Pass through scalars, and unpack broadcasts. Assert if it's a non-vector broadcast.
+Expr unbroadcast(Expr e) {
+    if (e.type().is_vector()) {
+        const Broadcast *broadcast = e.as<Broadcast>();
+        assert(broadcast);
+        return broadcast->value;
+    } else {
+        return e;
+    }
 }
 
 void CodeGen::visit(const Call *op) {
@@ -1140,7 +1158,7 @@ void CodeGen::visit(const Call *op) {
 
         } else if (op->name == Call::debug_to_file) {
             assert(op->args.size() == 9);
-            const Call *filename = op->args[0].as<Call>();
+            const StringImm *filename = op->args[0].as<StringImm>();
             const Load *func = op->args[1].as<Load>();
             assert(func && filename && "Malformed debug_to_file node");
             // Grab the function from the initial module
@@ -1148,11 +1166,7 @@ void CodeGen::visit(const Call *op) {
             assert(debug_to_file && "Could not find halide_debug_to_file function in initial module");
 
             // Make the filename a global string constant
-            llvm::Type *filename_type = ArrayType::get(i8, filename->name.size()+1);
-            GlobalVariable *filename_global = new GlobalVariable(*module, filename_type,
-                                                                 true, GlobalValue::PrivateLinkage, 0);
-            filename_global->setInitializer(ConstantDataArray::getString(*context, filename->name));
-            Value *char_ptr = builder->CreateConstInBoundsGEP2_32(filename_global, 0, 0);
+            Value *char_ptr = codegen(Expr(filename));
             Value *data_ptr = symbol_table.get(func->name + ".host");
             data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
             vector<Value *> args = vec(char_ptr, data_ptr);
@@ -1247,60 +1261,86 @@ void CodeGen::visit(const Call *op) {
             Value *buffer = codegen(op->args[0]);
             buffer = builder->CreatePointerCast(buffer, buffer_t->getPointerTo());
             value = buffer_extent(buffer, idx->value);
-        } else if (op->name == Call::maybe_rewrite_buffer) {
-            assert(op->args.size() == 15);
+        } else if (op->name == Call::rewrite_buffer) {
+            int dims = ((int)(op->args.size())-2)/3;
+            assert((int)(op->args.size()) == dims*3 + 2);
+            assert(dims <= 4);
 
-            Value *cond = codegen(op->args[0]);
-
-            const Call *call = op->args[1].as<Call>();
-            assert(call);
-            Value *buffer = sym_get(call->name + ".buffer");
-
-            BasicBlock *continue_bb = BasicBlock::Create(*context, "after_maybe_return", function);
-            BasicBlock *rewrite_bb = BasicBlock::Create(*context, "after_maybe_return", function);
-
-            // If the condition is true, enter the rewrite case, otherwise skip over this.
-            builder->CreateCondBr(cond, rewrite_bb, continue_bb);
-
-            // Build the rewrite case
-            builder->SetInsertPoint(rewrite_bb);
+            Value *buffer = codegen(op->args[0]);
 
             // Rewrite the buffer_t using the args
-            builder->CreateStore(codegen(op->args[2]), buffer_elem_size_ptr(buffer));
-            for (int i = 0; i < 4; i++) {
-                builder->CreateStore(codegen(op->args[i*3+3]), buffer_min_ptr(buffer, i));
-                builder->CreateStore(codegen(op->args[i*3+4]), buffer_extent_ptr(buffer, i));
-                builder->CreateStore(codegen(op->args[i*3+5]), buffer_stride_ptr(buffer, i));
+            builder->CreateStore(codegen(op->args[1]), buffer_elem_size_ptr(buffer));
+            for (int i = 0; i < dims; i++) {
+                builder->CreateStore(codegen(op->args[i*3+2]), buffer_min_ptr(buffer, i));
+                builder->CreateStore(codegen(op->args[i*3+3]), buffer_extent_ptr(buffer, i));
+                builder->CreateStore(codegen(op->args[i*3+4]), buffer_stride_ptr(buffer, i));
+            }
+            for (int i = dims; i < 4; i++) {
+                builder->CreateStore(ConstantInt::get(i32, 0), buffer_min_ptr(buffer, i));
+                builder->CreateStore(ConstantInt::get(i32, 0), buffer_extent_ptr(buffer, i));
+                builder->CreateStore(ConstantInt::get(i32, 0), buffer_stride_ptr(buffer, i));
             }
 
-            builder->CreateBr(continue_bb);
-
-            // Continue on using the continue case
-            builder->SetInsertPoint(continue_bb);
-
-            // From the point of view of the continued code, this returns true.
+            // From the point of view of the continued code (a containing assert stmt), this returns true.
             value = codegen(const_true());
-        } else if (op->name == Call::maybe_return) {
-            assert(op->args.size() == 1);
+        } else if (op->name == Call::trace) {
 
-            Value *cond = codegen(op->args[0]);
+            int int_args = (int)(op->args.size()) - 4;
+            assert(int_args >= 0);
 
-            BasicBlock *continue_bb = BasicBlock::Create(*context, "after_maybe_return", function);
-            BasicBlock *exit_bb = BasicBlock::Create(*context, "maybe_return_exit", function);
+            // Make a global string for the func name. Should be the same for all lanes.
+            Value *name = codegen(unbroadcast(op->args[0]));
 
-            // If the condition is true, go to the exit_bb
-            builder->CreateCondBr(cond, exit_bb, continue_bb);
+            // Codegen the event type. Should be the same for all lanes.
+            Value *event_type = codegen(unbroadcast(op->args[1]));
 
-            // Build the exit case
-            builder->SetInsertPoint(exit_bb);
-            // TODO: Doesn't work from inside parallel for bodies
+            // Codegen the value index. Should be the same for all lanes.
+            Value *value_index = codegen(unbroadcast(op->args[2]));
 
-            builder->CreateRet(ConstantInt::get(i32, 0));
-            // Continue on using the continue case
-            builder->SetInsertPoint(continue_bb);
+            Value *saved_stack = save_stack();
 
-            // From the point of view of the continued code, this returns true.
-            value = codegen(const_true());
+            // Allocate and populate a stack entry for the value arg
+            Type type = op->args[3].type();
+            Value *value_stored_array = builder->CreateAlloca(llvm_type_of(type), ConstantInt::get(i32, 1));
+            Value *value_stored = codegen(op->args[3]);
+            builder->CreateStore(value_stored, value_stored_array);
+            value_stored_array = builder->CreatePointerCast(value_stored_array, i8->getPointerTo());
+
+            // Allocate and populate a stack array for the integer args
+            Value *coords;
+            if (int_args > 0) {
+                coords = builder->CreateAlloca(llvm_type_of(op->args[4].type()),
+                                                      ConstantInt::get(i32, int_args));
+                for (int i = 0; i < int_args; i++) {
+                    Value *coord_ptr = builder->CreateConstInBoundsGEP1_32(coords, i);
+                    builder->CreateStore(codegen(op->args[4+i]), coord_ptr);
+                }
+                coords = builder->CreatePointerCast(coords, i32->getPointerTo());
+            } else {
+                coords = Constant::getNullValue(i32->getPointerTo());
+            }
+
+            // Call the runtime function
+            vector<Value *> args(9);
+            args[0] = name;
+            args[1] = event_type;
+            args[2] = ConstantInt::get(i32, type.t);
+            args[3] = ConstantInt::get(i32, type.bits);
+            args[4] = ConstantInt::get(i32, type.width);
+            args[5] = value_index;
+            args[6] = value_stored_array;
+            args[7] = ConstantInt::get(i32, int_args * type.width);
+            args[8] = coords;
+
+            llvm::Function *trace_fn = module->getFunction("halide_trace");
+            assert(trace_fn);
+
+            builder->CreateCall(trace_fn, args);
+
+            // Evaluates to the value arg
+            value = value_stored;
+
+            restore_stack(saved_stack);
 
         } else if (op->name == Call::profiling_timer) {
             assert(op->args.size() == 0);
@@ -1448,86 +1488,30 @@ void CodeGen::visit(const LetStmt *op) {
     sym_pop(op->name);
 }
 
-void CodeGen::visit(const PrintStmt *op) {
-    // Codegen the args, and flatten them into an array of
-    // scalars. Also generate a format string
-    ostringstream format_string;
-    format_string << op->prefix;
-
-    string fmt_of_type_32[3];
-    fmt_of_type_32[Halide::Type::UInt] = "%u";
-    fmt_of_type_32[Halide::Type::Int] = "%d";
-    fmt_of_type_32[Halide::Type::Float] = "%3.3f";
-
-    string fmt_of_type_64[3];
-    fmt_of_type_64[Halide::Type::UInt] = "%lu";
-    fmt_of_type_64[Halide::Type::Int] = "%ld";
-    fmt_of_type_64[Halide::Type::Float] = "%3.3f";
-
-    vector<Value *> args;
-    vector<Halide::Type> dst_types;
-    for (size_t i = 0; i < op->args.size(); i++) {
-        format_string << ' ';
-        Expr arg = op->args[i];
-        Value *ll_arg = codegen(arg);
-        string* fmt_of_type = arg.type().bits > 32 ? fmt_of_type_64 : fmt_of_type_32;
-        if (arg.type().is_vector()) {
-            format_string << '[';
-            for (int j = 0; j < arg.type().width; j++) {
-                if (j > 0) format_string << ' ';
-                Value *idx = ConstantInt::get(i32, j);
-                Value *ll_arg_lane = builder->CreateExtractElement(ll_arg, idx);
-                args.push_back(ll_arg_lane);
-                dst_types.push_back(arg.type().element_of());
-                format_string << fmt_of_type[arg.type().t];
-            }
-            format_string << ']';
-        } else {
-            args.push_back(ll_arg);
-            dst_types.push_back(arg.type());
-            format_string << fmt_of_type[arg.type().t];
-        }
-    }
-
-    format_string << endl;
-
-    // Now cast all the args to the appropriate types
-    for (size_t i = 0; i < args.size(); i++) {
-        if (dst_types[i].is_int()) {
-            args[i] = builder->CreateIntCast(args[i],
-                dst_types[i].bits > 32 ? i64 : i32, true);
-        } else if (dst_types[i].is_uint()) {
-            args[i] = builder->CreateIntCast(args[i],
-                dst_types[i].bits > 32 ? i64 : i32, false);
-        } else {
-            args[i] = builder->CreateFPCast(args[i], f64);
-        }
-    }
-
-    // Make the format string a global constant
-    string fmt_string = format_string.str();
-    llvm::Type *fmt_type = ArrayType::get(i8, fmt_string.size()+1);
-    GlobalVariable *fmt_global = new GlobalVariable(*module, fmt_type, true, GlobalValue::PrivateLinkage, 0);
-    fmt_global->setInitializer(ConstantDataArray::getString(*context, fmt_string));
-    Value *char_ptr = builder->CreateConstInBoundsGEP2_32(fmt_global, 0, 0);
-
-    // The format string is the first argument
-    args.insert(args.begin(), char_ptr);
-
-    // Grab the print function from the initial module
-    llvm::Function *halide_printf = module->getFunction("halide_printf");
-    assert(halide_printf && "Could not find halide_printf in initial module");
-
-    // Call it
-    debug(4) << "Creating call to halide_printf\n";
-    builder->CreateCall(halide_printf, args);
-}
-
 void CodeGen::visit(const AssertStmt *op) {
     create_assertion(codegen(op->condition), op->message);
 }
 
+Value *CodeGen::create_string_constant(const string &s) {
+    llvm::Type *str_type = ArrayType::get(i8, s.size()+1);
+    GlobalVariable *str_global = new GlobalVariable(*module, str_type,
+                                                    true, GlobalValue::PrivateLinkage, 0);
+    str_global->setInitializer(ConstantDataArray::getString(*context, s));
+    return builder->CreateConstInBoundsGEP2_32(str_global, 0, 0);
+}
+
 void CodeGen::create_assertion(Value *cond, const string &message) {
+
+    // If the condition is a vector, fold it down to a scalar
+    VectorType *vt = dyn_cast<VectorType>(cond->getType());
+    if (vt) {
+        Value *scalar_cond = builder->CreateExtractElement(cond, ConstantInt::get(i32, 0));
+        for (unsigned i = 1; i < vt->getNumElements(); i++) {
+            Value *lane = builder->CreateExtractElement(cond, ConstantInt::get(i32, i));
+            scalar_cond = builder->CreateAnd(scalar_cond, lane);
+        }
+        cond = scalar_cond;
+    }
 
     // Make a new basic block for the assert
     BasicBlock *assert_fails_bb = BasicBlock::Create(*context, "assert_failed", function);
@@ -1540,11 +1524,7 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
     builder->SetInsertPoint(assert_fails_bb);
 
     // Make the error message string a global constant
-    llvm::Type *msg_type = ArrayType::get(i8, message.size()+1);
-    GlobalVariable *msg_global = new GlobalVariable(*module, msg_type,
-                                                    true, GlobalValue::PrivateLinkage, 0);
-    msg_global->setInitializer(ConstantDataArray::getString(*context, message));
-    Value *char_ptr = builder->CreateConstInBoundsGEP2_32(msg_global, 0, 0);
+    Value *char_ptr = create_string_constant(message);
 
     // Call the error handler
     llvm::Function *error_handler = module->getFunction("halide_error");
@@ -1766,6 +1746,32 @@ void CodeGen::visit(const Realize *op) {
 
 void CodeGen::visit(const Provide *op) {
     assert(false && "Provide encountered during codegen");
+}
+
+void CodeGen::visit(const IfThenElse *op) {
+    BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+    BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+    BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+    builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
+
+    builder->SetInsertPoint(true_bb);
+    codegen(op->then_case);
+    builder->CreateBr(after_bb);
+
+    builder->SetInsertPoint(false_bb);
+    if (op->else_case.defined()) {
+        codegen(op->else_case);
+    }
+    builder->CreateBr(after_bb);
+
+    builder->SetInsertPoint(after_bb);
+}
+
+void CodeGen::visit(const Evaluate *op) {
+    codegen(op->value);
+
+    // Discard result
+    value = NULL;
 }
 
 Value *CodeGen::save_stack() {

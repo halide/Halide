@@ -478,10 +478,6 @@ private:
         assert(false && "Bounds of statement");
     }
 
-    void visit(const PrintStmt *) {
-        assert(false && "Bounds of statement");
-    }
-
     void visit(const AssertStmt *) {
         assert(false && "Bounds of statement");
     }

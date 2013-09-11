@@ -3,6 +3,7 @@
 #include "posix_error_handler.cpp"
 #include "write_debug_image.cpp"
 #include "posix_io.cpp"
+#include "tracing.cpp"
 #include "posix_math.cpp"
 #ifdef _WIN32
 #include "fake_thread_pool.cpp"

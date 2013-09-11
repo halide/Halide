@@ -1272,10 +1272,6 @@ class Simplify : public IRMutator {
         stmt = simplify_let<LetStmt, Stmt>(op);
     }
 
-    void visit(const PrintStmt *op) {
-        IRMutator::visit(op);
-    }
-
     void visit(const AssertStmt *op) {
         Expr condition = mutate(op->condition);
 

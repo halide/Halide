@@ -81,14 +81,14 @@ public:
     /** Do any required target-specific things to the execution engine
      * and the module prior to jitting. Called by JITCompiledModule
      * just before it jits. Does nothing by default. */
-    virtual void jit_init(llvm::ExecutionEngine *ee, llvm::Module *module) {}
+    virtual void jit_init(llvm::ExecutionEngine *, llvm::Module *) {}
 
     /** Do any required target-specific things to the execution engine
      * and the module after jitting. Called by JITCompiledModule just
      * after it jits. Does nothing by default. The third argument
      * gives the target a chance to inject calls to target-specific
      * module cleanup routines. */
-    virtual void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module, std::vector<void (*)()> *cleanup_routines) {}
+    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<void (*)()> *) {}
 
 protected:
 
@@ -161,6 +161,12 @@ protected:
     /** Codegen an assertion. If false, it bails out and calls the error handler. */
     void create_assertion(llvm::Value *condition, const std::string &message);
 
+    /** Put a string constant in the module as a global variable and return a pointer to it. */
+    llvm::Value *create_string_constant(const std::string &str);
+
+    /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
+    llvm::Value *create_broadcast(llvm::Value *, int width);
+
     /** Given an llvm value representing a pointer to a buffer_t, extract various subfields.
      * The *_ptr variants return a pointer to the struct element, while the basic variants
      * load the actual value. */
@@ -204,6 +210,7 @@ protected:
     // @{
     virtual void visit(const IntImm *);
     virtual void visit(const FloatImm *);
+    virtual void visit(const StringImm *);
     virtual void visit(const Cast *);
     virtual void visit(const Variable *);
     virtual void visit(const Add *);
@@ -229,12 +236,13 @@ protected:
     virtual void visit(const Call *);
     virtual void visit(const Let *);
     virtual void visit(const LetStmt *);
-    virtual void visit(const PrintStmt *);
     virtual void visit(const AssertStmt *);
     virtual void visit(const Pipeline *);
     virtual void visit(const For *);
     virtual void visit(const Store *);
     virtual void visit(const Block *);
+    virtual void visit(const IfThenElse *);
+    virtual void visit(const Evaluate *);
     // @}
 
     /** Recursive code for generating a gather using a binary tree. */

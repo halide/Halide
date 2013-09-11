@@ -2,6 +2,8 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "IRPrinter.h"
+#include "Deinterleave.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -13,7 +15,7 @@ class VectorizeLoops : public IRMutator {
     class VectorSubs : public IRMutator {
         string var;
         Expr replacement;
-        Scope<Type> scope;
+        Scope<Expr> scope;
 
         Expr widen(Expr e, int width) {
             if (e.type().width == width) return e;
@@ -42,7 +44,7 @@ class VectorizeLoops : public IRMutator {
                 // we're vectorizing across x we need to know the
                 // type of y has changed in the following example:
                 // let y = x + 1 in y*3
-                expr = Variable::make(scope.get(op->name), op->name);
+                expr = Variable::make(scope.get(op->name).type(), op->name);
             } else {
                 expr = op;
             }
@@ -117,8 +119,9 @@ class VectorizeLoops : public IRMutator {
                 max_width = std::max(new_arg.type().width, max_width);
             }
 
-            if (!changed) expr = op;
-            else {
+            if (!changed) {
+                expr = op;
+            } else {
                 // Widen the args to have the same width as the max width found
                 for (size_t i = 0; i < new_args.size(); i++) {
                     new_args[i] = widen(new_args[i], max_width);
@@ -131,7 +134,7 @@ class VectorizeLoops : public IRMutator {
         void visit(const Let *op) {
             Expr value = mutate(op->value);
             if (value.type().is_vector()) {
-                scope.push(op->name, value.type());
+                scope.push(op->name, value);
             }
 
             Expr body = mutate(op->body);
@@ -150,7 +153,7 @@ class VectorizeLoops : public IRMutator {
         void visit(const LetStmt *op) {
             Expr value = mutate(op->value);
             if (value.type().is_vector()) {
-                scope.push(op->name, value.type());
+                scope.push(op->name, value);
             }
 
             Stmt body = mutate(op->body);
@@ -214,6 +217,70 @@ class VectorizeLoops : public IRMutator {
             }
         }
 
+        void visit(const IfThenElse *op) {
+            Expr cond = mutate(op->condition);
+            int width = cond.type().width;
+            debug(3) << "Vectorizing over " << var << "\n"
+                     << "Old: " << op->condition << "\n"
+                     << "New: " << cond << "\n";
+            if (width > 1) {
+                // It's an if statement on a vector of
+                // conditions. We'll have to scalarize and make
+                // multiple copies of the if statement.
+                debug(3) << "Scalarizing if then else\n";
+                stmt = scalarize(op);
+            } else {
+                // It's an if statement on a scalar, we're ok to vectorize the innards.
+                debug(3) << "Not scalarizing if then else\n";
+                Stmt then_case = mutate(op->then_case);
+                Stmt else_case = mutate(op->else_case);
+                if (cond.same_as(op->condition) &&
+                    then_case.same_as(op->then_case) &&
+                    else_case.same_as(op->else_case)) {
+                    stmt = op;
+                } else {
+                    stmt = IfThenElse::make(cond, then_case, else_case);
+                }
+            }
+        }
+
+        /*
+        void visit(const AssertStmt *op) {
+            Expr cond = mutate(op->condition);
+            int width = cond.type().width;
+            if (width > 1) {
+                // Assert that all of the return values are true
+                Expr check_all = Call::make(Bool(), Call::horizontal_and, vec(cond), Call::Intrinsic);
+                stmt = AssertStmt::make(check_all, op->message);
+            }
+        }
+        */
+
+        Stmt scalarize(Stmt s) {
+            Stmt result;
+            int width = replacement.type().width;
+            for (int i = 0; i < width; i++) {
+                // Replace the var with a scalar version in the appropriate lane.
+                Stmt new_stmt = substitute(var, extract_lane(replacement, i), s);
+
+                // Hide all the vectors in scope with a scalar version
+                // in the appropriate lane.
+                for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
+                    string name = iter.name() + ".lane." + int_to_string(i);
+                    Expr lane = extract_lane(iter.value(), i);
+                    new_stmt = substitute(iter.name(), Variable::make(lane.type(), name), new_stmt);
+                    new_stmt = LetStmt::make(name, lane, new_stmt);
+                }
+
+                if (i == 0) {
+                    result = new_stmt;
+                } else {
+                    result = Block::make(result, new_stmt);
+                }
+            }
+            return result;
+        }
+
     public:
         VectorSubs(string v, Expr r) : var(v), replacement(r) {
         }
@@ -244,6 +311,7 @@ class VectorizeLoops : public IRMutator {
             IRMutator::visit(for_loop);
         }
     }
+
 };
 
 

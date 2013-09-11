@@ -20,8 +20,6 @@ public:
     IREquals(Stmt s) : result(0), stmt(s) {
     }
 
-    using IRVisitor::visit;
-
     void visit(const IntImm *op) {
         if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
         const IntImm *e = expr.as<IntImm>();
@@ -35,6 +33,16 @@ public:
     void visit(const FloatImm *op) {
         if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
         const FloatImm *e = expr.as<FloatImm>();
+        if (e->value < op->value) {
+            result = -1;
+        } else if (e->value > op->value) {
+            result = 1;
+        }
+    }
+
+    void visit(const StringImm *op) {
+        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
+        const StringImm *e = expr.as<StringImm>();
         if (e->value < op->value) {
             result = -1;
         } else if (e->value > op->value) {
@@ -245,19 +253,6 @@ public:
         op->body.accept(this);
     }
 
-    void visit(const PrintStmt *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const PrintStmt *s = stmt.as<PrintStmt>();
-
-        if (compare_names(s->prefix, op->prefix)) return;
-
-        for (size_t i = 0; (result == 0) && (i < s->args.size()); i++) {
-            expr = s->args[i];
-            op->args[i].accept(this);
-        }
-    }
-
     void visit(const AssertStmt *op) {
         if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
 
@@ -416,6 +411,39 @@ public:
                 op->rest.accept(this);
             }
         }
+    }
+
+    void visit(const Free *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
+        const Free *s = stmt.as<Free>();
+
+        compare_names(s->name, op->name);
+    }
+
+    void visit(const IfThenElse *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
+        const IfThenElse *s = stmt.as<IfThenElse>();
+
+        expr = s->condition;
+        op->condition.accept(this);
+
+        stmt = s->then_case;
+        op->then_case.accept(this);
+
+        stmt = s->else_case;
+        op->else_case.accept(this);
+
+    }
+
+    void visit(const Evaluate *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
+        const Evaluate *s = stmt.as<Evaluate>();
+
+        expr = s->value;
+        op->value.accept(this);
     }
 };
 

@@ -156,11 +156,49 @@ public:
         }
     }
 
-    /** Iterate through the keys. */
-    class iterator {
+    /** Iterate through the scope. */
+    class const_iterator {
         typename std::map<std::string, SmallStack<T> >::const_iterator iter;
     public:
-        explicit iterator(const typename std::map<std::string, SmallStack<T> >::const_iterator &i) :
+        explicit const_iterator(const typename std::map<std::string, SmallStack<T> >::const_iterator &i) :
+            iter(i) {
+        }
+
+        const_iterator() {}
+
+        bool operator!=(const const_iterator &other) {
+            return iter != other.iter;
+        }
+
+        void operator++() {
+            ++iter;
+        }
+
+        const std::string &name() {
+            return iter->first;
+        }
+
+        const SmallStack<T> &stack() {
+            return iter->second;
+        }
+
+        const T &value() {
+            return iter->second.top();
+        }
+    };
+
+    const_iterator cbegin() const {
+        return const_iterator(table.begin());
+    }
+
+    const_iterator cend() const {
+        return const_iterator(table.end());
+    }
+
+    class iterator {
+        typename std::map<std::string, SmallStack<T> >::iterator iter;
+    public:
+        explicit iterator(typename std::map<std::string, SmallStack<T> >::iterator i) :
             iter(i) {
         }
 
@@ -174,16 +212,24 @@ public:
             ++iter;
         }
 
-        const std::string &operator*() {
+        const std::string &name() {
             return iter->first;
+        }
+
+        SmallStack<T> &stack() {
+            return iter->second;
+        }
+
+        T &value() {
+            return iter->second.top_ref();
         }
     };
 
-    iterator begin() const {
+    iterator begin() {
         return iterator(table.begin());
     }
 
-    iterator end() const {
+    iterator end() {
         return iterator(table.end());
     }
 };
@@ -191,9 +237,9 @@ public:
 template<typename T>
 std::ostream &operator<<(std::ostream &stream, Scope<T>& s) {
     stream << "{\n";
-    typename Scope<T>::iterator iter;
-    for (iter = s.begin(); iter != s.end(); ++iter) {
-        stream << "  " << (*iter) << "\n";
+    typename Scope<T>::const_iterator iter;
+    for (iter = s.cbegin(); iter != s.cend(); ++iter) {
+        stream << "  " << iter.name() << "\n";
     }
     stream << "}";
     return stream;

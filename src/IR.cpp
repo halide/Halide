@@ -37,6 +37,7 @@ IntImm IntImm::small_int_cache[] = {make_immortal_int(-8),
 
 template<> EXPORT IRNodeType ExprNode<IntImm>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<FloatImm>::_type_info = {};
+template<> EXPORT IRNodeType ExprNode<StringImm>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<Cast>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<Variable>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<Add>::_type_info = {};
@@ -62,7 +63,6 @@ template<> EXPORT IRNodeType ExprNode<Broadcast>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<Call>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<Let>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<LetStmt>::_type_info = {};
-template<> EXPORT IRNodeType StmtNode<PrintStmt>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<AssertStmt>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Pipeline>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<For>::_type_info = {};
@@ -72,6 +72,8 @@ template<> EXPORT IRNodeType StmtNode<Allocate>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Free>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Realize>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Block>::_type_info = {};
+template<> EXPORT IRNodeType StmtNode<IfThenElse>::_type_info = {};
+template<> EXPORT IRNodeType StmtNode<Evaluate>::_type_info = {};
 
 using std::string;
 const string Call::debug_to_file = "debug_to_file";
@@ -84,13 +86,13 @@ const string Call::bitwise_xor = "bitwise_xor";
 const string Call::bitwise_or = "bitwise_or";
 const string Call::shift_left = "shift_left";
 const string Call::shift_right = "shift_right";
-const string Call::maybe_rewrite_buffer = "maybe_rewrite_buffer";
-const string Call::maybe_return = "maybe_return";
+const string Call::rewrite_buffer = "rewrite_buffer";
 const string Call::profiling_timer = "profiling_timer";
 const string Call::lerp = "lerp";
 const string Call::create_buffer_t = "create_buffer_t";
 const string Call::extract_buffer_min = "extract_buffer_min";
 const string Call::extract_buffer_extent = "extract_buffer_extent";
+const string Call::trace = "trace";
 
 }
 }

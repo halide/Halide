@@ -1,8 +1,8 @@
 #ifndef HALIDE_INTERNAL_LOWER_H
 #define HALIDE_INTERNAL_LOWER_H
 
-/** \file 
- * 
+/** \file
+ *
  * Defines the function that generates a statement that computes a
  * Halide function using its schedule.
  */

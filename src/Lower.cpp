@@ -62,7 +62,7 @@ void lower_test() {
 
 // Prefix all names in an expression with some string.
 class QualifyExpr : public IRMutator {
-    string prefix;
+    const string &prefix;
 
     using IRMutator::visit;
 
@@ -79,10 +79,10 @@ class QualifyExpr : public IRMutator {
         expr = Let::make(prefix + op->name, value, body);
     }
 public:
-    QualifyExpr(string p) : prefix(p) {}
+    QualifyExpr(const string &p) : prefix(p) {}
 };
 
-Expr qualify_expr(string prefix, Expr value) {
+Expr qualify_expr(const string &prefix, Expr value) {
     QualifyExpr q(prefix);
     return q.mutate(value);
 }
@@ -193,6 +193,7 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
             // stmt = LetStmt::make(prefix + split.old_var, base + inner + old_min, stmt);
             stmt = substitute(prefix + split.old_var, base + inner + old_min, stmt);
         } else {
+            // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
             stmt = substitute(prefix + split.old_var, outer, stmt);
         }
     }
@@ -1120,22 +1121,18 @@ Stmt add_image_checks(Stmt s, Function f) {
         }
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
-        Expr buffer_name = Call::make(Int(32), name, vector<Expr>(), Call::Intrinsic);
-        vector<Expr> args = vec(inference_mode, buffer_name, Expr(type.bits/8));
-        for (size_t i = 0; i < 4; i++) {
+        Expr buffer_name = Variable::make(Handle(), name + ".buffer");
+        vector<Expr> args = vec(buffer_name, Expr(type.bits/8));
+        for (size_t i = 0; i < region.size(); i++) {
             string dim = int_to_string(i);
-            if (i < region.size()) {
-                args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
-                args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
-                args.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
-            } else {
-                args.push_back(0);
-                args.push_back(0);
-                args.push_back(0);
-            }
+            args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
+            args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
+            args.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
         }
-        Expr call = Call::make(UInt(1), Call::maybe_rewrite_buffer, args, Call::Intrinsic);
-        buffer_rewrites.push_back(AssertStmt::make(call, "Failure in maybe_rewrite_buffer"));
+        Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic);
+        Stmt rewrite = Evaluate::make(call);
+        rewrite = IfThenElse::make(inference_mode, rewrite);
+        buffer_rewrites.push_back(rewrite);
 
         // Build the constraints tests and proposed sizes.
         vector<pair<string, Expr> > constraints;
@@ -1271,9 +1268,7 @@ Stmt add_image_checks(Stmt s, Function f) {
     }
 
     // Inject the code that returns early for inference mode.
-    Expr maybe_return = Call::make(UInt(1), Call::maybe_return,
-                                   vec(maybe_return_condition), Call::Intrinsic);
-    s = Block::make(AssertStmt::make(maybe_return, "Failure in maybe_return"), s);
+    s = IfThenElse::make(!maybe_return_condition, s);
 
     // Inject the code that does the buffer rewrites for inference mode.
     for (size_t i = buffer_rewrites.size(); i > 0; i--) {
@@ -1318,7 +1313,7 @@ Stmt lower(Function f) {
     debug(2) << "All realizations injected:\n" << s << '\n';
 
     debug(1) << "Injecting tracing...\n";
-    s = inject_tracing(s);
+    s = inject_tracing(s, env, f);
     debug(2) << "Tracing injected:\n" << s << '\n';
 
     debug(1) << "Injecting profiling...\n";

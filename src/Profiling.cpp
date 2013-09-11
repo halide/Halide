@@ -52,8 +52,10 @@ public:
             for (map<string, int>::const_iterator it = indices.begin(); it != indices.end(); ++it) {
                 int idx = it->second;
                 Expr val = Load::make(UInt(64), kBufName, idx, Buffer(), Parameter());
-                Stmt print_val = PrintStmt::make(it->first, vec(val));
-                s = Block::make(s, print_val);
+                Expr print_val = Call::make(Int(32), "halide_printf",
+                                            vec<Expr>(it->first + "%lu\n", val), Call::Extern);
+                Stmt print_stmt = AssertStmt::make(print_val > 0, "halide_printf failed");
+                s = Block::make(s, print_stmt);
             }
 
             // Now that we know the final size, allocate the buffer and init to zero.

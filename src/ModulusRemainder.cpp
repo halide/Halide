@@ -14,10 +14,9 @@ public:
     int modulus, remainder;
     Scope<ModulusRemainder> scope;
 
-    using IRVisitor::visit;
-
     void visit(const IntImm *);
     void visit(const FloatImm *);
+    void visit(const StringImm *);
     void visit(const Cast *);
     void visit(const Variable *);
     void visit(const Add *);
@@ -43,7 +42,6 @@ public:
     void visit(const Call *);
     void visit(const Let *);
     void visit(const LetStmt *);
-    void visit(const PrintStmt *);
     void visit(const AssertStmt *);
     void visit(const Pipeline *);
     void visit(const For *);
@@ -52,6 +50,9 @@ public:
     void visit(const Allocate *);
     void visit(const Realize *);
     void visit(const Block *);
+    void visit(const IfThenElse *);
+    void visit(const Free *);
+    void visit(const Evaluate *);
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
@@ -131,6 +132,10 @@ void ComputeModulusRemainder::visit(const IntImm *op) {
 
 void ComputeModulusRemainder::visit(const FloatImm *) {
     assert(false && "modulus_remainder of float");
+}
+
+void ComputeModulusRemainder::visit(const StringImm *) {
+    assert(false && "modulus_remainder of string");
 }
 
 void ComputeModulusRemainder::visit(const Cast *) {
@@ -353,10 +358,6 @@ void ComputeModulusRemainder::visit(const LetStmt *) {
     assert(false && "modulus_remainder of statement");
 }
 
-void ComputeModulusRemainder::visit(const PrintStmt *) {
-    assert(false && "modulus_remainder of statement");
-}
-
 void ComputeModulusRemainder::visit(const AssertStmt *) {
     assert(false && "modulus_remainder of statement");
 }
@@ -388,6 +389,19 @@ void ComputeModulusRemainder::visit(const Realize *) {
 void ComputeModulusRemainder::visit(const Block *) {
     assert(false && "modulus_remainder of statement");
 }
+
+void ComputeModulusRemainder::visit(const Free *) {
+    assert(false && "modulus_remainder of statement");
+}
+
+void ComputeModulusRemainder::visit(const IfThenElse *) {
+    assert(false && "modulus_remainder of statement");
+}
+
+void ComputeModulusRemainder::visit(const Evaluate *) {
+    assert(false && "modulus_remainder of statement");
+}
+
 
 }
 }

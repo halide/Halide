@@ -6,9 +6,9 @@
 #include "IR.h"
 #include <ostream>
 
-namespace Halide { 
+namespace Halide {
 
-/** \file 
+/** \file
  * This header file defines operators that let you dump a Halide
  * expression, statement, or type directly into an output stream
  * in a human readable form.
@@ -17,7 +17,7 @@ namespace Halide {
  Expr foo = ...
  std::cout << "Foo is " << foo << std::endl;
  \endcode
- * 
+ *
  * These operators are implemented using \ref Halide::Internal::IRPrinter
  */
 
@@ -70,6 +70,7 @@ protected:
 
     void visit(const IntImm *);
     void visit(const FloatImm *);
+    void visit(const StringImm *);
     void visit(const Cast *);
     void visit(const Variable *);
     void visit(const Add *);
@@ -95,7 +96,6 @@ protected:
     void visit(const Call *);
     void visit(const Let *);
     void visit(const LetStmt *);
-    void visit(const PrintStmt *);
     void visit(const AssertStmt *);
     void visit(const Pipeline *);
     void visit(const For *);
@@ -105,6 +105,8 @@ protected:
     void visit(const Free *);
     void visit(const Realize *);
     void visit(const Block *);
+    void visit(const IfThenElse *);
+    void visit(const Evaluate *);
 
 };
 }
