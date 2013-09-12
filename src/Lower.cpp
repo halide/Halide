@@ -184,10 +184,11 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
                 stmt = LetStmt::make(name, base, stmt);
                 base = Variable::make(Int(32), name);
 
-                // Perhaps we'd rather round up than go less than the
-                // original min, so we can push it forwards a little. I
-                // don't think this matters, so I'll leave it out for now.
-                // base = Max::make(base, 0);
+                // We'd rather round up than go less than the original
+                // min, so we push it forwards a little. This keeps
+                // the min of the min at zero, which simplifies bounds
+                // inference.
+                base = Max::make(base, 0);
             }
 
             // stmt = LetStmt::make(prefix + split.old_var, base + inner + old_min, stmt);
