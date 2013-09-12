@@ -28,9 +28,12 @@ struct timespec {
 
 #endif  // _STRUCT_TIMESPEC
 
-extern "C" {
+// Should be safe to include these, given that we know we're on linux
+// if we're compiling this file.
+#include <sys/syscall.h>
+#include <unistd.h>
 
-extern int clock_gettime(clockid_t clk_id, struct timespec *tp);
+extern "C" {
 
 WEAK bool halide_reference_clock_inited = false;
 WEAK timespec halide_reference_clock;
@@ -38,15 +41,16 @@ WEAK timespec halide_reference_clock;
 WEAK int halide_start_clock() {
     // Guard against multiple calls
     if (!halide_reference_clock_inited) {
-      clock_gettime(CLOCK_REALTIME, &halide_reference_clock);
-      halide_reference_clock_inited = true;
+        syscall(SYS_clock_gettime, CLOCK_REALTIME, &halide_reference_clock);
+        halide_reference_clock_inited = true;
     }
     return 0;
 }
 
 WEAK int64_t halide_current_time_ns() {
     timespec now;
-    clock_gettime(CLOCK_REALTIME, &now);
+    // To avoid requiring people to link -lrt, we just make the syscall directly.
+    syscall(SYS_clock_gettime, CLOCK_REALTIME, &now);
     int64_t d = int64_t(now.tv_sec - halide_reference_clock.tv_sec)*1000000000;
     int64_t nd = (now.tv_nsec - halide_reference_clock.tv_nsec);
     return d + nd;
