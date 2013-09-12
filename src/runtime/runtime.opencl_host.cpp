@@ -11,7 +11,11 @@
 
 // The OpenCL host extends the x86 target
 #include "posix_allocator.cpp"
+#ifdef __linux__
+#include "linux_clock.cpp"
+#else
 #include "posix_clock.cpp"
+#endif
 #include "posix_error_handler.cpp"
 #include "write_debug_image.cpp"
 #include "posix_io.cpp"
@@ -61,7 +65,7 @@ extern "C" {
     float msec;                                             \
     cuEventElapsedTime(&msec, __start, __end);              \
     printf(stderr, "Do %s\n", str);                         \
-    printf("   (took %fms, t=%d)\n", msec, halide_current_time_ns());  \
+    printf("   (took %fms, t=%lld)\n", msec, halide_current_time_ns());  \
 } halide_current_time_ns() // just *some* expression fragment after which it's legal to put a ;
 #else
 #define TIME_START()
