@@ -11,6 +11,9 @@ namespace Internal {
 namespace {
     const char kBufName[] = "ProfilerBuffer";
     const char kToplevel[] = "$total$";
+    const char kOverhead[] = "$overhead$";
+    const char kIgnore[] = "$ignore$";
+    const char kIgnoreBuf[] = "$ignore_buf$";
 }
 
 int profiling_level() {
@@ -47,6 +50,34 @@ public:
             Expr begin_clock_call = Call::make(Int(32), "halide_start_clock", std::vector<Expr>(), Call::Extern);
             Stmt begin_clock = AssertStmt::make(begin_clock_call == 0, "Failed to start clock");
             s = Block::make(begin_clock, s);
+
+            // Do a little calibration: make a loop that does a large number of calls to add_ticks
+            // and measures the total time, so we can calculate the average overhead
+            // and subtract it from the final results. (The "body" of this loop is just
+            // a store of 0 to scratch that we expect to be optimized away.) This isn't a perfect
+            // solution, but is much better than nothing.
+            //
+            // Note that we deliberately unroll a bit to minimize loop overhead, otherwise our
+            // estimate will be too high.
+            //
+            // NOTE: we deliberately do this *after* measuring
+            // the total, so this should *not* be included in "kToplevel".
+            const int kIters = 1000000;
+            const int kUnroll = 4;
+            Stmt ticker_block = Stmt();
+            for (int i = 0; i < kUnroll; i++) {
+                ticker_block = Block::make(
+                    add_ticks(kIgnore, kIgnore, Store::make(kIgnoreBuf, Cast::make(UInt(32), 0), 0)),
+                        ticker_block);
+            }
+
+            Expr j = Variable::make(Int(32), "j");
+            Stmt do_timings = For::make("j", 0, kIters, For::Serial, ticker_block);
+            do_timings = add_ticks(kOverhead, kOverhead, do_timings);
+            do_timings = add_delta("count", kOverhead, kOverhead, Cast::make(UInt(64), 0),
+                Cast::make(UInt(64), kIters * kUnroll), do_timings);
+            s = Block::make(s, do_timings);
+            s = Allocate::make(kIgnoreBuf, UInt(32), 1, s);
 
             // Tack on code to print the counters.
             for (map<string, int>::const_iterator it = indices.begin(); it != indices.end(); ++it) {
