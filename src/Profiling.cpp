@@ -31,7 +31,7 @@ public:
 
     Stmt inject(Stmt s) {
         if (level >= 1) {
-            // Add calls to the usec and timer at the start and end,
+            // Add calls to the nsec and timer at the start and end,
             // so that we can get an estimate of how long a single
             // tick of the profiling_timer is (since it may be dependent
             // on e.g. processor clock rate)
@@ -40,10 +40,10 @@ public:
                 s = mutate(s);
             }
             s = add_ticks(kToplevel, kToplevel, s);
-            s = add_usec(kToplevel, kToplevel, s);
+            s = add_nsec(kToplevel, kToplevel, s);
 
             // Note that this is tacked on to the front of the block, since it must come
-            // before the calls to halide_current_time_usec.
+            // before the calls to halide_current_time_ns.
             Expr begin_clock_call = Call::make(Int(32), "halide_start_clock", std::vector<Expr>(), Call::Extern);
             Stmt begin_clock = AssertStmt::make(begin_clock_call == 0, "Failed to start clock");
             s = Block::make(begin_clock, s);
@@ -120,9 +120,9 @@ private:
         return add_delta("ticks", op_type, op_name, ticks, ticks, s);
     }
 
-    Stmt add_usec(const string& op_type, const string& op_name, Stmt s) {
-        Expr usec = Call::make(UInt(64), "halide_current_time_usec", std::vector<Expr>(), Call::Extern);
-        return add_delta("usec", op_type, op_name, usec, usec, s);
+    Stmt add_nsec(const string& op_type, const string& op_name, Stmt s) {
+        Expr nsec = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
+        return add_delta("nsec", op_type, op_name, nsec, nsec, s);
     }
 
     Stmt add_delta(const string& metric_name, const string& op_type, const string& op_name,
