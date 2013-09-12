@@ -22,20 +22,20 @@ namespace {
     uint64_t count;
     // ticks used (processor specific, no fixed time intercal)
     uint64_t ticks;
-    // usec is actually only measured for $total$;
+    // nsec is actually only measured for $total$;
     // it's (approximated) calculated for all others
-    double usec;
+    double nsec;
     // percentage of total ticks, [0.0..1.0]
     double percent;
-    // ticks/usec/percent used by this op alone (not including callees)
+    // ticks/nsec/percent used by this op alone (not including callees)
     uint64_t ticks_only;
-    double usec_only;
+    double nsec_only;
     double percent_only;
 
     OpInfo()
       : count(0),
         ticks(0),
-        usec(0.0),
+        nsec(0.0),
         percent(0.0) {}
   };
 
@@ -99,29 +99,29 @@ namespace {
       op_info.count = value;
     } else if (metric == "ticks") {
       op_info.ticks = value;
-    } else if (metric == "usec") {
-      op_info.usec = value;
+    } else if (metric == "nsec") {
+      op_info.nsec = value;
     }
   }
 
   void FinishOpInfo(OpInfoMap& op_info_map) {
-    // First, fill in usec and percent.
+    // First, fill in nsec and percent.
     std::string toplevel_qual_name = qualified_name(kToplevel, kToplevel);
 
     OpInfo& total = op_info_map[toplevel_qual_name];
     total.count = 1;
     total.percent = 1.0;
 
-    double ticks_per_usec = (double)total.ticks / (double)total.usec;
+    double ticks_per_nsec = (double)total.ticks / (double)total.nsec;
     for (OpInfoMap::iterator o = op_info_map.begin(); o != op_info_map.end(); ++o) {
       const std::string& qual_name = o->first;
       if (qual_name == toplevel_qual_name) {
         continue;
       }
       OpInfo& op_info = o->second;
-      // usec isn't guaranteed to be super-precise, so this
+      // nsec isn't guaranteed to be super-precise, so this
       // isn't perfect; still useful for estimation though.
-      op_info.usec = op_info.ticks / ticks_per_usec;
+      op_info.nsec = op_info.ticks / ticks_per_nsec;
       op_info.percent = (double)op_info.ticks / (double)total.ticks;
     }
 
@@ -137,12 +137,12 @@ namespace {
     for (OpInfoMap::iterator o = op_info_map.begin(); o != op_info_map.end(); ++o) {
       OpInfo& op_info = o->second;
       op_info.ticks_only = op_info.ticks;
-      op_info.usec_only = op_info.usec;
+      op_info.nsec_only = op_info.nsec;
       std::string qual_name = qualified_name(op_info.op_type, op_info.op_name);
       const std::vector<OpInfo>& children = children_map[qual_name];
       for (std::vector<OpInfo>::const_iterator c = children.begin(); c != children.end(); ++c) {
         op_info.ticks_only -= c->ticks;
-        op_info.usec_only -= c->usec;
+        op_info.nsec_only -= c->nsec;
       }
       op_info.percent_only = (double)op_info.ticks_only / (double)total.ticks;
     }
@@ -229,10 +229,10 @@ int main(int argc, char** argv) {
         << std::setw(40) << std::left << op_info.op_name
         << std::setw(16) << std::right << op_info.count
         << std::setw(16) << op_info.ticks
-        << std::setw(12) << std::setprecision(2) << std::fixed << (op_info.usec / 1000.0)
+        << std::setw(12) << std::setprecision(2) << std::fixed << (op_info.nsec / 1000000.0)
         << std::setw(8) << std::setprecision(2) << std::fixed << (op_info.percent * 100.0)
         << std::setw(16) << op_info.ticks_only
-        << std::setw(12) << std::setprecision(2) << std::fixed << (op_info.usec_only / 1000.0)
+        << std::setw(12) << std::setprecision(2) << std::fixed << (op_info.nsec_only / 1000000.0)
         << std::setw(8) << std::setprecision(2) << std::fixed << (op_info.percent_only * 100.0)
         << "\n";
       if (--top_n <= 0) {
