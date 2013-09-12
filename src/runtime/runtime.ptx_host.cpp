@@ -30,6 +30,8 @@
 #endif
 #endif
 
+extern "C" int atoi(const char *);
+
 #define WEAK __attribute__((weak))
 
 extern "C" {
