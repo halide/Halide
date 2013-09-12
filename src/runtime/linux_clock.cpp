@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <unistd.h>
 
 #ifndef __clockid_t_defined
 #define __clockid_t_defined 1
@@ -28,15 +29,25 @@ struct timespec {
 
 #endif  // _STRUCT_TIMESPEC
 
-// Should be safe to include these, given that we know we're on linux
-// if we're compiling this file.
-#include <sys/syscall.h>
-#include <unistd.h>
-
 extern "C" {
 
 WEAK bool halide_reference_clock_inited = false;
 WEAK timespec halide_reference_clock;
+
+// The syscall number for gettime varies across platforms
+// android arm is 263
+// i386 and android x86 is 265
+// x64 is 228
+
+#ifdef __arm__
+#define SYS_clock_gettime 263
+#else
+#ifdef __i386__
+#define SYS_clock_gettime 265
+#else
+#define SYS_clock_gettime 228
+#endif
+#endif
 
 WEAK int halide_start_clock() {
     // Guard against multiple calls
