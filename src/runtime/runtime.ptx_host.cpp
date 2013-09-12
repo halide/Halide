@@ -5,6 +5,7 @@
  */
 
 //#include <cuda.h>
+#include <stdint.h>
 #include "../buffer_t.h"
 
 // The PTX host extends the x86 target
