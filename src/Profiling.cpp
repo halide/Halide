@@ -53,7 +53,7 @@ public:
                 int idx = it->second;
                 Expr val = Load::make(UInt(64), kBufName, idx, Buffer(), Parameter());
                 Expr print_val = Call::make(Int(32), "halide_printf",
-                                            vec<Expr>(it->first + "%llu\n", val), Call::Extern);
+                                            vec<Expr>(it->first + " %llu\n", val), Call::Extern);
                 Stmt print_stmt = AssertStmt::make(print_val > 0, "halide_printf failed");
                 s = Block::make(s, print_stmt);
             }
