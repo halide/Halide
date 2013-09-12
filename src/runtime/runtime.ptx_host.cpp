@@ -48,7 +48,7 @@ extern "C" {
     cuEventSynchronize(__end);                              \
     float msec;                                             \
     cuEventElapsedTime(&msec, __start, __end);              \
-    printf("   (took %fms, t=%d)\n", msec, halide_current_time());  \
+    printf("   (took %fms, t=%lld)\n", msec, halide_current_time_ns());  \
 } while(0)
 #endif //DEBUG
 
@@ -273,7 +273,7 @@ WEAK void halide_init_kernels(const char* ptx_src) {
         }
 
         #ifdef DEBUG
-        fprintf(stderr, "Got device %d, about to create context (t=%d)\n", dev, halide_current_time());
+        fprintf(stderr, "Got device %d, about to create context (t=%lld)\n", dev, halide_current_time_ns());
         #endif
 
 
@@ -348,7 +348,7 @@ static CUfunction __get_kernel(const char* entry_name)
 
     #ifdef DEBUG
     char msg[256];
-    snprintf(msg, 256, "get_kernel %s (t=%d)", entry_name, halide_current_time() );
+    snprintf(msg, 256, "get_kernel %s (t=%lld)", entry_name, halide_current_time_ns() );
     #endif
 
     // Get kernel function ptr
@@ -396,7 +396,7 @@ WEAK void halide_copy_to_dev(buffer_t* buf) {
         size_t size = buf_size(buf);
         #ifdef DEBUG
         char msg[256];
-        snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, halide_current_time() );
+        snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%lld)", size, buf->host, (void*)buf->dev, halide_current_time_ns() );
         assert(halide_validate_dev_pointer(buf));
         #endif
         TIME_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
@@ -439,9 +439,9 @@ WEAK void halide_dev_run(
     char msg[256];
     snprintf(
         msg, 256,
-        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%d)",
+        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%lld)",
         entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes,
-        halide_current_time()
+        halide_current_time_ns()
     );
     #endif
 
