@@ -1172,16 +1172,14 @@ void CodeGen_ARM::visit(const Load *op) {
 }
 
 void CodeGen_ARM::visit(const Call *op) {
-    if (use_android) {
-        if (op->call_type == Call::Intrinsic &&
-            op->name == Call::profiling_timer) {
-            // Android devices generally have read-cycle-counter
-            // disabled in user mode; fall back to calling
-            // halide_current_time_ns().
-            Expr e = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
-            e.accept(this);
-            return;
-        }
+    if (op->call_type == Call::Intrinsic &&
+        op->name == Call::profiling_timer) {
+        // Android devices generally have read-cycle-counter
+        // disabled in user mode; fall back to calling
+        // halide_current_time_ns().
+        Expr e = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
+        e.accept(this);
+        return;
     }
     CodeGen::visit(op);
 }
