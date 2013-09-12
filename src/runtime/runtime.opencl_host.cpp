@@ -8,7 +8,11 @@
 
 // The OpenCL host extends the x86 target
 #include "posix_allocator.cpp"
+#ifdef __linux__
+#include "linux_clock.cpp"
+#else
 #include "posix_clock.cpp"
+#endif
 #include "posix_error_handler.cpp"
 #include "write_debug_image.cpp"
 #include "posix_io.cpp"
@@ -48,9 +52,9 @@ extern "C" {
     halide_printf("Do %s\n", str);                                        \
     int err = (c);                                                          \
     if (err != CL_SUCCESS)                                                  \
-        halide_printf("CL: %s returned non-success: %d\n", str, err);  \
+        halide_printf("CL: %s returned non-success: %d\n", str, err); \
     halide_assert(err == CL_SUCCESS);                                              \
-} halide_current_time() // just *some* expression fragment after which it's legal to put a ;
+} halide_current_time_ns() // just *some* expression fragment after which it's legal to put a ;
 #if 0
 #define TIME_START() cuEventRecord(__start, 0)
 #define TIME_CHECK(str) {\
@@ -59,8 +63,8 @@ extern "C" {
     float msec;                                             \
     cuEventElapsedTime(&msec, __start, __end);              \
     printf(stderr, "Do %s\n", str);                         \
-    printf("   (took %fms, t=%d)\n", msec, halide_current_time());  \
-} halide_current_time() // just *some* expression fragment after which it's legal to put a ;
+    printf("   (took %fms, t=%lld)\n", msec, halide_current_time_ns());  \
+} halide_current_time_ns() // just *some* expression fragment after which it's legal to put a ;
 #else
 #define TIME_START()
 #define TIME_CHECK(str)
@@ -151,7 +155,7 @@ WEAK void halide_init_kernels(const char* src) {
         dev = devices[deviceCount-1];
 
         #ifndef NDEBUG
-        halide_printf("Got device %lld, about to create context (t=%d)\n", (long long)dev, halide_current_time());
+        halide_printf("Got device %lld, about to create context (t=%lld)\n", (long long)dev, halide_current_time_ns());
         #endif
 
 
@@ -218,7 +222,7 @@ static cl_kernel __get_kernel(const char* entry_name) {
     // char msg[1];
     #else
     char msg[256];
-    snprintf(msg, 256, "get_kernel %s (t=%d)", entry_name, halide_current_time() );
+    snprintf(msg, 256, "get_kernel %s (t=%lld)", entry_name, halide_current_time_ns() );
     #endif
     // Get kernel function ptr
     TIME_START();
@@ -235,7 +239,7 @@ static cl_mem __dev_malloc(size_t bytes) {
     // char msg[1];
     #else
     char msg[256];
-    snprintf(msg, 256, "dev_malloc (%zu bytes) (t=%d)", bytes, halide_current_time() );
+    snprintf(msg, 256, "dev_malloc (%zu bytes) (t=%lld)", bytes, halide_current_time_ns() );
     #endif
     TIME_START();
     int err;
@@ -280,7 +284,7 @@ WEAK void halide_copy_to_dev(buffer_t* buf) {
         // char msg[1];
         #else
         char msg[256];
-        snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%d)", size, buf->host, (void*)buf->dev, halide_current_time() );
+        snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%lld)", size, buf->host, (void*)buf->dev, halide_current_time_ns() );
         #endif
         halide_assert(halide_validate_dev_pointer(buf));
         TIME_START();
@@ -328,9 +332,9 @@ WEAK void halide_dev_run(
     char msg[256];
     snprintf(
         msg, 256,
-        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%d)",
+        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%lld)",
         entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes,
-        halide_current_time()
+        halide_current_time_ns()
     );
     #endif
     // Pack dims

@@ -118,7 +118,6 @@ private:
     }
 
     void visit(const Pipeline *op) {
-
         IRMutator::visit(op);
         op = stmt.as<Pipeline>();
         assert(op);
