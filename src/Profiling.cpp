@@ -43,7 +43,7 @@ public:
             s = add_usec(kToplevel, kToplevel, s);
 
             // Note that this is tacked on to the front of the block, since it must come
-            // before the calls to halide_current_time_usec.
+            // before the calls to halide_current_time_ns.
             Expr begin_clock_call = Call::make(Int(32), "halide_start_clock", std::vector<Expr>(), Call::Extern);
             Stmt begin_clock = AssertStmt::make(begin_clock_call == 0, "Failed to start clock");
             s = Block::make(begin_clock, s);
@@ -121,7 +121,7 @@ private:
     }
 
     Stmt add_usec(const string& op_type, const string& op_name, Stmt s) {
-        Expr usec = Call::make(UInt(64), "halide_current_time_usec", std::vector<Expr>(), Call::Extern);
+        Expr usec = Call::make(UInt(64), "halide_current_time_ns", std::vector<Expr>(), Call::Extern);
         return add_delta("usec", op_type, op_name, usec, usec, s);
     }
 

@@ -1375,7 +1375,7 @@ void CodeGen::visit(const Call *op) {
 
         bool has_side_effects = false;
         // TODO: Need a general solution here
-        if (op->name == "halide_current_time" || op->name == "halide_current_time_usec") {
+        if (op->name == "halide_current_time_ns") {
             has_side_effects = true;
         }
 

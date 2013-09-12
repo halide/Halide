@@ -1,5 +1,5 @@
 #include "posix_allocator.cpp"
-#include "posix_clock.cpp"
+#include "linux_clock.cpp"
 #include "posix_error_handler.cpp"
 #include "write_debug_image.cpp"
 #include "android_io.cpp"
