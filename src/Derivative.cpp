@@ -4,7 +4,7 @@
 #include "Scope.h"
 #include "IROperator.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 using std::string;
@@ -94,6 +94,261 @@ public:
 Expr finite_difference(Expr expr, const string &var) {
     return FiniteDifference(var).mutate(expr);
 }
-  
+
+class Monotonic : public IRVisitor {
+    const string &var;
+
+    Scope<MonotonicResult> scope;
+
+    void visit(const IntImm *) {
+        result = Constant;
+    }
+
+    void visit(const FloatImm *) {
+        result = Constant;
+    }
+
+    void visit(const StringImm *) {
+        assert(false && "Monotonic on String");
+    }
+
+    void visit(const Cast *op) {
+        // It's possible to reason about this, but for now we punt.
+        op->value.accept(this);
+        if (result != Constant) {
+            result = Unknown;
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (op->name == var) {
+            result = MonotonicIncreasing;
+        } else if (scope.contains(op->name)) {
+            result = scope.get(op->name);
+        } else {
+            result = Constant;
+        }
+    }
+
+    MonotonicResult flip(MonotonicResult r) {
+        switch (r) {
+        case MonotonicIncreasing: return MonotonicDecreasing;
+        case MonotonicDecreasing: return MonotonicIncreasing;
+        default: return r;
+        }
+    }
+
+    MonotonicResult unify(MonotonicResult a, MonotonicResult b) {
+        if (a == b) {
+            return a;
+        }
+
+        if (a == Unknown || b == Unknown) {
+            return Unknown;
+        }
+
+        if (a == Constant) {
+            return b;
+        }
+
+        if (b == Constant) {
+            return a;
+        }
+
+        return Unknown;
+    }
+
+    void visit(const Add *op) {
+        op->a.accept(this);
+        MonotonicResult ra = result;
+        op->b.accept(this);
+        MonotonicResult rb = result;
+        result = unify(ra, rb);
+    }
+
+    void visit(const Sub *op) {
+        op->a.accept(this);
+        MonotonicResult ra = result;
+        op->b.accept(this);
+        MonotonicResult rb = result;
+        result = unify(ra, flip(rb));
+    }
+
+    void visit(const Mul *op) {
+        op->a.accept(this);
+        MonotonicResult ra = result;
+        op->b.accept(this);
+        MonotonicResult rb = result;
+        result = unify(ra, rb);
+    }
+
+    void visit(const Div *op) {
+        op->a.accept(this);
+        MonotonicResult ra = result;
+        op->b.accept(this);
+        MonotonicResult rb = result;
+        result = unify(ra, flip(rb));
+    }
+
+    void visit(const Mod *op) {
+        result = Unknown;
+    }
+
+    void visit(const Min *op) {
+        op->a.accept(this);
+        MonotonicResult ra = result;
+        op->b.accept(this);
+        MonotonicResult rb = result;
+        result = unify(ra, rb);
+    }
+
+    void visit(const Max *op) {
+        op->a.accept(this);
+        MonotonicResult ra = result;
+        op->b.accept(this);
+        MonotonicResult rb = result;
+        result = unify(ra, rb);
+    }
+
+    void visit(const EQ *op) {
+        assert(false && "Monotonic of bool");
+    }
+
+    void visit(const NE *op) {
+        assert(false && "Monotonic of bool");
+    }
+
+    void visit(const LT *op) {
+        assert(false && "Monotonic of bool");
+    }
+
+    void visit(const LE *op) {
+        assert(false && "Monotonic of bool");
+    }
+
+    void visit(const GT *op) {
+        assert(false && "Monotonic of bool");
+    }
+
+    void visit(const GE *op) {
+        assert(false && "Monotonic of bool");
+    }
+
+    void visit(const And *op) {
+        assert(false && "Monotonic of bool");
+    }
+
+    void visit(const Or *op) {
+        assert(false && "Monotonic of bool");
+    }
+
+    void visit(const Not *op) {
+        assert(false && "Monotonic of bool");
+    }
+
+    void visit(const Select *op) {
+        op->true_value.accept(this);
+        MonotonicResult ra = result;
+        op->false_value.accept(this);
+        MonotonicResult rb = result;
+        result = unify(ra, rb);
+    }
+
+    void visit(const Load *op) {
+        op->index.accept(this);
+        if (result != Constant) {
+            result = Unknown;
+        }
+    }
+
+    void visit(const Ramp *op) {
+        assert(false && "Monotonic of vector");
+    }
+
+    void visit(const Broadcast *op) {
+        assert(false && "Monotonic of vector");
+    }
+
+    void visit(const Call *op) {
+        for (size_t i = 0; i < op->args.size(); i++) {
+            op->args[i].accept(this);
+            if (result != Constant) {
+                result = Unknown;
+                return;
+            }
+        }
+        result = Constant;
+    }
+
+    void visit(const Let *op) {
+        op->value.accept(this);
+        if (result != Constant) {
+            // No point pushing it if it's constant anyway w.r.t the
+            // var, because unknown variables are treated as constant.
+            scope.push(op->name, result);
+        }
+        op->body.accept(this);
+        scope.pop(op->name);
+    }
+
+    void visit(const LetStmt *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const AssertStmt *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const Pipeline *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const For *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const Store *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const Provide *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const Allocate *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const Free *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const Realize *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const Block *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const IfThenElse *op) {
+        assert(false && "Monotonic of statement");
+    }
+
+    void visit(const Evaluate *op) {
+        assert(false && "Monotonic of statement");
+    }
+public:
+    MonotonicResult result;
+
+    Monotonic(const std::string &v) : var(v), result(Unknown) {}
+};
+
+MonotonicResult is_monotonic(Expr e, const std::string &var) {
+    Monotonic m(var);
+    e.accept(&m);
+    return m.result;
+}
+
 }
 }

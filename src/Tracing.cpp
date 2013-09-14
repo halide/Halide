@@ -112,8 +112,10 @@ private:
             Expr call_before = Call::make(UInt(1), Call::trace, args, Call::Intrinsic);
             args[1] = halide_trace_end_realization;
             Expr call_after = Call::make(UInt(1), Call::trace, args, Call::Intrinsic);
-            stmt = Block::make(Evaluate::make(call_before), stmt);
-            stmt = Block::make(stmt, Evaluate::make(call_after));
+            Stmt new_body = op->body;
+            new_body = Block::make(Evaluate::make(call_before), new_body);
+            new_body = Block::make(new_body, Evaluate::make(call_after));
+            stmt = Realize::make(op->name, op->types, op->bounds, new_body);
         }
     }
 

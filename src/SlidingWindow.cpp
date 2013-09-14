@@ -4,6 +4,9 @@
 #include "Scope.h"
 #include "Debug.h"
 #include "Substitute.h"
+#include "IRPrinter.h"
+#include "Simplify.h"
+#include "Derivative.h"
 
 namespace Halide {
 namespace Internal {
@@ -84,26 +87,78 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 }
             }
 
+            Expr loop_var_expr = Variable::make(Int(32), loop_var);
+            bool increasing = true;
+
+            if (min.defined()) {
+                /*
+                // The min has to be monotonic with the loop variable, and
+                // should depend on the loop variable.
+                prev_min = substitute(loop_var, loop_var_expr - 1, min);
+                Expr monotonic_increasing = simplify(min >= prev_min);
+                Expr monotonic_decreasing = simplify(min <= prev_min);
+                Expr diff = simplify(finite_difference(min, loop_var));
+
+                if (!is_const(monotonic_increasing)) {
+                    // Try a different proof strategy
+                    monotonic_increasing = simplify(diff >= 0);
+                }
+                if (!is_const(monotonic_decreasing)) {
+                    monotonic_decreasing = simplify(diff <= 0);
+                }
+                */
+
+                MonotonicResult m = is_monotonic(min, loop_var);
+
+                if (m == MonotonicIncreasing || m == Constant) {
+
+                } else if (m == MonotonicDecreasing) {
+                    increasing = false;
+                } else {
+                    debug(3) << "Not sliding " << func.name()
+                             << " over dimension " << dim
+                             << " along loop variable " << loop_var
+                             << " because I couldn't prove it moved monotonically along that dimension\n"
+                             << "Min is " << min << "\n";
+                    min = Expr();
+                }
+            }
+
             if (min.defined()) {
                 // Ok, we've isolated a function, a dimension to slide along, and loop variable to slide over
-                debug(2) << "Sliding " << func.name() << " over dimension " << dim << " along loop variable " << loop_var << "\n";
-
-                Expr loop_var_expr = Variable::make(Int(32), loop_var);
+                debug(3) << "Sliding " << func.name() << " over dimension " << dim << " along loop variable " << loop_var << "\n";
                 Expr steady_state = loop_var_expr > loop_min;
 
-                // The new min is one beyond the max we reached on the last loop iteration
-                Expr new_min = substitute(loop_var, loop_var_expr - 1, min + extent);
-                // The new extent is the old extent shrunk by how much we trimmed off the min
-                Expr new_extent = extent + min - new_min;
+                Expr new_min, new_extent;
 
-                new_min = Select::make(steady_state, new_min, min);
+                if (increasing) {
+                    Expr prev_max_plus_one = substitute(loop_var, loop_var_expr - 1, min + extent);
+
+                    // Bump up the min to skip stuff we've already computed.
+                    new_min = simplify(Max::make(min, prev_max_plus_one));
+
+                    // The new extent is the old extent shrunk by how much we trimmed off the min
+                    new_extent = simplify(extent + Min::make(min - prev_max_plus_one, 0));
+                } else {
+                    // Truncate the extent to be less than the previous min
+                    new_min = simplify(min);
+                    Expr prev_min = substitute(loop_var, loop_var_expr - 1, min);
+                    new_extent = simplify(Min::make(extent + min, prev_min) - new_min);
+                }
+
+                debug(3) << "Pushing min up from " << min << " to " << new_min << "\n";
+                debug(3) << "Shrinking extent from " << extent << " to " << new_extent << "\n";
+
+                stmt = op;
+                if (increasing) {
+                    new_min = Select::make(steady_state, new_min, min);
+                    stmt = LetStmt::make(func.name() + "." + dim + ".min", new_min, stmt);
+                }
                 new_extent = Select::make(steady_state, new_extent, extent);
-
-                stmt = LetStmt::make(func.name() + "." + dim + ".extent", new_extent, op);
-                stmt = LetStmt::make(func.name() + "." + dim + ".min", new_min, stmt);
+                stmt = LetStmt::make(func.name() + "." + dim + ".extent", new_extent, stmt);
 
             } else {
-                debug(2) << "Could not perform sliding window optimization of " << func.name() << " over " << loop_var << "\n";
+                debug(3) << "Could not perform sliding window optimization of " << func.name() << " over " << loop_var << "\n";
                 stmt = op;
             }
 

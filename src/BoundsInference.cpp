@@ -28,12 +28,13 @@ public:
 
     virtual void visit(const For *for_loop) {
 
-        Stmt body = mutate(for_loop->body);
-
         debug(3) << "\nIn loop over " << for_loop->name << " computing regions called...\n\n";
 
         // Compute the region required of each function within this loop body
-        map<string, Region> regions = regions_called(body);
+
+        map<string, Region> regions = regions_called(for_loop->body);
+
+        Stmt body = mutate(for_loop->body);
 
 
         debug(3) << "\nIn loop over " << for_loop->name << " regions called are:\n\n";
@@ -325,6 +326,7 @@ public:
 
         stmt = Pipeline::make(pipeline->name, produce, update, consume);
     }
+
 };
 
 Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Function> &env) {
