@@ -159,6 +159,20 @@ int main(int argc, char **argv) {
         if (i < correct_trace_length) correct = correct_trace[i];
 
         if (!events_match(recorded, correct)) {
+            // Uh oh. Maybe it's just a reordered load.
+            if (i > 0 && events_match(recorded, correct_trace[i-1]) &&
+                recorded.event_type == 0 && correct.event_type == 0) {
+                // Phew.
+                continue;
+            }
+
+            if (i < correct_trace_length-1 && 
+                events_match(recorded, correct_trace[i+1]) &&
+                recorded.event_type == 0 && correct.event_type == 0) {
+                // Phew.
+                continue;
+            }
+
             printf("Traces differs at event %d:\n"
                    "-------------------------------\n"
                    "Correct trace:\n", i);
