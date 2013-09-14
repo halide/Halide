@@ -156,7 +156,8 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
         if (!split.is_rename) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
             Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".min");
-            Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".extent");
+            string old_extent_name = prefix + split.old_var + ".extent";
+            Expr old_extent = Variable::make(Int(32), old_extent_name);
 
             known_size_dims[split.inner] = split.factor;
 
@@ -177,6 +178,14 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
                 // redundant compute, so push it backwards a little.
                 base = Min::make(base, old_extent - split.factor);
 
+                // We'd rather round up than go less than the original
+                // min, so we push it forwards a little. This keeps
+                // the min of the min at zero, which simplifies bounds
+                // inference. This doesn't actually need to happen,
+                // because we'll insert an explicit max operator on
+                // the old extent instead.
+                // base = Max::make(base, 0);
+
                 // Split it off into a variable, as there are few
                 // peephole simplification opportunities through a
                 // min.
@@ -184,11 +193,23 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
                 stmt = LetStmt::make(name, base, stmt);
                 base = Variable::make(Int(32), name);
 
-                // We'd rather round up than go less than the original
-                // min, so we push it forwards a little. This keeps
-                // the min of the min at zero, which simplifies bounds
-                // inference.
-                base = Max::make(base, 0);
+                // At each loop level, foo.x.extent should be the
+                // extent computed of foo in the dimension x. This can
+                // mostly be discovered by bounds inference, but when
+                // bounds expressions depend on other bounds
+                // expressions (as min does here), things go
+                // pear-shaped, because expressions in the extent get
+                // lifted across levels incorrectly. So we explicitly
+                // insert a correct definition of the effective extent
+                // here, so that when the min expression gets lifted
+                // out it refers to the correct notion of extent.
+
+                // Bounds inference could discover this for itself,
+                // but that requires all sorts of gymnastics and
+                // reordering of stages to get right. This is a
+                // simpler solution.
+                old_extent = max(old_extent, split.factor);
+                stmt = LetStmt::make(old_extent_name, old_extent, stmt);
             }
 
             // stmt = LetStmt::make(prefix + split.old_var, base + inner + old_min, stmt);
@@ -497,42 +518,13 @@ private:
     }
 
     Stmt build_realize(Stmt s) {
-        // The allocate should cover everything touched below this point
-        //Region bounds = region_touched(s, func.name());
-
-        /* The following works if the provide steps of a realization
-         * always covers the region that will be used */
-        debug(4) << "Computing region provided of " << func.name() << " by " << s << "\n";
-        Region bounds = region_provided(s, func.name());
-        debug(4) << "Done computing region provided\n";
-
-        /* The following would work if things were only ever computed
-         * exactly to cover the region read. Loop splitting (which
-         * rounds things up, and reductions spraying writes
-         * everywhere, both break this assumption */
-
-        // Externally-defined things should fill in exactly as much as they are asked to.
-        if (func.has_extern_definition()) {
-            assert(bounds.empty() && "Provide to an externally defined func");
-            for (int i = 0; i < func.dimensions(); i++) {
-                const string &arg = func.args()[i];
-                Expr min = Variable::make(Int(32), func.name() + "." + arg + ".min");
-                Expr extent = Variable::make(Int(32), func.name() + "." + arg + ".extent");
-                bounds.push_back(Range(min, extent));
-            }
-        }
-
-        for (size_t i = 0; i < bounds.size(); i++) {
-            if (!bounds[i].min.defined()) {
-                std::cerr << "Use of " << func.name() << " is unbounded below in dimension "
-                          << func.args()[i] << " in the following statement:\n" << s << "\n";
-                assert(false);
-            }
-            if (!bounds[i].extent.defined()) {
-                std::cerr << "Use of " << func.name() << " is unbounded above in dimension "
-                          << func.args()[i] << " in the following statement:\n" << s << "\n";
-                assert(false);
-            }
+        // Use symbolic bounds that will get resolved after bounds inference.
+        Region bounds;
+        for (int i = 0; i < func.dimensions(); i++) {
+            string arg = func.args()[i];
+            Expr min = Variable::make(Int(32), func.name() + "." + arg + ".min_allocated");
+            Expr extent = Variable::make(Int(32), func.name() + "." + arg + ".extent_allocated");
+            bounds.push_back(Range(min, extent));
         }
 
         // Change the body of the for loop to do an allocation
@@ -1299,6 +1291,62 @@ Stmt add_image_checks(Stmt s, Function f) {
     return s;
 }
 
+class InferStorageBounds : public IRMutator {
+    const map<string, Function> &env;
+    using IRMutator::visit;
+
+    virtual void visit(const Realize *realize) {
+        Stmt body = mutate(realize->body);
+        Region bounds = region_touched(body, realize->name);
+
+        map<string, Function>::const_iterator iter = env.find(realize->name);
+        assert(iter != env.end() && "Realize of unknown func");
+        const Function &f = iter->second;
+
+        // Externally-defined things should fill in exactly as much as they are asked to.
+        if (f.has_extern_definition()) {
+            Region bounds_required;
+            for (int i = 0; i < f.dimensions(); i++) {
+                const string &arg = f.args()[i];
+                // Take the union of the region touched internally and the region required
+                Expr min = Variable::make(Int(32), f.name() + "." + arg + ".min");
+                Expr extent = Variable::make(Int(32), f.name() + "." + arg + ".extent");
+                bounds_required.push_back(Range(min, extent));
+            }
+            if (!bounds.empty()) {
+                bounds = region_union(bounds, bounds_required);
+            } else {
+                bounds = bounds_required;
+            }
+        } else {
+            for (size_t i = 0; i < bounds.size(); i++) {
+                if (!bounds[i].min.defined()) {
+                    std::cerr << "Use of " << realize->name << " is unbounded below in dimension "
+                              << i << " in the following statement:\n" << body << "\n";
+                    assert(false);
+                }
+                if (!bounds[i].extent.defined()) {
+                    std::cerr << "Use of " << realize->name << " is unbounded above in dimension "
+                              << i << " in the following statement:\n" << body << "\n";
+                    assert(false);
+                }
+            }
+        }
+
+        stmt = Realize::make(realize->name, realize->types, realize->bounds, body);
+
+        // Define the bounds
+        for (size_t i = 0; i < bounds.size(); i++) {
+            string prefix = realize->name + "." + f.args()[i];
+            stmt = LetStmt::make(prefix + ".min_allocated", bounds[i].min, stmt);
+            stmt = LetStmt::make(prefix + ".extent_allocated", bounds[i].extent, stmt);
+        }
+    }
+
+public:
+    InferStorageBounds(const map<string, Function> &e) : env(e) {}
+};
+
 Stmt lower(Function f) {
     // Compute an environment
     map<string, Function> env;
@@ -1325,12 +1373,16 @@ Stmt lower(Function f) {
     s = add_parameter_checks(s);
     debug(2) << "Parameter checks injected:\n" << s << '\n';
 
+    // The checks will be in terms of the symbols defined by bounds
+    // inference. Those symbols won't actually cover the regions read
+    // though, because sliding window can bump things up.
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, f);
     debug(2) << "Image checks injected:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
-    // can't simplify from here until we fix them up
+    // can't simplify statements from here until we fix them up. (We
+    // can still simplify Exprs).
     debug(1) << "Performing bounds inference...\n";
     s = bounds_inference(s, order, env);
     debug(2) << "Bounds inference:\n" << s << '\n';
@@ -1338,6 +1390,12 @@ Stmt lower(Function f) {
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
     debug(2) << "Sliding window:\n" << s << '\n';
+
+    // Needs to be after sliding window, because sliding window can
+    // actually slightly expand bounds computed.
+    debug(1) << "Inferring storage bounds...\n";
+    s = InferStorageBounds(env).mutate(s);
+    debug(2) << "Inferred storage bounds: " << s << '\n';
 
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic

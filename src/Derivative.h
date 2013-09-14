@@ -2,22 +2,22 @@
 #define HALIDE_DERIVATIVE_H
 
 /** \file
- * 
- * Methods for taking derivatives of halide expressions. Not currently used anywhere 
+ *
+ * Methods for taking derivatives of halide expressions. Not currently used anywhere
  */
 
 #include "IRVisitor.h"
 #include <string>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
-    
+
 /** Compute the analytic derivative of the expression with respect to
  * the variable. May returned an undefined Expr if it's
  * non-differentiable. */
 //Expr derivative(Expr expr, const string &var);
 
-/** 
+/**
  * Compute the finite difference version of the derivative:
  * expr(var+1) - expr(var). The reason to do this as a derivative,
  * instead of just explicitly constructing expr(var+1) -
@@ -32,6 +32,14 @@ namespace Internal {
  *
  */
 Expr finite_difference(Expr expr, const std::string &var);
+
+/**
+ * Detect whether an expression is monotonic increasing in a variable,
+ * decreasing, or unknown. Returns -1, 0, or 1 for decreasing,
+ * unknown, and increasing.
+ */
+enum MonotonicResult {Constant, MonotonicIncreasing, MonotonicDecreasing, Unknown};
+MonotonicResult is_monotonic(Expr e, const std::string &var);
 
 }
 }

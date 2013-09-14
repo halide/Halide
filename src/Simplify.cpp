@@ -360,6 +360,12 @@ class Simplify : public IRMutator {
         } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
             // (b + a) - (a + c) -> b - c
             expr = mutate(add_a->a - add_b->b);
+        } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
+            // (a - b) - (c - b) -> a - c
+            expr = mutate(sub_a->a - sub_b->a);
+        } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
+            // (b - a) - (b - c) -> c - a
+            expr = mutate(sub_b->b - sub_a->b);
         } else if (min_b && add_b_a && equal(a, add_b_a->a)) {
             // Quaternary expressions involving mins where a term
             // cancels. These are important for bounds inference
@@ -387,7 +393,6 @@ class Simplify : public IRMutator {
         } else if (min_a && add_a_b && equal(b, add_a_b->b)) {
             // min(c, b + a) - a -> min(b, c-a)
             expr = mutate(min(add_a_b->a, min_a->a - b));
-
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -600,6 +605,8 @@ class Simplify : public IRMutator {
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Sub *sub_b = b.as<Sub>();
         const Min *min_a = a.as<Min>();
         const Min *min_b = b.as<Min>();
         const Min *min_a_a = min_a ? min_a->a.as<Min>() : NULL;
@@ -672,6 +679,14 @@ class Simplify : public IRMutator {
             } else {
                 expr = b;
             }
+        } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b) &&
+                   const_int(sub_a->a, &ia) && const_int(sub_b->a, &ib)) {
+            // min (100-x, 101-x) -> 100-x
+            if (ia < ib) {
+                expr = a;
+            } else {
+                expr = b;
+            }
         } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
             // min(a + b, c + b) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->a)) + add_a->b;
@@ -732,6 +747,8 @@ class Simplify : public IRMutator {
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
+        const Sub *sub_b = b.as<Sub>();
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
         const Max *max_a_a = max_a ? max_a->a.as<Max>() : NULL;
@@ -779,6 +796,14 @@ class Simplify : public IRMutator {
                 expr = b;
             } else {
                 expr = a;
+            }
+        } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b) &&
+                   const_int(sub_a->a, &ia) && const_int(sub_b->a, &ib)) {
+            // max (100-x, 101-x) -> 101-x
+            if (ia > ib) {
+                expr = a;
+            } else {
+                expr = b;
             }
         } else if (min_a && equal(min_a->b, b)) {
             // max(min(x, y), y) -> y
@@ -1639,6 +1664,9 @@ void simplify_test() {
     check((y + x) - (z + y), x - z);
     check((y + x) - (y + z), x - z);
 
+    check((x - y) - (z - y), x - z);
+    check((y - z) - (y - x), x - z);
+
     check(x - min(x + y, z), max(-y, x-z));
     check(x - min(y + x, z), max(-y, x-z));
     check(x - min(z, x + y), max(-y, x-z));
@@ -1653,6 +1681,9 @@ void simplify_test() {
     check(min(y + x, z + y), min(x, z) + y);
     check(min(x + y, y + z), min(x, z) + y);
     check(min(y + x, y + z), min(x, z) + y);
+
+    check(min(123 - x, 1 - x), 1 - x);
+    check(max(123 - x, 1 - x), 123 - x);
 
     // Mins of expressions and rounded up versions of them
     check(min(((x+7)*8)/8, x), x);

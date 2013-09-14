@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
 
     // The golden trace, recorded when this test was written
     event correct_trace[] = {
-        {103, 2, 0, 32, 1, 0, 2, {0, 11, 0, 0}, {0.000000, 0.000000, 0.000000, 0.000000}},
+        {103, 2, 0, 32, 1, 0, 2, {0, 14, 0, 0}, {0.000000, 0.000000, 0.000000, 0.000000}},
         {103, 4, 0, 32, 1, 0, 2, {0, 5, 0, 0}, {0.000000, 0.000000, 0.000000, 0.000000}},
         {103, 1, 2, 32, 4, 0, 4, {0, 1, 2, 3}, {0.000000, 0.099833, 0.198669, 0.295520}},
         {103, 1, 2, 32, 4, 1, 4, {0, 1, 2, 3}, {1.000000, 0.995004, 0.980067, 0.955337}},
@@ -147,16 +147,22 @@ int main(int argc, char **argv) {
         {103, 0, 2, 32, 4, 0, 4, {6, 7, 8, 9}, {0.564642, 0.644218, 0.717356, 0.783327}},
         {102, 1, 2, 32, 4, 0, 4, {6, 7, 8, 9}, {1.329485, 1.340924, 1.338966, 1.323629}},
         {103, 7, 0, 32, 1, 0, 2, {9, 2, 0, 0}, {0.000000, 0.000000, 0.000000, 0.000000}},
-        {103, 3, 0, 32, 1, 0, 2, {0, 11, 0, 0}, {0.000000, 0.000000, 0.000000, 0.000000}}};
+        {103, 3, 0, 32, 1, 0, 2, {0, 14, 0, 0}, {0.000000, 0.000000, 0.000000, 0.000000}}};
 
-    assert(n_trace == sizeof(correct_trace)/sizeof(correct_trace[0]));
+    int correct_trace_length = sizeof(correct_trace)/sizeof(correct_trace[0]);
 
-    for (int i = 0; i < n_trace; i++) {
-        if (!events_match(trace[i], correct_trace[i])) {
+    int n = n_trace > correct_trace_length ? n_trace : correct_trace_length;
+    for (int i = 0; i < n; i++) {
+        event recorded;
+        if (i < n_trace) recorded = trace[i];
+        event correct;
+        if (i < correct_trace_length) correct = correct_trace[i];
+
+        if (!events_match(recorded, correct)) {
             printf("Traces differs at event %d:\n"
                    "-------------------------------\n"
                    "Correct trace:\n", i);
-            for (int j = 0; j < n_trace; j++) {
+            for (int j = 0; j < correct_trace_length; j++) {
                 if (j == i) printf(" ===> ");
                 print_event(correct_trace[j]);
             }
