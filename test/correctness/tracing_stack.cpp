@@ -84,6 +84,8 @@ int main(int argc, char **argv) {
 
 #else
 
+#include <stdio.h>
+
 int main(int argc, char **argv) {
     printf("Test skipped because we're not on linux\n");
     return 0;
