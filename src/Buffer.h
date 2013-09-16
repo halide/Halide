@@ -81,7 +81,7 @@ struct BufferContents {
     }
 
     BufferContents(Type t, const buffer_t *b, const std::string &n) :
-        type(t), name(n.empty() ? unique_name('b') : n) {
+        type(t), allocation(NULL), name(n.empty() ? unique_name('b') : n) {
         buf = *b;
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
     }

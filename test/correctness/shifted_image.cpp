@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
 
     Image<int> im(&buf);
 
+    ((int *)buf.host)[0] = 17;
     buf.host[0] = 17;
     if (im(100, 300, 500, 400) != 17) {
         printf("Image indexing into buffers with non-zero mins is broken\n");
