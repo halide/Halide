@@ -51,9 +51,21 @@ int main(int argc, char **argv) {
     downsampled[0](x, y, c) = clamped(x, y, c) * clamped(x, y, 3);
 
     for (unsigned int l = 1; l < levels; ++l) {
-        downx[l](x, y, c) = (downsampled[l-1](x*2-1, y, c) +
-                             2.0f * downsampled[l-1](x*2, y, c) +
-                             downsampled[l-1](x*2+1, y, c)) * 0.25f;
+        Func prev = downsampled[l-1];
+
+        if (l == 4) {
+            // Also add a boundary condition at a middle pyramid level
+            // to prevent the footprint of the downsamplings to extend
+            // too far off the base image. Otherwise we look 512
+            // pixels off each edge.
+            Expr w = input.width()/(1 << l);
+            Expr h = input.height()/(1 << l);
+            prev = lambda(x, y, c, prev(clamp(x, 0, w), clamp(y, 0, h), c));
+        }
+
+        downx[l](x, y, c) = (prev(x*2-1, y, c) +
+                             2.0f * prev(x*2, y, c) +
+                             prev(x*2+1, y, c)) * 0.25f;
         downsampled[l](x, y, c) = (downx[l](x, y*2-1, c) +
                                    2.0f * downx[l](x, y*2, c) +
                                    downx[l](x, y*2+1, c)) * 0.25f;
@@ -159,7 +171,6 @@ int main(int argc, char **argv) {
             downsampled[l].compute_root().cuda_tile(x, y, c, tile_size, tile_size, 4);
             interpolated[l].compute_at(final, xo).cuda_tile(x, y, c, tile_size, tile_size, 4);
         }
-
         break;
     }
     default:
