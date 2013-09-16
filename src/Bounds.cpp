@@ -291,7 +291,8 @@ private:
 
         if (min_a.defined() && min_a.same_as(min_b) &&
             max_a.defined() && max_a.same_as(max_b)) {
-            min = max = Min::make(min_a, min_b);
+            min = min_a;
+            max = max_a;
             return;
         }
 
@@ -327,7 +328,8 @@ private:
 
         if (min_a.defined() && min_a.same_as(min_b) &&
             max_a.defined() && max_a.same_as(max_b)) {
-            min = max = Min::make(min_a, min_b);
+            min = min_a;
+            max = max_a;
             return;
         }
 
