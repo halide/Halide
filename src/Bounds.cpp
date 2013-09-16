@@ -8,10 +8,8 @@
 #include "Util.h"
 #include "Var.h"
 #include "Debug.h"
+#include "CSE.h"
 #include <iostream>
-
-
-// This file is largely a port of src/bounds.ml
 
 namespace Halide {
 namespace Internal {
@@ -518,7 +516,16 @@ Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope) {
     Bounds b;
     b.scope = scope;
     expr.accept(&b);
-    debug(3) << "bounds_of_expr_in_scope " << expr << " = " << b.min << ", " << b.max << "\n";
+    // bounds of expr recursively expands let statements, so we need
+    // to pack them back up here to avoid combinatorial explosion.
+    // TODO: Make bounds_of_expr graph-aware instead
+    if (b.min.defined()) {
+        b.min = common_subexpression_elimination(simplify(b.min));
+    }
+    if (b.max.defined()) {
+        b.max = common_subexpression_elimination(simplify(b.max));
+    }
+    debug(3) << "bounds_of_expr_in_scope " << expr << " = " << b.max << ", " << b.max << "\n";
     return Interval(b.min, b.max);
 }
 
@@ -574,10 +581,10 @@ private:
     using IRVisitor::visit;
 
     void visit(const LetStmt *op) {
-        op->value.accept(this);
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
         scope.push(op->name, value_bounds);
-        debug(3) << "Adding " << op->name << " to scope\n";
+        debug(3) << "Adding " << op->name << " = " << op->value << " to scope: " << value_bounds.min << ", " << value_bounds.max << "\n";
+
         op->body.accept(this);
         debug(3) << "Removing " << op->name << " from scope\n";
         scope.pop(op->name);
@@ -602,7 +609,7 @@ private:
             max = (min_bounds.max + extent_bounds.max) - 1;
         }
         scope.push(op->name, Interval(min, max));
-        debug(3) << "Adding " << op->name << " to scope\n";
+        debug(3) << "Adding " << op->name << " to scope: " << min << ", " << max << "\n";
         op->body.accept(this);
         debug(3) << "Removing " << op->name << " from scope\n";
         scope.pop(op->name);
