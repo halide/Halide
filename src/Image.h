@@ -183,20 +183,26 @@ public:
     }
 
     /** Get the extent of dimension 0, which by convention we use as
-     * the width of the image */
+     * the width of the image. Unlike extent(0), returns one if the
+     * buffer is zero-dimensional. */
     int width() const {
+        if (dimensions() < 1) return 1;
         return extent(0);
     }
 
     /** Get the extent of dimension 1, which by convention we use as
-     * the height of the image */
+     * the height of the image. Unlike extent(1), returns one if the
+     * buffer has fewer than two dimensions. */
     int height() const {
+        if (dimensions() < 2) return 1;
         return extent(1);
     }
 
     /** Get the extent of dimension 2, which by convention we use as
-     * the number of color channels (often 3) */
+     * the number of color channels (often 3). Unlike extent(2),
+     * returns one if the buffer has fewer than three dimensions. */
     int channels() const {
+        if (dimensions() < 3) return 1;
         return extent(2);
     }
 
