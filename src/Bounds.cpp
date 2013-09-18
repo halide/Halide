@@ -516,20 +516,11 @@ private:
 };
 
 Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope) {
-    debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
+    //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
     Bounds b;
     b.scope = scope;
     expr.accept(&b);
-    // bounds of expr recursively expands let statements, so we need
-    // to pack them back up here to avoid combinatorial explosion.
-    // TODO: Make bounds_of_expr graph-aware instead
-    if (b.min.defined()) {
-        b.min = common_subexpression_elimination(simplify(b.min));
-    }
-    if (b.max.defined()) {
-        b.max = common_subexpression_elimination(simplify(b.max));
-    }
-    debug(3) << "bounds_of_expr_in_scope " << expr << " = " << b.max << ", " << b.max << "\n";
+    //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.min) << ", " << simplify(b.max) << "\n";
     return Interval(b.min, b.max);
 }
 
@@ -587,7 +578,7 @@ private:
     void visit(const LetStmt *op) {
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
         scope.push(op->name, value_bounds);
-        debug(3) << "Adding " << op->name << " = " << op->value << " to scope: " << value_bounds.min << ", " << value_bounds.max << "\n";
+        debug(3) << "Adding " << op->name << " = " << op->value << " to scope: " << simplify(value_bounds.min) << ", " << simplify(value_bounds.max) << "\n";
 
         op->body.accept(this);
         debug(3) << "Removing " << op->name << " from scope\n";
@@ -645,7 +636,7 @@ private:
                 if (!op->args[i].type().is_handle()) {
                     bounds = bounds_of_expr_in_scope(op->args[i], scope);
                     debug(3) << "Bounds of call to " << op->name << " in dimension " << i << ": "
-                             << bounds.min << ", " << bounds.max << "\n";
+                             << simplify(bounds.min) << ", " << simplify(bounds.max) << "\n";
                 }
 
                 if (r.size() > i) {
@@ -673,13 +664,24 @@ private:
     }
 
     void visit(const Pipeline *op) {
-        op->produce.accept(this);
+        // If we're considering only this function, and we're not
+        // considering provides, there's no point descending here.
+        if (func != op->name || consider_provides) {
+            op->produce.accept(this);
+        }
+
         if (op->update.defined()) {
             inside_update.push(op->name, 0);
             op->update.accept(this);
             inside_update.pop(op->name);
         }
-        op->consume.accept(this);
+
+        // If we're considering only this function, and we're not
+        // considering calls, there's no point descending here.
+        if (func != op->name || consider_calls) {
+            op->consume.accept(this);
+        }
+
     }
 };
 

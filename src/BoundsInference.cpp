@@ -36,6 +36,7 @@ public:
 
         Stmt body = mutate(for_loop->body);
 
+        debug(2) << "Bound inference considering for loop over " << for_loop->name << "\n";
 
         debug(3) << "\nIn loop over " << for_loop->name << " regions called are:\n\n";
         for (size_t i = 0; i < funcs.size(); i++) {
@@ -301,6 +302,7 @@ public:
                 debug(3) << "Assigning " << min_name << " and " << extent_name << "\n";
 
             }
+
         }
 
         if (body.same_as(for_loop->body)) {
@@ -325,6 +327,69 @@ public:
         in_consume.pop(pipeline->name);
 
         stmt = Pipeline::make(pipeline->name, produce, update, consume);
+    }
+
+    virtual void visit(const Realize *realize) {
+
+        Stmt body = mutate(realize->body);
+
+        debug(2) << "Bound inference considering realize of " << realize->name << "\n";
+
+        // TODO: If this is provided, then one of the autotuner bugs
+        // fails. If it is touched, then interpolate takes forever. It
+        // needs to be touched, because currently bounds of early
+        // stages depend on the bounds required of subsequent stages,
+        // not the bounds actually computed of subsequent stages. So
+        // it's possible that those later stages will read outside of
+        // bounds in the early stages for those values for which the
+        // output doesn't matter (because they're being computed, but
+        // are not semantically required).
+
+        // TODO: This same line of reasoning means that the image
+        // checks are wrong, and we might read out of bounds on input
+        // images without catching it.
+
+        Region bounds = region_touched(body, realize->name);
+
+        map<string, Function>::const_iterator iter = env.find(realize->name);
+        assert(iter != env.end() && "Realize of unknown func");
+        const Function &f = iter->second;
+
+        // Externally-defined things should fill in exactly as much as they are asked to.
+        if (f.has_extern_definition()) {
+            //assert(bounds.empty() && "Provide to externally-defined buffer");
+            Region bounds_required;
+            for (int i = 0; i < f.dimensions(); i++) {
+                const string &arg = f.args()[i];
+                // Take the union of the region touched internally and the region required
+                Expr min = Variable::make(Int(32), f.name() + "." + arg + ".min");
+                Expr extent = Variable::make(Int(32), f.name() + "." + arg + ".extent");
+                bounds_required.push_back(Range(min, extent));
+            }
+            bounds = bounds_required;
+        } else {
+            for (size_t i = 0; i < bounds.size(); i++) {
+                if (!bounds[i].min.defined()) {
+                    std::cerr << "Use of " << realize->name << " is unbounded below in dimension "
+                              << i << " in the following statement:\n" << body << "\n";
+                    assert(false);
+                }
+                if (!bounds[i].extent.defined()) {
+                    std::cerr << "Use of " << realize->name << " is unbounded above in dimension "
+                              << i << " in the following statement:\n" << body << "\n";
+                    assert(false);
+                }
+            }
+        }
+
+        stmt = Realize::make(realize->name, realize->types, realize->bounds, body);
+
+        // Define the bounds
+        for (size_t i = 0; i < bounds.size(); i++) {
+            string prefix = realize->name + "." + f.args()[i];
+            stmt = LetStmt::make(prefix + ".min_allocated", bounds[i].min, stmt);
+            stmt = LetStmt::make(prefix + ".extent_allocated", bounds[i].extent, stmt);
+        }
     }
 
 };
