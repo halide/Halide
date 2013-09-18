@@ -613,6 +613,7 @@ class Simplify : public IRMutator {
         const Min *min_a_a_a = min_a_a ? min_a_a->a.as<Min>() : NULL;
         const Min *min_a_a_a_a = min_a_a_a ? min_a_a_a->a.as<Min>() : NULL;
         const Max *max_a = a.as<Max>();
+        const Max *max_b = b.as<Max>();
 
         // Detect if the lhs or rhs is a rounding-up operation
         int a_round_up_factor = 0, b_round_up_factor = 0;
@@ -702,8 +703,16 @@ class Simplify : public IRMutator {
         } else if (a_round_up.defined() && equal(a_round_up, b)) {
             // min(((a + 3)/4)*4, a) -> a
             expr = b;
+        } else if (a_round_up.defined() && max_b &&
+                   equal(a_round_up, max_b->a) && equal(a_round_up_factor, max_b->b)) {
+            // min(((a + 3)/4)*4, max(a, 4)) -> max(a, 4)
+            expr = b;
         } else if (b_round_up.defined() && equal(b_round_up, a)) {
             // min(a, ((a + 3)/4)*4) -> a
+            expr = a;
+        } else if (b_round_up.defined() && max_a &&
+                   equal(b_round_up, max_a->a) && equal(b_round_up_factor, max_a->b)) {
+            // min(max(a, 4), ((a + 3)/4)*4) -> max(a, 4)
             expr = a;
         } else if (max_a && equal(max_a->b, b)) {
             // min(max(x, y), y) -> y
@@ -1685,9 +1694,15 @@ void simplify_test() {
     check(min(123 - x, 1 - x), 1 - x);
     check(max(123 - x, 1 - x), 123 - x);
 
+    //check(max(x, 16) - 16, max(x + -16, 0));
+    //check(min(x, -4) + 7, min(x + 7, 3));
+
     // Mins of expressions and rounded up versions of them
-    check(min(((x+7)*8)/8, x), x);
-    check(min(x, ((x+7)*8)/8), x);
+    check(min(((x+7)/8)*8, x), x);
+    check(min(x, ((x+7)/8)*8), x);
+
+    check(min(((x+7)/8)*8, max(x, 8)), max(x, 8));
+    check(min(max(x, 8), ((x+7)/8)*8), max(x, 8));
 
     check(!f, t);
     check(!t, f);

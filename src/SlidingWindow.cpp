@@ -7,6 +7,7 @@
 #include "IRPrinter.h"
 #include "Simplify.h"
 #include "Derivative.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
@@ -66,23 +67,24 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             string dim = "";
             Expr min, extent;
 
-            for (size_t i = 0; i < func.args().size(); i++) {
-                string min_name = func.name() + "." + func.args()[i] + ".min";
-                string extent_name = func.name() + "." + func.args()[i] + ".extent";
-                assert(scope.contains(min_name) && scope.contains(extent_name));
-                Expr this_min = scope.get(min_name);
-                Expr this_extent = scope.get(extent_name);
+            Region r = region_called(op, func.name());
 
-                if (expr_depends_on_var(this_min, loop_var) ||
-                    expr_depends_on_var(this_extent, loop_var)) {
-                    if (min.defined()) {
+            debug(3) << "Considering sliding " << func.name()
+                     << " along loop variable " << loop_var << "\n"
+                     << "Region provided:\n";
+            for (size_t i = 0; i < r.size(); i++) {
+                debug(3) << i << ") " << r[i].min << ", " << r[i].extent << "\n";
+                if (expr_depends_on_var(r[i].min, loop_var) ||
+                    expr_depends_on_var(r[i].extent, loop_var)) {
+                    if (!dim.empty()) {
+                        dim = "";
                         min = Expr();
                         extent = Expr();
                         break;
                     } else {
                         dim = func.args()[i];
-                        min = this_min;
-                        extent = this_extent;
+                        min = r[i].min;
+                        extent = r[i].extent;
                     }
                 }
             }
@@ -91,23 +93,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             bool increasing = true;
 
             if (min.defined()) {
-                /*
-                // The min has to be monotonic with the loop variable, and
-                // should depend on the loop variable.
-                prev_min = substitute(loop_var, loop_var_expr - 1, min);
-                Expr monotonic_increasing = simplify(min >= prev_min);
-                Expr monotonic_decreasing = simplify(min <= prev_min);
-                Expr diff = simplify(finite_difference(min, loop_var));
-
-                if (!is_const(monotonic_increasing)) {
-                    // Try a different proof strategy
-                    monotonic_increasing = simplify(diff >= 0);
-                }
-                if (!is_const(monotonic_decreasing)) {
-                    monotonic_decreasing = simplify(diff <= 0);
-                }
-                */
-
                 MonotonicResult m = is_monotonic(min, loop_var);
 
                 if (m == MonotonicIncreasing || m == Constant) {
@@ -138,6 +123,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     new_min = simplify(Max::make(min, prev_max_plus_one));
 
                     // The new extent is the old extent shrunk by how much we trimmed off the min
+                    //new_extent = simplify(extent + min - new_min);
                     new_extent = simplify(extent + Min::make(min - prev_max_plus_one, 0));
                 } else {
                     // Truncate the extent to be less than the previous min
@@ -148,14 +134,18 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
                 debug(3) << "Pushing min up from " << min << " to " << new_min << "\n";
                 debug(3) << "Shrinking extent from " << extent << " to " << new_extent << "\n";
+                string min_name = func.name() + "." + dim + ".min";
+                string extent_name = func.name() + "." + dim + ".extent";
 
                 stmt = op;
                 if (increasing) {
                     new_min = Select::make(steady_state, new_min, min);
-                    stmt = LetStmt::make(func.name() + "." + dim + ".min", new_min, stmt);
+                    //new_min = min;
+                    stmt = LetStmt::make(min_name, new_min, stmt);
                 }
                 new_extent = Select::make(steady_state, new_extent, extent);
-                stmt = LetStmt::make(func.name() + "." + dim + ".extent", new_extent, stmt);
+                //new_extent = extent;
+                stmt = LetStmt::make(extent_name, new_extent, stmt);
 
             } else {
                 debug(3) << "Could not perform sliding window optimization of " << func.name() << " over " << loop_var << "\n";
