@@ -413,10 +413,14 @@ private:
             min = Expr(); max = Expr(); return;
         }
 
-        min = Min::make(min_a, min_b);
+        if (min_a.same_as(min_b)) {
+            min = min_a;
+        } else {
+            min = Min::make(min_a, min_b);
+        }
 
-        if (min_a.same_as(max_a) && min_b.same_as(max_b)) {
-            max = min;
+        if (max_a.same_as(max_b)) {
+            max = max_a;
         } else {
             max = Max::make(max_a, max_b);
         }
