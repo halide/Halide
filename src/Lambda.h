@@ -16,7 +16,7 @@ namespace Halide {
  * contains implicit arguments. */
 inline Func lambda(Expr e) {
     Func f("lambda" + Internal::unique_name('_'));
-    f() = e;
+    f(_) = e;
     return f;
 }
 
@@ -25,7 +25,7 @@ inline Func lambda(Expr e) {
  * contains implicit arguments. */
 inline Func lambda(Var x, Expr e) {
     Func f("lambda" + Internal::unique_name('_'));
-    f(x) = e;
+    f(x, _) = e;
     return f;
 }
 
@@ -34,7 +34,7 @@ inline Func lambda(Var x, Expr e) {
  * contains implicit arguments. */
 inline Func lambda(Var x, Var y, Expr e) {
     Func f("lambda" + Internal::unique_name('_'));
-    f(x, y) = e;
+    f(x, y, _) = e;
     return f;
 }
 
@@ -43,7 +43,7 @@ inline Func lambda(Var x, Var y, Expr e) {
  * contains implicit arguments. */
 inline Func lambda(Var x, Var y, Var z, Expr e) {
     Func f("lambda" + Internal::unique_name('_'));
-    f(x, y, z) = e;
+    f(x, y, z, _) = e;
     return f;
 }
 
@@ -52,7 +52,7 @@ inline Func lambda(Var x, Var y, Var z, Expr e) {
  * contains implicit arguments. */
 inline Func lambda(Var x, Var y, Var z, Var w, Expr e) {
     Func f("lambda" + Internal::unique_name('_'));
-    f(x, y, z, w) = e;
+    f(x, y, z, w, _) = e;
     return f;
 }
 
