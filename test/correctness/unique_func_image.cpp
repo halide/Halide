@@ -5,7 +5,7 @@ using namespace Halide;
 
 Func add2(Func in) {
     Func a("ext");
-    a() = in + 2;
+    a(_) = in + 2;
     return a;
 }
 
