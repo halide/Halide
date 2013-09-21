@@ -5,7 +5,8 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    int W = 64*3, H = 64*3;
+    //int W = 64*3, H = 64*3;
+    const int W = 16, H = 16;
 
     Image<uint16_t> in(W, H);
     for (int y = 0; y < H; y++) {
@@ -30,6 +31,7 @@ int main(int argc, char **argv) {
 
     Func input("input");
     input(x, y) = in(clamp(x, 0, W-1), clamp(y, 0, H-1));
+    input.compute_root();
 
     RDom r(tent);
 

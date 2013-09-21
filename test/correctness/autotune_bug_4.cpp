@@ -7,11 +7,10 @@ void my_trace(const char *function, int event_type,
               int type_code, int bits, int width,
               int value_index, const void *value,
               int num_int_args, const int *int_args) {
-    // Due to sliding window rounding things up, the schedule implies
-    // that f and g will be stored from 0 to 8
+    // The schedule implies that f and g will be stored from 0 to 7
     if (event_type == 2) {
-        if (int_args[1] < 8) {
-            printf("Bounds on realization were supposed to be >= [0, 8]\n"
+        if (int_args[1] < 7) {
+            printf("Bounds on realization were supposed to be = [0, 7]\n"
                    "Instead they are: %d %d\n", int_args[0], int_args[1]);
             exit(-1);
         }

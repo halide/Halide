@@ -65,6 +65,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // dimensions of the buffer has a min/extent that depends
             // on the loop_var.
             string dim = "";
+            int dim_idx = 0;
             Expr min, extent;
 
             Region r = region_called(op, func.name());
@@ -78,11 +79,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     expr_depends_on_var(r[i].extent, loop_var)) {
                     if (!dim.empty()) {
                         dim = "";
+                        dim_idx = 0;
                         min = Expr();
                         extent = Expr();
                         break;
                     } else {
                         dim = func.args()[i];
+                        dim_idx = i;
                         min = r[i].min;
                         extent = r[i].extent;
                     }
@@ -122,8 +125,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     // Bump up the min to skip stuff we've already computed.
                     new_min = simplify(Max::make(min, prev_max_plus_one));
 
-                    // The new extent is the old extent shrunk by how much we trimmed off the min
-                    //new_extent = simplify(extent + min - new_min);
+                    // The new extent is the old extent shrunk by how
+                    // much we trimmed off the min. The extent does
+                    // not get larger because new_min > min.
+                    //new_extent = simplify(extent + (min - new_min));
                     new_extent = simplify(extent + Min::make(min - prev_max_plus_one, 0));
                 } else {
                     // Truncate the extent to be less than the previous min
@@ -134,18 +139,34 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
                 debug(3) << "Pushing min up from " << min << " to " << new_min << "\n";
                 debug(3) << "Shrinking extent from " << extent << " to " << new_extent << "\n";
-                string min_name = func.name() + "." + dim + ".min";
-                string extent_name = func.name() + "." + dim + ".extent";
+                string min_name = func.name() + "." + dim + ".min_produced";
+                string extent_name = func.name() + "." + dim + ".extent_produced";
+
+                // Check if we've gone off the end. Only relevant for increasing.
+                if (increasing) {
+                    // TODO: It would be better to truncate back to
+                    // the max min, but this produces expressions too
+                    // difficult for storage folding to handle.
+                    Expr min_extent = func.min_realization_size(dim_idx);
+                    if (!is_one(min_extent)) {
+                        Expr max_min = Variable::make(Int(32), func.name() + "." + dim + ".max_min");
+                        Expr before_end = new_min < max_min;
+                        steady_state = steady_state && before_end;
+                    }
+                }
 
                 stmt = op;
                 if (increasing) {
                     new_min = Select::make(steady_state, new_min, min);
-                    //new_min = min;
                     stmt = LetStmt::make(min_name, new_min, stmt);
                 }
                 new_extent = Select::make(steady_state, new_extent, extent);
                 //new_extent = extent;
                 stmt = LetStmt::make(extent_name, new_extent, stmt);
+
+                if (increasing) {
+
+                }
 
             } else {
                 debug(3) << "Could not perform sliding window optimization of " << func.name() << " over " << loop_var << "\n";
@@ -207,7 +228,10 @@ class SlidingWindow : public IRMutator {
 
         Stmt new_body = op->body;
         if (iter != env.end()) {
+            debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
             new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
+        } else {
+            assert(false && "Compiler bug: Sliding window found a realization for a function not in the environment\n");
         }
         new_body = mutate(new_body);
 

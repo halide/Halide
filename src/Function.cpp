@@ -289,5 +289,47 @@ void Function::define_extern(const std::string &function_name,
 
 }
 
+Expr Function::min_realization_size(int d) const {
+    string dim = args()[d];
+    Expr size = 1;
+    const vector<Schedule::Split> &splits = schedule().splits;
+    for (size_t i = 0; i < splits.size(); i++) {
+        if (splits[i].old_var == dim) {
+            if (!splits[i].is_rename) {
+                Expr factor = splits[i].factor;
+                size = Mul::make(size, factor);
+            }
+            dim = splits[i].outer;
+        }
+    }
+    return size;
+
+    // TODO: Take the max of what happens to the pure vars in a reduction
+    
+}
+
+Expr Function::min_realization_factor(int d) const {
+    if (!has_reduction_definition()) {
+        return 1;
+    }
+    string dim = args()[d];
+    Expr size = 1;
+    const vector<Schedule::Split> &splits = reduction_schedule().splits;
+    for (size_t i = 0; i < splits.size(); i++) {
+        if (splits[i].old_var == dim) {
+            if (!splits[i].is_rename) {
+                Expr factor = splits[i].factor;
+                size = Mul::make(size, factor);
+            }
+            dim = splits[i].outer;
+        }
+    }
+    return size;
+
+    // TODO: Take the max of what happens to the pure vars in a reduction
+    
+}
+
+
 }
 }
