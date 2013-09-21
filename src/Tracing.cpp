@@ -136,8 +136,8 @@ private:
             args.push_back(0); // value
 
             for (int i = 0; i < f.dimensions(); i++) {
-                Expr min = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".min");
-                Expr extent = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".extent");
+                Expr min = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".min_produced");
+                Expr extent = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".extent_produced");
                 args.push_back(min);
                 args.push_back(extent);
             }

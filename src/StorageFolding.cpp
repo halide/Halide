@@ -80,8 +80,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             return;
         }
 
-        map<string, Region> regions = regions_touched(op->body);
-        const Region &region = regions[func];
+        Region region = region_touched(op->body, func);
 
         Stmt result = op;
 
@@ -89,15 +88,19 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         for (size_t i = region.size(); i > 0; i--) {
             Expr min = region[i-1].min;
             Expr extent = region[i-1].extent;
-            Expr loop_var = Variable::make(Int(32), op->name);
 
+            debug(3) << "Considering folding " << func << " over for loop over " << op->name << '\n'
+                     << "Min: " << min << '\n'
+                     << "Extent: " << extent << '\n';
             // The min has to be monotonic with the loop variable, and
             // should depend on the loop variable.
-            Expr prev_min = substitute(op->name, loop_var - 1, min);
-            if (prev_min.same_as(min)) continue;
+            MonotonicResult m = is_monotonic(min, op->name);
 
-            Expr monotonic_increasing = simplify(min >= prev_min);
-            Expr monotonic_decreasing = simplify(min <= prev_min);
+            if (m != MonotonicIncreasing && 
+                m != MonotonicDecreasing) {
+                debug(3) << "Not folding because min is not monotonic in loop var\n";
+                continue;
+            }
 
             //Expr min_deriv = simplify(finite_difference(min, op->name));
 
@@ -109,19 +112,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             max_extent = simplify(max_extent);
 
-            // If the folding
-
-            debug(3) << "Considering folding " << func << " over for loop over " << op->name << '\n'
-                   << "Min: " << min << '\n'
-                   << "Extent: " << extent << '\n'
-                   << "Monotonic increasing: " << monotonic_increasing << '\n'
-                   << "Monotonic decreasing: " << monotonic_decreasing << '\n'
-                   << "Max extent: " << max_extent << '\n';
-
             const IntImm *max_extent_int = max_extent.as<IntImm>();
-            if ((equal(monotonic_increasing, const_true()) ||
-                 equal(monotonic_decreasing, const_true()))
-                && max_extent_int) {
+            if (max_extent_int) {
                 int extent = max_extent_int->value;
                 debug(3) << "Proceeding...\n";
 
@@ -131,6 +123,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 dim_folded = (int)i-1;
                 fold_factor = factor;
                 result = FoldStorageOfFunction(func, (int)i-1, factor).mutate(result);
+            } else {
+                debug(3) << "Not folding because extent not bounded by a constant\n"
+                         << "extent = " << extent << "\n"
+                         << "max extent = " << max_extent << "\n";
             }
         }
 

@@ -91,7 +91,8 @@ Expr qualify_expr(const string &prefix, Expr value) {
 Stmt build_provide_loop_nest(string buffer, string prefix,
                              const vector<Expr> &site,
                              const vector<Expr> &values,
-                             const Schedule &s) {
+                             const Schedule &s,
+                             bool is_update) {
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
 
@@ -155,9 +156,9 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
         Expr outer = Variable::make(Int(32), prefix + split.outer);
         if (!split.is_rename) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
-            Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".min");
-            string old_extent_name = prefix + split.old_var + ".extent";
-            Expr old_extent = Variable::make(Int(32), old_extent_name);
+            Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".min_produced");
+            Expr max_min = Variable::make(Int(32), prefix + split.old_var + ".max_min");
+            Expr extent_realized = Variable::make(Int(32), prefix + split.old_var + ".extent_realized");
 
             known_size_dims[split.inner] = split.factor;
 
@@ -171,26 +172,24 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
                 // We have proved that the split factor divides the
                 // old extent. No need to adjust the base.
                 known_size_dims[split.outer] = iter->second / split.factor;
-            } else {
-                // The split factor may not divide the old extent, and
-                // we don't want to needlessly go beyond the original
-                // extent, or we get bounds expansion and do a lot of
-                // redundant compute, so push it backwards a little.
-                base = Min::make(base, old_extent - split.factor);
+            } else if (!is_update) {
+                // Adjust the base downwards to not compute off the
+                // end of the realization.
 
-                // but keep it positive
-                base = Max::make(base, 0);
+                // Clamping breaks the meaning for reductions, so skip
+                // it. It's ok - we've added extra space to the end of
+                // the production in bounds inference to account for
+                // the extra work.
 
-                // Split it off into a variable, as there are few
-                // peephole simplification opportunities through a
-                // min.
+                base = Min::make(base + old_min, max_min);
+
                 string name = prefix + split.inner + ".base";
                 stmt = LetStmt::make(name, base, stmt);
                 base = Variable::make(Int(32), name);
             }
 
             // stmt = LetStmt::make(prefix + split.old_var, base + inner + old_min, stmt);
-            stmt = substitute(prefix + split.old_var, base + inner + old_min, stmt);
+            stmt = substitute(prefix + split.old_var, base + inner, stmt);
         } else {
             // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
             stmt = substitute(prefix + split.old_var, outer, stmt);
@@ -200,8 +199,8 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
     // Build the loop nest
     for (size_t i = 0; i < s.dims.size(); i++) {
         const Schedule::Dim &dim = s.dims[i];
-        Expr min = Variable::make(Int(32), prefix + dim.var + ".min");
-        Expr extent = Variable::make(Int(32), prefix + dim.var + ".extent");
+        Expr min = Variable::make(Int(32), prefix + dim.var + ".min_produced");
+        Expr extent = Variable::make(Int(32), prefix + dim.var + ".extent_produced");
         stmt = For::make(prefix + dim.var, min, extent, dim.for_type, stmt);
     }
 
@@ -209,15 +208,15 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
     // on the function args
     for (size_t i = splits.size(); i > 0; i--) {
         const Schedule::Split &split = splits[i-1];
-        Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".extent");
-        Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".min");
+        Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".extent_produced");
+        Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".min_produced");
         if (!split.is_rename) {
             Expr inner_extent = split.factor;
             Expr outer_extent = (old_var_extent + split.factor - 1)/split.factor;
-            stmt = LetStmt::make(prefix + split.inner + ".min", 0, stmt);
-            stmt = LetStmt::make(prefix + split.inner + ".extent", inner_extent, stmt);
-            stmt = LetStmt::make(prefix + split.outer + ".min", 0, stmt);
-            stmt = LetStmt::make(prefix + split.outer + ".extent", outer_extent, stmt);
+            stmt = LetStmt::make(prefix + split.inner + ".min_produced", 0, stmt);
+            stmt = LetStmt::make(prefix + split.inner + ".extent_produced", inner_extent, stmt);
+            stmt = LetStmt::make(prefix + split.outer + ".min_produced", 0, stmt);
+            stmt = LetStmt::make(prefix + split.outer + ".extent_produced", outer_extent, stmt);
 
             // The extent of the old variable must be at least the
             // split size. Adding this definition here prevents the
@@ -226,8 +225,8 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
             //Expr new_old_extent = max(old_var_extent, split.factor);
             //stmt = LetStmt::make(prefix + split.old_var + ".extent", new_old_extent, stmt);
         } else {
-            stmt = LetStmt::make(prefix + split.outer + ".min", old_var_min, stmt);
-            stmt = LetStmt::make(prefix + split.outer + ".extent", old_var_extent, stmt);
+            stmt = LetStmt::make(prefix + split.outer + ".min_produced", old_var_min, stmt);
+            stmt = LetStmt::make(prefix + split.outer + ".extent_produced", old_var_extent, stmt);
         }
     }
 
@@ -354,7 +353,7 @@ Stmt build_produce(Function f) {
             site.push_back(Variable::make(Int(32), f.name() + "." + f.args()[i]));
         }
 
-        return build_provide_loop_nest(f.name(), prefix, site, values, f.schedule());
+        return build_provide_loop_nest(f.name(), prefix, site, values, f.schedule(), false);
     }
 }
 
@@ -375,14 +374,14 @@ Stmt build_update(Function f) {
         debug(2) << "Reduction site " << i << " = " << site[i] << "\n";
     }
 
-    Stmt loop = build_provide_loop_nest(f.name(), prefix, site, values, f.reduction_schedule());
+    Stmt loop = build_provide_loop_nest(f.name(), prefix, site, values, f.reduction_schedule(), true);
 
     // Now define the bounds on the reduction domain
     const vector<ReductionVariable> &dom = f.reduction_domain().domain();
     for (size_t i = 0; i < dom.size(); i++) {
         string p = prefix + dom[i].var;
-        loop = LetStmt::make(p + ".min", dom[i].min, loop);
-        loop = LetStmt::make(p + ".extent", dom[i].extent, loop);
+        loop = LetStmt::make(p + ".min_produced", dom[i].min, loop);
+        loop = LetStmt::make(p + ".extent_produced", dom[i].extent, loop);
     }
 
     return loop;
@@ -393,15 +392,19 @@ pair<Stmt, Stmt> build_realization(Function func) {
     Stmt update = build_update(func);
 
     if (update.defined()) {
-        // Expand the bounds computed in the produce step using the
-        // bounds read in the update step. This is necessary because
-        // later bounds inference does not consider the bounds read
-        // during an update step, the bounds computed in the produce
-        // step must cover all pixels touched in the update step or
-        // bounds inference is wrong. TODO: don't actually compute all
-        // the pixels in the produce step if they're just going to get
-        // clobbered, or if they never get read in the update step.
-        Region bounds = region_touched(update, func.name());
+        // Expand the bounds produced in the produce step using the
+        // bounds read in the update step.
+
+        // This is necessary because later bounds inference does not
+        // consider the bounds read during an update step, and the
+        // bounds produced in the produce step must cover all pixels
+        // touched in the update step, or the update step is going to
+        // read uninitialized data.
+
+        // TODO: don't actually compute all the pixels in the produce
+        // step if they're just going to get clobbered, or if they
+        // never get read in the update step.
+        Region bounds = region_called(update, func.name());
         for (size_t i = 0; i < bounds.size(); i++) {
             if (!bounds[i].min.defined() || !bounds[i].extent.defined()) {
                 std::cerr << "Error: The region of " << func.name()
@@ -414,25 +417,25 @@ pair<Stmt, Stmt> build_realization(Function func) {
 
         if (!bounds.empty()) {
             assert(bounds.size() == func.args().size());
-            // Expand the region to be computed using the region read in the update step
+            // Expand the region to be produced using the region read in the update step
             for (size_t i = 0; i < bounds.size(); i++) {
                 string var = func.name() + "." + func.args()[i];
-                Expr update_min = Variable::make(Int(32), var + ".update_min");
-                Expr update_extent = Variable::make(Int(32), var + ".update_extent");
-                Expr consume_min = Variable::make(Int(32), var + ".min");
-                Expr consume_extent = Variable::make(Int(32), var + ".extent");
+                Expr update_min = Variable::make(Int(32), var + ".update_min_required");
+                Expr update_extent = Variable::make(Int(32), var + ".update_extent_required");
+                Expr consume_min = Variable::make(Int(32), var + ".min_produced");
+                Expr consume_extent = Variable::make(Int(32), var + ".extent_produced");
                 Expr init_min = Min::make(update_min, consume_min);
                 Expr init_max_plus_one = Max::make(update_min + update_extent, consume_min + consume_extent);
                 Expr init_extent = init_max_plus_one - init_min;
-                produce = LetStmt::make(var + ".min", init_min, produce);
-                produce = LetStmt::make(var + ".extent", init_extent, produce);
+                produce = LetStmt::make(var + ".min_produced", init_min, produce);
+                produce = LetStmt::make(var + ".extent_produced", init_extent, produce);
             }
 
             // Define the region read during the update step
             for (size_t i = 0; i < bounds.size(); i++) {
                 string var = func.name() + "." + func.args()[i];
-                produce = LetStmt::make(var + ".update_min", bounds[i].min, produce);
-                produce = LetStmt::make(var + ".update_extent", bounds[i].extent, produce);
+                produce = LetStmt::make(var + ".update_min_required", bounds[i].min, produce);
+                produce = LetStmt::make(var + ".update_extent_required", bounds[i].extent, produce);
             }
         }
     }
@@ -447,16 +450,20 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
     // Inject any explicit bounds
     for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
         Schedule::Bound b = func.schedule().bounds[i];
-        string min_name = func.name() + "." + b.var + ".min";
-        string extent_name = func.name() + "." + b.var + ".extent";
+        string prefix = func.name() + "." + b.var;
+        // Check against bounds produced, not bounds required. If
+        // produced is larger than required, there's a reason for that
+        // (e.g. vectorization), so the produced bounds must be
+        // respected.
+        string min_name = prefix + ".min_produced";
+        string extent_name = prefix + ".extent_produced";
         Expr min_var = Variable::make(Int(32), min_name);
         Expr extent_var = Variable::make(Int(32), extent_name);
         Expr check = (b.min <= min_var) && ((b.min + b.extent) >= (min_var + extent_var));
         string error_msg = "Bounds given for " + b.var + " in " + func.name() + " don't cover required region";
 
-
-        body = LetStmt::make(min_name, b.min,
-                             LetStmt::make(extent_name, b.extent, body));
+        body = LetStmt::make(prefix + ".min_produced", b.min,
+                             LetStmt::make(prefix + ".extent_produced", b.extent, body));
 
         body = Block::make(AssertStmt::make(check, error_msg), body);
     }
@@ -502,18 +509,54 @@ private:
     }
 
     Stmt build_realize(Stmt s) {
-        // Use symbolic bounds that will get resolved after bounds inference.
         Region bounds;
         for (int i = 0; i < func.dimensions(); i++) {
             string arg = func.args()[i];
-            Expr min = Variable::make(Int(32), func.name() + "." + arg + ".min_allocated");
-            Expr extent = Variable::make(Int(32), func.name() + "." + arg + ".extent_allocated");
+            Expr min = Variable::make(Int(32), func.name() + "." + arg + ".min_realized");
+            Expr extent = Variable::make(Int(32), func.name() + "." + arg + ".extent_realized");
             bounds.push_back(Range(min, extent));
         }
 
-        // Change the body of the for loop to do an allocation
         s = Realize::make(func.name(), func.output_types(), bounds, s);
 
+        // The allocated bounds are the bounds produced at this loop
+        // level. If it's a reduction, we may need to increase it to
+        // take into account the action of the reduction domain, so
+        // that we don't scatter out of bounds. If it's not taken into
+        // account already by the bounds produced, that means it's
+        // data that gets scattered somewhere but never gets
+        // loaded. So the only reason to expand the bounds is to avoid
+        // the segfault.
+
+        // TODO: Don't build the update twice, once here and once when we actually inject it.
+        Region reduction_region;
+        if (func.has_reduction_definition()) {
+            reduction_region = region_touched(build_update(func), func.name());
+        }
+
+        for (int i = 0; i < func.dimensions(); i++) {
+            string arg = func.args()[i];
+            Expr min_extent = func.min_realization_size(i);
+            string extent_realized = bounds[i].extent.as<Variable>()->name;
+            string min_realized = bounds[i].min.as<Variable>()->name;
+            Expr extent_produced = Variable::make(Int(32), func.name() + "." + arg + ".extent_produced");
+            Expr min_produced = Variable::make(Int(32), func.name() + "." + arg + ".min_produced");
+
+            if (func.has_reduction_definition()) {
+                Range r = reduction_region[i];
+                Expr old_max_plus_one = min_produced + extent_produced;
+                Expr new_max_plus_one = Max::make(r.min + r.extent, old_max_plus_one);
+                Expr new_min = Min::make(r.min, min_produced);
+                min_produced = new_min;
+                extent_produced = new_max_plus_one - new_min;
+            }
+
+            s = LetStmt::make(extent_realized, extent_produced, s);
+            s = LetStmt::make(min_realized, min_produced, s);
+        }
+
+        // This is also the point at which we inject explicit bounds
+        // for this realization.
         return inject_explicit_bounds(s, func);
     }
 

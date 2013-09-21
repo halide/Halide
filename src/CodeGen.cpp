@@ -1777,12 +1777,14 @@ void CodeGen::visit(const Evaluate *op) {
 Value *CodeGen::save_stack() {
     llvm::Function *stacksave =
         llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stacksave);
+    debug(4) << "Saving stack\n";
     return builder->CreateCall(stacksave);
 }
 
 void CodeGen::restore_stack(llvm::Value *saved_stack) {
     llvm::Function *stackrestore =
         llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore);
+    debug(4) << "Restoring stack\n";
     builder->CreateCall(stackrestore, saved_stack);
 }
 

@@ -7,9 +7,9 @@ void my_trace(const char *function, int event_type,
               int type_code, int bits, int width,
               int value_index, const void *value,
               int num_int_args, const int *int_args) {
-    // The schedule implies that f will be stored from 0 to 9
+    // The schedule implies that f will be stored from 0 to 8
     if (event_type == 2) {
-        if (int_args[1] < 9) {
+        if (int_args[1] < 8) {
             printf("Bounds on realization of f were supposed to be >= [0, 9]\n"
                    "Instead they are: %d %d\n", int_args[0], int_args[1]);
             exit(-1);

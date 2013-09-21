@@ -4,6 +4,7 @@
 #include "Bounds.h"
 #include "Debug.h"
 #include "IRPrinter.h"
+#include "IROperator.h"
 #include <sstream>
 
 namespace Halide {
@@ -20,7 +21,7 @@ class BoundsInference : public IRMutator {
 public:
     const vector<string> &funcs;
     const map<string, Function> &env;
-    Scope<int> in_consume;
+    Scope<int> in_consume, in_realize;
 
     BoundsInference(const vector<string> &f, const map<string, Function> &e) : funcs(f), env(e) {}
 
@@ -242,8 +243,8 @@ public:
                         output_buffer_t_args[1] = f.output_types()[j].bytes();
                         for (size_t k = 0; k < region.size(); k++) {
                             const string &arg = f.args()[k];
-                            Expr min = Variable::make(Int(32), f.name() + "." + arg + ".min");
-                            Expr extent = Variable::make(Int(32), f.name() + "." + arg + ".extent");
+                            Expr min = Variable::make(Int(32), f.name() + "." + arg + ".min_required");
+                            Expr extent = Variable::make(Int(32), f.name() + "." + arg + ".extent_required");
                             Expr stride = 0;
                             output_buffer_t_args.push_back(min);
                             output_buffer_t_args.push_back(extent);
@@ -293,13 +294,74 @@ public:
                 }
 
                 const string &arg_name = f.args()[j];
-                string min_name = f.name() + "." + arg_name + ".min";
-                string extent_name = f.name() + "." + arg_name + ".extent";
+                string prefix = f.name() + "." + arg_name;
+                string min_required_name = prefix + ".min_required";
+                string extent_required_name = prefix + ".extent_required";
 
-                body = LetStmt::make(min_name, region[j].min, body);
-                body = LetStmt::make(extent_name, region[j].extent, body);
+                Expr min_required = region[j].min;
+                Expr extent_required = region[j].extent;
+                Expr min_required_var = Variable::make(Int(32), min_required_name);
+                Expr extent_required_var = Variable::make(Int(32), extent_required_name);
+                Expr max_min_var = Variable::make(Int(32), prefix + ".max_min");
 
-                debug(3) << "Assigning " << min_name << " and " << extent_name << "\n";
+                // Compute the range produced as a function of the range required.
+                // TODO: Move the code that applies an explicit bound here
+                string extent_produced_name = prefix + ".extent_produced";
+                string min_produced_name = prefix + ".min_produced";
+                Expr extent_produced_var = Variable::make(Int(32), extent_produced_name);
+                Expr min_produced_var = Variable::make(Int(32), min_produced_name);
+
+                Expr min_extent = f.min_realization_size(j);
+
+                // Round up the extent to cover the min production size and factor
+                Expr extent_produced = extent_required_var;
+                if (!is_one(min_extent)) {
+                    extent_produced = Max::make(extent_required_var, min_extent);
+                }
+
+                Expr min_extent_factor = f.min_realization_factor(j);
+                if (!is_one(min_extent_factor)) {
+                    extent_produced += min_extent_factor - 1;
+                    extent_produced /= min_extent_factor;
+                    extent_produced *= min_extent_factor;
+                }
+
+                // Push the min down to be less than the max min.
+                Expr min_produced = min_required_var;
+                if (for_loop->name != "<outermost>") {
+                    if (!extent_produced.same_as(extent_required_var)) {
+                        min_produced = Min::make(min_produced, max_min_var);
+                    }
+                }
+
+                // The maximum min for inner realizations is min_extent less than the extent produced at this level.
+                if (!in_realize.contains(f.name())) {
+                    body = LetStmt::make(prefix + ".max_min", min_produced_var + extent_produced_var - min_extent, body);
+                }
+                // Assign the range produced as a function of the range required
+                body = LetStmt::make(extent_produced_name, extent_produced, body);
+                body = LetStmt::make(min_produced_name, min_produced, body);
+
+                // For the output function, the bounds realized need
+                // to be defined somewhere. They're the same as the
+                // region required. I.e. if you pass in a buffer of a
+                // certain size, you are requesting exactly that much
+                // data. In this future we may wish to distinguish
+                // between the allocated size and the region
+                // requested.
+                if (i == funcs.size()-1 && for_loop->name == "<outermost>") {
+                    Expr max_min = min_required_var + extent_required_var - min_extent;
+                    // TODO: Shouldn't this be related to the range produced, not required?
+                    body = LetStmt::make(prefix + ".max_min", max_min, body);
+                    body = LetStmt::make(prefix + ".min_realized", min_required_var, body);
+                    body = LetStmt::make(prefix + ".extent_realized", extent_required_var, body);
+                }
+
+                // Assign the range required as a function of the region called by the body.
+                body = LetStmt::make(min_required_name, min_required, body);
+                body = LetStmt::make(extent_required_name, extent_required, body);
+
+                debug(3) << "Assigning " << min_required_name << " and " << extent_required_name << "\n";
 
             }
 
@@ -330,66 +392,9 @@ public:
     }
 
     virtual void visit(const Realize *realize) {
-
-        Stmt body = mutate(realize->body);
-
-        debug(2) << "Bound inference considering realize of " << realize->name << "\n";
-
-        // TODO: If this is provided, then one of the autotuner bugs
-        // fails. If it is touched, then interpolate takes forever. It
-        // needs to be touched, because currently bounds of early
-        // stages depend on the bounds required of subsequent stages,
-        // not the bounds actually computed of subsequent stages. So
-        // it's possible that those later stages will read outside of
-        // bounds in the early stages for those values for which the
-        // output doesn't matter (because they're being computed, but
-        // are not semantically required).
-
-        // TODO: This same line of reasoning means that the image
-        // checks are wrong, and we might read out of bounds on input
-        // images without catching it.
-
-        Region bounds = region_touched(body, realize->name);
-
-        map<string, Function>::const_iterator iter = env.find(realize->name);
-        assert(iter != env.end() && "Realize of unknown func");
-        const Function &f = iter->second;
-
-        // Externally-defined things should fill in exactly as much as they are asked to.
-        if (f.has_extern_definition()) {
-            //assert(bounds.empty() && "Provide to externally-defined buffer");
-            Region bounds_required;
-            for (int i = 0; i < f.dimensions(); i++) {
-                const string &arg = f.args()[i];
-                // Take the union of the region touched internally and the region required
-                Expr min = Variable::make(Int(32), f.name() + "." + arg + ".min");
-                Expr extent = Variable::make(Int(32), f.name() + "." + arg + ".extent");
-                bounds_required.push_back(Range(min, extent));
-            }
-            bounds = bounds_required;
-        } else {
-            for (size_t i = 0; i < bounds.size(); i++) {
-                if (!bounds[i].min.defined()) {
-                    std::cerr << "Use of " << realize->name << " is unbounded below in dimension "
-                              << i << " in the following statement:\n" << body << "\n";
-                    assert(false);
-                }
-                if (!bounds[i].extent.defined()) {
-                    std::cerr << "Use of " << realize->name << " is unbounded above in dimension "
-                              << i << " in the following statement:\n" << body << "\n";
-                    assert(false);
-                }
-            }
-        }
-
-        stmt = Realize::make(realize->name, realize->types, realize->bounds, body);
-
-        // Define the bounds
-        for (size_t i = 0; i < bounds.size(); i++) {
-            string prefix = realize->name + "." + f.args()[i];
-            stmt = LetStmt::make(prefix + ".min_allocated", bounds[i].min, stmt);
-            stmt = LetStmt::make(prefix + ".extent_allocated", bounds[i].extent, stmt);
-        }
+        in_realize.push(realize->name, 0);
+        IRMutator::visit(realize);
+        in_realize.pop(realize->name);
     }
 
 };

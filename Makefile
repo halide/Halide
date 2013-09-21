@@ -254,6 +254,12 @@ valgrind_%: $(BIN_DIR)/test_%
 	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) valgrind --error-exitcode=-1 ../$<
 	@-echo
 
+# This test is *supposed* to do an out-of-bounds read, so skip it when testing under valgrind
+valgrind_tracing_stack: $(BIN_DIR)/test_tracing_stack
+	@-mkdir -p tmp
+	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$(BIN_DIR)/test_tracing_stack
+	@-echo
+
 performance_%: $(BIN_DIR)/performance_%
 	@-mkdir -p tmp
 	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$<
