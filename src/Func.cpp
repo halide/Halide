@@ -957,8 +957,7 @@ ScheduleHandle Func::update() {
     return ScheduleHandle(func.reduction_schedule());
 }
 
-FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a,
-                       int placeholder_pos) : func(f) {
+FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
     implicit_placeholder_pos = placeholder_pos;
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
@@ -1103,8 +1102,7 @@ FuncRefVar::operator Tuple() const {
 }
 */
 
-FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a,
-                         int placeholder_pos) : func(f), args(a) {
+FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a, int placeholder_pos) : func(f), args(a) {
     implicit_placeholder_pos = placeholder_pos;
     ImageParam::check_arg_types(f.name(), &args);
 }
