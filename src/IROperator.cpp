@@ -176,6 +176,15 @@ Expr const_false(int w) {
 }
 
 
+void check_representable(Type t, int x) {
+    int result = int_cast_constant(t, x);
+    if (result != x) {
+        std::cerr << "Integer constant " << x
+                  << " would be converted to " << result
+                  << " because it will be implicitly coerced to type " << t << "\n";
+        assert(false);
+    }
+}
 
 void match_types(Expr &a, Expr &b) {
     assert(!a.type().is_handle() && !b.type().is_handle() &&
@@ -183,8 +192,8 @@ void match_types(Expr &a, Expr &b) {
 
     if (a.type() == b.type()) return;
 
-    bool a_int_imm = a.as<IntImm>() != NULL;
-    bool b_int_imm = b.as<IntImm>() != NULL;
+    const int *a_int_imm = as_const_int(a);
+    const int *b_int_imm = as_const_int(b);
 
     // First widen to match
     if (a.type().is_scalar() && b.type().is_vector()) {
@@ -209,8 +218,10 @@ void match_types(Expr &a, Expr &b) {
         else a = cast(tb, a);
     } else if (!ta.is_float() && b_int_imm) {
         // (u)int(a) * IntImm(b) -> (u)int(a)
+        check_representable(ta, *b_int_imm);
         b = cast(ta, b);
     } else if (!tb.is_float() && a_int_imm) {
+        check_representable(tb, *a_int_imm);
         a = cast(tb, a);
     } else if (ta.is_uint() && tb.is_uint()) {
         // uint(a) * uint(b) -> uint(max(a, b))
