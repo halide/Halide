@@ -9,7 +9,6 @@ void my_error_handler(const char *msg) {
 }
 
 int main(int argc, char **argv) {
-    // Extract the ith column of an image
     Func f, g;
     Var x, y;
     Param<float> p;
