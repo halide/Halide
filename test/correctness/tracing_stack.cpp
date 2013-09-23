@@ -4,7 +4,7 @@
 // external code). We use a posix signal handler, which is probably
 // os-dependent, so I'm going to enable this test on linux only.
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__) || defined(__unix) || defined(__posix)
 
 #include <Halide.h>
 #include <stdio.h>
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 
     // Loads from this image will barf, because we've messed up the host pointer
     Image<int> input(100, 100);
-    buffer_t *buf = (buffer_t *)input;
+    buffer_t *buf = input.raw_buffer();
     buf->host = (uint8_t *)17;
 
     Func f("f"), g("g"), h("h");
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
 #include <stdio.h>
 
 int main(int argc, char **argv) {
-    printf("Test skipped because we're not on linux\n");
+    printf("Test skipped because we're not on a system with UNIX signal handling\n");
     return 0;
 }
 

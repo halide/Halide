@@ -113,12 +113,13 @@ protected:
     /** The dimensionality of this image. */
     int dims;
 
-    void add_implicit_args_if_placeholder(std::vector<Expr> &args,
-                                         Expr last_arg,
-                                         int total_args,
-                                         bool &placeholder_seen) const {
+    bool add_implicit_args_if_placeholder(std::vector<Expr> &args,
+                                          Expr last_arg,
+                                          int total_args,
+                                          bool placeholder_seen) const {
         const Internal::Variable *var = last_arg.as<Internal::Variable>();
-        if (var != NULL && Var::is_placeholder(var->name)) {
+        bool is_placeholder = var != NULL && Var::is_placeholder(var->name);
+        if (is_placeholder) {
             assert(!placeholder_seen && "Only one implicit placeholder ('_') allowed in argument list for ImageParam.");
             placeholder_seen = true;
 
@@ -130,7 +131,7 @@ protected:
             args.push_back(last_arg);
         }
 #if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
-        if (!placeholder_seen && args.size() == total_args && args.size() < dims) {
+        if (!is_placeholder && !placeholder_seen && args.size() == total_args && args.size() < dims) {
             std::cout << "Implicit arguments without placeholders ('_') are deprecated. Adding " <<
               dims - args.size() << " arguments to ImageParam " << name() << std::endl;
             int i = 0;
@@ -139,7 +140,8 @@ protected:
 
             }
         }
-#endif      
+#endif
+        return is_placeholder;
     }
 
 public:
@@ -331,7 +333,7 @@ public:
     Expr operator()(Expr x) const {
         std::vector<Expr> args;
         bool placeholder_seen = false;
-        add_implicit_args_if_placeholder(args, x, 1, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, x, 1, placeholder_seen);
 
         assert(args.size() == (size_t)dims);
 
@@ -342,8 +344,8 @@ public:
     Expr operator()(Expr x, Expr y) const {
         std::vector<Expr> args;
         bool placeholder_seen = false;
-        add_implicit_args_if_placeholder(args, x, 2, placeholder_seen);
-        add_implicit_args_if_placeholder(args, y, 2, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, x, 2, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, y, 2, placeholder_seen);
 
         assert(args.size() == (size_t)dims);
 
@@ -354,9 +356,9 @@ public:
     Expr operator()(Expr x, Expr y, Expr z) const {
         std::vector<Expr> args;
         bool placeholder_seen = false;
-        add_implicit_args_if_placeholder(args, x, 3, placeholder_seen);
-        add_implicit_args_if_placeholder(args, y, 3, placeholder_seen);
-        add_implicit_args_if_placeholder(args, z, 3, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, x, 3, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, y, 3, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, z, 3, placeholder_seen);
 
         assert(args.size() == (size_t)dims);
 
@@ -367,10 +369,10 @@ public:
     Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
         std::vector<Expr> args;
         bool placeholder_seen = false;
-        add_implicit_args_if_placeholder(args, x, 4, placeholder_seen);
-        add_implicit_args_if_placeholder(args, y, 4, placeholder_seen);
-        add_implicit_args_if_placeholder(args, z, 4, placeholder_seen);
-        add_implicit_args_if_placeholder(args, w, 4, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, x, 4, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, y, 4, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, z, 4, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, w, 4, placeholder_seen);
 
         assert(args.size() == (size_t)dims);
 

@@ -137,7 +137,7 @@ public:
         return is_implicit(name) ? atoi(name.c_str() + 1) : -1;
     }
 
-    static int is_placeholder(const std::string &name) {
+    static bool is_placeholder(const std::string &name) {
         return name == "_";
     }
 
