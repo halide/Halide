@@ -60,6 +60,8 @@ Func merge_sort(Func input, int total_size) {
 
     const int parallel_work_size = 512;
 
+    Func parallel_stage("parallel_stage");
+
     // First gather the input into a 2D array of width four where each row is sorted
     {
         assert(input.dimensions() == 1);
@@ -88,12 +90,10 @@ Func merge_sort(Func input, int total_size) {
                               select(x == 1, b1,
                                   select(x == 2, b2, b3)));
 
-        result.bound(x, 0, 4).unroll(x);
+        result.compute_at(parallel_stage, y).bound(x, 0, 4).unroll(x);
 
         stages.push_back(result);
     }
-
-    Func parallel_stage("parallel_stage");
 
     // Now build up to the total size, merging each pair of rows
     for (int chunk_size = 4; chunk_size < total_size; chunk_size *= 2) {
