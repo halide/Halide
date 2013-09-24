@@ -910,7 +910,9 @@ Func &Func::compute_at(Func f, Var var) {
 
 Func &Func::compute_root() {
     func.schedule().compute_level = Schedule::LoopLevel::root();
-    func.schedule().store_level = Schedule::LoopLevel::root();
+    if (func.schedule().store_level.is_inline()) {
+        func.schedule().store_level = Schedule::LoopLevel::root();
+    }
     return *this;
 }
 
