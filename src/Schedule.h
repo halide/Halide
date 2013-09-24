@@ -51,6 +51,13 @@ struct Schedule {
             return starts_with(loop, func + ".") && ends_with(loop, "." + var);
         }
 
+        bool match(const LoopLevel &other) const {
+            return (func == other.func &&
+                    (var == other.var ||
+                     ends_with(var, "." + other.var) ||
+                     ends_with(other.var, "." + var)));
+        }
+
     };
 
     /** At what sites should we inject the allocation and the

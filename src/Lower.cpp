@@ -1,3 +1,8 @@
+#include <iostream>
+#include <set>
+#include <sstream>
+#include <algorithm>
+
 #include "Lower.h"
 #include "IROperator.h"
 #include "Substitute.h"
@@ -7,9 +12,6 @@
 #include "Simplify.h"
 #include "IRPrinter.h"
 #include "Debug.h"
-#include <iostream>
-#include <set>
-#include <sstream>
 #include "Tracing.h"
 #include "Profiling.h"
 #include "StorageFlattening.h"
@@ -934,6 +936,115 @@ Stmt create_initial_loop_nest(Function f) {
     return inject_explicit_bounds(s, f);
 }
 
+class ComputeLegalSchedules : public IRVisitor {
+public:
+    vector<Schedule::LoopLevel> loops_allowed;
+
+    ComputeLegalSchedules(Function f) : func(f), found(false) {}
+
+private:
+    using IRVisitor::visit;
+
+    vector<Schedule::LoopLevel> loops;
+    Function func;
+    bool found;
+
+    void visit(const For *f) {
+        f->min.accept(this);
+        f->extent.accept(this);
+        size_t first_dot = f->name.find('.');
+        size_t last_dot = f->name.rfind('.');
+        assert(first_dot != string::npos && last_dot != string::npos);
+        string func = f->name.substr(0, first_dot);
+        string var = f->name.substr(last_dot + 1);
+        loops.push_back(Schedule::LoopLevel(func, var));
+        f->body.accept(this);
+        loops.pop_back();
+    }
+
+    void visit(const Call *c) {
+        IRVisitor::visit(c);
+
+        if (c->name == func.name()) {
+
+            if (!found) {
+                found = true;
+                loops_allowed = loops;
+            } else {
+                // Take the common prefix between loops and loops allowed
+                for (size_t i = 0; i < loops_allowed.size(); i++) {
+                    if (i >= loops.size() || !loops[i].match(loops_allowed[i])) {
+                        loops_allowed.resize(i);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+};
+
+string schedule_to_source(Function f,
+                          Schedule::LoopLevel store_at,
+                          Schedule::LoopLevel compute_at) {
+    std::ostringstream ss;
+    ss << f.name();
+    if (compute_at.is_inline()) {
+        ss << ".compute_inline()";
+    } else {
+        if (!store_at.match(compute_at)) {
+            if (store_at.is_root()) {
+                ss << ".store_root()";
+            } else {
+                ss << ".store_at(" << store_at.func << ", " << store_at.var << ")";
+            }
+        }
+        if (compute_at.is_root()) {
+            ss << ".compute_root()";
+        } else {
+            ss << ".compute_at(" << compute_at.func << ", " << compute_at.var << ")";
+        }
+    }
+    ss << ";";
+    return ss.str();
+}
+
+void validate_schedule(Function f, Stmt s) {
+
+    Schedule::LoopLevel store_at = f.schedule().store_level;
+    Schedule::LoopLevel compute_at = f.schedule().compute_level;
+    // Inlining is always allowed
+    if (store_at.is_inline() && compute_at.is_inline()) {
+        return;
+    }
+
+    // Otherwise inspect the uses to see what's ok.
+    ComputeLegalSchedules legal(f);
+    s.accept(&legal);
+
+    bool store_at_ok = false, compute_at_ok = false;
+    const vector<Schedule::LoopLevel> &loops = legal.loops_allowed;
+    for (size_t i = 0; i < loops.size(); i++) {
+        if (loops[i].match(store_at)) {
+            store_at_ok = true;
+        }
+        if (loops[i].match(compute_at)) {
+            compute_at_ok = store_at_ok;
+        }
+    }
+
+    if (!store_at_ok || !compute_at_ok) {
+        std::cerr << "Function " << f.name() << " is computed and stored in the following invalid location:\n"
+                  << schedule_to_source(f, store_at, compute_at) << "\n"
+                  << "Legal locations for this function are:\n";
+        for (size_t i = 0; i < loops.size(); i++) {
+            for (size_t j = i; j < loops.size(); j++) {
+                std::cerr << schedule_to_source(f, loops[i], loops[j]) << "\n";
+            }
+        }
+        assert(false);
+    }
+}
+
 Stmt schedule_functions(Stmt s, const vector<string> &order,
                         const map<string, Function> &env,
                         const map<string, set<string> > &graph) {
@@ -963,6 +1074,8 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
         // We don't actually want to schedule the output function here.
         if (i == order.size()) continue;
 
+        validate_schedule(f, s);
+
         if (f.has_pure_definition() &&
             !f.has_reduction_definition() &&
             f.schedule().compute_level.is_inline()) {
@@ -980,8 +1093,8 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();
     assert(root_loop);
-    return root_loop->body;
 
+    return root_loop->body;
 }
 
 // Insert checks to make sure that parameters are within their
