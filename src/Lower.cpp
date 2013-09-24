@@ -651,7 +651,63 @@ class InlineFunction : public IRMutator {
     bool found;
 public:
     InlineFunction(Function f) : func(f), found(false) {
+        // Sanity check that this is a reasonable function to inline.
         assert(!f.has_reduction_definition());
+
+        const Schedule &s = f.schedule();
+
+        if (!s.store_level.is_inline()) {
+            std::cerr << "Function " << f.name() << " is scheduled to be computed inline, "
+                      << "but is not scheduled to be stored inline. A storage schedule "
+                      << "is meaningless for functions computed inline.\n";
+            assert(false);
+        }
+
+        for (size_t i = 0; i < s.dims.size(); i++) {
+            Schedule::Dim d = s.dims[i];
+            if (d.for_type == For::Parallel) {
+                std::cerr << "Cannot parallelize dimension "
+                          << d.var << " of function "
+                          << f.name() << " because the function is scheduled inline.\n";
+                assert(false);
+            } else if (d.for_type == For::Unrolled) {
+                std::cerr << "Cannot unroll dimension "
+                          << d.var << " of function "
+                          << f.name() << " because the function is scheduled inline.\n";
+                assert(false);
+            } else if (d.for_type == For::Vectorized) {
+                std::cerr << "Cannot vectorize dimension "
+                          << d.var << " of function "
+                          << f.name() << " because the function is scheduled inline.\n";
+                assert(false);
+            }
+        }
+
+        for (size_t i = 0; i < s.splits.size(); i++) {
+            if (s.splits[i].is_rename) {
+                std::cerr << "Warning: It is meaningless to rename variable "
+                          << s.splits[i].old_var << " of function "
+                          << f.name() << " to " << s.splits[i].outer
+                          << " because " << f.name() << " is scheduled inline.\n";
+            } else {
+                std::cerr << "Warning: It is meaningless to split variable "
+                          << s.splits[i].old_var << " of function "
+                          << f.name() << " into "
+                          << s.splits[i].outer << " * "
+                          << s.splits[i].factor << " + "
+                          << s.splits[i].inner << " because "
+                          << f.name() << " is scheduled inline.\n";
+            }
+        }
+
+        for (size_t i = 0; i < s.bounds.size(); i++) {
+            std::cerr << "Warning: It is meaningless to bound dimension "
+                      << s.bounds[i].var << " of function "
+                      << f.name() << " to be within ["
+                      << s.bounds[i].min << ", "
+                      << s.bounds[i].extent << "] because the function is scheduled inline.\n";
+        }
+
     }
 private:
     using IRMutator::visit;
@@ -906,14 +962,6 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
         // We don't actually want to schedule the output function here.
         if (i == order.size()) continue;
-
-        if (f.schedule().compute_level.is_inline() &&
-            !f.schedule().store_level.is_inline()) {
-            std::cerr << "Function " << f.name() << " is scheduled to be computed inline, "
-                      << "but is not scheduled to be stored inline. A storage schedule "
-                      << "makes no sense for functions computed inline\n";
-            assert(false);
-        }
 
         if (f.has_pure_definition() &&
             !f.has_reduction_definition() &&
