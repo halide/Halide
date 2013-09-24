@@ -1215,6 +1215,8 @@ void CodeGen::visit(const Call *op) {
             if (!c) {
                 const IntImm *imm = op->args[0].as<IntImm>();
                 assert(imm && imm->value == 0 && "First argument to create_buffer_t must either be a buffer name or the constant zero");
+                // Buffers with null host pointers are used for bounds
+                // inference queries to external stages.
                 host_ptr = ConstantPointerNull::get(i8->getPointerTo());
             } else {
                 host_ptr = sym_get(c->name + ".host");
