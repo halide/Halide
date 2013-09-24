@@ -113,6 +113,41 @@ protected:
     /** The dimensionality of this image. */
     int dims;
 
+    bool add_implicit_args_if_placeholder(std::vector<Expr> &args,
+                                          Expr last_arg,
+                                          int total_args,
+                                          bool placeholder_seen) const {
+        const Internal::Variable *var = last_arg.as<Internal::Variable>();
+        bool is_placeholder = var != NULL && Var::is_placeholder(var->name);
+        if (is_placeholder) {
+            assert(!placeholder_seen && "Only one implicit placeholder ('_') allowed in argument list for ImageParam.");
+            placeholder_seen = true;
+
+            // The + 1 in the conditional is because one provided argument is an placeholder
+            for (int i = 0; i < (dims - total_args + 1); i++) {
+                args.push_back(Var::implicit(i));
+            }
+        } else {
+            args.push_back(last_arg);
+        }
+
+#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
+        if (!is_placeholder && !placeholder_seen &&
+            (int)args.size() == total_args &&
+            (int)args.size() < dims) {
+            std::cout << "Implicit arguments without placeholders ('_') are deprecated."
+                      << " Adding " << dims - args.size()
+                      << " arguments to ImageParam " << name() << '\n';
+            int i = 0;
+            while ((int)args.size() < dims) {
+                args.push_back(Var::implicit(i++));
+
+            }
+        }
+#endif
+        return is_placeholder;
+    }
+
 public:
 
     /** Construct a NULL image parameter handle. */
@@ -278,11 +313,8 @@ public:
      */
     // @{
     Expr operator()() const {
-        assert(dimensions() >= 0);
+        assert(dimensions() == 0);
         std::vector<Expr> args;
-        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
-            args.push_back(Var::implicit(i));
-        }
         return Internal::Call::make(param, args);
     }
 
@@ -303,51 +335,51 @@ public:
     }
 
     Expr operator()(Expr x) const {
-        assert(dimensions() >= 1);
         std::vector<Expr> args;
-        args.push_back(x);
-        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
-            args.push_back(Var::implicit(i));
-        }
+        bool placeholder_seen = false;
+        placeholder_seen |= add_implicit_args_if_placeholder(args, x, 1, placeholder_seen);
+
+        assert(args.size() == (size_t)dims);
+
         check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
 
     Expr operator()(Expr x, Expr y) const {
-        assert(dimensions() >= 2);
         std::vector<Expr> args;
-        args.push_back(x);
-        args.push_back(y);
-        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
-            args.push_back(Var::implicit(i));
-        }
+        bool placeholder_seen = false;
+        placeholder_seen |= add_implicit_args_if_placeholder(args, x, 2, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, y, 2, placeholder_seen);
+
+        assert(args.size() == (size_t)dims);
+
         check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z) const {
-        assert(dimensions() >= 3);
         std::vector<Expr> args;
-        args.push_back(x);
-        args.push_back(y);
-        args.push_back(z);
-        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
-            args.push_back(Var::implicit(i));
-        }
+        bool placeholder_seen = false;
+        placeholder_seen |= add_implicit_args_if_placeholder(args, x, 3, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, y, 3, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, z, 3, placeholder_seen);
+
+        assert(args.size() == (size_t)dims);
+
         check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
 
     Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
-        assert(dimensions() >= 4);
         std::vector<Expr> args;
-        args.push_back(x);
-        args.push_back(y);
-        args.push_back(z);
-        args.push_back(w);
-        for (int i = 0; args.size() < (size_t)dimensions(); i++) {
-            args.push_back(Var::implicit(i));
-        }
+        bool placeholder_seen = false;
+        placeholder_seen |= add_implicit_args_if_placeholder(args, x, 4, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, y, 4, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, z, 4, placeholder_seen);
+        placeholder_seen |= add_implicit_args_if_placeholder(args, w, 4, placeholder_seen);
+
+        assert(args.size() == (size_t)dims);
+
         check_arg_types(name(), &args);
         return Internal::Call::make(param, args);
     }
@@ -367,7 +399,7 @@ public:
      * at the same location.
      */
     operator Expr() const {
-        return (*this)();
+        return (*this)(_);
     }
 };
 

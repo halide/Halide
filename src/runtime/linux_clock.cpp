@@ -34,25 +34,24 @@ extern "C" {
 WEAK bool halide_reference_clock_inited = false;
 WEAK timespec halide_reference_clock;
 
-// The syscall number for gettime varies across platforms
-// android arm is 263
-// i386 and android x86 is 265
-// x64 is 228
-
-#ifdef __arm__
-#define SYS_clock_gettime 263
-#else
-#ifdef __i386__
-#define SYS_clock_gettime 265
-#else
-#define SYS_clock_gettime 228
-#endif
+// The syscall number for gettime varies across platforms:
+// -- android arm is 263
+// -- i386 and android x86 is 265
+// -- x64 is 228
+// Unfortunately, we don't (yet) have a good general infrastructure
+// to tell the runtime the platform we are building for (the target);
+// if we use (e.g.) ifdef __arm__, that sniffs the host compiler,
+// not the target. As a stopgap for now, we require the includer of this
+// file (which happens to know the proper platform) to define the proper
+// value.
+#ifndef LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME
+#error "LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME must be defined to use this file"
 #endif
 
 WEAK int halide_start_clock() {
     // Guard against multiple calls
     if (!halide_reference_clock_inited) {
-        syscall(SYS_clock_gettime, CLOCK_REALTIME, &halide_reference_clock);
+        syscall(LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME, CLOCK_REALTIME, &halide_reference_clock);
         halide_reference_clock_inited = true;
     }
     return 0;
@@ -61,7 +60,7 @@ WEAK int halide_start_clock() {
 WEAK int64_t halide_current_time_ns() {
     timespec now;
     // To avoid requiring people to link -lrt, we just make the syscall directly.
-    syscall(SYS_clock_gettime, CLOCK_REALTIME, &now);
+    syscall(LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME, CLOCK_REALTIME, &now);
     int64_t d = int64_t(now.tv_sec - halide_reference_clock.tv_sec)*1000000000;
     int64_t nd = (now.tv_nsec - halide_reference_clock.tv_nsec);
     return d + nd;

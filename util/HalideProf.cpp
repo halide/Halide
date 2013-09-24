@@ -82,19 +82,32 @@ namespace {
 
   void ProcessLine(const std::string& s, FuncInfoMap& info) {
     std::vector<std::string> v = Split(s, ' ');
-    if (v.size() < 8 || v[0] != "halide_profiler") {
+    if (v.size() < 8) {
       return;
     }
-    const std::string& metric = v[1];
-    const std::string& func_name = v[2];
-    const std::string& op_type = v[3];
-    const std::string& op_name = v[4];
-    const std::string& parent_type = v[5];
-    const std::string& parent_name = v[6];
+    // Some environments (e.g. Android logging) will emit a prefix
+    // for each line; skip the first few words we see before
+    // deciding to ignore the line.
+    int first = -1;
+    for (int i = 0; i < 4; ++i) {
+      if (v[i] == "halide_profiler") {
+        first = i;
+        break;
+      }
+    }
+    if (first < 0) {
+      return;
+    }
+    const std::string& metric = v[first + 1];
+    const std::string& func_name = v[first + 2];
+    const std::string& op_type = v[first + 3];
+    const std::string& op_name = v[first + 4];
+    const std::string& parent_type = v[first + 5];
+    const std::string& parent_name = v[first + 6];
     if (op_type == kIgnore || op_name == kIgnore) {
       return;
     }
-    std::istringstream value_stream(v[7]);
+    std::istringstream value_stream(v[first + 7]);
     int64_t value;
     value_stream >> value;
     OpInfoMap& op_info_map = info[func_name];
