@@ -29,8 +29,9 @@ class FoldStorageOfFunction : public IRMutator {
         IRMutator::visit(op);
         op = expr.as<Call>();
         assert(op);
-        if (op->name == func) {
+        if (op->name == func && op->call_type == Call::Halide) {
             vector<Expr> args = op->args;
+            assert(dim < (int)args.size());
             args[dim] = args[dim] % factor;
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
@@ -96,7 +97,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // should depend on the loop variable.
             MonotonicResult m = is_monotonic(min, op->name);
 
-            if (m != MonotonicIncreasing && 
+            if (m != MonotonicIncreasing &&
                 m != MonotonicDecreasing) {
                 debug(3) << "Not folding because min is not monotonic in loop var\n";
                 continue;
